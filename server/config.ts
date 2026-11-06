@@ -620,6 +620,9 @@ const appConfigSchema = z.object({
   /** 2026-10-30 (lot 2): on a solo server, the models its person turned off
    * (`<engine>/<model>`, shared/offered-models.ts). */
   disabledModels: z.array(z.string().max(300)).max(2000).optional(),
+  /** #2050: on a solo server, the models its person starred in the model
+   * selector (`<engine>/<model>`, shared/offered-models.ts). */
+  favoriteModels: z.array(z.string().max(300)).max(40).optional(),
   /** Historical config section name "box" (the persisted config.json key); the
    * provider is Boat now and the key is kept for compatibility. */
   box: z.object({ token: optionalText }).optional(),
@@ -869,6 +872,8 @@ export interface AppConfig {
   openaiCompatServers?: Record<string, { key?: string; ownerPrincipalId?: string }>;
   /** 2026-10-30: a solo server's own model switches (`<engine>/<model>` off). */
   disabledModels?: string[];
+  /** #2050: a solo server's starred models (`<engine>/<model>`). */
+  favoriteModels?: string[];
   /** Persisted under the historical config key "box" (ascii.dev renamed Box to Boat). */
   box?: { token?: string };
   /** A named host from the user's SSH config. Authentication stays with SSH. */
@@ -1949,6 +1954,7 @@ export function saveConfig(
   // Replaced whole: removing a named server removes its key.
   if (checkedPatch.openaiCompatServers !== undefined) disk.openaiCompatServers = checkedPatch.openaiCompatServers;
   if (checkedPatch.disabledModels !== undefined) disk.disabledModels = checkedPatch.disabledModels;
+  if (checkedPatch.favoriteModels !== undefined) disk.favoriteModels = checkedPatch.favoriteModels;
   if (checkedPatch.identityMigratedAt !== undefined) disk.identityMigratedAt = checkedPatch.identityMigratedAt;
   if (checkedPatch.privateThreadsMigratedAt !== undefined) disk.privateThreadsMigratedAt = checkedPatch.privateThreadsMigratedAt;
   if (checkedPatch.invites !== undefined) disk.invites = checkedPatch.invites;

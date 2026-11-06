@@ -12,6 +12,8 @@ import { ROUTINE_RESTARTED } from "../routines/routines.ts";
 import {
   PEER_WAKE_RULES,
   PeerNoticeHops,
+  PROACTIVE_FAILURE_BACKOFF_MAX_MS,
+  PROACTIVE_FAILURE_BACKOFF_MS,
   PROACTIVE_MAX_HOPS,
   ProactiveProposals,
   ProactiveWaker,
@@ -585,5 +587,67 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     expect(prompt).toContain("never ends with NOTHING_TO_REPORT");
     expect(peerWakeDigest([dmPost("m")])).toBe("Messages from teammates:\n- Post by Osprey in Osprey and Wren");
     expect(proactiveWakePrompt({ mode: "proactive", events: [dmPost("m", { dm: undefined })], more: 0 })).not.toContain(DM_WAKE_RULES);
+  });
+});
+
+// perspicax#880: a wave of failed routines woke a bot again and again, each
+// wake failed the same way and each failure was its own notification.
+describe("failed wakes back off and are told once (2026-11-05)", () => {
+  const failed = (n: number): ProactiveEvent => ({
+    botId: "nova", source: "run", key: `run-${n}`, failed: true,
+    label: "Routine failed: Hourly tickets", detail: `Run ${n} failed`,
+  });
+
+  it("only the first failure of a streak is told; a success ends the streak", () => {
+    const h = harness({ nova: "proactive" });
+    expect(h.waker.noteWakeFailed("nova")).toBe(true);
+    for (let n = 0; n < 14; n += 1) {
+      h.advance(20_000);
+      expect(h.waker.noteWakeFailed("nova")).toBe(false);
+    }
+    h.waker.noteWakeSucceeded("nova");
+    expect(h.waker.backoffLeft("nova")).toBe(0);
+    expect(h.waker.noteWakeFailed("nova")).toBe(true);
+  });
+
+  it("a failure long after the last one starts a new streak", () => {
+    const h = harness({ nova: "proactive" });
+    expect(h.waker.noteWakeFailed("nova")).toBe(true);
+    h.advance(PROACTIVE_FAILURE_BACKOFF_MAX_MS + 1);
+    expect(h.waker.noteWakeFailed("nova")).toBe(true);
+  });
+
+  it("the next wake waits, doubling per failure up to the cap, and the events meanwhile make one wake", () => {
+    const h = harness({ nova: "proactive" });
+    h.waker.noteWakeFailed("nova");
+    expect(h.waker.backoffLeft("nova")).toBe(PROACTIVE_FAILURE_BACKOFF_MS);
+    h.waker.noteWakeFailed("nova");
+    expect(h.waker.backoffLeft("nova")).toBe(PROACTIVE_FAILURE_BACKOFF_MS * 2);
+    for (let n = 0; n < 10; n += 1) h.waker.noteWakeFailed("nova");
+    expect(h.waker.backoffLeft("nova")).toBe(PROACTIVE_FAILURE_BACKOFF_MAX_MS);
+    h.waker.noteWakeSucceeded("nova");
+
+    h.waker.noteWakeFailed("nova");
+    for (let n = 1; n <= 15; n += 1) {
+      h.waker.offer(failed(n));
+      h.advance(18_000);
+    }
+    // four and a half minutes of failed runs: no wake yet
+    expect(h.modelCalls()).toBe(0);
+    h.advance(30_000);
+    expect(h.modelCalls()).toBe(1);
+    expect(h.woken[0]!.events).toHaveLength(15);
+  });
+
+  it("a wake that fails after the next group gathered pushes that group's wake past the backoff", () => {
+    const h = harness({ nova: "proactive" });
+    h.waker.offer(failed(1));
+    h.advance(10_000);
+    h.waker.noteWakeFailed("nova");
+    h.advance(20_000);
+    expect(h.modelCalls()).toBe(0);
+    expect(h.waker.pendingFor("nova")).toBe(1);
+    h.advance(PROACTIVE_FAILURE_BACKOFF_MS);
+    expect(h.modelCalls()).toBe(1);
   });
 });

@@ -200,6 +200,7 @@ export type StartTurnHost = {
   holdBootEngineSlot: any,
   holdBotMemoryPlain: any,
   holdDirectMachineTurn: any,
+  holdSignInRefusal: any,
   holdTurnAttachments: any,
   honouredPin: any,
   hooksEnabled: any,

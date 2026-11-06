@@ -7,7 +7,17 @@
 // (shared/user-preferences.ts). On a solo server it stays on this device.
 // A favorite names an engine and a model id; one whose engine or model is
 // gone is kept (it comes back with them) and simply not shown.
+//
+// #2050 (Settings > Models redesign): the stars also live beside the
+// person's model switches on the server (`favoriteModels` of GET/PUT
+// /api/me/models, `<engine>/<model>` keys), so they follow the person
+// without depending on the preference sync. `attachModelFavoritesServer`
+// wires that once per session: the server's list wins when it has stars,
+// a local list is pushed when the server has none, and every star or
+// unstar after that is sent.
 import { useSyncExternalStore } from "react";
+
+import { modelKey, parseModelKey } from "../../shared/offered-models";
 
 export const MODEL_FAVORITES_KEY = "sagax.modelFavorites.v1";
 
@@ -110,7 +120,7 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-export function writeModelFavorites(next: readonly string[]): void {
+function applyLocal(next: readonly string[]): void {
   session = next;
   try {
     storage()?.setItem(MODEL_FAVORITES_KEY, serializeModelFavorites(next));
@@ -119,6 +129,75 @@ export function writeModelFavorites(next: readonly string[]): void {
     // Storage refused: the stars hold for this session.
   }
   notify();
+}
+
+export function writeModelFavorites(next: readonly string[]): void {
+  applyLocal(next);
+  if (server) void server.save(toServerFavorites(next)).catch(() => undefined);
+}
+
+// ── the server copy (#2050) ──────────────────────────────────────────────
+
+export interface ModelFavoritesServer {
+  /** The person's list on the server, `<engine>/<model>` each; undefined
+   * when the server has no such list (signed out, older server). */
+  load(): Promise<readonly string[] | undefined>;
+  save(list: readonly string[]): Promise<unknown>;
+}
+
+let server: ModelFavoritesServer | null = null;
+let loading: Promise<void> | null = null;
+
+/** Menu row keys to the server's `<engine>/<model>` form. */
+export function toServerFavorites(keys: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const key of keys) {
+    const parts = splitKey(key);
+    if (parts) out.push(modelKey(parts[0], parts[1]));
+  }
+  return out;
+}
+
+/** The server's `<engine>/<model>` list to menu row keys. */
+export function fromServerFavorites(list: readonly unknown[]): string[] {
+  const out: string[] = [];
+  for (const entry of list) {
+    if (typeof entry !== "string") continue;
+    const parsed = parseModelKey(entry);
+    if (parsed) out.push(favoriteKey(parsed.instanceId, parsed.model));
+  }
+  return out.slice(-MAX_FAVORITES);
+}
+
+const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((key, i) => key === b[i]);
+
+/** Attaches (or detaches, with null) the server copy. The first attach
+ * loads once: the server's stars replace the local ones when it has some,
+ * else the local ones are pushed. A failed load is retried on the next
+ * attach. Returns when that first exchange is done. */
+export function attachModelFavoritesServer(next: ModelFavoritesServer | null): Promise<void> {
+  server = next;
+  if (!next) {
+    loading = null;
+    return Promise.resolve();
+  }
+  if (loading) return loading;
+  loading = (async () => {
+    try {
+      const remote = await next.load();
+      if (!remote || server !== next) return;
+      const remoteKeys = fromServerFavorites(remote);
+      const local = readModelFavorites();
+      if (remoteKeys.length) {
+        if (!sameList(remoteKeys, local)) applyLocal(remoteKeys);
+      } else if (local.length) {
+        await next.save(toServerFavorites(local));
+      }
+    } catch {
+      loading = null; // next attach tries again
+    }
+  })();
+  return loading;
 }
 
 export function toggleModelFavorite(key: string): void {

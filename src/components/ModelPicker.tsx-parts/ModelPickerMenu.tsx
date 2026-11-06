@@ -12,7 +12,7 @@ import { EffortRow } from "./EffortControls";
 import { toggleModelFavorite } from "@/lib/model-favorites";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/wire";
-import { MENU_WIDTH } from "./helpers";
+import { MENU_WIDTH, PANES_MENU_WIDTH } from "./helpers";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 
 function menuViewportHeight(fallback = 800): number {
@@ -63,6 +63,9 @@ export function ModelPickerMenu({
   pick,
   effortTitle,
   anchorRef,
+  panes = false,
+  turnedOff = 0,
+  openActiveModels,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
@@ -87,7 +90,14 @@ export function ModelPickerMenu({
   /** Hang the menu off this chip (Settings > Models list): under it or over
    * it, inside the window that holds it, above that window's layer. */
   anchorRef?: RefObject<HTMLElement | null>;
+  /** Two columns (providers, models) in place of the flat list (#2050). */
+  panes?: boolean;
+  /** Models this person or the organization turned off; the footer's
+   * "n turned off · Active models" opens Settings > Models > Advanced. */
+  turnedOff?: number;
+  openActiveModels?: () => void;
 }) {
+  const width = panes ? PANES_MENU_WIDTH : MENU_WIDTH;
   // The settings of the model in use, under the composer's list (the maintainer,
   // 2026-10-13, Cursor's second panel): Fast when it has a fast twin and
   // Effort › with only the levels it takes. The maintainer, 2026-10-14: Model › (the
@@ -135,11 +145,19 @@ export function ModelPickerMenu({
   };
   const content = (
     <>
-      <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)}
+      <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)} panes={panes}
         favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }} />
       {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
-      {advanced && settingsPanel}
+      {/* #2050: the two-pane selector always shows the effort bar (the
+          global Simple/Advanced mode hides nothing on these pages). */}
+      {(advanced || panes) && settingsPanel}
       <div className="border-t border-popover-hairline px-1.5 pt-1">
+        {openActiveModels && (
+          <ModelMenuItem variant="popover" data-model-active-models onClick={openActiveModels}>
+            <span>{turnedOff > 0 ? t("model.activeModelsLink", { count: turnedOff }) : t("model.activeModels")}</span>
+            <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
+          </ModelMenuItem>
+        )}
         <ModelMenuItem variant="popover" data-model-edit onClick={openProviders}>
           <span>{t("settings.section.providers")}</span>
           <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
@@ -160,7 +178,7 @@ export function ModelPickerMenu({
       data-model-menu-anchored=""
       role="dialog"
       aria-label={t("model.menu")}
-      style={{ width: MENU_WIDTH }}
+      style={{ width }}
       onKeyDown={onKeyDown}
       {...menuMotion.exitProps}
       className={cn(
@@ -187,7 +205,7 @@ export function ModelPickerMenu({
       aria-label={t("model.menu")}
       // Bottom-anchored menus open upward (2026-11-03); the model window
       // pins by its top so the list stays inside the viewport (Refs #1979).
-      style={menuAt ? { left: menuAt.left, right: menuAt.right, top: menuAt.top, bottom: menuAt.bottom, width: MENU_WIDTH, maxHeight: menuMaxHeight } : { width: MENU_WIDTH }}
+      style={menuAt ? { left: menuAt.left, right: menuAt.right, top: menuAt.top, bottom: menuAt.bottom, width, maxHeight: menuMaxHeight } : { width }}
       onKeyDown={onKeyDown}
       {...menuMotion.exitProps}
       className={cn(

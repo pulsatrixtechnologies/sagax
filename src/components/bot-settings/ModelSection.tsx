@@ -1,12 +1,14 @@
-// Model: which provider/model this bot runs on, and how hard it thinks.
-// Moved from SettingsPanel.tsx (~835-881). The pill keeps the profile row
-// (`contained`) and opens the same modal as the composer chip. An in-flow
-// menu is clipped by this sidebar.
-import { useAdvancedMode } from "@/lib/interface-mode";
+// Bot > Model (#2050, 2026-11-05): three cards. "Model": where the bot
+// runs (BotHostSettings, read-only when the organization decides), the
+// model and the effort. "If it fails": one switch and the ordered backups
+// (bot.fallback, up to 5), which also keep the single backup of
+// automaticRecovery in step: the first ordered backup. "Advanced", a
+// closed fold: who pays for replies and the prompt cache. The global
+// Simple/Advanced mode hides nothing here any more.
 import { EffortRow, ModelPicker } from "../ModelPicker";
-import { X } from "lucide-react";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { canEditBotField } from "@/lib/bot-capabilities";
-import { CompactRow, HelpTip, PillSelect, SettingsGroup } from "../SettingsPrimitives";
+import { CompactRow, DescribedRow, FoldRow, HelpTip, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { t } from "@/lib/i18n";
 import { engineLabel } from "@/lib/human-label";
 import { fallbackWithModel } from "../../../shared/handoff-model";
@@ -17,13 +19,14 @@ import { engineOffer } from "../../../shared/offered-engines";
 import { useMyEngines, usePerspicaxOrg } from "@/lib/perspicax-org";
 import { botWithViewerSettings, useViewerBotOverride, viewerLocalBotSettings } from "@/lib/viewer-bot-overrides";
 import { useBotEditor } from "./BotEditorContext";
-import { botRecovery } from "@/lib/bot-runtime-settings";
-import { BotRecoverySettings } from "./BotRecoverySettings";
-import { BotPayerSettings } from "./BotPayerSettings";
+import { botRecovery, type BotRecovery } from "@/lib/bot-runtime-settings";
+import { useBotRuntimeSettings } from "./useBotRuntimeSettings";
+import { BotPayerRow } from "./BotPayerSettings";
 import { BotHostSettings } from "./BotHostSettings";
 
+type Backup = NonNullable<Bot["fallback"]>[number];
+
 export function ModelSection({ bot }: { bot: Bot }) {
-  const advanced = useAdvancedMode();
   const { state, dispatch } = useStore();
   const { draft, bulk } = useBotEditor();
   const viewerLocal = viewerLocalBotSettings(state.config, bot);
@@ -35,6 +38,7 @@ export function ModelSection({ bot }: { bot: Bot }) {
   // field with nothing to act on.
   const turn = modelTurnLock(bot);
   const shown = { ...viewerShown, busy: turn.busy };
+  const machine = bot.host?.kind === "machine";
   const modelVariants = state.instances.find((instance) => instance.instanceId === shown.modelSelection.instanceId)?.capabilities?.modelVariants;
   const effortTitle = modelVariants ? t("botPanel.model.reasoning") : t("botPanel.model.effort");
   // Says what the app does, not what the engine ends up at: Codex applies a
@@ -47,16 +51,22 @@ export function ModelSection({ bot }: { bot: Bot }) {
     : modelVariants
       ? (draft && !bulk ? t("botPanel.model.reasoningStart") : t("botPanel.model.reasoningGroups"))
       : `${t("botPanel.model.effortHelp")}${shown.modelSelection.effort ? "" : t("botPanel.model.effortDefault")}`;
-  // 2026-10-16 : drawn like Settings: one group of rows (the model's
-  // pill, the effort's pill menu), then recovery and backups as groups.
+  // the same rights as before: the switch and the single backup go with
+  // automaticRecovery, the ordered list with fallback (shared/permissions.ts)
+  const canSwitch = !draft && canEditBotField(state.config, bot, "automaticRecovery");
+  const canOrder = !draft && canEditBotField(state.config, bot, "fallback");
+  // #1137: who pays for this bot's replies (organization server only)
+  const payer = !machine && !draft && Boolean(bot.turnPayerDefault) && canSwitch;
+  const keepWarm = !draft && Boolean(state.config?.cacheKeepWarm);
   return (
     <div className="flex flex-col gap-5">
       <SettingsGroup title={t("botSettings.nav.model")} groupId="botModel">
         {!draft && <BotHostSettings bot={bot} />}
-        {bot.host?.kind === "machine" ? null : <div className="px-3.5 py-2.5">
+        {machine ? null : <div className="px-3.5 py-2.5">
           <ModelPicker
             bot={shown}
             contained
+            panes
             viewerLocal={viewerLocal}
             label={
               <div>
@@ -70,8 +80,8 @@ export function ModelSection({ bot }: { bot: Bot }) {
           {!draft && turn.busy && <ModelLockLine bot={bot} lock={turn} />}
         </div>}
         {/* Share the model picker's effort choices, but edit the profile
-            default. Simple keeps the saved effort and does not show it. */}
-        {bot.host?.kind !== "machine" && advanced && <EffortRow
+            default. Shown in Simple too since #2050. */}
+        {!machine && <EffortRow
           bot={shown}
           viewerLocal={viewerLocal}
           pill={{ label: effortTitle, help: effortHelp }}
@@ -84,16 +94,21 @@ export function ModelSection({ bot }: { bot: Bot }) {
           }
         />}
       </SettingsGroup>
-      {/* #1137: who pays for this bot's replies (organization server, the
-          owner or an admin; Simple and Advanced). */}
-      {bot.host?.kind !== "machine" && !draft && bot.turnPayerDefault && canEditBotField(state.config, bot, "automaticRecovery") && <BotPayerSettings key={`payer:${bot.id}`} bot={bot} />}
-      {/* 2026-10-15: this bot's automatic recovery (it was Settings >
-          General > Advanced for every bot), then its ordered backups. */}
-      {bot.host?.kind !== "machine" && advanced && !draft && canEditBotField(state.config, bot, "automaticRecovery") && <BotRecoverySettings key={`recovery:${bot.id}`} bot={bot} />}
-      {bot.host?.kind !== "machine" && advanced && !draft && botRecovery(bot, state.config).enabled && canEditBotField(state.config, bot, "fallback") && <FallbackChain bot={bot} onChange={(fallback) => dispatch({ type: "updateBot", botId: bot.id, patch: { fallback } })} />}
-      {!draft && state.config?.cacheKeepWarm && (
-        <KeepWarmRow bot={bot} workspaceOn={state.config.cacheKeepWarm.enabled}
-          onChange={(cacheKeepWarm) => dispatch({ type: "updateBot", botId: bot.id, patch: { cacheKeepWarm } })} />
+      {!machine && (canSwitch || canOrder) && <IfItFailsCard key={`recovery:${bot.id}`} bot={bot} canSwitch={canSwitch} canOrder={canOrder} />}
+      {(payer || keepWarm) && (
+        <div data-settings-card="botModel.advanced">
+          <SettingsGroup title={t("botModel.advanced.title")} groupId="botModelAdvanced">
+            <FoldRow cardId="botModel.advanced" label={t("botModel.advanced.title")} description={t("botModel.advanced.help")}>
+              <div className="-mx-3.5 flex flex-col pt-1" data-bot-model-advanced="">
+                {payer && <BotPayerRow key={`payer:${bot.id}`} bot={bot} />}
+                {keepWarm && (
+                  <KeepWarmRow bot={bot} workspaceOn={state.config!.cacheKeepWarm!.enabled}
+                    onChange={(cacheKeepWarm) => dispatch({ type: "updateBot", botId: bot.id, patch: { cacheKeepWarm } })} />
+                )}
+              </div>
+            </FoldRow>
+          </SettingsGroup>
+        </div>
       )}
     </div>
   );
@@ -102,20 +117,22 @@ export function ModelSection({ bot }: { bot: Bot }) {
 /** Prompt-cache keep-warm for this bot: follow the workspace, or override it. */
 function KeepWarmRow({ bot, workspaceOn, onChange }: { bot: Bot; workspaceOn: boolean; onChange: (value: boolean | null) => void }) {
   const value = bot.cacheKeepWarm === true ? "on" : bot.cacheKeepWarm === false ? "off" : "follow";
+  const title = t("bot.keepWarm.title");
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl bg-card p-4">
-      <div className="min-w-0">
-        <label htmlFor="bot-cache-keepwarm" className="text-[15px] font-medium text-ink">{t("bot.keepWarm.title")}</label>
-        <div className="mt-0.5 text-[13px] text-ink-secondary">{t("bot.keepWarm.help")}</div>
+    <DescribedRow label={title} description={t("bot.keepWarm.help")} rowId="botKeepWarm">
+      <div data-bot-keep-warm={value}>
+        <PillSelect<"follow" | "on" | "off">
+          value={value}
+          ariaLabel={title}
+          onChange={(next) => onChange(next === "on" ? true : next === "off" ? false : null)}
+          options={[
+            { value: "follow", label: t("bot.keepWarm.follow", { state: t(workspaceOn ? "bot.keepWarm.on" : "bot.keepWarm.off") }) },
+            { value: "on", label: t("bot.keepWarm.on") },
+            { value: "off", label: t("bot.keepWarm.off") },
+          ]}
+        />
       </div>
-      <select id="bot-cache-keepwarm" value={value}
-        onChange={(event) => onChange(event.target.value === "on" ? true : event.target.value === "off" ? false : null)}
-        className="shrink-0 cursor-pointer rounded-lg border border-hairline/40 bg-inset px-3 py-2 text-[13px] text-ink">
-        <option value="follow">{t("bot.keepWarm.follow", { state: t(workspaceOn ? "bot.keepWarm.on" : "bot.keepWarm.off") })}</option>
-        <option value="on">{t("bot.keepWarm.on")}</option>
-        <option value="off">{t("bot.keepWarm.off")}</option>
-      </select>
-    </div>
+    </DescribedRow>
   );
 }
 
@@ -158,22 +175,44 @@ function ModelLockLine({ bot, lock }: { bot: Bot; lock: ModelTurnLock }) {
   );
 }
 
-/** Ordered backups use the same opt-in, proven-before-start recovery as
- * the workspace backup. They change only the failed thread's model. */
-function FallbackChain({ bot, onChange }: { bot: Bot; onChange: (fallback: Bot["fallback"]) => void }) {
-  const { state } = useStore();
+/** The single backup the server keeps in step with the ordered list: its
+ * first entry; off with no backup when the list is empty. */
+export function recoveryFor(chain: readonly Backup[], enabled: boolean): BotRecovery {
+  const first = chain[0];
+  return first ? { enabled, backup: first } : { enabled: false };
+}
+
+const swap = (chain: readonly Backup[], from: number, to: number): Backup[] => {
+  const next = [...chain];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved!);
+  return next;
+};
+
+/** "If it fails": automatic recovery (automaticRecovery, server/routes/
+ * bot-runtime-settings.ts) and the ordered backups (bot.fallback) as one
+ * card. The server keeps both fields; the ordered backups win when there
+ * are some, so every change to the list also rewrites the single backup
+ * as its first entry. Only the failed thread's model changes. */
+function IfItFailsCard({ bot, canSwitch, canOrder }: { bot: Bot; canSwitch: boolean; canOrder: boolean }) {
+  const { state, dispatch } = useStore();
+  const { shown, save, saving, error } = useBotRuntimeSettings(bot);
   const offered = useOfferedInstances();
   const org = usePerspicaxOrg();
   const mine = useMyEngines();
   const offerContext = engineOfferContext(state.config, org !== null, mine);
+  const recovery = botRecovery(shown, state.config);
   // a backup on an engine the organization no longer offers is not shown
   // (the server skips it too) and leaves the chain at the next change; one
   // the person pays for themselves stays when the organization lets own
   // accounts through (#1098, 2026-10-30)
-  const chain = (bot.fallback ?? []).filter((entry) => {
+  const stored = (bot.fallback ?? []).filter((entry) => {
     const offer = engineOffer(offerContext, entry.instanceId);
     return offer === "offered" || (offer === "notGiven" && mine?.find((row) => row.instanceId === entry.instanceId)?.orgNotAllowed !== true);
   });
+  // a bot with the single backup only (set before #2050, or the server
+  // default) shows it as its first ordered backup
+  const chain: Backup[] = stored.length > 0 ? stored : recovery.backup ? [recovery.backup] : [];
   // only engines offered to this person (src/lib/offered-instances.ts)
   const available = offered.filter(
     (instance) =>
@@ -184,61 +223,97 @@ function FallbackChain({ bot, onChange }: { bot: Bot; onChange: (fallback: Bot["
   );
   const nameOf = (instanceId: string) => engineLabel(state.instances.find((instance) => instance.instanceId === instanceId)?.displayName, instanceId);
 
+  const commit = (next: Backup[]) => {
+    dispatch({ type: "updateBot", botId: bot.id, patch: { fallback: next } });
+    if (canSwitch) void save({ automaticRecovery: recoveryFor(next, recovery.enabled) });
+  };
   const add = (instanceId: string) => {
     const instance = state.instances.find((candidate) => candidate.instanceId === instanceId);
     if (!instance || !instance.models.default.trim() || chain.length >= 5 || !available.includes(instance)) return;
-    onChange([...chain, { instanceId, model: instance.models.default }]);
+    commit([...chain, { instanceId, model: instance.models.default }]);
+  };
+  const toggle = () => {
+    if (saving) return;
+    void save({ automaticRecovery: recoveryFor(chain, !recovery.enabled) });
   };
 
-  const title = t("botPanel.model.backups");
+  const title = t("botModel.ifFails.title");
+  const switchLabel = t("botModel.ifFails.switch");
+  const noBackup = chain.length === 0;
   return (
-    <SettingsGroup
-      title={title}
-      groupId="botBackups"
-      accessory={<HelpTip label={t("settings.moreAbout", { title })}>{t("botPanel.model.backupsHelp")}</HelpTip>}
-    >
-      {chain.map((entry, index) => {
-        const models = state.instances.find((instance) => instance.instanceId === entry.instanceId)?.models.options ?? [];
-        const allowed = models.map((model) => model.id);
-        return (
-        <CompactRow key={entry.instanceId} label={`${index + 1}. ${nameOf(entry.instanceId)}`}>
-          <PillSelect
-            value={entry.model}
-            ariaLabel={t("botPanel.model.backupModel")}
-            onChange={(model) => {
-              const next = fallbackWithModel(chain, entry.instanceId, model, allowed.length ? allowed : [model]);
-              if (next) onChange(next);
-            }}
-            options={[
-              ...(allowed.includes(entry.model) ? [] : [{ value: entry.model, label: entry.model }]),
-              ...models.map((model) => ({ value: model.id, label: model.label })),
-            ]}
-          />
-          <button
-            type="button"
-            onClick={() => onChange(chain.filter((candidate) => candidate.instanceId !== entry.instanceId))}
-            aria-label={t("botPanel.model.removeFallback", { name: nameOf(entry.instanceId) })}
-            className="ui-icon-button shrink-0"
-          >
-            <X size={13} aria-hidden="true" />
-          </button>
-        </CompactRow>
-        );
-      })}
-      {chain.length < 5 && (
-        <CompactRow label={t("botPanel.model.addFallback")}>
-          <PillSelect
-            value=""
-            ariaLabel={t("botPanel.model.addFallback")}
-            disabled={available.length === 0}
-            onChange={add}
-            options={[
-              { value: "", label: available.length === 0 ? t("botPanel.model.noEngine") : t("botPanel.model.addEngine"), disabled: true },
-              ...available.map((instance) => ({ value: instance.instanceId, label: instance.displayName })),
-            ]}
-          />
-        </CompactRow>
-      )}
-    </SettingsGroup>
+    <div data-bot-recovery={recovery.enabled ? "on" : "off"}>
+      <SettingsGroup
+        title={title}
+        groupId="botRecovery"
+        accessory={
+          <HelpTip label={t("settings.moreAbout", { title })}>
+            <p>{t("settings.recovery.help")}</p>
+            <p className="mt-1.5">{t("settings.recovery.scope")}</p>
+            <p className="mt-1.5">{t("settings.recovery.charges")}</p>
+          </HelpTip>
+        }
+      >
+        <DescribedRow label={switchLabel} description={noBackup ? t("botModel.ifFails.addFirst") : t("botModel.ifFails.order")} rowId="botRecoveryEnabled">
+          <Switch checked={recovery.enabled} disabled={saving || !canSwitch || (noBackup && !recovery.enabled)}
+            aria-label={switchLabel} onClick={toggle} />
+        </DescribedRow>
+        {chain.map((entry, index) => {
+          const models = state.instances.find((instance) => instance.instanceId === entry.instanceId)?.models.options ?? [];
+          const allowed = models.map((model) => model.id);
+          const name = nameOf(entry.instanceId);
+          const modelLabel = models.find((model) => model.id === entry.model)?.label ?? entry.model;
+          return (
+            <CompactRow key={entry.instanceId} label={`${index + 1}. ${name}`} rowId={`botBackup.${index + 1}`}>
+              {canOrder ? (
+                <>
+                  <PillSelect
+                    value={entry.model}
+                    ariaLabel={t("botPanel.model.backupModel")}
+                    disabled={saving}
+                    onChange={(model) => {
+                      const next = fallbackWithModel(chain, entry.instanceId, model, allowed.length ? allowed : [model]);
+                      if (next) commit(next);
+                    }}
+                    options={[
+                      ...(allowed.includes(entry.model) ? [] : [{ value: entry.model, label: entry.model }]),
+                      ...models.map((model) => ({ value: model.id, label: model.label })),
+                    ]}
+                  />
+                  <button type="button" disabled={saving || index === 0} onClick={() => commit(swap(chain, index, index - 1))}
+                    aria-label={t("botModel.ifFails.moveUp", { name })} className="ui-icon-button shrink-0" data-backup-move="up">
+                    <ChevronUp size={13} aria-hidden="true" />
+                  </button>
+                  <button type="button" disabled={saving || index === chain.length - 1} onClick={() => commit(swap(chain, index, index + 1))}
+                    aria-label={t("botModel.ifFails.moveDown", { name })} className="ui-icon-button shrink-0" data-backup-move="down">
+                    <ChevronDown size={13} aria-hidden="true" />
+                  </button>
+                  <button type="button" disabled={saving} onClick={() => commit(chain.filter((candidate) => candidate.instanceId !== entry.instanceId))}
+                    aria-label={t("botPanel.model.removeFallback", { name })} className="ui-icon-button shrink-0" data-backup-remove="">
+                    <X size={13} aria-hidden="true" />
+                  </button>
+                </>
+              ) : (
+                <span className="truncate text-[13px] leading-[18px] text-ink-secondary">{modelLabel}</span>
+              )}
+            </CompactRow>
+          );
+        })}
+        {canOrder && chain.length < 5 && (
+          <CompactRow label={t("botPanel.model.addFallback")} rowId="botBackup.add">
+            <PillSelect
+              value=""
+              ariaLabel={t("botPanel.model.addFallback")}
+              disabled={saving || available.length === 0}
+              onChange={add}
+              options={[
+                { value: "", label: available.length === 0 ? t("botPanel.model.noEngine") : t("botPanel.model.addEngine"), disabled: true },
+                ...available.map((instance) => ({ value: instance.instanceId, label: instance.displayName })),
+              ]}
+            />
+          </CompactRow>
+        )}
+        {error && <p role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{error}</p>}
+      </SettingsGroup>
+    </div>
   );
 }

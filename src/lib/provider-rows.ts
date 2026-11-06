@@ -113,10 +113,12 @@ export function providerRows(input: ProviderInput): ProviderRow[] {
   const ownPayer: ProviderPayer = input.organization ? "org" : "me";
 
   // The organization's (or the server's) saved keys first, so an engine on
-  // that key joins its row.
-  if (input.manageKeys) {
+  // that key joins its row. On an organization server everyone reads them
+  // (the server reports presence, never the key): they are managed in
+  // Perspicax, so the row has no key form (2026-11-05).
+  if (input.manageKeys || input.organization) {
     for (const id of input.savedKeys) {
-      const row = keyRow(ownPayer, "server", id, true);
+      const row = keyRow(ownPayer, "server", id, input.manageKeys);
       if (VOICE_KEY_ROWS.has(id)) row.brings.push("voice");
       if (IMAGE_KEY_ROWS.has(id)) row.brings.push("images");
     }

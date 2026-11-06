@@ -468,8 +468,6 @@
   "botPanel.memory.write": "Escreva a nota aqui.",
   "botPanel.model.addEngine": "Adicionar um mecanismo…",
   "botPanel.model.addFallback": "Adicionar um mecanismo de reserva",
-  "botPanel.model.backups": "Modelos de reserva deste bot",
-  "botPanel.model.backupsHelp": "Quando a recuperação automática está ativa nos Ajustes, estes modelos são tentados em ordem só se o provedor provar que o pedido nunca começou. Trabalho que possa ter rodado não é repetido. Só essa conversa muda. Os padrões do bot e as outras conversas ficam. O provedor de reserva pode cobrar.",
   "botPanel.model.default": "Modelo padrão",
   "botPanel.model.effort": "Esforço",
   "botPanel.model.noEngine": "Nenhum outro mecanismo está disponível",

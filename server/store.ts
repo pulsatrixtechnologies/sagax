@@ -2811,10 +2811,8 @@ export class Store {
     const next = this.bots.map((bot) => {
       if (!ids.has(bot.id)) return bot;
       if (adds.has(bot.id)) return { ...bot, section: key, ...(targetId ? { sectionId: targetId } : {}) };
-      const cleared = { ...bot, section: undefined as string | undefined, sectionId: undefined as string | undefined };
-      delete cleared.section;
-      delete cleared.sectionId;
-      return cleared;
+      // Explicit undefined so the in-memory Object.assign below clears both keys.
+      return { ...bot, section: undefined, sectionId: undefined };
     });
     if (ids.size) {
       this.saveBots(next);

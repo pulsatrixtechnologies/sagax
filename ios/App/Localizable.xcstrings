@@ -41695,7 +41695,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "En service : %@ est connecté sur cet ordinateur. Sagax lui demande une carte à usage unique après votre accord."
+            "value": "En service : %@ est connecté sur cet ordinateur. Sagax lui demande une carte à usage unique après ton accord."
           }
         }
       }
@@ -50935,7 +50935,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pas branché. Activez pour utiliser le compte que vous avez déjà. Rien n'est facturé."
+            "value": "Pas branché. Active pour utiliser le compte que tu as déjà. Rien n'est facturé."
           }
         }
       }
@@ -72011,7 +72011,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shop Pay et Link sont des portefeuilles que vous avez déjà. Sagax demande une carte à usage unique seulement après votre accord, par l'outil en ligne de commande du portefeuille connecté sur cet ordinateur. Le site ne reçoit pas le numéro enregistré, et le bot ne le voit pas."
+            "value": "Shop Pay et Link sont des portefeuilles que tu as déjà. Sagax demande une carte à usage unique seulement après ton accord, par l'outil en ligne de commande du portefeuille connecté sur cet ordinateur. Le site ne reçoit pas le numéro enregistré, et le bot ne le voit pas."
           }
         }
       }

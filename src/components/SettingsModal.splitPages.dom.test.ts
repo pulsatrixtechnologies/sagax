@@ -192,8 +192,12 @@ describe("Settings split: every moved setting at its new place", () => {
     expect(pane().querySelector("h2")?.textContent).toBe("Vault");
     expect(card("credentials.items")).not.toBeNull();
     expect(pane().textContent).toContain("Your vault");
-    for (const action of ["data-credentials-import", "data-credentials-export", "data-credentials-add"]) expect(pane().querySelector(`[${action}]`), action).not.toBeNull();
-    expect(group("credentials.wallets")).not.toBeNull();
+    expect(pane().querySelector("[data-credentials-add]")).not.toBeNull();
+    expect(pane().querySelector("[data-credentials-import]")).toBeNull();
+    await act(async () => { pane().querySelector<HTMLButtonElement>("[data-vault-menu]")!.click(); });
+    for (const action of ["data-credentials-import", "data-credentials-export"]) expect(pane().querySelector(`[${action}]`), action).not.toBeNull();
+    expect(group("credentials.wallets")).toBeNull();
+    expect(card("credentials.wallets")).not.toBeNull();
     expect(pane().textContent).toContain("One-time card");
     expect(card("credentials.onePassword")).not.toBeNull();
     expect(card("security")).toBeNull();

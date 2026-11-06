@@ -38,6 +38,7 @@ import { HistorySection, type HistoryRow } from "./HistorySection";
 import { UsageSection } from "./UsageSection";
 import { VisibilitySection } from "./VisibilitySection";
 import { SharingSection } from "./SharingSection";
+import { BotPayerCard } from "./BotPayerSettings";
 import { TeamBotVaultSection } from "./TeamBotVaultSection";
 import { AppearancePane } from "../appearance/AppearancePane";
 import type { PromptPreviewData } from "./PromptPreview";
@@ -320,6 +321,8 @@ export function useBotSectionContent(bot: Bot, {
         return (
           <>
             <SharingSection bot={bot} />
+            {/* #1137: who pays for the replies of the people it is shared with */}
+            <BotPayerCard bot={bot} />
             {Boolean(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(config, bot) || canSetBotHost(config, bot)) && (
               <TeamBotVaultSection botId={bot.id} botName={bot.name} />
             )}

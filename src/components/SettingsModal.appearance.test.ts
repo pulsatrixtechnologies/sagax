@@ -96,6 +96,11 @@ vi.mock("@/lib/notification-preferences", () => {
     nudgeShake: local("omb-nudge-shake"),
     approvalChime: local("omb-approval-chime"),
     connectionNotices: local("omb-connection-notices"),
+    notifyBots: local("omb-notify-bots"),
+    notifyPeople: local("omb-notify-people"),
+    notifyGroups: local("omb-notify-groups"),
+    notifyApprovals: local("omb-notify-approvals"),
+    notifyRoutines: local("omb-notify-routines"),
     useLocalSwitch: (choice: { enabled: () => boolean }) => choice.enabled(),
   };
 });
@@ -471,7 +476,7 @@ describe("Settings → Notifications", () => {
     fixture.section = "notifications";
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    expect(groups).toEqual(["alerts", "privacy"]);
+    expect(groups).toEqual(["notificationTypes", "alerts", "privacy"]);
     expect(html).toContain(">Alerts</h3>");
     expect(html).toContain(">Privacy</h3>");
     expect(html).toContain(">Nudges</div>");

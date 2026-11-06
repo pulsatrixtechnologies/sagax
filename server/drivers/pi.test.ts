@@ -325,10 +325,16 @@ describe("buildMcpServers", () => {
         phone: { command: "node", args: ["p"], env: {} },
       },
     });
-    expect(servers).toEqual({
-      agents: { command: "node", args: ["a"], env: { B: "2" } },
-      phone: { command: "node", args: ["p"], env: {} },
-    });
+    // agents is passed through as is. Since #2189 every other mount goes
+    // through the gate while agents is mounted (it withholds the bare tool
+    // names agents owns), so phone is a gate proxy whose upstream is the
+    // original stdio server.
+    expect(servers?.agents).toEqual({ command: "node", args: ["a"], env: { B: "2" } });
+    const phone = servers?.phone as { args: string[]; env: Record<string, string> };
+    expect(phone.args[0]).toMatch(/mcp-gate\.ts$/);
+    expect(phone.env.SAGAX_GATE_NAME).toBe("phone");
+    expect(JSON.parse(phone.env.SAGAX_GATE_UPSTREAM!)).toEqual({ command: "node", args: ["p"], env: {} });
+    expect(JSON.parse(phone.env.SAGAX_GATE_WITHHOLD!)).toContain("list_threads");
   });
 
 

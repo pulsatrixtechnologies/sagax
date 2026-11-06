@@ -338,10 +338,13 @@ export interface AcpSupport {
   /** The agent's own debug log for a native session, read while a prompt is
    * quiet: any new line proves the process alive, and `parse` picks out what
    * is worth telling the person (a retry, a compression). Return null when
-   * this process keeps no log. */
+   * this process keeps no log. A `shared` log holds every session's and
+   * process's lines, so its lines prove nothing about this turn and only
+   * `parse` reads them. */
   statusLog?: {
     path(env: Record<string, string | undefined>, sessionId: string): string | null;
-    parse(line: string): LogSignal | null;
+    parse(line: string, sessionId: string): LogSignal | null;
+    shared?: true;
   };
   /** Bound provider-native tool payloads before writing diagnostic logs. */
   sanitizeToolPayload?: boolean;

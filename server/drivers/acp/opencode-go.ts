@@ -12,6 +12,7 @@ import { hostedWorkspaceConfigured } from "../../enterprise.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import { opencodeHostToolEnv, withheldWorkspace } from "../host-tools.ts";
 import { createAcpDriver, offeredModels, type AccountErrorCode, type AcpSupport } from "./core.ts";
+import { parseOpenCodeLogLine } from "./quiet-status.ts";
 import { MODEL_ACCESS_DISABLED_MESSAGE, MODEL_ACCESS_DISABLED_TEXT } from "../../../shared/model-access-disabled.ts";
 import type { ModelCatalog, ProviderErrorCode } from "../../contracts.ts";
 import { titleCaseModelId } from "../../contracts.ts";
@@ -571,6 +572,11 @@ export function ensureOpenCodeInjectModel(
   return native;
 }
 
+/** OpenCode 1.18 appends every process's log to one file under its xdg data folder. */
+export function openCodeLogPath(env: Record<string, string | undefined>): string {
+  return join(env.XDG_DATA_HOME || join(env.HOME || env.USERPROFILE || homedir(), ".local", "share"), "opencode", "log", "opencode.log");
+}
+
 /** Every path the OpenCode CLI may keep auth.json at.
  *
  * The CLI is xdg-flavoured on EVERY platform — `opencode auth list` on macOS
@@ -861,6 +867,7 @@ const support = (loadCatalog: OpenCodeCatalogLoader): AcpSupport => ({
     apiKey: true,
   },
   spawnArgs: () => ["acp"],
+  statusLog: { path: openCodeLogPath, parse: parseOpenCodeLogLine, shared: true },
   credentialEnv: ["OPENCODE_API_KEY", ...OPENCODE_PROVIDER_ENV],
   selectModel: { configId: "model" },
   // A retired id (x-preview-f-free, the Ox Alpha preview) or none at all:

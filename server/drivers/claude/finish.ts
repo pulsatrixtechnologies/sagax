@@ -35,6 +35,7 @@ const finalizeClose = async (code: number | null) => {
   if (!(await killCliTree(child, 0))) {
     session.broker?.close();
     session.broker = undefined;
+    session.elicit.close();
     emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: "Claude could not be confirmed stopped; its helper processes may still be running." });
     return;
   }
@@ -81,6 +82,7 @@ const finalizeClose = async (code: number | null) => {
       if (spentModels) carriedModels.set(turnId, spentModels);
       session.broker?.close();
       session.broker = undefined;
+      session.elicit.close();
       if (session.mcpConfigPath) {
         try {
           rmSync(dirname(session.mcpConfigPath), { recursive: true, force: true });
@@ -156,6 +158,7 @@ const finalizeClose = async (code: number | null) => {
       session.broker = undefined;
       failedBroker?.pause();
       failedBroker?.close();
+      session.elicit.close();
       if (session.mcpConfigPath) {
         try {
           rmSync(dirname(session.mcpConfigPath), { recursive: true, force: true });
@@ -249,6 +252,7 @@ const finalizeClose = async (code: number | null) => {
       });
       session.broker?.close();
       session.broker = undefined;
+      session.elicit.close();
       if (session.mcpConfigPath) {
         try {
           rmSync(dirname(session.mcpConfigPath), { recursive: true, force: true });
@@ -296,6 +300,7 @@ const finalizeClose = async (code: number | null) => {
   }
   if (session.idleTimer) clearTimeout(session.idleTimer);
   session.broker?.close();
+  session.elicit.close();
   if (session.mcpConfigPath) {
     try {
       rmSync(dirname(session.mcpConfigPath), { recursive: true, force: true });

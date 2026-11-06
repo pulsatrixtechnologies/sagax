@@ -1,6 +1,6 @@
 /** Quiet-watch and turn settle for an ACP instance. */
 import {
-  classifyQuiet, describeQuiet, LogTail, quietKey, sampleProcessTree,
+  classifyQuiet, describeQuiet, LogTail, quietKey, quietVerdict, sampleProcessTree,
   type LogSignal, type ProcessSample, type QuietState,
 } from "./quiet-status.ts";
 import { ACP_STUCK_AFTER_MS, envOr, promptIdleTimeoutMs } from "./constants.ts";
@@ -25,8 +25,9 @@ export function createStartQuietWatch(deps: Pick<LifecycleDeps, "support" | "emi
 
     const noticeAfterMs = envOr("SAGAX_ACP_QUIET_NOTICE_MS", 60_000);
     const tickMs = envOr("SAGAX_ACP_QUIET_TICK_MS", 15_000);
-    const logPath = support.statusLog && session.sessionId
-      ? support.statusLog.path(session.env, session.sessionId)
+    const { sessionId } = session;
+    const logPath = support.statusLog && sessionId
+      ? support.statusLog.path(session.env, sessionId)
       : null;
     const tail = logPath ? new LogTail(logPath) : null;
     tail?.read(); // skip what this log held before the prompt
@@ -42,19 +43,22 @@ export function createStartQuietWatch(deps: Pick<LifecycleDeps, "support" | "emi
     // A reused session's last inbound message may predate this prompt:
     // idle time between turns is not the agent being quiet on this one.
     const promptStartedAt = Date.now();
+    let readAt = promptStartedAt;
     const tick = async () => {
       if (probing || current.state.settled || session.current !== current) return;
       const now = Date.now();
       for (const line of tail?.read() ?? []) {
-        session.acp.touch();
-        const signal = support.statusLog!.parse(line);
+        if (!support.statusLog!.shared) session.acp.touch();
+        const signal = support.statusLog!.parse(line, sessionId!);
         if (signal?.kind === "context") context = { tokens: signal.tokens, threshold: signal.threshold };
-        else if (signal) logged = { signal, at: now };
+        // A shared row was written some time after the last read; date it then, so a reply since clears it.
+        else if (signal) logged = { signal, at: support.statusLog!.shared ? readAt : now };
       }
+      readAt = now;
       const quietMs = now - Math.max(promptStartedAt, session.acp.lastInboundAt);
       // A running tool or an open question is already on screen.
       if (quietMs < noticeAfterMs || current.asks.size || current.runningTools.size) {
-        if (quietMs < noticeAfterMs) logged = null;
+        if (quietMs < noticeAfterMs && (!support.statusLog?.shared || session.acp.lastInboundAt > (logged?.at ?? 0))) logged = null;
         previous = null;
         shownKey = null;
         noSignsSince = null;
@@ -79,15 +83,13 @@ export function createStartQuietWatch(deps: Pick<LifecycleDeps, "support" | "emi
       // CPU use needs two samples; the first only sets the baseline
       // (unless the log already said what is going on).
       if (first && next.kind === "unknown") return;
-      // An SDK sleeping between its own retries holds no socket and
-      // burns no CPU (seen with Qwen against a 429ing endpoint), so
-      // "no sign of life" is called only once that has lasted minutes.
-      if (next.kind === "no-signs") {
-        noSignsSince ??= now;
-        if (now - noSignsSince < ACP_STUCK_AFTER_MS) next = { kind: "between-requests" };
-      } else {
-        noSignsSince = null;
-      }
+      // An SDK sleeping between retries holds no socket and burns no CPU
+      // (Qwen against a 429ing endpoint); waiting out a usage limit ends the
+      // turn as that limit so limit-failover-host can carry on.
+      const verdict = quietVerdict({ next, logged, noSignsSince, now, quietMs, name: support.displayName, stuckAfterMs: ACP_STUCK_AFTER_MS });
+      next = verdict.next;
+      noSignsSince = verdict.noSignsSince;
+      if (verdict.stop) return void session.acp.failAll(verdict.stop);
       state = next;
       const key = quietKey(next);
       if (key === shownKey || notices >= 12) return;

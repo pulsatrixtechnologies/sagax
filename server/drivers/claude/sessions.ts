@@ -95,6 +95,7 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
     const broker = s.broker;
     s.broker = undefined;
     broker?.close();
+    s.elicit.close();
     appendNative(threadId, { dir: "out", source: "claude.session", msg: { close: why } });
     // A process that ends takes its turn files along. A replacement built
     // for this same thread already holds its values in its own env.

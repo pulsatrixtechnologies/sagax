@@ -2657,7 +2657,6 @@
   "routines.effort.label": "Esforço",
   "routines.effort.botDefault": "Esforço do bot",
   "routineEditor.hint.effort": "As execuções e seus subagentes usam este esforço. O chat mantém o esforço do bot.",
-  "settings.experimental.browserWindows": "Ainda não disponível nesta máquina Windows: instale o motor do navegador com `openmausbot browser install`.",
   "approvalMode.antigravityLocalOnly": "Automático (acesso total) está disponível no app de desktop instalado.",
   "approvalMode.trustedLocalOnly": "Acesso total e Personalizado estão disponíveis no app de desktop instalado.",
   "computer.askedHands": "pediu sua ajuda:",

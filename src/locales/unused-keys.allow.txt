@@ -37,6 +37,9 @@ attention.pin
 backup.fromComputer
 backup.fromComputerHint
 backup.import
+backups.export.last
+backups.export.never
+backups.group.full
 botAccess.grants.allApps
 botAccess.grants.allTools
 botAccess.grants.custom
@@ -234,6 +237,7 @@ folder.namedSettings
 folder.newIn
 folder.newNamed
 groupPanel.folderAdminOnly
+import.prefs.none
 keys.optional
 keys.other.title
 keys.providers.subtitle
@@ -266,6 +270,7 @@ model.auto.title
 model.auto.use
 model.botModelTag
 model.chooseHint
+model.edit
 model.payer.current
 model.payer.hint
 model.payer.keyMissing
@@ -345,6 +350,7 @@ organization.actionFailed
 organization.additive
 organization.address
 organization.advanced
+organization.advanced.summary
 organization.advancedHelp
 organization.browserConsent
 organization.cancel
@@ -364,6 +370,7 @@ organization.licenseExpired
 organization.link.lastSync
 organization.loadFailed
 organization.loading
+organization.manageInPerspicax
 organization.modelCount
 organization.modelHelp
 organization.noModels
@@ -488,6 +495,7 @@ serverEnvironment.resources
 serverEnvironment.title
 serverEnvironment.used
 serverEnvironment.usedValue
+servers.connectAction
 settings.companion.ownDevices
 settings.connections.subtitle
 settings.connections.title
@@ -495,6 +503,8 @@ settings.domain.inputHint
 settings.engines.subtitle
 settings.experimental.boatComputer
 settings.experimental.boatComputerDetail
+settings.experimental.browserDescription
+settings.experimental.decisionModel
 settings.experimental.routineGroupSettings
 settings.experimental.routineGroupSettingsAria
 settings.experimental.routineGroupSettingsDetail
@@ -584,9 +594,10 @@ settings.threadsView.hidden
 settings.toolCalls.show
 settings.universalPins.subtitle
 settings.universalPins.title
-settings.updates.prerelease.aria
-settings.updates.prerelease.short
-settings.updates.prerelease.title
+settings.updates.away.short
+settings.updates.channel.short
+settings.updates.latest
+settings.updates.prerelease.subtitle
 settings.userBubbles.aria
 settings.userBubbles.subtitle
 settings.userBubbles.title

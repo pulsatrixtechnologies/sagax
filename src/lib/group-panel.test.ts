@@ -8,10 +8,11 @@ const members = [{ id: "osprey" }, { id: "wren" }];
 const room = (defaultResponder: Group["defaultResponder"]) => ({ defaultResponder }) as Pick<Group, "defaultResponder">;
 
 describe("group panel tabs", () => {
-  it("orders Details, Members, Instructions, Memory, Library, Computer with no Advanced", () => {
-    // Instructions and Memory are hidden for now (GROUP_PANEL_HIDDEN_TABS).
-    expect(visibleGroupPanelTabs({ advanced: true, hasComputer: true })).toEqual(["details", "members", "library", "computer"]);
-    expect(GROUP_PANEL_HIDDEN_TABS).toEqual(new Set(["instructions", "memory"]));
+  it("orders Details, Members, Library with no Advanced and no Computer tab", () => {
+    // Instructions and Memory are hidden for now; Computer is a Details
+    // section, as on a bot (GROUP_PANEL_HIDDEN_TABS).
+    expect(visibleGroupPanelTabs({ advanced: true, hasComputer: true })).toEqual(["details", "members", "library"]);
+    expect(GROUP_PANEL_HIDDEN_TABS).toEqual(new Set(["instructions", "memory", "computer"]));
   });
 
   it("drops Computer in Simple or when no bot of the viewer works anywhere", () => {

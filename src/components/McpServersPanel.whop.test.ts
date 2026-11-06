@@ -52,7 +52,7 @@ beforeEach(async () => {
   testRequest = null;
   fixture.runMcpSignIn.mockResolvedValue({ phase: "succeeded", flowId: "00000000-0000-4000-8000-000000000000", authorizationUrl: null });
   fixture.api.mockImplementation((path: string, init?: RequestInit) => {
-    if (path === "/api/mcp/servers") return Promise.resolve({ servers: [whop] });
+    if (path.split("?")[0] === "/api/mcp/servers") return Promise.resolve({ servers: [whop] });
     if (path === "/api/mcp/servers/whop/test") {
       return new Promise((resolve, reject) => {
         testRequest = { resolve, signal: init?.signal ?? undefined };

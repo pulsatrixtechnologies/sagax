@@ -79,13 +79,19 @@ export function useMcpServers() {
     const generation = ++loadGeneration.current;
     setBusy("load");
     setError(null);
-    return api(reprobe ? "/api/mcp/servers?reprobe=1" : "/api/mcp/servers")
-      .then((result) => {
-        if (generation === loadGeneration.current) {
-          setServers(result.servers ?? []);
-          setReserved(result.reserved ?? []);
-          updateMcpServers(result.servers ?? []);
-        }
+    const apply = (result: { servers?: McpServerListing[]; reserved?: ReservedMcpListing[] }) => {
+      if (generation !== loadGeneration.current) return;
+      setServers(result.servers ?? []);
+      setReserved(result.reserved ?? []);
+      updateMcpServers(result.servers ?? []);
+    };
+    // The list at once, the sign-in probes after (#2273): a first look
+    // after a start no longer holds the panel for the slowest server.
+    return api(reprobe ? "/api/mcp/servers?reprobe=1" : "/api/mcp/servers?probe=background")
+      .then(async (result) => {
+        apply(result);
+        if (generation === loadGeneration.current) setBusy(null);
+        if (result.probing === true && generation === loadGeneration.current) apply(await api("/api/mcp/servers"));
       })
       .catch((cause) => {
         if (generation === loadGeneration.current) setError(readableError(cause));

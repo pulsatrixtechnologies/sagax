@@ -26,7 +26,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 
 const { setLocale } = await import("@/lib/i18n");
 const { ConfirmProvider, useConfirm } = await import("@/components/ConfirmProvider");
-const { RoutineDetail, clearRoutineRuns } = await import("./RoutineDetail");
+const { RoutineDetail, RoutineStateBadge, RoutineStatusRows, clearRoutineRuns } = await import("./RoutineDetail");
 
 const bot = { id: "runner", threadId: "main", name: "Runner", color: "green", tasks: [] } as unknown as Bot;
 const routine = {
@@ -101,5 +101,23 @@ describe("a routine's page", () => {
     await act(async () => { (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click(); });
     expect(fixture.calls).toContain("DELETE /api/routine-runs?scope=mine&routineId=r1");
     expect(dispatch).toHaveBeenCalledWith({ type: "routineRunsRemoved", ids: ["run-1", "run-2"] });
+  });
+});
+
+describe("the side panel's status rows (2026-11-06, JC)", () => {
+  const readiness = { checking: false, error: "", answer: null, check: () => {} } as never;
+  it("drops Runs as, the Active toggle and This week when the page asks", () => {
+    const weekly = { ...routine, weekRuns: { ok: 2, total: 3 } } as unknown as Routine;
+    flushSync(() => root.render(createElement(RoutineStatusRows, { routine: weekly, runs, readiness, onToggle: () => {}, runAs: false, active: false, week: false })));
+    expect(host.querySelector("[data-routine-active]")).toBeNull();
+    expect(host.querySelector("[data-routine-week-runs]")).toBeNull();
+    expect(host.textContent).not.toContain("Runs as");
+    expect(host.querySelector("[data-routine-next]")).not.toBeNull();
+  });
+  it("shows Failing as a badge, nothing when all is well", () => {
+    flushSync(() => root.render(createElement(RoutineStateBadge, { routine: { ...routine, failureStreak: 2 } as unknown as Routine, runs: [] })));
+    expect(host.querySelector("[data-routine-state-badge=warning]")?.textContent).toBe("Failing");
+    flushSync(() => root.render(createElement(RoutineStateBadge, { routine, runs: [] })));
+    expect(host.querySelector("[data-routine-state-badge]")).toBeNull();
   });
 });

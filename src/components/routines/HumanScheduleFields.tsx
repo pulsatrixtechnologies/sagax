@@ -58,11 +58,12 @@ export function scheduleTimeLabel(time: string): string {
 }
 
 /** The sentence and the next runs, or the reason it cannot be saved. */
-export function ScheduleSummary({ value, paused = false }: { value: ScheduleEditorValue; paused?: boolean }) {
+/** `preview` false (the side panel's routine page, 2026-11-06): no next runs. */
+export function ScheduleSummary({ value, paused = false, preview = true }: { value: ScheduleEditorValue; paused?: boolean; preview?: boolean }) {
   if (value.error) return <p id="routine-schedule-error" role="alert" className="text-[11.5px] text-danger">{value.error}</p>;
   return <div className="space-y-2 rounded-lg bg-inset/70 px-3 py-2.5">
     <p data-schedule-sentence aria-live="polite" className="text-[13px] font-medium leading-snug text-ink">{value.sentence}</p>
-    {value.schedule && <CronRunDates runs={value.runs} timeZone={value.schedule.timeZone} paused={paused} />}
+    {preview && value.schedule && <CronRunDates runs={value.runs} timeZone={value.schedule.timeZone} paused={paused} />}
   </div>;
 }
 
@@ -72,13 +73,15 @@ export function ScheduleSummary({ value, paused = false }: { value: ScheduleEdit
  * editor's Advanced). `all`: the full block. */
 export type HumanScheduleMode = "all" | "essentials" | "advanced";
 
-export function HumanScheduleFields({ draft, value, onChange, paused = false, mode = "all" }: {
+export function HumanScheduleFields({ draft, value, onChange, paused = false, mode = "all", preview = true }: {
   draft: ScheduleDraft;
   value: ScheduleEditorValue;
   onChange: (draft: ScheduleDraft) => void;
   /** A paused routine: the dates are a preview, not scheduled runs. */
   paused?: boolean;
   mode?: HumanScheduleMode;
+  /** The next runs under the zone (off on the side panel's routine page, 2026-11-06). */
+  preview?: boolean;
 }) {
   const { model } = draft;
   const update = (patch: Partial<ScheduleModel>) => onChange({ ...draft, model: { ...model, ...patch } });
@@ -146,21 +149,21 @@ export function HumanScheduleFields({ draft, value, onChange, paused = false, mo
     {showZoneAndPreview && mode === "advanced" && <>
       <TimeZonePicker value={draft.timeZone} onChange={(timeZone) => onChange({ ...draft, timeZone })} />
       {/* Advanced: the sentence and any error already read in When to run. */}
-      {value.schedule && !value.error && <div className="py-2"><CronRunDates runs={value.runs} timeZone={value.schedule.timeZone} paused={paused} /></div>}
+      {preview && value.schedule && !value.error && <div className="py-2"><CronRunDates runs={value.runs} timeZone={value.schedule.timeZone} paused={paused} /></div>}
     </>}
     {showZoneAndPreview && mode === "all" && <>
       <PanelRows><TimeZonePicker value={draft.timeZone} onChange={(timeZone) => onChange({ ...draft, timeZone })} /></PanelRows>
-      <ScheduleSummary value={value} paused={paused} />
+      <ScheduleSummary value={value} paused={paused} preview={preview} />
     </>}
   </div>;
 }
 
 /** A schedule no simple model fits, kept as it is: its sentence, its next
  * runs, and a way to pick a simple schedule instead. */
-export function AdvancedScheduleFields({ value, onSimplify, paused = false }: { value: ScheduleEditorValue; onSimplify: () => void; paused?: boolean }) {
+export function AdvancedScheduleFields({ value, onSimplify, paused = false, preview = true }: { value: ScheduleEditorValue; onSimplify: () => void; paused?: boolean; preview?: boolean }) {
   return <div data-schedule-advanced className="space-y-2">
     <p className="text-[11.5px] leading-relaxed text-ink-secondary">{t("scheduleEditor.advancedHelp")}</p>
-    <ScheduleSummary value={value} paused={paused} />
+    <ScheduleSummary value={value} paused={paused} preview={preview} />
     <button type="button" data-schedule-simplify onClick={onSimplify} className="rounded-lg border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised">{t("scheduleEditor.simplify")}</button>
   </div>;
 }

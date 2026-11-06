@@ -1,7 +1,6 @@
 import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 /** Claude ProviderInstance create: session maps, sendTurn wiring (#1383). */
 import { homedir } from "node:os";
-import type { ApprovalMode } from "../../../shared/approval-mode.ts";
 import type { HarnessCommand } from "../../../shared/harness-commands.ts";
 import { normalizeClaudeCommands } from "../../../shared/harness-commands.ts";
 import type {
@@ -21,13 +20,10 @@ import {
   ensureClaudeSubscriptionFresh,
   onClaudeSubscriptionRenew,
 } from "../../engines/claude-subscription-refresh.ts";
-import { sessionIdlePolicy } from "../session-idle.ts";
 import { claudeAuthRecovery } from "../claude-auth-recovery.ts";
 import { probeClaudeCommands } from "../harness-command-probe.ts";
-import type { KeepWarmContract } from "../claude-keepwarm.ts";
 import { DRIVER_KIND, STATIC_CLAUDE_MODELS, type ClaudeCliVersion, type ClaudeConfig } from "./config.ts";
-import type { ClaudeSession } from "./session-types.ts";
-import { createSessionHelpers } from "./sessions.ts";
+import { createClaudeSessionRuntime } from "./create-instance-session.ts";
 import { createSendTurn } from "./turn-send.ts";
 import { buildClaudeInstanceApi } from "./instance-api.ts";
 
@@ -193,42 +189,16 @@ export async function createClaudeInstance(
   // one active turn per thread; a second send while busy is a caller bug
   const active = new Map<string, { stop: () => void; turnId: string; broker?: Awaited<ReturnType<typeof createPermissionBroker>> }>();
 
-  // One live CLI process per thread, kept across turns. Under
-  // --input-format stream-json the CLI settles a turn with `result` while
-  // stdin stays open, takes the next user message on the same stdin as a
-  // new turn, and folds a message that arrives MID-turn into the running
-  // one before its next model call (verified against 2.1.221 — that fold
-  // is what "steer" is). So a session is spawned once, reused while its
-  // spawn contract (args, MCP config, cwd, model) is unchanged, closed
-  // after SESSION_IDLE_MS of quiet, and resumed by --resume when needed.
-  type Session = ClaudeSession;
-  const sessions = new Map<string, Session>();
-  // Prompt-cache keep-warm (claude-keepwarm.ts): what each live process
-  // was launched with, so a ping can replay the exact request prefix, and
-  // how long a keep-warm window wants that process kept past its idle
-  // close (the next real turn must reuse it: a relaunch recomputes the
-  // volatile system prompt and would miss the cache anyway).
-  const warmContracts = new Map<string, KeepWarmContract>();
-  const warmHolds = new Map<string, number>();
-
-  /** What a closed process's conversation holds of the volatile half, by
-   * thread: a relaunch that resumes that same session sends only what
-   * changed since, like a live one (port of OpenMausBot #3164). Absent
-   * (server restart, crash, unsettled turn, evicted entry): the whole
-   * half rides. Bounded like the neighboring session caches. */
-  const heldVolatile = new Map<string, { sessionId: string; volatile: string; sections?: Record<string, string> }>();
-  /** Where each session's file was written (the config dir of its launch),
-   * for sessionBytes. After a restart the default config dir is searched. */
-  const sessionConfigDirs = new Map<string, string>();
-  const sessionFiles = new Map<string, string>();
-  /** A session whose file was not found, and when to look again: a miss
-   * scans every projects/ folder, so it is not repeated on every turn. */
-  const sessionMisses = new Map<string, number>();
-  const { idleMs: SESSION_IDLE_MS } = sessionIdlePolicy("CLAUDE");
-  /** #1373: the level a person chose while a turn was running, by thread,
-   * for that logical turn's relaunches (see sendTurn). */
-  const liveApprovalModes = new Map<string, { turnId: string; mode: ApprovalMode }>();
   const {
+    sessions,
+    warmContracts,
+    warmHolds,
+    heldVolatile,
+    sessionConfigDirs,
+    sessionFiles,
+    sessionMisses,
+    SESSION_IDLE_MS,
+    liveApprovalModes,
     sessionFileBytes,
     stopSession,
     closeSession,
@@ -237,19 +207,8 @@ export async function createClaudeInstance(
     writeUser,
     controlRequest,
     applyApprovalMode,
-  } = createSessionHelpers({
-    environment,
-    sessions,
-    active,
-    warmContracts,
-    warmHolds,
-    heldVolatile,
-    sessionConfigDirs,
-    sessionFiles,
-    sessionMisses,
-    liveApprovalModes,
-    SESSION_IDLE_MS,
-  });
+  } = createClaudeSessionRuntime({ environment, active });
+
 
   // A signed-out refusal is held until the first model activity, so a turn
   // that could not start rejects once its process has stopped (the harness

@@ -30,26 +30,15 @@ import { PI_ORG_KEY_VARIABLES, PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredential
 import { applyEngineCommandVariables } from "../vault/credential-command-env.ts";
 import { openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
-import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../procs.ts";
-import { foreignMailboxAccessDenied } from "../../shared/mailbox-user.ts";
+import { execCli, killCliTree, spawnCli } from "../procs.ts";
 import { SEARCH_CALL_TOOL, searchedToolCall } from "../../shared/searched-tool-call.ts";
-import { PERSPICAX_TOKEN_ENV, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "./spawn-contract.ts";
+import { PERSPICAX_TOKEN_ENV, warmCommsEnv, warmPerspicaxEnv } from "./spawn-contract.ts";
 import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources, type WarmResourceLease } from "../resources/warm-resources.ts";
 import { retireClosedWarmProcess } from "../resources/warm-process.ts";
 import { engineStartGate } from "../engines/engine-start-gate.ts";
-import {
-  deletePromptSplitReceipt,
-  promptHalves,
-  readPromptSplitReceipt,
-  splitSessionPrompt,
-  writePromptSplitReceipt,
-} from "./prompt-split.ts";
-import type { PromptSplitReceipt } from "./prompt-split.ts";
 import { STABLE_END_MARKER } from "./pi-mcp-extension.ts";
 import { COMPACT_VOLATILE_LAST } from "../context/compact-prompt.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
-import { commandSummary, cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
-import { filesField, writtenFilesFromToolInput } from "../threads/thread-files.ts";
 
 import type {
   DriverCreateInput,
@@ -61,32 +50,27 @@ import type {
   RuntimeEvent,
   RuntimeEventListener,
   SendTurnInput,
-  SteerOutcome,
   TurnAccessInput,
   TurnImageInput,
 } from "../contracts.ts";
 import { NATIVE_EFFORT_LEVELS, ULTRACODE_EFFORT } from "../../shared/ultracode-effort.ts";
-import { newEventId, newId } from "../contracts.ts";
-import { parseAskQuestions, parseChoices, questionAnswersByQuestion } from "../../shared/ask-question.ts";
+import { newEventId } from "../contracts.ts";
 import {
   decodeInjectId,
-  isLocalModelId,
   encodeInjectId,
   hostApiKey,
   localHost,
   mergeLocalInject,
 } from "./local-inject.ts";
-import { localModelFailureMessage, providerReason } from "./engine-errors.ts";
-import { appendNative } from "./native.ts";
-import { piHostToolArgs } from "./host-tools.ts";
 import { installPiKit, piKitDir } from "./pi-kit.ts";
+import type { PiActiveTurn, PiTurnHooks } from "./pi-turn-ctx.ts";
+import { createPiSendTurn } from "./pi-send-turn.ts";
 import { MODEL_SERVER_DEFAULT_CONTEXT, MODEL_SERVER_DEFAULT_MAX_TOKENS, MODEL_SERVER_KEY_ENV_PREFIX, writePiModelServers } from "./pi-model-servers.ts";
 import { canUseMcpServer, parseToolScope } from "../../shared/tool-scope.ts";
 import { customServerGate, gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 import { compactGateSearch } from "../mcp/mcp-gate-search.ts";
 import { isPerspicaxBridge } from "./acp/grok-read-only-tools.ts";
 import { remoteMcpSpec } from "../mcp/mcp-http.ts";
-import { readMcpGatewayCall } from "../../shared/mcp-gateway-call.ts";
 
 const DRIVER_KIND = "piAgent";
 const PI_ARGS = ["--mode", "rpc", "--no-session"];
@@ -1041,33 +1025,6 @@ function decodeConfig(raw: unknown): PiConfig {
 
 const EMPTY: ModelCatalog = { default: "", options: [] };
 
-/** The parsed pi RPC event we branch on — only the fields this driver reads. */
-interface PiEvent {
-  type: string;
-  // response
-  command?: string;
-  success?: boolean;
-  data?: unknown;
-  // message_update
-  assistantMessageEvent?: { type?: string; delta?: string };
-  // tool_execution_*
-  toolCallId?: string;
-  toolName?: string;
-  args?: unknown;
-  result?: unknown;
-  isError?: boolean;
-  // turn_end / message_end
-  message?: { stopReason?: string; errorMessage?: string; usage?: { input?: number; output?: number } };
-  usage?: { input?: number; output?: number };
-  // agent_end / agent_settled
-  isTerminal?: boolean;
-  willRetry?: boolean;
-  // extension_ui_request
-  id?: string;
-  method?: string;
-  options?: unknown[];
-  title?: string;
-}
 
 function piEnvironment(source: Record<string, string | undefined>): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...source, PATH: augmentedPath() };
@@ -1203,13 +1160,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
 
     const listeners = new Set<RuntimeEventListener>();
     // one active turn per thread
-    const active = new Map<string, {
-      stop: () => void;
-      turnId: string;
-      pending: Map<string, (decision: { behavior: "allow" | "deny" | "answer"; message?: string }) => void>;
-      child?: { stdin: { write: (s: string) => void } };
-      steer?: (text: string, steerId?: string) => Promise<SteerOutcome>;
-    }>();
+    const active = new Map<string, PiActiveTurn>();
 
     const emit = (event: RuntimeEvent) => {
       for (const l of Array.from(listeners)) l(event);
@@ -1223,797 +1174,66 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       createdAt: new Date().toISOString(),
     });
 
-    const sendTurn = async (turn: SendTurnInput) => {
-      if (startupModelRefresh) await startupModelRefresh;
-      const { threadId } = turn;
-      const selection = parseToolScope(turn.toolScope);
-      if (!selection.ok) throw new Error(selection.error);
-      const toolScope = selection.scope;
-      if (active.has(threadId)) throw new Error("a turn is already running on this thread");
-      // Per-bot Ask/Auto is authoritative for harness turns. Preserve the
-      // legacy instance flag only for direct adapter callers that omit it.
-      const fullAuto = turn.approvalMode === undefined ? config.fullAuto : false;
-      // Host control always routes through the permission card; full-auto must
-      // never get unapproved hands on the user's machine (same guard as the
-      // Claude and ACP drivers).
-      const controlsHost = turn.integrations?.localComputer?.scope === "local-computer";
-      if (controlsHost && fullAuto) {
-        throw new Error("local computer control requires the interactive approval broker");
-      }
-      const turnId = newId();
-      const pending = new Map<string, (decision: { behavior: "allow" | "deny" | "answer"; message?: string }) => void>();
-      // Ask fail-safe timers, tracked so settle() can cancel them outright:
-      // a cleared pending map alone leaves each timer holding the ask
-      // closure (send, child) alive until it fires.
-      const askTimers = new Set<ReturnType<typeof setTimeout>>();
-      let settled = false;
-      /** the session a standby pi resumes (#1276) */
-      let standbySession: string | null = null;
-      // the last turn_end's outcome, replayed when the run's terminal
-      // agent_end (or the grace fallback) settles the turn
-      let endStopReason: string | undefined;
-      let endUsage: { input?: number; output?: number } | undefined;
-      let endErrorMessage: string | undefined;
-      // hang insurance for runtimes with no agent_end frame at all
-      let agentEndTimer: ReturnType<typeof setTimeout> | null = null;
-      // pi's RPC surface accepts image content directly. Read before spawning
-      // so an attachment that disappeared produces one clear dispatch error
-      // instead of starting a child that can never receive its prompt.
-      const images = readPiPromptImages(turn);
-
-      // Write ~/.pi/agent/models.json before creating any credential-bearing
-      // MCP temp files. If model setup fails, there is nothing sensitive to
-      // clean up yet.
-      const homeEnv = {
-        ...process.env,
-        ...input.environment,
-        // the payer's own pi home, the one the child reads (piAccessEnvironment)
-        ...(turn.access?.engineHome ? { PI_CODING_AGENT_DIR: turn.access.engineHome } : {}),
-      };
-      if (typeof turn.model === "string" && turn.model) {
-        const row = models.options.find((option) => option.id === turn.model);
-        ensurePiInjectModel(turn.model, homeEnv, { contextWindow: row?.contextWindow });
-      }
-      // #2024: the operator's pi kit (SAGAX_PI_KIT_DIR), copied into this
-      // turn's pi home and loaded with explicit `-e`, which pi keeps under
-      // --no-extensions; host tools stay withheld by --exclude-tools.
-      const kit = piKitDir(homeEnv);
-      const kitArgs = kit ? installPiKit(kit, piAgentDir(homeEnv), turn.piKitIdentity ?? {}, homeEnv).args : [];
-
-      // integrations → stdio MCP servers for the pi-mcp-extension. The config
-      // carries credentials (boat token, comms token), so it goes
-      // into a 0600 temp file removed when the turn settles — never on argv.
-      // #1276: a compact turn's per-turn tokens ride files (as Claude Code's
-      // warm process does), so a standby pi with the same contract can serve it.
-      const mcpServers = buildMcpServers(turn.compactPrompt ? withWarmTokens(turn, threadId) : turn);
-      let mcpTempDir: string | null = null;
-      let scopeReadyPath: string | undefined;
-      const mcpConfig: Record<string, unknown> = { mcpServers: mcpServers ?? {}, toolScope, approvalMode: turn.approvalMode, ...(turn.compactPrompt ? { stableCwd: true, splitStable: true } : {}) };
-      const mounts = Boolean(mcpServers || toolScope !== undefined);
-      const standbyArgs = [
-        ...(turn.compactPrompt ? PI_ARGS.filter((arg) => arg !== "--no-session") : PI_ARGS),
-        ...piHostToolArgs(turn.withholdHostTools === true),
-        ...(mounts ? ["-e", SPAWNED_PROXIES.piMcpExtension] : []),
-        ...kitArgs,
-      ];
-      const standbyKey = JSON.stringify({
-        cli: config.cli, args: standbyArgs, cwd: turn.cwd ?? null,
-        config: { ...mcpConfig, mcpServers: withoutTurnTokens(mcpServers ?? {}) },
-        environment: input.environment ?? null, person: turn.principalId ?? null, access: turn.access ?? null, command: turn.commandEnvironment ?? null,
-      });
-      // #1276: only a session of this turn's own pi home is ever resumed
-      const resumeCursor = piResumableSession(turn.resumeCursor, turn.access?.engineHome);
-      if (turn.compactPrompt && !turn.sessionReset && resumeCursor) await settledPiStandby(threadId);
-      const standby = turn.compactPrompt && !turn.sessionReset && resumeCursor
-        ? takePiStandby(threadId, standbyKey, resumeCursor)
-        : (dropPiStandby(threadId), undefined);
-      // #1276: a new conversation takes the pi started ahead for this bot's
-      // contract (everything but the folder and the MCP servers, which it
-      // receives now) and switches it to a new session in this folder.
-      const freshKey = JSON.stringify({
-        bot: turn.botId ?? null, cli: config.cli, args: standbyArgs,
-        environment: input.environment ?? null, person: turn.principalId ?? null, access: turn.access ?? null, command: turn.commandEnvironment ?? null,
-      });
-      const ahead = !standby && turn.compactPrompt && typeof turn.resumeCursor !== "string" && turn.cwd && mounts ? takePiFresh(freshKey) : undefined;
-      if (standby) {
-        mcpTempDir = standby.dir;
-        scopeReadyPath = standby.scopeReadyPath;
-      } else if (mounts) {
-        mcpTempDir = ahead ? ahead.dir : mkdtempSync(join(tmpdir(), "omb-pi-mcp-"));
-        if (toolScope !== undefined) scopeReadyPath = join(mcpTempDir, "scope-ready.json");
-        try {
-          writeFileSync(join(mcpTempDir, "mcp.json"), JSON.stringify({ ...mcpConfig, scopeReadyPath, ...(turn.compactPrompt ? { toolCachePath: join(mcpTempDir, PI_TOOL_CACHE), warmPath: join(mcpTempDir, PI_WARM) } : {}) }), { mode: 0o600 });
-        } catch (err) {
-          // A failed write must not leave the temp dir behind — a partial file
-          // could still hold the boat token / comms token.
-          try {
-            rmSync(mcpTempDir, { recursive: true, force: true });
-          } catch {
-            /* best effort */
-          }
-          throw err;
-        }
-      }
-      // `--no-extensions` still loads an explicit `-e`, so the Sagax MCP
-      // extension stays while the person's own pi extensions do not.
-      // #1276: a compact prompt (a local model) keeps pi's session, so the
-      // next turn resumes it (switch_session) and extends this very prompt:
-      // the local server's prefix cache serves everything but the new turn.
-      // Without it each turn replays the transcript into a fresh prompt.
-      const childArgs = standbyArgs;
-      const spawnEnv = piTurnEnvironment(piAccessEnvironment(piEnvironment({
-        ...process.env,
-        ...input.environment,
-        ...(mcpTempDir ? { SAGAX_MCP_CONFIG: join(mcpTempDir, "mcp.json") } : {}),
-      }), turn.access, input.environment), turn.commandEnvironment);
-
-      // spawnCli can throw synchronously (unresolvable CLI); if it does, the
-      // 0600 temp file with the boat token / comms token must
-      // not be left on disk — settle() never runs because no child existed.
-      const child = standby ? standby.child : ahead ? ahead.child : (() => {
-        try {
-          return spawnCli(config.cli, childArgs, {
-            stdio: ["pipe", "pipe", "pipe"],
-            cwd: turn.cwd,
-            env: spawnEnv,
-          }, "bot");
-        } catch (err) {
-          if (mcpTempDir) {
-            try {
-              rmSync(mcpTempDir, { recursive: true, force: true });
-            } catch {
-              /* best effort */
-            }
-          }
-          throw err;
-        }
-      })();
-      const budget = standby?.budget ?? ahead?.budget ?? warmResources.register({
-        person: warmResourcePerson(turn), kind: "pi", bytes: 256 * MiB,
+    const piTurnHooks: PiTurnHooks = {
+      settledPiStandby,
+      dropPiStandby,
+      takePiStandby,
+      takePiFresh,
+      startPiStandby,
+      startPiFresh,
+      readPiToolCache,
+      writePiSession,
+      readPiPromptImages,
+      piNativeLogMessage,
+      ensurePiInjectModel,
+      modelContextWindow: (modelId) => models.options.find((option) => option.id === modelId)?.contextWindow,
+      piKitArgs: (homeEnv, identity) => {
+        const kit = piKitDir(homeEnv);
+        return kit ? installPiKit(kit, piAgentDir(homeEnv), identity ?? {}, homeEnv).args : [];
+      },
+      warmPerson: warmResourcePerson,
+      registerWarmBudget: ({ person, child }) => warmResources.register({
+        person, kind: "pi", bytes: 256 * MiB,
         pids: () => child.pid ? [child.pid] : [], evict: () => killCliTree(child),
-      });
-      child.once("close", () => retireClosedWarmProcess(budget, child));
-      // Drain diagnostics on cold turns too. An unread stderr pipe can
-      // fill and stop pi before it sends its next protocol frame.
-      let stderr = "";
-      child.stderr.setEncoding("utf8");
-      child.stderr.on("data", (chunk: string) => {
-        stderr = (stderr + chunk).slice(-8192);
-      });
-      let assistantText = "";
-      // a tool's resolved name between its start and its end (gateway calls)
-      const toolNames = new Map<string, string>();
-      const toolArgs = new Map<string, unknown>();
-      const mcpServerNames = Object.keys(mcpServers ?? {});
-      const searchedServers = piSearchedServers(mcpServers);
-      // set when a compaction event arrives this turn; gates the receipt
-      // write below so a compacted-around delivery is never claimed
-      let compactionObserved = false;
-      // resolve one-shot RPC responses (new_session / switch_session / set_model)
-      const responseWaiters = new Map<string, { resolve: (data: unknown) => void; reject: (err: Error) => void; timer: NodeJS.Timeout }>();
-      // Steer frames correlate by a unique per-request id, not the shared
-      // "steer" command name: two concurrent steers would otherwise overwrite
-      // each other's waiter, and a refusal response could reject the wrong
-      // caller — requeueing words pi already accepted. Every other command
-      // keeps its command-name key.
-      let steerSeq = 0;
-      const rejectWaiters = (err: Error) => {
-        for (const waiter of responseWaiters.values()) {
-          clearTimeout(waiter.timer);
-          waiter.reject(err);
-        }
-        responseWaiters.clear();
-      };
-      const awaitResponse = (command: string, timeoutMs = 20_000, key = command) =>
-        new Promise<unknown>((resolve, reject) => {
-          const timer = setTimeout(() => {
-            responseWaiters.delete(key);
-            reject(new Error(`pi ${command} timed out`));
-          }, timeoutMs);
-          timer.unref?.();
-          responseWaiters.set(key, { resolve, reject, timer });
-        });
-      child.stdin.on("error", () => rejectWaiters(new Error("pi stdin closed")));
-      const send = (obj: Record<string, unknown>) => {
-        appendNative(threadId, { dir: "out", source: "pi.rpc", msg: piNativeLogMessage(obj) });
-        child.stdin.write(JSON.stringify(obj) + "\n");
-      };
-      // Declare protocol 2 on the same stdin before the first command, so an
-      // omp-style runtime chunks any oversized frame it sends back. Vanilla
-      // pi refuses the unknown command; no waiter is keyed for the reply,
-      // so either answer is ignored.
-      if (!standby && !ahead) send(PI_NEGOTIATE_FRAME);
-
-      /** Emit buffered assistant text as its own item, then clear it. */
-      const flushAssistantText = () => {
-        const text = assistantText;
-        assistantText = "";
-        if (!text.trim()) return;
-        emit({ ...base(threadId, turnId), type: "item.completed", itemType: "assistant_text", text });
-      };
-
-      const settle = (ok: boolean, stopReason?: string | null, usage?: { input?: number; output?: number }) => {
-        if (settled) return;
-        settled = true;
-        // #1276: once this pi has exited (its session file then holds the
-        // whole turn), start the thread's next pi, its session resumed.
-        if (ok && turn.compactPrompt && standbySession && (stopReason ?? "end_turn") === "end_turn") {
-          const resume = { person: warmResourcePerson(turn), threadId, key: standbyKey, sessionFile: standbySession, cli: config.cli, args: childArgs, cwd: turn.cwd, env: spawnEnv, config: mcpConfig, toolCache: readPiToolCache(mcpTempDir),
-            // a conversation's first turn warms the bot's next one (the standby sends it)
-            warm: typeof turn.resumeCursor === "string" ? undefined : readPiToolCache(mcpTempDir, PI_WARM) };
-          if (child.exitCode !== null || child.signalCode !== null) void startPiStandby(resume);
-          else child.once("exit", () => { void startPiStandby(resume); });
-          // and a pi for the bot's next new conversation, if none waits yet
-          if (mounts && turn.cwd) void startPiFresh({ person: warmResourcePerson(turn), key: freshKey, cli: config.cli, args: childArgs, cwd: turn.cwd, env: spawnEnv });
-        }
-        if (agentEndTimer) {
-          clearTimeout(agentEndTimer);
-          agentEndTimer = null;
-        }
-        // The turn is over: drop unanswered asks so their 15-minute
-        // fail-safe timers are cancelled outright instead of no-oping on a
-        // dead child while holding the ask closure alive.
-        for (const timer of askTimers) clearTimeout(timer);
-        askTimers.clear();
-        pending.clear();
-        flushAssistantText();
-        emit({
-          ...base(threadId, turnId),
-          type: "turn.completed",
-          ok,
-          stopReason: stopReason ?? (ok ? "end_turn" : "failed"),
-          ...(usage ? { usage: { input: usage.input ?? 0, output: usage.output ?? 0 } } : {}),
-        });
-        try {
-          child.stdin.end();
-        } catch {
-          /* already closed */
-        }
-        try {
-          killCliTree(child);
-        } catch {
-          /* already gone */
-        }
-        if (mcpTempDir) {
-          try {
-            rmSync(mcpTempDir, { recursive: true, force: true });
-          } catch {
-            /* best effort */
-          }
-        }
-        active.delete(threadId);
-      };
-
-      /** Settle from the last turn_end's recorded outcome. Errors surface
-       * here, at run completion, so a failed run reports exactly once and
-       * only after any scheduled maintenance events had their chance to
-       * arrive. */
-      const finishRun = () => {
-        const sr = endStopReason;
-        if (sr === "error" || sr === "failed") {
-          const raw = String(endErrorMessage ?? "pi turn failed");
-          // A local or computer-shared model has no usage limit: its failure
-          // says what is wrong and what to do, with the server's own words.
-          const local = isLocalModelId(turn.model) ? localModelFailureMessage(raw) : null;
-          const said = local ? providerReason(raw.replace(/^\d{3}\s+/, "")) : null;
-          emit({
-            ...base(threadId, turnId),
-            type: "runtime.error",
-            message: (local ? `${local}${said ? ` (the local server said: "${said}")` : ""}` : raw).slice(0, 2_000),
-          });
-          settle(false, "failed", endUsage);
-          return;
-        }
-        settle(true, sr === "cancelled" || sr === "aborted" ? "cancelled" : "end_turn", endUsage);
-      };
-
-      const stop = () => {
-        try {
-          send({ type: "abort" });
-        } catch {
-          /* ignore */
-        }
-        try {
-          killCliTree(child);
-        } catch {
-          /* ignore */
-        }
-        settle(true, "cancelled");
-      };
-
-      // Mid-turn input rides pi's native steer frame — the runtime queues
-      // it into the running agent without aborting the in-flight step, and
-      // answers success only after session.steer() accepted it. A success:
-      // false response is an explicit refusal (nothing consumed the words:
-      // safe to re-queue), while a death or timeout after the frame was
-      // written leaves the outcome unknowable — those are "indeterminate"
-      // so the caller can never run the words twice. Each frame carries a
-      // unique id that pi echoes on its response, so concurrent steers on
-      // the same turn never share or overwrite a waiter.
-      const steerActiveTurn = async (text: string, steerId?: string): Promise<SteerOutcome> => {
-        if (settled || child.exitCode !== null || child.signalCode !== null) return "refused";
-        let ack: Promise<unknown>;
-        try {
-          const id = `steer:${++steerSeq}`;
-          ack = awaitResponse("steer", 20_000, id);
-          send({ type: "steer", id, message: text });
-        } catch {
-          // stdin closed before the frame was written: provably undelivered.
-          return "refused";
-        }
-        try {
-          await ack;
-          // pi's agent loop polls accepted steering after every step, the
-          // last one included: the running turn reads it. Said so, the
-          // harness never offers it again to the next turn (2026-11-01).
-          if (steerId) emit({ ...base(threadId, turnId), type: "steer.received", steerId });
-          return "steered";
-        } catch (error) {
-          return error instanceof PiRpcRefusalError ? "refused" : "indeterminate";
-        }
-      };
-      active.set(threadId, { stop, turnId, pending, child, steer: steerActiveTurn });
-
-      const onEvent = (evt: PiEvent) => {
-        appendNative(threadId, { dir: "in", source: "pi.rpc", msg: evt });
-        switch (evt.type) {
-          case "response": {
-            // Resolve the echoed request id first (unique per steer);
-            // fall back to the command name for the handshake-style call
-            // sites, whose responses carry no id.
-            const key = typeof evt.id === "string" && responseWaiters.has(evt.id) ? evt.id : evt.command;
-            if (key && responseWaiters.has(key)) {
-              const waiter = responseWaiters.get(key)!;
-              responseWaiters.delete(key);
-              clearTimeout(waiter.timer);
-              if (evt.success) waiter.resolve(evt.data);
-              else waiter.reject(new PiRpcRefusalError(`pi ${evt.command} failed`));
-            }
-            return;
-          }
-          case "message_update": {
-            const e = evt.assistantMessageEvent;
-            if (!e) return;
-            if (e.type === "text_delta" && typeof e.delta === "string") {
-              assistantText += e.delta;
-              emit({ ...base(threadId, turnId), type: "content.delta", streamKind: "assistant_text", delta: e.delta });
-            } else if (e.type === "thinking_delta" && typeof e.delta === "string") {
-              emit({ ...base(threadId, turnId), type: "content.delta", streamKind: "reasoning_text", delta: e.delta });
-            }
-            return;
-          }
-          case "tool_execution_start": {
-            flushAssistantText();
-            // pi-mcp-adapter's single `mcp` tool: the step names the server
-            // and tool it ran (shared/mcp-gateway-call.ts), never "mcp".
-            const gateway = readMcpGatewayCall(typeof evt.toolName === "string" ? evt.toolName : undefined, evt.args, mcpServerNames);
-            const toolName = gateway?.kind === "tool" ? gateway.id : typeof evt.toolName === "string" ? evt.toolName : undefined;
-            const args = gateway?.kind === "tool" ? gateway.args : evt.args;
-            if (typeof evt.toolCallId === "string" && toolName) toolNames.set(evt.toolCallId, toolName);
-            if (typeof evt.toolCallId === "string") toolArgs.set(evt.toolCallId, args);
-            emit({
-              ...base(threadId, turnId),
-              type: "item.started",
-              itemType: "tool",
-              itemId: evt.toolCallId,
-              title: String(toolName ?? "tool").slice(0, 80),
-              summary: commandSummary(args),
-              input: toolDetailPreview(args),
-              ...filesField(writtenFilesFromToolInput(toolName, args)),
-            });
-            return;
-          }
-          case "tool_execution_end": {
-            const toolName = (typeof evt.toolCallId === "string" ? toolNames.get(evt.toolCallId) : undefined)
-              ?? (typeof evt.toolName === "string" ? evt.toolName : undefined);
-            const args = typeof evt.toolCallId === "string" ? toolArgs.get(evt.toolCallId) : evt.args;
-            if (typeof evt.toolCallId === "string") {
-              toolNames.delete(evt.toolCallId);
-              toolArgs.delete(evt.toolCallId);
-            }
-            const vendorDenied = evt.isError ? foreignMailboxAccessDenied(toolName, args, evt.result) : null;
-            emit({
-              ...base(threadId, turnId),
-              type: "item.completed",
-              itemType: "tool",
-              itemId: evt.toolCallId,
-              ok: !evt.isError,
-              // a failed call's own words (shared/tool-failure-text.ts).
-              // #1943: a 403 on another mailbox is the retry sentence.
-              output: vendorDenied ?? (evt.isError ? toolFailurePreview(evt.result) : toolDetailPreview(evt.result)),
-              ...(evt.isError ? {} : cwToolResult(toolName, evt.result)),
-            });
-            return;
-          }
-          case "extension_ui_request": {
-            // pi floods setWidget/setStatus for TUI bookkeeping; only
-            // select/confirm/input are questions that wait for an answer.
-            if (evt.method === "select" || evt.method === "confirm" || evt.method === "input") {
-              flushAssistantText();
-              const reqId = evt.id ?? newId();
-              const isSelect = evt.method === "select";
-              const isQuestion = isSelect || evt.method === "input";
-              const selectOptions: string[] = isSelect && Array.isArray(evt.options)
-                ? evt.options.filter((option): option is string => typeof option === "string") : [];
-              const summary = String(evt.title ?? (isQuestion ? "pi has a question" : "pi wants confirmation")).slice(0, 200);
-              const gatedTool = isQuestion ? undefined : piGatedMcpTool(evt.title, mcpServers);
-              const gatedInput = gatedTool ? piGatedMcpInput(evt.message, gatedTool) : undefined;
-              const searchedCall = gatedTool && gatedInput !== undefined ? piSearchedCall(gatedTool, gatedInput, searchedServers) : undefined;
-              if (searchedCall?.refused) {
-                // a wrapper that runs nothing named: refused, never a card
-                send({ type: "extension_ui_response", id: reqId, cancelled: true });
-                return;
-              }
-              const mcpTool = searchedCall?.mcpTool ?? gatedTool;
-              const mcpInput = searchedCall?.input ?? gatedInput;
-              // A select is a question with named options; the structured
-              // card renders from it while the flat choices keep older
-              // clients answering. An input has nothing to pick from and
-              // stays the free-text question it always was.
-              const question = isSelect
-                ? (parseAskQuestions({
-                    questions: [{ question: summary, options: selectOptions }],
-                  }) ?? [])[0]
-                : undefined;
-              const choices = question?.options.length ? question.options.map((option) => option.label) : undefined;
-              let timer: ReturnType<typeof setTimeout> | undefined;
-              // Register BEFORE emitting: the harness may auto-approve from
-              // inside its synchronous request.opened listener. Emitting first
-              // made respondToRequest see no pending ask, return unavailable,
-              // then fall back to a human card on every "Always allow" call.
-              pending.set(reqId, (decision) => {
-                if (timer) {
-                  clearTimeout(timer);
-                  askTimers.delete(timer);
-                }
-                if (decision.behavior === "deny") send({ type: "extension_ui_response", id: reqId, cancelled: true });
-                else if (isQuestion) {
-                  // Recover the picked label from a structured card's Q:/A:
-                  // reply; a flat answer or typed text passes through
-                  // verbatim (questionAnswersByQuestion's single-question
-                  // fallback does exactly that).
-                  const value = question
-                    ? questionAnswersByQuestion(decision.message ?? "", [question])[question.question] ?? decision.message ?? ""
-                    : decision.message ?? "";
-                  // Display labels are capped/trimmed; pi expects the
-                  // original option. Never guess if two normalize alike.
-                  const matched = selectOptions.filter(option => parseChoices([option], 1)?.[0] === value);
-                  send(matched.length > 1
-                    ? { type: "extension_ui_response", id: reqId, cancelled: true }
-                    : { type: "extension_ui_response", id: reqId, value: matched[0] ?? value });
-                }
-                else send({ type: "extension_ui_response", id: reqId, confirmed: true });
-              });
-              // The ask must never hold the turn forever: cancel it after 15
-              // minutes. The pending.delete guard makes this a no-op once the
-              // turn settled (settle clears pending) or a person answered.
-              timer = setTimeout(() => {
-                if (timer) askTimers.delete(timer);
-                if (!pending.delete(reqId)) return;
-                send({ type: "extension_ui_response", id: reqId, cancelled: true });
-                emit({
-                  ...base(threadId, turnId),
-                  requestId: reqId,
-                  type: "request.resolved",
-                  behavior: "deny",
-                  source: "timeout",
-                });
-              }, 15 * 60_000);
-              askTimers.add(timer);
-              timer.unref?.();
-              emit({
-                ...base(threadId, turnId),
-                requestId: reqId,
-                type: "request.opened",
-                requestType: isQuestion ? "question" : "permission",
-                tool: String(evt.title ?? "pi"),
-                summary,
-                ...(mcpTool ? { mcpTool, input: mcpInput } : {}),
-                ...(choices ? { choices } : {}),
-                ...(question ? { questions: [question] } : {}),
-              });
-            }
-            return;
-          }
-          case "compaction_start":
-          case "compaction_end":
-          case "auto_compaction_start":
-          case "auto_compaction_end": {
-            // pi compaction (manual or automatic) summarizes older
-            // messages, which can absorb the turn that carried this
-            // session's standing prompt. Both events ride the RPC surface
-            // for every compaction kind, so the moment either arrives the
-            // receipt is dropped and the next turn re-establishes the full
-            // prompt. The rest of the compacting turn may still answer
-            // without its standing instructions; that single turn is the
-            // unavoidable cost of summarizing history mid-session.
-            if (sessionReady && sessionFile) {
-              compactionObserved = true;
-              deletePromptSplitReceipt("pi", JSON.stringify([threadId, sessionFile]));
-            }
-            return;
-          }
-          case "turn_end":
-          {
-            // a killed child can still flush one buffered frame after the
-            // turn settled (the abort path's cancelled turn_end is the
-            // common one); arming the grace timer then would leak it past
-            // a turn that is already complete.
-            if (settled) return;
-            const sr = evt.message?.stopReason;
-            // toolUse means pi ran a tool and auto-continues next turn to
-            // answer — the run is not over, and the next turn_end carries
-            // the real outcome.
-            if (sr === "toolUse" || sr === "tool_use" || sr === "tool_calls") return;
-            endStopReason = sr;
-            endUsage = evt.usage ?? evt.message?.usage;
-            endErrorMessage = evt.message?.errorMessage;
-            // agent_end, not turn_end, closes the run: pi can schedule
-            // post-run maintenance (overflow-recovery compaction) after
-            // the final turn_end, and only the terminal agent_end proves
-            // the session is done rewriting itself. The grace timer
-            // settles a runtime that never sends agent_end at all.
-            if (agentEndTimer) clearTimeout(agentEndTimer);
-            agentEndTimer = setTimeout(finishRun, PI_AGENT_END_GRACE_MS);
-            agentEndTimer.unref?.();
-            return;
-          }
-          case "agent_end": {
-            // Two dialects mark a non-terminal agent_end: upstream pi sets
-            // willRetry: true when an automatic retry follows (overflow
-            // recovery runs compaction and retries as a fresh run), and the
-            // omp fork sets isTerminal: false while maintenance or async
-            // delivery has more work scheduled. Either marker means the
-            // session may still rewrite the turn that carried this
-            // session's standing prompt — keep listening so those events
-            // can drop the prompt-split receipt.
-            if (evt.isTerminal === false || evt.willRetry === true) return;
-            if (agentEndTimer) {
-              clearTimeout(agentEndTimer);
-              agentEndTimer = null;
-            }
-            finishRun();
-            return;
-          }
-          case "agent_settled": {
-            // upstream pi's explicit fully-settled guarantee: no automatic
-            // retry, compaction retry, or queued continuation remains.
-            // Usually settles one frame after the final agent_end already
-            // did; kept as its own terminal signal so the driver never
-            // depends on which dialect the configured cli speaks.
-            if (agentEndTimer) {
-              clearTimeout(agentEndTimer);
-              agentEndTimer = null;
-            }
-            finishRun();
-            return;
-          }
-          default:
-            return;
-        }
-      };
-
-      const chunks = new PiRpcChunks();
-      child.stdout.setEncoding("utf8");
-      child.stdout.on("data", piLineReader((line) => {
-        const frame = decodePiFrame(line, chunks);
-        if (!frame) return;
-        try {
-          onEvent(frame as unknown as PiEvent);
-        } catch {
-          /* skip a frame the event handler can't consume */
-        }
-      }));
-      child.on("error", (err) => {
-        const fail = describeSpawnFailure(err as NodeJS.ErrnoException, config.cli, turn.cwd);
-        rejectWaiters(new Error(fail.message));
-        emit({ ...base(threadId, turnId), type: "runtime.error", message: fail.message, setup: fail.setup });
-        settle(false);
-      });
-      child.on("close", () => {
-        // a clean close without a terminal event is a failed turn, never a hang
-        const message = `pi process exited before replying${stderr.trim() ? `: ${stderr.trim().slice(-300)}` : ""}`;
-        rejectWaiters(new Error(message));
-        if (!settled) emit({ ...base(threadId, turnId), type: "runtime.error", message });
-        settle(false);
-      });
-
-      emit({ ...base(threadId, turnId), type: "turn.started" });
-
-      // handshake: resume the remembered session or start a fresh one. The
-      // harness persists session.started.sessionId as the resumeCursor and
-      // hands it back next turn, so that id IS the resume handle — pi's
-      // sessionFile, which switch_session expects as `sessionPath`.
-      const sessionPath = resumeCursor;
-      let sessionFile = sessionPath;
-      let sessionReady = false;
-      if (standby) {
-        sessionReady = true;
-        standbySession = sessionFile;
-        emit({ ...base(threadId, turnId), type: "session.started", sessionId: sessionFile, model: turn.model ?? null });
-      } else try {
-        // #1276: a compact turn's pi keeps its session (no --no-session), so a
-        // fresh one already started a new session: a new_session would
-        // replace it, and pi reloads every extension (and its MCP servers)
-        // for the new one, about half a second per new conversation.
-        const fresh = !sessionPath && turn.compactPrompt;
-        // the pi started ahead moves to this folder: a new session written
-        // for it, then switch_session (pi reloads the extension, which reads
-        // this conversation's MCP servers)
-        const aheadSession = ahead && turn.cwd ? writePiSession(ahead.sessionsRoot, turn.cwd) : null;
-        const command = sessionPath || aheadSession ? "switch_session" : "new_session";
-        const hsPromise = fresh && !aheadSession ? Promise.resolve(undefined) : awaitResponse(command);
-        if (aheadSession) send({ type: "switch_session", sessionPath: aheadSession });
-        else if (!fresh) send(sessionPath ? { type: "switch_session", sessionPath } : { type: "new_session" });
-        const hs = (await hsPromise) as { sessionFile?: string; sessionId?: string } | undefined;
-        if (aheadSession) sessionFile = aheadSession;
-        if (hs?.sessionFile) sessionFile = hs.sessionFile;
-        // #1276: pi answers new_session without the file; a compact turn
-        // asks for it, so the next turn resumes this session (switch_session).
-        if (!sessionFile && turn.compactPrompt) {
-          try {
-            const statePromise = awaitResponse("get_state");
-            send({ type: "get_state" });
-            const state = (await statePromise) as { sessionFile?: unknown } | undefined;
-            if (typeof state?.sessionFile === "string" && state.sessionFile) sessionFile = state.sessionFile;
-          } catch {
-            // no file: the next turn replays, as before
-          }
-        }
-        sessionReady = true;
-        standbySession = sessionFile;
-        emit({
-          ...base(threadId, turnId),
-          type: "session.started",
-          sessionId: sessionFile ?? hs?.sessionId ?? null,
-          model: turn.model ?? null,
-        });
-      } catch {
-        // without a session we can still try a bare prompt; pi --no-session
-        // accepts a prompt without an explicit session. Not a pi started
-        // ahead: without its switch it has another folder and no MCP servers.
-        if (ahead) {
-          const message = "pi could not open this conversation; send the message again";
-          emit({ ...base(threadId, turnId), type: "runtime.error", message });
-          settle(false);
-          throw new Error(message);
-        }
-      }
-
-      // pin the chosen model (composite id or host::model inject → provider + modelId)
-      const chosen = typeof turn.model === "string" ? splitPiModel(turn.model) : null;
-      if (chosen) {
-        try {
-          const modelPromise = awaitResponse("set_model");
-          send({ type: "set_model", provider: chosen.provider, modelId: chosen.modelId });
-          await modelPromise;
-        } catch (err) {
-          // A local model pi cannot reach is never replaced by pi's default
-          // model: that one bills a provider the person did not pick (on
-          // 2026-10-27 a computer-shared model ran on an xAI key instead, and
-          // its spent credits read as a usage limit).
-          if (isLocalModelId(turn.model)) {
-            const reason = String((err as Error)?.message ?? err).slice(0, 300);
-            const message = `pi could not switch to the local model ${chosen.modelId}, so it did not answer on another model. Check that the computer that serves it is online and shares it, then try again. (pi said: "${reason}")`;
-            emit({ ...base(threadId, turnId), type: "runtime.error", message });
-            settle(false);
-            throw new Error(message);
-          }
-          /* a hosted pick keeps going on the default model */
-        }
-      }
-
-      // pin reasoning effort after the model (the supported level set is
-      // model-dependent); a rejection keeps the engine default
-      if (turn.effort) {
-        try {
-          const levelPromise = awaitResponse("set_thinking_level");
-          send({ type: "set_thinking_level", level: piThinkingLevel(turn.effort) });
-          await levelPromise;
-        } catch {
-          /* keep going on the engine default */
-        }
-      }
-
-      if (scopeReadyPath) {
-        let ready = false;
-        try {
-          const receipt = JSON.parse(readFileSync(scopeReadyPath, "utf8")) as { ok?: unknown; toolScope?: unknown };
-          ready = receipt.ok === true && JSON.stringify(receipt.toolScope) === JSON.stringify(toolScope);
-        } catch { /* Missing or malformed readiness is never a grant. */ }
-        if (!ready) {
-          const message = "Pi tool selection enforcement is unavailable. Update Pi and check the Sagax extension before retrying.";
-          emit({ ...base(threadId, turnId), type: "runtime.error", message });
-          settle(false);
-          throw new Error(message);
-        }
-      }
-
-      // The stable/volatile split: the full prompt rides only the turn that
-      // establishes - or re-instructs, after a soul edit - this pi session,
-      // which previously re-sent the whole system prompt on every turn and
-      // let it accumulate in the session file once per turn. pi compacts
-      // long sessions by summarizing older messages, which can absorb the
-      // turn that carried the prompt, so the driver watches pi's
-      // compaction events and drops the receipt the moment one arrives,
-      // and re-anchors the full prompt every PI_PROMPT_RE_ANCHOR_TURNS
-      // bare turns as a backstop for anything the events miss. Receipts
-      // are durable because the session file outlives both the per-turn
-      // child and this process. Without a session the prompt is the
-      // model's only context, so that turn keeps the full block and writes
-      // no receipt.
-      const halves = promptHalves(turn);
-      let message: string;
-      let pendingReceipt: { key: string; receipt: PromptSplitReceipt } | null = null;
-      if (halves.stable !== null && sessionReady && sessionFile) {
-        const receiptKey = JSON.stringify([threadId, sessionFile]);
-        const composed = splitSessionPrompt(
-          halves.stable,
-          halves.volatile,
-          readPromptSplitReceipt("pi", receiptKey),
-          turn.system,
-          turn.text,
-          Boolean(turn.mentionTurn),
-          // #1276: on a local model the full prompt goes again
-          // only after a compaction pi reports, not every few turns: a periodic
-          // re-anchor cost a slow turn (12 to 21 s) for a backstop.
-          turn.compactPrompt ? 0 : PI_PROMPT_RE_ANCHOR_TURNS,
-          turn.systemVolatileSections,
-        );
-        message = composed.text;
-        pendingReceipt = { key: receiptKey, receipt: composed.receipt };
-      } else {
-        message = turn.system ? `${turn.system}\n\n${turn.text}` : turn.text;
-      }
-      // #1276: what every new conversation of the bot shares (the stable half
-      // and the volatile sections before the per-conversation ones, which
-      // compactVolatileOrder puts last) becomes its own message
-      // (pi-mcp-extension.ts), where a local server keeps a cache for them.
-      if (turn.compactPrompt) message = markSharedPrompt(message, halves, turn.systemVolatileSections);
-      // events cannot interleave with this synchronous stretch, so any
-      // compaction recorded above already invalidated what compose read
-      try {
-        // pi answers the prompt with an authoritative response only after
-        // preflight accepts it - and rejects it outright while a
-        // compaction runs - so the receipt commits only after that
-        // acceptance: a rejected or compacted-around send redelivers on
-        // the next turn. The wait is long enough to survive a compaction
-        // queue; a dead child rejects it immediately.
-        // sendTurn still resolves once the prompt is written: a child that
-        // dies before replying settles the turn through the close handler,
-        // whose waiter sweep can precede this registration.
-        const accepted = awaitResponse("prompt", 120_000);
-        send({ type: "prompt", message, ...(images.length ? { images } : {}) });
-        void accepted.then(
-          () => {
-            if (!pendingReceipt || compactionObserved) return;
-            try {
-              writePromptSplitReceipt("pi", pendingReceipt.key, pendingReceipt.receipt);
-            } catch {
-              /* an unwritten receipt only re-delivers the full prompt next turn */
-            }
-          },
-          (err: Error) => {
-            if (settled) return;
-            emit({
-              ...base(threadId, turnId),
-              type: "runtime.error",
-              message: String(err?.message ?? err).slice(0, 2_000),
-            });
-            settle(false);
-          },
-        );
-      } catch (err) {
-        emit({
-          ...base(threadId, turnId),
-          type: "runtime.error",
-          message: String((err as Error)?.message ?? err).slice(0, 2_000),
-        });
-        settle(false);
-      }
-
-      return { turnId };
+      }),
+      armWarmBudgetClose: (budget, child) => {
+        child.once("close", () => retireClosedWarmProcess(budget as WarmResourceLease | undefined, child));
+      },
+      buildMcpServers,
+      withWarmTokens,
+      piResumableSession,
+      piSearchedServers,
+      piGatedMcpTool,
+      piGatedMcpInput,
+      piSearchedCall,
+      decodePiFrame: (line, chunks) => decodePiFrame(line, chunks as PiRpcChunks),
+      piLineReader,
+      newChunks: () => new PiRpcChunks(),
+      splitPiModel,
+      piThinkingLevel,
+      markSharedPrompt,
+      piEnvironment,
+      piAccessEnvironment,
+      piTurnEnvironment,
+      refusal: (message) => new PiRpcRefusalError(message),
+      isRefusal: (error) => error instanceof PiRpcRefusalError,
     };
+
+    const sendTurn = createPiSendTurn({
+      startupModelRefresh,
+      config,
+      environment: input.environment,
+      active,
+      emit,
+      base,
+      piArgs: PI_ARGS,
+      negotiateFrame: PI_NEGOTIATE_FRAME,
+      toolCacheName: PI_TOOL_CACHE,
+      warmName: PI_WARM,
+      agentEndGraceMs: PI_AGENT_END_GRACE_MS,
+      promptReAnchorTurns: PI_PROMPT_RE_ANCHOR_TURNS,
+      hooks: piTurnHooks,
+    });
 
     const snapshot = async (): Promise<ProviderSnapshot> => {
       // Every pi-based instance probes at start: one engine start slot each.

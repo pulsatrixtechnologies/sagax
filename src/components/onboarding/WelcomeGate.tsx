@@ -25,7 +25,6 @@ import { SharedWorkspaceHint } from "./SharedWorkspaceHint";
 import { WelcomeFlow } from "./WelcomeFlow";
 
 export { localDesktopPage, useWelcomeViewer } from "./welcome-viewer";
-import { localDesktopPage } from "./welcome-viewer";
 
 /** Opens the welcome flow on a fresh workspace (the server's onboarding
  * record says so) or on request from Settings. The decision waits for the

@@ -1508,6 +1508,7 @@ import {
   takeHeldSteersForThread,
   takeRemainingHeldSteers
 } from "./turns/held-steers.ts";
+import { continuationSpeaker } from "./turns/continuation-speaker.ts";
 import { acquireDataDirLeaseForProcess } from "./data-dir-lease.ts";
 import {
   createWorkspaceAccess,
@@ -21433,6 +21434,18 @@ function activeRoutineRunForThread(threadId: string): RoutineRun | null {
   return run && ["running", "waiting"].includes(run.status) ? run : null;
 }
 
+/** #2191: speaker a card / delegation / restart continuation must carry.
+ * Prefer turnSpeakers; for routine lineage without one, the run's
+ * owner-routine speaker (with runAs). Undefined: omit speaker (fail-closed). */
+function threadContinuationSpeaker(threadId: string, run?: { runAs?: string; botId: string } | null): TurnSpeaker | undefined {
+  const active = run ?? activeRoutineRunForThread(threadId);
+  return continuationSpeaker({
+    lastSpeaker: turnSpeakers.get(threadId),
+    routineRun: Boolean(active),
+    runAsPrincipalId: active ? effectiveRunAs(active) : undefined,
+  });
+}
+
 /** 2026-11-04 (shared/routine-model.ts): the models a live engine lists. */
 function engineModelIds(instance: { models: { default?: string; options: Array<{ id: string }> } }): string[] {
   const ids = instance.models.options.map((option) => option.id);
@@ -22462,10 +22475,11 @@ function finalizeDelegationWatch(
       // re-delegating loop cannot spin up runs. An external runtime polls
       // for the receipt instead; waking would answer it a second time.
       if (watched.completionOwner !== "external") {
+        const wakeSpeaker = threadContinuationSpeaker(watched.sourceThreadId);
         if (ok) {
-          wakeDelegationSource(source, watched.sourceThreadId, targetName, undefined, watched.routineRunId);
+          wakeDelegationSource(source, watched.sourceThreadId, targetName, undefined, watched.routineRunId, wakeSpeaker);
         } else {
-          wakeDelegationSource(source, watched.sourceThreadId, targetName, failureName || "the delegated turn did not finish", watched.routineRunId);
+          wakeDelegationSource(source, watched.sourceThreadId, targetName, failureName || "the delegated turn did not finish", watched.routineRunId, wakeSpeaker);
         }
       }
     }
@@ -26658,8 +26672,10 @@ function dispatchTeamSetupResume(entry: TeamSetupResumeEntry): void {
     groupQueues.set(request.threadId, next.finally(() => finishGroupTurnOperation(groupId, operation)).catch((error) => failed(error instanceof Error ? error.message : String(error))));
     return;
   }
+  const speaker = threadContinuationSpeaker(request.threadId);
   void startTurn(request.botId, prompt, { threadId: request.threadId, cardContinuation: true,
-    requestMessageId: requestSourceForCard(store.messagesFor(request.threadId), messageId), onDispatchError: failed }).catch((error) => {
+    requestMessageId: requestSourceForCard(store.messagesFor(request.threadId), messageId), onDispatchError: failed,
+    ...(speaker ? { speaker } : {}) }).catch((error) => {
     if (cancelled()) return;
     if (isTurnAdmissionBlocked(error)) pendingTeamSetupResumes.set(request.requestId, entry);
     else failed(error instanceof Error ? error.message : String(error));
@@ -28976,10 +28992,12 @@ function dispatchComputerResume(entry: ComputerResumeEntry): void {
     );
     return;
   }
+  const speaker = threadContinuationSpeaker(entry.threadId);
   void startTurn(entry.botId, prompt, {
     threadId: entry.threadId,
     cardContinuation: true,
-    onDispatchError: (message) => markComputerResumeFailed(entry, message)
+    onDispatchError: (message) => markComputerResumeFailed(entry, message),
+    ...(speaker ? { speaker } : {})
   }).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     if (isTurnAdmissionBlocked(error)) pendingComputerResumes.set(entry.threadId, entry);
@@ -29138,10 +29156,12 @@ function dispatchSecretResume(entry: SecretResumeEntry) {
     );
     return;
   }
+  const speaker = threadContinuationSpeaker(entry.threadId);
   void startTurn(entry.botId, prompt, {
     threadId: entry.threadId,
     cardContinuation: true,
-    onDispatchError: (message) => markSecretResumeFailed(entry.threadId, entry.messageId, message)
+    onDispatchError: (message) => markSecretResumeFailed(entry.threadId, entry.messageId, message),
+    ...(speaker ? { speaker } : {})
   }).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     if (isTurnAdmissionBlocked(error)) {
@@ -44010,8 +44030,11 @@ const agentApi = createAgentApi({
       : `@${agent.name} is waiting for a person to answer an approval before it can go on (send_prompt).`;
     store.appendMessage(caller.sourceThreadId, { role: "bot", kind: "text", text, ...(target ? { from: { botId: target.id, name: target.name, color: target.color } } : {}) });
     if (result.finished) {
-      wakeDelegationSource(source, caller.sourceThreadId, agent.name, undefined, undefined,
-        caller.speakerPrincipalId ? { origin: "person", principalId: caller.speakerPrincipalId } : undefined);
+      // Prefer the source thread's last speaker (incl. owner-routine lineage);
+      // speakerPrincipalId alone skipped routine wakes (#2191 / #318).
+      const wakeSpeaker = threadContinuationSpeaker(caller.sourceThreadId)
+        ?? (caller.speakerPrincipalId ? { origin: "person" as const, principalId: caller.speakerPrincipalId } : undefined);
+      wakeDelegationSource(source, caller.sourceThreadId, agent.name, undefined, undefined, wakeSpeaker);
     }
   }
 });
@@ -48654,7 +48677,8 @@ function resumeTurnsCutByRestart(): void {
     // older release's queue) would start work it may no longer want.
     legacyHandoffsDropped.add(threadId);
     store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
-    void startTurn(run.botId, ROUTINE_RESUME_PROMPT, { threadId, cardContinuation: true })
+    const speaker = threadContinuationSpeaker(threadId, run);
+    void startTurn(run.botId, ROUTINE_RESUME_PROMPT, { threadId, cardContinuation: true, ...(speaker ? { speaker } : {}) })
       .catch((error) => routines?.failRunById(run.id, `${ROUTINE_RESTARTED}: ${error instanceof Error ? error.message : String(error)}`));
   }
   let cut: ReturnType<typeof takeInterruptedTurns>;
@@ -48713,10 +48737,12 @@ function resumeHeldSteersAfterCrash(alreadyResumed: ReadonlySet<string>): void {
     // cardContinuation: the held rows are already in the transcript; this turn
     // answers them once without appending another user line (same shape as a
     // cut-turn resume that carries held words).
+    const speaker = threadContinuationSpeaker(threadId);
     void startTurn(botId, prompt, {
       threadId,
       cardContinuation: true,
-      excludeMessageIds: held.map((row) => row.messageId)
+      excludeMessageIds: held.map((row) => row.messageId),
+      ...(speaker ? { speaker } : {})
     }).catch((error) => {
       if (!store.taskByThread(botId, threadId)) return;
       store.appendMessage(threadId, {

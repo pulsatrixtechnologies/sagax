@@ -103,6 +103,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("artifacts:claude", "own", "claude_artifact"),
   p("pages:propose", "own", "propose_page"),
   p("pages:comments", "own", "page_comments"),
+  p("pages:choose", "own", "choose_page_target"),
   // place_call is the same tool under its compatibility name
   p("phone:call", "own", "place_phone_call", "sagax", ["place_call"]),
   // mid-call controls on the person's own live call (server/outbound/outbound-calls.ts)

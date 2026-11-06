@@ -99,7 +99,8 @@ export function BotHeaderPill({ name, panelOpen, onToggle, avatar }: {
 
 /**
  * The bot chat's header, like Grok Bot (#2141): the name pill alone (mascot
- * about 20px, then "Name · Label" in 14px regular), which opens and closes
+ * about 20px, then the name in 14px regular with the title under it,
+ * smaller and secondary), which opens and closes
  * the bot panel. No sharing pill and no gear above the chat (JC 2026-11-06):
  * sharing lives in the bot panel, the pill already toggles it.
  */
@@ -117,15 +118,20 @@ export function BotChatHeader({ name, label, panelOpen, onToggle, avatar }: {
         type="button"
         onClick={onToggle}
         data-bot-header-pill=""
-        className="flex h-8 min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-[6px] pr-3 transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        className={cn(
+          "flex min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-[6px] pr-3 transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+          tag ? "min-h-8 py-1" : "h-8",
+        )}
         title={panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
         aria-label={panelOpen ? t("chat.closePanelAria", { name }) : t("chat.openPanelAria", { name })}
         aria-expanded={panelOpen}
       >
         <span className="flex shrink-0 items-center">{avatar}</span>
-        <span className="truncate text-[14px] font-normal leading-5 text-ink">
-          {name}
-          {tag && <span data-bot-header-label="" className="text-ink-secondary"> · {tag}</span>}
+        {/* The name on its own line, the title under it, smaller and
+            secondary (JC 2026-11-06: never "Name · Title" on one line). */}
+        <span className="flex min-w-0 flex-col items-start text-left">
+          <span data-bot-header-name="" className="max-w-full truncate text-[14px] font-normal leading-5 text-ink">{name}</span>
+          {tag && <span data-bot-header-label="" className="max-w-full truncate text-[11.5px] leading-4 text-ink-secondary">{tag}</span>}
         </span>
       </button>
     </div>

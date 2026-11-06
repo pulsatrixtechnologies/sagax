@@ -144,9 +144,15 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     expect(html).not.toContain("data-bot-header-gear");
     expect(html).not.toContain("Shared with");
     expect(html).toContain("Pepper");
-    expect(html).toContain(" · Research");
+    expect(html).not.toContain(" · Research");
     expect(html).toContain("text-[14px] font-normal");
     expect(html).not.toContain("data-bot-header-chevron");
+  });
+
+  it("puts the title under the name, smaller and secondary, never on the name's line (JC 2026-11-06)", () => {
+    const html = header();
+    expect(html).toMatch(/data-bot-header-name="[^"]*"[^>]*>Pepper<\/span><span data-bot-header-label="" class="[^"]*text-\[11\.5px\][^"]*text-ink-secondary[^"]*">Research<\/span>/);
+    expect(html).toContain("flex-col");
   });
 
   it("leaves the label out when the bot has none", () => {

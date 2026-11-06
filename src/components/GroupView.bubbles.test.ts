@@ -7,6 +7,12 @@ import type { Bot, ConfigStatus, Group, Message } from "@/state/store";
 import { formatTime } from "@/state/store";
 
 const fixture = vi.hoisted(() => ({ config: null as ConfigStatus | null }));
+// Thread mode on: these cases cover the Go to conversation chip, which the
+// unified chat (the default) never draws (JC 2026-11-06, unified-chat.guard.test.ts).
+vi.mock("@/lib/thread-preferences", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/thread-preferences")>()),
+  useShowThreads: () => true,
+}));
 vi.mock("@/state/store", async (original) => ({
   ...await original<typeof import("@/state/store")>(),
   useStore: () => ({ state: { config: fixture.config }, dispatch: vi.fn() }),

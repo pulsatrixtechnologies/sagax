@@ -1,3 +1,4 @@
+import { useShowThreads } from "@/lib/thread-preferences";
 // Several "Go to conversation" lines in a row, drawn as one compact chip:
 // "3 conversations with [stacked faces] 3 agents". It opens a list of each
 // target once (a bot's face and name, or the cube for a thread or a room);
@@ -94,7 +95,15 @@ function SingleLine({
   );
 }
 
-export function GotoGroupChip({
+/** Threads off (the unified chat, the default): never a "Go to conversation"
+ * row, folded or not (JC 2026-11-06). Everything stays in the bot's chat. */
+export function GotoGroupChip(props: Parameters<typeof GotoGroupChipBody>[0]) {
+  const showThreads = useShowThreads();
+  if (!showThreads) return null;
+  return <GotoGroupChipBody {...props} />;
+}
+
+function GotoGroupChipBody({
   group,
   bots,
   groups,

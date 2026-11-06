@@ -21,6 +21,7 @@ import type { ConfigStatus } from "@/state/store";
 import { peopleDmPeer } from "@/lib/people-dm";
 import { groupNudgeTarget } from "@/lib/group-nudge";
 import type { LiveActivityPhrases } from "@/lib/live-activity";
+import { ChatEdgeFade } from "@/components/ChatEdgeFade";
 
 type Peer = NonNullable<ReturnType<typeof peopleDmPeer>>;
 type Nudge = ReturnType<typeof groupNudgeTarget>;
@@ -227,6 +228,7 @@ export function GroupRoomTranscriptPane({
       )}
 
       <div ref={composerDockRef} data-composer-dock="" className="absolute inset-x-0 bottom-0 z-[2]">
+      <ChatEdgeFade edge="bottom" />
       <Composer
         key={group.threadId}
         group={group}

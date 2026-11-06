@@ -964,7 +964,8 @@ import {
   SendSequencer
 } from "./messages/send-idempotency.ts";
 import { EventBus, withoutPrivateFields } from "./harness/bus.ts";
-import { ProviderRegistry } from "./harness/registry.ts";
+import { enginesByUse, ProviderRegistry } from "./harness/registry.ts";
+import { afterFirstEngineRead, holdUntilFirstEngineRead } from "./first-engine-read.ts";
 import { ManagedDesktopProviders } from "./computer/managed-desktop.ts";
 import { wasOldestThread } from "./threads/main-thread.ts";
 import {
@@ -989,6 +990,7 @@ import {
   readyToRun,
   starredModelSelections,
   selectDefaultModelSelection,
+  withInstanceConfig,
   withNewBotEffort,
   type SelectableInstance
 } from "./models/default-model-selection.ts";
@@ -3575,7 +3577,8 @@ if (IDENTITY.kind !== "perspicax") {
     resumeEngineReconnectForPerson(person, "Claude");
   });
 }
-const registry = new ProviderRegistry(BUILT_IN_DRIVERS);
+const registry = new ProviderRegistry(BUILT_IN_DRIVERS, { statusFile: join(DATA_DIR, "providers", "engine-status.json") });
+const firstEngineRead = holdUntilFirstEngineRead();
 // The approval gates below hand this their model selection — or a driver
 // view they already hold — and let the registry resolve the driver, instead
 // of each site unwrapping registry.cliTarget(...)?.driverKind itself.
@@ -7665,12 +7668,7 @@ const headlessTasks = createHeadlessTaskRunner({
 
 /** Include configuration that the driver snapshot itself does not carry. */
 function selectableInstances<T extends SelectableInstance>(instances: readonly T[]): T[] {
-  const configs = providerConfigs();
-  return instances.map(instance => ({
-    ...instance,
-    enabled: configs[instance.instanceId]?.enabled ?? instance.enabled,
-    ...(configs[instance.instanceId]?.access ? { access: configs[instance.instanceId].access } : {})
-  }));
+  return withInstanceConfig(instances, providerConfigs());
 }
 
 // New bots honor setup's saved choice; without one, an engine that can run a
@@ -7759,6 +7757,7 @@ function refreshUnsetModelSelections(instances?: readonly SelectableInstance[]):
 }
 
 async function refreshUnsetModelSelectionsFrom(instances?: readonly SelectableInstance[]): Promise<void> {
+  if (registry.provisional(instances)) return;
   const selectable = selectableInstances<SelectableInstance>(instances ?? await registry.describe());
   bootSelection = await defaultSelection(undefined, selectable.filter(instance => readyToRun(instance, selectionContext)));
   if (hostedModels) {
@@ -8299,10 +8298,7 @@ function checkedMemberIds(value: unknown, people = 0): { ok: true; memberIds: st
   return { ok: true, memberIds };
 }
 let bootSelection = { instanceId: "", model: "" };
-/** The engines read at start, while it runs (below). It is where the server
- * learns what each engine supports (a Claude CLI's version and flags), so a
- * turn waits for it, as every turn did when the server listened only after
- * that read. */
+/** The start-up read of every engine: routines and room handoffs wait for it; a turn waits only for its own engine's probe. */
 let enginesRead: Promise<void> | null = null;
 /** Preset bots for New bot, from shared files and the organization (presets.ts). */
 const presetStore = createPresetStore();
@@ -8429,10 +8425,13 @@ await retryComputerEngineMove();
 mcpServersHost.boot();
 // Reading the new-bot default probes every engine CLI (each up to its
 // timeout), and at start only the first-run seed needs the answer. A later
-// start listens without waiting: the same read runs behind it, and turns
-// wait for it (enginesRead).
-if (store.needsSeed()) await refreshUnsetModelSelections();
-else enginesRead = refreshUnsetModelSelections().catch(
+// start listens without waiting: the same read runs behind it, and a turn
+// waits only for its own engine's probe (enginesRead / registry.engineRead).
+if (store.needsSeed()) { firstEngineRead(); await refreshUnsetModelSelections(); }
+else enginesRead = registry.readAtStart(enginesByUse([cfg.defaultModelSelection, ...store.bots.map((bot) => bot.modelSelection)]), firstEngineRead).then(async ({ engines, changed }) => {
+  await refreshUnsetModelSelections(engines);
+  if (changed) broadcast({ kind: "config", ...configStatus() });
+}).catch(
   (error) => console.warn(`[engines] reading the engines at start failed: ${error instanceof Error ? error.message : String(error)}`),
 ).finally(() => { enginesRead = null; });
 // Model lists served from the last run refresh behind listen. Each one
@@ -31180,7 +31179,7 @@ async function describeInstances() {
   // (an install, a sign-in, a key or a Company engine), so a bot still on the
   // removed Computer engine moves now rather than at the next start.
   void retryComputerEngineMove().catch(reportBackgroundError);
-  const engines = selectableInstances(await registry.describe());
+  const engines = selectableInstances(await registry.describe({ known: true }));
   await refreshUnsetModelSelections(engines);
   return engines.map((instance) => {
     const entry = configs[instance.instanceId];
@@ -45236,6 +45235,7 @@ ROUTES.push(createBotsMessagesRoutes({
   drainQueuedSends,
   engineReference,
   get enginesRead() { return enginesRead; },
+  engineRead: (instanceId) => registry.engineRead(instanceId),
   finishUntilRuns,
   guardedSendSchema,
   handoffs,
@@ -47250,6 +47250,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   engineHasNativeWebSearch,
   engineTurnLevel,
   enginesRead,
+  engineRead: (instanceId) => registry.engineRead(instanceId),
   ensureTaskWorkspace,
   ensureWorkspace,
   expandLearnTurnText,
@@ -47598,6 +47599,7 @@ const startTurnRunner = createStartTurn({
   engineStartGate,
   engineTurnLevel,
   get enginesRead() { return enginesRead; },
+  engineRead: (instanceId) => registry.engineRead(instanceId),
   ensureTaskWorkspace,
   ensureWorkspace,
   expandLearnTurnText,

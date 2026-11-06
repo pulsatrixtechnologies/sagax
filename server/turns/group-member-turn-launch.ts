@@ -107,6 +107,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     engineHasNativeWebSearch,
     engineTurnLevel,
     enginesRead,
+    engineRead,
     ensureTaskWorkspace,
     ensureWorkspace,
     expandLearnTurnText,
@@ -978,9 +979,9 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     : undefined);
   const roomSystem = roomStable ? compactVolatileOrder(roomBuilt) : roomBuilt;
 
-  // The engines read at start is part of setup (it learns what this engine
-  // supports): wait for it before the claim below.
-  if (enginesRead) await enginesRead;
+  // The start-up probe of this engine is part of setup: wait for it before the claim below.
+  const ownEngineRead = typeof engineRead === "function" ? engineRead(instance.instanceId) : enginesRead;
+  if (ownEngineRead) await ownEngineRead;
   // an embedding endpoint the person runs reads the recall query first
   // (bounded), before the cancellation check below
   if (!cardContinuation && bot.memoryEnabled !== false && autoRecallEnabled(cfg) && semanticEmbeddingEndpoint(cfg)) await prepareSemanticRecall(bot.id, recallQuery(resolvedLatestImages.text));

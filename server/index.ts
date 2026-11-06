@@ -6837,6 +6837,30 @@ ROUTES.push(createPersonConnectionRoutes({
   servers: {
     list: personalServerListing,
     add: (principalId, body) => addPersonalMcpServer(principalId, body),
+    // Edit from Plugins > Me: the add body replaces the server (renamed when
+    // the body names another one). A token or env left out is kept, so the
+    // screen never has to show a secret; an unchanged OAuth address keeps
+    // its sign-in. Any refusal puts the previous server back as it was.
+    update: async (principalId, name, body) => {
+      const previous = personConnections.servers(principalId)[name];
+      if (!previous) throw new PersonConnectionsError("No server with that name.", "not_found", 404);
+      const next = { ...(body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {}) };
+      if (typeof next.name !== "string" || !next.name) next.name = name;
+      if (previous.kind === "remote" && next.auth === "token" && !next.token && previous.token) next.token = previous.token;
+      if (previous.kind === "remote" && next.auth === "token" && next.headerName === undefined && previous.headerName) next.headerName = previous.headerName;
+      if (previous.kind === "stdio" && typeof next.command === "string" && (!next.env || Object.keys(next.env as object).length === 0)) next.env = previous.env;
+      const keepSignIn = previous.kind === "remote" && previous.auth === "oauth" && next.auth === "oauth" && next.url === previous.url && next.name === name;
+      personConnections.remove(principalId, name);
+      try {
+        await addPersonalMcpServer(principalId, next, keepSignIn);
+      } catch (error) {
+        personConnections.add(principalId, name, previous);
+        throw error;
+      }
+      stdioRelay.closePerson(principalId, name);
+      if (next.name !== name) await personOAuth(principalId).forget(name).catch(() => undefined);
+      if (!previous.enabled) personConnections.setEnabled(principalId, next.name as string, false);
+    },
     setEnabled: async (principalId, name, enabled) => {
       personConnections.setEnabled(principalId, name, enabled);
       if (!enabled) stdioRelay.closePerson(principalId, name);

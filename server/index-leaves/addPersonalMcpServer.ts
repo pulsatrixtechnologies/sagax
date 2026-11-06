@@ -5,7 +5,7 @@ import { parsePersonalMcpInput, personalMcpHostRefusal, personalMcpPrivateAllowe
 export type Host = Record<string, any>;
 
 export function createAddPersonalMcpServer(getHost: () => Host): any {
-async function addPersonalMcpServer(principalId: string, body: unknown) {
+async function addPersonalMcpServer(principalId: string, body: unknown, keepSignIn = false) {
   const host = getHost();
   const { PersonConnectionsError } = host;
 
@@ -23,7 +23,7 @@ async function addPersonalMcpServer(principalId: string, body: unknown) {
     throw new PersonConnectionsError("This server has no server environments, so a command cannot run for you here. Add a remote host.server (an https address) instead.", "no_environment", 409);
   }
   host.personConnections.add(principalId, name, server);
-  if (server.kind === "remote" && server.auth === "oauth") {
+  if (server.kind === "remote" && server.auth === "oauth" && !keepSignIn) {
     const manager = host.personOAuth(principalId);
     await manager.forget(name).catch(() => undefined);
     await manager.probe(name, host.personalRemoteSpec(server), AbortSignal.timeout(10_000)).catch(() => undefined);

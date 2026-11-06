@@ -38,6 +38,12 @@ export type NewPersonalServer =
   | { name: string; command: string; args: string[]; env: Record<string, string> };
 
 export const addPersonalServer = (server: NewPersonalServer) => api<{ servers: PersonalServer[] }>("/api/me/mcp/servers", { method: "POST", body: JSON.stringify(server) });
+/** Plugins > Me > Add > Paste config: every server of the block is the person's own. */
+export const importPersonalServers = (json: string) =>
+  api<{ servers: PersonalServer[]; added: string[] }>("/api/me/mcp/servers/import", { method: "POST", body: JSON.stringify({ json }) });
+/** Edit one: the add body; a token or variables left out are kept. */
+export const updatePersonalServer = (name: string, server: NewPersonalServer) =>
+  api<{ servers: PersonalServer[] }>(`/api/me/mcp/servers/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify(server) });
 export const setPersonalServerEnabled = (name: string, enabled: boolean) =>
   api<{ servers: PersonalServer[] }>(`/api/me/mcp/servers/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify({ enabled }) });
 export const removePersonalServer = (name: string) => api<{ servers: PersonalServer[] }>(`/api/me/mcp/servers/${encodeURIComponent(name)}`, { method: "DELETE" });

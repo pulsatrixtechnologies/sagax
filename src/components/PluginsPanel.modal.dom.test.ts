@@ -42,7 +42,10 @@ vi.mock("./McpServersPanel", () => ({
 vi.mock("./settings/MyConnectionsSettings", () => ({
   MyGithubConnection: () => null,
   MyGithubSummary: () => null,
-  MyMcpServers: () => null,
+  PersonalServerForm: () => null,
+  PersonalImportForm: () => null,
+  stateLabel: () => "",
+  useMyConnections: () => ({ data: null, error: null, refresh: async () => {} }),
 }));
 vi.mock("./lazy-screens", () => ({
   BotCatalogPane: Object.assign(() => null, { preload: async () => {} }),

@@ -125,16 +125,18 @@ describe("outbound wiring", () => {
     expect(words).not.toMatch(/\d{12,}/);
   });
 
-  it("the Primary Bot answers a call or a purchase this once or no, never always (Owner 2026-10-22)", () => {
+  it("the Primary Bot answers a purchase once, always (a rule for the site) or no; a call only on its card (#2091)", () => {
     expect(primaryOutboundDecision("purchase", { behavior: "allow" })).toEqual({ decision: "once" });
-    expect(primaryOutboundDecision("call", { behavior: "allow" })).toHaveProperty("refused");
-    expect(primaryOutboundDecision("call", { behavior: "deny" })).toEqual({ decision: "deny" });
+    expect(primaryOutboundDecision("purchase", { behavior: "allow", always: true })).toEqual({ decision: "always" });
+    expect(primaryOutboundDecision("purchase", { behavior: "allow", rule: "allow" })).toEqual({ decision: "always" });
     expect(primaryOutboundDecision("purchase", { behavior: "deny" })).toEqual({ decision: "deny" });
-    expect(primaryOutboundDecision("purchase", { behavior: "allow", always: true })).toHaveProperty("refused");
+    // ÉFVP 2026-10-22: the person confirms the number on the card
+    expect(primaryOutboundDecision("call", { behavior: "allow" })).toHaveProperty("refused");
     expect(primaryOutboundDecision("call", { behavior: "allow", always: true })).toHaveProperty("refused");
+    expect(primaryOutboundDecision("call", { behavior: "deny" })).toEqual({ decision: "deny" });
     const card = primaryPurchaseCard(listing, "Rocket", false);
-    expect(card.options).toEqual(["allow", "deny"]);
-    expect(card).not.toHaveProperty("always");
-    expect(card).not.toHaveProperty("alwaysScope");
+    expect(card.options).toEqual(["allow", "always_allow", "deny"]);
+    expect(card.always).toBe("rule");
+    expect(card.alwaysScope).toContain(listing.domain);
   });
 });

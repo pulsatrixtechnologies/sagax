@@ -144,6 +144,9 @@ interface Options {
    * 2026-10-26, Approve for me on the person's own turn when every bot it
    * touches is theirs). A suggestion never reaches it. */
   autoApply?(botId: string, threadId: string, request: TeamSetupRequest): boolean;
+  /** #2091 (decided 2026-11-05): the Always allow the person kept for this kind
+   * of team setup (index.ts keptCardRule); kept, the request applies at once. */
+  keptRule?(botId: string, threadId: string, candidate: { tool: string; scope: Record<string, string>; description: string }): { id: string; behavior: "allow" | "ask" | "deny"; description: string } | undefined;
   /** Per-driver capability resolver for engine-switch warnings on the card. */
   driverCapabilities?(instanceId: string): DriverCapabilities | undefined;
   validateChange?(before: BotRecord, fields: TeamSetupFields): void;
@@ -157,6 +160,14 @@ interface Options {
 }
 
 type RequestFrom = { botId: string; name: string; color: string };
+
+/** #2091: what Always allow keeps on a team-setup card: this kind of
+ * change (set up, suggested specialist, deletion) for this bot. */
+export function teamSetupRuleCandidate(request: Pick<TeamSetupRequest, "deletion" | "suggestion">): { tool: string; scope: Record<string, string>; description: string } {
+  if (request.deletion) return { tool: "sagax:delete_bot", scope: { action: "delete" }, description: "Delete bots of the team" };
+  if (request.suggestion) return { tool: "sagax:team_setup", scope: { action: "suggest" }, description: "Add the specialists it suggests" };
+  return { tool: "sagax:team_setup", scope: { action: "setup" }, description: "Set up and change the team" };
+}
 type SetupArgs = { botId: string; threadId: string; plan: unknown; from?: RequestFrom; suggestion?: boolean };
 type DeletionArgs = { botId: string; threadId: string; targetBotId: string; reason: string; from?: RequestFrom };
 /** Server-only invocation lease. Never saved on a request or approval card. */
@@ -334,6 +345,8 @@ export class TeamSetupRequestService {
   async submit(args: SetupArgs & SubmitAuthority) {
     const request = this.prepare(args);
     if (!request.suggestion && this.options.autoApply?.(args.botId, args.threadId, request)) return this.applyImmediately(request, args.from, args.canCommit);
+    const kept = !request.suggestion ? this.options.keptRule?.(args.botId, args.threadId, teamSetupRuleCandidate(request)) : undefined;
+    if (kept?.behavior === "allow") return this.applyImmediately(request, args.from, args.canCommit, kept);
     return { ...this.card(request, args.from), applied: false, state: "pending" as const };
   }
 
@@ -357,6 +370,8 @@ export class TeamSetupRequestService {
   async submitDeletion(args: DeletionArgs & SubmitAuthority) {
     const request = this.prepareDeletion(args);
     if (this.options.autoApply?.(args.botId, args.threadId, request)) return this.applyImmediately(request, args.from, args.canCommit);
+    const kept = this.options.keptRule?.(args.botId, args.threadId, teamSetupRuleCandidate(request));
+    if (kept?.behavior === "allow") return this.applyImmediately(request, args.from, args.canCommit, kept);
     return { ...this.card(request, args.from), applied: false, state: "pending" as const };
   }
 
@@ -422,6 +437,8 @@ export class TeamSetupRequestService {
     return {
       title, subtitle: detail, options: request.deletion ? ["Delete bot", "Cancel"] : request.suggestion ? ["Add bot", "Not now"] : ["Apply setup", "Cancel"], requestId: request.requestId,
       tool: request.deletion ? "delete_bot" : "set_up_team", teamSetupRequest: request,
+      // #2091: what Always allow keeps on this card
+      ownerRule: teamSetupRuleCandidate(request),
     };
   }
 
@@ -456,7 +473,7 @@ export class TeamSetupRequestService {
     }
   }
 
-  private async applyImmediately(request: TeamSetupRequest, from?: RequestFrom, canCommit?: () => boolean) {
+  private async applyImmediately(request: TeamSetupRequest, from?: RequestFrom, canCommit?: () => boolean, byRule?: { id: string; behavior: "allow" | "ask" | "deny"; description: string }) {
     // Capture the before/after description before applying. Only a settled
     // receipt is published, so no interactive card or second turn can start.
     const card = this.cardData(request, true);
@@ -467,6 +484,7 @@ export class TeamSetupRequestService {
       // the settled receipt of an applied or expired proposal; full-access: exempt
       messageId = this.options.store.appendMessage(request.threadId, { role: "bot", kind: "options", ...(from ? { from } : {}), card: {
         ...card, title, options: [], ...(result.state === "applied" ? { answered: "allow" as const } : { expired: true }), held: result.error,
+        ...(byRule ? { ruleSaved: byRule } : {}),
         teamSetupRequest: { ...request, result, resumed: true },
       } }).id;
     } catch (error) {

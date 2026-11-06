@@ -63,7 +63,7 @@ export function stampPathFor(commonDir, sha, root = ROOT) {
  * so every PR runs them. */
 const GUARD_TESTS = [
   "scripts/testing/index-route-ratchet.test.ts",
-  // the operator's chat rules (#2081 unified mode, #2096 Stop on the card, #2098 a run opens in the chat)
+  // the operator's rules (#2081/#2096/#2098 chat, #2091 Always allow, #2086 settings-driven guards)
   "scripts/testing/jc-rules.guard.test.ts",
   "scripts/tool-policy/tool-policy-coverage.test.ts",
   "scripts/self-knowledge/knowledge.test.ts",

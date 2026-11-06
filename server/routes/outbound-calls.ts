@@ -6,8 +6,10 @@
 //   GET  /api/me/phone-calls/:id/recording   Recording proxy (30-day retention)
 //
 // Only the person, or their Primary Bot when they asked in this turn
-// (ownerGate). No Always allow: one answer covers one call. A person who
-// protects "money" with a security key steps up as for a purchase.
+// (ownerGate). Call, Always call (#2091: the next calls to this confirmed
+// number are approved as they open) or deny; the number is confirmed by
+// the person on the card. A person who protects "money" with a security
+// key steps up as for a purchase.
 import { formatPhone } from "../../shared/outbound-call.ts";
 import { OutboundCallError, type OutboundCallRecord, type OutboundCalls } from "../outbound/outbound-calls.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
@@ -112,11 +114,12 @@ export function createOutboundCallRoutes(deps: OutboundCallRouteDeps): RouteHand
     const input = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
     // the number is confirmed on the card by the person: a Primary Bot may
     // decline a call, never confirm one (ÉFVP pilot, re-review of #956)
-    if (input.decision === "call" && deps.viaPrimary?.()) {
+    const places = input.decision === "call" || input.decision === "always";
+    if (places && deps.viaPrimary?.()) {
       return json(res, 403, { error: "A phone call is confirmed by the person on its card, not by a bot.", code: "person_only" });
     }
-    if (input.decision === "call") {
-      const stepped = deps.stepUp?.(auth, { callId: match[1], decision: "call" }, input.stepUp);
+    if (places) {
+      const stepped = deps.stepUp?.(auth, { callId: match[1], decision: input.decision }, input.stepUp);
       if (stepped) return json(res, stepped.status, stepped.body);
     }
     try {

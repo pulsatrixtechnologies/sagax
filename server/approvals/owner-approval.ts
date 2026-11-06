@@ -526,8 +526,8 @@ export function ownerDecision(input: {
    * someone else's words. A deny rule still denies. */
   autonomyRefused?: boolean;
   /** The call reaches someone else's environment or data (a guest's turn,
-   * another person's destination): no rule of anyone answers it and none is
-   * offered. 2026-10-19 : the one situation "Always allow" never widens. */
+   * another person's destination): judged at Ask, answered only by an allow
+   * rule its answerer saved from such a card (#2091). */
   crossPerson?: boolean;
   /** 2026-10-26 (#1065): `autonomyRefused` holds only because the call acts
    * on the owner's real computer (sagax-desktop), and the turn is the
@@ -550,13 +550,15 @@ export function ownerDecision(input: {
   ownEnvironment?: boolean;
 }): OwnerDecision {
   if (input.adminRoute) return { kind: "card", reason: "admin" };
-  if (input.crossPerson) return { kind: "card", reason: "cross-person" };
   const bypassOwnComputer = (input.mode === "bypass" || input.mode === "auto") && input.autonomyRefused === true && input.ownComputerOwnTurn === true;
   // 2026-10-19 ("Toujours permettre" on every card): a held card (a
   // safety hold, a sandbox widening) and a turn that is not the person's own
   // are answered only by an allow rule the person saved from that same kind
   // of card; deny and ask rules answer as before.
-  const situation: RuleSituation | undefined = input.personMustAnswer ? "hold" : input.autonomyRefused && !bypassOwnComputer ? "origin" : undefined;
+  // 2026-11-05 (#2091): someone else's destination is a turn that is not
+  // the answerer's own: an allow rule they saved from such a card answers
+  // it, like any other origin.
+  const situation: RuleSituation | undefined = input.personMustAnswer ? "hold" : input.crossPerson || (input.autonomyRefused && !bypassOwnComputer) ? "origin" : undefined;
   const rule = matchOwnerRule(input.rules.filter((candidate) => candidate.behavior !== "allow" || ruleCoversSituation(candidate, situation)), input.call);
   if (rule?.behavior === "deny") return { kind: "deny", source: "owner-rule-deny", rule };
   if (input.stepUpRequired) return { kind: "card", reason: "step-up", ...(rule ? { rule } : {}) };
@@ -564,7 +566,7 @@ export function ownerDecision(input: {
     if (rule?.behavior === "allow") return { kind: "allow", source: "owner-rule", rule };
     // 2026-10-26: an ask rule is an ask rule here too, whatever the level
     if (rule?.behavior === "ask") return { kind: "card", reason: "ask-rule", rule };
-    return { kind: "card", reason: situation, ...(rule ? { rule } : {}) };
+    return { kind: "card", reason: input.crossPerson ? "cross-person" : situation, ...(rule ? { rule } : {}) };
   }
   if (rule?.behavior === "allow") return { kind: "allow", source: "owner-rule", rule };
   // 2026-10-26 (one approval level): a rule decides whatever the level.
@@ -703,19 +705,6 @@ export function ruleInputFor(input: string | undefined, command: string | undefi
   return JSON.stringify({ ...args, command: line });
 }
 
-const NO_ARGUMENT_DIGESTS: ReadonlySet<string> = new Set([wholeCallDigest(undefined), wholeCallDigest("{}")]);
-
-/** 2026-10-21 (review of #938): whether a scope may be kept from a card. An
- * empty scope is the whole tool, and the fingerprint of a call with no
- * arguments covers every such call (on main, every input-less shell line of
- * Codex or an ACP engine): neither is ever saved from a card. "Any target"
- * stays the person's explicit choice on their own rule (PATCH anyTarget). */
-export function scopeRemembers(scope: RuleScope): boolean {
-  const keys = Object.keys(scope);
-  if (!keys.length) return false;
-  return !(keys.length === 1 && keys[0] === WHOLE_CALL_KEY && NO_ARGUMENT_DIGESTS.has(scope[WHOLE_CALL_KEY]!));
-}
-
 /** What "Always allow" or "Always deny" on a permission card would keep, or
  * undefined when nothing safe can be kept.
  * - an ordinary card (no `from`): the target, a command as its one program;
@@ -733,7 +722,7 @@ export function cardRuleCandidate(
   call: { tool: string; input?: string; command?: string; cwd?: string; app?: ScreenAppIdentity },
   situation: { from?: RuleSituation; held?: boolean },
   words: ApprovalWords = ENGLISH_WORDS,
-): (RuleCandidate & { from?: RuleSituation }) | undefined {
+): RuleCandidate & { from?: RuleSituation } {
   // 2026-10-21 (parité R10, ligne 80): a screen action on the person's own
   // computer whose app the server read keeps that app, never more: "Toujours
   // permettre" then covers seeing, clicking and typing in that one app.
@@ -744,17 +733,25 @@ export function cardRuleCandidate(
     return appRuleCandidate(app, words);
   }
   const input = ruleInputFor(call.input, call.command);
-  if (input === undefined || !input.trim()) return undefined;
+  const from = situation.from ? { from: situation.from } : {};
+  // 2026-11-05 (#2091: "Toujours permettre" on every card, no exception
+  // added by caution): a call with no readable arguments keeps the whole
+  // tool for this bot; a scope too long to keep exactly keeps the whole
+  // request (its digest). Never undefined for a tool call.
+  if (input === undefined || !input.trim()) return { tool: normalizeRuleTool(call.tool), scope: {}, description: describeRule(call.tool, {}, words), ...from };
   const args = parseArgs(input);
-  if (args && Object.keys(args).length === 0) return undefined;
+  if (args && Object.keys(args).length === 0) return { tool: normalizeRuleTool(call.tool), scope: {}, description: describeRule(call.tool, {}, words, input), ...from };
   const held = situation.held === true || situation.from === "hold";
   const nativeShell = situation.from === "admin" && !held && typeof call.command === "string" && call.command.trim().length > 0;
   const candidate = ruleCandidateFor({ tool: call.tool, input, ...(call.cwd ? { cwd: call.cwd } : {}) }, words, {
     wholeCall: situation.from !== undefined && !nativeShell,
     programScope: !held && (situation.from !== "admin" || nativeShell),
   });
-  if (!scopeKeepable(candidate.scope) || !scopeRemembers(candidate.scope)) return undefined;
-  return { ...candidate, ...(situation.from ? { from: situation.from } : {}) };
+  if (!scopeKeepable(candidate.scope)) {
+    const scope: RuleScope = { [WHOLE_CALL_KEY]: wholeCallDigest(input) };
+    return { ...candidate, scope, description: describeRule(call.tool, scope, words, input), ...from };
+  }
+  return { ...candidate, ...from };
 }
 
 /** The deepest folder that holds every path (lexical), or undefined. */

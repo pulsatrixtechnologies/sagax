@@ -692,9 +692,10 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
     if (sessionGrants.size > MAX_DELIVERED_THREADS) sessionGrants.delete(sessionGrants.keys().next().value!);
     const approval = createChatToolApproval({
       signal: abort.signal,
-      // A guest's turn neither uses the owner's grants nor keeps one: its
-      // cards offer allow once only (index.ts request.opened).
-      granted: turn.guestConfined ? undefined : granted,
+      // #2091 (decided 2026-11-05): a guest's turn meets the same grants as any
+      // other; what answers it is decided in index.ts request.opened (the
+      // owner's rules, situation "origin"), never a strip added here
+      granted,
       // #1982: always emit; Full is answered in index.ts request.opened
       // (org/person rules, safety, isolation still hold). Never short-
       // circuit MCP asks in this driver the way Codex #1977 used to.

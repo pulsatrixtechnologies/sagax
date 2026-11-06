@@ -2,10 +2,11 @@
 // shared/wire.ts): a phone call (server/outbound/outbound-calls.ts) or a purchase
 // with a saved card (server/vault/credential-vault.ts). Parité Grok Bot V4, 59, 83.
 //
-// One answer covers one action: Call or Cancel, Pay or Cancel.
-// No Always allow here. The card shows the full number to its own person,
-// the exact words the call says, what the purchase buys; never a card
-// number, a security code or an id.
+// One answer covers one action: Call or Cancel, Pay or Cancel. Always
+// (#2091, 2026-11-05) keeps a rule too: Always call this number (the
+// number confirmed on the card), Always allow at this merchant. The card
+// shows the full number to its own person, the exact words the call says,
+// what the purchase buys; never a card number, a security code or an id.
 //
 // A conversation call (mode `conversation`) shows the objective, the most it
 // may last and the language, its guidance and voicemail words behind a
@@ -170,7 +171,7 @@ function statusLine(card: OutboundCardData): string | null {
 export function OutboundCard({ message, transcriptOpen = false }: { message: Message; transcriptOpen?: boolean }) {
   const card = message.outbound!;
   const conversation = card.kind === "call" && card.mode === "conversation";
-  const [busy, setBusy] = useState<"yes" | "no" | null>(null);
+  const [busy, setBusy] = useState<"yes" | "always" | "no" | null>(null);
   const [answered, setAnswered] = useState<OutboundCardData["status"] | null>(null);
   const [error, setError] = useState("");
   // ÉFVP pilot: Call only after the person confirms the number on the card
@@ -180,14 +181,15 @@ export function OutboundCard({ message, transcriptOpen = false }: { message: Mes
   const live = conversation && isLiveConversationCall(view);
   const ended = conversation && Boolean(card.result);
 
-  const answer = async (yes: boolean) => {
-    setBusy(yes ? "yes" : "no");
+  const answer = async (choice: "yes" | "always" | "no") => {
+    const yes = choice !== "no";
+    setBusy(choice);
     setError("");
     try {
       if (card.kind === "call") {
-        await api(`/api/me/phone-calls/${encodeURIComponent(card.id)}/answer`, { method: "POST", body: JSON.stringify(yes ? { decision: "call", confirmed: confirmed, confirmedTo: card.destination } : { decision: "deny" }) });
+        await api(`/api/me/phone-calls/${encodeURIComponent(card.id)}/answer`, { method: "POST", body: JSON.stringify(yes ? { decision: choice === "always" ? "always" : "call", confirmed: confirmed, confirmedTo: card.destination } : { decision: "deny" }) });
       } else {
-        await answerPurchase(card.id, yes ? "once" : "deny");
+        await answerPurchase(card.id, choice === "always" ? "always" : yes ? "once" : "deny");
       }
       setAnswered(yes ? "approved" : "denied");
     } catch (cause) {
@@ -320,12 +322,18 @@ export function OutboundCard({ message, transcriptOpen = false }: { message: Mes
         {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
         {status === "pending" && (
           <div className="flex flex-wrap gap-2 pt-1">
-            <button type="button" data-outbound-yes disabled={busy !== null || (card.kind === "call" && !confirmed)} onClick={() => void answer(true)}
+            <button type="button" data-outbound-yes disabled={busy !== null || (card.kind === "call" && !confirmed)} onClick={() => void answer("yes")}
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-40">
               {busy === "yes" && <Loader2 size={13} className="animate-spin" />}
               {card.kind === "call" ? t("outbound.call.allow") : t("outbound.purchase.allow")}
             </button>
-            <button type="button" data-outbound-no disabled={busy !== null} onClick={() => void answer(false)}
+            <button type="button" data-outbound-always disabled={busy !== null || (card.kind === "call" && !confirmed)} onClick={() => void answer("always")}
+              title={card.kind === "call" ? t("outbound.call.alwaysHint") : t("outbound.purchase.alwaysHint", { merchant: card.merchant ?? "" })}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-hairline/60 px-3 py-1.5 text-[12.5px] text-ink disabled:opacity-40">
+              {busy === "always" && <Loader2 size={13} className="animate-spin" />}
+              {card.kind === "call" ? t("outbound.call.always") : t("outbound.purchase.always", { merchant: card.merchant ?? "" })}
+            </button>
+            <button type="button" data-outbound-no disabled={busy !== null} onClick={() => void answer("no")}
               className="inline-flex items-center gap-1.5 rounded-lg border border-hairline/60 px-3 py-1.5 text-[12.5px] text-ink disabled:opacity-40">
               {busy === "no" && <Loader2 size={13} className="animate-spin" />}
               {card.kind === "call" ? (conversation ? t("outbound.call.cancel") : t("outbound.call.deny")) : t("outbound.purchase.deny")}

@@ -88,20 +88,19 @@ export function purchaseCardFallback(listing: PurchaseListing): string {
 }
 
 /** What a Primary Bot's answer means on a phone call or a purchase card:
- * this once, or no. An Always allow is refused (2026-10-22: every call
- * and every purchase its own card), never read as a yes. */
-export function primaryOutboundDecision(kind: "call" | "purchase", body: { behavior?: unknown; always?: unknown }): { decision: string } | { refused: string } {
-  if (body.always === true) return { refused: "Always allow is not offered for a phone call or a purchase: each one needs its own approval. Answer allow (this once) or deny." };
+ * this once, always (#2091: a purchase keeps the site in the bot's
+ * allowance), or no. A call is confirmed by the person on the card, where
+ * they check the number (ÉFVP 2026-10-22, pilot): the Primary Bot may
+ * decline it, and Always is answered on the card too. */
+export function primaryOutboundDecision(kind: "call" | "purchase", body: { behavior?: unknown; always?: unknown; rule?: unknown }): { decision: string } | { refused: string } {
   if (body.behavior === "deny") return { decision: "deny" };
-  // ÉFVP 2026-10-22 (pilot): a call goes only to a number the person
-  // confirms on the card themselves; their Primary Bot may decline it
   if (body.behavior === "allow" && kind === "call") return { refused: "A phone call is allowed only on its card, where the person confirms the number. Ask them to open the card in Sagax." };
-  if (body.behavior === "allow") return { decision: "once" };
+  if (body.behavior === "allow") return { decision: body.always === true || body.rule === "allow" ? "always" : "once" };
   return { refused: "Answer allow or deny." };
 }
 
 /** A purchase waiting on the person, in the Primary Bot's list: allow this
- * once or deny, never always. */
+ * once, always on this site, or deny. */
 export function primaryPurchaseCard(purchase: PurchaseListing, botName: string, needsKey: boolean): PrimaryCard {
   return {
     threadId: purchase.threadId,
@@ -113,7 +112,9 @@ export function primaryPurchaseCard(purchase: PurchaseListing, botName: string, 
     line: purchase.line,
     kind: "permission",
     needsKey,
-    options: ["allow", "deny"],
+    options: ["allow", "always_allow", "deny"],
+    always: "rule",
+    alwaysScope: `purchases at ${purchase.domain} by this bot`,
   };
 }
 

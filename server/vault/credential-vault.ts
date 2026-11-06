@@ -79,6 +79,7 @@ import {
   type PaymentMethodListing,
   type PaymentMethodRef,
   type PaymentsSettings,
+  standingPurchaseMerchant,
 } from "../../shared/payments-settings.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
@@ -237,6 +238,7 @@ const botAllowanceSchema = z.object({
   perPurchaseLimit: z.string().regex(/^\d{1,6}\.\d{2}$/).optional(),
   perMonthLimit: z.string().regex(/^\d{1,6}\.\d{2}$/).optional(),
   merchants: z.array(z.string().min(1).max(253)).max(50).optional(),
+  alwaysMerchants: z.array(z.string().min(1).max(253)).max(50).optional(),
 }).strict();
 
 const paymentsSchema = z.object({
@@ -1291,28 +1293,49 @@ export class CredentialVault {
     });
   }
 
-  /** The person's answer: deny, this time, or always for this bot on this site. */
+  /** The person's answer: deny, this time, or always for this bot on this
+   * site. #2091 (decided 2026-11-05): `always` approves this purchase like
+   * `once` and keeps the site in the bot's allowance (`alwaysMerchants`,
+   * Settings > Vault > Payments), so the next purchase there is approved as
+   * it opens; the card then says by what. */
   answerPurchase(principalId: string, purchaseId: string, decision: unknown, via?: string): { listing: PurchaseListing; note: string } {
-    // 2026-10-22: no standing grant for a purchase; each one is its own card
-    if (decision !== "deny" && decision !== "once") {
-      throw new CredentialVaultError("decision must be deny or once: every purchase needs its own approval", "invalid_decision");
+    if (decision !== "deny" && decision !== "once" && decision !== "always") {
+      throw new CredentialVaultError("decision must be deny, once or always", "invalid_decision");
     }
     const now = this.now();
     const name = via ? visibleText(via).slice(0, 80) : "";
-    return this.mutate(principalId, (items, purchases) => {
+    const approval = decision === "always" ? "once" : decision;
+    const answered = this.mutate(principalId, (items, purchases) => {
       const row = purchases[purchaseId];
       if (!row || row.status !== "pending") throw new CredentialVaultError("This purchase was already answered.", "not_pending", 409);
-      row.status = decision === "deny" ? "denied" : decision;
+      row.status = approval === "deny" ? "denied" : approval;
       row.answeredAt = now;
-      if (decision === "once") row.expiresAt = now + VAULT_ONCE_GRANT_MS;
+      if (approval === "once") row.expiresAt = now + VAULT_ONCE_GRANT_MS;
       if (name) row.via = name;
       const listing = this.purchaseListing({ items }, row);
+      const standing = { botId: row.botId, domain: row.domain };
       if (row.wallet) {
-        return { listing, note: requestSingleUseToken({ wallet: row.wallet, chosen: true, approval: decision, merchant: row.merchant, amount: row.amount, currency: row.currency, ...this.fillHandleFor(row) }).prompt };
+        return { standing, listing, note: requestSingleUseToken({ wallet: row.wallet, chosen: true, approval, merchant: row.merchant, amount: row.amount, currency: row.currency, ...this.fillHandleFor(row) }).prompt };
       }
-      const handle = decision === "deny" || !row.cardId ? undefined : vaultHandle(row.cardId);
-      return { listing, note: purchaseBotNote(decision, { merchant: row.merchant, amount: row.amount, currency: row.currency, ...(handle ? { handle } : {}) }) };
+      const handle = approval === "deny" || !row.cardId ? undefined : vaultHandle(row.cardId);
+      return { standing, listing, note: purchaseBotNote(approval, { merchant: row.merchant, amount: row.amount, currency: row.currency, ...(handle ? { handle } : {}) }) };
     });
+    if (decision === "always") {
+      const current = this.paymentsSettings(principalId).bots?.[answered.standing.botId]?.alwaysMerchants ?? [];
+      if (!current.includes(answered.standing.domain)) {
+        this.setPaymentsSettings(principalId, { bots: { [answered.standing.botId]: { alwaysMerchants: [...current, answered.standing.domain].slice(-50) } } });
+      }
+    }
+    return { listing: answered.listing, note: answered.note };
+  }
+
+  /** The person's standing Always allow for this bot on this page's site
+   * (#2091): the words the card shows as who answered, or null. */
+  standingPurchaseGrant(principalId: string, botId: string, pageUrl: string): string | null {
+    const domain = domainOfPage(pageUrl);
+    if (!domain) return null;
+    const merchant = standingPurchaseMerchant(this.paymentsSettings(principalId), botId, domain);
+    return merchant ? `your Always allow for ${merchant}` : null;
   }
 
   /** The shop confirmed the order (record_purchase): the receipt goes on
@@ -1819,8 +1842,9 @@ export function fillResolverFor(
           ...(input.category ? { category: input.category } : {}),
         });
         if (!opened.already && opened.listing.status === "pending") {
-          // Full: approved at once, the card says by what; nothing else changes
-          const level = options.autoApprove?.() ?? null;
+          // Full, or the person's Always allow for this site (#2091):
+          // approved at once, the card says by what; nothing else changes
+          const level = options.autoApprove?.() ?? vault.standingPurchaseGrant(context.principalId, context.botId, input.pageUrl);
           if (level) {
             const answered = vault.answerPurchase(context.principalId, opened.listing.id, "once", level);
             notify(answered.listing);

@@ -16,12 +16,12 @@ import {
   ruleCandidateFor,
   ruleCoversExactScope,
   WHOLE_CALL_KEY,
+  wholeCallDigest,
   APP_KEY,
   APP_RULE_TOOL,
   ruleInputFor,
   ruleScopeFor,
   scopeKeepable,
-  scopeRemembers,
   type OwnerRule,
   type RuleCall,
 } from "./owner-approval.ts";
@@ -375,8 +375,11 @@ describe("2026-10-19: Toujours permettre on every card", () => {
       // a security key the person chose still asks, whatever the rule
       expect(ownerDecision({ mode, rules: [shellRule("npm test", { from: "hold" })], call: shellCall, personMustAnswer: true, stepUpRequired: true })).toMatchObject({ kind: "card", reason: "step-up" });
       expect(ownerDecision({ mode, rules: [shellRule("npm test", { from: "origin" })], call: shellCall, autonomyRefused: true, stepUpRequired: true })).toMatchObject({ kind: "card", reason: "step-up" });
-      // someone else's environment: no rule of anyone
-      expect(ownerDecision({ mode, rules: [shellRule("npm test", { from: "origin" })], call: shellCall, crossPerson: true })).toEqual({ kind: "card", reason: "cross-person" });
+      // someone else's environment (#2091): the card offers Always allow like
+      // any other; only an origin rule its answerer saved answers it
+      expect(ownerDecision({ mode, rules: [shellRule("npm test")], call: shellCall, crossPerson: true })).toEqual({ kind: "card", reason: "cross-person" });
+      expect(ownerDecision({ mode, rules: [shellRule("npm test", { from: "hold" })], call: shellCall, crossPerson: true })).toEqual({ kind: "card", reason: "cross-person" });
+      expect(ownerDecision({ mode, rules: [shellRule("npm test", { from: "origin" })], call: shellCall, crossPerson: true })).toMatchObject({ kind: "allow", source: "owner-rule" });
     }
     // a deny rule still denies a held card
     expect(ownerDecision({ mode: "approval", rules: [shellRule("npm test", { behavior: "deny" })], call: shellCall, personMustAnswer: true })).toMatchObject({ kind: "deny" });
@@ -542,19 +545,21 @@ describe("a shell line reported beside no input (Codex, ACP)", () => {
     expect(cardRuleCandidate({ tool: SHELL, command: "npm test", cwd: CWD }, {})?.scope).toEqual({ program: "npm", cwd: CWD });
   });
 
-  it("never offers a rule for a call with no readable arguments", () => {
-    expect(cardRuleCandidate({ tool: SHELL, cwd: CWD }, { from: "admin" })).toBeUndefined();
-    expect(cardRuleCandidate({ tool: SHELL }, { from: "hold", held: true })).toBeUndefined();
-    expect(cardRuleCandidate({ tool: SHELL, input: "{}" }, {})).toBeUndefined();
-    expect(cardRuleCandidate({ tool: SHELL, input: "  " }, { from: "origin" })).toBeUndefined();
+  it("#2091: a call with no readable arguments keeps the whole tool, with its situation", () => {
+    expect(cardRuleCandidate({ tool: SHELL, cwd: CWD }, { from: "admin" })).toMatchObject({ tool: SHELL, scope: {}, from: "admin" });
+    expect(cardRuleCandidate({ tool: SHELL }, { from: "hold", held: true })).toMatchObject({ scope: {}, from: "hold" });
+    expect(cardRuleCandidate({ tool: SHELL, input: "{}" }, {})).toMatchObject({ scope: {} });
+    expect(cardRuleCandidate({ tool: SHELL, input: "  " }, { from: "origin" })).toMatchObject({ scope: {}, from: "origin" });
+    expect(cardRuleCandidate({ tool: SHELL }, {})!.description.length).toBeGreaterThan(0);
   });
 
-  it("an empty scope, or the fingerprint of no arguments, is never remembered", () => {
-    expect(scopeRemembers({})).toBe(false);
-    expect(scopeRemembers({ [WHOLE_CALL_KEY]: ruleCandidateFor({ tool: SHELL }, undefined, { wholeCall: true }).scope[WHOLE_CALL_KEY]! })).toBe(false);
-    expect(scopeRemembers({ [WHOLE_CALL_KEY]: ruleCandidateFor({ tool: SHELL, input: "{}" }, undefined, { wholeCall: true }).scope[WHOLE_CALL_KEY]! })).toBe(false);
-    expect(scopeRemembers({ program: "npm" })).toBe(true);
+  it("#2091: a scope too long to keep exactly keeps the whole request", () => {
+    const input = JSON.stringify({ command: "x".repeat(5000) });
+    const candidate = cardRuleCandidate({ tool: SHELL, input }, {});
+    expect(Object.keys(candidate.scope)).toEqual([WHOLE_CALL_KEY]);
+    expect(candidate.scope[WHOLE_CALL_KEY]).toBe(wholeCallDigest(input));
   });
+
 
   // review of #938, finding 3: a held admin card (safety hold,
   // dangerouslyDisableSandbox, Codex additionalPermissions or network,

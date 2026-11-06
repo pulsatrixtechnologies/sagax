@@ -1,12 +1,29 @@
-// the operator's rules for the chat, held as guard tests (2026-11-05),
-// plus #2106 model-picker / composer surface guards. Each section
-// names the issue and quotes the rule. They run for every PR
-// (scripts/verify/release/verify-merge.mjs, GUARD_TESTS) and fail for the PR
-// that merged last, so the line holds on main.
+// the operator's rules, held as guard tests on every PR
+// (scripts/verify/release/verify-merge.mjs, GUARD_TESTS). Each section names
+// the issue and quotes the rule. They fail for the PR that merged last, so
+// the line holds on main.
 //
-// Every guardrail here follows the app's own settings (the threads setting,
-// useShowThreads), never a hard-coded value: the tests check that the
-// gate reads the setting, and that nothing bypasses it.
+// Chat / routines (#2081, #2096, #2098): a run opens in the chat, Stop sits
+// on the running card, and with threads off there are zero thread links.
+// Every gate follows the app's own setting (useShowThreads), never a
+// hard-coded value.
+//
+// Model picker / composer (#2106): owned surfaces stay unified-chat clean
+// (no side-thread or run-continue copy), the chat-bar model chip stays
+// visible, and picking writes the bot default for every thread.
+//
+// Approvals (#2091, #2086):
+// 1. Every approval or permission card offers "Always allow", which keeps a
+//    rule; the only card without it is an organization Refuse / Ask first
+//    rule decided in Perspicax, and that card says so in plain words.
+// 2. Every approval passes through the one settings-linked decision (Full
+//    access, the person's Always / Ask / Deny rules, the organization's
+//    Perspicax settings): the card's emitter carries the full-access marker,
+//    like server/approvals/full-access-gate.guard.test.ts asks.
+// 3. No "never always" list anywhere: no tool, write, payment, remote MCP,
+//    shell, send, connector or delete is kept from Always by caution.
+// 4. No admin gate on the person's own space: `{admin &&` and
+//    `memberHidesSection` only where the thing is the whole organization's.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,9 +35,13 @@ import { AttentionCard } from "@/components/AttentionCard";
 import { RoutineRunCard } from "@/components/RoutineRunCard";
 import { initialState, openRoutineRun, reducer, type Action, type Message } from "@/state/store";
 import type { PersonAttentionCard } from "../../shared/person-attention";
+import { FULL_ACCESS_MARKER, FULL_ACCESS_SURFACES } from "../../server/approvals/full-access-gate.ts";
+import { recipientKeysForSendCard } from "../../shared/send-card-recipients.ts";
+import { parseGoMessage } from "../../server/perspicax/go-message.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SRC = join(ROOT, "src");
+const SKIP = /\.(?:test|e2e|dom\.test)\.tsx?$|\.d\.ts$|\/testing\/|\/self-knowledge\//;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -30,7 +51,20 @@ function sourceFiles(dir: string): string[] {
   });
 }
 const files = sourceFiles(SRC).map((path) => ({ name: relative(SRC, path).split("\\").join("/"), text: readFileSync(path, "utf8") }));
-const read = (name: string) => readFileSync(join(SRC, name), "utf8");
+const readSrc = (name: string) => readFileSync(join(SRC, name), "utf8");
+
+function* walkSources(dir: string, ext: RegExp): Generator<string> {
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    if (entry === "node_modules" || entry === "testing" || entry === "self-knowledge" || entry === "locales") continue;
+    if (statSync(path).isDirectory()) { yield* walkSources(path, ext); continue; }
+    if (!ext.test(path) || SKIP.test(path)) continue;
+    yield path;
+  }
+}
+
+const rel = (file: string) => relative(ROOT, file).split("\\").join("/");
+const readRoot = (file: string) => readFileSync(join(ROOT, file), "utf8");
 
 function runMessage(status: "running" | "completed", patch: Record<string, unknown> = {}): Message {
   return {
@@ -64,7 +98,7 @@ describe("#2098 a routine run opens in the chat, never beside it", () => {
   ];
 
   it("every entry point goes through openRoutineRun", () => {
-    for (const name of ENTRY_POINTS) expect(read(name), name).toContain("openRoutineRun(");
+    for (const name of ENTRY_POINTS) expect(readSrc(name), name).toContain("openRoutineRun(");
   });
 
   it("openRoutineRun lands on the bot's chat and focuses the run's message", () => {
@@ -93,7 +127,7 @@ describe("#2098 a routine run opens in the chat, never beside it", () => {
   });
 
   it("the calendar's details draw nothing for a run: it is on its way to the chat", () => {
-    const page = read("components/RoutineCalendarPage.tsx");
+    const page = readSrc("components/RoutineCalendarPage.tsx");
     expect(page).toContain("if (showingRun && run) return null;");
     expect(page).not.toContain("<RoutineRunExchange");
   });
@@ -161,7 +195,7 @@ describe("#2096 Stop on the running card, not in a bottom bar", () => {
   });
 
   it("the chat wires Stop to cancelRoutineRun on the card", () => {
-    const chat = read("components/ChatView.tsx");
+    const chat = readSrc("components/ChatView.tsx");
     expect(chat).toContain('onStop={run?.runId ? () => dispatch({ type: "cancelRoutineRun", runId: run.runId }) : undefined}');
   });
 
@@ -203,16 +237,277 @@ describe("unified chat mode: zero threads, following the threads setting", () =>
   });
 
   it("the chat gates every thread link and the side panel on the threads setting", () => {
-    const chat = read("components/ChatView.tsx");
+    const chat = readSrc("components/ChatView.tsx");
     expect(chat.match(/onOpenThread=\{showThreads \? /g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(chat).toContain("onReply={showThreads ? undefined : async (text) =>");
-    expect(read("App.tsx-parts/ShellLayout.tsx")).toContain("{showThreads && <SideThreadPanel />}");
+    expect(readSrc("App.tsx-parts/ShellLayout.tsx")).toContain("{showThreads && <SideThreadPanel />}");
   });
 
   it("the gate reads the setting, never a hard-coded value", () => {
     const hardCoded = files.filter((file) => /const showThreads = (true|false)\b|showThreads=\{(true|false)\}/.test(file.text)).map((file) => file.name);
     expect(hardCoded).toEqual([]);
-    for (const name of ["components/ChatView.tsx", "App.tsx-parts/ShellLayout.tsx"]) expect(read(name), name).toContain("useShowThreads()");
+    for (const name of ["components/ChatView.tsx", "App.tsx-parts/ShellLayout.tsx"]) expect(readSrc(name), name).toContain("useShowThreads()");
+  });
+});
+
+// ── 1. every card type offers Always allow ──────────────────────────────────
+
+/** A card the person answers: its `options:` line as the server writes it. */
+const CARD_OPTIONS = /\boptions: \[(?:"Allow", "Deny"(?:, "Always allow")?|"Confirm", "Cancel"|"Remember", "Skip"|"Ouvrir un terminal", "Refuser"|approve, decline|"allow", "always_allow", "deny"|"deny")\]/;
+
+/** What on the card (its object literal, around the options line) carries
+ * the rule Always allow keeps:
+ *  - `ownerRule`: the rule itself (server/approvals/owner-approval.ts), saved
+ *    by saveOwnerRuleFromCard and matched by keptCardRule on the next card;
+ *  - `always_allow` / "Always allow": a Primary Bot or peer card option that
+ *    maps to a rule (primary-approvals.ts `always: "rule"`);
+ *  - a proposal payload (`routineRequest`, `ruleRequest`, `profileRequest`,
+ *    `teamMemoryRequest`, `modelRequest`): proposalRuleCandidate puts the
+ *    rule on the card (settleProposalByRule), checked below;
+ *  - a send (`emailSendRequest`, `tool: "send_message"`): Always allow adds
+ *    the recipients to the bot's list (shared/send-card-recipients.ts),
+ *    checked below with the helper itself. */
+const RULE_ON_CARD = /\bownerRule\b|"always_allow"|"Always allow"|\browtineRequest\b|\broutineRequest\b|\bruleRequest\b|\bprofileRequest\b|\bteamMemoryRequest\b|\bmodelRequest\b|\bemailSendRequest\b|tool: "send_message"/;
+
+/** The cards that offer no Always allow, each by the operator's own decision, never
+ * by an agent's caution. The key is `file` + a text the options line's
+ * window carries. */
+const NO_ALWAYS_BY_DECISION: ReadonlyArray<{ file: string; marker: RegExp; why: string }> = [
+  {
+    file: "server/outbound/outbound-wiring.ts", marker: /phoneCallConsent/,
+    why: "a one-time consent that turns phone calls on: a setting, never an approval of one call (full-access: exempt)",
+  },
+  {
+    file: "server/outbound/outbound-wiring.ts", marker: /options: \["deny"\]/,
+    why: "the Primary Bot's view of a call card: ÉFVP 2026-10-22, the person confirms the number on their own Sagax card, where Always call is offered",
+  },
+  {
+    file: "server/rules/rule-requests.ts", marker: /autoApplied: true/,
+    why: "a rule proposal already applied at Full: the card is shown answered, nothing to allow",
+  },
+];
+
+interface CardHit { file: string; line: number; text: string; window: string }
+
+function cardEmitters(): CardHit[] {
+  const hits: CardHit[] = [];
+  for (const file of walkSources(join(ROOT, "server"), /\.ts$/)) {
+    const lines = readFileSync(file, "utf8").split("\n");
+    lines.forEach((text, index) => {
+      if (/^\s*(?:\/\/|\*)/.test(text) || !CARD_OPTIONS.test(text)) return;
+      // the card's object literal: the lines around the options line
+      const window = lines.slice(Math.max(0, index - 14), index + 22).join("\n");
+      hits.push({ file: rel(file), line: index + 1, text: text.trim(), window });
+    });
+  }
+  return hits;
+}
+
+const cards = cardEmitters();
+const describeCard = (hit: CardHit) => `${hit.file}:${hit.line}: ${hit.text.slice(0, 90)}`;
+
+describe("every approval card offers Always allow, which keeps a rule (#2091)", () => {
+  it("finds the card emitters at all", () => {
+    expect(cards.length).toBeGreaterThan(15);
+    expect(cards.some((hit) => hit.file === "server/index.ts")).toBe(true);
+    expect(cards.some((hit) => hit.file === "server/outbound/outbound-wiring.ts")).toBe(true);
+  });
+
+  it("each card carries its rule, or is on the operator's own list of cards without one", () => {
+    const decided = (hit: CardHit) => NO_ALWAYS_BY_DECISION.find((row) => row.file === hit.file && row.marker.test(hit.window));
+    const without = cards.filter((hit) => !RULE_ON_CARD.test(hit.window) && !decided(hit)).map(describeCard);
+    expect(without, "an approval card with nothing for Always allow to keep: give it an ownerRule (owner-approval.ts) or a proposal payload; never a card without Always (decided 2026-11-05)").toEqual([]);
+    // the list names only cards that exist, and none that already offers a rule
+    for (const row of NO_ALWAYS_BY_DECISION) {
+      const hit = cards.find((card) => card.file === row.file && row.marker.test(card.window));
+      expect(hit, `${row.file} ${row.marker}: no such card any more; drop it from NO_ALWAYS_BY_DECISION`).toBeDefined();
+    }
+  });
+
+  it("a proposal card gets its rule from proposalRuleCandidate, for every proposal kind", () => {
+    const index = readRoot("server/index.ts");
+    const start = index.indexOf("function proposalRuleCandidate(");
+    expect(start).toBeGreaterThan(0);
+    const body = index.slice(start, index.indexOf("\nfunction settleProposalByRule", start));
+    for (const key of ["routineRequest", "profileRequest", "ruleRequest", "teamMemoryRequest", "modelRequest"]) {
+      expect(body, `proposalRuleCandidate reads no ${key}`).toContain(key);
+    }
+    // the candidate is put on the card before a kept rule settles it
+    expect(index).toMatch(/store\.patchMessage\(threadId, message\.id, \{ card: \{ \.\.\.card, ownerRule: \{ tool: candidate\.tool/);
+  });
+
+  it("a send card's Always allow keeps the recipients: an email draft and an iMessage", () => {
+    expect(recipientKeysForSendCard({ emailSendRequest: { draft: { to: ["someone@example.test"], cc: ["Other@example.test"] } } }))
+      .toEqual(["email:someone@example.test", "email:other@example.test"]);
+    expect(recipientKeysForSendCard({ tool: "send_message", toolInput: JSON.stringify({ to: "+1 514 555 0142", text: "Allo", service: "iMessage" }) }))
+      .toEqual(["phone:+15145550142"]);
+  });
+
+  it("a Flow GO card keeps a rule per tool and action, whatever server asked it", () => {
+    const go = parseGoMessage("Pulsatrix Flow needs your GO before this write is sent.\nTool: cw_psa_write\nAction: create\nArguments: {\"action\":\"create\",\"resource\":\"service.tickets\"}");
+    expect(go.fingerprint).toBe("go:cw_psa_write:create");
+    // never "wants to <server-name>": the human line names the write
+    expect(go.summary).toMatch(/^Create service\.tickets with cw_psa_write\./);
+    const index = readRoot("server/index.ts");
+    const askGo = index.slice(index.indexOf("askGo: ({ threadId, botId, message }) =>"), index.indexOf("onRemoteSupport:"));
+    expect(askGo).toContain("parseGoMessage(message)");
+    expect(askGo).toMatch(/fingerprint: go\.fingerprint/);
+    expect(askGo).toMatch(/toolInput: go\.args/);
+    // the held card always carries a rule: a fingerprint, or the digest of its summary
+    const held = index.slice(index.indexOf("async function confirmHeldCard("), index.indexOf("\n}\n", index.indexOf("async function confirmHeldCard(")));
+    expect(held).toMatch(/const fingerprint = request\.fingerprint \?\? wholeCallDigest\(/);
+    expect(held).toMatch(/ownerRule: \{ \.\.\.candidate, from: "hold"/);
+  });
+
+  it("a purchase card and a phone call card offer Always, on the card and at the server", () => {
+    const outbound = readRoot("src/components/OutboundCard.tsx");
+    expect(outbound).toContain("data-outbound-always");
+    expect(outbound).toMatch(/decision: choice === "always" \? "always" : "call"/);
+    expect(outbound).toMatch(/answerPurchase\(card\.id, choice === "always" \? "always"/);
+    const vault = readRoot("server/vault/credential-vault.ts");
+    expect(vault).toMatch(/decision !== "deny" && decision !== "once" && decision !== "always"/);
+    expect(vault).toContain("standingPurchaseGrant(");
+    const calls = readRoot("server/outbound/outbound-calls.ts");
+    expect(calls).toMatch(/decision !== "call" && decision !== "always" && decision !== "deny"/);
+    expect(calls).toContain("STANDING_CALL_VIA");
+    const wiring = readRoot("server/outbound/outbound-wiring.ts");
+    expect(wiring).toMatch(/body\.always === true \|\| body\.rule === "allow" \? "always" : "once"/);
+  });
+
+  it("the client offers Always allow on every card but the organization's Refuse / Ask first, which says so", () => {
+    const pending = readRoot("src/components/PendingApproval.tsx");
+    // the one branch without Always allow is the organization policy, and it reads in plain words
+    expect(pending).toContain('data-org-always-allow-off=""');
+    expect(pending).toMatch(/orgPolicy\.alwaysAllow/);
+    const en = JSON.parse(readRoot("src/locales/en.json")) as Record<string, string>;
+    expect(en["approval.orgOnce"]).toMatch(/^Your organization always asks/);
+    expect(en["approval.orgOnce"]).not.toMatch(/policy|enforce|RBAC|tenant/i);
+    // every other card: a rule on the card is an Always allow button
+    expect(pending).toMatch(/const alwaysAllow[^\n]*= ownerRule\n\s*\? \{ run: \(\) => decide\("allow", false, false, "allow"\)/);
+    // the bulk answer saves the rule for whoever answers (no admin clause)
+    const index = readRoot("server/index.ts");
+    expect(index).toMatch(/if \(rule && \(decision !== "allow" \|\| !card\.ownerRule\)\)/);
+  });
+});
+
+// ── 2. every approval passes through the one settings-linked decision ──────
+
+const EMITTERS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
+  { name: "options card", pattern: /\bkind: "options",/ },
+  { name: "permission request", pattern: /\brequestType: "permission"(?!\s*\|)/ },
+  { name: "peer card", pattern: /\brequestPeerApproval\(/ },
+  { name: "safety review", pattern: /\bsafety(?:PermissionEffect|ToolHold)\(/ },
+  { name: "ask_choice card", pattern: /\bcreateChoiceCard\(/ },
+];
+
+describe("every approval reads the one settings-linked decision (Full access, rules, organization)", () => {
+  it("each card emitter carries the full-access marker of a registered surface", () => {
+    const unmarked: string[] = [];
+    let count = 0;
+    for (const file of walkSources(join(ROOT, "server"), /\.ts$/)) {
+      const lines = readFileSync(file, "utf8").split("\n");
+      lines.forEach((text, index) => {
+        if (/^\s*(?:export\s+)?(?:async\s+)?function\b/.test(text)) return;
+        if (/^\s*(?:readonly\s+)?\w+\??: .*;\s*$/.test(text) && !/\(/.test(text)) return;
+        if (/^\s*(?:readonly\s+)?\w+\??\(\w+\??:\s/.test(text)) return;
+        if (/^\s*(?:\/\/|\*)/.test(text)) return;
+        for (const emitter of EMITTERS) {
+          if (!emitter.pattern.test(text)) continue;
+          count += 1;
+          const marker = FULL_ACCESS_MARKER.exec(lines.slice(Math.max(0, index - 3), index + 1).join("\n"))?.[1];
+          if (!marker || !(marker in FULL_ACCESS_SURFACES)) unmarked.push(`${rel(file)}:${index + 1} (${emitter.name})`);
+        }
+      });
+    }
+    expect(count).toBeGreaterThan(20);
+    expect(unmarked, "a card that bypasses the settings-linked decision (server/approvals/full-access-gate.ts)").toEqual([]);
+  });
+
+  it("the Full access decision itself is read from the app settings, not hard-coded", () => {
+    const gate = readRoot("server/approvals/full-access-gate.ts");
+    expect(gate).toMatch(/export function fullAccessDecision\(/);
+    const index = readRoot("server/index.ts");
+    expect(index).toMatch(/const fullTurn = fullAccessDecision\(effectiveApprovalMode\)/);
+  });
+});
+
+// ── 3. no "never always" list ───────────────────────────────────────────────
+
+/** Words of a list that kept a tool, a write, a payment or a send from
+ * Always allow by caution. Each was removed under #2091; none comes back. */
+const NEVER_ALWAYS_TOKENS: ReadonlyArray<{ token: RegExp; was: string }> = [
+  { token: /\bscopeRemembers\b/, was: "owner-approval.ts: scopes refused a rule (guest, botmail, cross-person)" },
+  { token: /\bNO_ARGUMENT_DIGESTS\b/, was: "owner-approval.ts: tools whose calls kept no rule" },
+  { token: /never always/i, was: "a card or a decision that refused Always" },
+  { token: /"no_always"/, was: "index.ts: the Primary Bot's refusal code" },
+  { token: /deny or once/, was: "credential-vault.ts: a purchase answered once at most" },
+  { token: /call or deny\b/, was: "outbound-calls.ts: a phone call answered once at most" },
+  { token: /too dangerous for always/i, was: "a tool kept from Always by caution" },
+  { token: /scopeKeepable\(candidate\.scope\) \? \{ ownerRule/, was: "index.ts: a ConnectWise widget card without a rule when its scope was long" },
+];
+
+describe("no list keeps a card from Always allow", () => {
+  it("none of the removed exclusions is back in server, src or shared", () => {
+    const back: string[] = [];
+    for (const dir of ["server", "src", "shared"]) {
+      for (const file of walkSources(join(ROOT, dir), /\.tsx?$/)) {
+        const text = readFileSync(file, "utf8");
+        for (const row of NEVER_ALWAYS_TOKENS) {
+          if (row.token.test(text)) back.push(`${rel(file)}: ${row.token} (${row.was})`);
+        }
+      }
+    }
+    expect(back).toEqual([]);
+  });
+
+  it("the owner rule candidate is never undefined for a tool call", () => {
+    const owner = readRoot("server/approvals/owner-approval.ts");
+    const start = owner.indexOf("export function cardRuleCandidate(");
+    expect(start).toBeGreaterThan(0);
+    const body = owner.slice(start, owner.indexOf("\n}\n", start));
+    expect(body).not.toMatch(/return undefined/);
+    expect(body).toMatch(/WHOLE_CALL_KEY\]: wholeCallDigest\(input\)/);
+  });
+});
+
+// ── 4. no admin gate on the person's own space ──────────────────────────────
+
+/** Where `{admin &&` or `memberHidesSection` is right: the thing shown is
+ * the whole organization's (every member, the shared server, the org's
+ * billing), never the person's own bots, groups, setups or settings. */
+const ADMIN_GATES_BY_DECISION: ReadonlyArray<{ file: string; why: string }> = [
+  { file: "src/components/NotificationSettings.tsx", why: "ReportsSettings: the organization's reports, sent to every member" },
+  { file: "src/components/PublishedPages.tsx", why: "OrganizationPages: pages published for the whole organization" },
+  { file: "src/components/PerspicaxOrgSettings.tsx", why: "the organization's own settings in Perspicax (confidential default, vault export, team secrets, org pages)" },
+  { file: "src/components/settings/OrgSharing.tsx", why: "OrgBotMenu: stop or delete a bot shared with the whole organization" },
+  { file: "src/components/SettingsModal.tsx", why: "memberHidesSection: hides the organization-only sections (edit config, computers, backups) of the Settings nav" },
+  { file: "src/components/settings/settings-nav.ts", why: "memberHidesSection: its definition" },
+  { file: "src/components/settings/useSettingsModal.ts", why: "memberHidesSection: its one call" },
+];
+
+describe("no admin gate on what stays in the person's own space (decided 2026-10-26)", () => {
+  it("`{admin &&` and `memberHidesSection` only where the thing is the whole organization's", () => {
+    const gated: string[] = [];
+    for (const file of walkSources(join(ROOT, "src"), /\.tsx?$/)) {
+      const text = readFileSync(file, "utf8");
+      if (!/\{admin &&|\bmemberHidesSection\b/.test(text)) continue;
+      const path = rel(file);
+      if (!ADMIN_GATES_BY_DECISION.some((row) => row.file === path)) gated.push(path);
+    }
+    expect(gated, "an admin gate on the person's own space: a member manages their own bots, groups, setups and settings without an admin").toEqual([]);
+    for (const row of ADMIN_GATES_BY_DECISION) {
+      expect(/\{admin &&|\bmemberHidesSection\b/.test(readRoot(row.file)), `${row.file}: no admin gate any more; drop it from ADMIN_GATES_BY_DECISION`).toBe(true);
+    }
+  });
+
+  it("memberHidesSection hides organization sections only", () => {
+    const nav = readRoot("src/components/settings/settings-nav.ts");
+    const start = nav.indexOf("export function memberHidesSection(");
+    const body = nav.slice(start, nav.indexOf("\n}\n", start));
+    // the person's own sections never appear in the hidden set
+    for (const own of ['"bots"', '"security"', '"notifications"', '"appearance"', '"account"', '"memory"']) {
+      expect(body, `memberHidesSection hides ${own}, the person's own section`).not.toContain(own);
+    }
   });
 });
 
@@ -274,14 +569,14 @@ describe("JC unified chat guards (#2106)", () => {
   });
 
   it("ComposerActionBar restores a visible model chip (no headless chat-bar picker)", () => {
-    const bar = readFileSync(join(ROOT, "src/components/Composer.tsx-parts/ComposerActionBar.tsx"), "utf8");
+    const bar = readRoot("src/components/Composer.tsx-parts/ComposerActionBar.tsx");
     expect(bar).toMatch(/#2106/);
     expect(bar).toMatch(/<ModelPicker inComposer/);
     expect(bar).not.toMatch(/headless/);
   });
 
   it("picking writes the bot default for every thread (updateBotDefault)", () => {
-    const picker = readFileSync(join(ROOT, "src/components/ModelPicker.tsx"), "utf8");
+    const picker = readRoot("src/components/ModelPicker.tsx");
     expect(picker).toMatch(/updateBotDefault:\s*true/);
     expect(picker).not.toMatch(/confirm.*model|toast.*model|warn.*model/i);
   });

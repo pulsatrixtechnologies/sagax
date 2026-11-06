@@ -92,14 +92,31 @@ describe("payment vault", () => {
     expect(purchaseCardText({ merchant: "Example Shop", amount: "12.50", currency: "CAD", last4: "4242", brand: "visa" }).line).not.toContain(PAN);
   });
 
-  it("refuses an always grant: every purchase asks again (Owner 2026-10-22)", () => {
+  it("Always allow on a purchase card keeps the site: the next purchase there is approved without a card (#2091)", () => {
     const store = vault();
     const saved = store.create(LOCAL_VAULT_PRINCIPAL, card);
     const page = "https://shop.example.test/pay";
-    const asked = store.openPurchase(LOCAL_VAULT_PRINCIPAL, {
-      botId: "bot-a", threadId: "thread-1", pageUrl: page, amount: "4", currency: "USD", cardId: saved.id,
-    });
-    expect(() => store.answerPurchase(LOCAL_VAULT_PRINCIPAL, asked.listing.id, "always")).toThrow(/deny or once/);
+    const seen: string[] = [];
+    const access = fillResolverFor(store, { principalId: LOCAL_VAULT_PRINCIPAL, botId: "bot-a", threadId: "thread-1" }, undefined, (listing) => seen.push(`${listing.status}:${listing.via ?? ""}`));
+    const asked = access.requestPurchase({ pageUrl: page, amount: "4", currency: "USD", cardId: saved.id });
+    expect(asked.ok).toBe(true);
+    const pending = store.pendingPurchases(LOCAL_VAULT_PRINCIPAL)[0]!;
+    expect(() => store.answerPurchase(LOCAL_VAULT_PRINCIPAL, pending.id, "maybe" as never)).toThrow(/deny, once or always/);
+    const answered = store.answerPurchase(LOCAL_VAULT_PRINCIPAL, pending.id, "always");
+    expect(answered.listing.status).toBe("once");
+    expect(store.pendingPurchases(LOCAL_VAULT_PRINCIPAL)).toHaveLength(0);
+    expect(store.paymentsSettings(LOCAL_VAULT_PRINCIPAL).bots?.["bot-a"]?.alwaysMerchants).toEqual(["shop.example.test"]);
+    expect(store.standingPurchaseGrant(LOCAL_VAULT_PRINCIPAL, "bot-a", "https://www.shop.example.test/cart")).toContain("shop.example.test");
+    expect(store.standingPurchaseGrant(LOCAL_VAULT_PRINCIPAL, "bot-b", page)).toBeNull();
+    expect(store.standingPurchaseGrant(LOCAL_VAULT_PRINCIPAL, "bot-a", "https://other.example.test/pay")).toBeNull();
+    // the receipt closes this one; the next purchase on the site asks no card
+    expect(access.recordPurchase({ pageUrl: page, orderRef: "B-1" }).ok).toBe(true);
+    const next = access.requestPurchase({ pageUrl: page, amount: "9", currency: "USD", cardId: saved.id });
+    expect(next.ok).toBe(true);
+    expect(store.pendingPurchases(LOCAL_VAULT_PRINCIPAL)).toHaveLength(0);
+    expect(seen.at(-1)).toMatch(/^once:your Always allow for shop\.example\.test$/);
+    // another site still asks
+    access.requestPurchase({ pageUrl: "https://other.example.test/pay", amount: "9", currency: "USD", cardId: saved.id });
     expect(store.pendingPurchases(LOCAL_VAULT_PRINCIPAL)).toHaveLength(1);
   });
 

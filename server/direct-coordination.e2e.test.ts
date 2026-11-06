@@ -226,6 +226,12 @@ it("coordinates a lead and its specialist from ordinary chat, returns to Clive, 
   const chiefTools = chiefListed.map((tool: any) => tool.name);
   expect(chiefTools).toContain("coordinate_bots");
   expect(chiefTools).not.toContain("describe_tool");
+  // #2041: with native ToolSearch the Chief sees start_thread by name (deferred).
+  const selfThread = chiefListed.find((tool: any) => tool.name === "start_thread");
+  expect(selfThread).toBeTruthy();
+  expect(selfThread.description).toContain("separate job on yourself");
+  // #4425: no bot_id in the schema so every bot of the role shares one prompt cache.
+  expect(selfThread.inputSchema.properties.bot_id).toBeUndefined();
   expect(bots.find((bot: any) => bot.id === f.lead.id).tasks.find((task: any) => task.threadId === receipt.threadRef.threadId).openedBy)
     .toMatchObject({ botId: f.chief.id, name: "Clive" });
   // #1997: cold / work-request copy uses the brief; the full peer-roster

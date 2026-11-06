@@ -13372,6 +13372,7 @@
   "routineTrigger.keptHere": "This trigger is changed in Edit.",
   "routineEditor.showMore": "Show more",
   "routineEditor.showLess": "Show less",
+  "routineEditor.editInstruction": "Edit the instruction",
   "routineEditor.formatAi": "Format with AI",
   "routineEditor.formatAiHint": "Opens {bot}'s chat with a request to tidy this instruction. Nothing is sent until you press Enter.",
   "routineEditor.formatAiPrompt": "Please reformat the instruction of my routine “{name}” (id {id}) so it is better structured and easier to read: headings, numbered steps, short sentences. Keep every rule, fact, date and decision exactly as it is and change no meaning. Then update routine “{name}” (id {id}) with the result through your routine edit tool (propose_routine_action, action update, changes.instructions), and show me the before and after.",

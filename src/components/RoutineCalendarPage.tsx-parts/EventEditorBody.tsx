@@ -21,8 +21,11 @@ export function EventEditorBody(props: EventEditorBodyProps) {
     readOnly, canSwitchKind, setKind, setBotIds, recurrence, setRecurrence, setScheduleDraft, at, weekdays,
     selectRoutineTarget, routineTarget, lockedBotId, error, existingRoutine, existingCall, seed,
     liveEnabled, toggleEnabled, onStartEdit, onCancelEdit, requestCancelEdit, save, saving,
-    attachmentPending, valid, isRoomGoal, deleteRoutine, presentation,
+    attachmentPending, valid, isRoomGoal, deleteRoutine, presentation, page,
   } = m;
+  // 2026-11-06 (JC, one pane): on the side panel's routine page the
+  // routine's own bar stays until a change is not saved; then Cancel, Save.
+  const pageBar = panel && page && existingRoutine && !dirty ? page.actions : undefined;
 
   const shell = (
       <div
@@ -117,7 +120,7 @@ export function EventEditorBody(props: EventEditorBodyProps) {
         </div>
         </div>
 
-        <div data-routine-editor-actions={viewing ? "view" : "edit"} className={cn("sticky bottom-0 z-20 flex items-center justify-end gap-2", panel ? "bg-panel px-4 pb-4 pt-2" : "border-t border-hairline/40 bg-elevated px-6 py-4")}>
+        {pageBar ?? <div data-routine-editor-actions={viewing ? "view" : "edit"} className={cn("sticky bottom-0 z-20 flex items-center justify-end gap-2", panel ? "bg-panel px-4 pb-4 pt-2" : "border-t border-hairline/40 bg-elevated px-6 py-4")}>
           {viewing ? <>
             {/* 2026-11-03 (JC, Grok Bot): [Pause or Resume] [Edit] [trash]. */}
             {readOnly
@@ -131,7 +134,7 @@ export function EventEditorBody(props: EventEditorBodyProps) {
             {!readOnly && <button type="button" onClick={save} disabled={saving || attachmentPending || !valid} className={cn("flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-2 text-[13px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-40", panel && "flex-1")}>{(saving || attachmentPending) && <Loader2 size={14} className="animate-spin" />}{attachmentPending ? t("routineCalendar.attaching") : existingRoutine || existingCall ? t("common.save") : kind === "call" ? t("routineCalendar.scheduleCall") : isRoomGoal ? t("routineCalendar.scheduleGoal") : t("routineCalendar.scheduleRoutine")}</button>}
           </>}
           {kind === "routine" && existingRoutine && !readOnly && !seed.unmanaged && <button type="button" data-routine-delete onClick={() => void deleteRoutine()} aria-label={t("routineEditor.deleteRoutine")} title={t("routineEditor.deleteRoutine")} className="flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline/50 text-ink-secondary hover:border-danger/40 hover:bg-danger/10 hover:text-danger"><Trash2 size={15} strokeWidth={1.75} /></button>}
-        </div>
+        </div>}
       </div>
   );
 

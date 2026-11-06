@@ -162,17 +162,21 @@ describe("RoutinesSection", () => {
     expect(markup).not.toContain('aria-label="Run logs"');
     expect(markup).not.toContain("Next ");
     const source = readFileSync(new URL("./RoutinesSection.tsx", import.meta.url), "utf8");
-    const detail = source.slice(source.indexOf("if (detail)"), source.indexOf("return <div className=\"flex flex-col gap-3\">"));
-    // 2026-11-03: Duplicate from Edit > Advanced, Delete after a confirmation,
-    // Clear run logs on the page; a run's logs stay one click away in its sheet.
-    for (const needle of ["RoutinePanelActions", "onDuplicate={(routine) => setEditing({ copyOf: routine })}", "deleteRoutine", "confirm(", "clearRoutineRuns"]) expect(detail).toContain(needle);
+    const page = readFileSync(new URL("./RoutinePanelPage.tsx", import.meta.url), "utf8");
+    const detail = source.slice(source.indexOf("if (detail)"), source.indexOf("// No routine and nothing pending"));
+    // 2026-11-06 (JC, one pane): the routine's page is its editor; Duplicate
+    // from Advanced, Delete after a confirmation, Clear run logs on the page.
+    for (const needle of ["<RoutinePanelPage", "onDuplicate={(routine) => setEditing({ copyOf: routine })}"]) expect(detail).toContain(needle);
+    expect(detail).not.toContain('mode={editMode}');
+    for (const needle of ["RoutinePanelActions", "deleteRoutine", "confirm(", "clearRoutineRuns", "RoutineStatusRows", "RoutineRunsSection"]) expect(page).toContain(needle);
     // 2026-11-05 (#2098): a run opens in the chat, never in a sheet beside it.
-    expect(detail).toContain("onOpenRun={(run) => { openRun(run);");
+    expect(detail).toContain("onOpenRun={openRun}");
     expect(source).toContain("openRoutineRun(dispatch, { runId: run.id");
     expect(source).not.toContain("RoutineRunExchange");
-    // The bar includes Check routine; each run opens its own conversation.
-    const bar = source.slice(source.indexOf("export function RoutinePanelActions"));
-    for (const needle of ["RunNowButton", "data-routine-check", "botPanel.routines.edit", "routines.disable", "routines.enable", "data-routine-delete"]) expect(bar).toContain(needle);
+    // The bar includes Check routine; no Edit, the page is edited in place.
+    const bar = page.slice(page.indexOf("export function RoutinePanelActions"));
+    for (const needle of ["RunNowButton", "data-routine-check", "routines.disable", "routines.enable", "data-routine-delete"]) expect(bar).toContain(needle);
+    expect(bar).not.toContain("botPanel.routines.edit");
     for (const needle of ["data-routine-logs", "data-routine-duplicate"]) expect(bar).not.toContain(needle);
   });
 
@@ -227,8 +231,12 @@ describe("RoutineDetailHeader", () => {
   });
 
   it("is the header the detail page renders", () => {
+    // 2026-11-06 (JC, one pane): the routine's page is its editor, whose one
+    // header row is the panel's < name × row (content-topbar).
     const src = readFileSync(new URL("./RoutinesSection.tsx", import.meta.url), "utf8");
-    expect(src).toContain("<RoutineDetailHeader");
+    expect(src).toContain("<RoutinePanelPage");
     expect(src).not.toContain("ChevronsRight");
+    const body = readFileSync(new URL("../RoutineCalendarPage.tsx-parts/EventEditorBody.tsx", import.meta.url), "utf8");
+    expect(body).toContain("content-topbar h-12");
   });
 });

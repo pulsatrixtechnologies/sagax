@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { CheckCircle2, FileText, Search, Sparkles, X } from "lucide-react";
 import { BotAvatar } from "@/components/Avatar";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
@@ -91,7 +91,9 @@ export function toContextAttachments(attachments: Attachment[]): Array<RoutineCo
 
 /** The instruction in view mode (2026-11-03, JC: Grok Bot): the whole text
  * flows; a long one folds after about 60% of the window with Show more. */
-export function InstructionText({ text }: { text: string }) {
+/** `short` (the side panel's routine page): folded to a few lines; `onEdit`
+ * turns the text into its editor on a click or Enter (2026-11-06, JC). */
+export function InstructionText({ text, short = false, onEdit }: { text: string; short?: boolean; onEdit?: () => void }) {
   const body = useRef<HTMLDivElement>(null);
   const [long, setLong] = useState(false);
   const [open, setOpen] = useState(false);
@@ -99,9 +101,17 @@ export function InstructionText({ text }: { text: string }) {
     const element = body.current;
     if (element) setLong(element.scrollHeight > element.clientHeight + 4);
   }, [text]);
-  if (!text.trim()) return <p data-routine-instruction-text className="text-[13.5px] text-ink-tertiary">{t("routineEditor.none")}</p>;
+  const editProps = onEdit ? {
+    role: "button" as const,
+    tabIndex: 0,
+    "aria-label": t("routineEditor.editInstruction"),
+    title: t("routineEditor.editInstruction"),
+    onClick: (event: MouseEvent<HTMLElement>) => { if (!(event.target as HTMLElement).closest("a")) onEdit(); },
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(); } },
+  } : {};
+  if (!text.trim()) return <p data-routine-instruction-text {...editProps} className={cn("text-[13.5px] text-ink-tertiary", onEdit && "-mx-2 cursor-text rounded-lg px-2 py-1.5 hover:bg-hover")}>{onEdit ? t("routineCalendar.botInstructions") : t("routineEditor.none")}</p>;
   return <div className="min-w-0">
-    <div ref={body} data-routine-instruction-text data-folded={!open && long ? "" : undefined} className={cn("relative min-w-0 break-words text-[13.5px] leading-relaxed text-ink [&_a]:no-underline", !open && "max-h-[35vh] overflow-hidden")}>
+    <div ref={body} data-routine-instruction-text data-folded={!open && long ? "" : undefined} {...editProps} className={cn("relative min-w-0 break-words text-[13.5px] leading-relaxed text-ink [&_a]:no-underline", !open && (short ? "max-h-[7.5rem] overflow-hidden" : "max-h-[35vh] overflow-hidden"), onEdit && "-mx-2 cursor-text rounded-lg px-2 py-1 hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}>
       <ChatMarkdown text={text} />
       {!open && long && <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-panel to-transparent" />}
     </div>

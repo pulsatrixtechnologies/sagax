@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ChevronDown, ChevronRight, Copy, FileText, Plus,
 } from "lucide-react";
@@ -52,7 +53,13 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
     setRunAs, setRunOn, setStartTime, setTimeoutMinutes, setTimingMode, setWatchDraft, setWhenOpen, simplifySchedule,
     startTime, state, timeoutMinutes, timingMode, toggleMore, viewing, watchAllowed, watchDraft, WhenIcon,
     whenOpen, whenSentence, advancedSummary, bots, onDuplicate, onClose, seed: _seed, panel, whenIconName, selectedBots, triggered,
+    page, dirty,
   } = m;
+  // 2026-11-06 (JC, one pane): on the side panel's routine page the
+  // instruction reads folded and turns into its editor on a click (or
+  // focused from the start when an old Edit entry opened the page).
+  const onPage = Boolean(page) && panel;
+  const [instructionEditing, setInstructionEditing] = useState(() => !existingRoutine || Boolean(page?.focusInstruction));
   return (
     <>
           {(otherOwner || readOnly || existingRoutine?.redacted) && <div className="space-y-1.5 pb-3">
@@ -70,11 +77,13 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
               {/* 2026-11-03 (audit N-1): view mode only. In edit mode the form
                   keeps its own copy of the instruction, so Save would put the
                   old text back over the bot's reformatted one. */}
-              {viewing && existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
+              {(viewing || (onPage && !dirty)) && existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
             </div>
             {viewing
               ? <InstructionText text={description} />
-              : <MarkdownEditor compact expandable toolbarOnFocus value={description} onChange={setDescription} minHeight={panel ? 120 : 160} maxHeight={panel ? "40vh" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
+              : onPage && existingRoutine && !instructionEditing
+              ? <InstructionText text={description} short onEdit={() => setInstructionEditing(true)} />
+              : <MarkdownEditor compact expandable toolbarOnFocus autoFocus={onPage && Boolean(existingRoutine)} value={description} onChange={setDescription} minHeight={onPage ? 88 : panel ? 120 : 160} maxHeight={panel ? "40vh" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
           </section>
 
           <section data-routine-editor-section="when" className="min-w-0 space-y-1">
@@ -181,6 +190,8 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
             <h3 className={PANEL_LABEL}>{t("routineEditor.webhook")}</h3>
             <RoutineWebhookPanel routine={existingRoutine?.schedule.type === "webhook" ? existingRoutine : undefined} bot={bots.find((bot) => bot.id === botIds[0])} />
           </section>}
+
+          {onPage && page?.status}
 
           {!lockedBotId && <section data-routine-editor-section="bot" className="min-w-0 space-y-1.5">
             <h3 className={PANEL_LABEL}>{isRoomGoal ? t("routineCalendar.chooseGroup") : t("routineCalendar.assignBot")}</h3>
@@ -358,6 +369,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
             {!triggered && <div className="py-2"><RoutineScheduleNote /></div>}
             </PanelRows>
           </details>
+          {onPage && page?.runs}
           </div>
     </>
   );

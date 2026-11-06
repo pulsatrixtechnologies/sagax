@@ -16,7 +16,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     case "openPersonPanel": {
       const personId = action.personId?.trim() || null;
       if (!personId) return state.personPanelId === null ? state : { ...state, personPanelId: null };
-      return { ...state, personPanelId: personId, settingsOpen: false, computerOpen: false, inspectorOpen: false, appSettingsOpen: false };
+      return { ...state, personPanelId: personId, settingsOpen: false, computerOpen: false, inspectorOpen: false, appSettingsOpen: false, personaEditor: null };
     }
     case "toggleSettings": {
       // Only Details (and Routines) live in the bot panel. A deep link to any
@@ -68,6 +68,8 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         inspectorOpen: open ? false : state.inspectorOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
         memoryManagerOpen: open ? false : state.memoryManagerOpen,
+        // The bot's profile page is a right panel too: one at a time.
+        personaEditor: open ? null : state.personaEditor,
       };
     }
     case "openRoutine": {
@@ -173,6 +175,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         inspectorOpen: open ? false : state.inspectorOpen,
         activityOpen: open ? false : state.activityOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
+        personaEditor: open ? null : state.personaEditor,
       };
     }
     case "toggleInspector": {

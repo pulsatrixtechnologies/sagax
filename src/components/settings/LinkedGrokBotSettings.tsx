@@ -1,4 +1,4 @@
-// Settings > Providers > Linked Grok (#2193, moved from Account 2026-11-06): the person's own webhook URL
+// Settings > Providers > Advanced > Link with Grok Bot (#2193; in Advanced since #2295): the person's own webhook URL
 // and sealed key. Their Sagax bots reach only this link. Never shows the key
 // after save. Test sends a signed envelope. Phone opt-ins for owner call/text.
 import { useCallback, useEffect, useState } from "react";
@@ -106,7 +106,9 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
   if (!view) {
     return (
       <div data-settings-card="providers.linkedGrokBot">
-        <p className="text-[12.5px] text-ink-secondary">{error ?? t("grokBridge.loading")}</p>
+        <SettingsGroup title={t("grokBridge.title")} groupId="linkedGrokBot">
+          <p role={error ? "alert" : "status"} className={cn("px-3.5 py-2.5 text-[12px]", error ? "text-danger" : "text-ink-secondary")}>{error ?? t("grokBridge.loading")}</p>
+        </SettingsGroup>
       </div>
     );
   }
@@ -116,9 +118,9 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
   return (
     <div data-settings-card="providers.linkedGrokBot" data-grok-bridge={view.linked ? (view.enabled ? "on" : "off") : "none"}>
       <SettingsGroup title={t("grokBridge.title")} groupId="linkedGrokBot">
-        <p className="px-3.5 pt-2.5 text-[12.5px] text-ink-secondary">{orgBlocked ? t("grokBridge.orgDisabled") : t("grokBridge.intro")}</p>
-        {error && <p role="alert" className="mb-2 text-[12.5px] text-danger">{error}</p>}
-        {testNote && <p role="status" className="mb-2 text-[12.5px] text-ink-secondary">{testNote}</p>}
+        <p className="px-3.5 pt-2.5 pb-1 text-[12px] leading-4 text-ink-secondary">{orgBlocked ? t("grokBridge.orgDisabled") : t("grokBridge.intro")}</p>
+        {error && <p role="alert" className="px-3.5 pb-1 text-[12px] text-danger">{error}</p>}
+        {testNote && <p role="status" className="px-3.5 pb-1 text-[12px] text-ink-secondary">{testNote}</p>}
 
         <DescribedRow
           label={t("grokBridge.enabled")}
@@ -195,7 +197,7 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
         </DescribedRow>
 
         {view.stats && (
-          <p className="mt-1 text-[12px] text-ink-secondary" data-grok-bridge-stats="">
+          <p className="px-3.5 pt-1 text-[12px] text-ink-secondary" data-grok-bridge-stats="">
             {t("grokBridge.stats", {
               sent: String(view.stats.sentToday),
               dead: String(view.stats.deadLetters),
@@ -204,7 +206,7 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
           </p>
         )}
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 px-3.5 py-2.5">
           <button type="button" className={PILL} disabled={busy || orgBlocked || !webhookUrl.trim()} onClick={onSaveLink}>
             {t("grokBridge.save")}
           </button>
@@ -218,7 +220,7 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
           )}
         </div>
         {view.linkId && (
-          <p className="mt-2 text-[11px] text-ink-secondary" data-grok-bridge-link-id="">
+          <p className="px-3.5 pb-2 text-[12px] text-ink-secondary" data-grok-bridge-link-id="">
             {t("grokBridge.inboundHint", { path: `/api/bridge/grok/${view.linkId}` })}
           </p>
         )}

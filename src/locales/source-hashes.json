@@ -5263,7 +5263,6 @@
       "chat.usage.cardHint": "f5db49f6487b1282e368c40299fa0bd884db4188a1547603fb19ff2fabbe68d1",
       "chat.usage.cardLast": "ee5c88bf416d1e2fba390dbfa3643f063ff8c82ea2d69c79e9051f9a961b818a",
       "chat.usage.cardThread": "0e82ebfc8f9b7ac2500d0d7682a4316449447ef25d08e53703d0b0cfcb52534b",
-      "chat.usage.cardTokens": "507a17952dbcbb44f1b9ffff34ec5fc71563ca5d60c07c5fa9ab68339e462139",
       "chat.usage.cardWindow": "f95463e80b5a4e886724600a20a1118eb7180d9881163a6430d7df9a34902b12",
       "chat.usage.costAria": "452214154d93d820c56b5513f23b3ce01d1548d0c24b330d79df907576250c19",
       "chat.usage.in": "b48a8ba722bac8373fdafa1847df4e8df3f3b2cef3c45244e5f74a4fddd62dfe",
@@ -17428,7 +17427,7 @@
       "organization.grokBridge.title": "b4135ba66acb064f3d357d0d273e9fed3d63de5e99b823382ebf7cae9092f851",
       "organization.grokBridge.label": "a6a0da6ae76ec9e6298811db65a0206f28295828911199eb289846dc77d03980",
       "organization.grokBridge.short": "76ccd3916d37f8ebafacaade1f597be4776e4e0443073d1f3eb0fb4c649e8e01",
-      "grokBridge.title": "79cd6f3ae049f9e62db11609206fc49f303c48004592974aa430a4fdaf04b3d7",
+      "grokBridge.title": "39204865b943f1ca9b3c238639ba49f35e92f68ae616b0aaabc70c81eac4f4a2",
       "grokBridge.intro": "d22bc1e064dcc3d6df288f5eb9589f80cbf518c5b7d3d349b709625ce52e4db5",
       "grokBridge.orgDisabled": "eac027b6e3785419de38b200cb94df3a42cdf3771920bc50f933a41cbc87e4c2",
       "grokBridge.loading": "8a97265ed4f594bba1339f4d004ee62b3817d77fc52250829f8b8cfbff305f90",
@@ -17444,9 +17443,9 @@
       "grokBridge.bots": "c712d0f5241190649cb8865489665cf486492054bc22bbe6fa5281c5018e2467",
       "grokBridge.botsHelp": "7ef8bdcec83538b290ba411ffbe9fe23b8b36c2830009df81ff435c75d5c4010",
       "grokBridge.botsPlaceholder": "6a77b9783ab92db2448144c020f5295bd8629135f3cf559859316f6d436992cc",
-      "grokBridge.mayCall": "0fa43949d7b36954e8fcdb1f98630bf8f55ea49c660738a67bbe7b968c5cfbf7",
+      "grokBridge.mayCall": "8c2e7e37f9f3259b7bdfd3588b24edc1298a9c190c9577032044dd50a6d58a4e",
       "grokBridge.mayCallHelp": "dffe087958e8d92205c645cd77197d90dfcec1df3e18620ed48c545b9442442a",
-      "grokBridge.mayText": "7778df2b2aba7279cc53777bc8f4066e409c7104cabbc1bdb49abe9fa332e4e0",
+      "grokBridge.mayText": "3939fd98fa5424ac72bc58b213709ecf42e1e5151df9fed708aa7d6d6be0aacc",
       "grokBridge.mayTextHelp": "d2dd8925d3d18e0861de2579bd523007f162113738a89364653ba27926179500",
       "grokBridge.stats": "1928a02e048bfff58f21bb07533286a39655186969d2a768af11b79340ef1916",
       "grokBridge.circuitOpen": "2348f998744212575d85959674f9607ab26f67708a917157472832386337c904",
@@ -17572,7 +17571,8 @@
       "codingChat.panel.title": "6da6530a0728728ec3b9b78da3e40519cb602c7f6e1d5017b49a4c2170e2c07a",
       "codingChat.panel.status": "920e413c7d411b61ef3e8c63b1cb6ad058d5f95f8b481dbafe60248387d8c355",
       "codingChat.panel.duration": "4fc52a3c4c558b517c463b22d86d0e3b9cfd4255c98fe3510f9075b37ab419c9",
-      "codingChat.panel.tokens": "a039dfb9628b53ddaebcfe8ef0793e3fdf19867601295f00d192acef59050869"
+      "codingChat.panel.tokens": "a039dfb9628b53ddaebcfe8ef0793e3fdf19867601295f00d192acef59050869",
+      "memes.settings.changeKey": "1bc0f4da5f82b4e66d77dcecfb4a8f468718abeb9a0be4d465afb244ec322ea9"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

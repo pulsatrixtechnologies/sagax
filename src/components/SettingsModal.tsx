@@ -36,7 +36,6 @@ import { shortcutLabel } from "./ShortcutHint";
 import { aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
-import { LinkedGrokBotSettings } from "./settings/LinkedGrokBotSettings";
 import { MyApprovalRules } from "./settings/MyApprovalRules";
 import { MyToolGrants } from "./settings/MyToolGrants";
 import { cn } from "@/lib/cn";
@@ -464,11 +463,8 @@ export function SettingsModal() {
 
             {/* Providers (2026-10-30) */}
             {section === "providers" && (
-              <>
-                <ProvidersSettings />
-                {/* Linked Grok is a provider link, not identity (JC 2026-11-06). */}
-                <LinkedGrokBotSettings />
-              </>
+              // the link with Grok Bot sits in Providers > Advanced (#2295)
+              <ProvidersSettings />
             )}
 
             {section === "engines" && (

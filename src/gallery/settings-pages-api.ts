@@ -64,6 +64,12 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       ] : []),
     ] },
     "/api/me/cloud-agent-providers": { providers: [] },
+    // Providers > Advanced: the claude.ai connectors, the Grok Bot link (Advanced) and Memes (Other services)
+    "/api/me/harness-connectors": { manageUrl: "https://claude.ai/customize/connectors", canManage: true, enabled: true, claude: { available: true, connectors: [
+      { name: "Gmail", status: "connected" }, { name: "Google Calendar", status: "connected" }, { name: "Notion", status: "needs_auth" }, { name: "Example Docs", status: "unknown" },
+    ] }, codex: { available: false } },
+    "/api/me/grok-bridge": { linked: true, enabled: true, orgAllowed: true, webhookUrl: "https://bots.example.com/hook", keySet: true, bots: ["Scout"], mayCallOwner: false, mayTextOwner: true, linkId: "demo-link", stats: { sentToday: 3, deadLetters: 0, circuitOpen: false } },
+    "/api/me/memes": { provider: "giphy", keyConfigured: true, last4: "AB12", ready: true },
     // &org=1: an organization server, the viewer an admin with their own sign-ins
     ...(params.get("org") ? {
       "/api/org": { org: { name: "Example Org", identity: { kind: "perspicax", issuer: "https://perspicax.example.com" } }, link: { state: "ok" }, viewerRole: "admin", settings: {} },

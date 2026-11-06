@@ -54,9 +54,10 @@ import { modelOn } from "../../../shared/offered-models";
 import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSettings";
 import { MemesSettings } from "./MemesSettings";
 import { WebSearchSettings } from "./WebSearchSettings";
-import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, PRIMARY_PILL, SettingsGroup, Switch, requestSettingsCard } from "../SettingsPrimitives";
+import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, PRIMARY_PILL, SettingsFoldSection, SettingsGroup, Switch, requestSettingsCard } from "../SettingsPrimitives";
 import { ExternalLinkPill, SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { LocalModelsSettings } from "./LocalModelsSettings";
+import { LinkedGrokBotSettings } from "./LinkedGrokBotSettings";
 
 const PAYER_KEY = { me: "providers.payer.me", org: "providers.payer.org", computer: "providers.payer.computer" } as const satisfies Record<ProviderRow["payer"], LocaleKey>;
 const STATE_KEY = {
@@ -583,17 +584,20 @@ export function ProvidersSettings() {
             )}
         </SettingsGroup>
       </div>
-      {/* Advanced: the person's cloud agent keys and their claude.ai connectors (one fold, no heading over it) */}
-      <div data-settings-card="providers.advanced">
-        <SettingsGroup groupId="providers-advanced">
-          <FoldRow cardId="providers.advanced" label={t("providers.advanced.title")} description={t("providers.advanced.help")}>
-            <div className="-mx-3.5 flex flex-col gap-3">
-              {keys && <CloudAgentKeys />}
-              <div className="px-3.5 empty:hidden"><HarnessConnectorsSection placement="settings" /></div>
-            </div>
-          </FoldRow>
-        </SettingsGroup>
-      </div>
+      {/* Advanced (#2295): a heading with a disclosure, its content sibling
+          groups as on Models (#2175): the person's cloud agent keys, their
+          claude.ai connectors and the link with Grok Bot. Never a card in a card. */}
+      <SettingsFoldSection cardId="providers.advanced" groupId="providers-advanced" title={t("providers.advanced.title")} description={t("providers.advanced.help")}>
+        <div className="flex flex-col gap-6" data-providers-advanced="">
+          {keys && (
+            <SettingsGroup groupId="providers-cloud-agents">
+              <CloudAgentKeys />
+            </SettingsGroup>
+          )}
+          <HarnessConnectorsSection placement="settings" />
+          <LinkedGrokBotSettings />
+        </div>
+      </SettingsFoldSection>
       <ProviderKeyDialog hidden={rows.some((row) => keyInline(row))} />
     </div>
   );

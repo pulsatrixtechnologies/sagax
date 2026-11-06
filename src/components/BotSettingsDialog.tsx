@@ -31,9 +31,8 @@ import { VoiceChatCard } from "./bot-settings/VoiceChatCard";
 import { ActivitySection } from "./bot-settings/ActivitySection";
 import { BotTaskSection } from "./bot-settings/BotTaskSection";
 import { SuggestionsSection } from "./bot-settings/SuggestionsSection";
-import { InlineEditableText } from "./bot-settings/InlineEditableText";
+import { BotNameTitleStack } from "./bot-settings/BotNameTitleStack";
 import { PackageProvenance } from "./bot-settings/PackageProvenance";
-import { BOT_PROFILE_LIMITS } from "../../shared/bot-profile";
 import { ComputerPanel } from "./ComputerPanel";
 import { BotProfileAvatarCard } from "./BotProfileAvatarCard";
 import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
@@ -324,40 +323,18 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                   onPatch={derived.patch}
                   onContextMenu={openActionsAt}
                 />
-                {/* "Name · Label" on one line, both edited where they show (the
-                    hover pencils float outside, taking no room); adding a
-                    label is in the profile page. Spacing matches Grok Bot's
-                    panel header (#2196): ~17px semibold, ~65px under the
-                    mascot centre. */}
-                <div
-                  className="mt-5 flex max-w-full items-center justify-center gap-1 text-[17px] font-medium leading-[22px] text-ink"
-                  // the bot's menu on the name too, as on the mascot
+                {/* The name on its line, the title under it, smaller and
+                    secondary (JC: never "Name · Title" on one line); both
+                    edited where they show. Spacing matches Grok Bot's panel
+                    header (#2196). */}
+                <BotNameTitleStack
+                  name={bot.name}
+                  title={bot.title}
+                  onSaveName={canEditBotField(state.config, bot, "name") ? (name) => derived.patch({ name }) : undefined}
+                  onSaveTitle={canEditBotField(state.config, bot, "title") ? (title) => derived.patch({ title }) : undefined}
+                  renameRequest={renameRequest}
                   onContextMenu={openActionsAt}
-                >
-                  <InlineEditableText
-                    id="bot-settings-title"
-                    value={bot.name}
-                    required
-                    maxLength={BOT_PROFILE_LIMITS.name}
-                    ariaLabel={t("botPanel.name.edit")}
-                    onSave={canEditBotField(state.config, bot, "name") ? (name) => derived.patch({ name }) : undefined}
-                    editRequest={renameRequest}
-                    className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-medium leading-[22px] text-ink [&>svg]:absolute [&>svg]:-left-3.5"
-                  />
-                  {bot.title?.trim() && (
-                    <>
-                      <span aria-hidden="true" className="shrink-0">·</span>
-                      <InlineEditableText
-                        value={bot.title}
-                        maxLength={BOT_PROFILE_LIMITS.title}
-                        placeholder={t("botPanel.label.add")}
-                        ariaLabel={t("botPanel.label.edit")}
-                        onSave={canEditBotField(state.config, bot, "title") ? (title) => derived.patch({ title }) : undefined}
-                        className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-medium leading-[22px] text-ink [&>svg]:absolute [&>svg]:-right-3.5"
-                      />
-                    </>
-                  )}
-                </div>
+                />
               </div>
               {/* The tabs; once scrolled to the top they move into the top bar.
                   pt-10 keeps ~40px under the title, as on Grok Bot (#2196). */}

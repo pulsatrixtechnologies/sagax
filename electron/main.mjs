@@ -107,6 +107,7 @@ import localOriginModule from "./local-origin.cjs";
 import { buildApplicationMenu } from "./menu.mjs";
 import { createComputerSharing, validateSharedFolders } from "./computer-sharing.mjs";
 import { createDesktopBridge } from "./desktop-bridge.mjs";
+import { macAppEnabled, macAppOfTool, macAppsStatus, runMacAppCall, testMacApp, writeMacAppSettings } from "./mac-apps.mjs";
 import { applyAppIcon, createAppIconStore, parseAppIconRequest, windowIconImage } from "./app-icon.mjs";
 import { WINDOWS_APP_USER_MODEL_ID, shortcutFolders, updateShortcutIcons } from "./windows-shortcuts.mjs";
 import { createProxyCredentialStore, createProxyCredentials, proxyPasswordAnswerScript, proxyPasswordPage } from "./proxy-credentials.mjs";
@@ -2767,6 +2768,15 @@ function desktopBridge() {
     // (oMLX/Ornith), by base URL. Desktop-side only; used to authenticate the
     // probe and the model-serving calls to 127.0.0.1.
     localModelKeyFor: (base) => desktopBridgeLocalModelKeys().get(base),
+    // The Apple apps of this Mac (Plugins > This Mac): only the apps the
+    // person switched on here; the bot's approval mode already ran server-side.
+    macApp: async (toolName, args, signal) => {
+      const appId = macAppOfTool(toolName);
+      if (!appId || !macAppEnabled(app.getPath("userData"), appId)) {
+        return { content: [{ type: "text", text: `${appId ?? "This app"} is off on this Mac. The person turns it on in Plugins > This Mac.` }], isError: true };
+      }
+      return runMacAppCall(toolName, args, { signal });
+    },
     browse: bridgeBrowse,
     cuaConnection: async () => {
       const connection = await cuaReady.catch(() => null);
@@ -4175,6 +4185,20 @@ ipcMain.handle("clipboard:write-text", localOnly("clipboard:write-text", (_event
 // and never leaves it. The renderer only ever learns WHICH bases have a key,
 // never the key value. Setting or clearing a key re-probes at once, so a
 // server that was "needs an API key" turns into a listed one without waiting.
+// Plugins > This Mac with an organization server: the Apple apps live here,
+// so the setup pages read and change them over IPC (electron/mac-apps.mjs).
+ipcMain.handle("mac-apps:status", desktopUiOnly("mac-apps:status", () => macAppsStatus(app.getPath("userData"), { platform: process.platform })));
+ipcMain.handle("mac-apps:set", desktopUiOnly("mac-apps:set", (_event, appId, enabled) => {
+  if (typeof enabled !== "boolean") throw new Error("enabled must be true or false");
+  writeMacAppSettings(app.getPath("userData"), appId, { enabled });
+  return macAppsStatus(app.getPath("userData"), { platform: process.platform });
+}));
+ipcMain.handle("mac-apps:test", desktopUiOnly("mac-apps:test", (_event, appId) => testMacApp(app.getPath("userData"), appId)));
+ipcMain.handle("mac-apps:open-settings", desktopUiOnly("mac-apps:open-settings", (_event, pane) => {
+  if (process.platform !== "darwin") return false;
+  const anchor = pane === "fullDiskAccess" ? "Privacy_AllFiles" : "Privacy_Automation";
+  return shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${anchor}`).then(() => true);
+}));
 ipcMain.handle("local-models:key-bases", desktopUiOnly("local-models:key-bases", () => desktopBridgeLocalModelKeys().bases()));
 ipcMain.handle("local-models:set-key", desktopUiOnly("local-models:set-key", async (_event, base, key) => {
   const ok = await desktopBridgeLocalModelKeys().set(base, key);

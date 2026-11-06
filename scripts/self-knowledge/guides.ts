@@ -122,7 +122,7 @@ export const GUIDES: Guide[] = [
     access: "organization: admin tier; Perspicax admins may limit servers in Settings > Organisation > Allowed MCP servers",
     keywords: "mcp serveur server ajouter add connecteur connector outil tool",
     text: "Partly: add_mcp_server saves the server switched off, only when the person asked. The bot cannot enable, test or edit it: the person turns it on in the sidebar's Capabilities > Installed. On an organization server it is an admin-tier action, and the Perspicax admin may limit which servers are allowed (Perspicax Settings > Organisation > Allowed MCP servers).",
-    refs: ["tool:add_mcp_server", "card:myConnections.servers", "px:settings:org.mcp"],
+    refs: ["tool:add_mcp_server", "file:src/components/plugins/PersonalServers.tsx", "px:settings:org.mcp"],
   },
   {
     id: "voice-note",

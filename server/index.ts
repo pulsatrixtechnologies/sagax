@@ -848,6 +848,8 @@ import { createRemoteSessionInternalRoutes, createRemoteSessionRoutes } from "./
 import { createRemoteSessionsAdminRoutes } from "./routes/remote-sessions-admin.ts";
 import { createRemoteBotHosts } from "./remote-support/remote-bot-hosts.ts";
 import { createRemoteBotHostsRoutes } from "./routes/remote-bot-hosts.ts";
+import { createRemoteHostsRoutes } from "./routes/remote-hosts.ts";
+import { RemoteHostTeams } from "./remote-support/remote-host-teams.ts";
 import { createRemoteControlRoutes, isRemoteControlPath } from "./routes/remote-control.ts";
 import { BOT_ACT_ROUTE_HEADER, createRemoteSessionFileRoutes, remoteCallerIsAgent } from "./routes/remote-session-files.ts";
 import { createDeviceSettingsBroker } from "./device-settings.ts";
@@ -907,7 +909,7 @@ import { compatServers, compatServerOwner, compatServerVisible } from "./openai-
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
 import { providersOfDriver, providersOfInstance, resolveEngineAccess, subscriptionDriver, turnPayer, type AccessPayer, type SubscriptionDriver, type NoAccessCause, type TurnAccess } from "./engines/engine-credentials.ts";
 import { fileKeyConfigured } from "./engines/engine-api-keys.ts";
-import { isLoginDriver, LOGIN_MARKER, loginCliFor, loginSlotOf, PrincipalEngineLogins, secondLoginSupported, type LoginDriver, type LoginSlot } from "./engines/principal-engine-logins.ts";
+import { isLoginDriver, LOGIN_MARKER, loginCliFor, loginSlotOf, PrincipalEngineLogins, secondLoginSupported, separateAccountInstance, type LoginDriver, type LoginSlot } from "./engines/principal-engine-logins.ts";
 import { LOGIN_ENGINE_LABEL } from "./engines/engine-reconnect-ahead.ts";
 import {
   createSectionChannelRoutes,
@@ -1032,6 +1034,8 @@ import { personalPluginStorage } from "./plugins/person-plugins.ts";
 import { capabilityPrompt, capabilityPromptGroups } from "./capabilities/capability-prompt.ts";
 import { createLifecycleHookRoutes } from "./routes/lifecycle-hooks.ts";
 import { createMessagesRoutes } from "./routes/messages.ts";
+import { createMacAppsRoutes } from "./routes/mac-apps.ts";
+import { macAppEnabled as macAppSettingEnabled, MAC_APP_IDS, runMacAppCall } from "../electron/mac-apps.mjs";
 import { handleMessagesMcp } from "./imessage/imessage-mcp.ts";
 import { bindImessageMessage, takeImessageSend } from "./imessage/imessage-cards.ts";
 import { createOsascriptSender } from "./imessage/imessage-send.ts";
@@ -5180,7 +5184,12 @@ const phoneIntegration = createPhoneIntegration(getLeafHost);
 /** Messages tools, only on the solo Mac this process is. */
 function messagesWanted(): boolean {
   return messagesOnBotMac({ platform: process.platform, identityKind: IDENTITY.kind, bridgeAction: false }).ok
-    && readMessagesSettings(DATA_DIR).useMessages;
+    && MAC_APP_IDS.some((app) => soloMacAppEnabled(app));
+}
+
+/** Plugins > This Mac switch of one Apple app (Messages keeps its own setting). */
+function soloMacAppEnabled(app: string): boolean {
+  return app === "messages" ? readMessagesSettings(DATA_DIR).useMessages : macAppSettingEnabled(DATA_DIR, app);
 }
 
 const messagesIntegration = createMessagesIntegration(getLeafHost);
@@ -5609,6 +5618,15 @@ try {
   }
 } catch { /* a migration notice must never block startup */ }
 const teamComputers = new TeamComputers(join(DATA_DIR, "team-computers.json"), ENVIRONMENT_ID);
+// Computers panel (2026-11-06): enrolled hosts the person placed on a team.
+const remoteHostTeams = new RemoteHostTeams(join(DATA_DIR, "remote-host-teams.json"));
+/** A bot's hosts: those attached in its Computer tab, then those its owner
+ * placed on its team from the Computers panel (person isolation). */
+function effectiveRemoteHosts(bot: { remoteHosts?: string[]; section?: string; sectionId?: string } & Parameters<typeof effectiveBotOwner>[0]): string[] {
+  const own = bot.remoteHosts ?? [];
+  const inherited = remoteHostTeams.forBot(bot, effectiveBotOwner(bot), sectionKey);
+  return [...new Set([...own, ...inherited])];
+}
 let followupsReady = false;
 const sendSequencer = new SendSequencer();
 /** Presses that fold their widget, while their message is on its way in:
@@ -6819,6 +6837,30 @@ ROUTES.push(createPersonConnectionRoutes({
   servers: {
     list: personalServerListing,
     add: (principalId, body) => addPersonalMcpServer(principalId, body),
+    // Edit from Plugins > Me: the add body replaces the server (renamed when
+    // the body names another one). A token or env left out is kept, so the
+    // screen never has to show a secret; an unchanged OAuth address keeps
+    // its sign-in. Any refusal puts the previous server back as it was.
+    update: async (principalId, name, body) => {
+      const previous = personConnections.servers(principalId)[name];
+      if (!previous) throw new PersonConnectionsError("No server with that name.", "not_found", 404);
+      const next = { ...(body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {}) };
+      if (typeof next.name !== "string" || !next.name) next.name = name;
+      if (previous.kind === "remote" && next.auth === "token" && !next.token && previous.token) next.token = previous.token;
+      if (previous.kind === "remote" && next.auth === "token" && next.headerName === undefined && previous.headerName) next.headerName = previous.headerName;
+      if (previous.kind === "stdio" && typeof next.command === "string" && (!next.env || Object.keys(next.env as object).length === 0)) next.env = previous.env;
+      const keepSignIn = previous.kind === "remote" && previous.auth === "oauth" && next.auth === "oauth" && next.url === previous.url && next.name === name;
+      personConnections.remove(principalId, name);
+      try {
+        await addPersonalMcpServer(principalId, next, keepSignIn);
+      } catch (error) {
+        personConnections.add(principalId, name, previous);
+        throw error;
+      }
+      stdioRelay.closePerson(principalId, name);
+      if (next.name !== name) await personOAuth(principalId).forget(name).catch(() => undefined);
+      if (!previous.enabled) personConnections.setEnabled(principalId, next.name as string, false);
+    },
     setEnabled: async (principalId, name, enabled) => {
       personConnections.setEnabled(principalId, name, enabled);
       if (!enabled) stdioRelay.closePerson(principalId, name);
@@ -7058,21 +7100,27 @@ ROUTES.push(createLifecycleHookRoutes({
     return level === "owner" || level === "manage" || orgAdminCaller(auth);
   }
 }));
+const openMacPrivacyPane: ((anchor: string) => Promise<boolean>) | undefined = process.platform === "darwin"
+  ? async (anchor) => {
+    const { execFile } = await import("node:child_process");
+    await new Promise<void>((resolve, reject) => {
+      execFile("open", [`x-apple.systempreferences:com.apple.preference.security?${anchor}`], (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    return true;
+  }
+  : undefined;
 ROUTES.push(createMessagesRoutes({
   dataDir: DATA_DIR,
   host: () => ({ platform: process.platform, identityKind: IDENTITY.kind, bridgeAction: false }),
-  openPrivacyPane: process.platform === "darwin"
-    ? async (anchor) => {
-      const { execFile } = await import("node:child_process");
-      await new Promise<void>((resolve, reject) => {
-        execFile("open", [`x-apple.systempreferences:com.apple.preference.security?${anchor}`], (error) => {
-          if (error) reject(error);
-          else resolve();
-        });
-      });
-      return true;
-    }
-    : undefined,
+  openPrivacyPane: openMacPrivacyPane,
+}));
+ROUTES.push(createMacAppsRoutes({
+  dataDir: DATA_DIR,
+  host: () => ({ platform: process.platform, identityKind: IDENTITY.kind, bridgeAction: false }),
+  openPrivacyPane: openMacPrivacyPane,
 }));
 // Slice 4: the Perspicax team names (who is in a team lives on each person).
 const orgTeams = new OrgTeams({ path: join(DATA_DIR, "org-teams.json") });
@@ -9004,6 +9052,7 @@ const unattendedHosts = createUnattendedHosts({
       ? person.subject.sub
       : null;
   },
+  defaultOrg: () => process.env.SAGAX_ORG_ID?.trim() || process.env.SAGAX_ORG_NAME?.trim() || undefined,
   audit: (event) => remoteSessionActionsAudit.write({
     at: event.at,
     sessionId: "",
@@ -9026,6 +9075,10 @@ const remoteBotHosts = createRemoteBotHosts({
     const bot = store.bot(botId);
     if (!bot) return null;
     return { id: bot.id, remoteHosts: bot.remoteHosts, ownerPrincipalId: effectiveBotOwner(bot) };
+  },
+  inherited: (botId) => {
+    const bot = store.bot(botId);
+    return bot ? remoteHostTeams.forBot(bot, effectiveBotOwner(bot), sectionKey) : [];
   },
   canEdit: (principalId, botId) => {
     const bot = store.bot(botId);
@@ -10098,8 +10151,8 @@ const limitReset = createLimitResetHost({
     try {
       // The person's own sign-ins only, under the engine's instance id (the id the chat and the routines name).
       return orgPlanAccounts(providerConfigs(), {
-        loginDir: (driver) => logins.loginDir(principalId, driver),
-        signedIn: (driver) => logins.signedIn(principalId, driver),
+        loginDir: (driver, instanceId) => logins.loginDir(principalId, driver, "primary", instanceId),
+        signedIn: (driver, instanceId) => logins.signedIn(principalId, driver, "primary", instanceId),
       }).filter((account) => limitPlanDriver(account) && account.access !== "api-key" && !account.signedOut)
         .map((account) => ({ ...account, id: account.instanceId ?? account.id }));
     } catch {
@@ -13264,7 +13317,7 @@ const proactiveWaker = new ProactiveWaker({
     const driver = registry.cliTarget(bot.modelSelection.instanceId)?.driverKind;
     if (!driver || !isLoginDriver(driver)) return false;
     const payer = effectiveBotOwner(bot)?.trim();
-    return Boolean(payer && engineLogins.expired(payer, driver));
+    return Boolean(payer && engineLogins.expired(payer, driver, "primary", bot.modelSelection.instanceId));
   },
   // the verification fixtures shorten the gathering window
   ...(Number(process.env.SAGAX_PROACTIVE_GATHER_MS) > 0 ? { gatherMs: Number(process.env.SAGAX_PROACTIVE_GATHER_MS) } : {})
@@ -13355,9 +13408,10 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     if (!bot) return undefined;
     const principal = effectiveRunAs(run) ?? localPrincipalId();
     const rows: ReadinessComputer[] = sharedComputers.status(principal).map(row => ({ name: row.name, online: row.online }));
-    if (bot.remoteHosts?.length) {
+    const botHosts = effectiveRemoteHosts(bot);
+    if (botHosts.length) {
       const listed = await remoteBotHosts.available(principal);
-      if (listed.available) for (const host of listed.hosts.filter(host => bot.remoteHosts?.includes(host.hostId))) {
+      if (listed.available) for (const host of listed.hosts.filter(host => botHosts.includes(host.hostId))) {
         rows.push({ name: host.hostname ?? "Computer", online: host.state !== "enrolled" ? false : host.lastSeenAt ? Date.now() - Date.parse(host.lastSeenAt) < 120_000 : undefined });
       }
     }
@@ -15712,8 +15766,10 @@ class EngineAccessLost extends Error {
   }
 }
 /** A person's own engine login directory (their subscription). */
-function principalLoginDir(principalId: string, driver: SubscriptionDriver, slot: LoginSlot = "primary"): string {
-  return engineLogins?.loginDir(principalId, driver, slot) ?? join(DATA_DIR, "principals", principalId, { claudeAgent: "claude", codex: "codex", grokAgent: slot === "second" ? "grok-2" : "grok", kimiAgent: "kimi" }[driver]);
+function principalLoginDir(principalId: string, driver: SubscriptionDriver, slot: LoginSlot = "primary", instanceId?: string): string {
+  const name = { claudeAgent: "claude", codex: "codex", grokAgent: slot === "second" ? "grok-2" : "grok", kimiAgent: "kimi" }[driver];
+  // #2373: an added account (`claude-<uuid>`) has its own folder
+  return engineLogins?.loginDir(principalId, driver, slot, instanceId) ?? (separateAccountInstance(instanceId) ? join(DATA_DIR, "principals", principalId, "accounts", instanceId, name) : join(DATA_DIR, "principals", principalId, name));
 }
 /** Slice 4: the credentials of one turn on an organization server, fetched
  * at dispatch; undefined in solo mode. Throws EngineAccessLost. */
@@ -16725,6 +16781,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     desktopConnected: (person) => desktopBridges.connected(person),
     handleDesktopBridgeMcp,
     desktopBridgesRequest: (person, operation, active, onProgress) => desktopBridges.request(person, operation, active, onProgress),
+    desktopBridgeMacApps: (person) => desktopBridges.current(person)?.capabilities.macApps === true,
     bridgeAuditRecord: (row) => bridgeAudit.record(row as never),
     broadcast,
     turnWorkplace: (threadId) => turnWorkplaces.get(threadId) as never,
@@ -16739,6 +16796,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     cloudComputerRpc: (body, opts) => cloudComputerRpc(body as never, opts as never),
     cloudComputerCfg: () => cfg,
     messagesUseMessages: () => readMessagesSettings(DATA_DIR).useMessages,
+    macAppEnabled: (app) => soloMacAppEnabled(app),
+    runMacApp: (tool, args) => runMacAppCall(tool, args),
     standingGrantsAllowed,
     autoAnswerStepUp: (bot, threadId, input) => autoAnswerStepUp(bot as BotRecord, threadId, input),
     imessageSender,
@@ -22581,7 +22640,7 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
         botId: turn.botId,
         principalId: turn.principalId,
         ownerSub,
-        remoteHosts: bot?.remoteHosts,
+        remoteHosts: bot ? effectiveRemoteHosts(bot) : undefined,
         ownsHost: async (hostId) => {
           const out = await remoteBotHosts.assertOwnHost(turn.principalId, hostId);
           return !("ok" in out && out.ok === false);
@@ -24686,6 +24745,20 @@ ROUTES.push(createRemoteControlRoutes({
 ROUTES.push(createRemoteSessionFileRoutes({ sessions: remoteSessions, principalId: terminalPrincipalId }));
 ROUTES.push(createRemoteSessionsAdminRoutes({ admin: remoteSessionsAdmin, hosts: unattendedHosts, principalId: terminalPrincipalId, orgAdmin: orgAdminCaller }));
 ROUTES.push(createRemoteBotHostsRoutes({ hosts: remoteBotHosts, principalId: terminalPrincipalId }));
+ROUTES.push(createRemoteHostsRoutes({
+  principalId: terminalPrincipalId,
+  available: (principalId) => remoteBotHosts.available(principalId),
+  installCode: (principalId, options) => unattendedHosts.installCode({ principalId }, options),
+  teams: remoteHostTeams,
+  sectionsFor: (auth) => (sectionChannels
+    ? orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId())
+    : store.sections),
+  resolveSectionId: (section, auth) => {
+    if (!sectionChannels) return undefined;
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    return sectionChannels.byNameForOwner(section, owner)?.id;
+  }
+}));
 ROUTES.push(resourceUsage.route);
 
 // Live calls (GPT-Live as the voice, the bot as the brain). A client holds
@@ -24917,9 +24990,13 @@ ROUTES.push(createSidebarSectionsRoutes({
     if (sectionChannels) {
       const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
       const id = sectionChannels.byNameForOwner(section, owner)?.id;
-      return store.renameSectionForOwner(section, nextName, owner, teamComputers, id) ?? null;
+      const failed = store.renameSectionForOwner(section, nextName, owner, teamComputers, id);
+      if (!failed) remoteHostTeams.renameSection(section, nextName.trim());
+      return failed ?? null;
     }
-    return store.renameSection(section, nextName, teamComputers) ?? null;
+    const failed = store.renameSection(section, nextName, teamComputers);
+    if (!failed) remoteHostTeams.renameSection(section, nextName.trim());
+    return failed ?? null;
   },
   updateTeamMembers: (section, addBotIds, removeBotIds, sectionId) => store.updateTeamMembers(section, [...addBotIds], [...removeBotIds], sectionId),
   setBotsSection: (botIds, name, sectionId) => store.setBotsSection([...botIds], name, sectionId),

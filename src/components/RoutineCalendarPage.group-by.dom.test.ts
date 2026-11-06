@@ -164,3 +164,33 @@ describe("Automations list grouped", () => {
     expect(rowIds(botSection("atlas").querySelector('[data-routine-folder-section="Clients"]')!)).toEqual(expect.arrayContaining(["a1", "a2"]));
   });
 });
+
+// JC 2026-11-06: the Tools header standard (Team map) and a clickable crumb.
+describe("Automations header", () => {
+  it("renders the shared header: icon, title, count, subtitle, an outlined + New", async () => {
+    await mount();
+    const header = container.querySelector("[data-automations-header]")!;
+    expect(header.querySelector("[data-page-title] svg")).not.toBeNull();
+    expect(header.querySelector("h1")?.textContent).toBe("Automations");
+    expect(header.querySelector("[data-page-count]")?.textContent).toBe("4 routines");
+    expect(header.querySelector("[data-page-subtitle]")?.textContent).toBeTruthy();
+    const create = header.querySelector("[data-page-actions] summary, [data-page-actions] button:last-child");
+    expect(create?.className).toContain("border-hairline/50");
+    expect(create?.className).not.toContain("bg-accent");
+    // the List / Calendar switch sits in the toolbar row under the title
+    expect(header.querySelector("[data-page-toolbar]")?.textContent).toContain("List");
+  });
+
+  it("the parent crumb of a section brings back the Automations page", async () => {
+    await mount();
+    expect(container.querySelector("[data-automations-crumb]")).toBeNull();
+    const logs = [...container.querySelectorAll<HTMLButtonElement>("[data-automations-menu] button")].find((button) => button.textContent?.startsWith("Run logs"))!;
+    await act(async () => { logs.click(); });
+    expect(container.querySelector("[data-automations-section]")?.textContent).toBe("Run logs");
+    const crumb = container.querySelector<HTMLButtonElement>("[data-automations-crumb]")!;
+    expect(crumb.textContent).toBe("Automations");
+    await act(async () => { crumb.click(); });
+    expect(container.querySelector("[data-automations-section]")).toBeNull();
+    expect(container.querySelector("[data-automations-crumb]")).toBeNull();
+  });
+});

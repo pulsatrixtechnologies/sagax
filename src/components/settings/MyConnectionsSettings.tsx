@@ -2,11 +2,12 @@
 // Mes connexions, then Connect apps > Manage > Your connections). Their
 // GitHub account ("Connecter GitHub": a code to type at GitHub, or a
 // token), the one GitHub source of every use (GithubAccountSection), is on
-// the GitHub plugin's page since 2026-10-29; their own MCP servers, in
-// Connect apps > Providers
-// ("Ajouter un serveur MCP": an address with no sign-in, a token, OAuth
-// through this server, or their GitHub account; or a command that runs in
-// their server environment). Same routes, same storage. Only for them:
+// the GitHub plugin's page since 2026-10-29; their own MCP servers, listed
+// in Plugins > Me > Installed like every other entry since 2026-11-06
+// (plugins/PersonalServers.tsx), added from the same "+ Add" menu as the
+// organization's (an address with no sign-in, a token, OAuth through this
+// server, or their GitHub account; or a command that runs in their server
+// environment; or a pasted config). The forms live here. Only for them:
 // no other person's bot turn ever gets these
 // (server/routes/person-connections.ts). The person manages them with no
 // admin (the Sagax permission `apps.ownIntegrations`).
@@ -18,11 +19,11 @@ import { openExternalLink } from "@/lib/app-links";
 import { t } from "@/lib/i18n";
 import { readableError, retryTransient } from "@/lib/plain-error";
 import {
-  addPersonalServer, connectGithubToken, disconnectGithub, disconnectPersonalServer, GITHUB_MCP_URL, loadMyConnections, parseArgsLine,
-  parseEnvLines, removePersonalServer, setPersonalServerEnabled, startGithubDevice, startPersonalServerSignIn, suggestServerName,
-  type MyConnections, type PersonalServer,
+  addPersonalServer, connectGithubToken, disconnectGithub, GITHUB_MCP_URL, importPersonalServers, loadMyConnections, parseArgsLine,
+  parseEnvLines, startGithubDevice, suggestServerName, updatePersonalServer,
+  type MyConnections, type NewPersonalServer, type PersonalServer,
 } from "@/lib/my-connections";
-import { Card, PillSelect, Switch } from "../SettingsPrimitives";
+import { PillSelect } from "../SettingsPrimitives";
 
 const message = readableError;
 const inputClass = "w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-secondary focus:border-border-strong focus:outline-none";
@@ -30,7 +31,7 @@ const inputClass = "w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 
 /** GET /api/me/connections, asked again every two seconds while `waiting`
  * says a code or a sign-in is pending. A server restarting behind its proxy
  * (a bare 502) is asked again before anything shows. */
-function useMyConnections(initial: MyConnections | undefined, waiting: (data: MyConnections) => boolean) {
+export function useMyConnections(initial: MyConnections | undefined, waiting: (data: MyConnections) => boolean, active = true) {
   const [data, setData] = useState<MyConnections | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
   const refresh = useCallback(async () => {
@@ -44,9 +45,9 @@ function useMyConnections(initial: MyConnections | undefined, waiting: (data: My
   const preloaded = useRef(Boolean(initial));
   useEffect(() => {
     if (preloaded.current) { preloaded.current = false; return; }
-    void refresh();
-  }, [refresh]);
-  const pending = data ? waiting(data) : false;
+    if (active) void refresh();
+  }, [refresh, active]);
+  const pending = active && data ? waiting(data) : false;
   useEffect(() => {
     if (!pending) return;
     const timer = setInterval(() => { void refresh(); }, 2_000);
@@ -86,18 +87,6 @@ export function MyGithubSummary({ initial }: { initial?: MyConnections }) {
     return <>{t("myConnections.github.reconnectAs", { login: data.github.login })}</>;
   }
   return <>{t("myConnections.github.notConnected")}</>;
-}
-
-/** Connect apps > Providers: the person's own MCP servers. */
-export function MyMcpServers({ initial }: { initial?: MyConnections }) {
-  const { data, error, refresh } = useMyConnections(initial, (value) => value.servers.some((server) => server.kind === "remote" && server.authPending));
-  if (!data) return <Loading error={error} />;
-  return (
-    <div className="flex flex-col gap-3" data-my-connections>
-      <p className="text-[13px] leading-relaxed text-ink-secondary">{t("myConnections.intro")}</p>
-      <ServersCard data={data} onChanged={refresh} />
-    </div>
-  );
 }
 
 function GithubCard({ data, onChanged }: { data: MyConnections; onChanged: () => Promise<void> }) {
@@ -201,7 +190,7 @@ function GithubCard({ data, onChanged }: { data: MyConnections; onChanged: () =>
   );
 }
 
-function stateLabel(server: PersonalServer): string {
+export function stateLabel(server: PersonalServer): string {
   switch (server.authState) {
     case "connected": return t("myConnections.state.connected");
     case "ready": return t("myConnections.state.ready");
@@ -214,77 +203,26 @@ function stateLabel(server: PersonalServer): string {
   }
 }
 
-function ServersCard({ data, onChanged }: { data: MyConnections; onChanged: () => Promise<void> }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const run = async (key: string, work: () => Promise<unknown>) => {
-    setBusy(key);
-    setError(null);
-    try {
-      await work();
-      await onChanged();
-    } catch (failure) {
-      setError(message(failure));
-    } finally {
-      setBusy(null);
-    }
-  };
-  const signIn = (name: string) => run(`signin:${name}`, async () => {
-    const started = await startPersonalServerSignIn(name);
-    await openExternalLink(started.authorizationUrl);
-  });
-  return (
-    <Card cardId="myConnections.servers" title={t("myConnections.servers.title")} subtitle={t("myConnections.servers.subtitle")}>
-      <div className="flex flex-col gap-3 text-[13px]">
-        {data.servers.length === 0 && <p className="rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">{t("myConnections.servers.empty")}</p>}
-        {data.servers.length > 0 && (
-          <div className="divide-y divide-hairline/40 overflow-hidden rounded-lg border border-hairline/40">
-            {data.servers.map((server) => (
-              <div key={server.name} className="flex items-center gap-3 px-3 py-2.5" data-personal-server={server.name}>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-mono text-[12.5px] text-ink">{server.name}</div>
-                  <div className="mt-0.5 truncate text-[11.5px] text-ink-secondary">
-                    {server.kind === "remote" ? server.domain : t("myConnections.servers.runsInEnvironment", { command: server.command })}
-                    {" · "}{stateLabel(server)}
-                  </div>
-                  {server.kind === "remote" && server.authError && <div className="mt-0.5 text-[11.5px] text-danger">{server.authError}</div>}
-                </div>
-                {server.kind === "remote" && server.auth === "oauth" && server.authState !== "connected" && (
-                  <button type="button" className="ui-button" disabled={busy !== null} onClick={() => void signIn(server.name)}>{t("myConnections.servers.signIn")}</button>
-                )}
-                {server.kind === "remote" && server.auth === "oauth" && server.authState === "connected" && (
-                  <button type="button" className="ui-button" disabled={busy !== null} onClick={() => void run(`out:${server.name}`, () => disconnectPersonalServer(server.name))}>{t("myConnections.servers.signOut")}</button>
-                )}
-                <Switch checked={server.enabled} disabled={busy !== null} aria-label={t("myConnections.servers.enabled", { name: server.name })} onClick={() => void run(`toggle:${server.name}`, () => setPersonalServerEnabled(server.name, !server.enabled))} />
-                <button type="button" className="ui-button" disabled={busy !== null} onClick={() => void run(`rm:${server.name}`, () => removePersonalServer(server.name))}>{t("myConnections.servers.remove")}</button>
-              </div>
-            ))}
-          </div>
-        )}
-        {adding
-          ? <AddServerForm data={data} onDone={async () => { setAdding(false); await onChanged(); }} onCancel={() => setAdding(false)} />
-          : <div><button type="button" className="ui-button ui-button-primary" onClick={() => setAdding(true)}>{t("myConnections.servers.add")}</button></div>}
-        {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
-      </div>
-    </Card>
-  );
-}
-
 type Auth = "none" | "token" | "oauth" | "github";
 
-function AddServerForm({ data, onDone, onCancel }: { data: MyConnections; onDone: () => Promise<void>; onCancel: () => void }) {
-  const [kind, setKind] = useState<"remote" | "stdio">("remote");
-  const [name, setName] = useState("");
-  const named = useRef(false);
-  const [url, setUrl] = useState("");
-  const [auth, setAuth] = useState<Auth>("oauth");
+/** Plugins > Me > Add an MCP server, or Edit on one of the person's own
+ * rows: a remote address (no sign-in, a token, OAuth, their GitHub account)
+ * or a command in their server environment. Editing never shows the token
+ * or the variables: left empty, they are kept. */
+export function PersonalServerForm({ data, editing, onDone, onCancel }: { data: MyConnections; editing?: PersonalServer; onDone: () => Promise<void>; onCancel: () => void }) {
+  const [kind, setKind] = useState<"remote" | "stdio">(editing?.kind ?? "remote");
+  const [name, setName] = useState(editing?.name ?? "");
+  const named = useRef(Boolean(editing));
+  const [url, setUrl] = useState(editing?.kind === "remote" ? editing.url : "");
+  const [auth, setAuth] = useState<Auth>(editing?.kind === "remote" ? editing.auth : "oauth");
   const [token, setToken] = useState("");
-  const [command, setCommand] = useState("");
-  const [args, setArgs] = useState("");
+  const [command, setCommand] = useState(editing?.kind === "stdio" ? editing.command : "");
+  const [args, setArgs] = useState(editing?.kind === "stdio" ? editing.args.join(" ") : "");
   const [env, setEnv] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const keepsToken = editing?.kind === "remote" && editing.auth === "token" && editing.tokenConfigured;
+  const keepsEnv = editing?.kind === "stdio" && editing.envKeys.length > 0;
 
   const githubPreset = () => {
     setKind("remote");
@@ -297,13 +235,16 @@ function AddServerForm({ data, onDone, onCancel }: { data: MyConnections; onDone
     setError(null);
     try {
       const finalName = name.trim() || suggestServerName(kind === "remote" ? url : command);
+      let body: NewPersonalServer;
       if (kind === "remote") {
-        await addPersonalServer({ name: finalName, url: url.trim(), auth, ...(auth === "token" ? { token: token.trim() } : {}) });
+        body = { name: finalName, url: url.trim(), auth, ...(auth === "token" && token.trim() ? { token: token.trim() } : {}) };
       } else {
         const parsed = parseEnvLines(env);
         if (!parsed.ok) throw new Error(t("myConnections.add.badEnv", { line: parsed.line }));
-        await addPersonalServer({ name: finalName, command: command.trim(), args: parseArgsLine(args), env: parsed.env });
+        body = { name: finalName, command: command.trim(), args: parseArgsLine(args), env: parsed.env };
       }
+      if (editing) await updatePersonalServer(editing.name, body);
+      else await addPersonalServer(body);
       await onDone();
     } catch (failure) {
       setError(message(failure));
@@ -312,11 +253,14 @@ function AddServerForm({ data, onDone, onCancel }: { data: MyConnections; onDone
     }
   };
   return (
-    <form className="flex flex-col gap-2.5 rounded-lg bg-inset p-3" onSubmit={(event) => { event.preventDefault(); void submit(); }} data-add-personal-server>
+    <form className="mb-4 flex flex-col gap-2.5 rounded-2xl border border-hairline/60 bg-card p-4 sm:p-5" onSubmit={(event) => { event.preventDefault(); void submit(); }}
+      data-add-personal-server={editing ? undefined : ""} data-edit-personal-server={editing?.name}>
+      <div className="text-[14px] font-medium text-ink">{editing ? t("myConnections.edit.title", { name: editing.name }) : t("connectApps.manage.addServer")}</div>
+      <p className="text-[12px] leading-relaxed text-ink-secondary">{t("myConnections.servers.subtitle")}</p>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={kind === "remote" ? "ui-button ui-button-primary" : "ui-button"} onClick={() => setKind("remote")}>{t("myConnections.add.remote")}</button>
         <button type="button" className={kind === "stdio" ? "ui-button ui-button-primary" : "ui-button"} disabled={!data.sandbox} onClick={() => setKind("stdio")}>{t("myConnections.add.command")}</button>
-        <button type="button" className="ui-button" onClick={githubPreset}>{t("myConnections.add.githubPreset")}</button>
+        {!editing && <button type="button" className="ui-button" onClick={githubPreset}>{t("myConnections.add.githubPreset")}</button>}
       </div>
       <input value={name} onChange={(event) => { named.current = true; setName(event.target.value); }} placeholder={t("myConnections.add.namePlaceholder")} aria-label={t("myConnections.add.name")} className={inputClass} />
       {kind === "remote" ? (
@@ -331,7 +275,7 @@ function AddServerForm({ data, onDone, onCancel }: { data: MyConnections; onDone
               { value: "none", label: t("myConnections.auth.none") },
             ]} />
           </div>
-          {auth === "token" && <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder={t("myConnections.add.tokenPlaceholder")} aria-label={t("myConnections.auth.token")} className={inputClass} />}
+          {auth === "token" && <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder={keepsToken ? t("myConnections.edit.tokenKept") : t("myConnections.add.tokenPlaceholder")} aria-label={t("myConnections.auth.token")} className={inputClass} />}
           {auth === "oauth" && <p className="text-[12px] leading-relaxed text-ink-secondary">{t("myConnections.add.oauthHint")}</p>}
           {auth === "github" && data.github.state !== "connected" && <p className="text-[12px] leading-relaxed text-ink-secondary" data-github-auth-hint>{t("myConnections.add.githubHint")}</p>}
         </>
@@ -339,15 +283,58 @@ function AddServerForm({ data, onDone, onCancel }: { data: MyConnections; onDone
         <>
           <input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="npx" aria-label={t("myConnections.add.commandLabel")} className={inputClass} />
           <input value={args} onChange={(event) => setArgs(event.target.value)} placeholder="-y @modelcontextprotocol/server-github" aria-label={t("myConnections.add.args")} className={inputClass} />
-          <textarea value={env} onChange={(event) => setEnv(event.target.value)} rows={2} placeholder="GITHUB_PERSONAL_ACCESS_TOKEN=..." aria-label={t("myConnections.add.env")} className={inputClass} />
+          <textarea value={env} onChange={(event) => setEnv(event.target.value)} rows={2} placeholder={keepsEnv ? t("myConnections.edit.envKept", { keys: editing.envKeys.join(", ") }) : "GITHUB_PERSONAL_ACCESS_TOKEN=..."} aria-label={t("myConnections.add.env")} className={inputClass} />
           <p className="text-[12px] leading-relaxed text-ink-secondary">{t("myConnections.add.commandHint")}</p>
         </>
       )}
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" className="ui-button ui-button-primary" disabled={busy || (kind === "remote" ? !url.trim() : !command.trim())}>{t("myConnections.add.save")}</button>
+        <button type="submit" className="ui-button ui-button-primary" disabled={busy || (kind === "remote" ? !url.trim() : !command.trim())}>{editing ? t("myConnections.edit.save") : t("myConnections.add.save")}</button>
         <button type="button" className="ui-button" onClick={onCancel}>{t("myConnections.add.cancel")}</button>
       </div>
     </form>
+  );
+}
+
+/** Plugins > Me > Add > Paste config: the block the organization's import
+ * reads (mcpServers, a bare map, one entry, an address, a command line),
+ * every server added as the person's own. */
+export function PersonalImportForm({ onDone, onCancel }: { onDone: () => Promise<void>; onCancel: () => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await importPersonalServers(text);
+      setText("");
+      await onDone();
+    } catch (failure) {
+      setError(message(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mb-4 rounded-2xl border border-hairline/60 bg-card p-4 sm:p-5" data-import-personal-servers>
+      <div className="text-[14px] font-medium text-ink">{t("mcp.import")}</div>
+      <p className="mt-1 text-[12px] leading-relaxed text-ink-secondary">{t("myConnections.import.hint")}</p>
+      <textarea
+        autoFocus
+        aria-label={t("mcp.import")}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        spellCheck={false}
+        rows={8}
+        placeholder={'{\n  "mcpServers": {\n    "notes": { "command": "npx", "args": ["-y", "@example/notes-mcp"], "env": { "NOTES_TOKEN": "…" } },\n    "docs": { "type": "http", "url": "https://mcp.example.com/mcp", "headers": { "Authorization": "Bearer …" } }\n  }\n}'}
+        className="mt-3 w-full resize-y rounded-lg border border-hairline/60 bg-raised px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink outline-none focus:border-accent"
+      />
+      {error && <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p>}
+      <div className="mt-3 flex items-center justify-end gap-2">
+        <button type="button" disabled={busy} onClick={onCancel} className="rounded-lg px-3 py-2 text-[12.5px] text-ink-secondary hover:text-ink">{t("common.cancel")}</button>
+        <button type="button" disabled={busy || !text.trim()} onClick={() => void submit()} className="rounded-lg bg-accent px-3 py-2 text-[12.5px] font-medium text-accent-ink disabled:opacity-40">{t("mcp.importAction")}</button>
+      </div>
+    </div>
   );
 }

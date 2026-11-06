@@ -23,7 +23,7 @@ async function orgTurnAccess(threadId: string, bot: BotRecord, instance: { insta
     },
     invalidate: (sub, provider) => host.perspicaxDirectory?.invalidate(sub, provider),
     // the turn's own sign-in on this engine (a second Grok account runs in its own folder)
-    loginDir: (principalId, driver) => host.principalLoginDir(principalId, driver, host.turnSlotFor(bot, instance))
+    loginDir: (principalId, driver, instanceId) => host.principalLoginDir(principalId, driver, host.turnSlotFor(bot, instance), instanceId)
   });
   if (!outcome.ok) throw new host.EngineAccessLost(outcome.plan ? host.orgRefusalOf(outcome.plan, speaker) : { reason: outcome.reason }, outcome.detail);
   const { plan } = outcome;

@@ -3,6 +3,7 @@ import { t } from "./i18n";
 import type { LocaleKey } from "@/locales";
 import { currentWorkingStep } from "../../shared/working-step";
 import { workingStepLabel } from "./working-step";
+import { isBusyElsewhereWait } from "./turn-tail";
 
 // keys, not labels: t() reads the active pack when it is called, and this
 // array is built once at import time
@@ -90,6 +91,11 @@ export function liveActivityPhrases(message?: Message): LiveActivityPhrases {
     message.comm
   ) {
     return phaseOf("chat.activity.thinking");
+  }
+  // JC 2026-11-06: the wait on a member busy elsewhere, in the reader's language
+  if (isBusyElsewhereWait(message)) {
+    const name = message.from?.name ?? "";
+    return { phase: `busy-elsewhere:${name}`, phrases: [t("chat.presence.busyElsewhere", { name })] };
   }
   // 2026-10-29: the server's named step, the same on every engine
   const step = currentWorkingStep(message);

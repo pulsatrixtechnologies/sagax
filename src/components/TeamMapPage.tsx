@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, BookOpen, Box, Loader2, Monitor, Network, Plus, Save, Users, X } from "lucide-react";
+import { ArrowRight, BookOpen, Loader2, Monitor, MonitorSmartphone, Network, Plus, Save, Users, X } from "lucide-react";
 
 import { api, formatTime, openBot, openThread, useStore, type Bot } from "@/state/store";
 import {
@@ -15,7 +15,6 @@ import { cn } from "@/lib/cn";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { useCaptionChrome } from "@/components/DesktopCapabilities";
 import { placeOffered } from "@/lib/place";
-import { boatComputerEnabled } from "@/lib/feature-flags";
 import { isOwnerOrAdmin, readSessionState } from "@/lib/session";
 import { TeamCanvas } from "./TeamCanvas";
 import { TeamDialog } from "./TeamDialog";
@@ -26,6 +25,7 @@ import { DetailPanel } from "./DetailPanel";
 import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 import { t, activeLocale } from "@/lib/i18n";
 import { CanvasComputers } from "./CanvasComputers";
+import { PAGE_ACTION_BUTTON, PAGE_HEADER_BUTTON, PageHeader } from "./content-page";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
 import type { TeamComputer } from "../../shared/team-computer";
 import { useMacInsetChrome } from "./DesktopCapabilities";
@@ -256,17 +256,22 @@ export function TeamMapPage() {
   // null until the session answers: never flash Create team at a member on solo.
   const [manageTeams, setManageTeams] = useState<boolean | null>(null);
   const [adminTeams, setAdminTeams] = useState(false);
+  // Computers panel: the person's own enrolled hosts and teams, no admin.
+  const [ownComputers, setOwnComputers] = useState(false);
   const pendingMoveRef = useRef(pendingMove);
   pendingMoveRef.current = pendingMove;
   useEffect(() => () => pendingMoveRef.current?.resolve(false), []);
   // #2045: on an organization server the teams are the person's own sidebar
   // sections. They create, fill, nest and delete them without any admin
-  // right; the server-wide team computers stay with the admins (Boat cost).
+  // right. The Computers panel is theirs too (their own Unattended Remote
+  // Control hosts, /api/remote-hosts, scoped to the person); only the
+  // server-wide cloud team computers and the Local VM stay with the admins.
   const orgMode = usePerspicaxOrg() !== null;
   useEffect(() => {
     if (remoteClient) {
       setManageTeams(false);
       setAdminTeams(false);
+      setOwnComputers(false);
       return;
     }
     let alive = true;
@@ -275,11 +280,13 @@ export function TeamMapPage() {
         if (!alive) return;
         setManageTeams(canManageTeamMap(session, false, orgMode));
         setAdminTeams(isOwnerOrAdmin(session));
+        setOwnComputers(session.kind === "session" || (session.kind === "loopback" && session.trust !== "service"));
       })
       .catch(() => {
         if (!alive) return;
         setManageTeams(false);
         setAdminTeams(false);
+        setOwnComputers(false);
       });
     return () => { alive = false; };
   }, [remoteClient, orgMode]);
@@ -352,32 +359,32 @@ export function TeamMapPage() {
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-app text-ink">
       {(macInset || browser) && <div className="content-topbar-strip" />}
-      <header {...dragProps} className="content-topbar flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hairline/40 px-6 py-4 max-sm:pl-12">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <Network size={18} className="text-ink-secondary" />
-            <h1 className="text-[17px] font-semibold leading-6 tracking-[-0.008em]">{t("sidebar.nav.teamMap")}</h1>
-            <span className="ml-1 text-[11px] text-ink-secondary">{teamMapBotCount(bots.length)}</span>
-          </div>
-          <p className="mt-1 text-[12px] text-ink-secondary">{t("canvas.description")}</p>
-        </div>
-        {!remoteClient && <div style={controlsShiftStyle} className="flex items-center gap-2">
-          {adminTeams && <button onClick={() => setComputersOpen((value) => !value)} aria-label={t("settings.group.computers")} aria-expanded={computersOpen} className="flex size-9 items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary hover:bg-raised hover:text-ink"><Monitor size={16} /></button>}
-          {canEditTeams && <details className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => {
+      <PageHeader
+        name="team-map"
+        icon={Network}
+        title={t("sidebar.nav.teamMap")}
+        count={teamMapBotCount(bots.length)}
+        subtitle={t("canvas.description")}
+        {...dragProps}
+        topbar
+        actionsStyle={controlsShiftStyle}
+        actions={!remoteClient && <>
+          {ownComputers && <button onClick={() => setComputersOpen((value) => !value)} aria-label={t("settings.group.computers")} aria-expanded={computersOpen} className={PAGE_HEADER_BUTTON}><Monitor size={16} /></button>}
+          {(canEditTeams || ownComputers) && <details className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => {
             if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); }
           }}>
-            <summary aria-label={t("teamMap.addAria")} className="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 text-[12px] font-medium text-ink hover:bg-raised [&::-webkit-details-marker]:hidden"><Plus size={15} /> {t("common.add")}</summary>
+            <summary aria-label={t("teamMap.addAria")} className={PAGE_ACTION_BUTTON}><Plus size={15} /> {t("common.add")}</summary>
             <div className="absolute right-0 top-full z-40 mt-2 flex w-52 min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]" onClick={(event) => {
               const details = event.currentTarget.closest("details"); details?.querySelector("summary")?.focus(); details?.removeAttribute("open");
             }}>
-              <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => setTeamEditor({})}><Users size={16} />{t("team.create")}</button>
-              {adminTeams && boatComputerEnabled(state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => { setComputersOpen(true); setCreateComputerRequest((value) => value + 1); }}><Box size={16} />{t("teamMap.boatComputer")}</button>}
+              {canEditTeams && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => setTeamEditor({})}><Users size={16} />{t("team.create")}</button>}
+              {ownComputers && <button data-team-map-unattended="" className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => { setComputersOpen(true); setCreateComputerRequest((value) => value + 1); }}><MonitorSmartphone size={16} />{t("teamMap.unattendedComputer")}</button>}
               {/* An OMB Cloud home has no Local VM (shared/cloud-home.ts). */}
               {adminTeams && placeOffered("vm", state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => dispatch({ type: "toggleAppSettings", section: "computer", open: true })}><Monitor size={16} />{t("teamMap.localVm")}</button>}
             </div>
           </details>}
-        </div>}
-      </header>
+        </>}
+      />
       <div className="content-card-body flex min-h-0 flex-1 flex-col">
       {manageTeams === false && !orgMode && !remoteClient && <p data-team-map-admin-only className="shrink-0 border-b border-hairline/40 bg-panel px-6 py-2 text-[12px] text-ink-secondary">{t("team.adminOnly")}</p>}
       {(error || refreshError) && <div role="alert" className="flex shrink-0 items-center justify-between gap-3 border-b border-danger/20 bg-danger/10 px-6 py-2 text-[12px] text-danger">
@@ -390,13 +397,13 @@ export function TeamMapPage() {
         onComputer={(bot) => dispatch({ type: "toggleSettings", botId: bot.id, section: "access", open: true })}
         teamComputers={Object.fromEntries(computers.filter((computer) => computer.section !== null).map((computer) => [computer.section!, { name: computer.name, state: computer.state }]))}
         onTeamComputer={() => setComputersOpen(true)}
-        onComputerDrop={(id, section) => { if (adminTeams) { setComputersOpen(true); setComputerDrop({ id, section }); } }}
+        onComputerDrop={(id, section) => { if (ownComputers) { setComputersOpen(true); setComputerDrop({ id, section }); } }}
         onInstructions={(section, label) => setContextEditor({ section, label })}
         onMemory={(section, label) => setMemoryEditor({ section, label })}
         onEditTeam={(section, rename) => setTeamEditor({ section, rename })}
         onDeleteTeam={setDeletingTeam}
         isEmpty={(key) => ![...laidOut.bots, ...laidOut.groups].some((record) => record.section?.trim() === key)} />
-      {adminTeams && <CanvasComputers open={computersOpen} createRequest={createComputerRequest} drop={computerDrop} sections={sections}
+      {ownComputers && <CanvasComputers cloud={adminTeams} open={computersOpen} createRequest={createComputerRequest} drop={computerDrop} sections={sections}
         onClose={() => setComputersOpen(false)} onDropHandled={clearComputerDrop} onChange={setComputers} />}
       </div>
       {edges.length > 0 && <details className="shrink-0 border-t border-hairline/40 bg-panel px-6 py-3">

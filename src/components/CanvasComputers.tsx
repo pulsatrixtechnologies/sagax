@@ -1,20 +1,42 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Box, ExternalLink, Loader2, Monitor, Plus, RefreshCw, X } from "lucide-react";
-import { t } from "@/lib/i18n";
+import { Box, ExternalLink, Monitor, RefreshCw, X } from "lucide-react";
+import { activeLocale, t } from "@/lib/i18n";
 import { api, useStore } from "@/state/store";
 import type { TeamComputer } from "../../shared/team-computer";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { readableError } from "@/lib/plain-error";
+import { cn } from "@/lib/cn";
+import { UnattendedHostSetup } from "./remote-session/UnattendedHostSetup";
+import { unattendedHostLabel } from "./remote-session/UnattendedHostsSection";
+import { fetchRemoteHosts, placeRemoteHost, type RemoteHostCard, type RemoteHostsAnswer } from "./remote-session/remote-hosts-client";
 
 const control = "rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-40";
 const field = "w-full rounded-lg border border-hairline/60 bg-inset px-3 py-2 text-[12px] text-ink outline-none focus:border-accent";
 type Inventory = { computers: TeamComputer[]; configured: boolean; problem?: string };
+/** What can be placed on a team: a cloud computer, or an unattended host
+ * added through Unattended Remote Control (2026-11-06). */
+type Placeable = { kind: "cloud" | "host"; id: string; name: string; section: string | null };
+const cloudPlaceable = (computer: TeamComputer): Placeable => ({ kind: "cloud", id: computer.id, name: computer.name, section: computer.section });
+const hostPlaceable = (host: RemoteHostCard): Placeable => ({ kind: "host", id: host.hostId, name: unattendedHostLabel(host), section: host.section });
+const hostStatus = (host: RemoteHostCard) => host.online ? t("canvasComputers.unattended.online") : t("canvasComputers.unattended.offline");
+
+function seenLabel(iso: string | null): string {
+  if (!iso) return t("remoteSessionsAdmin.hosts.never");
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return t("remoteSessionsAdmin.hosts.never");
+  return new Intl.DateTimeFormat(activeLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hourCycle: "h23" }).format(date);
+}
 
 /** This shelf is only an owner control. Its list is read-only; every paid
- * lifecycle action is a deliberate button press, never a render effect. */
-export function CanvasComputers({ open, createRequest, drop, sections, onClose, onDropHandled, onChange }: {
+ * lifecycle action is a deliberate button press, never a render effect.
+ * Computers are added through Unattended Remote Control (an installed host,
+ * always on); existing cloud computers stay listed and placeable. */
+export function CanvasComputers({ cloud: cloudEnabled = true, open, createRequest, drop, sections, onClose, onDropHandled, onChange }: {
+  /** Server-wide cloud team computers (admin routes); a member sees only their own hosts. */
+  cloud?: boolean;
   open: boolean;
+  /** Above zero, opens the Unattended Remote Control add flow. */
   createRequest: number;
   drop: { id: string; section: string } | null;
   sections: Array<{ key: string; name: string }>;
@@ -28,26 +50,22 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
   const [error, setError] = useState("");
   const [readError, setReadError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const requestId = useRef(crypto.randomUUID());
-  const submittedName = useRef<string | null>(null);
-  const nameInput = useRef<HTMLInputElement>(null);
+  const [remote, setRemote] = useState<RemoteHostsAnswer | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const pending = useRef(false);
   const mounted = useRef(true);
   const read = useRef<AbortController | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const [assignment, setAssignment] = useState<{ computer: TeamComputer; section: string | null } | null>(null);
+  const [assignment, setAssignment] = useState<{ computer: Placeable; section: string | null } | null>(null);
   const [viewer, setViewer] = useState<{ id: string; url: string } | null>(null);
   const [heldHere, setHeldHere] = useState<string | null>(null);
   const controlLeaseId = useRef(crypto.randomUUID());
   const heldHereRef = useRef<string | null>(null);
   const shelf = useRef<HTMLElement>(null);
-  const pointer = useRef<{ id: number; x: number; y: number; moved: boolean; computer: TeamComputer; handle: HTMLElement } | null>(null);
+  const pointer = useRef<{ id: number; x: number; y: number; moved: boolean; computer: Placeable; handle: HTMLElement } | null>(null);
   const highlighted = useRef<HTMLElement | null>(null);
-  const [dragging, setDragging] = useState<{ name: string; x: number; y: number; hint: string } | null>(null);
+  const [dragging, setDragging] = useState<{ name: string; kind: Placeable["kind"]; x: number; y: number; hint: string } | null>(null);
   const clearDrag = useCallback(() => {
     const active = pointer.current;
     pointer.current = null;
@@ -73,9 +91,11 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
       keepalive: true,
     }).catch(() => {});
   }, []);
-  const requestAssignment = useCallback((computer: TeamComputer, section: string | null) => {
+  const requestAssignment = useCallback((computer: Placeable, section: string | null) => {
     if (pending.current || computer.section === section) return;
-    if (computer.section !== null && section !== null) {
+    // A cloud computer keeps one team's files and logins: unassign first. An
+    // unattended host moves straight to the new team.
+    if (computer.kind === "cloud" && computer.section !== null && section !== null) {
       setError(t("canvasComputers.moveError", { name: computer.name, team: computer.section || t("sidebar.section.general") }));
       return;
     }
@@ -101,9 +121,17 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
       highlighted.current = target;
     }
     const team = target ? sections.find((section) => section.key === target.dataset.teamKey) : null;
-    setDragging({ name: active.computer.name, x: event.clientX, y: event.clientY,
-      hint: team ? active.computer.section !== null && active.computer.section !== team.key
+    setDragging({ name: active.computer.name, kind: active.computer.kind, x: event.clientX, y: event.clientY,
+      hint: team ? active.computer.kind === "cloud" && active.computer.section !== null && active.computer.section !== team.key
         ? t("canvasComputers.hint.unassignFirst") : t("canvasComputers.hint.assign", { team: team.name }) : t("canvasComputers.hint.drop") });
+  };
+  const grab = (event: ReactPointerEvent<HTMLDivElement>, computer: Placeable) => {
+    if (pending.current || pointer.current || event.button !== 0 || !event.isPrimary) return;
+    event.currentTarget.focus({ preventScroll: true });
+    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, computer, handle: event.currentTarget };
+    // This handle has no click action. Capture immediately so the
+    // first movement can leave the narrow shelf without losing it.
+    event.currentTarget.setPointerCapture(event.pointerId);
   };
   const dragEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
     const active = pointer.current;
@@ -119,17 +147,25 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
     read.current = controller;
     setLoading(true);
     try {
-      const value: Inventory = await api("/api/team-computers", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
+      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]);
+      const [cloud, hosts] = await Promise.allSettled([cloudEnabled ? api<Inventory>("/api/team-computers", { signal }) : Promise.resolve(null), fetchRemoteHosts(signal)]);
       if (controller.signal.aborted || !mounted.current) return;
-      setInventory(value);
-      setReadError("");
-      onChangeRef.current(value.computers);
+      const value = cloud.status === "fulfilled" ? cloud.value : null;
+      const placed = hosts.status === "fulfilled" ? hosts.value : null;
+      if (value) setInventory(value);
+      if (placed) setRemote(placed);
+      const failed = cloud.status === "rejected" ? cloud.reason : hosts.status === "rejected" ? hosts.reason : null;
+      setReadError(failed ? readableError(failed) : "");
+      onChangeRef.current([
+        ...(placed?.hosts ?? []).filter((host) => host.state === "enrolled").map((host): TeamComputer => ({ id: host.hostId, name: unattendedHostLabel(host), section: host.section, state: hostStatus(host), held: false })),
+        ...(value?.computers ?? []),
+      ]);
     } catch (cause) {
       if (!controller.signal.aborted && mounted.current) setReadError(readableError(cause));
     } finally {
       if (!controller.signal.aborted && mounted.current) setLoading(false);
     }
-  }, []);
+  }, [cloudEnabled]);
   useEffect(() => {
     mounted.current = true;
     void refresh();
@@ -141,20 +177,20 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
     const timer = window.setInterval(() => { if (!pending.current && document.visibilityState === "visible") void refresh(); }, 20_000);
     return () => window.clearInterval(timer);
   }, [open, refresh]);
-  useEffect(() => { if (createRequest > 0) setCreating(true); }, [createRequest]);
   useEffect(() => {
     if (!open) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButton.current?.focus();
     return () => { if (opener?.isConnected) opener.focus(); };
   }, [open]);
-  useEffect(() => { if (open && creating) nameInput.current?.focus(); }, [open, creating]);
   useEffect(() => {
     if (!drop) return;
-    const computer = inventory?.computers.find((item) => item.id === drop.id);
-    if (computer) requestAssignment(computer, drop.section);
+    const cloud = inventory?.computers.find((item) => item.id === drop.id);
+    const host = remote?.hosts.find((item) => item.hostId === drop.id);
+    if (cloud) requestAssignment(cloudPlaceable(cloud), drop.section);
+    else if (host) requestAssignment(hostPlaceable(host), drop.section);
     onDropHandled();
-  }, [drop, inventory, onDropHandled, requestAssignment]);
+  }, [drop, inventory, remote, onDropHandled, requestAssignment]);
 
   const mutate = async (key: string, action: () => Promise<unknown>, success?: (value: any) => void, failure?: () => void) => {
     if (pending.current) return;
@@ -189,31 +225,27 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         <p className="text-[12px] leading-relaxed text-ink-secondary">{t("canvasComputers.intro")}</p>
         {(error || readError || inventory?.problem) && <p role="alert" className="rounded-lg bg-danger/10 p-3 text-[12px] text-danger">{error || readError || inventory?.problem}</p>}
-        {inventory && !inventory.configured && <div className="rounded-xl border border-hairline/50 p-3 text-[12px]">
-          <p className="text-ink-secondary">{t("canvasComputers.needsBoat")}</p>
-          <button className={`${control} mt-2 border border-hairline/50`} onClick={settings}>{t("canvasComputers.connectBoat")}</button>
-        </div>}
-        {creating ? <form className="space-y-3 rounded-xl border border-hairline/60 bg-card p-3" onSubmit={(event) => {
-          event.preventDefault();
-          const value = submittedName.current ?? name.trim();
-          if (!value || !inventory?.configured) return;
-          submittedName.current = value;
-          void mutate("create", () => api("/api/team-computers", { method: "POST", body: JSON.stringify({ name: value, requestId: requestId.current, acknowledgeCost: true }) }), () => {
-            setName(""); setCreating(false); requestId.current = crypto.randomUUID(); submittedName.current = null;
-          }, () => {
-            submittedName.current = null;
-          });
-        }}>
-          <label className="block text-[12px] font-medium" htmlFor="canvas-computer-name">{t("canvasComputers.newCloud")}</label>
-          <input ref={nameInput} id="canvas-computer-name" className={field} value={name} maxLength={60} placeholder={t("canvasComputers.namePlaceholder")} disabled={busy !== null || submittedName.current !== null} onChange={(event) => setName(event.target.value)} />
-          <p className="text-[11px] leading-relaxed text-ink-secondary">{t("canvasComputers.createNote")}</p>
-          <div className="flex justify-end gap-1">
-            <button type="button" className={control} disabled={busy !== null} onClick={() => setCreating(false)}>{t("common.cancel")}</button>
-            <button type="submit" className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-[12px] font-medium text-accent-ink disabled:opacity-40" disabled={!inventory?.configured || !name.trim() || busy !== null}>
-              {busy === "create" && <Loader2 size={13} className="animate-spin" />}{t("canvasComputers.create")}
-            </button>
+        <UnattendedHostSetup available={remote?.available ?? true} reason={remote?.reason} startRequest={createRequest} disabled={busy !== null} onIssued={() => void refresh()} />
+        {remote?.hosts.filter((host) => host.state === "enrolled").map((host) => {
+          const item = hostPlaceable(host);
+          return <article key={host.hostId} data-remote-host-id={host.hostId} className="rounded-xl border border-hairline/60 bg-card p-3">
+          <div data-computer-drag-id={host.hostId} role="group" tabIndex={-1} aria-label={t("canvasComputers.dragAria", { name: item.name })}
+            onPointerDown={(event) => grab(event, item)} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={clearDrag}
+            onLostPointerCapture={() => { if (pointer.current) clearDrag(); }}
+            className="flex touch-none select-none cursor-grab items-center gap-2.5 rounded-lg py-1 outline-none active:cursor-grabbing">
+            <span className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-control text-ink-secondary"><Monitor size={18} />
+              <span data-remote-host-online={host.online ? "true" : "false"} className={cn("absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-card", host.online ? "bg-success" : "bg-ink-secondary/50")} /></span>
+            <span className="min-w-0"><span className="block truncate text-[13px] font-medium" title={host.hostId}>{item.name}</span>
+              <span className="block text-[11px] text-ink-secondary">{t("canvasComputers.unattended.stateLine", { status: busy === host.hostId ? t("canvasComputers.updating") : hostStatus(host) })}</span>
+              <span className="block truncate text-[10px] text-ink-secondary">{[host.org, t(`remoteSessionsAdmin.hosts.scope.${host.scope}`), t("canvasComputers.unattended.seen", { time: seenLabel(host.lastSeenAt) })].filter(Boolean).join(" · ")}</span></span>
           </div>
-        </form> : <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-hairline/60 px-3 py-3 text-[12px] text-ink-secondary hover:bg-control hover:text-ink" disabled={busy !== null} onClick={() => setCreating(true)}><Plus size={14} /> {t("canvasComputers.newCloud")}</button>}
+          <label className="sr-only" htmlFor={`computer-team-${host.hostId}`}>{t("canvasComputers.teamFor", { name: item.name })}</label>
+          <select id={`computer-team-${host.hostId}`} className={`${field} mt-3`} disabled={busy !== null} value={host.section === null ? "unassigned" : `team:${host.section}`}
+            onChange={(event) => requestAssignment(item, event.target.value === "unassigned" ? null : event.target.value.slice(5))}>
+            <option value="unassigned">{t("canvasComputers.notAssigned")}</option>
+            {sections.map((section) => <option key={section.key} value={`team:${section.key}`}>{section.name}</option>)}
+          </select>
+        </article>; })}
         {inventory?.computers.map((computer) => {
           const ready = ["idle", "ready", "running"].includes(computer.state);
           const starting = ["init", "provisioning", "provisioned", "cloning", "starting"].includes(computer.state);
@@ -221,14 +253,7 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
           const held = computer.held || heldHereNow;
           return <article key={computer.id} data-computer-id={computer.id} className="rounded-xl border border-hairline/60 bg-card p-3">
           <div data-computer-drag-id={computer.id} role="group" tabIndex={-1} aria-label={t("canvasComputers.dragAria", { name: computer.name })}
-            onPointerDown={(event) => {
-              if (pending.current || pointer.current || event.button !== 0 || !event.isPrimary) return;
-              event.currentTarget.focus({ preventScroll: true });
-              pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, computer, handle: event.currentTarget };
-              // This handle has no click action. Capture immediately so the
-              // first movement can leave the narrow shelf without losing it.
-              event.currentTarget.setPointerCapture(event.pointerId);
-            }} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={clearDrag}
+            onPointerDown={(event) => grab(event, cloudPlaceable(computer))} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={clearDrag}
             onLostPointerCapture={() => { if (pointer.current) clearDrag(); }}
             className="flex touch-none select-none cursor-grab items-center gap-2.5 rounded-lg py-1 outline-none active:cursor-grabbing">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-control text-ink-secondary"><Box size={18} /></span>
@@ -237,7 +262,7 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
           {computer.problem && <p className="mt-2 text-[11px] text-danger">{computer.problem}</p>}
           <label className="sr-only" htmlFor={`computer-team-${computer.id}`}>{t("canvasComputers.teamFor", { name: computer.name })}</label>
           <select id={`computer-team-${computer.id}`} className={`${field} mt-3`} disabled={busy !== null} value={computer.section === null ? "unassigned" : `team:${computer.section}`}
-            onChange={(event) => requestAssignment(computer, event.target.value === "unassigned" ? null : event.target.value.slice(5))}>
+            onChange={(event) => requestAssignment(cloudPlaceable(computer), event.target.value === "unassigned" ? null : event.target.value.slice(5))}>
             <option value="unassigned">{t("canvasComputers.notAssigned")}</option>
             {sections.filter((section) => computer.section === null || section.key === computer.section).map((section) => <option key={section.key} value={`team:${section.key}`}>{section.name}</option>)}
           </select>
@@ -260,22 +285,25 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
           {viewer?.id === computer.id && <a href={viewer.url} target="_blank" rel="noopener noreferrer" className="mt-2 block rounded-lg px-3 py-2 text-[12px] text-accent hover:bg-control">{t("canvasComputers.openSecure")}</a>}
         </article>; })}
       </div>
-      <footer className="border-t border-hairline/40 p-3"><button className={`${control} w-full text-left`} onClick={settings}>{t("canvasComputers.footer")}</button></footer>
+      {cloudEnabled && <footer className="border-t border-hairline/40 p-3"><button className={`${control} w-full text-left`} onClick={settings}>{t("canvasComputers.footer")}</button></footer>}
     </aside>}
     {dragging && createPortal(<div role="status" className="pointer-events-none fixed z-[70] rounded-xl border border-accent/40 bg-card px-4 py-3 text-[12px] text-ink shadow-xl" style={{ left: dragging.x + 14, top: dragging.y + 14 }}>
-      <span className="flex items-center gap-2"><Box size={15} />{dragging.name}</span>
+      <span className="flex items-center gap-2">{dragging.kind === "host" ? <Monitor size={15} /> : <Box size={15} />}{dragging.name}</span>
       <p className="mt-1 text-[10px] text-ink-secondary">{dragging.hint}</p>
     </div>, document.body)}
     <ConfirmDialog open={assignment !== null} tone="neutral" title={assignment?.section === null ? t("canvasComputers.dialog.unassignTitle", { name: assignment?.computer.name ?? t("canvasComputers.fallbackName") }) : t("canvasComputers.dialog.assignTitle", { name: assignment?.computer.name ?? t("canvasComputers.fallbackName"), team: assignment?.section || t("sidebar.section.general") })}
-      body={assignment?.section === null
-        ? t("canvasComputers.dialog.unassignBody")
-        : t("canvasComputers.dialog.assignBody")}
+      body={assignment?.computer.kind === "host"
+        ? assignment.section === null ? t("canvasComputers.dialog.hostUnassignBody") : t("canvasComputers.dialog.hostAssignBody")
+        : assignment?.section === null
+          ? t("canvasComputers.dialog.unassignBody")
+          : t("canvasComputers.dialog.assignBody")}
       confirmLabel={assignment?.section === null ? t("canvasComputers.dialog.unassignConfirm") : t("canvasComputers.dialog.assignConfirm")} onCancel={cancelAssignment} onConfirm={() => {
         const target = assignment;
         if (!target) return;
         setAssignment(null);
         setViewer(null);
-        void mutate(target.computer.id, () => api(`/api/team-computers/${encodeURIComponent(target.computer.id)}`, { method: "PATCH", body: JSON.stringify({ section: target.section, acknowledgeSharedAccess: true }) }));
+        if (target.computer.kind === "host") void mutate(target.computer.id, () => placeRemoteHost(target.computer.id, target.section));
+        else void mutate(target.computer.id, () => api(`/api/team-computers/${encodeURIComponent(target.computer.id)}`, { method: "PATCH", body: JSON.stringify({ section: target.section, acknowledgeSharedAccess: true }) }));
       }} />
   </>;
 }

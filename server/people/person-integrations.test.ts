@@ -64,7 +64,8 @@ function connectionRoutes(denied: Set<string>, calls: string[]): RouteHandler {
     },
     servers: {
       list: async () => [{ name: "notes", kind: "remote", type: "http", url: "https://mcp.example.test/mcp", domain: "mcp.example.test", auth: "oauth", tokenConfigured: false, enabled: true, addedAt: 1 } as never],
-      add: async () => { calls.push("add"); },
+      add: async (_principalId, body) => { calls.push(`add:${(body as { name?: string }).name ?? ""}`); },
+      update: async (_principalId, name) => { calls.push(`update:${name}`); },
       setEnabled: async () => { calls.push("toggle"); },
       remove: async () => { calls.push("remove"); },
       oauthStart: async () => { calls.push("signin"); return { status: 200, body: { authorizationUrl: "https://idp.example.test/a", redirectUri: "http://localhost/cb" } }; },
@@ -84,6 +85,8 @@ describe("Mes connexions and apps.ownIntegrations", () => {
     for (const [method, path, body] of [
       ["POST", "/api/me/mcp/servers", { name: "gh", url: "https://api.githubcopilot.com/mcp/", auth: "github" }],
       ["PATCH", "/api/me/mcp/servers/notes", { enabled: false }],
+      ["PUT", "/api/me/mcp/servers/notes", { name: "notes", url: "https://mcp.example.test/mcp", auth: "oauth" }],
+      ["POST", "/api/me/mcp/servers/import", { json: "https://mcp.example.test/other" }],
       ["DELETE", "/api/me/mcp/servers/notes", undefined],
       ["POST", "/api/me/mcp/servers/notes/oauth/disconnect", {}],
     ] as const) {
@@ -117,7 +120,29 @@ describe("Mes connexions and apps.ownIntegrations", () => {
     expect((await send(base, "PATCH", "/api/me/mcp/servers/notes", { enabled: false })).status).toBe(200);
     expect((await send(base, "DELETE", "/api/me/mcp/servers/notes")).status).toBe(200);
     expect((await send(base, "DELETE", "/api/me/github")).status).toBe(200);
-    expect(calls).toEqual(["device", "token", "add", "toggle", "remove", "disconnect"]);
+    expect(calls).toEqual(["device", "token", "add:gh", "toggle", "remove", "disconnect"]);
+  });
+
+  it("Paste config and edit under Me: the person's own servers, no admin", async () => {
+    const calls: string[] = [];
+    const base = await serve([connectionRoutes(new Set(), calls)], member("pr_bob"));
+    const pasted = await send(base, "POST", "/api/me/mcp/servers/import", { json: JSON.stringify({ mcpServers: {
+      wiki: { url: "https://wiki.example.test/mcp", headers: { Authorization: "Bearer x" } },
+      files: { command: "npx", args: ["-y", "files-mcp"] },
+    } }) });
+    expect(pasted.status).toBe(201);
+    expect(pasted.body.added).toEqual(["wiki", "files"]);
+    expect(calls).toEqual(["add:wiki", "add:files"]);
+    // a name already taken is refused before anything is added
+    calls.length = 0;
+    const taken = await send(base, "POST", "/api/me/mcp/servers/import", { json: JSON.stringify({ notes: { url: "https://n.example.test/mcp" } }) });
+    expect(taken.status).toBe(409);
+    expect(calls).toEqual([]);
+    expect((await send(base, "POST", "/api/me/mcp/servers/import", { json: "" })).status).toBe(400);
+    expect((await send(base, "POST", "/api/me/mcp/servers/import", { json: "{ not json" })).status).toBe(400);
+    const edited = await send(base, "PUT", "/api/me/mcp/servers/notes", { name: "notes", url: "https://mcp.example.test/v2", auth: "oauth" });
+    expect(edited.status).toBe(200);
+    expect(calls).toEqual(["update:notes"]);
   });
 });
 

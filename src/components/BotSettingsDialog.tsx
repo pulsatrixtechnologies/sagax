@@ -65,7 +65,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 }) {
   const advanced = useAdvancedMode();
   const dispatch = useStoreDispatch();
-  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored }), shallowEqual);
+  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored, codingChat: current.codingChat }), shallowEqual);
   const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
@@ -90,8 +90,16 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // an organization server's bots act as Perspicax roles: a recent refusal
   // shows as one row in Activity > Permissions
   const rolesOn = Boolean(state.config?.viewer?.role);
-  const panelTabs = visiblePanelTabs({ advanced, computerOff });
+  // The Coding tab shows only while this bot's coding chat is the open
+  // conversation (JC 2026-11-06); leaving it, a Coding pick falls back to
+  // Activity.
+  const codingChatKey = state.codingChat?.botId === bot.id ? state.codingChat.itemId : null;
+  const panelTabs = visiblePanelTabs({ advanced, computerOff, coding: codingChatKey !== null });
   const tab: PanelTab = panelTabs.includes(pickedTab) ? pickedTab : "activity";
+  // Opening a coding chat brings its tab forward, where its session is.
+  useEffect(() => {
+    if (codingChatKey !== null) dispatch({ type: "pickBotPanelTab", botId: bot.id, tab: "coding" });
+  }, [codingChatKey, bot.id, dispatch]);
   // the Library holds the bot's files (an achievement teaches it)
   useEffect(() => {
     if (tab === "library" && !computerView) reportAchievement("files.opened");
@@ -110,6 +118,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // Compact head: once the in-flow tabs reach the top bar, they move into it.
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const codingHost = useCallback((element: HTMLDivElement | null) => setCodingPanelHost(bot.id, element), [bot.id]);
+  const codingActivityHost = useCallback((element: HTMLDivElement | null) => setCodingPanelHost(bot.id, element, "activity"), [bot.id]);
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [compact, setCompact] = useState(false);
   const onBodyScroll = () => {
@@ -358,9 +367,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
               {tab === "activity" && (
                 <div className="flex flex-col gap-5 px-4 pb-6">
-                  {/* #2285: an open coding window puts its session and its
-                      dev pods here, as sections of this panel. */}
-                  <div ref={codingHost} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
+                  {/* #2285: an open coding window's pods that are not coding
+                      work of their own (Connectors) stay here. */}
+                  <div ref={codingActivityHost} data-coding-activity-host="" className="flex flex-col gap-5 empty:hidden" />
                   <section data-bot-settings-section="routines" className="flex flex-col gap-2">
                     <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped upcoming createRequest={meetingRequest} />
                   </section>
@@ -390,6 +399,15 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               )}
 
               {tab === "library" && <LibraryTab bot={bot} />}
+
+              {/* #2285, JC 2026-11-06: the open coding chat's session
+                  (Status, Duration, Tokens) and dev pods (Environment,
+                  Context, Changes, Background tasks, Outputs). */}
+              {tab === "coding" && (
+                <div data-bot-panel-coding="" className="flex flex-col gap-5 px-4 pb-6">
+                  <div ref={codingHost} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
+                </div>
+              )}
             </>
           )}
 

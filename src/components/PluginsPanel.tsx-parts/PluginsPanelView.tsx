@@ -20,7 +20,8 @@ import {
   McpReservedServers,
   McpServerEditor,
 } from "../McpServersPanel";
-import { MyGithubSummary, MyMcpServers } from "../settings/MyConnectionsSettings";
+import { MyGithubSummary } from "../settings/MyConnectionsSettings";
+import { usePersonalMcp } from "../plugins/PersonalServers";
 import { ConnectAppsView, connectAppsTabLabel, connectedCounts, type ConnectAppsTab } from "../plugins/ConnectAppsView";
 import type { Crumb } from "../Breadcrumb";
 import { CATEGORY_MODAL } from "../category-modal";
@@ -56,7 +57,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     search, setSearch, openedGroups, setOpenedGroups, activeResult, setActiveResult, filter, setFilter,
     type, setType, tab, setTab, harness,
     ownerOrAdmin, libraryEditor, perspicaxOrg, organization, dataCenterFor, setDataCenterFor,
-    messagesSetup, skills, setInstalling, panelError, setPanelError, panelNotice,
+    macAppsVisible, macAppsSetup, skills, setInstalling, panelError, setPanelError, panelNotice,
     scopeBot, setScopeChoice, scope, scopedPluginView, orgRevision, botCapabilities, botView,
     skillsLibraryOn, close, revealLater, shownMarketplaces, grokConfigured, items, scopedItems,
     refreshAll, refreshing, chooseTab, setMarketplaces, loadSkills, loadFeatured,
@@ -67,6 +68,10 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     uninstallForBot, updatePlugin, renderAction, renderBelow, botBusy, removeSuperseded,
   } = a;
   const marketBusy = s.marketBusy;
+  // Me on an organization server: the person's own MCP servers, rows of
+  // Installed and the same "+ Add" flows as Organization (2026-11-06)
+  const personalHere = scope === "me" && Boolean(organization);
+  const personal = usePersonalMcp(personalHere);
   const marketError = s.marketError;
   const marketNeedsToken = s.marketNeedsToken;
 
@@ -318,8 +323,14 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
 
   // one "+ Add" menu (#2104): the server, the pasted config, the skill; an
   // entry shows only where it may act. It sits in Manage's title row.
+  // Me offers the same entries as Organization (2026-11-06): on an
+  // organization server they add the person's own servers, on a solo
+  // installation the installation's (which are the person's).
   const addActions = [
-    ...(scope === "workspace" && !mcp.restricted ? [
+    ...(personalHere ? [
+      { id: "server", label: t("connectApps.manage.addServer"), icon: <KeyRound size={14} />, onPick: personal.startAdd, disabled: personal.busy },
+      { id: "paste", label: t("mcp.import"), icon: <ClipboardPaste size={14} />, onPick: personal.startImport, disabled: personal.busy },
+    ] : (scope === "workspace" || scope === "me") && !mcp.restricted ? [
       { id: "server", label: t("connectApps.manage.addServer"), icon: <KeyRound size={14} />, onPick: mcp.startAdd, disabled: mcp.busy !== null },
       { id: "paste", label: t("mcp.import"), icon: <ClipboardPaste size={14} />, onPick: mcp.toggleImport, disabled: mcp.busy !== null },
     ] : []),
@@ -360,11 +371,12 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           // the one refresh (#2104): plugins, servers, skills, and the engine
           // accounts' connectors, together
           refreshing={refreshing || harness.loading}
-          onRefresh={() => { refreshAll(); void harness.load(true); }}
+          onRefresh={() => { refreshAll(); void harness.load(true); if (personalHere) void personal.refresh(); }}
           installed={(
             <InstalledView
               loading={mcp.servers === null}
               entries={entries}
+              personal={personalHere ? personal.rows : undefined}
               resolved={scope === "bot" ? botCapabilities.data : undefined}
               resolvedError={scope === "bot" && !botCapabilities.data ? botCapabilities.error : null}
               onRetryResolved={() => void botCapabilities.reload()}
@@ -389,20 +401,22 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               // at the end (#2104: Grok Bot's Manage opens on the list)
               organizationAdmin={scope === "workspace" && orgHere ? <OrgCapabilitiesAdmin /> : undefined}
               onDiscover={() => setTab("discover")}
-              macApps={scope !== "bot" ? (
+              macApps={scope !== "bot" && macAppsVisible ? (
                 <MacAppsInstalledSection
-                  onOpenMessages={() => { setTab("installed"); push({ page: "mac-messages" }); }}
-                  messagesEnabled={messagesSetup?.useMessages}
+                  status={macAppsSetup}
+                  onOpen={(app) => {
+                    setTab("installed");
+                    push(app === "messages" ? { page: "mac-messages" } : { page: "mac-app", app });
+                  }}
                 />
               ) : undefined}
               accounts={{ sections: accountSections, refreshing: harness.loading, onRefresh: () => void harness.load(true), onSetUp: setUpEngine, onOpen: openAccount }}
               providers={(
                 <AccountsView
-                  servers={organization ? <MyMcpServers /> : undefined}
                   claudeCode={!organization && canEditConfig(state.config) ? <ClaudeCodeSwitches /> : undefined}
                 />
               )}
-              forms={scope === "workspace" ? (
+              forms={scope === "workspace" || (scope === "me" && !personalHere) ? (
                 <>
                   {/* lot 4: the organization's declarations, owned by Perspicax */}
                   {mcp.restricted && mcp.policy && <p role="status" className="mb-3 text-[12.5px] leading-relaxed text-ink-secondary">{t("policy.mcpRestricted", { organization: mcp.policy.organizationName })}</p>}
@@ -411,7 +425,12 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
                   <McpImportForm mcp={mcp} />
                   {mcp.editing === "new" && <div className="mb-4"><McpServerEditor mcp={mcp} /></div>}
                 </>
-              ) : scope === "me" && perspicaxOrg !== null ? <OrgCapabilitiesForMe key={orgRevision ?? ""} /> : undefined}
+              ) : personalHere ? (
+                <>
+                  {personal.forms}
+                  {perspicaxOrg !== null && <OrgCapabilitiesForMe key={orgRevision ?? ""} />}
+                </>
+              ) : undefined}
             />
           )}
           discover={(

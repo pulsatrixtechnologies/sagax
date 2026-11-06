@@ -39,21 +39,30 @@ export function useChatWindow(): ChatWindowContextValue | null {
   return useContext(ChatWindowContext);
 }
 
-/** The pill in a window's header (CodingChat, ExchangeSheet): a button that
- * toggles the bot panel when the window sits over a chat, a label otherwise. */
+/** The one chat pill (JC 2026-11-06, hotfix 0.8.57): 40px, hairline border,
+ * mascot then "Name · Title" on one line. The bot chat, a group, a split
+ * pane, a coding chat, a bot-to-bot conversation and a routine run all draw
+ * it with this class, centered in ChatHeaderBar. */
+export const CHAT_PILL_CLASS = "flex h-10 min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5";
+const CHAT_PILL_HOVER = "transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
+
+/** The pill in a window's header (CodingChat, ExchangeSheet): the same pill
+ * as the bot chat; a button that toggles the bot panel when the window sits
+ * over a chat, a label otherwise. */
 export function WindowHeaderPill({ children, label }: { children: ReactNode; label: string }) {
   const chat = useChatWindow();
-  const className = "flex items-center gap-1.5 rounded-full bg-elevated px-3 py-1.5";
-  if (!chat) return <div data-window-pill="" className={className}>{children}</div>;
+  const className = CHAT_PILL_CLASS;
+  if (!chat) return <div data-window-pill="" data-chat-pill="" className={className}>{children}</div>;
   return (
     <button
       type="button"
       data-window-pill=""
+      data-chat-pill=""
       onClick={(event) => { event.stopPropagation(); chat.onTogglePanel(); }}
       aria-expanded={chat.panelOpen}
       aria-label={chat.panelOpen ? t("chat.closePanelAria", { name: label }) : t("chat.openPanelAria", { name: label })}
       title={chat.panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
-      className={cn(className, "transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}
+      className={cn(className, CHAT_PILL_HOVER)}
     >
       {children}
     </button>
@@ -66,7 +75,7 @@ export function WindowHeaderPill({ children, label }: { children: ReactNode; lab
  * ellipsis for the whole line when it is too long (JC 2026-11-06: one line,
  * never the title stacked under the name).
  */
-function PillName({ name, label, weight }: { name: string; label?: string; weight: string }) {
+export function PillName({ name, label, weight }: { name: string; label?: string; weight: string }) {
   const tag = label?.trim();
   return (
     // One line, ellipsis when it does not fit (a group named after its
@@ -95,8 +104,9 @@ export function BotHeaderPill({ name, label, panelOpen, onToggle, avatar }: {
     <button
       type="button"
       onClick={onToggle}
+      data-chat-pill=""
       data-bot-header-pill=""
-      className="flex h-10 min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5 transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+      className={cn(CHAT_PILL_CLASS, CHAT_PILL_HOVER)}
       title={panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
       aria-label={panelOpen ? t("chat.closePanelAria", { name }) : t("chat.openPanelAria", { name })}
       aria-expanded={panelOpen}
@@ -136,8 +146,9 @@ export function BotChatHeader({ name, label, panelOpen, onToggle, avatar }: {
       <button
         type="button"
         onClick={onToggle}
+        data-chat-pill=""
         data-bot-header-pill=""
-        className="flex h-10 min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5 transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        className={cn(CHAT_PILL_CLASS, CHAT_PILL_HOVER)}
         title={panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
         aria-label={panelOpen ? t("chat.closePanelAria", { name }) : t("chat.openPanelAria", { name })}
         aria-expanded={panelOpen}

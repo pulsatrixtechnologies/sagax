@@ -105,23 +105,30 @@ describe("the Achievements page", () => {
     expect(host.querySelector("[data-achievements-empty]")!.textContent).toBe("No achievement matches these filters.");
   });
 
-  it("the ☰ menu opens the settings and comes back to the same category; Escape leaves the settings first", () => {
+  it("the ☰ menu and the header gear open the settings modal over the same category; Escape closes it first", () => {
     choose("streaks");
     click(host.querySelector<HTMLButtonElement>("[data-achievements-menu-settings]")!);
-    expect(host.querySelector("[data-achievements-settings-page]")).not.toBeNull();
-    expect(host.querySelector("[data-achievement-grid]")).toBeNull();
-    expect(host.querySelector("[data-achievements-section]")!.textContent).toBe("Settings");
+    const dialog = document.querySelector("[data-achievements-settings-dialog]");
+    expect(dialog).not.toBeNull();
+    expect(dialog!.getAttribute("role")).toBe("dialog");
+    // a modal over the page: the grid stays, no "› Settings" sub-page in the header
+    expect(host.querySelector("[data-achievement-grid]")).not.toBeNull();
+    expect(host.querySelector("[data-achievements-section]")).toBeNull();
     // the six settings are there: the title, then five switches
-    const settings = host.querySelector("[data-achievements-settings-page]")!;
+    const settings = dialog!.querySelector("[data-achievements-settings-page]")!;
     expect(settings.querySelector('[data-settings-row="achievements.title"]')).not.toBeNull();
     for (const label of ["Show my points", "Show my title", "Show my points to colleagues", "Unlock banners", "System notification in the background"]) {
       expect(settings.querySelector(`[aria-label="${label}"]`), label).not.toBeNull();
     }
-    // Escape: back to the list, on the same category
-    flushSync(() => { host.querySelector("[data-achievements-screen]")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
-    expect(host.querySelector("[data-achievements-settings-page]")).toBeNull();
+    // Escape closes the modal first, the category stays
+    flushSync(() => { dialog!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(document.querySelector("[data-achievements-settings-dialog]")).toBeNull();
     expect(cards()).toEqual(ACHIEVEMENTS.filter((item) => item.category === "streaks").map((item) => item.id));
-    click(host.querySelector<HTMLButtonElement>("[data-achievements-menu-settings]")!);
+    // the header gear opens the same modal; its close button closes it
+    click(host.querySelector<HTMLButtonElement>("[data-achievements-settings-open]")!);
+    expect(document.querySelector("[data-achievements-settings-dialog]")).not.toBeNull();
+    click(document.querySelector<HTMLButtonElement>("[data-achievements-settings-dialog] button[aria-label]")!);
+    expect(document.querySelector("[data-achievements-settings-dialog]")).toBeNull();
     click(host.querySelector<HTMLButtonElement>("[data-achievements-menu-list]")!);
     expect(select().value).toBe("streaks");
   });

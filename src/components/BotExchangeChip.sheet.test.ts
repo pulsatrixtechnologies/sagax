@@ -116,6 +116,21 @@ describe("BotExchangeChip sheet", () => {
     expect(host.querySelector("[data-testid=bot-exchange-sheet]")).toBeNull();
   });
 
+  it("floats the bot chat's bar and fades: the 40px pill centered, the transcript under it (JC 2026-11-06)", async () => {
+    await act(async () => {
+      root.render(createElement(BotExchangeChip, { run: run(), onGo: () => false }));
+    });
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-testid=bot-exchange-chip]")!.click());
+    const sheet = host.querySelector("[data-testid=bot-exchange-sheet]")!;
+    const bar = sheet.querySelector<HTMLElement>("[data-chat-header-bar][data-exchange-header]")!;
+    expect(bar.className).toMatch(/absolute inset-x-0 top-0/);
+    expect(bar.querySelector('[data-chat-edge-fade="top"]')).not.toBeNull();
+    expect(bar.querySelector("[data-chat-header-center] [data-chat-pill]")?.className).toMatch(/h-10/);
+    expect(bar.querySelector("[data-testid=bot-exchange-close]")).not.toBeNull();
+    expect(sheet.querySelector("[data-testid=bot-exchange-scroll]")?.className).toMatch(/pt-\[52px\]/);
+    expect(sheet.querySelector('[data-chat-bottom-edge] [data-chat-edge-fade="bottom"]')).not.toBeNull();
+  });
+
   it("says Fermer in French", async () => {
     await loadLocale("fr");
     try {

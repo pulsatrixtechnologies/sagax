@@ -3,7 +3,7 @@
 // types, and the arrow keys over what is left. Pure, so the rules are tested
 // without a DOM.
 
-export type ModelMenuRowKind = "auto" | "follow" | "model";
+export type ModelMenuRowKind = "auto" | "follow" | "keep" | "model";
 
 export interface ModelMenuRow {
   /** Unique in the list. */

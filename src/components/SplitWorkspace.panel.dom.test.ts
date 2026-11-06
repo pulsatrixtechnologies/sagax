@@ -105,8 +105,11 @@ describe("a section's pill", () => {
     for (const [pane, name] of [["bot:scout", "Scout"], ["group:crew", "Crew"]] as const) {
       const header = host.querySelector(`[data-split-pane="${pane}"] [data-split-pane-header]`)!;
       const centered = header.querySelector<HTMLElement>("[data-split-pane-pill]")!;
-      expect(centered.className).toContain("left-1/2");
-      expect(centered.className).toContain("-translate-x-1/2");
+      const center = centered.closest<HTMLElement>("[data-chat-header-center]")!;
+      expect(center.className).toContain("left-1/2");
+      expect(center.className).toContain("-translate-x-1/2");
+      expect(header.hasAttribute("data-chat-header-bar")).toBe(true);
+      expect(header.querySelector('[data-chat-edge-fade="top"]')).not.toBeNull();
       const button = centered.querySelector("[data-bot-header-pill]")!;
       expect(button.textContent).toContain(name);
       expect(button.querySelector("[data-bot-header-chevron]")).not.toBeNull();

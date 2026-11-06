@@ -11,6 +11,7 @@ import { cleanCommandVariables } from "../vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
 import { localVmComputerCall, localVmComputerCatalogText } from "../computer/local-vm-computer.ts";
 import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools/tool-output-bound.ts";
+import { MAC_APP_TOOLS, isMacAppTool, macAppOperation } from "../../electron/mac-apps.mjs";
 
 const where = "on the computer of the person you are working for (their own PC, through their Sagax desktop app), like their own terminal";
 
@@ -129,6 +130,8 @@ const optionalNumber = (value: unknown, min: number, max: number): number | unde
 
 /** The operation one tool call becomes. Throws on bad arguments. */
 export function desktopToolOperation(name: string, args: Record<string, unknown>): DesktopBridgeOperation {
+  // The Apple apps of the person's Mac: validated and bounded here, again on the desktop.
+  if (isMacAppTool(name)) return { action: "mac_app", tool_name: name, arguments: macAppOperation(name, args) };
   switch (name) {
     case "run_command":
       return { action: "run_command", command: str(args.command, "command"), cwd: optionalStr(args.cwd, "cwd"), timeout_seconds: optionalNumber(args.timeout_seconds, 1, 600) ?? 120 };
@@ -241,9 +244,14 @@ export async function handleDesktopBridgeMcp(
     commandVariables?: () => Record<string, string>;
     /** Save a cut's full text for tool_result_read (TST-02). */
     hold?: BoundToolTextOptions["hold"];
+    /** The person's desktop is a Mac that offers its Apple apps (mac_*). */
+    macApps?: () => boolean;
   },
 ): Promise<unknown> {
-  if (method === "tools/list") return { tools: DESKTOP_BRIDGE_TOOLS };
+  if (method === "tools/list") {
+    if (!options?.macApps?.()) return { tools: DESKTOP_BRIDGE_TOOLS };
+    return { tools: [...DESKTOP_BRIDGE_TOOLS, ...MAC_APP_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }))] };
+  }
   if (method === "tools/call") {
     const call = (params ?? {}) as { name?: unknown; arguments?: unknown };
     if (typeof call.name !== "string") throw Object.assign(new Error("tools/call needs a tool name"), { status: 400 });
@@ -274,6 +282,9 @@ export async function handleDesktopBridgeMcp(
       // A desktop app from before Local VM creation refuses the operation.
       if (operation.action === "vm_create" && staleDesktop) {
         return text("The Sagax desktop app on this computer is too old to create a Local VM. Update it, or create the Local VM from its settings.", true);
+      }
+      if (operation.action === "mac_app" && staleDesktop) {
+        return text("The Sagax desktop app on this computer is too old to use its Apple apps. Update the Sagax app.", true);
       }
       if (operation.action === "vm_computer_call" && staleDesktop) {
         return text("The Sagax desktop app on this computer is too old to control the Local VM screen. Update the Sagax app.", true);

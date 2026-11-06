@@ -12,7 +12,7 @@ function personEngineAccess(principalId: string): Array<{ id: string; via: Engin
   return host.registry.entries().map((entry) => {
     const driver = entry.shadow?.driverKind ?? entry.live?.driverKind ?? "";
     // #1533: an API-key engine never runs on a subscription
-    const signedIn = Boolean(host.engineLogins && isLoginDriver(driver) && !host.keyOnlyInstance(entry.instanceId) && host.engineLogins.signedIn(principalId, driver));
+    const signedIn = Boolean(host.engineLogins && isLoginDriver(driver) && !host.keyOnlyInstance(entry.instanceId) && host.engineLogins.signedIn(principalId, driver, "primary", entry.instanceId));
     const key = providersOfInstance(entry.instanceId, driver).some((provider) => held.includes(provider));
     const orgKey = driverKeyBacked(host.cfg, driver, entry.instanceId);
     const off = !host.engineInstalled(entry.instanceId) || person?.disabledAt !== undefined || Boolean(person?.consoleDisabled);

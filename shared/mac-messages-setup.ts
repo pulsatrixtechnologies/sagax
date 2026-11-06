@@ -1,7 +1,9 @@
 // Messages setup on the person's own Mac (Connect apps > Mac > Messages).
 // Structure mirrors the reference Mac Messages surface; wording and branding
-// stay Sagax's. Tools and the enable switch live only on the solo darwin
-// process: never on an organization server or through the desktop bridge.
+// stay Sagax's. In solo the tools and the switch live in the darwin Sagax
+// process; with an organization server the desktop app keeps them on this Mac
+// and the server's bots reach them through the desktop bridge (mac_app,
+// electron/mac-apps.mjs). The setup page then reads them over IPC.
 
 import { messagesOnBotMac, type MessagesHost } from "./imessage.ts";
 

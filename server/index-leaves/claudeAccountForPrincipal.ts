@@ -15,11 +15,12 @@ function claudeAccountForPrincipal(principalId: string): { cli: string; env: Nod
   const cli = typeof config.cli === "string" && config.cli.trim() ? config.cli : "claude";
   const env: NodeJS.ProcessEnv = { ...process.env, ...entry.environment };
   if (host.IDENTITY.kind === "perspicax") {
-    if (!host.engineLogins?.signedIn(principalId, "claudeAgent")) return { unavailable: "not_signed_in" as const };
-    env.CLAUDE_CONFIG_DIR = host.engineLogins.loginDir(principalId, "claudeAgent");
+    // #2373: the chosen account's own folder (an added account has its own)
+    if (!host.engineLogins?.signedIn(principalId, "claudeAgent", "primary", instanceId)) return { unavailable: "not_signed_in" as const };
+    env.CLAUDE_CONFIG_DIR = host.engineLogins.loginDir(principalId, "claudeAgent", "primary", instanceId);
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
-    return { cli, env, key: `person:${principalId}` };
+    return { cli, env, key: instanceId === "claude" ? `person:${principalId}` : `person:${principalId}:${instanceId}` };
   }
   // A custom API instance has no claude.ai account. A separate provider key
   // never hides the subscription account's connectors.

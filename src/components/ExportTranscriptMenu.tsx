@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bug, Check, ChevronRight, Columns2, Copy, Database, Download, LogOut, MoreHorizontal, Package, Rows2, Upload } from "lucide-react";
+import { Bug, Check, ChevronRight, Columns2, Copy, Database, Download, LogOut, MoreHorizontal, Package, Rows2, SquarePen, Upload } from "lucide-react";
 
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { cn } from "@/lib/cn";
@@ -47,6 +47,11 @@ export interface ExportTranscriptMenuProps {
   /** Split right / Split down (#1504): this conversation in a new section
    * of the split view, beside the main chat (src/lib/split-view.ts). */
   onSplit?: (edge: "right" | "bottom") => void;
+  /** Clear chat (JC 2026-11-06): a fresh, empty topic with the bot; the
+   * earlier ones stay in the history. The first entry of this menu, never a
+   * separate header button. `clearChatKey` marks it (the bot's id). */
+  onClearChat?: () => void;
+  clearChatKey?: string;
 }
 
 /**
@@ -69,6 +74,8 @@ export function ExportTranscriptMenu({
   confidential = false,
   onLeave,
   onSplit,
+  onClearChat,
+  clearChatKey,
 }: ExportTranscriptMenuProps) {
   const [open, setOpen] = useState(false);
   const motion = useMenuMotion(open);
@@ -179,6 +186,7 @@ export function ExportTranscriptMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         data-conversation-menu=""
+        {...(onClearChat ? { "data-clear-chat-menu": clearChatKey ?? "" } : {})}
         className={cn(CIRCLE_BUTTON, open && "bg-elevated-hover", className)}
         title={t("chat.moreMenu.aria")}
       >
@@ -195,6 +203,23 @@ export function ExportTranscriptMenu({
           }}
           className={cn("absolute right-0 top-full z-40 mt-1 flex w-[240px] min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]", motion.className)} {...motion.exitProps}
         >
+          {onClearChat && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                data-chat-clear=""
+                data-new-topic={clearChatKey ?? ""}
+                onClick={() => { setOpen(false); onClearChat(); }}
+                onPointerOver={() => hoverSub(false)}
+                className={ROW}
+              >
+                <SquarePen size={16} className="shrink-0 text-ink" />
+                <span className="flex-1 truncate">{t("chat.clearChat")}</span>
+              </button>
+              <div role="separator" className="mx-2 my-1 h-[0.5px] bg-border" />
+            </>
+          )}
           {!hasMessages ? (
             <div className="px-2 py-1.5 text-[12px] text-ink-secondary">
               {t("chat.export.empty")}

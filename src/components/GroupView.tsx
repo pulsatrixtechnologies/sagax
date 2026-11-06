@@ -2,7 +2,7 @@
 // carry the personality; avatars inside the room stay still so a busy group
 // does not become a wall of competing motion. Plain messages go to the room's
 // default responder; @mentions override that routing.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { t } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";
@@ -59,7 +59,7 @@ import { GroupRoomRoster } from "./GroupView.tsx-parts/GroupRoomRoster";
 import { GroupRoomTranscriptPane } from "./GroupView.tsx-parts/GroupRoomTranscriptPane";
 import { groupRoomIdentity } from "./GroupView.tsx-parts/groupRoomIdentity";
 import { RoomHoldsBanner } from "./GroupView.tsx-parts/RoomHoldsBanner";
-import { ChatEdgeFade } from "@/components/ChatEdgeFade";
+import { ChatHeaderBar } from "@/components/ChatHeaderBar";
 
 export { RoomToolChip, Transcript, RoutedByLine, DefaultResponderSelect, RoomWorkingFolder, roomFolderEditable, RoomHoldsBanner };
 
@@ -196,23 +196,16 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
       {/* Header: laid out like a bot chat's. The centered chip (stacked
           member faces + name) opens the group panel; the right-hand
           controls move into the panel's top bar while it is open. */}
-      {pane ? (typeof pane.header === "function" ? pane.header(groupPill) : pane.header) : <div
-        {...headerDragProps}
-        className={cn(
-          "content-topbar",
-          // Grok Bot style, like a bot chat's header: no band. The pill
-          // floats over the transcript, which scrolls under it and fades out
-          // there (ChatEdgeFade). Pulsatrix Light turns it back into a
-          // normal band (styles.css `.content-topbar`).
-          "@container/chathead absolute inset-x-0 top-0 z-[3] flex min-h-[52px] items-center justify-end px-5 py-2.5",
-          // Room for the drawer button, which overlays this corner below sm.
-          "pl-11 sm:pl-5",
-        )}
+      {pane ? (typeof pane.header === "function" ? pane.header(groupPill) : pane.header) : <ChatHeaderBar
+        {...(headerDragProps as HTMLAttributes<HTMLDivElement>)}
+        // The same floating bar as a bot chat's (ChatHeaderBar): no band, the
+        // pill floats over the transcript, which scrolls under it and fades
+        // out there. Pulsatrix Light turns it back into a normal band
+        // (styles.css `.content-topbar`).
+        center={groupPill}
+        centerClassName="max-w-[50%]"
+        centerStyle={headerNoDragStyle}
       >
-        <ChatEdgeFade edge="top" />
-        <div className="absolute left-1/2 top-1/2 flex max-w-[50%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
-          {groupPill}
-        </div>
         <div
           className="flex shrink-0 items-center gap-2"
           // The caption buttons sit over the header's right end; drop this
@@ -237,7 +230,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
           {group.dm && memberMauses}
           {/* A group's pill opens its panel: no second button for it. */}
         </div>
-      </div>}
+      </ChatHeaderBar>}
 
       <div className="content-card-body flex min-h-0 flex-1 flex-col">
       {/* Banners sit below the floating header, as in a bot chat

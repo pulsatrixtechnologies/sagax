@@ -290,27 +290,31 @@ describe("achievements page, a sister of Automations", () => {
     expect(header).toContain('data-page-header=""');
     expect(header).toContain("content-topbar");
     expect(header).toContain("@container/page-header");
-    expect(header).toMatch(/<h1 class="text-\[16px\] font-medium leading-6 text-ink">Achievements<\/h1>/);
+    expect(header).toMatch(/<h1 class="[^"]*text-\[17px\] font-semibold[^"]*">Achievements<\/h1>/);
     expect(header).toContain("lucide-trophy");
-    // no way back button and no gear: Automations has neither
+    // the Team map standard: a grey count and a one-line subtitle
+    expect(header).toMatch(/data-page-count=""[^>]*>[^<]*of[^<]*unlocked/);
+    expect(header).toMatch(/data-page-subtitle=""[^>]*>Milestones your bots and you unlock/);
+    // no way back button; the settings open from a square icon button (a modal)
     expect(header).not.toContain('aria-label="Back"');
-    expect(html).not.toContain("data-achievements-settings-button");
+    expect(header).toMatch(/data-achievements-settings-open=""[^>]*aria-haspopup="dialog"/);
     expect(html).not.toContain("rounded-full text-ink-tertiary");
-    // the primary controls: All, Unlocked, Locked, then the search
-    const primary = header.slice(header.indexOf("data-achievements-primary"), header.indexOf("data-achievements-actions"));
+    // the toolbar row under the title: All, Unlocked, Locked, the search, then Filters
+    const primary = header.slice(header.indexOf("data-achievements-primary"));
     expect(primary).toMatch(/role="group"[^>]*aria-label="Show"/);
     expect(primary).toMatch(/aria-pressed="true"[^>]*>(<[^>]+>)*All</);
     expect(primary).toContain(">Unlocked<");
     expect(primary).toContain(">Locked<");
     expect(primary).toContain('data-achievement-search=""');
     expect(primary).toContain('aria-label="Search achievements"');
-    // the right group: points and streak as indicators, Filters, then ☰
-    const actions = header.slice(header.indexOf("data-achievements-actions"));
+    expect(primary).toContain('aria-label="Filters"');
+    expect(primary.indexOf("data-achievement-search")).toBeLessThan(primary.indexOf("data-achievements-filters"));
+    // the right group: points and streak as indicators, the settings, then ☰
+    const actions = header.slice(header.indexOf("data-achievements-actions"), header.indexOf("data-achievements-primary"));
     expect(actions).toMatch(/data-achievement-points=""[^>]*aria-label="1,240 points, Level 7"/);
     expect(actions).toMatch(/data-achievement-streak=""[^>]*aria-label="4-day streak"/);
-    expect(actions.indexOf("data-achievement-points")).toBeLessThan(actions.indexOf("data-achievements-filters"));
-    expect(actions.indexOf("data-achievements-filters")).toBeLessThan(actions.indexOf("data-achievements-menu"));
-    expect(actions).toContain('aria-label="Filters"');
+    expect(actions.indexOf("data-achievement-points")).toBeLessThan(actions.indexOf("data-achievements-settings-open"));
+    expect(actions.indexOf("data-achievements-settings-open")).toBeLessThan(actions.indexOf("data-achievements-menu"));
     expect(actions).toContain('aria-label="Achievements menu"');
     // the body: the frame's card and the Automations column
     expect(html).toContain("content-card-body");
@@ -369,23 +373,21 @@ describe("achievements page, a sister of Automations", () => {
     expect(item(menu, "settings")).toContain('role="menuitem"');
     expect(item(menu, "settings")).not.toContain("aria-current");
     expect(menu).toMatch(/data-achievements-menu-settings=""[^>]*>.*Settings/);
-    // settings shown: "› Settings" in the header, the six settings in the column
+    // settings: a modal of the Sagax settings family over the page, no sub-page
     const settings = renderToStaticMarkup(createElement(AchievementsScreen, { initialCategory: "settings" }));
     const header = headerOf(settings);
-    expect(header).toMatch(/data-achievements-section=""[^>]*>.*Settings/);
-    expect(header).not.toContain("data-achievements-filters");
-    expect(header).not.toContain("data-achievement-search");
-    expect(settings).toMatch(/data-achievements-menu-settings=""/);
-    expect(item(settings, "settings")).toContain('aria-current="page"');
-    expect(item(settings, "list")).not.toContain("aria-current");
+    expect(header).not.toContain("data-achievements-section");
+    expect(header).toContain("data-achievements-filters");
+    expect(settings).toContain("data-achievements-page");
+    expect(settings).toMatch(/data-achievements-settings-dialog=""[^>]*role="dialog"|role="dialog"[^>]*data-achievements-settings-dialog=""/);
+    expect(settings).toMatch(/aria-modal="true"/);
     expect(settings).toContain("data-achievements-settings-page");
-    expect(settings).toMatch(/<h2[^>]*>Settings<\/h2>/);
+    expect(settings).toMatch(/<h2[^>]*id="achievement-settings-title"[^>]*>Settings<\/h2>/);
     expect(settings).toMatch(/data-settings-row="achievements.title"/);
     for (const label of ["Show my points", "Show my title", "Show my points to colleagues", "Unlock banners", "System notification in the background"]) {
       expect(settings, label).toContain(`aria-label="${label}"`);
     }
-    expect(settings).not.toContain("data-achievements-page");
-    // the points and the streak stay in the header on the settings too
+    // the points and the streak stay in the header
     expect(header).toContain("data-achievement-points");
     expect(header).toContain("data-achievement-streak");
   });

@@ -58,7 +58,7 @@ describe("SkillUpload", () => {
     expect(uploadErrorText(item({}), unsafe)).toBe("../SKILL.md: a path leaves the skill folder, or is a link. Nothing was extracted.");
     expect(uploadErrorText(item({ file: "a.md" }), { code: "frontmatter", detail: "frontmatter description is required" })).toContain("a.md: the front matter needs a name");
     setLocale("fr");
-    expect(uploadErrorText(item({}), { code: "exists", subject: "triage", detail: "x" })).toBe("triage : ce bot a déjà une compétence de ce nom. Retirez-la d'abord ou renommez la compétence.");
+    expect(uploadErrorText(item({}), { code: "exists", subject: "triage", detail: "x" })).toBe("triage : ce bot a déjà une compétence de ce nom. Retire-la d'abord ou renomme la compétence.");
     const html = clean(renderToStaticMarkup(createElement(SkillUploadPreview, { items: [item({ errors: [unsafe] })] })));
     expect(html).toContain('data-skill-upload-error="unsafe-path"');
   });

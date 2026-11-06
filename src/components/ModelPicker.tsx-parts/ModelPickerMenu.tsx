@@ -69,6 +69,7 @@ export function ModelPickerMenu({
   anchorRef,
   turnedOff = 0,
   openActiveModels,
+  customModel,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
@@ -104,6 +105,8 @@ export function ModelPickerMenu({
    * (kept from the retired two-pane menu, #2050: one menu everywhere). */
   turnedOff?: number;
   openActiveModels?: () => void;
+  /** Pick-only surfaces that take a model typed in the search. */
+  customModel?: { label: (text: string) => string; onPick: (text: string) => void };
 }) {
   const width = MENU_WIDTH;
   const currentOptimize = autoOptimizeOf(selection.autoOptimize);
@@ -210,6 +213,7 @@ export function ModelPickerMenu({
         favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }}
         onAutoEdit={setAutoOptimize && setAutoEditOpen && !viewerLocal ? () => setAutoEditOpen((open) => !open) : undefined}
         after={below}
+        custom={customModel}
         autoPanel={autoPanel} />
     </>
   );

@@ -25,8 +25,8 @@ export interface PlanUsageRouteDeps {
   isOrganization: () => boolean;
   /** Present only on an organization server that tracks per-person logins. */
   engineLogins: () => {
-    loginDir: (principalId: string, driver: "claudeAgent" | "codex" | "grokAgent") => string;
-    signedIn: (principalId: string, driver: "claudeAgent" | "codex" | "grokAgent") => boolean;
+    loginDir: (principalId: string, driver: "claudeAgent" | "codex" | "grokAgent", slot?: "primary", instanceId?: string) => string;
+    signedIn: (principalId: string, driver: "claudeAgent" | "codex" | "grokAgent", slot?: "primary", instanceId?: string) => boolean;
   } | null;
   principals: {
     byId: (principalId: string) => { subject?: { iss: string; sub: string } } | null | undefined;
@@ -65,8 +65,8 @@ export function createPlanUsageRoutes(deps: PlanUsageRouteDeps): RouteHandler {
       const held = sub ? deps.perspicaxDirectory()?.providerKeys(sub) ?? [] : [];
       const logins = engineLogins;
       const accounts = orgPlanAccounts(instances, {
-        loginDir: (driver) => logins.loginDir(principalId, driver),
-        signedIn: (driver) => logins.signedIn(principalId, driver),
+        loginDir: (driver, instanceId) => logins.loginDir(principalId, driver, "primary", instanceId),
+        signedIn: (driver, instanceId) => logins.signedIn(principalId, driver, "primary", instanceId),
         apiKeyConfigured: (_driver, instanceId) => {
           const driver = instances[instanceId]?.driver ?? "";
           return providersOfInstance(instanceId, driver).some((provider) => held.includes(provider)) || planKeyConfigured(driver, instanceId);

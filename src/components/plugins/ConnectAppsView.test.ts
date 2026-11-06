@@ -364,11 +364,12 @@ describe("Engine accounts and Sources: one list, GitHub nowhere in the accounts"
     host.remove();
   });
 
-  it("the person's own servers and Claude Code; the engine accounts are rows of Installed now (#2306)", () => {
-    flushSync(() => root.render(createElement(AccountsView, { servers: createElement("div", { "data-servers": "" }) })));
+  it("Claude Code only; the engine accounts and the person's own servers are rows of Installed now (#2306, 2026-11-06)", () => {
+    flushSync(() => root.render(createElement(AccountsView, { claudeCode: createElement("div", { "data-claude": "" }) })));
     expect(host.querySelector("[data-accounts-service-pill]")).toBeNull();
     expect(host.querySelector("[data-harness-group]")).toBeNull();
-    expect(host.querySelector("[data-servers]")).not.toBeNull();
+    expect(host.querySelector("[data-plugins-personal]")).toBeNull();
+    expect(host.querySelector("[data-claude]")).not.toBeNull();
   });
 
   it("Sources: the marketplaces, then the organization's part marked for admins; no GitHub section", () => {
@@ -395,12 +396,13 @@ describe("Engine accounts and Sources: one list, GitHub nowhere in the accounts"
     expect(opened).toHaveBeenCalledTimes(1);
   });
 
-  it("the person's servers only, no GitHub (2026-10-29)", () => {
-    flushSync(() => root.render(createElement(AccountsView, { servers: createElement("div", { "data-servers": "" }) })));
+  it("no GitHub (2026-10-29), and nothing at all without Claude Code", () => {
+    flushSync(() => root.render(createElement(AccountsView, { claudeCode: createElement("div", { "data-claude": "" }) })));
     expect(host.querySelector("[data-plugins-github-card]")).toBeNull();
     expect(host.querySelector("[data-plugins-github]")).toBeNull();
     expect(host.textContent).not.toContain("GitHub");
-    expect(host.querySelector("[data-servers]")).not.toBeNull();
+    flushSync(() => root.render(createElement(AccountsView, {})));
+    expect(host.querySelector("[data-plugins-accounts]")).toBeNull();
   });
 
 });

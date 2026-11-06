@@ -9,6 +9,8 @@
 //   GET    /api/me/github                     { github: GithubStatus } (the device flow's poll)
 //   DELETE /api/me/github                     forget it (here and in the server environment)
 //   POST   /api/me/mcp/servers   { name, url, auth?, token?, headerName? } | { name, command, args?, env? }
+//   POST   /api/me/mcp/servers/import { json }   a pasted config block, each server the person's own
+//   PUT    /api/me/mcp/servers/:name  the add body: changes that server (a token or env left out is kept)
 //   PATCH  /api/me/mcp/servers/:name { enabled }
 //   DELETE /api/me/mcp/servers/:name
 //   POST   /api/me/mcp/servers/:name/oauth/start      { authorizationUrl, redirectUri }
@@ -24,6 +26,8 @@
 // scope (request-auth.ts CLIENT_ALLOW). No answer carries a token.
 import type { IncomingMessage } from "node:http";
 
+import { parseMcpServersImport } from "../mcp/mcp-registry.ts";
+import { personalMcpInputFromAgent } from "../people/person-connections.ts";
 import { setCapabilityDeprecationHeaders } from "../capabilities/capability-route-deprecation.ts";
 import type { GithubStatus } from "../github/github-connect.ts";
 import type { PersonalMcpListing } from "../people/person-connections.ts";
@@ -52,6 +56,8 @@ export interface PersonConnectionRouteDeps {
   servers: {
     list: (principalId: string) => Promise<Array<PersonalMcpListing & Partial<PersonalServerAuth>>>;
     add: (principalId: string, body: unknown) => Promise<void>;
+    /** Replaces one server with the add body; a token or env left out is kept. */
+    update?: (principalId: string, name: string, body: unknown) => Promise<void>;
     setEnabled: (principalId: string, name: string, enabled: boolean) => Promise<void>;
     remove: (principalId: string, name: string) => Promise<void>;
     oauthStart: (principalId: string, name: string, req: IncomingMessage, body: unknown, auth: RequestAuth) => Promise<{ status: number; body: Record<string, unknown> }>;
@@ -123,6 +129,31 @@ export function createPersonConnectionRoutes(deps: PersonConnectionRouteDeps): R
         await deps.servers.add(principalId, await jsonBody());
         return json(res, 201, { servers: await deps.servers.list(principalId) });
       }
+      if (path === "/api/me/mcp/servers/import" && method === "POST") {
+        // Paste config under Me: the same block the organization's import
+        // reads (mcpServers, a bare map, one entry, an address or a command
+        // line), every server added as the person's own.
+        const body = await jsonBody() as { json?: unknown } | null;
+        const text = typeof body?.json === "string" ? body.json : "";
+        if (!text.trim()) return json(res, 400, { error: "Paste the JSON block first.", code: "empty_import" });
+        const parsed = parseMcpServersImport(text);
+        if (!parsed.ok) return json(res, 400, { error: parsed.error, code: "invalid_import" });
+        const inputs: Array<{ name: string; input: unknown }> = [];
+        for (const [name, server] of Object.entries(parsed.servers)) {
+          const input = personalMcpInputFromAgent({ ...server, name });
+          if (typeof input === "string") return json(res, 400, { error: `"${name}": ${input}`, code: "invalid_import" });
+          inputs.push({ name, input });
+        }
+        const current = new Set((await deps.servers.list(principalId)).map((server) => server.name));
+        const taken = inputs.map((entry) => entry.name).filter((name) => current.has(name));
+        if (taken.length) return json(res, 409, { error: `Already added: ${taken.join(", ")}. Remove or rename ${taken.length === 1 ? "it" : "them"} first.`, code: "name_taken" });
+        const added: string[] = [];
+        for (const entry of inputs) {
+          await deps.servers.add(principalId, entry.input);
+          added.push(entry.name);
+        }
+        return json(res, 201, { servers: await deps.servers.list(principalId), added });
+      }
       const match = SERVER_ROUTE.exec(path);
       if (!match) return json(res, 404, { error: "not found" });
       const [, name, action] = match;
@@ -136,6 +167,11 @@ export function createPersonConnectionRoutes(deps: PersonConnectionRouteDeps): R
         const started = await deps.servers.oauthStart(principalId, name!, req, body, auth);
         return json(res, started.status, started.body);
       }
+      if (method === "PUT") {
+        if (!deps.servers.update) return json(res, 405, { error: "PATCH or DELETE" });
+        await deps.servers.update(principalId, name!, await jsonBody());
+        return json(res, 200, { servers: await deps.servers.list(principalId) });
+      }
       if (method === "PATCH") {
         const body = await jsonBody() as { enabled?: unknown } | null;
         if (!body || typeof body.enabled !== "boolean" || Object.keys(body).length !== 1) return json(res, 400, { error: "Only { enabled } can be changed here." });
@@ -146,7 +182,7 @@ export function createPersonConnectionRoutes(deps: PersonConnectionRouteDeps): R
         await deps.servers.remove(principalId, name!);
         return json(res, 200, { servers: await deps.servers.list(principalId) });
       }
-      return json(res, 405, { error: "PATCH or DELETE" });
+      return json(res, 405, { error: "PUT, PATCH or DELETE" });
     } catch (error) {
       const answer = refusal(error);
       if (answer) return json(res, answer.status, answer.body);

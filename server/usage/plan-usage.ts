@@ -276,42 +276,46 @@ export function planAccountsFromInstances(instances: InstanceConfigMap, options:
 export interface OrgPlanOptions {
   /** The person's own login directory for a driver
    * (PrincipalEngineLogins.loginDir). */
-  loginDir: (driver: "claudeAgent" | "codex" | "grokAgent") => string;
+  loginDir: (driver: "claudeAgent" | "codex" | "grokAgent", instanceId: string) => string;
   /** Their sign-in marker is there (PrincipalEngineLogins.signedIn). */
-  signedIn: (driver: "claudeAgent" | "codex" | "grokAgent") => boolean;
+  signedIn: (driver: "claudeAgent" | "codex" | "grokAgent", instanceId: string) => boolean;
   /** The key that would serve this person's turns on the engine: their own
    * key in Perspicax, or the organization's. Shown as "no plan windows". */
   apiKeyConfigured?: (driver: PlanDriver, instanceId: string) => boolean;
 }
 
-/** Organization server: one row per provider, read from the asking
- * person's own login directory only. */
+/** Organization server: one row per login directory of the asking person
+ * (one per provider, plus one per added account, #2373), read from their
+ * own directories only. */
 export function orgPlanAccounts(instances: InstanceConfigMap, options: OrgPlanOptions): PlanAccount[] {
   const accounts: PlanAccount[] = [];
   const keys: PlanAccount[] = [];
-  const seen = new Set<PlanDriver>();
+  const seen = new Set<string>();
+  const drivers = new Set<PlanDriver>();
   for (const entry of planInstances(instances)) {
     if (entry.apiKey) {
       if (options.apiKeyConfigured?.(entry.driver, entry.id) && !keys.some((key) => key.driver === entry.driver)) keys.push(apiKeyRow(entry));
       continue;
     }
-    if (seen.has(entry.driver)) continue;
-    seen.add(entry.driver);
     const login = LOGIN_DRIVER[entry.driver];
-    const dir = options.loginDir(login);
+    const dir = options.loginDir(login, entry.id);
+    if (seen.has(dir)) continue;
+    seen.add(dir);
+    const first = !drivers.has(entry.driver);
+    drivers.add(entry.driver);
     const environment: Record<string, string | undefined> =
       entry.driver === "claude" ? { HOME: dir, CLAUDE_CONFIG_DIR: dir }
         : entry.driver === "codex" ? { HOME: dir, CODEX_HOME: dir }
           : { HOME: dir, GROK_HOME: join(dir, ".grok") };
     accounts.push({
-      id: entry.driver,
-      name: PRODUCT_NAME[entry.driver],
+      id: first ? entry.driver : entry.id,
+      name: first ? PRODUCT_NAME[entry.driver] : entry.displayName?.trim() || PRODUCT_NAME[entry.driver],
       driver: entry.driver,
       environment,
       instanceId: entry.id,
       isolated: true,
       ...(entry.driver === "claude" ? { configDir: dir } : {}),
-      ...(options.signedIn(login) ? {} : { signedOut: true }),
+      ...(options.signedIn(login, entry.id) ? {} : { signedOut: true }),
     });
   }
   return [...accounts, ...keys];

@@ -2,7 +2,7 @@
  * floats over the transcript (Grok Bot style): the messages scroll under the
  * pill, and a long group name ends in an ellipsis with the chevron kept.
  * Answers /api itself with made-up people and bots; nothing reaches a
- * server. Not shipped in the app. ?skin=<id>&lang=<code>&long=1 */
+ * server. Not shipped in the app. ?skin=<id>&lang=<code>&long=1&bot=1 */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { loadLocale } from "../lib/i18n";
@@ -10,6 +10,7 @@ import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot } from "../state/store";
 import { DesktopCapabilitiesProvider } from "../components/DesktopCapabilities";
 import { GroupView } from "../components/GroupView";
+import { ChatView } from "../components/ChatView";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -18,6 +19,8 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 await loadLocale(params.get("lang") ?? "fr");
 const owner = true;
 const longName = params.get("long") === "1";
+// ?bot=1: the 1:1 chat of a bot (ChatView), the reference the other chat views match.
+const botChat = params.get("bot") === "1";
 
 const bot = (id: string, name: string, color: string, ownerUserId: string, title = ""): Bot =>
   ({ id, threadId: `t-${id}`, name, title, description: "", notifications: true, color, unread: false, ownerUserId, modelSelection: { instanceId: "fake", model: "test" }, messages: [], tasks: [] }) as unknown as Bot;
@@ -46,7 +49,7 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const path = new URL(url, location.href).pathname;
   if (!path.startsWith("/api/")) return realFetch(input, init);
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-  if (path === "/api/bots") return json({ bots: team, groups: [group], sections: [], computerControl: {} });
+  if (path === "/api/bots") return json({ bots: botChat ? team.map((b) => (b.id === "atlas" ? { ...b, messages: roomMessages.map(({ from: _from, ...m }) => m) } : b)) : team, groups: [group], sections: [], computerControl: {} });
   if (path === "/api/org") return json({ org: { identity: { kind: "perspicax" }, name: "Example" }, link: { state: "ok" }, viewerRole: "member", settings: {} });
   if (path === "/api/org/directory") return json({ people: [
     { principalId: "pr_me", name: "Alex Gagnon", login: "alex", role: "member", disabled: false },
@@ -72,9 +75,12 @@ class SilentEventSource {
 function Room() {
   const { state, dispatch } = useStore();
   useEffect(() => {
-    if (state.hydrated && state.selectedId !== "ops") dispatch({ type: "select", id: "ops" });
+    const target = botChat ? "atlas" : "ops";
+    if (state.hydrated && state.selectedId !== target) dispatch({ type: "select", id: target });
   }, [state.hydrated, state.selectedId, dispatch]);
   const room = state.groups.find((g) => g.id === "ops");
+  const one = state.bots.find((b) => b.id === "atlas");
+  if (botChat) return <div className="flex h-dvh bg-app text-ink">{one && state.selectedId === "atlas" ? <ChatView bot={one} /> : null}</div>;
   return <div className="flex h-dvh bg-app text-ink">{room ? <GroupView group={room} /> : null}</div>;
 }
 

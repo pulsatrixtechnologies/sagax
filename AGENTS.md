@@ -7178,8 +7178,9 @@ Messages (iMessage and SMS) run only in the solo Sagax process on the Mac
 where that process runs (`shared/imessage.ts`, `server/imessage/imessage-mcp.ts`).
 The Use Messages switch is `messages.json` in the data dir. Sends to someone
 on the bot's allowed recipients go through. Everyone else gets a card.
-Group chats are refused. This is not a desktop-bridge action: an
-organization server must not ask the signed-in Mac to open Messages.
+Group chats are refused. Since 2026-11-06 an organization server reaches the
+person's Mac through the desktop bridge `mac_app` action (see "Apple apps of
+This Mac" below); the old `read_messages` / `send_message` stay solo only.
 An image attached to a message is named on the read and returned by
 `read_attachment` only when the file is inside the Messages folder and
 at most 1.5 MB (`server/imessage/imessage-db.ts`). A file is sent only from the
@@ -7207,8 +7208,41 @@ branding only (`docs/design/ux-reference-grokbot-cursor.md` §2.8bis).
 - Computer Settings keeps a shortcut that deep-links to this setup
   (`sagax:open-mac-messages`). iOS mirrors the same Installed > This Mac >
   Messages flow (`ios/App/Features/Plugins/MacMessagesSetupView.swift`).
-- Gallery: `src/gallery/mac-messages.html` (`?state=off|ready|enabled|unavailable`).
+- Gallery: `src/gallery/mac-messages.html`
+  (`?view=setup|mac|app&app=<id>&state=off|ready|enabled|unavailable|server|error`).
   Captures: `node scripts/capture/mac-messages.mjs`.
+- 2026-11-06: the loaders throw instead of returning null. A 404
+  `messages_not_on_this_mac` / `mac_apps_not_on_this_mac` (organization
+  server) falls back to the desktop app over IPC (`window.ogb.macApps`), else a
+  readable error with Retry. The page is never blank
+  (`src/lib/mac-messages-setup.ts` `viaServerOrDesktop`).
+
+### Apple apps of This Mac (2026-11-06)
+
+Plugins > Installed > This Mac lists Messages, Mail, Calendar, Contacts,
+Reminders and Notes, one row each, each with a setup page (permission state,
+Open System Settings, test, On/Off). The section shows only in the desktop
+app on macOS (`shared/mac-apps-setup.ts` `macAppsSectionVisible`), never on
+Windows, Linux or the web.
+
+- Tools (`electron/mac-apps.mjs` `MAC_APP_TOOLS`, single `_` names):
+  `mac_messages_read/send`, `mac_mail_search/read/send`,
+  `mac_calendar_list/create`, `mac_contacts_search`,
+  `mac_reminders_list/create`, `mac_notes_search/create`. Read and write.
+- Solo: the imessage MCP lists the tools of each app turned on
+  (`mac-apps.json` in the data dir; Messages keeps `messages.json`). A write
+  follows the bot's approval mode: Auto/Full run it, Ask stages a card.
+- Organization server: the server tools map to the desktop bridge action
+  `mac_app` (`server/desktop/desktop-bridge-tools.ts`); Electron main checks the
+  app is on in its own `mac-apps.json` (userData) and runs it. The bridge
+  journal keeps the operation and the target (recipient, calendar, list),
+  never the content. Setup is read over IPC (`mac-apps:status|set|test|open-settings`).
+- Scripts are constant JXA texts; the arguments go as one JSON argv
+  (`macAppArgv`, `osascript -l JavaScript -e <script> <json>`), never
+  concatenated. Messages reads `chat.db` with `node:sqlite` (read only).
+- API (solo darwin only; else 404 `mac_apps_not_on_this_mac`):
+  `GET`/`PUT /api/mac-apps`, `POST /api/mac-apps/test`,
+  `POST /api/mac-apps/permissions/open` (`server/routes/mac-apps.ts`).
 
 Plugin lifecycle hooks are stripped from the folder Claude loads with
 `--plugin-dir`. The commands are kept under `bot-plugins/<bot>/computer-hooks/`

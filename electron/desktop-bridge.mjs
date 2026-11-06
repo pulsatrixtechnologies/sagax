@@ -28,6 +28,7 @@ import { loginShellArgv, openBridgeTerminal } from "./desktop-terminal.mjs";
 import { createLocalVm } from "./local-vm.mjs";
 import { archiveKind, extractArchive, extractedFolderName } from "./archive-extract.mjs";
 import { executeLocalModel, normalizeLoopbackBase, probeLoopbackCatalog } from "./local-models.mjs";
+import { isMacAppTool, macAppTarget } from "./mac-apps.mjs";
 
 export { createLocalVm };
 
@@ -74,7 +75,7 @@ const WRITE_MAX = 1024 * 1024;
 const FETCH_MAX = 256 * 1024;
 /** The server's largest upload (a video, server/attachments/attachments.ts). */
 const STAGE_MAX = 1024 * 1024 * 1024;
-const ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "fetch_url", "browse", "computer_tools", "computer_call", "vm_status", "vm_start", "vm_run_command", "vm_create", "vm_stop", "vm_pause", "vm_resume", "vm_setup", "vm_install", "vm_screenshot", "vm_computer_call", "stage_file", "extract_archive", "local_model", "terminal_open", "vm_terminal_open"]);
+const ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "fetch_url", "browse", "computer_tools", "computer_call", "vm_status", "vm_start", "vm_run_command", "vm_create", "vm_stop", "vm_pause", "vm_resume", "vm_setup", "vm_install", "vm_screenshot", "vm_computer_call", "stage_file", "extract_archive", "local_model", "terminal_open", "vm_terminal_open", "mac_app"]);
 const KEYS = new Set(["action", "path", "content", "encoding", "offset", "max_bytes", "command", "cwd", "timeout_seconds", "pattern", "glob", "url", "screenshot", "tool_name", "arguments", "container", "name", "final", "endpoint", "http_method", "http_path", "json", "env"]);
 /** Command variables (run_command, vm_run_command): API keys the person
  * exposed to this bot, by the names they chose. Names a shell or Sagax
@@ -114,6 +115,11 @@ export function validBridgeOperation(operation) {
     const args = operation.arguments;
     if (!args || typeof args.ticket !== "string" || !/^[a-f0-9]{48}$/.test(args.ticket)) return false;
     if (!Number.isInteger(args.cols) || !Number.isInteger(args.rows)) return false;
+  }
+  if (operation.action === "mac_app") {
+    // One of the Apple app tools (electron/mac-apps.mjs), its arguments as an object.
+    if (!isMacAppTool(operation.tool_name) || !operation.arguments) return false;
+    if (Object.keys(operation).some(key => !["action", "tool_name", "arguments"].includes(key))) return false;
   }
   if (operation.action === "local_model") {
     if (operation.url !== undefined) return false;
@@ -362,6 +368,9 @@ export async function executeBridgeOperation(operation, deps, signal) {
       if (!result.extracted) return failure(`Not unpacked: ${result.manifest.reason ?? result.manifest.status}`);
       return text(`unpacked ${result.manifest.files} files into ${path.join(dir, extractedFolderName(name))}`);
     }
+    case "mac_app":
+      if (typeof deps.macApp !== "function") return failure("The Apple apps run only in the Sagax desktop app on a Mac.");
+      return deps.macApp(operation.tool_name, operation.arguments, signal);
     case "local_model":
       return executeLocalModel(operation, deps.localModelBase ?? (() => null), deps.fetchUrl, signal, deps.localModelAnthropic ?? (() => false), deps.localModelKey ?? (() => null));
     default:
@@ -375,6 +384,11 @@ const describe = operation => {
     case "read_file": case "write_file": case "list_files": case "search_files": return String(operation.path ?? "~").slice(0, 300);
     case "fetch_url": case "browse": try { return new URL(operation.url).host; } catch { return ""; }
     case "computer_call": case "vm_computer_call": return String(operation.tool_name ?? "");
+    // Action and target app only, never the message, email or note.
+    case "mac_app": {
+      const name = String(operation.tool_name ?? "");
+      try { const target = macAppTarget(name, operation.arguments); return (target === name ? name : `${name}: ${target}`).slice(0, 300); } catch { return name; }
+    }
     case "stage_file": case "extract_archive": return String(operation.name ?? "");
     case "terminal_open": return "terminal";
     case "vm_terminal_open": return "Local VM terminal";
@@ -395,6 +409,9 @@ export function createDesktopBridge({
   // the Authorization header of the loopback probe and the model-serving
   // calls, and is never sent to or stored on the organization server.
   localModelKeyFor = () => null,
+  // The Apple apps of this Mac (electron/mac-apps.mjs): (tool, args, signal)
+  // => MCP result. Only given on darwin; the switch per app is checked there.
+  macApp = null,
 }) {
   const roots = [...protectedPaths, ...personalSecretPaths(home)];
   const activity = createLendingActivity(activityFile);
@@ -442,12 +459,19 @@ export function createDesktopBridge({
             id, name: hostname.slice(0, 120) || "Computer", platform: ["darwin", "win32", "linux"].includes(platform) ? platform : "linux", attachmentsDir,
             capabilities: { shell: true, files: true, fetch: true, browser: Boolean(browse), computer: Boolean(cuaConnection), localVm: true },
           };
-          try {
-            await request(env, "/api/desktop-bridge/connect", { ...registration, capabilities: { ...registration.capabilities, localModels: true } }, signal, secret);
-          } catch (error) {
-            // A server that predates local models rejects the extra capability. Connect without it.
-            if (error?.status !== 400) throw error;
-            await request(env, "/api/desktop-bridge/connect", registration, signal, secret);
+          // Newest first: a server that predates a capability rejects it (400), so step back.
+          const offers = [
+            ...(macApp && platform === "darwin" ? [{ ...registration.capabilities, localModels: true, macApps: true }] : []),
+            { ...registration.capabilities, localModels: true },
+            registration.capabilities,
+          ];
+          for (let index = 0; ; index += 1) {
+            try {
+              await request(env, "/api/desktop-bridge/connect", { ...registration, capabilities: offers[index] }, signal, secret);
+              break;
+            } catch (error) {
+              if (error?.status !== 400 || index === offers.length - 1) throw error;
+            }
           }
           registered = { id, secret };
           backoff.reset();
@@ -617,6 +641,7 @@ export function createDesktopBridge({
                 // The key for the served endpoint, by its loopback base, from
                 // this computer's store. Used only for the 127.0.0.1 request.
                 localModelKey: (endpoint) => { const base = localCatalog.get(endpoint); return base ? localModelKeyFor(base) : null; },
+                macApp: macApp && platform === "darwin" ? macApp : null,
                 computer: cuaConnection ? async (op, sig) => {
                   if (hostControl) control = await hostControl(job.id, sig);
                   if (!cua) {

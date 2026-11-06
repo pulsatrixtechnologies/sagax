@@ -1,7 +1,7 @@
 // Connect apps > Mac > Messages: setup for iMessage/SMS on this Mac.
 // Structure matches Grok Bot's Mac Messages surface; Sagax words and mascot.
 import { useCallback, useEffect, useState } from "react";
-import { Check, Loader2, MessageSquare, Shield, X } from "lucide-react";
+import { Check, Loader2, MessageSquare, RotateCw, Shield, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -54,28 +54,37 @@ export function MessagesSetupView({ onBack, trail }: Props) {
   const [tested, setTested] = useState(false);
   const [testOk, setTestOk] = useState(false);
 
+  // Refresh after an action or on focus: a failure keeps the page and only
+  // replaces a blank one by the readable error (never an unhandled reject).
   const refresh = useCallback(async () => {
+    try {
+      const next = await loadMessagesSetup();
+      setStatus(next);
+      return next;
+    } catch (cause) {
+      setStatus((current) => {
+        if (!current) setError(readableError(cause));
+        return current;
+      });
+      return null;
+    }
+  }, []);
+
+  const load = useCallback(async () => {
+    setBusy("load");
     setError(null);
-    const next = await loadMessagesSetup();
-    setStatus(next);
-    return next;
+    try {
+      setStatus(await loadMessagesSetup());
+    } catch (cause) {
+      setError(readableError(cause));
+    } finally {
+      setBusy(null);
+    }
   }, []);
 
   useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const next = await loadMessagesSetup();
-        if (!alive) return;
-        setStatus(next);
-      } catch (cause) {
-        if (alive) setError(readableError(cause));
-      } finally {
-        if (alive) setBusy(null);
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
+    void load();
+  }, [load]);
 
   useEffect(() => {
     const onFocus = () => { void refresh(); };
@@ -298,7 +307,17 @@ export function MessagesSetupView({ onBack, trail }: Props) {
           </div>
         )}
 
-        {error && <p role="alert" className="mt-3 text-[12px] text-danger">{error}</p>}
+        {!status && busy !== "load" && (
+          <div className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-messages-load-error="">
+            <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.loadFailed")}</p>
+            <p role="alert" className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{error ?? t("connectApps.mac.notOnThisMac")}</p>
+            <button type="button" onClick={() => void load()} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised">
+              <RotateCw size={13} aria-hidden="true" /> {t("connectApps.mac.retry")}
+            </button>
+          </div>
+        )}
+
+        {status && error && <p role="alert" className="mt-3 text-[12px] text-danger">{error}</p>}
       </div>
     </>
   );

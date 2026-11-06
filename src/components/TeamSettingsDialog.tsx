@@ -27,7 +27,7 @@ import { api, desktopApprovalBridge, persistBotUpdate, useStore } from "@/state/
 import { EFFORT_LEVELS, type EffortLevel } from "../../shared/wire";
 import { approvalModeOptions } from "./ApprovalModeSelector";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
-import { effortLabel } from "./ModelPicker";
+import { ModelPicker, effortLabel } from "./ModelPicker";
 
 type Tab = "approval" | "model";
 const KEEP = "";
@@ -58,6 +58,7 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
   const [tab, setTab] = useState<Tab>("approval");
   const [mode, setMode] = useState<TeamApprovalMode | null>(null);
   const [model, setModel] = useState<string>(KEEP);
+  const [modelInstance, setModelInstance] = useState<string | undefined>(undefined);
   const [effort, setEffort] = useState<string>(KEEP);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -67,6 +68,7 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
 
   const bots = useMemo(() => teamBots(state.bots, team), [state.bots, team]);
   const models = useMemo(() => teamModelChoices(bots, state.instances), [bots, state.instances]);
+  const teamEngines = useMemo(() => new Set(bots.map((bot) => bot.modelSelection.instanceId)), [bots]);
   const efforts = useMemo(() => teamEffortChoices(bots, state.instances, EFFORT_LEVELS), [bots, state.instances]);
   const change: TeamChange | null = tab === "approval"
     ? mode ? { kind: "approval", mode } : null
@@ -153,12 +155,17 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
               </fieldset>
             ) : (
               <fieldset disabled={running} className="flex flex-col gap-3">
-                <label className="text-[13px] text-ink-secondary">{t("teamSettings.model")}
-                  <select aria-label={t("teamSettings.model")} value={model} onChange={(event) => setModel(event.target.value)} className={select}>
-                    <option value={KEEP}>{t("teamSettings.keepModel")}</option>
-                    {models.map((choice) => <option key={choice.id} value={choice.id}>{`${choice.label} · ${choice.engines.join(", ")}`}</option>)}
-                  </select>
-                </label>
+                <ModelPicker
+                  contained
+                  label={<div className="text-[13px] text-ink-secondary">{t("teamSettings.model")}</div>}
+                  choose={{
+                    value: model === KEEP ? null : { instanceId: modelInstance, model },
+                    label: model === KEEP ? t("teamSettings.keepModel") : models.find((choice) => choice.id === model)?.label ?? model,
+                    keep: { label: t("teamSettings.keepModel"), onKeep: () => { setModel(KEEP); setModelInstance(undefined); } },
+                    engine: (instance) => teamEngines.has(instance.instanceId),
+                    onPick: (pick) => { setModel(pick.model); setModelInstance(pick.instanceId); },
+                  }}
+                />
                 <label className="text-[13px] text-ink-secondary">{t("teamSettings.effort")}
                   <select aria-label={t("teamSettings.effort")} value={effort} onChange={(event) => setEffort(event.target.value)} className={select}>
                     <option value={KEEP}>{t("teamSettings.keepEffort")}</option>

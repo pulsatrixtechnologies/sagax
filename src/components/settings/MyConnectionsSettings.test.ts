@@ -1,7 +1,8 @@
 // A person's own connections (organization server), since 2026-10-28 both
-// in Connect apps > Providers: GitHub (MyGithubConnection, in its GitHub
-// section) and their MCP servers (MyMcpServers). What each state draws, in English
-// and in French. A bot's plugins: see
+// in Connect apps: GitHub (MyGithubConnection, in its GitHub section) and
+// their MCP servers, rows of Plugins > Me > Installed since 2026-11-06
+// (plugins/PersonalServers.tsx) added through PersonalServerForm. What each
+// state draws, in English and in French. A bot's plugins: see
 // src/components/plugins/BotPluginCard.test.ts.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -10,11 +11,19 @@ import { afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { parseArgsLine, parseEnvLines, suggestServerName, type MyConnections } from "@/lib/my-connections";
 import { SECTIONS, organizationHidesSection } from "../SettingsModal";
-import { MyGithubConnection, MyMcpServers } from "./MyConnectionsSettings";
+import { usePersonalMcp } from "../plugins/PersonalServers";
+import { MyGithubConnection, PersonalServerForm } from "./MyConnectionsSettings";
 
-/** Both parts, as a person sees them across the two tabs. */
+const noop = async () => {};
+/** The person's own servers, as rows of Plugins > Me > Installed. */
+function PersonalRows({ initial }: { initial: MyConnections }) {
+  const personal = usePersonalMcp(true, initial);
+  return createElement("ul", null, personal.rows.map((row) => createElement("li", { key: row.key }, row.node)));
+}
+/** GitHub, the Add form and the rows, as a person sees them. */
 function MyConnectionsSettings({ initial }: { initial: MyConnections }) {
-  return createElement("div", null, createElement(MyGithubConnection, { initial }), createElement(MyMcpServers, { initial }));
+  return createElement("div", null, createElement(MyGithubConnection, { initial }),
+    createElement(PersonalServerForm, { data: initial, onDone: noop, onCancel: () => {} }), createElement(PersonalRows, { initial }));
 }
 
 afterEach(() => setLocale("en"));
@@ -32,8 +41,9 @@ describe("Mes connexions", () => {
     const github = renderToStaticMarkup(createElement(MyGithubConnection, { initial: base }));
     expect(github).toContain("Connect GitHub");
     expect(github).not.toContain("Add an MCP server");
-    const servers = renderToStaticMarkup(createElement(MyMcpServers, { initial: base }));
+    const servers = renderToStaticMarkup(createElement(PersonalServerForm, { data: base, onDone: noop, onCancel: () => {} }));
     expect(servers).toContain("Add an MCP server");
+    expect(servers).toContain("never on the Sagax server");
     expect(servers).not.toContain("Connect GitHub");
     expect(servers).not.toContain("data-github-state");
   });
@@ -45,7 +55,9 @@ describe("Mes connexions", () => {
     expect(html).not.toContain("Use a token");
     expect(html).toContain("Advanced: use a personal access token");
     expect(html).toContain("Add an MCP server");
-    expect(html).toContain("No MCP server of your own yet.");
+    // 2026-11-06: no card of its own any more, the servers are Installed rows
+    expect(html).not.toContain("No MCP server of your own yet.");
+    expect(html).not.toContain("My MCP servers");
   });
 
   // 2026-10-28: one Connect GitHub whatever the server has; without its
@@ -95,7 +107,7 @@ describe("Mes connexions", () => {
     expect(html).not.toContain("administrator");
     expect(html).toContain('data-personal-server="notes"');
     expect(html).toContain("@octo");
-    expect(html).toContain('role="switch"');
+    expect(html).toContain("data-entry-menu");
     expect(html).toContain("Add an MCP server");
   });
 

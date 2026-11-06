@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
 import type { MyConnections } from "@/lib/my-connections";
-import { MyGithubConnection, MyMcpServers } from "./MyConnectionsSettings";
+import { MyGithubConnection, PersonalServerForm } from "./MyConnectionsSettings";
 
 const fixture = vi.hoisted(() => ({
   data: null as unknown,
@@ -76,8 +76,7 @@ describe("Connect GitHub (#2109)", () => {
   });
 
   it("the GitHub MCP preset uses the GitHub account, not a pasted token, even before it is connected", () => {
-    render(createElement(MyMcpServers, { initial: none }));
-    flushSync(() => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Add an MCP server")!.click());
+    render(createElement(PersonalServerForm, { data: none, onDone: async () => {}, onCancel: () => {} }));
     const preset = [...host.querySelectorAll<HTMLButtonElement>("[data-add-personal-server] button")].find((button) => /GitHub/.test(button.textContent ?? ""))!;
     flushSync(() => preset.click());
     const pill = $<HTMLButtonElement>("[data-add-personal-server] [data-pill-select]")!;

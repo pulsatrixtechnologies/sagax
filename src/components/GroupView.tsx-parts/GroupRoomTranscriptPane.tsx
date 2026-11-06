@@ -190,21 +190,6 @@ export function GroupRoomTranscriptPane({
             </div>
           )}
           {speaker && <LiveReply threadId={group.threadId} botId={speaker.id} mentionPeers={members} label={speaker.name} room hidden={onCall} shownRef={liveShown} />}
-          {(speaker || presenceVisible) && (
-            <TurnPresence
-              // the speaker's colour and mascot, as in ChatView
-              bot={presenceSpeaker ?? { color: "green" }}
-              // a bot the room waits on (busy elsewhere) is not typing here
-              streamThreadId={speaker ? group.threadId : null}
-              visible={presenceVisible}
-              phrases={activity.phrases}
-              phase={activity.phase}
-              quietSince={activity.stepSince ?? null}
-              seed={`${group.id}:${group.turnStartedAt ?? ""}:${speaker?.id ?? ""}`}
-              since={speaker ? group.turnStartedAt ?? null : null}
-              answering={popping !== null}
-            />
-          )}
           {/* Stop only the member that is working; the room carries on. */}
           {threadSpeaker && !group.dm && members.length > 1 && !group.holds?.[threadSpeaker.id] && (
             <div className="flex justify-start pl-12">
@@ -232,6 +217,27 @@ export function GroupRoomTranscriptPane({
 
       <div ref={composerDockRef} data-composer-dock="" className="absolute inset-x-0 bottom-0 z-[2]">
       <ChatEdgeFade edge="bottom" />
+      {/* JC 2026-11-06: the working line sits just above the composer, on the
+          message column, whatever the scroll (as in ChatView). */}
+      <div data-turn-presence-slot="" className="px-5 [&:not(:has(.turn-presence))]:hidden">
+        <div className={cn(chatColumnClassName, "pb-1.5")}>
+          {(speaker || presenceVisible) && (
+            <TurnPresence
+              // the speaker's colour and mascot, as in ChatView
+              bot={presenceSpeaker ?? { color: "green" }}
+              // a bot the room waits on (busy elsewhere) is not typing here
+              streamThreadId={speaker ? group.threadId : null}
+              visible={presenceVisible}
+              phrases={activity.phrases}
+              phase={activity.phase}
+              quietSince={activity.stepSince ?? null}
+              seed={`${group.id}:${group.turnStartedAt ?? ""}:${speaker?.id ?? ""}`}
+              since={speaker ? group.turnStartedAt ?? null : null}
+              answering={popping !== null}
+            />
+          )}
+        </div>
+      </div>
       <Composer
         key={group.threadId}
         group={group}

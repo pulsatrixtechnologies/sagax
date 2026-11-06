@@ -34,7 +34,13 @@ vi.mock("./ModelPicker", () => ({ ModelPicker: () => null }));
 vi.mock("./ApprovalModeSelector", () => ({ ApprovalModeSelector: () => null }));
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
 
-const wireBot = (id: string) => ({
+let aTopicMade = false;
+const wireBot = (id: string) => id === "a" && aTopicMade ? ({
+  id, threadId: "a-new", mainThreadId: "a-new", name: "A", title: "", description: "Ready when you are.", color: "green",
+  notifications: true, unread: false, busy: false, hasMore: false, messages: [],
+  modelSelection: { instanceId: "x", model: "m" },
+  tasks: [{ threadId: "a-first", title: "First", createdAt: 1, updatedAt: 2 }, { threadId: "a-now", title: "Now", createdAt: 3, updatedAt: 4 }, { threadId: "a-new", title: "", createdAt: 5 }],
+}) : ({
   id, threadId: `${id}-now`, mainThreadId: `${id}-now`, name: id.toUpperCase(), title: "", description: "Ready when you are.", color: "green",
   notifications: true, unread: false, busy: false, hasMore: false,
   messages: [{ id: `${id}-m1`, role: "bot", kind: "text", text: `old answer ${id}`, at: 4 }],
@@ -103,8 +109,8 @@ beforeAll(() => {
     if (path.startsWith("/api/threads/a-now/messages")) return Promise.resolve(json({ messages: wireBot("a").messages, hasMore: false }));
     if (path.startsWith("/api/threads/a-first/messages")) return Promise.resolve(json({ messages: [], hasMore: false }));
     if (path === "/api/bots/a/tasks" && init?.method === "POST") {
-      const made = { ...wireBot("a"), threadId: "a-new", mainThreadId: "a-new", messages: [{ id: "u1", role: "user", kind: "text", text: "hello", at: 6 }],
-        tasks: [...wireBot("a").tasks, { threadId: "a-new", title: "", createdAt: 5 }] };
+      aTopicMade = true;
+      const made = wireBot("a");
       return Promise.resolve(json({ bot: made, task: { threadId: "a-new" } }));
     }
     return Promise.resolve(json({}));
@@ -113,11 +119,30 @@ beforeAll(() => {
 beforeEach(() => {
   saved.clear();
   posts.length = 0;
+  aTopicMade = false;
   resetFreshTopicMemory();
   saved.set("sagax.lastConversation.v1", "a");
 });
 afterEach(() => resetFreshTopicMemory());
 afterAll(() => vi.unstubAllGlobals());
+
+describe("Clear chat in the ... menu (JC 2026-11-06)", () => {
+  it("is an entry of the conversation menu, never a button of its own, and starts the fresh topic", async () => {
+    await launch();
+    expect(host.querySelector("[data-new-topic]")).toBeNull();
+    expect(host.querySelector("[data-chat-clear]")).toBeNull();
+    flushSync(() => host.querySelector<HTMLButtonElement>('[data-clear-chat-menu="a"]')!.click());
+    const clear = host.querySelector<HTMLButtonElement>('[role="menu"] [data-chat-clear][data-new-topic="a"]');
+    expect(clear?.textContent).toContain("Clear chat");
+    expect([...host.querySelectorAll("[data-chat-clear]")].every((node) => node.closest('[role="menu"]'))).toBe(true);
+    flushSync(() => clear!.click());
+    await settle();
+    expect(posts.some((post) => post.path === "/api/bots/a/tasks")).toBe(true);
+    expect(host.textContent).not.toContain("old answer a");
+    expect(host.querySelector('[data-clear-chat-menu="a"]')?.getAttribute("aria-expanded")).toBe("false");
+    unmount();
+  });
+});
 
 describe("New chat sticks", () => {
   it("stays empty through typing, a switch away and back, a live frame and a reload, then the send makes the new topic", async () => {
@@ -125,10 +150,14 @@ describe("New chat sticks", () => {
     expect(state.selectedId).toBe("a");
     expect(host.textContent).toContain("old answer a");
 
-    flushSync(() => host.querySelector<HTMLButtonElement>("[data-new-topic=a]")!.click());
+    flushSync(() => host.querySelector<HTMLButtonElement>('[data-clear-chat-menu="a"]')!.click());
+    flushSync(() => host.querySelector<HTMLButtonElement>('[role="menu"] [data-chat-clear]')!.click());
     await settle();
+    // #2312: New chat makes the topic on the server at once, so what arrives lands in it.
+    expect(posts.filter((post) => post.path === "/api/bots/a/tasks")).toEqual([{ path: "/api/bots/a/tasks", body: { stream: true } }]);
+    expect(bot("a").threadId).toBe("a-new");
+    expect(state.freshTopic.a).toBeUndefined();
     expect(host.textContent).not.toContain("old answer a");
-    expect(host.querySelector("[data-fresh-topic-divider]")).toBeTruthy();
 
     await type("hello");
     expect(host.querySelector("textarea")!.value).toBe("hello");
@@ -141,32 +170,26 @@ describe("New chat sticks", () => {
     openBot(dispatch, bot("a"), false);
     await settle();
     expect(host.textContent).not.toContain("old answer a");
-    expect(host.querySelector("[data-fresh-topic-divider]")).toBeTruthy();
 
-    // a live frame for the covered topic
-    stream().send({ kind: "bot", bot: { ...wireBot("a"), tasks: [wireBot("a").tasks[0], { ...wireBot("a").tasks[1], updatedAt: 4 }] } }, "run:1");
+    // a live frame for the topic
+    stream().send({ kind: "bot", bot: wireBot("a") }, "run:1");
     await settle();
     expect(host.textContent).not.toContain("old answer a");
 
-    // a reload
+    // a reload: the server has the topic, no second one is made
     unmount();
     resetFreshTopicMemory();
     await launch();
-    expect(state.freshTopic.a).toEqual({ threadId: "a-now", auto: false });
+    expect(bot("a").threadId).toBe("a-new");
     expect(host.textContent).not.toContain("old answer a");
-    expect(posts.some((post) => post.path === "/api/bots/a/tasks")).toBe(false);
+    expect(posts.filter((post) => post.path === "/api/bots/a/tasks")).toHaveLength(1);
 
-    // the first message creates the topic, then goes there
+    // the first message goes to that same topic
     dispatch({ type: "send", botId: "a", text: "hello" } as Action);
     await settle();
-    const created = posts.filter((post) => post.path === "/api/bots/a/tasks");
-    expect(created).toEqual([{ path: "/api/bots/a/tasks", body: { stream: true } }]);
+    expect(posts.filter((post) => post.path === "/api/bots/a/tasks")).toHaveLength(1);
     expect(posts.find((post) => post.path === "/api/bots/a/messages")?.body.threadId).toBe("a-new");
-    expect(bot("a").threadId).toBe("a-new");
-    expect(state.freshTopic.a).toBeUndefined();
-    // the earlier topic stays in the bot's threads, not drawn above the new one
     expect(bot("a").tasks?.map((task) => task.threadId)).toEqual(["a-first", "a-now", "a-new"]);
-    expect(host.textContent).toContain("hello");
     expect(host.textContent).not.toContain("old answer a");
     unmount();
   });

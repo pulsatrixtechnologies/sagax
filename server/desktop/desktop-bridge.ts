@@ -40,6 +40,8 @@ export const desktopBridgeRegistration = z.object({
     shell: z.boolean(), files: z.boolean(), fetch: z.boolean(), browser: z.boolean(), computer: z.boolean(), localVm: z.boolean(),
     /** Optional so a desktop that predates local models still registers. */
     localModels: z.boolean().optional(),
+    /** The Apple apps of a Mac (electron/mac-apps.mjs). Optional for older desktops. */
+    macApps: z.boolean().optional(),
   }).strict(),
   version: z.string().max(40).optional(),
 }).strict();
@@ -61,10 +63,11 @@ export const desktopSystemInfo = z.object({
 }).strict();
 export type DesktopSystemInfo = z.infer<typeof desktopSystemInfo>;
 
-// Messages (iMessage) is intentionally not a bridge action. It runs only
-// inside the solo Sagax process on the Mac where that process runs
-// (server/imessage/imessage-mcp.ts). An organization server must not ask the
-// signed-in desktop to read or send Messages.
+// The Apple apps of the person's Mac (Messages, Mail, Calendar, Contacts,
+// Reminders, Notes) are one action, "mac_app": the server's bots call them on
+// the person's own Mac through their signed-in desktop app, which runs them
+// with osascript/JXA (electron/mac-apps.mjs) when the person turned that app on
+// there. In solo mode the same tools run in-process (server/imessage/imessage-mcp.ts).
 export const DESKTOP_BRIDGE_ACTIONS = [
   "run_command", "read_file", "write_file", "list_files", "search_files", "fetch_url", "browse",
   "computer_tools", "computer_call", "vm_status", "vm_start", "vm_run_command", "vm_create", "stage_file",
@@ -77,6 +80,8 @@ export const DESKTOP_BRIDGE_ACTIONS = [
   // The in-chat terminal the person opened on their computer or its Local VM
   // (server/desktop/desktop-terminal.ts): the app connects back with the ticket.
   "terminal_open", "vm_terminal_open",
+  // One Apple app tool on the person's Mac (tool_name + bounded arguments).
+  "mac_app",
 ] as const;
 export type DesktopBridgeAction = (typeof DESKTOP_BRIDGE_ACTIONS)[number];
 
@@ -125,6 +130,7 @@ export function desktopBridgeCapability(action: DesktopBridgeAction): keyof Desk
     case "vm_status": case "vm_start": case "vm_run_command": case "vm_create":
     case "vm_stop": case "vm_pause": case "vm_resume": case "vm_setup": case "vm_install": case "vm_screenshot": case "vm_computer_call": case "vm_terminal_open": return "localVm";
     case "local_model": return "localModels";
+    case "mac_app": return "macApps";
   }
 }
 

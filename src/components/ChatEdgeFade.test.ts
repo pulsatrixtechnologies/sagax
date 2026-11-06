@@ -32,15 +32,16 @@ describe("ChatEdgeFade", () => {
     // own, in the bot chat and the group chat alike (JC 2026-11-06).
     const header = (src: string) => /"@container\/chathead[^"]*"/.exec(src)?.[0] ?? "";
     const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
-    expect(read("./ChatView.tsx-parts/ChatViewHeader.tsx")).toContain('<ChatEdgeFade edge="top" />');
-    expect(read("./GroupView.tsx")).toContain('<ChatEdgeFade edge="top" />');
+    // One shared bar (ChatHeaderBar) carries the top fade for every chat view.
+    expect(read("./ChatHeaderBar.tsx")).toContain('<ChatEdgeFade edge="top" />');
+    expect(read("./ChatHeaderBar.tsx")).toContain('<ChatEdgeFade edge="bottom" />');
+    expect(read("./ChatView.tsx-parts/ChatViewHeader.tsx")).toContain("<ChatHeaderBar");
+    expect(read("./GroupView.tsx")).toContain("<ChatHeaderBar");
     expect(read("./ChatView.tsx-parts/ChatViewShell.tsx")).toContain('<ChatEdgeFade edge="bottom" />');
     expect(read("./GroupView.tsx-parts/GroupRoomTranscriptPane.tsx")).toContain('<ChatEdgeFade edge="bottom" />');
-    for (const file of ["./ChatView.tsx-parts/ChatViewHeader.tsx", "./GroupView.tsx"]) {
-      const cls = header(read(file));
-      expect(cls, file).toContain("absolute");
-      expect(cls, file).not.toMatch(/\bbg-/);
-    }
+    const cls = header(read("./ChatHeaderBar.tsx"));
+    expect(cls).toContain("absolute");
+    expect(cls).not.toMatch(/\bbg-/);
     expect(read("./GroupView.tsx-parts/GroupRoomTranscriptPane.tsx")).toContain('"pt-14"');
   });
 });

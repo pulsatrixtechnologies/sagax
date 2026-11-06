@@ -92,8 +92,32 @@ export function turnedOffCount(instances: readonly { instanceId: string; models:
   return count;
 }
 
+/** Pick-only mode: the menu chooses a model and hands it back; nothing is
+ * saved to a bot. For surfaces that plan a change (team settings) or launch
+ * something (a cloud run), one menu everywhere. */
+export interface ModelChoose {
+  /** What is chosen now; null when nothing is (the keep row is current). */
+  value: { instanceId?: string; model: string } | null;
+  onPick: (pick: { instanceId?: string; model: string }) => void;
+  /** The text the chip shows. */
+  label: string;
+  /** A row at the head of the menu, for example "Keep current model". */
+  keep?: { label: string; onKeep: () => void };
+  /** Only the engines this accepts are listed. */
+  engine?: (instance: import("@/state/store").InstanceInfo) => boolean;
+  /** A model typed in the search, outside the catalog, can be picked too. */
+  custom?: { label: (text: string) => string };
+}
+
+/** The bot the menu leans on when it only chooses (no bot is touched). */
+const CHOOSE_BOT = {
+  id: "", name: "", threadId: "", busy: false, tasks: [],
+  modelSelection: { instanceId: "", model: "" },
+} as unknown as Bot;
+
 export function ModelPicker({
-  bot,
+  bot: botProp,
+  choose,
   threadId,
   className,
   contained = false,
@@ -110,7 +134,9 @@ export function ModelPicker({
   /** Other selected bots that receive the same model and effort. */
   alsoApplyTo,
 }: {
-  bot: Bot;
+  /** Omitted with `choose`. */
+  bot?: Bot;
+  choose?: ModelChoose;
   threadId?: string;
   className?: string;
   /** Profile row: the label sits above the pill, which opens the model
@@ -139,6 +165,7 @@ export function ModelPicker({
   alsoApplyTo?: readonly string[];
 }) {
   const { state, dispatch, refreshInstances, refreshModels: refreshInstanceModels } = useStore();
+  const bot = botProp ?? CHOOSE_BOT;
   // #2050: the stars follow the person through /api/me/models
   useModelFavoritesServerSync();
   const applyToOthers = (next: ModelSelection) => {
@@ -176,11 +203,13 @@ export function ModelPicker({
   const anyOpen = menu;
   const accountModels = useMyEngineModels(myEngines, anyOpen);
 
-  const selection = bot.modelSelection;
-  const autoOn = selection.auto === true && !viewerLocal;
+  const selection: ModelSelection = choose
+    ? { instanceId: choose.value?.instanceId ?? "", model: choose.value?.model ?? "" }
+    : bot.modelSelection;
+  const autoOn = selection.auto === true && !viewerLocal && !choose;
   const autoTask = state.bots?.find((candidate) => candidate.id === bot.id)?.tasks
     ?.find((task) => task.threadId === (threadId ?? bot.threadId));
-  const autoStatus = useAutoModelStatus(bot.id, threadId, autoOn || anyOpen, JSON.stringify([selection, state.config?.disabledModels, state.config?.myDisabledModels, state.instances]));
+  const autoStatus = useAutoModelStatus(bot.id, threadId, (autoOn || anyOpen) && !choose, JSON.stringify([selection, state.config?.disabledModels, state.config?.myDisabledModels, state.instances]));
   const autoPreview = autoStatus?.auto ? autoStatus.pick : null;
   const autoRecord = autoOn ? autoTask?.autoModel ?? autoPreview : null;
   const active = state.instances.find((instance) => instance.instanceId === selection.instanceId);
@@ -194,7 +223,7 @@ export function ModelPicker({
     ? configured.filter((instance) => !notAllowed(instance) &&
       (instance.instanceId === selection.instanceId || (!orgRefusesEngine(instance) && !notGiven(instance))))
     : configured;
-  const selectable = pickerInstances.filter((instance) => !notAllowed(instance));
+  const selectable = pickerInstances.filter((instance) => !notAllowed(instance) && (!choose?.engine || choose.engine(instance)));
   const selectedVariantLabel = variantLabelForSelection(active, selection);
   const multipleClaudeAccounts = state.instances.filter(isClaudeAccount).length > 1;
   const showActiveAccount = (multipleClaudeAccounts && isClaudeAccount(active)) || Boolean(active?.snapshot.chatgptPlan);
@@ -228,7 +257,7 @@ export function ModelPicker({
   // One menu everywhere (#2050 two-pane menu retired): the settings surfaces
   // (Settings > Models, Bot > Model, bulk edit) have no Effort row of their
   // own, so their chip and menu always carry the effort, as before.
-  const showEffort = advanced || listChip || contained || Boolean(alsoApplyTo?.length);
+  const showEffort = !choose && (advanced || listChip || contained || Boolean(alsoApplyTo?.length));
 
   const profile = state.bots.find((candidate) => candidate.id === bot.id) ?? bot;
   const follows = threadId ? profile.tasks?.find((task) => task.threadId === threadId)?.followsBotModel : undefined;
@@ -266,6 +295,12 @@ export function ModelPicker({
   };
 
   const pick = (instance: typeof state.instances[number], model: string, keepOpen = false) => {
+    if (choose) {
+      if (instance.policy || notAllowed(instance)) return;
+      choose.onPick({ instanceId: instance.instanceId, model });
+      closeAll();
+      return;
+    }
     if ((bot.busy && !alsoApplyTo?.length) || instance.policy || notAllowed(instance)) return;
     const localRow = instance.models.options.find((option) => option.id === model && (option.local || isDesktopModelId(option.id)));
     if (localRow && localRowUnavailable(instance.driverKind, model, localRow.anthropic)) return;
@@ -349,7 +384,8 @@ export function ModelPicker({
     fallback,
     instances: state.instances,
     selectable,
-    viewerLocal,
+    viewerLocal: viewerLocal || Boolean(choose),
+    keepRow: choose?.keep ? { key: "keep", kind: "keep", label: choose.keep.label, current: choose.value === null } : undefined,
     autoPreview,
     autoRecord,
     profile,
@@ -361,6 +397,10 @@ export function ModelPicker({
     favoriteKeys,
   });
   const onRow = (row: ModelMenuRow) => {
+    if (row.kind === "keep") {
+      choose?.keep?.onKeep();
+      return closeAll();
+    }
     if (row.kind === "auto") return chooseAuto();
     if (row.kind === "follow") return pickBotModel();
     const instance = state.instances.find((candidate) => candidate.instanceId === row.instanceId);
@@ -369,7 +409,7 @@ export function ModelPicker({
 
   const summary = modelPickerSummary({ autoOn, autoRecord, active, selection, selectedVariantLabel, advanced });
   const followLine = modelPickerFollowLine({ follows, profileName: profile.name, fallbackLine });
-  const composerLabel = modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel });
+  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel });
 
   const toggleMenu = (anchor: HTMLElement | null = null, onDone?: () => void) => {
     if (locked) return;
@@ -421,6 +461,7 @@ export function ModelPicker({
     contained,
     listChip,
     bot,
+    chooseLabel: choose?.label,
     threadId,
     triggerRef,
     menu,
@@ -480,6 +521,7 @@ export function ModelPicker({
       inComposer={inComposer}
       turnedOff={turnedOff}
       openActiveModels={openActiveModels}
+      customModel={choose?.custom ? { label: choose.custom.label, onPick: (text) => { choose.onPick({ model: text }); closeAll(); } } : undefined}
     />
   );
 }
@@ -521,6 +563,7 @@ function ModelPickerShell({
   inComposer,
   turnedOff,
   openActiveModels,
+  customModel,
 }: {
   rootRef: React.RefObject<HTMLDivElement | null>;
   className?: string;
@@ -558,6 +601,7 @@ function ModelPickerShell({
   inComposer: boolean;
   turnedOff: number;
   openActiveModels?: () => void;
+  customModel?: { label: (text: string) => string; onPick: (text: string) => void };
 }) {
   return (
     <div ref={rootRef} className={cn(contained || listChip ? "w-full min-w-0" : "relative", className)}>
@@ -623,6 +667,7 @@ function ModelPickerShell({
         anchorRef: (!headless && !windowOnly && (listChip || inComposer)) ? triggerRef : undefined,
         turnedOff,
         openActiveModels,
+        customModel,
       }))}
     </div>
   );

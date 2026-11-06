@@ -9,6 +9,7 @@ import { RUN_ENGINES } from "../../../shared/cloud-agents.ts";
 import type { CodeEnvironment } from "@/lib/code-runs";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { ModelPicker } from "../ModelPicker";
 
 export interface LaunchComposerProps {
   environments: CodeEnvironment[];
@@ -19,12 +20,15 @@ export interface LaunchComposerProps {
 }
 
 const ENGINE_LABEL: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex" };
+/** The Sagax engines whose models a cloud run engine can run. */
+const ENGINE_DRIVER: Record<string, string> = { "claude-code": "claudeAgent", codex: "codex" };
 
 export function LaunchComposer({ environments, consoleUrl, busy = false, error, onLaunch }: LaunchComposerProps) {
   const [envId, setEnvId] = useState<string>("");
   const [prompt, setPrompt] = useState("");
   const [engine, setEngine] = useState<string>("");
   const [model, setModel] = useState("");
+  const [modelInstance, setModelInstance] = useState<string | undefined>(undefined);
   const [picker, setPicker] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const env = environments.find((row) => row.id === envId) ?? environments[0];
@@ -32,6 +36,7 @@ export function LaunchComposer({ environments, consoleUrl, busy = false, error, 
     if (!env) return;
     setEngine((current) => current || env.engine_default);
     setModel(env.model_default);
+    setModelInstance(undefined);
   }, [env]);
   useEffect(() => {
     if (!picker) return;
@@ -108,11 +113,14 @@ export function LaunchComposer({ environments, consoleUrl, busy = false, error, 
           >
             {RUN_ENGINES.map((value) => <option key={value} value={value}>{ENGINE_LABEL[value]}</option>)}
           </select>
-          <input
-            aria-label={t("code.launch.model")}
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="w-44 rounded-md bg-transparent px-1 py-0.5 text-[12.5px] text-ink-secondary hover:bg-hover focus:bg-hover focus:outline-none"
+          <ModelPicker
+            choose={{
+              value: model.trim() ? { instanceId: modelInstance, model: model.trim() } : null,
+              label: model.trim() || t("code.launch.model"),
+              engine: (instance) => !ENGINE_DRIVER[engine || env?.engine_default || ""] || instance.driverKind === ENGINE_DRIVER[engine || env?.engine_default || ""],
+              custom: { label: (text) => t("code.launch.useModel", { model: text }) },
+              onPick: (pick) => { setModel(pick.model); setModelInstance(pick.instanceId); },
+            }}
           />
           <span className="flex-1" />
           <button

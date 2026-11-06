@@ -47,6 +47,7 @@ export function ModelPickerTrigger({
   contained,
   listChip = false,
   bot,
+  chooseLabel,
   threadId,
   triggerRef,
   menu,
@@ -71,6 +72,8 @@ export function ModelPickerTrigger({
   /** Settings list row: full-width readable pill, no effort suffix (effort is a sibling control). */
   listChip?: boolean;
   bot: Bot;
+  /** Pick-only surfaces: the text the chip shows in place of the bot's model. */
+  chooseLabel?: string;
   threadId?: string;
   triggerRef: RefObject<HTMLButtonElement | null>;
   menu: boolean;
@@ -136,7 +139,7 @@ export function ModelPickerTrigger({
         </span>
       )}
       <span data-model-list-chip-label="" className="min-w-0 flex-1 truncate text-left">
-        {listChipLabel({ autoOn, autoRecord, active, selection, showActiveAccount })}
+        {chooseLabel !== undefined ? chooseLabel : listChipLabel({ autoOn, autoRecord, active, selection, showActiveAccount })}
       </span>
       <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform", menu && "rotate-180")} />
     </button>
@@ -172,11 +175,11 @@ export function ModelPickerTrigger({
     )}
     <span className={cn("flex min-w-0 flex-nowrap items-center gap-1", !contained && active && "@max-4xl/chathead:hidden")}>
       <span className={"max-w-[160px] truncate"}>
-        {active && showActiveAccount && !autoOn && (
+        {chooseLabel === undefined && active && showActiveAccount && !autoOn && (
           <span data-model-account className="text-ink-secondary">{active.displayName} · </span>
         )}
-        {autoOn ? <span data-model-auto-chip>{autoChipLabel(autoRecord)}</span> : modelLabel(active, selection.model)}
-        {!autoOn && active && modelProvider(active, selection.model) && (
+        {chooseLabel !== undefined ? chooseLabel : autoOn ? <span data-model-auto-chip>{autoChipLabel(autoRecord)}</span> : modelLabel(active, selection.model)}
+        {chooseLabel === undefined && !autoOn && active && modelProvider(active, selection.model) && (
           <span className="text-ink-secondary"> · {modelProvider(active, selection.model)}</span>
         )}
       </span>

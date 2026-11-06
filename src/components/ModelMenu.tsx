@@ -106,7 +106,7 @@ function canHover(): boolean {
   }
 }
 
-export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, onPreview, onAutoEdit, after, autoPanel }: {
+export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, onPreview, onAutoEdit, after, autoPanel, custom }: {
   sections: ModelMenuSection[];
   onPick: (row: ModelMenuRow) => void;
   onPreview?: (row: ModelMenuRow) => void;
@@ -131,6 +131,9 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   /** #2106: drawn right under the Auto row of the flat list (its Optimize
    * choices), so opening Edit shows them where the eye already is. */
   autoPanel?: ReactNode;
+  /** A typed value outside the catalog: with a search that matches no model
+   * exactly, a "Use <text>" row picks the text itself. */
+  custom?: { label: (text: string) => string; onPick: (text: string) => void };
 }) {
   const style = STYLE[variant];
   const [query, setQuery] = useState("");
@@ -168,6 +171,9 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
     setExpandedProviders((prev) => ({ ...prev, [key]: !prev[key] }));
   };
   const active = activeRowKey(rows, moved, searching);
+  const typed = query.trim();
+  const customOffer = custom && searching && !flatRowsOf(shown).some((row) => row.modelId === typed || row.label.toLowerCase() === typed.toLowerCase())
+    ? typed : null;
   const flatIds = shown.flatMap((section) => section.rows);
   const optionId = (key: string) => entries
     ? `${baseId}-r${entries.findIndex((entry) => entry.key === key)}`
@@ -266,6 +272,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
       event.preventDefault();
       const row = entry ? entry.row : pickableRows(shown).find((candidate) => candidate.key === active);
       if (row && !disabled) onPick(row);
+      else if (!row && customOffer && !disabled) custom!.onPick(customOffer);
       return;
     }
     if (event.key === "Escape") {
@@ -400,7 +407,14 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
         <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list
           data-model-list-scroll={after !== undefined ? "" : undefined}
           className={listScrollClass}>
-          {shown.length === 0 && <div data-model-no-match className={style.empty}>{t("model.noMatch")}</div>}
+          {shown.length === 0 && !customOffer && <div data-model-no-match className={style.empty}>{t("model.noMatch")}</div>}
+          {customOffer && (
+            <div role="group" data-model-custom className="py-0.5">
+              <ModelMenuItem variant={variant} data-model-custom-row onClick={() => custom!.onPick(customOffer)}>
+                <span className="truncate">{custom!.label(customOffer)}</span>
+              </ModelMenuItem>
+            </div>
+          )}
           {shown.map((section, index) => {
             const preview = previewSection(section);
             return (
@@ -458,6 +472,10 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
       )}
     </div>
   );
+}
+
+function flatRowsOf(sections: readonly ModelMenuSection[]): ModelMenuRow[] {
+  return sections.flatMap((section) => section.rows);
 }
 
 /** "Provider ›": the providers, listed in place of the root. */
@@ -717,6 +735,7 @@ function ModelSearchRow({ row, id, domKey, active, style, disabled, nested = fal
       data-model-option={row.kind === "model" ? row.modelId : undefined}
       data-model-auto-row={row.kind === "auto" || undefined}
       data-follow-bot-model={row.kind === "follow" || undefined}
+      data-model-keep-row={row.kind === "keep" || undefined}
       data-model-unavailable={row.unavailable ? "" : undefined}
       title={row.unavailable ?? (row.warning ? [row.title ?? row.label, row.warning].join(" · ") : row.title)}
       // keep the focus in the search field (a submenu's row takes it)

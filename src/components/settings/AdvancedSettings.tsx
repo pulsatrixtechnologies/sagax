@@ -1,7 +1,6 @@
-// Settings > General > Advanced (0.5.6, Decision: the reference design's layout). Grey
-// headings over cards of rows: the organization's bots (on a desktop with no
-// server only: Organization is hidden there), people's tool access (when
-// some exist), event log cleanup, and Diagnostics. Every value keeps its
+// Rows of Settings > App (advanced and help groups; AppPage.tsx mounts them,
+// General > Advanced no longer exists since 2026-10-26): loop guard,
+// Diagnostics, logs and feedback. Every value keeps its
 // route and applies whether or not anyone looks.
 //
 // 2026-10-16 (the reference design parity): Diagnostics also has "Download logs" (the
@@ -18,11 +17,7 @@ import { launchBridges } from "@/lib/launch";
 import { t } from "@/lib/i18n";
 import { canEditConfig } from "@/lib/viewer";
 import { api, useStore, type ConfigStatus } from "@/state/store";
-import { DescribedRow, PILL, SettingsGroup, Switch } from "../SettingsPrimitives";
-import { ThreadCleanupSettings } from "../ThreadCleanupSettings";
-import { PeopleToolAccessSettings } from "../ToolAccessSettings";
-import { OrganizationBotRows } from "./OrganizationBotRules";
-import { UsageMeterRow } from "./UsageMeterRow";
+import { DescribedRow, PILL, Switch } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 /** The desktop app in "No server" mode: Settings > Organization is hidden
@@ -36,38 +31,6 @@ export function isSoloDesktop(config: ConfigStatus | null | undefined): boolean 
  * an installation editor's, but for Diagnostics, which is the desktop app's. */
 export function generalAdvancedShown(config: ConfigStatus | null | undefined): boolean {
   return canEditConfig(config) || Boolean(typeof window !== "undefined" && (window.ogb?.exportDiagnostics || window.ogb?.exportLogs));
-}
-
-export function GeneralAdvancedSettings() {
-  const { state } = useStore();
-  const editConfig = canEditConfig(state.config);
-  return (
-    <div className="flex flex-col gap-5" data-general-advanced="">
-      {isSoloDesktop(state.config) && (
-        <SettingsGroup title={t("organization.group.bots")} groupId="organizationBots">
-          <OrganizationBotRows />
-        </SettingsGroup>
-      )}
-      {editConfig && (
-        <>
-          {/* 2026-10-15: Tool access, Parallel conversations and Automatic
-              recovery are each bot's own, in its editor (Permissions and
-              Model pages). A person's grants stay here. */}
-          <PeopleToolAccessSettings />
-          <ThreadCleanupSettings />
-          <SettingsGroup title={t("settings.loopGuard.title")} groupId="loopGuard">
-            <LoopGuardRow />
-          </SettingsGroup>
-        </>
-      )}
-      <SettingsGroup title={t("settings.diagnostics.title")} groupId="diagnostics">
-        <DiagnosticsRow />
-        <DownloadLogsRow />
-        <UsageMeterRow />
-        <SendFeedbackRow />
-      </SettingsGroup>
-    </div>
-  );
 }
 
 /** Workspace loop guard: on by default; steers then stops a repeating shell failure. */

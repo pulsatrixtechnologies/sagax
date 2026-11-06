@@ -188,7 +188,7 @@ function WorkspaceBackupForm() {
             <p className="text-[12px] leading-4 text-ink-secondary">{t("backup.passwordHint")}</p>
             <p className="text-[12px] leading-4 text-warning">{t("backup.privacy")}</p>
             <button type="submit" disabled={disabled || !validPassword(exportPassword) || exportPassword !== confirmPassword} className={primaryPill}>{busy === "export" ? <Loader2 aria-hidden="true" size={14} className="animate-spin" /> : <Download aria-hidden="true" size={14} />}{busy === "export" ? t("backup.exporting") : t("backup.export")}</button>
-            {download && <a href={download.url} download={download.filename} className="self-end break-all text-[12px] text-accent-text underline">{t("backup.downloadAgain", { filename: download.filename })}</a>}
+            {download && <a href={download.url} download={download.filename} className={`${PILL} self-end break-all`}>{t("backup.downloadAgain", { filename: download.filename })}</a>}
           </form>}
         >
           <button

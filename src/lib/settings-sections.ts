@@ -36,7 +36,6 @@ const MERGED: Partial<Record<AppSettingsSection, { section: AppSettingsSection; 
 export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   security: "security",
   "security.keys": "security",
-  "security.classes": "security",
   myApprovalRules: "security",
   myToolAccess: "security",
   "credentials.items": "credentials",

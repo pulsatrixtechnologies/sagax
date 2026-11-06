@@ -69,8 +69,9 @@ export function openSettings(dispatch: SettingsDispatch, section: AppSettingsSec
     dispatch({ type: "togglePlugins", open: true, page: "pages" });
     return;
   }
-  // About is its own centred modal (last under App), not a Settings pane.
-  if (section === "about") {
+  // The About window is its own centred modal; a card of the App page
+  // (about.* / general.*) opens the App page instead.
+  if (section === "about" && !(cardId && /^(about|general)\./.test(cardId))) {
     requestAbout();
     return;
   }

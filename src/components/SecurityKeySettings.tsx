@@ -180,6 +180,7 @@ export function SecurityKeySettings() {
       {state?.unreadable && <SettingsNotice tone="danger">{t("security.unreadable")}</SettingsNotice>}
       {notice && <SettingsNotice tone="success">{notice}</SettingsNotice>}
 
+      <div data-settings-card="security.keys">
       <SettingsGroup title={t("security.keys.title")} groupId="security.keys">
         {state?.keys.map((key) => (
           namingId === key.id ? (
@@ -282,6 +283,7 @@ export function SecurityKeySettings() {
           )}
         </DescribedRow>
       </SettingsGroup>
+      </div>
     </div>
   );
 }

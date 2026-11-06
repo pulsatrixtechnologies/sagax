@@ -65,7 +65,13 @@ export function createPluginRoutes(deps: PluginRouteDeps): RouteHandler {
       const q = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
       const cursor = url.searchParams.get("cursor") || undefined;
       if (cursor && cursor.length > 500) return json(res, 400, { error: "cursor is not one this server returned" });
-      const [page, installed] = await Promise.all([deps.registry.search(q, cursor), deps.installed()]);
+      // ?registry=0: the reviewed catalog only (the panels read featured, #2273):
+      // a first registry call can take its 5 s timeout.
+      const skipRegistry = url.searchParams.get("registry") === "0";
+      const [page, installed] = await Promise.all([
+        skipRegistry ? Promise.resolve({ results: [], nextCursor: null, available: false }) : deps.registry.search(q, cursor),
+        deps.installed(),
+      ]);
       const installedUrls = new Set(installed.map((plugin) => plugin.url));
       const mark = (listing: PluginListing) => {
         const region = listing.regions?.find((candidate) => installedUrls.has(candidate.url));

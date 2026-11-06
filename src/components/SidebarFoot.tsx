@@ -42,7 +42,7 @@ export function useConnectedApps(): PluginItem[] {
     };
     void Promise.all([
       api("/api/mcp/servers").catch(() => null),
-      api("/api/plugins/search").catch(() => null),
+      api("/api/plugins/search?registry=0").catch(() => null),
     ]).then(([mcp, search]) => {
       servers = { servers: mcp?.servers ?? [], featured: search?.featured ?? [] };
       publish();

@@ -125,7 +125,7 @@ export function usePluginsPanelState() {
   const botCapabilities = useBotCapabilities(scopeBotId, { revision: capabilityRevision });
   const [botBusy, setBotBusy] = useState<string | null>(null);
 
-  const loadFeatured = useCallback(() => api("/api/plugins/search")
+  const loadFeatured = useCallback(() => api("/api/plugins/search?registry=0")
     .then((result) => setFeatured(result.featured ?? []))
     .catch(() => setFeatured([])), []);
   const skillsRoute: "/api/me/skills-library" | "/api/skills-library" = scope === "me" ? "/api/me/skills-library" : "/api/skills-library";

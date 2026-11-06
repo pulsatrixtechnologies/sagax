@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
 import type { PluginListing, RegistrySearch } from "../plugins/plugin-registry.ts";
@@ -70,6 +70,15 @@ describe("plugin routes", () => {
     // install; the handler's mayInstall refuses everyone else (see below).
     expect(requiredScope("POST", "/api/plugins/install")).toBe("client");
     expect(requiredScope("POST", "/api/plugins/uninstall")).toBe("admin");
+  });
+
+  it("registry=0 answers the reviewed catalog without waiting for the registry (#2273)", async () => {
+    const search = vi.fn(() => new Promise<never>(() => undefined));
+    const { base } = await serve(OWNER, { registry: { search, lookup: async () => null } });
+    const page = await (await fetch(`${base}/search?registry=0`)).json() as { featured: Array<{ id: string; installed: boolean }>; results: unknown[] };
+    expect(search).not.toHaveBeenCalled();
+    expect(page.featured.find((listing) => listing.id === "linear")).toMatchObject({ installed: true });
+    expect(page.results).toEqual([]);
   });
 
   it("lists featured first, community without duplicates, and what is installed", async () => {

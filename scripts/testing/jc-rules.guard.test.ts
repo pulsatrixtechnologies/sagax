@@ -476,7 +476,6 @@ describe("no list keeps a card from Always allow", () => {
  * the whole organization's (every member, the shared server, the org's
  * billing), never the person's own bots, groups, setups or settings. */
 const ADMIN_GATES_BY_DECISION: ReadonlyArray<{ file: string; why: string }> = [
-  { file: "src/components/NotificationSettings.tsx", why: "ReportsSettings: the organization's reports, sent to every member" },
   { file: "src/components/PublishedPages.tsx", why: "OrganizationPages: pages published for the whole organization" },
   { file: "src/components/PerspicaxOrgSettings.tsx", why: "the organization's own settings in Perspicax (confidential default, vault export, team secrets, org pages)" },
   { file: "src/components/settings/OrgSharing.tsx", why: "OrgBotMenu: stop or delete a bot shared with the whole organization" },

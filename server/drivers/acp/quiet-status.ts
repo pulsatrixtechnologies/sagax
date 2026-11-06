@@ -422,12 +422,3 @@ export function lastSeenPhrase(state: QuietState): string {
     case "unknown": return "no readable process state";
   }
 }
-
-/** A 429 whose wait is longer than any engine retries on its own is a usage limit, not a short rate limit. */
-export const DEFAULT_LIMIT_QUIET_MS = 2 * 60_000;
-export const limitQuietMs = (): number => {
-  const raw = Number(process.env.SAGAX_ACP_LIMIT_QUIET_MS ?? DEFAULT_LIMIT_QUIET_MS);
-  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_LIMIT_QUIET_MS;
-};
-export const usageLimitWait = (status: number | null | undefined, waitMs: number | null | undefined): boolean =>
-  status === 429 && (waitMs ?? 0) > limitQuietMs();

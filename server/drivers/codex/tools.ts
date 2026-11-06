@@ -14,6 +14,7 @@ import { commandSummary } from "../../tools/tool-summary.ts";
 import { CODEX_MISSING_CREDENTIALS, codexContextFull, codexSignInExpired, codexSignInRefused, codexUserError } from "../codex-errors.ts";
 import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { renewalPrompt } from "../../context/context-renewal.ts";
+import { boundedLabel } from "./plain.ts";
 import { codexQuestionReply } from "./questions.ts";
 import { boundedLabel } from "./plain.ts";
 

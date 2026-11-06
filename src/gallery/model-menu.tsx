@@ -85,7 +85,7 @@ function Gallery() {
     <div className="min-h-dvh bg-app p-4">
       <div data-model-menu
         style={narrow ? { left: 8, right: 8, bottom: 16 } : { right: 24, bottom: 24, width: 340 }}
-        className="fixed z-50 flex max-h-[min(560px,calc(100dvh-96px))] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50">
+        className="fixed z-50 flex max-h-[min(392px,calc(100dvh-96px))] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50">
         <ModelSearchList variant="popover" autoFocus submenus={!flat} sections={sections} onPick={() => {}}
           favorites={{ keys, onToggle: (row) => toggleModelFavorite(row.key) }}
           after={footer} />

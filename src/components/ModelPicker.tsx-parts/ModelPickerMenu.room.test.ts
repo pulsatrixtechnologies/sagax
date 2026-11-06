@@ -8,8 +8,8 @@ describe("menuRoomAbove", () => {
     // chip at 350px from the top of a 900px window: bottom edge 556px from the bottom
     expect(menuRoomAbove(556, 900)).toBe(336);
   });
-  it("keeps the 560px ceiling when there is room", () => {
-    expect(menuRoomAbove(100, 1200)).toBe(560);
+  it("keeps the 392px ceiling when there is room", () => {
+    expect(menuRoomAbove(100, 1200)).toBe(392);
   });
   it("keeps a usable height when the chip sits near the top", () => {
     expect(menuRoomAbove(850, 900)).toBe(120);
@@ -23,9 +23,9 @@ describe("windowOnly menu place", () => {
     expect(windowOnlyMenuPlace()).toEqual({ left: 24, top: 96 });
   });
   it("keeps the menu below that top edge inside the window", () => {
-    expect(menuRoomBelow(96, 1032)).toBe(560);
+    expect(menuRoomBelow(96, 1032)).toBe(392);
     expect(menuRoomBelow(96, 200)).toBe(120);
-    // 1376 x 1032 capture: room from top 96 down leaves the full 560 ceiling
+    // 1376 x 1032 capture: room from top 96 down leaves the full 392 ceiling
     expect(96 + menuRoomBelow(96, 1032)).toBeLessThanOrEqual(1032 - 8);
   });
   it("clamps the top pin on a short viewport so the menu stays on screen", () => {

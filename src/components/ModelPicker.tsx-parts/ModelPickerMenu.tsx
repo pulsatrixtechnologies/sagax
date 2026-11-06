@@ -21,16 +21,16 @@ function menuViewportHeight(fallback = 800): number {
   return Number(window.innerHeight) || fallback;
 }
 
-/** The height a menu anchored by its bottom edge can take: up to 560px, never
+/** The height a menu anchored by its bottom edge can take: up to 392px (30% under the old 560, #2181), never
  * past the window's top (8px margin). */
 export function menuRoomAbove(bottom: number, viewportHeight = menuViewportHeight()): number {
-  return Math.max(120, Math.min(560, viewportHeight - bottom - 8));
+  return Math.max(120, Math.min(392, viewportHeight - bottom - 8));
 }
 
-/** The height a menu anchored by its top edge can take: up to 560px, never
+/** The height a menu anchored by its top edge can take: up to 392px, never
  * past the window's bottom (8px margin). */
 export function menuRoomBelow(top: number, viewportHeight = menuViewportHeight()): number {
-  return Math.max(120, Math.min(560, viewportHeight - top - 8));
+  return Math.max(120, Math.min(392, viewportHeight - top - 8));
 }
 
 /** Where the model window (`windowOnly`) pins its menu: top-left inside the
@@ -225,7 +225,7 @@ export function ModelPickerMenu({
       popoverRef={menuRef as RefObject<HTMLElement | null>}
       align="start"
       gap={6}
-      maxHeight={560}
+      maxHeight={392}
       bounds={enclosingWindowBounds}
       data-model-menu=""
       data-model-menu-anchored=""
@@ -248,7 +248,7 @@ export function ModelPickerMenu({
       ? menuRoomBelow(menuAt.top)
       : menuAt.bottom != null
         ? menuRoomAbove(menuAt.bottom)
-        : 560
+        : 392
     : undefined;
   const menuPanel = (
     <div
@@ -262,7 +262,7 @@ export function ModelPickerMenu({
       onKeyDown={onKeyDown}
       {...menuMotion.exitProps}
       className={cn(
-        "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
+        "z-50 flex max-h-[min(392px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
         menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
         menuMotion.className,
       )}

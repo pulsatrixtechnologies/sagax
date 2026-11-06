@@ -26,10 +26,10 @@ function section(start: string, end: string) {
 }
 const code = transpileTs([
   section("async function interruptDirectThread(", "/** Stop left teammates"),
-  section("async function interruptParkedTurn(", "async function interruptAllDirectThreads("),
+  section("export async function interruptParkedTurn(", "async function interruptAllDirectThreads("),
   section("function releaseTurnResources(", "async function bindTurnComputer("),
   section("async function stopCompanyInstances(", "async function persistProviderInstance("),
-].join("\n"));
+].join("\n").replace(/^export\s+/m, ""));
 const reloadProvidersCode = transpileTs(
   section("/** The engine a bot's process in a conversation runs on", "// Config writes replace the engines they change."));
 
@@ -93,6 +93,7 @@ function fixture(kind: "direct" | "group", threadIds = ["first"]) {
     turnResourceOwners: owners, directTurnGenerationByThread: generations, directTurnBots: directBots, groupSpeakers: speakers,
     // each fixture room has one thread, keyed like its group
     activeGroupSpeaker: (groupId: string) => speakers.get(groupId),
+    pendingComputerResumes: new Map(),
     directRequestOwners,
     // Duplex barge-in records the live turn as cancelled. Empty here: this
     // fixture never starts a voice turn, so Stop is a no-op on that map.

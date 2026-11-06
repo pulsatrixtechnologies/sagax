@@ -2802,6 +2802,7 @@ import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
 import { createConfigHttpRoutes, type ConfigWriteContext } from "./routes/config-http.ts";
 import { reportBackgroundError } from "./background-error.ts";
+import { harnessMcpTokenEnv } from "./harness-mcp-token.ts";
 
 const PORT = Number(process.env.SAGAX_PORT || process.env.OGB_PORT || 8799);
 /** Capabilities lot 4: the organization's declarations as last broadcast
@@ -6900,7 +6901,7 @@ async function browserIntegration(botId: string, requestedProfile: string | unde
     kind: "browser", depth: 0, skillAuthoring: false, createdBots: 0, openedThreads: 0 });
   return { profile: partitionId, session, spec, integration: {
     command: process.execPath, args: [SPAWNED_PROXIES.harnessMcp, "browser"], env: {
-      ...AGENTS_NODE_FLAG, SAGAX_MCP_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`
+      ...AGENTS_NODE_FLAG, [harnessMcpTokenEnv("browser")]: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`
     }
   } };
 }
@@ -7060,7 +7061,7 @@ function dataIntegration(botId: string, turn: { threadId: string; generation: st
   const token = mintInternalCapability({ botId, ...turn, kind: "data", depth: 0, skillAuthoring: false, createdBots: 0, openedThreads: 0 });
   return {
     command: process.execPath, args: [SPAWNED_PROXIES.harnessMcp, "data"], env: {
-      ...AGENTS_NODE_FLAG, SAGAX_MCP_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`
+      ...AGENTS_NODE_FLAG, [harnessMcpTokenEnv("data")]: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`
     }
   };
 }
@@ -18918,7 +18919,7 @@ function cloudComputerTools(botId: string, owner: TurnOwner, boxId: string | nul
   return {
     command: process.execPath,
     args: [SPAWNED_PROXIES.harnessMcp, "computer"],
-    env: { ...AGENTS_NODE_FLAG, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`, SAGAX_MCP_TOKEN: control.token },
+    env: { ...AGENTS_NODE_FLAG, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`, [harnessMcpTokenEnv("computer")]: control.token },
     platform: "linux"
   };
 }

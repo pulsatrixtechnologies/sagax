@@ -25,7 +25,7 @@ import type { RuntimeStore } from "./store.ts";
 import { asking, awaited, childrenSince, clip, continuations, CUT_TWICE, duration, isTerminal, loopStop, nextGuard, outwardDetail, ownsConversation, path, restartNote, wakeOwner } from "./tree.ts";
 import { DEFAULT_LIMITS, INPUT_REMIND_REPEAT_MS, type Assignment, type Assignee, type Clock, type EndResult, type EnqueueRequest, type EnqueueResult, type EnvelopeNames,
   type EventKind, type InboxItem, type InboxKind, type Level, type Limits, type LiveEdge, type Origin, type Outcome, type Owner,
-  type Reply, type Requester, type RunInput, type RunResult, type StatusView, type TurnEvidence, type TurnRunner } from "./types.ts";
+  type Reply, type Requester, type RunInput, type RunResult, type StatusView, type TurnRunner } from "./types.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
 export type { Attempt } from "./attempts.ts";
@@ -1121,7 +1121,9 @@ result => this.turnEnded(n.id, result, live),
    * to answer it (runner.parkedGone). */
   private parkedStale(n: Assignment, now: number): string | undefined {
     if (n.status !== "needs_input") return undefined;
-    if (this.isDelegation(n) && now - n.lastActivityAt > this.limits.delegationInputWaitMs) {
+    // A non-finite inputWaitMs turns every person-wait into an open wait,
+    // including a child's delegation clock.
+    if (Number.isFinite(this.limits.inputWaitMs) && this.isDelegation(n) && now - n.lastActivityAt > this.limits.delegationInputWaitMs) {
       return `the person did not answer within ${duration(this.limits.delegationInputWaitMs)}`;
     }
     if (this.runner.parkedGone && this.safe("parkedGone", () => this.runner.parkedGone!(n)) === true) {

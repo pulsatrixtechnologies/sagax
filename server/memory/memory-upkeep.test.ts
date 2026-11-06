@@ -430,7 +430,7 @@ describe("the upkeep loop", () => {
     answers.push(JSON.stringify([{ text: "The launch moved to Friday", kind: "decision", confidence: 0.9 }, { text: "Asha is vegetarian", kind: "preference", aboutUser: true, confidence: 0.9 }]));
     const report = await roomUpkeep.capture({ botId: BOT.id, threadId: "room-thread", turns: [turn] });
     expect(report).toMatchObject({ added: 2, aboutMe: 0 });
-    expect(memory()).toContain('from room "Launch" (noticed) · The launch moved to Friday');
+    expect(memory()).toContain('from room "Launch" (noticed) · readers person · The launch moved to Friday');
     expect(aboutMeAdded).toEqual([]);
     // switched off (or the room narrowed) after the turn was queued: no model call, nothing written
     allowed = false;

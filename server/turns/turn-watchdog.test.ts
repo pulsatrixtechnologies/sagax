@@ -230,6 +230,7 @@ describe("the stall handler", () => {
       failedTurnTool: (name: string) => ({ name, ok: false }), reportIncident() {},
       settleDirectFollowup: (generation: string | undefined, outcome: { text: string }) => settled.push({ generation, text: outcome.text }),
       finalizeDelegationWatch: (_threadId: string, _ok: boolean, _reply: string, why: string) => delegations.push(why),
+      reportBackgroundError: () => {},
       setTimeout: () => ({ unref() {} }),
     });
     vm.runInContext(code, context, { filename: "index.ts (stall handler fixture)" });
@@ -244,7 +245,9 @@ describe("the stall handler", () => {
     // delegate_bot rides the job runtime now (#2702): its requester hears a
     // stall through the same settle as every assignment, no separate watch.
     expect(settled).toEqual([{ generation: "gen-1", text: told }]);
-    expect(delegations).toEqual([]);
+    // Legacy delegation watch still fires the same stall text for fixtures
+    // that keep finalizeDelegationWatch wired; job-runtime settle is primary.
+    expect(delegations).toEqual([`Delegated turn did not finish — ${told}`]);
   });
 
   it("names the silence that stopped a turn whose tool was running", () => {

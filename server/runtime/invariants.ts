@@ -16,8 +16,12 @@ const isStatus = (value: string): value is Status => (STATUSES as readonly strin
 function replayStep(event: AssignmentEvent): Status | undefined {
   switch (event.kind) {
     case "enqueued": return "queued";
-    case "started":
-    case "continued": return "running";
+    case "started": return "running";
+    case "continued": {
+      // Host continue lands on running; a turn's own continue parks as queued.
+      const token = (event.detail ?? "").split(":")[0]?.trim() ?? "";
+      return isStatus(token) ? token : "running";
+    }
     case "parked": return "needs_input";
     case "answered": return "queued";
     case "waiting": return "waiting";

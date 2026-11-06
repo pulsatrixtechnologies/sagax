@@ -15,7 +15,12 @@ vi.mock("./DesktopCapabilities", () => ({
   useMacInsetChrome: () => ({ macInset: false, browser: false }),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/lib/thread-preferences", () => ({ useShowThreads: () => false, useShowThreadsChoice: () => false, setShowThreads: vi.fn() }));
+vi.mock("@/lib/thread-preferences", () => ({
+  useShowThreads: () => false,
+  useShowThreadsChoice: () => false,
+  useThreadsMode: () => "one" as const,
+  setShowThreads: vi.fn(),
+}));
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => false, setAdvancedMode: vi.fn() }));
 vi.mock("@/lib/cloud-guest", () => ({ useCanWriteIn: () => true }));
 vi.mock("./CitationUI", () => ({ CitationSelectionToolbar: () => null, SentCitations: () => null }));

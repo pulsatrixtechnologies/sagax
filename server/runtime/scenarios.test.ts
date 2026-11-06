@@ -1510,7 +1510,7 @@ describe("§5/§2 ported from the delegation ledger", () => {
 
     w.clock.advance(1_001);
     await drain(w);
-    expect(get(w, stuck.id)).toMatchObject({ status: "failed", outcome: "expired" });
+    expect(get(w, stuck.id)).toMatchObject({ status: "expired", outcome: "expired" });
     expect(w.runner.runs(stuck.id)).toHaveLength(0);
     expect(w.runner.reports(broken.id)).toHaveLength(1);
     expect(w.runner.reports(stuck.id)).toHaveLength(1);
@@ -1524,7 +1524,7 @@ describe("§5/§2 ported from the delegation ledger", () => {
     expect(polled.items.map((i) => [i.assignmentId, i.kind]).sort()).toEqual([[broken.id, "settled"], [stuck.id, "settled"]].sort());
     expect(polled.assignments.map((a) => [a.id, a.outcome]).sort()).toEqual([[broken.id, "provider_error"], [stuck.id, "expired"]].sort());
     expect(w.rt.poll({ runId: "run-ext" }).items).toEqual([]);
-    expect(w.rt.status(root.id)?.children.map((c) => c.status)).toEqual(["failed", "failed"]);
+    expect(w.rt.status(root.id)?.children.map((c) => c.status)).toEqual(["failed", "expired"]);
     invariants(w);
   });
 
@@ -1874,7 +1874,7 @@ describe("§2/§5 every turn a root", () => {
     // ten days: the child's wait ran out long ago; the root's cards wait on
     w.clock.advance(10 * 24 * 60 * 60_000);
     await drain(w);
-    expect(get(w, child.id)).toMatchObject({ status: "failed", outcome: "expired" });
+    expect(get(w, child.id)).toMatchObject({ status: "expired", outcome: "expired" });
     expect(get(w, running.id).status).toBe("needs_input");
     expect(get(w, running.id).cards).toEqual(["msg-1"]);
     expect(w.rt.answer(child.id, "too late")).toBe(false);
@@ -1887,7 +1887,9 @@ describe("§2/§5 every turn a root", () => {
     await drain(w);
     const run = w.runner.runs(running.id);
     expect(run).toHaveLength(1);
-    expect(run[0].input!.turn).toBe("answered");
+    // A settled child is still owed to the root's next turn, so answer()
+    // lands as resume (resultsOwed), not a plain answered park.
+    expect(run[0].input!.turn).toBe("resume");
     expect(run[0].input!.settled?.map((a) => [a.id, a.outcome])).toEqual([[child.id, "expired"]]);
     expect(get(w, running.id)).toMatchObject({ status: "completed", result: "late but done" });
     invariants(w);
@@ -2346,7 +2348,7 @@ describe("§5 outward / §2 loop guard", () => {
     expect(get(w, root.id).outcome).toBeUndefined();
     expect(kinds(w, root.id)).not.toContain("stalled");
     expect(w.runner.runs(root.id)).toHaveLength(0);
-    expect(get(w, child.id)).toMatchObject({ status: "failed", outcome: "expired", outcomeDetail: "never started" });
+    expect(get(w, child.id)).toMatchObject({ status: "expired", outcome: "expired", outcomeDetail: "never started" });
     expect(get(w, other.id)).toMatchObject({ status: "completed" });
     invariants(w);
 

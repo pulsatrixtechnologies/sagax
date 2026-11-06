@@ -22,6 +22,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { RemoteMcpSpec, StdioMcpSpec } from "../contracts.ts";
 import { harnessMcpRequest, type HarnessMcpKind } from "../harness-mcp-proxy.ts";
+import { harnessMcpTokenEnv } from "../harness-mcp-token.ts";
 
 const MAX_INPUT_BYTES = 1_048_576;
 const MAX_PENDING = 16;
@@ -50,7 +51,7 @@ export function harnessMcpHttpSpec(spec: StdioMcpSpec | undefined, kind: Harness
   if (env.SAGAX_HARNESS_MCP_HTTP === "0" || !spec) return null;
   const script = spec.args?.[0] ?? "";
   if (!/(^|[\\/])harness-mcp-proxy(\.[cm]?[jt]s)?$/.test(script) || spec.args.at(-1) !== kind || spec.args.length !== 2) return null;
-  const token = spec.env?.SAGAX_MCP_TOKEN ?? "";
+  const token = spec.env?.[harnessMcpTokenEnv(kind)] ?? spec.env?.SAGAX_MCP_TOKEN ?? "";
   const base = spec.env?.SAGAX_HARNESS_URL ?? "";
   let url: URL;
   try { url = new URL(base); } catch { return null; }

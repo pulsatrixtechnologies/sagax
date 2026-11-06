@@ -1314,7 +1314,10 @@ describe("Store", () => {
       "provider-tool:claude:linear:list_comments:config-one",
       "provider-tool:claude:linear:list_issues:config-one",
     ]);
-    expect(reloaded.createTask(bot.id)?.alwaysAllow).toEqual([
+    // New threads follow the bot's standing grants live; they do not copy
+    // alwaysAllow onto the task record at create time.
+    expect(reloaded.createTask(bot.id)?.alwaysAllow).toBeUndefined();
+    expect(reloaded.bot(bot.id)?.alwaysAllow).toEqual([
       "provider-tool:claude:linear:list_comments:config-one",
       "provider-tool:claude:linear:list_issues:config-one",
     ]);

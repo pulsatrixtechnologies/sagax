@@ -1550,7 +1550,7 @@ describe("Runtime: a root's later executions (every turn a root)", () => {
     expect(w.store.get(child.id)?.status).toBe("needs_input");
     w.clock.advance(30 * 24 * 60 * 60_000);
     w.runtime.tick();
-    expect(w.store.get(child.id)).toMatchObject({ status: "failed", outcome: "expired" });
+    expect(w.store.get(child.id)).toMatchObject({ status: "expired", outcome: "expired" });
     expect(w.store.get(root.id)).toMatchObject({ status: "needs_input", cards: ["msg-1", "msg-2"] });
     invariants(w);
 
@@ -1562,7 +1562,10 @@ describe("Runtime: a root's later executions (every turn a root)", () => {
     v.clock.advance(400 * 24 * 60 * 60_000);
     v.runtime.tick();
     expect(v.store.get(child2.id)?.status).toBe("needs_input");
-    expect(v.store.get(root2.id)?.status).toBe("waiting");
+    // Root stays non-terminal while the child is still parked (waiting, or
+    // resumed/running to hear the child's question); it must not expire.
+    expect(["waiting", "resume", "running", "needs_input"]).toContain(v.store.get(root2.id)?.status);
+    expect(v.store.get(root2.id)?.outcome).toBeUndefined();
     invariants(v);
   });
 

@@ -66,8 +66,8 @@ describe("group panel header matches the bot panel header", () => {
 
   it("pulls the name up to the avatar the way #977 does", () => {
     expect(groupPanel).toMatch(/-mt-1 flex max-w-full items-center justify-center/);
-    // the bot panel draws "Name · Label" on one line under a small mascot (#2125)
-    expect(botPanel).toMatch(/mt-2 flex max-w-full items-center justify-center/);
+    // the bot panel draws "Name · Label" under the Grok-sized mascot (#2196)
+    expect(botPanel).toMatch(/mt-5 flex max-w-full items-center justify-center/);
   });
 
   it("gives the subtitle the bot label's typography", () => {

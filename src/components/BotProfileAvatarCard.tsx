@@ -38,8 +38,8 @@ export function BotProfileAvatarCard({
    * there). The pencil badge is gone (2026-10-14): a click on the mascot
    * opens the editor, and the "..." menu has Edit bot. */
   onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  /** The mascot's size: 144 in the panel; the bot wizard's Identity step
-   * draws it smaller beside the name (2026-10-27). */
+  /** The mascot's size: 92 in the bot panel (#2196, Grok Bot parity); 144 on
+   * the profile page; the bot wizard's Identity step draws it at 104. */
   size?: number;
   /** What a click does instead of opening the profile page (the profile
    * page goes to its Appearance section). */
@@ -58,8 +58,9 @@ export function BotProfileAvatarCard({
 
   return (
     <div className="relative">
-      {/* room above for a move's jump and effects: the panel scrolls, so anything past its top is cut by a straight edge */}
-      <div className={cn("flex justify-center pb-0", size >= 144 ? "pt-5" : "pt-3")}>
+      {/* room above for a move's jump and effects: the panel scrolls, so anything past its top is cut by a straight edge.
+          pt-5 from 80px up (panel 92, wizard 104, profile 144) so a jump clears the box. */}
+      <div className={cn("flex justify-center pb-0", size >= 80 ? "pt-5" : "pt-3")}>
         <button
           type="button"
           aria-label={t("botPanel.avatar.edit")}

@@ -1946,7 +1946,9 @@ there; the question first.
   (`resyncOnForeground`). Tests: `server/needs-you-settled.e2e.test.ts`,
   iOS `NeedsYouFollowsServerTests`.
 - Tests: `server/push/*.test.ts`, `server/notify.test.ts`, iOS
-  `ApprovalNotificationTests`.
+  `ApprovalNotificationTests`. Recipe and physical checklist (still open):
+  `docs/verification/approval-notifications.md` (#1708). Simulator and unit
+  green are not a device pass.
 
 ## Connect Apps: a Bots tab and one search (2026-10-29)
 

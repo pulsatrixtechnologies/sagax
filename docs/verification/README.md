@@ -58,6 +58,7 @@ Use only mapped, tested commands:
 - [Blocking decisions as actionable cards](decisions-as-cards.md)
 - [Exact command allowlist UI and saved rules](command-allowlist.md)
 - [Peer approval denial, expiry, and cancellation](peer-approvals.md)
+- [Approval notifications on the phone and the Watch](approval-notifications.md)
 - [Waiting for an occupied desktop](computer-wait.md)
 - [Chat UI, driven headlessly](chat-ui.md)
 - [Chat widgets](widgets.md)
@@ -232,6 +233,11 @@ Hidden activity, and compact webhook messages using bundled offline data.
 The [iOS responsiveness checks](ios-responsiveness.md) exercise ordinary chat
 typing and navigation during a synthetic busy-fleet stream, plus batched
 delivery, compact off-main widget writes and bounded Markdown parse reuse.
+
+The [approval notifications recipe](approval-notifications.md) runs the push
+and CompanionCore contracts for per-ask ids, question choice buttons, and
+silent `settled` / `notify-withdraw` removal, then lists the physical iPhone
+and Apple Watch checklist for #1708. It does not claim a device pass.
 
 The [Android thread checks](android-threads.md) cover the Compose thread tree,
 local selection, draft isolation and installable preview APK.

@@ -34,7 +34,12 @@ export interface TeamComputersRouteDeps {
   /** #2045: resolve the caller's stable section id for a display name. */
   resolveSectionId?(section: string, auth: import("../auth/request-auth.ts").RequestAuth): string | undefined;
   setProblem(id: string, problem?: string): void;
+  /** Solo: every team name. Organization: this caller's teams only (#2045). */
   sections(): readonly string[];
+  /** #2045: when set, assignment and list checks use the caller's teams. */
+  sectionsFor?(auth: import("../auth/request-auth.ts").RequestAuth): readonly string[];
+  /** #2045: stable section ids this caller owns; used to filter the list. */
+  sectionIdsFor?(auth: import("../auth/request-auth.ts").RequestAuth): readonly string[];
   sectionKey(section: string | undefined): string;
   bots(): readonly { id: string; section?: string; sectionId?: string }[];
   botHasActiveTurn(botId: string): boolean;
@@ -55,11 +60,35 @@ export interface TeamComputersRouteDeps {
   joinReadyBoat(ownerKey: string): Promise<unknown>;
 }
 
+/** #2045: keep unassigned computers and those tied to the caller's teams. */
+export function filterTeamComputersForCaller<T extends { section: string | null; sectionId?: string | null }>(
+  computers: readonly T[],
+  ownNames: ReadonlySet<string> | null,
+  ownIds: ReadonlySet<string> | null,
+): T[] {
+  if (!ownNames && !ownIds) return [...computers];
+  return computers.filter((entry) => {
+    if (entry.section === null) return true;
+    const id = entry.sectionId?.trim();
+    if (id && ownIds) return ownIds.has(id);
+    if (ownNames) return ownNames.has(entry.section);
+    return false;
+  });
+}
+
 export function createTeamComputersRoutes(deps: TeamComputersRouteDeps): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
+    const listedSections = () => (deps.sectionsFor ? deps.sectionsFor(auth) : deps.sections());
     if (path === "/api/team-computers" && method === "GET") {
       res.setHeader("cache-control", "private, no-store");
-      return json(res, 200, await deps.listPayload());
+      const payload = await deps.listPayload();
+      if (!deps.sectionsFor && !deps.sectionIdsFor) return json(res, 200, payload);
+      const ownNames = new Set(listedSections());
+      const ownIds = new Set(deps.sectionIdsFor?.(auth) ?? []);
+      return json(res, 200, {
+        ...payload,
+        computers: filterTeamComputersForCaller(payload.computers, ownNames, ownIds),
+      });
     }
 
     let m = path.match(/^\/api\/team-computers(?:\/([\w-]+)(?:\/(provision|join|sleep|control))?)?$/);
@@ -113,7 +142,7 @@ export function createTeamComputersRoutes(deps: TeamComputersRouteDeps): RouteHa
       const sectionId = section === null ? undefined : deps.resolveSectionId?.(section, auth);
       const checkAssignment = () => {
         assertCurrentOwner();
-        if (section !== null && section !== "" && !deps.sections().includes(section)) {
+        if (section !== null && section !== "" && !listedSections().includes(section)) {
           throw Object.assign(new Error("Create the team before assigning a computer"), { status: 404 });
         }
         if (section !== null && deps.bots().some((bot) => {

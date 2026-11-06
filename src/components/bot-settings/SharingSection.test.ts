@@ -44,7 +44,7 @@ vi.mock("@/state/store", async (importOriginal) => {
           mcp: { callTimeoutMinutes: 10 },
           viewer: {
             role: "member",
-            ...(fixture.viewer ?? {}),
+            ...fixture.viewer,
             capabilities: { editConfig: false, manageKeys: false, manageComputers: false, viewUsage: false, manageBackups: false, pairDevices: false },
           },
         },

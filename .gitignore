@@ -11,6 +11,7 @@ dist-server
 .DS_Store
 *.tsbuildinfo
 electron/resources/speech-helper
+electron/resources/automation-helper
 electron/resources/Sagax Speech.app
 # the name build-speech-helper.mjs actually gives the bundle
 electron/resources/Pulsa Bot Speech.app

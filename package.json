@@ -76,7 +76,7 @@
     "gen:self-knowledge": "node --experimental-strip-types scripts/self-knowledge/generate.ts",
     "gen:settings-doc": "node --experimental-strip-types scripts/settings-actions/doc.ts",
     "build:companion": "tsc -p companion/tsconfig.build.json && node scripts/mark-module-scope.mjs dist-companion",
-    "build:speech": "node electron/build-speech-helper.mjs",
+    "build:speech": "node electron/build-speech-helper.mjs && node electron/build-automation-helper.mjs",
     "build:cua": "node scripts/prepare-cua.mjs",
     "build:cua:win": "node scripts/prepare-cua-win.mjs",
     "smoke:cua-win": "node scripts/smoke-cua-win-embedded.mjs",

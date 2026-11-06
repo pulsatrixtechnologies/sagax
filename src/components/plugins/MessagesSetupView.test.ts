@@ -12,6 +12,13 @@ vi.mock("@/lib/mac-messages-setup", () => ({
     permissions: { fullDiskAccess: "denied", automation: "notAsked" },
   })),
   openMessagesPermissionPane: vi.fn(async () => {}),
+  askMessagesAutomation: vi.fn(async () => ({
+    available: true,
+    onThisMac: true,
+    useMessages: false,
+    permissions: { fullDiskAccess: "granted", automation: "granted" },
+  })),
+  automationAction: (state: string) => (state === "granted" || state === "unsupported" ? null : state === "denied" ? "openSettings" : "ask"),
   permissionTone: (state: string) => (state === "granted" ? "ok" : state === "denied" ? "warn" : "muted"),
   setMessagesEnabled: vi.fn(async (useMessages: boolean) => ({
     available: true,
@@ -29,7 +36,7 @@ vi.mock("@/lib/i18n", () => ({
   },
 }));
 
-import { loadMessagesSetup, setMessagesEnabled } from "@/lib/mac-messages-setup";
+import { askMessagesAutomation, loadMessagesSetup, openMessagesPermissionPane, setMessagesEnabled, testMessagesSetup } from "@/lib/mac-messages-setup";
 import { MessagesSetupView } from "./MessagesSetupView";
 import { MacAppsInstalledSection } from "./MacAppsView";
 
@@ -108,5 +115,60 @@ describe("Mac Messages setup surface", () => {
     expect(block!.textContent).toContain("connectApps.mac.retry");
     act(() => root.unmount());
     host.remove();
+  });
+  async function mountSetup() {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => { root.render(createElement(MessagesSetupView, { onBack: () => {}, trail: [] })); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    return { host, done: () => { act(() => root.unmount()); host.remove(); } };
+  }
+
+  // Automation stayed "Not asked yet" with only Open System Settings: macOS
+  // lists nothing to turn on until Sagax asks once (2026-11-06).
+  it("asks macOS for Automation when it was never asked", async () => {
+    const { host, done } = await mountSetup();
+    const ask = host.querySelector<HTMLElement>("[data-messages-ask-automation]");
+    expect(ask, "the Ask for access button").not.toBeNull();
+    expect(host.querySelector("[data-messages-open-automation]")).toBeNull();
+    await act(async () => { ask!.click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(askMessagesAutomation).toHaveBeenCalledTimes(1);
+    expect(host.querySelector("[data-messages-ask-automation]")).toBeNull();
+    done();
+  });
+
+  it("sends a refusal to System Settings, Automation", async () => {
+    vi.mocked(loadMessagesSetup).mockResolvedValueOnce({
+      available: true,
+      onThisMac: true,
+      useMessages: false,
+      permissions: { fullDiskAccess: "granted", automation: "denied" },
+    } as Awaited<ReturnType<typeof loadMessagesSetup>>);
+    const { host, done } = await mountSetup();
+    expect(host.querySelector("[data-messages-ask-automation]")).toBeNull();
+    expect(host.querySelector("[data-messages-automation-denied]")?.textContent).toContain("connectApps.mac.deniedHelp");
+    await act(async () => { host.querySelector<HTMLElement>("[data-messages-open-automation]")!.click(); });
+    expect(openMessagesPermissionPane).toHaveBeenCalledWith("automation");
+    done();
+  });
+
+  it("shows why Test a read failed instead of a bare red mark", async () => {
+    vi.mocked(testMessagesSetup).mockRejectedValueOnce(new Error("Messages could not be read from chat.db: boom"));
+    vi.mocked(loadMessagesSetup).mockResolvedValue({
+      available: true,
+      onThisMac: true,
+      useMessages: false,
+      permissions: { fullDiskAccess: "granted", automation: "granted" },
+    } as Awaited<ReturnType<typeof loadMessagesSetup>>);
+    const { host, done } = await mountSetup();
+    await act(async () => { host.querySelector<HTMLElement>("[data-messages-test]")!.click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    const err = host.querySelector<HTMLElement>("[data-messages-test-error]");
+    expect(err, "the read error").not.toBeNull();
+    expect(err!.getAttribute("role")).toBe("alert");
+    done();
   });
 });

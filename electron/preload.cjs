@@ -222,6 +222,7 @@ const bridge = {
     status: () => ipcRenderer.invoke("mac-apps:status"),
     set: (app, enabled) => ipcRenderer.invoke("mac-apps:set", app, enabled),
     test: (app) => ipcRenderer.invoke("mac-apps:test", app),
+    askAutomation: (app) => ipcRenderer.invoke("mac-apps:ask-automation", app),
     openSettings: (pane) => ipcRenderer.invoke("mac-apps:open-settings", pane),
   },
   localControl: {

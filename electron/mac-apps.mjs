@@ -13,6 +13,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 
 export const MAC_APPS = [
   { id: "messages", name: "Messages", bundleId: "com.apple.MobileSMS", fullDiskAccess: true },
@@ -269,7 +270,7 @@ export function macAppErrorText(appId, error) {
   }
   if (error?.killed || /ETIMEDOUT|timed out/i.test(raw)) return { denied: false, message: `${name} did not answer in time.` };
   const line = raw.split("\n").map((part) => part.replace(/^.*execution error:\s*/, "").trim()).find(Boolean) ?? "";
-  return { denied: false, message: `${name} refused: ${line.slice(0, 300) || "unknown error"}` };
+  return { denied: false, message: `${name} returned an error: ${line.slice(0, 300) || "unknown error"}` };
 }
 
 async function runScript(appId, script, args, { execFile = execFilePromise, signal, timeoutMs = 60_000 } = {}) {
@@ -280,11 +281,29 @@ async function runScript(appId, script, args, { execFile = execFilePromise, sign
 
 // --- Messages database (read only). ----------------------------------------
 const APPLE_EPOCH = 978_307_200;
-function appleDate(raw) {
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) return null;
-  const seconds = value > 1e14 ? value / 1e9 : value;
-  return new Date((seconds + APPLE_EPOCH) * 1000).toISOString();
+/** chat.db dates: nanoseconds since 2001 on current macOS (past 2^53, so they
+ * arrive as BigInt), whole seconds on old databases (below 1e10). */
+export function appleDate(raw) {
+  let seconds;
+  if (typeof raw === "bigint") {
+    if (raw <= 0n) return null;
+    seconds = raw >= 10_000_000_000n ? Number(raw / 1_000_000n) / 1_000 : Number(raw);
+  } else {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    seconds = value >= 1e10 ? value / 1e9 : value;
+  }
+  const date = new Date((seconds + APPLE_EPOCH) * 1000);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/** A failed chat.db read, worded as a read error (never as a refusal). */
+export function messagesReadErrorText(error) {
+  const raw = String(error?.message || error || "").split("\n")[0].trim().slice(0, 300);
+  if (error?.code === "EACCES" || error?.code === "EPERM" || /authorization denied|not permitted|unable to open database/i.test(raw)) {
+    return `Messages could not be read: macOS blocked access to chat.db. Turn on Full Disk Access for Sagax in System Settings > Privacy & Security > Full Disk Access, then quit and reopen Sagax.`;
+  }
+  return `Messages could not be read from chat.db: ${raw || "unknown error"}`;
 }
 function attributedText(blob) {
   if (!(blob instanceof Uint8Array)) return "";
@@ -343,11 +362,15 @@ export async function readMessages(dir, op, { open = openDatabase } = {}) {
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
       ORDER BY m.date DESC LIMIT ?`;
     params.push(op.limit);
-    const rows = db.prepare(sql).all(...params);
+    const statement = db.prepare(sql);
+    // message.date is nanoseconds since 2001: past Number.MAX_SAFE_INTEGER,
+    // node:sqlite throws unless integers come back as BigInt.
+    statement.setReadBigInts?.(true);
+    const rows = statement.all(...params);
     return rows.map((row) => ({
       id: String(row.guid ?? ""),
       chat: String(row.chat_name || row.chat || ""),
-      from: Number(row.from_me) === 1 ? "me" : String(row.handle ?? ""),
+      from: String(row.from_me) === "1" ? "me" : String(row.handle ?? ""),
       date: appleDate(row.date),
       service: String(row.service || "iMessage"),
       text: String(row.text ?? "").trim().slice(0, 4_000) || attributedText(row.body),
@@ -369,12 +392,100 @@ export async function runMacAppCall(name, args, deps = {}) {
     if (name === "mac_messages_read") {
       const dir = deps.messagesDir ?? messagesDir();
       if (probeMessagesAccess(dir) !== "granted") return failure("Messages could not be read. Sagax needs Full Disk Access on this Mac (System Settings > Privacy & Security > Full Disk Access).");
-      return text({ messages: await (deps.readMessages ?? readMessages)(dir, op) });
+      try {
+        return text({ messages: await (deps.readMessages ?? readMessages)(dir, op) });
+      } catch (error) {
+        return failure(messagesReadErrorText(error));
+      }
     }
     return text(await runScript(tool.app, MAC_APP_SCRIPTS[name], op, deps));
   } catch (error) {
     return failure(macAppErrorText(tool.app, error).message);
   }
+}
+
+// --- Automation (Apple Events) grant, per app. ------------------------------
+// macOS lists an app under Sagax in Privacy & Security > Automation only after
+// Sagax sent it an Apple Event and the person answered the prompt, so a page
+// that only opens System Settings can never get the grant. The signed helper
+// (electron/resources/automation-helper.swift) calls
+// AEDeterminePermissionToAutomateTarget: "status" never prompts, "ask" shows
+// macOS's prompt. It runs as a child of Sagax, so TCC attributes it to Sagax.
+const HELPER_NAME = "automation-helper";
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
+/** The helper binary, or null (development without `pnpm build:speech`). */
+export function automationHelperPath({ env = process.env, resourcesPath = process.resourcesPath, exists = fs.existsSync } = {}) {
+  const candidates = [
+    env.SAGAX_AUTOMATION_HELPER,
+    resourcesPath ? path.join(resourcesPath, HELPER_NAME) : null,
+    // packaged: Resources/app.asar/electron/mac-apps.mjs or Resources/server/electron/...
+    path.join(moduleDir, "..", "..", HELPER_NAME),
+    path.join(moduleDir, "..", "..", "..", HELPER_NAME),
+    path.join(moduleDir, "resources", HELPER_NAME),
+  ].filter(Boolean);
+  return candidates.find((file) => { try { return exists(file); } catch { return false; } }) ?? null;
+}
+
+/** Helper output to a permission state; null when macOS could not say. */
+export function automationStateOf(output) {
+  const word = String(output ?? "").trim().split(/\s+/)[0];
+  if (word === "granted" || word === "denied" || word === "notAsked") return word;
+  return null;
+}
+
+async function runHelper(mode, bundleId, deps) {
+  const helper = deps.helper !== undefined ? deps.helper : automationHelperPath();
+  if (!helper) return { state: null, helper: false };
+  const run = deps.execFile ?? execFilePromise;
+  try {
+    const { stdout } = await run(helper, [mode, bundleId], { timeout: mode === "ask" ? 120_000 : 8_000, maxBuffer: 64 * 1024 });
+    return { state: automationStateOf(stdout), helper: true };
+  } catch {
+    return { state: null, helper: true };
+  }
+}
+
+/** The live Automation state of one app, never prompting. Null: unknown
+ * (the app is not running, or no helper). */
+export async function probeMacAppAutomation(appId, deps = {}) {
+  const app = macAppInfo(appId);
+  if (!app || (deps.platform ?? process.platform) !== "darwin") return null;
+  return (await runHelper("status", app.bundleId, deps)).state;
+}
+
+/** Ask macOS for the Automation grant: shows the system prompt naming Sagax
+ * when the person has not answered yet. Saves and returns the state. */
+export async function requestMacAppAutomation(dir, appId, deps = {}) {
+  const app = macAppInfo(appId);
+  if (!app) throw new Error("Unknown app");
+  if ((deps.platform ?? process.platform) !== "darwin") return "unsupported";
+  let { state, helper } = await runHelper("ask", app.bundleId, deps);
+  if (!state && !helper) {
+    // No helper: a harmless read-only tell (the app's name) from an osascript
+    // child of Sagax raises the same prompt, attributed to Sagax.
+    try {
+      await (deps.execFile ?? execFilePromise)("osascript", ["-e", `tell application id "${app.bundleId}" to get name`], { timeout: 120_000, maxBuffer: 64 * 1024 });
+      state = "granted";
+    } catch (error) {
+      state = macAppErrorText(appId, error).denied ? "denied" : null;
+    }
+  }
+  if (state) writeMacAppSettings(dir, appId, { automation: state });
+  return state ?? readMacAppSettings(dir)[appId].automation;
+}
+
+/** macAppsStatus with every app's Automation read live from macOS first. */
+export async function macAppsStatusLive(dir, deps = {}) {
+  const platform = deps.platform ?? process.platform;
+  if (platform === "darwin") {
+    const states = await Promise.all(MAC_APP_IDS.map(async (id) => [id, await probeMacAppAutomation(id, { ...deps, platform })]));
+    const saved = readMacAppSettings(dir);
+    for (const [id, state] of states) {
+      if (state && saved[id].automation !== state) writeMacAppSettings(dir, id, { automation: state });
+    }
+  }
+  return macAppsStatus(dir, { platform, ...(deps.messagesAccess ? { messagesAccess: deps.messagesAccess } : {}) });
 }
 
 // --- Setup state (the On/Off switch and the last test), one JSON file. -----
@@ -385,7 +496,7 @@ export function readMacAppSettings(dir) {
     const apps = raw && typeof raw.apps === "object" && raw.apps ? raw.apps : {};
     return Object.fromEntries(MAC_APP_IDS.map((id) => {
       const row = apps[id] && typeof apps[id] === "object" ? apps[id] : {};
-      return [id, { enabled: row.enabled === true, automation: ["granted", "denied"].includes(row.automation) ? row.automation : "notAsked" }];
+      return [id, { enabled: row.enabled === true, automation: ["granted", "denied", "notAsked"].includes(row.automation) ? row.automation : "notAsked" }];
     }));
   } catch {
     return Object.fromEntries(MAC_APP_IDS.map((id) => [id, { enabled: false, automation: "notAsked" }]));
@@ -433,7 +544,12 @@ export async function testMacApp(dir, appId, deps = {}) {
   if ((deps.platform ?? process.platform) !== "darwin") return { ok: false, error: "The Apple apps run only on a Mac.", count: 0, names: [] };
   try {
     if (appId === "messages") {
-      const rows = await (deps.readMessages ?? readMessages)(deps.messagesDir ?? messagesDir(), { limit: 50 });
+      let rows;
+      try {
+        rows = await (deps.readMessages ?? readMessages)(deps.messagesDir ?? messagesDir(), { limit: 50 });
+      } catch (error) {
+        return { ok: false, error: messagesReadErrorText(error), count: 0, names: [] };
+      }
       const names = [...new Set(rows.map((row) => row.chat).filter(Boolean))];
       return { ok: true, count: names.length, names: names.slice(0, 8).map((name) => name.slice(0, 60)) };
     }

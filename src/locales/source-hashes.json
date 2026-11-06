@@ -17645,7 +17645,11 @@
       "settings.notifications.native.testBody": "1d3430a3a272aac6fc8c5cb9c6d28042ad84dd8fa1f34a6f5d9ec0702be00318",
       "settings.notifications.native.open": "63568f0582af1e88b9fd590bdbe3fd88cb114bd377411cd1d8492804b7b7d57d",
       "botPanel.computerCard.capturedAt": "0860ee4a91e8e679c7b1a95b84f1e9254fdf0b6d618dd4b519f08fac0af25b26",
-      "botPanel.computerCard.preview": "bdccbad426ee372a866387a089d54dda797e79019efeeaaa0daf2d17be9b6576"
+      "botPanel.computerCard.preview": "bdccbad426ee372a866387a089d54dda797e79019efeeaaa0daf2d17be9b6576",
+      "connectApps.mac.askAccess": "3dffe371b18523179bc9f5c7e47a38763097d3d800ed6f8436da25c0be2b1ca0",
+      "connectApps.mac.askAccessHelp": "4abe3aa4794fca6cceab11832bdf9657bbdbde5d283f94b623aa1a579e19baea",
+      "connectApps.mac.deniedHelp": "6100c65d5c89053c81466908fb6c4339aaf87926eb410bd05ec87042f108315e",
+      "connectApps.mac.readFailed": "89ad923a8ea9b6e4989759968cc71bb04cd0adf7c04acc09eae87078fe415bba"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

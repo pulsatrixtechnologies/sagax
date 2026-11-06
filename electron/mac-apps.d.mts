@@ -74,5 +74,13 @@ export function runMacAppCall(name: string, args: unknown, deps?: MacAppRunDeps)
 export function readMacAppSettings(dir: string): Record<MacAppId, { enabled: boolean; automation: MacAppPermission }>;
 export function writeMacAppSettings(dir: string, appId: string, patch: { enabled?: boolean; automation?: MacAppPermission }): Record<MacAppId, { enabled: boolean; automation: MacAppPermission }>;
 export function macAppEnabled(dir: string, appId: string): boolean;
+export function appleDate(raw: unknown): string | null;
+export function messagesReadErrorText(error: unknown): string;
+export function automationHelperPath(deps?: { env?: Record<string, string | undefined>; resourcesPath?: string; exists?: (file: string) => boolean }): string | null;
+export function automationStateOf(output: unknown): "granted" | "denied" | "notAsked" | null;
+export interface MacAppAutomationDeps { platform?: string; execFile?: MacAppExecFile; helper?: string | null }
+export function probeMacAppAutomation(appId: string, deps?: MacAppAutomationDeps): Promise<"granted" | "denied" | "notAsked" | null>;
+export function requestMacAppAutomation(dir: string, appId: string, deps?: MacAppAutomationDeps): Promise<MacAppPermission>;
+export function macAppsStatusLive(dir: string, deps?: MacAppAutomationDeps & { messagesAccess?: () => MacAppPermission }): Promise<MacAppsStatus>;
 export function macAppsStatus(dir: string, deps?: { platform?: string; messagesAccess?: () => MacAppPermission }): MacAppsStatus;
 export function testMacApp(dir: string, appId: string, deps?: MacAppRunDeps): Promise<MacAppTestResult>;

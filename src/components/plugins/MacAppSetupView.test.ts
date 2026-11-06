@@ -15,12 +15,13 @@ vi.mock("@/lib/mac-apps-setup", () => ({
   setMacAppEnabled: vi.fn(async (_app: string, enabled: boolean) => ({ ...status, apps: [{ ...status.apps[0], enabled }] })),
   testMacApp: vi.fn(async () => ({ ok: true, count: 3, names: ["Work", "Home", "Family"] })),
   openMacAppPermissionPane: vi.fn(async () => {}),
+  askMacAppAutomation: vi.fn(async () => ({ ...status, apps: [{ ...status.apps[0], permissions: { automation: "granted" } }] })),
 }));
 vi.mock("@/lib/i18n", () => ({
   t: (key: string, vars?: Record<string, string | number>) => (vars?.count != null ? `${key}:${vars.count}` : key),
 }));
 
-import { loadMacApps, setMacAppEnabled, testMacApp } from "@/lib/mac-apps-setup";
+import { askMacAppAutomation, loadMacApps, openMacAppPermissionPane, setMacAppEnabled, testMacApp } from "@/lib/mac-apps-setup";
 import { MacAppSetupView } from "./MacAppSetupView";
 
 async function mount() {
@@ -56,6 +57,36 @@ describe("Apple app setup page", () => {
     await act(async () => { block!.querySelector<HTMLElement>("button")!.click(); });
     for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
     expect(host.querySelector('[data-mac-app-step="automation"]')).not.toBeNull();
+    done();
+  });
+  // Same Automation path as Messages: ask once, then a refusal opens Settings (2026-11-06).
+  it("asks macOS for Automation when it was never asked", async () => {
+    const { host, done } = await mount();
+    const ask = host.querySelector<HTMLElement>("[data-mac-app-ask-automation]");
+    expect(ask, "the Ask for access button").not.toBeNull();
+    await act(async () => { ask!.click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(askMacAppAutomation).toHaveBeenCalledWith("calendar");
+    expect(host.querySelector("[data-mac-app-ask-automation]")).toBeNull();
+    done();
+  });
+
+  it("sends a refusal to System Settings, Automation", async () => {
+    vi.mocked(loadMacApps).mockResolvedValueOnce({ ...status, apps: [{ ...status.apps[0], permissions: { automation: "denied" } }] } as Awaited<ReturnType<typeof loadMacApps>>);
+    const { host, done } = await mount();
+    expect(host.querySelector("[data-mac-app-ask-automation]")).toBeNull();
+    expect(host.querySelector("[data-mac-app-automation-denied]")).not.toBeNull();
+    await act(async () => { host.querySelector<HTMLElement>("[data-mac-app-open-automation]")!.click(); });
+    expect(openMacAppPermissionPane).toHaveBeenCalledWith("automation");
+    done();
+  });
+
+  it("shows why the test failed", async () => {
+    vi.mocked(testMacApp).mockRejectedValueOnce(new Error("Calendar returned an error"));
+    const { host, done } = await mount();
+    await act(async () => { host.querySelector<HTMLElement>("[data-mac-app-test]")!.click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(host.querySelector('[data-mac-app-test-error][role="alert"]')).not.toBeNull();
     done();
   });
 });

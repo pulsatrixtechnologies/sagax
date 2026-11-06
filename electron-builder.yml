@@ -49,6 +49,8 @@ files:
   - "!electron/resources/speech-helper.swift"
   - "!electron/resources/speech-helper-Info.plist"
   - "!electron/resources/Pulsa Bot Speech.app/**"
+  - "!electron/resources/automation-helper"
+  - "!electron/resources/automation-helper.swift"
   # The Teach a skill recorder is gone, but a machine that once ran
   # `pnpm build:recorder` may still hold its helper build; never ship it.
   - "!electron/resources/recorder-helper"
@@ -138,6 +140,10 @@ mac:
   extraResources:
     - from: electron/resources/Pulsa Bot Speech.app
       to: Pulsa Bot Speech.app
+    # Reads and asks the Automation grant for Messages, Mail, Calendar,
+    # Contacts, Reminders and Notes (electron/mac-apps.mjs automationHelperPath)
+    - from: electron/resources/automation-helper
+      to: automation-helper
     # CUA must live outside ASAR. prepare-cua stages the signed executable and
     # a self-contained JS/native SDK bundle selected for macOS arm64.
     # ${arch} resolves per built arch — each bundle carries its own natives
@@ -163,6 +169,7 @@ mac:
     NSSpeechRecognitionUsageDescription: Sagax transcribes your voice on-device to type messages for you.
     NSAccessibilityUsageDescription: Sagax uses Accessibility when you let a bot control this Mac.
     NSScreenCaptureUsageDescription: Sagax uses Screen Recording so bots can see this Mac before acting.
+    NSAppleEventsUsageDescription: Sagax controls Messages, Mail, Calendar, Contacts, Reminders and Notes when you let your bots use them.
   # Notarization runs manually after the build (notarytool + staple),
   # mirroring the BlueyLite ship_release.sh flow.
   notarize: false

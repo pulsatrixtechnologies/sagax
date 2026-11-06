@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { auditKnowledgeText, buildKnowledge, KNOWLEDGE_FILE, serializeKnowledge, settingsSectionRows } from "./build.ts";
 import { GUIDES } from "./guides.ts";
 import { slug, splitHeadings } from "./markdown.ts";
-import type { KnowledgeBase, KnowledgeSection } from "../../server/self-knowledge-types.ts";
+import type { KnowledgeBase, KnowledgeSection } from "../../server/self-knowledge/self-knowledge-types.ts";
 import { availableTools } from "../../server/drivers/agents-catalog.ts";
 import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
 

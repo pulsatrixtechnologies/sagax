@@ -13786,8 +13786,6 @@
   "organization.people": "Personnes",
   "organization.approvals.waiting": "Approbations en attente",
   "organization.approvals.count": "{count} commandes attendent",
-  "organization.people.value": "Membres et invitations",
-  "organization.approvals.see": "Voir",
   "organization.rules.title": "Règles de l'organisation",
   "organization.rules.confidential": "Fils confidentiels",
   "organization.rules.confidential.on": "Activé par défaut",

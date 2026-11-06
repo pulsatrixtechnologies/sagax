@@ -13785,8 +13785,6 @@
   "organization.people": "People",
   "organization.approvals.waiting": "Approvals waiting",
   "organization.approvals.count": "{count} commands waiting",
-  "organization.people.value": "Members and invitations",
-  "organization.approvals.see": "See",
   "organization.rules.title": "Organization rules",
   "organization.rules.confidential": "Confidential threads",
   "organization.rules.confidential.on": "On by default",
@@ -13829,5 +13827,6 @@
   "organization.memory.open": "Open",
   "organization.memory.menu": "More memory actions",
   "import.action": "Import",
-  "import.prefs.none": "No primary bot yet"
+  "import.prefs.none": "No primary bot yet",
+  "organization.manageInPerspicax": "Manage in Perspicax"
 }

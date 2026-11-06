@@ -7317,12 +7317,6 @@
             "state": "translated",
             "value": "Activité"
           }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Atividade"
-          }
         }
       }
     },
@@ -9110,12 +9104,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avancé"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Avançado"
           }
         }
       }
@@ -44197,12 +44185,6 @@
             "state": "translated",
             "value": "Membres"
           }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Membros"
-          }
         }
       }
     },
@@ -47486,16 +47468,16 @@
     },
     "New routine": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New routine"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Nouvelle routine"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nova rotina"
           }
         }
       }
@@ -113113,6 +113095,134 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter, se connecter, activer ou désactiver : Plugins > Fournisseurs."
+          }
+        }
+      }
+    },
+    "View run for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View run for %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voir le run de %@"
+          }
+        }
+      }
+    },
+    "Review for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review for %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Examiner %@"
+          }
+        }
+      }
+    },
+    "Stop the run of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop the run of %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter le run de %@"
+          }
+        }
+      }
+    },
+    "This session": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This session"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette session"
+          }
+        }
+      }
+    },
+    "New team goal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New team goal"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvel objectif d’équipe"
+          }
+        }
+      }
+    },
+    "Routines of this group's bots show here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routines of this group's bots show here."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les routines des bots de ce groupe s’affichent ici."
+          }
+        }
+      }
+    },
+    "Computer of": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Computer of"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordinateur de"
+          }
+        }
+      }
+    },
+    "No routine for this group yet. Team goals and routines that post here show up in this list.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No routine for this group yet. Team goals and routines that post here show up in this list."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune routine pour ce groupe pour l’instant. Les objectifs d’équipe et les routines qui publient ici apparaissent dans cette liste."
           }
         }
       }

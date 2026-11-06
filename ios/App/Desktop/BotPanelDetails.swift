@@ -229,20 +229,26 @@ struct BotPanelDetails: View {
 
     /// "All history": the history, while no section above shows.
     private var allHistoryRow: some View {
-        PanelSectionHeader(icon: .activity, title: "All history") { route = .history(.other) }
+        PanelSectionHeader(icon: nil, title: "All history") { route = .history(.other) }
             .accessibilityIdentifier("desktop-panel-history.all")
     }
 
     private var codingSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            PanelSectionHeader(icon: .squareTerminal, title: "Coding") { route = .history(.coding) }
+            // 2026-11-06 (desktop aa6255ac2a): a plain grey label like
+            // Upcoming, and Claude Code's agent list in one panel card.
+            PanelSectionHeader(icon: nil, title: "Coding") { route = .history(.coding) }
                 .accessibilityIdentifier("desktop-panel-history.coding")
-            if !activity.launchedAgents.isEmpty {
-                LaunchedAgentsGroup(items: activity.launchedAgents) { item in
-                    route = .detail(item.asActivityItem())
-                }
+            if let items = activity.coding, !(items.isEmpty && activity.launchedAgents.isEmpty) {
+                PanelAgentRows(items: items, launched: activity.launchedAgents,
+                               now: activity.now.timeIntervalSince1970 * 1000,
+                               stopping: activity.stopping,
+                               onOpen: { route = .detail($0) },
+                               onOpenLaunched: { route = .detail($0.asActivityItem()) },
+                               onStop: { stop($0) })
+            } else {
+                liveSectionBody(.coding, items: activity.coding, showsError: true)
             }
-            liveSectionBody(.coding, items: activity.coding, showsError: true)
         }
     }
 
@@ -306,7 +312,8 @@ struct BotPanelDetails: View {
 /// section's history.
 struct PanelSectionHeader: View {
     @Environment(\.desktopTheme) private var theme
-    let icon: DesktopIcon
+    /// Nil: a plain grey label (PANEL_LABEL), as Coding on desktop.
+    let icon: DesktopIcon?
     let title: LocalizedStringKey
     let action: () -> Void
 
@@ -314,12 +321,14 @@ struct PanelSectionHeader: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                DesktopIconView(icon: icon, size: 16)
-                    .foregroundStyle(theme.inkSecondary)
+            HStack(spacing: icon == nil ? 4 : 8) {
+                if let icon {
+                    DesktopIconView(icon: icon, size: 16)
+                        .foregroundStyle(theme.inkSecondary)
+                }
                 Text(title)
                     .font(theme.font(13))
-                    .foregroundStyle(hovering ? theme.ink : theme.inkSecondary)
+                    .foregroundStyle(icon == nil ? (hovering ? theme.inkSecondary : theme.inkTertiary) : (hovering ? theme.ink : theme.inkSecondary))
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .medium))
@@ -335,6 +344,185 @@ struct PanelSectionHeader: View {
         .onHover { hovering = $0 }
         .padding(.horizontal, -4)
         .accessibilityHint(Text("Open history"))
+    }
+}
+
+/// Details > Coding (desktop `AgentRows.tsx`, aa6255ac2a / #2099): one
+/// panel card, a row per agent, Claude Code's list:
+///   ○ @Bot · task                         20m 58s  ■
+///     Running · repo · branch
+/// A live row reads now minus its start; a finished one its end minus its
+/// start, and nothing when the end is unknown. Stop is a small square.
+struct PanelAgentRows: View {
+    @Environment(\.desktopTheme) private var theme
+    let items: [BotActivityItem]
+    let launched: [BotLaunchedAgentItem]
+    let now: Double
+    let stopping: Set<String>
+    let onOpen: (BotActivityItem) -> Void
+    let onOpenLaunched: (BotLaunchedAgentItem) -> Void
+    let onStop: (BotActivityItem) -> Void
+
+    private enum Row: Identifiable {
+        case item(BotActivityItem)
+        case launched(BotLaunchedAgentItem)
+        var id: String {
+            switch self {
+            case let .item(item): "item.\(item.id)"
+            case let .launched(item): "launched.\(item.id)"
+            }
+        }
+    }
+
+    private var rows: [Row] { items.map(Row.item) + launched.map(Row.launched) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(rows) { row in
+                switch row {
+                case let .item(item): itemRow(item)
+                case let .launched(item): launchedRow(item)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .background(theme.card, in: RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("desktop-panel-agent-rows")
+    }
+
+    private func itemRow(_ item: BotActivityItem) -> some View {
+        let live = item.status.isActive
+        let elapsed: String? = live
+            ? BotActivityRules.duration(now - item.startedAt)
+            : item.endedAt.map { BotActivityRules.duration($0 - item.startedAt) }
+        let step: String = {
+            if live, let current = item.currentStep, !current.isEmpty { return current }
+            return BotActivityWording.status(item.status)
+        }()
+        return shell(status: item.status,
+                     tag: item.botName.flatMap { $0.isEmpty ? nil : "@\($0)" },
+                     title: BotActivityWording.title(item),
+                     step: step, place: Self.place(item.code),
+                     elapsed: elapsed,
+                     open: { onOpen(item) },
+                     id: "desktop-agent-row.\(item.id)") {
+            if item.stoppable {
+                Button { onStop(item) } label: {
+                    Group {
+                        if stopping.contains(item.id) {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: "stop.fill").font(.system(size: 9))
+                        }
+                    }
+                    .foregroundStyle(theme.inkSecondary)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(stopping.contains(item.id))
+                .hoverEffect(.highlight)
+                .accessibilityLabel(Text("Stop \(BotActivityWording.title(item))"))
+                .accessibilityIdentifier("desktop-agent-stop.\(item.id)")
+            }
+        }
+    }
+
+    private func launchedRow(_ item: BotLaunchedAgentItem) -> some View {
+        let ended = item.status.isActive ? now : item.updatedAt
+        return shell(status: item.status,
+                     tag: item.targetBotName.isEmpty ? nil : "@\(item.targetBotName)",
+                     title: item.title,
+                     step: BotActivityWording.launchedSubtitle(item), place: nil,
+                     elapsed: BotActivityRules.duration(max(0, ended - item.startedAt)),
+                     open: item.threadId == nil ? nil : { onOpenLaunched(item) },
+                     id: "desktop-launched-row.\(item.id)") { EmptyView() }
+    }
+
+    /// `codingWhere`: the repository (else the folder's last part) and the branch.
+    static func place(_ code: BotCodeWork?) -> String? {
+        guard let code else { return nil }
+        let folder = code.folder?.replacingOccurrences(of: "\\", with: "/").split(separator: "/").last.map(String.init)
+        let parts = [code.repo ?? folder, code.branch].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func shell<Stop: View>(status: BotActivityStatus, tag: String?, title: String, step: String, place: String?,
+                                   elapsed: String?, open: (() -> Void)?, id: String,
+                                   @ViewBuilder stop: () -> Stop) -> some View {
+        HStack(spacing: 10) {
+            Text(verbatim: status.isActive ? "○" : "●")
+                .font(.system(size: 10))
+                .foregroundStyle(glyphTint(status))
+                .frame(width: 16, height: 16)
+                .modifier(AgentPulse(active: status == .running))
+                .accessibilityHidden(true)
+            Button { open?() } label: {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        (tagText(tag) + Text(verbatim: title).foregroundColor(theme.ink))
+                            .font(theme.font(14))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if let elapsed {
+                            Text(verbatim: elapsed)
+                                .font(theme.font(12).monospacedDigit())
+                                .foregroundStyle(theme.inkTertiary)
+                                .lineLimit(1)
+                                .accessibilityIdentifier("\(id).elapsed")
+                        }
+                    }
+                    (Text(verbatim: step).foregroundColor(theme.inkSecondary)
+                        + Text(verbatim: place.map { " · \($0)" } ?? "").foregroundColor(theme.inkTertiary))
+                        .font(theme.font(12))
+                        .lineLimit(1)
+                        .accessibilityIdentifier("\(id).line")
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(open == nil)
+            .accessibilityIdentifier(id)
+            stop()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .hoverEffect(.highlight)
+    }
+
+    private func tagText(_ tag: String?) -> Text {
+        guard let tag else { return Text(verbatim: "") }
+        return Text(verbatim: tag).fontWeight(.semibold).foregroundColor(theme.ink)
+            + Text(verbatim: " · ").foregroundColor(theme.inkTertiary)
+    }
+
+    private func glyphTint(_ status: BotActivityStatus) -> Color {
+        switch status {
+        case .running, .waiting: theme.accentText
+        case .queued, .stopped: theme.inkTertiary
+        case .failed: theme.danger
+        case .finished: theme.success
+        }
+    }
+}
+
+/// The running glyph breathes (animate-pulse); still with Reduce Motion.
+private struct AgentPulse: ViewModifier {
+    let active: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dim = false
+
+    func body(content: Content) -> some View {
+        if active && !reduceMotion {
+            content
+                .opacity(dim ? 0.4 : 1)
+                .onAppear { withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) { dim = true } }
+        } else {
+            content
+        }
     }
 }
 
@@ -440,7 +628,6 @@ struct BotPanelRoutines: View {
 
     @State private var routines: [Routine] = []
     @State private var loaded = false
-    @State private var openRoutine: Routine?
     @State private var adding = false
     @State private var toggling: Set<String> = []
     @State private var expanded = false
@@ -459,16 +646,18 @@ struct BotPanelRoutines: View {
                 AnyView(emptyHint)
             } else {
             HStack(spacing: 8) {
-                DesktopIconView(icon: .calendarClock, size: 16)
-                    .foregroundStyle(theme.inkSecondary)
+                // RoutinesSection.tsx (upcoming): a plain grey label, no icon
                 Text("Upcoming")
                     .font(theme.font(13))
-                    .foregroundStyle(theme.inkSecondary)
+                    .foregroundStyle(theme.inkTertiary)
+                    .padding(.horizontal, 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                // RoutinesSection.tsx: the ⋯ (Run logs, Automations) and the +
+                // RoutinesSection.tsx: the ⋯ (Run logs, Automations); Upcoming
+                // has no + (New routine stays in the empty hint and the ⋯).
                 Menu {
                     Button(String(localized: "Run logs"), systemImage: "list.bullet.rectangle") { model.show(.automations) }
                     Button(String(localized: "Automations"), systemImage: "calendar") { model.show(.automations) }
+                    Button(String(localized: "New routine"), systemImage: "plus") { adding = true }
                 } label: {
                     DesktopIconView(icon: .ellipsis, size: 15)
                         .foregroundStyle(theme.inkSecondary)
@@ -476,20 +665,12 @@ struct BotPanelRoutines: View {
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel(Text("More options"))
-                iconButton(.plus, size: 15, label: "Create schedule") { adding = true }
-                    .accessibilityIdentifier("desktop-panel-routine-new")
             }
             .frame(height: 28)
             AnyView(list)
             }
         }
         .task { await load() }
-        .sheet(item: $openRoutine) { routine in
-            NavigationStack {
-                RoutineDetailView(routine: routine) { await load() }
-            }
-            .environmentObject(session)
-        }
         .sheet(isPresented: $adding) {
             RoutineEditorView(routine: nil, presetBotId: bot.id) { await load() }
                 .environmentObject(session)
@@ -599,25 +780,35 @@ struct BotPanelRoutines: View {
 
     private func row(_ routine: Routine) -> some View {
         HStack(spacing: 10) {
-            Button { openRoutine = routine } label: {
+            Button { model.panelRoutineId = routine.id } label: {
+                HStack(spacing: 10) {
+                // RoutineList.tsx leadingClock (#2125): a clock leads the row
+                Image(systemName: "clock")
+                    .font(.system(size: 14, weight: .light))
+                    .foregroundStyle(theme.inkTertiary)
+                    .frame(width: 16)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(verbatim: routine.name)
-                        .font(theme.font(13))
+                        .font(theme.font(14))
                         .foregroundStyle(theme.ink)
                         .lineLimit(1)
                         .frame(height: 18)
-                    // the desktop's row: the schedule, its zone, the next run; Paused under it
-                    Text(verbatim: Self.scheduleLine(routine))
-                        .font(theme.font(12))
-                        .foregroundStyle(theme.inkSecondary)
-                        .lineLimit(1)
-                        .frame(height: 17)
-                    if !routine.enabled {
-                        Text(stateLabel(routine))
-                            .font(theme.font(12))
-                            .foregroundStyle(theme.inkSecondary)
-                            .frame(height: 17)
+                    // the desktop's panel row: only the schedule and its zone
+                    // (the next run is in the tooltip); a paused one says only Paused
+                    Group {
+                        if DesktopRoutineList.state(routine) == .paused {
+                            Text(stateLabel(routine))
+                        } else {
+                            Text(verbatim: Self.scheduleLine(routine, next: false))
+                        }
                     }
+                    .font(theme.font(12))
+                    .foregroundStyle(theme.inkSecondary)
+                    .lineLimit(1)
+                    .frame(height: 17)
+                    .help(Text(verbatim: Self.scheduleLine(routine)))
+                }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -637,10 +828,10 @@ struct BotPanelRoutines: View {
         .hoverEffect(.highlight)
     }
 
-    static func scheduleLine(_ routine: Routine) -> String {
+    static func scheduleLine(_ routine: Routine, next showNext: Bool = true) -> String {
         var parts = [RoutineWording.desktop(routine.schedule)]
         if let zone = routine.schedule.timeZone, !zone.isEmpty { parts.append(zone) }
-        if routine.enabled, let next = routine.nextRunAt {
+        if showNext, routine.enabled, let next = routine.nextRunAt {
             let date = Date(timeIntervalSince1970: next / 1000)
             let time = date.formatted(date: .omitted, time: .shortened)
             let when = Calendar.current.isDateInToday(date) ? String(localized: "Today at \(time)")
@@ -799,5 +990,59 @@ struct PanelSectionStack: Layout {
             y += size.height
             placed += 1
         }
+    }
+}
+
+/// The routine page over the whole bot panel (desktop PanelPage,
+/// ff87bf7daf): the routine's panel with one header row (back, title, X);
+/// back returns to the panel, X closes the panel.
+struct BotPanelRoutinePage: View {
+    @EnvironmentObject private var session: Session
+    @EnvironmentObject private var model: DesktopShellModel
+    let routineId: String
+
+    @State private var routines: [Routine] = []
+    @State private var runs: [RoutineRun] = []
+    @State private var editing: Routine?
+    @State private var duplicating: Routine?
+
+    var body: some View {
+        Group {
+            if let routine = routines.first(where: { $0.id == routineId }) {
+                DesktopRoutinePanel(
+                    routine: routine,
+                    runs: runs,
+                    close: {
+                        model.panelRoutineId = nil
+                        model.togglePanel()
+                    },
+                    changed: { await load() },
+                    openRun: { run in Task { await session.openRoutineRunInChat(run) } },
+                    openEditor: { editing = $0 },
+                    duplicate: { duplicating = $0 },
+                    back: { model.panelRoutineId = nil }
+                )
+            } else {
+                Color.clear
+            }
+        }
+        .background(Theme.bg)
+        .task(id: routineId) { await load() }
+        .sheet(item: $editing) { routine in
+            RoutineEditorView(routine: routine) { await load() }
+                .environmentObject(session)
+        }
+        .sheet(item: $duplicating) { source in
+            RoutineEditorView(routine: nil, copyOf: source) { await load() }
+                .environmentObject(session)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("panel-routine-page")
+    }
+
+    private func load() async {
+        let loaded = await session.loadRoutines()
+        routines = loaded.routines
+        runs = loaded.runs
     }
 }

@@ -88,49 +88,47 @@ struct CodingChatView: View {
 
     // MARK: Header
 
+    /// The folder · the branch (desktop `codingWhere` order).
+    private var metaLine: String? {
+        let parts = [CodingChatRules.folderLine(snapshot.place), snapshot.place.branch].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// 2026-11-06 (desktop 1522091154, #2285): the session header is the
+    /// chat header's pill (BotHeaderPill); the meta line keeps the folder
+    /// and the branch only. The session's status and duration sit quietly
+    /// at the right ("This session"), no longer in the meta line.
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 if let bot {
-                    HStack(spacing: 6) {
-                        BotMascotView(bot: bot, size: 22, state: snapshot.live ? .working : .idle, animated: false)
-                        Text(verbatim: bot.name)
-                            .font(Theme.Font.labelMedium)
-                            .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
-                    }
-                    .padding(.vertical, 3)
-                    .padding(.leading, 3)
-                    .padding(.trailing, 10)
-                    .background(Theme.inset, in: Capsule())
+                    ChatNameCapsule(chat: .bot(bot), state: snapshot.live ? .working : .idle) { close() }
+                        .frame(maxWidth: 230, alignment: .leading)
+                        .accessibilityIdentifier("coding-chat-pill")
                 } else {
                     Text(verbatim: botName)
                         .font(Theme.Font.labelMedium)
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Spacer(minLength: 4)
+                Text(verbatim: "\(CodingChatRules.statusLabel(detail?.item.status ?? item.status)) · \(CodingChatRules.elapsedLabel(item: item, detail: detail, nowMs: now.timeIntervalSince1970 * 1000))")
+                    .font(Theme.font(12).monospacedDigit())
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+                    .accessibilityLabel(Text("This session"))
+                    .accessibilityValue(Text(verbatim: "\(CodingChatRules.statusLabel(detail?.item.status ?? item.status)) · \(CodingChatRules.elapsedLabel(item: item, detail: detail, nowMs: now.timeIntervalSince1970 * 1000))"))
+                    .accessibilityIdentifier("coding-chat-session")
             }
             Text(verbatim: BotActivityWording.title(item))
                 .font(Theme.font(17, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(2)
-            HStack(spacing: 6) {
-                if let folder = CodingChatRules.folderLine(snapshot.place) {
-                    Text(verbatim: folder)
-                        .font(Theme.Profile.labelFont)
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
-                }
-                if let branch = snapshot.place.branch {
-                    Text(verbatim: "· \(branch)")
-                        .font(Theme.Profile.labelFont)
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
-                }
-                Text(verbatim: "· \(CodingChatRules.statusLabel(detail?.item.status ?? item.status)) · \(CodingChatRules.elapsedLabel(item: item, detail: detail, nowMs: now.timeIntervalSince1970 * 1000))")
+            if let meta = metaLine {
+                Text(verbatim: meta)
                     .font(Theme.Profile.labelFont)
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
+                    .accessibilityIdentifier("coding-chat-meta")
             }
         }
         .padding(.horizontal, 16)

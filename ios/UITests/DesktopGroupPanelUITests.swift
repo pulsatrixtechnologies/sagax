@@ -118,18 +118,15 @@ final class DesktopGroupPanelUITests: XCTestCase {
         XCTAssertTrue(element(app, "group-panel-instructions-info").exists, "the (i) beside the name")
         XCTAssertTrue(app.staticTexts["3 bots"].exists, "the bot count")
         XCTAssertTrue(element(app, "group-panel-menu").exists, "the ... menu")
-        for tab in ["details", "instructions", "memory", "advanced"] {
+        // desktop #2333: Activity and Members; Instructions and Memory hidden
+        for tab in ["details", "members"] {
             XCTAssertTrue(element(app, "group-panel-tab.\(tab)").exists, "the \(tab) tab")
         }
-        XCTAssertTrue(element(app, "group-panel-tab.details").isSelected, "Details first")
-        XCTAssertTrue(app.staticTexts["People"].exists, "the People card")
-        XCTAssertTrue(app.staticTexts["parity@example.com"].exists, "the viewer's email")
-        for name in ["Ara", "Helios", "Liora"] {
-            XCTAssertTrue(element(app, "group-panel-bot-\(try XCTUnwrap(try botId(name)))").exists, "\(name) in Bots")
+        for tab in ["instructions", "memory", "advanced"] {
+            XCTAssertFalse(element(app, "group-panel-tab.\(tab)").exists, "no \(tab) tab")
         }
-        XCTAssertTrue(element(app, "group-panel-add-person").exists, "People's Add")
-        XCTAssertTrue(element(app, "group-panel-add-bot").exists, "Bots' Add")
-        XCTAssertTrue(element(app, "group-panel-manage-members").exists, "Manage members")
+        XCTAssertTrue(element(app, "group-panel-tab.details").isSelected, "Activity first")
+        XCTAssertTrue(element(app, "group-panel-upcoming").exists || app.staticTexts["Upcoming"].exists, "Upcoming under Activity")
 
         // the ... menu: the export rows
         element(app, "group-panel-menu").tap()
@@ -137,24 +134,24 @@ final class DesktopGroupPanelUITests: XCTestCase {
         XCTAssertTrue(element(app, "group-panel-export.export").exists, "Export")
         element(app, "group-panel-menu").tap()
 
-        // Instructions: the editor saves the brief on the server
-        element(app, "group-panel-tab.instructions").tap()
-        let editor = element(app, "group-panel-instructions-editor")
-        XCTAssertTrue(editor.waitForExistence(timeout: 5), "the instructions editor")
-        let field = editor.descendants(matching: .textView).firstMatch
-        (field.exists ? field : editor).tap()
-        (field.exists ? field : editor).typeText("Ship on Fridays.")
-        element(app, "group-panel-tab.memory").tap()
-        try eventually("the brief is saved") { ((try room())?["bulletin"] as? String ?? "").contains("Ship on Fridays.") }
-        XCTAssertTrue(element(app, "group-panel-memory").waitForExistence(timeout: 10), "the Memory tab")
-
-        element(app, "group-panel-tab.advanced").tap()
-        XCTAssertTrue(element(app, "group-panel-advanced").waitForExistence(timeout: 5), "the Advanced tab")
-        XCTAssertTrue(element(app, "group-panel-responder").exists, "the default responder")
+        // Members: People, Bots, Manage members, then Advanced folded
+        element(app, "group-panel-tab.members").tap()
+        XCTAssertTrue(app.staticTexts["People"].waitForExistence(timeout: 5), "the People card")
+        XCTAssertTrue(app.staticTexts["parity@example.com"].exists, "the viewer's email")
+        for name in ["Ara", "Helios", "Liora"] {
+            XCTAssertTrue(element(app, "group-panel-bot-\(try XCTUnwrap(try botId(name)))").exists, "\(name) in Bots")
+        }
+        XCTAssertTrue(element(app, "group-panel-add-person").exists, "People's Add")
+        XCTAssertTrue(element(app, "group-panel-add-bot").exists, "Bots' Add")
+        XCTAssertTrue(element(app, "group-panel-manage-members").exists, "Manage members")
+        let toggle = element(app, "group-panel-advanced-toggle")
+        XCTAssertTrue(toggle.exists, "Advanced, folded")
+        XCTAssertFalse(element(app, "group-panel-responder").exists, "folded by default")
+        toggle.tap()
+        XCTAssertTrue(element(app, "group-panel-responder").waitForExistence(timeout: 5), "the default responder")
         XCTAssertTrue(element(app, "group-panel-turn-limit").exists, "the turn limit")
 
-        // Details: a bot's × takes it out of the room
-        element(app, "group-panel-tab.details").tap()
+        // Members: a bot's × takes it out of the room
         let remove = element(app, "group-panel-remove-bot-\(liora)")
         XCTAssertTrue(remove.waitForExistence(timeout: 5), "Liora's ×")
         remove.tap()

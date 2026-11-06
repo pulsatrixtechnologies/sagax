@@ -1885,9 +1885,7 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
     },
     "es": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -3755,9 +3753,7 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
     },
     "fr": {
       "access.addKey": "8a9f02fd9bdb83ac02d3240dcade949d6f3ffa2fc0b3df528e348bb4d29ae639",
@@ -17294,10 +17290,6 @@
       "settings.notifications.types.groups": "39bbb719fa2b9d2251039cbf2cd072e1120a414278263e2f11d99af0236c4262",
       "settings.notifications.types.approvals": "2bfc3471571e5c008cb26bd839b0d4cbcb1132fc9d6c8206bb595fa26e83a45b",
       "settings.notifications.types.routines": "61b7bb44e2b47b7c0ccaccff4872fdcf3e298345d0f003ea4bf54e8c84e2a889",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
-      "chat.exchange.closeChat": "96c660dc0b34405148faae357d8559d6b5ee64dd1a46bfcb6f3fd4f040e3b001",
-      "codingChat.back": "d3a4824104cb5386285124cce0302a3b4010662c35e55d3f879394814c9f73f2",
       "page.broken.title": "41b1aa9e83434d21fcb26ae3985cdbf78fea77e1c21f2ff325b01d04a3d2ded4",
       "page.broken.body": "6115a3f22df33db394b4cbc335b6d000b50532375a8d292f776d0ec723ba67f6",
       "page.broken.reload": "bdc090ec61e3fcfc65f469951dfe00f3f2ecfc6003c44deac8e05b7237092de6",
@@ -19161,9 +19153,7 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
     },
     "ja": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -22899,9 +22889,7 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
     },
     "pt-br": {
       "achievements.panel.all": "e2adb0c3b5f28a7c9d5bdac240382201b39376dd11671aedc93e8a73b6468f19",
@@ -25566,9 +25554,7 @@
       "routineEditor.hint.model": "1e4801441d38abd465f72135feab7a2b811ddb57537c948ed2d04e6d6e576719",
       "routines.effort.label": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
       "routines.effort.botDefault": "a6f2b10be05387215e32f014b3db3c2a378d078db65fa84390757038af7e5dad",
-      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a"
+      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18"
     },
     "uk": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -27928,9 +27914,7 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
     },
     "zh": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -30563,9 +30547,7 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
     },
     "zh-tw": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -34186,9 +34168,7 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
     }
   }
 }

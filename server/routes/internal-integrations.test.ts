@@ -253,7 +253,11 @@ describe("createInternalIntegrationsRoutes", () => {
       body: { credentialId: "not-a-real-key" },
     });
     await run();
-    expect(sent).toEqual([{ status: 400, body: { error: "unsupported credential id" } }]);
+    // Custom secrets need a label; an unknown id without one explains both shapes.
+    expect(sent).toEqual([{
+      status: 400,
+      body: { error: "request_credential needs credential_id for a key Sagax keeps, or label for any other secret." },
+    }]);
   });
 
   it("POST /request-credential appends a secret card (201)", async () => {

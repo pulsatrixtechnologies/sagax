@@ -2227,6 +2227,16 @@ describe("customMcpServers", () => {
     );
     expect(Object.keys(out)).toEqual(["keeper"]);
   });
+
+  it("starts a bot-owned server only for that bot", () => {
+    const all = cfg({
+      blender: { command: "python3", args: ["/w/iris/s.py"], bot: "iris" },
+      notes: { command: "npx", args: ["-y", "notes"] },
+    });
+    expect(Object.keys(customMcpServers(all, undefined, "iris")).sort()).toEqual(["blender", "notes"]);
+    expect(Object.keys(customMcpServers(all, undefined, "paul"))).toEqual(["notes"]);
+    expect(Object.keys(customMcpServers(all))).toEqual(["notes"]);
+  });
 });
 
 describe("changedInstanceIds", () => {

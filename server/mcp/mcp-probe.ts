@@ -154,6 +154,12 @@ export async function callsNeedSignIn(
   }
 }
 
+export interface McpProbeOptions {
+  /** Start a command server as this bot's AI would: from its own folder
+   * (boxed wrap is a leftover where Sagax gains bot-box). */
+  asBot?: { id: string; cwd: string };
+}
+
 /** Prove the MCP handshake and list the tools of one configured server,
  * whichever way it is reached. Neither path returns anything the renderer
  * must not see: child stderr, environment values, header values. */
@@ -162,10 +168,11 @@ export function probeMcpServer(
   timeoutMs?: number,
   signal?: AbortSignal,
   serverName?: string,
+  options?: McpProbeOptions,
 ): Promise<McpProbeResult> {
   return isRemoteMcpServer(server)
     ? probeRemoteMcpServer(server, timeoutMs ?? REMOTE_PROBE_TIMEOUT_MS, signal, serverName)
-    : probeStdioMcpServer(server, timeoutMs ?? STDIO_PROBE_TIMEOUT_MS, signal, serverName);
+    : probeStdioMcpServer(server, timeoutMs ?? STDIO_PROBE_TIMEOUT_MS, signal, serverName, options);
 }
 
 /** Connect to a remote server over its transport, bounded by one timeout
@@ -221,6 +228,7 @@ function probeStdioMcpServer(
   timeoutMs: number,
   signal?: AbortSignal,
   serverName?: string,
+  options?: McpProbeOptions,
 ): Promise<McpProbeResult> {
   return new Promise((resolve) => {
     if (signal?.aborted) {
@@ -231,7 +239,7 @@ function probeStdioMcpServer(
     let child: ReturnType<typeof spawnCli>;
     try {
       child = spawnCli(server.command, server.args, {
-        cwd: process.cwd(),
+        cwd: options?.asBot?.cwd ?? process.cwd(),
         env: probeEnvironment(server),
         stdio: ["pipe", "pipe", "pipe"],
       });

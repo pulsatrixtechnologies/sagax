@@ -696,6 +696,7 @@ import { entitled } from "./enterprise.ts";
 import { describeSpawnFailure, execCli, runAsBotEngine } from "./procs.ts";
 import {
   blockedTarget,
+  buildNoticeNotification,
   buildSpendNotification,
   deliverableNotification,
   quietForCall,
@@ -704,6 +705,7 @@ import {
   summarize,
   type Notification
 } from "./notify.ts";
+import { createMcpServersHost } from "./host/mcp-servers-host.ts";
 import {
   approvalPlain,
   describeAllowRule,
@@ -8355,6 +8357,21 @@ const store = new Store(
   newBotApprovalMode,
   newBotGreetingLanguage,
 );
+/** Bot-owned MCP claim + leave-out of servers that do not start (OMB #3751 / #2115).
+ * Boxed on a hosted workspace (Cloud); on desktop every bot reaches every folder. */
+const mcpServersHost = createMcpServersHost({
+  dataDir: DATA_DIR,
+  cfg: () => cfg,
+  persist: persistMcpServers,
+  bots: () => store.bots,
+  policy: (servers) => managedPolicy.filterMcp(servers),
+  tell: (text, about) => notify(buildNoticeNotification(about, store.bot(about.id)?.threadId ?? "", text)),
+  startsServers: (botId) => {
+    const bot = store.bot(botId);
+    return Boolean(bot && registry.get(bot.modelSelection.instanceId)?.adapter.capabilities.customMcp === true);
+  },
+  boxed: () => HOSTED_WORKSPACE,
+});
 // Preserve the payer of legacy solo choices before serving or probing them.
 // Persist bot/thread references first and the marker last so a failed write retries.
 if (claudeRetirement) retireEveryClaudeBot(cfg, store, saveConfig, claudeRetirement);
@@ -8398,6 +8415,7 @@ const sendSequencer = new SendSequencer();
 const widgetPressesInFlight = new Map<string, string | undefined>();
 // Before the new-bot default is read: a saved default may name the engine.
 await retryComputerEngineMove();
+mcpServersHost.boot();
 // Reading the new-bot default probes every engine CLI (each up to its
 // timeout), and at start only the first-run seed needs the answer. A later
 // start listens without waiting: the same read runs behind it, and turns
@@ -10912,7 +10930,7 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
       browser: previewPlan.computer === undefined ? false : previewPlan.browser
     }, { note: previewPlan.note, cloudHome: false }) },
     { id: "cloud-home", label: "OMB Cloud", text: "" },
-    { id: "mcp", label: "MCP servers", text: caps?.customMcp ? customMcpPrompt(Object.keys(engineMcpServers(bot))) : "" },
+    { id: "mcp", label: "MCP servers", text: caps?.customMcp ? customMcpPrompt(Object.keys(engineMcpServers(bot)), mcpServersHost.off(bot)) : "" },
     { id: "browser", label: "Browser", text: previewPlan.browser ? BUILT_IN_BROWSER_SYSTEM_PROMPT : "" },
     { id: "coordination", label: "Team", text: agentsMounted && coordination ? ` ${coordination}` : "" },
     { id: "credential", label: "Credentials", text: agentsMounted ? CREDENTIAL_PROMPT : "" },
@@ -13399,7 +13417,7 @@ store.onChange((change) => {
       catch { console.error("[memory-upkeep] Could not forget deleted bot's upkeep state."); }
       try { cacheKeepWarm.cancelBot(change.botId); }
       catch { console.error("[cache-keepwarm] Could not cancel deleted bot's keep-warm windows."); }
-      try { commandAllowlist.clear(change.botId); }
+      try { commandAllowlist.clear(change.botId); mcpServersHost.botDeleted(change.botId); }
       catch { console.error("[command-allowlist] Could not remove deleted bot's saved rules."); }
       // Its plugins and the tokens saved for its marketplaces go with it.
       try { botPlugins.forgetBot(change.botId); }
@@ -29612,7 +29630,7 @@ function mcpServerResponse(viewer?: string | null) {
     } : server;
     // Shared config rows stay installation; a name that only exists in a
     // person store never appears here. scope lets the panel skip personal lookups.
-    const withScope = { ...listed, ...githubState(server.name), scope: skipPersonalInSharedProbe(server.name, personalNames) ? "person" as const : "installation" as const };
+    const withScope = mcpServersHost.listing({ ...listed, ...githubState(server.name), scope: skipPersonalInSharedProbe(server.name, personalNames) ? "person" as const : "installation" as const });
     return managedPolicy.mcpAllowed(server.name, "url" in server ? server.url : undefined) ? withScope : { ...withScope, managedBy: policy!.organizationName };
   });
   // a server saved under a name Sagax now reserves is never mounted: listed
@@ -29669,14 +29687,21 @@ function engineMcpServers(bot: BotRecord, threadId?: string) {
   // the selection is server/turns/turn-mounts.ts engineServerMcp, which the
   // capabilities resolver (server/capabilities/capabilities.ts) reads too
   const servers = engineServerMcp({
-    configured: customMcpServers(cfg, bot.mcpServers),
+    configured: customMcpServers(cfg, bot.mcpServers, bot.id),
     organization: IDENTITY.kind === "perspicax",
     filterPolicy: (configured) => managedPolicy.filterMcp(configured),
     sign: (allowed) => mcpOAuth.withAuthHeaders(allowed, (name) => bot.mcpAccounts?.[name])
   });
+  // Leave out command servers that did not start for this bot (mcp-health).
+  const usable = mcpServersHost.health.usable(bot.id, servers);
   // A turn mounts a server with tools switched off through the gate
   // (server/mcp/mcp-tool-filter.ts); listings only need the names.
-  return threadId === undefined ? servers : withDisabledTools(servers, mcpDisabledTools(cfg), threadId);
+  return threadId === undefined ? usable : withDisabledTools(usable, mcpDisabledTools(cfg), threadId);
+}
+
+/** Before a turn: first health check of the bot's command MCP servers. */
+async function prepareMcpServers(bot: BotRecord): Promise<void> {
+  await mcpServersHost.prepare(bot);
 }
 /** The bot's MCP servers as `person` (server/github/github-mcp-token.ts): on an
  * organization server each GitHub server carries that person's own GitHub
@@ -29690,7 +29715,7 @@ const ORG_HOST_COMMAND_REFUSAL = "On an organization server a command would run 
 /** Refresh the OAuth tokens a turn is about to hand its engine. A failure
  * only marks that server expired; the turn still starts without it signed in. */
 async function refreshMcpOAuth(bot: BotRecord): Promise<void> {
-  await mcpOAuth.refreshDue(managedPolicy.filterMcp(customMcpServers(cfg, bot.mcpServers)), undefined, (name) => bot.mcpAccounts?.[name]).catch(() => undefined);
+  await mcpOAuth.refreshDue(managedPolicy.filterMcp(customMcpServers(cfg, bot.mcpServers, bot.id)), undefined, (name) => bot.mcpAccounts?.[name]).catch(() => undefined);
 }
 
 /** Every configured remote server, parsed, keyed by name. */
@@ -32688,9 +32713,11 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     endMcpConfigUpdate: () => { mcpConfigBusy = false; },
     mcpServers: () => cfg.mcpServers ?? {},
     addDisabledMcpServer,
+    botAddMcpServer: (current, body, botId) => mcpServersHost.botAdd(current, body, botId),
     sharedMcpPersonalRefusal,
     mcpPolicyRefusal,
     persistMcpServers,
+    healthChanged: (name) => mcpServersHost.health.changed(name),
     turnSpeaker: (threadId) => turnSpeakers.get(threadId),
     turnIsRoutine: (threadId) => turnRoutineLineage.has(threadId),
     turnIsInternal: (threadId) => isInternalTurn(threadId),
@@ -45792,6 +45819,7 @@ ROUTES.push(createMcpServersHttpRoutes({
   managedPolicy,
   mcpPolicyRefusal,
   persistMcpServers,
+  health: mcpServersHost.health,
   bots: () => store.bots,
   patchBot: (id, patch) => store.patchBot(id, patch),
   broadcast,
@@ -47121,6 +47149,8 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   mcpCallTimeoutMinutes,
   messageFileRootsForThread,
   mcpServersAsPerson,
+  prepareMcpServers,
+  mcpServersOff: (bot: BotRecord) => mcpServersHost.off(bot),
   memoryPromptFor,
   mentionedBots,
   messagesIntegration,
@@ -47497,6 +47527,8 @@ const startTurnRunner = createStartTurn({
   mcpCallTimeoutMinutes,
   messageFileRootsForThread,
   mcpServersAsPerson,
+  prepareMcpServers,
+  mcpServersOff: (bot: BotRecord) => mcpServersHost.off(bot),
   measureContextBuckets,
   routineApprovalWaitMs,
   memoryPromptFor,

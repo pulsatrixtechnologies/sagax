@@ -149,6 +149,8 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     mcpCallTimeoutMinutes,
     messageFileRootsForThread,
     mcpServersAsPerson,
+    prepareMcpServers,
+    mcpServersOff,
     memoryPromptFor,
     mentionedBots,
     messagesIntegration,
@@ -421,6 +423,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   let roomGithubWithheld: string[] = [];
   if (instance.adapter.capabilities.customMcp === true) {
     await refreshMcpOAuth(bot);
+    await prepareMcpServers(bot);
     const mounted = mcpServersAsPerson(bot, orgSpeakerPrincipal(bot, roomAccessSpeaker), threadId);
     attachCustomMcp(integrations, mounted.servers, cfg);
     roomGithubWithheld = mounted.githubWithheld;
@@ -923,7 +926,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     { id: "files", label: "File locations", text: workspace ? workspaceLocationsPrompt(bot.id, cwd, readyBot.cwd, { attachFile: Boolean(integrations.agents) && !HOSTED_WORKSPACE, ...(roomStable ? { cwdElsewhere: true } : {}), serverFiles: roomServerFiles, environmentFolder: roomEnvironmentFolder }) : "" },
     { id: "files-cwd", label: "Current working folder", text: roomStable && workspace && roomServerFiles ? workspaceCwdPrompt(cwd) : "" },
     { id: "shell", label: "Long-running commands", text: workspace ? longCommandsPrompt(roomComputerPromptKind) : "" },
-    { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(integrations.custom ?? {})) + githubWithheldPrompt(roomGithubWithheld) },
+    { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(integrations.custom ?? {}), mcpServersOff(bot)) + githubWithheldPrompt(roomGithubWithheld) },
     { id: "perspicax", label: "Perspicax", text: roomPerspicaxPrompt },
     { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(readyBot, instance, roomSpeakerId ? { origin: "person", principalId: roomSpeakerId, groupId } : roomRoutineSpeaker(threadId) ?? { origin: "operator" }, { level: roomPromptLevel }) },
     { id: "approval-level", label: "Approval level", text: approvalLevelPrompt(roomPromptLevel) },

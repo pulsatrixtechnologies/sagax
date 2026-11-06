@@ -8,6 +8,7 @@ import {
   MAX_MCP_SERVERS,
   MAX_RESULT_BUDGET,
   mcpServerNameError,
+  mcpServerServes,
   parseMcpServerMutation,
   parseMcpServersImport,
   parseStoredMcpServer,
@@ -28,6 +29,22 @@ describe("custom MCP registry", () => {
       ok: true,
       server: { command: "npx", args: [], env: {}, enabled: true },
     });
+  });
+
+  it("keeps a bot-owned server for that bot only, and lists the bot id", () => {
+    expect(parseStoredMcpServer("blender", { command: "python3", bot: "iris" })).toEqual({
+      ok: true,
+      server: { command: "python3", args: [], env: {}, enabled: true, bot: "iris" },
+    });
+    expect(mcpServerServes({ command: "python3", args: [], env: {}, bot: "iris" }, "iris")).toBe(true);
+    expect(mcpServerServes({ command: "python3", args: [], env: {}, bot: "iris" }, "paul")).toBe(false);
+    expect(mcpServerServes({ command: "npx", args: [], env: {} }, "paul")).toBe(true);
+    expect(mcpServerServes({ command: "npx", args: [], env: {}, bot: "iris" }, undefined)).toBe(false);
+    expect(listMcpServers({ blender: { command: "python3", bot: "iris" } })).toEqual([
+      { name: "blender", command: "python3", args: [], envKeys: [], enabled: true, bot: "iris" },
+    ]);
+    expect(parseMcpServerMutation("blender", { command: "python3" }, { command: "old", args: [], env: {}, enabled: true, bot: "iris" }))
+      .toMatchObject({ ok: true, server: { bot: "iris", command: "python3" } });
   });
 
   it("refuses unsafe and reserved routing names", () => {

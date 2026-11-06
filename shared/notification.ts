@@ -41,7 +41,10 @@ export type NotifyKind =
   /** 2026-11-05: a bot's turn elsewhere (a hand-off, a routine run, a
    * thread another bot opened) ended with items only the person can do; the
    * card is in their conversation with that bot (shared/person-attention.ts). */
-  | "needs-you";
+  | "needs-you"
+  /** Something Sagax changed on its own that the person hears about once:
+   * a tool turned off for the bots it does not start for. */
+  | "notice";
 
 export interface Notification {
   kind: NotifyKind;

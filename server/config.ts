@@ -23,7 +23,7 @@ import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts"
 import { PROVIDER_ICON_PRESETS, providerIconError } from "../shared/provider-icon.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import type { MailSettings } from "./mail/mail-config.ts";
-import { isRemoteMcpServer, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp/mcp-registry.ts";
+import { isRemoteMcpServer, mcpServerServes, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp/mcp-registry.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schema.ts";
 import { isPersonalBrowserProfileId } from "../shared/person-settings.ts";
 import { browserEgressConfigSchema, type BrowserEgressConfig } from "./browser/egress/policy.ts";
@@ -2558,7 +2558,7 @@ export function mcpDisabledTools(cfg: AppConfig): Record<string, string[]> {
   return out;
 }
 
-export function customMcpServers(cfg: AppConfig, only?: string[]): Record<string, CustomMcpServer> {
+export function customMcpServers(cfg: AppConfig, only?: string[], botId?: string): Record<string, CustomMcpServer> {
   const out: Record<string, CustomMcpServer> = {};
   for (const [name, raw] of Object.entries(cfg.mcpServers ?? {})) {
     // a bot with its own list gets exactly those names; a bot without one
@@ -2573,7 +2573,8 @@ export function customMcpServers(cfg: AppConfig, only?: string[]): Record<string
       skipMcpEntry(name, `${parsed.error} Expected { "command": "npx", "args": [...], "env": { ... } } or { "type": "http", "url": "https://…", "headers": { ... } }`);
       continue;
     }
-    if (!parsed.server.enabled) continue;
+    // another bot's own server never starts for this bot (or for a turn of no bot)
+    if (!parsed.server.enabled || !mcpServerServes(parsed.server, botId)) continue;
     out[name] = isRemoteMcpServer(parsed.server)
       ? { type: parsed.server.type, url: parsed.server.url, headers: parsed.server.headers }
       : { command: parsed.server.command, args: parsed.server.args, env: parsed.server.env };

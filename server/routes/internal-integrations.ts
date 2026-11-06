@@ -66,9 +66,12 @@ export interface InternalIntegrationsDeps {
   endMcpConfigUpdate(): void;
   mcpServers(): Record<string, unknown>;
   addDisabledMcpServer(current: Record<string, unknown>, body: unknown): DisabledMcpServerAdd;
+  /** Bot add with folder claim / keep-in-tools (OMB #3751). Falls back to addDisabledMcpServer. */
+  botAddMcpServer?(current: Record<string, unknown>, body: unknown, botId: string): DisabledMcpServerAdd & { moved?: Array<{ from: string; to: string }>; server: StoredMcpServer };
   sharedMcpPersonalRefusal(name: string, server: StoredMcpServer): string | null;
   mcpPolicyRefusal(name: string, server: object): string | undefined;
   persistMcpServers(next: Record<string, unknown>): void;
+  healthChanged?(name: string): void;
   turnSpeaker(threadId: string): { origin: string; principalId?: string } | undefined;
   turnIsRoutine(threadId: string): boolean;
   turnIsInternal(threadId: string): boolean;
@@ -198,7 +201,9 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       if (!deps.tryBeginMcpConfigUpdate()) return json(res, 409, { error: "MCP servers are already being updated." });
       try {
         const body = await readBody();
-        const added = deps.addDisabledMcpServer(deps.mcpServers(), body);
+        const added = deps.botAddMcpServer
+          ? deps.botAddMcpServer(deps.mcpServers(), body, sender.id)
+          : deps.addDisabledMcpServer(deps.mcpServers(), body);
         if (!added.ok) return json(res, added.status, { error: added.error });
         const personalRefusal = deps.sharedMcpPersonalRefusal(added.name, added.server);
         if (personalRefusal) return json(res, 400, { error: personalRefusal });
@@ -216,7 +221,9 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
           organization: deps.isPerspicax(),
           remote,
         });
-        deps.persistMcpServers(enabled ? { ...added.next, [added.name]: { ...server, enabled: true } } : added.next);
+        const stored = enabled ? { ...server, enabled: true } : server;
+        deps.persistMcpServers({ ...added.next, [added.name]: stored });
+        deps.healthChanged?.(added.name);
         if (remote) {
           return json(res, 201, {
             name: added.name,
@@ -230,6 +237,10 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
         return json(res, 201, {
           name: added.name,
           enabled,
+          ...(!remote && "bot" in server && server.bot ? { own: true } : {}),
+          ...("moved" in added && Array.isArray(added.moved) && added.moved.length
+            ? { keptIn: added.moved.map((entry: { to: string }) => entry.to) }
+            : {}),
           transport: "command",
           target: server.command,
           envKeys: Object.keys(server.env).sort(),

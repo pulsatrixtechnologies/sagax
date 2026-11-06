@@ -145,6 +145,8 @@ export type GroupMemberTurnHost = {
   mcpCallTimeoutMinutes: any,
   messageFileRootsForThread: any,
   mcpServersAsPerson: any,
+  prepareMcpServers: any,
+  mcpServersOff: any,
   memoryPromptFor: any,
   mentionedBots: any,
   messagesIntegration: any,

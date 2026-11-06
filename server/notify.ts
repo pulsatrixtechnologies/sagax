@@ -71,6 +71,11 @@ export function buildSpendNotification(
   return { kind: "spend", botId: bot.id, botName: bot.name, threadId, title: text.title, body: summarize(text.body, 200) };
 }
 
+/** Something Sagax did on its own about `bot` that the person hears once, in one plain line. */
+export function buildNoticeNotification(bot: Pick<NotifyBot, "id" | "name">, threadId: string, text: string): Notification {
+  return { kind: "notice", botId: bot.id, botName: bot.name, threadId, title: bot.name, body: summarize(text, 240) };
+}
+
 /** Build the frame for one event, or null when it should stay quiet.
  *
  * Kept pure and separate from the event fold so the policy — which is the

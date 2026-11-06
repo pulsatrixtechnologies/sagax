@@ -41,6 +41,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
     coordinationSystemInstructions,
     coordinator,
     customMcpPrompt,
+    mcpServersOff,
     devPodsPrompt,
     devPodsThreads,
     docsIndexPrompt,
@@ -181,7 +182,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "cloud-home", label: "OMB Cloud", text: "" },
       // gated on the integration, not the key: the hint only goes to a
       // bot whose driver actually mounted the tools
-      { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(state.integrations.custom ?? {})) + githubWithheldPrompt(state.githubWithheld) },
+      { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(state.integrations.custom ?? {}), mcpServersOff(state.bot)) + githubWithheldPrompt(state.githubWithheld) },
       { id: "perspicax", label: "Perspicax", text: state.perspicaxPrompt },
       // run_with_engine is shown to a person's own direct turn only (not one hop away)
       { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(state.liveBot ?? state.bot, state.instance, state.speaker, { level: promptApprovalLevel, relay: Boolean(state.integrations.agents) && state.commsDepth === 0 }) },

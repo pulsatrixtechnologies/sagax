@@ -248,6 +248,8 @@ export type StartTurnHost = {
   messageFileRootsForThread: any,
   routineApprovalWaitMs?: any,
   mcpServersAsPerson: any,
+  prepareMcpServers: any,
+  mcpServersOff: any,
   measureContextBuckets: any,
   memoryPromptFor: any,
   mentionPrompt: any,

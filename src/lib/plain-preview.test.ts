@@ -35,6 +35,11 @@ describe("plainPreviewText", () => {
     expect(plainPreviewText(input)).toBe(expected);
   });
 
+  it("never shows a chat-template token a model leaked as its reply", () => {
+    expect(plainPreviewText("<|eos|>")).toBe("");
+    expect(plainPreviewText("Bonjour.<|im_end|>")).toBe("Bonjour.");
+  });
+
   it("leaves text without markdown alone", () => {
     for (const text of ["snake_case_name stays", "2 * 3 = 6", "price is $5 * 2", "C# and F# are fine", "use a_b_c here", "Done."]) {
       expect(plainPreviewText(text)).toBe(text);

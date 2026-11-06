@@ -1,5 +1,6 @@
 import { t } from "@/lib/i18n";
 import { richFenceKind } from "@/lib/rich-blocks";
+import { stripChatSpecialTokens } from "../../shared/chat-special-tokens";
 
 /**
  * One line of plain text for a list preview (the sidebar's bot and room
@@ -10,7 +11,10 @@ import { richFenceKind } from "@/lib/rich-blocks";
  * This is a reading aid, not a Markdown parser. It never needs to be exact,
  * only to never show syntax a person did not type to be read.
  */
-export function plainPreviewText(text: string): string {
+export function plainPreviewText(raw: string): string {
+  // a reply stored before the server dropped a leaked chat-template token
+  // (`<|eos|>`) never reads as that token
+  const text = stripChatSpecialTokens(raw);
   const out = plainPreviewBody(text);
   // a reply that is nothing but a rich view (a ```widget, chart, table...)
   // has no sentence to preview: name the view rather than show its source

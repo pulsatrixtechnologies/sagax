@@ -258,3 +258,30 @@ describe("a local model repeating itself", () => {
     expect(f.requests).toHaveLength(2);
   });
 });
+
+describe("a chat-template token a local model wrote as text", () => {
+  it("never shows an end token split across deltas", async () => {
+    const f = await fixture((_body, response) => say(response, "Bonjour JC.", "<|e", "os|>"));
+    await f.start({ integrations: {} });
+    expect(await f.completed()).toMatchObject({ ok: true });
+    expect(f.shown()).toBe("Bonjour JC.");
+    expect(f.replies()).toEqual(["Bonjour JC."]);
+  });
+
+  it("takes a reply that is only the token as an empty reply, never as the words <|eos|>", async () => {
+    const f = await fixture((_body, response) => say(response, "<|eos|>"));
+    await f.start({ integrations: {} });
+    expect(await f.completed()).toMatchObject({ ok: false });
+    expect(f.shown()).toBe("");
+    expect(f.replies()).toEqual([]);
+    expect(f.recorder.events).toContainEqual(expect.objectContaining({ type: "runtime.error", message: expect.stringContaining("empty response") }));
+  });
+
+  it("leaves a token quoted in a sentence as written", async () => {
+    const f = await fixture((_body, response) => say(response, "The ", "<|eos|>", " token ends a turn.<|im_end|>"));
+    await f.start({ integrations: {} });
+    expect(await f.completed()).toMatchObject({ ok: true });
+    expect(f.shown()).toBe("The <|eos|> token ends a turn.");
+    expect(f.replies()).toEqual(["The <|eos|> token ends a turn."]);
+  });
+});

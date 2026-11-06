@@ -45,7 +45,7 @@ function Sample() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BotEditorStore value={store}>
-      <div data-gallery-sample="canvas-computers" className="flex h-[760px] w-[420px] justify-end bg-app">
+      <div data-gallery-sample="canvas-computers" className="relative flex h-[760px] w-[420px] justify-end bg-app">
         <Sample />
       </div>
     </BotEditorStore>

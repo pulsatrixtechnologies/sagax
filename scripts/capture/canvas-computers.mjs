@@ -54,7 +54,13 @@ try {
         await page.waitForTimeout(1000);
         if (view === "code") {
           const submit = page.locator("[data-unattended-generate]");
-          if (await submit.count()) { await submit.click(); await page.waitForSelector("[data-unattended-code]"); await page.waitForTimeout(400); }
+          if (await submit.count()) {
+            await submit.click();
+            await page.waitForSelector("[data-unattended-code], [data-unattended-setup] [role=alert]");
+            const alert = page.locator("[data-unattended-setup] [role=alert]");
+            if (await alert.count()) errors.push(`setup error: ${await alert.first().innerText()}`);
+            await page.waitForTimeout(400);
+          }
         }
         const file = join(outDir, `canvas-computers-${tag}-${view}-${skin === "pulsatrix" ? "dark" : "light"}-${lang}.png`);
         await page.locator("[data-gallery-sample='canvas-computers']").screenshot({ path: file });

@@ -54,7 +54,7 @@ export function UnattendedHostSetup({ available = true, reason, startRequest = 0
   const [issued, setIssued] = useState<HostInstallCode | null>(null);
   const scopeInput = useRef<HTMLSelectElement>(null);
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { if (startRequest > 0) { setOpen(true); setIssued(null); } }, [startRequest]);
   useEffect(() => { if (open && !issued) scopeInput.current?.focus(); }, [open, issued]);
 

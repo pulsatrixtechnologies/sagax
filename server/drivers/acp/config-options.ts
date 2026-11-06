@@ -56,7 +56,7 @@ export function acpModelOption(result: unknown, configId = "model"): {
   options: ModelCatalog["options"];
 } | undefined {
   const configs = configOptions(result);
-  const option = configs.find((entry) => entry.type === "select" && entry.id === configId)
+  const option = configs.find((entry) => (entry.type === undefined || entry.type === "select") && entry.id === configId)
     ?? configs.find((entry) => entry.type === "select" && entry.category === "model" && nonempty(entry.id));
   if (option) {
     const currentValue = nonempty(option.currentValue);

@@ -4,12 +4,18 @@
 // still hidden (#555), then "Bots' computer" with Reset as a red pill.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { setLocale } from "@/lib/i18n";
 import { otherComputers } from "./BotWorkplaceSettings";
 import { OrgComputerSettings } from "./OrgComputerSettings";
+
+// the Computer page's rows (server-mode access, Mac control) read the store
+vi.mock("@/state/store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/state/store")>()),
+  useStore: () => ({ state: { config: null }, dispatch: () => {} }),
+}));
 
 const desktop = (id: string, name: string, online: boolean, lastSeenAt: number) => ({ id, name, platform: "darwin", online, busy: false, lastSeenAt, capabilities: { localVm: true } });
 const bridge = (patch: Partial<DesktopBridgeStatus> = {}): DesktopBridgeStatus => ({

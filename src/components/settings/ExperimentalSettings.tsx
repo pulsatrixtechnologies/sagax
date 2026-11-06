@@ -2,23 +2,19 @@
 // One row = a label, a consequence line, a switch. Features this server
 // cannot run sit under "Needs a server update". Developer pods sit under
 // "Developer". Decision model lives only on Models (its own master switch).
-// Browser stays here until L3 moves it to Computer; My Chrome folds under
-// the browser row. Phone calls show for every org member (read-only for
-// non-admins), never behind an admin-only gate.
+// #2080 L3: built-in browser and My Chrome live on Computer.
+// Phone calls show for every org member (read-only for non-admins), never
+// behind an admin-only gate.
 import { useEffect, useState } from "react";
 import { api, useStore, type ConfigStatus } from "@/state/store";
-import { browserAvailable, builtInBrowserEnabled, dataWindowEnabled, llmThreadTitlesEnabled, meetingNotetakerEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
+import { dataWindowEnabled, llmThreadTitlesEnabled, meetingNotetakerEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import type { LocaleKey } from "@/locales";
-import { BrowserProfilesManager } from "../BrowserProfilesManager";
-import { MyChromeSettings } from "./MyChromeSettings";
-import { BrowserUnavailableNote } from "../SettingsLink";
 import { DescribedRow, FoldRow, HelpTip, SettingsGroup, Switch } from "../SettingsPrimitives";
-import { DisclosurePill } from "./AppearanceSettings";
 import { ExternalLinkPill } from "./SettingsPatterns";
 import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
-import { canEditConfig, canManageExperimental } from "@/lib/viewer";
+import { canManageExperimental } from "@/lib/viewer";
 import { useServerFeature } from "@/lib/server-features";
 import { featureMissingOnServer } from "@/lib/server-route";
 import { isPersonalFeature } from "../../../shared/person-settings";
@@ -27,7 +23,7 @@ import { perspicaxConsoleUrl } from "../PerspicaxOrgSettings";
 import { OrgPhoneCalls } from "./OrgPhoneCalls";
 import { SkillReviewSettings } from "./SkillReviewSettings";
 
-type ExperimentalFeature = "skillAuthoring" | "browser" | "dataWindow" | "meetingNotetaker" | "llmThreadTitles";
+type ExperimentalFeature = "skillAuthoring" | "dataWindow" | "meetingNotetaker" | "llmThreadTitles";
 
 function FeatureRow({
   feature,
@@ -98,51 +94,23 @@ function UnavailableRow({
   );
 }
 
-function BrowserProfilesBelow({ count }: { count: number }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div data-settings-card="experimental.browserProfiles" data-open={open ? "true" : "false"} className="mt-1 flex flex-col">
-      <div className="flex min-h-[32px] items-center justify-between gap-4 border-l-[0.5px] border-border pl-3">
-        <span className="text-[13px] leading-[18px] text-ink">{t("settings.profiles.title")}</span>
-        <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.profiles.title")}>{count}</DisclosurePill>
-      </div>
-      <div hidden={!open} className="mt-2"><BrowserProfilesManager /></div>
-    </div>
-  );
-}
-
-/** My Chrome folds under the browser row; body stays mounted while folded. */
-function MyChromeFold() {
-  const [open, setOpen] = useState(false);
-  return (
-    <div data-my-chrome-fold="" data-open={open ? "true" : "false"} className="mt-1 flex flex-col">
-      <div className="flex min-h-[32px] items-center justify-between gap-4 border-l-[0.5px] border-border pl-3">
-        <span className="text-[13px] leading-[18px] text-ink">{t("settings.profiles.myChrome")}</span>
-        <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.profiles.myChrome")}>{null}</DisclosurePill>
-      </div>
-      <div hidden={!open} className="mt-2"><MyChromeSettings /></div>
-    </div>
-  );
-}
-
 export function ExperimentalSettings() {
   const { state, dispatch } = useStore();
   const skillAuthoring = skillAuthoringEnabled(state.config);
-  const browser = builtInBrowserEnabled(state.config);
   const dataWindow = dataWindowEnabled(state.config);
   const dataWindowServed = typeof state.config?.features?.dataWindow === "boolean";
   const meetingNotetaker = meetingNotetakerEnabled(state.config);
   const meetingNotetakerServed = typeof state.config?.features?.meetingNotetaker === "boolean";
-  const desktopBrowser = browserAvailable(state.config);
-  const browserInstallable = state.config?.browserEngine?.installable === true;
-  const browserBlockedOnWindows = typeof window !== "undefined" && window.ogb?.platform === "win32" && !desktopBrowser && !browserInstallable;
-  const browserUnavailable = !desktopBrowser && !browserInstallable;
-  const editConfig = canEditConfig(state.config);
+  // #1098 (2026-10-27): on an organization server a person sets their own
+  // switches (skill authoring, the Data window, generated titles) with no
+  // right to edit the installation (/api/me/experimental). The meeting
+  // notetaker stays the installation's (server.experimental).
   const manage = canManageExperimental(state.config);
   const personalServed = useServerFeature("memberPersonSettings") !== "no";
   const personal = state.config?.personalSettings === true && personalServed;
   const personalMissing = state.config?.personalSettings === true && !personalServed && !manage;
-  const profiles = (state.config?.browserProfiles ?? []).filter((profile) => (editConfig ? !profile.personal : profile.personal));
+  // 2026-10-26 (owner): generated conversation titles were on only after a
+  // hand edit of config.json; they get their switch here.
   const llmThreadTitles = llmThreadTitlesEnabled(state.config);
   const llmThreadTitlesServed = typeof state.config?.features?.llmThreadTitles === "boolean";
   const org = usePerspicaxOrg();
@@ -203,22 +171,6 @@ export function ExperimentalSettings() {
       description: "settings.experimental.skillAuthoringDescription",
       checked: skillAuthoring,
       below: <SkillReviewSettings />,
-    },
-    {
-      feature: "browser",
-      label: "settings.experimental.browser",
-      aria: "settings.experimental.browserAria",
-      description: "settings.experimental.browserDescription",
-      checked: browser,
-      unavailable: browserUnavailable,
-      reason: browserBlockedOnWindows ? t("settings.experimental.browserWindows") : <BrowserUnavailableNote config={state.config} />,
-      note: !desktopBrowser && browserInstallable ? t("settings.experimental.browserInstall") : t("settings.experimental.browserDescription"),
-      below: (
-        <>
-          {(editConfig || personal) && (browser || profiles.length > 0) && <BrowserProfilesBelow count={profiles.length} />}
-          {browser && <MyChromeFold />}
-        </>
-      ),
     },
   ];
   const unavailable: Array<{ feature: ExperimentalFeature; label: LocaleKey; reason: React.ReactNode }> = [];

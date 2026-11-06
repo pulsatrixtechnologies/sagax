@@ -13,10 +13,16 @@ import { openSettings } from "@/lib/settings-link";
 import { PerspicaxOrgSettings } from "../PerspicaxOrgSettings";
 import { marketplacePolicyBody, OrgSourcesAccess } from "./OrgSourcesAccess";
 
-// an admin sees OrgTeamSecrets (#932), which reads the bots from the store
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
-  useStore: () => ({ state: { bots: [] }, dispatch: vi.fn() }),
+  api: vi.fn(async () => ({ approvals: [], secrets: [], pages: [] })),
+  useStore: () => ({
+    state: {
+      bots: [],
+      config: { viewer: { role: "member", capabilities: { editConfig: false, manageKeys: false, manageComputers: false, viewUsage: false, manageBackups: false, pairDevices: false } } },
+    },
+    dispatch: vi.fn(),
+  }),
 }));
 
 afterEach(() => setLocale("en"));
@@ -36,18 +42,18 @@ const org = (viewerRole: "admin" | "member"): PerspicaxOrg => ({
 });
 
 describe("Organization sources and access", () => {
-  it("Settings > Organization: an admin finds one link to Plugins > Sources and the GitHub OAuth App's client id, a member nothing", () => {
+  it("Settings > Organization: sources are one read-only row for everyone, and the admin keeps the GitHub OAuth App's client id", () => {
+    // #2080 L3: sources are a read-only row for everyone, with no shortcut to Perspicax
     const admin = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
-    expect(admin).toContain('data-settings-card="organization.plugins"');
-    expect(admin).toContain("data-org-sources-moved");
-    expect(admin).toContain("managed in Plugins &gt; Sources");
-    expect(admin).toContain("Open Sources");
+    expect(admin).toContain('data-settings-row="orgSources"');
+    expect(admin).toContain("Sources and access");
+    expect(admin).not.toContain("data-external-link-pill");
     expect(admin).not.toContain("data-org-plugin-policy");
     expect(admin).not.toContain("data-github-token-add");
-    // the client id is a server setting: here, for admins (2026-10-28)
     expect(admin).toContain('data-settings-card="organization.githubApp"');
-    expect(admin).toContain("GitHub OAuth App (Connect GitHub)");
+    expect(admin).not.toContain('data-settings-card="organization.plugins"');
     const member = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("member"), onChanged: () => {} }));
+    expect(member).toContain('data-settings-row="orgSources"');
     expect(member).not.toContain("Allowed marketplaces");
     expect(member).not.toContain('data-settings-card="organization.plugins"');
     expect(member).not.toContain("organization.githubApp");

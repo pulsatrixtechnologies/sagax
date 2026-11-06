@@ -35,7 +35,22 @@ vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return {
     ...original,
-    useStore: () => ({ state: { ...original.initialState, config: { viewer: fixture.viewer } }, dispatch: vi.fn() }),
+    api: vi.fn(async () => ({ approvals: [], secrets: [], pages: [] })),
+    useStore: () => ({
+      state: {
+        ...original.initialState,
+        config: {
+          rooms: { turnTimeoutMinutes: 5 },
+          mcp: { callTimeoutMinutes: 10 },
+          viewer: {
+            role: "member",
+            ...fixture.viewer,
+            capabilities: { editConfig: false, manageKeys: false, manageComputers: false, viewUsage: false, manageBackups: false, pairDevices: false },
+          },
+        },
+      },
+      dispatch: vi.fn(),
+    }),
   };
 });
 const { SharingSection, initialGrantRows } = await import("./SharingSection");
@@ -185,22 +200,25 @@ describe("Settings > Organization on a Perspicax server", () => {
     viewerRole: "admin" as const,
     settings: { orgKeyConfigured: false },
   };
-  it("shows the link, the role and the console link", () => {
+  it("shows the link and the role, with no shortcut to the console", () => {
     const markup = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org, onChanged: () => {} }));
     // #584: link state and role on one grey line under the organization's name
     expect(markup).toContain("Linked to Pulsatrix · Admin");
-    expect(markup).toContain("Manage in Perspicax");
-    expect(markup).toContain('href="https://px.example.test/console/"');
+    expect(markup).not.toContain("Manage in Perspicax");
+    expect(markup).not.toContain("/console");
     expect(markup).not.toContain("type=\"checkbox\"");
     expect(markup).not.toContain("Who pays for a turn");
     expect(markup).not.toContain("data-pay-order");
     expect(markup).not.toContain("Last sync");
-    expect(markup).toContain("Commands waiting for an admin");
+    expect(markup).toContain('data-org-band=""');
+    expect(markup).toContain('data-settings-group="organizationRules"');
     // 2026-10-01: no copy-file import card, no My engines (Model providers has the sign-in)
     expect(markup).not.toContain("Bring bots from a solo Sagax");
     expect(markup).not.toContain("My subscriptions and keys");
     expect(markup).not.toContain("data-my-engines");
     expect(markup).not.toContain("Routines in my name");
+    // the GitHub OAuth App's client id stays for the admin, under advanced
+    expect(markup).toContain('data-settings-card="organization.githubApp"');
   });
   it("gives an admin the force actions menu on every bot, and a member none (OrgSharing.test.ts has the rest)", async () => {
     const { OrgSharing } = await import("../settings/OrgSharing");
@@ -230,11 +248,11 @@ describe("Settings > Organization on a Perspicax server", () => {
   });
   it("keeps the interim card after the last attach so its notice stays visible, and hides it once closed", () => {
     const until = Date.UTC(2026, 10, 1);
-    expect(showInterimCard(true, { until, people: 2 }, false)).toBe(true);
-    expect(showInterimCard(true, { until, people: 0 }, false)).toBe(false);
-    expect(showInterimCard(true, { until, people: 0 }, true)).toBe(true);
-    expect(showInterimCard(true, { until: null, people: 0 }, true)).toBe(false);
-    expect(showInterimCard(false, { until, people: 2 }, true)).toBe(false);
+    expect(showInterimCard({ until, people: 2 }, false)).toBe(true);
+    expect(showInterimCard({ until, people: 0 }, false)).toBe(false);
+    expect(showInterimCard({ until, people: 0 }, true)).toBe(true);
+    expect(showInterimCard({ until: null, people: 0 }, true)).toBe(false);
+    expect(showInterimCard(undefined, true)).toBe(false);
   });
 });
 

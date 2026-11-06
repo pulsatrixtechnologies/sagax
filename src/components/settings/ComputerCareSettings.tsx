@@ -204,7 +204,7 @@ export function ComputerCareSettings() {
   const selectedBytes = preview?.items.filter((item) => selected.has(item.id)).reduce((sum, item) => sum + item.bytes, 0) ?? 0;
 
   return (
-    <SettingsGroup title={t("computerCare.title")} groupId="computerCare">
+    <SettingsGroup title={t("computer.group.care")} groupId="computerCare">
       <ComputerRecoverRow />
       <div data-settings-card="computer.maintenance" className="px-3.5 py-2.5">
         <SwitchRow

@@ -51,7 +51,6 @@ import { ServerForm } from "./OpenAiCompatServers";
 import { CloudAgentProvidersSettings, useCloudAgentProviders } from "./CloudAgentProvidersSettings";
 import { modelSwitches } from "@/lib/offered-instances";
 import { modelOn } from "../../../shared/offered-models";
-import { perspicaxConsoleUrl } from "../PerspicaxOrgSettings";
 import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSettings";
 import { MemesSettings } from "./MemesSettings";
 import { WebSearchSettings } from "./WebSearchSettings";
@@ -151,7 +150,7 @@ function AccountRow({ row, open, onToggle, nameOf, detail, issuer, label }: {
   onToggle: () => void;
   nameOf: (instanceId: string) => string;
   detail: ReactNode;
-  /** The organization's console: its providers are managed there. */
+  /** Set on an organization server: its providers are managed there. */
   issuer?: string;
   label?: string;
 }) {
@@ -286,17 +285,9 @@ function ProviderDetail({ row, member, issuer, showKey }: { row: ProviderRow; me
             <button type="button" className={PILL} onClick={() => setEditing(true)}>{t("compatServers.edit")}</button>
             <RemoveServer instanceId={server.instanceId} />
           </div>)}
-      {/* who pays (the organization chose it in Perspicax) and this provider's active models */}
+      {/* who pays and this provider's active models */}
       <div className="-mx-3.5 border-t border-hairline/40">
-        <DescribedRow label={t("providers.whoPays")} description={t(PAYER_KEY[row.payer])} rowId={`providers.whoPays.${row.id}`}>
-          {organization && (
-            <span data-provider-who-pays="perspicax" className="flex items-center gap-2 text-[12px] text-ink-secondary">
-              {issuer
-                ? <span data-provider-open-perspicax={row.id}><ExternalLinkPill href={perspicaxProvidersUrl(issuer)}>{t("providers.chosenInPerspicax")}</ExternalLinkPill></span>
-                : t("providers.chosenInPerspicax")}
-            </span>
-          )}
-        </DescribedRow>
+        <DescribedRow label={t("providers.whoPays")} description={t(PAYER_KEY[row.payer])} rowId={`providers.whoPays.${row.id}`} />
         {total > 0 && (
           <LinkRow rowId={`providers.models.${row.id}`} label={t("providers.models.active", { active, total })}
             onClick={() => { requestSettingsCard("models.advanced"); dispatch({ type: "toggleAppSettings", open: true, section: "engines" }); }} />
@@ -430,12 +421,6 @@ function AddProvider({ toConnect, onPick, onClose, organization, manageKeys, nam
       </div>
     </div>
   );
-}
-
-/** The organization's model providers in the Perspicax console (Sagax >
- * Configuration > Policies). */
-export function perspicaxProvidersUrl(issuer: string): string {
-  return `${issuer.replace(/\/+$/, "")}/console/settings/org.bots?tab=policies`;
 }
 
 /** This person's local model servers (Settings > Computer; the same
@@ -594,13 +579,7 @@ export function ProvidersSettings() {
           {installation
             ? <div data-settings-card="connections.image"><ImageGenerationSettings keysLink={keys} /></div>
             : (
-              <DescribedRow label={t("imageGen.title")} description={imageProviderLabel(imageGen?.provider)} rowId="providers.imageGen">
-                {organization && issuer && (
-                  <span data-perspicax-link="imageGen" data-href={perspicaxConsoleUrl(issuer)}>
-                    <ExternalLinkPill href={perspicaxConsoleUrl(issuer)}>{t("providers.setInPerspicax")}</ExternalLinkPill>
-                  </span>
-                )}
-              </DescribedRow>
+              <DescribedRow label={t("imageGen.title")} description={imageProviderLabel(imageGen?.provider)} rowId="providers.imageGen" />
             )}
         </SettingsGroup>
       </div>

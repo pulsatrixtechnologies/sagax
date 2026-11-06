@@ -92,7 +92,6 @@
   "Their messages are hidden for you only, on all your devices.": "moderation.blocked.help",
   "Let your bots notify you when something needs your attention": "notifications.invite.title",
   "Enable": "notifications.invite.enable",
-  "Import a Grok Bot": "grokImport.title",
   "Bring a shared Grok Bot into Sagax: its instructions, skills (turned off), timed routines (paused) and the apps it used. The model, the computer, logins and keys never come over; the bot uses your own engine and apps.": "grokImport.intro",
   "Grok Bot link": "grokImport.linkLabel",
   "Read the link": "grokImport.load",
@@ -1096,11 +1095,6 @@
   "You have no bots yet.": "botModels.empty",
   "Allow control of this computer": "settings.mac.allow",
   "Local computer control is not ready. Sagax needs Accessibility and Screen Recording to use this Mac. Check Driver detail or System Settings, then click Retry.": "computer.mac.permission.generic",
-  "Use Messages": "settings.messages.use",
-  "Lets Sagax read and send messages on the Mac where this app runs. Not from a server, and not through another Mac.": "settings.messages.help",
-  "Reading Messages needs Full Disk Access for Sagax. Sending needs Automation for Messages. Nothing is sent to someone who is not on the bot's allowed recipients without a card.": "settings.messages.permission",
-  "Open Messages setup in Capabilities": "settings.messages.openSetup",
-  "Computer care": "computerCare.title",
   "Recover computer": "computerCare.recover.title",
   "It is not answering. Recover rebuilds it from the current image: your files stay, installed apps and packages are removed.": "computerCare.recover.hint",
   "Recover": "computerCare.recover.button",
@@ -1737,9 +1731,9 @@
   "Which model each bot uses.": "settings.intro.engines",
   "How your bots speak and listen.": "settings.intro.voice",
   "What your bots used and what it costs.": "settings.intro.usage",
-  "The server you work on and what it shares.": "settings.intro.organization",
-  "The computer your bots work on.": "settings.intro.computer",
-  "Save, restore and bring in your data.": "settings.intro.backups",
   "This app's version, updates and help.": "settings.intro.about",
-  "Features still being tried out.": "settings.intro.experimental"
+  "Features still being tried out.": "settings.intro.experimental",
+  "Your organization's server, and what it decides for your bots.": "settings.intro.organization",
+  "Where your bots work and what they can do on this computer.": "settings.intro.computer",
+  "Take a full copy out, restore it, or bring a bot in from elsewhere.": "settings.intro.backups"
 }

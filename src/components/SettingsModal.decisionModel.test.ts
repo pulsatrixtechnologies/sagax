@@ -71,11 +71,12 @@ describe("Settings → Decision model", () => {
     expect(panel).toContain("A fast decision model that picks");
   });
 
-  it("leaves Experimental without a Decision model switch; VPS and Boat stay gone", async () => {
+  it("leaves Experimental without Decision model or browser (on Models / Computer); VPS and Boat stay gone", async () => {
     fixture.section = "experimental";
     const html = await render();
     expect(html).not.toContain('data-experimental-feature="decisionModel"');
     expect(html).not.toContain(">Decision model<");
+    expect(html).not.toContain('data-experimental-feature="browser"');
     expect(html).not.toContain("data-experimental-browse-bots");
     expect(html).not.toContain("Browse Bots");
     expect(html).not.toContain("Templates");

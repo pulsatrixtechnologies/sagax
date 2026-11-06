@@ -546,7 +546,7 @@ describe("VPS computer inventory UI", () => {
 
 describe("Settings → Computers", () => {
   afterEach(() => { storeFixture.config = null; });
-  // Settings cards are collapsible here: the title is the first span of the card's toggle.
+  // Cloud/VPS stay Card toggles; Setup/Isolation/Safety are SettingsGroup advanced (#2080 L3).
   const markup = () => renderToStaticMarkup(createElement(ConfirmProvider, null, createElement(LocalComputerSection)));
   const cards = () => [...markup().matchAll(/<button type="button" aria-expanded="[a-z]+"[^>]*><span class="min-w-0 truncate">([^<]+)<\/span>/g)].map((match) => match[1]);
 
@@ -554,7 +554,7 @@ describe("Settings → Computers", () => {
   const html = () => markup();
 
   it("sets up a Local VM on a desktop or self-hosted server", () => {
-    expect(cards()).toContain("Setup");
+    expect(html()).toContain('data-settings-group="computerSetup"');
     expect(html()).toMatch(/data-settings-group="botsComputer"[\s\S]*data-settings-row="localVm"[\s\S]*>Local VM</);
     // Boat Computer is experimental: its card shows only when switched on.
     expect(cards()).not.toContain("Cloud computers");
@@ -567,7 +567,7 @@ describe("Settings → Computers", () => {
     const titles = cards();
     expect(titles).not.toContain("Cloud computers");
     expect(html()).toContain('data-settings-row="localVm"');
-    expect(titles).toContain("Setup");
+    expect(html()).toContain('data-settings-group="computerSetup"');
   });
 });
 

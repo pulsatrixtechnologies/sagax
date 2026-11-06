@@ -222,17 +222,19 @@ describe("Settings > Providers, in an organization", () => {
     expect(host.querySelector("[data-org-band]")).toBeNull();
     expect(host.querySelector('[data-provider-row="key:org:server:mistral"]')).toBeNull();
     expect(host.querySelector('[data-provider-state="managed"]')).toBeNull();
+    // no shortcut to Perspicax (2026-11-05)
+    expect(host.querySelector('a[href*="/console/settings"]')).toBeNull();
     expect(host.querySelector("[data-view-as-member]"), "no View as a member").toBeNull();
   });
 
-  it("keeps the person's own subscription row with its own action, and image generation read-only with Set in Perspicax", async () => {
+  it("keeps the person's own subscription row with its own action, and image generation read-only", async () => {
     await render();
     const codex = host.querySelector<HTMLElement>('[data-provider-row="account:codex"]')!;
     expect(codex).not.toBeNull();
     expect(codex.querySelector('[data-provider-state="managed"]')).toBeNull();
     const services = host.querySelector('[data-settings-card="providers.services"]')!;
     expect(services.querySelector('[data-settings-card="connections.image"]')).toBeNull();
-    const imageGen = services.querySelector<HTMLElement>('[data-perspicax-link="imageGen"]')!;
-    expect(imageGen.querySelector<HTMLAnchorElement>("[data-external-link-pill]")?.href).toBe("https://px.example.test/console/");
+    expect(services.querySelector('[data-settings-row="providers.imageGen"]')).not.toBeNull();
+    expect(services.querySelector('[data-perspicax-link="imageGen"]')).toBeNull();
   });
 });

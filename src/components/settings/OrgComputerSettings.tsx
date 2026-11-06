@@ -8,7 +8,7 @@
 // confirmation) and the Local VM on their own computer (found through their
 // desktop app: which runtime, its state, "Set up in one click" with visible
 // steps, install offers). One short grey line under each label.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Circle, Loader2, X } from "lucide-react";
 
 import { confirmAsync, type ConfirmRequest } from "@/components/ConfirmProvider";
@@ -26,10 +26,11 @@ import { ServerComputerScreen, useDesktopLocalVm } from "../computer/OrgComputer
 import { screenStateLabel } from "../computer/ComputerScreen";
 import { DANGER_PILL, DescribedRow, HelpTip, SettingsGroup } from "../SettingsPrimitives";
 import { BotWorkplaceSettings } from "./BotWorkplaceSettings";
-import { LocalModelsSettings } from "./LocalModelsSettings";
+import { ComputerMacControlRow } from "./ComputerMacControlRow";
+import { ServerModeComputerAccess } from "../ServerModeSettings";
 import { serverEnvironmentStateText } from "./MyServerEnvironment";
 
-export function OrgComputerSettings({ bridge, initialLocal = null, initialServer = null, confirm = defaultConfirm, localVmAllowed = true }: {
+export function OrgComputerSettings({ bridge, initialLocal = null, initialServer = null, confirm = defaultConfirm, localVmAllowed = true, botsExtra }: {
   bridge: DesktopBridgeStatus;
   /** False when the organization's policy turned the Local VM off: no
    * automatic setup then. */
@@ -37,6 +38,8 @@ export function OrgComputerSettings({ bridge, initialLocal = null, initialServer
   initialLocal?: DesktopLocalVmStatus | null;
   initialServer?: ServerEnvironmentStatus | null;
   confirm?: LooseConfirm;
+  /** Cloud / VPS cards that belong in Bots' computer (#2080 L3). */
+  botsExtra?: ReactNode;
 }) {
   const desktop = currentDesktop(bridge);
   return (
@@ -52,11 +55,13 @@ export function OrgComputerSettings({ bridge, initialLocal = null, initialServer
         )}
       >
         <BotWorkplaceSettings status={bridge} />
+        <ServerModeComputerAccess />
+        <ComputerMacControlRow />
       </SettingsGroup>
-      <LocalModelsSettings />
       <SettingsGroup title={t("computer.group.bots")} groupId="botsComputer">
         <ServerEnvironmentCard initial={initialServer} confirm={confirm} />
         <LocalVmCard bridge={bridge} initial={initialLocal} confirm={confirm} allowed={localVmAllowed} />
+        {botsExtra}
       </SettingsGroup>
     </>
   );

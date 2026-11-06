@@ -151,7 +151,7 @@ describe("an organization member", () => {
     expect(memberHidesSection("decisionModel", hidden)).toBe(true);
     // 2026-10-15: Usage is the person's own (GET /api/me/usage): every member sees it
     expect(memberHidesSection("usage", hidden)).toBe(false);
-    expect(memberHidesSection("backups", hidden)).toBe(true);
+    expect(memberHidesSection("backups", hidden)).toBe(false);
     expect(memberHidesSection("general", hidden)).toBe(false);
     expect(memberHidesSection("computer", hidden)).toBe(false);
     expect(memberHidesSection("computer", { ...hidden, organization: false })).toBe(true);
@@ -162,7 +162,8 @@ describe("an organization member", () => {
     expect(nav).not.toContain(">API keys<");
     expect(nav).not.toContain(">Decision model<");
     expect(nav).toContain(">Usage<");
-    expect(nav).not.toContain(">Backups<");
+    // #2080 L3: Backups and import stays visible; the page gates Full backup on manageBackups.
+    expect(nav).toContain(">Backups<");
     // General is out of the navigation (2026-10-26); Account is first
     expect(nav).not.toContain(">General<");
     expect(nav).toContain(">Account<");
@@ -176,9 +177,9 @@ describe("an organization member", () => {
     const html = await render();
     expect(html).toContain('<option value="usage" selected="">Usage</option>');
     expect(html).toContain('data-settings-card="usage.headline"');
-    // the organization's console is an admin's; a member manages their keys (#2080 L1)
+    // no shortcut to Perspicax in Usage (2026-11-05)
     expect(html).not.toContain("Open Sagax Business");
-    expect(html).toContain("Manage my keys in Perspicax");
+    expect(html).not.toContain("data-usage-org-link");
   });
 
   it("hides the General and Appearance rows that write the installation", async () => {

@@ -19,6 +19,7 @@ import {
   DecisionModelSettings,
   EnginesSettings,
   ExperimentalSettings,
+  ImportSettings,
   LocalComputerSection,
   NotificationSettings,
   OrganizationSettings,
@@ -372,9 +373,9 @@ export function SettingsModal() {
                 turns and MCP calls are rows of its groups. */}
             {section === "organization" && (
               allowed("organization")
-                ? <OrganizationSettings advanced={advanced} memoryShown={memoryShown} />
+                ? <OrganizationSettings memoryShown={memoryShown} />
                 : memoryShown && (
-                  <SettingsGroup title={t("settings.thisComputer.title")} groupId="thisComputer">
+                  <SettingsGroup title={t("organization.group.memory")} groupId="organizationMemory">
                     <OrgMemorySettings />
                   </SettingsGroup>
                 )
@@ -466,8 +467,13 @@ export function SettingsModal() {
             {/* Voice (2026-10-28, out of Models and voice) */}
             {section === "voice" && <VoiceSettingsPage />}
 
-            {/* Backups (#2090): Import is hidden completely, JC 2026-11-05. */}
-            {section === "backups" && <WorkspaceBackupSettings />}
+            {/* Backups and import (#2080): Import is a card of this page. Updates stay on their own page (#2090). */}
+            {section === "backups" && (
+              <>
+                <WorkspaceBackupSettings />
+                <ImportSettings />
+              </>
+            )}
 
             {section === "computer" && <LocalComputerSection />}
 

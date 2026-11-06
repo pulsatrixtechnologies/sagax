@@ -8,9 +8,9 @@
 // "Set model for n bots" button and Bot > Model open. #2080: the checkboxes
 // show only in "Edit several" mode (SelectionBar); the Backup column reads
 // the effective backups (effectiveBackups, shared with Bot > Model) and is
-// hidden while no bot has one. "Defaults for new bots" is read-only with a
-// Perspicax link in an organization (set there, folded under Advanced),
-// editable solo.
+// hidden while no bot has one. "Defaults for new bots" is read-only in an
+// organization (set there, folded under Advanced; no shortcut to Perspicax
+// since 2026-11-05), editable solo.
 import { Fragment, useCallback, useMemo, useRef, useState, useId, type ReactNode } from "react";
 import { ChevronDown, TriangleAlert, X } from "lucide-react";
 
@@ -42,9 +42,8 @@ import { engineOffer } from "../../../shared/offered-engines";
 import { AnchoredPopover, enclosingWindowBounds, useAnchoredDismissRoot } from "../AnchoredPopover";
 import { ModelPicker, type ComposerModelMenuControl } from "../ModelPicker";
 import { DefaultBotSettings, newBotDefaultsSummary } from "../NewBotDialog";
-import { perspicaxConsoleUrl } from "../PerspicaxOrgSettings";
 import { DescribedRow, DialogFrame, DialogLayer, HelpTip, LinkRow, PILL, PillSelect, SettingsGroup, TABLE_CELL_CONTROL } from "../SettingsPrimitives";
-import { ExternalLinkPill, SelectionBar } from "./SettingsPatterns";
+import { SelectionBar } from "./SettingsPatterns";
 
 // One grid for the column headers, the section headers and every row, so
 // the checkbox (Edit several only), Model · effort and Backup (only when a
@@ -283,11 +282,10 @@ function BulkBackupChoice({
 }
 
 /** "Defaults for new bots": set in Perspicax in an organization (read-only
- * here with the current choice and the link), editable solo. */
+ * here with the current choice), editable solo. */
 function NewBotDefaultsCard() {
   const { state } = useStore();
   const org = usePerspicaxOrg();
-  const issuer = org?.org.identity.issuer;
   const title = t("botModels.defaults.title");
   return (
     <SettingsGroup
@@ -301,13 +299,7 @@ function NewBotDefaultsCard() {
           label={newBotDefaultsSummary(state.config) || t("botModels.defaults.perspicax")}
           description={t("providers.chosenInPerspicax")}
           rowId="models.newBotDefaults"
-        >
-          {issuer && (
-            <span data-perspicax-link="newBotDefaults">
-              <ExternalLinkPill href={perspicaxConsoleUrl(issuer)}>{t("providers.change")}</ExternalLinkPill>
-            </span>
-          )}
-        </DescribedRow>
+        />
       ) : (
         <DefaultBotSettings />
       )}

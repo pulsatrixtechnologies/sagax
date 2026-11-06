@@ -1,4 +1,4 @@
-import { Archive, AudioLines, Bell, Coins, FlaskConical, Info, KeyRound, Monitor, Palette, Plug, ShieldCheck, Terminal, User, Building2 } from "lucide-react";
+import { Archive, AudioLines, Bell, Coins, Download, FlaskConical, Info, KeyRound, Monitor, Palette, Plug, ShieldCheck, Terminal, User, Building2 } from "lucide-react";
 import type { AppSettingsSection } from "@/state/store";
 import type { LocaleKey } from "@/locales";
 import { t } from "@/lib/i18n";
@@ -25,8 +25,9 @@ export const NAV_GROUPS: Array<{ id: SettingsNavGroup; labelKey: LocaleKey }> = 
 export const SECTIONS: Array<{
   id: AppSettingsSection;
   labelKey: LocaleKey;
-  /** The page's one-line sentence, drawn by the modal under the title (#2080). */
-  introKey: LocaleKey;
+  /** The page's one-line sentence, drawn by the modal under the title (#2080).
+   * About has none: it opens the centred About window, not a page. */
+  introKey?: LocaleKey;
   /** The nav heading it sits under (NAV_GROUPS). */
   group: SettingsNavGroup;
   icon: typeof User;
@@ -35,9 +36,8 @@ export const SECTIONS: Array<{
   // #2080 (L0, 2026-11-05): the final rail, which never changes size.
   // Personal: Account, Appearance, Notifications, Security, Vault. AI:
   // Providers, Models, Voice, Usage. Installation: Organization, Computer,
-  // Backups and import. App: App (id "about", which holds Updates) and
-  // Experimental (Advanced mode only). Import and Updates are cards now
-  // (settings-sections.ts MERGED). Each keyword names the one page where its
+  // Backups and import. App: Updates (desktop only) and Experimental
+  // (Advanced mode only). Import is a card now (settings-sections.ts MERGED). Each keyword names the one page where its
   // option lives (settings-nav.test.ts checks no page shares one).
   { id: "account", group: "you", labelKey: "settings.section.account", introKey: "settings.intro.account", icon: User, keywords: ["account", "compte", "profile", "profil", "name", "nom", "email", "courriel", "copy email", "sign out", "se déconnecter", "déconnexion", "label", "avatar", "photo", "about me", "à propos de moi", "language", "langue", "time zone", "timezone", "fuseau horaire", "fuseau", "region", "région"] },
   { id: "appearance", group: "you", labelKey: "settings.section.appearance", introKey: "settings.intro.appearance", icon: Palette, keywords: ["skin", "theme", "thème", "variant", "variante", "light", "clair", "dark", "sombre", "auto", "appearance", "apparence", "tools", "tool calls", "threads", "show threads", "hide threads", "sidebar", "hidden", "hide", "show", "density", "compact", "comfortable", "avatars", "display", "run", "this run", "run card", "commands", "mascot", "owl", "fly", "floating", "font", "police", "accessibility", "accessibilité", "reduce motion", "motion", "animations", "contrast", "contraste", "text size", "taille du texte", "zoom", "inspector", "inspecteur", "logo", "masqués", "mascottes", "barre latérale", "conversations", "background", "arrière-plan", "customize", "personnaliser"] },
@@ -56,9 +56,12 @@ export const SECTIONS: Array<{
   { id: "computer", group: "workspace", labelKey: "settings.section.computer", introKey: "settings.intro.computer", icon: Monitor, keywords: ["computer", "local vm", "vm", "virtual", "desktop", "ordinateur", "this computer", "cet ordinateur", "your computer", "votre ordinateur", "other computers", "autres ordinateurs", "rename", "renommer", "remove computer", "retirer", "network", "réseau", "traffic", "trafic", "server environment", "environnement serveur", "reset", "réinitialiser", "repair", "réparer", "maintenance", "entretien", "disk", "disque", "disk saver", "économiseur de disque", "cache", "clean", "nettoyer"] },
   // #2080: Import is a card of this page (backups.import).
   { id: "backups", group: "workspace", labelKey: "settings.section.backupsAndImport", introKey: "settings.intro.backups", icon: Archive, keywords: ["backups", "export", "exporter", "import", "importer", "restore", "restaurer", "full backup", "recovery", "backup", "sauvegarde", "sauvegardes", "replace", "remplacer", "grok bot", "x.ai", "share link", "lien de partage", "template"] },
-  // #2080: App (id "about"): the version and updates first (about.updates), then the rest of the app.
-  { id: "about", group: "app", labelKey: "settings.section.app", introKey: "settings.intro.about", icon: Info, keywords: ["app", "application", "about", "à propos", "version", "updates", "update", "mise à jour", "mises à jour", "prerelease", "pre-release", "beta", "bêta", "restart", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot", "open at login", "ouvrir à la connexion", "tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "startup", "démarrage", "help", "aide", "send", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "ime", "japanese", "spell check", "spellcheck", "orthographe", "correcteur", "hardware acceleration", "accélération matérielle", "gpu", "app icon", "icon", "taskbar", "hotkey", "raccourci", "advanced mode", "mode avancé", "simple", "mode", "cleanup", "retention", "nettoyage", "people's tool access"] },
+  // #2090: Updates is its own page again (desktop only).
+  { id: "updates", group: "app", labelKey: "settings.updates.title", introKey: "settings.intro.updates", icon: Download, keywords: ["updates", "update", "version", "mise à jour", "mises à jour", "prerelease", "pre-release", "beta", "bêta", "restart"] },
   { id: "experimental", group: "app", labelKey: "settings.section.experimental", introKey: "settings.intro.experimental", icon: FlaskConical, keywords: ["early", "preview", "learn", "skill", "authoring", "browser", "profiles", "experimental", "expérimental", "data window", "fenêtre data", "decision model", "modèle de décision", "compétences", "navigateur", "unavailable", "indisponible", "phone calls", "appels téléphoniques", "callback number", "numéro de rappel", "do not call", "ne pas appeler"] },
+  // #2080 L2: App (id "about") keeps startup, help, holding and the About link.
+  // Updates live on their own page (#2090); the About window still opens from the link and the app menu.
+  { id: "about", group: "app", labelKey: "settings.section.app", introKey: "settings.intro.about", icon: Info, keywords: ["app", "application", "about", "à propos", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot", "open at login", "ouvrir à la connexion", "tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "startup", "démarrage", "help", "aide", "send", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "ime", "japanese", "spell check", "spellcheck", "orthographe", "correcteur", "hardware acceleration", "accélération matérielle", "gpu", "app icon", "icon", "taskbar", "hotkey", "raccourci", "advanced mode", "mode avancé", "simple", "mode", "cleanup", "retention", "nettoyage", "people's tool access"] },
 ];
 
 /** Former sections that are a card of another page now (2026-10-14), by the
@@ -87,7 +90,7 @@ export const CARD_KEYWORDS: Record<string, string[]> = {
   "usage.breakdown": ["by bot", "by model", "par bot", "par modèle"],
   "organization.memory": ["obsidian", "vault"],
   "backups.import": ["import", "restore", "restaurer", "grok bot", "share link"],
-  "about.updates": ["updates", "update", "version", "prerelease", "beta"],
+  // #2080 L2: App cards (updates moved to its own page in #2090)
   "about.startup": ["open at login", "ouvrir à la connexion", "startup", "démarrage", "app icon", "hotkey", "raccourci"],
   "about.input": ["send", "enter", "spell check", "spellcheck", "orthographe", "correcteur", "keyboard"],
   "about.help": ["tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"],

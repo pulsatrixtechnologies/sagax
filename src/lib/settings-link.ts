@@ -43,8 +43,8 @@ const SECTION_LABEL = {
   privacy: "settings.section.notifications",
   notifications: "settings.section.notifications",
   memory: "settings.section.organization",
-  updates: "settings.section.app",
-  about: "settings.section.app",
+  updates: "settings.updates.title",
+  about: "sidebar.menu.about",
   security: "settings.section.security",
   // Published pages are a section of Connect apps > Manage (2026-10-26).
   pages: "connectApps.title",

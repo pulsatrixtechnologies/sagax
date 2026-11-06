@@ -11,6 +11,7 @@ import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
 import { CompactRow, GROUP_CARD, LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
+
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
 import { AppPageExtras } from "./settings/AppPage";
 import {
@@ -251,7 +252,7 @@ export function SettingsModal() {
               heading shows while one of its entries does, a search too. */}
           {NAV_GROUPS.map((group) => {
             // #2080 (L0): App (id "about") is a page of the rail; the About
-            // window still opens from the app menu, the sidebar and that page.
+            // window opens from its link. #2090: Updates is its own page too.
             const entries = visibleSections.filter((entry) => entry.group === group.id);
             if (entries.length === 0) return null;
             const headingId = `app-settings-nav-${group.id}`;
@@ -326,8 +327,7 @@ export function SettingsModal() {
               value={section}
               onChange={(event) => {
                 setQuery("");
-                const next = event.target.value as AppSettingsSection;
-                dispatch({ type: "toggleAppSettings", open: true, section: next });
+                dispatch({ type: "toggleAppSettings", open: true, section: event.target.value as AppSettingsSection });
               }}
               className="w-full min-w-0 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink focus:border-border-strong focus:outline-none sm:hidden"
             >
@@ -426,20 +426,20 @@ export function SettingsModal() {
               </div>
             )}
 
-            {/* App (id "about", #2080): the version and updates first (the
-                former Updates page, where the desktop app answers), then the
-                About window (version, license, documentation). */}
+            {/* #2090: Updates is its own page (desktop only). */}
+            {section === "updates" && (
+              <div data-settings-card="updates">
+                <SettingsGroup title={t("settings.updates.group")} groupId="updates">
+                  <UpdatesRow />
+                  <PrereleaseRow />
+                  <AutoInstallAwayRow />
+                </SettingsGroup>
+              </div>
+            )}
+
+            {/* #2080 L2: App keeps startup, help, holding; About window opens from the link. */}
             {section === "about" && (
               <>
-                {window.ogb?.updater && (
-                  <div data-settings-card="about.updates">
-                    <SettingsGroup title={t("settings.updates.group")} groupId="updates">
-                      <UpdatesRow />
-                      <PrereleaseRow />
-                      <AutoInstallAwayRow />
-                    </SettingsGroup>
-                  </div>
-                )}
                 <AppPageExtras remoteActive={remoteActive} />
                 <div data-settings-card="about.about" className={GROUP_CARD}>
                   <LinkRow rowId="about" label={t("settings.app.openAbout")} onClick={openAbout} />

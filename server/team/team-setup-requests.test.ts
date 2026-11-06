@@ -44,7 +44,7 @@ function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean 
   const targetBusy = vi.fn((id: string, _sourceThreadId?: string) => Boolean(store.bot(id)?.busy));
   const validateChange = vi.fn();
   const canPersist = vi.fn((): { ok: true } | { ok: false; status: number; error: string } => ({ ok: true }));
-  const service = new TeamSetupRequestService({ store, teams: () => teams, maxBots: 100, canAccessTeam,
+  const service = new TeamSetupRequestService({ store, teams: (_owner) => teams, maxBots: 100, canAccessTeam,
     canPersist, ownsThread: () => sourceExists, targetBusy, deleteBot, autoApply, validateChange,
     validateModel: (selection, current) => {
       if (!({ claude: ["sonnet", "opus"], codex: ["gpt-fixture"] }[selection.instanceId]?.includes(selection.model))) return "Model is not in the current catalog";
@@ -200,6 +200,60 @@ describe("reviewed Chief team setup", () => {
     const card = h.propose([specialist("Mira", "Research"), { action: "update", botId: h.chief.id, fields: { chiefOfStaff: false } }], ["Research"]);
     expect(card.detail).toContain('Create teams: "Research"');
     expect(card.detail).not.toContain("Authorize @Clive");
+  });
+
+  it("lets two people create the same team name; only the owner's own name blocks (#2045)", () => {
+    const alice = "pr_00000000-0000-4000-8000-0000000000a1";
+    const bob = "pr_00000000-0000-4000-8000-0000000000b2";
+    const bots: BotRecord[] = [];
+    const add = (id: string, ownerUserId: string, overrides: Partial<BotRecord> = {}) => {
+      const value: BotRecord = {
+        id, threadId: `${id}-thread`, name: id, title: "", description: "", soul: "", section: "Work",
+        notifications: true, color: "blue", unread: false, createdAt: 1, resumeCursors: {},
+        modelSelection: { instanceId: "claude", model: "sonnet" }, ownerUserId, ...overrides,
+      };
+      bots.push(value);
+      return value;
+    };
+    const chief = add("BobLead", bob, { chiefOfStaff: true, section: "Home" });
+    add("AliceOps", alice, { section: "Ops" }); // another person's Ops must not block Bob
+    const messages: Array<{ id: string; card?: OptionCardData }> = [];
+    const owned = (owner: string) => [...new Set(["", ...bots.filter((bot) => (bot.ownerUserId ?? "").toLowerCase() === owner).map((bot) => bot.section?.trim() || "").filter(Boolean)])];
+    const service = new TeamSetupRequestService({
+      store: {
+        bots,
+        bot: (id: string) => bots.find((item) => item.id === id),
+        botOwnerKey: (bot: BotRecord) => (bot.ownerUserId ?? "").trim().toLowerCase(),
+        messagesFor: () => messages,
+        appendMessage: (_thread: string, input: { card: OptionCardData }) => {
+          const message = { id: `message-${messages.length}`, card: input.card };
+          messages.push(message);
+          return message;
+        },
+        patchMessage: () => null,
+        applyTeamSetup: () => ({ state: "applied" as const, newTeams: [], bots: [] }),
+      },
+      teams: (ownerKey) => owned(ownerKey),
+      maxBots: 100,
+      canAccessTeam,
+      sameOwner: (from, target) => (from.ownerUserId ?? "").toLowerCase() === (target.ownerUserId ?? "").toLowerCase(),
+      canPersist: () => ({ ok: true }),
+      ownsThread: () => true,
+      targetBusy: () => false,
+      deleteBot: async () => {},
+      autoApply: () => false,
+      validateModel: () => null,
+    });
+    // Bob may create Ops even though Alice already holds that display name.
+    expect(() => service.propose({
+      botId: chief.id, threadId: chief.threadId,
+      plan: { reason: "Open Ops", newTeams: ["Ops"], operations: [specialist("Bea", "Ops")] },
+    })).not.toThrow();
+    // Bob creating a second Home (his own existing team) is refused.
+    expect(() => service.propose({
+      botId: chief.id, threadId: chief.threadId,
+      plan: { reason: "Duplicate Home", newTeams: ["Home"], operations: [specialist("Bea", "Home")] },
+    })).toThrow(/now exists/);
   });
   it("shows what stays owner-owned after creation on create cards, and keeps update cards lean", () => {
     const h = harness();
@@ -608,7 +662,7 @@ describe("one new bot asked for by a bot that is not a Primary Bot (2026-10-17)"
         return { state: "applied", newTeams: [], bots: request.operations.map((op) => ({ id: op.botId, name: op.fields.name ?? "", action: "created" as const })) };
       },
     };
-    const service = new TeamSetupRequestService({ store, teams: () => ["", "Work", "Engineering"], maxBots: 100, canAccessTeam,
+    const service = new TeamSetupRequestService({ store, teams: (_owner) => ["", "Work", "Engineering"], maxBots: 100, canAccessTeam,
       canPersist: () => ({ ok: true }), ownsThread: () => true, targetBusy: () => false, deleteBot: async () => {}, autoApply: () => false,
       validateModel: () => null, mayCreateBots: (bot) => mayCreateBots && !bot.chiefOfStaff });
     const submit = (operations: unknown[], extra: Record<string, unknown> = {}) => service.submit({ botId: maker.id, threadId: maker.threadId,

@@ -237,7 +237,8 @@ export interface InternalRequestsDeps {
   peerAllowed(from: InternalRequestsBot, target: InternalRequestsBot): boolean;
   peerInScope(from: InternalRequestsBot, target: InternalRequestsBot): boolean;
   archivedAgent(bot: InternalRequestsBot): boolean;
-  teamSetupTeams(): string[];
+  /** #2045: display names of this owner's teams only. */
+  teamSetupTeams(ownerKey: string): string[];
   canAccessTeam(bot: InternalRequestsBot, name: string, sectionId?: string): boolean;
   orgOfferedEngines<T extends { instanceId: string }>(instances: readonly T[], person?: string | null): readonly T[];
   consoleEngineAllowed(instanceId: string): boolean;
@@ -855,7 +856,7 @@ export function createInternalRequestsRoutes(deps: InternalRequestsDeps): Intern
       const coveredTeams = new Set(covered.map((bot) => bot.section?.trim() || ""));
       const ownerId = deps.effectiveBotOwner(chief);
       return json(res, 200, {
-        teams: deps.teamSetupTeams().filter((name) => deps.canAccessTeam(chief!, name) || coveredTeams.has(name.trim())),
+        teams: deps.teamSetupTeams(ownerId).filter((name) => deps.canAccessTeam(chief!, name) || coveredTeams.has(name.trim())),
         // 2026-10-20: every bot of the person (canAccessBot), whatever its
         // team; an archived bot or temporary agent is not listed
         bots: setupBots,

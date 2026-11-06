@@ -144,6 +144,40 @@ describe("unassigned items are always visible", () => {
   });
 });
 
+
+describe("personal view drops server sectionId (#2045)", () => {
+  it("clears sectionId so a shared bot follows the viewer folder, not the owner team", () => {
+    const bots = [{
+      id: "shared",
+      name: "Shared",
+      section: "Owner Ops",
+      sectionId: "sec_11111111-1111-1111-1111-111111111111",
+      ownerUserId: "pr_alice",
+    }];
+    const bob = ok(assignToPersonalSection(EMPTY_PERSONAL_SECTIONS, itemKey("bot", "shared"), "Mine"));
+    const view = withPersonalSections(bots, [], bob);
+    expect(view.bots[0]).toMatchObject({ section: "Mine", sectionId: undefined });
+    const teams = buildTeamMapSections(view.bots, personalSectionNames(bob));
+    expect(teams.map((team) => ({ key: team.key, ids: team.members.map((bot) => bot.id) }))).toEqual([
+      { key: "Mine", ids: ["shared"] },
+    ]);
+  });
+
+  it("unassigned bots leave the owner sectionId behind", () => {
+    const bots = [{
+      id: "own",
+      name: "Own",
+      section: "Server Ops",
+      sectionId: "sec_22222222-2222-2222-2222-222222222222",
+      ownerUserId: "pr_bob",
+    }];
+    const view = withPersonalSections(bots, [], EMPTY_PERSONAL_SECTIONS);
+    expect(view.bots[0]).toMatchObject({ section: undefined, sectionId: undefined });
+    const teams = buildTeamMapSections(view.bots, [], { general: true });
+    expect(teams.find((team) => team.key === "")!.members.map((bot) => bot.id)).toEqual(["own"]);
+  });
+});
+
 describe("a room that arrives after the sections were set", () => {
   it("stays in the list (Unassigned) until the person files it", () => {
     const prefs = { sections: [{ name: "Work", items: [itemKey("group", "old")] }] };

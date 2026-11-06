@@ -308,12 +308,13 @@ describe("Settings → Appearance", () => {
     expect(fixture.setShowRunCard).toHaveBeenLastCalledWith(true);
   });
 
-  it("leaves non-appearance General settings in place", () => {
-    fixture.section = "general";
+  it("leaves non-appearance Account settings in place", () => {
+    fixture.section = "account";
     const html = render();
     expect(html).toContain('aria-label="App language"');
-    // the technical cards are on General > Advanced (2026-10-14)
-    expect(html).toContain('data-settings-card="general.advanced"');
+    // technical cards left Account for App (#2080 L2)
+    expect(html).not.toContain('data-settings-card="general.advanced"');
+    expect(html).toContain('data-settings-group="languageRegion"');
     expect(html).not.toContain("Maximum running threads per bot");
     expect(html).not.toContain("Automatic recovery");
     expect(html).not.toContain('aria-label="Show threads"');

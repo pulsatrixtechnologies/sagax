@@ -110,12 +110,12 @@ export function useSettingsModal() {
   // A request for Settings > Organization (the Server menu, a deep link) on
   // a desktop with no server opens the launch screen on Server instead,
   // unless the page holds this computer's organization memory.
-  // A link to a card moved from General > Advanced (2026-10-15) opens
-  // General > Advanced there, where those cards stay.
+  // A link to a card moved from General > Advanced (#2080 L2) opens App,
+  // where those cards live under Advanced until L3 takes them.
   useEffect(() => {
     if (!soloDesktop || memoryShown || state.appSettingsSection !== "organization") return;
     if (isMovedOrganizationCard(takeRequestedSettingsCard())) {
-      dispatch({ type: "toggleAppSettings", open: true, section: "account", subPage: "general.advanced" });
+      dispatch({ type: "toggleAppSettings", open: true, section: "about" });
       return;
     }
     dispatch({ type: "toggleAppSettings", open: false, section: "account" });
@@ -126,7 +126,7 @@ export function useSettingsModal() {
   // A page this viewer cannot see (an old link to Email where People is not
   // shown, a hidden page) draws the first page they can, at once.
   const section: AppSettingsSection = availableSections.some((entry) => entry.id === requested) ? requested : availableSections[0]?.id ?? requested;
-  const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "account" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
+  const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "about" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
   const pagesHit = Boolean(q) && publishedPagesMatch(q);
   const sectionLabelKey = SECTIONS.find((entry) => entry.id === section)?.labelKey;
   // #2080: every page has its one sentence under the title, drawn by the modal.

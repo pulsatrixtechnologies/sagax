@@ -2,14 +2,10 @@
 // Per-bot settings (persona, model, computer) live in BotSettingsDialog: this
 // is the stuff shared by every bot: who you are, your keys, and the
 // machine your bots can borrow.
-import { useState } from "react";
 import { FileText, Search, X } from "lucide-react";
-import { api, useStore, type AppSettingsSection } from "@/state/store";
+import { useStore, type AppSettingsSection } from "@/state/store";
 import { localeChoices } from "@/locales";
 import { t } from "@/lib/i18n";
-import { withTourReset } from "@/lib/guided-tour";
-import { completionPatch } from "@/lib/onboarding";
-import { launchBridges } from "@/lib/launch";
 import { brand } from "@/lib/brand";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
@@ -20,6 +16,7 @@ import { OrganizationSettings } from "./OrganizationSettings";
 import { OrgMemorySettings } from "./OrgMemorySettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
+import { AppPageExtras } from "./settings/AppPage";
 import {
   AppearanceSettings,
   CredentialsSettings,
@@ -37,7 +34,6 @@ import { shortcutLabel } from "./ShortcutHint";
 import { aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
-import { OpenAtLoginRow } from "./OpenAtLoginOffer";
 import { SecurityKeySettings } from "./SecurityKeySettings";
 import { MyApprovalRules } from "./settings/MyApprovalRules";
 import { MyToolGrants } from "./settings/MyToolGrants";
@@ -179,67 +175,6 @@ function AutoInstallAwayRow() {
   );
 }
 
-/** General > System > Guided tours: the app tour (cleared and opened
- * again on the live interface) and the welcome flow, one row with two
- * buttons (0.5.6, they were two rows with a paragraph each). */
-function GuidedToursRow() {
-  const { state, dispatch } = useStore();
-  const [saving, setSaving] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const replayAppTour = () => {
-    setSaving(true);
-    setFailed(false);
-    void api("/api/config", {
-      method: "PUT",
-      body: JSON.stringify({ onboarding: {
-        // Upgraded users may have completed only the legacy browser gate.
-        ...(!state.config?.onboarding?.completedAt ? completionPatch().onboarding : {}),
-        hintsSeen: withTourReset(state.config?.onboarding),
-      } }),
-      signal: AbortSignal.timeout(10_000),
-    })
-      .then((config) => {
-        dispatch({ type: "configStatus", config });
-        dispatch({ type: "toggleTour", open: true });
-      })
-      .catch(() => setFailed(true))
-      .finally(() => setSaving(false));
-  };
-  return (
-    <>
-      <CompactRow label={t("settings.tours.title")} rowId="tours">
-        <button type="button" disabled={saving} onClick={replayAppTour} className="ui-button">
-          {t("settings.appTour.title")}
-        </button>
-        <button type="button" onClick={() => dispatch({ type: "toggleWelcome", open: true })} className="ui-button">
-          {t("settings.welcome.title")}
-        </button>
-      </CompactRow>
-      {failed && <p role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{t("onboarding.tour.error")}</p>}
-    </>
-  );
-}
-
-/** General > System > Server: the launch screen (no server, or an
- * organization server). What the current choice means is one hover away. */
-function ServerRow() {
-  const { state, dispatch } = useStore();
-  const launchMode = state.config?.onboarding?.launchMode ?? "solo";
-  if (!launchBridges(window.ogb)) return null;
-  return (
-    <CompactRow label={t("settings.launch.title")} rowId="server">
-      <button
-        type="button"
-        title={t(launchMode === "server" ? "settings.launch.server" : "settings.launch.solo")}
-        onClick={() => dispatch({ type: "toggleLaunch", open: true, mode: launchMode })}
-        className="ui-button"
-      >
-        {t("settings.launch.change")}
-      </button>
-    </CompactRow>
-  );
-}
-
 function LanguageRow() {
   const { state } = useStore();
   // Follows the account: anyone can switch, including a chat-only teammate,
@@ -261,7 +196,7 @@ function LanguageRow() {
 export function SettingsModal() {
   const {
     state, dispatch, advanced, retroSkin, remoteActive, dialogRef, paneRef,
-    searchLabels, closeSettings, openAbout, query, setQuery, q, editConfig,
+    searchLabels, closeSettings, openAbout, query, setQuery, q,
     lockedServer, allowed, memoryShown, availableSections, section, visibleSections,
     pagesHit, sectionLabelKey, sectionIntroKey, subPageId, subPage, openSubPage, closeSubPage,
   } = useSettingsModal();
@@ -445,15 +380,10 @@ export function SettingsModal() {
             )}
             {section === "account" && (
               <>
-                {/* The account first; then the person's language and time zone
-                    (2026-10-26). What General held (server, default bot,
-                    guided tours, Advanced) is at the bottom. Security keys,
-                    the approval rules, tool access and the vault are pages
-                    of their own since 2026-10-28; the microphone is in Voice. */}
-                <SettingsGroup title={t("settings.group.account")} groupId="account">
-                  {/* 2026-10-15: one account row (who, label, Sign out) */}
+                {/* #2080 L2: identity and region only. Open at login, tours,
+                    diagnostics and the former Advanced rows live on App. */}
+                <SettingsGroup groupId="account">
                   <AccountCard lockedServer={lockedServer} />
-                  <OpenAtLoginRow />
                   {(!state.config?.viewer || state.config.viewer.operator) && (
                     <SettingsSubPageRow
                       bare
@@ -465,34 +395,10 @@ export function SettingsModal() {
                     />
                   )}
                 </SettingsGroup>
-                <SettingsGroup title={t("settings.group.appearance")} groupId="appearance">
+                <SettingsGroup title={t("settings.group.languageRegion")} groupId="languageRegion">
                   <LanguageRow />
-                  {/* the person's own time zone (parity 2E) */}
                   <TimeZoneRows />
                 </SettingsGroup>
-                <SettingsGroup title={t("settings.group.system")} groupId="system">
-                  {!remoteActive && <ServerRow />}
-                  {/* Defaults for new bots live on Settings > Models > Bot models (#1675). */}
-                  {!remoteActive && <GuidedToursRow />}
-                  {/* General > Advanced: people's tool access, conversation
-                      cleanup and diagnostics on one sub-page (tool access,
-                      parallel conversations and recovery are each bot's own
-                      since #546; routines, group turns and MCP calls went to
-                      Organization; pre-releases to Updates). Shown when it
-                      holds something for this viewer. A search that names
-                      one of them shows them here. */}
-                  {advanced && !q && generalAdvancedShown(state.config) && (
-                    <SettingsSubPageRow
-                      bare
-                      cardId="general.advanced"
-                      title={t("settings.advancedPage.title")}
-                      summary={editConfig ? t("settings.advancedPage.summary") : t("settings.diagnostics.title")}
-                      actionLabel={t("settings.advancedPage.open")}
-                      onOpen={() => openSubPage("general.advanced")}
-                    />
-                  )}
-                </SettingsGroup>
-                {advanced && q && generalAdvancedShown(state.config) && <GeneralAdvancedSettings />}
               </>
             )}
 
@@ -532,6 +438,7 @@ export function SettingsModal() {
                     </SettingsGroup>
                   </div>
                 )}
+                <AppPageExtras remoteActive={remoteActive} />
                 <div data-settings-card="about.about" className={GROUP_CARD}>
                   <LinkRow rowId="about" label={t("settings.app.openAbout")} onClick={openAbout} />
                 </div>

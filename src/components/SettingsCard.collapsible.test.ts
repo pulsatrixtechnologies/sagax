@@ -212,12 +212,11 @@ describe("skin picker", () => {
 });
 
 describe("Settings → Account and General, compact", () => {
-  it("renders the advanced cards collapsed on General > Advanced and About me as a row to its own page", async () => {
+  it("keeps Account identity-only and About me as a row; Advanced lives on App (#2080 L2)", async () => {
     device();
     const { SettingsModal, GeneralAdvancedSettings } = await import("./SettingsModal");
     const html = renderToStaticMarkup(createElement(StoreProvider, null, createElement(SettingsModal)));
-    // 2026-10-26: General is gone; its Advanced row is at the bottom of Account
-    expect(html).toContain('data-settings-card="general.advanced" data-settings-subpage-row');
+    expect(html).not.toContain('data-settings-card="general.advanced"');
     for (const id of ["general.threadCleanup", "general.roomTurns", "general.mcpCalls"]) {
       expect(html).not.toContain(`data-settings-card="${id}"`);
     }
@@ -233,7 +232,7 @@ describe("Settings → Account and General, compact", () => {
     // 2026-10-15: group turns and MCP calls are cards of Organization
     for (const id of ["organization.roomTurns", "organization.mcpCalls"]) expect(advanced).not.toContain(`data-settings-card="${id}"`);
     expect(html).toContain(">Not set<");
-    // About me is edited on its sub-page; General shows its first line and Edit
+    // About me is edited on its sub-page; Account shows its first line and Edit
     expect(html).toContain('data-settings-card="general.aboutMe" data-settings-subpage-row');
     expect(html).not.toContain('id="profile-about-me"');
     // every other card on the page is the collapsible kind; the account card

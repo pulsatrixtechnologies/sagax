@@ -148,29 +148,27 @@ describe("Settings > Experimental", () => {
   });
 });
 
-describe("Settings > General > Advanced", () => {
-  it("keeps the technical cards off General itself: one row opens them", async () => {
+describe("Settings > Account and App Advanced (#2080 L2)", () => {
+  it("keeps the technical cards off Account itself", async () => {
     fixture.features = { routinesInConversation: true };
     const html = await render();
-    expect(html).toContain('data-settings-card="general.advanced"');
+    expect(html).not.toContain('data-settings-card="general.advanced"');
     expect(html).not.toContain("Routines in the conversation");
     expect(html).not.toContain('data-settings-card="organization.roomTurns"');
     expect(html).not.toContain('data-settings-card="organization.mcpCalls"');
     expect(html).not.toContain('data-settings-card="general.toolAccess"');
     expect(switchNamed("Run routines in the conversation")).toBeUndefined();
-    // nothing is saved or reset by not showing them
     expect(fixture.api).not.toHaveBeenCalled();
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it("keeps cleanup, pre-releases and diagnostics on the sub-page; routines, group turns and MCP left for Organization", async () => {
+  it("mounts cleanup and diagnostics on App; routines, group turns and MCP stay on Organization when it shows", async () => {
     fixture.features = { routinesInConversation: true };
-    fixture.subPage = "general.advanced";
+    fixture.section = "about";
     const html = await render();
-    expect(html).toContain('data-settings-subpage="general.advanced"');
+    expect(html).toContain('data-settings-card="about.holding"');
     expect(html).toContain('data-settings-card="general.threadCleanup"');
-    // 2026-10-15: Tool access, Parallel conversations and Automatic recovery
-    // are each bot's own (bot editor); none is a Settings card any more.
+    expect(html).toContain('data-settings-card="about.help"');
     for (const card of ["general.toolAccess", "general.threads", "general.recovery"]) expect(html, card).not.toContain(`data-settings-card="${card}"`);
     expect(html).not.toContain("Routines in the conversation");
     expect(html).not.toContain('data-settings-card="organization.roomTurns"');
@@ -198,11 +196,11 @@ describe("Settings > Organization (cards from General > Advanced, 2026-10-15)", 
     expect(fixture.api).not.toHaveBeenCalled();
   });
 
-  it("keeps them in General > Advanced on a desktop with no server, where Organization is hidden", async () => {
+  it("keeps them on App on a desktop with no server, where Organization is hidden", async () => {
     vi.stubGlobal("window", { ogb: { remoteClient: { active: false }, environments: {}, orgJoin: {} } });
     const { isSoloDesktop } = await import("./SettingsModal");
     expect(isSoloDesktop({} as never)).toBe(true);
-    fixture.subPage = "general.advanced";
+    fixture.section = "about";
     const html = await render();
     expect(html).toContain('data-settings-card="organization.roomTurns"');
     expect(html).toContain('data-settings-card="organization.mcpCalls"');
@@ -224,6 +222,6 @@ describe("Settings > Organization (cards from General > Advanced, 2026-10-15)", 
     expect(currentSettingsSection("general", "organization.roomTurns")).toBe("organization");
     expect(currentSettingsCard("general.roomTurns")).toBe("organization.roomTurns");
     expect(isMovedOrganizationCard("general.threadCleanup")).toBe(false);
-    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("account");
+    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("about");
   });
 });

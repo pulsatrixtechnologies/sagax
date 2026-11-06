@@ -3163,7 +3163,6 @@
   "settings.group.you": "自分",
   "settings.group.ai": "AI",
   "settings.group.computers": "コンピューター",
-  "settings.group.account": "アカウント",
   "apps.title": "アプリ",
   "apps.subtitle": "アプリや自分の MCP サーバーを一度接続し、使用を許可するボットを選びます。",
   "apps.filter.aria": "表示",

@@ -3233,7 +3233,6 @@
   "settings.group.you": "你",
   "settings.group.ai": "AI",
   "settings.group.computers": "電腦",
-  "settings.group.account": "帳戶",
   "apps.title": "應用程式",
   "apps.subtitle": "只需連線一次應用程式或你自己的 MCP 伺服器，然後選擇哪些機器人可以使用。",
   "apps.filter.aria": "顯示",

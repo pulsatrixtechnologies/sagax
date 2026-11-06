@@ -27,6 +27,8 @@ import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
 import type { NewBotDefaults } from "../../shared/new-bot-defaults";
 import { botLabel } from "@/lib/human-label";
 import { readableError } from "@/lib/plain-error";
+import { viewerActorId } from "@/lib/viewer";
+import { viewerOwnBots } from "@/lib/viewer-teams";
 
 /** What the file will hold, counted from the server's own dry run, so the
  * numbers are exactly what Save file writes. Pure, for tests. */
@@ -150,9 +152,13 @@ export function ShareTeamDialog({
 }) {
   const { state } = useStore();
   const popoverRef = useRef<HTMLElement | null>(null);
+  // #2045: Share lists only this person's bots in the team (server export
+  // packs the same set). A shared bot filed under the same display name
+  // stays out of the preview.
+  const viewerId = viewerActorId(state.config);
   const teamBots = useMemo(
-    () => state.bots.filter((bot) => !bot.hidden && (bot.section?.trim() ?? "") === team),
-    [state.bots, team],
+    () => viewerOwnBots(state.bots, viewerId).filter((bot) => (bot.section?.trim() ?? "") === team),
+    [state.bots, team, viewerId],
   );
   const botNames = useMemo(() => new Map(teamBots.map((bot) => [bot.id, bot.name])), [teamBots]);
   const [name, setName] = useState(team || t("teamLibrary.general"));

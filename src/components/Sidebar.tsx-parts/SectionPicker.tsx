@@ -1,5 +1,4 @@
 import { useStoreSelector } from "@/state/store-selector";
-import { equalRows, peerBots, peerGroups } from "@/state/view-slices";
 import { useEffect, useRef, useState } from "react";
 import { Check, FolderMinus } from "lucide-react";
 
@@ -27,7 +26,7 @@ export function SectionPicker({
   /** "" clears — the server drops an empty section */
   onAssign: (section: string) => void;
 }) {
-  const state = useStoreSelector((current) => ({ bots: peerBots(current), groups: peerGroups(current), sections: current.sections }), (a, b) => equalRows(a.bots, b.bots) && equalRows(a.groups, b.groups) && a.sections === b.sections);
+  const state = useStoreSelector((current) => ({ sections: current.sections }), (a, b) => a.sections === b.sections);
   const [name, setName] = useState("");
   const motion = useHeldMenuMotion(anchor);
   const shown = motion.value;
@@ -51,15 +50,11 @@ export function SectionPicker({
     };
   }, [anchor, onClose]);
 
-  // Hidden bots can carry a stale assignment; don't offer it as a context.
-  // Channels and bots share one namespace, so Work or Personal can hold both.
-  const sections = names ? [...names] : [
-    ...new Set([
-      ...(state.sections ?? []),
-      ...state.bots.filter((b) => !b.hidden && b.section).map((b) => b.section!),
-      ...state.groups.filter((g) => g.section).map((g) => g.section!),
-    ]),
-  ];
+  // Prefer the caller's list (personal folders on an organization server).
+  // Fallback is the server's sections for this viewer only (#2045): never
+  // harvest bot.section / group.section, or a shared bot would offer its
+  // owner's team name here.
+  const sections = names ? [...names] : [...(state.sections ?? [])];
 
   const assign = (section: string) => {
     onAssign(section);

@@ -23,6 +23,9 @@ import { t } from "@/lib/i18n";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { fullAccessNeedsConfirmation, orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
+import { EMPTY_PERSONAL_SECTIONS, personalSectionNames, usePersonalSections } from "@/lib/personal-sections";
+import { viewerActorId } from "@/lib/viewer";
+import { viewerOwnTeamNames } from "@/lib/viewer-teams";
 import { api, useStore, type Bot } from "@/state/store";
 import { liveApprovalChange, type ApprovalMode } from "../../../shared/approval-mode";
 import { AppliedLevelNote } from "./AppliedLevelNote";
@@ -90,6 +93,17 @@ export function PermissionsSection({
   // threads and routines) over HTTP while the organization allows it.
   const perspicaxOrg = usePerspicaxOrg();
   const viewerId = state.config?.viewer?.principalId ?? null;
+  // #2045: Primary Bot managed teams are this person's teams only.
+  const orgMode = perspicaxOrg !== null;
+  const personal = usePersonalSections();
+  const viewerTeamChoices = viewerOwnTeamNames({
+    orgMode,
+    viewerId: viewerActorId(state.config),
+    personalNames: orgMode ? personalSectionNames(personal ?? EMPTY_PERSONAL_SECTIONS) : undefined,
+    serverSections: state.sections ?? [],
+    bots: state.bots,
+    groups: state.groups,
+  });
   // Edit N bots (#1674) offers Full as Edit bot does: the draft stands for
   // the viewer's bots, and the server decides each one at Apply.
   const orgFullAccess = draft && !bulk ? undefined : orgFullAccessFor(perspicaxOrg, bot, viewerId);
@@ -348,7 +362,7 @@ export function PermissionsSection({
         {showTeams && bot.chiefOfStaff && <ManagedTeamsSettings
           key={bot.id + JSON.stringify(bot.managedSections ?? [])}
           name={bot.name} ownTeam={bot.section?.trim() || ""}
-          teams={["", ...(state.sections ?? []), ...[...state.bots, ...state.groups].map(member => member.section?.trim() || "")]}
+          teams={["", ...viewerTeamChoices]}
           allowed={bot.managedSections ?? []}
           onSave={managedSections => patch({ managedSections, acknowledgePeerScope: true })}
         />}

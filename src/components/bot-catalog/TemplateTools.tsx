@@ -27,6 +27,10 @@ import { BotZipImportPanel } from "../BotZipImport";
 import { shareableTeamList, TeamGlyph, TeamImportDetails, type TeamImportResult } from "./TeamImportDetails";
 import { readableError } from "@/lib/plain-error";
 import { TemplateScoutPanel, type DirectoryCandidate, type ScoutResult } from "./TemplateScoutPanel";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
+import { EMPTY_PERSONAL_SECTIONS, personalSectionNames, usePersonalSections } from "@/lib/personal-sections";
+import { viewerActorId } from "@/lib/viewer";
+import { viewerOwnBots, viewerOwnTeamNames } from "@/lib/viewer-teams";
 
 export type TemplateTool = "import" | "zip" | "scout" | "share";
 export const TEMPLATE_TOOLS: readonly TemplateTool[] = ["import", "zip", "scout", "share"];
@@ -193,7 +197,19 @@ export function TemplateTools({ tool, onTool, installUrl, onImported, backRef }:
     return true;
   };
 
-  const shareableTeams = shareableTeamList(state.sections ?? [], state.bots);
+  // #2045: Share a team lists only this person's teams and own bots.
+  const orgMode = usePerspicaxOrg() !== null;
+  const personal = usePersonalSections();
+  const viewerId = viewerActorId(state.config);
+  const ownTeamNames = viewerOwnTeamNames({
+    orgMode,
+    viewerId,
+    personalNames: orgMode ? personalSectionNames(personal ?? EMPTY_PERSONAL_SECTIONS) : undefined,
+    serverSections: state.sections ?? [],
+    bots: state.bots,
+    groups: state.groups,
+  });
+  const shareableTeams = shareableTeamList(ownTeamNames, viewerOwnBots(state.bots, viewerId));
 
   const preview = (next: PendingTeamImport, nextSource: ImportSource) => {
     setPending(next);

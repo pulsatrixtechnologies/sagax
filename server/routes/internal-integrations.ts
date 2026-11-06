@@ -249,7 +249,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       const body = await readBody();
       const owner = deps.ownsThread(sender.id, capability.threadId);
       if (!owner) return json(res, 403, { error: "source conversation does not belong to sender" });
-      // #2109 (JC 2026-11-05): from any chat, a group included; the card
+      // #2109: from any chat, a group included; the card
       // binds the code to the person who asked, never to the group.
       // Only a person's own turn: never a routine, an automation or another
       // bot's hop (whose speaker falls back to the bot's owner), so a code
@@ -263,7 +263,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       const speaker = turnSpeaker.principalId || (!deps.isPerspicax() ? deps.localPrincipalId() : "");
       if (!speaker) return json(res, 403, { error: "GitHub is connected by a signed-in person." });
       const principalId = speaker.trim().toLowerCase();
-      // No admin door (#2109, JC 2026-11-05): a person connects their own
+      // No admin door (#2109): a person connects their own
       // GitHub account for their own environment.
       const current = deps.personGithub(principalId);
       const status = await deps.githubProbeStatus(principalId, current);

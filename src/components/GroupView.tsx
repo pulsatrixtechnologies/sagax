@@ -92,8 +92,6 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
   const { node: exchangeColumnNode, ref: exchangeColumnRef } = useExchangeColumn();
   const composerDockRef = useRef<HTMLDivElement>(null);
   const composerDock = useComposerDockPad(composerDockRef);
-  const [bulletinOpen, setBulletinOpen] = useState(false);
-  const [bulletinDraft, setBulletinDraft] = useState(group.bulletin);
   // The group panel shares the bot panel's slot: one open flag in the store.
   // A split-view section's panel (panelOwner) holds the slot instead. A
   // group section's own panel (pane.panel) portals to the window's right
@@ -161,7 +159,6 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
   useReportRead(group.threadId, scrollRef, group.messages.at(-1)?.id);
   const unreadDivider = useUnreadDivider({ threadId: group.threadId, messages: group.messages, following });
 
-  useEffect(() => setBulletinDraft(group.bulletin), [group.id, group.bulletin]);
   // The room's panel, when it was already open as the room opened (it follows
   // the selection from the previous conversation), is drawn in place on the
   // first frame; only a panel the person opens here slides in.
@@ -169,12 +166,6 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
   useEffect(() => {
     if (!panelOpen) setPanelOpenedWithRoom(false);
   }, [panelOpen]);
-  const saveBulletin = () => {
-    setBulletinOpen(false);
-    if (bulletinDraft !== group.bulletin) {
-      dispatch({ type: "patchGroup", groupId: group.id, patch: { bulletin: bulletinDraft } });
-    }
-  };
 
   const { memberMauses, groupPill } = groupRoomIdentity({
     group,
@@ -209,9 +200,11 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
         {...headerDragProps}
         className={cn(
           "content-topbar",
-          // z-[3] + ChatEdgeFade: the transcript fades out under the header
-          // like a bot chat's (JC 2026-11-06).
-          "@container/chathead relative z-[3] flex min-h-[52px] items-center justify-end px-5 py-2.5",
+          // Grok Bot style, like a bot chat's header: no band. The pill
+          // floats over the transcript, which scrolls under it and fades out
+          // there (ChatEdgeFade). Pulsatrix Light turns it back into a
+          // normal band (styles.css `.content-topbar`).
+          "@container/chathead absolute inset-x-0 top-0 z-[3] flex min-h-[52px] items-center justify-end px-5 py-2.5",
           // Room for the drawer button, which overlays this corner below sm.
           "pl-11 sm:pl-5",
         )}
@@ -247,6 +240,10 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
       </div>}
 
       <div className="content-card-body flex min-h-0 flex-1 flex-col">
+      {/* Banners sit below the floating header, as in a bot chat
+          (ChatViewBanners); the wrapper vanishes when none is showing so
+          the transcript runs to the top, under the pill. */}
+      <div className={cn("chat-banners empty:hidden", !pane && "pt-[52px]")}>
       {!pane && <ThreadReturnLink ownerId={group.id} threadId={group.threadId} />}
       {findOpen && <ChatFindBar threadId={group.threadId} onClose={() => setFindOpen(false)} />}
       {!pane && <ChatErrorBanner message={state.error} onDismiss={() => dispatch({ type: "error", message: null })} />}
@@ -291,44 +288,6 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
       {/* Members the person stopped: who is held, and how to bring them back. */}
       {!group.dm && <RoomHoldsBanner group={group} members={members} />}
 
-      {/* Bulletin: one pinned line; click to edit */}
-      {!stored.peopleDm && <div className="w-full px-5">
-        {bulletinOpen ? (
-          <div className="mb-1 rounded-lg border border-hairline/40 bg-panel p-2">
-            <textarea
-              autoFocus
-              dir="auto"
-              value={bulletinDraft}
-              onChange={(e) => setBulletinDraft(e.target.value)}
-              onBlur={saveBulletin}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveBulletin();
-                if (e.key === "Escape") {
-                  setBulletinDraft(group.bulletin);
-                  setBulletinOpen(false);
-                }
-              }}
-              placeholder={t("room.bulletin.placeholder")}
-              rows={4}
-              className="w-full resize-none bg-transparent text-[13px] leading-relaxed text-ink placeholder:text-ink-secondary focus:outline-none"
-            />
-          </div>
-        ) : (
-          <button
-            disabled={!editable}
-            onClick={() => { if (editable) setBulletinOpen(true); }}
-            className={cn("mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left", editable && "hover:bg-raised/40")}
-            title={t("room.bulletin.title")}
-          >
-            <Pin size={12} className="shrink-0 text-ink-secondary" />
-            <span dir="auto" className={cn("truncate text-[12.5px]", group.bulletin ? "text-ink-secondary" : "text-ink-tertiary")}>
-              {group.bulletin.split("\n")[0] || (remoteClient ? t("room.bulletin.none") : t("room.bulletin.add"))}
-            </span>
-          </button>
-        )}
-      </div>}
-
-
       {/* Pinned message banner — resolves against the room's full transcript */}
       {(() => {
         const pinned = group.messages.find((m) => m.id === group.pinnedMessageId && m.kind === "text");
@@ -359,6 +318,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
           </div>
         );
       })()}
+      </div>
 
       <GroupRoomTranscriptPane
         group={group}

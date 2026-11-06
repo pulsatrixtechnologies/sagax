@@ -107,7 +107,7 @@ export function groupRoomIdentity({
   ) : group.dm ? (
     <span className="flex min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated py-[7.5px] pl-[7.5px] pr-[13.5px]">
       <GroupAvatarStack members={members} size={24} />
-      <span className="truncate text-[14px] font-medium leading-5 text-ink">{group.name}</span>
+      <span title={group.name} className="min-w-0 truncate whitespace-nowrap text-[14px] font-medium leading-5 text-ink">{group.name}</span>
     </span>
   ) : (
     // The bot chat's pill (member faces, name, chevron): it opens

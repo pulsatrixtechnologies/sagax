@@ -115,8 +115,8 @@ export class BotFolderRegistry {
     return this.slugs.get(botId) ?? null;
   }
 
-  /** This bot's folder name, given now from its name when it has none. */
-  slugFor(botId: string, name: string): string {
+  /** The folder name this bot has, or would get now, without giving it. */
+  private nextSlug(botId: string, name: string): string {
     this.load();
     const kept = this.slugs.get(botId);
     if (kept) return kept;
@@ -124,6 +124,14 @@ export class BotFolderRegistry {
     const base = slugifyBotName(name);
     let slug = base;
     for (let n = 2; taken.has(slug); n++) slug = `${base.slice(0, SLUG_MAX - String(n).length - 1)}-${n}`;
+    return slug;
+  }
+
+  /** This bot's folder name, given now from its name when it has none. */
+  slugFor(botId: string, name: string): string {
+    const kept = this.known(botId);
+    if (kept) return kept;
+    const slug = this.nextSlug(botId, name);
     this.slugs.set(botId, slug);
     try {
       writeFileAtomic(this.file, `${JSON.stringify({ version: 1, slugs: Object.fromEntries(this.slugs) }, null, 2)}\n`);
@@ -135,6 +143,12 @@ export class BotFolderRegistry {
 
   folderFor(botId: string, name: string): string {
     return botFolderPath(this.slugFor(botId, name));
+  }
+
+  /** The folder the bot has, or would get, saving nothing (the settings
+   * show it before the bot's first turn). */
+  peekFolderFor(botId: string, name: string): string {
+    return botFolderPath(this.nextSlug(botId, name));
   }
 }
 

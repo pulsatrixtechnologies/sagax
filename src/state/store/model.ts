@@ -651,6 +651,9 @@ export interface Bot {
   autoStartVps?: boolean;
   /** where new tasks run their shell tools; absent = the private bot workspace */
   cwd?: string;
+  /** Server-derived: the folder the tools use when cwd is unset, in the
+   * person's server environment (/workspace/bots/<slug>). */
+  workFolder?: string;
   /** auto mode: the bot approves its own tool permissions */
   autoApprove?: boolean;
   /** Explicit approval level; absent records use the legacy autoApprove bit. */

@@ -466,6 +466,10 @@ export interface WireBot {
   autoStartVps?: boolean;
   /** where NEW tasks run their shell tools; absent = home folder. */
   cwd?: string;
+  /** Where the tools run when cwd is unset: the bot's own folder of the
+   * person's server environment (/workspace/bots/<slug>). Server-derived;
+   * absent without a server environment. */
+  workFolder?: string;
   /** Auto mode: the bot approves its own tool permissions. */
   autoApprove?: boolean;
   /** Canonical approval level. Missing resolves through autoApprove. */

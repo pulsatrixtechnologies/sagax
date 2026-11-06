@@ -12,7 +12,7 @@ import { EffortRow } from "./EffortControls";
 import { toggleModelFavorite } from "@/lib/model-favorites";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/wire";
-import { MENU_WIDTH, PANES_MENU_WIDTH } from "./helpers";
+import { MENU_WIDTH } from "./helpers";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
 
@@ -67,7 +67,6 @@ export function ModelPickerMenu({
   pick,
   effortTitle,
   anchorRef,
-  panes = false,
   turnedOff = 0,
   openActiveModels,
 }: {
@@ -100,14 +99,13 @@ export function ModelPickerMenu({
   /** Hang the menu off this chip (Settings > Models list): under it or over
    * it, inside the window that holds it, above that window's layer. */
   anchorRef?: RefObject<HTMLElement | null>;
-  /** Two columns (providers, models) in place of the flat list (#2050). */
-  panes?: boolean;
   /** Models this person or the organization turned off; the footer's
-   * "n turned off · Active models" opens Settings > Models > Advanced. */
+   * "n turned off · Active models" row opens Settings > Models > Advanced
+   * (kept from the retired two-pane menu, #2050: one menu everywhere). */
   turnedOff?: number;
   openActiveModels?: () => void;
 }) {
-  const width = panes ? PANES_MENU_WIDTH : MENU_WIDTH;
+  const width = MENU_WIDTH;
   const currentOptimize = autoOptimizeOf(selection.autoOptimize);
   // The settings of the model in use, under the composer's list (the maintainer,
   // 2026-10-13, Cursor's second panel): Fast when it has a fast twin and
@@ -156,12 +154,12 @@ export function ModelPickerMenu({
   };
   // #2106: Auto's Optimize choices sit right under the Auto row.
   // #2181: the model's settings and the Provider link sit in a fixed footer
-  // under the scrolling list in every mode (flat list and panes).
+  // under the scrolling list.
   const autoPanel = (
     <>
       {autoEditOpen && setAutoOptimize && setAutoEditOpen && (
         <div role="group" aria-label={t("model.auto.optimizeTitle")} data-model-auto-optimize
-          className={cn("py-1", panes ? "border-t border-popover-hairline px-1.5" : "pb-0.5")}>
+          className="py-1 pb-0.5">
           <div className="px-2 pb-1 pt-1 text-[11.5px] text-popover-ink-secondary">{t("model.auto.optimizeTitle")}</div>
           {AUTO_OPTIMIZE_VALUES.map((value) => (
             <button
@@ -191,9 +189,7 @@ export function ModelPickerMenu({
   const below = (
     <>
       {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
-      {/* #2050: the two-pane selector always shows the effort bar (the
-          global Simple/Advanced mode hides nothing on these pages). */}
-      {(advanced || panes) && settingsPanel}
+      {advanced && settingsPanel}
       <div className="border-t border-popover-hairline px-1.5 pt-1">
         {openActiveModels && (
           <ModelMenuItem variant="popover" data-model-active-models onClick={openActiveModels}>
@@ -210,12 +206,11 @@ export function ModelPickerMenu({
   );
   const content = (
     <>
-      <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)} panes={panes}
+      <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)}
         favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }}
         onAutoEdit={setAutoOptimize && setAutoEditOpen && !viewerLocal ? () => setAutoEditOpen((open) => !open) : undefined}
         after={below}
-        autoPanel={panes ? undefined : autoPanel} />
-      {panes && autoPanel}
+        autoPanel={autoPanel} />
     </>
   );
 

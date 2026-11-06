@@ -13609,7 +13609,6 @@
   "routines.effort.label": "Effort",
   "routines.effort.botDefault": "Bot's effort",
   "routineEditor.hint.effort": "Its runs and their sub-agents use this effort. Chat keeps the bot's effort.",
-  "model.panes.noFavorites": "No favorites yet. Star a model to list it here.",
   "model.activeModels": "Active models",
   "model.activeModelsLink": "{count} turned off · Active models",
   "botModels.selectAll": "All bots",

@@ -3,6 +3,7 @@
 // Never imports server/index.ts.
 import { resolveClaudeSubagentModel } from "../../shared/claude-subagent-model.ts";
 import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
+import { deferConnectorsPatch } from "./defer-connectors-patch.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -51,8 +52,10 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     resolveEngineTurnEffort,
     runAsBotEngine,
     savedSteps,
+    store,
     toolErrorCorrectiveRoundsFor,
     turnCommandEnvironment,
+    turnConnectorsFor,
     turnNetworkProxy,
     turnTrace,
     typedCommandForTurn,
@@ -215,6 +218,24 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     });
     // Adapter accepted the turn (process reused or spawned).
     if (!state.warmOnly) turnTrace(state.threadId, "dispatched");
+    // Dev panel Connectors card: after dispatched so the fsync'd bots save
+    // stays off accept→send and off send→dispatched (#1950 leftover on #1971).
+    if (!state.warmOnly) {
+      const botId = state.bot.id;
+      const threadId = state.threadId;
+      const connectorsBot = state.liveBot ?? state.bot;
+      const instance = state.instance;
+      const speaker = state.speaker;
+      const integrations = state.integrations;
+      const principal = state.turnPlace.principal;
+      const customMcp = state.instance.adapter.capabilities.customMcp === true;
+      deferConnectorsPatch(() => {
+        store.patchTask(botId, threadId, {
+          connectors: turnConnectorsFor(connectorsBot, instance, speaker, integrations, principal, customMcp),
+        });
+        turnTrace(threadId, "connectors-patched");
+      });
+    }
     if (state.warmOnly) {
       // A duplex interrupt while the person is still talking cancels this
       // claim: there is no spoken turn yet, and releasing the process

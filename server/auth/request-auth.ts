@@ -542,6 +542,11 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // 2026-10-26): theirs on an organization server, no admin right; the key is
   // never answered back.
   { methods: ["GET", "PUT", "DELETE", "POST"], path: /^\/api\/me\/web-search(?:\/test)?$/ },
+  // Memes (#2121): the person's Tenor/GIPHY key (never answered back) and the
+  // search / materialize proxy used by the Memes picker.
+  { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/me\/memes$/ },
+  { methods: ["GET"], path: /^\/api\/memes\/(?:search|trending)$/ },
+  { methods: ["POST"], path: /^\/api\/memes\/materialize$/ },
   // The person's own Experimental switches and display preferences
   // (server/routes/person-settings.ts) and own voice keys
   // (server/routes/person-voice-keys.ts), #1098: theirs, no admin right;

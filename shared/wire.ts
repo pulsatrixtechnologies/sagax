@@ -516,6 +516,9 @@ export interface WireBot {
   /** Whether this bot may write email draft cards. Absent/true = allowed;
    * false refuses ```email fences in the prompt and the send route. */
   emailDrafts?: boolean;
+  /** #2121: whether this bot may reply with memes (send_meme). Absent or
+   * "auto" = the bot decides from the person's style; "off" hides the tool. */
+  memeReplies?: "auto" | "off";
   /** Whether this bot uses native memory. Absent/true = enabled. */
   memoryEnabled?: boolean;
   /** Whether this bot's turns use the loop guard. Absent/true = on (workspace setting still applies); false = off for this bot. */
@@ -824,7 +827,19 @@ export interface WireMessage extends WaitLineField {
    * and video a bot attached with attach_file; they are opened through the
    * message-scoped file route, never by path. */
   attachments?: Array<
-    | { kind: "image"; path: string; mime: string; name?: string }
+    | {
+        kind: "image";
+        path: string;
+        mime: string;
+        name?: string;
+        /** #2121: reaction meme / GIF metadata (attribution required by the provider). */
+        meme?: {
+          provider: "giphy" | "tenor" | "imgflip" | "upload";
+          attribution: string;
+          caption?: string;
+          sourceId?: string;
+        };
+      }
     | { kind: "file"; path: string; mime: string; name: string }
     | { kind: "audio"; path: string; mime: string; durationMs?: number }
   >;

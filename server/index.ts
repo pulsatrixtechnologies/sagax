@@ -633,6 +633,10 @@ import { createUsageMeterRoutes } from "./routes/usage-meter.ts";
 import { createLimitResetRoutes } from "./routes/limit-resets.ts";
 import { UsageMeter, usageMeterScope } from "./usage/usage-meter.ts";
 import { createWebSearchStore, webSearchScope } from "./web-search/store.ts";
+import { createMemesRoutes } from "./routes/memes.ts";
+import { createSendMemeInternalRoutes } from "./routes/memes-internal.ts";
+import { createMemeStore, memeScope } from "./memes/store.ts";
+import { memeRepliesEnabled } from "../shared/memes.ts";
 import { engineHasNativeWebSearch } from "./web-search/native.ts";
 import { isIP } from "node:net";
 import { blockedAddressReason, defaultMediaProxyResolver } from "./media/media-proxy-guard.ts";
@@ -5546,6 +5550,10 @@ function agentsIntegration(
       })(),
       // end_call is offered only while this thread is on a live phone call.
       // The route re-checks; a turn that is not a call never sees the tool.
+      SAGAX_MEME_REPLIES: (() => {
+        const speaking = botForThread(botId, threadId) ?? store.bot(botId);
+        return speaking?.memeReplies === "off" ? "0" : "1";
+      })(),
       SAGAX_VOICE_CALL: voiceCalls.active(threadId) ? "1" : "0",
       // connect_github: a 1:1 turn on a server with a GitHub OAuth App
       // (device flow). The route re-checks both.
@@ -8996,6 +9004,7 @@ function vaultPrincipalForThread(threadId: string): string | null {
 // payer's), and the address guard for a SearXNG instance on an
 // organization server (its own network is not a member's to reach).
 const webSearchStore = createWebSearchStore(DATA_DIR);
+const memeStore = createMemeStore(DATA_DIR);
 const openApiStore = new OpenApiStore(DATA_DIR);
 function openApiToolsEnv(botId: string, threadId: string): string {
   if (store.groupByThread(threadId)) return "";
@@ -9091,6 +9100,10 @@ async function voiceFor(cfg: AppConfig, principalId: string | null | undefined, 
 function webSearchScopeForThread(threadId: string) {
   const organization = IDENTITY.kind === "perspicax";
   return webSearchScope(organization, organization ? vaultPrincipalForThread(threadId) : null);
+}
+function memeScopeForThread(threadId: string) {
+  const organization = IDENTITY.kind === "perspicax";
+  return memeScope(organization, organization ? vaultPrincipalForThread(threadId) : null);
 }
 async function webSearchAddressRefusal(raw: string): Promise<string | null> {
   if (IDENTITY.kind !== "perspicax") return null;
@@ -31842,6 +31855,28 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     },
     refuseAddress: webSearchAddressRefusal
   }),
+  createSendMemeInternalRoutes({
+    config: (capability) => {
+      const scope = memeScopeForThread(capability.threadId);
+      return scope ? memeStore.config(scope) : null;
+    },
+    memeRepliesEnabled: (capability) => {
+      const bot = botForThread(capability.botId, capability.threadId) ?? store.bot(capability.botId);
+      return memeRepliesEnabled(bot);
+    },
+    appendMeme: (capability, attachment, caption) => {
+      const from = store.bot(capability.botId);
+      const source = connectorThread(capability.botId, capability.threadId);
+      if (!from || !source) return;
+      store.appendMessage(capability.threadId, {
+        role: "bot",
+        kind: "text",
+        text: caption ?? "",
+        attachments: [attachment],
+        ...(source.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}),
+      });
+    },
+  }),
   createShapeAvatarGenerateInternalRoutes({ generate: shapeAvatarGenerator }),
   createVideoInternalRoutes({
     jobs: () => videoGenerations,
@@ -39700,6 +39735,11 @@ ROUTES.push(createWebSearchRoutes({
   store: webSearchStore,
   scope: (auth) => webSearchScope(IDENTITY.kind === "perspicax", sessionPrincipal(auth)),
   refuseAddress: webSearchAddressRefusal
+}));
+ROUTES.push(createMemesRoutes({
+  store: memeStore,
+  scope: (auth) => memeScope(IDENTITY.kind === "perspicax", sessionPrincipal(auth)),
+  owner: (auth) => IDENTITY.kind === "perspicax" ? sessionPrincipal(auth) : localPrincipalId(),
 }));
 ROUTES.push(createWebBotAuthRoutes({
   store: webBotAuthStore,

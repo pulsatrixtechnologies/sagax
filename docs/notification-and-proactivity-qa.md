@@ -38,6 +38,7 @@ alone cannot provide closed-app delivery.
 | Routine failure receipt and callback occur once | `server/routines/routines.test.ts` |
 | Real failed routine emits one `routine-failed` notification and no duplicate `done` | `server/notification-wiring.test.ts` |
 | iOS target parsing and detached-task decision | `ios/Tests/CompanionCoreTests/DecodingTests.swift` |
+| Per-ask collapse id, choices, settled withdraw, notify-withdraw | `server/push/*.test.ts`, `ios/Tests/CompanionCoreTests/ApprovalNotificationTests.swift` (recipe: [docs/verification/approval-notifications.md](verification/approval-notifications.md)) |
 | Paired-device route policy remains default-deny | `companion/test/routes.test.ts` |
 
 ## Manual release pass
@@ -61,3 +62,8 @@ other:
 
 Live provider, OS-permission, backgrounding, and APNs behavior cannot be proven
 by unit tests alone and remains part of the signed desktop/iPhone release pass.
+Question choice buttons on the banner, silent removal after an answer
+elsewhere, and Apple Watch layout need a real device: follow the checklist in
+[docs/verification/approval-notifications.md](verification/approval-notifications.md)
+(#1708) and record results on that issue. Do not treat simulator or unit green
+as a device pass.

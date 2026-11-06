@@ -2343,7 +2343,6 @@
   "keys.testUnreachable": "このサーバーからプロバイダーに接続できませんでした。",
   "keys.testUnexpected": "プロバイダーから予期しない応答がありました（ステータス {status}）。",
   "decider.intro": "数百ミリ秒でボットの判断を代行する高速な判断モデルです。料金は 1 セント未満。実際の作業は引き続きボットが行います。",
-  "decider.masterNeedsKey": "オンにするには、下でキーを保存してください。",
   "decider.key.label": "Jev API キー",
   "decider.key.placeholder": "TypeSafe API キーを貼り付け",
   "decider.key.getKey": "typesafe.ai でキーを取得",

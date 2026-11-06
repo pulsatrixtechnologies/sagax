@@ -2792,7 +2792,6 @@
   "keys.cerebras.desc": "在 Cerebras 晶片上執行的開放模型（GPT OSS、Qwen），速度比 GPU 雲端快上許多倍。會新增 Cerebras 引擎。",
   "keys.cerebras.link": "Cerebras Cloud",
   "decider.intro": "快速決策模型，能在幾百毫秒內替你的機器人做出選擇，費用僅需幾分之一美分。工作仍由你的機器人完成。",
-  "decider.masterNeedsKey": "請在下方儲存金鑰以啟用此功能。",
   "decider.key.label": "Jev API 金鑰",
   "decider.key.placeholder": "貼上你的 TypeSafe API 金鑰",
   "decider.key.getKey": "前往 typesafe.ai 取得金鑰",

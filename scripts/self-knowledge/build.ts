@@ -57,7 +57,7 @@ const CONDITIONS: Array<{ when: string; profile: Partial<CatalogProfile> }> = [
   { when: "for a Primary Bot with the agent-to-agent API", profile: { agentApi: true, chief: true } },
   { when: "in a single-stream conversation (threads off)", profile: { singleStream: true } },
   { when: "when the bot routes messages sent while it is busy", profile: { routeMessages: true } },
-  { when: "in a person's 1:1 chat on a server with a GitHub app", profile: { githubConnect: true } },
+  { when: "in any chat on a server with a GitHub app", profile: { githubConnect: true } },
   { when: "when the engine has no web search of its own and the person saved a search provider", profile: { webSearch: true } },
   { when: "when the bot may send an API key of the person", profile: { vaultHttp: true } },
   { when: "when the person's phone offers tools now", profile: { phoneTools: ["location"] } },

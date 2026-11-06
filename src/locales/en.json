@@ -4326,7 +4326,6 @@
   "myConnections.github.tokenHint": "A fine-grained or classic personal access token from github.com/settings/tokens. It is kept encrypted for you only.",
   "myConnections.github.tokenLabel": "GitHub token",
   "myConnections.github.typeCode": "Type this code at GitHub to connect your account:",
-  "myConnections.github.useToken": "Use a token",
   "myConnections.github.waiting": "Waiting for GitHub…",
   "myConnections.github.fineGrained": "This fine-grained token reaches one owner only (@{login}): your bots will not see the repositories of your organizations. Reconnect GitHub with access to organizations (Connect GitHub, or a classic token with the repo and read:org scopes).",
   "myConnections.github.orgAccess": "Organization access on GitHub",

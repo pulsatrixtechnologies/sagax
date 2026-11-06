@@ -3455,7 +3455,6 @@
   "myConnections.github.tokenHint": "Un jeton d'accès personnel (fin ou classique) de github.com/settings/tokens. Il est chiffré et réservé à vous.",
   "myConnections.github.tokenLabel": "Jeton GitHub",
   "myConnections.github.typeCode": "Entrez ce code sur GitHub pour connecter votre compte :",
-  "myConnections.github.useToken": "Utiliser un jeton",
   "myConnections.github.waiting": "En attente de GitHub…",
   "myConnections.github.fineGrained": "Ce jeton fine-grained ne couvre qu'un seul propriétaire (@{login}) : vos bots ne verront pas les dépôts de vos organisations. Reconnectez GitHub avec l'accès aux organisations (Connecter GitHub, ou un jeton classique avec les portées repo et read:org).",
   "myConnections.github.orgAccess": "Accès aux organisations sur GitHub",

@@ -1455,7 +1455,7 @@ export interface AppState {
   /** The persona editor (src/components/persona/PersonaEditorModal.tsx): one
    * bot's whole profile in a modal shaped like Achievements, opened from the
    * mascot's menu in the bot panel. Null when closed. */
-  personaEditor: { botId: string; section: BotSettingsSection } | null;
+  personaEditor: { botId: string; section: BotSettingsSection; panel?: ProfilePanelSnapshot } | null;
   /** A settings sub-page pushed inside the section (src/components/
    * SettingsSubPage.tsx), e.g. General > About me; null shows the section.
    * Any toggleAppSettings that names none (another section, closing) clears it. */
@@ -2548,6 +2548,10 @@ export function closeBotCatalog(): Action {
 
 /** The split-view section whose bot or group owns the panel
  * (AppState.panelOwner). */
+/** The right panel as it was when the bot's profile page opened (#2271):
+ * closing the page puts it back, open or closed, on the same bot. */
+export type ProfilePanelSnapshot = Pick<AppState, "settingsOpen" | "panelOwner" | "computerOpen" | "inspectorOpen" | "activityOpen" | "personPanelId">;
+
 export type PanelOwner =
   | { leafId: string; botId: string; groupId?: undefined }
   | { leafId: string; groupId: string; botId?: undefined };

@@ -54,7 +54,7 @@ import { createLoadRecovery, isAppPage, loadErrorPage, loadingPage, loadOutcome,
 import { confirmLanguage } from "./update-confirm.mjs";
 import { createSystemTray, normalizeBotHotkeyConfig, normalizeRoster, slotAccelerator } from "./system-tray.mjs";
 let desktopTray = null;
-import { collisionFreeDownloadPath, defaultSaveName, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
+import { collisionFreeDownloadPath, defaultSaveName, localFilesExist, openLocalFile, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
 import { openPdfInDefaultApp } from "./open-pdf.mjs";
 import { desktopViewerPermissionAllowed } from "./desktop-viewer-permissions.mjs";
 import { appPermissionHandlers, connectorSetupUrl, externalOpenUrl, externalWebUrl } from "./app-permissions.mjs";
@@ -4536,7 +4536,21 @@ ipcMain.handle("app-icon:reset", desktopUiOnly("app-icon:reset", () => {
 // server is refused, because that server's paths mean nothing here.
 ipcMain.handle("desktop:reveal-file", localOnly("desktop:reveal-file", async (_event, rawPath) => {
   if (desktopRemoteAccess) throw new Error("That file is on the computer this app is connected to");
-  return revealInFolder(rawPath, { reveal: (target) => shell.showItemInFolder(target) });
+  return revealInFolder(rawPath, { reveal: (target) => shell.showItemInFolder(target), home: os.homedir() });
+}));
+
+// A file name in a bot message, clicked: open it with this computer's default
+// app. Same local-only rule as reveal.
+ipcMain.handle("desktop:open-file", localOnly("desktop:open-file", async (_event, rawPath) => {
+  if (desktopRemoteAccess) throw new Error("That file is on the computer this app is connected to");
+  return openLocalFile(rawPath, { open: (target) => shell.openPath(target), home: os.homedir() });
+}));
+
+// Which file names a bot message mentions exist on this computer, so the chat
+// links only real files.
+ipcMain.handle("desktop:files-exist", localOnly("desktop:files-exist", async (_event, rawPaths) => {
+  if (desktopRemoteAccess) return [];
+  return localFilesExist(rawPaths, { home: os.homedir() });
 }));
 
 // The renderer owns the skin, including the Windows caption buttons it draws

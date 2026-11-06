@@ -125,13 +125,22 @@ export async function withSavableFile(
 // absolute local path that exists reaches `reveal`, and nothing here opens,
 // reads or runs it. Network shares and URLs are refused; merely looking up a
 // share can hand this computer's sign-in to whoever runs that server.
-export async function revealInFolder(rawPath, { reveal, fsp = fs.promises, pathApi = path }) {
+// A bot says "~/Desktop/x.html": expand the tilde against this user's home so
+// the chat link opens the same file the bot wrote. Anything not absolute after
+// that (a URL, a UNC share, a relative name) is refused.
+function localTarget(rawPath, pathApi, home) {
   const local = (value) => !/^[\\/]{2}/.test(value) && pathApi.isAbsolute(value);
-  if (typeof rawPath !== "string" || rawPath.includes("\0") || /^[a-z][a-z\d+.-]+:/i.test(rawPath) || !local(rawPath)) {
-    return "invalid";
-  }
-  const target = pathApi.normalize(rawPath);
-  if (!local(target)) return "invalid";
+  if (typeof rawPath !== "string" || rawPath.includes("\0") || /^[a-z][a-z\d+.-]+:/i.test(rawPath)) return null;
+  let value = rawPath;
+  if (home && (value === "~" || value.startsWith("~/") || value.startsWith("~\\"))) value = pathApi.join(home, value.slice(1));
+  if (!local(value)) return null;
+  const target = pathApi.normalize(value);
+  return local(target) ? target : null;
+}
+
+export async function revealInFolder(rawPath, { reveal, fsp = fs.promises, pathApi = path, home }) {
+  const target = localTarget(rawPath, pathApi, home);
+  if (!target) return "invalid";
   let stats;
   try {
     stats = await fsp.stat(target);
@@ -141,6 +150,40 @@ export async function revealInFolder(rawPath, { reveal, fsp = fs.promises, pathA
   if (!stats.isFile() && !stats.isDirectory()) return "invalid";
   reveal(target);
   return "shown";
+}
+
+// Click on a file name in a bot message: open it with the default app.
+// `open` is shell.openPath, which resolves to "" on success or an error text.
+export async function openLocalFile(rawPath, { open, fsp = fs.promises, pathApi = path, home }) {
+  const target = localTarget(rawPath, pathApi, home);
+  if (!target) return "invalid";
+  let stats;
+  try {
+    stats = await fsp.stat(target);
+  } catch {
+    return "missing";
+  }
+  if (!stats.isFile() && !stats.isDirectory()) return "invalid";
+  const error = await open(target);
+  return error ? "failed" : "opened";
+}
+
+// Which of these paths are files on this computer, for the chat to decide
+// whether a file name becomes a link. Returns the expanded absolute path for
+// each one that exists, null otherwise. Bounded so a message cannot stat
+// thousands of paths.
+export async function localFilesExist(rawPaths, { fsp = fs.promises, pathApi = path, home } = {}) {
+  if (!Array.isArray(rawPaths)) return [];
+  return Promise.all(rawPaths.slice(0, 200).map(async (rawPath) => {
+    const target = localTarget(rawPath, pathApi, home);
+    if (!target) return null;
+    try {
+      const stats = await fsp.stat(target);
+      return stats.isFile() || stats.isDirectory() ? target : null;
+    } catch {
+      return null;
+    }
+  }));
 }
 
 // The name the save dialog opens on: "report.docx", or "report (2).docx" when

@@ -6,7 +6,7 @@ import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 
-import { collisionFreeDownloadPath, defaultSaveName, resolveSavablePath, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
+import { collisionFreeDownloadPath, defaultSaveName, localFilesExist, openLocalFile, resolveSavablePath, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
 
 // Creating a symlink on Windows needs elevation or developer mode, so the
 // symlink cases only run where the runner can actually make one.
@@ -270,5 +270,37 @@ describe("Show in folder for a file outside the workspace", () => {
     const rawPath = "C:\\Users\\Maus\\_draft\\..\\_draft\\ollama-gen.js";
     assert.equal(await revealInFolder(rawPath, { reveal, fsp, pathApi: path.win32 }), "shown");
     assert.deepEqual(shown, ["C:\\Users\\Maus\\_draft\\ollama-gen.js"]);
+  });
+});
+
+describe("Open a file a bot named in a message", () => {
+  // Stands in for shell.openPath: nothing on this computer is really opened.
+  const shell = (error = "") => {
+    const opened = [];
+    return { opened, open: async (target) => { opened.push(target); return error; } };
+  };
+
+  it("opens an existing file, expanding ~ to the home folder", async () => {
+    const { opened, open } = shell();
+    assert.equal(await openLocalFile(path.join(home, "secret.txt"), { open }), "opened");
+    assert.equal(await openLocalFile("~/secret.txt", { open, home }), "opened");
+    assert.deepEqual(opened, [path.join(home, "secret.txt"), path.join(home, "secret.txt")]);
+  });
+
+  it("says missing, failed or invalid without opening anything it should not", async () => {
+    const { opened, open } = shell();
+    assert.equal(await openLocalFile(path.join(home, "gone.html"), { open }), "missing");
+    assert.equal(await openLocalFile("secret.txt", { open, home }), "invalid");
+    assert.equal(await openLocalFile("https://example.com/x.html", { open, home }), "invalid");
+    assert.equal(await openLocalFile("~/secret.txt", { open }), "invalid");
+    assert.deepEqual(opened, []);
+    const failing = shell("No application knows how to open it");
+    assert.equal(await openLocalFile(path.join(home, "secret.txt"), { open: failing.open }), "failed");
+  });
+
+  it("lists which paths exist here, as absolute paths", async () => {
+    const found = await localFilesExist([path.join(home, "secret.txt"), "~/secret.txt", "~/gone.html", "relative.txt", 42], { home });
+    assert.deepEqual(found, [path.join(home, "secret.txt"), path.join(home, "secret.txt"), null, null, null]);
+    assert.deepEqual(await localFilesExist("nope", { home }), []);
   });
 });

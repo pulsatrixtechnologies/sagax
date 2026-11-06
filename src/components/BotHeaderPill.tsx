@@ -76,13 +76,13 @@ export function BotHeaderPill({ name, panelOpen, onToggle, avatar }: {
       type="button"
       onClick={onToggle}
       data-bot-header-pill=""
-      className="flex min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated py-[7.5px] pl-[7.5px] pr-[11.5px] transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+      className="flex h-10 min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5 transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
       title={panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
       aria-label={panelOpen ? t("chat.closePanelAria", { name }) : t("chat.openPanelAria", { name })}
       aria-expanded={panelOpen}
     >
       {avatar}
-      <span className="truncate text-[14px] font-medium leading-5 text-ink">{name}</span>
+      <span className="truncate text-[15px] font-medium leading-5 text-ink">{name}</span>
       <ChevronRight
         data-bot-header-chevron=""
         size={14}
@@ -98,8 +98,9 @@ export function BotHeaderPill({ name, panelOpen, onToggle, avatar }: {
 }
 
 /**
- * The bot chat's header, like Grok Bot (#2141): the name pill alone (mascot
- * about 20px, then the name in 14px regular with the title under it,
+ * The bot chat's header, like Grok Bot (#2141): the name pill alone, 40px
+ * high (#2298: mascot about 22px, then the name in 15px regular with the
+ * title under it,
  * smaller and secondary), which opens and closes
  * the bot panel. No sharing pill and no gear above the chat (JC 2026-11-06):
  * sharing lives in the bot panel, the pill already toggles it.
@@ -119,8 +120,8 @@ export function BotChatHeader({ name, label, panelOpen, onToggle, avatar }: {
         onClick={onToggle}
         data-bot-header-pill=""
         className={cn(
-          "flex min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-[6px] pr-3 transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-          tag ? "min-h-8 py-1" : "h-8",
+          "flex min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5 transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+          tag ? "min-h-10 py-1" : "h-10",
         )}
         title={panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
         aria-label={panelOpen ? t("chat.closePanelAria", { name }) : t("chat.openPanelAria", { name })}
@@ -130,8 +131,8 @@ export function BotChatHeader({ name, label, panelOpen, onToggle, avatar }: {
         {/* The name on its own line, the title under it, smaller and
             secondary (JC 2026-11-06: never "Name · Title" on one line). */}
         <span className="flex min-w-0 flex-col items-start text-left">
-          <span data-bot-header-name="" className="max-w-full truncate text-[14px] font-normal leading-5 text-ink">{name}</span>
-          {tag && <span data-bot-header-label="" className="max-w-full truncate text-[11.5px] leading-4 text-ink-secondary">{tag}</span>}
+          <span data-bot-header-name="" className="max-w-full truncate text-[15px] font-normal leading-5 text-ink">{name}</span>
+          {tag && <span data-bot-header-label="" className="max-w-full truncate text-[12px] leading-4 text-ink-secondary">{tag}</span>}
         </span>
       </button>
     </div>

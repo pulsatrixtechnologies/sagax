@@ -25,7 +25,7 @@ describe("bot panel mascot size (#2196)", () => {
   });
 
   it("keeps Grok Bot header spacing under the mascot", () => {
-    expect(panelSource).toMatch(/mt-5 flex max-w-full items-center justify-center gap-1 text-\[17px\] font-semibold/);
+    expect(panelSource).toMatch(/mt-5 flex max-w-full items-center justify-center gap-1 text-\[17px\] font-medium/);
     expect(panelSource).toMatch(/data-bot-panel-tabs="" className=\{cn\("flex justify-center px-4 pb-4 pt-10"/);
   });
 });

@@ -4031,6 +4031,8 @@ const agentsProxyPath = SPAWNED_PROXIES.agents;
 const perspicaxBridgePath = SPAWNED_PROXIES.perspicax;
 const phoneProxyPath = SPAWNED_PROXIES.phone;
 const messagesProxyPath = SPAWNED_PROXIES.messages;
+const AGENTS_NODE_FLAG = { ELECTRON_RUN_AS_NODE: "1" };
+Object.assign(leafHostBindings, { AGENTS_NODE_FLAG, agentsProxyPath, perspicaxBridgePath, phoneProxyPath, messagesProxyPath });
 // in the packaged app process.execPath is Electron — run the proxy as node
 
 /** Whether this bot may write the shared memory of this group: the group's
@@ -9591,6 +9593,9 @@ const limitResumeText = createLimitResumeText(getLeafHost);
  * other-provider backups read only real refusals; same-provider accounts also
  * rotate from the report's used percent (#2192). */
 const spentPlans = new Map<string, number>();
+/** #2192: fullest window used-percent per payer and engine, from the last report. */
+const planUsedPercents = new Map<string, number>();
+Object.assign(leafHostBindings, { spentPlans, planUsedPercents, spentPlanUntil, planUsedPercent });
 const notePlanLimits = createNotePlanLimits(getLeafHost);
 function planLimitUntil(payer: string, instanceId: string): number | null {
   const until = spentPlans.get(`${payer}\u0000${instanceId}`);
@@ -11405,6 +11410,11 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get clearRelayedStream() { return clearRelayedStream; },
   get clearThreadStopping() { return clearThreadStopping; },
   get closeCutToolRows() { return closeCutToolRows; },
+  get DATA_DIR() { return DATA_DIR; },
+  get deleteAttachment() { return deleteAttachment; },
+  get deliverableNotification() { return deliverableNotification; },
+  get endedToolOutput() { return endedToolOutput; },
+  get flushUsageLedger() { return flushUsageLedger; },
   get cloudGuestDriven() { return cloudGuestDriven; },
   get commandAllowlist() { return commandAllowlist; },
   get commandAllowlistCandidate() { return commandAllowlistCandidate; },
@@ -11557,6 +11567,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get reviewAnswerThreads() { return reviewAnswerThreads; },
   get roleEvents() { return roleEvents; },
   get roleJournal() { return roleJournal; },
+  get roomMemberContexts() { return roomMemberContexts; },
   get roomTurnLevels() { return roomTurnLevels; },
   get roomTurnRuns() { return roomTurnRuns; },
   get routedRoomReplies() { return routedRoomReplies; },
@@ -11597,6 +11608,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get soloGoals() { return soloGoals; },
   get stepFromToolEvent() { return stepFromToolEvent; },
   get stoppedRowSinceLastPerson() { return stoppedRowSinceLastPerson; },
+  get stoppedTurnText() { return stoppedTurnText; },
   get stoppedTurns() { return stoppedTurns; },
   get store() { return store; },
   get strictCardRule() { return strictCardRule; },
@@ -32223,6 +32235,7 @@ Object.assign(leafHostBindings, {
   spendAlertText,
   spendState,
   spentPlanUntil,
+  planUsedPercent,
   spokenLineFields,
   stageBotZipUpload,
   stageTurnAttachments,
@@ -32398,6 +32411,8 @@ Object.assign(leafHostBindings, {
   writesManagedProfile,
   z
 });
+
+Object.assign(leafHostBindings, { DirectSendRefused, EngineAccessLost, AGENTS_NODE_FLAG });
 
 // #1388: primitives must stay live on the leaf host (Object.assign copies values).
 Object.defineProperty(leafHostBindings, "lastSeq", {

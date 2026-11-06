@@ -40,7 +40,7 @@ async function interruptDirectThread(botId: string, threadId: string, options?: 
   // A safe-point cut, a park or an engine change is not that Stop: the
   // teammates' results still come back and resume this conversation (owner report,
   // 2026-11-01: "the bots do not answer me, I have to relaunch them").
-  if (!host.interruptKeepsTeammates(options?.cause ?? "stop")) host.noteTeammatesLeftRunning(botId, threadId, host.coordinator.stopAwaitingDirect(threadId));
+  if (!host.interruptKeepsTeammates(options?.cause ?? "stop")) host.noteTeammatesLeftRunning(threadId, host.coordinator.stopAwaitingDirect(threadId));
   const owner = host.botForThread(botId, threadId);
   const generation = host.directTurnGenerationByThread.get(threadId);
   host.cancelDirectTurnDispatch(botId, threadId);

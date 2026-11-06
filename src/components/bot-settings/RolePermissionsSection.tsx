@@ -1,12 +1,13 @@
-// Visible roles, batch 5 (2026-11-05): the bot panel's "Rôles" tab.
-// A small graph of the roles this person's bot used in the last seven days
-// ("Moi" included) and the transitions between them with their count; a
-// click on an edge lists its history. Below, "Permissions manquantes": what
-// a role was refused, the ConnectWise permission an administrator would
-// fix, and "Envoyer à l'admin" (a Sagax message, never a ConnectWise write).
-// Role names only; a profile id shows in a tooltip at most.
+// Details > Permissions (2026-11-05, JC): the bot panel's Roles tab is gone.
+// What stays is the missing permission alert: ONE row, shown only when the
+// bot was refused at least once in the last seven days. The row says what
+// the role cannot do ("Dispatch Agent ne peut pas modifier les billets"),
+// its state in grey, and "Envoyer à l'admin" (a Sagax message to the
+// organization admins, never a ConnectWise write). Nothing is lost: the
+// roles graph of the seven days and each edge's history sit behind the
+// row's disclosure. Role names only; a profile id shows in a tooltip at most.
 import { useEffect, useId, useMemo, useState } from "react";
-import { Send } from "lucide-react";
+import { ChevronDown, Send, ShieldAlert } from "lucide-react";
 import { activeLocale, documentLanguage, t } from "@/lib/i18n";
 import { api } from "@/state/store";
 import { useStoreDispatch } from "@/state/store-selector";
@@ -14,8 +15,10 @@ import { readableError } from "@/lib/plain-error";
 import { cn } from "@/lib/cn";
 import { stepToolName } from "@/lib/step-label";
 import { roleLabel } from "../RoleChip";
-import { permissionArea, operationLabel } from "@/lib/role-permission";
-import type { MissingPermission, RoleGraphEdge, RoleGraphNode, RolesTabBody } from "../../../shared/role-graph";
+import { permissionText } from "@/lib/role-permission";
+import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
+import { ROLE_GRAPH_WINDOW_MS, type MissingPermission, type RoleGraphEdge, type RoleGraphNode, type RolesTabBody } from "../../../shared/role-graph";
+import type { CwOperation, CwPermission } from "../../../shared/perspicax-roles";
 
 const ET = "America/New_York";
 
@@ -24,10 +27,13 @@ function intlLocale(): string {
   return lang.startsWith("fr") ? "fr-CA" : lang;
 }
 
-/** "5 nov., 14 h 03" in Eastern time. */
+/** "5 nov. 13:10" in Eastern time. */
 export function easternTime(at: number): string {
   try {
-    return new Intl.DateTimeFormat(intlLocale(), { timeZone: ET, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(at));
+    const date = new Intl.DateTimeFormat(intlLocale(), { timeZone: ET, month: "short", day: "numeric" }).format(new Date(at));
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: ET, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(at));
+    const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "00";
+    return `${date} ${part("hour")}:${part("minute")}`;
   } catch {
     return new Date(at).toISOString();
   }
@@ -178,110 +184,157 @@ function EdgeHistory({ edge, names, onOpenThread }: { edge: RoleGraphEdge; names
   );
 }
 
-function MissingRow({ botId, entry, onSent }: { botId: string; entry: MissingPermission; onSent: (sentAt: number) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const send = () => {
-    setBusy(true);
-    setError(null);
-    void api<{ sentAt: number }>(`/api/bots/${encodeURIComponent(botId)}/roles/missing/send`, { method: "POST", body: JSON.stringify({ id: entry.id }) })
-      .then((body) => onSent(typeof body.sentAt === "number" ? body.sentAt : Date.now()))
-      .catch((cause: unknown) => setError(readableError(cause)))
-      .finally(() => setBusy(false));
-  };
-  const role = roleLabel(entry.role);
+// What a refused permission is about, in words: "les billets", else the
+// security role function ConnectWise names ("Holiday Lists").
+const OBJECTS: Record<string, "tickets" | "time" | "schedule" | "companies" | "contacts" | "projects" | "agreements" | "configurations" | "invoices"> = {
+  "service/tickets": "tickets",
+  "time/entries": "time",
+  "schedule/entries": "schedule",
+  "company/companies": "companies",
+  "company/contacts": "contacts",
+  "project/projects": "projects",
+  "finance/agreements": "agreements",
+  "company/configurations": "configurations",
+  "finance/invoices": "invoices",
+};
+
+function permissionObject(permission: CwPermission): string {
+  const path = permission.path.replace(/\./g, "/").replace(/^\/+/, "").toLowerCase();
+  const known = Object.entries(OBJECTS).find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`));
+  if (known) return t(`roles.object.${known[1]}`);
+  return permission.func || permission.path;
+}
+
+function operationVerb(operation: CwOperation): string {
+  return t(operation === "Inquire" ? "roles.verb.inquire" : operation === "Add" ? "roles.verb.add" : operation === "Edit" ? "roles.verb.edit" : "roles.verb.delete");
+}
+
+/** "Dispatch Agent ne peut pas modifier les billets". */
+export function refusalLabel(entry: Pick<MissingPermission, "role" | "permission">): string {
+  return t("roles.refusal.label", { role: roleLabel(entry.role), verb: operationVerb(entry.permission.operation), object: permissionObject(entry.permission) });
+}
+
+/** "refusé 1 fois, dernier 5 nov. 13:10". */
+export function refusalState(entry: Pick<MissingPermission, "count" | "lastAt">): string {
+  return t(entry.count === 1 ? "roles.refusal.state.one" : "roles.refusal.state.other", { count: String(entry.count), when: easternTime(entry.lastAt) });
+}
+
+/** The refusals of the last seven days, newest first. */
+export function recentRefusals(missing: readonly MissingPermission[], now: number): MissingPermission[] {
+  return missing.filter((entry) => entry.lastAt >= now - ROLE_GRAPH_WINDOW_MS).sort((a, b) => b.lastAt - a.lastAt);
+}
+
+function RefusalEntry({ entry }: { entry: MissingPermission }) {
   return (
-    <li data-missing-permission={entry.id} className="flex flex-col gap-1 py-2.5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium text-ink">{permissionArea(entry.permission)}</p>
-          <p className="text-[12px] text-ink-secondary">
-            {entry.permission.path && <code className="mr-1 rounded bg-elevated px-1 py-px text-[11px]">{entry.permission.path}</code>}
-            {operationLabel(entry.permission.operation)}
-          </p>
-        </div>
-        {entry.sentAt
-          ? <span data-missing-sent="" className="shrink-0 text-[12px] text-ink-tertiary">{t("roles.missing.sent", { when: easternTime(entry.sentAt) })}</span>
-          : (
-            <button type="button" data-missing-send={entry.id} disabled={busy} onClick={send}
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-hairline px-2.5 py-1 text-[12px] text-ink hover:bg-elevated-hover disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-accent">
-              <Send size={12} aria-hidden="true" />
-              {t("roles.missing.send")}
-            </button>
-          )}
-      </div>
-      <p className="text-[12px] text-ink-secondary">
-        {entry.member ? t("roles.missing.fixMember", { member: entry.member }) : t("roles.missing.fixRole", { role })}
-      </p>
-      <p className="text-[11.5px] text-ink-tertiary">
-        {t("roles.missing.seen", { count: String(entry.count), when: easternTime(entry.lastAt) })}
-      </p>
-      {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+    <li data-missing-permission={entry.id} title={permissionText(entry.permission)} className="flex flex-col gap-0.5 py-2 text-[12.5px]">
+      <span className="text-ink">{refusalLabel(entry)}</span>
+      <span className="text-ink-tertiary">{refusalState(entry)}{entry.sentAt ? ` · ${t("roles.missing.sent", { when: easternTime(entry.sentAt) })}` : ""}</span>
+      <span className="text-ink-tertiary">
+        {entry.member ? t("roles.missing.fixMember", { member: entry.member }) : t("roles.missing.fixRole", { role: roleLabel(entry.role) })}
+      </span>
     </li>
   );
 }
 
-/** The tab itself, store-free: `onOpenThread` opens an edge's conversation. */
-export function RolesTabView({ botId, body, error, onOpenThread }: { botId: string; body: RolesTabBody | null; error?: string | null; onOpenThread?: (threadId: string) => void }) {
+/** The row itself, store-free: `onOpenThread` opens an edge's conversation. */
+export function RolePermissionsView({ botId, body, now = Date.now(), open, onOpenThread }: { botId: string; body: RolesTabBody | null; now?: number; open?: boolean; onOpenThread?: (threadId: string) => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [sent, setSent] = useState<Record<string, number>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const names = useMemo(() => new Map((body?.nodes ?? []).map((node) => [node.slug, nodeLabel(node)])), [body]);
-  if (error) return <p role="alert" className="px-4 pt-2 text-[12.5px] text-danger">{error}</p>;
-  if (!body) return <p className="px-4 pt-2 text-[12.5px] text-ink-tertiary">{t("roles.tab.loading")}</p>;
+  const refusals = useMemo(() => recentRefusals(body?.missing ?? [], now).map((entry) => (sent[entry.id] ? { ...entry, sentAt: sent[entry.id] } : entry)), [body, now, sent]);
+  // no recent refusal: no row, no section
+  if (!body || refusals.length === 0) return null;
+  const latest = refusals[0]!;
+  const unsent = refusals.filter((entry) => !entry.sentAt);
+  const lastSent = Math.max(0, ...refusals.map((entry) => entry.sentAt ?? 0));
+  const others = refusals.length - 1;
   const edge = body.edges.find((candidate) => edgeId(candidate) === selected) ?? null;
-  // grouped by role
-  const missingByRole = new Map<string, MissingPermission[]>();
-  for (const entry of body.missing) {
-    const list = missingByRole.get(entry.role.slug) ?? [];
-    list.push(sent[entry.id] ? { ...entry, sentAt: sent[entry.id] } : entry);
-    missingByRole.set(entry.role.slug, list);
-  }
+  const send = () => {
+    setBusy(true);
+    setError(null);
+    void (async () => {
+      for (const entry of unsent) {
+        const answer = await api<{ sentAt: number }>(`/api/bots/${encodeURIComponent(botId)}/roles/missing/send`, { method: "POST", body: JSON.stringify({ id: entry.id }) });
+        const at = typeof answer.sentAt === "number" ? answer.sentAt : Date.now();
+        setSent((before) => ({ ...before, [entry.id]: at }));
+      }
+    })()
+      .catch((cause: unknown) => setError(readableError(cause)))
+      .finally(() => setBusy(false));
+  };
   return (
-    <div data-roles-tab="" className="flex flex-col gap-5 px-4 pb-6 pt-2">
-      <section className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-[13px] font-medium text-ink">{t("roles.tab.title")}</h2>
-          <span className="text-[11.5px] text-ink-tertiary">{t("roles.tab.window")}</span>
-        </div>
-        {body.edges.length === 0 && body.nodes.length <= 1
-          ? <p className="text-[12.5px] text-ink-tertiary">{t("roles.tab.empty")}</p>
-          : <RolesGraph graph={body} selected={selected} onSelect={setSelected} />}
-        {body.journal === "local" && <p data-roles-local="" className="text-[11.5px] text-ink-tertiary">{t("roles.tab.localOnly")}</p>}
-        {body.edges.length > 0 && !edge && <p className="text-[11.5px] text-ink-tertiary">{t("roles.tab.pickEdge")}</p>}
-        {edge && <EdgeHistory edge={edge} names={names} {...(onOpenThread ? { onOpenThread } : {})} />}
-      </section>
-      <section className="flex flex-col gap-1" data-missing-list="">
-        <h2 className="text-[13px] font-medium text-ink">{t("roles.missing.title")}</h2>
-        {body.missing.length === 0 && <p className="text-[12.5px] text-ink-tertiary">{t("roles.missing.none")}</p>}
-        {[...missingByRole.entries()].map(([slug, list]) => (
-          <div key={slug || "me"} data-missing-role={slug || "me"} className="flex flex-col">
-            <h3 className="pt-1 text-[11px] font-medium uppercase tracking-wide text-ink-tertiary">{roleLabel(list[0]!.role)}</h3>
-            <ul className="flex flex-col divide-y divide-hairline-weak">
-              {list.map((entry) => <MissingRow key={entry.id} botId={botId} entry={entry} onSent={(at) => setSent((before) => ({ ...before, [entry.id]: at }))} />)}
-            </ul>
+    <section data-bot-settings-section="permissions" className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <ShieldAlert size={16} aria-hidden="true" className="text-ink-secondary" />
+        <h2 className="min-w-0 flex-1 text-[13px] font-normal leading-[18px] text-ink-secondary">{t("roles.permissions.title")}</h2>
+      </div>
+      <div className={GROUPED_CARD}>
+        <div data-missing-permission-row={latest.id} className={cn("flex flex-col gap-2", GROUPED_ROW)}>
+          <div className="flex items-start gap-2.5">
+            <div className="min-w-0 flex-1" title={permissionText(latest.permission)}>
+              <span data-missing-label="" className="block text-[13px] font-medium leading-[18px] text-ink">{refusalLabel(latest)}</span>
+              <span data-missing-state="" className="block text-[12.5px] leading-[18px] text-ink-tertiary">
+                {refusalState(latest)}
+                {others > 0 ? ` · ${t(others === 1 ? "roles.refusal.others.one" : "roles.refusal.others.other", { count: String(others) })}` : ""}
+              </span>
+            </div>
+            {unsent.length === 0
+              ? <span data-missing-sent="" className="shrink-0 pt-0.5 text-[12px] text-ink-tertiary">{t("roles.missing.sent", { when: easternTime(lastSent) })}</span>
+              : (
+                <button type="button" data-missing-send="" disabled={busy} onClick={send}
+                  className="ui-button h-[28px] shrink-0 gap-1.5 px-[11px] text-[12.5px] leading-[18px] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
+                  <Send size={13} aria-hidden="true" />
+                  {t("roles.missing.send")}
+                </button>
+              )}
           </div>
-        ))}
-      </section>
-    </div>
+          {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+          <details data-missing-details="" open={open} className="group/roles flex flex-col">
+            <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded text-[12.5px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden">
+              {t("roles.permissions.more")}
+              <ChevronDown size={13} aria-hidden="true" className="transition-transform group-open/roles:rotate-180 motion-reduce:transition-none" />
+            </summary>
+            <div className="mt-2 flex flex-col gap-3">
+              <ul data-missing-list="" className="flex flex-col divide-y divide-hairline-weak">
+                {refusals.map((entry) => <RefusalEntry key={entry.id} entry={entry} />)}
+              </ul>
+              {body.nodes.length > 1 || body.edges.length > 0 ? (
+                <div data-roles-graph-block="" className="flex flex-col gap-1.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="text-[12.5px] font-medium text-ink">{t("roles.tab.title")}</h3>
+                    <span className="text-[11.5px] text-ink-tertiary">{t("roles.tab.window")}</span>
+                  </div>
+                  <RolesGraph graph={body} selected={selected} onSelect={setSelected} />
+                  {body.edges.length > 0 && !edge && <p className="text-[11.5px] text-ink-tertiary">{t("roles.tab.pickEdge")}</p>}
+                  {edge && <EdgeHistory edge={edge} names={names} {...(onOpenThread ? { onOpenThread } : {})} />}
+                </div>
+              ) : null}
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
   );
 }
 
-export function RolesTab({ botId }: { botId: string }) {
+/** Details > Permissions: reads the bot's roles once; nothing shows while
+ * it loads, on a failure, or when nothing was refused lately. */
+export function RolePermissionsSection({ botId }: { botId: string }) {
   const dispatch = useStoreDispatch();
   const [body, setBody] = useState<RolesTabBody | null>(null);
-  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
     setBody(null);
-    setError(null);
     void api<RolesTabBody>(`/api/bots/${encodeURIComponent(botId)}/roles`)
       .then((answer) => { if (alive) setBody({ nodes: answer.nodes ?? [], edges: answer.edges ?? [], missing: answer.missing ?? [], journal: answer.journal === "perspicax" ? "perspicax" : "local" }); })
-      .catch((cause: unknown) => { if (alive) setError(readableError(cause)); });
+      .catch(() => { if (alive) setBody(null); });
     return () => { alive = false; };
   }, [botId]);
   const openThread = (threadId: string) => {
     dispatch({ type: "switchTask", botId, threadId });
     dispatch({ type: "revealThread", threadId });
   };
-  return <RolesTabView botId={botId} body={body} error={error} onOpenThread={openThread} />;
+  return <RolePermissionsView botId={botId} body={body} onOpenThread={openThread} />;
 }

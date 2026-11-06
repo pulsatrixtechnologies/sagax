@@ -82,6 +82,8 @@ const GUARD_TESTS = [
   "server/approvals/full-access-gate.guard.test.ts",
   // #1386: docs/ media must be cited; no large GIF; PR proofs on pr-assets
   "scripts/testing/docs-media.guard.test.ts",
+  // #2086: the bot panel has only Details, Library and Computer (no Roles tab)
+  "src/components/bot-settings/panel-tabs.guard.test.ts",
 ];
 
 const LIGHT_CHECKS = [

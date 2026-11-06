@@ -26,7 +26,8 @@ hidden when the routine has no Flow recipe); other routines save no role. A
 read 403 under a role is read once more as "Moi" by the relay and the role is
 put back; a write 403 stops the turn's role switches; a lapsed role stops the
 call; a routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
-keeps transitions, refusals and owner rules per principal for the Roles tab
+keeps transitions, refusals and owner rules per principal for the bot panel's
+Details > Permissions row (graph behind its disclosure; no Roles tab since 2026-11-05)
 and routine coverage; `role-events.ts` writes the journal only and never
 posts into the chat. Tests: `perspicax-roles-relay.test.ts`,
 `role-journal.test.ts`, `shared/perspicax-roles.test.ts`,

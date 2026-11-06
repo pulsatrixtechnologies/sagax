@@ -5582,6 +5582,22 @@
         }
       }
     },
+    "A group works best with bots that split the work.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A group works best with bots that split the work."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un groupe donne sa pleine mesure avec des bots qui se partagent le travail."
+          }
+        }
+      }
+    },
     "A Sagax server": {
       "localizations": {
         "fr": {
@@ -6716,6 +6732,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "A value of the JSON result"
+          }
+        }
+      }
+    },
+    "Add a second bot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a second bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un deuxième bot"
+          }
+        }
+      }
+    },
+    "Add to meeting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to meeting"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter à une réunion"
+          }
+        }
+      }
+    },
+    "Add to Slack": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to Slack"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter à Slack"
           }
         }
       }
@@ -26184,6 +26248,22 @@
         }
       }
     },
+    "Delete this routine?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this routine?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer cette routine ?"
+          }
+        }
+      }
+    },
     "Delete this rule?": {
       "localizations": {
         "fr": {
@@ -27860,6 +27940,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Glissez un ordinateur sur une équipe, ou choisissez son équipe ci-dessous. Les bots en mode Auto l'utiliseront."
+          }
+        }
+      }
+    },
+    "Drag and drop or paste an image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag and drop or paste an image"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glissez-déposez ou collez une image"
           }
         }
       }
@@ -31506,6 +31602,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Os arquivos e artefatos desta conversa aparecem aqui."
+          }
+        }
+      }
+    },
+    "Files and pages from this group show up here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files and pages from this group show up here."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les fichiers et pages de ce groupe apparaissent ici."
           }
         }
       }
@@ -45384,6 +45496,22 @@
         }
       }
     },
+    "More actions for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More actions for %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autres actions pour %@"
+          }
+        }
+      }
+    },
     "More actions happened than the list shows. Narrow the period or search.": {
       "localizations": {
         "en": {
@@ -57228,6 +57356,22 @@
         }
       }
     },
+    "Paste image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste image"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coller l'image"
+          }
+        }
+      }
+    },
     "PASTED": {
       "localizations": {
         "en": {
@@ -68260,6 +68404,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Roda enquanto o Sagax estiver aberto neste computador: ele não consegue acordar um Mac em repouso. Uma execução perdida há menos de 12 horas ainda acontece quando o app volta; para 24/7, rode o Sagax em um VPS."
+          }
+        }
+      }
+    },
+    "Session details": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session details"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détails de la session"
           }
         }
       }
@@ -91224,6 +91384,22 @@
         }
       }
     },
+    "Voice chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice chat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clavardage vocal"
+          }
+        }
+      }
+    },
     "Voice engine": {
       "localizations": {
         "en": {
@@ -92708,6 +92884,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O que a equipe deve realizar?"
+          }
+        }
+      }
+    },
+    "What should the team do?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What should the team do?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Que doit faire l'équipe ?"
           }
         }
       }

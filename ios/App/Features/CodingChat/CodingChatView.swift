@@ -30,6 +30,13 @@ struct CodingChatView: View {
     @State private var now = Date()
     @State private var revealRowId: String?
     @State private var changesOpen = false
+    /// The thread's raw messages: their digests carry the tokens.
+    @State private var rawMessages: [Message] = []
+    /// The side panel (desktop: the bot panel's Coding tab): a column when
+    /// the window is wide, a sheet otherwise.
+    @State private var panelOpen = true
+    @State private var panelSheet = false
+    @State private var width: CGFloat = 0
 
     init(target: CodingChatTarget, parent: BotActivityModel, onClose: (() -> Void)? = nil) {
         self.target = target
@@ -53,18 +60,66 @@ struct CodingChatView: View {
         CodingChatModel.snapshot(messages: messages, item: item, detail: detail)
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider().overlay(Theme.hairline)
-            transcript
-            if CodingChatRules.showChangesBand(files: snapshot.files, tests: snapshot.tests, place: snapshot.place) {
-                changesBand
-                Divider().overlay(Theme.hairline)
-            }
-            footer
+    /// Wide enough for the transcript and the session column side by side.
+    private var wide: Bool { width >= 720 }
+
+    private var panelInput: CodingPanelInput {
+        CodingPanelInput(item: detail?.item ?? item, detail: detail, bot: bot, threadId: threadId,
+                         messages: rawMessages, repo: snapshot.place.repo, now: now)
+    }
+
+    /// Scroll the transcript to a message's row ("Show in conversation").
+    private func reveal(_ messageId: String) {
+        let rows = snapshot.rows
+        guard let row = rows.first(where: { $0.id == messageId }) ?? rows.first(where: { $0.id.hasPrefix(messageId) }) else { return }
+        panelSheet = false
+        revealRowId = row.id
+    }
+
+    private func togglePanel() {
+        if wide {
+            withAnimation(.easeOut(duration: 0.2)) { panelOpen.toggle() }
+        } else {
+            panelSheet = true
         }
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            main
+            if wide && panelOpen {
+                Rectangle()
+                    .fill(Theme.hairline)
+                    .frame(width: 1)
+                    .ignoresSafeArea(edges: .bottom)
+                CodingChatPanel(input: panelInput, showMessage: reveal)
+                    .frame(width: 300)
+                    .transition(.move(edge: .trailing))
+            }
+        }
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { width = proxy.size.width }
+                    .onChange(of: proxy.size.width) { width = $0 }
+            }
+        )
         .background(Theme.bg.ignoresSafeArea())
+        .sheet(isPresented: $panelSheet) {
+            NavigationStack {
+                CodingChatPanel(input: panelInput, showMessage: reveal)
+                    .navigationTitle(Text(verbatim: CodingPanelStrings.title))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(String(localized: "Done")) { panelSheet = false }
+                                .accessibilityIdentifier("coding.panel.done")
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+            .environmentObject(session)
+        }
         .navigationTitle(Text(verbatim: BotActivityWording.title(item)))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -86,6 +141,20 @@ struct CodingChatView: View {
         .accessibilityIdentifier("coding-chat")
     }
 
+    private var main: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().overlay(Theme.hairline)
+            transcript
+            if CodingChatRules.showChangesBand(files: snapshot.files, tests: snapshot.tests, place: snapshot.place) {
+                changesBand
+                Divider().overlay(Theme.hairline)
+            }
+            footer
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     // MARK: Header
 
     /// The folder · the branch (desktop `codingWhere` order).
@@ -97,7 +166,8 @@ struct CodingChatView: View {
     /// 2026-11-06 (desktop 1522091154, #2285): the session header is the
     /// chat header's pill (BotHeaderPill); the meta line keeps the folder
     /// and the branch only. The session's status and duration sit quietly
-    /// at the right ("This session"), no longer in the meta line.
+    /// in the "This session" card of the side panel, which the button at the
+    /// right opens (a column on a wide window, a sheet otherwise).
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -111,13 +181,20 @@ struct CodingChatView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Spacer(minLength: 4)
-                Text(verbatim: "\(CodingChatRules.statusLabel(detail?.item.status ?? item.status)) · \(CodingChatRules.elapsedLabel(item: item, detail: detail, nowMs: now.timeIntervalSince1970 * 1000))")
-                    .font(Theme.font(12).monospacedDigit())
-                    .foregroundStyle(Theme.textTertiary)
-                    .lineLimit(1)
-                    .accessibilityLabel(Text("This session"))
-                    .accessibilityValue(Text(verbatim: "\(CodingChatRules.statusLabel(detail?.item.status ?? item.status)) · \(CodingChatRules.elapsedLabel(item: item, detail: detail, nowMs: now.timeIntervalSince1970 * 1000))"))
-                    .accessibilityIdentifier("coding-chat-session")
+                Button {
+                    togglePanel()
+                } label: {
+                    Image(systemName: "sidebar.right")
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundStyle(wide && panelOpen ? Theme.textPrimary : Theme.textSecondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(verbatim: CodingPanelStrings.toggle))
+                .accessibilityValue(Text(verbatim: "\(CodingChatRules.statusLabel(detail?.item.status ?? item.status)) · \(CodingChatRules.elapsedLabel(item: item, detail: detail, nowMs: now.timeIntervalSince1970 * 1000))"))
+                .accessibilityAddTraits(wide && panelOpen ? .isSelected : [])
+                .accessibilityIdentifier("coding.panel-toggle")
             }
             Text(verbatim: BotActivityWording.title(item))
                 .font(Theme.font(17, .semibold))
@@ -399,6 +476,7 @@ struct CodingChatView: View {
             if let threadId = loaded.item.threadId ?? target.threadId {
                 let page = try await client.messages(threadId: threadId, limit: 80)
                 messages = page.messages.map { $0.toCodingMessage() }
+                rawMessages = page.messages
                 oldestId = page.messages.first?.id
                 hasOlder = page.messages.count >= 80
             } else if !loaded.steps.isEmpty {
@@ -418,6 +496,7 @@ struct CodingChatView: View {
             let page = try await client.messages(threadId: threadId, before: oldestId, limit: 80)
             let older = page.messages.map { $0.toCodingMessage() }
             messages = older + messages
+            rawMessages = page.messages + rawMessages
             self.oldestId = page.messages.first?.id ?? oldestId
             hasOlder = page.messages.count >= 80
         } catch {

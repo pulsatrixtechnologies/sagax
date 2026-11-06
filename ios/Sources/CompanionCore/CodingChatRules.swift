@@ -109,3 +109,41 @@ public enum CodingChatRules {
         String(localized: "… \(count) unchanged lines")
     }
 }
+
+// MARK: - This session (#2285)
+
+/// The bot panel's "This session" card (`SessionCard` in CodingChat.tsx):
+/// status glyph and lead, duration, and the turn digests' tokens.
+public enum CodingSessionRules {
+    /// ○ while the task runs, ● once it settled.
+    public static func glyph(live: Bool) -> String { live ? "○" : "●" }
+
+    /// The current step while live (Working otherwise), the status once settled.
+    public static func lead(item: BotActivityItem, detail: BotActivityDetail?) -> String {
+        let shown = detail?.item ?? item
+        guard shown.status.isActive else { return CodingChatRules.statusLabel(shown.status) }
+        let step = shown.currentStep?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return step.isEmpty ? CodingChatRules.working : step
+    }
+
+    /// Sum of the turn digests' input plus output (`codingTokens`); nil when
+    /// no turn reported usage yet.
+    public static func tokens(_ messages: [Message]) -> Int? {
+        var total = 0.0
+        var any = false
+        for message in messages {
+            guard let usage = message.digest?.usage else { continue }
+            any = true
+            let input = usage.input.flatMap { $0.isFinite ? $0 : nil } ?? 0
+            let output = usage.output.flatMap { $0.isFinite ? $0 : nil } ?? 0
+            total += input + output
+        }
+        return any ? Int(total.rounded()) : nil
+    }
+
+    /// "12.4k", or nil when nothing worth showing (`tokensLabel`).
+    public static func tokensLabel(_ messages: [Message]) -> String? {
+        guard let tokens = tokens(messages), tokens > 0 else { return nil }
+        return BotUsageTotal.formatTokens(tokens)
+    }
+}

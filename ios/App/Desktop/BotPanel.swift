@@ -2,9 +2,11 @@
 // trailing edge from 1024 pt, over the leading edge below
 // (`max-lg:absolute`). Its tabs are the current desktop's
 // (`bot-settings/panel-tabs.ts`): Activity | Library. Edit bot is a
-// pencil on the mascot and the first entry of the bot's one "..." menu
+// pencil on the mascot and the first entry of the bot's actions menu
 // (`BotActionsMenu.tsx`, #518), which also holds Rename, the Primary Bot,
-// the export and Archive. Edit bot / the gear open the bot's profile page
+// the export and Archive. As on the desktop (`trigger={false}`), the top
+// bar has no "..." button: the menu opens from a right click or a long
+// press on the mascot or the name. Edit bot / the gear open the bot's profile page
 // in the main column (#2136 / #1939), on Identity from the menu and on
 // Appearance from a tap on the mascot. The name and label are edited where
 // they show, under the mascot (`InlineEditableText.tsx`). Which tabs and
@@ -12,8 +14,7 @@
 // (CompanionCore), from `SurfaceGate`.
 //
 // Sizes from desktop-1366x1024-33-panel-details.json: top bar 48 with 36 pt
-// round buttons at y 6 (Export, Inspector when the
-// Appearance switch shows it, Close), the 112x119 mascot button at y 72 (it
+// round buttons at y 6 (the gear, Close), the 112x119 mascot button at y 72 (it
 // opens the character editor), the name 17/24 medium in a 28 pt button at
 // y 211, the label 12.5/16 at y 241, the description 11.5/16 at y 263, tabs
 // 13/20 at y 299 (px 6, py 4, radius 6, selected `elevated-hover`), the body
@@ -57,8 +58,6 @@ private struct BotPanelContent: View {
     let docked: Bool
 
     @State private var sharedFile: ShareFile?
-    /// The bot's one "..." menu (`BotActionsMenu.tsx`, #518).
-    @State private var menuOpen = false
     @State private var viewerId: String?
     @State private var renaming = false
     @State private var renameDraft = ""
@@ -83,7 +82,12 @@ private struct BotPanelContent: View {
             AnyView(topBar)
             ScrollView {
                 VStack(spacing: 0) {
-                    AnyView(BotPanelIdentity(bot: current, editing: $inlineEditing))
+                    AnyView(
+                        BotPanelIdentity(bot: current, editing: $inlineEditing)
+                            .contextMenu { actionsMenu }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("bot-panel.identity")
+                    )
                     AnyView(tabRow)
                         .padding(.top, 16)
                         .padding(.bottom, 12)
@@ -165,12 +169,6 @@ private struct BotPanelContent: View {
             }
             .accessibilityIdentifier("desktop-panel-gear")
             Spacer(minLength: 0)
-            DesktopRoundButton(systemImage: "ellipsis", label: "Bot menu", active: menuOpen, icon: .ellipsis) { menuOpen.toggle() }
-                .overlay(alignment: .topTrailing) {
-                    if menuOpen { actionsMenu }
-                }
-                .zIndex(1)
-                .accessibilityIdentifier("desktop-panel-menu")
             DesktopRoundButton(systemImage: "xmark", label: "Close", icon: .x) { model.togglePanel() }
                 .keyboardShortcut(inlineEditing ? KeyboardShortcut("w", modifiers: [.command, .control, .option, .shift]) : KeyboardShortcut(.escape, modifiers: []))
                 .accessibilityIdentifier("desktop-panel-close")
@@ -192,36 +190,23 @@ private struct BotPanelContent: View {
         )
     }
 
-    /// The bot's one "..." menu (lot 6): Primary, Redo the wizard, Share;
-    /// Export; Archive, Delete, Inspector. Edit bot and Rename left.
+    /// The bot's actions menu (lot 6): Primary, Redo the wizard, Share;
+    /// Export; Archive, Delete, Inspector. Edit bot and Rename lead. Opened
+    /// from the mascot or the name (desktop `onContextMenu`).
+    @ViewBuilder
     private var actionsMenu: some View {
         let plan = menuPlan
-        return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(plan.groups.enumerated()), id: \.offset) { index, group in
-                if index > 0 {
-                    Rectangle().fill(theme.border).frame(height: 0.5).padding(.horizontal, 8).padding(.vertical, 4)
-                }
-                if group.contains(.copyConversation) {
-                    Text("Export conversation")
-                        .font(theme.font(12))
-                        .foregroundStyle(theme.inkSecondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                }
+        ForEach(Array(plan.groups.enumerated()), id: \.offset) { _, group in
+            Section {
                 ForEach(group, id: \.self) { item in
                     menuRow(item, enabled: plan.enables(item) && !(item == .makePrimary && primaryWorking))
                 }
+            } header: {
+                if group.contains(.copyConversation) {
+                    Text("Export conversation")
+                }
             }
         }
-        .padding(6)
-        .frame(width: 248, alignment: .leading)
-        .background(theme.menu, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-        .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
-        .fixedSize()
-        .alignmentGuide(.top) { d in d[.top] - 40 }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("desktop-panel-actions")
     }
 
     @ViewBuilder
@@ -242,13 +227,13 @@ private struct BotPanelContent: View {
             case .inspector: return ("ladybug", "Inspector")
             }
         }()
-        DesktopMenuRow(systemImage: icon, title: Text(title)) {
-            menuOpen = false
+        Button(role: item == .delete || item == .archive ? .destructive : nil) {
             perform(item)
+        } label: {
+            Label(title, systemImage: icon)
         }
         .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.4)
-        .accessibilityIdentifier("desktop-panel-action.\(item.rawValue)")
+        .accessibilityIdentifier("bot-panel.action.\(item.rawValue)")
     }
 
     private func perform(_ item: BotActionsMenuItem) {

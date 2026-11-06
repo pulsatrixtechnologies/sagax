@@ -38,9 +38,15 @@ struct BotProfilePage: View {
     var mailRow: BotInboundMailRow?
     /// iPad main column (#2136): X sits on the banner; no navigation back.
     var fillsMain = false
+    /// Unfold Appearance in the page (an avatar click, Edit bot > Appearance):
+    /// the desktop's `personaCategoryForSection(section) === "appearance"`.
+    var openAppearance = false
+    /// Told once the page has unfolded Appearance for `openAppearance`.
+    var onAppearanceOpened: (() -> Void)?
 
     @State private var tab: BotProfileTab
     @State private var settingsOpen = false
+    @State private var appearanceOpen: Bool
     @StateObject private var owlHandle = OwlMascotHandle()
 
     init(
@@ -50,7 +56,9 @@ struct BotProfilePage: View {
         actions: BotEditActions,
         slackURL: URL? = nil,
         mailRow: BotInboundMailRow? = nil,
-        fillsMain: Bool = false
+        fillsMain: Bool = false,
+        openAppearance: Bool = false,
+        onAppearanceOpened: (() -> Void)? = nil
     ) {
         self.bot = bot
         self.startTab = startTab
@@ -59,6 +67,9 @@ struct BotProfilePage: View {
         self.slackURL = slackURL
         self.mailRow = mailRow
         self.fillsMain = fillsMain
+        self.openAppearance = openAppearance
+        self.onAppearanceOpened = onAppearanceOpened
+        _appearanceOpen = State(initialValue: fillsMain && openAppearance)
         // Settings is no longer a tab (#2136); land on General.
         _tab = State(initialValue: startTab == .settings ? .general : startTab)
         _settingsOpen = State(initialValue: startTab == .settings)
@@ -126,6 +137,8 @@ struct BotProfilePage: View {
             }
         }
         .navigationBarHidden(fillsMain)
+        .onAppear { unfoldAppearanceIfAsked(openAppearance) }
+        .onValueChange(of: openAppearance) { unfoldAppearanceIfAsked($0) }
         // Keep children queryable for UITests (tabs, Settings disclosure).
         .accessibilityIdentifier("bot-profile-page")
     }
@@ -278,24 +291,11 @@ struct BotProfilePage: View {
                 .contentShape(Rectangle())
                 .onTapGesture { playMove() }
                 .accessibilityIdentifier("bot-profile-mascot")
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: headline)
-                        .font(.system(size: 28, weight: .regular))
-                        .foregroundStyle(desktopTheme.ink)
-                        .lineLimit(2)
-                        .accessibilityIdentifier("bot-profile-name")
-                    if let titleLine {
-                        Text(verbatim: titleLine)
-                            .font(.system(size: 15))
-                            .foregroundStyle(desktopTheme.inkSecondary)
-                            .lineLimit(2)
-                            .accessibilityIdentifier("bot-profile-title")
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // The name at 28 and the label under it, edited in place.
+                BotProfileHeroIdentity(bot: current)
                 VStack(spacing: 8) {
                     heroButton("sparkles", "Play a move", id: "bot-profile-play") { playMove() }
-                    heroButton("paintpalette", "Appearance", id: "bot-profile-appearance") { actions.editAvatar() }
+                    appearanceToggle
                 }
                 .fixedSize()
             }
@@ -317,17 +317,24 @@ struct BotProfilePage: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(desktopTheme.hairlineWeak, lineWidth: 1)
             )
+            // A picture dropped on the hero, or pasted from its menu, becomes the avatar.
+            .botProfileHeroImageTarget(current)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("bot-profile-hero")
-            HStack(spacing: 6) {
-                Image(systemName: "lock")
-                    .font(.system(size: 12))
-                Text(verbatim: privacy)
-                    .font(.system(size: 13.5))
+            // Who sees it, the owner, then the description typed in place.
+            BotProfileHeroDetails(bot: current, audience: privacy)
+            // Appearance unfolds here, in the page (never a sheet or a window).
+            if appearanceOpen {
+                PersonaAppearancePane(bot: current)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(.top, 4)
+                    .accessibilityElement(children: .contain)
+                    // The id the Edit bot page used, so its deep links still find it.
+                    .accessibilityIdentifier("desktop-persona-window.page.appearance")
+                    .transition(.opacity)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("bot-profile.hero.appearance")
             }
-            .foregroundStyle(desktopTheme.inkSecondary)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("bot-profile-privacy")
         }
         .padding(.horizontal, 24)
         .padding(.top, -40)
@@ -351,6 +358,43 @@ struct BotProfilePage: View {
         .accessibilityIdentifier(id)
     }
 
+    /// Where Randomize was (#2313): unfolds the Appearance pane under the
+    /// header, the chevron turning, the pill lit while it is open.
+    private var appearanceToggle: some View {
+        Button {
+            Haptics.selection()
+            withAnimation(.snappy(duration: 0.2)) { appearanceOpen.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "paintpalette").font(.system(size: 12))
+                Text("Appearance").font(.system(size: 13))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+                    .rotationEffect(.degrees(appearanceOpen ? 180 : 0))
+            }
+            .foregroundStyle(desktopTheme.ink)
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .frame(maxWidth: .infinity)
+            .background(
+                appearanceOpen ? desktopTheme.raisedHover : desktopTheme.control.opacity(0.7),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(desktopTheme.hairlineWeak, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(Text(appearanceOpen ? "Expanded" : "Collapsed"))
+        .accessibilityAddTraits(appearanceOpen ? [.isSelected, .isButton] : .isButton)
+        .accessibilityIdentifier("bot-profile.hero.appearance-toggle")
+    }
+
+    private func unfoldAppearanceIfAsked(_ asked: Bool) {
+        guard asked, fillsMain else { return }
+        withAnimation(.snappy(duration: 0.2)) { appearanceOpen = true }
+        onAppearanceOpened?()
+    }
+
     /// One move on the stage: a wing move for the owl, a Shapes move for a shape.
     private func playMove() {
         Haptics.selection()
@@ -358,7 +402,43 @@ struct BotProfilePage: View {
         if let shape = ShapeMove.allCases.randomElement() { owlHandle.shape(shape) }
     }
 
+    @ViewBuilder
     private var tabPills: some View {
+        if fillsMain { mainTabs } else { phoneTabPills }
+    }
+
+    /// The desktop's tab row (`data-bot-profile-tabs`): pills on the left
+    /// edge of the column, the selected one on the hover fill.
+    private var mainTabs: some View {
+        HStack(spacing: 4) {
+            ForEach(BotProfileTab.visible) { item in
+                let on = tab == item
+                Button {
+                    Haptics.selection()
+                    withAnimation(.snappy(duration: 0.2)) { tab = item }
+                } label: {
+                    Text(item.title)
+                        .font(.system(size: 14))
+                        .foregroundStyle(on ? desktopTheme.ink : desktopTheme.inkSecondary)
+                        .padding(.horizontal, 14)
+                        .frame(height: 32)
+                        .background(Capsule().fill(on ? desktopTheme.hover : Color.clear))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(item.title))
+                .accessibilityAddTraits(on ? [.isSelected, .isButton] : .isButton)
+                .accessibilityIdentifier("bot-profile-tab.\(item.rawValue)")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24)
+        .padding(.top, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("bot-profile-tabs")
+    }
+
+    private var phoneTabPills: some View {
         HStack(spacing: 4) {
             ForEach(BotProfileTab.visible) { item in
                 let on = tab == item

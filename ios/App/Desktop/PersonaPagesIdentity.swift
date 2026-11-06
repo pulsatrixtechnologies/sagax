@@ -230,8 +230,9 @@ struct PersonaIdentityPage: View {
 
 /// `InlineEditableText`: the value as a button (the pencil shows on a touch
 /// screen, `touch:opacity-100`), a field in its place while editing; leaving
-/// it or Return saves, an emptied required value goes back.
-private struct PersonaInlineText: View {
+/// it or Return saves, an emptied required value goes back. Shared with the
+/// bot profile hero (BotProfileHero.swift).
+struct PersonaInlineText: View {
     @Environment(\.desktopTheme) private var theme
     let value: String
     let placeholder: LocalizedStringKey?
@@ -259,7 +260,12 @@ private struct PersonaInlineText: View {
                     .foregroundStyle(theme.ink)
                     .focused($focused)
                     .submitLabel(.done)
-                    .onSubmit { focused = false }
+                    .onSubmit {
+                        // Return saves on its own: the focus change may not reach
+                        // this view when the desktop shell keeps keyboard focus.
+                        commit(onSave)
+                        focused = false
+                    }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
                     .frame(height: line + 4)

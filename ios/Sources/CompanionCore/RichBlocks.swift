@@ -1240,10 +1240,28 @@ public struct DigestAccess: Codable, Hashable, Sendable {
 /// The structured part of a turn digest the phone reads. The rest of the
 /// digest stays in the message text (`DigestSummary`).
 public struct MessageDigest: Codable, Hashable, Sendable {
-    public var access: DigestAccess?
+    /// The turn's token usage (`TurnDigest.usage`). Numbers stay Double so a
+    /// fractional or odd value never fails the whole message.
+    public struct Usage: Codable, Hashable, Sendable {
+        public var input: Double?
+        public var output: Double?
+        public var cachedInput: Double?
+        public var costUsd: Double?
 
-    public init(access: DigestAccess? = nil) {
+        public init(input: Double? = nil, output: Double? = nil, cachedInput: Double? = nil, costUsd: Double? = nil) {
+            self.input = input
+            self.output = output
+            self.cachedInput = cachedInput
+            self.costUsd = costUsd
+        }
+    }
+
+    public var access: DigestAccess?
+    public var usage: Usage?
+
+    public init(access: DigestAccess? = nil, usage: Usage? = nil) {
         self.access = access
+        self.usage = usage
     }
 }
 

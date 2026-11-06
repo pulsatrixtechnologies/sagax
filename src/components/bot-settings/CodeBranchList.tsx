@@ -25,6 +25,7 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
 import { openExternalLink } from "@/lib/app-links";
+import { copyText } from "@/lib/copy-text";
 import { writeComputerPanelView } from "@/lib/computer-panel-view";
 import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
 import {
@@ -603,10 +604,9 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
       case "copyLink": {
         const url = branch.url;
         if (!url) return;
-        void navigator.clipboard?.writeText(url).then(
-          () => patch(key, { note: { tone: "ok", text: t("botPanel.branch.done.copyLink") } }),
-          () => patch(key, { note: { tone: "error", text: t("botPanel.branch.error.copyLink") } }),
-        );
+        void copyText(url).then((result) => patch(key, result === "copied"
+          ? { note: { tone: "ok", text: t("botPanel.branch.done.copyLink") } }
+          : { note: { tone: "error", text: t("botPanel.branch.error.copyLink") } }));
         return;
       }
       case "ignore":

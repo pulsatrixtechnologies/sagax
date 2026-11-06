@@ -785,6 +785,28 @@
       }
     },
     {
+      "name": "message_user",
+      "description": "Message one person of your organization when the user asks you to write to, tell or ask someone by name. Sagax posts it, as you, in the group of exactly the user, that person and you (created when missing); their answer arrives there for you to read. If the name matches nobody or several people, ask the user; never guess.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "user": {
+            "type": "string",
+            "description": "The person's name, login or email, as the user said it."
+          },
+          "text": {
+            "type": "string",
+            "description": "The complete message, written for that person."
+          }
+        },
+        "required": [
+          "user",
+          "text"
+        ]
+      }
+    },
+    {
       "name": "react_to_message",
       "description": "React with one emoji to a message in this conversation, like a colleague in a chat, when a short acknowledgement says it: 👍 noted, ✅ a small thing you were asked is done, 👀 you are starting on something that takes a while, ❤️ or 🙏 for a thank-you, 🎉 for good news. Sparingly: most messages get none, one per message at most, never on your own messages. Never instead of an answer the person needs, and never together with a sentence that says the same thing: if the reaction says it all, end the turn without text (no empty reply is shown). Omit message_id for the message you are answering.",
       "inputSchema": {

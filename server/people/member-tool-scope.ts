@@ -198,6 +198,9 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   cloud_agent_follow_up: "own-account",
   cancel_cloud_agent: "own-account",
   archive_cloud_agent: "own-account",
+  // a message to another person in the owner's name (#2118): the person's own
+  // card at their own approval level, never answered by Sagax for them
+  message_user: "own-account",
 });
 
 /** The agents tools that keep the admin gate when they would touch the

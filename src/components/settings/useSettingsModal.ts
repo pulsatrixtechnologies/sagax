@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { decisionModelEnabled } from "@/lib/feature-flags";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { servedPage } from "@/lib/desktop";
 import { navigate } from "@/lib/view-transitions";
@@ -103,8 +102,8 @@ export function useSettingsModal() {
     if (id === "activity" && !(servedPage() && (ownerOrAdmin === true || (perspicaxOrg !== null && viewerCan(state.config, "people.activityLog"))))) return false;
     // Installation writes the server refuses with 403: hide the section.
     if (memberHidesSection(id, { editConfig, manageComputers, manageBackups, organization, manageExperimental, personalSettings: state.config?.personalSettings === true })) return false;
-    // Decision model is experimental, off until its switch is on.
-    if (id === "decisionModel" && !decisionModelEnabled(state.config)) return false;
+    // #2093: Decision model always shows on Models; its own master switch
+    // is the only control (no Experimental gate).
     // Simple hides technical sections. Their saved values stay.
     return advanced || !simpleHidesSettingsSection(id);
   };

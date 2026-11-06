@@ -7724,8 +7724,12 @@ describe("harness HTTP API", () => {
         if (mode === "auto") expect(await permissionModeOf(bot.id, opened[0]!)).toBe("acceptEdits");
       }
       const full = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full", applyToAllThreads: true });
-      expect(full.status).toBe(403);
-      expect(full.body.error).toMatch(/desktop app/i);
+      // Full access is a level a person turns on for their own bot (#2111):
+      // the team-wide patch reaches every thread like the safe levels.
+      expect(full.status).toBe(200);
+      expect(levels(full.body.bot)).toEqual(["full", "full", "full"]);
+      const back = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "ask", applyToAllThreads: true });
+      expect(back.status).toBe(200);
       const after = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
       expect(levels(after)).toEqual(["ask", "ask", "ask"]);
       expect(await permissionModeOf(bot.id, opened[1]!)).toBe("default");
@@ -9046,7 +9050,11 @@ describe("harness HTTP API", () => {
       // of asking the person for the same exact read again.
       const nextTask = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Later work" });
       expect(nextTask.status).toBe(201);
-      expect(nextTask.body.task.alwaysAllow).toContain(linearCard.allowKey);
+      // A following thread stores no grants of its own (#1169/#1170): it
+      // reads the bot's, which now hold the key.
+      expect(nextTask.body.task.alwaysAllow).toBeUndefined();
+      const savedBot = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
+      expect(savedBot.alwaysAllow).toContain(linearCard.allowKey);
     } finally {
       for (const conn of conns) conn.destroy();
       await api("POST", `/api/bots/${bot.id}/interrupt`);

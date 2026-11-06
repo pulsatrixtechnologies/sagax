@@ -32,6 +32,7 @@ import {
 import { appendDecision, decisionCall } from "../decision-log.ts";
 import { cardStandingGrants, orgServerExecRouting } from "../exec-target.ts";
 import { providerLabel } from "../memes/providers.ts";
+import { providerMcpTool, providerToolAllowKey } from "../provider-tool-allow.ts";
 import { deliverableNotification } from "../notify.ts";
 import {
   memberEnvironmentAutonomyAllowed,
@@ -443,6 +444,20 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         });
         break;
       }
+      // A person may remember one exact read-shaped tool from one configured
+      // MCP server. Bind it to the provider and current server config: a
+      // provider switch or server edit invalidates the grant rather than
+      // silently transferring it. Built-in tools and unconfigured/spoofed
+      // server names never get a durable key. Never on a member's bot (one
+      // action at a time) nor on an admin's card, nor a call bound for another person's place.
+      const providerInstanceId = asker ? event.providerInstanceId ?? asker.modelSelection.instanceId : "";
+      const providerTool = permission && asker && event.requestId && !event.requiresExplicitApproval && !guestDriven && !strictCard && !foreignDestination && !memberAsker
+        ? providerMcpTool(event.tool)
+        : null;
+      const configuredMcp = providerTool && asker ? host.engineMcpServers(asker, event.threadId)[providerTool.server] : undefined;
+      const toolAllowKey = configuredMcp === undefined
+        ? null
+        : providerToolAllowKey(providerInstanceId, event.tool, configuredMcp);
       // 2026-10-21 (parité 1C): a message send whose every recipient is on
       // the bot's allowed recipients goes with no card (shared/allowed-recipients.ts).
       const recipientsListed = Boolean(permission && asker && event.requestId && !strictCard && !guestDriven && !foreignDestination
@@ -461,6 +476,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
           requiresExplicitApproval: event.requiresExplicitApproval,
           sagaxGate: event.sagaxGate === true,
           ruleAllowed: Boolean(gateAllowKey && !strictCard && !guestDriven && !gateGrantBlocked && host.botForThread(asker.id, event.threadId)?.alwaysAllow?.includes(gateAllowKey)),
+          providerToolAllowed: Boolean(toolAllowKey && host.botForThread(asker.id, event.threadId)?.alwaysAllow?.includes(toolAllowKey)),
           commandAllowed: Boolean(command && host.commandAllowlist.matches(asker.id, command)),
           safetyHold: safetyEffect?.kind === "hold",
           // A gate card stays a person's choice. Reads the gate already
@@ -857,7 +873,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
             : undefined,
           ...(event.pageTargetChoice ? { pageTargetChoice: event.pageTargetChoice } : {}),
           commandAllowlist: command ?? undefined,
-          ...(gateAllowKey && !strictCard && grantsOffered && !guestDriven && !gateGrantBlocked ? { allowKey: gateAllowKey } : {}),
+          ...(gateAllowKey && !strictCard && grantsOffered && !guestDriven && !gateGrantBlocked ? { allowKey: gateAllowKey } : toolAllowKey ? { allowKey: toolAllowKey } : {}),
           // Provider-owned session grants remain separate from exact commands.
           // a member's bot is approved one action at a time: a session rule
           // (Claude's own suggestion) could reach past its workspace, except

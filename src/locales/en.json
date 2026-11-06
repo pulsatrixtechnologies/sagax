@@ -3592,7 +3592,7 @@
   "room.leave.title": "Leave {name}?",
   "room.leave.body": "The group leaves your sidebar and you stop getting its messages and notifications. Your messages stay for the others, and your private bots leave with you. Someone in the group can add you back.",
   "room.leave.owner": "You own this group: it passes to the person who has been in it the longest.",
-  "room.leave.last": "You are the last person in it: the group will be archived.",
+  "room.leave.last": "You are the last person in it, so you cannot leave. Delete the group instead.",
   "room.roster.left": "{name} left the group",
   "groupPanel.ownerOnly": "Only the group's owner can change these settings.",
   "groupPanel.people": "People",

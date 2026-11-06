@@ -1717,7 +1717,6 @@
   "room.leave.title": "¿Salir de {name}?",
   "room.leave.body": "Sale de tu barra lateral y dejas de recibir sus mensajes y notificaciones. Tus mensajes quedan para los demás y tus bots privados salen contigo. Alguien del grupo puede volver a añadirte.",
   "room.leave.owner": "Este grupo es tuyo: pasa a la persona que lleva más tiempo en él.",
-  "room.leave.last": "Eres la última persona: el grupo se archivará.",
   "room.roster.left": "{name} salió del grupo",
   "access.signInRequested": "{bot} te pide que inicies sesión en {engine}. Inicias sesión tú mismo; el bot nunca ve tu inicio de sesión.",
   "appearance.playMove": "Reproducir un movimiento",

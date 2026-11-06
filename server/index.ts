@@ -11547,6 +11547,7 @@ const soloGoalReceipts = new Map<string, Message>();
 installMainRuntimeEventSubscriber(bus, () => ({
   get reportBackgroundError() { return reportBackgroundError; },
   get EXEC_USE_BOT_COMPUTER() { return EXEC_USE_BOT_COMPUTER; },
+  get engineMcpServers() { return engineMcpServers; },
   get HIDDEN_APPROVAL_TTL_MS() { return HIDDEN_APPROVAL_TTL_MS; },
   get IDENTITY() { return IDENTITY; },
   get MODEL_ACCESS_DISABLED_MESSAGE() { return MODEL_ACCESS_DISABLED_MESSAGE; },

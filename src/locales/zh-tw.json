@@ -3485,7 +3485,6 @@
   "room.leave.title": "退出 {name}？",
   "room.leave.body": "它會從側邊欄移除，你將不再收到它的訊息和通知。你的訊息會為其他人保留，你的私人機器人會隨你一起離開。群組中的人可以重新加入你。",
   "room.leave.owner": "你是這個群組的擁有者：它將轉交給加入時間最長的人。",
-  "room.leave.last": "你是最後一個人：群組將被封存。",
   "room.roster.left": "{name} 已退出群組",
   "access.signInRequested": "{bot} 請你登入 {engine}。由你自己登入；機器人永遠看不到你的登入資訊。",
   "appearance.playMove": "播放動作",

@@ -488,7 +488,9 @@ describe("Plugins, driven like the owner does", () => {
       // the plugin's server page: Open the GitHub plugin leads there too
       await go("installed");
       await click(githubRow());
-      await click([...host.querySelectorAll<HTMLElement>("[data-plugins-detail] li button")].find((button) => button.textContent?.includes("github-github"))!);
+      // the server rows sit behind the collapsed Tools card (Connect Apps parity, #2104)
+      await click($("[data-plugin-tools-toggle]"));
+      await click($('[data-plugin-tool-open="github-github"]'));
       expect($("[data-plugins-detail]")?.getAttribute("data-plugins-detail")).toBe("mcp:github-github");
       expect($("[data-mcp-open-github]")?.textContent).toBe("Open the GitHub plugin");
       await click($("[data-mcp-open-github]"));

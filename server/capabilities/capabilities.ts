@@ -93,8 +93,9 @@ export interface SkillInput {
   name: string;
   description: string;
   enabled: boolean;
-  /** private (the bot's own copy), library (Organisation assignment), or me
-   * (person's shared Me library; usually fed through personalSkills) */
+  /** private (the bot's own copy), library (Organisation assignment), me
+   * (person's shared Me library; usually fed through personalSkills), or
+   * native (engine folders; listing only, #3459) */
   origin: "private" | "library" | "me" | "native";
   /** manifest source (`org:` for the organization library, a URL...) */
   source: string;

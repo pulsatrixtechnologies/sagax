@@ -443,13 +443,13 @@ describe("CursorAgentDriver", () => {
       const timeouts: Array<{ delay: number; cb: () => void }> = [];
       const realSetTimeout = globalThis.setTimeout;
       const realClearTimeout = globalThis.clearTimeout;
-      const setSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((cb: any, delay?: number, ...args: unknown[]) => {
+      const setSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((cb: unknown, delay?: number, ...args: unknown[]) => {
         if (typeof cb === "function" && delay === 15 * 60_000) {
-          timeouts.push({ delay: delay!, cb: () => cb(...args as never[]) });
+          timeouts.push({ delay: delay!, cb: () => (cb as (...cbArgs: unknown[]) => void)(...args) });
           return 0 as unknown as ReturnType<typeof setTimeout>;
         }
-        return realSetTimeout(cb, delay, ...args);
-      }) as typeof setTimeout);
+        return realSetTimeout(cb as Parameters<typeof realSetTimeout>[0], delay, ...args);
+      }) as unknown as typeof setTimeout);
       const clearSpy = vi.spyOn(globalThis, "clearTimeout").mockImplementation((id) => {
         if (id === 0) return;
         return realClearTimeout(id);

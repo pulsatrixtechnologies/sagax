@@ -466,7 +466,7 @@ function BotPane({ leafId, bot, threadId, target, onClose }: { leafId: string; b
     />
   );
   // Until the thread loads, the same pill with a still mascot.
-  const loadingPill = <BotHeaderPill name={bot.name} panelOpen={panel.open} onToggle={panel.onToggle} avatar={<BotAvatar bot={bot} state="idle" size={22} animated={false} />} />;
+  const loadingPill = <BotHeaderPill name={bot.name} label={bot.title} panelOpen={panel.open} onToggle={panel.onToggle} avatar={<BotAvatar bot={bot} state="idle" size={22} animated={false} />} />;
   return (
     <section aria-label={label} data-split-pane={`bot:${bot.id}`} className="relative flex h-full min-h-0 w-full min-w-0 flex-col bg-app">
       {transcript.loaded ? <ChatView bot={paneBot} side={{ header, label, panel, loadOlder: transcript.loadOlder, loadingOlder: transcript.loadingOlder }} /> : <PaneLoading header={header(loadingPill)} failed={transcript.failed} />}

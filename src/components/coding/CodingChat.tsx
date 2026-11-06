@@ -389,6 +389,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
           <div data-coding-bot="" className="flex min-w-0 max-w-[45%] shrink-0">
             <BotHeaderPill
               name={party.name}
+              label={bot?.title}
               panelOpen={chat?.panelOpen ?? false}
               onToggle={() => chat?.onTogglePanel()}
               avatar={<PartyAvatar id={party.id} bot={party} size={22} />}

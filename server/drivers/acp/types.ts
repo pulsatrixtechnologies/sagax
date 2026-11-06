@@ -441,7 +441,7 @@ export interface AcpSupport {
     /** Last model acknowledged by session/new/load/set_model, preserved for pooled turns. */
     currentModelId?: string;
     /** session/new's or session/load's `configOptions`, verbatim. */
-    configOptions: Array<{ id?: unknown; currentValue?: unknown }>;
+    configOptions: Array<{ id?: unknown; currentValue?: unknown; category?: unknown }>;
     /** True when this turn prompts a live session that did not run
      * session/new or session/load (same MCP mounts still connected). */
     reused?: boolean;

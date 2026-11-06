@@ -2830,7 +2830,7 @@
   "room.leave.title": "Quitter {name} ?",
   "room.leave.body": "Le groupe quitte votre barre latérale et vous ne recevez plus ses messages ni ses notifications. Vos messages restent pour les autres, et vos bots privés partent avec vous. Une personne du groupe peut vous rajouter.",
   "room.leave.owner": "Ce groupe vous appartient : il passe à la personne qui en fait partie depuis le plus longtemps.",
-  "room.leave.last": "Vous êtes la dernière personne du groupe : il sera archivé.",
+  "room.leave.last": "Vous êtes la dernière personne du groupe : vous ne pouvez pas le quitter. Supprimez-le plutôt.",
   "room.roster.left": "{name} a quitté le groupe",
   "groupPanel.ownerOnly": "Seul le propriétaire du groupe peut modifier ces réglages.",
   "groupPanel.people": "Gens",

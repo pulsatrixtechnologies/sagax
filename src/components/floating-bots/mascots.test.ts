@@ -126,7 +126,9 @@ describe("a bot's character and its look", () => {
     // a bot's mascot is never drawn straight from the owl or the old cursor body outside these files
     const allowed = new Set(["Avatar.tsx", "OwlAvatar.tsx", "OwlSkinFx.tsx", "mascots.tsx", "MascotLookEditor.tsx", "FloatingBotWindow.tsx", "AssistantArt.tsx", "RetroAssistant.tsx", "Owl25D.tsx", "CursorAvatar.tsx",
       // an achievement reward's skin preview (the toast, the achievements page), not a bot
-      "RewardPreview.tsx"]);
+      "RewardPreview.tsx",
+      // the retro assistant dialogs preview the owl look being picked, not a bot
+      "RetroAssistantDialogs.tsx"]);
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {

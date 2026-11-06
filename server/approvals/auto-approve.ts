@@ -239,6 +239,8 @@ export function autoVerdict(
     /** The person saved an Allow rule for this exact gated MCP tool
      * (BotRecord.alwaysAllow "mcp:<server>__<tool>"). */
     ruleAllowed?: boolean;
+    /** The person's durable grant for this exact read-shaped MCP tool (provider-tool allow key). */
+    providerToolAllowed?: boolean;
     /** Safety review: the person must accept this call. Full and Auto do not. */
     safetyHold?: boolean;
     /** Safety review: a read-only call may run without a card. */
@@ -363,10 +365,11 @@ export function autoVerdict(
   // "Toujours permettre" off, no standing grant answers (a saved Allow rule
   // of a gate, a saved command, an allow rule in the person's words); each
   // call is approved on its card.
-  if (context && !standingGrantsAllowed({ ownSandbox: context.ownSandbox === true }) && (context.ruleAllowed || context.commandAllowed || context.customRule?.behavior === "allow" || context.recipientsAllowed)) {
+  if (context && !standingGrantsAllowed({ ownSandbox: context.ownSandbox === true }) && (context.ruleAllowed || context.providerToolAllowed || context.commandAllowed || context.customRule?.behavior === "allow" || context.recipientsAllowed)) {
     context = {
       ...context,
       ruleAllowed: false,
+      providerToolAllowed: false,
       commandAllowed: false,
       recipientsAllowed: false,
       ...(context.customRule?.behavior === "allow" ? { customRule: undefined } : {}),
@@ -446,6 +449,7 @@ export function autoVerdict(
   // Full's promise is literal: even a sandbox widening is approved. Entering
   // Full is separately consent-gated by the bot PATCH endpoint, and the
   // request.opened caller invokes this for permissions only, never questions.
+  if (context?.providerToolAllowed) return { approve: `approved ${tool} (your Allow rule)`, source: "allow-rule" };
   if (context?.sagaxGate && context.ruleAllowed) return { approve: `approved ${tool} (your Allow rule)`, source: "allow-rule" };
   // A gate card in a class the person protects with a security key is the
   // one personal rule a Full turn still meets here (#648).

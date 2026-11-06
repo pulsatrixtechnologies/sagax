@@ -1,15 +1,15 @@
 // @ts-nocheck
 /** resumeTurnsCutByRestart (#1388). Pure move from server/index.ts. */
-import { migrateLegacyHeldSteers, resumePromptWithHeld, takeHeldSteersForThread } from "../turns/held-steers.ts";
-import { ROUTINE_RESUME_PROMPT } from "../routines/routines.ts";
-import { TURN_RESUME_PROMPT, takeInterruptedTurns } from "../turns/interrupted-turns.ts";
+import { failedTurnTool } from "../../shared/failed-turn.ts";
+import { DATA_DIR } from "../config.ts";
+import { ROUTINE_RESTARTED, ROUTINE_RESUME_PROMPT } from "../routines/routines.ts";
+import { migrateLegacyHeldSteers, takeHeldSteersForThread, resumePromptWithHeld } from "../turns/held-steers.ts";
+import { takeInterruptedTurns, TURN_RESUME_PROMPT } from "../turns/interrupted-turns.ts";
 export type Host = Record<string, any>;
 
 export function createResumeTurnsCutByRestart(getHost: () => Host): any {
-function resumeTurnsCutByRestart() {
+function resumeTurnsCutByRestart(): void {
   const host = getHost();
-  const { DATA_DIR, ROUTINE_RESTARTED } = host;
-
   // Pre-at-rest held journal (DATA_DIR/held-steers.json) → per-thread sealed files.
   try { migrateLegacyHeldSteers(DATA_DIR); }
   catch (error) { console.warn(`held-steers: legacy migrate failed: ${error instanceof Error ? error.message : String(error)}`); }
@@ -23,7 +23,8 @@ function resumeTurnsCutByRestart() {
     // older release's queue) would start work it may no longer want.
     host.legacyHandoffsDropped.add(threadId);
     host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
-    void host.startTurn(run.botId, ROUTINE_RESUME_PROMPT, { threadId, cardContinuation: true })
+    const speaker = host.threadContinuationSpeaker(threadId, run);
+    void host.startTurn(run.botId, ROUTINE_RESUME_PROMPT, { threadId, cardContinuation: true, ...(speaker ? { speaker } : {}) })
       .catch((error) => host.routines?.failRunById(run.id, `${ROUTINE_RESTARTED}: ${error instanceof Error ? error.message : String(error)}`));
   }
   let cut: ReturnType<typeof takeInterruptedTurns>;
@@ -34,11 +35,11 @@ function resumeTurnsCutByRestart() {
     return;
   }
   const failed = (threadId: string, why: string) =>
-    host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: host.failedTurnTool(why) });
+    host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: failedTurnTool(why) });
   for (const turn of cut.stale) if (host.store.taskByThread(turn.botId, turn.threadId)) failed(turn.threadId, "turn interrupted — Sagax restarted");
   const resumedThreads = new Set<string>();
   for (const turn of cut.resume) {
-    if (!host.store.taskByThread(turn.botId, turn.threadId) || host.threadBusy(turn.botId, turn.threadId)) continue;
+    if (!host.store.taskByThread(turn.botId, turn.threadId) || host.threadBusy(turn.botId, turn.threadId) || host.coordinator.continuesAfterRestart(turn.threadId) || host.runtimeHoldsRoot(turn.threadId)) continue;
     host.store.appendMessage(turn.threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
     // Messages accepted into the cut turn stay answered once: fold them into
     // this resume (D2), then drop the durable rows so crash recovery does not
@@ -56,7 +57,6 @@ function resumeTurnsCutByRestart() {
   // Crash path (no interrupted-turns.json): held rows that no resume took
   // become one follow-up turn per thread, like busy lines draining together.
   host.resumeHeldSteersAfterCrash(resumedThreads);
-
 }
   return resumeTurnsCutByRestart;
 }

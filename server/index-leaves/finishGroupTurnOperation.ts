@@ -5,7 +5,8 @@ export type Host = Record<string, any>;
 export function createFinishGroupTurnOperation(getHost: () => Host): any {
 function finishGroupTurnOperation(groupId: string, operation: GroupTurnOperation) {
   const host = getHost();
-
+  // Nothing this thread reserved may outlive its drive.
+  host.roomMemberLock.releaseThread(operation.threadId);
   if (operation.goalRun && !operation.goalRun.finished) {
     host.finishGroupGoalRun(groupId, operation, "failed", "The team run ended before the lead reported an outcome.");
   }
@@ -26,7 +27,6 @@ function finishGroupTurnOperation(groupId: string, operation: GroupTurnOperation
   // harness, not whichever composer happened to be mounted. Hand the next
   // one to the ordinary channel runner as soon as the channel is truly idle.
   host.drainQueuedChannelSends();
-
 }
   return finishGroupTurnOperation;
 }

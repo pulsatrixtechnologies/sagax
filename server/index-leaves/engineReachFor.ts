@@ -1,14 +1,13 @@
 // @ts-nocheck
 /** engineReachFor (#1388). Pure move from server/index.ts. */
-import { claudeAiConnectorsForTurn } from "../harness-connectors.ts";
+import { isPrincipalId } from "../auth/principals.ts";
+import { grokAccountReach, grokReachConnectorNames } from "../drivers/acp/grok-tool-catalog.ts";
+import { claudeAiConnectorsForTurn, connectorPrincipalFor, grokCloudConnectorsForTurn } from "../harness-connectors.ts";
 export type Host = Record<string, any>;
 
 export function createEngineReachFor(getHost: () => Host): any {
-function engineReachFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot?: LoginSlot): Array<{ connector: string }> | null {
+function engineReachFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot: LoginSlot = getHost().turnSlotFor(bot, instance)): Array<{ connector: string }> | null {
   const host = getHost();
-  slot ??= host.turnSlotFor(bot, instance);
-  const { connectorPrincipalFor, grokCloudConnectorsForTurn, isPrincipalId } = host;
-
   const input = host.accountConnectorInput(bot, instance, speaker, via, slot);
   if (claudeAiConnectorsForTurn(input)) {
     const account = host.claudeAccountForPrincipal(connectorPrincipalFor(input));
@@ -25,15 +24,14 @@ function engineReachFor(bot: BotRecord, instance: Parameters<typeof withholdHost
   if (grokCloudConnectorsForTurn(input) && host.withholdHostToolsFor(instance) && bot.toolScope === undefined) {
     const principal = connectorPrincipalFor(input);
     if (!principal || !isPrincipalId(principal)) return null;
-    const reach = host.grokAccountReach(host.principalLoginDir(principal, "grokAgent", slot));
+    const reach = grokAccountReach(host.principalLoginDir(principal, "grokAgent", slot));
     if (!reach) {
       host.engineLogins?.warmReach(principal, instance.instanceId, slot);
       return null;
     }
-    return host.grokReachConnectorNames(reach).map((connector) => ({ connector }));
+    return grokReachConnectorNames(reach).map((connector) => ({ connector }));
   }
   return [];
-
 }
   return engineReachFor;
 }

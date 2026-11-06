@@ -1,20 +1,22 @@
 // @ts-nocheck
 /** delegateOnRuntime (#1388). Pure move from server/index.ts. */
-import { peerApprovalFailure } from "../peers/peer-approval.ts";
+import { requestPeerApproval, peerApprovalFailure } from "../peers/peer-approval.ts";
+import { receiptName, peerDeliveryReceipt } from "../peers/peer-delivery.ts";
+import { canReachPeer } from "../peers/peer-roster.ts";
 export type Host = Record<string, any>;
 
 export function createDelegateOnRuntime(getHost: () => Host): any {
-async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: string, capability: InternalCapability,   delegated: (taskId: string) => void, external = false, mode: "work" | "consult" = "work", key?: string) {
+async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: string, capability: InternalCapability,
+  delegated: (taskId: string) => void, external = false, mode: "work" | "consult" = "work", key?: string): Promise<[number, Record<string, unknown>]> {
   const host = getHost();
-  const { canReachPeer, requestPeerApproval, store } = host;
   const room = host.store.groupByThread(capability.threadId);
   const address = { ...(room ? { groupId: room.id } : {}), threadId: capability.threadId, botId: from.id };
   // The teammate's name as this sender may read it at the moment it is
   // written (receiptName): `target` is the live record, which a rename
   // patches in place while a card waits, so it is never trusted for a name.
-  const shownName = () => host.receiptName(host.store.bot(from.id), host.store.bot(target.id));
+  const shownName = () => receiptName(host.store.bot(from.id), host.store.bot(target.id));
   const refused = (detail: string, status = 200): [number, Record<string, unknown>] => [status, { error: detail,
-    receipt: host.peerDeliveryReceipt({ botId: target.id, botName: shownName(), outcome: "failed", detail: `${detail}: nothing was queued` }) }];
+    receipt: peerDeliveryReceipt({ botId: target.id, botName: shownName(), outcome: "failed", detail: `${detail}: nothing was queued` }) }];
   if (target.id === from.id) return refused("a bot cannot delegate to itself");
   const problem = host.roomHandoffProblem(address) ?? host.roomHandoffProblem({ threadId: target.threadId, botId: target.id }, address);
   if (problem) return refused(problem, 403);
@@ -48,9 +50,15 @@ async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: st
     { botId: from.id, name: from.name, kind: "work", threadId: address.threadId, at: Date.now() });
   if (!task) return refused("no such bot", 404);
   if (continued) host.adoptReservedWorkThread(target.id, task.threadId);
-  host.applyDelegatedLevel(from, address.threadId, host.store.bot(target.id)!, task.threadId);
+  host.applyDelegatedLevel(
+    from,
+    address.threadId,
+    host.store.bot(target.id)!,
+    task.threadId,
+    capability.roomHandoffId ?? capability.generation,
+  );
   try {
-    const sourceText = [...store.messagesFor(address.threadId)].reverse().find(m => m.role === "user" && m.kind === "text")?.text ?? "";
+    const sourceText = [...host.store.messagesFor(address.threadId)].reverse().find(m => m.role === "user" && m.kind === "text")?.text ?? "";
     const { node, duplicate } = external
       ? host.coordinator.enqueueExternal(address, { threadId: task.threadId, botId: target.id }, message, approvalGranted, mode, key)
       : host.coordinator.enqueue(address, capability.generation, capability.roomHandoffId,
@@ -73,14 +81,13 @@ async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: st
       message: reviewLater ? `Queued for review: ${called} will pick it up once the user approves.`
         : external ? `Delegated: ${called} is picking it up now.` : "Queued on the job runtime: end your turn; the result resumes you automatically.",
       ...(reviewLater ? { approvalRequired: true } : {}),
-      receipt: host.peerDeliveryReceipt({ botId: target.id, botName: shown, outcome: duplicate && node.status !== "queued" ? "injected" : "queued",
+      receipt: peerDeliveryReceipt({ botId: target.id, botName: shown, outcome: duplicate && node.status !== "queued" ? "injected" : "queued",
         detail: duplicate ? `already sent: it is ${node.status} and its result will resume you`
           : reviewLater ? "the teammate's turn waits on the user's approval" : "queued; it runs after your current turn ends", taskId: node.id }) }];
   } catch (error) {
     if (!continued) host.store.deleteTask(target.id, task.threadId);
     return refused(error instanceof Error ? error.message : String(error));
   }
-
 }
   return delegateOnRuntime;
 }

@@ -3,12 +3,10 @@
 export type Host = Record<string, any>;
 
 export function createCancelDirectTurnDispatch(getHost: () => Host): any {
-function cancelDirectTurnDispatch(botId: string, expectedThreadId?: string) {
+function cancelDirectTurnDispatch(botId: string, expectedThreadId?: string): DirectTurnDispatchClaim | null {
   const host = getHost();
-
   const threadId = expectedThreadId ?? host.store.bot(botId)?.threadId;
   if (!threadId) return null;
-  host.cancelTeamSetupResumesForThread(threadId);
   const claim = host.directTurnDispatchClaims.get(threadId);
   if (!claim || claim.botId !== botId) return null;
   const compacting = host.compactionControllers.get(threadId);
@@ -26,7 +24,6 @@ function cancelDirectTurnDispatch(botId: string, expectedThreadId?: string) {
   // before sendTurn returns; making the bot idle here would let a replacement
   // start early enough for those old events to settle the replacement.
   return claim;
-
 }
   return cancelDirectTurnDispatch;
 }

@@ -1,15 +1,24 @@
 // @ts-nocheck
 /** botCapabilitiesAs (#1388). Pure move from server/index.ts. */
-import { reservedMcpServerName } from "../mcp/mcp-registry.ts";
 import { readPluginContents } from "../bots/bot-plugins.ts";
 import { resolveBotCapabilities } from "../capabilities/capabilities.ts";
-import { listBotSkillsWithOrigin } from "../skills/skills.ts";
+import { skillsLibraryEnabled, customMcpServers } from "../config.ts";
+import { claudeAiConnectorsForTurn } from "../harness-connectors.ts";
+import { parseStoredMcpServer, reservedMcpServerName, isRemoteMcpServer } from "../mcp/mcp-registry.ts";
+import { guarded as orgFlowGuarded } from "../org/org-flow-plugins.ts";
+import { skillDiscoveryAvailable } from "../skills/skill-discovery.ts";
+import { readSkillLibraryIndex } from "../skills/skill-library.ts";
+import { listBotSkillsWithOrigin, listSkills } from "../skills/skills.ts";
+import { supportsWorkspaceFiles } from "../workspace/workspace.ts";
 export type Host = Record<string, any>;
 
 export function createBotCapabilitiesAs(getHost: () => Host): any {
-function botCapabilitiesAs(   bot: NonNullable<ReturnType<typeof store.bot>>,   engineId: string | undefined,   viewer: { principal?: string; mayChange: boolean; marketplace: MarketplaceViewer; computedFor?: { principalId: string; name: string } }, ) {
+function botCapabilitiesAs(
+  bot: NonNullable<ReturnType<typeof store.bot>>,
+  engineId: string | undefined,
+  viewer: { principal?: string; mayChange: boolean; marketplace: MarketplaceViewer; computedFor?: { principalId: string; name: string } },
+): BotCapabilitiesAnswer {
   const host = getHost();
-  const { botPlugins, claudeAiConnectorsForTurn, customMcpServers, isRemoteMcpServer, listSkills, parseStoredMcpServer, personalPlugins, pluginMarketplaces, readSkillLibraryIndex, skillsLibraryEnabled, supportsWorkspaceFiles } = host;
   const instance = host.registry.get(engineId ?? bot.modelSelection.instanceId);
   if (!instance) return { ok: false, status: engineId ? 400 : 404, error: "Unknown engine.", code: "unknown_engine" };
   const organization = host.IDENTITY.kind === "perspicax";
@@ -58,11 +67,11 @@ function botCapabilitiesAs(   bot: NonNullable<ReturnType<typeof store.bot>>,   
       signedIn: (name, server) => server.kind === "remote" && host.personOAuth(principal).status(name, host.personalRemoteSpec(server))?.auth === "connected"
     };
   }
-  const prompt = host.scopedSkillsPrompt(bot, instance, principal, { managedTools: host.skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope), fileAccess: supportsWorkspaceFiles(kind) });
+  const prompt = host.scopedSkillsPrompt(bot, instance, principal, { managedTools: skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope), fileAccess: supportsWorkspaceFiles(kind) });
   const inputs: CapabilityInputs = {
     organization,
     bot: { id: bot.id, name: bot.name, ...(bot.mcpServers ? { mcpServers: bot.mcpServers } : {}), ...(bot.assignedSkills ? { assignedSkills: bot.assignedSkills } : {}) },
-    engine: { instanceId: instance.instanceId, kind, label: instance.displayName ?? kind, customMcp: instance.adapter.capabilities.customMcp === true, agentsMcp: host.skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope) },
+    engine: { instanceId: instance.instanceId, kind, label: instance.displayName ?? kind, customMcp: instance.adapter.capabilities.customMcp === true, agentsMcp: skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope) },
     botPlugins: host.botPlugins.listPlugins(bot.id).map((plugin) => {
       const folder = host.botPlugins.installedFolder(bot.id, plugin);
       let contents: PluginContents = { skills: [], commands: [], agents: [] };
@@ -100,9 +109,9 @@ function botCapabilitiesAs(   bot: NonNullable<ReturnType<typeof store.bot>>,   
     orgFlow: {
       dirsFor: (own) => host.orgFlowPlugins.dirsFor(principal ?? owner, own),
       ...(declaration ? { declared: declaration.plugins } : {}),
-      guarded: host.orgFlowGuarded(declaration),
+      guarded: orgFlowGuarded(declaration),
       member: Boolean(principal) && host.orgMemberActive(principal!),
-      aliases: [...pluginMarketplaces.installed(), ...personalPlugins.listPlugins(principal ?? host.localPrincipalId()), ...botPlugins.listPlugins(bot.id)].filter((plugin) => host.linkedFlowAlias(plugin.name, plugin.marketplace)).map((plugin) => plugin.key),
+      aliases: [...host.pluginMarketplaces.installed(), ...host.personalPlugins.listPlugins(principal ?? host.localPrincipalId()), ...host.botPlugins.listPlugins(bot.id)].filter((plugin) => host.linkedFlowAlias(plugin.name, plugin.marketplace)).map((plugin) => plugin.key),
       pack: host.orgFlowPlugins.loadedPack(),
       versionOf: (name) => host.orgFlowPlugins.loadedVersion(name),
       contentsOf: (name) => { const dir = host.orgFlowPlugins.loadedDir(name); return dir ? readPluginContents(dir) : undefined; },
@@ -117,9 +126,17 @@ function botCapabilitiesAs(   bot: NonNullable<ReturnType<typeof store.bot>>,   
       return spec ? host.mcpOAuth.status(name, spec, bot.mcpAccounts?.[name])?.auth : undefined;
     },
     ...(personal ? { personal } : {}),
-    skills: library
-      ? listBotSkillsWithOrigin(bot.id, bot.assignedSkills).skills.map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: skill.origin, source: skill.source }))
-      : listSkills(bot.id).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: "private" as const, source: skill.source })),
+    skills: (() => {
+      const natives = host.listNativeBotSkills(bot, bot.threadId);
+      if (library) {
+        return listBotSkillsWithOrigin(bot.id, bot.assignedSkills, [], undefined, natives).skills.map((skill) => ({
+          name: skill.name, description: skill.description, enabled: skill.enabled, origin: skill.origin, source: skill.source,
+        }));
+      }
+      const own = listSkills(bot.id).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: "private" as const, source: skill.source }));
+      const names = new Set(own.map((skill) => skill.name));
+      return [...own, ...natives.filter((skill) => !names.has(skill.name)).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: skill.origin, source: skill.source }))];
+    })(),
     librarySkills: Object.values(readSkillLibraryIndex()).map((skill) => ({ name: skill.name, source: skill.source })),
     skillsLibrary: library,
     ...(prompt ? { promptIndex: prompt.index, capabilityPromptIndex: prompt.byCapability } : {}),
@@ -134,7 +151,6 @@ function botCapabilitiesAs(   bot: NonNullable<ReturnType<typeof store.bot>>,   
     grokCloud: host.grokCloudOnTurn(account, instance, bot)
   };
   return { ok: true, capabilities: resolveBotCapabilities(inputs, { ...(principal ? { principalId: principal } : {}), mayChange, ...(viewer.computedFor ? { computedFor: viewer.computedFor } : {}) }) };
-
 }
   return botCapabilitiesAs;
 }

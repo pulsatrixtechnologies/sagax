@@ -1,20 +1,21 @@
 // @ts-nocheck
 /** guardedRequestSnapshot (#1388). Pure move from server/index.ts. */
-import { guardedRequestPath, requestNeedsInput } from "../auth/guarded-requests.ts";
+import { requestConflict, guardedRequestPath, requestNeedsInput } from "../auth/guarded-requests.ts";
 export type Host = Record<string, any>;
 
 export function createGuardedRequestSnapshot(getHost: () => Host): any {
 function guardedRequestSnapshot(botId: string, threadId: string, sendId: string) {
   const host = getHost();
-  const { pendingTeamSetupResumes, requestConflict } = host;
   if (!host.store.taskByThread(botId, threadId)) throw requestConflict("No such conversation for this bot");
   const activeLeafId = host.store.activeLeaf(threadId);
   const messages = guardedRequestPath(host.store.messagesFor(threadId), activeLeafId, sendId);
   const messageId = messages[0].id;
   const owner = host.directRequestOwners.get(threadId);
   const busy = host.threadBusy(botId, threadId);
-  const waiting = messages.some(requestNeedsInput) || host.coordinator.activeDirect(threadId) ||
-    [...pendingTeamSetupResumes.values()].some(entry => entry.request.threadId === threadId);
+  // Waiting: a card the request left for the person, or a root of it the
+  // runtime still owes a turn (parked, waiting on teammates, due a resume,
+  // queued to continue). Never the request's own running turn.
+  const waiting = messages.some(requestNeedsInput) || host.directRootPending(threadId);
   const latestTerminal = messages.findLast(message => message.role === "bot" && message.kind === "text" && message.turnTerminal);
   const latestTurn = messages.findLast(message => message.turnId);
   const latestOutcome = messages.findLast(message => message.turnSucceeded !== undefined);
@@ -36,7 +37,6 @@ function guardedRequestSnapshot(botId: string, threadId: string, sendId: string)
     throw Object.assign(new Error("Open this request in the workspace; its transcript exceeds the response limit"), { status: 413 });
   }
   return snapshot;
-
 }
   return guardedRequestSnapshot;
 }

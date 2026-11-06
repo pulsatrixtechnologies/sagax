@@ -1,14 +1,19 @@
 // @ts-nocheck
 /** finalizeDelegationWatch (#1388). Pure move from server/index.ts. */
 import { masteryDelegationFacts } from "../achievements/achievements-mastery.ts";
+import { getOrCreateChannel, mirrorReply, mirrorActivity } from "../comms-visibility.ts";
 import { recordDelegationReceipt } from "../peers/delegation-receipts.ts";
+import { canReachPeer } from "../peers/peer-roster.ts";
 export type Host = Record<string, any>;
 
 export function createFinalizeDelegationWatch(getHost: () => Host): any {
-function finalizeDelegationWatch(   threadId: string,   ok: boolean,   reply = "",   failureName = "Delegated turn did not finish", ) {
+function finalizeDelegationWatch(
+  threadId: string,
+  ok: boolean,
+  reply = "",
+  failureName = "Delegated turn did not finish",
+): boolean {
   const host = getHost();
-  const { canReachPeer } = host;
-
   const watched = host.delegationWatch.get(threadId);
   if (!watched) return false;
   host.delegationWatch.delete(threadId);
@@ -72,7 +77,7 @@ function finalizeDelegationWatch(   threadId: string,   ok: boolean,   reply = "
       const targetStillMember = target ? sourceGroup.memberIds.includes(target.id) : false;
       if (!sourceStillMember || !targetStillMember) {
         if (target) {
-          channel = host.getOrCreateChannel(host.store, source, target);
+          channel = getOrCreateChannel(host.store, source, target);
           terminalThreadId = channel.threadId;
         } else {
           // Target is gone: the source may still see the original group, but
@@ -140,22 +145,22 @@ function finalizeDelegationWatch(   threadId: string,   ok: boolean,   reply = "
       // re-delegating loop cannot spin up runs. An external runtime polls
       // for the receipt instead; waking would answer it a second time.
       if (watched.completionOwner !== "external") {
+        const wakeSpeaker = host.threadContinuationSpeaker(watched.sourceThreadId);
         if (ok) {
-          host.wakeDelegationSource(source, watched.sourceThreadId, targetName, undefined, watched.routineRunId);
+          host.wakeDelegationSource(source, watched.sourceThreadId, targetName, undefined, watched.routineRunId, wakeSpeaker);
         } else {
-          host.wakeDelegationSource(source, watched.sourceThreadId, targetName, failureName || "the delegated turn did not finish", watched.routineRunId);
+          host.wakeDelegationSource(source, watched.sourceThreadId, targetName, failureName || "the delegated turn did not finish", watched.routineRunId, wakeSpeaker);
         }
       }
     }
   }
 
   if (target && channel) {
-    if (ok && reply.trim()) host.mirrorReply(host.commsBus, target, reply, channel);
-    else if (ok) host.mirrorActivity(host.commsBus, target, channel, "Delegated turn completed", true);
-    else host.mirrorActivity(host.commsBus, target, channel, failureChip, false);
+    if (ok && reply.trim()) mirrorReply(host.commsBus, target, reply, channel);
+    else if (ok) mirrorActivity(host.commsBus, target, channel, "Delegated turn completed", true);
+    else mirrorActivity(host.commsBus, target, channel, failureChip, false);
   }
   return true;
-
 }
   return finalizeDelegationWatch;
 }

@@ -3,9 +3,8 @@
 export type Host = Record<string, any>;
 
 export function createCheckedGroupResponder(getHost: () => Host): any {
-function checkedGroupResponder(value: unknown, memberIds: string[]) {
-  void getHost();
-
+function checkedGroupResponder(value: unknown, memberIds: string[]): GroupDefaultResponder | null {
+  const host = getHost();
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const responder = value as { kind?: unknown; botId?: unknown; fallbackBotId?: unknown };
   if (responder.kind === "everyone") return { kind: "everyone" };
@@ -24,7 +23,6 @@ function checkedGroupResponder(value: unknown, memberIds: string[]) {
     return { kind: "member", botId: responder.botId };
   }
   return null;
-
 }
   return checkedGroupResponder;
 }

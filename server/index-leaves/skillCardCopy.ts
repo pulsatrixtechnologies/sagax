@@ -8,8 +8,7 @@ function skillCardCopy(staged: { action: "create" | "update"; name: string; gist
   subtitle: string;
   tool: string;
 } {
-  void getHost();
-
+  const host = getHost();
   const warnings = staged.warnings.length ? `\n\nWarnings:\n- ${staged.warnings.join("\n- ")}` : "";
   return {
     title: staged.action === "create"
@@ -18,7 +17,6 @@ function skillCardCopy(staged: { action: "create" | "update"; name: string; gist
     subtitle: `${staged.gist || staged.name}\n\nAdds one line to the prompt index; the body is read only when used.${warnings}`,
     tool: "stage_skill"
   };
-
 }
   return skillCardCopy;
 }

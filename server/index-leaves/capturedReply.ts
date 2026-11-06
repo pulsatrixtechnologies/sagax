@@ -3,9 +3,8 @@
 export type Host = Record<string, any>;
 
 export function createCapturedReply(getHost: () => Host): any {
-function capturedReply():{ res: ServerResponse; reply: () => { status: number; body: Record<string, unknown> } | null } {
-  void getHost();
-
+function capturedReply(): { res: ServerResponse; reply: () => { status: number; body: Record<string, unknown> } | null } {
+  const host = getHost();
   let status = 0;
   let text = "";
   const res = {
@@ -23,7 +22,6 @@ function capturedReply():{ res: ServerResponse; reply: () => { status: number; b
       try { return { status, body: JSON.parse(text) as Record<string, unknown> }; } catch { return { status, body: {} }; }
     }
   };
-
 }
   return capturedReply;
 }

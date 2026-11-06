@@ -1,12 +1,18 @@
 // @ts-nocheck
 /** resolveImessageCard (#1388). Pure move from server/index.ts. */
+import { messagesOnBotMac } from "../../shared/imessage.ts";
+import { DATA_DIR } from "../config.ts";
+import { json } from "../harness/http.ts";
+import { takeImessageSend } from "../imessage/imessage-cards.ts";
+import { fileInsideRoots } from "../imessage/imessage-db.ts";
+import { readMessagesSettings } from "../imessage/imessage-settings.ts";
+import { workspaceDir, TASK_WORKSPACES_DIR } from "../workspace/workspace.ts";
 import { join } from "node:path";
 export type Host = Record<string, any>;
 
 export function createResolveImessageCard(getHost: () => Host): any {
-async function resolveImessageCard(res: ServerResponse, threadId: string, requestId: string, behavior: string) {
+async function resolveImessageCard(res: ServerResponse, threadId: string, requestId: string, behavior: string): Promise<boolean> {
   const host = getHost();
-  const { DATA_DIR, TASK_WORKSPACES_DIR, json, workspaceDir } = host;
   if (!requestId.startsWith("imsg-")) return false;
   const message = host.store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
   const card = message?.card;
@@ -18,21 +24,21 @@ async function resolveImessageCard(res: ServerResponse, threadId: string, reques
     json(res, 409, { error: "The request is no longer open." });
     return true;
   }
-  const pending = host.takeImessageSend(requestId, threadId);
+  const pending = takeImessageSend(requestId, threadId);
   if (behavior !== "allow" || !pending) {
     host.store.patchMessage(threadId, message.id, { card: { ...card, answered: "deny", subtitle: pending ? card.subtitle : "This send expired. Nothing was sent." } });
     json(res, 200, { ok: true, outcome: "rejected" });
     return true;
   }
-  const hostnameHostLocal = host.messagesOnBotMac({ platform: process.platform, identityKind: host.IDENTITY.kind, bridgeAction: false });
-  if (!hostnameHostLocal.ok || !host.readMessagesSettings(DATA_DIR).useMessages) {
+  const host = messagesOnBotMac({ platform: process.platform, identityKind: host.IDENTITY.kind, bridgeAction: false });
+  if (!host.ok || !readMessagesSettings(DATA_DIR).useMessages) {
     host.store.patchMessage(threadId, message.id, { card: { ...card, answered: "deny", subtitle: "Messages is not available on this Mac. Nothing was sent." } });
     json(res, 409, { error: "Messages is not available on this Mac.", code: "messages_not_on_this_mac" });
     return true;
   }
   let file = pending.file;
   if (file) {
-    const inside = host.fileInsideRoots([workspaceDir(pending.botId), join(TASK_WORKSPACES_DIR, pending.botId, pending.threadId)], file);
+    const inside = fileInsideRoots([workspaceDir(pending.botId), join(TASK_WORKSPACES_DIR, pending.botId, pending.threadId)], file);
     if (!inside) {
       host.store.patchMessage(threadId, message.id, { card: { ...card, answered: "deny", subtitle: "That file is not in this bot's folder. Nothing was sent." } });
       json(res, 409, { error: "That file is not in this bot's folder.", code: "messages_file_outside" });
@@ -50,7 +56,6 @@ async function resolveImessageCard(res: ServerResponse, threadId: string, reques
     json(res, 200, { ok: true, outcome: "allowed-once", send: "failed" });
   }
   return true;
-
 }
   return resolveImessageCard;
 }

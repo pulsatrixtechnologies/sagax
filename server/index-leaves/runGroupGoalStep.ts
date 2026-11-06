@@ -13,7 +13,6 @@ async function runGroupGoalStep(args: {
   instructions: string;
 }): Promise<{ ran: boolean; replyText: string; outcome?: GroupMemberTurnOutcome; stopReason?: string | null }> {
   const host = getHost();
-
   const run = args.operation.goalRun;
   if (!run || args.operation.cancelled || run.turnCount >= run.maxTurns) {
     return { ran: false, replyText: "" };
@@ -63,6 +62,7 @@ async function runGroupGoalStep(args: {
           systemInstructions: args.instructions,
           followMentions: false,
           result,
+          goalRunId: run.runId,
           onClaimed: () => {
             if (claimed) return;
             claimed = true;
@@ -137,7 +137,6 @@ async function runGroupGoalStep(args: {
       }
     }
   }
-
 }
   return runGroupGoalStep;
 }

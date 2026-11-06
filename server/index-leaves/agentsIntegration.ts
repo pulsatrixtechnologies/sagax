@@ -1,13 +1,29 @@
 // @ts-nocheck
 /** agentsIntegration (#1388). Pure move from server/index.ts. */
+import { botCreationOffered } from "../bots/bot-creation.ts";
+import { meetingNotetakerEnabled, DATA_DIR } from "../config.ts";
+import { mcpIdentityEnv, mcpPolicyEnv } from "../mcp/mcp-permissions.ts";
+import { personDisplayName } from "../people/viewer-identity.ts";
+import { phoneToolTurn } from "../phone/phone-tools.ts";
+import * as tts from "../tts/index.ts";
 import { join } from "node:path";
-import { mcpPolicyEnv } from "../mcp/mcp-permissions.ts";
 export type Host = Record<string, any>;
 
 export function createAgentsIntegration(getHost: () => Host): any {
-function agentsIntegration(   botId: string,   threadId: string,   depth: number,   skillAuthoring: boolean,   generation: string,   roomHandoffId?: string,   roomCoordination = false,   ownThreadCreation = false,   hostFiles = false,   /** The turn's engine has no web search of its own (server/web-search/native.ts). */   noNativeWebSearch = false, ) {
+function agentsIntegration(
+  botId: string,
+  threadId: string,
+  depth: number,
+  skillAuthoring: boolean,
+  generation: string,
+  roomHandoffId?: string,
+  hostFiles = false,
+  /** The turn's engine has no web search of its own (server/web-search/native.ts). */
+  noNativeWebSearch = false,
+  roomCoordination = false,
+  ownThreadCreation = false,
+) {
   const host = getHost();
-  const { DATA_DIR, botCreationOffered, mcpIdentityEnv, meetingNotetakerEnabled, personDisplayName } = host;
   const token = host.mintInternalCapability({
     botId,
     threadId,
@@ -44,8 +60,7 @@ function agentsIntegration(   botId: string,   threadId: string,   depth: number
       SAGAX_OWN_THREAD_CREATION: ownThreadCreation ? "1" : "0",
       SAGAX_SKILL_AUTHORING_ENABLED: skillAuthoring ? "1" : "0",
       // The agent-to-agent tools (server/agent-api.ts) in every turn outside
-      // a room, coordinate_bots turns included (roomCoordination is also set
-      // for direct coordination); a room uses post_to_room. The route re-checks.
+      // a room; a room uses post_to_room. The route re-checks.
       SAGAX_AGENT_API: !host.store.groupByThread(threadId) && host.store.bot(botId) && host.agentApiMounted(host.store.bot(botId)!) ? "1" : "0",
       SAGAX_MEMORY_ENABLED: host.store.bot(botId)?.memoryEnabled === false ? "0" : "1",
       // A room turn in a group whose shared memory is on gets
@@ -68,14 +83,18 @@ function agentsIntegration(   botId: string,   threadId: string,   depth: number
         const owner = host.providerAccountOwner(host.turnMediaPrincipal(threadId) ?? host.effectiveBotOwner(speaking ?? {}));
         const held = owner ? host.perspicaxDirectory?.providerKeys(owner.sub) ?? [] : [];
         const ownVoice = ["elevenlabs", "fish", "xai"].some((provider) => held.includes(provider));
-        return (ownVoice || host.tts.voiceReady(host.cfg, speaking?.voice, { xaiKeyGiven: given })) && speaking?.voiceNotes !== false ? "1" : "0";
+        return (ownVoice || tts.voiceReady(host.cfg, speaking?.voice, { xaiKeyGiven: given })) && speaking?.voiceNotes !== false ? "1" : "0";
       })(),
       // end_call is offered only while this thread is on a live phone call.
       // The route re-checks; a turn that is not a call never sees the tool.
+      SAGAX_MEME_REPLIES: (() => {
+        const speaking = host.botForThread(botId, threadId) ?? host.store.bot(botId);
+        return speaking?.memeReplies === "off" ? "0" : "1";
+      })(),
       SAGAX_VOICE_CALL: host.voiceCalls.active(threadId) ? "1" : "0",
-      // connect_github: a 1:1 turn on a server with a GitHub OAuth App
-      // (device flow). The route re-checks both.
-      SAGAX_GITHUB_CONNECT: !host.store.groupByThread(threadId) && host.githubConnect.deviceFlowAvailable() ? "1" : "0",
+      // connect_github: any chat (#2109) on a server with a GitHub OAuth App
+      // (device flow). The route re-checks.
+      SAGAX_GITHUB_CONNECT: host.githubConnect.deviceFlowAvailable() ? "1" : "0",
       // join_meeting: Settings > Experimental > Meeting notetaker, direct
       // conversations only. The internal route re-checks both.
       SAGAX_MEETINGS: meetingNotetakerEnabled(host.cfg) && !host.store.groupByThread(threadId) ? "1" : "0",
@@ -88,7 +107,7 @@ function agentsIntegration(   botId: string,   threadId: string,   depth: number
       SAGAX_PHONE_TOOLS: (() => {
         const bot = host.store.bot(botId);
         if (!bot) return "";
-        const turn = host.phoneToolTurn({
+        const turn = phoneToolTurn({
           ownsThread: true,
           inRoom: Boolean(host.store.groupByThread(threadId)),
           depth,
@@ -137,6 +156,16 @@ function agentsIntegration(   botId: string,   threadId: string,   depth: number
       // The claim tools (server/perspicax/perspicax-claims.ts) while this turn has a
       // Perspicax account connection mounted for the person speaking; the route re-checks.
       SAGAX_CLAIMS: host.perspicaxMcp?.hasMounted(threadId, generation, botId) ? "1" : "0",
+      // Grok bridge (#2193): the speaker has a live per-person link.
+      SAGAX_GROK_BRIDGE: (() => {
+        if (!host.grokBridgeAllowed()) return "0";
+        const person = host.safetyPrincipal(threadId).principalId?.trim().toLowerCase()
+          || (host.store.bot(botId) ? host.effectiveBotOwner(host.store.bot(botId)!).trim().toLowerCase() : "")
+          || (host.IDENTITY.kind === "solo" ? host.localPrincipalId() : "");
+        if (!person) return "0";
+        const live = host.grokBridgeService.live(person);
+        return live.ok ? "1" : "0";
+      })(),
       // sagax_web_search: an engine without a web search of its own, for a
       // person who saved a search provider (a local file read, no network).
       // The route re-checks; the key never goes in this env.
@@ -149,7 +178,6 @@ function agentsIntegration(   botId: string,   threadId: string,   depth: number
       SAGAX_OPENAPI_TOOLS: host.openApiToolsEnv(botId, threadId)
     }
   };
-
 }
   return agentsIntegration;
 }

@@ -1,13 +1,30 @@
 // @ts-nocheck
 /** startGroupTurn (#1388). Pure move from server/index.ts. */
-import { channelTurnGate } from "../workers.ts";
+import { reportBackgroundError } from "../background-error.ts";
+import { llmThreadTitlesEnabled } from "../config.ts";
+import { deciderReady } from "../decider/index.ts";
+import { decideRoomResponder } from "../decider/room-routing.ts";
 import { selectGroupGoalCoordinator, GROUP_GOAL_MAX_TURNS } from "../groups/group-goal-run.ts";
+import { workOrigin } from "../peers/peer-provenance.ts";
+import { stopWordPlacement } from "../room-holds.ts";
+import { roomTurnNarrationIds } from "../room-reply.ts";
+import { mentionedBots, roomResponders } from "../store.ts";
+import { extractTurnImages } from "../turns/turn-images.ts";
+import { channelTurnGate } from "../workers.ts";
+import { randomUUID } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createStartGroupTurn(getHost: () => Host): any {
-function startGroupTurn(   groupId: string,   text: string,   replyTo?: Message,   sendId?: string,   channelMode: "chat" | "goal" = "chat",   queueId?: string,   options: StartGroupTurnOptions = {}, ) {
+function startGroupTurn(
+  groupId: string,
+  text: string,
+  replyTo?: Message,
+  sendId?: string,
+  channelMode: "chat" | "goal" = "chat",
+  queueId?: string,
+  options: StartGroupTurnOptions = {},
+) {
   const host = getHost();
-  const { deciderReady, llmThreadTitlesEnabled, mentionedBots, roomResponders, store, workOrigin } = host;
   const group = host.store.group(groupId);
   if (!group) throw Object.assign(new Error("no such group"), { status: 404 });
   // Capture the chosen thread once. Manual sends use the active task; a
@@ -23,6 +40,10 @@ function startGroupTurn(   groupId: string,   text: string,   replyTo?: Message,
     .map((id) => host.store.bot(id))
     .filter((bot): bot is NonNullable<typeof bot> => Boolean(bot));
   const availableMembers = members.filter((member) => !member.hidden);
+  // Members the person stopped ("stop @Bot") take no turn from any route
+  // until they are @mentioned again or resumed (room-holds.ts).
+  const isHeld = (member: { id: string }) => host.roomHeld(group, member.id);
+  const routableMembers = availableMembers.filter((member) => !isHeld(member));
   const requestedGoalCoordinator = options.goalCoordinatorBotId
     ? availableMembers.find((member) => member.id === options.goalCoordinatorBotId)
     : undefined;
@@ -34,7 +55,11 @@ function startGroupTurn(   groupId: string,   text: string,   replyTo?: Message,
   const autoCandidate = !group.dm && channelMode === "chat" && group.defaultResponder.kind === "auto" &&
     deciderReady(host.cfg, "roomRouting");
   const historyBeforeSend = autoCandidate
-    ? host.store.messagesFor(threadId).filter((m) => m.kind === "text" && m.text).slice(-host.GROUP_CONTEXT_MESSAGES)
+    ? (() => {
+        const before = host.store.messagesFor(threadId);
+        const narration = roomTurnNarrationIds(before);
+        return before.filter((m) => m.kind === "text" && m.text && !narration.has(m.id)).slice(-host.GROUP_CONTEXT_MESSAGES);
+      })()
     : [];
   // A coalesced drain appends every queued line under its own queueId (the
   // chips and sendId receipts stay per-item); the LAST line is the turn's
@@ -104,19 +129,35 @@ function startGroupTurn(   groupId: string,   text: string,   replyTo?: Message,
     ? options.commandRoute
     : host.cachedGroupEngineCommandRoute(group, threadId, text, availableMembers, channelMode, queuedGroup?.length ?? 0, options.sender?.id ? { origin: "person", principalId: options.sender.id } : { origin: "operator" });
   if (commandRoute) responders = availableMembers.filter((member) => member.id === commandRoute.botId);
-  const explicitlyMentionedLead = roomResponders(text, availableMembers, { kind: "mentions" })[0];
+  // A held member is passed over whoever chose it — its @mention, the lead,
+  // everyone — and the room says so once; what addressed it is kept for its
+  // next turn.
+  if (!group.dm) {
+    // The "stop @Bot" line itself is not something to show the bot later.
+    const addressed = stopWordPlacement(text) === "adjacent" ? undefined : message.id;
+    for (const held of responders.filter(isHeld)) host.noteHeldSkip(group.id, threadId, held, addressed);
+    responders = responders.filter((responder) => !isHeld(responder));
+  }
+  const explicitlyMentionedLead = roomResponders(text, routableMembers, { kind: "mentions" })[0];
   const goalCoordinator = channelMode === "goal"
-    ? requestedGoalCoordinator ?? explicitlyMentionedLead ?? selectGroupGoalCoordinator(availableMembers, group.defaultResponder)
+    ? requestedGoalCoordinator ?? explicitlyMentionedLead ?? selectGroupGoalCoordinator(routableMembers, group.defaultResponder)
     : null;
   // bot⇄bot channels: chipping in without a tag addresses the last speaker
   if (!responders.length && group.dm) {
-    const lastSpeakerId = [...store.messagesFor(threadId)]
+    const lastSpeakerId = [...host.store.messagesFor(threadId)]
       .reverse()
       .find((msg) => msg.kind === "text" && msg.from)?.from?.botId;
     const last = availableMembers.find((b) => b.id === lastSpeakerId) ?? availableMembers[0];
     responders = last ? [last] : [];
   }
-  if (!responders.length && !goalCoordinator) {
+  // Auto with nobody addressed: the responders above are only the fallback
+  // until the decision model answers, in the async round below. The append
+  // and this function's return stay synchronous either way. It picks among
+  // the members who are not held; a held fallback leaves the round to it.
+  const autoRoute = autoCandidate && !goalCoordinator && !commandRoute && routableMembers.length > 1 &&
+    roomResponders(text, availableMembers, { kind: "mentions" }).length === 0;
+
+  if (!responders.length && !goalCoordinator && !autoRoute) {
     const defaultArchivedId = group.defaultResponder.kind === "member" ? group.defaultResponder.botId : undefined;
     const defaultArchived = archived.find((member) => member.id === defaultArchivedId);
     let unavailableMessage: string | undefined;
@@ -161,19 +202,13 @@ function startGroupTurn(   groupId: string,   text: string,   replyTo?: Message,
     if (!responders.length) return message;
   }
 
-  // Auto with nobody addressed: the responders above are only the fallback
-  // until the decision model answers, in the async round below. The append
-  // and this function's return stay synchronous either way.
-  const autoRoute = autoCandidate && !goalCoordinator && !commandRoute && availableMembers.length > 1 &&
-    roomResponders(text, availableMembers, { kind: "mentions" }).length === 0;
-
   // The snippet is only the fallback name here too. The member about to
   // answer supplies the same cheap one-shot the bot path uses, and the
   // swap lands only while the row still carries the snippet — a rename by
   // the person always wins. Channel tasks carry no peer provenance (no
   // assignment opens them), and a member whose engine offers no text
   // one-shot simply keeps the snippet.
-  const titleText = host.extractTurnImages(text).text;
+  const titleText = extractTurnImages(text).text;
   const startTitle = (titleBot: (typeof members)[number]) => {
     const titleInstance = host.registry.get(titleBot.modelSelection.instanceId);
     // An engine the organisation disallows never receives the text, even for a title.
@@ -200,7 +235,7 @@ function startGroupTurn(   groupId: string,   text: string,   replyTo?: Message,
   // answer is waited for only when this round's turn comes up. It never
   // rejects; a Stop aborts it through the operation's signal.
   const routing = autoRoute
-    ? host.decideRoomResponder(host.decider, host.roomRoutingInput(group.name, text, availableMembers, historyBeforeSend, options.sender), {
+    ? decideRoomResponder(host.decider, host.roomRoutingInput(group.name, text, availableMembers, historyBeforeSend, options.sender), {
         signal: operation.cancellation.signal
       })
     : null;
@@ -263,8 +298,8 @@ function startGroupTurn(   groupId: string,   text: string,   replyTo?: Message,
       if (routing) {
         const route = await routing;
         if (operation.cancelled) return;
-        const picked = route.kind === "member" ? availableMembers.filter((member) => member.id === route.botId)
-          : route.kind === "everyone" ? availableMembers
+        const picked = route.kind === "member" ? routableMembers.filter((member) => member.id === route.botId)
+          : route.kind === "everyone" ? routableMembers
             : [];
         if (picked.length && route.kind !== "fallback") {
           round = picked;
@@ -272,7 +307,7 @@ function startGroupTurn(   groupId: string,   text: string,   replyTo?: Message,
         }
         // What a routed round holds from the start, like any other round.
         for (const responder of round) operation.botIds.add(responder.id);
-        startTitle(round[0]!);
+        if (round[0]) startTitle(round[0]);
       }
       const spoken = new Set<string>();
       const skillAuthoringClaim = { claimed: false };
@@ -317,9 +352,8 @@ function startGroupTurn(   groupId: string,   text: string,   replyTo?: Message,
     }
   });
   const tracked = next.finally(() => host.finishGroupTurnOperation(groupId, operation));
-  host.groupQueues.set(threadId, tracked.catch(host.reportBackgroundError));
+  host.groupQueues.set(threadId, tracked.catch(reportBackgroundError));
   return message;
-
 }
   return startGroupTurn;
 }

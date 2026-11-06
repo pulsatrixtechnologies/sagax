@@ -3,9 +3,8 @@
 export type Host = Record<string, any>;
 
 export function createIsApprovalCardMessage(getHost: () => Host): any {
-function isApprovalCardMessage(message: { kind?: unknown; card?: unknown }) {
-  void getHost();
-
+function isApprovalCardMessage(message: { kind?: unknown; card?: unknown }): boolean {
+  const host = getHost();
   if (message.kind !== "options" || !message.card || typeof message.card !== "object") return false;
   const card = message.card as Record<string, unknown>;
   // A linked question carries the same private source audience as a linked
@@ -18,7 +17,6 @@ function isApprovalCardMessage(message: { kind?: unknown; card?: unknown }) {
     || card.teamSetupRequest || card.modelRequest || card.tighteningRequest
     || card.terminalRequest || card.meetingRequest,
   );
-
 }
   return isApprovalCardMessage;
 }

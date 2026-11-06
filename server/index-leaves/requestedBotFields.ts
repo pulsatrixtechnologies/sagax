@@ -4,9 +4,8 @@ import { parsedBodyOf } from "../harness/http.ts";
 export type Host = Record<string, any>;
 
 export function createRequestedBotFields(getHost: () => Host): any {
-function requestedBotFields(req: IncomingMessage, path: string) {
-  void getHost();
-
+function requestedBotFields(req: IncomingMessage, path: string): string[] {
+  const host = getHost();
   if (path.endsWith("/always-allow")) return ["alwaysAllow"];
   if (path.endsWith("/model")) return ["modelSelection"];
   const body = parsedBodyOf(req);
@@ -15,7 +14,6 @@ function requestedBotFields(req: IncomingMessage, path: string) {
   if (fields.has("autoApprove") || fields.has("approvalMode")) fields.add("autoApprove").add("approvalMode");
   if (fields.has("chiefOfStaff")) fields.add("managedSections");
   return [...fields];
-
 }
   return requestedBotFields;
 }

@@ -1,14 +1,14 @@
 // @ts-nocheck
 /** mcpServerResponse (#1388). Pure move from server/index.ts. */
-import { skipPersonalInSharedProbe } from "../mcp/mcp-personal-shared-guard.ts";
+import { readsGithubToken } from "../github/github-mcp-token.ts";
 import { DEFAULT_MCP_ACCOUNT } from "../mcp/mcp-oauth.ts";
-import { reservedMcpServers } from "../mcp/mcp-registry.ts";
+import { skipPersonalInSharedProbe } from "../mcp/mcp-personal-shared-guard.ts";
+import { listMcpServers, reservedMcpServers } from "../mcp/mcp-registry.ts";
 export type Host = Record<string, any>;
 
 export function createMcpServerResponse(getHost: () => Host): any {
 function mcpServerResponse(viewer?: string | null) {
   const host = getHost();
-  const { listMcpServers } = host;
   // While enrolled with custom servers off, say which servers stay configured
   // but never reach bots, and why. Nothing here is written to config.json.
   const policy = host.managedPolicy.current();
@@ -22,7 +22,7 @@ function mcpServerResponse(viewer?: string | null) {
   const githubState = (name: string): { github?: "connected" | "missing" } => {
     const spec = remote[name];
     // undefined: the caller is not known here (the next listing says)
-    if (!spec || viewer === undefined || !host.readsGithubToken(spec)) return {};
+    if (!spec || viewer === undefined || !readsGithubToken(spec)) return {};
     viewerGithub ??= Boolean(host.githubAccountToken(viewer));
     return { github: viewerGithub ? "connected" : "missing" };
   };
@@ -39,7 +39,7 @@ function mcpServerResponse(viewer?: string | null) {
     } : server;
     // Shared config rows stay installation; a name that only exists in a
     // person store never appears here. scope lets the panel skip personal lookups.
-    const withScope = { ...listed, ...githubState(server.name), scope: skipPersonalInSharedProbe(server.name, personalNames) ? "person" as const : "installation" as const };
+    const withScope = host.mcpServersHost.listing({ ...listed, ...githubState(server.name), scope: skipPersonalInSharedProbe(server.name, personalNames) ? "person" as const : "installation" as const });
     return host.managedPolicy.mcpAllowed(server.name, "url" in server ? server.url : undefined) ? withScope : { ...withScope, managedBy: policy!.organizationName };
   });
   // a server saved under a name Sagax now reserves is never mounted: listed
@@ -50,7 +50,6 @@ function mcpServerResponse(viewer?: string | null) {
     ...(reserved.length ? { reserved } : {}),
     ...(policy && !policy.mcp.allowCustom ? { managed: { organizationName: policy.organizationName, allowlist: policy.mcp.allowlist } } : {})
   };
-
 }
   return mcpServerResponse;
 }

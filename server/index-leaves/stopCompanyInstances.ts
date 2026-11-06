@@ -1,12 +1,11 @@
 // @ts-nocheck
 /** stopCompanyInstances (#1388). Pure move from server/index.ts. */
+import { stoppedTurnOutcome } from "../turns/turn-outcome.ts";
 export type Host = Record<string, any>;
 
 export function createStopCompanyInstances(getHost: () => Host): any {
 async function stopCompanyInstances(ids: string[]) {
   const host = getHost();
-  const { groupSpeakers } = host;
-
   if (!ids.length) return;
   if (host.companyShutdown) {
     for (const id of ids) { host.providerAuthSessions.clearInstance(id); host.bus.detach(id); }
@@ -32,7 +31,6 @@ async function stopCompanyInstances(ids: string[]) {
     if (host.directTurnGenerationByThread.get(threadId) !== generation) continue;
     host.stopScreenPoller(botId, threadId); host.releaseLocalVmThread(threadId);
     host.watchdog.settle(threadId); host.closeOpenApprovals(threadId); host.directTurnBots.delete(threadId);
-    host.finalizeDelegationWatch(threadId, false, "", `Delegated turn did not finish — ${interrupted}`);
     host.routines?.failThread(threadId, "Company connection changed while this thread was running");
     if (host.store.taskByThread(botId, threadId)) {
       host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Company connection changed — choose whether to reconnect or use a personal model", ok: false } });
@@ -41,13 +39,13 @@ async function stopCompanyInstances(ids: string[]) {
   }
   // Freeze this cancellation batch across interruptTurn's asynchronous yield.
   // oxlint-disable-next-line unicorn/no-useless-spread
-  for (const [threadId, speaker] of [...groupSpeakers]) {
+  for (const [threadId, speaker] of [...host.groupSpeakers]) {
     if (host.groupSpeakers.get(threadId) !== speaker) continue;
     const bot = host.store.bot(speaker.botId);
     if (!bot || !selected.has(bot.modelSelection.instanceId)) continue;
     const group = host.store.groupByThread(threadId);
     const owner = host.turnResourceOwners.get(threadId);
-    if (group) host.cancelGroupTurnOperations(group.id, threadId, { status: "stopped", detail: host.stoppedTurnOutcome({ reason: cause, activities: [] }), byHarness: true });
+    if (group) host.cancelGroupTurnOperations(group.id, threadId, { status: "stopped", detail: stoppedTurnOutcome({ reason: cause, activities: [] }), byHarness: true });
     host.revokeInternalCapabilitiesForThread(threadId);
     await host.runningTurnInstance(bot, threadId)?.adapter.interruptTurn(threadId);
     const stillOwned = host.groupSpeakers.get(threadId) === speaker &&
@@ -57,11 +55,10 @@ async function stopCompanyInstances(ids: string[]) {
     host.releaseLocalVmThread(threadId);
     host.watchdog.settle(threadId); host.closeOpenApprovals(threadId);
     host.groupSpeakers.delete(threadId);
-    if (group) host.store.patchGroup(group.id, { busyBotId: null });
+    if (group) host.store.patchGroup(group.id, { busyBotId: host.activeGroupSpeaker(group.id)?.botId ?? null });
     host.store.setActivity(bot.id, "idle");
   }
   for (const id of ids) { host.providerAuthSessions.clearInstance(id); host.bus.detach(id); }
-
 }
   return stopCompanyInstances;
 }

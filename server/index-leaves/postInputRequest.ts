@@ -1,12 +1,15 @@
 // @ts-nocheck
 /** postInputRequest (#1388). Pure move from server/index.ts. */
+import { deliverableNotification } from "../notify.ts";
 export type Host = Record<string, any>;
 
 export function createPostInputRequest(getHost: () => Host): any {
-function postInputRequest(node: HandoffView, question: string, reminder: boolean, restored = false) {
+function postInputRequest(node: HandoffView, question: string, reminder: boolean, restored = false): void {
   const host = getHost();
-  const { deliverableNotification } = host;
-
+  // A root parked on the person's own cards (decision 2): the cards
+  // already show, and said what they needed when they appeared. Nothing
+  // more, also when a restart re-parks it or a reminder comes due.
+  if (!node.parentId && node.cards?.length) return;
   const bot = host.store.bot(node.botId);
   if (!bot) return;
   const full = question.trim() || "Your answer is needed to continue.";
@@ -65,7 +68,6 @@ function postInputRequest(node: HandoffView, question: string, reminder: boolean
   if (node.groupId) host.store.patchGroup(node.groupId, { unread: true });
   else host.store.patchTask(bot.id, node.threadId, { unread: true });
   host.notify(deliverableNotification("delegation-settled", bot, node.threadId, full, { avatarUrl: bot.avatarUrl }));
-
 }
   return postInputRequest;
 }

@@ -2,13 +2,13 @@
 /** inboxTestRule (#1388). Pure move from server/index.ts. */
 import { RULE_TEST_DAYS } from "../../shared/action-journal.ts";
 import { compileRule } from "../../shared/custom-rules.ts";
-import { replayable, testRuleOnJournal } from "../action-journal.ts";
+import { testRuleOnJournal, replayable } from "../action-journal.ts";
+import { serverHome, reviewCustomRules } from "../rules/custom-rules-review.ts";
 export type Host = Record<string, any>;
 
 export function createInboxTestRule(getHost: () => Host): any {
 function inboxTestRule(_auth: RequestAuth, viewer: InboxViewer, draft: RuleTestDraft): RuleTestResult | { error: string; status: number } {
   const host = getHost();
-  const { customRules, serverHome } = host;
   if (draft.botId && host.effectiveBotOwner(host.store.bot(draft.botId) ?? {}) !== viewer.principalId) return { error: "no such bot of yours", status: 404 };
   const saved = draft.id ? host.customRules.ownRulesOf(viewer.principalId).find((rule) => rule.id === draft.id) : undefined;
   if (draft.id && !saved) return { error: "no such rule of yours", status: 404 };
@@ -24,9 +24,9 @@ function inboxTestRule(_auth: RequestAuth, viewer: InboxViewer, draft: RuleTestD
   return testRuleOnJournal(rows, draftId, (row) => {
     if (!replayable(row)) return null;
     if (draft.botId && draft.botId !== row.botId) return null;
-    const rules = [...customRules.rulesOf(viewer.principalId, row.botId).filter((other) => other.id !== draftId), rule];
+    const rules = [...host.customRules.rulesOf(viewer.principalId, row.botId).filter((other) => other.id !== draftId), rule];
     const call = row.call;
-    return host.reviewCustomRules(rules, {
+    return reviewCustomRules(rules, {
       tool: row.tool,
       ...(call?.mcpTool ? { mcpTool: call.mcpTool } : {}),
       ...(call?.input !== undefined ? { input: call.input } : {}),
@@ -37,7 +37,6 @@ function inboxTestRule(_auth: RequestAuth, viewer: InboxViewer, draft: RuleTestD
       ...(row.summary ? { summary: row.summary } : {})
     }, row.botId, home, host.ruleProductsOf(row.botId)).decision;
   }, RULE_TEST_DAYS, unreadable);
-
 }
   return inboxTestRule;
 }

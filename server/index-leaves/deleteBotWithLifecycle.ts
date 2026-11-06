@@ -1,16 +1,22 @@
 // @ts-nocheck
 /** deleteBotWithLifecycle (#1388). Pure move from server/index.ts. */
-import { vpsSshAlias } from "../config.ts";
 import { requireBrowserCleanupAcknowledged } from "../browser/browser-lifecycle-cleanup.ts";
+import { boatCreateRecoverySnapshot } from "../computer/boat-create-idempotency.ts";
+import { boatDeletionSnapshot } from "../computer/boat-delete-journal.ts";
+import * as boat from "../computer/boat.ts";
+import { perBotLocalVmTarget, containerComputerStatus, containerComputerAction } from "../computer/container-computer.ts";
+import * as vps from "../computer/vps-computer.ts";
+import { vpsSshAlias, localVmMode } from "../config.ts";
+import { dataEngine } from "../data/deps.ts";
 import { forgetDataScopes } from "../data/scope.ts";
-import { existsSync } from "node:fs";
 import { cancelPeerApprovalsFor } from "../peers/peer-approval.ts";
+import { existsSync } from "node:fs";
+import { rm as removeDirectory } from "node:fs/promises";
 export type Host = Record<string, any>;
 
 export function createDeleteBotWithLifecycle(getHost: () => Host): any {
 async function deleteBotWithLifecycle(botId: string, revalidate: () => void = () => {}, setupRequest?: TeamSetupRequest) {
   const host = getHost();
-  const { containerComputerAction, containerComputerStatus, dataEngine, localVmMode, perBotLocalVmTarget } = host;
   const deletionResponse = (status: number, body: { error?: string; ok?: boolean }) => ({ status, body });
       revalidate();
       const bot = host.store.bot(botId);
@@ -39,11 +45,11 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
       // A direct turn that has already claimed the bot can provision a Boat in
       // its background setup. Do not let deletion race that work while a Boat
       // account is configured; the person can stop the turn and retry.
-      if ((host.boat.boatConfigured(host.cfg) || vpsSshAlias(host.cfg)) && (bot.busy || host.hasDirectDispatch(bot.id))) {
+      if ((boat.boatConfigured(host.cfg) || vpsSshAlias(host.cfg)) && (bot.busy || host.hasDirectDispatch(bot.id))) {
         return deletionResponse( 409, { error: "stop this bot's work before checking and deleting its cloud computer" });
       }
-      const botBoatRecovery = host.boatCreateRecoverySnapshot().filter((entry) => entry.botId === bot.id);
-      const botBoatDeletions = host.boatDeletionSnapshot().filter((entry) => entry.ownerBotId === bot.id);
+      const botBoatRecovery = boatCreateRecoverySnapshot().filter((entry) => entry.botId === bot.id);
+      const botBoatDeletions = boatDeletionSnapshot().filter((entry) => entry.ownerBotId === bot.id);
       if (botBoatRecovery.some((entry) => !entry.resolved)) {
         return deletionResponse( 409, {
           error: "finish reconciling this bot's pending cloud computer creation before deleting it — check boat.dev, then retry Boat setup"
@@ -96,7 +102,7 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
         // Preflight every provider before deleting any resource. Cleanup can
         // still fail mid-flight across independent providers, but a missing
         // credential or offline daemon should not cause avoidable partial work.
-        const vpsInventory = await host.vps.listManagedVpsComputers(host.cfg, host.managedBoatOwners());
+        const vpsInventory = await vps.listManagedVpsComputers(host.cfg, host.managedBoatOwners());
         if (vpsInventory.configured && !vpsInventory.available) {
           return deletionResponse( 503, {
             error: `${vpsInventory.problem ?? "VPS computer inventory is unavailable"}. The bot was kept so its computer can be retried safely`
@@ -104,12 +110,12 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
         }
         const ownedVpsComputers = vpsInventory.instances.filter((instance) => instance.ownerBotId === bot.id);
 
-        if ((botBoatRecovery.length > 0 || botBoatDeletions.length > 0) && !host.boat.boatConfigured(host.cfg)) {
+        if ((botBoatRecovery.length > 0 || botBoatDeletions.length > 0) && !boat.boatConfigured(host.cfg)) {
           return deletionResponse(409, {
             error: "Reconnect the Boat account that owns this bot's remembered cloud computer, then retry deletion"
           });
         }
-        const cloudInventory = await host.boat.listManagedBoats(host.cfg, host.managedBoatOwners());
+        const cloudInventory = await boat.listManagedBoats(host.cfg, host.managedBoatOwners());
         if (cloudInventory.configured && !cloudInventory.available) {
           return deletionResponse( 503, {
             error: `${cloudInventory.problem ?? "cloud computer inventory is unavailable"}. The bot was kept so its computer can be retried safely`
@@ -130,7 +136,7 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
           // owner disappear. Shared team computers use a different owner id
           // and are intentionally absent from these lists.
           for (const instance of ownedBoatComputers) {
-            const removed = await host.boat.deleteManagedBoat(host.cfg, host.managedBoatOwners(), instance.boxId, instance.name);
+            const removed = await boat.deleteManagedBoat(host.cfg, host.managedBoatOwners(), instance.boxId, instance.name);
             if (removed.pending) {
               throw Object.assign(
                 new Error("The cloud computer deletion has started but is still finishing. The bot was kept; retry in a moment"),
@@ -139,7 +145,7 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
             }
           }
           for (const instance of ownedVpsComputers) {
-            await host.vps.removeManagedVpsComputer(host.cfg, host.managedBoatOwners(), instance.name, instance.name);
+            await vps.removeManagedVpsComputer(host.cfg, host.managedBoatOwners(), instance.name, instance.name);
           }
           if (localVmCleanup) {
             if (localVmCleanup.removeContainer) {
@@ -148,7 +154,7 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
             // Unlike the standalone "Delete VM" action, deleting the bot is
             // a complete erasure: its now-ownerless desktop files and browser
             // session must not remain hidden on disk or block the event loop.
-            await host.removeDirectory(localVmCleanup.target.workspaceDir, { recursive: true, force: true });
+            await removeDirectory(localVmCleanup.target.workspaceDir, { recursive: true, force: true });
             host.localVmSeen.delete(localVmCleanup.target.key);
             host.localVmIdles.get(localVmCleanup.target.key)?.cancel();
             host.localVmIdles.delete(localVmCleanup.target.key);
@@ -158,13 +164,7 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
           // Invalidate every bot-callable bearer before the first asynchronous
           // teardown step. A request that already passed its initial header
           // check is revalidated after its body arrives and must fail closed.
-          for (const entry of host.pendingTeamSetupResumes.values()) {
-            if (entry.request.botId === bot.id) host.cancelTeamSetupResumesForThread(entry.request.threadId);
-          }
-          for (const task of host.store.tasks(bot.id)) {
-            host.cancelTeamSetupResumesForThread(task.threadId);
-            host.revokeInternalCapabilitiesForThread(task.threadId);
-          }
+          for (const task of host.store.tasks(bot.id)) host.revokeInternalCapabilitiesForThread(task.threadId);
           await host.interruptAllDirectThreads(bot.id);
           // Deletion removes the thread before a late turn.completed can fold
           // staged provider images into a message, so dispose them here.
@@ -197,7 +197,9 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
             .map((task) => ({ threadId: task.threadId, keys: host.threadEngineKeys(bot.id, task.threadId) }));
           host.botWaits.removeForBot(bot.id);
           host.store.deleteBot(bot.id, setupRequest);
+          host.skillReview.dropBot(bot.id);
           host.purgeDeletedThreadEngines(confidentialEngines, "bot deleted");
+          host.skillReview.dropBot(bot.id);
           // Removing schedules is not a security revocation. Keep them intact
           // if the bot/receipt write fails, so a failed deletion is retryable.
           host.routines!.disableForBot(bot.id);
@@ -206,6 +208,7 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
           host.calendarCalls!.removeBot(bot.id);
           host.browserLive.closeForBot(bot.id);
           host.browserNetworkDebug.clearBot(bot.id);
+          host.cacheKeepWarm.cancelBot(bot.id);
           host.computerTeach.discardBot(bot.id);
           await host.forgetTemporaryBrowser(bot.id);
           // The bot's database and sheet go with the bot; a failure here
@@ -235,7 +238,6 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
         releaseComputerLifecycle();
         releasePhoneSecretMutation();
       }
-
 }
   return deleteBotWithLifecycle;
 }

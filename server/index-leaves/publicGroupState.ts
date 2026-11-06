@@ -1,17 +1,19 @@
 // @ts-nocheck
 /** publicGroupState (#1388). Pure move from server/index.ts. */
+import { groupOwnerId } from "../groups/group-ownership.ts";
 export type Host = Record<string, any>;
 
 export function createPublicGroupState(getHost: () => Host): any {
-function publicGroupState(record: GroupRecord) {
+function publicGroupState(record: GroupRecord): WireGroup {
   const host = getHost();
-
   // The organization library's part hashes and the person-thread migration
   // marker stay server-side.
   const { installedPackage: _installedPackage, personThreads: _personThreads, archivedAt: _archivedAt, ...group } = record;
   let usage: WireGroup["usage"];
   try { usage = host.groupUsageReader.forThread(group.threadId); } catch { /* accounting must not block chat */ }
-  const openHandoffs = host.coordinator.active().filter(n => n.groupId === group.id && !["completed", "failed", "cancelled"].includes(n.status));
+  // A member's node parked on the person's cards holds nothing and is not
+  // working: the room keeps taking messages while that member waits.
+  const openHandoffs = host.coordinator.active().filter(n => n.groupId === group.id && !host.ENDED.has(n.status) && !(n.status === "waiting" && n.cards?.length));
   // A task works while a turn runs in it or its hand-offs are still out: its
   // composer locks on this, so another task stays free to talk in.
   const tasks = host.store.groupTasks(record.id).map((task) => {
@@ -26,7 +28,7 @@ function publicGroupState(record: GroupRecord) {
   const currentSpeaker = host.groupSpeakers.get(group.threadId);
   const activeWorking = host.groupThreadIsWorking(record.id, group.threadId);
   // Organization server: who owns the group's settings (null: its admins).
-  const owner = host.IDENTITY.kind === "perspicax" && !group.dm ? { ownerId: host.groupOwnerId(group) } : {};
+  const owner = host.IDENTITY.kind === "perspicax" && !group.dm ? { ownerId: groupOwnerId(group) } : {};
   return {
     ...group, ...owner,
     tasks: record.dm ? undefined : tasks,
@@ -36,12 +38,14 @@ function publicGroupState(record: GroupRecord) {
     usage: usage ?? null,
     memberContext: host.roomMemberContexts.forThread(group.threadId) ?? null,
     busyBotId: currentSpeaker?.botId ?? (activeWorking ? record.busyBotId : null),
+    // The open thread's speaker started its own turn; record.turnStartedAt
+    // follows whichever thread's member claimed last.
+    ...(currentSpeaker?.since ? { turnStartedAt: currentSpeaker.since } : {}),
     // The room works while any of its tasks does, a background goal's too:
     // the sidebar, a call and Stop read this.
     working: host.groupIsWorking(record) || openHandoffs.length > 0,
     memberProfiles: host.groupMemberProfiles(group)
   };
-
 }
   return publicGroupState;
 }

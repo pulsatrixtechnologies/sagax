@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** provideSecretFromPhone (#1388). Pure move from server/index.ts. */
-import { assertPhoneSecretRequestMatches, PhoneSecretError, phoneSecretOperationId } from "../phone/phone-secret.ts";
+import { isCredentialTargetId, credentialIsConfigured } from "../../shared/credential-request.ts";
+import { PhoneSecretError, assertPhoneSecretRequestMatches, phoneSecretOperationId } from "../phone/phone-secret.ts";
 export type Host = Record<string, any>;
 
 export function createProvideSecretFromPhone(getHost: () => Host): any {
@@ -9,7 +10,6 @@ async function provideSecretFromPhone(
   authenticatedDeviceId: string,
 ): Promise<{ provided: boolean; resumed: boolean }> {
   const host = getHost();
-
   const owner = host.connectorThread(context.botId, context.threadId);
   const message = host.secretMessage(context.botId, context.threadId, context.messageId);
   if (!owner || !message?.secret) throw new PhoneSecretError("No such credential request", 404);
@@ -31,7 +31,7 @@ async function provideSecretFromPhone(
   // card, so the exact retry can repair that tiny window without writing the
   // credential again. A different randomized envelope was rejected above.
   if (message.secret.phoneOperationId === operationId && !message.secret.provided) {
-    if (!host.credentialIsConfigured(host.cfg, message.secret.target)) {
+    if (!(isCredentialTargetId(message.secret.target) && credentialIsConfigured(host.cfg, message.secret.target))) {
       throw new PhoneSecretError(`${message.secret.label} is no longer configured`, 409);
     }
     if (!host.resumeSecretCard(context.botId, context.threadId, context.messageId, "provided")) {
@@ -48,7 +48,7 @@ async function provideSecretFromPhone(
         409,
       );
     }
-    if (!host.credentialIsConfigured(host.cfg, message.secret.target)) {
+    if (!(isCredentialTargetId(message.secret.target) && credentialIsConfigured(host.cfg, message.secret.target))) {
       throw new PhoneSecretError(`${message.secret.label} is no longer configured`, 409);
     }
     // A crash or older build may have committed the credential and marked
@@ -91,7 +91,7 @@ async function provideSecretFromPhone(
     // Electron acknowledges only after credentials.bin and the server's
     // external-secret config update both commit. Keep this assertion at the
     // boundary so a future parent handler cannot accidentally resume first.
-    if (!host.credentialIsConfigured(host.cfg, current.secret.target)) {
+    if (!(isCredentialTargetId(current.secret.target) && credentialIsConfigured(host.cfg, current.secret.target))) {
       throw new PhoneSecretError(`${current.secret.label} was not saved yet`, 409);
     }
     // Persist the winning randomized envelope id before completing the card.
@@ -107,7 +107,6 @@ async function provideSecretFromPhone(
   const settled = host.currentSecretState(context.botId, context.threadId, context.messageId);
   if (!settled) throw new PhoneSecretError("This credential request is no longer available", 409);
   return settled;
-
 }
   return provideSecretFromPhone;
 }

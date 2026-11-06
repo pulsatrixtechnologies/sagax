@@ -3,9 +3,8 @@
 export type Host = Record<string, any>;
 
 export function createScrubConfidentialThreads(getHost: () => Host): any {
-function scrubConfidentialThreads(value: unknown, ids: ReadonlySet<string>) {
-  void getHost();
-
+function scrubConfidentialThreads(value: unknown, ids: ReadonlySet<string>): unknown {
+  const host = getHost();
   const transcript = ["messages", "activeLeafId", "hasMore"];
   const scrub = (item: unknown): unknown => {
     if (Array.isArray(item)) {
@@ -23,7 +22,6 @@ function scrubConfidentialThreads(value: unknown, ids: ReadonlySet<string>) {
     return out;
   };
   return scrub(value);
-
 }
   return scrubConfidentialThreads;
 }

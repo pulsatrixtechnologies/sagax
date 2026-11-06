@@ -1,7 +1,11 @@
 // @ts-nocheck
 /** deliverLateQuestionAnswer (#1388). Pure move from server/index.ts. */
-import { queueChannelMessage, queuedChannelMessage } from "../rooms/channel-queue.ts";
+import { DATA_DIR } from "../config.ts";
+import { sendFingerprint, acceptedSendMatch } from "../messages/send-idempotency.ts";
+import { speakerFor } from "../request-speaker.ts";
+import { queuedChannelMessage, queueChannelMessage } from "../rooms/channel-queue.ts";
 import { queuedSteeredMessage } from "../turns/steer-queue.ts";
+import { assertWithinBudget } from "../usage/spend.ts";
 import { createHash } from "node:crypto";
 export type Host = Record<string, any>;
 
@@ -18,7 +22,6 @@ async function deliverLateQuestionAnswer(
   callId?: string,
 ): Promise<{ queued: boolean }> {
   const host = getHost();
-  const { DATA_DIR, acceptedSendMatch, assertWithinBudget, sendFingerprint } = host;
   const group = host.store.groupByThread(threadId);
   const roomTarget = group
     ? group.dm
@@ -67,7 +70,7 @@ async function deliverLateQuestionAnswer(
     if (group) {
       const current = host.store.group(group.id);
       if (!current || !roomTarget) throw Object.assign(new Error("the room switched tasks before it could receive the answer"), { status: 409 });
-      if (host.groupIsWorking(current)) {
+      if (host.groupThreadIsWorking(current.id, threadId)) {
         const queued = queueChannelMessage(current.id, threadId, text, {
           replyToId: cardMessage.id,
           sendId,
@@ -80,7 +83,7 @@ async function deliverLateQuestionAnswer(
       host.startGroupTurn(current.id, text, cardMessage, sendId, "chat", undefined, { threadId, sender, trigger });
       return { queued: false };
     }
-    const direct = await host.startOrQueueDirectMessage(owner.id, threadId, text, cardMessage, sendId, sender, trigger, host.speakerFor(auth), undefined, via, callId);
+    const direct = await host.startOrQueueDirectMessage(owner.id, threadId, text, cardMessage, sendId, sender, trigger, speakerFor(auth), undefined, via, callId);
     return { queued: "queued" in direct && Boolean(direct.queued) };
   });
 
@@ -89,7 +92,6 @@ async function deliverLateQuestionAnswer(
     host.store.patchMessage(threadId, cardMessage.id, { card: { ...latest, answered: "answer", answeredText: answer, dismissed: false } });
   }
   return receipt;
-
 }
   return deliverLateQuestionAnswer;
 }

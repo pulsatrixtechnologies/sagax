@@ -1,15 +1,22 @@
 // @ts-nocheck
 /** configStatus (#1388). Pure move from server/index.ts. */
-import {  boatComputerEnabled, dataWindowEnabled, decisionModelEnabled, maxConcurrentBotThreads, maxParallelTasksPerPerson, openCodeProviderKeys, roomMemoryCaptureEnabled, routineGroupSettingsEnabled, showToolCallsEnabled, skillReviewEnabled, skillReviewSteps, templatesEnabled, threadEventLogRetentionDays, vpsComputerEnabled, vpsSshAlias, threadEventLogMaxBytes } from "../config.ts";
-import { editionStatus, workspaceMembership } from "../enterprise.ts";
+import * as boat from "../computer/boat.ts";
+import { threadEventLogMaxBytes, threadEventLogRetentionDays, semanticRecallEnabled, vpsSshAlias, openCodeProviderKeys, liveSettingsFor, roomTurnTimeoutMinutes, mcpCallTimeoutMinutes, cacheKeepWarmSettings, maxConcurrentBotThreads, maxParallelTasksPerPerson, localVmMode, localVmMaxInstances, localVmIdleTimeoutMinutes, skillAuthoringEnabled, skillReviewEnabled, skillReviewSteps, skillsLibraryEnabled, showToolCallsEnabled, routinesInConversationEnabled, templatesEnabled, vpsComputerEnabled, boatComputerEnabled, decisionModelEnabled, dataWindowEnabled, meetingNotetakerEnabled, routineGroupSettingsEnabled, builtInBrowserEnabled, sharedComputersEnabled, claudeUserMcpEnabled, autoRecallEnabled, roomMemoryCaptureEnabled, llmThreadTitlesEnabled } from "../config.ts";
 import { describeDecider } from "../decider/index.ts";
+import { decisionRetentionDays } from "../decision-log.ts";
+import { editionStatus, workspaceMembership } from "../enterprise.ts";
+import { fleetAvailable, fleetSocketPath } from "../fleet/fleet-client.ts";
+import { loopGuardSettings, correctiveRounds } from "../host/loop-guard.ts";
+import { avatarImageStatus } from "../media/avatar-image.ts";
+import { compatServers } from "../openai-compat-servers.ts";
+import { savedStepsEnabled } from "../saved-steps/saved-steps.ts";
+import * as tts from "../tts/index.ts";
 import { claudeUserSkillsEnabled } from "../turn-settings.ts";
 export type Host = Record<string, any>;
 
 export function createConfigStatus(getHost: () => Host): any {
 function configStatus() {
   const host = getHost();
-  const { autoRecallEnabled, avatarImageStatus, builtInBrowserEnabled, cacheKeepWarmSettings, claudeUserMcpEnabled, decisionRetentionDays, liveSettingsFor, llmThreadTitlesEnabled, localVmIdleTimeoutMinutes, localVmMaxInstances, localVmMode, mcpCallTimeoutMinutes, meetingNotetakerEnabled, roomTurnTimeoutMinutes, routinesInConversationEnabled, savedStepsEnabled, semanticRecallEnabled, sharedComputersEnabled, skillAuthoringEnabled, skillsLibraryEnabled } = host;
   // off-by-default thread cleanup knobs stay absent so clients can tell
   // "unset" apart from any in-range value
   const eventLogMaxBytes = threadEventLogMaxBytes(host.cfg);
@@ -19,11 +26,13 @@ function configStatus() {
     mistral: { configured: Boolean(host.cfg.mistral?.key) },
     cerebras: { configured: Boolean(host.cfg.cerebras?.key) },
     groq: { configured: Boolean(host.cfg.groq?.key) },
-    anthropic: { configured: Boolean(host.cfg.anthropic?.key), everyClaudeBot: false },
+    meta: { configured: Boolean(host.cfg.meta?.key) },
+    deepseek: { configured: Boolean(host.cfg.deepseek?.key) },
+    anthropic: { configured: Boolean(host.cfg.anthropic?.key), everyClaudeBot: host.cfg.anthropic?.everyClaudeBot !== false },
     openai: { configured: Boolean(host.cfg.openai?.key) },
     openrouter: { configured: Boolean(host.cfg.openrouter?.key) },
     // a fleet agent on this server means Settings → Installations has something to drive
-    fleet: { available: host.fleetAvailable(host.fleetSocketPath()) },
+    fleet: { available: fleetAvailable(fleetSocketPath()) },
     // the features this server runs with (every one in the open-source
     // edition), so Settings shows only what works here
     edition: host.editionForSettings(editionStatus()),
@@ -43,16 +52,16 @@ function configStatus() {
     ...(host.orgCapabilitiesRevision ? { orgCapabilities: { revision: host.orgCapabilitiesRevision } } : {}),
     // 2026-10-30: the named OpenAI-compatible servers, never their keys.
     // Person isolation (#2054) is applied in configForPerson / instancesForViewer.
-    openaiCompatServers: host.compatServers(host.cfg),
+    openaiCompatServers: compatServers(host.cfg),
     // configured = cloud computers work here; included = through Cloud Pro,
     // not a saved key
-    box: host.boat.describeBoatAccount(host.cfg),
+    box: boat.describeBoatAccount(host.cfg),
     vps: { configured: Boolean(vpsSshAlias(host.cfg)), sshAlias: vpsSshAlias(host.cfg) ?? "" },
     // names only: every provider key stays write-only
     opencodeGo: { configured: Boolean(host.cfg.opencodeGo?.apiKey), providerKeys: Object.keys(openCodeProviderKeys(host.cfg)) },
     // the chosen voice is a setting, not a secret; the key is reported the
     // same configured-or-not way as every other credential
-    tts: host.tts.describeVoice(host.cfg),
+    tts: tts.describeVoice(host.cfg),
     // the decision model: switches and configured-or-not, never the key
     decider: describeDecider(host.cfg),
     imageGen: avatarImageStatus(host.cfg),
@@ -123,13 +132,13 @@ function configStatus() {
       savedStepsHere: host.savedSteps.here()
     },
     ...(() => {
-      const guard = host.loopGuardSettings(host.cfg);
+      const guard = loopGuardSettings(host.cfg);
       return {
         loopGuard: {
           enabled: guard.enabled,
           steerAt: guard.steerAt,
           ...(guard.stopAt === undefined ? {} : { stopAt: guard.stopAt }),
-          correctiveRounds: host.correctiveRounds(host.cfg)
+          correctiveRounds: correctiveRounds(host.cfg)
         }
       };
     })(),
@@ -163,7 +172,6 @@ function configStatus() {
     // organization server: new threads start confidential (server/threads/confidential-threads.ts)
     ...(host.IDENTITY.kind === "perspicax" ? { confidentialThreadsByDefault: host.confidentialThreadsByDefault() } : {})
   };
-
 }
   return configStatus;
 }

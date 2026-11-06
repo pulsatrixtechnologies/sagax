@@ -1,13 +1,16 @@
 // @ts-nocheck
 /** generateThreadTitle (#1388). Pure move from server/index.ts. */
-import { threadTitlePrompt } from "../threads/thread-title.ts";
 import { titleFromLlm } from "../store.ts";
+import { threadTitlePrompt } from "../threads/thread-title.ts";
 export type Host = Record<string, any>;
 
 export function createGenerateThreadTitle(getHost: () => Host): any {
-async function generateThreadTitle(   provider: { generateText?: (prompt: string, options?: { signal?: AbortSignal }) => Promise<string> },   text: string,   source: ThreadTitleSource = "first-message", ) {
-  void getHost();
-
+async function generateThreadTitle(
+  provider: { generateText?: (prompt: string, options?: { signal?: AbortSignal }) => Promise<string> },
+  text: string,
+  source: ThreadTitleSource = "first-message",
+): Promise<string | null> {
+  const host = getHost();
   const prompt = threadTitlePrompt(text, source);
   const expiry = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -29,7 +32,6 @@ async function generateThreadTitle(   provider: { generateText?: (prompt: string
   } finally {
     clearTimeout(timer);
   }
-
 }
   return generateThreadTitle;
 }

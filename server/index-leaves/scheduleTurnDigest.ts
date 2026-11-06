@@ -1,13 +1,26 @@
 // @ts-nocheck
 /** scheduleTurnDigest (#1388). Pure move from server/index.ts. */
-import { buildTurnDigest, coverageForDriver, renderDigest, toolEvidence } from "../digest.ts";
+import { reportBackgroundError } from "../background-error.ts";
+import * as checkpoints from "../checkpoints.ts";
+import { recordHanded, isContextMessage } from "../context/delta-context.ts";
+import { buildTurnDigest, coverageForDriver, toolEvidence, renderDigest } from "../digest.ts";
 export type Host = Record<string, any>;
 
 export function createScheduleTurnDigest(getHost: () => Host): any {
-async function scheduleTurnDigest(input: {   botId: string;   botName: string;   threadId: string;   turnId: string;   driverKind: string | undefined;   instanceId?: string;   reply: string;   from?: Message["from"];   isCurrent: () => boolean;   usage?: { input: number; output: number; cachedInput?: number; costUsd?: number | null };   succeeded?: boolean; }) {
+async function scheduleTurnDigest(input: {
+  botId: string;
+  botName: string;
+  threadId: string;
+  turnId: string;
+  driverKind: string | undefined;
+  instanceId?: string;
+  reply: string;
+  from?: Message["from"];
+  isCurrent: () => boolean;
+  usage?: { input: number; output: number; cachedInput?: number; costUsd?: number | null };
+  succeeded?: boolean;
+}): Promise<void> {
   const host = getHost();
-  const { isContextMessage, recordHanded } = host;
-
   const at = Date.now();
   const startedAt = host.turnStartedAt.get(input.threadId);
   host.turnStartedAt.delete(input.threadId);
@@ -57,7 +70,7 @@ async function scheduleTurnDigest(input: {   botId: string;   botName: string;  
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const capture = async () => {
-      return host.checkpoints.diffWorkingTree(input.botId, checkpoint.cwd, checkpoint.hash, controller.signal);
+      return checkpoints.diffWorkingTree(input.botId, checkpoint.cwd, checkpoint.hash, controller.signal);
     };
     let files: Awaited<ReturnType<typeof capture>>;
     try {
@@ -76,11 +89,10 @@ async function scheduleTurnDigest(input: {   botId: string;   botName: string;  
   } finally {
     // The pre-turn commit has had its last reader (the diff above is queued
     // ahead of this in the shadow repo); the next snapshot may reclaim it.
-    if (checkpoint) void host.checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin);
-    void host.runLifecycleEvent(input.botId, input.threadId, "after_agent_response", { text: input.reply.slice(0, 2_000) }).catch(host.reportBackgroundError);
-    void host.runLifecycleEvent(input.botId, input.threadId, "stop", {}).catch(host.reportBackgroundError);
+    if (checkpoint) void checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin).catch(reportBackgroundError);
+    void host.runLifecycleEvent(input.botId, input.threadId, "after_agent_response", { text: input.reply.slice(0, 2_000) }).catch(reportBackgroundError);
+    void host.runLifecycleEvent(input.botId, input.threadId, "stop", {}).catch(reportBackgroundError);
   }
-
 }
   return scheduleTurnDigest;
 }

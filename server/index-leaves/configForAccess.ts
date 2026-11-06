@@ -4,8 +4,7 @@ export type Host = Record<string, any>;
 
 export function createConfigForAccess(getHost: () => Host): any {
 function configForAccess(status: ReturnType<typeof configStatus>, admin: boolean) {
-  void getHost();
-
+  const host = getHost();
   if (admin) return status;
   // Configured-or-not is fine; an SSH alias, an email, a browser partition
   // id, and the sign-in list are not a client's business. Preserve the
@@ -18,7 +17,6 @@ function configForAccess(status: ReturnType<typeof configStatus>, admin: boolean
     profile: { name: status.profile.name, email: "" },
     browserProfiles: status.browserProfiles.map((profile) => Object.fromEntries(Object.entries(profile).filter(([key]) => key !== "partitionId")))
   };
-
 }
   return configForAccess;
 }

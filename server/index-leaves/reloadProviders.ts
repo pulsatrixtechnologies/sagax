@@ -1,12 +1,13 @@
 // @ts-nocheck
 /** reloadProviders (#1388). Pure move from server/index.ts. */
-import { changedInstanceIds } from "../config.ts";
+import { failedTurnTool } from "../../shared/failed-turn.ts";
+import { changedInstanceIds, engineLaunches } from "../config.ts";
+import { stoppedTurnOutcome } from "../turns/turn-outcome.ts";
 export type Host = Record<string, any>;
 
 export function createReloadProviders(getHost: () => Host): any {
 async function reloadProviders(before: Record<string, unknown>) {
   const host = getHost();
-  const { engineLaunches, groupSpeakers } = host;
   const configs = host.providerConfigs();
   const changed = new Set(changedInstanceIds(before, engineLaunches(configs)));
   if (!changed.size) return;
@@ -14,7 +15,7 @@ async function reloadProviders(before: Record<string, unknown>) {
   const direct = host.store.bots.flatMap((bot) => host.store.tasks(bot.id)
     .filter((task) => host.threadBusy(bot.id, task.threadId) && onChanged(bot.id, task.threadId))
     .map((task) => ({ botId: bot.id, threadId: task.threadId, owner: host.turnResourceOwners.get(task.threadId) })));
-  const rooms = [...groupSpeakers.entries()].filter(([threadId, speaker]) => onChanged(speaker.botId, threadId));
+  const rooms = [...host.groupSpeakers.entries()].filter(([threadId, speaker]) => onChanged(speaker.botId, threadId));
   const cause = "turn interrupted — provider settings changed";
   host.providerFleetReloading = true;
   for (const id of changed) host.providerInstancesChanging.add(id);
@@ -26,7 +27,7 @@ async function reloadProviders(before: Record<string, unknown>) {
     const group = host.store.groupByThread(threadId);
     // The room's assignments, queued ones too, fail with this cause, and its
     // goal run says it: neither reads as the person's Stop.
-    if (group) host.cancelGroupTurnOperations(group.id, threadId, { status: "stopped", detail: host.stoppedTurnOutcome({ reason: cause, activities: [] }), byHarness: true });
+    if (group) host.cancelGroupTurnOperations(group.id, threadId, { status: "stopped", detail: stoppedTurnOutcome({ reason: cause, activities: [] }), byHarness: true });
   }
   try {
     const kept = [...changed].filter((id) => Object.hasOwn(configs, id));
@@ -47,17 +48,15 @@ async function reloadProviders(before: Record<string, unknown>) {
       host.closeOpenApprovals(threadId);
       host.directTurnBots.delete(threadId);
       host.runningTurnEngines.delete(threadId);
-      host.finalizeDelegationWatch(threadId, false, "", `Delegated turn did not finish — ${interrupted}`);
       host.routines?.failThread(threadId, "Provider settings changed while this thread was running");
       if (host.store.taskByThread(botId, threadId)) {
         host.store.appendMessage(threadId, {
           role: "bot", kind: "activity",
-          tool: host.failedTurnTool(cause)
+          tool: failedTurnTool(cause)
         });
         host.store.setTaskActivity(botId, threadId, "idle");
       }
       host.settleDirectFollowup(owner?.generation, { ok: false, text: interrupted });
-      host.retryDelegationsWaitingOn(botId);
     }
     for (const [threadId, speaker] of rooms) {
       host.releaseLocalVmThread(threadId);
@@ -69,7 +68,7 @@ async function reloadProviders(before: Record<string, unknown>) {
       host.runningTurnEngines.delete(threadId);
       host.groupSpeakers.delete(threadId);
       const group = host.store.groupByThread(threadId);
-      if (group) host.store.patchGroup(group.id, { busyBotId: null });
+      if (group) host.store.patchGroup(group.id, { busyBotId: host.activeGroupSpeaker(group.id)?.botId ?? null });
       host.store.setActivity(speaker.botId, "idle");
     }
     for (const id of changed) host.providerInstancesChanging.delete(id);
@@ -78,10 +77,6 @@ async function reloadProviders(before: Record<string, unknown>) {
   // killed turns settle here without a turn.completed event, so anything
   // queued behind them drains now — onto the freshly loaded fleet
   host.drainQueuedSends();
-  host.drainComputerResumes();
-  host.drainSecretResumes();
-  host.drainTeamSetupResumes();
-
 }
   return reloadProviders;
 }

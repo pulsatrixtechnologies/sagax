@@ -1,16 +1,22 @@
 // @ts-nocheck
 /** compactConversation (#1388). Pure move from server/index.ts. */
-import { compactBudget, contextWindowFor, defaultCompactAt, nativeCompactionPoint, shouldCompact } from "../context/context-budget.ts";
-import { MAX_SUMMARY_BYTES } from "../context/context-rebuild.ts";
+import { foldPoint, deterministicSummary, draftSummary } from "../context/compaction-summary.ts";
+import { contextWindowFor, nativeCompactionPoint, shouldCompact, compactBudget, defaultCompactAt } from "../context/context-budget.ts";
+import { selectReplay, MAX_SUMMARY_BYTES, DEFAULT_REBUILD_BYTES } from "../context/context-rebuild.ts";
 import { autoCompactWindow } from "../drivers/claude.ts";
 import { remindAfterCompaction } from "../finish-until.ts";
+import { redactSecretsInText } from "../redact.ts";
+import { replaysNatively } from "../turns/turn-context.ts";
 import { createHash } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createCompactConversation(getHost: () => Host): any {
-async function compactConversation(input: {   bot: BotRecord; threadId: string; generation: string;   instance: NonNullable<ReturnType<typeof registry.get>>; model: string;   excludedIds: ReadonlySet<string>; manual: boolean; }) {
+async function compactConversation(input: {
+  bot: BotRecord; threadId: string; generation: string;
+  instance: NonNullable<ReturnType<typeof registry.get>>; model: string;
+  excludedIds: ReadonlySet<string>; manual: boolean;
+}): Promise<void> {
   const host = getHost();
-  const { DEFAULT_REBUILD_BYTES, cfg, replaysNatively, selectReplay } = host;
   const { bot, threadId, generation, instance, model, excludedIds, manual } = input;
   const task = host.store.taskByThread(bot.id, threadId);
   if (!task || (!manual && !host.sagaxCompactionOn(bot.id))) return;
@@ -32,7 +38,7 @@ async function compactConversation(input: {   bot: BotRecord; threadId: string; 
   const stale = manual ? null : host.staleEngineSession(threadId, task, instance, messages, excludedIds);
   if (stale) {
     const fresh = history.some(entry => entry.id !== record?.id);
-    const fold = host.foldPoint(history) ?? host.foldPoint(history, 1) ?? { folded: history, firstKeptId: "" };
+    const fold = foldPoint(history) ?? foldPoint(history, 1) ?? { folded: history, firstKeptId: "" };
     const foldedThroughId = fold.folded.at(-1)?.id;
     const anchorId = context.at(-1)?.id;
     if (fresh && foldedThroughId && foldedThroughId !== record?.id && anchorId) {
@@ -41,7 +47,7 @@ async function compactConversation(input: {   bot: BotRecord; threadId: string; 
       if (!current) return;
       if (!current.contextSummaries?.some(entry => entry.id === id)) {
         const bytes = history.reduce((n, entry) => n + Buffer.byteLength(entry.text), 0);
-        const entry = { id, at: Date.now(), summary: host.redactSecretsInText(remindAfterCompaction(host.deterministicSummary(fold.folded), bot.finishUntil)), firstKeptId: fold.firstKeptId,
+        const entry = { id, at: Date.now(), summary: redactSecretsInText(remindAfterCompaction(deterministicSummary(fold.folded), bot.finishUntil)), firstKeptId: fold.firstKeptId,
           foldedThroughId, anchorId, tokensBefore: Math.ceil(bytes / 4), stale: true as const };
         host.store.patchTask(bot.id, threadId, { contextSummaries: [...(current.contextSummaries ?? []), entry].slice(-host.CONTEXT_SUMMARIES_KEPT) });
       }
@@ -69,7 +75,7 @@ async function compactConversation(input: {   bot: BotRecord; threadId: string; 
   // (context-budget.ts nativeCompactionPoint). For Claude it is the
   // selected account's launch setting; "auto" and "off" supply no number.
   const claudeWindow = instance.driverKind === "claudeAgent"
-    ? Number(autoCompactWindow({ ...process.env, ...cfg.instances?.[instance.instanceId]?.environment })) : undefined;
+    ? Number(autoCompactWindow({ ...process.env, ...host.cfg.instances?.[instance.instanceId]?.environment })) : undefined;
   const nativeCompactAt = nativeCompactionPoint(instance.driverKind, window, claudeWindow);
   // An engine that is handed the stored transcript every turn only ever
   // sees the newest rebuildBytes of it: past that, older turns would fall
@@ -80,13 +86,13 @@ async function compactConversation(input: {   bot: BotRecord; threadId: string; 
   const rebuildBytes = host.cfg.context?.rebuildBytes ?? DEFAULT_REBUILD_BYTES;
   const replayFold = !manual && replaysNatively(instance.driverKind)
     && selectReplay(context, { budgetBytes: rebuildBytes, excludedIds, compaction: record }).dropped > 0
-    ? host.foldPoint(history) : null;
+    ? foldPoint(history) : null;
   const keptStart = replayFold ? history.findIndex(entry => entry.id === replayFold.firstKeptId) : -1;
   const replayWouldDrop = Boolean(replayFold && replayFold.folded.some(entry => entry.id !== record?.id) && keptStart >= 0
     && history.slice(keptStart).reduce((n, entry) => n + Buffer.byteLength(entry.text) + 16, 0) <= rebuildBytes / 2 - 128);
   if (!manual && !replayWouldDrop && !shouldCompact({ contextTokens: measurement?.tokens, estimatedBytes: bytes,
     budget: compactBudget(window, host.cfg.context?.compactAt ?? defaultCompactAt(instance.driverKind), nativeCompactAt), floor, window, nativeCompactAt })) return;
-  const fold = manual ? { folded: history, firstKeptId: "" } : host.foldPoint(history);
+  const fold = manual ? { folded: history, firstKeptId: "" } : foldPoint(history);
   if (!fold) return;
   const foldedThroughId = manual
     ? context.findLast(entry => !excludedIds.has(entry.id))?.id
@@ -96,7 +102,7 @@ async function compactConversation(input: {   bot: BotRecord; threadId: string; 
   const controller = new AbortController();
   host.compactionControllers.set(threadId, { generation, controller });
   try {
-    const summary = await host.draftSummary(fold.folded, { signal: controller.signal, generateText: instance.generateText?.bind(instance) });
+    const summary = await draftSummary(fold.folded, { signal: controller.signal, generateText: host.sideJobs.text("compaction", bot.id, { instance })?.generateText });
     if (!host.directTurnClaimIsCurrent(bot.id, generation, threadId)) throw new host.DirectTurnSetupCancelled("context summarization stopped");
     controller.signal.throwIfAborted();
     // Appended teammate results remain after the fold. A changed prefix is
@@ -123,14 +129,13 @@ async function compactConversation(input: {   bot: BotRecord; threadId: string; 
     const id = `ctx-${createHash("sha256").update(`${threadId}:${anchorId}:${fold.firstKeptId}`).digest("hex").slice(0, 24)}`;
     const current = host.store.taskByThread(bot.id, threadId);
     if (!current || current.contextSummaries?.some(entry => entry.id === id)) return;
-    const entry = { id, at: Date.now(), summary: host.redactSecretsInText(remindAfterCompaction(summary, bot.finishUntil)), firstKeptId: fold.firstKeptId,
+    const entry = { id, at: Date.now(), summary: redactSecretsInText(remindAfterCompaction(summary, bot.finishUntil)), firstKeptId: fold.firstKeptId,
       foldedThroughId, anchorId, tokensBefore };
     host.store.patchTask(bot.id, threadId, { contextSummaries: [...(current.contextSummaries ?? []), entry].slice(-host.CONTEXT_SUMMARIES_KEPT) });
     console.info(`[context] ${bot.id} ${threadId}: folded ${fold.folded.length} message(s) at about ${tokensBefore} tokens (window ${window}${nativeCompactAt ? `, engine compacts at ${nativeCompactAt}` : ""})`);
   } finally {
     if (host.compactionControllers.get(threadId)?.generation === generation) host.compactionControllers.delete(threadId);
   }
-
 }
   return compactConversation;
 }

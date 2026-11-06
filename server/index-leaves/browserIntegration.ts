@@ -1,14 +1,18 @@
 // @ts-nocheck
 /** browserIntegration (#1388). Pure move from server/index.ts. */
-import { browserProfilePartitionTarget } from "../config.ts";
 import { noteBrowserOwner } from "../auth/web-bot-auth.ts";
-import { agentBrowserIntegration, prepareBrowserSessionState, describeBrowserEngine } from "../browser/browser-engine.ts";
+import { browserEngineStatus, describeBrowserEngine, agentBrowserIntegration, browserEngineEncryptionKey, prepareBrowserSessionState } from "../browser/browser-engine.ts";
+import { browserEgress } from "../browser/egress/registry.ts";
+import { MY_CHROME_PROFILE } from "../browser/my-chrome/pilot.ts";
+import { browserProfilePartitionTarget, browserEngineAttachCdpUrl, builtInBrowserEnabled } from "../config.ts";
+import { augmentedPath } from "../env-path.ts";
+import { harnessMcpTokenEnv } from "../harness-mcp-token.ts";
+import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 export type Host = Record<string, any>;
 
 export function createBrowserIntegration(getHost: () => Host): any {
 async function browserIntegration(botId: string, requestedProfile: string | undefined, turn?: { threadId: string; generation: string }, sessionThreadId?: string) {
   const host = getHost();
-  const { MY_CHROME_PROFILE, browserEngineAttachCdpUrl, browserEngineEncryptionKey, browserEngineStatus, builtInBrowserEnabled } = host;
   const profile = host.effectiveBrowserProfile(botId, requestedProfile);
   const status = browserEngineStatus();
   if (status.kind !== "ready") {
@@ -40,11 +44,11 @@ async function browserIntegration(botId: string, requestedProfile: string | unde
       session,
       encryptionKey: browserEngineEncryptionKey(),
       persistent,
-      env: { ...process.env, PATH: host.augmentedPath() },
+      env: { ...process.env, PATH: augmentedPath() },
       attachCdpUrl,
       // A Chrome attached over CDP is the person's own: no gate to put it behind
       // (My Chrome has its own: server/browser/my-chrome/gate.ts).
-      ...(attachCdpUrl ? {} : { egressPort: await host.browserEgress.open(session) })
+      ...(attachCdpUrl ? {} : { egressPort: await browserEgress.open(session) })
     });
   host.usedBrowserSessions.set(session, spec);
   host.browserSessionBots.set(session, botId);
@@ -58,11 +62,10 @@ async function browserIntegration(botId: string, requestedProfile: string | unde
   const token = host.mintInternalCapability({ botId, ...turn, browserSession: session,
     kind: "browser", depth: 0, skillAuthoring: false, createdBots: 0, openedThreads: 0 });
   return { profile: partitionId, session, spec, integration: {
-    command: process.execPath, args: [host.SPAWNED_PROXIES.harnessMcp, "browser"], env: {
-      ...host.AGENTS_NODE_FLAG, SAGAX_MCP_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`
+    command: process.execPath, args: [SPAWNED_PROXIES.harnessMcp, "browser"], env: {
+      ...host.AGENTS_NODE_FLAG, [harnessMcpTokenEnv("browser")]: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`
     }
   } };
-
 }
   return browserIntegration;
 }

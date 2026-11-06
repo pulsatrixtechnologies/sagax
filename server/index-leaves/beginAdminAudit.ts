@@ -1,14 +1,16 @@
 // @ts-nocheck
 /** beginAdminAudit (#1388). Pure move from server/index.ts. */
-import { onJsonBody } from "../harness/http.ts";
+import { appendAdminAction } from "../activity/admin-activity.ts";
+import { adminAuditPlan } from "../admin/admin-audit-plan.ts";
 import { requiredScope } from "../auth/request-auth.ts";
+import { DATA_DIR } from "../config.ts";
+import { onJsonBody } from "../harness/http.ts";
 export type Host = Record<string, any>;
 
 export function createBeginAdminAudit(getHost: () => Host): any {
-function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: string, path: string, auth: RequestAuth) {
+function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: string, path: string, auth: RequestAuth): AdminActorScope {
   const host = getHost();
-  const { DATA_DIR, appendAdminAction } = host;
-  const plan = host.DESKTOP_MANAGED ? null : host.adminAuditPlan(method, path, { requiredScope, lendingEnabled: host.lendingEnabled });
+  const plan = host.DESKTOP_MANAGED ? null : adminAuditPlan(method, path, { requiredScope, lendingEnabled: host.lendingEnabled });
   const actor = plan ? host.adminActorFor(auth, req) : null;
   // Whether several people share the workspace as the request begins: a
   // change that ends sharing (the last chat-only phone signed out) is kept.
@@ -33,7 +35,6 @@ function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: stri
     }
   });
   return scope;
-
 }
   return beginAdminAudit;
 }

@@ -1,15 +1,13 @@
 // @ts-nocheck
 /** startMcpSignIn (#1388). Pure move from server/index.ts. */
-import { DEFAULT_MCP_ACCOUNT, McpOAuthError, McpOAuthManager, phoneOAuthReturns } from "../mcp/mcp-oauth.ts";
-import {randomBytes} from "node:crypto";
+import { DEFAULT_MCP_ACCOUNT, phoneOAuthReturns, McpOAuthError } from "../mcp/mcp-oauth.ts";
+import { randomBytes } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createStartMcpSignIn(getHost: () => Host): any {
-async function startMcpSignIn(req: IncomingMessage, auth: RequestAuth, name: string, server: RemoteMcpSpec, body: unknown, manager?: McpOAuthManager):
+async function startMcpSignIn(req: IncomingMessage, auth: RequestAuth, name: string, server: RemoteMcpSpec, body: unknown, manager: McpOAuthManager = getHost().mcpOAuth):
   Promise<{ status: number; body: Record<string, unknown> }> {
   const host = getHost();
-  manager ??= host.mcpOAuth;
-
   const input = host.mcpOAuthStartSchema.safeParse(body ?? {});
   if (!input.success) return { status: 400, body: { error: input.error.issues[0]?.message ?? "Invalid sign-in request." } };
   const { returnTo, callbackOrigin, account: chosen, newAccount, ...client } = input.data;
@@ -31,7 +29,6 @@ async function startMcpSignIn(req: IncomingMessage, auth: RequestAuth, name: str
     return { status: 409, body: { error: "Send the address the phone reaches this computer on (callbackOrigin).", code: "callback_unreachable" } };
   }
   try {
-    // `server` is the RemoteMcpSpec argument, not the HTTP listener on the host.
     const started = await manager.start(name, server, {
       redirectUri, ...client, ...(returnTo ? { returnTo } : {}),
       ...(account ? { account } : {}), ...(newAccount ? { label: newAccount.label } : {})
@@ -43,7 +40,6 @@ async function startMcpSignIn(req: IncomingMessage, auth: RequestAuth, name: str
     }
     return { status: 502, body: { error: "The sign-in could not be started." } };
   }
-
 }
   return startMcpSignIn;
 }

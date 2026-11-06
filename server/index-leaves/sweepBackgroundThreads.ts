@@ -1,16 +1,16 @@
 // @ts-nocheck
 /** sweepBackgroundThreads (#1388). Pure move from server/index.ts. */
-import { sweepSummary } from "../threads/background-sweep.ts";
+import { planBackgroundSweep, backgroundIdleMs, sweepSummary } from "../threads/background-sweep.ts";
 export type Host = Record<string, any>;
 
 export function createSweepBackgroundThreads(getHost: () => Host): any {
-function sweepBackgroundThreads() {
+function sweepBackgroundThreads(): number {
   const host = getHost();
   try {
     const onScreen = new Set(host.viewerSelections.values());
-    const plan = host.planBackgroundSweep(host.store.bots.map((bot) => ({ id: bot.id, threadId: bot.threadId, tasks: host.store.tasks(bot.id) })), {
+    const plan = planBackgroundSweep(host.store.bots.map((bot) => ({ id: bot.id, threadId: bot.threadId, tasks: host.store.tasks(bot.id) })), {
       now: Date.now(),
-      idleMs: host.backgroundIdleMs(),
+      idleMs: backgroundIdleMs(),
       held: (botId, threadId) => onScreen.has(threadId) || host.threadBusy(botId, threadId) || host.coordinator.activeDirect(threadId)
         || host.coordinator.outstandingDirect(threadId).length > 0 || host.coordinator.awaitsTeammates(threadId)
         || Boolean(host.activeRoutineRunForThread(threadId)) || host.pendingComputerResumes.has(threadId) || host.delegationWatch.has(threadId)
@@ -24,7 +24,6 @@ function sweepBackgroundThreads() {
     console.warn(`[background-threads] sweep skipped: ${error instanceof Error ? error.message : String(error)}`);
     return 0;
   }
-
 }
   return sweepBackgroundThreads;
 }

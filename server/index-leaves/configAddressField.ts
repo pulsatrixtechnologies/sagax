@@ -3,9 +3,8 @@
 export type Host = Record<string, any>;
 
 export function createConfigAddressField(getHost: () => Host): any {
-function configAddressField(value: unknown, prefix = "", depth = 0) {
-  void getHost();
-
+function configAddressField(value: unknown, prefix = "", depth = 0): string | undefined {
+  const host = getHost();
   if (!value || typeof value !== "object" || depth > 4) return undefined;
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     const path = prefix ? `${prefix}.${key}` : key;
@@ -14,7 +13,6 @@ function configAddressField(value: unknown, prefix = "", depth = 0) {
     if (nested) return nested;
   }
   return undefined;
-
 }
   return configAddressField;
 }

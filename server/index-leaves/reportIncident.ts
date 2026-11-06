@@ -1,33 +1,39 @@
 // @ts-nocheck
 /** reportIncident (#1388). Pure move from server/index.ts. */
-import { INCIDENTS_THREAD_TITLE, chiefForBot, incidentChip, incidentText } from "../peers/incidents.ts";
-import { problemReason } from "../org/org-problem-log.ts";
+import { admit } from "../admission.ts";
+import { reportBackgroundError } from "../background-error.ts";
+import { DATA_DIR } from "../config.ts";
+import { deliverableNotification } from "../notify.ts";
+import { appendProblem, problemReason } from "../org/org-problem-log.ts";
+import { chiefForBot, incidentChip, INCIDENTS_THREAD_TITLE, incidentText } from "../peers/incidents.ts";
+import { redactSecretsInText } from "../redact.ts";
+import { CONFIDENTIAL_INCIDENT_TEXT } from "../threads/confidential-threads.ts";
+import { queueSteeredMessage } from "../turns/steer-queue.ts";
 export type Host = Record<string, any>;
 
 export function createReportIncident(getHost: () => Host): any {
-function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: string; detail: string; routine?: { routineId: string; runAs?: string }; run?: Incident["run"]; title?: string }) {
+function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: string; detail: string; routine?: { routineId: string; runAs?: string }; run?: Incident["run"]; title?: string }): void {
   const host = getHost();
-  const { DATA_DIR, deliverableNotification, queueSteeredMessage } = host;
   const { bot, threadId } = input;
   const task = host.store.taskByThread(bot.id, threadId);
   // A confidential thread's incident carries no text: no title, request,
   // reply, cause or reason, in the console's problem log or anywhere else,
   // and it reaches the thread's owner only, never a Primary Bot's thread.
   if (task?.confidential === true) {
-    void host.appendProblem(DATA_DIR, {
+    void appendProblem(DATA_DIR, {
       kind: input.kind, botId: bot.id, botName: bot.name, ownerPrincipalId: host.effectiveBotOwner(bot) || null, threadId,
       title: null, engine: (task.modelSelection ?? bot.modelSelection)?.instanceId ?? null,
-      detail: host.CONFIDENTIAL_INCIDENT_TEXT
-    });
+      detail: CONFIDENTIAL_INCIDENT_TEXT
+    }).catch(reportBackgroundError);
     if (host.incidentLedger.note(threadId).muted) return;
     if (input.kind === "could-not-start" || input.kind === "routine-failed") return;
-    host.notify(deliverableNotification("incident", bot, threadId, host.CONFIDENTIAL_INCIDENT_TEXT, { avatarUrl: bot.avatarUrl }));
+    host.notify(deliverableNotification("incident", bot, threadId, CONFIDENTIAL_INCIDENT_TEXT, { avatarUrl: bot.avatarUrl }));
     return;
   }
   // The console's Overview and Incidents (server/org/org-problem-log.ts): every
   // incident, before the delegation and storm rules below decide who hears.
   const failedCause = input.kind === "failed" ? host.latestFailedTurnCause(threadId) : null;
-  void host.appendProblem(DATA_DIR, {
+  void appendProblem(DATA_DIR, {
     kind: input.kind, botId: bot.id, botName: bot.name, ownerPrincipalId: host.effectiveBotOwner(bot) || null, threadId,
     // a run names itself: the thread it reported into may be a conversation's
     title: input.title ?? task?.title ?? host.store.groupByThread(threadId)?.name ?? null,
@@ -37,11 +43,13 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     // engine printed as text, "429 Too Many Requests"); only the cause row
     // or the stop reason is stored, never a message text (decision T7).
     ...(failedCause === null && input.kind === "failed" ? { reason: problemReason("failed", `${input.detail} ${host.incidentContext(threadId).lastReply ?? ""}`) } : {}),
-    detail: host.redactSecretsInText(failedCause ?? input.detail)
-  });
+    detail: redactSecretsInText(failedCause ?? input.detail)
+  }).catch(reportBackgroundError);
   // A thread another bot opened and is watching is that bot's to handle:
   // the delegator is woken with the failure already (wakeDelegationSource).
-  if (task?.openedBy?.delegationId || host.delegationWatch.has(threadId) || host.coordinator.activeDirect(threadId)) return;
+  // A thread running coordinated work is its requester's to handle: the
+  // runtime reports the failure there (the report hook).
+  if (task?.openedBy?.delegationId || host.delegationWatch.has(threadId) || host.coordinator.activeDirect(threadId) || host.coordinator.assignerOf(threadId)) return;
   const group = host.store.groupByThread(threadId);
   const incident: Incident = {
     kind: input.kind,
@@ -49,7 +57,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     threadId,
     title: input.title ?? task?.title ?? null,
     room: group?.name ?? null,
-    detail: host.redactSecretsInText(input.detail),
+    detail: redactSecretsInText(input.detail),
     ...(input.run ? { run: input.run } : {}),
     ...host.incidentContext(threadId)
   };
@@ -96,7 +104,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
   // The incidents thread is reused, so the previous report may still be
   // running there: this one waits in that thread's queue and drains when
   // the Chief is free — with any others that waited — never refused.
-  const decision = host.admit("incident", {}, {
+  const decision = admit("incident", {}, {
     threadBusy: host.threadBusy(chief.id, incidents.threadId),
     atCapacity: host.botAtThreadCapacity(chief.id),
     groupTurn: Boolean(host.activeGroupTurnForBot(chief.id))
@@ -108,7 +116,6 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
   void host.startTurn(chief.id, text, { threadId: incidents.threadId, unattended: true, peerAsk }).catch((error) => {
     host.incidentRefused(chief, incidents.threadId, [peerAsk], error instanceof Error ? error.message : String(error));
   });
-
 }
   return reportIncident;
 }

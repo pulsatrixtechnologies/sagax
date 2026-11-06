@@ -1,17 +1,18 @@
 // @ts-nocheck
 /** describeInstances (#1388). Pure move from server/index.ts. */
+import { reportBackgroundError } from "../background-error.ts";
 import { CLAUDE_API_INSTANCE } from "../config.ts";
+import { claudeAccountInfo } from "../engines/claude-accounts.ts";
 export type Host = Record<string, any>;
 
 export function createDescribeInstances(getHost: () => Host): any {
 async function describeInstances() {
   const host = getHost();
-
   const configs = host.providerConfigs();
   // Reading the engines is where this server learns one became available
   // (an install, a sign-in, a key or a Company engine), so a bot still on the
   // removed Computer engine moves now rather than at the next start.
-  void host.retryComputerEngineMove();
+  void host.retryComputerEngineMove().catch(reportBackgroundError);
   const engines = host.selectableInstances(await host.registry.describe({ known: true }));
   await host.refreshUnsetModelSelections(engines);
   return engines.map((instance) => {
@@ -42,7 +43,7 @@ async function describeInstances() {
       return { ...described, ...policy, authentication: undefined, install: { ...instance.install, signInCommand: undefined } };
     }
     try {
-      const claudeAccount = host.claudeAccountInfo(instance.instanceId, entry, instance.cli ?? instance.cliDefault ?? "claude");
+      const claudeAccount = claudeAccountInfo(instance.instanceId, entry, instance.cli ?? instance.cliDefault ?? "claude");
       return { ...described, ...policy, claudeAccount, install: { ...instance.install, signInCommand: claudeAccount.signInCommand } };
     } catch {
       // A malformed saved config remains a repairable shadow, never takes
@@ -50,7 +51,6 @@ async function describeInstances() {
       return { ...described, ...policy, install: { ...instance.install, signInCommand: undefined } };
     }
   });
-
 }
   return describeInstances;
 }

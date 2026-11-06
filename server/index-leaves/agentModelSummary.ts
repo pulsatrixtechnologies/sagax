@@ -4,8 +4,7 @@ export type Host = Record<string, any>;
 
 export function createAgentModelSummary(getHost: () => Host): any {
 function agentModelSummary(bot: BotRecord): { instance_id: string; model: string; effort?: string; auto?: boolean } | null {
-  void getHost();
-
+  const host = getHost();
   const selection = bot.modelSelection;
   if (!selection?.instanceId) return null;
   return {
@@ -14,7 +13,6 @@ function agentModelSummary(bot: BotRecord): { instance_id: string; model: string
     ...(selection.effort ? { effort: selection.effort } : {}),
     ...(selection.auto === true ? { auto: true } : {}),
   };
-
 }
   return agentModelSummary;
 }

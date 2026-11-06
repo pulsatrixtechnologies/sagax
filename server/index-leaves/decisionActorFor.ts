@@ -3,9 +3,8 @@
 export type Host = Record<string, any>;
 
 export function createDecisionActorFor(getHost: () => Host): any {
-function decisionActorFor(auth: RequestAuth) {
-  void getHost();
-
+function decisionActorFor(auth: RequestAuth): DecisionActor {
+  const host = getHost();
   if (auth.kind === "loopback") return auth.trust === "service" ? { kind: "worker" } : { kind: "loopback" };
   const session = auth.session;
   return {
@@ -14,7 +13,6 @@ function decisionActorFor(auth: RequestAuth) {
     // A portal session's id is its membership grant: never written down.
     ...(session.userId && !session.userId.startsWith("portal:") ? { userId: session.userId } : {})
   };
-
 }
   return decisionActorFor;
 }

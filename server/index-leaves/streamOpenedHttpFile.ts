@@ -4,9 +4,13 @@ import { parseAttachmentRange } from "../attachments/attachments.ts";
 export type Host = Record<string, any>;
 
 export function createStreamOpenedHttpFile(getHost: () => Host): any {
-function streamOpenedHttpFile(   req: IncomingMessage,   res: ServerResponse,   file: OpenedMessageFile,   headers: Record<string, string>, ) {
-  void getHost();
-
+function streamOpenedHttpFile(
+  req: IncomingMessage,
+  res: ServerResponse,
+  file: OpenedMessageFile,
+  headers: Record<string, string>,
+): void {
+  const host = getHost();
   // no-transform keeps Caddy's encode, Cloudflare and other proxies from
   // compressing a body whose Content-Length and ranges are stored bytes.
   const cacheControl = headers["cache-control"] ?? "private, no-store";
@@ -43,7 +47,6 @@ function streamOpenedHttpFile(   req: IncomingMessage,   res: ServerResponse,   
   stream.on("error", () => res.destroy());
   res.on("close", () => stream.destroy());
   stream.pipe(res);
-
 }
   return streamOpenedHttpFile;
 }

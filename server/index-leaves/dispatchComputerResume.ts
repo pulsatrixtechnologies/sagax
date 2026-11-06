@@ -4,9 +4,8 @@ import { isTurnAdmissionBlocked } from "../turns/turn-dispatch-guard.ts";
 export type Host = Record<string, any>;
 
 export function createDispatchComputerResume(getHost: () => Host): any {
-function dispatchComputerResume(entry: ComputerResumeEntry) {
+function dispatchComputerResume(entry: ComputerResumeEntry): void {
   const host = getHost();
-
   const owner = host.connectorThread(entry.botId, entry.threadId);
   if (!owner) return;
   const prompt = "Sagax computer update: the computer this conversation waited for is free again. Continue the task that parked waiting for it.";
@@ -44,16 +43,17 @@ function dispatchComputerResume(entry: ComputerResumeEntry) {
     );
     return;
   }
+  const speaker = host.threadContinuationSpeaker(entry.threadId);
   void host.startTurn(entry.botId, prompt, {
     threadId: entry.threadId,
     cardContinuation: true,
-    onDispatchError: (message) => host.markComputerResumeFailed(entry, message)
+    onDispatchError: (message) => host.markComputerResumeFailed(entry, message),
+    ...(speaker ? { speaker } : {})
   }).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     if (isTurnAdmissionBlocked(error)) host.pendingComputerResumes.set(entry.threadId, entry);
     else host.markComputerResumeFailed(entry, message);
   });
-
 }
   return dispatchComputerResume;
 }

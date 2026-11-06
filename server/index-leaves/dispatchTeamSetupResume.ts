@@ -1,14 +1,13 @@
 // @ts-nocheck
 /** dispatchTeamSetupResume (#1388). Pure move from server/index.ts. */
-import { isTurnAdmissionBlocked } from "../turns/turn-dispatch-guard.ts";
 import { requestSourceForCard } from "../auth/guarded-requests.ts";
 import { redactSecretsInText } from "../redact.ts";
+import { isTurnAdmissionBlocked } from "../turns/turn-dispatch-guard.ts";
 export type Host = Record<string, any>;
 
 export function createDispatchTeamSetupResume(getHost: () => Host): any {
-function dispatchTeamSetupResume(entry: TeamSetupResumeEntry) {
+function dispatchTeamSetupResume(entry: TeamSetupResumeEntry): void {
   const host = getHost();
-
   const { request, messageId } = entry;
   const cancelled = () => entry.generation !== (host.teamSetupResumeGenerations.get(request.threadId) ?? 0);
   if (cancelled()) return;
@@ -43,13 +42,14 @@ function dispatchTeamSetupResume(entry: TeamSetupResumeEntry) {
     host.groupQueues.set(request.threadId, next.finally(() => host.finishGroupTurnOperation(groupId, operation)).catch((error) => failed(error instanceof Error ? error.message : String(error))));
     return;
   }
+  const speaker = host.threadContinuationSpeaker(request.threadId);
   void host.startTurn(request.botId, prompt, { threadId: request.threadId, cardContinuation: true,
-    requestMessageId: requestSourceForCard(host.store.messagesFor(request.threadId), messageId), onDispatchError: failed }).catch((error) => {
+    requestMessageId: requestSourceForCard(host.store.messagesFor(request.threadId), messageId), onDispatchError: failed,
+    ...(speaker ? { speaker } : {}) }).catch((error) => {
     if (cancelled()) return;
     if (isTurnAdmissionBlocked(error)) host.pendingTeamSetupResumes.set(request.requestId, entry);
     else failed(error instanceof Error ? error.message : String(error));
   });
-
 }
   return dispatchTeamSetupResume;
 }

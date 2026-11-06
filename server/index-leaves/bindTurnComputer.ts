@@ -1,14 +1,14 @@
 // @ts-nocheck
 /** bindTurnComputer (#1388). Pure move from server/index.ts. */
+import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../../shared/host-control.ts";
 import { computerFreeAfterText, computerParkedText, computerStoppedWaitingText, computerWaitingText } from "../computer/computer-wait.ts";
+import { newId } from "../contracts.ts";
 import { computerKindForResource } from "../managed-policy.ts";
 export type Host = Record<string, any>;
 
 export function createBindTurnComputer(getHost: () => Host): any {
-async function bindTurnComputer(owner: TurnOwner, resource: string, exclusive = false) {
+async function bindTurnComputer(owner: TurnOwner, resource: string, exclusive = false): Promise<void> {
   const host = getHost();
-  const { newId } = host;
-
   // Every computer claim passes here: a kind the organisation disallows, or a
   // Cloud home never offers, is refused at claim time, whichever path selected it.
   const kind = computerKindForResource(resource), refusal = kind && host.computerPlaceRefusal(kind);
@@ -97,11 +97,14 @@ async function bindTurnComputer(owner: TurnOwner, resource: string, exclusive = 
         });
       }
       if (Date.now() >= deadline) {
-        // ADR-2 (#1651): the ceiling parks the turn — settled, with a
-        // registered resume — instead of failing it. The owner mark lets the
-        // live lazy-claim rejection path park the same way.
+        // ADR-2 (#1651): the ceiling parks the turn instead of failing it:
+        // its root continues in place once the seat frees (the runtime's
+        // admission, decision 6). The owner mark lets the live lazy-claim
+        // rejection path park the same way; the seat is read where the
+        // turn settles (hostTurnResult).
         endWait("parked");
         owner.computerParkedOn = resource;
+        host.computerParks.set(owner.generation, resource);
         throw new host.ComputerWaitParked(computerParkedText(holder, host.COMPUTER_WAIT_MAX_MS), resource, owner.generation);
       }
       await new Promise<void>(resolve => setTimeout(resolve, 100));
@@ -119,11 +122,10 @@ async function bindTurnComputer(owner: TurnOwner, resource: string, exclusive = 
   // This computer's own screen (2026-10-28): the turn's first screen action
   // says so in the conversation, whatever the model said before it; the
   // banner with Stop reads the same seat (GET /api/computer/host-control).
-  if (exclusive && resource === host.HOST_COMPUTER_RESOURCE && !owner.hostControlAnnounced && host.turnResources.owns(resource, owner)) {
+  if (exclusive && resource === HOST_COMPUTER_RESOURCE && !owner.hostControlAnnounced && host.turnResources.owns(resource, owner)) {
     owner.hostControlAnnounced = true;
-    host.store.appendMessage(owner.threadId, { role: "bot", kind: "activity", tool: { name: host.HOST_CONTROL_NOTICE, ok: true } });
+    host.store.appendMessage(owner.threadId, { role: "bot", kind: "activity", tool: { name: HOST_CONTROL_NOTICE, ok: true } });
   }
-
 }
   return bindTurnComputer;
 }

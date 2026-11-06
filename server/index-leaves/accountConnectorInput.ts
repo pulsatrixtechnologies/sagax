@@ -1,12 +1,11 @@
 // @ts-nocheck
 /** accountConnectorInput (#1388). Pure move from server/index.ts. */
+import { resolveEngineAccess } from "../engines/engine-credentials.ts";
 export type Host = Record<string, any>;
 
 export function createAccountConnectorInput(getHost: () => Host): any {
-function accountConnectorInput(bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot?: LoginSlot) {
+function accountConnectorInput(bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot: LoginSlot = getHost().turnSlotFor(bot, instance)): ClaudeAiTurnInput {
   const host = getHost();
-  slot ??= host.turnSlotFor(bot, instance);
-  const { resolveEngineAccess } = host;
   let planned = via;
   let payerPrincipalId: string | undefined;
   if (host.IDENTITY.kind === "perspicax" && (instance.driverKind === "claudeAgent" || instance.driverKind === "grokAgent" || instance.driverKind === "grok")) {
@@ -26,7 +25,6 @@ function accountConnectorInput(bot: BotRecord, instance: { instanceId: string; d
     ownerPrincipalId: host.effectiveBotOwner(bot),
     localPrincipalId: host.localPrincipalId()
   };
-
 }
   return accountConnectorInput;
 }

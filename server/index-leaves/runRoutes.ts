@@ -1,13 +1,12 @@
 // @ts-nocheck
 /** runRoutes (#1388). Pure move from server/index.ts. */
-import { ROUTES, dispatchRoutes } from "../routes/table.ts";
-import { BODY_YIELD_BYTES, estimateJsonBytes, json, readBody, yieldToEventLoop } from "../harness/http.ts";
+import { json, readBody, estimateJsonBytes, BODY_YIELD_BYTES, yieldToEventLoop } from "../harness/http.ts";
+import { dispatchRoutes, ROUTES } from "../routes/table.ts";
 export type Host = Record<string, any>;
 
 export function createRunRoutes(getHost: () => Host): any {
-async function runRoutes(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, auth: RequestAuth) {
-  void getHost();
-
+async function runRoutes(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, auth: RequestAuth): Promise<boolean> {
+  const host = getHost();
   // #1750: after a large body is read, yield once more before the route's
   // zod safeParse so JSON.parse and validation are not one continuous block.
   if (await dispatchRoutes(ROUTES, {
@@ -28,7 +27,6 @@ async function runRoutes(req: IncomingMessage, res: ServerResponse, url: URL, pa
   // library, so a test relays one here instead. Like the capability route
   // below, it exists only when the launcher sets its high-entropy key.
   return false;
-
 }
   return runRoutes;
 }

@@ -1,16 +1,15 @@
 // @ts-nocheck
 /** roomHandoffProblem (#1388). Pure move from server/index.ts. */
-import { coordinatorSupervises } from "../peers/peer-roster.ts";
+import { archivedAgent, canAccessBot, coordinatorSupervises, sameOwnerBots, peerAllowed, peerInScope } from "../peers/peer-roster.ts";
 export type Host = Record<string, any>;
 
 export function createRoomHandoffProblem(getHost: () => Host): any {
-function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "botId"> & Partial<Pick<HandoffView, "kind">>, parent?: Pick<HandoffView, "groupId" | "threadId" | "botId">) {
+function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "botId"> & Partial<Pick<HandoffView, "kind">>, parent?: Pick<HandoffView, "groupId" | "threadId" | "botId">): string | undefined {
   const host = getHost();
-  const { canAccessBot, peerAllowed, peerInScope, sameOwnerBots } = host;
-
   const group = node.groupId ? host.store.group(node.groupId) : undefined;
   const bot = host.store.bot(node.botId);
-  if (!bot || bot.hidden) return "The addressed agent no longer exists";
+  // An archived temporary agent is gone for every route (#897).
+  if (!bot || bot.hidden || archivedAgent(bot)) return "The addressed agent no longer exists";
   if (node.groupId && (!group || group.dm || !host.store.groupTaskByThread(group.id, node.threadId))) return "Destination room task no longer exists";
   if (!node.groupId && !host.store.taskByThread(bot.id, node.threadId)) return "Destination bot task no longer exists";
   // A confidential thread takes no part in teammate work: nothing of it goes
@@ -52,7 +51,6 @@ function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "bo
       if (readers.some(member => !peerInScope(from, member))) return "The recipient is outside the sender's owner's bots";
     }
   }
-
 }
   return roomHandoffProblem;
 }

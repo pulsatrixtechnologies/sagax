@@ -1,13 +1,13 @@
 // @ts-nocheck
 /** resumeHeldSteersAfterCrash (#1388). Pure move from server/index.ts. */
-import { joinHeldSteerTexts, takeHeldSteersForThread, takeRemainingHeldSteers } from "../turns/held-steers.ts";
+import { failedTurnTool } from "../../shared/failed-turn.ts";
+import { DATA_DIR } from "../config.ts";
+import { takeRemainingHeldSteers, joinHeldSteerTexts } from "../turns/held-steers.ts";
 export type Host = Record<string, any>;
 
 export function createResumeHeldSteersAfterCrash(getHost: () => Host): any {
-function resumeHeldSteersAfterCrash(alreadyResumed: ReadonlySet<string>) {
+function resumeHeldSteersAfterCrash(alreadyResumed: ReadonlySet<string>): void {
   const host = getHost();
-  const { DATA_DIR } = host;
-
   let remaining: Map<string, ReturnType<typeof takeHeldSteersForThread>>;
   try { remaining = takeRemainingHeldSteers(DATA_DIR); }
   catch (error) {
@@ -28,19 +28,20 @@ function resumeHeldSteersAfterCrash(alreadyResumed: ReadonlySet<string>) {
     // cardContinuation: the held rows are already in the transcript; this turn
     // answers them once without appending another user line (same shape as a
     // cut-turn resume that carries held words).
+    const speaker = host.threadContinuationSpeaker(threadId);
     void host.startTurn(botId, prompt, {
       threadId,
       cardContinuation: true,
-      excludeMessageIds: held.map((row) => row.messageId)
+      excludeMessageIds: held.map((row) => row.messageId),
+      ...(speaker ? { speaker } : {})
     }).catch((error) => {
       if (!host.store.taskByThread(botId, threadId)) return;
       host.store.appendMessage(threadId, {
         role: "bot", kind: "activity",
-        tool: host.failedTurnTool(`messages sent before the restart could not continue: ${error instanceof Error ? error.message : String(error)}`)
+        tool: failedTurnTool(`messages sent before the restart could not continue: ${error instanceof Error ? error.message : String(error)}`)
       });
     });
   }
-
 }
   return resumeHeldSteersAfterCrash;
 }

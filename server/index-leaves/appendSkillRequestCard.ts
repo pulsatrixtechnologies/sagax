@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** appendSkillRequestCard (#1388). Pure move from server/index.ts. */
+import { randomUUID } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createAppendSkillRequestCard(getHost: () => Host): any {
@@ -23,8 +24,6 @@ function appendSkillRequestCard(args: {
   };
 }): { requestId: string; summary: string } {
   const host = getHost();
-  const { randomUUID } = host;
-
   const requestId = randomUUID();
   const copy = host.skillCardCopy(args.staged);
   const payload: SkillRequestCardData = {
@@ -44,6 +43,8 @@ function appendSkillRequestCard(args: {
     ...(args.applied && args.previous ? { previous: args.previous } : {})
   };
   const from = host.store.bot(args.botId);
+  // The bot changed its skills here: automatic review starts counting again.
+  host.skillReview.noteSkillChange(args.botId, args.threadId);
   // a skill proposal, applied at Full (args.applied); full-access: proposal
   host.store.appendMessage(args.threadId, {
     role: "bot",
@@ -64,7 +65,6 @@ function appendSkillRequestCard(args: {
     requestId,
     summary: `${copy.title} ${args.staged.gist}`.trim()
   };
-
 }
   return appendSkillRequestCard;
 }

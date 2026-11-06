@@ -23,12 +23,13 @@
 // permission. The page itself carries no gear: the bot's settings live here
 // and in the right-hand bot panel.
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, type SetStateAction } from "react";
-import { BellRing, Brain, ChevronDown, ChevronRight, Cpu, LayoutDashboard, Lock, Mail, MessageCircle, Plug, Search, Star, Users, X } from "lucide-react";
+import { BellRing, Brain, ChevronDown, ChevronRight, Cpu, LayoutDashboard, Lock, Mail, MessageCircle, Plug, Search, Star, Users } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
+import { CIRCLE_LABEL } from "@/lib/circle-button";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { simpleHidesBotSection } from "@/lib/interface-visibility";
 import { canEditBotField } from "@/lib/bot-capabilities";
@@ -57,6 +58,7 @@ import { mascotColorGroup } from "../../../shared/mascot-colors";
 import type { MessagesSetupStatus } from "../../../shared/mac-messages-setup";
 import { BOT_PROFILE_LIMITS } from "../../../shared/bot-profile";
 import { WindowDragStrip, useCaptionChrome } from "../DesktopCapabilities";
+import { WindowCloseButton } from "../WindowCloseButton";
 import { AnchoredPopover, useAnchoredDismissRoot } from "../AnchoredPopover";
 import { PILL } from "../SettingsPrimitives";
 import { BotProfileAvatarCard } from "../BotProfileAvatarCard";
@@ -661,22 +663,13 @@ function BotProfilePageView({
           style={bannerStyle}
           className="bot-profile-banner relative h-[145px] w-full shrink-0"
         >
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("common.close")}
-            title={t("common.close")}
-            style={noDragStyle}
-            className="absolute left-3 top-3 flex size-8 items-center justify-center rounded-full bg-black/85 text-white transition-colors hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 max-sm:left-14"
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
+          <WindowCloseButton onClose={onClose} />
           <span
             data-bot-profile-visibility={privateBot ? "private" : "shared"}
             style={controlsShiftStyle ?? noDragStyle}
-            className="absolute right-3 top-3 inline-flex h-7 items-center gap-1.5 rounded-full bg-black/85 px-3 text-[12.5px] leading-none text-white"
+            className={cn(CIRCLE_LABEL, "absolute right-3 top-3")}
           >
-            {privateBot ? <Lock size={12} aria-hidden="true" /> : <Users size={12} aria-hidden="true" />}
+            {privateBot ? <Lock size={14} strokeWidth={1.75} aria-hidden="true" /> : <Users size={14} strokeWidth={1.75} aria-hidden="true" />}
             {privateBot ? t("botProfile.private") : t("botProfile.shared")}
           </span>
         </div>

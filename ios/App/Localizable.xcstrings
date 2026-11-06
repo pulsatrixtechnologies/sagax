@@ -112986,7 +112986,6 @@
         }
       }
     },
-<<<<<<< HEAD
     "Balance": {
       "localizations": {
         "en": {
@@ -112999,7 +112998,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Équilibre"
-=======
+          }
+        }
+      }
+    },
+    "Intelligence": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intelligence"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intelligence"
+          }
+        }
+      }
+    },
+    "Optimize for": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optimize for"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optimiser pour"
+          }
+        }
+      }
+    },
     "Your organization's server, and what it decides for your bots.": {
       "extractionState": "manual",
       "localizations": {
@@ -113013,25 +113047,10 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your organization's server, and what it decides for your bots."
->>>>>>> 0ec776a4c1 (feat(settings): L3 Organization, Computer, Backups and import (Refs #2080))
           }
         }
       }
     },
-<<<<<<< HEAD
-    "Intelligence": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Intelligence"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Intelligence"
-=======
     "Where your bots work and what they can do on this computer.": {
       "extractionState": "manual",
       "localizations": {
@@ -113045,25 +113064,10 @@
           "stringUnit": {
             "state": "translated",
             "value": "Where your bots work and what they can do on this computer."
->>>>>>> 0ec776a4c1 (feat(settings): L3 Organization, Computer, Backups and import (Refs #2080))
           }
         }
       }
     },
-<<<<<<< HEAD
-    "Optimize for": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Optimize for"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Optimiser pour"
-=======
     "Take a full copy out, restore it, or bring a bot in from elsewhere.": {
       "extractionState": "manual",
       "localizations": {
@@ -113077,7 +113081,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Take a full copy out, restore it, or bring a bot in from elsewhere."
->>>>>>> 0ec776a4c1 (feat(settings): L3 Organization, Computer, Backups and import (Refs #2080))
           }
         }
       }

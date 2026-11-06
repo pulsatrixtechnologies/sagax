@@ -136,7 +136,12 @@ struct DesktopNewBotModal: View {
                 .frame(maxWidth: 384)
                 .accessibilityIdentifier("desktop-new-bot.name")
             VStack(spacing: 12) {
-                Text("Shape").font(theme.font(12, .medium)).foregroundStyle(theme.inkSecondary)
+                // QuickCreate: `text-center text-[12px] font-medium text-ink-secondary`
+                Text("Shape")
+                    .font(theme.font(12, .medium))
+                    .foregroundStyle(theme.inkSecondary)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
                 // grid-cols-8 gap-2 in max-w-md: 49 pt columns, 40 pt tiles
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 8), spacing: 8) {
                     ForEach(Self.shapes, id: \.self) { id in
@@ -159,7 +164,11 @@ struct DesktopNewBotModal: View {
             }
             .frame(maxWidth: 448)
             VStack(spacing: 12) {
-                Text("Color").font(theme.font(12, .medium)).foregroundStyle(theme.inkSecondary)
+                Text("Color")
+                    .font(theme.font(12, .medium))
+                    .foregroundStyle(theme.inkSecondary)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
                 DesktopFlowLayout(spacing: 8) {
                     ForEach(Self.colors, id: \.self) { id in
                         let on = color == id

@@ -158,6 +158,24 @@ export const MIRRORED_TASK_FIELDS = ["modelSelection", "approvalMode", "autoAppr
 /** Transcript fields a bot record may carry for its selected thread. */
 export const TRANSCRIPT_FIELDS = ["messages", "activeLeafId", "hasMore"] as const;
 
+/** #2045: another person's team (name and stable id) stays theirs. A shared
+ * bot reaches the viewer without the owner's section fields; personal
+ * folders on the client place it. */
+export function withoutForeignTeamFields<T extends Record<string, unknown>>(
+  bot: T,
+  viewerId: string | undefined,
+  botOwnerPrincipalId: string | undefined,
+): T {
+  if (!viewerId || !botOwnerPrincipalId) return bot;
+  if (viewerId.trim().toLowerCase() === botOwnerPrincipalId.trim().toLowerCase()) return bot;
+  if (!("section" in bot) && !("sectionId" in bot)) return bot;
+  if (bot.section === undefined && bot.sectionId === undefined) return bot;
+  const out: Record<string, unknown> = { ...bot };
+  delete out.section;
+  delete out.sectionId;
+  return out as T;
+}
+
 /** A bot as one viewer receives it on an organization server: only their
  * threads in `tasks`; `threadId` is their thread; a transcript or mirrored
  * settings that came from someone else's thread are dropped or replaced by
@@ -180,9 +198,10 @@ export function narrowBotForViewer<T extends Record<string, unknown>>(
     activity?: { activity: string; busy: boolean };
   },
 ): T {
-  const tasks = Array.isArray(bot.tasks) ? (bot.tasks as ThreadRecord[]) : undefined;
+  const teamCleared = withoutForeignTeamFields(bot, input.viewerId, input.botOwnerPrincipalId);
+  const tasks = Array.isArray(teamCleared.tasks) ? (teamCleared.tasks as ThreadRecord[]) : undefined;
   const shownTasks = tasks ? ownThreads(tasks, input.viewerId, input.botOwnerPrincipalId) : undefined;
-  const threadId = typeof bot.threadId === "string" ? bot.threadId : undefined;
+  const threadId = typeof teamCleared.threadId === "string" ? teamCleared.threadId : undefined;
   const threadIsMine = threadId !== undefined && (shownTasks
     ? shownTasks.some((task) => task.threadId === threadId)
     : threadId === input.mine);
@@ -190,11 +209,11 @@ export function narrowBotForViewer<T extends Record<string, unknown>>(
   // conversation (shared/single-stream.ts, the same rule the server applies
   // for its owner): worked out over the threads they see, so a shared bot
   // tells each person their own conversation, never someone else's.
-  const main = typeof bot.mainThreadId === "string" ? bot.mainThreadId : undefined;
+  const main = typeof teamCleared.mainThreadId === "string" ? teamCleared.mainThreadId : undefined;
   const viewerMain = shownTasks ? viewerConversation(shownTasks) : (main === input.mine ? main : undefined);
   const mainHidden = main !== viewerMain;
-  if (threadIsMine && !mainHidden && (!tasks || shownTasks!.length === tasks.length)) return bot;
-  const out: Record<string, unknown> = { ...bot };
+  if (threadIsMine && !mainHidden && (!tasks || shownTasks!.length === tasks.length)) return teamCleared;
+  const out: Record<string, unknown> = { ...teamCleared };
   if (mainHidden) {
     if (viewerMain !== undefined) out.mainThreadId = viewerMain;
     else delete out.mainThreadId;

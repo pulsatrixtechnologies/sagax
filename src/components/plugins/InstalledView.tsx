@@ -244,7 +244,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
       {resolved === undefined && skills.length > 0 && (
         <section className="mt-8" data-plugins-skills>
           <h3 className={PLUGINS.label}>{t("connectApps.manage.privateSkills")}</h3>
-          <ul className="mt-1">
+          <ul className={cn(PLUGINS.grid, "mt-1")}>
             {skills.map((skill) => (
               <li key={skill.key}>
                 <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="-mx-2 flex w-[calc(100%+16px)] items-center gap-3 rounded-xl px-2 py-[11px] text-left hover:bg-hover">

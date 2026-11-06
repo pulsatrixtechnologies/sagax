@@ -1,14 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { onArtifactPublished } from "../claude-artifacts/events.ts";
 import { ArtifactSummaryCache, type PersonArtifactCall } from "../claude-artifacts/service.ts";
+import { claudeArtifactCopyPrompt } from "../../shared/claude-chat-blocks.ts";
 import type { InternalRouteContext } from "./internal-route.ts";
 import { createClaudeArtifactInternalRoutes, createClaudeArtifactRoutes } from "./claude-artifacts.ts";
 import type { RouteContext } from "./table.ts";
 
 const URL_A = "https://claude.ai/artifact/abcdefgh12";
+const URL_B = "https://claude.ai/artifact/ijklmnop34";
 type Sent = { status: number; body: any };
 
 function readerCall(log: string[]): PersonArtifactCall {
@@ -20,8 +22,18 @@ function readerCall(log: string[]): PersonArtifactCall {
   };
 }
 
-function client(opts: { principal?: string; call: PersonArtifactCall; cache?: ArtifactSummaryCache }) {
-  const route = createClaudeArtifactRoutes({ principalId: () => opts.principal, call: opts.call, cache: opts.cache ?? new ArtifactSummaryCache() });
+function client(opts: {
+  principal?: string;
+  call: PersonArtifactCall;
+  cache?: ArtifactSummaryCache;
+  copy?: NonNullable<Parameters<typeof createClaudeArtifactRoutes>[0]["copy"]>;
+}) {
+  const route = createClaudeArtifactRoutes({
+    principalId: () => opts.principal,
+    call: opts.call,
+    cache: opts.cache ?? new ArtifactSummaryCache(),
+    ...(opts.copy ? { copy: opts.copy } : {}),
+  });
   return async (method: string, path: string, body?: unknown) => {
     const sent: Sent[] = [];
     const url = new URL(`http://x${path}`);
@@ -75,6 +87,28 @@ describe("/api/claude-artifacts (the person's routes)", () => {
     const call = client({ principal: "p-1", call: readerCall([]) });
     expect(await call("GET", "/api/claude-artifacts/summary?url=https%3A%2F%2Fexample.com%2Fx")).toMatchObject({ status: 400 });
   });
+
+  it("POST /copy asks the bot with the Lot 1 republish prompt", async () => {
+    const copy = vi.fn(async (_auth, botId, threadId, url) => {
+      expect(botId).toBe("bot-1");
+      expect(threadId).toBe("t-main");
+      expect(url).toBe(URL_A);
+      expect(claudeArtifactCopyPrompt(url)).toContain("fichier HTML");
+      return { ok: true as const };
+    });
+    const call = client({ principal: "p-1", call: readerCall([]), copy });
+    expect(await call("POST", "/api/claude-artifacts/copy", { url: URL_A, botId: "bot-1", threadId: "t-main" }))
+      .toEqual({ status: 200, body: { ok: true } });
+    expect(copy).toHaveBeenCalledOnce();
+    expect(await call("POST", "/api/claude-artifacts/copy", { url: "https://example.com/x", botId: "bot-1" }))
+      .toMatchObject({ status: 400 });
+  });
+
+  it("answers 404 for /copy when the host did not wire a copy handler", async () => {
+    const call = client({ principal: "p-1", call: readerCall([]) });
+    expect(await call("POST", "/api/claude-artifacts/copy", { url: URL_A, botId: "bot-1" }))
+      .toEqual({ status: 404, body: { error: "not found" } });
+  });
 });
 
 describe("POST /api/internal/claude-artifact (the bot's tool)", () => {
@@ -125,5 +159,36 @@ describe("POST /api/internal/claude-artifact (the bot's tool)", () => {
     const call: PersonArtifactCall = async () => ({ ok: false, blocked: "other_account", account: "person@example.com" });
     expect(await internal({ call })({ tool: "Artifact", input: { action: "read", url: URL_A } }))
       .toEqual({ status: 200, body: { blocked: "other_account", account: "person@example.com" } });
+  });
+
+  it("Lot 1 slice: foreign read is blocked, then publish from file owns the new URL", async () => {
+    const published: unknown[] = [];
+    const stop = onArtifactPublished((event) => published.push(event));
+    const calls: Array<{ action: unknown; page?: unknown }> = [];
+    const call: PersonArtifactCall = async (_principalId, tool, input, page) => {
+      calls.push({ action: input.action, page });
+      if (tool === "Artifact" && input.action === "read" && input.url === URL_A) {
+        return { ok: false, blocked: "other_account", account: "other@example.com" };
+      }
+      if (tool === "Artifact" && input.action === "publish") {
+        expect(page).toEqual({ file: "/workspace/dispatch-history.html" });
+        return { ok: true, result: { url: URL_B, title: "Historique du dispatch", owned: true }, text: "" };
+      }
+      return { ok: false, error: "unexpected" };
+    };
+    const route = internal({ call, file: "/workspace/dispatch-history.html" });
+    expect(await route({ tool: "Artifact", input: { action: "read", url: URL_A } }))
+      .toEqual({ status: 200, body: { blocked: "other_account", account: "other@example.com" } });
+    expect(await route({
+      tool: "Artifact",
+      input: { action: "publish", title: "Historique du dispatch" },
+      file: "dispatch-history.html",
+    })).toMatchObject({ status: 200, body: { result: { url: URL_B, owned: true } } });
+    stop();
+    expect(calls).toEqual([
+      { action: "read", page: undefined },
+      { action: "publish", page: { file: "/workspace/dispatch-history.html" } },
+    ]);
+    expect(published).toEqual([expect.objectContaining({ url: URL_B, botId: "bot-1", threadId: "t1", principalId: "p-1" })]);
   });
 });

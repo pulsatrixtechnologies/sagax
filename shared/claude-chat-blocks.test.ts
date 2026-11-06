@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   antArtifactToMarkdown,
+  claudeArtifactCopyPrompt,
+  claudeArtifactOtherAccountGuidance,
   claudeArtifactUrl,
   formatArtifactConsentFence,
   formatArtifactFence,
@@ -28,6 +30,23 @@ describe("#2018 artifact helpers", () => {
     expect(claudeArtifactUrl("https://www.claude.ai/code/artifact/abcdef12-3456")).toBe("https://claude.ai/code/artifact/abcdef12-3456");
     expect(claudeArtifactUrl("https://evil.example/artifact/HBXTc3TAqqC5odi1H6Bgu9")).toBeNull();
     expect(claudeArtifactUrl("https://claude.ai/chat/HBXTc3TAqqC5odi1H6Bgu9")).toBeNull();
+  });
+
+  it("Lot 1 republish prompts: copy chat and other_account tool guidance", () => {
+    const url = "https://claude.ai/artifact/HBXTc3TAqqC5odi1H6Bgu9";
+    const copy = claudeArtifactCopyPrompt(url);
+    expect(copy).toContain(url);
+    expect(copy).toContain("claude_artifact");
+    expect(copy).toContain("fichier HTML");
+    expect(copy).toContain("nouvelle URL");
+    expect(copy).not.toMatch(/[\u2013\u2014]/);
+    const guidance = claudeArtifactOtherAccountGuidance("bot@example.com");
+    expect(guidance).toContain("bot@example.com");
+    expect(guidance).toContain("cannot Artifact-read");
+    expect(guidance).toContain("HTML file");
+    expect(guidance).toContain("new URL");
+    expect(guidance).not.toMatch(/[\u2013\u2014]/);
+    expect(claudeArtifactOtherAccountGuidance()).not.toContain("Claude account is");
   });
 
   it("recognises the consent refusal and round-trips its fence", () => {

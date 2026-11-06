@@ -12591,6 +12591,7 @@
   "routineRun.stepsUnavailable": "No steps were kept for this run.",
   "routineRun.configuration": "Configuration",
   "routineRun.stop": "Stop",
+  "routineRun.details": "Details",
   "routineRun.runAgain": "Run again",
   "routineRun.continue": "Continue in the conversation",
   "routineRun.openRoutine": "Routine",

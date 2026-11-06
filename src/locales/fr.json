@@ -13610,7 +13610,6 @@
   "botModel.advanced.help": "Le cache de prompt.",
   "models.autoNow.title": "Ce qu'Auto choisirait maintenant",
   "models.keepWarm.off": "Désactivé",
-  "model.panes.noFavorites": "Aucun favori pour l'instant. Étoilez un modèle pour le lister ici.",
   "model.activeModels": "Modèles actifs",
   "model.activeModelsLink": "{count} désactivés · Modèles actifs",
   "botModels.selectAll": "Tous les bots",

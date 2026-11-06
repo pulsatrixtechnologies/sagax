@@ -20,14 +20,7 @@
 // bot's model and the favorites. It lists the providers in place of the
 // root, with a Back row; each provider opens its submenu as above.
 //
-// `panes` (2026-11-05, Settings > Models and Bot > Model, #2050): two
-// columns while the search is empty. Left, Auto and the bot's model, then
-// Favorites (with its count) and one entry per provider with its active
-// model count (a provider with none is greyed). Right, the models of the
-// chosen column entry, each with its star and the check on the current
-// one. The left and right arrows step the column entries. Typing lists
-// every provider's matches flat, as in the other modes.
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { TriangleAlert, Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -113,142 +106,7 @@ function canHover(): boolean {
   }
 }
 
-/** The Favorites entry of the two-pane list's left column. */
-export const PANE_FAVORITES_KEY = "pane:favorites";
-
-interface PaneGroup {
-  key: string;
-  label: string;
-  note?: string;
-  rows: ModelMenuRow[];
-  /** The models one can pick in it. */
-  count: number;
-  /** The current model is one of its rows. */
-  current: boolean;
-}
-
-/** The left column of the two-pane list: Favorites first, then the
- * providers in their order. Exported for the tests. */
-export function paneGroups(sections: readonly ModelMenuSection[], favoriteKeys: readonly string[]): { top: ModelMenuRow[]; groups: PaneGroup[] } {
-  const root = modelMenuRoot(sections, favoriteKeys);
-  const favorites: PaneGroup = {
-    key: PANE_FAVORITES_KEY,
-    label: t("model.favorites"),
-    rows: root.favorites,
-    count: root.favorites.filter((row) => !row.unavailable).length,
-    current: root.favorites.some((row) => row.current),
-  };
-  const providers = root.providers.map((provider): PaneGroup => ({
-    key: provider.key,
-    label: provider.section.label ?? "",
-    note: provider.section.note,
-    rows: provider.section.rows,
-    count: provider.section.rows.filter((row) => row.kind === "model" && !row.unavailable).length,
-    current: provider.current,
-  }));
-  return { top: root.top, groups: [favorites, ...providers] };
-}
-
-/** The column entry shown when none was chosen: the one holding the
- * current model, else Favorites when it has some, else the first provider. */
-export function defaultPaneKey(groups: readonly PaneGroup[]): string | undefined {
-  return (groups.find((group) => group.current) ?? groups.find((group) => group.key === PANE_FAVORITES_KEY && group.count > 0) ?? groups.find((group) => group.key !== PANE_FAVORITES_KEY) ?? groups[0])?.key;
-}
-
-/** Two-column empty-search body for ModelSearchList (Favorites / providers | models). */
-function ModelPanesBody({
-  pane,
-  activePane,
-  activePanePreview,
-  expandedProviders,
-  listRef,
-  listboxId,
-  label,
-  after,
-  variant,
-  style,
-  rowProps,
-  choosePane,
-  toggleProviderExpanded,
-}: {
-  pane: { top: ModelMenuRow[]; groups: PaneGroup[] };
-  activePane: PaneGroup;
-  activePanePreview: { rows: ModelMenuRow[]; hidden: number };
-  expandedProviders: Record<string, boolean>;
-  listRef: RefObject<HTMLDivElement | null>;
-  listboxId: string;
-  label?: string;
-  after?: ReactNode;
-  variant: "popover" | "window";
-  style: Style;
-  rowProps: (row: ModelMenuRow, key: string) => Parameters<typeof ModelSearchRow>[0];
-  choosePane: (key: string) => void;
-  toggleProviderExpanded: (key: string) => void;
-}) {
-  return (
-    <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list data-model-panes
-      data-model-list-scroll={after !== undefined ? "" : undefined}
-      className={cn("@container flex min-h-0", after !== undefined ? "flex-1 overflow-hidden px-1.5 pb-1" : variant === "popover" ? "max-h-[min(280px,39dvh)] px-1.5 pb-1" : "")}>
-      <div className="flex min-h-0 w-full flex-col @min-[26rem]:flex-row">
-        <div role="group" aria-label={t("model.providers")} data-model-panes-left
-          className={cn("flex shrink-0 flex-col overflow-y-auto overscroll-contain py-0.5 @max-[26rem]:border-b @min-[26rem]:w-[11rem] @min-[26rem]:border-r @min-[26rem]:pr-1.5", variant === "popover" ? "border-popover-hairline" : "border-hairline/50")}>
-          {pane.top.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
-          {pane.groups.map((group) => {
-            const selected = group.key === activePane.key;
-            return (
-              <button
-                key={group.key}
-                type="button"
-                data-model-pane-group={group.key}
-                data-model-pane-selected={selected || undefined}
-                aria-pressed={selected}
-                // keep the focus in the search field
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => choosePane(group.key)}
-                className={cn(
-                  "flex min-h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none",
-                  style.row, selected && style.active, group.count === 0 && "opacity-50",
-                )}
-              >
-                <span className="flex min-w-0 items-center gap-1.5">
-                  {group.key === PANE_FAVORITES_KEY && <Star size={12} aria-hidden="true" fill="currentColor" className={cn("shrink-0", style.check)} />}
-                  <span className="truncate">{group.label}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-1.5">
-                  {group.current && <span data-model-provider-current aria-hidden="true" className={cn("size-1.5 rounded-full bg-current", style.check)} />}
-                  <span data-model-pane-count className={cn("text-[11.5px] tabular-nums", style.detail)}>{group.count}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <div role="group" aria-label={activePane.label} data-model-panes-right={activePane.key}
-          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain py-0.5 @min-[26rem]:pl-1.5">
-          <div aria-hidden="true" className={cn("flex items-baseline gap-1.5", style.heading)}>
-            <span className="truncate">{activePane.label}</span>
-            {activePane.note && <span data-model-section-note className="truncate opacity-80">· {activePane.note}</span>}
-          </div>
-          {activePanePreview.rows.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
-          {(activePanePreview.hidden > 0 || expandedProviders[activePane.key]) && activePane.key !== PANE_FAVORITES_KEY && (
-            <ShowMoreRow
-              sectionKey={activePane.key}
-              expanded={Boolean(expandedProviders[activePane.key])}
-              style={style}
-              onToggle={() => toggleProviderExpanded(activePane.key)}
-            />
-          )}
-          {activePane.rows.length === 0 && (
-            <div data-model-pane-empty className={style.empty}>
-              {activePane.key === PANE_FAVORITES_KEY ? t("model.panes.noFavorites") : t("model.noMatch")}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, panes = false, onPreview, onAutoEdit, after, autoPanel }: {
+export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, onPreview, onAutoEdit, after, autoPanel }: {
   sections: ModelMenuSection[];
   onPick: (row: ModelMenuRow) => void;
   onPreview?: (row: ModelMenuRow) => void;
@@ -265,13 +123,10 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   submenus?: boolean;
   /** With `submenus`: the providers behind one "Provider ›" row. */
   groupProviders?: boolean;
-  /** Two columns while the search is empty: Favorites and the providers
-   * on the left, the chosen one's models on the right. Wins over `submenus`. */
-  panes?: boolean;
   /** #2106: Edit on the Auto row opens Optimize for Intelligence / Balance / Cost. */
   onAutoEdit?: () => void;
   /** #2181: Effort, Provider and the other links sit in a fixed footer
-   * under the scrolling list in every mode (flat, nested, panes, search). */
+   * under the scrolling list in every mode (flat, nested, search). */
   after?: ReactNode;
   /** #2106: drawn right under the Auto row of the flat list (its Optimize
    * choices), so opening Edit shows them where the eye already is. */
@@ -282,7 +137,6 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   const [moved, setMoved] = useState<string | null>(null);
   const [openSub, setOpenSub] = useState<OpenSubmenu | null>(null);
   const [allOpen, setAllOpen] = useState(false);
-  const [paneKey, setPaneKey] = useState<string | null>(null);
   const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -290,8 +144,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baseId = useId();
   const searching = query.trim().length > 0;
-  const paned = panes && !searching;
-  const nested = submenus && !searching && !paned;
+  const nested = submenus && !searching;
   const shown = filterModelSections(sections, query);
   const favoriteKeys = favorites?.keys ?? [];
   const previewSection = (section: ModelMenuSection): { section: ModelMenuSection; hidden: number } => {
@@ -304,19 +157,10 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   };
   const displaySections = shown.map((section) => previewSection(section).section);
   const root = nested ? modelMenuRoot(shown, favoriteKeys) : null;
-  const pane = paned ? paneGroups(shown, favoriteKeys) : null;
-  const activePane = pane ? (pane.groups.find((group) => group.key === paneKey) ?? pane.groups.find((group) => group.key === defaultPaneKey(pane.groups))) : undefined;
-  const activePanePreview = activePane && activePane.key !== PANE_FAVORITES_KEY
-    ? previewProviderRows(activePane.rows, { expanded: Boolean(expandedProviders[activePane.key]), favoriteKeys })
-    : activePane
-      ? { rows: activePane.rows, hidden: 0 }
-      : undefined;
   const grouped = Boolean(root) && groupProviders;
   const showingAll = grouped && allOpen;
   const entries = root ? (groupProviders ? groupedModelMenuEntries(root, allOpen) : modelMenuRootEntries(root)) : null;
-  const rows = entries ?? (pane
-    ? [...pane.top, ...(activePanePreview?.rows ?? [])]
-    : pickableRows(displaySections));
+  const rows = entries ?? pickableRows(displaySections);
   const listScrollClass = after !== undefined
     ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1"
     : style.list;
@@ -387,20 +231,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  const choosePane = (key: string) => {
-    setPaneKey(key);
-    setMoved(null);
-  };
-
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (pane && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-      // the column entries, in order; the caret has nothing to move over
-      event.preventDefault();
-      const index = pane.groups.findIndex((group) => group.key === activePane?.key);
-      const next = pane.groups[index + (event.key === "ArrowRight" ? 1 : -1)];
-      if (next) choosePane(next.key);
-      return;
-    }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const next = stepRow(rows, active, event.key);
@@ -513,23 +344,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
           className={style.input}
         />
       </label>
-      {pane && activePane && activePanePreview ? (
-        <ModelPanesBody
-          pane={pane}
-          activePane={activePane}
-          activePanePreview={activePanePreview}
-          expandedProviders={expandedProviders}
-          listRef={listRef}
-          listboxId={listboxId}
-          label={label}
-          after={after}
-          variant={variant}
-          style={style}
-          rowProps={rowProps}
-          choosePane={choosePane}
-          toggleProviderExpanded={toggleProviderExpanded}
-        />
-      ) : root ? (
+      {root ? (
         <div ref={listRef} id={listboxId} role="menu" aria-label={label ?? t("model.models")} data-model-list
           data-model-list-scroll={after !== undefined ? "" : undefined}
           className={listScrollClass}>

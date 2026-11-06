@@ -58,7 +58,6 @@ export function ModelSection({ bot }: { bot: Bot }) {
           <ModelPicker
             bot={shown}
             contained
-            panes
             viewerLocal={viewerLocal}
             label={
               <div>

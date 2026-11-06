@@ -369,10 +369,9 @@ describe("BotModelsSettings page", () => {
     await flush();
     const menu = document.querySelector("[data-model-menu]");
     expect(menu, "the selector opened").not.toBeNull();
-    expect(menu?.querySelector("[data-model-panes]"), "two panes").not.toBeNull();
-    expect(menu?.querySelector('[data-model-pane-group="pane:favorites"]')).not.toBeNull();
+    expect(menu?.querySelector("[data-model-panes]"), "one column, the chat bar menu").toBeNull();
     expect(menu?.querySelector("[data-model-settings-effort]"), "effort bar at the bottom").not.toBeNull();
-    const option = menu!.querySelector<HTMLElement>('[data-model-panes-right] [data-model-option="grok-4"]');
+    const option = menu!.querySelector<HTMLElement>('[data-model-option="grok-4"]');
     expect(option).not.toBeNull();
     act(() => { option!.click(); });
     await flush();

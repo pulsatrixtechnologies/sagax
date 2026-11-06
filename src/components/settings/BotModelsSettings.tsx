@@ -4,8 +4,9 @@
 // ModelPicker path.
 // Layout: a table like Grok Bot / Cursor model settings, one row per bot
 // grouped by sidebar section: Bot / Model · effort / Backup. The Model cell
-// is the two-pane model selector (ModelPicker `panes`), the same one the
-// "Set model for n bots" button and Bot > Model open. #2080: the checkboxes
+// is the chat bar's model menu (ModelPicker, one menu everywhere since the
+// two-pane one was retired), the same one the "Set model for n bots" button
+// and Bot > Model open. #2080: the checkboxes
 // show only in "Edit several" mode (SelectionBar); the Backup column always
 // shows (effectiveBackups, shared with Bot > Model) so a person can pick the
 // engine and the backup model per bot even before any bot has one.
@@ -494,7 +495,7 @@ export function BotModelsSettings() {
                         >
                           <Cell label={t("botModels.col.modelEffort")} data-bot-models-model={row.id}>
                             {mayEdit ? (
-                              <ModelPicker bot={full} listChip panes />
+                              <ModelPicker bot={full} listChip />
                             ) : (
                               <span className={READ_ONLY_CELL} title={modelName}>{modelName}</span>
                             )}
@@ -545,7 +546,6 @@ export function BotModelsSettings() {
           key={bulkLead.id}
           bot={bulkLead}
           headless
-          panes
           alsoApplyTo={bulkIds}
           menuControl={bulkMenu}
           fallbackAnchor={() => pageRef.current?.querySelector<HTMLButtonElement>("[data-selection-bar] button:last-child") ?? null}

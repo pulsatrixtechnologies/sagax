@@ -427,13 +427,10 @@ import {
 import { OwnerApprovalStore } from "./approvals/owner-approval-store.ts";
 import { CustomRuleStore, registeredCustomRuleStore } from "./rules/custom-rules-store.ts";
 import {
-  customRuleCandidate,
-  customRuleNotice,
   reviewCustomRules,
   ruleCoversCard,
   serverHome,
-  type CustomRuleCall,
-  type RuleProductContext
+  type CustomRuleCall
 } from "./rules/custom-rules-review.ts";
 import { createCustomRulesModelReviewer } from "./rules/custom-rules-model.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";

@@ -224,7 +224,6 @@ describe("the reference design's app-wide chords", () => {
     ].join("\n");
     expect(chatFind).toContain('(event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "f")');
     expect(read("../components/GroupView.tsx")).toContain('(event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "f")');
-
   });
 });
 

@@ -200,6 +200,7 @@ botField("bot.voice", "voice", "string?", "Voice", "Bot editor > Voice");
 botField("bot.speakReplies", "speakReplies", "boolean", "Speak replies", "Bot editor > Voice");
 botField("bot.voiceNotes", "voiceNotes", "boolean", "Voice notes", "Bot editor > Voice");
 botField("bot.emailDrafts", "emailDrafts", "boolean", "Email drafts", "Bot editor > Permissions > Email drafts");
+botField("bot.memeReplies", "memeReplies", "any", "Meme replies", "Bot editor > Permissions > Meme replies");
 botField("bot.notifications", "notifications", "any", "Notifications", "Bot editor > Voice > Notifications");
 botField("bot.model", "modelSelection", "object", "Model and effort ({instanceId, model, effort})", "Bot editor > Model");
 add({
@@ -1159,7 +1160,7 @@ add({
 add({
   key: "connections.webSearch", family: "connections", target: "none", value: "object",
   label: "Your web search provider ({provider: brave|exa|parallel|firecrawl|searxng, baseUrl, key?}; null forgets it). get says whether a key is saved, never the key",
-  where: "Settings > Models > Web search",
+  where: "Settings > Providers > Other services > Web search",
   read: () => ({ path: "/api/me/web-search" }),
   classes: (v) => v && typeof v === "object" && "key" in v ? ["secret"] : ["own"],
   write: (_ids, v) => {
@@ -1168,6 +1169,19 @@ add({
     if (!w || typeof w !== "object" || typeof w.provider !== "string") return "value is {provider, baseUrl}, or null.";
     // #1545 (2026-10-28): the key too, a reference the server resolves ({$secret})
     return { method: "PUT", path: "/api/me/web-search", body: { provider: w.provider, ...(typeof w.baseUrl === "string" ? { baseUrl: w.baseUrl } : {}), ...(w.key !== undefined ? { key: w.key } : {}) } };
+  },
+});
+add({
+  key: "connections.memes", family: "connections", target: "none", value: "object",
+  label: "Your meme provider ({provider: tenor|giphy, key?}; null forgets it). get says whether a key is saved, never the key",
+  where: "Settings > Providers > Other services > Memes",
+  read: () => ({ path: "/api/me/memes" }),
+  classes: (v) => v && typeof v === "object" && "key" in v ? ["secret"] : ["own"],
+  write: (_ids, v) => {
+    if (v === null) return { method: "DELETE", path: "/api/me/memes" };
+    const w = v as { provider?: unknown; key?: unknown } | null;
+    if (!w || typeof w !== "object" || typeof w.provider !== "string") return "value is {provider, key?}, or null.";
+    return { method: "PUT", path: "/api/me/memes", body: { provider: w.provider, ...(w.key !== undefined ? { key: w.key } : {}) } };
   },
 });
 
@@ -1375,7 +1389,7 @@ add({
   write: (_ids, v) => v === true ? { method: "POST", path: "/api/decider/test", body: {} } : "value is true.",
 });
 add({
-  key: "connections.webSearchTest", family: "connections", target: "none", value: "boolean", label: "Test web search with the saved settings (value true)", where: "Settings > Models > Web search > Test",
+  key: "connections.webSearchTest", family: "connections", target: "none", value: "boolean", label: "Test web search with the saved settings (value true)", where: "Settings > Providers > Other services > Web search > Test",
   write: (_ids, v) => v === true ? { method: "POST", path: "/api/me/web-search/test", body: {} } : "value is true.",
 });
 // account

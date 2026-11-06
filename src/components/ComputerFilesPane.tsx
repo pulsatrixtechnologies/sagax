@@ -6,7 +6,7 @@ import { FileText, FolderOpen } from "lucide-react";
 import { useMemo } from "react";
 import { useStore, visibleMessages, type Bot } from "@/state/store";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
-import { collectMessageFiles, fileIdentity, splitMessageAttachments, type GalleryFile } from "./AttachmentGallery";
+import { collectMessageFiles, fileIdentity, imagePathOf, splitMessageAttachments, type GalleryFile } from "./AttachmentGallery";
 import { AttachedFileChip, type MessageAttachmentContext } from "./AttachmentPreview";
 import { shortPath } from "@/lib/short-path";
 import { t } from "@/lib/i18n";
@@ -52,7 +52,7 @@ export function sharedFileReferences(bot: Bot): Map<string, SharedFile> {
     const attached = splitMessageAttachments(message.attachments);
     const files = [
       ...attached.files,
-      ...collectMessageFiles(message.text ?? "", [...attached.images, ...attached.files.map((file) => file.path)]),
+      ...collectMessageFiles(message.text ?? "", [...attached.images.map(imagePathOf), ...attached.files.map((file) => file.path)]),
     ];
     for (const file of files) {
       const identity = file.private ? file.path : fileIdentity(file.path);

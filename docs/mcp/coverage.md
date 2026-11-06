@@ -100,6 +100,7 @@ Reading the table:
 | cards:ask | sagax | `ask_choice` | `cards:ask` | covered |
 | rooms:react | sagax | `react_to_message` | `rooms:react` | covered |
 | rooms:unreact | sagax | `remove_reaction` | `rooms:unreact` | covered |
+| rooms:meme | sagax | `send_meme` | `rooms:meme` | covered |
 | rooms:post | sagax | `post_to_room` | `rooms:post` | covered |
 | threads:close | sagax | `close_thread` | `threads:close` | covered |
 | voice:note | sagax | `send_voice_note` | `voice:note` | covered |

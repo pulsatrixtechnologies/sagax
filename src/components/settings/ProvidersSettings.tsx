@@ -53,6 +53,7 @@ import { modelSwitches } from "@/lib/offered-instances";
 import { modelOn } from "../../../shared/offered-models";
 import { perspicaxConsoleUrl } from "../PerspicaxOrgSettings";
 import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSettings";
+import { MemesSettings } from "./MemesSettings";
 import { WebSearchSettings } from "./WebSearchSettings";
 import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, PRIMARY_PILL, SettingsGroup, Switch, requestSettingsCard } from "../SettingsPrimitives";
 import { ExternalLinkPill, SettingsEmpty, StatusText } from "./SettingsPatterns";
@@ -589,6 +590,7 @@ export function ProvidersSettings() {
       <div data-settings-card="providers.services">
         <SettingsGroup title={t("providers.services.title")} groupId="providers-services">
           <WebSearchSettings bare />
+          <MemesSettings bare />
           {installation
             ? <div data-settings-card="connections.image"><ImageGenerationSettings keysLink={keys} /></div>
             : (

@@ -23,6 +23,7 @@ import {
   type MessageAttachmentContext,
   type PreviewImage,
 } from "./AttachmentPreview";
+import { MemeImage } from "./MemeImage";
 
 export interface GalleryFile extends TranscriptFileAttachment {
   /** The file came from a rendered Markdown link rather than a user upload. */
@@ -43,6 +44,11 @@ export function fileIdentity(path: string): string {
   if (/^file:\/\//i.test(path)) return localFilePath(path) ?? path;
   try { return decodeURIComponent(path.split(/[?#]/, 1)[0]!); }
   catch { return path; }
+}
+
+/** Path of a gallery image entry (string path or transcript image object). */
+export function imagePathOf(image: string | TranscriptImageAttachment): string {
+  return typeof image === "string" ? image : image.path;
 }
 
 /** Real Markdown links only: prose, examples, images, and remote URLs don't
@@ -102,30 +108,62 @@ export function listMessageFiles(input: {
   includeLinks?: boolean;
 }): Array<{ path: string; name: string; kind: MessageFileKind; linked: boolean }> {
   const attached = splitMessageAttachments(input.attachments);
+  const imagePaths = attached.images.map(imagePathOf);
   const linked = input.includeLinks === false || !input.text
     ? []
-    : collectMessageFiles(input.text, [...attached.images, ...attached.files.map((file) => file.path)]);
+    : collectMessageFiles(input.text, [...imagePaths, ...attached.files.map((file) => file.path)]);
   const classify = (path: string): MessageFileKind =>
     isVideoAttachment(path) ? "video" : isAudioAttachment(path) ? "audio" : isPdfAttachment(path) ? "pdf" : "file";
   return [
-    ...attached.images.map((path) => ({ path, name: attachmentBasename(path), kind: "image" as const, linked: false })),
+    ...attached.images.map((image) => {
+      const path = imagePathOf(image);
+      const name = typeof image === "string" ? attachmentBasename(path) : (image.name || attachmentBasename(path));
+      return { path, name, kind: "image" as const, linked: false };
+    }),
     ...attached.files.map((file) => ({ path: file.path, name: file.name, kind: classify(file.path), linked: false })),
     ...linked.map((file) => ({ path: file.path, name: file.name, kind: classify(file.path), linked: true })),
   ];
 }
 
-type MessageAttachmentEntry = { path: string; kind?: string; name?: string };
+type MessageAttachmentEntry = {
+  path: string;
+  kind?: string;
+  name?: string;
+  /** #2121: meme meta on a bot-posted image attachment. */
+  meme?: {
+    provider?: string;
+    attribution?: string;
+    caption?: string;
+  };
+};
 const NO_GENERATED_ATTACHMENTS: readonly MessageAttachmentEntry[] = [];
 
-/** A bot message's stored attachments as the gallery wants them: image paths,
- * plus documents, audio and video attached with attach_file as private files
- * (authorized by the message itself, like a user's own upload). */
-export function splitMessageAttachments(attachments: readonly MessageAttachmentEntry[] = NO_GENERATED_ATTACHMENTS): { images: string[]; files: GalleryFile[] } {
-  const images: string[] = [];
+/** A bot message's stored attachments as the gallery wants them: image paths
+ * (with optional meme attribution), plus documents, audio and video attached
+ * with attach_file as private files (authorized by the message itself). */
+export function splitMessageAttachments(attachments: readonly MessageAttachmentEntry[] = NO_GENERATED_ATTACHMENTS): {
+  images: Array<string | TranscriptImageAttachment>;
+  files: GalleryFile[];
+} {
+  const images: Array<string | TranscriptImageAttachment> = [];
   const files: GalleryFile[] = [];
   for (const attachment of attachments) {
     if (attachment.kind === "file") files.push({ path: attachment.path, name: attachment.name || attachmentBasename(attachment.path), private: true });
-    else if (attachment.kind === "image" || attachment.kind === undefined) images.push(attachment.path);
+    else if (attachment.kind === "image" || attachment.kind === undefined) {
+      const attribution = attachment.meme?.attribution?.trim();
+      if (attribution) {
+        images.push({
+          path: attachment.path,
+          name: attachment.name || attachmentBasename(attachment.path),
+          private: true,
+          memeAttribution: attribution,
+          ...(attachment.meme?.provider ? { memeProvider: attachment.meme.provider } : {}),
+          ...(attachment.meme?.caption ? { memeCaption: attachment.meme.caption } : {}),
+        });
+      } else {
+        images.push(attachment.path);
+      }
+    }
   }
   return { images, files };
 }
@@ -137,7 +175,7 @@ export function splitMessageAttachments(attachments: readonly MessageAttachmentE
  * the delivered copy (`delivered`), which the message itself authorizes.
  * Linked video and audio keep their player in the group. */
 export function replyAttachmentGroup(text: string, attachments: readonly MessageAttachmentEntry[] = NO_GENERATED_ATTACHMENTS): {
-  images: string[];
+  images: Array<string | TranscriptImageAttachment>;
   files: GalleryFile[];
   delivered: Record<string, string>;
 } {
@@ -153,7 +191,7 @@ export function replyAttachmentGroup(text: string, attachments: readonly Message
     if (linkedNames.has(file.name) && deliveredNames.get(file.name) === 1) delivered[file.name] = file.path;
     else files.push(file);
   }
-  const taken = new Set([...attached.images, ...attached.files.map((file) => file.path)].map(fileIdentity));
+  const taken = new Set([...attached.images.map(imagePathOf), ...attached.files.map((file) => file.path)].map(fileIdentity));
   for (const link of links) {
     if (Object.hasOwn(delivered, link.name) || taken.has(fileIdentity(link.path))) continue;
     if (isVideoAttachment(link.path) || isAudioAttachment(link.path)) files.push(link);
@@ -172,7 +210,7 @@ export function MessageAttachmentGallery({ text, attachments = NO_GENERATED_ATTA
 }) {
   const attached = useMemo(() => splitMessageAttachments(attachments), [attachments]);
   const files = useMemo(
-    () => [...attached.files, ...collectMessageFiles(text, [...attached.images, ...attached.files.map((file) => file.path)])],
+    () => [...attached.files, ...collectMessageFiles(text, [...attached.images.map(imagePathOf), ...attached.files.map((file) => file.path)])],
     [text, attached],
   );
   return <AttachmentGallery images={attached.images} files={files} message={message} eager={eager} className={className} />;
@@ -495,7 +533,7 @@ function PdfAttachment({ file, message }: { file: GalleryFile; message: MessageA
 }
 
 type GalleryItem = { key: string } & (
-  | { kind: "image"; image: PreviewImage }
+  | { kind: "image"; image: PreviewImage; memeAttribution?: string; memeCaption?: string }
   | { kind: "video" | "audio" | "pdf" | "file"; file: GalleryFile }
 );
 
@@ -522,11 +560,21 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
       const key = fileIdentity(path);
       if (seen.has(key)) continue;
       seen.add(key);
+      const meta = typeof reference === "string" ? null : reference;
       const image = typeof reference === "string" || reference.private
         ? previewImage(path, typeof reference === "string" ? undefined : reference.name)
         : null;
-      if (image) result.push({ key, kind: "image", image });
-      else result.push({ key, kind: "file", file: typeof reference === "string" ? { path, name: attachmentBasename(path) } : reference });
+      if (image) {
+        result.push({
+          key,
+          kind: "image",
+          image,
+          ...(meta?.memeAttribution ? { memeAttribution: meta.memeAttribution } : {}),
+          ...(meta?.memeCaption ? { memeCaption: meta.memeCaption } : {}),
+        });
+      } else {
+        result.push({ key, kind: "file", file: typeof reference === "string" ? { path, name: attachmentBasename(path) } : reference });
+      }
     }
     for (const file of files) {
       const key = fileIdentity(file.path);
@@ -566,7 +614,18 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
           <div className="flex max-w-full flex-wrap gap-2">
             {thumbs.map((item) => item.kind === "image" && (
               <div key={item.key} className="min-w-0" title={item.image.name}>
-                <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className="h-24 w-auto max-w-48 rounded-2xl border-0" />
+                {item.memeAttribution ? (
+                  <MemeImage
+                    src={item.image.src}
+                    alt={item.image.name}
+                    attribution={item.memeAttribution}
+                    caption={item.memeCaption}
+                    onClick={() => setSelected(item.image)}
+                    className="max-h-24"
+                  />
+                ) : (
+                  <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className="h-24 w-auto max-w-48 rounded-2xl border-0" />
+                )}
               </div>
             ))}
           </div>
@@ -601,7 +660,17 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
         <div className={cn("grid gap-2", media.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
           {media.map((item) => item.kind === "image" ? (
             <div key={item.key} className="min-w-0" title={item.image.name}>
-              <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className="max-h-72 rounded-2xl border-0 bg-transparent" />
+              {item.memeAttribution ? (
+                <MemeImage
+                  src={item.image.src}
+                  alt={item.image.name}
+                  attribution={item.memeAttribution}
+                  caption={item.memeCaption}
+                  onClick={() => setSelected(item.image)}
+                />
+              ) : (
+                <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className="max-h-72 rounded-2xl border-0 bg-transparent" />
+              )}
             </div>
           ) : item.kind === "video" && message ? (
             <VideoAttachment key={`${message.threadId}:${message.messageId}:${item.key}`} file={item.file} message={message} />

@@ -52,6 +52,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   coordinate_bots: "conversation",
   post_to_room: "conversation",
   react_to_message: "conversation",
+  send_meme: "conversation",
   remove_reaction: "conversation",
   start_thread: "conversation",
   route_message: "conversation",
@@ -88,10 +89,10 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   claude_artifact: "conversation",
   // a page proposal: a card in the member's own conversation; publishing is theirs
   propose_page: "conversation",
+  // #2048: pick a publish surface; card in the member's own conversation
+  choose_page_target: "conversation",
   // the annotations of the member's own page, answered in their own conversation
   page_comments: "conversation",
-  // #2048: pick which surface publishes a new page
-  choose_page_target: "conversation",
   // a phone call: a card in the member's own conversation, through their own Twilio profile
   place_phone_call: "conversation",
   phone_call_owner: "conversation",

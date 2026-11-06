@@ -488,6 +488,30 @@
       }
     },
     {
+      "name": "send_meme",
+      "description": "Search reaction memes (animated GIFs and still captioned meme images) and post the best match into this chat. Use sparingly, only when the person's style invites it (they send memes or emojis, playful tone, memory of that preference). Never in serious or work contexts: tickets, invoices, errors, approvals, or anything they are waiting on as a real answer. Optional caption for a still meme (top/bottom style text). A meme never replaces a needed written answer.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "What meme to look for, for example \"this is fine\" or \"high five\"."
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Optional short caption for a still meme template."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
       "name": "check_widget",
       "description": "Check a ```widget before you show it: pass the exact HTML of the fence. It is drawn as the chat draws it (desktop and phone width, light and dark) and you get its defects back with a small screenshot: JavaScript errors, overflow, overlapping or crushed text, hidden or too small controls, low contrast, horizontal scroll. Read the report, fix every defect and check again until it passes (3 checks per turn), then show the HTML that passed. Never show an unchecked ```widget.",
       "inputSchema": {

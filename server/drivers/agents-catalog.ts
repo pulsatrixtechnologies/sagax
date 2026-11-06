@@ -77,6 +77,8 @@ export interface CatalogProfile {
   sharedComputers: boolean;
   /** A voice is actually configured for this bot (tts voiceReady). */
   voiceNotes: boolean;
+  /** #2121: meme replies allowed for this bot (absent/true = auto). */
+  memeReplies?: boolean;
   /** Settings > Experimental > Meeting notetaker is on, in a direct
    * conversation: join_meeting is offered. */
   meetings?: boolean;
@@ -150,6 +152,7 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     skillAuthoring: env.SAGAX_SKILL_AUTHORING_ENABLED === "1",
     sharedComputers: env.SAGAX_SHARED_COMPUTERS_ENABLED === "1",
     voiceNotes: env.SAGAX_VOICE_NOTES === "1",
+    memeReplies: env.SAGAX_MEME_REPLIES !== "0",
     meetings: !externalRuntime && env.SAGAX_MEETINGS === "1",
     singleStream: !externalRuntime && env.SAGAX_SINGLE_STREAM === "1",
     routeMessages: !externalRuntime && env.SAGAX_ROUTE_MESSAGES === "1",
@@ -197,6 +200,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   teamTools.DEF_START_THREAD,
   computersTools.DEF_VM_EXEC,
   coreTools.DEF_ATTACH_FILE,
+  coreTools.DEF_SEND_MEME,
   ...WIDGET_TOOL_DEFINITIONS,
   ...APP_TOOL_DEFINITIONS,
   ...ARTIFACT_TOOL_DEFINITIONS,
@@ -280,7 +284,8 @@ const VOICE_TOOL_NAMES = new Set(["send_voice_note"]);
 const CALL_TOOL_NAMES = new Set(["end_call"]);
 // On a live call the bot answers by voice: a reaction would land silently in
 // the transcript while the person is listening (2026-10-18).
-const NOT_ON_CALL_TOOL_NAMES = new Set(["react_to_message", "remove_reaction"]);
+const NOT_ON_CALL_TOOL_NAMES = new Set(["react_to_message", "remove_reaction", "send_meme"]);
+const MEME_TOOL_NAMES = new Set(["send_meme"]);
 // The meeting notetaker is experimental and off by default: join_meeting is
 // shown only while it is on (SAGAX_MEETINGS); its routes refuse otherwise.
 const MEETING_TOOL_NAMES = new Set(["join_meeting"]);
@@ -390,7 +395,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const COMPACT_CORE_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_bots", "ask_bot", "coordinate_bots", "send_to_bot", "route_message", "list_room_targets",
   "delegate_bot", "check_delegation", "wait_delegation",
-  "react_to_message", "show_widget", "update_widget", "check_widget", "attach_file", "select_computer", "request_credential",
+  "react_to_message", "send_meme", "show_widget", "update_widget", "check_widget", "attach_file", "select_computer", "request_credential",
   "memory_update", "memory_log", "session_search", "tool_result_read", "answer_approval", "act",
   // #1989: same always-loaded rule as DEFERRED: every bot can list and check/run its routines
   "list_routines", "run_routine",
@@ -575,7 +580,7 @@ export function knownAgentToolName(name: string): boolean {
   if (!everyAgentTool) {
     const widest: Omit<CatalogProfile, "coordinating" | "voiceCall"> = {
       externalRuntime: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
-      voiceNotes: true, meetings: true, singleStream: true, routeMessages: true, githubConnect: true, cloudHome: false,
+      voiceNotes: true, memeReplies: true, meetings: true, singleStream: true, routeMessages: true, githubConnect: true, cloudHome: false,
       memoryEnabled: true, groupMemory: true, chief: true, createBots: true, botId: WATCHER_OPTIONS_CARD_BOT_ID,
       agentApi: true, perspicax: true, claims: true, grokBridge: true, phoneTools: [...PHONE_TOOLS], webSearch: true, vaultHttp: true,
     };
@@ -603,9 +608,12 @@ function coreCatalogTools(profile: CatalogProfile) {
   const VOICE_READY_TOOLS = profile.voiceNotes
     ? SHAREABLE_TOOLS
     : SHAREABLE_TOOLS.filter((tool) => !VOICE_TOOL_NAMES.has(tool.name));
+  const MEME_READY_TOOLS = profile.memeReplies === false
+    ? VOICE_READY_TOOLS.filter((tool) => !MEME_TOOL_NAMES.has(tool.name))
+    : VOICE_READY_TOOLS;
   const CALL_TOOLS = (profile.voiceCall
-    ? VOICE_READY_TOOLS.filter((tool) => !NOT_ON_CALL_TOOL_NAMES.has(tool.name))
-    : VOICE_READY_TOOLS.filter((tool) => !CALL_TOOL_NAMES.has(tool.name)))
+    ? MEME_READY_TOOLS.filter((tool) => !NOT_ON_CALL_TOOL_NAMES.has(tool.name))
+    : MEME_READY_TOOLS.filter((tool) => !CALL_TOOL_NAMES.has(tool.name)))
     .filter((tool) => profile.meetings === true || !MEETING_TOOL_NAMES.has(tool.name))
     .filter((tool) => profile.singleStream === true || !STREAM_TOOL_NAMES.has(tool.name))
     .filter((tool) => profile.routeMessages === true || !ROUTE_TOOL_NAMES.has(tool.name))

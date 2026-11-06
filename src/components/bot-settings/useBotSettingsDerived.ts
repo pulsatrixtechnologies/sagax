@@ -49,6 +49,7 @@ export type BotPatch = Partial<
     | "voiceSpeed"
     | "voiceLanguage"
     | "emailDrafts"
+    | "memeReplies"
     | "chiefOfStaff"
     | "managedSections"
     | "approvePeerComms"

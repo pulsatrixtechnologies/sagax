@@ -5,7 +5,11 @@
 
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
+import { BOT_NOTIFY_PARAM as NOTIFY_PARAM, botNotifyArg } from "../../../shared/notification.ts";
+
+export { NOTIFY_PARAM };
 import { jsonRecord } from "./shared.ts";
+
 
 export const DEF_LIST_ROOMS = {
     name: "list_rooms",
@@ -25,6 +29,7 @@ export const DEF_POST_TO_ROOM = {
         group_id: { type: "string", description: "The room's id, copied exactly from list_rooms." },
         message: { type: "string", description: "The complete message to post, written for the room to read as it stands." },
         attach_voice_note: { type: "boolean", description: "True to attach this turn's send_voice_note recording; the message is its caption. Call send_voice_note first." },
+        notify: NOTIFY_PARAM,
       },
       required: ["group_id", "message"],
     },
@@ -40,6 +45,7 @@ export const DEF_MESSAGE_USER = {
       properties: {
         user: { type: "string", description: "The person's name, login or email, as the user said it." },
         text: { type: "string", description: "The complete message, written for that person." },
+        notify: NOTIFY_PARAM,
       },
       required: ["user", "text"],
     },
@@ -55,6 +61,7 @@ export const DEF_MESSAGE_PERSON = {
       properties: {
         principal_id: { type: "string", maxLength: 200, description: "The person's principal id from the organization directory or a bot's owner.principal_id." },
         message: { type: "string", description: "The complete message for that person to read as it stands." },
+        notify: NOTIFY_PARAM,
       },
       required: ["principal_id", "message"],
     },
@@ -100,7 +107,7 @@ export async function callRoomsTool(name: string, args: Json, context: ToolCallC
     }
     const r = await api("/api/internal/post-to-room", {
       method: "POST",
-      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, groupId, message, attachVoiceNote }),
+      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, groupId, message, attachVoiceNote, notify: botNotifyArg(args.notify) }),
     });
     if (r.error) return { text: String(r.error), isError: true };
     return {
@@ -113,7 +120,7 @@ export async function callRoomsTool(name: string, args: Json, context: ToolCallC
     if (!user || !text) return { text: "message_user needs user (the person's name) and text.", isError: true };
     const r = await api("/api/internal/message-user", {
       method: "POST",
-      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, user, text }),
+      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, user, text, notify: botNotifyArg(args.notify) }),
     });
     if (r.error) return { text: String(r.error), isError: true };
     const where = String(r.groupName ?? "the group");
@@ -129,7 +136,7 @@ export async function callRoomsTool(name: string, args: Json, context: ToolCallC
     }
     const r = await api("/api/internal/message-person", {
       method: "POST",
-      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, principalId, message }),
+      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, principalId, message, notify: botNotifyArg(args.notify) }),
     });
     if (r.error) return { text: String(r.error), isError: true };
     const where = r.roomName ? `"${r.roomName}"` : "the group chat";

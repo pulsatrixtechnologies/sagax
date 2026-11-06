@@ -17632,7 +17632,15 @@
       "myConnections.edit.save": "1509f561f2416598629b886ad7d3c05a7e221e4e0675c84bbff4ee6d9e03913d",
       "myConnections.edit.tokenKept": "719284ca8e29c1bc8be5e09ff6ef73975a36ca7ec4607502d2608a6cc8dd911f",
       "myConnections.edit.envKept": "156066aafe2eb55774f904be106ff8df04994f1eaad7c2e65585ccd5dd13f8aa",
-      "myConnections.import.hint": "f41f693bf77595e2f88ca7837eba062476e1ec90670f92185e69820d9dfb9014"
+      "myConnections.import.hint": "f41f693bf77595e2f88ca7837eba062476e1ec90670f92185e69820d9dfb9014",
+      "settings.notifications.native.title": "04c55b3101186345f3d7f6ded2f568dca442278198c6707cad6b7882a24c7309",
+      "settings.notifications.native.delivered": "71742d93524f54ce0d265c0e88f31762983b8a6255b06bef46e1593f8f0bf233",
+      "settings.notifications.native.notDelivered": "3d88bd2e7604299f06c4e98eb0193174d1a64ae5b6961ae6ed0fc92ed6cf2b3d",
+      "settings.notifications.native.unknown": "ec8f4de8b5ad0af7eba3c4bee4d394a5c04e3eea5cf86c69d762157560e8c521",
+      "settings.notifications.native.test": "edc014363ddb8cf9e7bd64603f5f485f1a6cbe549ed9a131116e48c846f8c72d",
+      "settings.notifications.native.testTitle": "8d1b6d92efd9b9b219ed242cd654c84e69a6b2ea8ab760a1de14bfa5922b562a",
+      "settings.notifications.native.testBody": "1d3430a3a272aac6fc8c5cb9c6d28042ad84dd8fa1f34a6f5d9ec0702be00318",
+      "settings.notifications.native.open": "63568f0582af1e88b9fd590bdbe3fd88cb114bd377411cd1d8492804b7b7d57d"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

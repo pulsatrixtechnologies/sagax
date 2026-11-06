@@ -45,6 +45,7 @@ function deps(over: Partial<InternalMemoryDeps> = {}): InternalMemoryDeps {
     voiceCallActive: () => false,
     botReaction: () => ({ ok: true, messageId: "m1", emoji: "👍", changed: true }),
     recordPlacedReaction: () => undefined,
+    setReplyNotify: () => undefined,
     roomFeedsBot: () => true,
     turnSpeaker: () => undefined,
     localPrincipalId: () => "local",
@@ -89,6 +90,25 @@ function call(
 }
 
 describe("createInternalMemoryRoutes", () => {
+  it("POST /api/internal/reply-notify silences this turn's reply, and a thread only when this bot opened it", async () => {
+    const setReplyNotify = vi.fn();
+    const taskByThread = vi.fn((_botId: string, threadId: string) => (threadId === "t-opened" ? { openedBy: { botId: "bot-1" } } : { openedBy: { botId: "other" } }));
+    const route = createInternalMemoryRoutes(deps({ setReplyNotify, taskByThread } as Partial<InternalMemoryDeps>));
+    const own = call(route, { path: "/api/internal/reply-notify", body: { notify: false } });
+    await own.run();
+    expect(own.sent).toEqual([{ status: 200, body: { ok: true, notify: false, threadId: "t-1" } }]);
+    expect(setReplyNotify).toHaveBeenLastCalledWith("t-1", false);
+    const opened = call(route, { path: "/api/internal/reply-notify", body: { notify: false, threadId: "t-opened", toBotId: "bot-2" } });
+    await opened.run();
+    expect(setReplyNotify).toHaveBeenLastCalledWith("t-opened", false);
+    const foreign = call(route, { path: "/api/internal/reply-notify", body: { notify: false, threadId: "t-x", toBotId: "bot-2" } });
+    await foreign.run();
+    expect(foreign.sent[0]?.status).toBe(403);
+    const bad = call(route, { path: "/api/internal/reply-notify", body: { notify: "no" } });
+    await bad.run();
+    expect(bad.sent[0]?.status).toBe(400);
+    expect(setReplyNotify).toHaveBeenCalledTimes(2);
+  });
   it("passes foreign paths and methods", async () => {
     const route = createInternalMemoryRoutes(deps());
     expect(await route(call(route, { path: "/api/internal/browser/mcp" }).ctx)).toBe(PASS);

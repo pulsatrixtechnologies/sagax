@@ -102,6 +102,8 @@ export function openInternalRoomsCall(deps: InternalRoomsDeps, ctx: InternalRout
   const requireActiveInternalCapability = () => deps.requireActive(internalCapability);
   const deciderReady = (_cfg: unknown, job: string) => job === "roomRouting" && deps.deciderReadyRoomRouting();
   const notePeerNotice = deps.notePeerNotice;
+  const notifyRoomPost = deps.notifyRoomPost;
+  const setReplyNotify = deps.setReplyNotify;
   const internalSender = store.bot(internalCapability.botId);
   if (!internalSender) return null;
   if (internalCapability.depth === undefined) internalCapability.depth = 0;
@@ -168,6 +170,8 @@ export function openInternalRoomsCall(deps: InternalRoomsDeps, ctx: InternalRout
     createChannel,
     updateChannel,
     notePeerNotice,
+    notifyRoomPost,
+    setReplyNotify,
     cfg,
     botMaxConcurrentThreadsLocal,
     botMaxParallelPerPersonLocal,

@@ -114,6 +114,11 @@ export interface InternalRoomsDeps {
   /** A one-way notice now runs in `threadId` of its receiver, sent from
    * `fromThreadId`: its hop in a chain of bots (peer inbox, 2026-11-02). */
   notePeerNotice?(threadId: string, fromThreadId: string): void;
+  /** The usual message notification for a bot's room post; `notify` false
+   * when the bot chose to post without alerting anyone. */
+  notifyRoomPost?(room: InternalRoomsGroup, poster: InternalRoomsBot, text: string, notify: boolean): void;
+  /** send_to_bot with notify false: the teammate's reply in that thread settles without a notification. */
+  setReplyNotify?(threadId: string, notify: boolean): void;
   pollOnlyCaller(capability: InternalCapabilityView): boolean;
   peerSpeaker(fromBotId: string, fromThreadId?: string): unknown;
   cloudGuestDriven(threadId: string): boolean;
@@ -262,6 +267,8 @@ export interface InternalRoomsCall {
   createChannel: InternalRoomsDeps["createChannel"];
   updateChannel: InternalRoomsDeps["updateChannel"];
   notePeerNotice: InternalRoomsDeps["notePeerNotice"];
+  notifyRoomPost: InternalRoomsDeps["notifyRoomPost"];
+  setReplyNotify: InternalRoomsDeps["setReplyNotify"];
   cfg: GlobalRuntimeSettings;
   botMaxConcurrentThreadsLocal: (bot: InternalRoomsBot) => number;
   botMaxParallelPerPersonLocal: (bot: InternalRoomsBot) => number;

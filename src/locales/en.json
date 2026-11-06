@@ -13892,5 +13892,13 @@
   "codingChat.panel.title": "This session",
   "codingChat.panel.status": "Status",
   "codingChat.panel.duration": "Duration",
-  "codingChat.panel.tokens": "Tokens"
+  "codingChat.panel.tokens": "Tokens",
+  "settings.notifications.native.title": "Desktop notifications",
+  "settings.notifications.native.delivered": "Sagax notifications show up on this computer.",
+  "settings.notifications.native.notDelivered": "This computer is not showing Sagax notifications. Allow them in the system notification settings.",
+  "settings.notifications.native.unknown": "Send a test to check that Sagax notifications show up on this computer.",
+  "settings.notifications.native.test": "Send a test",
+  "settings.notifications.native.testTitle": "Sagax notifications work",
+  "settings.notifications.native.testBody": "Your bots can reach you here.",
+  "settings.notifications.native.open": "Notification settings"
 }

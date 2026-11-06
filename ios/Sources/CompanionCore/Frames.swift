@@ -32,6 +32,9 @@ public struct NotificationFrame: Codable, Hashable, Sendable {
     /// A conversation an AI client holds over MCP: never on this phone or
     /// the watch (shared/notification.ts `quietOnPhones`).
     public var quietOnPhones: Bool? = nil
+    /// False when the bot chose to post without alerting anyone
+    /// (shared/notification.ts `notify`): no banner, no sound.
+    public var notify: Bool? = nil
 
     /// What the banner says under the bot's name: the question first, then
     /// the detail, never the question twice.

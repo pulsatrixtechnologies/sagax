@@ -2501,19 +2501,36 @@ function deliverNotificationToPage(channel, id, ...payload) {
   });
 }
 
-/** macOS: read Notification Center authorization when Electron exposes it.
- * Showing a banner still prompts on first need when status is not-determined. */
+/** macOS asks for Notification Center authorization the first time
+ * Electron posts (UNUserNotificationCenter requestAuthorization, logged by
+ * Electron as "Notification authorization granted"). Electron exposes no
+ * read of that status, so the state Settings shows comes from
+ * desktopAttention.deliveryStatus(): whether macOS lists what was posted. */
 function ensureMacNotificationAuthorized() {
-  if (process.platform !== "darwin") return true;
-  try {
-    const settings = systemPreferences.getNotificationSettings?.();
-    const status = settings?.authorizationStatus ?? settings?.authStatus;
-    if (status === "denied") {
-      console.warn("[desktop] Notification Center authorization is denied for Sagax");
-      return false;
-    }
-  } catch { /* older Electron: show() prompts */ }
   return true;
+}
+
+/** Notifications still listed in Notification Center, mirrored to disk so
+ * the next launch re-attaches their click or posts again what quitting
+ * removed (electron/desktop-attention.mjs). */
+const DELIVERED_NOTIFICATIONS_FILE = () => path.join(app.getPath("userData"), "notifications-delivered.json");
+const deliveredNotificationStore = {
+  read() {
+    try { return JSON.parse(fs.readFileSync(DELIVERED_NOTIFICATIONS_FILE(), "utf8")); } catch { return null; }
+  },
+  write(value) {
+    const file = DELIVERED_NOTIFICATIONS_FILE();
+    const temp = `${file}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(value), { mode: 0o600 });
+    fs.renameSync(temp, file);
+  },
+};
+
+/** Where System Settings lets the person allow Sagax notifications. */
+function notificationSettingsUrl() {
+  if (process.platform === "darwin") return "x-apple.systempreferences:com.apple.Notifications-Settings.extension";
+  if (process.platform === "win32") return "ms-settings:notifications";
+  return null;
 }
 
 // Native notifications, the Dock bounce and the taskbar flash
@@ -2526,8 +2543,15 @@ const desktopAttention = createDesktopAttention({
   Notification,
   getWindow: () => mainWindow,
   ensureAuthorized: ensureMacNotificationAuthorized,
-  onClick: (id, target) => deliverNotificationToPage("desktop:notification-click", id, target),
-  onReply: (id, reply, target) => deliverNotificationToPage("desktop:notification-reply", id, reply, target),
+  store: deliveredNotificationStore,
+  onClick: (id, target, origin) => {
+    if (origin && !notificationAccounts.has(id)) notificationAccounts.set(id, origin);
+    deliverNotificationToPage("desktop:notification-click", id, target);
+  },
+  onReply: (id, reply, target, origin) => {
+    if (origin && !notificationAccounts.has(id)) notificationAccounts.set(id, origin);
+    deliverNotificationToPage("desktop:notification-reply", id, reply, target);
+  },
 });
 
 // A nudge on this computer, received or sent: bring the window to the very
@@ -2548,7 +2572,29 @@ ipcMain.on("desktop:nudge", (event, options) => {
 ipcMain.on("desktop:notify", (event, request) => {
   if (!fromMainWindowTop(event)) return;
   rememberNotificationAccount(event, request);
-  desktopAttention.notify(request);
+  const origin = pageContexts?.originOf(event.sender) ?? "";
+  desktopAttention.notify(request && typeof request === "object" ? { ...request, origin } : request);
+});
+// Settings > Notifications: whether notifications reach Notification Center,
+// a test notification, and the System Settings pane that allows them.
+ipcMain.handle("desktop:notification-status", (event) => {
+  if (!fromMainWindowTop(event)) return null;
+  return { ...desktopAttention.deliveryStatus(), platform: process.platform, settings: Boolean(notificationSettingsUrl()) };
+});
+ipcMain.handle("desktop:notification-test", async (event, text) => {
+  if (!fromMainWindowTop(event)) return null;
+  const asked = text && typeof text === "object" ? text : {};
+  const state = await desktopAttention.test({
+    title: typeof asked.title === "string" ? asked.title : "Sagax",
+    body: typeof asked.body === "string" ? asked.body : "",
+  });
+  return { ...desktopAttention.deliveryStatus(), state, platform: process.platform, settings: Boolean(notificationSettingsUrl()) };
+});
+ipcMain.handle("desktop:open-notification-settings", (event) => {
+  if (!fromMainWindowTop(event)) return false;
+  const url = notificationSettingsUrl();
+  if (!url) return false;
+  return shell.openExternal(url).then(() => true, () => false);
 });
 // The approval a notification asked about was answered elsewhere or expired.
 ipcMain.on("desktop:notify-withdraw", (event, withdrawKey) => {
@@ -5530,6 +5576,14 @@ app.whenReady().then(async () => {
   // identity in this profile without the visibility gate re-running. The
   // first launch of each new version empties the HTTP cache, before any
   // window could serve one of those entries.
+  // Notifications from the last run: re-attach what Notification Center
+  // still lists, post again what quitting (an update) removed.
+  if (process.platform === "darwin") {
+    void desktopAttention.adoptDelivered().then(
+      ({ adopted, reposted }) => { if (adopted || reposted) slog(`notifications: ${adopted} adopted, ${reposted} posted again`); },
+      (error) => slog(`notifications: adopt failed: ${error?.message ?? error}`),
+    );
+  }
   await evictStartupCacheOnce({
     userData: app.getPath("userData"),
     currentVersion: app.getVersion(),

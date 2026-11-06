@@ -99,6 +99,9 @@ export interface NativeNotificationPayloadInput {
   /** Inline reply when the destination can take a message. */
   canReply?: boolean;
   typeSettings: NotificationTypeSettings;
+  /** False when the bot wrote the message with `notify: false`: it stays
+   * in the chat, unread as usual, and no banner shows. */
+  notify?: boolean;
 }
 
 export interface NativeNotificationPayload {
@@ -116,8 +119,9 @@ export interface NativeNotificationPayload {
 
 /**
  * Build the OS banner for one notify frame. Null-ish fields are empty
- * strings; `show` is false when the person is already looking at that chat
- * or the type switch is off (spend always shows when looking).
+ * strings; `show` is false when the person is already looking at that chat,
+ * the type switch is off (spend always shows when looking) or the bot wrote
+ * the message with `notify: false`.
  */
 export function buildNativeNotificationPayload(
   input: NativeNotificationPayloadInput,
@@ -128,7 +132,7 @@ export function buildNativeNotificationPayload(
     input.windowFocused &&
     Boolean(input.activeThreadId) &&
     input.activeThreadId === input.threadId;
-  const show = typeOk && (input.kind === "spend" || !looking);
+  const show = input.notify !== false && typeOk && (input.kind === "spend" || !looking);
 
   const sender = (input.senderName || "").replace(/\s+/g, " ").trim() || "Sagax";
   const group = (input.groupName || "").replace(/\s+/g, " ").trim();

@@ -315,6 +315,7 @@ export function showNotification(
     platform: shellPlatform(),
     canReply,
     typeSettings: typeSettingsFromAttention(),
+    ...(frame.notify === false ? { notify: false } : {}),
   });
   if (!payload.show) return;
 

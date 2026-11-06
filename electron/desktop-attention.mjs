@@ -14,11 +14,25 @@
 // Never pass urgency: "critical" on macOS: that requires Apple's critical-
 // alerts entitlement, which Sagax does not ship. Without it, those banners
 // never reach Notification Center (#2120).
+//
+// Electron takes a notification it created out of Notification Center when
+// the JS object is garbage collected, and every one of them when the app
+// quits (an auto-update included). So: every notification has an id and is
+// held until clicked, closed, replaced or withdrawn; what is listed is
+// mirrored to disk; at launch adoptDelivered() re-attaches what macOS still
+// lists (getHistory) and quietly posts again what the quit removed.
 
 const MAX_TITLE = 120;
 const MAX_BODY = 400;
 const MAX_ID = 200;
-const MAX_KEPT = 50;
+// Held notification objects: Electron takes a notification out of
+// Notification Center when its object is garbage collected, so this is how
+// many stay listed at once.
+const MAX_KEPT = 500;
+/** At most this many notifications come back after a quit or an update. */
+const MAX_REPOST = 30;
+/** How long after a banner macOS is asked whether it was delivered. */
+const PROBE_MS = 4000;
 
 /** Text shown in a notification: a string, trimmed and capped. */
 function clip(value, max) {
@@ -31,6 +45,8 @@ function clip(value, max) {
  * Null when it has nothing to show. */
 export function normalizeAttentionRequest(value) {
   if (!value || typeof value !== "object") return null;
+  // the bot wrote it with notify false: in the chat, never a banner
+  if (value.notify === false) return null;
   const title = clip(value.title, MAX_TITLE);
   if (!title) return null;
   const id = typeof value.id === "string" && value.id.length <= MAX_ID ? value.id : "";
@@ -60,6 +76,9 @@ export function normalizeAttentionRequest(value) {
     hasReply: value.hasReply === true,
     replyPlaceholder: clip(value.replyPlaceholder, 80) || "Reply",
     icon,
+    // the account page that asked (set by main, never by the page): a click
+    // after a restart still opens the right account
+    origin: typeof value.origin === "string" && value.origin.length <= 500 ? value.origin : "",
   };
 }
 
@@ -91,37 +110,84 @@ export function notificationUrgency(platform, persistent) {
  * @param {{
  *   platform: string,
  *   app: { dock?: { bounce?: (type: string) => number, cancelBounce?: (id: number) => void }, setBadgeCount?: (count: number) => boolean },
- *   Notification?: { new (options: object): { show(): void, close?(): void, on(event: string, fn: (...args: any[]) => void): void }, isSupported?(): boolean, remove?(id: string): void },
+ *   Notification?: { new (options: object): { id?: string, show(): void, close?(): void, on(event: string, fn: (...args: any[]) => void): void }, isSupported?(): boolean, remove?(id: string): void, getHistory?(): Promise<Array<{ id?: string, on(event: string, fn: (...args: any[]) => void): void }>> },
  *   getWindow: () => any,
- *   onClick: (id: string, target: object | null) => void,
- *   onReply?: (id: string, reply: string, target: object | null) => void,
+ *   onClick: (id: string, target: object | null, origin?: string | null) => void,
+ *   onReply?: (id: string, reply: string, target: object | null, origin?: string | null) => void,
  *   icon?: string,
  *   ensureAuthorized?: () => boolean | Promise<boolean>,
+ *   store?: { read(): unknown, write(value: object): void },
+ *   now?: () => number,
+ *   setTimeout?: (fn: () => void, ms: number) => unknown,
  * }} deps
  */
 export function createDesktopAttention(deps) {
+  /** native id → the live notification object. Holding it is what keeps it
+   * in Notification Center: Electron removes a notification it created
+   * when that object is garbage collected. */
   const kept = new Map();
-  /** replaceId → kept key, so a new notice for the same chat replaces the old. */
-  const byReplace = new Map();
+  /** native id → what a click needs after a restart ({id, target, ...}),
+   * mirrored to deps.store so the next launch can re-attach or re-post it. */
+  const records = new Map();
   let bounceId = null;
   let authAsked = false;
+  let seq = 0;
+  /** "delivered": macOS listed a notification we showed in Notification
+   * Center; "not-delivered": it did not (Sagax is off or denied there);
+   * "unknown": nothing checked yet, or the platform cannot tell. */
+  let deliveryState = "unknown";
+  const now = deps.now ?? Date.now;
+  const later = deps.setTimeout ?? ((fn, ms) => { const timer = setTimeout(fn, ms); timer.unref?.(); return timer; });
+  const canList = () => typeof deps.Notification?.getHistory === "function";
 
   const liveWindow = () => {
     const win = deps.getWindow();
     return win && !(typeof win.isDestroyed === "function" && win.isDestroyed()) ? win : null;
   };
 
-  const forget = (key) => {
-    const note = kept.get(key);
-    kept.delete(key);
-    withdrawable.delete(key);
-    for (const [replaceId, held] of byReplace) {
-      if (held === key) byReplace.delete(replaceId);
+  function persist() {
+    if (!deps.store) return;
+    try { deps.store.write({ version: 1, records: Object.fromEntries(records) }); } catch { /* disk full: next change retries */ }
+  }
+
+  function readStore() {
+    try {
+      const saved = deps.store?.read();
+      const list = saved && typeof saved === "object" ? saved.records : null;
+      if (!list || typeof list !== "object") return new Map();
+      const out = new Map();
+      for (const [nid, rec] of Object.entries(list)) {
+        if (typeof nid !== "string" || nid.length > MAX_ID * 2 || !rec || typeof rec !== "object") continue;
+        const title = clip(rec.title, MAX_TITLE);
+        if (!title) continue;
+        out.set(nid, {
+          id: typeof rec.id === "string" && rec.id.length <= MAX_ID ? rec.id : "",
+          target: normalizeTarget(rec.target),
+          title,
+          subtitle: clip(rec.subtitle, MAX_TITLE),
+          body: clip(rec.body, MAX_BODY),
+          groupId: typeof rec.groupId === "string" && rec.groupId.length <= MAX_ID * 2 ? rec.groupId : "",
+          withdrawKey: typeof rec.withdrawKey === "string" && rec.withdrawKey.length <= MAX_ID * 3 ? rec.withdrawKey : "",
+          origin: typeof rec.origin === "string" && rec.origin.length <= 500 ? rec.origin : "",
+          at: Number.isFinite(rec.at) ? rec.at : 0,
+        });
+      }
+      return out;
+    } catch {
+      return new Map();
     }
-    return note;
+  }
+
+  /** Let go of one notification: clicked, closed, replaced or withdrawn.
+   * `note` guards against a late close event of an object already replaced
+   * under the same id. */
+  const forget = (nid, note) => {
+    if (note && kept.get(nid) !== note) return null;
+    const held = kept.get(nid);
+    kept.delete(nid);
+    if (records.delete(nid)) persist();
+    return held;
   };
-  /** kept key → the page's withdraw key (an approval answered elsewhere) */
-  const withdrawable = new Map();
 
   /** Bounce the Dock icon (macOS) or flash the taskbar button (Windows,
    * Linux) until the window is focused. Nothing when it already is. */
@@ -150,6 +216,65 @@ export function createDesktopAttention(deps) {
     win.focus?.();
   }
 
+  /** Hold a notification (new, adopted or re-posted) and wire its click,
+   * reply and close to the conversation its record names. */
+  function hold(nid, note, rec, hasReply) {
+    kept.set(nid, note);
+    if (kept.size > MAX_KEPT) {
+      const oldest = kept.keys().next().value;
+      forget(oldest);
+    }
+    note.on("click", () => {
+      forget(nid, note);
+      focusWindow();
+      if (rec?.id) deps.onClick(rec.id, rec.target ?? null, rec.origin || null);
+    });
+    if (hasReply && typeof deps.onReply === "function") {
+      note.on("reply", (_event, reply) => {
+        forget(nid, note);
+        focusWindow();
+        const text = typeof reply === "string" ? reply.trim() : "";
+        if (text && rec?.id) deps.onReply(rec.id, text, rec.target ?? null, rec.origin || null);
+      });
+    }
+    note.on("close", () => forget(nid, note));
+  }
+
+  /** The ids macOS still lists in Notification Center, or null when it
+   * cannot say (other platforms, older Electron, an error). */
+  async function deliveredIds() {
+    if (!canList()) return null;
+    try {
+      const history = await deps.Notification.getHistory();
+      return new Set((Array.isArray(history) ? history : []).map((note) => note?.id).filter((id) => typeof id === "string"));
+    } catch {
+      return null;
+    }
+  }
+
+  /** A few seconds after a banner, ask macOS whether it reached
+   * Notification Center: that is the authorization state Settings shows. */
+  function probe(nid) {
+    if (!canList()) return Promise.resolve(deliveryState);
+    return new Promise((resolve) => {
+      later(async () => {
+        const ids = await deliveredIds();
+        if (ids) {
+          if (ids.has(nid)) deliveryState = "delivered";
+          else if (kept.has(nid)) deliveryState = "not-delivered";
+          // drop what the person dismissed in Notification Center, so a
+          // restart does not bring it back
+          let changed = false;
+          for (const [held, rec] of records) {
+            if (!ids.has(held) && held !== nid && now() - rec.at > PROBE_MS) { records.delete(held); changed = true; }
+          }
+          if (changed) persist();
+        }
+        resolve(deliveryState);
+      }, PROBE_MS);
+    });
+  }
+
   /** Show one native notification. False when the platform has none. */
   function notify(raw) {
     const request = normalizeAttentionRequest(raw);
@@ -158,8 +283,9 @@ export function createDesktopAttention(deps) {
     const Notification = deps.Notification;
     if (!Notification || (typeof Notification.isSupported === "function" && !Notification.isSupported())) return false;
 
-    // First need: ask macOS for authorization when the API is there. A denied
-    // status still attempts show() so a later grant is picked up.
+    // Electron asks macOS for authorization itself the first time it posts
+    // (UNUserNotificationCenter requestAuthorization); this hook only reads
+    // and reports the state.
     if (!authAsked && typeof deps.ensureAuthorized === "function") {
       authAsked = true;
       try {
@@ -168,12 +294,13 @@ export function createDesktopAttention(deps) {
       } catch { /* show anyway */ }
     }
 
+    // Every notification carries an id: the one of its chat (a new notice
+    // replaces the old) or a fresh one, so Notification Center can list it
+    // and a restart can find it again.
+    const nid = request.replaceId || `sagax:n:${request.id || "notice"}:${now().toString(36)}:${(++seq).toString(36)}`;
     if (request.replaceId) {
-      const previous = byReplace.get(request.replaceId);
-      if (previous) {
-        const old = forget(previous);
-        try { old?.close?.(); } catch { /* already gone */ }
-      }
+      const old = forget(request.replaceId);
+      try { old?.close?.(); } catch { /* already gone */ }
       if (typeof Notification.remove === "function") {
         try { Notification.remove(request.replaceId); } catch { /* older Electron */ }
       }
@@ -186,7 +313,7 @@ export function createDesktopAttention(deps) {
     const icon = request.icon
       || (deps.icon && deps.platform !== "darwin" ? deps.icon : undefined);
     const note = new Notification({
-      ...(request.replaceId ? { id: request.replaceId } : {}),
+      id: nid,
       ...(request.groupId ? { groupId: request.groupId } : {}),
       title: request.title,
       ...(request.subtitle ? { subtitle: request.subtitle } : {}),
@@ -198,29 +325,87 @@ export function createDesktopAttention(deps) {
       ...(icon ? { icon } : {}),
       ...(request.hasReply ? { hasReply: true, replyPlaceholder: request.replyPlaceholder } : {}),
     });
-    // The click handler lives as long as the notification object does; keep
-    // it until it is clicked or closed (a bounded number, oldest first).
-    const key = Symbol(request.id || request.replaceId || "notification");
-    kept.set(key, note);
-    if (request.replaceId) byReplace.set(request.replaceId, key);
-    if (request.withdrawKey) withdrawable.set(key, request.withdrawKey);
-    if (kept.size > MAX_KEPT) forget(kept.keys().next().value);
-    note.on("click", () => {
-      forget(key);
-      focusWindow();
-      if (request.id) deps.onClick(request.id, request.target);
-    });
-    if (request.hasReply && typeof deps.onReply === "function") {
-      note.on("reply", (_event, reply) => {
-        forget(key);
-        focusWindow();
-        const text = typeof reply === "string" ? reply.trim() : "";
-        if (text && request.id) deps.onReply(request.id, text, request.target);
-      });
-    }
-    note.on("close", () => forget(key));
+    const rec = {
+      id: request.id,
+      target: request.target,
+      title: request.title,
+      subtitle: request.subtitle,
+      body: request.body,
+      groupId: request.groupId,
+      withdrawKey: request.withdrawKey,
+      origin: request.origin,
+      at: now(),
+    };
+    // Held until it is clicked, closed, replaced or withdrawn (a bounded
+    // number, oldest first): letting it go would take it out of
+    // Notification Center.
+    hold(nid, note, rec, request.hasReply);
+    records.set(nid, rec);
+    persist();
     note.show();
+    void probe(nid);
     return true;
+  }
+
+  /** At launch (macOS): take back what Notification Center still lists from
+   * the last run, with its click, and post again, quietly, what quitting
+   * removed (Electron clears its own notifications on quit, an update
+   * included). Returns how many of each. */
+  async function adoptDelivered() {
+    const saved = readStore();
+    if (!canList()) return { adopted: 0, reposted: 0 };
+    let history = [];
+    try { history = await deps.Notification.getHistory(); } catch { history = []; }
+    if (!Array.isArray(history)) history = [];
+    let adopted = 0;
+    const present = new Set();
+    for (const note of history) {
+      const nid = typeof note?.id === "string" ? note.id : "";
+      if (!nid || kept.has(nid)) continue;
+      present.add(nid);
+      const rec = saved.get(nid) ?? null;
+      if (rec) records.set(nid, rec);
+      hold(nid, note, rec, false);
+      adopted++;
+    }
+    if (present.size > 0) deliveryState = "delivered";
+    const missing = [...saved]
+      .filter(([nid]) => !present.has(nid) && !kept.has(nid))
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, MAX_REPOST);
+    let reposted = 0;
+    for (const [nid, rec] of missing) {
+      try {
+        const note = new deps.Notification({
+          id: nid,
+          ...(rec.groupId ? { groupId: rec.groupId } : {}),
+          title: rec.title,
+          ...(rec.subtitle ? { subtitle: rec.subtitle } : {}),
+          body: rec.body,
+          silent: true,
+          timeoutType: "default",
+          urgency: notificationUrgency(deps.platform, false),
+        });
+        hold(nid, note, rec, false);
+        records.set(nid, rec);
+        note.show();
+        reposted++;
+      } catch { /* skip this one */ }
+    }
+    persist();
+    return { adopted, reposted };
+  }
+
+  /** What Settings shows: whether notifications reach Notification Center. */
+  function deliveryStatus() {
+    return { state: deliveryState, canCheck: canList() };
+  }
+
+  /** Settings' "Send a test": one notification, then the state it found. */
+  function test(request) {
+    if (!notify({ ...request, sound: true, persistent: false })) return Promise.resolve(deliveryState);
+    const last = [...kept.keys()].pop();
+    return last ? probe(last) : Promise.resolve(deliveryState);
   }
 
   /** The unread count on the app icon (macOS Dock, Linux launcher). */
@@ -245,14 +430,17 @@ export function createDesktopAttention(deps) {
   function withdraw(withdrawKey) {
     if (typeof withdrawKey !== "string" || !withdrawKey) return 0;
     let closed = 0;
-    for (const [key, value] of withdrawable) {
-      if (value !== withdrawKey) continue;
-      const note = kept.get(key);
-      forget(key);
-      try { note?.close?.(); closed++; } catch { /* already gone */ }
+    for (const [nid, rec] of records) {
+      if (rec.withdrawKey !== withdrawKey) continue;
+      const note = forget(nid);
+      try {
+        if (note?.close) note.close();
+        else deps.Notification?.remove?.(nid);
+        closed++;
+      } catch { /* already gone */ }
     }
     return closed;
   }
 
-  return { notify, withdraw, requestAttention, setBadge, settle, keptCount: () => kept.size };
+  return { notify, withdraw, requestAttention, setBadge, settle, adoptDelivered, deliveryStatus, test, keptCount: () => kept.size };
 }

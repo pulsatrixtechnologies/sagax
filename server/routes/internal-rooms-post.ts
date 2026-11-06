@@ -38,6 +38,7 @@ export async function handlePostToRoom(call: InternalRoomsCall): Promise<typeof 
     connectorThread,
     roomPostEligibility,
     lastHumanRoomMessageAt,
+    notifyRoomPost,
     peerReviewRequired,
     isUnattended,
     turnAttachmentKey,
@@ -56,6 +57,8 @@ export async function handlePostToRoom(call: InternalRoomsCall): Promise<typeof 
   const groupId = String(body.groupId ?? "").trim();
   const message = String(body.message ?? "").trim();
   const attachVoiceNote = body.attachVoiceNote === true;
+  // The bot's own choice (post_to_room `notify`): false posts without alerting.
+  const notify = body.notify !== false;
   if (body.attachVoiceNote !== undefined && typeof body.attachVoiceNote !== "boolean") {
     return json(res, 400, { error: "attachVoiceNote must be true or false" });
   }
@@ -205,6 +208,7 @@ export async function handlePostToRoom(call: InternalRoomsCall): Promise<typeof 
   internalCapability.roomPosts = (internalCapability.roomPosts ?? 0) + 1;
   detachParkedAudio?.();
   store.patchGroup(room.id, { unread: true });
+  notifyRoomPost?.(room, poster, message, notify);
   // The same visibility contract the peer tools keep: whatever a bot
   // does elsewhere shows up in the conversation it is actually in.
   // The chip is settled — the post has already landed — and carries

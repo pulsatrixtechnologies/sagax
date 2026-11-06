@@ -155,3 +155,25 @@ describe("buildNativeNotificationPayload", () => {
     ).toBe(false);
   });
 });
+
+describe("buildNativeNotificationPayload: the bot's notify choice", () => {
+  const base = {
+    kind: "done" as const,
+    senderName: "Scout",
+    body: "Step 2 of 5 done",
+    threadId: "t-1",
+    botId: "b-1",
+    windowFocused: false,
+    activeThreadId: null,
+    platform: "darwin",
+    typeSettings: typesOn,
+  };
+  it("notify false writes no banner, even unfocused on another chat", () => {
+    expect(buildNativeNotificationPayload({ ...base, notify: false }).show).toBe(false);
+    expect(buildNativeNotificationPayload({ ...base, kind: "message", notify: false }).show).toBe(false);
+  });
+  it("notify true or absent keeps the banner", () => {
+    expect(buildNativeNotificationPayload({ ...base, notify: true }).show).toBe(true);
+    expect(buildNativeNotificationPayload(base).show).toBe(true);
+  });
+});

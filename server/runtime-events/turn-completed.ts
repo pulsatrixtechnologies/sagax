@@ -2,6 +2,7 @@
 /** handleTurnCompleted (#1388). Pure move from server/index.ts bus.subscribe. */
 import { INCIDENTS_THREAD_TITLE } from "../peers/incidents.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
+import { withBotNotify } from "../../shared/notification.ts";
 export function handleTurnCompleted(event: any, ctx: any, host: any): void {
   const { DATA_DIR, deleteAttachment, deliverableNotification, endedToolOutput, flushUsageLedger } = host;
   const {
@@ -290,6 +291,10 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
           }) : Promise.resolve();
         if (resourceOwner) host.settlingResourceOwners.set(resourceOwner.threadId, resourceOwner.generation);
         host.liveTurnByThread.delete(event.threadId);
+        // The bot chose to settle this reply without alerting anyone
+        // (set_reply_notify, send_to_bot notify false): its message and
+        // unread stay, its notification and push do not ring. Read once.
+        const replyAlerts = !host.silentReplyThreads?.delete(event.threadId);
         // A Team incidents report (server/peers/incidents.ts): the Primary Bot
         // worked in its "Team incidents" thread, beside its conversation;
         // what it has to say arrives as its own message in the person's one
@@ -310,7 +315,7 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
           // nothing here either. notify() checks quietTurnThreads by the
           // notice's thread, and this one names the conversation.
           if (!host.computerSelectionTurns.get(event.threadId)?.selected && !host.quietTurnThreads.has(event.threadId)) {
-            host.notify(deliverableNotification("done", bot, incidentsReport!, reply, { avatarUrl: bot.avatarUrl }));
+            host.notify(withBotNotify(deliverableNotification("done", bot, incidentsReport!, reply, { avatarUrl: bot.avatarUrl }), replyAlerts));
           }
         }
         // 2026-11-05: a result that needs the person reaches the person,
@@ -351,10 +356,10 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
             ? reply || routineRun.output || routineRun.routineName
             : reply;
           const notificationBot = (routineRun && host.routineSourceOwner(routineRun)?.bot) || bot;
-          host.notify(deliverableNotification("done", notificationBot, routineReportThread ?? event.threadId, completionDetail, {
+          host.notify(withBotNotify(deliverableNotification("done", notificationBot, routineReportThread ?? event.threadId, completionDetail, {
             avatarUrl: notificationBot.avatarUrl,
             ...(routineRun && routineRun.status === "completed" ? { routineRunId: routineRun.id, routineName: routineRun.routineName } : {})
-          }));
+          }), replyAlerts));
         }
         if (host.screenPollers.has(event.threadId) && host.askedForView(host.latestPersonText(event.threadId), "screen")) {
           // views on request only (shared/requested-views.ts): the settled

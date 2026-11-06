@@ -7,6 +7,14 @@ declare global {
     | { status: "waiting"; origin: string }
     | { status: "error"; origin: string; error: "timeout" | "unsupported" | "browser" | "unreachable" };
   type CompanyBackupEntry = Omit<import("../../electron/company-backups.mjs").CompanyBackupMetadata, "status"> & { status: "creating" | "uploading" | "completing" | "ready" | "cleanup" };
+  /** Settings > Notifications: what the desktop shell found about native
+   * notifications (electron/desktop-attention.mjs deliveryStatus). */
+  interface NativeNotificationStatus {
+    state: "delivered" | "not-delivered" | "unknown";
+    canCheck: boolean;
+    platform: string;
+    settings: boolean;
+  }
   interface CompanyBackupScheduleState {
     enabled: boolean;
     status: "off" | "waiting" | "running" | "paused" | "error";
@@ -475,6 +483,13 @@ const __BASE_VERSION__: string;
       }): void;
       /** Close the shell notifications shown with this withdraw key. */
       withdrawNotification?(withdrawKey: string): void;
+      /** Whether notifications reach the OS notification center (macOS can
+       * tell; elsewhere "unknown"), and whether a settings pane can open. */
+      notificationStatus?(): Promise<NativeNotificationStatus | null>;
+      /** Post a test notification, then the state it found. */
+      testNotification?(text: { title: string; body: string }): Promise<NativeNotificationStatus | null>;
+      /** Open System Settings > Notifications (macOS) or Windows settings. */
+      openNotificationSettings?(): Promise<boolean>;
       /** The id of a shell notification the person clicked. */
       onNotificationClick?(cb: (id: string, target?: { botId?: string; threadId?: string; groupId?: string; routineRunId?: string } | null) => void): () => void;
       /** Inline reply from the OS banner: open that chat and send the text. */

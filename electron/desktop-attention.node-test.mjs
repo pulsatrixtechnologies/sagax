@@ -247,3 +247,125 @@ test("ensureAuthorized runs once on first notify", () => {
   attention.notify({ title: "B", body: "2" });
   assert.equal(calls, 1);
 });
+
+test("a notice the bot sent with notify false never reaches the desktop", () => {
+  assert.equal(normalizeAttentionRequest({ title: "Scout", body: "log", notify: false }), null);
+  assert.ok(normalizeAttentionRequest({ title: "Scout", body: "done", notify: true }));
+  assert.ok(normalizeAttentionRequest({ title: "Scout", body: "done" }));
+  const { FakeNotification, made } = fakeNotificationClass();
+  const { app } = fakeApp();
+  const attention = createDesktopAttention({ platform: "darwin", app, Notification: FakeNotification, getWindow: () => null, onClick: () => {} });
+  assert.equal(attention.notify({ title: "Scout", body: "log", notify: false }), false);
+  assert.equal(made.length, 0);
+});
+
+// Root cause of "no Sagax notifications in Notification Center" (0.8.58):
+// Electron removes a notification it created when its object is garbage
+// collected, and all of them at quit (every auto-update). These cover the fix.
+function macNotificationClass(history = []) {
+  const made = [];
+  const removed = [];
+  class MacNote {
+    constructor(options) { this.options = options; this.id = options?.id; this.handlers = {}; this.shown = false; made.push(this); }
+    static isSupported() { return true; }
+    static remove(id) { removed.push(id); }
+    static async getHistory() { return history; }
+    on(event, fn) { this.handlers[event] = fn; }
+    show() { this.shown = true; }
+    close() { this.handlers.close?.(); }
+  }
+  return { MacNote, made, removed };
+}
+
+function memoryStore(initial = null) {
+  let value = initial;
+  return { read: () => value, write: (next) => { value = JSON.parse(JSON.stringify(next)); }, get value() { return value; } };
+}
+
+function restored(id) {
+  const note = { id, handlers: {}, on(event, fn) { this.handlers[event] = fn; } };
+  return note;
+}
+
+test("every notification carries an id and stays held well past fifty (no GC removal)", () => {
+  const { MacNote, made } = macNotificationClass();
+  const attention = createDesktopAttention({ platform: "darwin", app: fakeApp().app, Notification: MacNote, getWindow: () => null, onClick: () => {}, setTimeout: () => {} });
+  for (let i = 0; i < 120; i++) attention.notify({ id: `n${i}`, title: "Scout", body: `msg ${i}` });
+  assert.equal(attention.keptCount(), 120);
+  assert.ok(made.every((note) => typeof note.options.id === "string" && note.options.id.length > 0));
+  assert.equal(new Set(made.map((note) => note.options.id)).size, 120);
+});
+
+test("what is listed is mirrored to the store, and a click drops it", () => {
+  const { MacNote, made } = macNotificationClass();
+  const store = memoryStore();
+  const attention = createDesktopAttention({ platform: "darwin", app: fakeApp().app, Notification: MacNote, getWindow: () => null, onClick: () => {}, store, setTimeout: () => {} });
+  attention.notify({ id: "thread:t1", title: "Scout", body: "done", replaceId: "sagax:chat:t1", target: { botId: "scout", threadId: "t1" } });
+  attention.notify({ id: "approval:1", title: "Allow?", body: "run", withdrawKey: "approval:t2:r1" });
+  assert.deepEqual(Object.keys(store.value.records).length, 2);
+  assert.deepEqual(store.value.records["sagax:chat:t1"].target, { botId: "scout", threadId: "t1" });
+  made[0].handlers.click();
+  assert.deepEqual(Object.keys(store.value.records).length, 1);
+  assert.equal(attention.withdraw("approval:t2:r1"), 1);
+  assert.deepEqual(store.value.records, {});
+});
+
+test("at launch, a notification macOS still lists is adopted and its click opens the right chat", async () => {
+  const listed = restored("sagax:chat:t1");
+  const { MacNote, made } = macNotificationClass([listed]);
+  const store = memoryStore({ version: 1, records: { "sagax:chat:t1": { id: "thread:t1", target: { botId: "scout", threadId: "t1" }, title: "Scout", body: "done", at: 1 } } });
+  const clicked = [];
+  const attention = createDesktopAttention({ platform: "darwin", app: fakeApp().app, Notification: MacNote, getWindow: () => null, onClick: (id, target) => clicked.push({ id, target }), store, setTimeout: () => {} });
+  assert.deepEqual(await attention.adoptDelivered(), { adopted: 1, reposted: 0 });
+  assert.equal(made.length, 0);
+  assert.equal(attention.deliveryStatus().state, "delivered");
+  listed.handlers.click();
+  assert.deepEqual(clicked, [{ id: "thread:t1", target: { botId: "scout", threadId: "t1" } }]);
+});
+
+test("at launch, what the quit removed is posted again quietly with its click", async () => {
+  const { MacNote, made } = macNotificationClass([]);
+  const store = memoryStore({ version: 1, records: {
+    "sagax:chat:t1": { id: "thread:t1", target: { botId: "scout", threadId: "t1" }, title: "Scout", subtitle: "Ops", body: "done", groupId: "sagax:chat:t1", at: 2 },
+    "bad": { title: "" },
+  } });
+  const clicked = [];
+  const attention = createDesktopAttention({ platform: "darwin", app: fakeApp().app, Notification: MacNote, getWindow: () => null, onClick: (id, target) => clicked.push({ id, target }), store, setTimeout: () => {} });
+  assert.deepEqual(await attention.adoptDelivered(), { adopted: 0, reposted: 1 });
+  assert.equal(made[0].options.id, "sagax:chat:t1");
+  assert.equal(made[0].options.silent, true);
+  assert.equal(made[0].options.urgency, "normal");
+  assert.equal(made[0].shown, true);
+  made[0].handlers.click();
+  assert.deepEqual(clicked, [{ id: "thread:t1", target: { botId: "scout", threadId: "t1" } }]);
+});
+
+test("a late close event of a replaced notification does not drop its replacement", () => {
+  const { MacNote, made } = macNotificationClass();
+  const store = memoryStore();
+  const attention = createDesktopAttention({ platform: "darwin", app: fakeApp().app, Notification: MacNote, getWindow: () => null, onClick: () => {}, store, setTimeout: () => {} });
+  made.length = 0;
+  attention.notify({ id: "a", title: "Scout", body: "one", replaceId: "sagax:chat:t1" });
+  const first = made[0];
+  first.close = () => {}; // Electron emits close later, not during close()
+  attention.notify({ id: "b", title: "Scout", body: "two", replaceId: "sagax:chat:t1" });
+  first.handlers.close();
+  assert.equal(attention.keptCount(), 1);
+  assert.equal(store.value.records["sagax:chat:t1"].body, "two");
+});
+
+test("the delivery probe reports delivered or not-delivered from Notification Center", async () => {
+  const listed = [];
+  const { MacNote, made } = macNotificationClass(listed);
+  const timers = [];
+  const attention = createDesktopAttention({ platform: "darwin", app: fakeApp().app, Notification: MacNote, getWindow: () => null, onClick: () => {}, setTimeout: (fn) => timers.push(fn) });
+  assert.deepEqual(attention.deliveryStatus(), { state: "unknown", canCheck: true });
+  const missing = attention.test({ title: "Sagax", body: "test" });
+  await timers.pop()();
+  assert.equal(await missing, "not-delivered");
+  const found = attention.test({ title: "Sagax", body: "test 2" });
+  listed.push(restored(made.at(-1).options.id));
+  await timers.pop()();
+  assert.equal(await found, "delivered");
+  assert.equal(attention.deliveryStatus().state, "delivered");
+});

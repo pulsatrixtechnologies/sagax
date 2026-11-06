@@ -51,7 +51,7 @@ describe("built-in agent tool read policy", () => {
   });
 
   it.each([
-    "shared_computer", "ask_bot", "delegate_bot", "start_thread", "close_thread", "post_to_room",
+    "shared_computer", "ask_bot", "delegate_bot", "start_thread", "close_thread", "post_to_room", "message_user",
     // These post into the chat: never read-only.
     "attach_file", "show_widget", "update_widget",
     "create_bot", "request_credential", "memory_update", "propose_routine",

@@ -4721,7 +4721,7 @@ describe("harness HTTP API", () => {
         const snapshot = (await api("GET", "/api/bots?messages=30")).body;
         const currentRoom = snapshot.groups.find((candidate: { id: string }) => candidate.id === room.id);
         return currentRoom?.messages.some((message: { tool?: { name?: string } }) =>
-          message.tool?.name === "Target's cloud computer is being changed — skipped this round"
+          message.tool?.name === "Target's cloud computer is being changed  -  skipped this round"
         ) ?? false;
       }, { timeout: 5_000 }).toBe(true);
       listGate.release();

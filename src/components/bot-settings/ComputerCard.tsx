@@ -6,7 +6,7 @@
 // PillSelect (Voice "Ara ⌄" style) listing the same computers as the chat
 // Computer menu / LocalComputerSection (`computerChoices`); picking one
 // changes the bot's Works on and refreshes the card.
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check } from "lucide-react";
 
@@ -24,11 +24,11 @@ import {
   type ComputerChoice,
   type DesktopBridgeStatus,
 } from "@/lib/desktop-bridge";
-import { desktopLocalVm } from "@/lib/desktop-local-vm";
 import { DEFAULT_BOT_WORKPLACE } from "../../../shared/bot-workplace";
 import type { PillOption } from "../SettingsPrimitives";
 import { navigateThreadMenu } from "../BotProjects";
 import { SandboxDesktopModal } from "../computer/SandboxDesktopModal";
+import { LocalLiveScreen } from "../computer/LocalLiveScreen";
 import { worksOnMode } from "../computer/WorksOnSetting";
 import { activeComputer } from "../computer/OrgComputerTab";
 import { screenFramePreview } from "../ScreenFrame";
@@ -116,30 +116,6 @@ export function computerCardTitle(
 function modeToPatch(mode: ComputerSelectValue): ComputerPatch {
   if (mode === "auto") return { computer: null };
   return { computer: mode };
-}
-
-/** Local computer live picture inside SandboxDesktopModal (Watching / control). */
-function LocalLiveScreen({ desktopId, control }: { desktopId?: string; control: boolean }) {
-  const [frame, setFrame] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    const grab = async () => {
-      try {
-        const answer = await desktopLocalVm("screenshot", { desktopId });
-        if (!cancelled && answer.image) setFrame(answer.image);
-      } catch { /* keep the last frame */ }
-    };
-    void grab();
-    const timer = window.setInterval(() => void grab(), 4_000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [desktopId]);
-  return (
-    <div data-computer-card-local-live={control ? "control" : "watch"} className="absolute inset-0 flex items-center justify-center bg-black">
-      {frame
-        ? <img src={frame} alt="" className="h-full w-full object-contain" draggable={false} />
-        : <p role="status" className="text-[12px] text-white/70">{t("computer.capturingLocal")}</p>}
-    </div>
-  );
 }
 
 export function ComputerCard({ bot, onPatch, readOnly = false }: {

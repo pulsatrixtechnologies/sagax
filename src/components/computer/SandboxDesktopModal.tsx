@@ -1,9 +1,8 @@
 // "Take control" of the server environment desktop opens it here, large
 // (92vw by 88vh, the remote screen scaled to fit and letterboxed), while the
-// Computer tab's square stays view-only. The window chrome is calm: close on
 // Computer tab's square stays view-only. The window chrome is calm: one
-// collapse button at the top right closes it back to the panel (no red close
-// dot, 2026-11-02). The live screen sits in the middle with even margins and
+// round X (CIRCLE_CLOSE_BUTTON, JC 2026-11-06) at the top right closes it
+// back to the panel (no red close dot, 2026-11-02). The live screen sits in the middle with even margins and
 // rounded corners. One segmented control under it chooses Watching (the bot
 // drives) or Take control / You have control (you drive). Full screen is one
 // icon button beside it. No Play / Pause / Stop here: the computer's
@@ -22,8 +21,9 @@
 // Opening moves keyboard focus into the window; closing gives it back.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Eye, Hand, Minimize2 } from "lucide-react";
+import { Eye, Hand, X } from "lucide-react";
 
+import { CIRCLE_CLOSE_BUTTON, CIRCLE_ICON } from "@/lib/circle-button";
 import { cn } from "@/lib/cn";
 import type { ScreenState } from "@/lib/desktop-local-vm";
 import { t } from "@/lib/i18n";
@@ -79,7 +79,7 @@ export function SandboxDesktopModal({ title, state, onClose, onConnected, screen
           "flex flex-col overflow-hidden bg-[#161618] text-white shadow-2xl outline-none dark:bg-[#121214]",
           "h-[88vh] w-[92vw] rounded-2xl border border-white/10",
         )}>
-        {/* Window chrome only: collapse back to the panel, top right. */}
+        {/* Window chrome only: the round X (CIRCLE_BUTTON) closes, top right. */}
         <div className="flex shrink-0 items-center justify-end px-3 py-2.5">
           <button
             type="button"
@@ -88,9 +88,9 @@ export function SandboxDesktopModal({ title, state, onClose, onConnected, screen
             onClick={onClose}
             data-takeover-close
             data-takeover-collapse
-            className="flex size-7 items-center justify-center rounded-full text-white/55 hover:bg-white/10 hover:text-white"
+            className={CIRCLE_CLOSE_BUTTON}
           >
-            <Minimize2 size={14} aria-hidden="true" />
+            <X {...CIRCLE_ICON} aria-hidden="true" />
           </button>
         </div>
 

@@ -32,8 +32,6 @@ const { RoutinesPage: MemoRoutinesPage, RoutineEditor, EventDetails } = await im
 // its function directly.
 const RoutinesPage = MemoRoutinesPage.type;
 const { PageMenuItem } = await import("./content-page");
-const SOURCE = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx"), "utf8");
-
 const bot: Bot = {
   id: "runner", threadId: "execution", name: "Runner", title: "", description: "", color: "green",
   notifications: true, unread: false, busy: false, messages: [],
@@ -256,6 +254,7 @@ describe("the Automations header (Owner, 2026-10-27: one row, secondary controls
     const html = header();
     for (const label of ["Previous dates", "Next dates", "Create an automation", "Filters"]) expect(html).toContain(`title="${label}"`);
     expect(html).toContain("@container/page-header");
-    expect(SOURCE).toMatch(/actionsStyle=\{[^\n]*controlsShiftStyle/);
+    const routinesPageView = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx-parts/RoutinesPageView.tsx"), "utf8");
+    expect(routinesPageView).toMatch(/actionsStyle=\{[^\n]*controlsShiftStyle/);
   });
 });

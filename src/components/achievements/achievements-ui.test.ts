@@ -454,13 +454,16 @@ describe("achievements page, a sister of Automations", () => {
 
 describe("Automations and Achievements share their pieces", () => {
   it("both pages build their header, filters, menu and body from content-page.tsx", () => {
-    const automations = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx"), "utf8");
+    const automations = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx-parts/RoutinesPageView.tsx"), "utf8");
+    const automationsHook = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx-parts/useRoutinesPage.ts"), "utf8");
     const achievements = readFileSync(join(process.cwd(), "src/components/achievements/AchievementsScreen.tsx"), "utf8");
     const body = readFileSync(join(process.cwd(), "src/components/achievements/AchievementsPage.tsx"), "utf8");
-    for (const piece of ["<PageHeader", "<PageFilters", "<PageMenu ", "<PageMenuItem", "<PageSegment", "useDismissMenus("]) {
+    for (const piece of ["<PageHeader", "<PageFilters", "<PageMenu ", "<PageMenuItem", "<PageSegment"]) {
       expect(automations, piece).toContain(piece);
       expect(achievements, piece).toContain(piece);
     }
+    expect(automationsHook).toContain("useDismissMenus(");
+    expect(achievements).toContain("useDismissMenus(");
     expect(automations).toContain("<PageHeading");
     expect(body).toContain("<PageHeading");
     expect(achievements).toContain("<PageBody");

@@ -37,7 +37,10 @@ describe("the right rail shared by Automations and Memory", () => {
   });
 
   it("both pages take the open state and the strip from it", () => {
-    const calendarPage = readFileSync(join(__dirname, "RoutineCalendarPage.tsx"), "utf8");
+    const calendarPage = [
+      readFileSync(join(__dirname, "RoutineCalendarPage.tsx-parts/useRoutinesPage.ts"), "utf8"),
+      readFileSync(join(__dirname, "RoutineCalendarPage.tsx-parts/RoutinesPageView.tsx"), "utf8"),
+    ].join("\n");
     const memoryPage = readFileSync(join(__dirname, "memory-manager/MemoryManagerPanel.tsx"), "utf8");
     for (const source of [calendarPage, memoryPage]) {
       expect(source).toContain("useRightRailOpen()");

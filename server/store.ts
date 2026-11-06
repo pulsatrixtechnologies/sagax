@@ -800,510 +800,509 @@ export class Store {
   }
 
   private bootPhaseA(boot: StoreBootState): void {
-      mkdirSync(DATA_DIR, { recursive: true });
-      for (const file of [BOTS_FILE, GROUPS_FILE]) tightenRegistryFile(file);
-      // Whether the bot list is the real one. Room repair below trusts it to
-      // say which members no longer exist; an unreadable file must never read
-      // as "every member was deleted".
-      boot.botsLoaded = false;
-      try {
-        const text = readFileSync(BOTS_FILE, "utf8");
-        const raw: unknown = JSON.parse(text);
-        if (!Array.isArray(raw)) throw new Error("bots.json must be an array");
-        this.bots = raw;
-        this.botsFile.loaded(text);
-        boot.botsLoaded = true;
-      } catch (error) {
-        this.bots = [];
-        // Missing means no bots yet. Any other read/parse failure disables
-        // overwriting the file and first-run seed (#1712).
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-          this.botsUnreadable = true;
-          const reason = error instanceof SyntaxError ? "invalid JSON"
-            : error instanceof Error ? error.message : "unable to read bots";
-          console.error(`store: ignoring unreadable ${BOTS_FILE}: ${reason}`);
+    mkdirSync(DATA_DIR, { recursive: true });
+    for (const file of [BOTS_FILE, GROUPS_FILE]) tightenRegistryFile(file);
+    // Whether the bot list is the real one. Room repair below trusts it to
+    // say which members no longer exist; an unreadable file must never read
+    // as "every member was deleted".
+    boot.botsLoaded = false;
+    try {
+      const text = readFileSync(BOTS_FILE, "utf8");
+      const raw: unknown = JSON.parse(text);
+      if (!Array.isArray(raw)) throw new Error("bots.json must be an array");
+      this.bots = raw;
+      this.botsFile.loaded(text);
+      boot.botsLoaded = true;
+    } catch (error) {
+      this.bots = [];
+      // Missing means no bots yet. Any other read/parse failure disables
+      // overwriting the file and first-run seed (#1712).
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        this.botsUnreadable = true;
+        const reason = error instanceof SyntaxError ? "invalid JSON"
+          : error instanceof Error ? error.message : "unable to read bots";
+        console.error(`store: ignoring unreadable ${BOTS_FILE}: ${reason}`);
+      }
+    }
+    try {
+      const text = readFileSync(GROUPS_FILE, "utf8");
+      const raw: unknown = JSON.parse(text);
+      if (!Array.isArray(raw)) throw new Error("groups.json must be an array");
+      this.groups = raw;
+      this.groupsFile.loaded(text);
+    } catch (error) {
+      this.groups = [];
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        this.groupsUnreadable = true;
+        const reason = error instanceof SyntaxError ? "invalid JSON"
+          : error instanceof Error ? error.message : "unable to read groups";
+        console.error(`store: ignoring unreadable ${GROUPS_FILE}: ${reason}`);
+      }
+    }
+    this.rememberSections([...this.bots, ...this.groups].map((record) => record.section));
+    // busy never survives a restart — no turn does either. Rooms saved
+    // before default responders existed adopt their first member as lead.
+    boot.botsMigrated = false;
+    const browserProfileAliases = loadBrowserProfileIdAliases();
+    boot.groupsMigrated = false;
+    // An unconfirmed elevation revoked below must stay Ask. The one-time
+    // default below must not turn that revocation into Approve for me.
+    for (const b of this.bots) {
+      // transient state never survives a restart — and if a previous
+      // process died mid-turn, bots.json still says busy/working; persist
+      // the reset so the next load does not read it again
+      if (b.busy || (b.activity !== undefined && b.activity !== "idle")) boot.botsMigrated = true;
+      b.busy = false;
+      b.activity = "idle";
+      if (typeof b.soul !== "string") {
+        b.soul = "";
+        boot.botsMigrated = true;
+      }
+      if (b.soulHash !== soulHash(b.soul)) {
+        b.soulHash = soulHash(b.soul);
+        boot.botsMigrated = true;
+      }
+      // Existing bots predate their folders. Create missing mirrors before
+      // their first history write, but preserve any edits already on disk.
+      if (!existsSync(soulFile(b.id))) {
+        try { writeSoulMirror(b.id, b.soul); } catch (e) {
+          console.warn(`[bot-folder] could not create SOUL.md for ${b.id}: ${(e as Error).message}`);
         }
       }
-      try {
-        const text = readFileSync(GROUPS_FILE, "utf8");
-        const raw: unknown = JSON.parse(text);
-        if (!Array.isArray(raw)) throw new Error("groups.json must be an array");
-        this.groups = raw;
-        this.groupsFile.loaded(text);
-      } catch (error) {
-        this.groups = [];
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-          this.groupsUnreadable = true;
-          const reason = error instanceof SyntaxError ? "invalid JSON"
-            : error instanceof Error ? error.message : "unable to read groups";
-          console.error(`store: ignoring unreadable ${GROUPS_FILE}: ${reason}`);
-        }
-      }
-      this.rememberSections([...this.bots, ...this.groups].map((record) => record.section));
-      // busy never survives a restart — no turn does either. Rooms saved
-      // before default responders existed adopt their first member as lead.
-      boot.botsMigrated = false;
-      const browserProfileAliases = loadBrowserProfileIdAliases();
-      boot.groupsMigrated = false;
-      // An unconfirmed elevation revoked below must stay Ask. The one-time
-      // default below must not turn that revocation into Approve for me.
-      
-      
-      for (const b of this.bots) {
-        // transient state never survives a restart — and if a previous
-        // process died mid-turn, bots.json still says busy/working; persist
-        // the reset so the next load does not read it again
-        if (b.busy || (b.activity !== undefined && b.activity !== "idle")) boot.botsMigrated = true;
-        b.busy = false;
-        b.activity = "idle";
-        if (typeof b.soul !== "string") {
-          b.soul = "";
-          boot.botsMigrated = true;
-        }
-        if (b.soulHash !== soulHash(b.soul)) {
-          b.soulHash = soulHash(b.soul);
-          boot.botsMigrated = true;
-        }
-        // Existing bots predate their folders. Create missing mirrors before
-        // their first history write, but preserve any edits already on disk.
-        if (!existsSync(soulFile(b.id))) {
-          try { writeSoulMirror(b.id, b.soul); } catch (e) {
-            console.warn(`[bot-folder] could not create SOUL.md for ${b.id}: ${(e as Error).message}`);
-          }
-        }
-        if (b.browserProfile) {
-          const browserProfile = browserProfileAliases.get(b.browserProfile);
-          if (browserProfile && browserProfile !== b.browserProfile) {
-            b.browserProfile = browserProfile;
-            boot.botsMigrated = true;
-          }
-        }
-        if (b.cloudBackend !== undefined && b.cloudBackend !== "box" && b.cloudBackend !== "vps") {
-          delete b.cloudBackend;
-          boot.botsMigrated = true;
-        }
-        if (b.autoStartVps !== undefined && b.autoStartVps !== true && b.autoStartVps !== false) {
-          delete b.autoStartVps;
-          boot.botsMigrated = true;
-        }
-        if (b.managedSections !== undefined && (!b.chiefOfStaff || !Array.isArray(b.managedSections) ||
-            b.managedSections.length > 100 || b.managedSections.some(section => typeof section !== "string" || section.length > 60))) {
-          delete b.managedSections;
-          boot.botsMigrated = true;
-        }
-        if (b.approvalMode !== undefined && !isApprovalMode(b.approvalMode)) {
-          delete b.approvalMode;
-          boot.botsMigrated = true;
-        }
-        // A trusted elevation is a prepare/confirm/activate commit. If the
-        // desktop process or its private reply path died before activation,
-        // the durable marker survives beside the mode in the same atomic
-        // bots.json write. Revoke it before schedulers, listeners, or HTTP can
-        // start any new work.
-        if (b.approvalGrant !== undefined) {
-          const threadOnly = b.approvalGrant.threadOnly === true;
-          if (threadOnly) {
-            // A crash may land between saving the target and clearing its
-            // journal. Revoke that target only, never unrelated threads.
-            const target = b.tasks?.find(task => task.threadId === b.approvalGrant?.threadId);
-            if (target) {
-              target.approvalMode = "ask";
-              target.autoApprove = false;
-              target.approvalOwn = "safety";
-              boot.keepAskTask.add(target.threadId);
-            }
-          }
-          if (!threadOnly) {
-          b.approvalMode = "ask";
-          b.autoApprove = false;
-          boot.keepAskBot.add(b.id);
-          for (const task of b.tasks ?? []) {
-            if (task.approvalMode === "full" || task.approvalMode === "custom") {
-              task.approvalMode = "ask";
-              task.autoApprove = false;
-              boot.keepAskTask.add(task.threadId);
-            }
-          }
-          }
-          delete b.approvalGrant;
-          boot.botsMigrated = true;
-        }
-        const avatar = botAvatarProfile(b);
-        if (b.avatarUrl !== undefined && avatar.avatarUrl !== b.avatarUrl) {
-          delete b.avatarUrl;
-          boot.botsMigrated = true;
-        }
-        if (b.avatarCrop !== undefined && avatar.avatarCrop !== b.avatarCrop) {
-          delete b.avatarCrop;
-          boot.botsMigrated = true;
-        }
-        if (b.avatarZoom !== undefined) {
-          const zoom = clampAvatarZoom(b.avatarZoom);
-          if (zoom === AVATAR_ZOOM_MIN) {
-            delete b.avatarZoom;
-            boot.botsMigrated = true;
-          } else if (b.avatarZoom !== zoom) {
-            b.avatarZoom = zoom;
-            boot.botsMigrated = true;
-          }
-        }
-        for (const key of ["avatarFocusX", "avatarFocusY"] as const) {
-          if (b[key] === undefined) continue;
-          const focus = clampAvatarFocus(b[key]);
-          if (focus === AVATAR_FOCUS_CENTER) {
-            delete b[key];
-            boot.botsMigrated = true;
-          } else if (b[key] !== focus) {
-            b[key] = focus;
-            boot.botsMigrated = true;
-          }
-        }
-        const host = recordedBotHost(b.host);
-        if (JSON.stringify(host) !== JSON.stringify(b.host)) {
-          b.host = host;
+      if (b.browserProfile) {
+        const browserProfile = browserProfileAliases.get(b.browserProfile);
+        if (browserProfile && browserProfile !== b.browserProfile) {
+          b.browserProfile = browserProfile;
           boot.botsMigrated = true;
         }
       }
+      if (b.cloudBackend !== undefined && b.cloudBackend !== "box" && b.cloudBackend !== "vps") {
+        delete b.cloudBackend;
+        boot.botsMigrated = true;
+      }
+      if (b.autoStartVps !== undefined && b.autoStartVps !== true && b.autoStartVps !== false) {
+        delete b.autoStartVps;
+        boot.botsMigrated = true;
+      }
+      if (b.managedSections !== undefined && (!b.chiefOfStaff || !Array.isArray(b.managedSections) ||
+          b.managedSections.length > 100 || b.managedSections.some(section => typeof section !== "string" || section.length > 60))) {
+        delete b.managedSections;
+        boot.botsMigrated = true;
+      }
+      if (b.approvalMode !== undefined && !isApprovalMode(b.approvalMode)) {
+        delete b.approvalMode;
+        boot.botsMigrated = true;
+      }
+      // A trusted elevation is a prepare/confirm/activate commit. If the
+      // desktop process or its private reply path died before activation,
+      // the durable marker survives beside the mode in the same atomic
+      // bots.json write. Revoke it before schedulers, listeners, or HTTP can
+      // start any new work.
+      if (b.approvalGrant !== undefined) {
+        const threadOnly = b.approvalGrant.threadOnly === true;
+        if (threadOnly) {
+          // A crash may land between saving the target and clearing its
+          // journal. Revoke that target only, never unrelated threads.
+          const target = b.tasks?.find(task => task.threadId === b.approvalGrant?.threadId);
+          if (target) {
+            target.approvalMode = "ask";
+            target.autoApprove = false;
+            target.approvalOwn = "safety";
+            boot.keepAskTask.add(target.threadId);
+          }
+        }
+        if (!threadOnly) {
+        b.approvalMode = "ask";
+        b.autoApprove = false;
+        boot.keepAskBot.add(b.id);
+        for (const task of b.tasks ?? []) {
+          if (task.approvalMode === "full" || task.approvalMode === "custom") {
+            task.approvalMode = "ask";
+            task.autoApprove = false;
+            boot.keepAskTask.add(task.threadId);
+          }
+        }
+        }
+        delete b.approvalGrant;
+        boot.botsMigrated = true;
+      }
+      const avatar = botAvatarProfile(b);
+      if (b.avatarUrl !== undefined && avatar.avatarUrl !== b.avatarUrl) {
+        delete b.avatarUrl;
+        boot.botsMigrated = true;
+      }
+      if (b.avatarCrop !== undefined && avatar.avatarCrop !== b.avatarCrop) {
+        delete b.avatarCrop;
+        boot.botsMigrated = true;
+      }
+      if (b.avatarZoom !== undefined) {
+        const zoom = clampAvatarZoom(b.avatarZoom);
+        if (zoom === AVATAR_ZOOM_MIN) {
+          delete b.avatarZoom;
+          boot.botsMigrated = true;
+        } else if (b.avatarZoom !== zoom) {
+          b.avatarZoom = zoom;
+          boot.botsMigrated = true;
+        }
+      }
+      for (const key of ["avatarFocusX", "avatarFocusY"] as const) {
+        if (b[key] === undefined) continue;
+        const focus = clampAvatarFocus(b[key]);
+        if (focus === AVATAR_FOCUS_CENTER) {
+          delete b[key];
+          boot.botsMigrated = true;
+        } else if (b[key] !== focus) {
+          b[key] = focus;
+          boot.botsMigrated = true;
+        }
+      }
+      const host = recordedBotHost(b.host);
+      if (JSON.stringify(host) !== JSON.stringify(b.host)) {
+        b.host = host;
+        boot.botsMigrated = true;
+      }
+    }
   }
 
   private bootPhaseB(boot: StoreBootState): void {
-      // 0.8.19: every bot is proactive by default. 2026-11-01: only off |
-      // proactive remain; propose / read-auto / follow-rules all become
-      // proactive; a chosen off stays off; a garbled value fails closed to off.
-      for (const b of this.bots) {
-        const next = normalizeProactiveMode(b.proactiveMode);
-        if (b.proactiveMode !== next) {
-          b.proactiveMode = next;
-          boot.botsMigrated = true;
-        }
-      }
-      // A Primary Bot stays reachable in the sidebar. One per person is
-      // enforced by enforceOnePrimaryPerOwner once the server knows who owns
-      // which bot (index.ts runs it at boot).
-      for (const b of this.bots) {
-        if (b.chiefOfStaff && b.hidden) {
-          b.hidden = false;
-          boot.botsMigrated = true;
-        }
-      }
-      // Peer grants originally used mutable display names (ask_bot:@Helper).
-      // Convert only when exactly one bot has that name; ambiguous legacy
-      // entries remain inert rather than granting access to the wrong bot.
-      for (const b of this.bots) {
-        if (!b.alwaysAllow?.length) continue;
-        let changed = false;
-        const migrated = b.alwaysAllow.map((key) => {
-          const match = key.match(/^(ask_bot|delegate_bot):@(.+)$/);
-          if (!match) return key;
-          const candidates = this.bots.filter((candidate) => candidate.name === match[2]);
-          if (candidates.length !== 1) return key;
-          changed = true;
-          return peerAllowKey(match[1] as PeerAction, candidates[0]!.id);
-        });
-        if (changed) {
-          b.alwaysAllow = [...new Set(migrated)];
-          boot.botsMigrated = true;
-        }
-      }
-      // Early builds of durable provider-tool grants saved them only on the
-      // task that raised the approval card. The UI promised a standing bot
-      // grant, so recover those exact app-issued keys into the bot defaults;
-      // never promote ordinary task/session grants such as shell commands.
-      for (const b of this.bots) {
-        const taskProviderGrants = (b.tasks ?? []).flatMap((task) =>
-          (task.alwaysAllow ?? []).filter((key) => key.startsWith("provider-tool:")),
-        );
-        if (!taskProviderGrants.length) continue;
-        const migrated = [...new Set([...(b.alwaysAllow ?? []), ...taskProviderGrants])].slice(0, 200);
-        if (JSON.stringify(migrated) === JSON.stringify(b.alwaysAllow ?? [])) continue;
-        b.alwaysAllow = migrated;
+    // 0.8.19: every bot is proactive by default. 2026-11-01: only off |
+    // proactive remain; propose / read-auto / follow-rules all become
+    // proactive; a chosen off stays off; a garbled value fails closed to off.
+    for (const b of this.bots) {
+      const next = normalizeProactiveMode(b.proactiveMode);
+      if (b.proactiveMode !== next) {
+        b.proactiveMode = next;
         boot.botsMigrated = true;
       }
-      // Composio was removed. A bot record from an older release may still
-      // carry the connected-apps switch (`composio`) or per-service grants
-      // (`connectorTools`, `connectorScopes`). Drop them so they never persist
-      // or travel in an export; a bot that actually had grants is remembered
-      // so admins can be told its apps need reconnecting via an engine
-      // connector (index.ts, at start).
-      for (const b of this.bots) {
-        const legacy = b as unknown as Record<string, unknown>;
-        const hadGrants = legacy.connectorTools && typeof legacy.connectorTools === "object" && Object.keys(legacy.connectorTools as object).length > 0;
-        if ("composio" in legacy || "connectorTools" in legacy || "connectorScopes" in legacy) {
-          if (hadGrants) this.legacyComposioBots.push(b.name);
-          delete legacy.composio;
-          delete legacy.connectorTools;
-          delete legacy.connectorScopes;
-          boot.botsMigrated = true;
-        }
-      }
-      const botIds = new Set(this.bots.map((b) => b.id));
-      for (const g of this.groups) {
-        g.busyBotId = null;
-        delete g.turnStartedAt;
-        // A deleted bot used to stay a member for good: counted on the room's
-        // Save button and refused by the roster check on every save.
-        // Bot-to-bot channels keep their pair; they are not edited as rooms.
-        if (boot.botsLoaded && !g.dm && g.memberIds.some((id) => !botIds.has(id))) {
-          g.memberIds = g.memberIds.filter((id) => botIds.has(id));
-          boot.groupsMigrated = true;
-        }
-        const normalized = normalizeGroupDefaultResponder(g.defaultResponder, g.memberIds, Boolean(g.dm));
-        if (JSON.stringify(normalized) !== JSON.stringify(g.defaultResponder)) boot.groupsMigrated = true;
-        g.defaultResponder = normalized;
-        // Holds survive a restart (a stopped bot stays stopped); a member who
-        // left while the server was down takes its hold with it.
-        if (g.holds !== undefined || g.heldMessages !== undefined) {
-          const before = JSON.stringify([g.holds, g.heldMessages]);
-          pruneRoomHolds(g);
-          if (JSON.stringify([g.holds, g.heldMessages]) !== before) boot.groupsMigrated = true;
-        }
-        // Bot-to-bot channels intentionally remain one canonical thread.
-        if (g.dm) {
-          if (g.tasks !== undefined) {
-            delete g.tasks;
-            boot.groupsMigrated = true;
-          }
-          continue;
-        }
-        // A room left with setup pending by an older build counts as set up.
-        if (g.setupCompletedAt === null && g.setupSkippedAt == null) {
-          g.setupCompletedAt = g.createdAt;
-          boot.groupsMigrated = true;
-        }
-        if (!g.tasks?.length) {
-          const initialTask: GroupTaskRecord = {
-            threadId: g.threadId,
-            title: this.firstUserLine(g.threadId) ?? UNTITLED_TASK,
-            createdAt: g.createdAt,
-            updatedAt: g.createdAt,
-          };
-          if (g.pinnedCwd !== undefined) initialTask.pinnedCwd = g.pinnedCwd;
-          if (g.pinnedMessageId) initialTask.pinnedMessageId = g.pinnedMessageId;
-          g.tasks = [initialTask];
-          boot.groupsMigrated = true;
-        }
-        // Repair a malformed/stale active pointer conservatively. Every task
-        // transcript is retained; the newest known task becomes active.
-        let active = g.tasks.find((task) => task.threadId === g.threadId);
-        if (!active) {
-          active = g.tasks[0]!;
-          g.threadId = active.threadId;
-          boot.groupsMigrated = true;
-        }
-        // A person conversation becomes threads once: what it was is its
-        // first thread, "General", and stays its default (server/people/people-dms.ts).
-        if (migratePeopleDmToThreads(g)) boot.groupsMigrated = true;
-        g.pinnedCwd = active.pinnedCwd;
-        g.pinnedMessageId = active.pinnedMessageId;
-      }
-      if (boot.groupsMigrated) this.saveGroups();
-      // Older builds copied a bot's model onto every thread it made, so a
-      // thread on exactly its bot's model is a copy, not a person's pick: once
-      // per data directory it is cleared and the thread follows its bot. A
-      // different model can't be told apart from a pick and stays. Only over a
-      // bot list this load could read, so an unreadable file is not skipped.
-      const clearModelCopies = !existsSync(THREAD_MODEL_COPIES_CLEARED) && (boot.botsLoaded || !existsSync(BOTS_FILE));
-      const fillAskedAts = !existsSync(ASKED_AT_FILLED) && (boot.botsLoaded || !existsSync(BOTS_FILE));
-      // bots saved before tasks existed have one endless thread; adopt it as
-      // their first task so nothing is lost and nothing special-cases it
-      for (const b of this.bots) {
-        // Folders are organizational only. Preserve threads' own models while
-        // discarding the unshipped folder-default setting.
-        if (b.projects?.some((project) => "modelSelection" in project)) {
-          b.projects = b.projects.map(({ id, name, emoji }) => ({ id, name, ...(isProjectEmoji(emoji) ? { emoji } : {}) }));
-          boot.botsMigrated = true;
-        }
-        if (!b.tasks?.length) {
-          b.tasks = [{
-            threadId: b.threadId,
-            title: this.firstUserLine(b.threadId) ?? UNTITLED_TASK,
-            createdAt: b.createdAt,
-            updatedAt: b.createdAt,
-            resumeCursors: b.resumeCursors ?? {},
-          }];
-          boot.botsMigrated = true;
-        }
-        // Retain an old active transcript even if a stale tasks array omitted
-        // it. Repairing the pointer by selecting another task would hide it.
-        let active = b.tasks.find((task) => task.threadId === b.threadId);
-        if (!active) {
-          active = {
-            threadId: b.threadId,
-            title: this.firstUserLine(b.threadId) ?? UNTITLED_TASK,
-            createdAt: b.createdAt,
-            updatedAt: b.createdAt,
-            resumeCursors: b.resumeCursors ?? {},
-          };
-          b.tasks.unshift(active);
-          boot.botsMigrated = true;
-        }
-        for (const task of b.tasks) {
-          if (clearModelCopies && task.modelSelection !== undefined && sameModelSelection(task.modelSelection, b.modelSelection)) {
-            delete task.modelSelection;
-            boot.botsMigrated = true;
-          }
-          if (!task.resumeCursors) {
-            task.resumeCursors = task === active ? (b.resumeCursors ?? {}) : {};
-            boot.botsMigrated = true;
-          }
-          if (task.unread === undefined) {
-            task.unread = task === active && b.unread;
-            boot.botsMigrated = true;
-          }
-          // Older builds left a failed hidden run unread, which kept the bot
-          // dot on after every visible chat was read. Clear it before the
-          // recompute below so the saved roster heals.
-          if ((task.routineRunId || task.hidden === true) && task.unread) {
-            task.unread = false;
-            boot.botsMigrated = true;
-          }
-          if (task.confidential !== undefined && task.confidential !== true) {
-            delete task.confidential;
-          }
-          if (task.hidden !== undefined && task.hidden !== true) {
-            delete task.hidden;
-            boot.botsMigrated = true;
-          }
-          // #1170: no hidden conversation any more. Work sent over the agent
-          // API lands in the bot's single chat; the hidden threads it made
-          // before come back, nothing deleted: an AI client's joins the
-          // person's conversations (a segment of their stream), one another
-          // bot opened is listed with threads shown, where its person can
-          // close or archive it. Not the person's main thread: they did not
-          // write there themselves.
-          if (task.hidden === true) {
-            delete task.hidden;
-            if (!task.openedBy) delete task.askedAt;
-            boot.botsMigrated = true;
-          }
-          if (task === active) {
-            if (task.rewound === undefined && b.rewound !== undefined) {
-              task.rewound = b.rewound;
-              boot.botsMigrated = true;
-            }
-            if (task.pinnedMessageId === undefined && b.pinnedMessageId !== undefined) {
-              task.pinnedMessageId = b.pinnedMessageId;
-              boot.botsMigrated = true;
-            }
-          }
-          if (task.approvalMode !== undefined && !isApprovalMode(task.approvalMode)) {
-            delete task.approvalMode;
-            boot.botsMigrated = true;
-          }
-          if (task.approvalOwn !== undefined && !isApprovalException(task.approvalOwn)) {
-            delete task.approvalOwn;
-            boot.botsMigrated = true;
-          }
-          // #1169/#1170: a thread's level is its bot's, read live at each turn.
-          // Before, every thread kept a copy of the bot's level from the day it
-          // was made (a hidden send_prompt thread made on Ask stayed on Ask
-          // after the bot went Full). A level with no stated exception is such
-          // a copy: it goes, and the thread follows its bot. Idempotent.
-          if (task.approvalOwn === undefined && (task.approvalMode !== undefined || task.autoApprove !== undefined)) {
-            delete task.approvalMode;
-            delete task.autoApprove;
-            boot.botsMigrated = true;
-          }
-          if (task.busy !== undefined || task.activity !== undefined || task.turnStartedAt !== undefined) boot.botsMigrated = true;
-          task.busy = false;
-          task.activity = "idle";
-          task.turnStartedAt = undefined;
-        }
-        this.mirrorActiveTask(b, active);
-        b.unread = botHasPersonUnread(b);
-      }
-      // Slice 4: grants with levels replace directGrants (each becomes a
-      // `user:` grant at level use, given by the owner), once; malformed
-      // grants are dropped.
-      for (const b of this.bots) {
-        if (b.grants === undefined && Array.isArray(b.directGrants) && b.directGrants.length) {
-          b.grants = grantsFromDirect(b.directGrants, b.ownerUserId, b.createdAt);
-          boot.botsMigrated = true;
-        } else if (b.grants !== undefined) {
-          const clean = cleanBotGrants(b.grants);
-          if (clean.length !== (Array.isArray(b.grants) ? b.grants.length : -1)) {
-            b.grants = clean;
-            b.directGrants = directFromGrants(clean);
-            boot.botsMigrated = true;
-          }
-        }
-      }
-      // Account runtime migration: Perspicax roles and acting identity no
-      // longer belong to a bot. Drop both old settings instead of letting an
-      // invisible legacy choice affect a later turn.
-      for (const b of this.bots) {
-        if (b.perspicax === undefined && b.perspicaxActAs === undefined) continue;
-        delete b.perspicax;
-        delete b.perspicaxActAs;
+    }
+    // A Primary Bot stays reachable in the sidebar. One per person is
+    // enforced by enforceOnePrimaryPerOwner once the server knows who owns
+    // which bot (index.ts runs it at boot).
+    for (const b of this.bots) {
+      if (b.chiefOfStaff && b.hidden) {
+        b.hidden = false;
         boot.botsMigrated = true;
       }
-      // Perspicax #321: a malformed temporary mark is dropped.
-      for (const b of this.bots) {
-        if (b.temporary === undefined) continue;
-        const clean = cleanTemporaryAgent(b.temporary);
-        if (JSON.stringify(clean) !== JSON.stringify(b.temporary)) {
-          if (clean) b.temporary = clean;
-          else delete b.temporary;
+    }
+    // Peer grants originally used mutable display names (ask_bot:@Helper).
+    // Convert only when exactly one bot has that name; ambiguous legacy
+    // entries remain inert rather than granting access to the wrong bot.
+    for (const b of this.bots) {
+      if (!b.alwaysAllow?.length) continue;
+      let changed = false;
+      const migrated = b.alwaysAllow.map((key) => {
+        const match = key.match(/^(ask_bot|delegate_bot):@(.+)$/);
+        if (!match) return key;
+        const candidates = this.bots.filter((candidate) => candidate.name === match[2]);
+        if (candidates.length !== 1) return key;
+        changed = true;
+        return peerAllowKey(match[1] as PeerAction, candidates[0]!.id);
+      });
+      if (changed) {
+        b.alwaysAllow = [...new Set(migrated)];
+        boot.botsMigrated = true;
+      }
+    }
+    // Early builds of durable provider-tool grants saved them only on the
+    // task that raised the approval card. The UI promised a standing bot
+    // grant, so recover those exact app-issued keys into the bot defaults;
+    // never promote ordinary task/session grants such as shell commands.
+    for (const b of this.bots) {
+      const taskProviderGrants = (b.tasks ?? []).flatMap((task) =>
+        (task.alwaysAllow ?? []).filter((key) => key.startsWith("provider-tool:")),
+      );
+      if (!taskProviderGrants.length) continue;
+      const migrated = [...new Set([...(b.alwaysAllow ?? []), ...taskProviderGrants])].slice(0, 200);
+      if (JSON.stringify(migrated) === JSON.stringify(b.alwaysAllow ?? [])) continue;
+      b.alwaysAllow = migrated;
+      boot.botsMigrated = true;
+    }
+    // Composio was removed. A bot record from an older release may still
+    // carry the connected-apps switch (`composio`) or per-service grants
+    // (`connectorTools`, `connectorScopes`). Drop them so they never persist
+    // or travel in an export; a bot that actually had grants is remembered
+    // so admins can be told its apps need reconnecting via an engine
+    // connector (index.ts, at start).
+    for (const b of this.bots) {
+      const legacy = b as unknown as Record<string, unknown>;
+      const hadGrants = legacy.connectorTools && typeof legacy.connectorTools === "object" && Object.keys(legacy.connectorTools as object).length > 0;
+      if ("composio" in legacy || "connectorTools" in legacy || "connectorScopes" in legacy) {
+        if (hadGrants) this.legacyComposioBots.push(b.name);
+        delete legacy.composio;
+        delete legacy.connectorTools;
+        delete legacy.connectorScopes;
+        boot.botsMigrated = true;
+      }
+    }
+    const botIds = new Set(this.bots.map((b) => b.id));
+    for (const g of this.groups) {
+      g.busyBotId = null;
+      delete g.turnStartedAt;
+      // A deleted bot used to stay a member for good: counted on the room's
+      // Save button and refused by the roster check on every save.
+      // Bot-to-bot channels keep their pair; they are not edited as rooms.
+      if (boot.botsLoaded && !g.dm && g.memberIds.some((id) => !botIds.has(id))) {
+        g.memberIds = g.memberIds.filter((id) => botIds.has(id));
+        boot.groupsMigrated = true;
+      }
+      const normalized = normalizeGroupDefaultResponder(g.defaultResponder, g.memberIds, Boolean(g.dm));
+      if (JSON.stringify(normalized) !== JSON.stringify(g.defaultResponder)) boot.groupsMigrated = true;
+      g.defaultResponder = normalized;
+      // Holds survive a restart (a stopped bot stays stopped); a member who
+      // left while the server was down takes its hold with it.
+      if (g.holds !== undefined || g.heldMessages !== undefined) {
+        const before = JSON.stringify([g.holds, g.heldMessages]);
+        pruneRoomHolds(g);
+        if (JSON.stringify([g.holds, g.heldMessages]) !== before) boot.groupsMigrated = true;
+      }
+      // Bot-to-bot channels intentionally remain one canonical thread.
+      if (g.dm) {
+        if (g.tasks !== undefined) {
+          delete g.tasks;
+          boot.groupsMigrated = true;
+        }
+        continue;
+      }
+      // A room left with setup pending by an older build counts as set up.
+      if (g.setupCompletedAt === null && g.setupSkippedAt == null) {
+        g.setupCompletedAt = g.createdAt;
+        boot.groupsMigrated = true;
+      }
+      if (!g.tasks?.length) {
+        const initialTask: GroupTaskRecord = {
+          threadId: g.threadId,
+          title: this.firstUserLine(g.threadId) ?? UNTITLED_TASK,
+          createdAt: g.createdAt,
+          updatedAt: g.createdAt,
+        };
+        if (g.pinnedCwd !== undefined) initialTask.pinnedCwd = g.pinnedCwd;
+        if (g.pinnedMessageId) initialTask.pinnedMessageId = g.pinnedMessageId;
+        g.tasks = [initialTask];
+        boot.groupsMigrated = true;
+      }
+      // Repair a malformed/stale active pointer conservatively. Every task
+      // transcript is retained; the newest known task becomes active.
+      let active = g.tasks.find((task) => task.threadId === g.threadId);
+      if (!active) {
+        active = g.tasks[0]!;
+        g.threadId = active.threadId;
+        boot.groupsMigrated = true;
+      }
+      // A person conversation becomes threads once: what it was is its
+      // first thread, "General", and stays its default (server/people/people-dms.ts).
+      if (migratePeopleDmToThreads(g)) boot.groupsMigrated = true;
+      g.pinnedCwd = active.pinnedCwd;
+      g.pinnedMessageId = active.pinnedMessageId;
+    }
+    if (boot.groupsMigrated) this.saveGroups();
+    // Older builds copied a bot's model onto every thread it made, so a
+    // thread on exactly its bot's model is a copy, not a person's pick: once
+    // per data directory it is cleared and the thread follows its bot. A
+    // different model can't be told apart from a pick and stays. Only over a
+    // bot list this load could read, so an unreadable file is not skipped.
+    const clearModelCopies = !existsSync(THREAD_MODEL_COPIES_CLEARED) && (boot.botsLoaded || !existsSync(BOTS_FILE));
+    const fillAskedAts = !existsSync(ASKED_AT_FILLED) && (boot.botsLoaded || !existsSync(BOTS_FILE));
+    // bots saved before tasks existed have one endless thread; adopt it as
+    // their first task so nothing is lost and nothing special-cases it
+    for (const b of this.bots) {
+      // Folders are organizational only. Preserve threads' own models while
+      // discarding the unshipped folder-default setting.
+      if (b.projects?.some((project) => "modelSelection" in project)) {
+        b.projects = b.projects.map(({ id, name, emoji }) => ({ id, name, ...(isProjectEmoji(emoji) ? { emoji } : {}) }));
+        boot.botsMigrated = true;
+      }
+      if (!b.tasks?.length) {
+        b.tasks = [{
+          threadId: b.threadId,
+          title: this.firstUserLine(b.threadId) ?? UNTITLED_TASK,
+          createdAt: b.createdAt,
+          updatedAt: b.createdAt,
+          resumeCursors: b.resumeCursors ?? {},
+        }];
+        boot.botsMigrated = true;
+      }
+      // Retain an old active transcript even if a stale tasks array omitted
+      // it. Repairing the pointer by selecting another task would hide it.
+      let active = b.tasks.find((task) => task.threadId === b.threadId);
+      if (!active) {
+        active = {
+          threadId: b.threadId,
+          title: this.firstUserLine(b.threadId) ?? UNTITLED_TASK,
+          createdAt: b.createdAt,
+          updatedAt: b.createdAt,
+          resumeCursors: b.resumeCursors ?? {},
+        };
+        b.tasks.unshift(active);
+        boot.botsMigrated = true;
+      }
+      for (const task of b.tasks) {
+        if (clearModelCopies && task.modelSelection !== undefined && sameModelSelection(task.modelSelection, b.modelSelection)) {
+          delete task.modelSelection;
+          boot.botsMigrated = true;
+        }
+        if (!task.resumeCursors) {
+          task.resumeCursors = task === active ? (b.resumeCursors ?? {}) : {};
+          boot.botsMigrated = true;
+        }
+        if (task.unread === undefined) {
+          task.unread = task === active && b.unread;
+          boot.botsMigrated = true;
+        }
+        // Older builds left a failed hidden run unread, which kept the bot
+        // dot on after every visible chat was read. Clear it before the
+        // recompute below so the saved roster heals.
+        if ((task.routineRunId || task.hidden === true) && task.unread) {
+          task.unread = false;
+          boot.botsMigrated = true;
+        }
+        if (task.confidential !== undefined && task.confidential !== true) {
+          delete task.confidential;
+        }
+        if (task.hidden !== undefined && task.hidden !== true) {
+          delete task.hidden;
+          boot.botsMigrated = true;
+        }
+        // #1170: no hidden conversation any more. Work sent over the agent
+        // API lands in the bot's single chat; the hidden threads it made
+        // before come back, nothing deleted: an AI client's joins the
+        // person's conversations (a segment of their stream), one another
+        // bot opened is listed with threads shown, where its person can
+        // close or archive it. Not the person's main thread: they did not
+        // write there themselves.
+        if (task.hidden === true) {
+          delete task.hidden;
+          if (!task.openedBy) delete task.askedAt;
+          boot.botsMigrated = true;
+        }
+        if (task === active) {
+          if (task.rewound === undefined && b.rewound !== undefined) {
+            task.rewound = b.rewound;
+            boot.botsMigrated = true;
+          }
+          if (task.pinnedMessageId === undefined && b.pinnedMessageId !== undefined) {
+            task.pinnedMessageId = b.pinnedMessageId;
+            boot.botsMigrated = true;
+          }
+        }
+        if (task.approvalMode !== undefined && !isApprovalMode(task.approvalMode)) {
+          delete task.approvalMode;
+          boot.botsMigrated = true;
+        }
+        if (task.approvalOwn !== undefined && !isApprovalException(task.approvalOwn)) {
+          delete task.approvalOwn;
+          boot.botsMigrated = true;
+        }
+        // #1169/#1170: a thread's level is its bot's, read live at each turn.
+        // Before, every thread kept a copy of the bot's level from the day it
+        // was made (a hidden send_prompt thread made on Ask stayed on Ask
+        // after the bot went Full). A level with no stated exception is such
+        // a copy: it goes, and the thread follows its bot. Idempotent.
+        if (task.approvalOwn === undefined && (task.approvalMode !== undefined || task.autoApprove !== undefined)) {
+          delete task.approvalMode;
+          delete task.autoApprove;
+          boot.botsMigrated = true;
+        }
+        if (task.busy !== undefined || task.activity !== undefined || task.turnStartedAt !== undefined) boot.botsMigrated = true;
+        task.busy = false;
+        task.activity = "idle";
+        task.turnStartedAt = undefined;
+      }
+      this.mirrorActiveTask(b, active);
+      b.unread = botHasPersonUnread(b);
+    }
+    // Slice 4: grants with levels replace directGrants (each becomes a
+    // `user:` grant at level use, given by the owner), once; malformed
+    // grants are dropped.
+    for (const b of this.bots) {
+      if (b.grants === undefined && Array.isArray(b.directGrants) && b.directGrants.length) {
+        b.grants = grantsFromDirect(b.directGrants, b.ownerUserId, b.createdAt);
+        boot.botsMigrated = true;
+      } else if (b.grants !== undefined) {
+        const clean = cleanBotGrants(b.grants);
+        if (clean.length !== (Array.isArray(b.grants) ? b.grants.length : -1)) {
+          b.grants = clean;
+          b.directGrants = directFromGrants(clean);
           boot.botsMigrated = true;
         }
       }
-      // When new bots still start on Approve for me (org New-bot policy), the
-      // first start on this data directory moves bots and threads still on Ask
-      // (or with no mode) onto Auto. Solo servers now start on Full (omb #2808),
-      // so this pass is a no-op there. A later choice of Ask, Edits, Full or
-      // Custom stays. This computer keeps Ask until its own warning. A grant
-      // revoked above stays Ask, threads included. The marker is written after
-      // the save so a crash before the write retries. Where new bots start on
-      // Ask (an organization whose policy says Ask, 2026-10-11) nothing moves,
-      // and the marker is written so a later change of that policy never moves
-      // existing bots either.
-      const approvalDefaultMarker = join(DATA_DIR, "approval-default-auto.v1");
-      const approvalDefaultPending = !existsSync(approvalDefaultMarker);
-      if (approvalDefaultPending && this.newBotApprovalMode() === "auto") {
-        for (const b of this.bots) {
-          if (b.computer === "local" || boot.keepAskBot.has(b.id)) continue;
-          if (b.approvalMode === undefined || b.approvalMode === "ask") {
-            b.approvalMode = "auto";
-            b.autoApprove = true;
+    }
+    // Account runtime migration: Perspicax roles and acting identity no
+    // longer belong to a bot. Drop both old settings instead of letting an
+    // invisible legacy choice affect a later turn.
+    for (const b of this.bots) {
+      if (b.perspicax === undefined && b.perspicaxActAs === undefined) continue;
+      delete b.perspicax;
+      delete b.perspicaxActAs;
+      boot.botsMigrated = true;
+    }
+    // Perspicax #321: a malformed temporary mark is dropped.
+    for (const b of this.bots) {
+      if (b.temporary === undefined) continue;
+      const clean = cleanTemporaryAgent(b.temporary);
+      if (JSON.stringify(clean) !== JSON.stringify(b.temporary)) {
+        if (clean) b.temporary = clean;
+        else delete b.temporary;
+        boot.botsMigrated = true;
+      }
+    }
+    // When new bots still start on Approve for me (org New-bot policy), the
+    // first start on this data directory moves bots and threads still on Ask
+    // (or with no mode) onto Auto. Solo servers now start on Full (omb #2808),
+    // so this pass is a no-op there. A later choice of Ask, Edits, Full or
+    // Custom stays. This computer keeps Ask until its own warning. A grant
+    // revoked above stays Ask, threads included. The marker is written after
+    // the save so a crash before the write retries. Where new bots start on
+    // Ask (an organization whose policy says Ask, 2026-10-11) nothing moves,
+    // and the marker is written so a later change of that policy never moves
+    // existing bots either.
+    const approvalDefaultMarker = join(DATA_DIR, "approval-default-auto.v1");
+    const approvalDefaultPending = !existsSync(approvalDefaultMarker);
+    if (approvalDefaultPending && this.newBotApprovalMode() === "auto") {
+      for (const b of this.bots) {
+        if (b.computer === "local" || boot.keepAskBot.has(b.id)) continue;
+        if (b.approvalMode === undefined || b.approvalMode === "ask") {
+          b.approvalMode = "auto";
+          b.autoApprove = true;
+          boot.botsMigrated = true;
+        }
+        for (const task of b.tasks ?? []) {
+          // a thread that follows its bot moved with it above
+          if (boot.keepAskTask.has(task.threadId) || task.approvalOwn === undefined) continue;
+          if (task.approvalMode === undefined || task.approvalMode === "ask") {
+            task.approvalMode = "auto";
+            task.autoApprove = true;
             boot.botsMigrated = true;
-          }
-          for (const task of b.tasks ?? []) {
-            // a thread that follows its bot moved with it above
-            if (boot.keepAskTask.has(task.threadId) || task.approvalOwn === undefined) continue;
-            if (task.approvalMode === undefined || task.approvalMode === "ask") {
-              task.approvalMode = "auto";
-              task.autoApprove = true;
-              boot.botsMigrated = true;
-            }
           }
         }
       }
-      if (boot.botsMigrated) this.saveBots();
-      if (approvalDefaultPending) {
-        try { writeFileAtomic(approvalDefaultMarker, "auto\n", { mode: 0o600 }); }
-        catch (error) { console.warn("store: approval default marker was not saved", error); }
-      }
-      if (clearModelCopies) writeFileAtomic(THREAD_MODEL_COPIES_CLEARED, "Threads follow their bot's model; the copies older builds made are cleared.\n", { mode: 0o600 });
-      // Search reads SQLite directly, so migrate every known legacy transcript
-      // at startup rather than waiting until the user happens to open it. Only
-      // pending JSON files are touched; already-migrated threads stay lazy.
-      const knownThreads = new Set([
-        ...this.bots.flatMap((b) => [b.threadId, ...(b.tasks ?? []).map((task) => task.threadId)]),
-        ...this.groups.flatMap((group) => [group.threadId, ...(group.tasks ?? []).map((task) => task.threadId)]),
-      ]);
-      for (const threadId of knownThreads) {
-        const legacyFile = messagesFile(threadId);
-        if (existsSync(legacyFile)) mdb.readThread(threadId, legacyFile);
-      }
-      // After legacy transcripts are in SQLite, so the first boot sees their
-      // newest message instead of stamping createdAt and jumping next launch.
-      this.repairThreadUpdatedAts();
-      if (fillAskedAts) this.fillTaskAskedAts();
-      // After the roster is loaded, so identity resolution sees which opener
-      // ids are still live.
-      this.repairDuplicatePairConversations();
-      this.registeringInitialSections = false;
+    }
+    if (boot.botsMigrated) this.saveBots();
+    if (approvalDefaultPending) {
+      try { writeFileAtomic(approvalDefaultMarker, "auto\n", { mode: 0o600 }); }
+      catch (error) { console.warn("store: approval default marker was not saved", error); }
+    }
+    if (clearModelCopies) writeFileAtomic(THREAD_MODEL_COPIES_CLEARED, "Threads follow their bot's model; the copies older builds made are cleared.\n", { mode: 0o600 });
+    // Search reads SQLite directly, so migrate every known legacy transcript
+    // at startup rather than waiting until the user happens to open it. Only
+    // pending JSON files are touched; already-migrated threads stay lazy.
+    const knownThreads = new Set([
+      ...this.bots.flatMap((b) => [b.threadId, ...(b.tasks ?? []).map((task) => task.threadId)]),
+      ...this.groups.flatMap((group) => [group.threadId, ...(group.tasks ?? []).map((task) => task.threadId)]),
+    ]);
+    for (const threadId of knownThreads) {
+      const legacyFile = messagesFile(threadId);
+      if (existsSync(legacyFile)) mdb.readThread(threadId, legacyFile);
+    }
+    // After legacy transcripts are in SQLite, so the first boot sees their
+    // newest message instead of stamping createdAt and jumping next launch.
+    this.repairThreadUpdatedAts();
+    if (fillAskedAts) this.fillTaskAskedAts();
+    // After the roster is loaded, so identity resolution sees which opener
+    // ids are still live.
+    this.repairDuplicatePairConversations();
+    this.registeringInitialSections = false;
   }
+
 
   /** Advance a task's update stamp in memory only. Message writes must not
    * rewrite bots.json; the next snapshot and the startup repair read this. */
@@ -1815,7 +1814,7 @@ export class Store {
     );
   }
 
-  patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "humanIds" | "defaultResponder" | "bulletin" | "unread" | "lastReadMessageId" | "pinned" | "busyBotId" | "cwd" | "pinnedMessageId" | "section" | "sectionId" | "setupCompletedAt" | "setupSkippedAt" | "audienceFloor" | "installedPackage" | "createdBy" | "peopleDm" | "unreadFor" | "memoryEnabled" | "turnTimeoutMinutes" | "tasks" | "mentionAll" | "botPayers" | "archivedAt" | "holds" | "heldMessages">>): GroupRecord | null {
+patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "humanIds" | "defaultResponder" | "bulletin" | "unread" | "lastReadMessageId" | "pinned" | "busyBotId" | "cwd" | "pinnedMessageId" | "section" | "sectionId" | "setupCompletedAt" | "setupSkippedAt" | "audienceFloor" | "installedPackage" | "createdBy" | "peopleDm" | "unreadFor" | "memoryEnabled" | "turnTimeoutMinutes" | "tasks" | "mentionAll" | "botPayers" | "archivedAt" | "holds" | "heldMessages">>): GroupRecord | null {
     const group = this.group(id);
     if (!group) return null;
     if (Object.prototype.hasOwnProperty.call(patch, "humanIds")) {
@@ -3773,7 +3772,7 @@ export class Store {
   setAllThreadApprovalMode(botId: string, mode: Exclude<ApprovalMode, "custom">): BotRecord | null {
     const bot = this.bot(botId);
     if (!bot) return null;
-    const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
+const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
     // Every thread follows the bot again: no copy, no exception left.
     const tasks = (bot.tasks ?? []).map(task => followingBot({ ...task, alwaysAllow: [] }));
     const next = { ...bot, ...patch, approvalGrant: undefined, tasks };
@@ -4038,7 +4037,7 @@ export class Store {
     this.commitBotChange(bot, "the thread's title", () => {
       task.title = titleFromMessage(text);
       task.titleFromFirstMessage = true;
-    });
+    }, undefined, true);
     this.emit({ type: "bot", botId });
     return task;
   }

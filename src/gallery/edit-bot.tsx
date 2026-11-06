@@ -4,7 +4,7 @@
  * ?view=editor&section=<page> (the profile page in the main panel, beside
  * the real sidebar) | ?view=panel&tab=<details|library|computer>
  * &org=1 (an organization server with the person's server environment)
- * &skin=<id>&lang=<code>
+ * &skin=<id>&lang=<code>&color=<mascot colour> (the banner's wash, #2173)
  * scripts/capture/edit-bot.mjs shoots every page and tab, light and dark. */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -32,7 +32,7 @@ window.addEventListener("unhandledrejection", (event) => {
 
 const bot = {
   id: "scout", threadId: "t-scout", name: "Scout", title: "Recherche", description: "Trouve des sources et les résume.",
-  notifications: true, color: "green", unread: false, messages: [], tasks: [{ id: "task-1", threadId: "t-scout", title: "Tri" }],
+  notifications: true, color: params.get("color") ?? "green", unread: false, messages: [], tasks: [{ id: "task-1", threadId: "t-scout", title: "Tri" }],
   soul: "Sois bref et cite tes sources.", modelSelection: { instanceId: "claude", model: "sonnet" }, approvalMode: "ask",
   computer: org ? "cloud" : "local", mcpServers: null,
   toolScope: { deny: ["mcp:mail:send"] },

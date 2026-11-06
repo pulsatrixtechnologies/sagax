@@ -67,6 +67,12 @@ struct DesktopLineText: View {
         }
         .frame(minWidth: 0, idealWidth: ideal, maxWidth: centered ? .infinity : ideal)
         .frame(height: lineHeight)
+        // GroupListItem's name row is `items-baseline`: the Canvas must
+        // report the same baseline the glyphs use, or a 12 pt time next to
+        // a 14 pt name sits ~4 pt too high.
+        .alignmentGuide(.firstTextBaseline) { _ in
+            DesktopLineTextLine.baseline(lineHeight: lineHeight, font: line.font)
+        }
         // takes its own width before a Spacer beside it does (`truncate`
         // only when the row is truly out of room)
         .layoutPriority(1)

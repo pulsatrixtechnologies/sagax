@@ -364,7 +364,10 @@ struct DesktopSidebarRow: View {
         return HStack(spacing: showThreads && compact ? 6 : 8) {
             avatar(size: avatarSize)
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) {
+                // GroupListItem: `flex items-baseline` so the 12/16 time
+                // shares a baseline with the 14/20 name (not centre, which
+                // lifts the time ~4 pt).
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     if case let .bot(bot) = chat, bot.pinned == true {
                         DesktopIconView(icon: .pin, size: 12)
                             .foregroundStyle(theme.sidebarInkSecondary)
@@ -381,17 +384,13 @@ struct DesktopSidebarRow: View {
                     Spacer(minLength: 0)
                     if selected, !threadsOpen, !hovered, let time = lastTime {
                         // `text-[12px] leading-4` on GroupListItem's time
-                        Text(verbatim: time)
-                            .font(theme.font(12))
-                            .foregroundStyle(theme.sidebarInkSecondary)
-                            .lineLimit(1)
-                            .frame(height: 16)
+                        DesktopLineText(text: time, size: 12, color: theme.sidebarInkSecondary, lineHeight: 16)
                     }
                     if unread, threadsOpen || (compact && !quietStatus) {
                         Circle().fill(theme.accent).frame(width: 6, height: 6)
                     }
                 }
-                .frame(height: 20)
+                .frame(height: 20, alignment: .firstTextBaseline)
                 if !threadsOpen, !compact || quietStatus {
                     HStack(spacing: 0) {
                         statusLine(status)

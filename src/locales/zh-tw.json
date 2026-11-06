@@ -3627,5 +3627,9 @@
   "botPanel.library.pageState.revoked": "已撤銷",
   "botPanel.library.pageState.expired": "已過期",
   "settings.experimental.browserWindows": "這台 Windows 電腦尚未支援：請使用 `openmausbot browser install` 安裝瀏覽器引擎。",
-  "settings.experimental.skillAuthoring": "允許機器人草擬技能供你審核"
+  "settings.experimental.skillAuthoring": "允許機器人草擬技能供你審核",
+  "approvalMode.antigravityLocalOnly": "「自動（完整存取權）」可在本機封裝的桌面版中使用。",
+  "approvalMode.trustedLocalOnly": "「完整存取權」與「自訂」可在封裝的桌面版中使用。",
+  "computer.askedHands": "請求你動手協助：",
+  "computer.dismiss": "關閉"
 }

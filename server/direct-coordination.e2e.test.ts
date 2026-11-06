@@ -193,11 +193,9 @@ it.each([false, true])("starts independent work immediately and frees the Chief 
 it("coordinates a lead and its specialist from ordinary chat, returns to Clive, and leaves unrelated tasks untouched", () => fixture(async f => {
   const originalLead = await f.messages(f.lead.activeTaskId);
   const originalSpecialist = await f.messages(f.specialist.activeTaskId);
-  // 2026-10-27 (#1314): a Claude Code turn lists the compact core and keeps
-  // the rest of the catalog behind search; start_thread, deferred in a
-  // coordinating turn (agents-catalog.ts DEFERRED_WHEN_COORDINATING), is
-  // read through describe_tool. The Chief asks for it before coordinating.
-  f.plan[f.chief.id].steps.unshift({ tool: "describe_tool", arguments: { name: "start_thread" } });
+  // #2041: a compact Claude turn with native ToolSearch lists every Sagax
+  // tool by name (rare ones deferred with alwaysLoad false). start_thread is
+  // callable by its own name; the old describe_tool directory pair is gone.
   await f.start();
   expect((await f.wait()).status).toBe("settled");
   expect(f.evidence().map((turn: any) => turn.botId)).toEqual([f.chief.id, f.lead.id, f.specialist.id, f.lead.id, f.chief.id]);
@@ -220,18 +218,14 @@ it("coordinates a lead and its specialist from ordinary chat, returns to Clive, 
   const tools = leadTools.map((tool: any) => tool.name);
   expect(tools).toContain("coordinate_bots");
   expect(tools).not.toContain("delegate_bot");
+  // Lead has no own-thread creation: start_thread stays out of the room catalog.
   expect(tools).not.toContain("start_thread");
+  expect(tools).not.toContain("describe_tool");
   const chiefTurn = f.evidence()[0];
-  const chiefTools = chiefTurn.evidence[0].result.tools.map((tool: any) => tool.name);
+  const chiefListed = chiefTurn.evidence[0].result.tools;
+  const chiefTools = chiefListed.map((tool: any) => tool.name);
   expect(chiefTools).toContain("coordinate_bots");
-  expect(chiefTools).toContain("describe_tool");
-  expect(chiefTools).not.toContain("start_thread");
-  const described = chiefTurn.evidence.find((entry: any) => entry.step?.tool === "describe_tool").response;
-  expect(described.result.isError).toBeFalsy();
-  const selfThread = JSON.parse(described.result.content[0].text);
-  expect(selfThread.name).toBe("start_thread");
-  expect(selfThread.description).toContain("separate job on yourself");
-  expect(selfThread.inputSchema.properties.bot_id.enum).toEqual([f.chief.id]);
+  expect(chiefTools).not.toContain("describe_tool");
   expect(bots.find((bot: any) => bot.id === f.lead.id).tasks.find((task: any) => task.threadId === receipt.threadRef.threadId).openedBy)
     .toMatchObject({ botId: f.chief.id, name: "Clive" });
   // #1997: cold / work-request copy uses the brief; the full peer-roster

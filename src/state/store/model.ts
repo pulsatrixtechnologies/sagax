@@ -21,7 +21,7 @@ import type { ModelVariantOption, RuntimeEvent } from "../../../shared/runtime-e
 import type { MausColor, MausMotion } from "@/lib/mascot";
 import type { BotAvatarCrop } from "../../../shared/bot-avatar";
 import type { BotPublicProfile } from "../../../shared/bot-public-profile";
-import { threadApprovalFields, type ApprovalMode } from "../../../shared/approval-mode";
+import { approvalModeFor, threadApprovalFields, type ApprovalMode } from "../../../shared/approval-mode";
 import type { ProactiveMode } from "../../../shared/proactive-mode";
 import type { MascotBodyId } from "../../../shared/mascot-bodies";
 import type { MascotSkinId } from "../../../shared/mascot-skins";
@@ -206,12 +206,14 @@ export interface SecretRequestCardData {
   superseded?: boolean;
   resumed?: boolean;
   error?: string;
+  /** Stop ended the turn this card paused. */
+  stopped?: boolean;
 }
 
-export interface Message extends Pick<import("../../../shared/wire").WireMessage, "widget" | "app" | "routineToggle" | "pagePublish" | "requested" | "outbound" | "dataContext" | "roster"> {
+export interface Message extends Pick<import("../../../shared/wire").WireMessage, "widget" | "app" | "routineToggle" | "pagePublish" | "requested" | "outbound" | "dataContext" | "roster" | "signIn"> {
   id: string;
   role: "bot" | "user";
-  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
+  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
   text?: string;
   /** An accepted nudge. Drawn per viewer from these names, not as a bubble.
    * `groupId` is set when the line belongs to that group chat. */
@@ -361,6 +363,10 @@ export interface Group {
   memoryEnabled?: boolean;
   /** A room: @all notifies every person in it (server/rooms/room-mentions.ts). */
   mentionAll?: boolean;
+  /** Members the person stopped in this room, by bot id (shared/wire RoomHold). */
+  holds?: Record<string, import("../../../shared/wire").RoomHold>;
+  /** Per-member context window reading for the room warning chip. */
+  memberContext?: Record<string, { tokens: number; window: number; compactRequested?: true }> | null;
   /** #1137: per bot of this room, who pays for its replies here. */
   botPayers?: Record<string, "owner" | "speaker">;
   busyBotId?: string | null;
@@ -796,6 +802,15 @@ export const PERSON_THREADS_HEADER = "x-sagax-person-threads";
 
 /** A conversation uses its own execution settings; the sidebar keeps the
  * original bot's aggregate presence and profile defaults. */
+/** The level each of a bot's threads runs at: its own, else the bot's (as
+ * currentTaskBot resolves it). */
+export function threadApprovalModes(bot: Pick<Bot, "approvalMode" | "autoApprove" | "tasks">): ApprovalMode[] {
+  return (bot.tasks ?? []).map((task) => approvalModeFor({
+    approvalMode: task.approvalMode ?? (task.autoApprove === undefined ? bot.approvalMode : undefined),
+    autoApprove: task.autoApprove ?? bot.autoApprove,
+  }));
+}
+
 export function currentTaskBot(bot: Bot, threadId = bot.threadId): Bot {
   const task = bot.tasks?.find((candidate) => candidate.threadId === threadId);
   if (!task) return bot;
@@ -940,6 +955,8 @@ export interface ConfigStatus {
   billing?: { currency?: string; prices?: Record<string, { inputPerMillion: number; outputPerMillion: number; cachedInputPerMillion?: number }> };
   /** `included`: cloud computers come with Cloud Pro, no key is saved. */
   box: { configured: boolean; included?: boolean };
+  /** Meta AI API key status (never the key). */
+  meta?: { configured: boolean };
   vps: { configured: boolean; sshAlias: string };
   rooms: { turnTimeoutMinutes: number };
   /** Per-call ceiling (minutes) for a bot's MCP tools. Absent from servers
@@ -1122,7 +1139,7 @@ export interface BrowserProfile {
 // Settings shows (a saved key's Test button used to vanish that way).
 export type ConfigStatusFrame = Pick<
   ConfigStatus,
-  "xai" | "mistral" | "cerebras" | "groq" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "loopGuard" | "onboarding" | "browserEngine" | "browserProfiles" | "personalSettings" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "ownAccountsOutsideList" | "disabledModels" | "myDisabledModels" | "confidentialThreadsByDefault" | "orgCapabilities"
+  "xai" | "mistral" | "cerebras" | "groq" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "box" | "meta" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "loopGuard" | "onboarding" | "browserEngine" | "browserProfiles" | "personalSettings" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "ownAccountsOutsideList" | "disabledModels" | "myDisabledModels" | "confidentialThreadsByDefault" | "orgCapabilities"
 >;
 
 export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
@@ -1137,6 +1154,7 @@ export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
     openaiCompat: frame.openaiCompat,
     fleet: frame.fleet,
     box: frame.box,
+    meta: frame.meta,
     vps: frame.vps,
     rooms: frame.rooms,
     mcp: frame.mcp,
@@ -1502,7 +1520,7 @@ export interface AppState {
   hydrated?: true;
   error: string | null;
   /** a quiet, non-error line above the transcript; clears itself */
-  notice: { kind: "thread-gone" | "bot-gone"; botName: string | null } | null;
+  notice: { kind: "thread-gone" | "bot-gone" | "steer-images"; botName: string | null } | null;
   /** a thread the person asked to open (chip or #Title link): the sidebar
    * expands its bot and scrolls the row into view once it is current */
   revealThread: { threadId: string; nonce: number } | null;
@@ -1703,6 +1721,8 @@ export type Action =
    * same fields as a bot thread's updateTask). */
   | { type: "updateGroupTask"; groupId: string; threadId: string; patch: GroupTaskUpdatePatch; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   | { type: "interruptGroup"; groupId: string; threadId?: string; onError?: () => void }
+  /** Hold or release a room member for the current turn (POST /api/groups/<id>/holds). */
+  | { type: "setGroupHold"; groupId: string; botId: string; held: boolean }
   | { type: "instances"; instances: InstanceInfo[] }
   | { type: "configStatus"; config: ConfigStatus }
   | { type: "liveCall"; call: LiveCallState | null }

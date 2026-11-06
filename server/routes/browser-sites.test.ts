@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { BrowserSitesTarget } from "../browser-sites.ts";
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { createBrowserSiteRoutes, type BrowserSitesRef } from "./browser-sites.ts";
 import { dispatchRoutes } from "./table.ts";
 

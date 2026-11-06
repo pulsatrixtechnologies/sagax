@@ -23,7 +23,7 @@ import { newEventId, newId } from "../contracts.ts";
 import { augmentedPath } from "../env-path.ts";
 import { execCli } from "../procs.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { commandSummary, toolDetailPreview } from "../tool-summary.ts";
+import { commandSummary, toolDetailPreview } from "../tools/tool-summary.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { parseProtocolAskQuestions, questionAnswersById, type ProtocolAskQuestion } from "../../shared/ask-question.ts";
 import type { EffortLevel } from "../../shared/wire.ts";

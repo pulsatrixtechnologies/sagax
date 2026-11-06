@@ -155,7 +155,7 @@ import { ChatFindBar } from "./ChatFindBar";
 import { ReplyQuote } from "./ReplyQuote";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { SignInRequestCard } from "./SignInRequestCard";
-import { hasRoutineExecutionTask, RoutineRunCard } from "./RoutineRunCard";
+import { RoutineRunCard } from "./RoutineRunCard";
 import { AttentionCard } from "./AttentionCard";
 import { CallRecordRow } from "./CallRecordRow";
 import { AttachmentGallery, collectMessageFiles, replyAttachmentGroup, splitMessageAttachments } from "./AttachmentGallery";
@@ -2297,15 +2297,15 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   useLayoutEffect(() => { branch.current = messages; }, [messages]);
   const onBranch = useCallback((messageId: string) => branch.current.some((m) => m.id === messageId), []);
   const colorMine = useColorUserBubbles();
-  const bubbleStyle = useMemo(() => (colorMine ? userBubbleStyle(bot.color) : undefined), [colorMine, bot.color]);
+  const coloredUserBubble = useMemo(() => (colorMine ? userBubbleStyle(bot.color) : undefined), [colorMine, bot.color]);
   const hasMore = Boolean(bot.hasMore);
   const reactionSelfKey = reactionSelfIds(state.config, threadReads.self).join("\n");
   const reactionSelf = useMemo(() => reactionSelfKey.split("\n").filter(Boolean), [reactionSelfKey]);
   const dmIds = useStoreSelector((current) => current.groups.filter((group) => group.dm && !group.peopleDm).map((group) => group.id), shallowEqual);
   const botDmIds = useMemo(() => new Set(dmIds), [dmIds]);
   const rows = useMemo<ChatRows>(
-    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds, bubbleStyle }),
-    [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds, bubbleStyle],
+    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds, bubbleStyle: coloredUserBubble }),
+    [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds, coloredUserBubble],
   );
   // Where this conversation works, for the place icon on screen and page tools.
   const place = effectivePlace(bot, bot.tasks?.find((task) => task.threadId === bot.threadId));

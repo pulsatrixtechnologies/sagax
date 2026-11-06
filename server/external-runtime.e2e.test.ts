@@ -15,10 +15,8 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { launchVerificationServer, verificationServerEnvironment, type VerificationServer } from "../scripts/control-omb.ts";
-import { ENVELOPE_MARK } from "./runtime/envelope.ts";
 import { waitForExit } from "./testing/cleanup.ts";
 import { readHandoffs } from "./testing/handoff-rows.ts";
-import { ownTurnText } from "./testing/room-handoff-agent.ts";
 
 const TOKEN = "external-runtime-fixture-token-0123456789abcdef";
 
@@ -51,10 +49,6 @@ const botState = async (botId: string) =>
 const runtimesFile = () => join(data, "external-runtimes.json");
 /** The runtime's rows (DATA_DIR/runtime.db), as the server reads them. */
 const rows = () => readHandoffs(data);
-/** The teammate's turn text, from the fake engine's launch dump (the latest turn). */
-const latestTurnText = (): string => {
-  try { return ownTurnText(JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8")).prompt); } catch { return ""; }
-};
 
 beforeAll(async () => {
   fixture = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_PROMPTS: promptsFile });

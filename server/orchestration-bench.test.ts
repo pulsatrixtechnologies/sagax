@@ -104,7 +104,8 @@ function enqueue(w: World, source: RoomAddress, generation: string, parentId: st
     w.coordinator.beginTurn({ id: generation, address: source, brief: opts.sourceText ?? origin.request, level: "ask", origin,
       ...(opts.person ? { person: opts.person } : {}) });
   }
-  return w.coordinator.enqueue(source, generation, parentId, target, text, opts.mode ? { mode: opts.mode } : {});
+  return w.coordinator.enqueue(source, generation, parentId, target, target.botId, text, false, false,
+    opts.sourceText ?? "", undefined, undefined, opts.mode ?? "work", opts.person);
 }
 
 // ── Perspicax ──────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 // tests are mostly about the cases where the answer is "stay quiet".
 import { describe, expect, it } from "vitest";
 
-import { blockedTarget, buildNotification, buildSpendNotification, CALL_QUIET_MS, quietForCall, routineIncidentTitle, routineRunTitle, summarize } from "./notify.ts";
+import { buildNotification, buildSpendNotification, CALL_QUIET_MS, quietForCall, routineIncidentTitle, routineRunTitle, summarize } from "./notify.ts";
 
 const bot = { id: "bot-1", name: "Scout", threadId: "thread-1" };
 

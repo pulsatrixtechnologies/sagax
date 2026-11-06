@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
 import type { WireBot } from "../shared/wire.ts";
-import { CAPTURE_MARKER } from "./memory-capture.ts";
+import { CAPTURE_MARKER } from "./memory/memory-capture.ts";
 
 it("captures a member bot's room turn into its memory, sourced to the room, once Learn from group chats is on", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "omb-room-capture-"));

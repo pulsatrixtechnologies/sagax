@@ -24,7 +24,7 @@
 // durable in the transcript; after a restart it still settles, it only has
 // no banner.
 
-import type { ComputerHelpRef } from "../shared/wire.ts";
+import type { ComputerHelpRef } from "../../shared/wire.ts";
 
 export interface ControlSnapshot {
   /** True while the person is driving; the bot's hands are refused. */
@@ -174,6 +174,42 @@ export class ComputerControl {
       this.changed(botId);
     }
     return settled;
+  }
+
+
+  /** Compatibility for internal-environments takeover: open a plea without a
+   * transcript card ref yet, return a request id the DELETE can expire. */
+  requestHelpLease(botId: string, reason: unknown): { snapshot: ControlSnapshot; requestId: string } {
+    const requestId = `help-${this.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const ref = { messageId: requestId, site: "computer" } as ComputerHelpRef;
+    const snapshot = this.requestHelp(botId, reason, ref);
+    return { snapshot, requestId };
+  }
+
+  /** Drop the plea opened by requestHelpLease (or any plea whose card id matches). */
+  expireHelp(botId: string, requestId: unknown): ControlSnapshot {
+    const id = typeof requestId === "string" ? requestId : "";
+    if (id) this.settleHelp(id);
+    else {
+      const entry = this.entries.get(botId);
+      if (entry) {
+        entry.pleas = [];
+        if (entry.heldSinceMs === null) this.entries.delete(botId);
+        else this.entries.set(botId, entry);
+        return this.changed(botId);
+      }
+    }
+    return this.snapshot(botId);
+  }
+
+  /** Clear every open plea on this computer (panel dismiss). */
+  dismissHelp(botId: string): ControlSnapshot {
+    const entry = this.entries.get(botId);
+    if (!entry || !entry.pleas.length) return this.snapshot(botId);
+    entry.pleas = [];
+    if (entry.heldSinceMs === null) this.entries.delete(botId);
+    else this.entries.set(botId, entry);
+    return this.changed(botId);
   }
 
   /** The bot is gone; a hold on a deleted bot's computer means nothing. */

@@ -15,8 +15,8 @@ import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, un
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { browserRestoreKey, browserSessionsDirectory, inRunningBrowser } from "./browser-engine.ts";
-import { browserRuntimeEnv } from "./browser-runtime.ts";
+import { browserRestoreKey, browserSessionsDirectory, inRunningBrowser } from "./browser/browser-engine.ts";
+import { browserRuntimeEnv } from "./browser/browser-runtime.ts";
 
 export interface SignedInSite {
   /** The site's host, as wide as the browser's own records go: a cookie for

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addHeldSecretScrubber, HELD_SECRET_MASK } from "../shared/redact.ts";
+import { addHeldSecretScrubber, HELD_SECRET_MASK } from "../../shared/redact.ts";
 import { BrowserRuntime, TransportError, browserRuntimeEnv, formatBrowserTiming, type BrowserSpawnSpec, type BrowserTiming } from "./browser-runtime.ts";
 
 const runtimes: BrowserRuntime[] = [];

@@ -105,6 +105,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("artifacts:claude", "own", "claude_artifact"),
   p("pages:propose", "own", "propose_page"),
   p("pages:comments", "own", "page_comments"),
+  // #2048: pick which surface to publish with before propose_page / save_artifact / claude_artifact
+  p("pages:choose", "own", "choose_page_target"),
   // place_call is the same tool under its compatibility name
   p("phone:call", "own", "place_phone_call", "sagax", ["place_call"]),
   // mid-call controls on the person's own live call (server/outbound/outbound-calls.ts)
@@ -363,7 +365,7 @@ export const ROLE_OVERRIDES: Partial<Record<McpRole, Record<string, McpScope | n
   // docs are lasting instructions untrusted text must not write.
   service: {
     "vm:exec": null, "actions:invoke": null, "settings:manage": null, "pairing:manage": null, "credentials:login": null,
-    "vm:exec": null, "actions:invoke": null, "pairing:manage": null, "credentials:login": null, "credentials:signin": null,
+    "credentials:signin": null,
     "teamsetup:propose": null, "rules:update": null, "docs:update": null,
   },
 };

@@ -38,8 +38,6 @@ import { VoiceProviderOptions } from "./settings/VoiceProviderOptions";
 import { MicrophonePermissionRow, MicrophoneSettings } from "./settings/MicrophoneSettings";
 import { LiveCallInstallationSettings } from "./LiveCallSettings";
 import { ApiKeyRow, VpsConnection } from "./ApiKeys";
-import { useOfferedInstances } from "@/lib/offered-instances";
-import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
 
 interface ProbeResult {
   ok: boolean;

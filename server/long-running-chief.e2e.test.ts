@@ -199,7 +199,7 @@ async function chiefJob(test: (f: any) => Promise<void>) {
     const handComputer = (connection: object | null) => handDesktopComputer(server, connection);
     await test({ api, bot, dataDir, clive, mira, eli, compat, script, newJob, say, tree, root, child, turns, turn, prompt,
       messages, rows, final, cards, openCard, respond, tasks, gate, open, expireApprovals, stallSilentTurns, restart, handComputer, notifications,
-      model: { requests, answer: (next: typeof answer) => { answer = next; } } });
+      eventsOf, model: { requests, answer: (next: typeof answer) => { answer = next; } } });
     // No bot ever ran a turn its script did not plan: no duplicate
     // dispatch, no resume nobody expected.
     expect(turns().filter((record) => record.unplanned).map((record) => prompt(record).slice(0, 300))).toEqual([]);

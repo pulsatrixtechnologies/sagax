@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 
-import { browserRestoreKey } from "./browser-engine.ts";
+import { browserRestoreKey } from "./browser/browser-engine.ts";
 import { decryptBrowserState, encryptBrowserState, listSignedInSites, signOutOfSites, signedInSites, type BrowserSitesTarget } from "./browser-sites.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 

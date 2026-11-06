@@ -131,19 +131,6 @@ export type RoutineScheduleInput =
 
 const persistedSourceThreadId = z.string().trim().min(1).optional().catch(undefined);
 
-export type RoutineRunTrigger = "schedule" | "manual" | "webhook" | "startup";
-
-export type RoutineRunStatus =
-  | "queued"
-  | "running"
-  | "waiting"
-  | "completed"
-  | "failed"
-  | "cancelled"
-  | "missed"
-  /** The pre-check found nothing to do: no turn, no message, no notice. */
-  | "nothing_to_report";
-
 export interface Routine {
   requires?: RoutineRequirements;
   id: string;
@@ -1826,11 +1813,6 @@ export class RoutineManager {
       if (run.status === "waiting" && isEngineReconnectAttention(run.attention)) continue;
       if (run.status === "waiting" && run.target !== "room-goal" && run.threadId && this.options.awaitsPerson?.(run.threadId)) continue;
       if (run.status === "running" || run.status === "waiting") {
-        if (run.threadId && run.target === "bot" && this.options.hasPendingDelegations?.(run.threadId) === true) {
-          run.status = "waiting";
-          run.attention = "Waiting for delegated work to finish";
-          continue;
-        }
         run.status = "failed";
         if (run.target === "room-goal") run.goalStatus = "failed";
         run.error = ROUTINE_RESTARTED;

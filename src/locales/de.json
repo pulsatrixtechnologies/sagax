@@ -1885,5 +1885,9 @@
   "botPanel.library.pageState.link": "für alle mit dem Link veröffentlicht",
   "botPanel.library.pageState.revoked": "widerrufen",
   "botPanel.library.pageState.expired": "abgelaufen",
-  "settings.experimental.browserWindows": "Auf diesem Windows-Rechner noch nicht verfügbar: installiere die Browser-Engine mit `openmausbot browser install`."
+  "settings.experimental.browserWindows": "Auf diesem Windows-Rechner noch nicht verfügbar: installiere die Browser-Engine mit `openmausbot browser install`.",
+  "approvalMode.antigravityLocalOnly": "Automatisch (voller Zugriff) gibt es in der installierten Desktop-App.",
+  "approvalMode.trustedLocalOnly": "Voller Zugriff und Benutzerdefiniert gibt es in der installierten Desktop-App.",
+  "computer.askedHands": "braucht deine Hilfe:",
+  "computer.dismiss": "Verwerfen"
 }

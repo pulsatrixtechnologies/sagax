@@ -47,7 +47,6 @@ it.each(["already busy", "became busy during approval"])(
         .filter(message => message.roomRequest?.phase === "request" && message.from?.botId === source.id);
       const sourceState = async () => (await api("GET", "/api/bots?messages=0")).bots.find((bot: any) => bot.id === source.id);
       const receipt = (id: string) => api("GET", `/api/internal/assignment-status?id=${id}`, undefined, true);
-      const row = (id: string) => readHandoffs(session.info.dataDir).find(node => node.id === id);
       const withholdAfterRevocation = async (id: string) => {
         await api("PATCH", `/api/bots/${source.id}`, { peers: [] });
         const response = await fetch(`${session.info.url}/api/internal/assignment-status?id=${id}`, { headers: { authorization: `Bearer ${TOKEN}` } });
@@ -76,12 +75,12 @@ it.each(["already busy", "became busy during approval"])(
       await expect.poll(async () => (await sourceCards()).length, { timeout: 15_000 }).toBe(1);
       const [card] = await sourceCards();
       expect(card.card.tool).toBe("ask_bot");
-      expect(await peerRequests()).toHaveLength(0);
+      expect(await peerRequests(peerThread)).toHaveLength(0);
       if (scenario === "became busy during approval") await occupy();
       await approve(card);
       // Allowed, but the peer is busy: it waits queued, nothing is lost.
       await expect.poll(() => waiting(queued.taskId), { timeout: 5_000 }).toBe(true);
-      expect(await peerRequests()).toHaveLength(0);
+      expect(await peerRequests(peerThread)).toHaveLength(0);
       expect((await sourceState()).busy).toBeFalsy();
       expect((await messages(sourceThread)).filter(message => message.role === "user")).toHaveLength(0);
       evidence.push({ scenario, queued, waitingOnBusy: true, beforeRelease: await sourceCards() });
@@ -94,7 +93,7 @@ it.each(["already busy", "became busy during approval"])(
       expect((await control("wait", "--bot", source.id, "--task", sourceThread)).status).toBe("settled");
       expect((await messages(sourceThread)).filter(message => message.role === "bot" && message.turnId && !message.from)).toEqual([]);
       // Delivered once, where the runtime ran it (the peer's work thread).
-      expect(await peerRequests()).toHaveLength(0);
+      expect(await peerRequests(peerThread)).toHaveLength(0);
       const workThread = readHandoffs(session.info.dataDir).find((node) => node.id === queued.taskId)!.threadId;
       const requests = (await messages(workThread)).filter(message => message.roomRequest?.phase === "request");
       expect(requests).toHaveLength(1);

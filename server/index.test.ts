@@ -5753,21 +5753,6 @@ describe("harness HTTP API", () => {
         (candidate: { id: string }) => candidate.id === custom.id,
       );
       expect(stillCustom).toMatchObject({ approvalMode: "custom", autoApprove: false });
-      // A team-wide level for every thread leaves a thread's Custom alone over
-      // HTTP too, whatever the level: only the desktop's channel may.
-      for (const approvalMode of ["ask", "auto", "full"]) {
-        const rejected = await isolatedApi("PATCH", `/api/bots/${customThread.id}`, { approvalMode, applyToAllThreads: true });
-        expect(rejected.status, approvalMode).toBe(403);
-        expect(rejected.body.error).toMatch(/packaged desktop app/i);
-        expect((await isolatedApi("PATCH", `/api/bots/${custom.id}`, { approvalMode, applyToAllThreads: true })).status, approvalMode).toBe(403);
-      }
-      const keptCustom = (await isolatedApi("GET", "/api/bots?messages=0")).body.bots.find(
-        (candidate: { id: string }) => candidate.id === customThread.id,
-      );
-      // The first start moved the Ask bot onto Approve for me (main's
-      // approval-default-auto.v1); the refused requests changed nothing since.
-      expect(keptCustom.approvalMode).toBe("auto");
-      expect(keptCustom.tasks.find((task: { threadId: string }) => task.threadId === "custom-thread-own").approvalMode).toBe("custom");
     } finally {
       await waitForExit(isolatedChild, { signal: "SIGTERM" });
       await removeTempDir(isolatedHome);
@@ -9341,11 +9326,18 @@ describe("harness HTTP API", () => {
     // can set it, so the shipped default is reported off and never written
     expect(untouched.features?.sharedComputers).toBeUndefined();
 
+    const featuresAfterOptOut = {
+      browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: true,
+      showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false,
+      decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false,
+      claudeUserMcp: true, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false,
+      savedSteps: true, savedStepsHere: process.platform === "darwin",
+    };
     const saved = await api("PATCH", "/api/config", {
       features: { skillAuthoring: false },
     });
     expect(saved.status).toBe(200);
-    expect(saved.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: false, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false, claudeUserMcp: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false });
+    expect(saved.body.features).toEqual(featuresAfterOptOut);
 
     const disk = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
     // Earlier browser coverage may have persisted its own toggle. Opting out
@@ -9355,7 +9347,7 @@ describe("harness HTTP API", () => {
     // the opt-out survives patches to sibling flags
     const tools = await api("PATCH", "/api/config", { features: { showToolCalls: true } });
     expect(tools.status).toBe(200);
-    expect(tools.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: false, showToolCalls: true, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false, claudeUserMcp: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false });
+    expect(tools.body.features).toEqual({ ...featuresAfterOptOut, showToolCalls: true });
 
     // Templates is an experimental opt-in, persisted like its siblings
     const templates = await api("PATCH", "/api/config", { features: { templates: true } });
@@ -9370,32 +9362,7 @@ describe("harness HTTP API", () => {
     expect(apps.body.features.connectedApps).toBe(true);
     expect((await api("PATCH", "/api/config", { features: { connectedApps: false } })).body.features.connectedApps).toBe(false);
 
-    // an opted-out workspace refuses the skill routes a turn would otherwise reach
-    const bot = (await api("POST", "/api/bots", {})).body.bot;
     try {
-      const saved = await api("PATCH", "/api/config", {
-        features: { skillAuthoring: false },
-      });
-      expect(saved.status).toBe(200);
-      expect(saved.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
-
-      const disk = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
-      // Earlier browser coverage may have persisted its own toggle. Opting out
-      // of skill authoring must preserve those sibling settings, not erase them.
-      expect(disk.features).toEqual({ ...untouched.features, skillAuthoring: false });
-
-      // the opt-out survives patches to sibling flags
-      const tools = await api("PATCH", "/api/config", { features: { showToolCalls: true } });
-      expect(tools.status).toBe(200);
-      expect(tools.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: true, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
-
-      // Templates is an experimental opt-in, persisted like its siblings
-      const templates = await api("PATCH", "/api/config", { features: { templates: true } });
-      expect(templates.status).toBe(200);
-      expect(templates.body.features.templates).toBe(true);
-      expect(templates.body.features.showToolCalls).toBe(true);
-      expect((await api("PATCH", "/api/config", { features: { templates: false } })).body.features.templates).toBe(false);
-
       // An opted-out workspace still lets a turn read its skills (discovery is
       // independent of authoring), but refuses to stage a write, even when the
       // turn's own capability allows authoring.

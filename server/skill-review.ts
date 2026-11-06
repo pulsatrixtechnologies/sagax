@@ -28,7 +28,7 @@ import { dirname } from "node:path";
 import type { WireMessage } from "../shared/wire.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { MAX_SKILL_REVIEW_STEPS } from "./config.ts";
-import { AUTHORING_STANDARDS } from "./skill-learn.ts";
+import { AUTHORING_STANDARDS } from "./skills/skill-learn.ts";
 
 export const SKILL_REVIEW_MARKER = "You are the SKILL REVIEW step";
 /** One review may change at most this many skills. */

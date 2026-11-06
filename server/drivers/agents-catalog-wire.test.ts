@@ -48,18 +48,18 @@ const GOLDENS = join(HERE, "agents-catalog-goldens");
 const UPDATE = process.env.UPDATE_AGENTS_CATALOG_GOLDENS === "1";
 
 interface Profile {
+  /** Which full golden every tool of this profile must be found in. */
+  family: "direct" | "room" | "external";
   env: Record<string, string>;
 }
 
 const flag = (on: boolean) => (on ? "1" : "0");
 
-/** Every combination server/index.ts agentsIntegration() can produce. One
- * tool surface for every turn (docs/runtime-contract.md §9): a person's
- * chat, a room turn, a routine or webhook run and a standing external
- * runtime all mount the same teamwork tools, so the only switches are the
- * features (skills, shared computers, voice) and the role. The bot id is
- * fixed because start_thread's schema carries it. A name without
- * "+non-chief" is a Primary Bot's turn, which mounts the most. */
+/** Every combination server/index.ts agentsIntegration() can produce, plus the
+ * standing external runtime (docs/self-hosting.md), which sets only its own
+ * switch. The bot id is fixed because a room turn writes it into the
+ * start_thread schema. A name without "+non-chief" is a Primary Bot's turn,
+ * which mounts the most. */
 function profiles(): Record<string, Profile> {
   const all: Record<string, Profile> = {};
   for (const chief of [true, false]) {
@@ -90,12 +90,19 @@ function profiles(): Record<string, Profile> {
       }
     }
   }
-  // The switches that once picked a catalog profile (a room turn, own-thread
-  // creation) change nothing now; pin that. A standing external runtime still
-  // narrows the catalog (below).
-  // Sagax has no Cloud home, so no cloud-home profile is pinned.
-  all["default+legacy-switches"] = {
-    env: { ...all.default!.env, SAGAX_ROOM_TURN: "1", SAGAX_OWN_THREAD_CREATION: "1" },
+  all.external = { family: "external", env: { SAGAX_EXTERNAL_RUNTIME: "1" } };
+  // The external switch wins over every other one; pin that it still does.
+  all["external+everything"] = {
+    family: "external",
+    env: {
+      SAGAX_EXTERNAL_RUNTIME: "1",
+      SAGAX_ROOM_TURN: "1",
+      SAGAX_OWN_THREAD_CREATION: "1",
+      SAGAX_SKILL_AUTHORING_ENABLED: "1",
+      SAGAX_SHARED_COMPUTERS_ENABLED: "1",
+      SAGAX_VOICE_NOTES: "1",
+      SAGAX_CHIEF_OF_STAFF: "1",
+    },
   };
   return all;
 }
@@ -106,13 +113,10 @@ const CHIEF_ONLY_TOOLS = ["create_bot", "list_team_setup", "propose_team_setup",
 /** Their for_bot_id, changing another bot, is a Primary Bot's alone. */
 const CHIEF_TARGET_TOOLS = ["propose_profile", "propose_model"];
 const CHIEF_PROFILE_TARGET = " A Primary Bot may pass for_bot_id (from list_bots) for a requested change to any bot of its person.";
-/** The one surface's teamwork tools (docs/runtime-contract.md §9). Every
- * profile mounts all of them. */
-const TEAMWORK_TOOLS = ["list_room_targets", "coordinate_bots", "assignment_status", "list_bots", "list_rooms", "list_threads", "close_thread", "start_thread", "post_to_room"];
-/** The profile that mounts the most: checked in whole, as readable JSON.
- * Every other profile is a by-name subset of it and is pinned by tool names,
- * byte count and sha256 in profiles.json. */
-const FULL = "skills+shared+voice";
+/** The profile of each family that mounts the most: checked in whole, as
+ * readable JSON. Every other profile is a by-name subset of one of these and
+ * is pinned by tool names, byte count and sha256 in profiles.json. */
+const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skills+shared+voice", external: "external" } as const;
 
 /** Bytes measured when the budget was last set. A profile may not exceed this
  * by more than 2%, and may not undercut it by more than 2% either: a smaller
@@ -225,6 +229,7 @@ const BUDGET_BASELINE: Record<string, number> = {
   "room+own-thread+skills+voice+non-chief": 77984,
   "room+own-thread+skills+shared+non-chief": 79018,
   "room+own-thread+skills+shared+voice+non-chief": 79985,
+  // Annotations on check_delegation / wait_delegation (read-only policy).
   "external": 5083,
   "external+everything": 5083,
 };
@@ -274,7 +279,7 @@ const sha256 = (text: string) => createHash("sha256").update(text, "utf8").diges
 type Tool = { name: string };
 const toolsOf = (wire: string) => (JSON.parse(wire) as { tools: Tool[] }).tools;
 
-const goldenPath = join(GOLDENS, "full.tools-list.json");
+const goldenPath = (family: keyof typeof FULL) => join(GOLDENS, `${family}-full.tools-list.json`);
 const manifestPath = join(GOLDENS, "profiles.json");
 // Goldens are stored pretty-printed so a wire change reads as a diff, and are
 // compared after JSON.parse, so a CRLF checkout on Windows cannot fail them.
@@ -295,7 +300,7 @@ let wires: Record<string, string> = {};
 beforeAll(async () => {
   wires = await wireForEveryProfile(PROXY_SOURCE);
   if (UPDATE) {
-    writeJson(goldenPath, JSON.parse(wires[FULL]!));
+    for (const family of Object.keys(FULL) as (keyof typeof FULL)[]) writeJson(goldenPath(family), JSON.parse(wires[FULL[family]]!));
     writeJson(manifestPath, manifestOf(wires));
   }
 }, 120_000);
@@ -316,9 +321,9 @@ describe("agents proxy tools/list golden", () => {
     for (const wire of Object.values(wires)) expect(JSON.stringify(JSON.parse(wire))).toBe(wire);
   });
 
-  it("the fullest profile is byte-identical to its golden", () => {
-    const golden = readJson(goldenPath);
-    const wire = wires[FULL]!;
+  it.each(Object.keys(FULL) as (keyof typeof FULL)[])("%s: the fullest profile is byte-identical to its golden", (family) => {
+    const golden = readJson(goldenPath(family));
+    const wire = wires[FULL[family]]!;
     // Structural first: a readable diff naming the tool and field that moved.
     expect(JSON.parse(wire)).toEqual(golden);
     // Then the bytes: key order and number formatting included.
@@ -329,9 +334,9 @@ describe("agents proxy tools/list golden", () => {
     expect(manifestOf(wires)).toEqual(readJson(manifestPath));
   });
 
-  it("every profile is a by-name subset of the full golden, tool bytes included", () => {
-    const full = new Map(toolsOf(wires[FULL]!).map((tool) => [tool.name, JSON.stringify(tool)]));
+  it("every profile is a by-name subset of its family's full golden, tool bytes included", () => {
     for (const [name, profile] of Object.entries(PROFILES)) {
+      const full = new Map(toolsOf(wires[FULL[profile.family]]!).map((tool) => [tool.name, JSON.stringify(tool)]));
       for (const tool of toolsOf(wires[name]!)) {
         // A non-Primary Bot's propose_profile and propose_model are pinned by
         // the next test.
@@ -346,48 +351,14 @@ describe("agents proxy tools/list golden", () => {
     }
   });
 
-  it("gives every turn the one teamwork surface, with start_thread on the bot itself", () => {
-    type SchemaTool = Tool & { description: string; inputSchema: { properties: Record<string, { enum?: string[]; description?: string }> } };
-    for (const [name, wire] of Object.entries(wires)) {
-      const tools = new Map((toolsOf(wire) as SchemaTool[]).map((tool) => [tool.name, tool]));
-      for (const tool of TEAMWORK_TOOLS) expect(tools.has(tool), `${name}: ${tool}`).toBe(true);
-      // the one-release aliases of the old names are gone (docs/runtime-contract.md §9)
-      for (const alias of ["delegate_bot", "ask_bot", "send_to_bot", "check_delegation", "wait_delegation"]) expect(tools.has(alias), `${name}: ${alias}`).toBe(false);
-      expect(JSON.stringify([...tools.values()])).not.toMatch(/Deprecated alias|works for this release/);
-      // the contract's fields, in the contract's words
-      const coordinate = tools.get("coordinate_bots")!.inputSchema.properties;
-      expect(Object.keys(coordinate)).toEqual(["group_id", "bot_ids", "message", "reason", "rework", "thread", "reply", "consult", "relay", "done_when"]);
-      expect(coordinate.thread!.enum).toEqual(["standing", "new"]);
-      expect(coordinate.reply!.enum).toEqual(["resume", "none"]);
-      expect(Object.keys(tools.get("assignment_status")!.inputSchema.properties)).toEqual(["id", "wait_ms"]);
-      // start_thread opens a job on the bot itself: its bot_id takes one value
-      expect(tools.get("start_thread")!.inputSchema.properties.bot_id!.enum).toEqual(["bot-golden"]);
-      // nothing in the catalog teaches the legacy wait
-      expect(wire).not.toMatch(/Brief synchronous consultation|DEFAULT FOR ASSIGNING WORK|BLOCKING status tool/);
-    }
-  });
-
-  it("ignores the switches that once picked a catalog profile", () => {
-    expect(wires["default+legacy-switches"]).toBe(wires.default);
-    const profile = catalogProfileFromEnv({ SAGAX_BOT_ID: "bot-golden", SAGAX_CHIEF_OF_STAFF: "1", SAGAX_ROOM_TURN: "1", SAGAX_OWN_THREAD_CREATION: "1" });
-    expect(JSON.stringify({ tools: availableTools(profile) })).toBe(wires.default);
-    expect(profile).not.toHaveProperty("coordinating");
-    expect(profile).not.toHaveProperty("ownThreadCreation");
-  });
-
-  it("gives a standing external runtime the peer surface only, never act", () => {
-    const profile = catalogProfileFromEnv({ SAGAX_BOT_ID: "bot-golden", SAGAX_CHIEF_OF_STAFF: "1", SAGAX_EXTERNAL_RUNTIME: "1" });
-    expect(availableTools(profile).map((tool) => tool.name).sort()).toEqual(["assignment_status", "coordinate_bots", "list_bots"]);
-  });
-
   it("shows only a Primary Bot the Primary-Bot-only tools, and for_bot_id on another bot's profile or model", () => {
     // Every route behind these refuses a bot that is not a Primary Bot, so the rest
     // are not shown them; otherwise the two catalogs are the same to the byte.
     type SchemaTool = Tool & { description: string; inputSchema: { properties: Record<string, unknown> } };
     const nonChief = Object.keys(PROFILES).filter((name) => PROFILES[name]!.env.SAGAX_CHIEF_OF_STAFF === "0");
-    expect(nonChief).toHaveLength(8);
+    expect(nonChief).toHaveLength(24);
     for (const name of nonChief) {
-      const chiefTools = toolsOf(wires[name === "non-chief" ? "default" : name.replace("+non-chief", "")]!) as SchemaTool[];
+      const chiefTools = toolsOf(wires[name.replace("+non-chief", "")]!) as SchemaTool[];
       const tools = new Map((toolsOf(wires[name]!) as SchemaTool[]).map((tool) => [tool.name, tool]));
       expect(chiefTools.map((tool) => tool.name)).toEqual(expect.arrayContaining(CHIEF_ONLY_TOOLS));
       expect([...tools.keys()], name).toEqual(chiefTools.map((tool) => tool.name).filter((tool) => !CHIEF_ONLY_TOOLS.includes(tool)));
@@ -407,6 +378,8 @@ describe("agents proxy tools/list golden", () => {
         expect(tools.get(routine)!.inputSchema.properties, `${name}: ${routine}`).toHaveProperty("for_bot_id");
       }
     }
+    // A standing external runtime is shown none of them, Primary Bot or not.
+    expect(wires["external+everything"]).toBe(wires.external);
   });
 
   it("is what the catalog module computes in-process, so another front end mounts the same tools", () => {
@@ -420,7 +393,7 @@ describe("agents proxy tools/list golden", () => {
     // One source constant, serialized in full twice: see the wire-size table
     // for what that costs, and the next test for why it is not a $ref.
     type RoutineTool = Tool & { inputSchema: { properties: Record<string, unknown> & { changes: { properties: Record<string, unknown> } } } };
-    const tools = new Map(toolsOf(wires[FULL]!).map((tool) => [tool.name, tool as RoutineTool]));
+    const tools = new Map(toolsOf(wires[FULL.direct]!).map((tool) => [tool.name, tool as RoutineTool]));
     const created = tools.get("propose_routine")!.inputSchema.properties;
     const changed = tools.get("propose_routine_action")!.inputSchema.properties.changes.properties;
     expect(Object.keys(changed).length).toBeGreaterThan(0);
@@ -471,7 +444,7 @@ describe("agents proxy tools/list from the packaged bundle", () => {
 
 describe("agents proxy tools/list wire size", () => {
   it("prints per-tool and total UTF-8 bytes", () => {
-    const shown = [FULL, `${FULL}+non-chief`];
+    const shown = Object.values(FULL);
     const perTool = new Map<string, Record<string, number>>();
     for (const name of shown) {
       for (const tool of toolsOf(wires[name]!)) {

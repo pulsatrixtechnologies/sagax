@@ -11,7 +11,7 @@
 // as "not now" by the Runtime, so nothing here wraps it again.
 import { join } from "node:path";
 
-import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffOptions, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./coordinator.ts";
+import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./coordinator.ts";
 import type { WorkOrigin } from "./peers/peer-provenance.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, composeRootTurn, continuationLine, envelopeNote } from "./runtime/envelope.ts";
 import { Runtime } from "./runtime/runtime.ts";
@@ -36,10 +36,6 @@ const SOURCE_FAILED = "The originating turn ended before its teammates returned.
 export const EXTERNAL_QUEUE_CAP = 6;
 const EXTERNAL_TOO_MANY = "too many delegations queued on this conversation — wait for some to finish first";
 const KEY_REUSED = "that idempotency key was already used for a different request";
-/** A hand-off from a generation the host never began a root for: no turn
- * is running that could own the request. */
-const NO_TURN = "The requesting turn has no root (no turn)";
-
 const BRIEF_MAX = 12_000;
 /** The runtime's own depth refusal, mapped onto the legacy words. */
 const RUNTIME_DEPTH = /^Assignment depth limit reached/;
@@ -255,17 +251,17 @@ export class RuntimeCoordinator implements Coordinator {
 
   // ── enqueue ──────────────────────────────────────────────────────────
 
-  /** `options.mode`: "work" (the default) is refused back up its own tree;
-   * "consult" is a question, allowed to an ancestor (the bot that sent the
-   * work); "auto" is a consultation when the target is an ancestor, else
-   * work (main 2026-10-19, consultation of the requester). When the
-   * generation has no root yet, one is created (OURS create-parent) so
-   * callers that have not begun a turn still enqueue. */
-  enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, text: string,
-    options: HandoffOptions = {}): { node: HandoffView; duplicate: boolean; joined?: boolean } {
+  /** `mode`: "work" (the default) is refused back up its own tree; "consult"
+   * is a question, allowed to an ancestor (the bot that sent the work);
+   * "auto" is a consultation when the target is an ancestor, else work
+   * (main 2026-10-19, consultation of the requester). When the generation
+   * has no root yet, one is created so callers that have not begun a turn
+   * still enqueue. */
+  enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, _key: string, text: string,
+    approvalGranted = false, rework = false, sourceText = "", requestBatchKey?: string, origin?: WorkOrigin,
+    mode: "work" | "consult" | "notify" | "auto" = "work", person?: string, relay = false, doneWhen?: string, request?: string,
+    extra: { priority?: "now"; defaultAnswer?: string } = {}): { node: HandoffView; duplicate: boolean; joined?: boolean } {
     this.ready();
-    const { approvalGranted = false, rework = false, requestBatchKey, thread, relay = false } = options;
-    const requested = options.mode ?? "work";
     // Prefer a continued root, then the generation, then create a parent.
     let parent = parentId ? this.store.get(parentId) : this.store.get(this.continuing.get(generation) ?? generation);
     if (parentId && !parent) throw new Error(NOT_RUNNING);
@@ -279,44 +275,44 @@ export class RuntimeCoordinator implements Coordinator {
       if (ancestorOf(source, target)) throw new Error(ANCESTOR);
       parent = this.runtime.begin({
         id: generation,
-        origin: runtimeOrigin(undefined, source),
+        origin: runtimeOrigin(origin, source),
         requester: { kind: "person", threadId: source.threadId, botId: source.botId, chief: this.host.chiefOf(source) },
         assignee: { botId: source.botId, destination: { kind: source.groupId ? "room_thread" : "standing_thread", threadId: source.threadId,
           ...(source.groupId ? { groupId: source.groupId } : {}) } },
-        brief: "",
+        brief: sourceText.slice(0, BRIEF_MAX),
         level: this.host.levelOf(source).level,
+        ...(person ? { person } : {}), ...(request ? { request } : {}),
       });
     }
     // The legacy rules, in the legacy order, with the legacy words.
     const lineage = path(this.store, parent);
     const root = lineage[0]!;
     const upTree = lineage.some(n => ancestorOf(address(n), target));
-    const asked: Mode = requested === "auto" ? (upTree ? "consult" : "work") : requested;
+    const asked: Mode = mode === "auto" ? (upTree ? "consult" : "work") : mode;
     if (upTree && asked !== "consult") throw new Error(ANCESTOR);
-    const mode = asked;
     const siblings = this.store.children(parent.id);
-    const existing = siblings.findLast(c => c.assignee.botId === target.botId && c.assignee.destination.groupId === target.groupId && c.brief === brief && c.mode === mode);
+    const existing = siblings.findLast(c => c.assignee.botId === target.botId && c.assignee.destination.groupId === target.groupId && c.brief === brief && c.mode === asked);
     if (existing && !(rework && isTerminal(existing))) return { node: view(existing, parent), duplicate: true };
     // A one-way notice is not an assignment a teammate completes: several may go to one teammate.
-    if (!rework && mode !== "notify" && siblings.some(c => c.mode !== "notify" && kindOf(c.assignee.destination.groupId, parent) === kind &&
+    if (!rework && asked !== "notify" && siblings.some(c => c.mode !== "notify" && kindOf(c.assignee.destination.groupId, parent) === kind &&
       c.assignee.destination.groupId === target.groupId && c.assignee.botId === target.botId && c.status === "completed")) throw new Error(ALREADY_COMPLETED);
-    if (mode === "work" && kind === "work" && target.groupId && lineage.some(n => n.assignee.destination.groupId === target.groupId)) throw new Error(ROOM_ANCESTOR);
+    if (asked === "work" && kind === "work" && target.groupId && lineage.some(n => n.assignee.destination.groupId === target.groupId)) throw new Error(ROOM_ANCESTOR);
     // A one-way notice returns nothing. Under a root that polls (an external
     // runtime, which has no turn to resume) every awaited result waits in
     // the inbox; otherwise the requester is resumed.
-    const wanted: Reply = mode === "notify" ? "none" : options.reply ?? "resume";
-    const reply: Reply = wanted === "none" ? "none" : root.reply === "poll" ? "poll" : wanted;
+    const reply: Reply = asked === "notify" ? "none" : root.reply === "poll" ? "poll" : "resume";
     const requester: Requester = { kind: "bot_turn", botId: parent.assignee.botId, threadId: parent.assignee.destination.threadId,
       chief: this.host.chiefOf(address(parent)), ...(parent.id === root.id && root.requester.runId !== undefined ? { runId: root.requester.runId } : {}) };
     const level = this.host.levelOf(target, address(parent));
-    const criterion = typeof options.doneWhen === "string" ? options.doneWhen.trim().slice(0, 500) : "";
+    const criterion = typeof doneWhen === "string" ? doneWhen.trim().slice(0, 500) : "";
     const result = this.runtime.enqueue({
       parentId: parent.id,
       origin: parent.origin,
       requester,
-      assignee: { botId: target.botId, destination: { kind: target.groupId ? "room_thread" : thread === "standing" ? "standing_thread" : "work_thread",
-        threadId: target.threadId, ...(target.groupId ? { groupId: target.groupId } : {}) } },
-      mode, reply, brief: text, rework,
+      assignee: { botId: target.botId, destination: { kind: target.groupId ? "room_thread" : "work_thread", threadId: target.threadId,
+        ...(target.groupId ? { groupId: target.groupId } : {}) } },
+      mode: asked, reply, brief: text, rework,
+      ...(extra.priority ? { priority: extra.priority } : {}),
       levels: { own: level.level },
       ...(level.driverKind !== undefined ? { driverKind: level.driverKind } : {}),
       approved: approvalGranted,
@@ -324,6 +320,8 @@ export class RuntimeCoordinator implements Coordinator {
       // Only a direct thread relays: a room already shows every reply.
       ...(relay && !target.groupId ? { relay: true } : {}),
       ...(criterion ? { doneWhen: criterion } : {}),
+      ...(typeof extra.defaultAnswer === "string" && extra.defaultAnswer.trim()
+        ? { defaultAnswer: extra.defaultAnswer.trim() } : {}),
     });
     if (!result.ok) {
       if (result.outcome === "budget") throw new Error(BUDGET);
@@ -431,12 +429,12 @@ export class RuntimeCoordinator implements Coordinator {
     // Only the host's own turn ends here (its first, or one that continues
     // the root); a resume the runtime dispatched settles through run(), and
     // anything else is ignored as legacy does.
-    if (!root || !(isSourceTurn(root) || (continued !== undefined && !root.parentId && root.status === "running"))) return;
+    if (!root || !(hostFirstTurn(root) || (continued !== undefined && !root.parentId && root.status === "running"))) return;
     this.runtime.end(root.id, { ok, text: ok ? "" : SOURCE_FAILED, ...(!ok && stalled ? { stalled: true } : {}) });
   }
 
   enqueueExternal(source: RoomAddress, target: RoomAddress, text: string, approvalGranted = false, mode: "work" | "consult" | "notify" = "work",
-    key?: string, extra: { priority?: "now" } = {}): { node: HandoffView; duplicate: boolean } {
+    key?: string, _extra: { priority?: "now" } = {}): { node: HandoffView; duplicate: boolean } {
     this.ready();
     // A retried call (a connection that dropped after the server accepted
     // it) carries the same idempotency key: it is the same request, answered
@@ -468,7 +466,7 @@ export class RuntimeCoordinator implements Coordinator {
       brief: "", level: this.host.levelOf(source).level, reply: "poll", ...(request ? { request } : {}),
     });
     try {
-      const { node, duplicate } = this.enqueue(source, root.id, root.id, target, text, { approvalGranted, mode });
+      const { node, duplicate } = this.enqueue(source, root.id, root.id, target, target.botId, text, approvalGranted, false, "", undefined, undefined, mode);
       return { node, duplicate };
     } finally {
       // The caller's request is the whole host turn: it ends as it is sent.
@@ -517,7 +515,7 @@ export class RuntimeCoordinator implements Coordinator {
       brief: "", level: this.host.levelOf(source).level, reply: "poll", request: `goal:${runId}:${target.botId}:${clip(text, 80)}`,
     });
     try {
-      const { node } = this.enqueue(source, root.id, root.id, target, text, { approvalGranted: true, mode: "work" });
+      const { node } = this.enqueue(source, root.id, root.id, target, target.botId, text, true, false, "", undefined, undefined, "work");
       return node;
     } finally {
       // The lead's own decision turn already ended: poll, never resume it.
@@ -821,11 +819,12 @@ export class RuntimeCoordinator implements Coordinator {
     const note = resumed || root ? body : envelopeNote(body);
     const evidence = (result: HostTurnResult) => result.evidence ? { evidence: result.evidence } : {};
     const result = await this.host.run(node, resumed, signal,
-      { text: `${input.restartNote}${body}`, note: `${input.restartNote}${note}`, restartNote: input.restartNote, turn: input.turn });
+      { text: `${input.restartNote}${body}`, note: `${input.restartNote}${note}`, restartNote: input.restartNote, turn: input.turn,
+        ...(asked.length ? { asked: asked.map(child => child.assignee.botId) } : {}) });
     if (signal.aborted) return { kind: "failed", outcome: "stopped", text: result.text };
     if (result.cap) return { kind: "continue", text: result.text, note: result.cap.note, ...(result.cap.handoffPath ? { handoffPath: result.cap.handoffPath } : {}), ...evidence(result) };
     if (result.cards) return { kind: "needs_input", question: result.cards.question, cards: result.cards.ids, ...evidence(result) };
-    if (!result.ok) return { kind: "failed", outcome: "provider_error", text: result.text, ...evidence(result) };
+    if (!result.ok) return { kind: "failed", outcome: result.stalled ? "stalled" : "provider_error", text: result.text, ...evidence(result) };
     // A root is the person's own conversation: a NEEDS INPUT line there is a
     // question in the chat, answered by a typed line that starts a new root;
     // only cards park a root. A child's line parks it for the requester.

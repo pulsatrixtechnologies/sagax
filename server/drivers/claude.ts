@@ -405,11 +405,6 @@ export const CLAUDE_FLAG_FLOORS = {
   "--restricted": [2, 1, 257],
   // A bot's Claude Code plugins (server/bots/bot-plugins.ts).
   "--plugin-dir": [2, 0, 0],
-  // Prompt-cache keep-warm pings (claude-keepwarm.ts) only. Not bisected:
-  // both are in every 2.1 build checked. A CLI that lacks one rejects the
-  // ping as an argument error, which ends the keep-warm window, nothing else.
-  "--fork-session": [2, 1, 0],
-  "--no-session-persistence": [2, 1, 0],
   // A one-shot helper with no built-in tool (oneShotIsolationArgs). Placed
   // conservatively: an older CLI keeps the plain one-shot it always had.
   "--tools": [2, 1, 0],

@@ -70,6 +70,7 @@ export function toolCallContextFromEnv(env: NodeJS.ProcessEnv): ToolCallContext 
       }
     },
     externalRuntime: profile.externalRuntime === true,
+    coordinating: profile.coordinating === true,
     sharedComputers: profile.sharedComputers,
     client: harnessClientFromEnv(env),
     remoteSupport: remoteSupportFromEnv(env),

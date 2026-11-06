@@ -46,7 +46,10 @@ export type NotifyKind =
   | "needs-you"
   /** Something Sagax changed on its own that the person hears about once:
    * a tool turned off for the bots it does not start for. */
-  | "notice";
+  | "notice"
+  /** A bot asked the person to take over the computer (requestHelpLease):
+   * it waits on their hands at the place it works. */
+  | "takeover";
 
 export interface Notification {
   kind: NotifyKind;

@@ -2360,5 +2360,9 @@
   "botPanel.library.pageState.revoked": "відкликано",
   "botPanel.library.pageState.expired": "термін минув",
   "settings.experimental.browserWindows": "Ще недоступно на цій машині Windows: встановіть браузерний конектор командою `openmausbot browser install`.",
-  "settings.experimental.skillAuthoring": "Створювати навички для вашого перегляду"
+  "settings.experimental.skillAuthoring": "Створювати навички для вашого перегляду",
+  "approvalMode.antigravityLocalOnly": "Авто (повний доступ) доступне в локальному пакованому десктопному застосунку.",
+  "approvalMode.trustedLocalOnly": "Повний і Власний доступні в пакованому десктопному застосунку.",
+  "computer.askedHands": "попросив ваших рук:",
+  "computer.dismiss": "Приховати"
 }

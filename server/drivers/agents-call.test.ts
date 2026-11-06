@@ -10,7 +10,7 @@ function context(overrides: Partial<ToolCallContext> = {}): ToolCallContext {
     botId: "bot-voice",
     threadId: "thread-voice",
     depth: 0,
-    externalRuntime: false,
+    coordinating: false, externalRuntime: false,
     sharedComputers: false,
     client: {
       api: async () => ({}),

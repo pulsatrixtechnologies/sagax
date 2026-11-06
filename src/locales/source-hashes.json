@@ -1887,7 +1887,11 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
+      "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
+      "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
+      "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
+      "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261"
     },
     "es": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -3757,7 +3761,11 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
+      "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
+      "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
+      "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
+      "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261"
     },
     "fr": {
       "access.addKey": "8a9f02fd9bdb83ac02d3240dcade949d6f3ffa2fc0b3df528e348bb4d29ae639",
@@ -17315,7 +17323,13 @@
       "settings.experimental.developer": "3fb7b39416f1d067268747fc214494d759d2609f863ace1a8a76705618d5c80b",
       "settings.experimental.browserDescription": "a02389b71d4c802f0fcc490d5c2a3ccdca761ae8dddb74b394279ac413d34fb0",
       "settings.experimental.orgLocked": "43878058cb22f549950eba23a98707b71157be0b0981be6d227199e0d6e69a1a",
-      "settings.experimental.llmThreadTitlesDescription": "b667d76670e6398f1f2f14e5592f692c8b4d88ac01c7cd7290c14ec37d91bdd2"
+      "settings.experimental.llmThreadTitlesDescription": "b667d76670e6398f1f2f14e5592f692c8b4d88ac01c7cd7290c14ec37d91bdd2",
+      "settings.intro.about": "519ffc435ea4cefe5f71e138c0763383910a0c5497e5a999f897f6ebb251569c",
+      "settings.section.app": "0d04bfeb7d64b71c74fc925cca93d683154e8cc7e6e5838faced498e34c9984d",
+      "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
+      "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
+      "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
+      "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -19175,7 +19189,11 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
+      "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
+      "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
+      "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
+      "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261"
     },
     "ja": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -22919,7 +22937,11 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
+      "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
+      "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
+      "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
+      "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261"
     },
     "pt-br": {
       "achievements.panel.all": "e2adb0c3b5f28a7c9d5bdac240382201b39376dd11671aedc93e8a73b6468f19",
@@ -25586,7 +25608,11 @@
       "routineEditor.hint.model": "1e4801441d38abd465f72135feab7a2b811ddb57537c948ed2d04e6d6e576719",
       "routines.effort.label": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
       "routines.effort.botDefault": "a6f2b10be05387215e32f014b3db3c2a378d078db65fa84390757038af7e5dad",
-      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18"
+      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18",
+      "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
+      "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
+      "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
+      "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261"
     },
     "uk": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -27948,7 +27974,11 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
+      "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
+      "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
+      "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
+      "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261"
     },
     "zh": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -30575,7 +30605,11 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
+      "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
+      "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
+      "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
+      "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261"
     },
     "zh-tw": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -34204,7 +34238,11 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
+      "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
+      "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
+      "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
+      "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261"
     }
   }
 }

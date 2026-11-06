@@ -237,6 +237,14 @@ export function dispatchTasksEffects(action: Action, env: DispatchEnv): void {
             action.onError?.();
           });
           break;
+        case "setGroupHold":
+          api<{ group?: Partial<Group> & { id: string } }>(`/api/groups/${action.groupId}/holds`, {
+            method: "POST",
+            body: JSON.stringify({ botId: action.botId, held: action.held }),
+          })
+            .then((r) => { if (r?.group) dispatch({ type: "groupPatched", group: r.group }); })
+            .catch(showError);
+          break;
         case "updateBot": {
           if (botBeforeUpdate) {
             botPatchQueue.enqueue(action.botId, action.patch, botBeforeUpdate);

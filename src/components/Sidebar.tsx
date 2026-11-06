@@ -104,9 +104,6 @@ import { openCommandPalette } from "@/lib/command-palette-open";
 import { APP_NAME } from "@/lib/app-links";
 import { isBotFloating, subscribeFloatingBots, toggleFloatingBot } from "@/lib/floating-bots";
 import { isMacPlatform, SHORTCUT_GROUPS, shortcutKeysForPlatform } from "@/lib/keyboard-shortcuts";
-import { ShareTeamDialog } from "./ShareTeamDialog";
-import { TeamSettingsDialog } from "./TeamSettingsDialog";
-import { TeamDialog } from "./TeamDialog";
 import { RenameTitle } from "./RenameTitle";
 import {
   BotProjectDialog,
@@ -147,8 +144,6 @@ import { sidebarGoalRunPreview } from "@/lib/sidebar-layout";
 import { botListItemPointerIntent } from "@/lib/sidebar-selection";
 import { phoneSettingsAction, SidebarPhoneButton } from "./SidebarPhoneButton";
 import { PulsatrixMark } from "./PulsatrixMark";
-import type { SidebarMenuItem } from "./SidebarPopoverMenu";
-import { roomSpeakerIds, roomThreadSpeakerId, roomThreadWorking } from "@/lib/room-threads";
 
 import { SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
@@ -163,6 +158,7 @@ import { openSideThread } from "@/lib/side-thread";
 import { moveRailFocus } from "@/lib/sidebar-rail";
 import { isClientCancellation } from "../../shared/client-cancel";
 import { readableError } from "@/lib/plain-error";
+import { roomSpeakerIds, roomThreadSpeakerId, roomThreadWorking } from "@/lib/room-threads";
 
 import {
   COMPOSE_DISMISS,
@@ -241,7 +237,6 @@ function openBotContextMenu(onMenu: (menu: MenuState) => void, botId: string, ev
  * a received direct message included. */
 export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | null, instances: InstanceInfo[]): string {
   const viewerId = viewerActorId(config);
-  // the open thread's speaker first, else one working in another thread
   const speakerId = group.busyBotId ?? roomSpeakerIds(group)[0];
   if (speakerId) {
     return t("sidebar.preview.botWorking", {
@@ -479,7 +474,6 @@ export function GroupThreadList({ group, selected, density = "comfortable", quer
   }), (a, b) => equalRows(a.bots, b.bots) && Object.is(a.revealThread, b.revealThread));
   const now = useRelativeNow();
   const [showAll, setShowAll] = useState(false);
-  // Each thread reports its own work and speaker: threads run side by side.
   const tasks = (group.tasks ?? [{ threadId: group.threadId, title: group.name, createdAt: group.createdAt }]).map((task) => {
     const speakerId = roomThreadSpeakerId(group, task.threadId);
     const waiting = Boolean(speakerId) && state.bots.find((bot) => bot.id === speakerId)?.activity === "waiting-on-you";
@@ -2372,82 +2366,6 @@ export function ArchivedBotsPanel({
 
 /** A named team's context menu: add bots, rename, share the whole team,
  * delete. Exported for a markup test. */
-export function TeamMenuItems({ onAddBots, onRename, onShare, onDelete, onSetForAll }: {
-  onAddBots: () => void;
-  onRename: () => void;
-  onShare: () => void;
-  onDelete: () => void;
-  /** Owner/admin only: one approval level or model for every bot in the team. */
-  onSetForAll?: () => void;
-}) {
-  const item = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover";
-  return (
-    <>
-      <button type="button" role="menuitem" autoFocus className={item} onClick={onAddBots}><Users size={14} />{t("team.addBots")}</button>
-      {onSetForAll && <button type="button" role="menuitem" className={item} onClick={onSetForAll}><SlidersHorizontal size={14} />{t("teamSettings.menu")}</button>}
-      <button type="button" role="menuitem" className={item} onClick={onRename}><Pencil size={14} />{t("team.rename")}</button>
-      <button type="button" role="menuitem" className={item} onClick={onShare}><Share2 size={14} />{t("team.share")}</button>
-      <button type="button" role="menuitem" className={cn(item, "text-danger")} onClick={onDelete}><Trash2 size={14} />{t("team.delete")}</button>
-    </>
-  );
-}
-
-function orgViewerId(state: AppState): string {
-  // The server's principal for this viewer; older servers: the profile
-  // email, else the same "local-owner" fallback as the server actor id.
-  return viewerActorId(state.config);
-}
-
-function isExternalBot(bot: Bot, viewerId: string): boolean {
-  const owner = bot.ownerUserId?.trim().toLowerCase();
-  if (!owner || owner === "local-owner") return false;
-  return owner !== viewerId.trim().toLowerCase();
-}
-
-/** The bots the sidebar lists. On a shared workspace a bot someone else
- * owns reaches you only through a room, so it stays out of the list. In an
- * organization the server lists only bots you may open (yours and the ones
- * shared with you), so all of them show; a shared bot filed in a section of
- * its owner that you do not see goes to Unassigned. */
-export function sidebarListedBots(bots: Bot[], viewerId: string, orgMode: boolean, sections: readonly string[] = []): Bot[] {
-  if (!orgMode) return bots.filter((bot) => !isExternalBot(bot, viewerId));
-  return bots.map((bot) => (isExternalBot(bot, viewerId) && bot.section && !sections.includes(bot.section) ? { ...bot, section: undefined } : bot));
-}
-
-/** The "Hidden (N)" row at the foot of the list: closed by default; each
- * entry comes back with Show. */
-function HiddenEntriesRow({ rows }: { rows: ReturnType<typeof hiddenSidebarRows> }) {
-  const [open, setOpen] = useState(false);
-  if (!rows.length) return null;
-  return (
-    <div data-sidebar-hidden className="mt-3 flex flex-col gap-0.5">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-[12px] font-medium text-sidebar-ink-secondary hover:text-sidebar-ink"
-      >
-        <ChevronRight aria-hidden="true" size={12} className={cn("transition-transform", open && "rotate-90")} />
-        <EyeOff aria-hidden="true" size={12} />
-        {t("sidebar.hidden.title", { count: rows.length })}
-      </button>
-      {open && rows.map((row) => (
-        <div key={row.key} data-sidebar-hidden-row={row.key} className="flex items-center gap-2 rounded-md py-1 pl-7 pr-1 text-[13px] text-sidebar-ink-secondary hover:bg-sidebar-hover">
-          <span className="min-w-0 flex-1 truncate">{row.name}</span>
-          <button
-            type="button"
-            onClick={() => showInSidebar(row.key)}
-            aria-label={t("sidebar.hidden.showNamed", { name: row.name })}
-            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-sidebar-ink hover:bg-sidebar-selected"
-          >
-            <Eye aria-hidden="true" size={12} />
-            {t("sidebar.hidden.show")}
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   open: boolean;
@@ -2511,132 +2429,6 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
     assignSection: sections.assignSection,
   });
 
-  const [teamMenu, setTeamMenu] = useState<{ name: string; x: number; y: number } | null>(null);
-  const [teamSettings, setTeamSettings] = useState<string | null>(null);
-  // Approval levels and models are the owner's to set, as in each bot's panel.
-  const teamSettingsAllowed = useOwnerOrAdmin();
-  const teamMotion = useHeldMenuMotion(teamMenu);
-  const teamMenuReturn = useRef<HTMLElement | null>(null);
-  const closeTeamMenu = () => {
-    (teamMenuReturn.current?.isConnected ? teamMenuReturn.current : sidebarRef.current)?.focus();
-    setTeamMenu(null);
-  };
-  const renamedTeam = (oldName: string, newName: string) => {
-    const replace = (ids: string[]) => [...new Set(ids.map(id => id === userSectionId(oldName) ? userSectionId(newName) : id))];
-    setCollapsedSections(current => { const next = replace(current); saveCollapsedSections(next); return next; });
-    setSectionOrder(current => { const next = replace(current); saveSectionOrder(next); return next; });
-    requestAnimationFrame(() => {
-      const header = [...(sidebarRef.current?.querySelectorAll<HTMLElement>("[data-section]") ?? [])]
-        .find(element => element.dataset.section === newName);
-      (header?.querySelector<HTMLElement>("button") ?? header ?? sidebarRef.current)?.focus();
-    });
-  };
-  const [deletingTeam, setDeletingTeam] = useState<string | null>(null);
-  const [teamDeletePending, setTeamDeletePending] = useState(false);
-  const teamDeleteRunning = useRef(false);
-  const [moveToTeam, setMoveToTeam] = useState<string | null>(null);
-  const [renameTeam, setRenameTeam] = useState<string | null>(null);
-  const [shareTeam, setShareTeam] = useState<string | null>(null);
-  // Slice 4: sections are channels on a server signed in with Perspicax.
-  const perspicaxOrg = usePerspicaxOrg();
-  const orgMode = perspicaxOrg !== null;
-  const sidebarHidden = useSidebarHidden();
-  const sidebarPeople = useOrgPeople();
-  // A new message brings a hidden entry back, per the person's setting
-  // (people on, bots off by default; Settings > Appearance).
-  useEffect(() => {
-    if (!sidebarHidden.items.length) return;
-    const me = orgViewerId(state);
-    const keys = entriesToUnhide(sidebarHidden, {
-      bots: state.bots,
-      groups: state.groups,
-      personGroup: (personId) => state.groups.find((group) => group.peopleDm && groupHiddenKey(group, me) === hiddenKey("person", personId)),
-    });
-    if (keys.length) showInSidebar(keys);
-  }, [sidebarHidden, state.bots, state.groups, state.config]);
-  // Selecting a closed direct conversation (person panel, To: picker,
-  // search, a nudge) brings it back. Only a change of selection counts, so
-  // closing the conversation that is open leaves it closed.
-  useEffect(() => {
-    if (state.activeView !== "chat" || !state.selectedId) return;
-    const key = closedDmToReopen(state.groups.find((candidate) => candidate.id === state.selectedId), hiddenKeySet(sidebarHidden), orgViewerId(state));
-    if (key) showInSidebar(key);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedId, state.activeView]);
-  const [orgMenu, setOrgMenu] = useState<{ name: string | null; id: string | null; x: number; y: number } | null>(null);
-  const [sectionEdit, setSectionEdit] = useState<{ mode: "rename"; name: string } | null>(null);
-  // Organization: the viewer's own sections (personal-sections.ts). The
-  // first time, they start from the sections the server gave their bots.
-  const personalStored = usePersonalSections();
-  const personal: PersonalSections | null = orgMode ? personalStored ?? EMPTY_PERSONAL_SECTIONS : null;
-  const loaded = state.config !== null && state.config !== undefined;
-  useEffect(() => {
-    if (!orgMode || personalStored !== null || !loaded) return;
-    if (!state.bots.length && !state.groups.length) return;
-    writePersonalSections(seedPersonalSections({ bots: state.bots, groups: state.groups, sections: state.sections ?? [], viewerId: orgViewerId(state) }));
-  }, [orgMode, personalStored, loaded, state.bots, state.groups, state.sections, state.config]);
-  // What the sidebar lays out: on an organization server each bot and group
-  // sits in the viewer's own section (undefined: Unassigned), whatever the
-  // server's section field says.
-  const personalView = personal ? withPersonalSections(state.bots, state.groups, personal) : null;
-  const layoutBots = personalView?.bots ?? state.bots;
-  const layoutGroups = personalView?.groups ?? state.groups;
-  const layoutSections = personal ? personalSectionNames(personal) : state.sections ?? [];
-  const knownItems = new Set([...state.bots.map((bot) => itemKey("bot", bot.id)), ...state.groups.map((group) => itemKey("group", group.id))]);
-  const openOrgMenu = (event: React.MouseEvent<HTMLElement>, name: string | null, id: string | null) => {
-    event.preventDefault();
-    event.stopPropagation();
-    teamMenuReturn.current = event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget;
-    // Shift+F10 and the ContextMenu key arrive with no pointer position.
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX || rect.left + 16;
-    const y = event.clientY || rect.bottom;
-    setOrgMenu({ name, id, x: Math.max(8, Math.min(x, window.innerWidth - 230)), y: Math.max(8, Math.min(y, window.innerHeight - 280)) });
-  };
-  const closeOrgMenu = () => {
-    (teamMenuReturn.current?.isConnected ? teamMenuReturn.current : sidebarRef.current)?.focus();
-    setOrgMenu(null);
-  };
-  const renameOrgSection = async (oldName: string, name: string): Promise<string | null> => {
-    const code = editPersonalSections((prefs) => renamePersonalSection(prefs, oldName, name));
-    if (code) return sectionEditMessage(code);
-    setSectionEdit(null);
-    renamedTeam(oldName, name.trim());
-    return null;
-  };
-  /** Files a bot or a group in a section ("" = Unassigned): the viewer's own on
-   * an organization server, the server's otherwise. */
-  const assignSection = (kind: SectionItemKind, id: string, section: string) => {
-    if (personal) {
-      const failed = assignPersonalSection(kind, id, section, knownItems);
-      if (failed) setTeamFeedback({ error: true, text: failed });
-      return;
-    }
-    if (kind === "group") {
-      dispatch({ type: "patchGroup", groupId: id, patch: { section } });
-      return;
-    }
-    if (!remoteClient) {
-      dispatch({ type: "updateBot", botId: id, patch: { section } });
-      return;
-    }
-    void api("/api/sidebar-sections", {
-      method: "POST",
-      body: JSON.stringify({ name: section, botIds: [id] }),
-    })
-      .then(({ bots }) => bots.forEach((bot: Bot) => dispatch({ type: "botPatched", bot })))
-      .catch((cause) => dispatch({ type: "error", message: cause instanceof Error ? cause.message : String(cause) }));
-  };
-  const [roomMenu, setRoomMenu] = useState<{ groupId: string; x: number; y: number } | null>(null);
-  const [roomSectionPicker, setRoomSectionPicker] = useState<{ groupId: string; x: number; y: number } | null>(null);
-  const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null);
-  const deletingRoom = deletingRoomId ? state.groups.find((g) => g.id === deletingRoomId) : undefined;
-  const [archivedBotsOpen, setArchivedBotsOpen] = useState(false);
-  const [teamFeedback, setTeamFeedback] = useState<{
-    error: boolean;
-    text: string;
-    restoreBot?: { id: string; name: string };
-  } | null>(null);
   const searchTitle = `${t("sidebar.search")} (${paletteShortcutLabel()})`;
   const macInset = capabilities.windowChrome === "mac-inset";
   const browser = capabilities.host.label === "Browser";

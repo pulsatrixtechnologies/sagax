@@ -130,6 +130,8 @@ export function buildNotification(
                     ? `${who}'s wait is done`
                   : kind === "needs-you"
                     ? `${who} needs you`
+                  : kind === "takeover"
+                    ? `${who} needs your hands`
                   : `${who} finished`;
 
   // A "finished" with nothing to say is not worth a notification — the

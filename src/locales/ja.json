@@ -3742,5 +3742,9 @@
   "botPanel.library.pageState.revoked": "取り消し済み",
   "botPanel.library.pageState.expired": "期限切れ",
   "settings.experimental.browserWindows": "この Windows マシンではまだ使えません。`openmausbot browser install` でブラウザーエンジンをインストールしてください。",
-  "settings.experimental.skillAuthoring": "ボットが自分のスキルを作成できるようにする"
+  "settings.experimental.skillAuthoring": "ボットが自分のスキルを作成できるようにする",
+  "approvalMode.antigravityLocalOnly": "自動（フルアクセス）は、インストール済みのデスクトップアプリで使えます。",
+  "approvalMode.trustedLocalOnly": "フルアクセスとカスタムは、インストール済みのデスクトップアプリで使えます。",
+  "computer.askedHands": "があなたの操作を求めています:",
+  "computer.dismiss": "閉じる"
 }

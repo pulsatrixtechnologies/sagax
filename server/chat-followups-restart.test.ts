@@ -115,7 +115,7 @@ it("survives a real server crash: queued sends keep receipts, cancellation and u
     // the one chat that never waits for a capacity slot: it holds the slot,
     // and the queued receipt lives on the earlier thread.
     const later = { threadId: uncertain.threadId as string };
-    const holder = (await api("POST", `/api/bots/${uncertain.id}/tasks`, { title: "Holds the slot" }, 201)).task;
+    const uncertainHolder = (await api("POST", `/api/bots/${uncertain.id}/tasks`, { title: "Holds the slot" }, 201)).task;
     const worker = (await api("POST", "/api/bots", { name: "Channel worker" }, 201)).bot;
     const channel = (await api("POST", "/api/groups", {
       name: "Durable channel", memberIds: [worker.id],
@@ -148,11 +148,11 @@ it("survives a real server crash: queued sends keep receipts, cancellation and u
     const cancelled = await api("POST", `/api/bots/${bot.id}/messages`, cancelledBody, 202);
     await api("DELETE", `/api/bots/${bot.id}/queue/${cancelled.queueId}`, { threadId: bot.threadId });
 
-    await api("POST", `/api/bots/${uncertain.id}/messages`, { threadId: holder.threadId, text: "Hold capacity" }, 202);
+    await api("POST", `/api/bots/${uncertain.id}/messages`, { threadId: uncertainHolder.threadId, text: "Hold capacity" }, 202);
     const uncertainBody = { threadId: later.threadId, text: "A possibly executed action", sendId: "uncertain_bot_send_123456" };
     const claimed = await api("POST", `/api/bots/${uncertain.id}/messages`, uncertainBody, 202);
     expect(claimed).toMatchObject({ queued: true, reason: "capacity" });
-    writeFileSync(join(dataDir, `${holder.threadId}.gate`), "finish first task only");
+    writeFileSync(join(dataDir, `${uncertainHolder.threadId}.gate`), "finish first task only");
     await expect.poll(() => prompts(later.threadId).length, { timeout: 15_000 }).toBe(1);
 
     // Stop revokes provider credentials before the provider reports completion;

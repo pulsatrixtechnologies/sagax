@@ -689,6 +689,7 @@ describe("implicit browser control", () => {
     fixture.states = { 9: true };
     const { cleanup, input } = connectViewer();
     input(press); input(lift); await settleAll();
+    // LiveBrowser: [0]/[1] popover dismiss, [2] typing hold/caret, [3] EventSource, [4] keep.
     fixture.effects[2]!();
     vi.advanceTimersByTime(60_000); await settleAll();
     expect(sentTypes()).toEqual(["take"]);
@@ -704,8 +705,9 @@ describe("implicit browser control", () => {
   });
 });
 
-// useState call order: connected 4, showTyping 9, kept 18, masked 19; the
-// sign-in Open effect is the fifth useEffect (index 4).
+// useState call order: connected 4, showTyping 9, kept 18, masked 19.
+// LiveBrowser effects: [0]/[1] popover dismiss, [2] caret, [3] EventSource,
+// [4] keep (kept/sign-in open), [5] sign-in Open.
 describe("explicit browser control and signing in", () => {
   const press = { type: "input_mouse", eventType: "mousePressed", x: 4, y: 5, button: "left", clickCount: 1, modifiers: 0 };
   const lift = { ...press, eventType: "mouseReleased" };
@@ -714,13 +716,18 @@ describe("explicit browser control and signing in", () => {
     let tree!: ReturnType<typeof LiveBrowser>;
     function Capture() { tree = LiveBrowser(props); return tree; }
     renderToStaticMarkup(createElement(Capture));
+    // Expand LiveBrowserView so BrowserViewport and toolbar buttons are findable.
+    if (isValidElement(tree) && tree.type === LiveBrowserView) {
+      tree = LiveBrowserView(tree.props as Parameters<typeof LiveBrowserView>[0]);
+    }
     return elements(tree);
   };
   const byText = (nodes: Node[], text: string) => nodes.find((node) => node.type === "button" && Children.toArray(node.props.children).includes(text))!;
   const connect = (props?: Parameters<typeof capture>[0]) => {
     fixture.frame = { seq: 1, data: "fixture", viewerId: "current-viewer", generation: 1 };
     const nodes = capture(props);
-    const cleanup = fixture.effects[2]!();
+    // LiveBrowser: EventSource is [3] (after two popover dismiss + caret).
+    const cleanup = fixture.effects[3]!();
     const source = FixtureEventSource.instances[0]!;
     source.emit("ready", { viewerId: "current-viewer" });
     return { cleanup, source, nodes, input: nodes.find((node) => node.type === BrowserViewport)!.props.input! };
@@ -782,11 +789,12 @@ describe("explicit browser control and signing in", () => {
     const signIn = { url: "https://example.com/", site: "example.com", nonce: 1 };
     const { cleanup, source } = connect({ bot, signIn });
     source.emit("tabs", { tabs: [{ tabId: "t1", active: true, title: "", url }] });
-    fixture.effects[4]!(); await settleAll();
+    // LiveBrowser alone: sign-in Open effect is [5] (after popovers, caret, live, keep).
+    fixture.effects[5]!(); await settleAll();
     expect(sentTypes()).toEqual(sent);
     if (sent.includes("navigate")) expect(JSON.parse(String(vi.mocked(api).mock.calls[1]![1]!.body)).url).toBe("https://example.com/");
     // The same Open is acted on once.
-    fixture.effects[4]!(); await settleAll();
+    fixture.effects[5]!(); await settleAll();
     expect(sentTypes()).toEqual(sent);
     cleanup?.();
   });

@@ -14,7 +14,7 @@
 // warm processes do not outlive this server either.
 
 import type { ModelCatalog } from "./contracts.ts";
-import { contextWindowFor } from "./context-budget.ts";
+import { contextWindowFor } from "./context/context-budget.ts";
 
 /** Before a room turn, at or above this share of the window, start fresh. */
 export const DEFAULT_ROOM_COMPACT_AT = 0.9;

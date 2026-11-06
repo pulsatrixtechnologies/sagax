@@ -22,7 +22,7 @@ export interface DriverCapabilities {
  * gets the same teamwork tools. So the count is an upper bound, not one
  * bot's catalog. Both sides of a comparison get the same profile; only the
  * driver's own capability can differ. */
-const ENVELOPE: CatalogProfile = {
+const ENVELOPE: CatalogProfile = {externalRuntime: false, coordinating: false, ownThreadCreation: false, 
   skillAuthoring: true,
   sharedComputers: true,
   voiceNotes: true,

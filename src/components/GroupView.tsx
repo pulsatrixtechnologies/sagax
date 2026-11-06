@@ -6,7 +6,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { createPortal } from "react-dom";
 import { t, activeLocale } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";
-import { ChevronDown, FolderOpen, Pin, X, ArrowDown, Pause, Square } from "lucide-react";
+import { ChevronDown, FolderOpen, Pin, X, Pause, Square } from "lucide-react";
 import {
   api,
   useStore,
@@ -57,7 +57,7 @@ import { ReactionChips } from "./Reactions";
 import { myReactions, reactionSelfIds, useToggleReaction } from "@/lib/reactions";
 import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
-import { normalizeState, MAUS_COLOR_NAMES, mausInk } from "@/lib/mascot";
+import { normalizeState } from "@/lib/mascot";
 import { defaultResponderName, effectiveDefaultResponder, groupResponseHint, jevRoomRoutingOn } from "@/lib/group-routing";
 import { groupLeadBotId, leadResponder } from "@/lib/group-panel";
 import { openSettings } from "@/lib/settings-link";
@@ -92,7 +92,7 @@ import { ExportTranscriptMenu } from "./ExportTranscriptMenu";
 import { ReplyQuote } from "./ReplyQuote";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { SignInRequestCard } from "./SignInRequestCard";
-import { hasRoutineExecutionTask, RoutineRunCard } from "./RoutineRunCard";
+import { RoutineRunCard } from "./RoutineRunCard";
 import { GoalRunCard, GoalRunHeaderChip, goalRunPlace } from "./GoalRunCard";
 import { AccessCard } from "./AccessCard";
 import { TransientNotice } from "./TransientNotice";
@@ -218,39 +218,7 @@ export function RoomToolChip({ message, roomId, live = false }: { message: Messa
   );
 }
 
-/** A palette color: every skin carries its readable tone (--identity-<color>). */
-function isPaletteColor(color: string): boolean {
-  return (MAUS_COLOR_NAMES as readonly string[]).includes(color);
-}
 
-/** 16px profile avatar + name, shown once per sender cluster. The name uses
- * that bot's color, deepened or lightened per skin so it stays readable. */
-function ClusterLabel({ bot, name, color }: { bot?: Bot; name: string; color: string }) {
-  "use memo";
-  const ownColor = bot?.color ?? color;
-  // A palette color wears the skin's identity tone (styles.css
-  // .bot-identity, 4.5:1 on the thread in every skin); anything else (an
-  // older stored value) keeps its readable ink.
-  const identity = isPaletteColor(ownColor);
-  const tint = identity ? undefined : mausInk(ownColor) ?? color;
-  return (
-    <div className="-mb-1.5 ms-1.5 mt-3 flex items-center gap-1.5 px-1.5">
-      <BotAvatar
-        bot={bot ?? { name, color: color as Bot["color"] }}
-        state={normalizeState(bot?.mascotExpression) ?? "happy"}
-        size={16}
-        motion="none"
-        motionKey={0}
-        animated={false}
-      />
-      <span
-        className={cn("text-[12px] font-normal leading-4", identity && "bot-identity")}
-        data-bot-color={identity ? ownColor : undefined}
-        style={tint ? { color: tint } : undefined}
-      >{name}</span>
-    </div>
-  );
-}
 
 /** Pin for one room message, one pin per room, patchGroup path. */
 function roomPin(group: Group, message: Message, dispatch: ReturnType<typeof useStore>["dispatch"]): PinAction | undefined {
@@ -1051,6 +1019,7 @@ export const Transcript = memo(function Transcript({
                         group={group}
                         message={note}
                         members={members}
+                        mentionPeers={mentionPeers}
                         transcript={transcript}
                         emerging={false}
                         eager={false}

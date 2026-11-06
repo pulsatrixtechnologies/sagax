@@ -166,7 +166,6 @@ import {
   provenRequestPerson,
   SharedComputers,
   sharedComputerOperation,
-  sharedComputerRegistration,
 } from "./computer/shared-computers.ts";
 import { publishPersonalCopy, readPersonalCopy } from "./personal-copy.ts";
 import { createUserComputerRouter } from "./computer/user-computers.ts";
@@ -176,7 +175,6 @@ import {
   type ComposedTurn,
   type Coordinator,
   type HandoffOpener,
-  type HandoffOptions,
   type HandoffView,
   type HostTurnResult
 } from "./coordinator.ts";
@@ -188,7 +186,6 @@ import {
   requestNeedsInput,
   requestSourceForCard
 } from "./auth/guarded-requests.ts";
-import { RoomContextTracker } from "./room-context.ts";
 import { botAvatarUrlFromStoredPath } from "../shared/bot-avatar.ts";
 import { botPublicProfile, type BotPublicProfile } from "../shared/bot-public-profile.ts";
 import { CLOUD_COMPUTER_BUSY_ERROR } from "../shared/computer-contention.ts";
@@ -267,12 +264,7 @@ import { escapeAttribute } from "../src/lib/composer-attachments.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
 import { markDeadThreadChip } from "./threads/dead-thread-chips.ts";
 import {
-  CREDENTIAL_TARGETS,
   credentialIsConfigured,
-  credentialResumeOutcome,
-  isPendingCredentialRequest,
-  isCredentialTargetId,
-  type CredentialTargetId,
 } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
 import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../shared/host-control.ts";
@@ -423,7 +415,6 @@ import { DATA_DOWNLOADS_DIR } from "./data/engine.ts";
 import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./computer/team-computers.ts";
 import { instructionsLead } from "../shared/instructions-lead.ts";
 import {
-  commPreview,
   isEffortLevel,
   ROUTINE_CONVERSATION_HEADER,
   type BotVisibility,
@@ -436,7 +427,7 @@ import {
   type WireGroup,
   type WireTask
 } from "../shared/wire.ts";
-import { isPersistentQuestionCard, QUESTION_DISMISS_MESSAGE, shouldSettleRequestCard } from "../shared/ask-question.ts";
+import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
 import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import {
   closedTool,
@@ -707,8 +698,7 @@ import {
 } from "./usage/spend.ts";
 import { fleetAvailable, fleetRequest, fleetSocketPath } from "./fleet/fleet-client.ts";
 import { entitled } from "./enterprise.ts";
-import { HOSTED_CONTRACT_HEADER, HOSTED_CONTRACT_METADATA, HOSTED_CONTRACT_VERSION } from "./hosted-contract.ts";
-import { cliCommandRefusal, describeSpawnFailure, execCli, runAsBotEngine } from "./procs.ts";
+import { describeSpawnFailure, execCli, runAsBotEngine } from "./procs.ts";
 import {
   blockedTarget,
   buildNoticeNotification,
@@ -935,6 +925,16 @@ import {
   takeLegacyDelegations,
   type DelegationReceipt
 } from "./peers/delegation-receipts.ts";
+import { RoomMemberLock } from "./room-member-lock.ts";
+import { providerMcpTool, providerToolAllowKey } from "./provider-tool-allow.ts";
+import { createSkillReview, turnToolSteps } from "./skill-review.ts";
+import { listSignedInSites, signOutOfSites } from "./browser-sites.ts";
+import { roomTurnNarrationIds } from "./room-reply.ts";
+import { RoomContextTracker } from "./room-context.ts";
+import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeldMessage, stopWordPlacement } from "./room-holds.ts";
+import { parseSurface } from "./surface.ts";
+import type { RoomLine } from "./memory/memory-capture.ts";
+import { signInOutcome, signInResumePrompt, normalizeSignInSite, signInFallbackText, isPendingSignInRequest } from "../shared/sign-in-request.ts";
 import {
   drainSteeredMessages,
   cancelThreadQueue,
@@ -1187,6 +1187,7 @@ import {
   writeSectionContext
 } from "./rooms/section-context.ts";
 import {
+  applySkillWriteWithReceipt,
   applyStagedSkillWrite,
   getStagedSkillWrite,
   installOrgSkill,
@@ -1209,8 +1210,10 @@ import {
   resolvedSkillFiles,
   expandSkillCommandTurnText,
   skillCommandInline,
+  stageSkillWrite,
   undoSkillWrite
 } from "./skills/skills.ts";
+import { learnSource } from "./skills/skill-learn.ts";
 import { newBotDefaultsSchema } from "./bots/new-bot-defaults.ts";
 import { greetingLanguage } from "./bots/new-bot-greeting.ts";
 import {
@@ -1232,7 +1235,7 @@ import type { SkillRequestCardData } from "../shared/skill-request.ts";
 import {
   checkSoulDrift
 } from "./bots/bot-folder.ts";
-import {
+import { mentionPrompt,
   aiClientPrompt,
   buildSystemPrompt,
   userProfileSystemPrompt,
@@ -1418,7 +1421,6 @@ import { TriggerPollerCredentials } from "./triggers/trigger-poller-credentials.
 import { openTriggerSeenStore } from "./triggers/trigger-seen-store.ts";
 import type { WebhookTrigger } from "../shared/webhooks.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
-import { harnessMcpTokenEnv } from "./harness-mcp-token.ts";
 import {
   installLibrarySkill,
   removeLibrarySkillFrom,
@@ -2740,6 +2742,7 @@ import { createMachineRunRoutes, createMachineRuns } from "./machine-run.ts";
 import { createDeciderRoutes } from "./routes/decider.ts";
 import { createBrowserSiteRoutes } from "./routes/browser-sites.ts";
 import { createSignInCardRoutes } from "./routes/sign-in-cards.ts";
+import { createInternalSignInRoutes } from "./routes/sign-in.ts";
 import { createRoomHoldRoutes } from "./routes/room-holds.ts";
 import { createThreadModelRoutes } from "./routes/thread-models.ts";
 import { createUndoRoutes } from "./routes/undo.ts";
@@ -5197,6 +5200,10 @@ type InternalCapability = {
    * waited on until a later turn, so the teammate gets to work first. */
   delegatedThisTurn?: Set<string>;
   externalRuntime?: ExternalRuntimeGrant;
+  /** Room-coordination / bounded peer tools for this turn. */
+  roomCoordination?: boolean;
+  /** start_thread (and peers) allowed for this turn. */
+  ownThreadCreation?: boolean;
 };
 // Room posts, threads opened and rooms created per turn: the bot's own
 // limits, set by its owner (#1098, shared/turn-limits.ts botTurnLimit).
@@ -5520,6 +5527,8 @@ function agentsIntegration(
   hostFiles = false,
   /** The turn's engine has no web search of its own (server/web-search/native.ts). */
   noNativeWebSearch = false,
+  roomCoordination = false,
+  ownThreadCreation = false,
 ) {
   const token = mintInternalCapability({
     botId,
@@ -5531,6 +5540,8 @@ function agentsIntegration(
     createdBots: 0,
     openedThreads: 0,
     roomHandoffId,
+    roomCoordination,
+    ownThreadCreation,
     // Only an engine whose own tools read and write host files; a Cloud home
     // or hosted workspace keeps attach_file to the conversation's folders.
     ...(hostFiles && !HOSTED_WORKSPACE ? { deliversSavedFiles: true } : {})
@@ -5787,10 +5798,23 @@ type DirectTurnOutcome = {
   ok: boolean;
   text: string;
   stalled?: boolean;
-  evidence?: { toolCalls?: number; tools?: string[]; commands?: number; summary?: string };
+  evidence?: { toolCalls?: number; tools?: string[]; commands?: number; summary?: string; okToolCalls?: number };
+  cap?: { note: string; handoffPath?: string };
+  cards?: { question: string; ids: string[] };
 };
 
 /** Tools the harness saw on this thread since `sinceAt` (coordinated turn evidence for done_when). */
+function turnEvidence(nodeRows: { tool?: { name?: string; ok?: boolean } | null }[]): { toolCalls?: number; tools?: string[]; okToolCalls?: number } {
+  const tools: string[] = [];
+  let okToolCalls = 0;
+  for (const row of nodeRows) {
+    const name = row.tool?.name?.trim();
+    if (!name) continue;
+    if (!tools.includes(name)) tools.push(name);
+    if (row.tool?.ok === true) okToolCalls += 1;
+  }
+  return { toolCalls: tools.length, tools, okToolCalls };
+}
 function turnToolEvidence(threadId: string, sinceAt: number): { toolCalls: number; tools: string[] } {
   const names: string[] = [];
   for (const message of store.messagesFor(threadId)) {
@@ -5944,7 +5968,7 @@ function hostTurnResult(node: HandoffView | undefined, generation: string, outco
 function settleDirectCoordination(generation: string | undefined, outcome: DirectTurnOutcome) {
   if (!generation) return;
   coordinator.sourceSettled(generation, outcome.ok, outcome.stalled === true);
-  const settle = directCoordinationSettlers.get(generation);
+  const settler = directCoordinationSettlers.get(generation);
   directCoordinationSettlers.delete(generation);
   const node = coordinator.node(settler?.nodeId ?? generation);
   const result = hostTurnResult(node, generation, outcome);
@@ -5997,7 +6021,7 @@ function stopParkedCards(threadId: string): void {
  * Held words wait behind it, as they waited behind the turn it continues;
  * a root waiting on teammates or parked on cards holds nothing back (a
  * typed line there is its own turn, decision 3). */
-function directRootQueued(threadId: string): boolean {
+export function directRootQueued(threadId: string): boolean {
   return coordinator.all().some((n) => !n.parentId && !n.groupId && n.threadId === threadId && n.status === "queued");
 }
 
@@ -6452,7 +6476,7 @@ async function interruptDirectThread(botId: string, threadId: string, options?: 
   // A safe-point cut, a park or an engine change is not that Stop: the
   // teammates' results still come back and resume this conversation (owner report,
   // 2026-11-01: "the bots do not answer me, I have to relaunch them").
-  if (!interruptKeepsTeammates(options?.cause ?? "stop")) noteTeammatesLeftRunning(botId, threadId, coordinator.stopAwaitingDirect(threadId));
+  if (!interruptKeepsTeammates(options?.cause ?? "stop")) noteTeammatesLeftRunning(threadId, coordinator.stopAwaitingDirect(threadId));
   const owner = botForThread(botId, threadId);
   const generation = directTurnGenerationByThread.get(threadId);
   cancelDirectTurnDispatch(botId, threadId);
@@ -6485,7 +6509,7 @@ function noteTeammatesLeftRunning(threadId: string, running: HandoffView[]): voi
  * lazy claim (#1651): the turn settles and its root continues in place
  * when the seat frees. Not a Stop: the request stays the person's, nothing
  * the conversation awaits is cancelled, and the root is not. */
-async function interruptParkedTurn(botId: string, threadId: string): Promise<void> {
+export async function interruptParkedTurn(botId: string, threadId: string): Promise<void> {
   const owner = botForThread(botId, threadId);
   const generation = directTurnGenerationByThread.get(threadId);
   cancelDirectTurnDispatch(botId, threadId);
@@ -11663,7 +11687,7 @@ const goalWorkerTurns = new Map<string, { systemInstructions: string; onClaimed:
 const groupTurnOperations = new Map<string, Set<GroupTurnOperation>>();
 // Group threads: the fold needs to know who is talking. The turn engine
 // records the active member here before dispatching its turn.
-const groupSpeakers = new Map<string, { botId: string; name: string; color: string }>();
+const groupSpeakers = new Map<string, { botId: string; name: string; color: string; since?: number }>();
 const groupApprovalRequests = new Map<string, { messageId: string }>();
 
 function groupThreadIsWorking(groupId: string, threadId: string): boolean {
@@ -12454,13 +12478,8 @@ function oneOwnerRoom(room: Pick<GroupRecord, "memberIds">, also?: BotRecord): b
   return !first || members.every((member) => sameOwnerBots(first, member));
 }
 
-function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "botId"> & Partial<Pick<HandoffView, "kind">>, parent?: Pick<HandoffView, "groupId" | "threadId" | "botId">): string | undefined {
-  const group = node.groupId ? store.group(node.groupId) : undefined;
-  const bot = store.bot(node.botId);
-  if (!bot || bot.hidden) return "The addressed agent no longer exists";
-  if (!group || !(group.dm ? group.threadId === node.threadId : store.groupTaskByThread(group.id, node.threadId))) return "Destination room task no longer exists";
-  if (!group.memberIds.includes(bot.id)) return "The addressed agent is no longer a member of this room";
-  return undefined;
+function roomRootProblem(node: Pick<HandoffView, "groupId" | "threadId" | "botId">): string | undefined {
+  return roomHandoffProblem(node);
 }
 function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "botId"> & Partial<Pick<HandoffView, "kind">>, parent?: Pick<HandoffView, "groupId" | "threadId" | "botId">): string | undefined {
   const group = node.groupId ? store.group(node.groupId) : undefined;
@@ -13149,6 +13168,7 @@ const coordinator: Coordinator = createCoordinator({
       // thread and is polling us. Chaining behind it deadlocks; run inline.
       // Ordinary room handoffs keep the queue (they start once the room is
       // free, see host.busy / groupIsWorking).
+      const result: GroupTurnOrchestration["result"] = {};
       const orchestration = goalWorker
         ? { roomHandoffId: node.id, resumed, systemInstructions, followMentions: false as const, result,
           onClaimed: goalWorker.onClaimed,
@@ -13196,7 +13216,7 @@ const coordinator: Coordinator = createCoordinator({
         requester: parent ? store.bot(parent.botId)?.name ?? "Teammate" : person ?? "the user",
         assignee: teammateNameFor(node, parent),
         person,
-        thread: store.taskByThread(parent?.botId ?? node.botId, parent?.threadId ?? node.threadId)?.title
+        thread
       };
     },
     // A teammate ended its turn on a question for the person: one card where
@@ -13685,7 +13705,7 @@ async function waitForGroupMemberBot(
 const heldInterrupts = new Set<string>();
 /** `${threadId}:${botId}` of a member being re-asked for the result its
  * turn did not post (one re-ask per turn). */
-const summaryReasks = new Set<string>();
+export const summaryReasks = new Set<string>();
 
 function roomHeld(group: GroupRecord | null | undefined, botId: string): boolean {
   return Boolean(group && !group.dm && group.holds?.[botId]);
@@ -13696,7 +13716,7 @@ function roomThreadIds(group: GroupRecord): string[] {
 }
 
 /** The newest text on a room thread: what addressed a member just now. */
-function latestRoomTextId(threadId: string): string | undefined {
+export function latestRoomTextId(threadId: string): string | undefined {
   return store.activePath(threadId).findLast((message) => message.kind === "text" && Boolean(message.text))?.id;
 }
 
@@ -13740,7 +13760,7 @@ async function interruptHeldMember(groupId: string, botId: string): Promise<void
 /** Set or release holds from one human room message. Applied when the
  * message is accepted — before it queues behind a busy room — so a stop
  * reaches a member that is working right now. */
-function applyRoomHoldsFromMessage(groupId: string, text: string): void {
+export function applyRoomHoldsFromMessage(groupId: string, text: string): void {
   const group = store.group(groupId);
   if (!group || group.dm) return;
   const members = group.memberIds
@@ -13768,7 +13788,7 @@ function setRoomHold(groupId: string, botId: string, held: boolean): GroupRecord
 
 /** What reached a member while it was held, on this thread: shown to its
  * next turn there, then cleared (clearHeldReplay). */
-function heldReplayFor(groupId: string, threadId: string, botId: string, userName: string, roomContext: string): { block: string; messageIds: string[] } {
+export function heldReplayFor(groupId: string, threadId: string, botId: string, userName: string, roomContext: string): { block: string; messageIds: string[] } {
   const entries = (store.group(groupId)?.heldMessages?.[botId] ?? []).filter((entry) => entry.threadId === threadId);
   if (!entries.length) return { block: "", messageIds: [] };
   const messages = store.messagesFor(threadId);
@@ -13788,7 +13808,7 @@ function heldReplayFor(groupId: string, threadId: string, botId: string, userNam
   };
 }
 
-function clearHeldReplay(groupId: string, botId: string, messageIds: readonly string[]): void {
+export function clearHeldReplay(groupId: string, botId: string, messageIds: readonly string[]): void {
   if (!messageIds.length) return;
   const group = store.group(groupId);
   const current = group?.heldMessages?.[botId];
@@ -17990,98 +18010,6 @@ function captureTurnFor(threadId: string, turnId: string): CaptureTurn | null {
   };
 }
 
-// Prompt-cache keep-warm (server/cache-keepwarm.ts; design from Cache Tax,
-// MIT, Karan Bansal): an idle Claude thread with a big context gets one
-// forked, tool-less cache read per idle stretch while its window is open,
-// instead of a full re-write on the next message. Off unless switched on.
-const keepWarmTargets = new Map<string, KeepWarmTarget>();
-const keepWarmContext = new Map<string, number>();
-/** The bot a thread's turn runs for: its own 1:1 thread, or a room's speaker. */
-function keepWarmBotFor(threadId: string): BotRecord | null {
-  return store.botByThread(threadId) ?? (groupSpeakers.get(threadId) ? store.bot(groupSpeakers.get(threadId)!.botId) : null);
-}
-const cacheKeepWarm = createCacheKeepWarm({
-  now: () => Date.now(),
-  after: (ms, fn) => {
-    const timer = setTimeout(fn, ms);
-    timer.unref?.();
-    return { cancel: () => clearTimeout(timer) };
-  },
-  windowMs: (botId) => {
-    const bot = store.bot(botId);
-    const workspace = cacheKeepWarmSettings(cfg);
-    const on = bot?.cacheKeepWarm ?? workspace.enabled;
-    return bot && on ? workspace.windowMinutes * 60_000 : null;
-  },
-  ineligible: ({ threadId, botId, instanceId }) => {
-    if (!store.bot(botId)) return "the bot was deleted";
-    if (!store.taskByThread(botId, threadId) && !store.groupByThread(threadId)) return "the thread was deleted";
-    const instance = registry.get(instanceId);
-    if (!instance?.adapter.cacheKeepWarm) return "this engine cannot keep its cache warm";
-    if (policyModelRefusal(instance)) return "this engine is not allowed here";
-    // A metered API key's cache lives five minutes: pinging it costs more
-    // than the re-write it saves (see server/cache-keepwarm.ts).
-    if (registry.lastSnapshot(instanceId)?.billing !== "subscription") return "keep-warm runs only on a Claude subscription sign-in";
-    return null;
-  },
-  busy: ({ threadId, botId }) => threadBusy(botId, threadId) || botHasActiveTurn(botId) || Boolean(store.groupByThread(threadId)?.busyBotId),
-  overBudget: () => spendState(cfg, DATA_DIR)?.exceeded === true,
-  ping: async ({ threadId, instanceId }, signal) => {
-    const warm = registry.get(instanceId)?.adapter.cacheKeepWarm;
-    return warm ? warm.ping(threadId, { signal }) : { ok: false, reason: "this engine cannot keep its cache warm" };
-  },
-  hold: ({ threadId, instanceId }, until) => { registry.get(instanceId)?.adapter.cacheKeepWarm?.hold(threadId, until); },
-  book: ({ threadId, botId, instanceId }, result) => {
-    const bot = store.bot(botId);
-    const instance = registry.get(instanceId);
-    if (!bot || !instance) return;
-    // The ledger only (spend and the cap): a ping is not a turn of the thread.
-    bookTurnUsage({
-      botId: bot.id,
-      botName: bot.name,
-      threadId,
-      instanceId,
-      driverKind: instance.driverKind,
-      model: result.model ?? store.taskByThread(bot.id, threadId)?.modelSelection?.model ?? bot.modelSelection.model,
-      input: result.input + result.cacheRead + result.cacheWrite,
-      output: result.output,
-      cachedInput: result.cacheRead,
-      costUsd: result.costUsd,
-      trigger: { kind: "bot", botId: bot.id },
-    });
-  },
-  changed: ({ threadId }) => {
-    const bot = store.botByThread(threadId);
-    if (bot) broadcast({ kind: "bot", bot: wireBot(bot) });
-  },
-});
-cacheKeepWarmStatus = (threadId) => cacheKeepWarm.status(threadId);
-onConfigSaved((before, after) => {
-  if (JSON.stringify(before.cacheKeepWarm ?? null) !== JSON.stringify(after.cacheKeepWarm ?? null)) setImmediate(() => cacheKeepWarm.refresh());
-});
-bus.subscribe((event: RuntimeEvent) => {
-  if (shouldIgnoreProviderEvent(event)) return;
-  try {
-    if (event.type === "thread.token-usage.updated") {
-      if (event.contextTokens !== undefined) keepWarmContext.set(event.threadId, event.contextTokens);
-    } else if (event.type === "turn.started") {
-      keepWarmContext.delete(event.threadId);
-      const bot = keepWarmBotFor(event.threadId);
-      if (bot && event.providerInstanceId) keepWarmTargets.set(event.threadId, { threadId: event.threadId, botId: bot.id, instanceId: event.providerInstanceId });
-      cacheKeepWarm.noteTurnStarted(event.threadId);
-    } else if (event.type === "turn.completed") {
-      const target = keepWarmTargets.get(event.threadId);
-      const contextTokens = keepWarmContext.get(event.threadId);
-      keepWarmTargets.delete(event.threadId);
-      keepWarmContext.delete(event.threadId);
-      // A routine run's thread is one-off: nobody comes back to it warm.
-      if (!target || routines?.runForThread(event.threadId)) return;
-      cacheKeepWarm.noteTurnCompleted(target, { ok: event.ok, stopReason: event.stopReason, contextTokens });
-    }
-  } catch (error) {
-    console.warn(`cache keep-warm: ${(error as Error).message}`);
-  }
-});
 
 /** How many room lines before a bot's reply capture reads: what it read
  * since it last spoke there, at most this many. */
@@ -18408,7 +18336,7 @@ bus.subscribe((event: RuntimeEvent) => {
         threadId: event.threadId,
       }),
     }));
-    if (lendingMemory) lendingMemory.trustedWrite(bot.id, writeLine); else writeLine();
+    writeLine();
   } catch {
     // a missing note never fails a turn
   }
@@ -21484,7 +21412,6 @@ bus.subscribe((event: RuntimeEvent) => {
       const computerParked = event.stopReason === "exit_before_result" &&
         turnResourceOwners.get(event.threadId)?.computerParkedOn !== undefined;
       // A step cap is not a broken run: the same turn continues in place.
-      const capContinues = !event.ok && turnStops.read(event.threadId, completedTurnId)?.handoffPath !== undefined;
       // A usage limit: another engine continues the turn, or it waits for the
       // reset (server/usage/limit-failover-host.ts); either way no incident.
       // Prefer backup failover over reconnect-wait / usage requeue when a
@@ -22479,6 +22406,21 @@ function dispatchDelegationWake(botId: string, threadId: string, targetName: str
     });
 }
 
+
+const pendingDelegationWakes = new Map<string, {
+  botId: string;
+  targetName: string;
+  failureReason?: string;
+  routineRunId?: string;
+  budgetAcquired?: boolean;
+  speaker?: TurnSpeaker;
+}>();
+const delegationWakeBudget = new DelegationWakeBudget();
+const roomMemberLock = new RoomMemberLock();
+const roomMemberContexts = new RoomContextTracker();
+const CLOUD_HOME = false;
+function cloudOwnerOnlyThread(_threadId: string): boolean { return true; }
+
 function wakeDelegationSource(source: BotRecord, threadId: string, targetName: string, failureReason?: string, routineRunId?: string, speaker?: TurnSpeaker): void {
   if (!store.taskByThread(source.id, threadId)) return;
   if (!routineDelegationCanResume(threadId, routineRunId)) return;
@@ -22491,12 +22433,18 @@ function wakeDelegationSource(source: BotRecord, threadId: string, targetName: s
     return;
   }
   dispatchDelegationWake(source.id, threadId, targetName, failureReason, routineRunId, false, speaker);
+}
 
 /** Who hands work on from this turn, for the root the first hand-off of the
  * turn opens (docs/runtime-contract.md §9): a standing external runtime
  * (its results wait in its inbox, `reply: poll`), a routine run (a webhook's
  * is outside lineage), a Cloud guest's conversation. Undefined for a
  * person's chat, whose origin the request's own record settles (turnOrigin). */
+function externalRunId(grant: InternalCapability["externalRuntime"]): string {
+  if (grant && typeof grant === "object" && "threadId" in grant) return grant.threadId;
+  return "external";
+}
+
 function handoffOpener(capability: Pick<InternalCapability, "botId" | "threadId" | "externalRuntime">, threadId: string): HandoffOpener | undefined {
   if (capability.externalRuntime) {
     return {
@@ -22530,7 +22478,7 @@ function handoffOpener(capability: Pick<InternalCapability, "botId" | "threadId"
  * when the run's turn ends, before the runtime settles that turn
  * (the fold runs ahead of settleDirectCoordination), so the root is still
  * "source"/"running" then and its children are what tells. */
-function runtimeWorkPending(threadId: string): boolean {
+export function runtimeWorkPending(threadId: string): boolean {
   if (coordinator.outstandingFor(threadId).length > 0) return true;
   return coordinator.all().some(root => !root.parentId && !root.groupId && root.threadId === threadId
     && (root.status === "waiting" || root.status === "resume"
@@ -23698,7 +23646,24 @@ function scheduleVoiceCallWatchdog(botId: string, threadId: string): void {
 // pass runs once more when it is done.
 let drainingQueuedSends = false, queuedSendsDrainOwed = false;
 /** send_prompt wakes waiting for their thread (wakeAfterAgentReply). */
-const pendingAgentReplyWakes = new Map<string, { botId: string; agentName: string; speaker?: TurnSpeaker }>();
+export const pendingAgentReplyWakes = new Map<string, { botId: string; agentName: string; speaker?: TurnSpeaker }>();
+
+function wakeAfterAgentReply(botId: string, threadId: string, agentName: string, speaker?: TurnSpeaker): void {
+  pendingAgentReplyWakes.set(threadId, { botId, agentName, ...(speaker ? { speaker } : {}) });
+  drainQueuedSends();
+}
+function drainAgentReplyWakes(): void {
+  if (pendingAgentReplyWakes.size === 0) return;
+  const pending = [...pendingAgentReplyWakes.entries()];
+  pendingAgentReplyWakes.clear();
+  for (const [threadId, wake] of pending) {
+    if (threadBusy(wake.botId, threadId)) { pendingAgentReplyWakes.set(threadId, wake); continue; }
+    void startTurn(wake.botId, `@${wake.agentName} finished. Continue with what you were doing.`, {
+      threadId, cardContinuation: true, ...(wake.speaker ? { speaker: wake.speaker } : {}),
+    }).catch((error) => console.error(`agent-reply wake failed on ${threadId}: ${error instanceof Error ? error.message : String(error)}`));
+  }
+}
+
 function drainQueuedSends() {
   if (!followupsReady) return;
   if (drainingQueuedSends) { queuedSendsDrainOwed = true; return; }
@@ -26290,7 +26255,7 @@ routines = new RoutineManager({
     // still reports, and nothing resumes the run's thread. Its turn may be
     // over already (the run waits on that work), so the interrupt below
     // would not reach it.
-    if (!store.groupByThread(threadId)) noteTeammatesLeftRunning(botId, threadId, coordinator.stopAwaitingDirect(threadId, "The routine run was stopped"));
+    if (!store.groupByThread(threadId)) noteTeammatesLeftRunning(threadId, coordinator.stopAwaitingDirect(threadId, "The routine run was stopped"));
     cancelDirectTurnDispatch(botId, threadId);
     revokeInternalCapabilitiesForThread(threadId);
     // The person stopped the run: as with a chat's Stop, its node stops
@@ -28356,7 +28321,7 @@ const approvalBus: ApprovalBus = { store, broadcast, notify, autoApply: fullAcce
 /** The brief of a room member's root: the person's line that started the
  * round; for a chained @mention (`hop` > 0), the teammate's reply that
  * summoned the member, with the hop, so the record says who brought it in. */
-function roomTurnBrief(threadId: string, bot: BotRecord, hop: number, latestUser: Message | undefined): string {
+export function roomTurnBrief(threadId: string, bot: BotRecord, hop: number, latestUser: Message | undefined): string {
   const mention = hop > 0
     ? [...store.activePath(threadId)].reverse().find((m) => m.role === "bot" && m.kind === "text" && Boolean(m.text) && m.from !== undefined && m.from.botId !== bot.id)
     : undefined;
@@ -30105,6 +30070,13 @@ type SecretResumeEntry = {
   prompt?: string;
 };
 const pendingSecretResumes = new Map<string, SecretResumeEntry>();
+function drainSecretResumes(): void {
+  if (pendingSecretResumes.size === 0) return;
+  const pending = [...pendingSecretResumes.values()];
+  pendingSecretResumes.clear();
+  for (const entry of pending) dispatchSecretResume(entry);
+}
+
 const phoneSecretSubmissions = new PhoneSecretSubmissionRegistry();
 
 function claimPhoneSecretBotDeletion(botId: string): (() => void) | null {
@@ -30234,7 +30206,7 @@ function resumeSecretCard(botId: string, threadId: string, messageId: string, ou
   if (!message?.secret) return false;
   if (message.secret.resumed) return true;
   // a vault login card carries its own note to the bot (routes/credential-vault.ts)
-  const resumed = answerCardNode(threadId, messageId, prompt ?? credentialUpdateText(message.secret.label, outcome));
+  void answerCardNode(threadId, messageId, prompt ?? credentialUpdateText(message.secret.label, outcome));
   store.patchMessage(threadId, message.id, {
     secret: {
       ...message.secret,
@@ -30357,7 +30329,7 @@ async function provideSecretFromPhone(
 // one notification, the computer plea behind the panel's banner, and the
 // root's park on the card (docs/runtime-contract.md §2) to resume the bot.
 
-function recordTurnPlace(botId: string, threadId: string, place: Surface | null): void {
+export function recordTurnPlace(botId: string, threadId: string, place: Surface | null): void {
   if (place) turnPlaces.set(threadId, { botId, place });
   else turnPlaces.delete(threadId);
 }
@@ -30384,7 +30356,7 @@ function signInControlKey(bot: BotRecord, threadId: string, place: Surface): str
  * A newer request for the same site in this conversation supersedes the
  * older card. The card is appended first, like the credential card's: a
  * failed append leaves the older one actionable. */
-function requestSignIn(from: BotRecord, threadId: string, rawSite: unknown, rawReason: unknown):
+export function requestSignIn(from: BotRecord, threadId: string, rawSite: unknown, rawReason: unknown):
   { messageId: string; site: string; place: Surface } | { status: number; error: string } {
   const owner = connectorThread(from.id, threadId);
   if (!owner) return { status: 403, error: "source conversation does not belong to sender" };
@@ -30728,6 +30700,7 @@ function configStatus() {
       meetingNotetaker: meetingNotetakerEnabled(cfg),
       routineGroupSettings: routineGroupSettingsEnabled(cfg),
       browser: builtInBrowserEnabled(cfg),
+      connectedApps: cfg.features?.connectedApps === true,
       // Maintainer-only escape hatch, not a Settings toggle: the desktop
       // shell and the Settings UI read it so they offer nothing this server
       // would refuse.
@@ -48321,6 +48294,10 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       return true;
     }
     if (await dispatchRoutes([savedSteps.journalRoutes({ capability: internalCapability, readBody: readInternalBody })], { req, res, url, path, method, auth, json, readBody })) return true;
+    if (await dispatchRoutes([createInternalSignInRoutes({
+      readBody: readInternalBody,
+      request: (site, reason) => requestSignIn(internalSender, internalCapability.threadId, site, reason),
+    })], { req, res, url, path, method, auth, json, readBody })) return true;
     // The cloud computer's tools (harness-mcp-proxy computer): the turn's
     // capability names its Boat, and the Boat credential stays here. A
     // capability minted before the Boat existed (boxId null) acts on the
@@ -49426,12 +49403,6 @@ for (const row of chatFollowups()) {
     sendId: row.payload.sendId, queueId: row.id, sender: row.payload.sender,
     ...(row.kind === "channel" ? { channelMode: row.payload.mode, via: row.payload.via } : {}),
     ...(row.kind === "bot" ? spokenLineFields(row.payload.via, row.payload.callId) : {}),
-    ...(row.kind === "aside" ? {
-      aside: true,
-      peerAsk: row.payload.aside
-        ? { botId: row.payload.aside.fromBotId, name: row.payload.aside.fromBotName, ...(row.payload.aside.unattended ? { unattended: true } : {}) }
-        : undefined
-    } : {})
   });
   // Nor as a message a resumed session has not seen: count it as handed.
   const recoveredTask = row.kind !== "channel" ? store.taskByThread(row.ownerId, row.threadId) : undefined;
@@ -49924,7 +49895,7 @@ function resumeTurnsCutByRestart(): void {
   for (const turn of cut.stale) if (store.taskByThread(turn.botId, turn.threadId)) failed(turn.threadId, "turn interrupted — Sagax restarted");
   const resumedThreads = new Set<string>();
   for (const turn of cut.resume) {
-    if (!store.taskByThread(turn.botId, turn.threadId) || threadBusy(turn.botId, turn.threadId) || runtimeAccounts(turn.threadId)) continue;
+    if (!store.taskByThread(turn.botId, turn.threadId) || threadBusy(turn.botId, turn.threadId) || coordinator.continuesAfterRestart(turn.threadId) || runtimeHoldsRoot(turn.threadId)) continue;
     store.appendMessage(turn.threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
     // Messages accepted into the cut turn stay answered once: fold them into
     // this resume (D2), then drop the durable rows so crash recovery does not

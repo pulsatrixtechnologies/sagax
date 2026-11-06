@@ -404,6 +404,10 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     setShowProfiles={setShowProfiles}
     showTyping={showTyping}
     setShowTyping={setShowTyping}
+    masked={masked}
+    setMasked={setMasked}
+    takeControl={takeControl}
+    handBack={handBack}
     viewport={viewport}
     takeStatus={takeStatus}
     busy={busy}

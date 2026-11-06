@@ -1,6 +1,6 @@
 import type { ComputerHelpRef } from "../../shared/wire";
 
-export type ComputerControlAction = "take" | "release";
+export type ComputerControlAction = "take" | "release" | "dismiss-help";
 
 export interface ComputerControlSnapshot {
   held: boolean;

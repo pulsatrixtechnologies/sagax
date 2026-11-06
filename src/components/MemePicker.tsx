@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { materializeMeme, searchMemes, type MemeSearchHit } from "@/lib/memes";
 import { readableErrorMessage } from "@/lib/readable-error";
+import { SECONDARY_CIRCLE } from "./ComposerControls";
 
 export interface MemeAttachmentPick {
   kind: "image";
@@ -214,9 +215,10 @@ export function MemePickerButton({
       aria-expanded={open}
       disabled={disabled}
       onClick={onToggle}
-      className="flex size-7 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink disabled:opacity-40"
+      className={SECONDARY_CIRCLE}
     >
-      <ImagePlay size={16} strokeWidth={2} aria-hidden="true" />
+      {/* #2295: the composer's own icon button, the same as the + beside it */}
+      <ImagePlay size={15} strokeWidth={2.25} aria-hidden="true" />
     </button>
   );
 }

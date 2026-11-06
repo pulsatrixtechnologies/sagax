@@ -81,6 +81,14 @@ export interface MascotLookEditorProps {
   initialTab?: EditorTab;
   /** Only the hero card, for the bot's own look: the profile page's header while the editor is closed (#2313). */
   heroOnly?: boolean;
+  /** Draws the hero card (false while a picture, not the mascot, is the bot's avatar: the page keeps its picture hero). */
+  hero?: boolean;
+  /** Opens the Mascot tab's tool row, beside the search and the filters: the avatar source switch (AppearancePane). */
+  sources?: ReactNode;
+  /** In the Mascot tab in place of the gallery: a picture source (Generate, Upload) or the picture in use. */
+  sourcePanel?: ReactNode;
+  /** At the right of the tab row, before Randomize: Reset (AppearancePane). */
+  tabActions?: ReactNode;
 }
 
 export const CHARACTER_LABEL = {
@@ -664,17 +672,31 @@ export function randomLook({ listed, look, color, owlSkin, characterLocked, skin
   return patch;
 }
 
-export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, onOwlMove, initialTab = "mascot", heroOnly = false }: MascotLookEditorProps) {
+export default function MascotLookEditor({
+  bot,
+  disabled,
+  onPatch: savePatch,
+  onOwlMove,
+  initialTab = "mascot",
+  heroOnly = false,
+  hero = true,
+  sources,
+  sourcePanel,
+  tabActions,
+}: MascotLookEditorProps) {
   // On the bot's profile page the hero card is the page's header: the open
-  // editor draws it there (a portal) and keeps Randomize over its tabs.
+  // editor draws it there (a portal) and keeps Randomize in its tab row.
   const slot = useMascotHeroSlot();
-  const portalTarget = !heroOnly && slot ? slot.target : null;
+  const portalTarget = !heroOnly && hero && slot ? slot.target : null;
   const claim = slot?.claim;
   useEffect(() => {
-    if (heroOnly || !claim) return;
+    if (heroOnly || !hero || !claim) return;
     claim(true);
     return () => claim(false);
-  }, [heroOnly, claim]);
+  }, [heroOnly, hero, claim]);
+  // Randomize sits on the preview card, unless the card is the page's header
+  // (or not drawn): then it sits at the right of the tab row, beside Reset.
+  const randomizeInTabRow = !heroOnly && (Boolean(slot) || !hero);
   const look = completeMascotLook(bot.mascotLook);
   const owlSkin = botMascotSkin(bot.mascotSkin);
   // what this person unlocked (src/lib/achievements.ts); what the bot wears now always stays.
@@ -864,7 +886,7 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
         onUse={() => setLook({ character: shown })}
         onPlay={play}
         onPlayNext={playNext}
-        onRandomize={slot ? undefined : randomize}
+        onRandomize={slot || randomizeInTabRow ? undefined : randomize}
         heading={slot?.heading}
         subheading={slot?.subheading}
         action={slot?.action}
@@ -876,94 +898,103 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
 
   return (
     <div data-mascot-look-editor="" className="flex flex-col gap-4">
-      {slot ? (
-        <>
-          {portalTarget && createPortal(preview, portalTarget)}
-          <div className="flex justify-end">
-            <button type="button" data-mascot-randomize="" disabled={disabled} onClick={randomize} className={MASCOT_HERO_BUTTON}>
-              <Shuffle size={13} aria-hidden="true" />
-              {t("appearance.randomize")}
-            </button>
-          </div>
-        </>
-      ) : preview}
+      {slot ? portalTarget && createPortal(preview, portalTarget) : hero && preview}
 
-      {/* the tabs: each its current value under its label, the open one underlined in the bot's color */}
-      <div role="tablist" aria-label={t("appearance.tabs")} className="flex gap-1 overflow-x-auto border-b border-hairline-weak" data-appearance-tabs="">
-        {tabs.map((id) => {
-          const selected = id === tab;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`appearance-tab-${id}`}
-              aria-selected={selected}
-              aria-controls="appearance-tab-panel"
-              tabIndex={selected ? 0 : -1}
-              data-appearance-tab={id}
-              onClick={() => setTab(id)}
-              onKeyDown={(event) => {
-                const next = nextTab(tabs, tab, event.key);
-                if (next == null) return;
-                event.preventDefault();
-                setTab(next);
-                event.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-appearance-tab="${next}"]`)?.focus();
-              }}
-              style={{ borderBottomColor: selected ? ink : "transparent" }}
-              className={cn(
-                "-mb-px flex min-w-0 shrink-0 flex-col items-start gap-0.5 border-b-2 px-4 pb-2.5 pt-2 text-left transition-colors",
-                focusRing,
-                selected ? "text-ink" : "text-ink-secondary hover:text-ink",
-              )}
-            >
-              <span className="text-[13.5px] font-medium leading-5">{t(EDITOR_TAB_LABEL[id])}</span>
-              <span className="max-w-[10rem] truncate text-[11.5px] leading-4 text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>
-            </button>
-          );
-        })}
+      {/* the tabs: each its current value under its label, the open one underlined in the bot's color; Reset and Randomize at the right */}
+      <div className="flex min-w-0 items-center gap-2 border-b border-hairline-weak" data-appearance-tab-bar="">
+        <div role="tablist" aria-label={t("appearance.tabs")} className="flex min-w-0 flex-1 gap-1 overflow-x-auto" data-appearance-tabs="">
+          {tabs.map((id) => {
+            const selected = id === tab;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`appearance-tab-${id}`}
+                aria-selected={selected}
+                aria-controls="appearance-tab-panel"
+                tabIndex={selected ? 0 : -1}
+                data-appearance-tab={id}
+                onClick={() => setTab(id)}
+                onKeyDown={(event) => {
+                  const next = nextTab(tabs, tab, event.key);
+                  if (next == null) return;
+                  event.preventDefault();
+                  setTab(next);
+                  event.currentTarget.parentElement?.querySelector<HTMLElement>(`[data-appearance-tab="${next}"]`)?.focus();
+                }}
+                style={{ borderBottomColor: selected ? ink : "transparent" }}
+                className={cn(
+                  "-mb-px flex min-w-0 shrink-0 flex-col items-start gap-0.5 border-b-2 px-4 pb-2.5 pt-2 text-left transition-colors",
+                  focusRing,
+                  selected ? "text-ink" : "text-ink-secondary hover:text-ink",
+                )}
+              >
+                <span className="text-[13.5px] font-medium leading-5">{t(EDITOR_TAB_LABEL[id])}</span>
+                <span className="max-w-[10rem] truncate text-[11.5px] leading-4 text-ink-tertiary" data-appearance-tab-value="">{tabValue[id]}</span>
+              </button>
+            );
+          })}
+        </div>
+        {(tabActions || randomizeInTabRow) && (
+          <div className="flex shrink-0 items-center gap-2 pb-1.5" data-appearance-tab-actions="">
+            {tabActions}
+            {randomizeInTabRow && (
+              <button type="button" data-mascot-randomize="" disabled={disabled} onClick={randomize} className={MASCOT_HERO_BUTTON}>
+                <Shuffle size={13} aria-hidden="true" />
+                {t("appearance.randomize")}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div id="appearance-tab-panel" role="tabpanel" aria-labelledby={`appearance-tab-${tab}`} data-appearance-tab-panel={tab} data-character-options={shown}>
         {tab === "mascot" && (
           <div ref={browser} data-mascot-browser="" className="flex min-w-0 flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex h-8 min-w-[12rem] flex-1 items-center gap-1.5 rounded-lg border border-hairline-weak bg-elevated px-2.5 @[34rem]:max-w-[18rem]">
-                <Search size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    // Escape clears a search first; an empty one leaves Escape to the modal
-                    if (event.key === "Escape" && query) {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setQuery("");
-                    }
-                  }}
-                  placeholder={t("appearance.search", { count: listed.length })}
-                  aria-label={t("appearance.searchLabel")}
-                  data-mascot-search=""
-                  className="w-full min-w-0 bg-transparent text-[12.5px] text-ink placeholder:text-ink-secondary focus:outline-none"
-                />
-              </label>
-              <div role="group" aria-label={t("appearance.filters")} className="flex flex-wrap gap-1.5" data-mascot-filters="">
-                {filters.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    aria-pressed={filter === id}
-                    data-mascot-filter={id}
-                    onClick={() => setFilter(id)}
-                    className={cn(chip, focusRing, filter === id ? chipOn : chipOff)}
-                  >
-                    {filterLabel(id)}
-                  </button>
-                ))}
-              </div>
+            <div className="flex flex-wrap items-center gap-2" data-mascot-tools="">
+              {sources}
+              {!sourcePanel && (
+                <>
+                  <label className="flex h-8 min-w-[12rem] flex-1 items-center gap-1.5 rounded-lg border border-hairline-weak bg-elevated px-2.5 @[34rem]:max-w-[18rem]">
+                    <Search size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
+                    <input
+                      type="search"
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        // Escape clears a search first; an empty one leaves Escape to the modal
+                        if (event.key === "Escape" && query) {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setQuery("");
+                        }
+                      }}
+                      placeholder={t("appearance.search", { count: listed.length })}
+                      aria-label={t("appearance.searchLabel")}
+                      data-mascot-search=""
+                      className="w-full min-w-0 bg-transparent text-[12.5px] text-ink placeholder:text-ink-secondary focus:outline-none"
+                    />
+                  </label>
+                  <div role="group" aria-label={t("appearance.filters")} className="flex flex-wrap gap-1.5" data-mascot-filters="">
+                    {filters.map((id) => (
+                      <button
+                        key={id}
+                        type="button"
+                        aria-pressed={filter === id}
+                        data-mascot-filter={id}
+                        onClick={() => setFilter(id)}
+                        className={cn(chip, focusRing, filter === id ? chipOn : chipOff)}
+                      >
+                        {filterLabel(id)}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-            {shelves.map(({ shelf, entries }) => (
+            {sourcePanel}
+            {!sourcePanel && shelves.map(({ shelf, entries }) => (
               <section key={shelf} data-mascot-shelf={shelf} aria-labelledby={`mascot-shelf-${shelf}`}>
                 <div className="mb-1.5 flex items-baseline gap-2">
                   <h3 id={`mascot-shelf-${shelf}`} className={heading}>{t(SHELF_LABEL[shelf])}</h3>
@@ -990,7 +1021,7 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
                 </div>
               </section>
             ))}
-            {shelves.length === 0 && (
+            {!sourcePanel && shelves.length === 0 && (
               <p className="py-4 text-center text-[12px] text-ink-secondary" data-mascot-empty="">
                 {query.trim() ? t("appearance.noMatch", { query: query.trim() }) : t("appearance.empty")}
               </p>

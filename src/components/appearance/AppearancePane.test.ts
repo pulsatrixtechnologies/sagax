@@ -16,6 +16,7 @@ import { botMascotLook, completeMascotLook, CRAB_SKINS } from "../../../shared/m
 import { MASCOT_SKIN_IDS } from "../../../shared/mascot-skins";
 import MascotLookEditor, { editorTabsFor, randomLook, type EditorTab, type MascotLookPatch } from "../floating-bots/MascotLookEditor";
 import { MASCOTS } from "../floating-bots/mascots";
+import { MascotHeroSlotContext, type MascotHeroSlot } from "../floating-bots/mascot-hero-slot";
 import { AppearancePane, initialAppearanceMode } from "./AppearancePane";
 
 const closeWindow = installHappyWindow();
@@ -37,7 +38,6 @@ function makeBot(overrides: Partial<Bot> = {}): Bot {
   };
 }
 
-const renderPane = (bot: Bot) => renderToStaticMarkup(createElement(StoreProvider, null, createElement(AppearancePane, { bot, onPatch: vi.fn() })));
 const renderEditor = (bot: Bot, initialTab?: EditorTab) => renderToStaticMarkup(createElement(MascotLookEditor, { bot, onPatch: vi.fn(), initialTab }));
 const enforce = (rewards: string[]) => resetAchievementsForTests({ status: "ready", snapshot: { rewards, items: [] } as unknown as AchievementSnapshot });
 
@@ -46,30 +46,94 @@ afterEach(() => resetAchievementsForTests());
 afterAll(() => closeWindow());
 
 describe("the Appearance pane", () => {
-  it("offers Mascot, Generate and Upload as tabs, Reset on the right", () => {
-    const html = renderPane(makeBot());
-    expect([...html.matchAll(/data-appearance-mode="(\w+)"/g)].map((match) => match[1])).toEqual(["mascot", "generate", "upload"]);
-    expect(html).toContain('role="tablist" aria-label="Avatar source"');
-    expect(html).toMatch(/aria-selected="true"[^>]*data-appearance-mode="mascot"/);
-    expect(html).toMatch(/data-appearance-reset=""[^>]*>Reset</);
-    // a size container: the gallery lays itself out on the pane's width, not the window's
-    expect(html).toContain('class="@container" data-appearance-pane=""');
+  let host: HTMLDivElement;
+  let root: ReturnType<typeof createRoot>;
+
+  beforeEach(() => {
+    setLocale("en");
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
   });
 
-  it("opens a custom picture on Upload, with its zoom and framing", () => {
+  // The pane as the bot's profile page shows it: inside the page's hero slot (#2313).
+  const mountPane = async (bot: Bot, inPage = false) => {
+    const target = document.createElement("div");
+    const slot: MascotHeroSlot = { target, claim: () => {}, heading: "Maus" };
+    const pane = createElement(StoreProvider, null, createElement(AppearancePane, { bot, onPatch: vi.fn() }));
+    await act(async () => root.render(inPage ? createElement(MascotHeroSlotContext.Provider, { value: slot }, pane) : pane));
+    // the editor's lazy chunk
+    for (let tick = 0; tick < 5 && !host.querySelector("[data-mascot-look-editor]"); tick++) await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(host.querySelector("[data-mascot-look-editor]")).not.toBeNull();
+  };
+  const inside = (selector: string, container: string) => Boolean(host.querySelector(container)?.querySelector(selector));
+
+  it("offers Mascot, Generate and Upload as tabs in the Mascot tab's tool row, Reset at the right of the tab row", async () => {
+    await mountPane(makeBot());
+    expect([...host.querySelectorAll("[data-appearance-mode]")].map((element) => element.getAttribute("data-appearance-mode"))).toEqual(["mascot", "generate", "upload"]);
+    expect(host.querySelector('[role="tablist"][aria-label="Avatar source"]')).not.toBeNull();
+    expect(host.querySelector('[data-appearance-mode="mascot"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(inside("[data-appearance-modes]", "[data-mascot-tools]")).toBe(true);
+    expect(inside("[data-mascot-search]", "[data-mascot-tools]")).toBe(true);
+    expect(host.querySelector("[data-appearance-reset]")?.textContent).toBe("Reset");
+    expect(inside("[data-appearance-reset]", "[data-appearance-tab-bar] [data-appearance-tab-actions]")).toBe(true);
+    // a size container: the gallery lays itself out on the pane's width, not the window's
+    expect(host.querySelector("[data-appearance-pane]")?.className).toBe("@container");
+  });
+
+  it("opens a custom picture on Upload, in the Mascot tab, with its zoom and framing", async () => {
     expect(initialAppearanceMode({ avatarCrop: "circle", avatarUrl: "/api/attachments/cat.webp" })).toBe("upload");
     expect(initialAppearanceMode({ avatarCrop: "mascot", avatarUrl: "/api/attachments/cat.webp" })).toBe("mascot");
     expect(initialAppearanceMode({})).toBe("mascot");
-    const markup = renderPane(makeBot({ avatarUrl: "/api/attachments/cat.webp", avatarCrop: "circle", avatarZoom: 1.5 }));
-    expect(markup).toMatch(/aria-selected="true"[^>]*data-appearance-mode="upload"/);
+    await mountPane(makeBot({ avatarUrl: "/api/attachments/cat.webp", avatarCrop: "circle", avatarZoom: 1.5 }));
+    expect(host.querySelector('[data-appearance-mode="upload"]')?.getAttribute("aria-selected")).toBe("true");
+    const markup = host.querySelector("[data-mascot-browser]")!.innerHTML;
     expect(markup).toContain('aria-label="Zoom avatar"');
     expect(markup).toContain("Drag the picture to reposition it");
     expect(markup).toContain("150%");
     expect(markup).toContain("Reset framing");
+    // the gallery gives way to the source; Shape, Color and Skin stay one click away
+    expect(host.querySelector("[data-mascot-search]")).toBeNull();
+    expect(host.querySelector('[data-appearance-tab="color"]')).not.toBeNull();
   });
 
-  it("hides zoom controls for the mascot", () => {
-    expect(renderPane(makeBot())).not.toContain('aria-label="Zoom avatar"');
+  it("hides zoom controls for the mascot", async () => {
+    await mountPane(makeBot());
+    expect(host.innerHTML).not.toContain('aria-label="Zoom avatar"');
+  });
+
+  it("regression (JC 2026-11-06): on the profile page, colours only in the Color tab, Mascot / Generate / Upload in the Mascot tab, Reset and Randomize in the tab row", async () => {
+    await mountPane(makeBot(), true);
+    // open on Mascot: no colour dot anywhere, the sources beside the search, Reset and Randomize at the right of the tabs
+    expect(host.querySelector('[data-appearance-tab="mascot"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(host.querySelectorAll("[data-mascot-color]").length).toBe(0);
+    expect(inside("[data-appearance-modes]", '[data-appearance-tab-panel="mascot"] [data-mascot-tools]')).toBe(true);
+    expect(inside("[data-appearance-reset]", "[data-appearance-tab-actions]")).toBe(true);
+    expect(inside("[data-mascot-randomize]", "[data-appearance-tab-actions]")).toBe(true);
+    expect(host.querySelectorAll("[data-mascot-randomize]").length).toBe(1);
+    // nothing of the pane before its tab row
+    const bar = host.querySelector("[data-appearance-tab-bar]")!;
+    for (const selector of ["[data-appearance-modes]", "[data-appearance-reset]", "[data-mascot-randomize]"]) {
+      const element = host.querySelector(selector)!;
+      expect(bar.compareDocumentPosition(element) & window.Node.DOCUMENT_POSITION_PRECEDING).toBe(0);
+    }
+    // Skin (Shape too, for Shapes): still no colour dot, no source switch
+    for (const tab of ["skin"]) {
+      await act(async () => host.querySelector<HTMLButtonElement>(`[data-appearance-tab="${tab}"]`)!.click());
+      expect(host.querySelectorAll("[data-mascot-color]").length).toBe(0);
+      expect(host.querySelector("[data-appearance-modes]")).toBeNull();
+    }
+    // Color: the dots, inside its panel; Reset and Randomize still in the tab row
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-appearance-tab="color"]')!.click());
+    expect(host.querySelector("[data-appearance-tab-panel]")?.getAttribute("data-appearance-tab-panel")).toBe("color");
+    expect(host.querySelectorAll('[data-appearance-tab-panel="color"] [data-mascot-color]').length).toBeGreaterThan(0);
+    expect(host.querySelectorAll("[data-mascot-color]").length).toBe(host.querySelectorAll('[data-appearance-tab-panel="color"] [data-mascot-color]').length);
+    expect(inside("[data-appearance-reset]", "[data-appearance-tab-actions]")).toBe(true);
+    expect(inside("[data-mascot-randomize]", "[data-appearance-tab-actions]")).toBe(true);
   });
 });
 

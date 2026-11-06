@@ -92,6 +92,9 @@ describe("BotProfileAvatarCard", () => {
     await act(async () => avatar().click());
     expect(fixture.dispatch).not.toHaveBeenCalled();
     expect(avatar().getAttribute("aria-expanded")).toBe("true");
+    // the source switch sits in the Mascot tab of the lazily loaded editor
+    await import("./floating-bots/MascotLookEditor");
+    for (let tick = 0; tick < 50 && !host.querySelector("[data-appearance-mode]"); tick++) await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
     const modes = [...host.querySelectorAll("[data-appearance-mode]")].map((tab) => tab.textContent);
     expect(modes).toEqual(["Mascot", "Generate", "Upload"]);
     await act(async () => avatar().click());

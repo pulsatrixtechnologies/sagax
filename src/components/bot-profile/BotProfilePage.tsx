@@ -2,9 +2,9 @@
 // surface that edits one bot, filling the main panel in place of the chat.
 // Its top is the bot's appearance, edited in place: a banner in the mascot's
 // colour with the mascot over its lower edge, "Name · Label", who sees it
-// ("Private to you") and the owner, the description, the colour dots and an
-// Appearance pill that unfolds the full appearance pane (mascot, motion,
-// desktop) under them. Then four pill tabs, each a page of cards laid out in
+// ("Private to you") and the owner, the description and an
+// Appearance pill that unfolds the full appearance pane (its four tabs; the
+// colour dots live in its Color tab only) under them. Then four pill tabs, each a page of cards laid out in
 // two columns on a wide window and one under 900px:
 //
 // - General: the bot's channels (Slack, email, Reach me, Mac Messages), each
@@ -59,10 +59,10 @@ import {
   personaCategoryForSection,
 } from "@/lib/persona-sections";
 import { personaSharingSummary } from "@/lib/bot-sharing";
-import { MAUS_COLORS, swatchStyle } from "@/lib/mascot";
+import { MAUS_COLORS } from "@/lib/mascot";
 import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
-import { mascotColorGroup, paletteSwatches } from "../../../shared/mascot-colors";
+import { mascotColorGroup } from "../../../shared/mascot-colors";
 import { botMascotSkin } from "../../../shared/mascot-skins";
 import { completeMascotLook } from "../../../shared/mascot-look";
 import type { MessagesSetupStatus } from "../../../shared/mac-messages-setup";
@@ -430,8 +430,6 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   const canName = canEditBotField(state.config, bot, "name");
   const canLabel = canEditBotField(state.config, bot, "title");
   const canDescribe = canEditBotField(state.config, bot, "description");
-  const canColor = canEditBotField(state.config, bot, "color") && lockOf("appearance") === null;
-  const colors = paletteSwatches(mascotColorGroup(bot.color));
 
   const tabs: readonly BotProfileTab[] = BOT_PROFILE_TABS.filter(tabShown);
 
@@ -513,8 +511,8 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
       />
     </div>
   ) : undefined;
-  // Where the hero's Randomize was: Appearance unfolds the sources, the
-  // tabs, the grid, Reset and Randomize under the header.
+  // Where the hero's Randomize was: Appearance unfolds its four tabs under
+  // the header (the sources in the Mascot tab, Reset and Randomize in the tab row).
   const appearanceButton = shown("appearance") ? (
     <button
       type="button"
@@ -640,7 +638,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
         {/* One centred column, 1100px wide at most, a 16px gutter on a phone. */}
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[1100px] flex-col px-4 pb-10 sm:px-6">
           {/* The header: the mascot hero card with the bot's name and label,
-              then who sees it, its description and its colour, edited in place. */}
+              then who sees it and its description, edited in place. */}
           <header data-bot-profile-header="" data-bot-profile-section="overview" data-persona-section="overview" data-open="" className="flex min-w-0 flex-col">
             <div
               data-bot-profile-hero=""
@@ -718,29 +716,8 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
                 {bot.description.trim() || <span className="text-ink-secondary">{t("persona.overview.noDescription")}</span>}
               </p>
             )}
-            {/* The colour dots; the hero's Appearance button unfolds the rest. */}
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-              {canColor && (
-                <div role="radiogroup" aria-label={t("mascot.color.title")} data-bot-profile-colors="" className="flex flex-wrap items-center gap-2">
-                  {colors.map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      role="radio"
-                      aria-checked={bot.color === name}
-                      aria-label={t("mascot.color.use", { color: name })}
-                      data-mascot-color={name}
-                      onClick={() => derived.patch({ color: name })}
-                      style={swatchStyle(name)}
-                      className={cn(
-                        "size-6 shrink-0 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                        bot.color === name && "ring-2 ring-ink/80 ring-offset-2 ring-offset-app",
-                      )}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Nothing of the Appearance shows here while it is folded: the colour
+                dots live in its Color tab only (JC 2026-11-06). */}
             {appearanceOpen && shown("appearance") && (
               <section
                 id="bot-profile-appearance"

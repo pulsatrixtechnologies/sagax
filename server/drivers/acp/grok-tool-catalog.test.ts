@@ -14,8 +14,13 @@ import {
   sagaxAgentToolBareName,
 } from "./grok-tool-catalog.ts";
 import { GROK_KNOWN_TOOLS_SECTION } from "./grok-tool-usage.ts";
+import { grokTurnCatalogSection } from "./grok.ts";
+import { resetTurnActiveProfileResolver, setTurnActiveProfileResolver } from "../../turns/turn-active-profile.ts";
 
-afterEach(() => resetGrokCatalogs());
+afterEach(() => {
+  resetGrokCatalogs();
+  resetTurnActiveProfileResolver();
+});
 
 // the shape grok 1.0.62 answers `_x.ai/mcp/list` with (measured 2026-10-22)
 const LIST = {
@@ -329,5 +334,43 @@ describe("duplicate Sagax agent tools across Perspicax gateway connectors (#1050
     expect(text).toMatch(/Sagax agent tools \(await_turn, list_agents, send_prompt\) kept once on this connector/);
     expect(text).not.toContain("cursor__user-personal-bot-send_5fprompt___11");
     expect(text).not.toContain("cursor__user-default-send_5fprompt___12");
+  });
+
+  // #2258: volatileSection reads the turn's active Perspicax profile and
+  // keeps Sagax agent tools on that connector (not the alphabetically first).
+  it("grokTurnCatalogSection keeps agent tools on the turn's active profile connector", () => {
+    setTurnActiveProfileResolver((threadId, botId) => {
+      expect(threadId).toBe("thread-active");
+      expect(botId).toBe("bot-1");
+      return "personal-bot";
+    });
+    rememberGrokCatalog("session-active", DUPLICATE_SAGAX_AGENT);
+    const text = grokTurnCatalogSection({
+      botId: "bot-1",
+      serverNames: [],
+      sessionId: "session-active",
+      threadId: "thread-active",
+    })!.text;
+    expect(text).toMatch(/personal-bot \(4 tools, e\.g\. cursor__user-personal-bot-/);
+    expect(text).toMatch(/Sagax agent tools \(await_turn, list_agents, send_prompt\) kept once on this connector/);
+    expect(text).not.toContain("cursor__user-default-send_5fprompt___12");
+    expect(text).not.toContain("cursor__user-dispatch-send_5fprompt___10");
+    // without the turn profile, "default" would keep the shared agent tools
+    expect(text).toMatch(/default \(1 tool/);
+  });
+
+  it("grokTurnCatalogSection keeps the first connector when the turn has no active profile", () => {
+    setTurnActiveProfileResolver(() => undefined);
+    rememberGrokCatalog("session-none", DUPLICATE_SAGAX_AGENT);
+    const text = grokTurnCatalogSection({
+      botId: "bot-1",
+      serverNames: [],
+      sessionId: "session-none",
+      threadId: "thread-none",
+    })!.text;
+    // alphabetically first ("default") keeps the shared agent tools
+    expect(text).toMatch(/default \(3 tools, e\.g\. cursor__user-default-/);
+    expect(text).toMatch(/Sagax agent tools \(await_turn, send_prompt\) kept once on this connector/);
+    expect(text).not.toContain("cursor__user-personal-bot-send_5fprompt___11");
   });
 });

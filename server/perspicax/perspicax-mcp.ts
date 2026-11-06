@@ -1778,6 +1778,23 @@ export class PerspicaxMcp {
     return this.turnEntry(threadId, generation, botId) !== undefined;
   }
 
+  /** The Perspicax role / profile slug this thread acts as now (routine
+   * act-as, profile_use, identity_switch). Empty "Moi" and a missing
+   * connection are undefined so the Grok gateway catalog keeps the first
+   * connector (Perspicax #1050, Sagax #2258). */
+  activeProfileFor(threadId: string, botId?: string): string | undefined {
+    const want = threadId.trim();
+    if (!want) return undefined;
+    for (const entry of [...this.entries.values(), ...this.warm.values()]) {
+      if (entry.ended || entry.threadId !== want) continue;
+      if (botId && entry.botId !== botId) continue;
+      if (!this.entryMounted(entry)) continue;
+      const role = this.currentRole(entry).trim();
+      if (role) return role;
+    }
+    return undefined;
+  }
+
   /** Read the product names Perspicax declares for this bot's APIs
    * (api_list), at most once per API_NAMES_TTL_MS per bot. Never throws;
    * the turn never waits on it. */

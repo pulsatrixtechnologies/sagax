@@ -4,7 +4,8 @@
 // tabs are Details (the bot's Details sections, for the group), Members
 // (people, bots with the lead set on its row, Leave group, then every other
 // setting under Advanced, folded by default), Instructions, Memory, Library
-// and Computer. The roster and the Advanced settings come from GroupView,
+// and Computer. 2026-11-06 (JC): Instructions and Memory are hidden for now
+// (GROUP_PANEL_HIDDEN_TABS), so the strip holds on one line as on a bot. The roster and the Advanced settings come from GroupView,
 // which owns their state. Every group setting lives here: there is no
 // separate setup dialog.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -117,7 +118,6 @@ export function GroupPanel({
   canEdit,
   canAddBot = false,
   onLeave,
-  onOpenVmWorkspace,
   readOnlyNote = false,
   arriving = true,
 }: {
@@ -135,7 +135,6 @@ export function GroupPanel({
   canAddBot?: boolean;
   /** Leave group, at the bottom of Members; absent when the viewer cannot leave. */
   onLeave?: () => void;
-  onOpenVmWorkspace?: (botId: string) => void;
   /** Rename and instructions: the group's owner, never a remote client. */
   canEdit: boolean;
   /** Organization server: someone else owns the group; say why it is read-only. */
@@ -222,7 +221,9 @@ export function GroupPanel({
           </div>
           {/* As on a bot: the name is edited where it shows (its owner),
               and the (i) beside it reveals the group instructions. */}
-          <div className="-mt-1 flex max-w-full items-center justify-center gap-0.5">
+          {/* Same row as the bot's name (BotSettingsDialog): the name shrinks
+              with an ellipsis inside the panel's px-4, the (i) stays in. */}
+          <div data-group-panel-title-row="" className="-mt-1 flex w-full min-w-0 max-w-full items-center justify-center gap-1 text-[17px] font-medium leading-[22px] text-ink">
             <InlineEditableText
               id="group-panel-title"
               value={group.name}
@@ -230,7 +231,7 @@ export function GroupPanel({
               maxLength={100}
               ariaLabel={t("botPanel.name.edit")}
               onSave={canEdit ? saveName : undefined}
-              className="text-[17px] font-medium leading-6 text-ink"
+              className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-medium leading-[22px] text-ink [&>svg]:absolute [&>svg]:-left-3.5"
             />
             <DescriptionInfo
               value={group.bulletin}
@@ -254,7 +255,7 @@ export function GroupPanel({
               setTab(next);
               event.currentTarget.querySelector<HTMLElement>(`[data-panel-tab="${next}"]`)?.focus();
             }}
-            className="mt-4 flex max-w-full flex-wrap items-center justify-center gap-0.5"
+            className="mt-4 flex max-w-full items-center justify-center gap-1"
           >
             {tabs.map((id) => (
               <button
@@ -266,8 +267,9 @@ export function GroupPanel({
                 tabIndex={tab === id ? 0 : -1}
                 onClick={() => setTab(id)}
                 className={cn(
-                  "rounded-md px-1.5 py-1 text-[13px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                  tab === id ? "bg-elevated-hover text-ink" : "text-ink-secondary hover:text-ink",
+                  // The bot panel's tab pill (BotSettingsDialog tabList).
+                  "rounded-full px-3 py-[3px] text-[14px] font-normal leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                  tab === id ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink",
                 )}
               >
                 {tabLabel(id)}
@@ -331,7 +333,7 @@ export function GroupPanel({
 
         {tab === "library" && <GroupLibraryTab group={group} />}
 
-        {tab === "computer" && <GroupComputerTab bots={computerBots} leadBotId={leadBotId} onOpenVmWorkspace={onOpenVmWorkspace} />}
+        {tab === "computer" && <GroupComputerTab bots={computerBots} leadBotId={leadBotId} />}
       </div>
     </aside>
   );

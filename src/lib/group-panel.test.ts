@@ -2,14 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { Group } from "@/state/store";
 import type { Routine } from "@/lib/routines";
-import { groupLeadBotId, groupRoutines, groupSuggestions, groupThreadIds, leadResponder, visibleGroupPanelTabs } from "./group-panel";
+import { GROUP_PANEL_HIDDEN_TABS, groupLeadBotId, groupRoutines, groupSuggestions, groupThreadIds, leadResponder, visibleGroupPanelTabs } from "./group-panel";
 
 const members = [{ id: "osprey" }, { id: "wren" }];
 const room = (defaultResponder: Group["defaultResponder"]) => ({ defaultResponder }) as Pick<Group, "defaultResponder">;
 
 describe("group panel tabs", () => {
   it("orders Details, Members, Instructions, Memory, Library, Computer with no Advanced", () => {
-    expect(visibleGroupPanelTabs({ advanced: true, hasComputer: true })).toEqual(["details", "members", "instructions", "memory", "library", "computer"]);
+    // Instructions and Memory are hidden for now (GROUP_PANEL_HIDDEN_TABS).
+    expect(visibleGroupPanelTabs({ advanced: true, hasComputer: true })).toEqual(["details", "members", "library", "computer"]);
+    expect(GROUP_PANEL_HIDDEN_TABS).toEqual(new Set(["instructions", "memory"]));
   });
 
   it("drops Computer in Simple or when no bot of the viewer works anywhere", () => {
@@ -49,8 +51,8 @@ describe("group lead", () => {
 
 describe("group suggestions", () => {
   const base = { bulletin: "", botCount: 1, routineCount: 0, canEdit: true, canAddBot: true, canAddRoutine: true };
-  it("suggests instructions, a second bot and a team goal", () => {
-    expect(groupSuggestions(base).map((item) => item.action)).toEqual(["instructions", "members", "routine"]);
+  it("suggests a second bot and a team goal (instructions while their tab is hidden: none)", () => {
+    expect(groupSuggestions(base).map((item) => item.action)).toEqual(["members", "routine"]);
   });
 
   it("suggests nothing the viewer cannot do or that is already done", () => {

@@ -130,7 +130,7 @@ A restart reruns a member's cut turn once in place (the room shows "Resuming
 after a restart" from the member and no interrupted line), never one that
 already acted outward, and never a goal step whose run ended with the restart.
 `server/room-roots.e2e.test.ts` proves each of these on the real server with
-the scripted engine; `server/room-coordination.e2e.test.ts` reads the same
+the scripted engine; `server/runtime-coordination.e2e.test.ts` reads the same
 rows for every hand-off it checks (a refused call leaves no hand-off row; a
 restart leaves the sender's root resumed once, never rerun).
 

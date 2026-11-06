@@ -147,7 +147,7 @@ A repeating routine's **Advanced** section offers **Also run when Sagax
 starts**. In the isolated renderer, create a daily routine with it ticked, then
 reopen the editor: the box stays ticked. A one-time routine does not offer it.
 Startup needs a restart on the same data, which this launcher does not do;
-`server/routines-startup.test.ts` restarts a real fixture server on its own
+`server/routines/routines-startup.test.ts` restarts a real fixture server on its own
 store and requires exactly one completed **On startup** run.
 
 The desktop gives every server child of one launch the same
@@ -157,7 +157,7 @@ that launch queues none; the next launch does. A server without the variable,
 such as a standalone one, counts every process start.
 
 ```sh
-pnpm exec vitest run server/routines.test.ts server/routines-startup.test.ts server/routine-requests.test.ts server/drivers/agents-proxy.test.ts shared/package-format.test.ts server/package-export.test.ts server/package-import.test.ts
+pnpm exec vitest run server/routines/routines.test.ts server/routines/routines-startup.test.ts server/routines/routine-requests.test.ts server/drivers/agents-proxy.test.ts shared/package-format.test.ts server/packages/package-export.test.ts server/packages/package-import.test.ts
 node --test electron/server-child-launch.node-test.mjs
 ```
 
@@ -219,7 +219,7 @@ pnpm exec vitest run server/routines/routines.test.ts server/routines/routines-s
 pnpm exec vitest run src/components/routines/RoutineViews.test.ts src/components/bot-settings/RoutinesSection.test.ts src/components/RoutineRunCard.test.ts src/components/BotProjects.test.ts src/lib/folder-read.test.ts src/lib/computer-panel-view.test.ts src/state/store.test.ts
 ```
 
-The hand-off integration tests (`server/routine-delegation.e2e.test.ts`,
+The hand-off integration tests (`server/routines/routine-delegation.e2e.test.ts`,
 `server/runtime-paths.e2e.test.ts`) launch their own shared-control fixtures.
 A routine turn hands work on with `coordinate_bots`; the run's root on the
 job runtime names the run as its
@@ -228,7 +228,7 @@ busy peer delaying completion until its result resumes the same run as a
 routine turn, a denied hand-off refused with that outcome and no assignment
 written, a run that stays waiting through a restart while its cut teammate
 turn runs again once (§5), and the one-time import of a pre-runtime
-`delegations.json` at boot (`server/routines-startup.test.ts`). They print
+`delegations.json` at boot (`server/routines/routines-startup.test.ts`). They print
 retained server-log and JSON evidence paths. These complement the scheduler,
 proposal and renderer tests; they do not prove real-provider tool selection,
 actual desktop work, or packaged Electron behavior.

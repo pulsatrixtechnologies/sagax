@@ -7672,26 +7672,26 @@ describe("harness HTTP API", () => {
       modelSelection: { instanceId: "claude", model: "claude-sonnet-5" }, settings: { approvalMode: "ask" },
     })).body.bot;
     const opened: string[] = [];
-    // The first thread, then the New-thread ones, each at the level it runs at.
+    // Effective level: a following thread has no approvalMode of its own and
+    // runs at the bot's (#1169/#1170).
     const levels = (saved: WireBot) => [bot.threadId, ...opened].map((threadId) =>
       saved.tasks.find((task) => task.threadId === threadId)?.approvalMode ?? saved.approvalMode);
     try {
-      // Threads opened with New thread save the level they started at.
       for (const title of ["New thread one", "New thread two"]) {
         const task = (await api("POST", `/api/bots/${bot.id}/tasks`, { title })).body.task;
-        expect(task.approvalMode).toBe("ask");
+        expect(task.approvalMode).toBeUndefined();
         opened.push(task.threadId);
       }
-      // A bot's own panel moves the default; the New-thread ones keep theirs.
+      // The bot's panel moves the level; every following thread moves with it.
       const panel = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto" });
       expect(panel.status).toBe(200);
       expect(panel.body.bot.approvalMode).toBe("auto");
-      expect(levels(panel.body.bot).slice(1)).toEqual(["ask", "ask"]);
+      expect(levels(panel.body.bot)).toEqual(["auto", "auto", "auto"]);
 
-      expect((await api("PATCH", `/api/bots/${bot.id}`, { applyToAllThreads: true })).status).toBe(400);
-      expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto", applyToAllThreads: "yes" })).status).toBe(400);
-      // A team-wide level reaches every thread, whatever the safe level, and
-      // the bot's standing approvals stay.
+      // applyToAllThreads is obsolete: the bot level always reaches every
+      // following thread. Orphan or mistyped flags must not fail the patch.
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { applyToAllThreads: true })).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto", applyToAllThreads: "yes" })).status).toBe(200);
       expect((await api("PATCH", `/api/bots/${bot.id}`, { alwaysAllow: ["Read"] })).status).toBe(200);
       for (const mode of ["auto", "edits", "ask"] as const) {
         const team = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: mode, applyToAllThreads: true });
@@ -7701,12 +7701,8 @@ describe("harness HTTP API", () => {
         expect(team.body.bot.alwaysAllow, mode).toEqual(["Read"]);
         const saved = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
         expect(levels(saved), mode).toEqual([mode, mode, mode]);
-        // Approve for me runs Claude on acceptEdits plus Sagax's own allow
-        // list, never the CLI's auto mode (main 2026-10-19, drivers/claude.ts).
         if (mode === "auto") expect(await permissionModeOf(bot.id, opened[0]!)).toBe("acceptEdits");
       }
-      // Full stays the packaged desktop's private channel (solo server): a
-      // team-wide Full over HTTP is refused and changes no thread.
       const full = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full", applyToAllThreads: true });
       expect(full.status).toBe(403);
       expect(full.body.error).toMatch(/desktop app/i);
@@ -7722,17 +7718,17 @@ describe("harness HTTP API", () => {
     const bot = (await api("POST", "/api/bots", { settings: { approvalMode: "ask" } })).body.bot;
     try {
       const opened = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "New thread" })).body.task;
-      expect(opened.approvalMode).toBe("ask");
+      expect(opened.approvalMode).toBeUndefined();
+      // First Auto on local computer needs the warning.
+      const blindFirst = await api("PATCH", `/api/bots/${bot.id}`, { computer: "local", approvalMode: "auto" });
+      expect(blindFirst.status).toBe(400);
+      expect(blindFirst.body.error).toMatch(/acknowledgeLocalAuto/);
       expect((await api("PATCH", `/api/bots/${bot.id}`, { computer: "local", approvalMode: "auto", acknowledgeLocalAuto: true })).status).toBe(200);
-      // The bot already runs Auto on this computer, but that thread does not.
-      const blind = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto", applyToAllThreads: true });
-      expect(blind.status).toBe(400);
-      expect(blind.body.error).toMatch(/acknowledgeLocalAuto/);
-      const confirmed = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto", applyToAllThreads: true, acknowledgeLocalAuto: true });
-      expect(confirmed.status).toBe(200);
-      expect(confirmed.body.bot.tasks.every((task: { approvalMode?: string }) => (task.approvalMode ?? "auto") === "auto")).toBe(true);
-      // Once every thread is on it, re-asserting it needs no new warning.
+      // Following threads already run Auto with the bot; re-asserting needs no warning.
       expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto", applyToAllThreads: true })).status).toBe(200);
+      const saved = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
+      expect(saved.approvalMode).toBe("auto");
+      expect(saved.tasks.every((task: { approvalMode?: string }) => task.approvalMode === undefined || task.approvalMode === "auto")).toBe(true);
     } finally {
       await api("DELETE", `/api/bots/${bot.id}`);
     }
@@ -7754,25 +7750,31 @@ describe("harness HTTP API", () => {
         expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${picked.threadId}`, { modelSelection: claude("thread-pick") })).status).toBe(200);
       }
       expect((await api("POST", `/api/bots/${bot.id}/tasks/${onScreen.threadId}?messages=0`)).body.bot.threadId).toBe(onScreen.threadId);
+      // Thread picks stick until the bot's model changes.
+      const before = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
+      expect(thread(before, onScreen.threadId)).toEqual({ model: "thread-pick", follows: false });
+      expect(thread(before, own.threadId)).toEqual({ model: "thread-pick", follows: false });
+      expect(thread(before, follower.threadId)).toEqual({ model: "team-start", follows: true });
 
-      expect((await api("PATCH", `/api/bots/${bot.id}`, { keepThreadModels: true })).status).toBe(400);
-      expect((await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: claude("team-pick"), keepThreadModels: "yes" })).status).toBe(400);
-      // There and back, as a team: followers move each time; a model picked
-      // in a thread stays, on the selected thread and on the others.
+      // keepThreadModels is a client hint the server ignores.
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { keepThreadModels: true })).status).toBe(200);
+      // Changing the bot's model makes every thread follow it again
+      // (store.patchBot strips per-thread copies).
       for (const model of ["team-pick", "team-start"]) {
         const team = await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: claude(model), keepThreadModels: true });
         expect(team.status, model).toBe(200);
         expect(team.body.bot.modelSelection.model).toBe(model);
-        expect(thread(team.body.bot, onScreen.threadId), model).toEqual({ model: "thread-pick", follows: false });
-        expect(thread(team.body.bot, own.threadId), model).toEqual({ model: "thread-pick", follows: false });
+        expect(thread(team.body.bot, onScreen.threadId), model).toEqual({ model, follows: true });
+        expect(thread(team.body.bot, own.threadId), model).toEqual({ model, follows: true });
         expect(thread(team.body.bot, follower.threadId), model).toEqual({ model, follows: true });
         expect(thread(team.body.bot, bot.threadId), model).toEqual({ model, follows: true });
       }
-      // The bot's own panel still moves the thread on screen with it.
+      // A fresh thread pick after the bot moved stays until the next bot change.
+      expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${own.threadId}`, { modelSelection: claude("thread-pick") })).status).toBe(200);
       const panel = await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: claude("panel-pick") });
       expect(panel.status).toBe(200);
       expect(thread(panel.body.bot, onScreen.threadId)).toEqual({ model: "panel-pick", follows: true });
-      expect(thread(panel.body.bot, own.threadId)).toEqual({ model: "thread-pick", follows: false });
+      expect(thread(panel.body.bot, own.threadId)).toEqual({ model: "panel-pick", follows: true });
     } finally {
       await api("DELETE", `/api/bots/${bot.id}`);
     }

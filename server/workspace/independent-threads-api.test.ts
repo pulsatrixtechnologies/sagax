@@ -372,11 +372,11 @@ describe("independent bot tasks through the isolated control surface", () => {
     expect(handoff()!.result.startsWith("[Sagax: nobody answered the approval for “Bash: npm run release-check” in time, so it did not run.")).toBe(true);
   }, 60_000);
 
-  // A one-way notice (coordinate_bots with thread "new" and reply "none")
-  // is never awaited and returns nothing to its sender (docs/
-  // runtime-contract.md §2), so a recipient thread the person deletes before
-  // the notice starts ends the notice on the runtime, tells the sender
-  // nothing, and restarts nobody.
+  // A one-way notice (POST /api/internal/threads with oneWay: true, the
+  // send_to_bot path) is never awaited and returns nothing to its sender
+  // (docs/runtime-contract.md §2), so a recipient thread the person deletes
+  // before the notice starts ends the notice on the runtime, tells the sender
+  // nothing, and restarts nobody. coordinate_bots no longer takes reply:none.
   it("ends a one-way notice whose recipient thread was deleted before it started, without restarting the sender", async () => {
     const sender = (await tool("create_bot", { name: "Independent sender", instance_id: "claude", model: models[0] })).bot;
     const recipient = (await tool("create_bot", { name: "Independent recipient", instance_id: "claude", model: models[1] })).bot;
@@ -390,15 +390,15 @@ describe("independent bot tasks through the isolated control surface", () => {
       await control(["send", "--bot", sender.id, "--text", "Prepare independent work."]);
       const launched = await dump(models[0]);
       const token = launched.mcpConfig.mcpServers.agents.env.SAGAX_COMMS_TOKEN;
-      const sent = await internal(token, "POST", "/api/internal/coordinate-bots", {
-        botIds: [recipient.id], message: "Own this work.", thread: "new", reply: "none",
+      const before = new Set(readHandoffs(session.info.dataDir).map((node) => node.id));
+      const sent = await internal(token, "POST", "/api/internal/threads", {
+        toBotId: recipient.id, title: "Own this work", message: "Own this work.", oneWay: true,
       });
-      expect(sent.status, JSON.stringify(sent.body)).toBe(200);
-      const receipt = sent.body.receipts[0];
-      expect(receipt).toMatchObject({ botId: recipient.id, outcome: "queued", threadId: expect.any(String), requestId: expect.any(String) });
-      const threadId = receipt.threadId as string;
-      const notice = () => readHandoffs(session.info.dataDir).find((node) => node.id === receipt.requestId);
-      expect(notice()).toMatchObject({ mode: "notify", reply: "none", status: "queued", threadId });
+      expect(sent.status, JSON.stringify(sent.body)).toBe(201);
+      expect(sent.body).toMatchObject({ botId: recipient.id, threadId: expect.any(String) });
+      const threadId = sent.body.threadId as string;
+      const notice = () => readHandoffs(session.info.dataDir).find((node) => !before.has(node.id) && node.threadId === threadId);
+      await expect.poll(() => notice(), { timeout: 10_000 }).toMatchObject({ mode: "notify", reply: "none", status: "queued", threadId });
       expect((await api("DELETE", `/api/bots/${recipient.id}/tasks/${threadId}`)).status).toBe(200);
       // The runtime ends the notice without a turn: nobody awaits it, so
       // nothing is reported anywhere, and the sender's turn goes on.
@@ -407,7 +407,16 @@ describe("independent bot tasks through the isolated control surface", () => {
       writeFileSync(modelFile(models[0], "gate"), "finish sender");
       expect((await control(["wait", "--bot", sender.id, "--timeout", "15"])).status).toBe("settled");
       const after = (await api("GET", `/api/threads/${sender.activeTaskId}/messages`)).body.messages as any[];
-      expect(after.filter((message: any) => message.tool?.ok === false)).toEqual([]);
+      // Sagax tells the sender the notice never started (activity row), and
+      // never resumes it with a room result for a one-way send.
+      expect(after.filter((message: any) => message.tool?.ok === false)).toEqual([
+        expect.objectContaining({
+          tool: expect.objectContaining({
+            ok: false,
+            name: expect.stringMatching(/deleted before it could start/i),
+          }),
+        }),
+      ]);
       expect(after.filter((message: any) => message.roomRequest?.phase === "result")).toEqual([]);
       expect((await api("GET", `/api/threads/${threadId}/messages`)).status).toBe(404);
       expect((await botState(recipient.id)).tasks.some((task: any) => task.threadId === threadId)).toBe(false);

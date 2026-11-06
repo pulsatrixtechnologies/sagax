@@ -17,9 +17,10 @@ the bundled MCP stdio bridge, `server/drivers/agents-proxy.ts`, with
 `SAGAX_EXTERNAL_RUNTIME=1`. The bridge offers the one tool surface every turn
 gets (docs/runtime-contract.md §9): `coordinate_bots` (work, or a question
 with `consult: true`, or a one-way notice with `reply: "none"`) and the
-read-only `assignment_status`. The server accepts only `GET /api/internal/agents`,
-`POST /api/internal/coordinate-bots` and `GET /api/internal/assignment-status`
-with that capability; every other internal route answers 403.
+read-only `assignment_status`. The server accepts only `GET /api/internal/agents` and
+`POST /api/internal/coordinate-bots` with that capability; every other
+internal route answers 403. Status is read through the MCP tool
+`assignment_status` on the same bridge.
 
 Each `coordinate_bots` call from a standing capability is its own root on the
 job runtime: requester `external_runtime` (run id `external-runtime:<bot>:<thread>`),

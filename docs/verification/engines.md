@@ -70,7 +70,7 @@ this recipe.
 ## Meta Muse: Model API and Muse Code
 
 ```sh
-pnpm exec vitest run server/drivers/meta.test.ts server/drivers/muse-code.test.ts server/provider-key-check.test.ts server/config.test.ts server/openai-tools.e2e.test.ts src/components/ApiKeys.test.ts src/state/store.test.ts
+pnpm exec vitest run server/drivers/meta.test.ts server/drivers/muse-code.test.ts server/engines/provider-key-check.test.ts server/config.test.ts server/openai-tools.e2e.test.ts src/components/ApiKeys.test.ts src/state/store.test.ts
 ```
 
 The Meta Model API fixtures use a local HTTP provider: preset endpoint,

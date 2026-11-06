@@ -53,6 +53,7 @@ const featureRouteModules = [
   join(ROOT, "server", "data", "routes.ts"),
   join(ROOT, "server", "workspace-backup-http.ts"),
   join(ROOT, "server", "backup", "workspace-backup-http.ts"),
+  join(ROOT, "server", "request-pipeline", "origin-gates.ts"),
 ].filter((file, index, all) => existsSync(file) && all.indexOf(file) === index).sort();
 const serverSource = [join(ROOT, "server", "index.ts"), ...routeModules, ...featureRouteModules]
   .map((file) => readFileSync(file, "utf8")).join("\n");

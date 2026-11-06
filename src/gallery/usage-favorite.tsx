@@ -44,9 +44,11 @@ function Gallery() {
   }, NOW);
   const items: SidebarMenuItem[] = [{
     key: "usage",
-    label: (summary.percent !== null && summary.name) || t("sidebar.account.usage"),
+    label: t("sidebar.account.usage"),
     icon: <Gauge size={18} />,
-    value: summary.percent === null ? undefined : t("planUsage.used", { used: summary.percent }),
+    value: summary.percent === null ? undefined : summary.name
+      ? t("sidebar.account.usageFavorite", { name: summary.name, used: summary.percent })
+      : t("planUsage.used", { used: summary.percent }),
     submenu: [
       ...lines.map((line, index) => ({
         key: line.key, label: line.label, subtitle: line.subtitle, value: line.value, info: true,

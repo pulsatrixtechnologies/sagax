@@ -547,7 +547,7 @@ describe("flexible routine timing", () => {
       timing: "flexible",
       windowEarlyMinutes: 15,
       windowLateMinutes: 0,
-    }, "UTC")).toContain("around 09:00 (-15/+0 min)");
+    }, "UTC")).toContain("around 9:00 (-15/+0 min)");
   });
 
   it("keeps a start around midnight and around a daylight-saving change inside the window", () => {

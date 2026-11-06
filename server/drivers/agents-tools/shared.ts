@@ -157,6 +157,10 @@ export const ROUTINE_FIELDS_SCHEMA = {
     type: "boolean",
     description: "true: feed latest completed run report into the next run. false starts fresh.",
   },
+  run_on_startup: {
+    type: "boolean",
+    description: "true: also run once each time Sagax starts (repeating schedules only). false stops it.",
+  },
   overlap: {
     type: "string",
     enum: ["skip", "queue"],
@@ -519,6 +523,13 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
   if (deleteWhenFinished != null && typeof deleteWhenFinished !== "boolean") {
     return { fields, error: "delete_when_finished must be true or false." };
   }
+  const runOnStartup = args.run_on_startup ?? args.runOnStartup;
+  if (args.run_on_startup != null && args.runOnStartup != null && args.run_on_startup !== args.runOnStartup) {
+    return { fields, error: "Choose one run_on_startup value; run_on_startup and runOnStartup disagree." };
+  }
+  if (runOnStartup != null && typeof runOnStartup !== "boolean") {
+    return { fields, error: "run_on_startup must be true or false." };
+  }
   if (args.overlap !== undefined && args.overlap !== "skip" && args.overlap !== "queue") {
     return { fields, error: "overlap must be skip or queue." };
   }
@@ -548,6 +559,7 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
   if (args.clear_timeout === true) fields.timeoutMinutes = null;
   else if (timeoutMinutes != null) fields.timeoutMinutes = timeoutMinutes;
   if (typeof args.continuity === "boolean") fields.continuity = args.continuity;
+  if (typeof runOnStartup === "boolean") fields.runOnStartup = runOnStartup;
   if (args.overlap !== undefined) fields.overlap = args.overlap;
   if (typeof args.enabled === "boolean") fields.enabled = args.enabled;
   // 2026-10-26: run only when something changes; checked by the service.

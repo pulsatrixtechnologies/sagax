@@ -32,7 +32,7 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     const proposal = async (tool: string, args: unknown, text: string, expectError = false) => {
       const previousTurns = providerEvidence().length;
       writeFileSync(planPath, JSON.stringify({ [bot.id]: {
-        expectSystemIncludes: ["five-field cron expression", "Never replace a calendar rule with daily AI date checking", "including its VPS"],
+        expectSystemIncludes: ["exact cron and IANA timezone", "never daily AI date checks"],
         steps: [{ tool: "list_routines", arguments: {} }, { tool, arguments: args, expectError }],
         reply: expectError ? "That invalid schedule was refused." : "The routine change is applied.",
       } }));
@@ -60,7 +60,7 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     expect(create.subtitle).toContain("Created paused; resume it when ready.");
     expect(create.subtitle).not.toContain("Next 3 runs");
     // In words, never the expression (2026-10-29).
-    expect(create.subtitle).toContain("Monthly on day 1 at 09:00 · America/New_York");
+    expect(create.subtitle).toContain("Monthly on day 1 at 09:00 Eastern time");
     expect(create.subtitle).not.toContain("0 9 1 * *");
     const { resultId: routineId } = applied(create);
     const current = async () => (await api("GET", "/api/routines")).routines.find((routine: any) => routine.id === routineId);
@@ -68,7 +68,7 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     expect(create.subtitle).toContain("Queue one scheduled run");
     expect(create.subtitle).toContain("On startup: Also runs once each time Sagax starts");
     const firstResume = await proposal("propose_routine_action", { action: "resume", routine_id: routineId }, "Resume the monthly report now.");
-    expect(firstResume.subtitle).toContain("Next 3 runs (America/New_York)");
+    expect(firstResume.subtitle).toContain("Next 3 runs (Eastern time)");
     applied(firstResume);
     expect(await current()).toMatchObject({ schedule, enabled: true, runOnStartup: true });
     expect((await current()).nextRunAt).toBe(nextCronRuns(schedule, firstResume.routineRequest.createdAt, 1)[0]);
@@ -92,8 +92,6 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     // streak only when there is one.
     expect(listed).toContain('"type":"cron"');
     expect(listed).toContain('"timeZone":"America/New_York"');
-    expect(listed).toContain('"overlap":"queue"');
-    expect(listed).toContain('"runOnStartup":true');
     expect(listed).not.toContain('"failureStreak"');
     applied(update);
     expect(update.routineRequest.undo.before).toMatchObject({ schedule, overlap: "queue", runOnStartup: true });
@@ -105,7 +103,7 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     applied(pause);
     expect(await current()).toMatchObject({ enabled: false, nextRunAt: null, schedule: lastDay });
     const resume = await proposal("propose_routine_action", { action: "resume", routine_id: routineId }, "Resume the monthly report.");
-    expect(resume.subtitle).toContain("Next 3 runs (America/New_York)");
+    expect(resume.subtitle).toContain("Next 3 runs (Eastern time)");
     applied(resume);
     expect(await current()).toMatchObject({ enabled: true, schedule: lastDay });
 

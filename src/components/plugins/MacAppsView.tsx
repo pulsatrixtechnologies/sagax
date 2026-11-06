@@ -41,7 +41,7 @@ export function MacAppsInstalledSection({
   return (
     <section className="mt-8 first:mt-0" data-plugins-mac>
       <h3 className={PLUGINS.label}>{t("connectApps.mac.section")}</h3>
-      <ul className="mt-1">
+      <ul className={`${PLUGINS.grid} mt-1`}>
         {MAC_APP_SETUP_IDS.map((app) => {
           const look = MAC_APP_LOOK[app];
           const Icon = look.icon;

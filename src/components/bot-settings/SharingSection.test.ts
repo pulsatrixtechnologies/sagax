@@ -200,12 +200,14 @@ describe("Settings > Organization on a Perspicax server", () => {
     viewerRole: "admin" as const,
     settings: { orgKeyConfigured: false },
   };
-  it("shows the link and the role, with no shortcut to the console", () => {
+  it("shows the link, the role, and Manage in Perspicax on the org band", () => {
     const markup = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org, onChanged: () => {} }));
     // #584: link state and role on one grey line under the organization's name
     expect(markup).toContain("Linked to Pulsatrix · Admin");
-    expect(markup).not.toContain("Manage in Perspicax");
-    expect(markup).not.toContain("/console");
+    // JC 2026-11-06: Manage opens the org console in the browser
+    expect(markup).toContain("Manage in Perspicax");
+    expect(markup).toContain("data-external-link-pill");
+    expect(markup).toContain('href="https://px.example.test/console/"');
     expect(markup).not.toContain("type=\"checkbox\"");
     expect(markup).not.toContain("Who pays for a turn");
     expect(markup).not.toContain("data-pay-order");

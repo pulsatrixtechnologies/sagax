@@ -1,15 +1,15 @@
 // Settings > Organization on a server signed in with Perspicax (#2080 L3):
 // the same page for everyone. The organization's name and the person's role,
-// no shortcut to Perspicax (JC 2026-11-05: they only took space). Approvals
-// waiting are a count row. Interim people stay when the window still has some.
-// #2193: admins keep the Grok bridge kill switch here.
+// plus Manage in Perspicax (opens the console in the browser; JC 2026-11-06).
+// Approvals waiting are a count row. Interim people stay when the window still
+// has some. #2193: admins keep the Grok bridge kill switch here.
 import { useEffect, useState } from "react";
 
 import { t } from "@/lib/i18n";
 import type { PerspicaxOrg } from "@/lib/perspicax-org";
 import { setOrgApprovalsCount, useOrgApprovalsVersion } from "@/lib/org-approvals";
 import { api } from "@/state/store";
-import { DescribedRow, OrgBand, SettingsGroup } from "./SettingsPrimitives";
+import { DescribedRow, ExternalLinkPill, OrgBand, SettingsGroup } from "./SettingsPrimitives";
 import { InterimPeople } from "./settings/InterimPeople";
 import { OrganizationBotRows } from "./settings/OrganizationBotRules";
 import { OrgGrokBridgePolicy } from "./settings/OrgGrokBridgePolicy";
@@ -90,9 +90,15 @@ export function PerspicaxOrgSettings({ org, onChanged }: {
     </span>
   );
 
+  const manage = (
+    <ExternalLinkPill href={perspicaxConsoleUrl(org.org.identity.issuer)}>
+      {t("organization.manageInPerspicax")}
+    </ExternalLinkPill>
+  );
+
   return (
     <>
-      <OrgBand name={org.org.name} role={bandRole} />
+      <OrgBand name={org.org.name} role={bandRole} action={manage} />
       {(waiting > 0 || (interimVisible && interim?.until)) && (
         <SettingsGroup groupId="organizationPeople">
           {waiting > 0 && (

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// #2080 (L0): the shared patterns of the Settings redesign. No Perspicax
-// shortcut in the organization band, no filter chip without an item, at most one action in an
+// #2080 (L0): the shared patterns of the Settings redesign. OrgBand can carry
+// Manage in Perspicax, no filter chip without an item, at most one action in an
 // empty state, and a selection bar Escape closes.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -25,11 +25,20 @@ afterEach(() => {
 const draw = (node: React.ReactNode) => act(() => root.render(node));
 
 describe("Settings patterns", () => {
-  it("OrgBand: the name and the role, no shortcut to Perspicax", () => {
+  it("OrgBand: the name and the role, optional Manage action", () => {
     draw(createElement(OrgBand, { name: "Acme", role: "Member" }));
     expect(host.querySelector("[data-org-band]")?.textContent).toContain("Acme");
     expect(host.textContent).toContain("Member");
     expect(host.querySelectorAll("a, button")).toHaveLength(0);
+    draw(createElement(OrgBand, {
+      name: "Acme",
+      role: "Member",
+      action: createElement(ExternalLinkPill, { href: "https://px.example.test/console/", children: "Manage in Perspicax" }),
+    }));
+    const link = host.querySelector<HTMLAnchorElement>("[data-external-link-pill]");
+    expect(link?.getAttribute("href")).toBe("https://px.example.test/console/");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(host.textContent).toContain("Manage in Perspicax");
   });
 
   it("ExternalLinkPill and StatusText", () => {

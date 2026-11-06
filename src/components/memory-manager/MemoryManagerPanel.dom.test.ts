@@ -204,9 +204,16 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-manager-page]")).not.toBeNull();
     expect(host.querySelector('[role="dialog"]')).toBeNull();
     expect(host.querySelector("[data-memory-header] h1")?.textContent).toBe("Memory");
-    // The console's large title, no icon before it.
-    expect(host.querySelector("[data-memory-header] h1")?.className).toContain("text-[30px]");
-    expect(host.querySelector("[data-memory-header] [data-page-title] svg")).toBeNull();
+    // The Tools page standard (Team map, 2026-11-06): icon, 17px title, count, subtitle.
+    expect(host.querySelector("[data-memory-header] h1")?.className).toContain("text-[17px]");
+    expect(host.querySelector("[data-memory-header] [data-page-title] svg")).not.toBeNull();
+    expect(host.querySelector("[data-memory-header] [data-page-count]")?.textContent).toMatch(/notes?$/);
+    expect(host.querySelector("[data-memory-header] [data-page-subtitle]")?.textContent).toBe("What your bots remember, by note, map, tag and quality.");
+    // the views and the scope chip sit in the toolbar row under the title
+    expect(host.querySelector("[data-memory-header] [data-page-toolbar] [data-memory-views]")).not.toBeNull();
+    // "+ New note" is the outlined action, never the filled brown one
+    expect(host.querySelector("[data-memory-create]")?.className).toContain("border-hairline/50");
+    expect(host.querySelector("[data-memory-create]")?.className).not.toContain("bg-accent");
     expect(Array.from(host.querySelectorAll("[data-memory-views] button")).map((button) => button.textContent)).toEqual(["Notes", "Map", "Tags", "Quality"]);
     expect(host.querySelector("[data-memory-create]")?.textContent).toContain("New note");
     const body = host.querySelector("[data-memory-row] .content-card-body")!;
@@ -675,6 +682,21 @@ describe("MemoryManagerPanel page", () => {
     await settle();
     expect(host.querySelector("[data-memory-scope-chip]")).toBeNull();
     expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("5");
+  });
+  // JC 2026-11-06: "Memory > Atlas" in the header, the parent segment brings back the whole memory.
+  it("the header crumb of a scoped memory is a link back to all the memory", async () => {
+    await render();
+    expect(host.querySelector("[data-memory-crumb]")).toBeNull();
+    await act(async () => { (host.querySelector('[data-memory-source="bot:atlas"]') as HTMLButtonElement).click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-section]")?.textContent).toBe("Atlas");
+    const crumb = host.querySelector<HTMLButtonElement>("[data-memory-header] [data-memory-crumb]");
+    expect(crumb?.textContent).toBe("Memory");
+    await act(async () => { crumb!.click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-section]")).toBeNull();
+    expect(host.querySelector("[data-memory-crumb]")).toBeNull();
+    expect(host.querySelector("[data-memory-scope-chip]")).toBeNull();
   });
   // 2026-11-03 (audit N-6): one request per collection at once, asked again
   // on every select while they loaded.

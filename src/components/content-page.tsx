@@ -1,8 +1,9 @@
-// The full-window pages of the content frame (2026-10-28): Automations
-// (RoutineCalendarPage.tsx) and Achievements (achievements/AchievementsScreen.tsx)
-// draw from these pieces, so the two stay sister pages. One row of header
-// (icon, 16px title, an optional "› section", the page's primary controls,
-// then on the right its indicators, Filters, the ☰ menu and an action), a
+// The full-window Tools pages of the content frame: Automations
+// (RoutineCalendarPage.tsx), Memory, Team map, Remote sessions and
+// Achievements draw from these pieces, so they stay sister pages. The header
+// is the Team map standard (2026-11-06): icon, 17px title and a grey count,
+// a grey subtitle, outlined buttons on the right, the page's own controls in
+// a toolbar row under it (PageHeader). Then a
 // body in a centred 4xl column with a 16px heading and a 12px line under
 // it, sections with a 16px heading, rows that light on hover and a dashed
 // empty state. Under 60rem of header the labels of the segment and Filters
@@ -13,8 +14,10 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 
-/** A header control: the same 36px circle as CIRCLE_BUTTON. A labelled control adds w-auto, px-3 and gap-1.5. */
-export const PAGE_HEADER_BUTTON = "flex size-9 shrink-0 cursor-pointer list-none items-center justify-center rounded-full border border-hairline-weak bg-elevated text-ink transition-colors hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden";
+/** A header control: a 36px square outlined icon button (Team map standard, 2026-11-06). A labelled control adds w-auto, px-3 and gap-1.5. */
+export const PAGE_HEADER_BUTTON = "flex size-9 shrink-0 cursor-pointer list-none items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary transition-colors hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden";
+/** The header's primary action ("+ Add", "+ New"): outlined, never filled, as tall and round as PAGE_HEADER_BUTTON. */
+export const PAGE_ACTION_BUTTON = "flex h-9 shrink-0 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 text-[12px] font-medium text-ink transition-colors hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-40 [&::-webkit-details-marker]:hidden";
 /** A popover under a header control (Filters, ☰, New). */
 export const PAGE_POPOVER = "absolute right-0 top-full z-40 mt-1.5 flex flex-col rounded-xl border-[0.5px] border-border popover-surface bg-elevated text-[13px] leading-[18px]";
 /** An entry of the ☰ menu. */
@@ -74,49 +77,75 @@ export function PageTopStrip() {
 }
 
 /**
- * The page's header row. `name` sets the data attributes the page's tests and
- * tours find it by (`data-<name>-header`, `-primary`, `-actions`, `-section`).
+ * The Tools pages' header (Team map standard, owner 2026-11-06): row one is
+ * the icon, the title and a small grey count; row two a one-line grey
+ * subtitle; on the right, centred, square outlined icon buttons then the
+ * outlined primary action (PAGE_ACTION_BUTTON). The page's own controls
+ * (segments, search, Filters, dates) sit in a toolbar row under it. `name`
+ * sets the data attributes the page's tests and tours find it by
+ * (`data-<name>-header`, `-primary`, `-actions`, `-section`).
  */
-export function PageHeader({ name, icon: Icon, title, section, primary, actions, below, topbar = false, inset = false, large = false, primaryStyle, actionsStyle, titleProps, ...rest }: {
+export function PageHeader({ name, icon: Icon, title, count, subtitle, section, onRoot, primary, actions, below, topbar = false, inset = false, primaryStyle, actionsStyle, titleProps, ...rest }: {
   name: string;
   icon: LucideIcon;
   title: string;
+  /** The small grey count after the title ("9 bots"). */
+  count?: ReactNode;
+  /** The one grey line under the title. */
+  subtitle?: ReactNode;
   /** "› <section>" after the title, when the page shows one of its sections. */
   section?: string | null;
-  /** The page's own controls, next to the title (a view switch, the dates, a search). */
+  /** With a section shown, the title is a link back to the page's root. */
+  onRoot?: () => void;
+  /** The toolbar row under the header: a view switch, the dates, a search, Filters. */
   primary?: ReactNode;
-  /** The right group: indicators, Filters, the ☰ menu, an action. */
+  /** The right group: indicators, icon buttons, the ☰ menu, then the action. */
   actions?: ReactNode;
-  /** Errors and notices under the row. */
+  /** Errors and notices under the rows. */
   below?: ReactNode;
   /** In the content frame: the frame's top bar (and its drag region). */
   topbar?: boolean;
   /** A standalone window on macOS: clear the traffic lights. */
   inset?: boolean;
-  /** The Perspicax console's page title (Memory, 2026-11-02): 30px, no icon. */
-  large?: boolean;
   primaryStyle?: CSSProperties;
   actionsStyle?: CSSProperties;
   titleProps?: HTMLAttributes<HTMLDivElement> & DataAttributes;
 } & Omit<HTMLAttributes<HTMLElement>, "title"> & DataAttributes) {
+  const crumb = Boolean(section && onRoot);
   return (
     <header
       {...rest}
       {...{ [`data-${name}-header`]: "" }}
       data-page-header=""
-      className={cn(topbar && "content-topbar", "@container/page-header shrink-0 border-b border-hairline/50 bg-app py-3 pr-4", inset ? "pl-[86px]" : "pl-6", rest.className)}
+      className={cn(topbar && "content-topbar", "@container/page-header shrink-0 border-b border-hairline/40 bg-app py-4 pr-6", inset ? "pl-[86px]" : "pl-6 max-sm:pl-12", rest.className)}
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div {...titleProps} data-page-title="" className="flex min-w-0 shrink-0 items-center gap-2">
-          {!large && <Icon size={18} className="shrink-0 text-ink-secondary" aria-hidden="true" />}
-          <h1 className={large ? "text-[30px] font-semibold leading-9 tracking-[-0.01em] text-ink" : "text-[16px] font-medium leading-6 text-ink"}>{title}</h1>
-          {section && <span {...{ [`data-${name}-section`]: "" }} className={cn("flex min-w-0 items-center gap-1 text-ink-secondary", large ? "text-[20px]" : "text-[16px]")}><ChevronRight size={14} aria-hidden="true" /><span className="truncate">{section}</span></span>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div {...titleProps} data-page-title="" className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Icon size={18} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+            {crumb
+              ? <h1 className="min-w-0 text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink"><button type="button" data-page-crumb="" {...{ [`data-${name}-crumb`]: "" }} onClick={onRoot} className="rounded-md text-ink-secondary hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">{title}</button></h1>
+              : <h1 className="min-w-0 truncate text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink">{title}</h1>}
+            {section && <span {...{ [`data-${name}-section`]: "" }} aria-current="page" className="flex min-w-0 items-center gap-1 text-[17px] font-semibold leading-6 text-ink"><ChevronRight size={14} className="text-ink-secondary" aria-hidden="true" /><span className="truncate">{section}</span></span>}
+            {count != null && count !== false && <span data-page-count="" className="ml-1 shrink-0 text-[11px] tabular-nums text-ink-secondary">{count}</span>}
+          </div>
+          {subtitle && <p data-page-subtitle="" className="mt-1 text-[12px] text-ink-secondary">{subtitle}</p>}
         </div>
-        {primary && <div {...{ [`data-${name}-primary`]: "" }} className="flex min-w-0 items-center gap-2 @max-[44rem]/page-header:order-last @max-[44rem]/page-header:basis-full" style={primaryStyle}>{primary}</div>}
-        <div {...{ [`data-${name}-actions`]: "" }} className="ml-auto flex shrink-0 items-center gap-1.5" style={actionsStyle}>{actions}</div>
+        <div {...{ [`data-${name}-actions`]: "" }} data-page-actions="" className="ml-auto flex shrink-0 items-center gap-2" style={actionsStyle}>{actions}</div>
       </div>
+      {primary && <div {...{ [`data-${name}-primary`]: "" }} data-page-toolbar="" className="mt-3 flex min-w-0 flex-wrap items-center gap-2" style={primaryStyle}>{primary}</div>}
       {below}
     </header>
+  );
+}
+
+/** An on/off pill of the toolbar row ("Active only"). */
+export function PageToggle({ pressed, onClick, children, ...rest }: { pressed: boolean; onClick: () => void; children: ReactNode } & DataAttributes) {
+  return (
+    <button {...rest} type="button" aria-pressed={pressed} onClick={onClick}
+      className={cn("flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", pressed ? "border-accent/40 bg-accent/10 text-accent" : "border-hairline/50 bg-panel text-ink-secondary hover:bg-raised hover:text-ink")}>
+      {children}
+    </button>
   );
 }
 

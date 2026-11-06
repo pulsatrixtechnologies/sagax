@@ -9,7 +9,7 @@
 // what it unlocks. A secret stays masked until found. The header's segment
 // (All, Unlocked, Locked), search and Filters (category, reward) narrow the
 // rows together. The settings that hide the points or the toasts open from
-// the header's ☰ menu (AchievementSettingsPage).
+// the settings button of the header (AchievementSettingsPage, in a dialog).
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import { Lock, Trophy } from "lucide-react";
 import { ACHIEVEMENTS } from "../../../shared/achievements-catalog";
@@ -264,7 +264,7 @@ export function AchievementsPage({ category = "all", status: statusFilter = "all
 /** The feature-wide settings (card, title, toasts, public card), the page's
  * Settings section, opened from the header's ☰ menu as Automations opens its
  * sections. */
-export function AchievementSettingsPage() {
+export function AchievementSettingsPage({ heading = true }: { heading?: boolean } = {}) {
   const { status, snapshot } = useAchievements();
   useEffect(() => { void loadAchievements(); }, []);
   if (status === "unavailable") {
@@ -275,7 +275,7 @@ export function AchievementSettingsPage() {
   const titles = ACHIEVEMENTS.flatMap((item) => (states.get(item.id)?.unlockedAt ? item.rewards : [])).filter((reward) => reward.kind === "title");
   return (
     <div className="space-y-5" data-achievements-settings-page="">
-      <PageHeading title={t("achievements.settings.title")} subtitle={t("achievements.settings.subtitle")} />
+      {heading && <PageHeading title={t("achievements.settings.title")} subtitle={t("achievements.settings.subtitle")} />}
       <SettingsGroup title={t("achievements.settings.card")} groupId="achievements.settings">
         {titles.length > 0 && (
           <CompactRow label={t("achievements.titleLabel")} rowId="achievements.title">

@@ -17,7 +17,7 @@ import type { MemoryBrowse, MemoryManagerSource, MemoryNoteDetail, MemoryNoteRow
 import type { PageRow } from "@/lib/memory-page";
 import type { LinkBot } from "@/lib/memory-folders";
 import { useCaptionChrome } from "../DesktopCapabilities";
-import { PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
+import { PAGE_ACTION_BUTTON, PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
 import { fetchCollections, MemoryCollections, type CollectionItem, type CollectionSummary } from "./MemoryCollections";
 import { MemoryMapView } from "./MemoryMapView";
 import { MemoryNotesList } from "./MemoryNotesList";
@@ -25,7 +25,6 @@ import { MemoryQualityView } from "./MemoryQualityView";
 import { RightRailStrip, useRightRailOpen } from "@/components/RightRail";
 import { MemorySidebar } from "./MemorySidebar";
 import { MemoryTagsView } from "./MemoryTagsView";
-import { PRIMARY_BUTTON } from "./memory-ui";
 import { MemoryManagerReading } from "./MemoryManagerReading";
 
 // Tools > Memory: a full page of the main column (Automations / Team map
@@ -215,14 +214,17 @@ export function MemoryManagerPanel() {
         name="memory"
         icon={Brain}
         title={t("memoryManager.title")}
-        large
+        section={scoped ? scopeLabel : null}
+        onRoot={() => goPlace({ kind: "all" })}
+        count={counts.all === 1 ? t("memoryManager.noteCountOne") : t("memoryManager.noteCount", { count: counts.all })}
+        subtitle={t("memoryManager.subtitle")}
         {...dragProps}
         topbar
         style={dragProps.style}
         actionsStyle={{ ...noDragStyle, ...controlsShiftStyle }}
         actions={<>
           {targets.length > 0 && (
-            <button type="button" data-memory-create="" className={cn(PRIMARY_BUTTON, "h-9 px-3.5")} onClick={() => startCreate()} title={t("memoryManager.newNote")}>
+            <button type="button" data-memory-create="" className={PAGE_ACTION_BUTTON} onClick={() => startCreate()} title={t("memoryManager.newNote")}>
               <Plus size={15} aria-hidden="true" /><span className="@max-[30rem]/page-header:sr-only">{t("memoryManager.newNote")}</span>
             </button>
           )}
@@ -254,9 +256,8 @@ export function MemoryManagerPanel() {
             <X size={16} />
           </button>
         </>}
-        below={(
-          <div className="mt-3 space-y-2" style={noDragStyle}>
-            <div className="flex flex-wrap items-center gap-2">
+        primaryStyle={noDragStyle}
+        primary={<>
               <div className="flex" data-memory-views="">
                 <PageSegment label={t("memoryManager.viewLabel")} value={view} onChange={(next) => { setView(next); if (next !== "map") setMapFocus(null); }} options={viewOptions} />
               </div>
@@ -268,7 +269,9 @@ export function MemoryManagerPanel() {
                   </button>
                 </span>
               )}
-            </div>
+        </>}
+        below={(error || notice) && (
+          <div className="mt-3 space-y-2" style={noDragStyle}>
             {error && <p role="alert" className="rounded-xl bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
             {notice && (
               <div className="flex items-center gap-2 rounded-xl bg-raised px-3 py-2 text-[12.5px] text-ink" data-memory-notice="">

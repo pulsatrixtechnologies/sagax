@@ -1,12 +1,14 @@
 /** Isolated gallery for headless screenshots of the admin Remote Sessions
  * page: the active list, history (ended and failed rows), the unattended
  * column, and the logs view. Not shipped in the app. A mocked fetch feeds
- * seeded rows and a redacted log so nothing connects. ?lang=<code>&skin=<id>. */
+ * seeded rows and a redacted log so nothing connects.
+ * ?lang=<code>&skin=<id>&width=<px>&height=<px>&hosts=0 (no enrolled host). */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { RemoteSessionsAdminPage, RemoteSessionLogList } from "../components/remote-session/RemoteSessionsAdminPage";
 import type { RemoteSessionAdminRow, RemoteSessionLogEntry } from "../../shared/remote-session-admin";
+import type { UnattendedHostRow } from "../../shared/remote-unattended-host";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import "../styles.css";
@@ -16,6 +18,8 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "fr");
 
+const width = Number(params.get("width") ?? 1100);
+const height = Number(params.get("height") ?? 640);
 const DAY = "2026-10-22T";
 const rows: RemoteSessionAdminRow[] = [
   {
@@ -52,9 +56,17 @@ const log: RemoteSessionLogEntry[] = [
   { at: `${DAY}13:20:00Z`, kind: "control.stop", reason: "released" },
 ];
 
+const hosts: UnattendedHostRow[] = params.get("hosts") === "0" ? [] : [
+  { hostId: "h-reception", hostname: "POSTE-RECEPTION", org: "Clinique Nord", scope: "full-control", installedBy: null, enrolledAt: "2026-09-30T09:00:00Z", expiresAt: "2026-12-29T09:00:00Z", lastSeenAt: `${DAY}13:20:00Z`, revokedAt: null, state: "enrolled" },
+  { hostId: "h-paie", hostname: "SERVEUR-PAIE", org: "Clinique Nord", scope: "full-control", installedBy: null, enrolledAt: "2026-10-10T14:00:00Z", expiresAt: "2027-01-08T14:00:00Z", lastSeenAt: `${DAY}11:40:00Z`, revokedAt: null, state: "enrolled" },
+];
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (url.includes("/api/admin/remote-sessions/hosts")) {
+    return new Response(JSON.stringify({ hosts, available: true }), { status: 200, headers: { "content-type": "application/json" } });
+  }
   if (url.includes("/api/admin/remote-sessions") && url.includes("/logs")) {
     return new Response(JSON.stringify({ entries: log }), { status: 200, headers: { "content-type": "application/json" } });
   }
@@ -74,8 +86,8 @@ window.fetch = async (input, init) => {
 function Gallery() {
   return (
     <div className="min-h-screen bg-app text-ink">
-      <div data-gallery-sample="list" className="h-[640px] w-[1100px] overflow-hidden border-b border-hairline/50">
-        <RemoteSessionsAdminPage />
+      <div data-gallery-sample="list" className="flex overflow-hidden border-b border-hairline/50" style={{ width, height }}>
+        <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col"><RemoteSessionsAdminPage /></div>
       </div>
       <div data-gallery-sample="logs" className="w-[720px] p-5">
         <div className="overflow-hidden rounded-2xl border border-hairline/60 bg-panel">

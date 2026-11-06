@@ -25,6 +25,7 @@ import { DetailPanel } from "./DetailPanel";
 import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 import { t, activeLocale } from "@/lib/i18n";
 import { CanvasComputers } from "./CanvasComputers";
+import { PAGE_ACTION_BUTTON, PAGE_HEADER_BUTTON, PageHeader } from "./content-page";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
 import type { TeamComputer } from "../../shared/team-computer";
 import { useMacInsetChrome } from "./DesktopCapabilities";
@@ -358,21 +359,21 @@ export function TeamMapPage() {
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-app text-ink">
       {(macInset || browser) && <div className="content-topbar-strip" />}
-      <header {...dragProps} className="content-topbar flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hairline/40 px-6 py-4 max-sm:pl-12">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <Network size={18} className="text-ink-secondary" />
-            <h1 className="text-[17px] font-semibold leading-6 tracking-[-0.008em]">{t("sidebar.nav.teamMap")}</h1>
-            <span className="ml-1 text-[11px] text-ink-secondary">{teamMapBotCount(bots.length)}</span>
-          </div>
-          <p className="mt-1 text-[12px] text-ink-secondary">{t("canvas.description")}</p>
-        </div>
-        {!remoteClient && <div style={controlsShiftStyle} className="flex items-center gap-2">
-          {ownComputers && <button onClick={() => setComputersOpen((value) => !value)} aria-label={t("settings.group.computers")} aria-expanded={computersOpen} className="flex size-9 items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary hover:bg-raised hover:text-ink"><Monitor size={16} /></button>}
+      <PageHeader
+        name="team-map"
+        icon={Network}
+        title={t("sidebar.nav.teamMap")}
+        count={teamMapBotCount(bots.length)}
+        subtitle={t("canvas.description")}
+        {...dragProps}
+        topbar
+        actionsStyle={controlsShiftStyle}
+        actions={!remoteClient && <>
+          {ownComputers && <button onClick={() => setComputersOpen((value) => !value)} aria-label={t("settings.group.computers")} aria-expanded={computersOpen} className={PAGE_HEADER_BUTTON}><Monitor size={16} /></button>}
           {(canEditTeams || ownComputers) && <details className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => {
             if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); }
           }}>
-            <summary aria-label={t("teamMap.addAria")} className="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 text-[12px] font-medium text-ink hover:bg-raised [&::-webkit-details-marker]:hidden"><Plus size={15} /> {t("common.add")}</summary>
+            <summary aria-label={t("teamMap.addAria")} className={PAGE_ACTION_BUTTON}><Plus size={15} /> {t("common.add")}</summary>
             <div className="absolute right-0 top-full z-40 mt-2 flex w-52 min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]" onClick={(event) => {
               const details = event.currentTarget.closest("details"); details?.querySelector("summary")?.focus(); details?.removeAttribute("open");
             }}>
@@ -382,8 +383,8 @@ export function TeamMapPage() {
               {adminTeams && placeOffered("vm", state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => dispatch({ type: "toggleAppSettings", section: "computer", open: true })}><Monitor size={16} />{t("teamMap.localVm")}</button>}
             </div>
           </details>}
-        </div>}
-      </header>
+        </>}
+      />
       <div className="content-card-body flex min-h-0 flex-1 flex-col">
       {manageTeams === false && !orgMode && !remoteClient && <p data-team-map-admin-only className="shrink-0 border-b border-hairline/40 bg-panel px-6 py-2 text-[12px] text-ink-secondary">{t("team.adminOnly")}</p>}
       {(error || refreshError) && <div role="alert" className="flex shrink-0 items-center justify-between gap-3 border-b border-danger/20 bg-danger/10 px-6 py-2 text-[12px] text-danger">

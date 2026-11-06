@@ -1,15 +1,14 @@
 // Achievements, a full page of the content frame (activeView "achievements";
 // store action showAchievements, from the account menu, the person panel's
-// Achievements tab and the `#achievements/<category>` address). A sister of
-// Automations since 2026-10-28: the same pieces (content-page.tsx). One row
-// of header: the trophy and the title (with "› Settings" on its settings),
-// the status segment (All, Unlocked, Locked) and the search, then on the
-// right the points and the streak, Filters (the category with each one's
-// unlocked count, the reward) and the ☰ menu (All achievements, Settings).
-// Under it, AchievementsPage in the centred column: the heading with the
-// level, the recent unlocks, one section per category. The settings
-// (AchievementSettingsPage, still `#achievements/settings`) are a section
-// of the ☰ menu, as Run logs and Webhooks are on Automations.
+// Achievements tab and the `#achievements/<category>` address). The Tools
+// page header since 2026-11-06 (the Team map standard, content-page.tsx):
+// the trophy, the title, the unlocked count and a grey line; on the right
+// the points, the streak, the settings button and the ☰ menu. The toolbar
+// row under it: the status segment (All, Unlocked, Locked), the search and
+// Filters (the category with each one's unlocked count, the reward).
+// Under it, AchievementsPage in the centred column. The settings
+// (AchievementSettingsPage, still `#achievements/settings`) open in a dialog
+// of the Settings family, over the page.
 import { useEffect, useRef, useState } from "react";
 import { Flame, Settings, Trophy } from "lucide-react";
 import { isBackShortcut } from "@/lib/back-shortcut";
@@ -18,8 +17,10 @@ import { cn } from "@/lib/cn";
 import { unlocksFromSnapshot, useAchievements } from "@/lib/achievements";
 import { useStore, type AchievementsCategory } from "@/state/store";
 import { useCaptionChrome } from "../DesktopCapabilities";
+import { useCategoryModalKeyboard } from "../category-modal";
+import { DIALOG, DialogCloseButton, DialogLayer } from "../SettingsPrimitives";
 import {
-  PAGE_FIELD_LABEL, PAGE_FILTER_RESET, PAGE_INDICATOR, PAGE_SELECT,
+  PAGE_FIELD_LABEL, PAGE_FILTER_RESET, PAGE_HEADER_BUTTON, PAGE_INDICATOR, PAGE_SELECT,
   PageBody, PageFilters, PageHeader, PageMenu, PageMenuItem, PageMenuSeparator, PageSearch, PageSegment, PageTopStrip, useDismissMenus,
 } from "../content-page";
 import { AchievementSettingsPage, AchievementsPage, achievementCategoryLabel, formatPoints } from "./AchievementsPage";
@@ -89,27 +90,20 @@ export function AchievementsScreen({ initialCategory }: { initialCategory?: Achi
         name="achievements"
         icon={Trophy}
         title={t("achievements.menu")}
-        section={settingsOpen ? t("achievements.settings.title") : null}
+        count={t("achievements.unlockedCount", { count: counts.all.unlocked, total: counts.all.total })}
+        subtitle={t("achievements.pageSubtitle")}
         {...dragProps}
         topbar
         primaryStyle={noDragStyle}
         actionsStyle={{ ...noDragStyle, ...controlsShiftStyle }}
-        primary={!settingsOpen && <>
+        primary={<>
           <PageSegment label={t("achievements.filter")} value={status} onChange={setStatus} options={[
             { value: "all", label: t("achievements.category.all") },
             { value: "unlocked", label: t("achievements.filter.unlocked") },
             { value: "locked", label: t("achievements.filter.locked") },
           ]} />
           <PageSearch value={search} onChange={setSearch} placeholder={t("achievements.search")} label={t("achievements.searchLabel")} data-achievement-search="" />
-        </>}
-        actions={<>
-          {snapshot && <span role="status" data-achievement-points="" title={pointsLabel} aria-label={pointsLabel} className={cn(PAGE_INDICATOR, "font-medium text-ink")}>
-            <Trophy size={14} className="text-[#e0a82e]" aria-hidden="true" />{formatPoints(snapshot.points)}
-          </span>}
-          {snapshot && snapshot.streak > 0 && <span role="status" data-achievement-streak="" title={t("achievements.streak", { days: snapshot.streak })} aria-label={t("achievements.streak", { days: snapshot.streak })} className={cn(PAGE_INDICATOR, "text-ink")}>
-            <Flame size={14} className="text-[#f97316]" aria-hidden="true" />{snapshot.streak}
-          </span>}
-          {!settingsOpen && (
+          <div className="ml-auto">
             <PageFilters name="achievements" menuRef={filtersRef} activeCount={activeFilters}>
               <label className="block">
                 <span className={PAGE_FIELD_LABEL}>{t("achievements.categories")}</span>
@@ -127,17 +121,58 @@ export function AchievementsScreen({ initialCategory }: { initialCategory?: Achi
               </label>
               {activeFilters > 0 && <button type="button" data-achievement-filter-reset="" onClick={clearFilters} className={PAGE_FILTER_RESET}>{t("routines.scope.reset")}</button>}
             </PageFilters>
-          )}
+          </div>
+        </>}
+        actions={<>
+          {snapshot && <span role="status" data-achievement-points="" title={pointsLabel} aria-label={pointsLabel} className={cn(PAGE_INDICATOR, "font-medium text-ink")}>
+            <Trophy size={14} className="text-[#e0a82e]" aria-hidden="true" />{formatPoints(snapshot.points)}
+          </span>}
+          {snapshot && snapshot.streak > 0 && <span role="status" data-achievement-streak="" title={t("achievements.streak", { days: snapshot.streak })} aria-label={t("achievements.streak", { days: snapshot.streak })} className={cn(PAGE_INDICATOR, "text-ink")}>
+            <Flame size={14} className="text-[#f97316]" aria-hidden="true" />{snapshot.streak}
+          </span>}
+          <button type="button" data-achievements-settings-open="" aria-label={t("achievements.settings.title")} title={t("achievements.settings.title")} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)} className={PAGE_HEADER_BUTTON}>
+            <Settings size={16} aria-hidden="true" />
+          </button>
           <PageMenu name="achievements" menuRef={menuRef} label={t("achievements.pageMenu")}>
-            <PageMenuItem icon={Trophy} current={!settingsOpen} data-achievements-menu-list="" onClick={() => { closeMenus(); setSettingsOpen(false); }}>{t("achievements.panel.all")}</PageMenuItem>
+            <PageMenuItem icon={Trophy} current data-achievements-menu-list="" onClick={() => { closeMenus(); setSettingsOpen(false); }}>{t("achievements.panel.all")}</PageMenuItem>
             <PageMenuSeparator />
-            <PageMenuItem icon={Settings} current={settingsOpen} data-achievements-menu-settings="" onClick={() => { closeMenus(); setSettingsOpen(true); }}>{t("achievements.settings.title")}</PageMenuItem>
+            <PageMenuItem icon={Settings} data-achievements-menu-settings="" onClick={() => { closeMenus(); setSettingsOpen(true); }}>{t("achievements.settings.title")}</PageMenuItem>
           </PageMenu>
         </>}
       />
       <PageBody data-achievements-pane="">
-        {settingsOpen ? <AchievementSettingsPage /> : <AchievementsPage category={category} status={status} reward={reward} search={search} />}
+        <AchievementsPage category={category} status={status} reward={reward} search={search} />
       </PageBody>
+      {settingsOpen && <AchievementSettingsDialog onClose={() => { setSettingsOpen(false); mainRef.current?.focus({ preventScroll: true }); }} />}
     </main>
+  );
+}
+
+/** The achievement settings (Your card, When you unlock one) in a dialog
+ * drawn like Settings, opened from the header's settings button. */
+export function AchievementSettingsDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useCategoryModalKeyboard(dialogRef, "[data-dialog-close]", onClose);
+  return (
+    <DialogLayer onBackdropMouseDown={onClose}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="achievement-settings-title"
+        tabIndex={-1}
+        data-achievements-settings-dialog=""
+        className={cn(DIALOG.frame, DIALOG.width.lg)}
+      >
+        <DialogCloseButton label={t("common.close")} onClick={onClose} />
+        <div className={DIALOG.header}>
+          <h2 id="achievement-settings-title" className={DIALOG.title}>{t("achievements.settings.title")}</h2>
+          <p className={DIALOG.subtitle}>{t("achievements.settings.subtitle")}</p>
+        </div>
+        <div className={DIALOG.body}>
+          <AchievementSettingsPage heading={false} />
+        </div>
+      </div>
+    </DialogLayer>
   );
 }

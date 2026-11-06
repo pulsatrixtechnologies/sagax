@@ -55,8 +55,14 @@ export function providerOptions<P extends string>(offered: readonly P[], all: re
   return options;
 }
 
-export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: string } }) {
-  const botId = bot?.id;
+/** The providers this person may use and the voices of the one that speaks,
+ * for one bot or for the person (shared by Edit bot > Voice and the bot
+ * panel's Voice chat card, #2125). */
+// Voices already read, per provider and bot: the picker shows the current
+// voice by name at once on the next open instead of a loading label (#2125).
+const voiceListCache = new Map<string, VoiceOption[]>();
+
+export function useVoicePicker(botId?: string) {
   const settings = useVoiceModeSettings();
   const view = voiceSettingsForBot(settings, botId);
   const [resolution, setResolution] = useState<{ botId?: string; tts: VoiceTtsChoice; stt: VoiceSttChoice; status: VoiceModeStatus } | null>(null);
@@ -64,10 +70,6 @@ export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: strin
   const currentResolution = resolution?.botId === botId && resolution?.tts === view.tts && resolution?.stt === view.stt;
   const [failed, setFailed] = useState<string | null>(null);
   const [voices, setVoices] = useState<VoiceOption[] | null>(null);
-  const [testing, setTesting] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const audio = useRef<HTMLAudioElement | null>(null);
-
   useEffect(() => {
     const controller = new AbortController();
     setFailed(null);
@@ -87,11 +89,33 @@ export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: strin
   useEffect(() => {
     if (!speaking || !offeredTts.includes(speaking)) { setVoices(null); return; }
     const controller = new AbortController();
-    setVoices(null);
-    fetchProviderVoices(speaking, botId, controller.signal).then(setVoices, () => { if (!controller.signal.aborted) setVoices([]); });
+    const cacheKey = `${speaking}:${botId ?? ""}`;
+    setVoices(voiceListCache.get(cacheKey) ?? null);
+    fetchProviderVoices(speaking, botId, controller.signal).then((next) => {
+      voiceListCache.set(cacheKey, next);
+      setVoices(next);
+    }, () => { if (!controller.signal.aborted) setVoices([]); });
     return () => controller.abort();
     // offeredTts is derived from status: its identity follows it
   }, [speaking, botId, status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectedVoice = speaking ? view.voices[speaking] ?? "" : "";
+  const voiceOptions: Array<PillOption<string>> = [
+    // the current voice reads by name right away, never "Loading voices" (#2125)
+    { value: "", label: t("voiceProviders.default") },
+    ...(selectedVoice && !(voices ?? []).some((voice) => voice.id === selectedVoice) ? [{ value: selectedVoice, label: selectedVoice }] : []),
+    ...(voices ?? []).map((voice) => ({ value: voice.id, label: voice.own ? t("voiceProviders.ownVoice", { voice: voice.label }) : voice.description ? `${voice.label} (${voice.description})` : voice.label })),
+  ];
+
+  return { settings, view, status, currentResolution, failed, voices, offeredTts, offeredStt, speaking, selectedVoice, voiceOptions };
+}
+
+export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: string } }) {
+  const botId = bot?.id;
+  const { settings, view, status, currentResolution, failed, offeredTts, offeredStt, speaking, selectedVoice, voiceOptions } = useVoicePicker(botId);
+  const [testing, setTesting] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => () => { audio.current?.pause(); }, []);
 
@@ -137,13 +161,6 @@ export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: strin
     : undefined;
 
   const none = status !== null && !offeredTts.length && !offeredStt.length;
-  const selectedVoice = speaking ? view.voices[speaking] ?? "" : "";
-  const voiceOptions: Array<PillOption<string>> = [
-    { value: "", label: voices === null && speaking ? t("voiceProviders.loading") : t("voiceProviders.default") },
-    ...(selectedVoice && !(voices ?? []).some((voice) => voice.id === selectedVoice) ? [{ value: selectedVoice, label: selectedVoice }] : []),
-    ...(voices ?? []).map((voice) => ({ value: voice.id, label: voice.own ? t("voiceProviders.ownVoice", { voice: voice.label }) : voice.description ? `${voice.label} (${voice.description})` : voice.label })),
-  ];
-
   const body = (
     <>
       {failed && (!status || !currentResolution) && <DescribedRow label={t("voiceProviders.tts")} description={failed} />}

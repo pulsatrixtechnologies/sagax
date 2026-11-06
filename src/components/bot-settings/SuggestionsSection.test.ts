@@ -21,8 +21,11 @@ describe("SuggestionsSection", () => {
   it("draws the card while the global preference is on", () => {
     fixture.shown = true;
     const html = renderToStaticMarkup(createElement(SuggestionsSection, { bot, routineCount: 0 }));
-    expect(html).toContain("data-suggestions-hide");
+    // the bot panel's card has no Hide and always offers Add to Slack (#2125)
+    expect(html).not.toContain("data-suggestions-hide");
     expect(html).toContain('data-suggestion="approval:t1"');
+    expect(html).toContain('data-suggestion="slack"');
+    expect(html).toContain("data-slack-logo");
   });
 
   it("draws nothing for any bot once the preference is off", () => {

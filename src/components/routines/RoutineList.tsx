@@ -1,4 +1,5 @@
-import { Loader2, MoreHorizontal, Repeat2 } from "lucide-react";
+import { Clock, Loader2, MoreHorizontal, Repeat2 } from "lucide-react";
+import { useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
@@ -12,7 +13,7 @@ import { BotAvatar } from "@/components/Avatar";
 import { PILL_INFO } from "@/lib/status-tones";
 import { Switch } from "../SettingsPrimitives";
 import { RoutineOwnerBadge } from "./RoutineScopeBar";
-import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
+import { GROUPED_CARD, GROUPED_ROW, PANEL_CARD, PANEL_ROW } from "@/lib/grouped-card";
 import { cn } from "@/lib/cn";
 import { RoutineNameInput } from "./RoutineRowMenu";
 
@@ -35,7 +36,7 @@ const UPCOMING_TONES = {
 } as const;
 
 
-export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, error, onOpen, onToggle, grouped = false, toggle = true, variant = "list", emptyText, onRowMenu, onRowDragStart, onRowStep, onOpenRunning, label, renamingId, onRenameStart, onRenameSave, onRenameCancel, showBot = false }: {
+export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, error, onOpen, onToggle, grouped = false, toggle = true, variant = "list", emptyText, onRowMenu, onRowDragStart, onRowStep, onOpenRunning, label, renamingId, onRenameStart, onRenameSave, onRenameCancel, showBot = false, collapseAfter, leadingClock = false }: {
   routines: Routine[];
   /** Slice 6: the signed-in person on an organization server. */
   viewerPrincipalId?: string | null;
@@ -80,7 +81,13 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
   /** The list variant with the bot before the schedule line (the Automations
    * list grouped by folder across bots, 2026-11-03). Needs `bots`. */
   showBot?: boolean;
+  /** The bot panel's Upcoming card (#2125): the first N rows, then a
+   * centered Show more at the bottom of the card. */
+  collapseAfter?: number;
+  /** A clock before each row's name (the bot panel's Upcoming card). */
+  leadingClock?: boolean;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const upcoming = variant === "upcoming";
   const sorted = upcoming
     ? [...routines].sort((a, b) => (a.nextRunAt ?? Infinity) - (b.nextRunAt ?? Infinity) || a.name.localeCompare(b.name))
@@ -94,8 +101,8 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
     {loading && <p role="status" className="flex items-center gap-2 p-3 text-[12px] text-ink-secondary"><Loader2 size={14} className="animate-spin" />{t("routines.loading")}</p>}
     {!loading && !error && sorted.length === 0 && <div className="rounded-xl border border-dashed border-hairline/50 p-6 text-center text-[13px] text-ink-secondary"><Repeat2 size={20} className="mx-auto mb-2 opacity-60" />{emptyText ?? t("routines.empty")}</div>}
     {sorted.length > 0 && (
-      <div className={grouped ? GROUPED_CARD : "flex flex-col gap-0.5"}>
-        {sorted.map((routine) => {
+      <div className={leadingClock ? PANEL_CARD : grouped ? GROUPED_CARD : "flex flex-col gap-0.5"}>
+        {(collapseAfter && !showAll ? sorted.slice(0, collapseAfter) : sorted).map((routine) => {
           const bot = upcoming || showBot ? bots?.find((candidate) => candidate.id === routine.botId) : undefined;
           const botName = bot?.name ?? routine.bot?.name;
           const when = upcoming && routine.nextRunAt != null ? routineNextRunPhrase(routine.nextRunAt) : routineWhenLabel(routine);
@@ -111,20 +118,27 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
           // 2026-10-28: the row says only "Paused" or "Running" (live), in quiet
           // text; "Runs as" lives in the routine's detail.
           const runningRun = onOpenRunning && !upcoming ? runs.find((run) => run.routineId === routine.id && run.status === "running") : undefined;
-          const showPaused = !upcoming && !routine.enabled && !autoPaused && !runningRun && routineScheduleState(routine) === t("routines.pausedSchedule");
+          const showPaused = !upcoming && !leadingClock && !routine.enabled && !autoPaused && !runningRun && routineScheduleState(routine) === t("routines.pausedSchedule");
           // The line under the name is always when the routine runs, even
           // paused: with a switch, the switch says it is off (the state stays
           // in the tooltip). A finished one-shot keeps its word.
           const pausedWithSwitch = toggle && !upcoming && !routine.enabled && routineScheduleState(routine) === t("routines.pausedSchedule");
-          const whenLine = upcoming ? when : routine.schedule.type !== "once" || routine.enabled || routine.nextRunAt != null ? scheduleLabelCompact(routine.schedule) : when;
+          const scheduleLine = upcoming ? when : routine.schedule.type !== "once" || routine.enabled || routine.nextRunAt != null ? scheduleLabelCompact(routine.schedule) : when;
+          // Bot panel Upcoming (#2125, as Grok Bot): a paused routine says only
+          // "Paused" under its name, its switch off; the schedule moves to the tooltip.
+          const pausedOnly = leadingClock && !upcoming && !routine.enabled && routineScheduleState(routine) === t("routines.pausedSchedule");
+          const whenLine = pausedOnly ? t("routines.pausedSchedule") : scheduleLine;
           // 2026-10-29: the row says how the last run went and when the next
           // one is, as cloud routines list them.
           // 2026-11-02 (JC): a live run takes the last-run line's place
           // ("Running · 2 min ago"); the old result never shows beside it.
           const lastRun = upcoming || runningRun ? undefined : runs.filter((run) => run.routineId === routine.id && run.status !== "queued" && run !== runningRun).sort((a, b) => routineRunTime(b) - routineRunTime(a))[0];
           const lastPreview = lastRun && !lastRun.redacted && !lastRun.quiet ? routineRunPreview(lastRun) : "";
-          const nextLine = !upcoming && routine.enabled && routine.nextRunAt != null ? routineNextRunPhrase(routine.nextRunAt) : undefined;
-          const whenTitle = [pausedWithSwitch ? routineWhenLabel(routine) : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n");
+          const nextRun = !upcoming && routine.enabled && routine.nextRunAt != null ? routineNextRunPhrase(routine.nextRunAt) : undefined;
+          // The bot panel's Upcoming (#2125): the line is only the schedule,
+          // as the reference design; the next run moves to the tooltip.
+          const nextLine = leadingClock ? undefined : nextRun;
+          const whenTitle = [pausedOnly ? scheduleLine : null, leadingClock && nextRun ? t("routines.list.next", { when: nextRun }) : null, pausedWithSwitch ? routineWhenLabel(routine) : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n");
           return (
             <div key={routine.id} data-routine-row data-routine-id={routine.id}
               onPointerDown={onRowDragStart && !readOnly ? (event) => {
@@ -133,7 +147,8 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 onRowDragStart(routine, event);
               } : undefined}
               onContextMenu={onRowMenu && !readOnly ? (event) => { event.preventDefault(); openMenu(routine, event.currentTarget, { x: event.clientX, y: event.clientY }); } : undefined}
-              className={cn("group/routine", onRowDragStart && !readOnly && "cursor-grab select-none", grouped ? cn("flex items-center gap-2 hover:bg-hover", GROUPED_ROW, "py-1.5") : "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover")}>
+              className={cn("group/routine", onRowDragStart && !readOnly && "cursor-grab select-none", leadingClock ? cn("flex items-center gap-2.5 hover:bg-hover", PANEL_ROW) : grouped ? cn("flex items-center gap-2 hover:bg-hover", GROUPED_ROW, "py-1.5") : "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover")}>
+              {leadingClock && <Clock size={16} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-tertiary" />}
               {renamingId === routine.id && onRenameSave ? <RoutineNameInput initial={routine.name} onSave={(name) => onRenameSave(routine, name)} onCancel={() => onRenameCancel?.()} /> : <button type="button" onClick={() => runningRun ? onOpenRunning!(routine, runningRun) : onOpen(routine)}
                 onKeyDown={(onRowMenu || onRowStep || onRenameStart) && !readOnly ? (event: ReactKeyboardEvent<HTMLButtonElement>) => {
                   if (onRenameStart && event.key === "F2") { event.preventDefault(); onRenameStart(routine); }
@@ -147,7 +162,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                     <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink">{routine.name}</span>
                     <span data-routine-state className={`shrink-0 rounded-md ${UPCOMING_TONES[state.tone]} px-1.5 text-[11px] leading-[16px]`}>{state.label}</span>
                   </span>
-                ) : <span className="block truncate text-[13px] leading-[18px] text-ink">{routine.name}</span>}
+                ) : <span className={cn("block truncate leading-[18px] text-ink", leadingClock ? "text-[14px]" : "text-[13px]")}>{routine.name}</span>}
                 {upcoming ? (
                   <span data-routine-when={when} title={[botName ? `${botName} · ${when}` : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n")} className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-ink-secondary">
                     {bot && <BotAvatar bot={bot} size={16} animated={false} />}
@@ -189,6 +204,8 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 className="hidden size-7 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-raised hover:text-ink focus-visible:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 group-hover/routine:flex touch:flex"><MoreHorizontal size={15} /></button>}
               {toggle && !upcoming && <Switch
                 checked={routine.enabled}
+                // the panel's off switch: a dark grey track, white thumb (#2125)
+                className={leadingClock && !routine.enabled ? "bg-[var(--bot-panel-switch-off)] shadow-none" : undefined}
                 disabled={readOnly}
                 title={readOnly ? t("routines.scope.readOnly") : undefined}
                 aria-label={routine.enabled ? t("botPanel.routines.pause") : t("botPanel.routines.resume")}
@@ -197,6 +214,12 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
             </div>
           );
         })}
+        {collapseAfter != null && sorted.length > collapseAfter && (
+          <button type="button" data-routines-show-more={showAll ? "less" : "more"} aria-expanded={showAll} onClick={() => setShowAll((value) => !value)}
+            className={cn("w-full py-2 text-center text-[13px] leading-[18px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60", leadingClock ? "px-3" : grouped && GROUPED_ROW)}>
+            {showAll ? t("botPanel.routines.showLess") : t("botPanel.library.showMore")}
+          </button>
+        )}
       </div>
     )}
   </div>;

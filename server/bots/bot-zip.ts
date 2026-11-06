@@ -57,6 +57,7 @@ import {
   type BotZipPreviewLine,
 } from "../../shared/bot-zip.ts";
 import { isApprovalMode } from "../../shared/approval-mode.ts";
+import { VOICE_MODE_MAX_SPEED, VOICE_MODE_MIN_SPEED, isVoiceModeLanguage } from "../../shared/voice-mode.ts";
 import { botAvatarUrlFromStoredPath } from "../../shared/bot-avatar.ts";
 import { takeImportName } from "../../shared/import-name.ts";
 import { MASCOT_COLOR_NAMES } from "../../shared/mascot-colors.ts";
@@ -146,6 +147,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   finishUntilMaxRounds: "settings",
   voice: "settings",
   voiceNotes: "settings",
+  voiceSpeed: "settings",
+  voiceLanguage: "settings",
   emailDrafts: "settings",
   memoryEnabled: "settings",
   loopGuard: "settings",
@@ -785,6 +788,8 @@ const settingsSchema = z.object({
   finishUntilMaxRounds: z.number().int().min(1).max(50).optional(),
   voice: z.string().max(200).optional(),
   voiceNotes: z.boolean().optional(),
+  voiceSpeed: z.number().finite().min(VOICE_MODE_MIN_SPEED).max(VOICE_MODE_MAX_SPEED).optional(),
+  voiceLanguage: z.string().refine(isVoiceModeLanguage).optional(),
   emailDrafts: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
   loopGuard: z.boolean().optional(),
@@ -950,6 +955,8 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       ...(settings.finishUntil ? { finishUntil: settings.finishUntil.replace(/[\r\n]+/g, " ").trim() } : {}),
       ...(settings.finishUntilMaxRounds !== undefined ? { finishUntilMaxRounds: settings.finishUntilMaxRounds } : {}),
       ...(settings.voiceNotes !== undefined ? { voiceNotes: settings.voiceNotes } : {}),
+      ...(settings.voiceSpeed !== undefined ? { voiceSpeed: settings.voiceSpeed } : {}),
+      ...(settings.voiceLanguage !== undefined ? { voiceLanguage: settings.voiceLanguage } : {}),
       ...(settings.emailDrafts !== undefined ? { emailDrafts: settings.emailDrafts } : {}),
       ...(settings.memoryEnabled !== undefined ? { memoryEnabled: settings.memoryEnabled } : {}),
       ...(settings.loopGuard !== undefined ? { loopGuard: settings.loopGuard } : {}),

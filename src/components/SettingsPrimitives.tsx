@@ -605,6 +605,7 @@ export function PillSelect<T extends string>({
   mixed = false,
   mixedLabel,
   fill = false,
+  bordered = false,
 }: {
   value: T | undefined;
   options: ReadonlyArray<PillOption<T>>;
@@ -617,6 +618,8 @@ export function PillSelect<T extends string>({
   /** Fill a table cell (Settings > Models): the value at the left, the
    * chevron at the cell's right edge, the same width on every row. */
   fill?: boolean;
+  /** The bot panel's Voice chat (#2125): a thin border around a compact pill. */
+  bordered?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -671,7 +674,7 @@ export function PillSelect<T extends string>({
         }}
         data-pill-select=""
         data-pill-mixed={mixed || value === undefined ? "" : undefined}
-        className={fill ? TABLE_CELL_CONTROL : "inline-flex h-7 max-w-[240px] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none"}
+        className={fill ? TABLE_CELL_CONTROL : cn("inline-flex h-7 max-w-[240px] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none", bordered && "h-6 border border-[var(--bot-panel-pill-border)] px-2")}
       >
         <span className={cn("min-w-0 truncate", fill && "flex-1 text-left", (mixed || value === undefined) && "text-ink-secondary")}>{shown}</span>
         <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />

@@ -675,6 +675,10 @@ export interface Bot {
   finishUntilMaxRounds?: number;
   /** this bot's own voice id (falls back to the app-wide one) */
   voice?: string;
+  /** #2125: voice chat speed; absent = 1x */
+  voiceSpeed?: number;
+  /** #2125: voice chat language code or "auto"; absent = auto-detect */
+  voiceLanguage?: string;
   /** whether this bot may send voice notes (on unless switched off) */
   voiceNotes?: boolean;
   /** whether this bot may write email draft cards (on unless switched off) */

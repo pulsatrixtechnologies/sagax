@@ -46,6 +46,8 @@ export type BotPatch = Partial<
     | "memoryEnabled"
     | "loopGuard"
     | "voice"
+    | "voiceSpeed"
+    | "voiceLanguage"
     | "emailDrafts"
     | "chiefOfStaff"
     | "managedSections"

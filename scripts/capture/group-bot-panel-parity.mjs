@@ -61,7 +61,7 @@ try {
         await groupPanel.screenshot({ path: join(outDir, `group-members-advanced-open-${label}.png`) });
       }
     }
-    for (const tab of ["details", "library", "computer"]) {
+    for (const tab of ["activity", "library"]) {
       const button = botPanel.locator(`[data-panel-tab="${tab}"]`);
       if (!(await button.count())) continue;
       await button.click();

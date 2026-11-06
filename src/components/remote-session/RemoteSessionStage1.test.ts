@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { formatEndLabel, type RemoteSessionView } from "../../../shared/remote-session";
 import { setLocale, t } from "@/lib/i18n";
 import { StoreProvider } from "@/state/store";
-import { visiblePanelTabs } from "../bot-settings/panel-tabs";
+import { showsComputer, visiblePanelTabs } from "../bot-settings/panel-tabs";
 import { RemoteSessionCard } from "./RemoteSessionCard";
 import { RemoteSessionsPanel } from "./RemoteSessionsSection";
 
@@ -37,10 +37,12 @@ describe("tailcat stage 1", () => {
     setLocale("en");
   });
 
-  it("never shows the Computer tab for a remote session: Simple hides it, a bot that works nowhere has none", () => {
-    expect(visiblePanelTabs({ advanced: false, computerOff: false })).toEqual(["details", "library"]);
-    expect(visiblePanelTabs({ advanced: true, computerOff: true })).toEqual(["details", "library"]);
-    expect(visiblePanelTabs({ advanced: true, computerOff: false })).toEqual(["details", "library", "computer"]);
+  it("never shows a Computer tab: the panel has Activity and Library, and Simple or a bot that works nowhere has no Computer card", () => {
+    expect(visiblePanelTabs({ advanced: false, computerOff: false })).toEqual(["activity", "library"]);
+    expect(visiblePanelTabs({ advanced: true, computerOff: false })).toEqual(["activity", "library"]);
+    expect(showsComputer({ advanced: false, computerOff: false })).toBe(false);
+    expect(showsComputer({ advanced: true, computerOff: true })).toBe(false);
+    expect(showsComputer({ advanced: true, computerOff: false })).toBe(true);
   });
 
   it("the panel row shows computer, user, code and end time, with Prendre le contrôle and a two-step close", () => {

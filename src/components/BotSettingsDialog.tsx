@@ -1,13 +1,17 @@
 import { botRoutineRuns } from "@/state/view-slices";
-// Per-bot settings as a right sidebar with fold-out (accordion) categories:
-// same shell pattern as InspectorPanel. Every section lives under
-// bot-settings/; their bodies and reads (overview, system-prompt, history)
-// are useBotSectionContent, shared with the persona editor. This dialog owns
-// which tab is up; every section but Details opens in the persona editor.
-// The header holds the bot's one "..." menu (BotActionsMenu) and Close.
+// The bot panel, as the reference design draws it (#2125): a round gear at
+// the top left (the bot's profile page) and a round X at the top right, a
+// small mascot and "Name · Label" on one line, then two tabs, Activity and
+// Library. Once the body scrolls past the tabs, the head compacts into one
+// row: gear, tabs centered, X. The bot's menu (archive, primary, export,
+// copy link, float) opens on a right click on the mascot or the name, and the
+// profile page holds the same actions. Every section lives under
+// bot-settings/; their bodies and reads are useBotSectionContent, shared
+// with the persona editor. Activity > Computer opens the computer view in
+// this same panel, with a back arrow to Activity.
 import { useEffect, useRef, useState } from "react";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
-import { PanelRight } from "lucide-react";
+import { ArrowLeft, Settings, X } from "lucide-react";
 
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import type { Bot } from "@/state/store";
@@ -21,7 +25,9 @@ import { LibraryTab } from "./bot-settings/LibraryTab";
 import { RolePermissionsSection } from "./bot-settings/RolePermissionsSection";
 import { RoutinesSection } from "./bot-settings/RoutinesSection";
 
-import { visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
+import { showsComputer, visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
+import { ComputerCard } from "./bot-settings/ComputerCard";
+import { VoiceChatCard } from "./bot-settings/VoiceChatCard";
 import { ActivitySection } from "./bot-settings/ActivitySection";
 import { BotTaskSection } from "./bot-settings/BotTaskSection";
 import { SuggestionsSection } from "./bot-settings/SuggestionsSection";
@@ -55,40 +61,49 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // Keep expansion in the store too: header deep links can arrive while
   // this panel is already mounted, including after collapsing the same row.
   const collapsed = !state.botSettingsExpandAccordion;
-  // Every deep link that reaches the panel (Details, Routines) lands on Details.
-  const [pickedTab, setPickedTab] = useState<Exclude<PanelTab, "computer">>("details");
+  // Every deep link that reaches the panel (the old Details, Routines)
+  // lands on Activity.
+  const [pickedTab, setPickedTab] = useState<PanelTab>("activity");
   useEffect(() => {
-    if (!collapsed) setPickedTab("details");
+    if (!collapsed) setPickedTab("activity");
   }, [collapsed, section]);
-  // The Computer tab is the store's computer view, so every existing
-  // "open the computer" link still lands on it. A bot that works nowhere
-  // (Works on: Off) has no computer to show; Works on stays in the editor.
+  // The computer view is the store's computerOpen, so every existing "open
+  // the computer" link (the old Computer tab's included) still lands on it,
+  // pushed over Activity. A bot that works nowhere (Works on: Off) and
+  // Simple have no computer to show: the link lands on Activity.
   const computerOff = bot.computer === "off";
+  const computerShown = showsComputer({ advanced, computerOff });
+  const computerView = computerShown && state.computerOpen;
   // an organization server's bots act as Perspicax roles: a recent refusal
-  // shows as one row in Details > Permissions
+  // shows as one row in Activity > Permissions
   const rolesOn = Boolean(state.config?.viewer?.role);
   const panelTabs = visiblePanelTabs({ advanced, computerOff });
-  // Simple has no computer tab. An open computer panel is otherwise closed
-  // by the shell; until that lands, the tab the person picked stays up.
-  const tab: PanelTab = advanced && state.computerOpen && panelTabs.includes("computer") ? "computer" : panelTabs.includes(pickedTab) ? pickedTab : "details";
+  const tab: PanelTab = panelTabs.includes(pickedTab) ? pickedTab : "activity";
   // the Library holds the bot's files (an achievement teaches it)
   useEffect(() => {
-    if (tab === "library") reportAchievement("files.opened");
-  }, [tab]);
+    if (tab === "library" && !computerView) reportAchievement("files.opened");
+  }, [tab, computerView]);
   const chooseTab = (next: PanelTab) => {
-    if (next === "computer") {
-      if (!panelTabs.includes("computer")) return;
-      dispatch({ type: "toggleComputer", open: true });
-      return;
-    }
     if (state.computerOpen || !collapsed) dispatch({ type: "toggleSettings", open: true });
     setPickedTab(next);
   };
+  // Suggested > Add to meeting opens a new routine in Upcoming.
+  const [meetingRequest, setMeetingRequest] = useState(0);
   const closePanel = () => {
     dispatch({ type: "toggleSettings", open: false });
     dispatch({ type: "toggleComputer", open: false });
   };
   const dockedPanel = useDockedPanelWidth();
+  // Compact head: once the in-flow tabs reach the top bar, they move into it.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+  const [compact, setCompact] = useState(false);
+  const onBodyScroll = () => {
+    const body = bodyRef.current;
+    const tabs = tabsRef.current;
+    if (!body || !tabs) return;
+    setCompact(body.scrollTop > 0 && tabs.offsetTop - body.scrollTop <= 0);
+  };
   // The bot's "..." menu: under its button in the header, or where a right
   // click on the mascot or the name happened.
   const [actionsMenu, setActionsMenu] = useState<BotActionsMenuAnchor | null>(null);
@@ -147,6 +162,43 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
     };
   }, [dispatch]);
 
+  const tabList = (inBar: boolean) => (
+    <div
+      role="tablist"
+      aria-label={t("botPanel.tabsAria")}
+      data-panel-tabs-compact={inBar ? "" : undefined}
+      onKeyDown={(event) => {
+        // Arrow keys move between tabs, as in any tab list.
+        const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        event.preventDefault();
+        const next = panelTabs[(panelTabs.indexOf(tab) + step + panelTabs.length) % panelTabs.length]!;
+        chooseTab(next);
+        event.currentTarget.querySelector<HTMLElement>(`[data-panel-tab="${next}"]`)?.focus();
+      }}
+      className="flex max-w-full items-center gap-1"
+    >
+      {panelTabs.map((id) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          data-panel-tab={id}
+          aria-selected={tab === id}
+          tabIndex={tab === id ? 0 : -1}
+          onClick={() => chooseTab(id)}
+          className={cn(
+            "rounded-full px-3 py-[3px] text-[14px] font-normal leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+            tab === id ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink",
+          )}
+        >
+          {t(`botPanel.tab.${id}`)}
+        </button>
+      ))}
+    </div>
+  );
+  const showCompact = compact && !computerView;
+
   return (
     <>
       <aside
@@ -156,13 +208,38 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
         tabIndex={-1}
         style={{ width: dockedPanel.width }}
         data-panel-bot={bot.id}
-        className="app-docked-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-app outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!"
+        className="app-docked-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-[var(--bot-panel-bg)] outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto!"
       >
         <DockedPanelResizeHandle label="Resize settings" panel={dockedPanel} />
         {(macInset || browser) && <div className="content-topbar-strip" />}
         {/* Top bar: only the controls, the way the reference design's panel opens. On
             Windows it drops below the caption buttons (padClass). */}
-        <div {...dragProps} className={cn("content-topbar relative flex h-12 shrink-0 items-center justify-end px-3", padClass)}>
+        <div {...dragProps} className={cn("content-topbar relative flex h-12 shrink-0 items-center justify-between px-3", padClass)}>
+          {computerView ? (
+            <button
+              type="button"
+              data-bot-panel-back=""
+              onClick={() => dispatch({ type: "toggleSettings", open: true })}
+              aria-label={t("botPanel.computerCard.back")}
+              title={t("botPanel.computerCard.back")}
+              className={CIRCLE_BUTTON}
+            >
+              <ArrowLeft size={18} strokeWidth={1.75} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-bot-panel-gear=""
+              // a Settings section, so the bot's profile page opens on its Settings tab (#2126)
+              onClick={() => dispatch({ type: "openPersonaEditor", botId: bot.id, section: "appearance" })}
+              aria-label={t("botPanel.editPersona")}
+              title={t("botPanel.editPersona")}
+              className={CIRCLE_BUTTON}
+            >
+              <Settings size={18} strokeWidth={1.75} />
+            </button>
+          )}
+          {showCompact && <div className="pointer-events-none absolute inset-x-14 flex justify-center [&>*]:pointer-events-auto">{tabList(true)}</div>}
           <div className="flex items-center gap-2">
             <BotActionsMenu
               bot={bot}
@@ -170,6 +247,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               onAnchor={setActionsMenu}
               onRename={() => setRenameRequest((count) => count + 1)}
               data={dataItem}
+              trigger={false}
             />
             <button
               type="button"
@@ -178,111 +256,95 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               title={t("common.close")}
               className={CIRCLE_BUTTON}
             >
-              <PanelRight size={18} strokeWidth={1.75} />
+              <X size={18} strokeWidth={1.75} />
             </button>
           </div>
         </div>
 
-        <div className="content-card-body flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [&>*]:shrink-0">
+        <div ref={bodyRef} onScroll={onBodyScroll} className="content-card-body relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [&>*]:shrink-0">
           {viewerBotsReadOnly(state.config) && (
             <p role="note" data-bots-read-only className="mx-4 mb-2 rounded-lg bg-raised/60 px-3 py-2 text-center text-[12.5px] leading-snug text-ink-secondary">{botsReadOnlyText(state.config)}</p>
           )}
-          {/* Who this is, then the tabs */}
-          <div className="flex shrink-0 flex-col items-center px-4 pb-3">
-            <BotProfileAvatarCard
-              bot={bot}
-              activeState={derived.activeState}
-              mascotMotion={derived.mascotMotion}
-              onPatch={derived.patch}
-              onContextMenu={openActionsAt}
-            />
-            {/* Name and label are edited where they show; the name stays
-                centered on its own line. The description is not shown here. */}
-            <div
-              className="-mt-1 flex max-w-full items-center justify-center"
-              // the bot's menu on the name too, as on the mascot
-              onContextMenu={openActionsAt}
-            >
-              <InlineEditableText
-                id="bot-settings-title"
-                value={bot.name}
-                required
-                maxLength={BOT_PROFILE_LIMITS.name}
-                ariaLabel={t("botPanel.name.edit")}
-                onSave={canEditBotField(state.config, bot, "name") ? (name) => derived.patch({ name }) : undefined}
-                editRequest={renameRequest}
-                className="text-[17px] font-medium leading-6 text-ink"
-              />
-            </div>
-            {/* The label shows when there is one; adding one is in the
-                editor's Profile. */}
-            {bot.title?.trim() && (
-              <InlineEditableText
-                value={bot.title}
-                maxLength={BOT_PROFILE_LIMITS.title}
-                placeholder={t("botPanel.label.add")}
-                ariaLabel={t("botPanel.label.edit")}
-                onSave={canEditBotField(state.config, bot, "title") ? (title) => derived.patch({ title }) : undefined}
-                muted
-                className="mt-0.5 text-[12.5px] leading-4"
-              />
-            )}
-            <div
-              role="tablist"
-              aria-label={t("botPanel.tabsAria")}
-              onKeyDown={(event) => {
-                // Arrow keys move between tabs, as in any tab list.
-                const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-                if (!step) return;
-                event.preventDefault();
-                const next = panelTabs[(panelTabs.indexOf(tab) + step + panelTabs.length) % panelTabs.length]!;
-                chooseTab(next);
-                event.currentTarget.querySelector<HTMLElement>(`[data-panel-tab="${next}"]`)?.focus();
-              }}
-              className="mt-4 flex max-w-full flex-wrap items-center justify-center gap-0.5"
-            >
-              {panelTabs.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  data-panel-tab={id}
-                  aria-selected={tab === id}
-                  tabIndex={tab === id ? 0 : -1}
-                  onClick={() => chooseTab(id)}
-                  className={cn(
-                    "rounded-md px-1.5 py-1 text-[13px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                    tab === id ? "bg-elevated-hover text-ink" : "text-ink-secondary hover:text-ink",
-                  )}
-                >
-                  {t(`botPanel.tab.${id}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {tab === "details" && (
-            <div className="flex flex-col gap-6 px-4 pb-6 pt-2">
-              <SuggestionsSection bot={bot} routineCount={derived.botRoutines.length} />
-              <BotTaskSection botId={bot.id} />
-              <ActivitySection bot={bot} />
-              {/* Temporary attended remote sessions: only while active, above Routines.
-                  Unattended hosts live in the Computer place picker. */}
-              <RemoteSessionsSection bot={bot} />
-              {rolesOn && <RolePermissionsSection botId={bot.id} />}
-              <section data-bot-settings-section="routines" className="flex flex-col gap-2">
-                <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped />
-              </section>
-              <PackageProvenance bot={bot} />
-            </div>
-          )}
-
-          {tab === "library" && <LibraryTab bot={bot} />}
-
-          {tab === "computer" && (
-            <div className="px-4 pt-2">
+          {computerView ? (
+            <div data-bot-panel-computer="" className="px-4 pt-2">
               <ComputerPanel bot={bot} onOpenVmWorkspace={onOpenVmWorkspace} embedded />
             </div>
+          ) : (
+            <>
+              {/* Who this is: it scrolls away, the tabs stay */}
+              <div className="flex shrink-0 flex-col items-center px-4 pb-1">
+                <BotProfileAvatarCard
+                  bot={bot}
+                  size={46}
+                  activeState={derived.activeState}
+                  mascotMotion={derived.mascotMotion}
+                  onPatch={derived.patch}
+                  onContextMenu={openActionsAt}
+                />
+                {/* "Name · Label" on one line, both edited where they show (the
+                    hover pencils float outside, taking no room); adding a
+                    label is in the profile page. */}
+                <div
+                  className="mt-2 flex max-w-full items-center justify-center gap-1 text-[16px] font-normal leading-[22px] text-ink"
+                  // the bot's menu on the name too, as on the mascot
+                  onContextMenu={openActionsAt}
+                >
+                  <InlineEditableText
+                    id="bot-settings-title"
+                    value={bot.name}
+                    required
+                    maxLength={BOT_PROFILE_LIMITS.name}
+                    ariaLabel={t("botPanel.name.edit")}
+                    onSave={canEditBotField(state.config, bot, "name") ? (name) => derived.patch({ name }) : undefined}
+                    editRequest={renameRequest}
+                    className="min-w-0 shrink gap-0 px-0.5 text-[16px] font-normal leading-[22px] text-ink [&>svg]:absolute [&>svg]:-left-3.5"
+                  />
+                  {bot.title?.trim() && (
+                    <>
+                      <span aria-hidden="true" className="shrink-0">·</span>
+                      <InlineEditableText
+                        value={bot.title}
+                        maxLength={BOT_PROFILE_LIMITS.title}
+                        placeholder={t("botPanel.label.add")}
+                        ariaLabel={t("botPanel.label.edit")}
+                        onSave={canEditBotField(state.config, bot, "title") ? (title) => derived.patch({ title }) : undefined}
+                        className="min-w-0 shrink gap-0 px-0.5 text-[16px] font-normal leading-[22px] text-ink [&>svg]:absolute [&>svg]:-right-3.5"
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+              {/* The tabs; once scrolled to the top they move into the top bar */}
+              <div ref={tabsRef} data-bot-panel-tabs="" className={cn("flex justify-center px-4 pb-4 pt-4", showCompact && "invisible")}>
+                {tabList(false)}
+              </div>
+
+              {tab === "activity" && (
+                <div className="flex flex-col gap-5 px-4 pb-6">
+                  <section data-bot-settings-section="routines" className="flex flex-col gap-2">
+                    <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped upcoming createRequest={meetingRequest} />
+                  </section>
+                  <SuggestionsSection
+                    bot={bot}
+                    routineCount={derived.botRoutines.length}
+                    slackUrl={slackUrl}
+                    onAddToMeeting={() => setMeetingRequest((count) => count + 1)}
+                  />
+                  {computerShown && <ComputerCard bot={bot} />}
+                  <VoiceChatCard bot={bot} onPatch={derived.patch} readOnly={!canEditBotField(state.config, bot, "voice")} />
+                  {/* What the bot does now and did: each folds away when empty. */}
+                  <BotTaskSection botId={bot.id} />
+                  <ActivitySection bot={bot} />
+                  {/* Temporary attended remote sessions: only while active.
+                      Unattended hosts live in the Computer place picker. */}
+                  <RemoteSessionsSection bot={bot} />
+                  {rolesOn && <RolePermissionsSection botId={bot.id} />}
+                  <PackageProvenance bot={bot} />
+                </div>
+              )}
+
+              {tab === "library" && <LibraryTab bot={bot} />}
+            </>
           )}
 
         </div>

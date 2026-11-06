@@ -4833,7 +4833,7 @@
       "botPanel.library.loading": "ba3bbbe10d8bef66441c88536ce7b8e724e2829b59a3da658654f4961cd61ae5",
       "botPanel.library.error": "97a7d3988c246fd4095be6d7ebc0e8ee1aa383cd82112049d7fb7d7d3de4844f",
       "botPanel.tabsAria": "5bb63878d337cbdcb53c1bab56098cc1d092161e314239f0139e4d488b1b83f6",
-      "botPanel.suggestions.title": "16c1d601fc66950402ca8d54257acea0f5d21be1e00b9eb99224e436da66c950",
+      "botPanel.suggestions.title": "93b63bab4c3a28d73a8bb83bcdfdcc5f6ddecfc8fc702296ca159d94c5dc6e53",
       "botPanel.suggestions.hide": "ac20a57bfde0bbc40bfe70895eb1cfacc944aaff06ca784053623c569b3e1b3d",
       "botPanel.suggestions.approval.title": "2e5599d4c99ed8597292a50b6ae92a41b6fb7aec04f9dc3efb2f2f2e71acd8d4",
       "botPanel.suggestions.approval.subtitle": "346abd9822de0ad1c3327966aafadfcce1289ff3e92770fa137ccaa576eb45da",
@@ -17230,7 +17230,16 @@
       "connectApps.skill.off": "ca7981b46ecf2c1787b6d76d81d9fd7fa0ca95842e2fcc2a452869891a9334d1",
       "connectApps.skill.on": "130011756125313c72f2cab730db4347e2841526d236a89cb25f38789fa49229",
       "connectApps.skill.publish": "859390eb495b2ead7f05f0f799546c71435b2db31dbe082adecc3426fffc3391",
-      "connectApps.skill.saveMd": "f8b33d9682e26540e89eb24174d8516c87cf9cf00868050134959aa01188bf5d"
+      "connectApps.skill.saveMd": "f8b33d9682e26540e89eb24174d8516c87cf9cf00868050134959aa01188bf5d",
+      "botPanel.tab.activity": "38da1505ca8373288489495101b14f24ac95078f520ad64df18272aa6054f750",
+      "botPanel.routines.showLess": "94ea9b1d33a02975ea6b71d6cf87d461a48de07869c047b5daeb1654e9d539f8",
+      "botPanel.suggestions.slack.title": "3357cd3d0cee91e1af62b6ae5aa35ef82f7f3f11166752a9b08dc870cc5f06cf",
+      "botPanel.suggestions.meeting.title": "830195471a9c8660856e577a66f616f1a89d1b940f137d3a4c243b4e143f32ae",
+      "botPanel.computerCard.title": "6d3ac489128eb83d9f039c74d0c07ad2352459017cf53e31ba6bbbd286af9df6",
+      "botPanel.computerCard.awake": "9123b5f4812aa52e79126fac805d933eeb98b609491fa16ef391d1544b506b71",
+      "botPanel.computerCard.working": "a92f0449a9f7235bf69dc2e8ff7070bfae3f00ec8f8f26e5457a9beac53466ac",
+      "botPanel.computerCard.back": "02b5e3c897d5eabd71ada6e6c9c9c0538e19ff39329bcb6dfd40a49eb0e28503",
+      "botPanel.voiceChat.title": "9bdbc177e89d82e2faf7a8a3624d0e0db95781036cafde1e92e4d74036405052"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

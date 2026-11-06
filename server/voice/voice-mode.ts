@@ -166,6 +166,10 @@ export interface VoiceTarget {
   threadId: string;
   /** The bot's owner (organization server), for the access card's audience. */
   ownerPrincipalId?: string;
+  /** #2125: the bot's own voice chat speed and language (bot panel > Voice chat).
+   * When set they win over what the device sends. */
+  speed?: number;
+  language?: string;
 }
 
 export type VoiceKey =
@@ -493,7 +497,7 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
    * the page gets a 502 and speaks over POST /voice/stream. A key refused
    * for credits or for itself gives way to the next one before that, and a
    * provider that fails to another provider. The keys stay here. */
-  async function speech(req: IncomingMessage, res: import("node:http").ServerResponse, url: URL, json: Json, keys: VoiceKeyCandidate[], refusals: VoiceKeyRefusals, who: string, usageFor: UsageFor, voiceFor: (provider: VoiceProviderId) => string | undefined, threadId: string): Promise<void> {
+  async function speech(req: IncomingMessage, res: import("node:http").ServerResponse, url: URL, json: Json, keys: VoiceKeyCandidate[], refusals: VoiceKeyRefusals, who: string, usageFor: UsageFor, voiceFor: (provider: VoiceProviderId) => string | undefined, threadId: string, botVoice: { speed?: number; language?: string } = {}): Promise<void> {
     const upgrade = deps.upgrade?.(req);
     const speaks = (candidate: VoiceKeyCandidate) => {
       const adapter = adapterOf(candidateProvider(candidate));
@@ -503,9 +507,9 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
     if (!upgrade || !usable.length) { json(res, 426, { error: "WebSocket upgrade required" }); return; }
     const shake = handshake(req);
     if ("status" in shake) { json(res, shake.status, { error: shake.error }); return; }
-    const language = url.searchParams.get("language") ?? "auto";
+    const language = botVoice.language ?? url.searchParams.get("language") ?? "auto";
     if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
-    const speed = Number(url.searchParams.get("speed") ?? "1");
+    const speed = botVoice.speed ?? Number(url.searchParams.get("speed") ?? "1");
     if (!Number.isFinite(speed) || speed < VOICE_MODE_MIN_SPEED || speed > VOICE_MODE_MAX_SPEED) {
       json(res, 400, { error: `speed must be between ${VOICE_MODE_MIN_SPEED} and ${VOICE_MODE_MAX_SPEED}` });
       return;
@@ -1040,7 +1044,7 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
     };
     if (choice.badVoice && action !== "listen") return json(res, 400, { error: "voice must be a voice id" });
     if (action === "listen") return listen(req, res, url, json, sttKeys, refusals, who, usageFor, keyterms(), target.threadId);
-    if (action === "speech") return speech(req, res, url, json, ttsKeys, refusals, who, usageFor, voiceFor, target.threadId);
+    if (action === "speech") return speech(req, res, url, json, ttsKeys, refusals, who, usageFor, voiceFor, target.threadId, { speed: target.speed, language: target.language });
 
     if (action === "speak" || action === "stream") {
       const record = body as Record<string, unknown>;
@@ -1050,11 +1054,11 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
       let text = action === "stream" ? deps.utterances(raw).join(" ").trim() : raw;
       if (action === "stream" && raw.length > VOICE_MODE_MAX_TEXT * 4) return json(res, 413, { error: `voice sentences are limited to ${VOICE_MODE_MAX_TEXT * 4} characters` });
       if (text.length > VOICE_MODE_MAX_TEXT) return json(res, 413, { error: `voice utterances are limited to ${VOICE_MODE_MAX_TEXT} characters` });
-      const speed = record.speed === undefined ? 1 : record.speed;
+      const speed = target.speed ?? (record.speed === undefined ? 1 : record.speed);
       if (typeof speed !== "number" || !Number.isFinite(speed) || speed < VOICE_MODE_MIN_SPEED || speed > VOICE_MODE_MAX_SPEED) {
         return json(res, 400, { error: `speed must be between ${VOICE_MODE_MIN_SPEED} and ${VOICE_MODE_MAX_SPEED}` });
       }
-      const language = record.language === undefined ? "auto" : record.language;
+      const language = target.language ?? (record.language === undefined ? "auto" : record.language);
       if (!isVoiceModeLanguage(language)) return json(res, 400, { error: "unknown language" });
       if (action === "stream") {
         text = readForVoice(language, text);

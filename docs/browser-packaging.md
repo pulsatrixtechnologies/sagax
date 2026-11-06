@@ -25,6 +25,12 @@ Profiles, cookies and downloads are user data, never packaged resources.
 The npm/self-hosted distribution stays small and retains its explicit browser
 installation flow. Desktop packaging does not silently enlarge the npm tarball.
 
+## Signed-in sites
+
+Each built-in browser lists its signed-in sites (Settings → Browser profiles,
+or a bot's Browser panel) with Sign out per site and Sign out of all. It works
+the same on desktop, a server and Cloud, for an open or a closed browser.
+
 ## Process hygiene
 
 Each built-in browser is an agent-browser daemon and the Chrome it starts.

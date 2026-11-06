@@ -1,4 +1,5 @@
-// Agents tool family: Room list and post from a direct chat.
+// Agents tool family: Room list and post from a direct chat, and
+// message_user (#2118): write to one person through Sagax.
 // Definitions and handlers. Assembled in order by agents-catalog.ts;
 // dispatched by agents-call.ts. Never import server/index.ts.
 
@@ -29,7 +30,22 @@ export const DEF_POST_TO_ROOM = {
     },
   };
 
-export const ROOMS_TOOL_NAMES: ReadonlySet<string> = new Set(['list_rooms', 'post_to_room'] as const);
+export const DEF_MESSAGE_USER = {
+    name: "message_user",
+    description:
+      "Message one person of your organization when the user asks you to write to, tell or ask someone by name. Sagax posts it, as you, in the group of exactly the user, that person and you (created when missing); their answer arrives there for you to read. If the name matches nobody or several people, ask the user; never guess.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        user: { type: "string", description: "The person's name, login or email, as the user said it." },
+        text: { type: "string", description: "The complete message, written for that person." },
+      },
+      required: ["user", "text"],
+    },
+  };
+
+export const ROOMS_TOOL_NAMES: ReadonlySet<string> = new Set(['list_rooms', 'post_to_room', 'message_user'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callRoomsTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -74,6 +90,20 @@ export async function callRoomsTool(name: string, args: Json, context: ToolCallC
     if (r.error) return { text: String(r.error), isError: true };
     return {
       text: `Posted in ${r.roomName ?? "the room"}${r.attachedVoiceNote ? " with the voice note attached" : ""}. Nobody's turn was started, so expect no reply — tell the user it is posted.`,
+    };
+  }
+  if (name === "message_user") {
+    const user = String(args.user ?? "").trim();
+    const text = String(args.text ?? "").trim();
+    if (!user || !text) return { text: "message_user needs user (the person's name) and text.", isError: true };
+    const r = await api("/api/internal/message-user", {
+      method: "POST",
+      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, user, text }),
+    });
+    if (r.error) return { text: String(r.error), isError: true };
+    const where = String(r.groupName ?? "the group");
+    return {
+      text: `${r.created ? `Created the group ${where} and sent` : `Sent in ${where}`} your message to ${String(r.person || user)}. Their answer will arrive in that group, where you are a member. Tell the user it is sent.`,
     };
   }
   return null;

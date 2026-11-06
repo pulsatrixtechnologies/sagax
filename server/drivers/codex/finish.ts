@@ -25,6 +25,7 @@ import type { CodexSession } from "./session-types.ts";
 import { redactSecretsInText } from "../../redact.ts";
 import { CODEX_AMBIENT_MCP_REFUSAL } from "../../../shared/presend-refusal.ts";
 import { clearAmbientRefusal, codexHomeOf, forgetAmbientMcp, learnAmbientMcp, learnedAmbientMcp, noteAmbientRefusal } from "./ambient-mcp.ts";
+import { enabledMcpMounts, supportsMcpStartup } from "./mcp-startup.ts";
 
 /** A mount's `env` table as Codex reports it equals the one Sagax wrote. */
 function sameLiteralEnv(actual: unknown, expected: Record<string, string>): boolean {
@@ -47,13 +48,14 @@ if (s.attempt === 0 && !s.announced) s.emit({ ...s.base(s.threadId, s.turnId), t
 // nothing streamed yet, and never for auth/shape errors or interrupts
 try {
   if (!s.process.initialized) {
-  await s.request("initialize", {
+  const initialized = await s.request("initialize", {
     clientInfo: { name: "openmausbot", title: "Sagax", version: serverVersion() },
     // Named permission profiles are an experimental app-server field in
     // Codex 0.151. Negotiate them explicitly; older servers ignore this
     // capability and remain on the legacy Custom fallback below.
     capabilities: { experimentalApi: true },
   });
+  s.process.userAgent = initialized?.userAgent;
   s.send({ jsonrpc: "2.0", method: "initialized", params: {} });
   s.process.initialized = true;
   }
@@ -355,6 +357,14 @@ try {
       ...(turn.effort ? { effort: turn.effort } : {}),
     });
   };
+  // Codex starts MCP with the thread and does not wait before sampling
+  // (codex-cli 0.166.0). Hold turn/start until each mounted server has
+  // reported ready/failed/cancelled, or the bounded wait expires.
+  const waitNames = supportsMcpStartup(s.process.userAgent)
+    ? enabledMcpMounts([...s.selectedMcp.keys(), ...s.directMounts], effectiveConfig, turn.toolScope !== undefined)
+    : [];
+  const mcpReady = await s.mcpStartup.settled(waitNames, s.stopSignal.signal);
+  if (!mcpReady || s.stopRequested || s.state.settled) return s.releaseSlot();
   try {
     await startTurn();
   } catch (error) {
@@ -376,7 +386,7 @@ try {
   // Three guards hold here: main's abandoned attempt never retries,
   // neither does a Company session already recovered once from canonical
   // history, and a Stop already asked for must not be undone by a relaunch.
-  if (!s.state.settled && !s.abandoned && !s.recoveredMissingSession && !s.stopRequested && !needsAuth && verdict.transient && s.attempt < RETRY_MAX_ATTEMPTS - 1 && s.state.sawStreamDelta === false) {
+  if (!s.state.settled && !s.abandoned && !s.recoveredMissingSession && !s.stopRequested && !needsAuth && s.codexTurnId === null && s.earlyNotifications.length === 0 && verdict.transient && s.attempt < RETRY_MAX_ATTEMPTS - 1 && s.state.sawStreamDelta === false) {
     return s.relaunch(verdict.reason, message, "rpc_error");
   }
   // abandoned marks an attempt retired by a retry; its late rpc
@@ -388,7 +398,8 @@ try {
     s.emit({
       ...s.base(s.threadId, s.turnId),
       type: "runtime.error",
-      message,
+      message: s.earlyNotifications.some((event) => ["commandExecution", "fileChange", "mcpToolCall", "webSearch"].includes(event.params?.item?.type))
+        ? `${message} A tool action may have run. Check its effects before trying again.` : message,
       ...(needsAuth ? { setup: true } : {}),
     });
     await s.settle(false, needsAuth ? "auth_required" : verdict.reason === "provider_safety" ? "provider_safety" : "rpc_error");

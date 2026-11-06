@@ -24,7 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("node:fs", { spy: true });
 vi.resetModules();
 const spied = await import("node:fs");
-const { renameWithRetry, writeFileAtomic, writeFileAtomicIfChanged } = await import("./atomic.ts");
+const { OwnedFile, renameWithRetry, writeFileAtomic, writeFileAtomicIfChanged } = await import("./atomic.ts");
 
 describe("writeFileAtomic", () => {
   let dir: string;
@@ -252,5 +252,29 @@ describe("renameWithRetry", () => {
       expect(() => renameWithRetry("a.tmp", "a", stub.rename)).toThrow(new RegExp(code));
       expect(stub.calls).toBe(1);
     }
+  });
+});
+
+describe("OwnedFile", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "omb-owned-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("skips a write whose text equals the last one written or loaded", () => {
+    const path = join(dir, "bots.json");
+    const file = new OwnedFile(path, { mode: 0o600 });
+    expect(file.write('{"a":1}')).toBe(true);
+    expect(readFileSync(path, "utf8")).toBe('{"a":1}');
+    const renames = vi.mocked(spied.renameSync).mock.calls.length;
+    expect(file.write('{"a":1}')).toBe(false);
+    expect(vi.mocked(spied.renameSync).mock.calls.length).toBe(renames);
+    file.loaded('{"b":2}');
+    expect(file.write('{"b":2}')).toBe(false);
+    expect(file.write('{"c":3}')).toBe(true);
+    expect(readFileSync(path, "utf8")).toBe('{"c":3}');
   });
 });

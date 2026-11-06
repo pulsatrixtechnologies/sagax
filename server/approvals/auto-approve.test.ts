@@ -90,6 +90,17 @@ describe("autoVerdict", () => {
       expect(autoVerdict(mode, tool, { ownReadOnlyCommand: true, requiresExplicitApproval: true }).approve).toBeNull();
     }
   });
+  it("answers a bot's plain read of its own files at every level, but never a sandbox widening or a question", () => {
+    for (const mode of ["ask", "edits", "auto", "custom"] as const) {
+      expect(autoVerdict(mode, "Bash", { ownFilesRead: true }), mode).toEqual({ approve: "approved Bash (its own files)", source: "own-files" });
+    }
+    expect(autoVerdict("ask", "Read", { ownFilesRead: true })).toEqual({ approve: "approved Read (its own files)", source: "own-files" });
+    expect(autoVerdict("ask", "Bash", { ownFilesRead: true, requiresExplicitApproval: true })).toEqual({ approve: null, source: "explicit-approval-block" });
+    expect(autoVerdict("ask", "AskUserQuestion", { ownFilesRead: true })).toEqual({ approve: null, source: "no-grant" });
+    // Sagax answers own-files before Full (same order as own-read-only); the call still runs with no card.
+    expect(autoVerdict("full", "Read", { ownFilesRead: true }).source).toBe("own-files");
+    expect(autoVerdict("ask", "Bash", { ownFilesRead: false })).toEqual({ approve: null, source: "no-grant" });
+  });
   it("never uses a saved command grant to silently send on the person's behalf", () => {
     for (const mode of ["ask", "edits", "auto", "custom"] as const) {
       expect(autoVerdict(mode, "mcp__composio__GMAIL_SEND_DRAFT", { commandAllowed: true })).toEqual({ approve: null, source: "outbound-guard" });
@@ -105,6 +116,17 @@ describe("autoVerdict", () => {
       expect(autoVerdict(mode, "AskUserQuestion", { commandAllowed: true }).approve).toBeNull();
     }
     expect(autoVerdict("full", "Bash", { commandAllowed: true, requiresExplicitApproval: true }).source).toBe("full-access");
+  });
+  it("applies an exact saved MCP read grant without bypassing outbound or sandbox guards", () => {
+    for (const mode of ["ask", "edits", "auto", "custom"] as const) {
+      expect(autoVerdict(mode, "mcp__linear__list_issues", { toolAllowed: true })).toEqual({
+        approve: "approved mcp__linear__list_issues (always allowed)",
+        source: "tool-allowlist",
+      });
+      expect(autoVerdict(mode, "mcp__linear__list_issues", { toolAllowed: true, requiresExplicitApproval: true }).approve).toBeNull();
+      expect(autoVerdict(mode, "mcp__linear__create_comment", { toolAllowed: true }).approve).toBeNull();
+      expect(autoVerdict(mode, "AskUserQuestion", { toolAllowed: true }).approve).toBeNull();
+    }
   });
   it("answers only for Full access, and then answers everything", () => {
     expect(autoVerdict("full", "Bash")).toEqual({ approve: "approved Bash (full access)", source: "full-access" });
@@ -336,9 +358,10 @@ describe("delegatedApprovalMode", () => {
     expect(delegatedApprovalMode({ ...base, recipientMode: "custom", recipientDriverKind: "codex" })).toBeNull();
   });
   it("steps down to the next level the teammate's engine has", () => {
-    // No Full mode (hermes): the Chief's Full becomes Approve for me.
-    expect(delegatedApprovalMode({ ...base, recipientDriverKind: "hermes" })).toBe("auto");
-    expect(delegatedApprovalMode({ ...base, recipientDriverKind: undefined })).toBe("auto");
+    // Full runs on every engine (omb #2808): the Chief's Full stays Full,
+    // including engines with no permissive mode of their own.
+    expect(delegatedApprovalMode({ ...base, recipientDriverKind: "hermesAgent" })).toBe("full");
+    expect(delegatedApprovalMode({ ...base, recipientDriverKind: undefined })).toBe("full");
     // Codex has no Auto-accept edits (its Ask already writes the workspace).
     expect(delegatedApprovalMode({ ...base, senderMode: "edits", recipientDriverKind: "codex" })).toBeNull();
     expect(delegatedApprovalMode({ ...base, senderMode: "auto", recipientDriverKind: "codex" })).toBe("auto");

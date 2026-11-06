@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  activeRowKey, filterModelSections, foldSearch, groupedModelMenuEntries, modelMenuRoot, modelMenuRootEntries, pickableRows, stepRow,
-  ALL_MODELS_KEY, FAVORITE_KEY_PREFIX, PROVIDER_KEY_PREFIX, type ModelMenuRow, type ModelMenuSection,
+  activeRowKey, filterModelSections, foldSearch, groupedModelMenuEntries, modelMenuRoot, modelMenuRootEntries, pickableRows, previewProviderRows, stepRow,
+  ALL_MODELS_KEY, FAVORITE_KEY_PREFIX, PROVIDER_KEY_PREFIX, PROVIDER_MODEL_PREVIEW, type ModelMenuRow, type ModelMenuSection,
 } from "./model-menu";
 
 const model = (key: string, label: string, extra: Partial<ModelMenuRow> = {}): ModelMenuRow => ({ key, kind: "model", modelId: key, label, current: false, ...extra });
@@ -107,5 +107,25 @@ describe("groupedModelMenuEntries (Simple, Owner 2026-10-14)", () => {
   it("has no All models entry without a provider", () => {
     const root = modelMenuRoot([sections[0]!], []);
     expect(groupedModelMenuEntries(root, false).map((entry) => entry.key)).toEqual(["auto"]);
+  });
+});
+
+describe("previewProviderRows (#2181)", () => {
+  const many = Array.from({ length: 7 }, (_, i) => model(`m${i}`, `Model ${i}`, { current: i === 5 }));
+
+  it(`shows at most ${PROVIDER_MODEL_PREVIEW} models in order when collapsed`, () => {
+    const { rows, hidden } = previewProviderRows(many, { expanded: false });
+    expect(rows.map((row) => row.key)).toEqual(["m0", "m1", "m2", "m5"]);
+    expect(hidden).toBe(3);
+  });
+
+  it("keeps a favorite that sits past the preview window", () => {
+    const { rows } = previewProviderRows(many, { expanded: false, favoriteKeys: ["m6"] });
+    expect(rows.map((row) => row.key)).toEqual(["m0", "m1", "m5", "m6"]);
+  });
+
+  it("shows every model when expanded or when the list is short", () => {
+    expect(previewProviderRows(many, { expanded: true }).rows).toHaveLength(7);
+    expect(previewProviderRows(many.slice(0, 3), { expanded: false }).hidden).toBe(0);
   });
 });

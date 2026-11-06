@@ -56,10 +56,10 @@ export function approvalModeOptionsFor(driverKind: string, trustedModesAvailable
       // Antigravity has no native reviewer. Offer its explicit full-access
       // grant as Auto instead of a second choice that actually behaves as Ask.
       && (driverKind !== "antigravityAgent" || option.mode !== "auto")
-      && (trustedModesAvailable || option.mode === "ask" || option.mode === "edits" || option.mode === "auto" ||
-        // Organization server: the bot's owner sees Full (greyed when the
-        // organization turned it off); Custom stays desktop only.
-        (option.mode === "full" && orgFullAccess !== undefined && orgFullAccess !== "hidden")))
+      // Full is available from any client (omb #2701). Custom stays desktop
+      // only. Organization: the owner sees Full (greyed when turned off).
+      && (option.mode !== "custom" || trustedModesAvailable)
+      && (option.mode !== "full" || orgFullAccess !== "hidden"))
     .map((option) => {
       if (driverKind === "antigravityAgent" && option.mode === "full") {
         return {
@@ -100,6 +100,7 @@ export function ApprovalModeSelector({
   menuDirection = "up",
   wide = false,
   disabled = false,
+  busy = false,
   trustedModesAvailable = true,
   orgFullAccess,
   onManageCommandAllowlist,
@@ -115,7 +116,10 @@ export function ApprovalModeSelector({
   align?: "left" | "right";
   menuDirection?: "up" | "down";
   wide?: boolean;
+  /** Legacy lock (tests / older callers). Prefer `busy` for a working bot. */
   disabled?: boolean;
+  /** The bot is working: levels stay selectable; a note says from when a change applies (omb #3627). */
+  busy?: boolean;
   trustedModesAvailable?: boolean;
   trustedModesNotice?: string;
   /** Organization server only (src/lib/full-access.ts). */
@@ -190,9 +194,13 @@ export function ApprovalModeSelector({
   }, [open, variant]);
 
   const CurrentIcon = current.Icon;
-  // The allowlist is Advanced only: in Simple a busy bot greys the icon.
+  // The allowlist is Advanced only. A working bot (`busy`) keeps the control
+  // open (omb #3627); only a hard `disabled` greys the trigger.
   const triggerDisabled = disabled && !(advanced && onManageCommandAllowlist);
   const modesDisabled = disabled || requiresLocalDesktop;
+  const workingNote = busy ? (
+    <p role="status" className="mt-1 px-2 text-[12px] leading-snug text-ink-secondary">{t("approvalMode.whileWorking")}</p>
+  ) : null;
   const allowlistAction = onManageCommandAllowlist && (
     <button
       type="button"
@@ -227,6 +235,7 @@ export function ApprovalModeSelector({
     );
     return (
       <div data-approval-simple data-approval-mixed={mixed ? "" : undefined} className="flex w-full min-w-0 flex-col gap-1">
+        {workingNote}
         <div className="flex w-full min-w-0 flex-col gap-1">
           {choices.map((choice) => (
             <button
@@ -274,7 +283,7 @@ export function ApprovalModeSelector({
                 aria-checked={selected}
                 disabled={modesDisabled}
                 data-approval-choice={choice.mode}
-                title={disabled ? t("approvalMode.busy") : requiresLocalDesktop ? t("approvalMode.customLocalOnly") : undefined}
+                title={requiresLocalDesktop ? t("approvalMode.customLocalOnly") : undefined}
                 onClick={() => {
                   if (modesDisabled) return;
                   onSelect(choice.mode);
@@ -297,9 +306,11 @@ export function ApprovalModeSelector({
               </button>
             );
           })}
+          {workingNote}
           {!known && <p data-approval-custom className="px-2 py-1 text-[12px] leading-4 text-ink-secondary">{t("approvalMode.simple.custom")}</p>}
         </>
       )}
+      {advanced && workingNote}
       {advanced && visibleOptions.map((option) => {
         const selected = option.mode === mode;
         const Icon = option.Icon;
@@ -315,7 +326,7 @@ export function ApprovalModeSelector({
               disabled={optionDisabled}
               data-approval-mode={option.mode}
               title={
-                disabled ? t("approvalMode.busy") : requiresLocalDesktop ? t("approvalMode.customLocalOnly") : orgOff ? t("approvalMode.full.orgDisabled") : undefined
+                requiresLocalDesktop ? t("approvalMode.customLocalOnly") : orgOff ? t("approvalMode.full.orgDisabled") : undefined
               }
               onClick={() => {
                 if (optionDisabled) return;

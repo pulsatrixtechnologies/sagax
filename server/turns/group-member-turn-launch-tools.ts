@@ -77,6 +77,7 @@ export function createPrepareRoomMemberTools(host: GroupMemberTurnHost) {
   const burstIds = new Set(operation?.queuedQueueIds ?? []);
   const burstOverrides: Array<{ messageId: string; text: string }> = [];
   const burstImages: ReturnType<typeof extractTurnImages>["images"] = [];
+  const burstVideos: ReturnType<typeof extractTurnImages>["videos"] = [];
   if (usesNativeImageInput && !cardContinuation) {
     for (const message of store.activePath(threadId)) {
       if (message.role !== "user" || message.kind !== "text" || !message.text) continue;
@@ -84,6 +85,7 @@ export function createPrepareRoomMemberTools(host: GroupMemberTurnHost) {
       const resolved = extractTurnImages(message.text);
       burstOverrides.push({ messageId: message.id, text: resolved.text });
       burstImages.push(...resolved.images);
+      burstVideos.push(...resolved.videos);
     }
   }
   // the latest line is usually the burst's last item: extracting it again
@@ -91,18 +93,24 @@ export function createPrepareRoomMemberTools(host: GroupMemberTurnHost) {
   const latestInBurst = latestUser?.queueId !== undefined && burstIds.has(latestUser.queueId);
   const resolvedLatestImages = latestUser?.text && !cardContinuation && !latestInBurst
     ? extractTurnImages(latestUser.text)
-    : { text: latestUser?.text ?? "", images: [] };
+    : { text: latestUser?.text ?? "", images: [], videos: [] };
   // stored files sealed at rest go plain for the engine (server/encryption/content-at-rest.ts)
-  const roomAttachmentsHold = cardContinuation ? undefined : holdTurnAttachments(threadId, [latestUser?.text], [...burstImages, ...resolvedLatestImages.images], { picturesByPath: instance.driverKind === "codex" });
+  const roomVideos = [...burstVideos, ...resolvedLatestImages.videos];
+  const roomAttachmentsHold = cardContinuation ? undefined : holdTurnAttachments(threadId, [latestUser?.text], [...burstImages, ...resolvedLatestImages.images], {
+    picturesByPath: instance.driverKind === "codex",
+    ...(usesNativeImageInput && roomVideos.length ? { videos: roomVideos } : {}),
+  });
     ctx.skillAuthoring = skillAuthoring;
     ctx.integrations = integrations;
     ctx.latestUser = latestUser;
     ctx.usesNativeImageInput = usesNativeImageInput;
     ctx.burstOverrides = burstOverrides;
     ctx.burstImages = burstImages;
+    ctx.burstVideos = burstVideos;
     ctx.latestInBurst = latestInBurst;
     ctx.resolvedLatestImages = resolvedLatestImages;
     ctx.roomAttachmentsHold = roomAttachmentsHold;
+    ctx.latestVideoFrames = [];
   }
 
   function placeAndSkills(ctx: GroupMemberTurnCtx) {
@@ -134,7 +142,9 @@ export function createPrepareRoomMemberTools(host: GroupMemberTurnHost) {
       : undefined,
     bot.id,
   );
-  const turnImages = usesNativeImageInput ? [...burstImages, ...resolvedLatestImages.images] : [];
+  const turnImages = usesNativeImageInput
+    ? [...burstImages, ...resolvedLatestImages.images, ...(ctx.latestVideoFrames ?? [])]
+    : [];
   const skills = availableSkills();
   const selectedSkills = mergeSkills(
     selectBundledSkills(

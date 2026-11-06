@@ -16,7 +16,7 @@ import { useShowThreads } from "@/lib/thread-preferences";
 import { useCaptionChrome } from "@/components/DesktopCapabilities";
 import { placeOffered } from "@/lib/place";
 import { boatComputerEnabled } from "@/lib/feature-flags";
-import { readSessionState } from "@/lib/session";
+import { isOwnerOrAdmin, readSessionState } from "@/lib/session";
 import { TeamCanvas } from "./TeamCanvas";
 import { TeamDialog } from "./TeamDialog";
 import { TeamMemoryDialog } from "./TeamMemoryDialog";
@@ -253,32 +253,41 @@ export function TeamMapPage() {
   const [computerDrop, setComputerDrop] = useState<{ id: string; section: string } | null>(null);
   const clearComputerDrop = useCallback(() => setComputerDrop(null), []);
   const [pendingMove, setPendingMove] = useState<{ bot: Bot; destination: string; resolve: (moved: boolean) => void } | null>(null);
-  // null until the session answers: never flash Create team at a member.
-  const [canManageTeams, setCanManageTeams] = useState<boolean | null>(null);
+  // null until the session answers: never flash Create team at a member on solo.
+  const [manageTeams, setManageTeams] = useState<boolean | null>(null);
+  const [adminTeams, setAdminTeams] = useState(false);
   const pendingMoveRef = useRef(pendingMove);
   pendingMoveRef.current = pendingMove;
   useEffect(() => () => pendingMoveRef.current?.resolve(false), []);
+  // #2045: on an organization server the teams are the person's own sidebar
+  // sections. They create, fill, nest and delete them without any admin
+  // right; the server-wide team computers stay with the admins (Boat cost).
+  const orgMode = usePerspicaxOrg() !== null;
   useEffect(() => {
     if (remoteClient) {
-      setCanManageTeams(false);
+      setManageTeams(false);
+      setAdminTeams(false);
       return;
     }
     let alive = true;
     void readSessionState()
-      .then((session) => { if (alive) setCanManageTeams(canManageTeamMap(session, false)); })
-      .catch(() => { if (alive) setCanManageTeams(false); });
+      .then((session) => {
+        if (!alive) return;
+        setManageTeams(canManageTeamMap(session, false, orgMode));
+        setAdminTeams(isOwnerOrAdmin(session));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setManageTeams(false);
+        setAdminTeams(false);
+      });
     return () => { alive = false; };
-  }, [remoteClient]);
-  // #2045: on an organization server the teams are the person's own sidebar
-  // sections. They create, fill, nest and delete them without any admin
-  // right; the server-wide team computers stay with the admins.
-  const orgMode = usePerspicaxOrg() !== null;
+  }, [remoteClient, orgMode]);
   const personalStored = usePersonalSections();
   const personal = orgMode ? personalStored ?? EMPTY_PERSONAL_SECTIONS : null;
   const sectionParents = useSectionParents();
   const viewerId = viewerActorId(state.config);
-  const adminTeams = canManageTeams === true;
-  const manageTeams = orgMode ? !remoteClient : adminTeams;
+  const canEditTeams = manageTeams === true;
   const laidOut = useMemo(() => personal ? withPersonalSections(state.bots, state.groups, personal) : { bots: state.bots, groups: state.groups }, [personal, state.bots, state.groups]);
   const bots = useMemo(() => laidOut.bots.filter((bot) => !bot.hidden), [laidOut.bots]);
   const sections = useMemo(() => {
@@ -354,7 +363,7 @@ export function TeamMapPage() {
         </div>
         {!remoteClient && <div style={controlsShiftStyle} className="flex items-center gap-2">
           {adminTeams && <button onClick={() => setComputersOpen((value) => !value)} aria-label={t("settings.group.computers")} aria-expanded={computersOpen} className="flex size-9 items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary hover:bg-raised hover:text-ink"><Monitor size={16} /></button>}
-          {manageTeams && <details className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => {
+          {canEditTeams && <details className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => {
             if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); }
           }}>
             <summary aria-label={t("teamMap.addAria")} className="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 text-[12px] font-medium text-ink hover:bg-raised [&::-webkit-details-marker]:hidden"><Plus size={15} /> {t("common.add")}</summary>
@@ -370,13 +379,13 @@ export function TeamMapPage() {
         </div>}
       </header>
       <div className="content-card-body flex min-h-0 flex-1 flex-col">
-      {canManageTeams === false && !orgMode && !remoteClient && <p data-team-map-admin-only className="shrink-0 border-b border-hairline/40 bg-panel px-6 py-2 text-[12px] text-ink-secondary">{t("team.adminOnly")}</p>}
+      {manageTeams === false && !orgMode && !remoteClient && <p data-team-map-admin-only className="shrink-0 border-b border-hairline/40 bg-panel px-6 py-2 text-[12px] text-ink-secondary">{t("team.adminOnly")}</p>}
       {(error || refreshError) && <div role="alert" className="flex shrink-0 items-center justify-between gap-3 border-b border-danger/20 bg-danger/10 px-6 py-2 text-[12px] text-danger">
         {error || refreshError}
         <button aria-label={t("common.close")} className="rounded p-1 hover:bg-danger/10" onClick={() => { setError(null); setRefreshError(null); }}><X size={14} /></button>
       </div>}
       <div className="relative flex min-h-0 flex-1">
-      <TeamCanvas sections={sections} canManage={manageTeams} onMove={requestMove}
+      <TeamCanvas sections={sections} canManage={canEditTeams} onMove={requestMove}
         connectedBotIds={state.settingsOpen ? edges.flatMap((edge) => edge.sourceBotId === state.selectedId ? [edge.targetBotId] : edge.targetBotId === state.selectedId ? [edge.sourceBotId] : []) : []}
         onComputer={(bot) => dispatch({ type: "toggleSettings", botId: bot.id, section: "access", open: true })}
         teamComputers={Object.fromEntries(computers.filter((computer) => computer.section !== null).map((computer) => [computer.section!, { name: computer.name, state: computer.state }]))}

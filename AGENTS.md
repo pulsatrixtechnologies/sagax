@@ -1332,19 +1332,24 @@ from the run's detail and Run logs; they are not merged into the stream
 
 When a model or engine reaches its usage limit (or runs out of credits, or
 hits a rate limit) the person sees nothing: the same turn goes on at once on
-a model that works. On Auto, `limit-failover-host.ts` (`failed`, `auto`)
-skips the limited model until its reset (`autoRefuse`, and `autoExcluded`
-for an engine-wide limit and any other sign-in to the same subscription)
-and sends the message again; Auto picks the next model. A chosen model
-moves to a backup as before. Either way the next engine is told the steps
-the turn already took (`limitResumeText`, `renewalPrompt` with
-`cause: "limit"`) so it never runs them again, the failure row becomes a
-hidden `notice:` row, and the words go to the Events lens
-(`limitFailoverRow`, a `runtime.notice`). Only when nothing else can answer
-does the chat say when it comes back (`waiting`). Stored `recovery:` switch
-rows are hidden too (`isHiddenStatusActivity`). Test:
-`server/auto-limit-continue.e2e.test.ts` (fake CLI
-`FAKE_CLAUDE_LIMIT_MID_TURN_FILE`).
+a model that works. Accounts of the same provider are a silent pool (#2192):
+Sagax rotates to the next account (more headroom first) before trying another
+provider, and before the turn when a plan report shows the account near its
+limit (`NEAR_LIMIT_PERCENT`). On Auto, `limit-failover-host.ts` (`failed`,
+`auto`) skips the limited model until its reset (`autoRefuse`, and
+`autoExcluded` for an engine-wide limit) and sends the message again; Auto
+picks the next model. A chosen model moves to a backup as before. Either way
+the next engine is told the steps the turn already took (`limitResumeText`,
+`renewalPrompt` with `cause: "limit"`) so it never runs them again, the
+failure row becomes a hidden `notice:` row, and the words go to the Events
+lens (`limitFailoverRow`, a `runtime.notice`). An empty reply right after a
+limit or provider error retries once on the next pool member
+(`emptyReplyRetry`). Only when every account of every allowed engine is
+spent does the chat say when it comes back (`waiting` / `exhausted`).
+Stored `recovery:` switch rows are hidden too (`isHiddenStatusActivity`).
+Test: `server/auto-limit-continue.e2e.test.ts` (fake CLI
+`FAKE_CLAUDE_LIMIT_MID_TURN_FILE`), `server/usage/limit-failover-host.test.ts`
+(account rotation).
 
 ## OpenAI's API runs on /v1/responses (2026-10-29)
 
@@ -1430,18 +1435,18 @@ the two takeovers: it is no other engine; `takeOver` then ends the takeover
 with no second line); with no taker it waits for the earlier real reset
 under 12 h of the two (the bot's own engine on a tie, its next start naming
 no takeover model, so `beforeTurn` brings the conversation back), else
-fails with the bot's own engine and its reset. A backup never is another
-sign-in to a subscription engine this payer is held on, whatever engine
-refused (`outOf`, as `autoExcluded`): a chat backup, `beforeTurn` and a run's
-takeover agree, and the conversation's own engine is never a backup for its
-own refused model. With no taker the words say why (`noTaker`: no other
-engine this person may use, the two moves already made, or switching off
-with `SAGAX_LIMIT_FAILOVER=0`); they advise choosing another engine for the
-bot only when switching is off. A failed run's own error is those words
-(its row, any tool reading runs); the engine's raw words stay in its
-thread. Every line names the engine (its model on a detour) and gives the
-real reset or says the engine gave none, in English or Quebec French ("2 nov.
-à 15 h 16") by the person's language and zone
+fails with the bot's own engine and its reset. Sibling accounts of the same
+provider are tried first (#2192, `pickLimitBackup`, `outOf` /
+`autoExcluded`): a chat backup, `beforeTurn` and a run's takeover agree, and
+the conversation's own engine is never a backup for its own refused model.
+With no taker the words say why (`noTaker`: no other engine this person may
+use, the two moves already made, or switching off with
+`SAGAX_LIMIT_FAILOVER=0`); they advise choosing another engine for the bot
+only when switching is off. A failed run's own error is those words (its
+row, any tool reading runs); the engine's raw words stay in its thread.
+Every line names the engine (its model on a detour) and gives the real
+reset or says the engine gave none, in English or Quebec French ("2 nov. à
+15 h 16") by the person's language and zone
 (`server/routines/routine-limit-words.ts`); a rate limit is called one. The
 thread's notice names a backup standing in (`LimitFailoverLine.home`,
 `limitFailover.switchedStandIn`) and a return after its refusal
@@ -1941,7 +1946,9 @@ there; the question first.
   (`resyncOnForeground`). Tests: `server/needs-you-settled.e2e.test.ts`,
   iOS `NeedsYouFollowsServerTests`.
 - Tests: `server/push/*.test.ts`, `server/notify.test.ts`, iOS
-  `ApprovalNotificationTests`.
+  `ApprovalNotificationTests`. Recipe and physical checklist (still open):
+  `docs/verification/approval-notifications.md` (#1708). Simulator and unit
+  green are not a device pass.
 
 ## Connect Apps: a Bots tab and one search (2026-10-29)
 
@@ -2030,7 +2037,24 @@ the app (Show the token): a bot's replay of `POST /api/webhooks/:id/rotate`
 (`WebhookManager.rotatePending`) and never answers it. Tests:
 `server/settings-actions.test.ts`, `server/triggers/webhooks.test.ts`.
 
-## Leave a group chat (#1480, 2026-10-28)
+## A bot writes to a person via a group (#2118, 2026-11-06)
+
+A bot messages another person of the organization with `message_user`
+(rooms family, permission `people:message`, member scope `own-account`):
+the person's own approval card and level (Allow, Always allow, Ask, Deny,
+Full access), no extra guard. Sagax posts the message as the bot in the
+group whose people are exactly the bot's owner and that person, with the
+bot in it (`server/people/bot-message-user.ts` `findBotPersonGroup`); when
+missing, `POST /api/internal/message-user` creates it in the same request
+as the post (`"<Owner>, <Person> et <Bot>"`, owned by the owner, no
+section, default responder the bot), so there is never an empty group.
+Person resolution: id, exact name / login / email, then a unique partial
+name; self, unknown and ambiguous are refused and create nothing. Both
+people get unread and the usual message notification; the person's answer
+lands in that group where the bot is a member. Activity rows reuse the
+"posting in a group" label. Tests: `server/routes/internal-message-user.test.ts`.
+
+## Leave a group chat (#1480, #2119, 2026-10-28 / 2026-11-06)
 
 On an organization server a person listed in a group in their own name
 leaves it on their own, owner included, without an admin:
@@ -2038,15 +2062,18 @@ leaves it on their own, owner included, without an admin:
 session names who leaves, never the body. They leave `humanIds` under every
 id they are listed by; their private bots (owned by them, no grant) leave
 with them, a shared bot stays. The owner hands the group to the person
-listed longest (first non-team entry left), and the last person archives it
-(`archivedAt`, server-private: kept, listed to no one, its routines off).
-Their past messages stay. The others get one neutral line, message kind
-`roster` (`WireMessage.roster`, drawn by RosterLine, `text` is the English
-fallback); their own devices get `group.left` (`roomId`, their streams
-only) and drop the group. Leave group sits in the sidebar menu, the
-conversation's « … » and the group panel on desktop (LeaveGroupDialog
-confirms), and in the row menu and Room info on iOS. They can be added back
-like anyone. Tests: `server/groups/group-leave.test.ts`, `src/lib/group-leave.test.ts`,
+listed longest (first non-team entry left). #2119: leaving that would leave
+zero people is refused (`sole_member`; bots and `team:` seats do not count);
+the sole remaining person deletes instead of leaving, so the group never
+becomes a ghost. Only the owner (or an org admin for moderation) may delete
+(`mayDeleteGroup`); an invited member may only Leave. Their past messages
+stay. The others get one neutral line, message kind `roster`
+(`WireMessage.roster`, drawn by RosterLine, `text` is the English fallback);
+their own devices get `group.left` (`roomId`, their streams only) and drop
+the group. Leave group sits in the sidebar menu, the conversation's « … »
+and the group panel on desktop (LeaveGroupDialog confirms), and in the row
+menu and Room info on iOS. They can be added back like anyone. Tests:
+`server/groups/group-leave.test.ts`, `src/lib/group-leave.test.ts`,
 `src/components/Sidebar.member-menu.test.ts`, iOS `GroupLeaveTests`.
 
 ## Shopping cards, order tracking, subscription templates (2026-10-29)
@@ -2412,7 +2439,7 @@ respecté, et si je suis en bypass que ça ne le demande pas.").
 
 ## Bot content has a default theme (2026-10-28)
 
-Pages and widgets bots make draw in the app's look, sober as Grok Bot's.
+Pages and widgets bots make draw in the app's look, sober as the reference design.
 Every page the sandboxed frame route serves (`pageDocument`) starts with
 one inline stylesheet (src/lib/page-theme.ts): the skin's tokens (the app
 preview sends `theme=` and the person's skin as `skin=`, base64url JSON of
@@ -2440,7 +2467,7 @@ scaled-down drawing of its top and its icon, title and "Page"
 (`PageSurface` in src/components/PageViewer.tsx, src/lib/open-page.ts,
 src/lib/page-chat-layout.ts): Back to chat (×) top left, the title pill
 (click to rename, Enter saves), « ⋯ » and Share top right. Default surface
-for published HTML pages is **stage** (measured Grok Bot 0.78.1 HTML/file
+for published HTML pages is **stage** (measured reference design 0.78.1 HTML/file
 artifacts and Sagax 0.8.23 iOS): the page covers the mounted conversation and
 the composer docks on the page (`data-page-stage-chat=docked`). The chat
 column stays mounted underneath (`inert` while covered) so closing returns
@@ -2526,7 +2553,7 @@ new page; the self-knowledge builder reads it too. Tests:
 
 ## Shapes set and eyes (2026-10-28)
 
-Decision (JC): the Shapes bodies are the bloub network's tables (MIT, NOTICE
+Decision (maintainer): the Shapes bodies are the bloub network's tables (MIT, NOTICE
 and `third_party/bloub`) plus our pumpkin, 32 in all (`MASCOT_SHAPES`). The
 first eight keep their stored ids; `LEGACY_SHAPES` maps the older ids. Picking
 the pumpkin sets the bot's color to orange where the skin paints the bot's
@@ -3979,7 +4006,7 @@ covered by `server/mail/bot-inbound-mail.test.ts`,
   bot has no Perspicax owner), 403 `owner_inactive`. Every answer carries
   `X-Sagax-Mail-Api: 1`.
 - Then delivery splits on the To address (`shared/routine-mail-alias.ts`
-  `planMailDelivery`, 2026-11-01 / Grok Bot 0.71):
+  `planMailDelivery`, 2026-11-01 / reference design 0.71):
   - `name+tag@`: only enabled, unsuspended routines of that bot with
     `mailAlias === tag` wake (`wakeRoutine` → `enqueueWebhook` with a
     synthetic `mail-tag:<routineId>` id, confined like S2). Other bots'
@@ -4831,7 +4858,7 @@ Admin writes from Plugins > Sources / Installed (Organization scope) go
 through this server's link with the admin's live sign-in token
 (`server/routes/org-capabilities.ts`). A member's own switch is
 `/api/me/org-capabilities`. No Capabilities tab in the bot panel: the
-resolved list lives in Plugins > Installed (JC, 2026-11-01). Form mirror:
+resolved list lives in Plugins > Installed (maintainer, 2026-11-01). Form mirror:
 `shared/org-capability-form.ts`. Tests: `server/org/org-capabilities.test.ts`,
 `server/routes/org-capabilities.test.ts`, `shared/org-capability-form.test.ts`.
 
@@ -7152,7 +7179,7 @@ its path.
 ### Connect apps > Mac > Messages setup (2026-11-02)
 
 Setup lives under Connect apps > Mac > Messages (Installed shows a "This Mac"
-section). Structure matches the Grok Bot Mac Messages surface; Sagax words and
+section). Structure matches the reference design Mac Messages surface; Sagax words and
 branding only (`docs/design/ux-reference-grokbot-cursor.md` §2.8bis).
 
 - Live permission checks: Full Disk Access (read `chat.db`) and Automation
@@ -8232,7 +8259,7 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
 
 ## Coding chat: a coding task opens where the chat is (2026-11-03)
 
-Decision (JC): a row of Details > Coding no longer opens the task sheet in the
+Decision (maintainer): a row of Details > Coding no longer opens the task sheet in the
 side panel. It opens as a chat over the chat column (`AppState.codingChat`,
 actions `openCodingChat` / `closeCodingChat`, drawn by ChatView like
 `routineRunSheet`; a routine run, another bot or a closing panel closes it),
@@ -8567,7 +8594,7 @@ and `ios/App/Session+FreshTopic.swift`; shared cases in
   `FreshTopicHeader`); scrolling up does not reveal the covered topic in
   the same view. An automatic fresh topic shows nothing. ⌘F still searches
   the covered topic and the earlier ones.
-- New chat sticks (JC 2026-11-02, desktop): an asked-for New topic
+- New chat sticks (maintainer 2026-11-02, desktop): an asked-for New topic
   (`auto: false`) is the bot's current conversation until the person sends,
   Back, or opens the covered topic by name. Opening the bot itself (rows,
   palette, links to the bot, team map, launch, the follow effect) clears
@@ -9089,12 +9116,12 @@ PT-4 in `server/org/org-private-threads.e2e.test.ts`):
 ## Achievements (2026-10-02)
 
 Catalog `shared/achievements-catalog.ts` (pure data, ids never renamed),
-engine `shared/achievements.ts`, store `server/achievements.ts` (one
+engine `shared/achievements.ts`, store `server/achievements/achievements.ts` (one
 `achievements.json`, per person on an organization server, the local
 operator on a solo server), routes `server/routes/achievements.ts`, app
 `src/lib/achievements.ts` and `src/components/achievements/`. Keep these
 rules, each covered by `shared/achievements-catalog.test.ts`,
-`server/achievements.test.ts`, `src/lib/achievements.test.ts`,
+`server/achievements/achievements.test.ts`, `src/lib/achievements.test.ts`,
 `src/lib/achievement-toasts.test.ts` or `achievements-ui.test.ts`:
 
 - Server events come from the server's own hooks only (a request's method
@@ -9147,7 +9174,7 @@ rules, each covered by `shared/achievements-catalog.test.ts`,
   public card) sees "This person keeps their achievements private." and no
   private records. With neither title nor points, the member card centres
   the name beside the avatar. Settings > Achievements itself and the unlock
-  toasts are unchanged by these switches. Tests: `server/achievements.test.ts`,
+  toasts are unchanged by these switches. Tests: `server/achievements/achievements.test.ts`,
   `src/lib/public-achievements.test.ts`, `PersonPanel.test.ts`,
   `achievements-ui.test.ts`, `SidebarProfileMenu.footer.test.ts`.
 - People rows in the sidebar sit at the bot rows' inset (`pl-1`, `pl-2` compact) with thread
@@ -9487,10 +9514,10 @@ the rule: no card, the turn continues at once.
 - Candidates are `autoEnginesFor` (the same filter Auto uses): enabled,
   organization policy and `allowedEngines`, sign-ins and keys of this
   speaker (`resolveEngineAccess`), approval mode, tools the thread needs.
-  Never another sign-in to the same subscription engine
-  (`limitBackupAllowed`). Order: the bot's own backups, then the default
-  model of new bots, then the catalog. Engines blocked for this payer are
-  skipped: no ping-pong, at most 3 takeovers per message.
+  Same-provider accounts rotate first (`limitBackupAllowed`, #2192). Order:
+  same-provider pool (more headroom first), then the bot's own backups, then
+  the default model of new bots, then the catalog. Engines blocked for this
+  payer are skipped: no ping-pong, at most 3 takeovers per message.
 - Only the thread moves (`switchTaskModel`, `rewound`), never the bot. The
   failover is kept in `DATA_DIR/limit-failovers.json`; the first turn after
   the reset plus `AFTER_RESET_MS` goes back to the engine the thread started
@@ -9529,8 +9556,13 @@ launcher is a separate artwork.
 
 ## Upstream sync
 
-Last sync: 2026-10-12, upstream `milind-soni/OpenMausBot` main at
-`295f947d` (0.1.107) merged into Sagax; `baseVersion` follows it. Upstream
+Last sync: 2026-10-19, upstream `milind-soni/OpenMausBot` main at
+`34cbd59b` (0.1.107, PR #2718, the last one before upstream split
+`server/index.ts` into route files) merged into Sagax; `baseVersion` follows
+it. The rest of upstream (the route split #2740 to #2759 and the repository
+wide comment deletion #2827, through 0.1.116) still has to be merged: do it
+as a planned merge, porting our organization rules into upstream's route
+files, never by keeping both handlers. Upstream
 removed `ios/` and `android/` in 0.1.97 (#2382); Sagax keeps its own native
 apps, so those paths stay ours on every later merge. To repeat:
 

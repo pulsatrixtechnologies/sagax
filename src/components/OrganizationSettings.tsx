@@ -9,7 +9,6 @@ import { ConnectServerWizard } from "./ConnectServerWizard";
 import { OrgDirectory, type OrgPersonView, type PendingInviteView } from "./OrgDirectory";
 import type { OrgRole } from "../../shared/org-role";
 import { isPerspicaxOrg, type PerspicaxOrg } from "@/lib/perspicax-org";
-import { ServerModeComputerAccess } from "./ServerModeSettings";
 import { OrgMemorySettings } from "./OrgMemorySettings";
 import { SettingsGroup } from "./SettingsPrimitives";
 import { OrganizationBotRows } from "./settings/OrganizationBotRules";
@@ -75,23 +74,17 @@ function ServerInvitesDirectory() {
   );
 }
 
-/** Settings → Organization is Perspicax (or a solo server's own invitations).
- * The hosted Sagax Admin portal is not offered here. 0.5.6: the reference design's
- * layout, grey headings over cards of rows. On an organization server:
- * Organization, Organization's bots (with routines, group turns and MCP
- * calls in Advanced mode), This computer (its access for the bots, the
- * memory). On a solo server: Servers, People, Organization's bots. */
-export function OrganizationSettings({ advanced = false, memoryShown = false }: { advanced?: boolean; memoryShown?: boolean } = {}) {
+/** Settings → Organization (#2080 L3). Same page for everyone on Perspicax
+ * (OrgBand + read-only rules). Solo: Server, people, bot rules (advanced),
+ * memory. "This computer" access moved to Computer. */
+export function OrganizationSettings({ memoryShown = false }: { advanced?: boolean; memoryShown?: boolean } = {}) {
   const { state: store } = useStore();
   const remoteActive = window.ogb?.remoteClient?.active === true;
   const [orgReady, setOrgReady] = useState(false);
   const [directoryError, setDirectoryError] = useState("");
-  const [servers, setServers] = useState<{ activeId: string; count: number } | null>(null);
-  // A server signed in with Perspicax: its own organization view.
+  const [servers, setServers] = useState<{ activeId: string; count: number; activeName?: string } | null>(null);
   const [perspicaxOrg, setPerspicaxOrg] = useState<PerspicaxOrg | null>(null);
 
-  // GET /api/org answers the Perspicax organization on an organization
-  // server; a solo server has none (404).
   const loadOrg = async (alive = () => true) => {
     try {
       const body = await api<unknown>("/api/org");
@@ -119,55 +112,54 @@ export function OrganizationSettings({ advanced = false, memoryShown = false }: 
   }, []);
 
   useEffect(() => {
-    // Whether this desktop has already joined (or is currently active on)
-    // another server decides whether Organization shows a bare join card or
-    // the connected server list next to it.
     let cancelled = false;
     void Promise.resolve(window.ogb?.environments?.state()).then((next) => {
-      if (next && !cancelled) setServers({ activeId: next.activeId, count: next.environments.length });
+      if (next && !cancelled) {
+        const active = next.environments.find((entry) => entry.id === next.activeId);
+        setServers({ activeId: next.activeId, count: next.environments.length, activeName: active?.name || active?.label });
+      }
     }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
-  // Already active on (or saved) another server: show the connected/joined
-  // server list next to Organization.
   const connectedToAnotherServer = remoteActive || (servers ? servers.activeId !== "local" : false);
   const hasSavedServers = (servers?.count ?? 0) > 0;
   const showJoinOnly = !hasSavedServers && !connectedToAnotherServer;
+  const serverState = connectedToAnotherServer
+    ? t("servers.state.linked", { name: servers?.activeName || t("settings.servers.unnamed") })
+    : t("servers.state.local");
 
-  const botRows = advanced ? <OrganizationBotRows /> : null;
-  const thisComputer = (
-    <SettingsGroup title={t("settings.thisComputer.title")} groupId="thisComputer">
-      <ServerModeComputerAccess />
-      {memoryShown && <OrgMemorySettings />}
+  const memory = memoryShown ? (
+    <SettingsGroup title={t("organization.group.memory")} groupId="organizationMemory">
+      <OrgMemorySettings />
     </SettingsGroup>
-  );
+  ) : null;
 
-  // Server mode: this person's own computer for the organization's bots.
-  if (perspicaxOrg) return <PerspicaxOrgSettings org={perspicaxOrg} onChanged={() => loadOrg()} botRows={botRows} after={thisComputer} />;
+  if (perspicaxOrg) {
+    return (
+      <>
+        <PerspicaxOrgSettings org={perspicaxOrg} onChanged={() => loadOrg()} />
+        {memory}
+      </>
+    );
+  }
 
-  // No server joined yet: the join card.
-  // Otherwise, show the servers this desktop already connects to (switch,
-  // leave, or the active remote-client connection and its disconnect action).
-  // Waits for the organization load so it settles into one shape instead of
-  // swapping components once the load resolves.
-  // 2026-10-14: one "Connect to a server" card holds the three ways in
-  // (Perspicax, a Sagax server's link, another computer); open while
-  // nothing is connected yet. A desktop that is another computer's client
-  // keeps that connection's card, with Disconnect. The forms keep their
-  // cards under the Servers heading; the domain card joins them.
+  // Solo: Connect a server stays closed by default (#2080). This computer
+  // access lives on Computer now.
   return <>
     {orgReady && (
-      <SettingsGroup plain title={t("settings.servers.unnamed")} groupId="servers">
+      <SettingsGroup plain title={t("organization.group.server")} groupId="servers" accessory={<span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary">· {serverState}</span>}>
         {!showJoinOnly && <ConnectedWorkspacesSettings />}
         {remoteActive && <RemoteComputerSection />}
-        <ConnectServerWizard defaultOpen={showJoinOnly} />
+        <ConnectServerWizard defaultOpen={false} />
         {!remoteActive && store.config?.viewer?.operator !== false && <CustomDomainSettings />}
       </SettingsGroup>
     )}
     {orgReady && !remoteActive && <ServerInvitesDirectory />}
     {directoryError && <p role="alert" className="text-[13px] text-danger">{directoryError}</p>}
-    <SettingsGroup title={t("organization.group.bots")} groupId="organizationBots">{botRows}</SettingsGroup>
-    {thisComputer}
+    <SettingsGroup advanced title={t("organization.group.botRules")} groupId="organizationBots">
+      <OrganizationBotRows />
+    </SettingsGroup>
+    {memory}
   </>;
 }

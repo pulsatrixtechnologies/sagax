@@ -27,7 +27,6 @@ import { useBotSettingsDerived } from "./bot-settings/useBotSettingsDerived";
 import { BotEditorContext } from "./bot-settings/BotEditorContext";
 import { CompactRow, ConfirmPill, DescribedRow, FIELD, FieldRow, PILL, PillSelect, PRIMARY_PILL, Switch, type PillOption, DIALOG, GROUP_CARD } from "./SettingsPrimitives";
 import { RoutineEditor } from "./RoutinesPage";
-import { FullAccessWarning } from "./FullAccessWarning";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import { SharePresetDialog } from "./SharePresetDialog";
 import { servedPage } from "@/lib/desktop";
@@ -230,7 +229,7 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
   const savingRef = useRef(false);
   const alive = useRef(true);
   const [error, setError] = useState("");
-  const [warning, setWarning] = useState<"full" | "local" | null>(null);
+  const [warning, setWarning] = useState<"local" | null>(null);
   const [audience, setAudience] = useState<VisibilityMode>("everyone");
   const [people, setPeople] = useState("");
   const ownerOrAdmin = useOwnerOrAdmin();
@@ -321,7 +320,6 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
   }, []);
   const save = async () => {
     if (!ready || savingRef.current || parent.state.botCreationPending) return;
-    if (!defaultsMode && draft.bot.approvalMode === "full" && !draft.consent.confirmFullAccess) { setWarning("full"); return; }
     if (!defaultsMode && draft.bot.approvalMode === "auto" && draft.bot.computer === "local" && !draft.consent.acknowledgeLocalAuto) { setWarning("local"); return; }
     const visibility = choosesVisibility ? visibilityFromForm(audience, people) : null;
     if (visibility && !visibility.ok) { setError(t("botSettings.visibility.needPeople")); return; }
@@ -428,7 +426,6 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
           {saving && <Loader2 size={15} className="animate-spin" />}{t(defaultsMode ? "newBot.saveDefaults" : "newBot.create")}
         </button>
       </div>
-      <FullAccessWarning open={warning === "full"} onCancel={() => setWarning(null)} onConfirm={() => { draft.consent.confirmFullAccess = true; setWarning(null); void save(); }} />
       <LocalComputerAutoWarning open={warning === "local"} onCancel={() => setWarning(null)} onConfirm={() => { draft.consent.acknowledgeLocalAuto = true; setWarning(null); void save(); }} />
     </>
   );

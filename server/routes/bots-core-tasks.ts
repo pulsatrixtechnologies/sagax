@@ -42,7 +42,6 @@ export function createBotsCoreTasksRoutes(deps: BotsCoreRouteDeps): RouteHandler
       sharedWorkspaceFullAccessEnabled,
       approvalModeStepUpGate,
       ruleManager,
-      supportsApprovalMode,
       confidentialThreadsByDefault,
       scopedThreadViewer,
       conversationThreadFor,
@@ -103,9 +102,7 @@ export function createBotsCoreTasksRoutes(deps: BotsCoreRouteDeps): RouteHandler
           return json(res, 403, { error: "New Full tasks require the operator's dedicated shared-workspace policy" });
         }
         if (bot.approvalGrant) return json(res, 409, { error: "the bot's approval mode is still being confirmed" });
-        if (!supportsApprovalMode(bot.modelSelection, "full")) {
-          return json(res, 400, { error: "This provider does not support Full access" });
-        }
+        // Full runs on every engine (omb #2808); no provider gate here.
         const fullStepUp = approvalModeStepUpGate({ person: ruleManager(auth), botId: bot.id, op: "new-task", thread: "*", froms: ["ask"], to: "full", stepUp: body.stepUp });
         if (fullStepUp) return json(res, fullStepUp.status, fullStepUp.body);
       }

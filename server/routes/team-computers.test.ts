@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { TeamComputerRecord } from "../computer/team-computers.ts";
-import { createTeamComputersRoutes, type TeamComputersRouteDeps } from "./team-computers.ts";
+import { createTeamComputersRoutes, filterTeamComputersForCaller, type TeamComputersRouteDeps } from "./team-computers.ts";
 import { PASS, type RouteContext } from "./table.ts";
 
 const auth = { kind: "loopback", trust: "owner", scopes: ["admin"] } as unknown as RequestAuth;
@@ -130,5 +130,51 @@ describe("createTeamComputersRoutes", () => {
     });
     await route(call.context);
     expect(call.sent[0]?.status).toBe(409);
+  });
+
+  it("#2045: lists only unassigned computers and this caller's teams", async () => {
+    const aliceId = "sec_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const bobId = "sec_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const route = createTeamComputersRoutes(deps({
+      listPayload: async () => ({
+        configured: true,
+        computers: [
+          { id: "free", name: "Free", section: null, state: "missing" as const, held: false },
+          { id: "alice", name: "A", section: "Ops", sectionId: aliceId, state: "missing" as const, held: false },
+          { id: "bob", name: "B", section: "Ops", sectionId: bobId, state: "missing" as const, held: false },
+        ],
+      }),
+      sectionsFor: () => ["Ops"],
+      sectionIdsFor: () => [aliceId],
+    }));
+    const call = ctx("/api/team-computers", "GET");
+    await route(call.context);
+    expect(call.sent[0]?.status).toBe(200);
+    const body = call.sent[0]?.body as { computers: Array<{ id: string }> };
+    expect(body.computers.map((row) => row.id).sort()).toEqual(["alice", "free"]);
+  });
+
+  it("#2045: assignment refuses another person's team name", async () => {
+    const route = createTeamComputersRoutes(deps({
+      sectionsFor: () => ["Mine"],
+      resolveSectionId: () => undefined,
+    }));
+    const call = ctx(`/api/team-computers/${computer.id}`, "PATCH", {
+      section: "Ops",
+      acknowledgeSharedAccess: true,
+    });
+    await expect(route(call.context)).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("filterTeamComputersForCaller (#2045)", () => {
+  it("keeps unassigned rows and the caller's section ids", () => {
+    const aliceId = "sec_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const rows = [
+      { id: "1", section: null as string | null, sectionId: null as string | null },
+      { id: "2", section: "Ops", sectionId: aliceId },
+      { id: "3", section: "Ops", sectionId: "sec_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" },
+    ];
+    expect(filterTeamComputersForCaller(rows, new Set(["Ops"]), new Set([aliceId])).map((row) => row.id)).toEqual(["1", "2"]);
   });
 });

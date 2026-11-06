@@ -109,7 +109,7 @@ describe("claims", () => {
       { ok: true, status: 200, body: { result: { code: "params_invalid" }, isError: true } },
     ];
     const context = (externalRuntime = false): ToolCallContext => ({
-      botId: "b1", threadId: "t1", depth: 0, externalRuntime, coordinating: false, sharedComputers: false,
+      botId: "b1", threadId: "t1", depth: 0, coordinating: false, externalRuntime, sharedComputers: false,
       client: {
         api: async () => ({}),
         apiResponse: async (path, init) => {

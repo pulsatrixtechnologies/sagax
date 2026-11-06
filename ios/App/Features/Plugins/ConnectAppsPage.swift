@@ -280,7 +280,7 @@ struct ConnectAppsPage: View {
             ConnectAppsMain(model: model, bots: bots, botsShown: botsShown, initialTab: initialTab, openBot: openBot) { path.append($0) }
                 // the desktop window's body: the app's colour, not the stack's black
                 .background { if embedded { desktopTheme.app.ignoresSafeArea() } }
-                .navigationTitle(String(localized: "Capabilities"))
+                .navigationTitle(String(localized: "Plugins"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(embedded ? .hidden : .automatic, for: .navigationBar)
                 .toolbar {
@@ -319,7 +319,7 @@ struct ConnectAppsPage: View {
         .onValueChange(of: scenePhase) { phase in
             if phase == .active { Task { await model.load(session) } }
         }
-        .alert(String(localized: "Capabilities"), isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })) {
+        .alert(String(localized: "Plugins"), isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })) {
             Button(String(localized: "OK"), role: .cancel) {}
         } message: {
             Text(verbatim: model.message ?? "")
@@ -604,7 +604,7 @@ struct ConnectAppsMain: View {
             if desktop {
                 if model.marketplaces.isEmpty {
                     // `mt-2 rounded-lg bg-inset px-3 py-2 text-[12px]` (18 line)
-                    Text("No marketplace yet. Add one in Capabilities > Sources.")
+                    Text("No marketplace yet. Add one in Plugins > Sources.")
                         .font(theme.font(12))
                         .foregroundStyle(theme.inkSecondary)
                         .frame(minHeight: 18)
@@ -621,7 +621,7 @@ struct ConnectAppsMain: View {
             } else {
             Section {
                 connectedLink
-                Picker(String(localized: "Capabilities"), selection: $tab) {
+                Picker(String(localized: "Plugins"), selection: $tab) {
                     ForEach(shownTabs, id: \.self) { Text(verbatim: $0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)

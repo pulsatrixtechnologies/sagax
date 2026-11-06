@@ -9,7 +9,7 @@ const read = (path: string) => readFileSync(join(import.meta.dirname, path), "ut
 describe("server paths never reach a prompt without server file tools", () => {
   it.each([
     ["turns/start-turn-prompt.ts", "serverFiles"],
-    ["turns/group-member-turn-launch.ts", "roomServerFiles"],
+    ["turns/group-member-turn-launch-prompt.ts", "roomServerFiles"],
   ])("%s gives the locations without server paths and runs the net", (file, flag) => {
     const source = read(file);
     expect(source).toContain(`const ${flag} = !withholdHostToolsFor(`);

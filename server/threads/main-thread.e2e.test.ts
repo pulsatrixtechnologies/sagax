@@ -68,7 +68,7 @@ it("stamps askedAt where a person writes, never for a routine, a webhook, start_
         { reply: "Hand-off done." },
       ] },
       [teammate.id]: { turns: [
-        { steps: [{ tool: "send_to_bot", arguments: { bot_id: bot.id, title: "Hand-off", message: "Take this over." } }], reply: "Handed it over." },
+        { steps: [{ arguments: { bot_ids: [bot.id], message: "Take this over.", thread: "new", reply: "none" } }], reply: "Handed it over." },
       ] },
     }));
     const first = bot.activeTaskId as string;
@@ -112,7 +112,8 @@ it("stamps askedAt where a person writes, never for a routine, a webhook, start_
     await replied(bot.id, webhookThread, "Webhook handled.");
 
     await cli("send", "--bot", teammate.id, "--task", teammate.activeTaskId, "--text", "Hand this to Asker.");
-    const handoff = await thread(bot.id, "Hand-off");
+    // A thread opened with coordinate_bots is titled by its message.
+    const handoff = await thread(bot.id, "Take this over.");
     await replied(bot.id, handoff.threadId, "Hand-off done.");
     await idle(teammate.id);
     // 84841aeed: the runtime persists one roomRequest row with its sender

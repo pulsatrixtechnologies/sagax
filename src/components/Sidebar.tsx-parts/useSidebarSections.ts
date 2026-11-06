@@ -84,6 +84,8 @@ export function useSidebarSections({
   const [moveToTeam, setMoveToTeam] = useState<string | null>(null);
   const [renameTeam, setRenameTeam] = useState<string | null>(null);
   const [shareTeam, setShareTeam] = useState<string | null>(null);
+  // Approval levels and models are the owner's to set, as in each bot's panel.
+  const [teamSettings, setTeamSettings] = useState<string | null>(null);
   // The section header that opened the team menu. The menu closes on Share,
   // so the popover hangs off this trigger, which stays mounted.
   const shareTeamAnchor = useRef<HTMLElement | null>(null);
@@ -208,6 +210,8 @@ export function useSidebarSections({
     setRenameTeam,
     shareTeam,
     setShareTeam,
+    teamSettings,
+    setTeamSettings,
     shareTeamAnchor,
     orgMode,
     sidebarHidden,

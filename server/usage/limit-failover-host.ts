@@ -4,6 +4,7 @@
 // through deps, so the rules are tested here without a server
 // (server/usage/limit-failover-host.test.ts) and through it in
 // server/usage/limit-failover.e2e.test.ts.
+import { NEAR_LIMIT_PERCENT } from "../../shared/limit-reset.ts";
 import type { LimitFailoverLine } from "../../shared/limit-failover.ts";
 import type { ModelSelection } from "../../shared/wire.ts";
 import { isEngineExhaustedRefusal } from "../drivers/openai-chat.ts";
@@ -71,9 +72,13 @@ export interface LimitFailoverHostDeps {
    * quick pick (a wake's or a call's fast model) skips such an engine. A
    * refusal on it that names no reset is still held for Sagax's estimate,
    * never until that window's reset. Auto, a backup and a run's takeover
-   * read only the refusals Sagax saw, and a person's chosen engine is never
-   * moved on it alone (2026-11-02). */
+   * read only the refusals Sagax saw for other providers; same-provider
+   * accounts rotate on the report too (#2192). */
   planLimitUntil?: (payer: string, instanceId: string) => number | null;
+  /** #2192: fullest window used-percent (0–100) from the last plan usage
+   * report for this payer and instance; null when unknown. Near-limit
+   * rotation (≥ NEAR_LIMIT_PERCENT) picks the sibling with more headroom. */
+  planUsedPercent?: (payer: string, instanceId: string) => number | null;
   /** A turn on this engine just worked for this payer: a plan window Sagax
    * read as spent for it is not (extra-usage credits, a plan upgrade, an
    * early reset), so Sagax's own picks may land on it again. */
@@ -124,12 +129,19 @@ export interface LimitFailoverHost {
   /** Readiness uses the same selection as beforeTurn without moving a thread. */
   backupFor(botId: string, threadId: string, speaker: unknown, from: string): Promise<ModelSelection | null>;
   /** The engines Sagax must not pick for this payer now: one a refusal holds
-   * at its usage limit, and any other sign-in to the same subscription
-   * engine (limitBackupAllowed). `pick` "quick": Sagax's quick pick (a
+   * at its usage limit. Sibling accounts of the same provider stay available
+   * for silent rotation (#2192). `pick` "quick": Sagax's quick pick (a
    * wake's or a call's fast model) also skips an engine whose plan the
    * payer's usage report showed spent (planLimitUntil); Auto and its panel
    * read only the refusals Sagax saw. */
   autoExcluded(payer: string, engines: readonly LimitEngine[], pick?: "quick"): Set<string>;
+  /** #2192: after a limit or provider error the backup answered with no text:
+   * try the next pool member once (same provider first), with the steps
+   * already taken. True when a resend was started. */
+  emptyReplyRetry(input: {
+    botId: string; threadId: string; speaker: unknown; messageId: string;
+    turnId?: string; trigger?: unknown;
+  }): boolean;
   /** Remember what a turn runs on, for its failure. */
   noteDispatch(threadId: string, dispatch: LimitDispatch): void;
   /** A runtime.error: keeps the reset the engine said, if any, and whether
@@ -253,18 +265,27 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
   const quickHeldUntil = (payer: string, instanceId: string): number | null =>
     heldUntil(payer, instanceId) ?? planUntil(payer, instanceId);
   /** The engines among `engines` a turn of this payer must not run on now:
-   * one held (`quick`: or whose plan is spent), and any other sign-in to the
-   * same subscription engine as one held (limitBackupAllowed's no-rotation
-   * rule), whatever engine refused. `also`: engines that may be held though
-   * not in the list (the one that refused, the conversation's own). */
+   * ones held (`quick`: or whose plan is spent). Sibling accounts of the
+   * same provider stay available for silent rotation (#2192). `also`:
+   * engines that may be held though not in the list (the one that refused,
+   * the conversation's own). */
   const outOf = (payer: string, engines: readonly LimitEngine[], quick = false, also: readonly LimitEngine[] = []): Set<string> => {
     const until = quick ? quickHeldUntil : heldUntil;
     const limited = [...engines, ...also].filter((engine) => until(payer, engine.instanceId) !== null);
     const out = new Set<string>();
     for (const engine of engines) {
+      // Held itself, or not allowed as a backup from a held engine (same
+      // instance only after #2192; siblings of a held account stay in).
       if (limited.some((at) => !limitBackupAllowed(at, engine, deps.config(engine.instanceId)))) out.add(engine.instanceId);
     }
     return out;
+  };
+  const usedOf = (payer: string, instanceId: string): number | null => {
+    try {
+      return deps.planUsedPercent?.(payer, instanceId) ?? null;
+    } catch {
+      return null;
+    }
   };
   /** A line's reset for this engine is only Sagax's estimate when the hold
    * that sets it says so; `fallback` when no hold sets that time. */
@@ -275,7 +296,8 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
   /** `ownHeld`: the conversation's own engine, while a limit bound only to
    * its own model still holds (ownModelHolds): another model of it is no
    * backup for the one a limit refused, as for a run (routineBackup). */
-  const pick = async (botId: string, threadId: string, speaker: unknown, from: LimitEngine, payer: string, ownHeld?: string) => {
+  const pick = async (botId: string, threadId: string, speaker: unknown, from: LimitEngine, payer: string, ownHeld?: string,
+    options?: { skip?: readonly string[]; sameProviderOnly?: boolean }) => {
     const preferred = deps.preferred(botId, threadId);
     const candidates = await deps.candidates(botId, threadId, speaker);
     const out = outOf(payer, candidates, false, [from]);
@@ -283,6 +305,9 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     return pickLimitBackup({
       from, preferred, candidates, config: deps.config,
       blocked: (instanceId) => out.has(instanceId) || Boolean(deps.refusal?.(botId, threadId, speaker, instanceId)),
+      usedPercent: (instanceId) => usedOf(payer, instanceId),
+      ...(options?.skip ? { skip: options.skip } : {}),
+      ...(options?.sameProviderOnly ? { sameProviderOnly: true } : {}),
     });
   };
   /** The conversation runs on a backup standing in for its own model
@@ -380,6 +405,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       candidates,
       blocked: (instanceId) => out.has(instanceId),
       config: deps.config,
+      usedPercent: (instanceId) => usedOf(dispatch.payer, instanceId),
     });
   };
   /** Auto has another model to pick for this payer (as Auto picks:
@@ -617,12 +643,56 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     autoExcluded(payer, engines, pick) {
       try {
         // A refusal's hold (for Sagax's quick pick, also a plan window the
-        // payer's usage report showed spent), and any other sign-in to the
-        // same subscription engine: never landed on (2026-11-02).
+        // payer's usage report showed spent). Sibling accounts of the same
+        // provider stay available for silent rotation (#2192).
         return outOf(payer, engines, pick === "quick");
       } catch (failure) {
         console.warn(`[limit-failover] auto: ${failure instanceof Error ? failure.message : String(failure)}`);
         return new Set<string>();
+      }
+    },
+
+    emptyReplyRetry({ botId, threadId, speaker, messageId, turnId, trigger }) {
+      try {
+        if (!deps.enabled()) return false;
+        const selection = deps.threadSelection(botId, threadId);
+        if (!selection || selection.auto === true) return false;
+        const from = deps.engine(selection.instanceId);
+        const candidates = deps.candidatesNow?.(botId, threadId, speaker);
+        if (!from || !candidates) return false;
+        const payer = deps.payer(botId, speaker);
+        const standing = store.failover(botId, threadId);
+        const ownHeld = standing && same(standing.to, selection) ? ownModelHolds(standing) : undefined;
+        const out = outOf(payer, candidates, false, [from]);
+        if (ownHeld) out.add(ownHeld);
+        const backup = pickLimitBackup({
+          from, preferred: deps.preferred(botId, threadId), candidates, config: deps.config,
+          blocked: (instanceId) => out.has(instanceId) || Boolean(deps.refusal?.(botId, threadId, speaker, instanceId)),
+          usedPercent: (instanceId) => usedOf(payer, instanceId),
+          skip: [selection.instanceId],
+        });
+        if (!backup || !store.takeResend(messageId)) return false;
+        const refused = deps.switchThread(botId, threadId, backup);
+        if (refused) {
+          console.warn(`[limit-failover] ${threadId}: empty-reply could not move to ${backup.instanceId}: ${refused}`);
+          return false;
+        }
+        const resetsAt = store.blockedUntil(payer, selection.instanceId) ?? deps.now() + 60_000;
+        const kept = store.record({
+          botId, threadId, from: selection, to: backup, resetsAt, at: deps.now(), estimated: true,
+        });
+        deps.note(threadId, {
+          kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId),
+          resetsAt: kept.resetsAt, estimated: true,
+          ...(deps.ownerPays?.(botId, speaker) ? { owner: true as const } : {}),
+        });
+        track(deps.resend(botId, threadId, messageId, speaker, trigger, turnId ? { turnId } : {}).catch((failure) => {
+          console.warn(`[limit-failover] empty-reply ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+        }));
+        return true;
+      } catch (failure) {
+        console.warn(`[limit-failover] empty-reply ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+        return false;
       }
     },
 
@@ -891,7 +961,9 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           }
         }
         // The thread's engine is known to be at its limit for this payer: a
-        // backup takes the turn before it is refused.
+        // backup takes the turn before it is refused. Near the limit (#2192):
+        // rotate silently to another account of the same provider with more
+        // headroom before the turn starts.
         const selection = deps.threadSelection(botId, threadId);
         if (!selection || (selection.auto === true && !resolvedSelection)) return null;
         const instanceId = resolvedSelection?.instanceId ?? selection.instanceId;
@@ -899,12 +971,31 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         // Credits have no reset time. Their recorded refusal expires after its existing TTL.
         const until = refusal ? refusal.cause === "usage_limit" && refusal.resetsAt !== undefined
           ? refusal.resetsAt : refusal.at + ENGINE_REFUSAL_TTL_MS : store.blockedUntil(payer, instanceId);
-        const from = until === null ? undefined : deps.engine(instanceId);
-        if (until === null || !from) return null;
+        const from = deps.engine(instanceId);
+        if (!from) return null;
         // On a backup standing in for its own model: that model's engine is
         // no backup while a limit bound only to that model holds.
         const standing = store.failover(botId, threadId);
         const ownHeld = standing && same(standing.to, selection) ? ownModelHolds(standing) : undefined;
+        if (until === null) {
+          const used = usedOf(payer, instanceId);
+          if (used === null || used < NEAR_LIMIT_PERCENT) return null;
+          return pick(botId, threadId, speaker, from, payer, ownHeld, { sameProviderOnly: true }).then((backup) => {
+            if (!backup || !same(deps.threadSelection(botId, threadId), selection)) return;
+            const siblingUsed = usedOf(payer, backup.instanceId);
+            // Only move when the sibling has more headroom (or unknown).
+            if (siblingUsed !== null && siblingUsed >= used) return;
+            if (deps.switchThread(botId, threadId, backup)) return;
+            // Pool rotation stays put: no return timer. Events lens only.
+            deps.note(threadId, {
+              kind: "switched", from: deps.engineName(selection.instanceId), to: deps.engineName(backup.instanceId),
+              resetsAt: deps.now(), estimated: true,
+              ...(deps.ownerPays?.(botId, speaker) ? { owner: true as const } : {}),
+            });
+          }).catch((failure) => {
+            console.warn(`[limit-failover] near-limit ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+          });
+        }
         return pick(botId, threadId, speaker, from, payer, ownHeld).then((backup) => {
           // Nothing awaited after the pick: the thread is read again here.
           if (!backup || !same(deps.threadSelection(botId, threadId), selection)) return;

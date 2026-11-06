@@ -100,8 +100,10 @@ export function summaryPrompt(history: readonly ReplayEntry[]): string {
   ].join("\n\n");
 }
 
-/** The selected account's tool-free helper is optional. Timeout aborts it,
- * and Stop aborts the whole operation instead of committing a late summary. */
+/** The writer is optional: the selected account's tool-free one-shot, or
+ * the helper model for an engine that has none (server/side-jobs.ts).
+ * Timeout aborts it, and Stop aborts the whole operation instead of
+ * committing a late summary. */
 export async function draftSummary(history: readonly ReplayEntry[], options: {
   generateText?: (prompt: string, options?: { signal?: AbortSignal }) => Promise<string>;
   signal: AbortSignal;

@@ -19,6 +19,7 @@ import type { ProviderInstance } from "../../contracts.ts";
 import { TurnNotStartedError } from "../../contracts.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { promptSplitFingerprints, writePromptSplitReceipt } from "../prompt-split.ts";
+import { classifyError } from "../retry.ts";
 import { GROK_TOOL_REUSE_HINT as HINT } from "./grok.ts";
 import { contextFullMessage, contextRenewedNotice } from "../../context/context-renewal.ts";
 import { createAcpDriver, DEFAULT_ACP_PROMPT_IDLE_MS, skipSubscriptionAuthForLocalInject, type AcpSupport } from "./core.ts";
@@ -261,7 +262,13 @@ describe("ACP turns (fake CLI)", () => {
 
   afterEach(async () => {
     delete process.env.FAKE_ACP_MODE;
+    delete process.env.FAKE_ACP_ASK_METHOD;
+    delete process.env.FAKE_ACP_ASK_PARAMS;
+    delete process.env.FAKE_ACP_ASK_ANSWER;
+    delete process.env.FAKE_ACP_ASK_TIMING;
+    delete process.env.FAKE_ACP_AUTH_METHOD;
     delete process.env.FAKE_ACP_CANCEL_REPLY;
+    delete process.env.FAKE_ACP_IGNORE_CANCEL;
     delete process.env.FAKE_ACP_DUMP;
     delete process.env.FAKE_ACP_RPC_DUMP;
     delete process.env.FAKE_ACP_RPC_APPEND_FILE;
@@ -284,6 +291,7 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_PERMISSION_OPTIONS;
     delete process.env.FAKE_ACP_QUESTION_OPTIONS;
     delete process.env.FAKE_ACP_HOLD_ON_CANCELLED;
+    delete process.env.FAKE_ACP_TEXT_REPLY;
     delete process.env.XAI_API_KEY;
     delete process.env.OPENCODE_API_KEY;
     delete process.env.CLINE_API_KEY;
@@ -2240,7 +2248,14 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     await recorder.until((e) => e.type === "turn.completed");
   });
 
-  it("grok fails closed when the CLI advertises no cached_token (needs login)", async () => {
+  it("grok accepts the grok.com authentication method offered by current CLI versions", async () => {
+    process.env.FAKE_ACP_AUTH_METHOD = "grok.com";
+    await create(GrokAgentDriver);
+    await instance.adapter.sendTurn({ threadId: "t-grok-current-auth", text: "go" });
+    expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
+  });
+
+  it("grok fails closed when the CLI advertises no supported authentication method", async () => {
     await create(GrokAgentDriver, "no-auth");
     await instance.adapter.sendTurn({ threadId: "t-auth", text: "go" });
     const done = await recorder.until((e) => e.type === "turn.completed");
@@ -2306,6 +2321,48 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     await instance.adapter.interruptTurn("t-int");
     const done = await recorder.until((e) => e.type === "turn.completed");
     expect(done).toMatchObject({ type: "turn.completed" });
+  });
+
+  it("fails the turn when Stop could not end the process", async () => {
+    const dump = join(scratch, "stop-failed-dump.json");
+    const appendFile = join(scratch, "stop-failed-rpc.jsonl");
+    process.env.FAKE_ACP_MODE = "hang";
+    process.env.FAKE_ACP_IGNORE_CANCEL = "1";
+    process.env.FAKE_ACP_DUMP = dump;
+    process.env.FAKE_ACP_RPC_APPEND_FILE = appendFile;
+    const spawn = procs.spawnCli;
+    let child: ReturnType<typeof procs.spawnCli> | undefined;
+    vi.spyOn(procs, "spawnCli").mockImplementation((...args) => {
+      child = spawn(...args);
+      return child;
+    });
+    instance = await GrokAgentDriver.create({
+      instanceId: "acp-test", displayName: "ACP Test", enabled: true,
+      environment: {
+        FAKE_ACP_MODE: "hang", FAKE_ACP_IGNORE_CANCEL: "1",
+        FAKE_ACP_DUMP: dump, FAKE_ACP_RPC_APPEND_FILE: appendFile,
+      },
+      config: { cli: FAKE_CLI, fullAuto: false },
+    });
+    recorder = recordEvents(instance.adapter);
+    await instance.adapter.sendTurn({ threadId: "t-stop-failed", text: "go" });
+    // Wait until the hanging prompt is in flight; interrupting earlier only
+    // throws "turn stopped" before cancel-timeout owns the settle.
+    await vi.waitFor(() => {
+      expect(existsSync(appendFile) && readFileSync(appendFile, "utf8")).toMatch(/session\/prompt/);
+    }, { timeout: 10_000 });
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.FAKE_ACP_IGNORE_CANCEL).toBe("1");
+    const kill = procs.killCliTree;
+    let refused = false;
+    vi.spyOn(procs, "killCliTree").mockImplementation(async (target, timeout) => {
+      if (target !== child || refused) return kill(target, timeout);
+      refused = true;
+      return false;
+    });
+    await instance.adapter.interruptTurn("t-stop-failed");
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: false, stopReason: "stop_failed" });
+    expect(recorder.events.some((e) => e.type === "runtime.error" && /could not be ended/.test(e.message))).toBe(true);
   });
 
   it.each(["error", "refusal"])("a stop during the prompt leaves no error row when the agent answers the cancel with %s", async (reply) => {
@@ -2579,6 +2636,57 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(done).toMatchObject({ ok: false, stopReason: "empty_turn" });
     expect(recorder.events.find((e) => e.type === "runtime.error")?.message)
       .toMatch(/no reply, image, or tool result/);
+  });
+
+  // omp 18.12's ACP mode sends a provider's refusal as the reply's text and ends the turn with end_turn.
+  describe("a reply that is only a provider's error body", () => {
+    const OAUTH_REFUSED = '403 {"type":"error","error":{"type":"permission_error","message":"OAuth authentication is currently not allowed for this organization.","details":{"error_code":"oauth_not_allowed_for_organization"}},"request_id":"req_011CgY35mSFzqEa1NBU5nq8i"}';
+    const WEEKLY_LIMIT = '429 {"type":"error","error":{"type":"rate_limit_error","code":"1310","message":"[1310][Weekly/Monthly Limit Exhausted. Your limit will reset at 2026-10-23 09:13:38][20261022010620e41a1d021c2d4ce4]"},"request_id":"20261022010620e41a1d021c2d4ce4"} retry-after-ms=115636000';
+    const turn = async (threadId: string, reply: string) => {
+      process.env.FAKE_ACP_TEXT_REPLY = reply;
+      await create(GrokAgentDriver);
+      await instance.adapter.sendTurn({ threadId, text: "go" });
+      const done = await recorder.until((e) => e.type === "turn.completed");
+      const replies = recorder.events.filter((e) => e.type === "item.completed" && e.itemType === "assistant_text");
+      const errors = recorder.events.flatMap((e) => e.type === "runtime.error" ? [e] : []);
+      return { done, replies, errors };
+    };
+
+    it("fails the turn on a 403 and says the refusal in plain words, never the JSON", async () => {
+      const { done, replies, errors } = await turn("t-error-403", OAUTH_REFUSED);
+      expect(done).toMatchObject({ ok: false, stopReason: "rpc_error" });
+      expect(replies).toEqual([]);
+      expect(errors).toEqual([expect.objectContaining({
+        message: 'Grok stopped with an error (HTTP 403; Grok says: "OAuth authentication is currently not allowed for this organization").',
+      })]);
+      expect(errors[0]).not.toHaveProperty("limit");
+      expect(classifyError({ text: errors[0]!.message }).reason).toBe("auth");
+    });
+
+    it("fails the turn on a 429 that names its wait as a usage limit held until then", async () => {
+      const before = Date.now();
+      const { done, replies, errors } = await turn("t-error-429", WEEKLY_LIMIT);
+      const after = Date.now();
+      expect(done).toMatchObject({ ok: false, stopReason: "quota" });
+      expect(replies).toEqual([]);
+      expect(errors).toHaveLength(1);
+      const error = errors[0]!;
+      expect(error.limit).toBe("engine");
+      expect(error.limitResetsAt).toBeGreaterThanOrEqual(before + 115_636_000);
+      expect(error.limitResetsAt).toBeLessThanOrEqual(after + 115_636_000);
+      expect(error.message).toMatch(/^This Grok account has reached its usage limit \(Grok says: "\[1310\]\[Weekly\/Monthly Limit Exhausted/);
+      expect(error.message).toMatch(/which resets .+\. Until then, switch this bot to another engine\.$/);
+      expect(error.message).not.toMatch(/rate_limit_error|retry-after-ms|request_id/);
+      expect(classifyError({ text: error.message }).reason).toBe("quota");
+    });
+
+    it("keeps a reply that quotes such an error among its own words", async () => {
+      const quoted = `The deploy failed with this response:\n\n${OAUTH_REFUSED}\n\nI'll retry with the API key.`;
+      const { done, replies, errors } = await turn("t-error-quoted", quoted);
+      expect(done).toMatchObject({ ok: true, stopReason: null });
+      expect(replies).toEqual([expect.objectContaining({ text: quoted })]);
+      expect(errors).toEqual([]);
+    });
   });
 
   it("reasoning with no answer is a lost turn, not a success", async () => {
@@ -3225,6 +3333,110 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(unknown.errors).toEqual([expect.objectContaining({
         message: "Internal error: Grok could not finish the session (session/prompt, service: session, APIError)",
       })]);
+    });
+  });
+
+  describe("Grok ask_user_question", () => {
+    // The request Grok's shell sends when its ask_user_question tool runs
+    // (xai-org/grok-build AskUserQuestionExtRequest, camelCase on the wire).
+    const GROK_ASK = {
+      sessionId: "fake-acp-session",
+      toolCallId: "call-1",
+      mode: "default",
+      questions: [
+        { question: "Which database?", options: [{ label: "Redis", description: "In-memory store" }, { label: "Postgres", description: "Relational" }] },
+        { question: "Which caches?", multiSelect: true, options: [{ label: "Hot path", description: "" }, { label: "Cold path", description: "" }] },
+        { question: "Anything else?", options: [{ label: "No", description: "" }, { label: "Yes", description: "" }] },
+      ],
+    };
+    const ask = async (threadId: string, env: Record<string, string> = {}, approvalMode?: "full") => {
+      Object.assign(process.env, {
+        FAKE_ACP_ASK_METHOD: "_x.ai/ask_user_question",
+        FAKE_ACP_ASK_PARAMS: JSON.stringify(GROK_ASK),
+        FAKE_ACP_ASK_ANSWER: join(scratch, "grok-ask.json"),
+        ...env,
+      });
+      await create(GrokAgentDriver, "ask-question");
+      await instance.adapter.sendTurn({ threadId, text: "go", ...(approvalMode ? { approvalMode } : {}) });
+    };
+    const reply = () => JSON.parse(readFileSync(join(scratch, "grok-ask.json"), "utf8"));
+
+    it("asks every question on one card and keys the answers by Grok's question text", async () => {
+      await ask("t-grok-ask");
+      const opened = await recorder.until((e) => e.type === "request.opened");
+      expect(opened).toMatchObject({
+        requestType: "question",
+        tool: "ask_user",
+        summary: "Which database? (+2 more questions)",
+        questions: [
+          { question: "Which database?", options: [{ label: "Redis", description: "In-memory store" }, { label: "Postgres", description: "Relational" }] },
+          { question: "Which caches?", multiSelect: true, options: [{ label: "Hot path" }, { label: "Cold path" }] },
+          { question: "Anything else?", options: [{ label: "No" }, { label: "Yes" }] },
+        ],
+      });
+      const outcome = await instance.adapter.respondToRequest("t-grok-ask", (opened as { requestId: string }).requestId, {
+        behavior: "answer",
+        message: "The user answered your questions.\n\nQ: Which database?\nA: Postgres\n\nQ: Which caches?\nA: Hot path, Cold path, and the CDN\n\nQ: Anything else?\nA: Use version 16",
+      });
+      expect(outcome).toBe("answered");
+      await recorder.until((e) => e.type === "turn.completed");
+      expect(reply()).toEqual({ result: {
+        outcome: "accepted",
+        answers: { "Which database?": ["Postgres"], "Which caches?": ["Hot path", "Cold path", "Other"], "Anything else?": ["Other"] },
+        annotations: { "Which caches?": { notes: "and the CDN" }, "Anything else?": { notes: "Use version 16" } },
+      } });
+    });
+
+    it("still asks under Full access, reads multi_select, and accepts the bare method name", async () => {
+      await ask("t-grok-ask-full", {
+        FAKE_ACP_ASK_METHOD: "x.ai/ask_user_question",
+        FAKE_ACP_ASK_PARAMS: JSON.stringify({ ...GROK_ASK, questions: [{ question: "Which caches?", multi_select: true, options: [{ label: "Hot path" }, { label: "Cold path" }] }] }),
+      }, "full");
+      const opened = await recorder.until((e) => e.type === "request.opened");
+      expect(opened).toMatchObject({ requestType: "question", questions: [{ question: "Which caches?", multiSelect: true }] });
+      // a multi-select question has no flat one-tap answer
+      expect(opened).not.toHaveProperty("choices");
+      await instance.adapter.respondToRequest("t-grok-ask-full", (opened as { requestId: string }).requestId, { behavior: "answer", message: "Cold path" });
+      await recorder.until((e) => e.type === "turn.completed");
+      expect(reply()).toEqual({ result: { outcome: "accepted", answers: { "Which caches?": ["Cold path"] } } });
+    });
+
+    it("cancels a denied card and refuses malformed params", async () => {
+      await ask("t-grok-ask-deny");
+      const opened = await recorder.until((e) => e.type === "request.opened");
+      expect(await instance.adapter.respondToRequest("t-grok-ask-deny", (opened as { requestId: string }).requestId, { behavior: "deny" })).toBe("rejected");
+      expect(await recorder.until((e) => e.type === "request.resolved")).toMatchObject({ behavior: "deny", source: "user" });
+      await recorder.until((e) => e.type === "turn.completed");
+      expect(reply()).toEqual({ result: { outcome: "cancelled" } });
+
+      process.env.FAKE_ACP_ASK_PARAMS = JSON.stringify({ ...GROK_ASK, questions: [{ options: [{ label: "Redis" }] }] });
+      const { turnId } = await instance.adapter.sendTurn({ threadId: "t-grok-ask-deny", text: "again" });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      expect(reply()).toMatchObject({ error: { code: -32602 } });
+      expect(recorder.events.filter((e) => e.type === "request.opened")).toHaveLength(1);
+
+      // More questions than one card holds: refused whole, not partly answered.
+      const seven = Array.from({ length: 7 }, (_, i) => ({ question: `Question ${i}?`, options: [{ label: "Yes" }, { label: "No" }] }));
+      process.env.FAKE_ACP_ASK_PARAMS = JSON.stringify({ ...GROK_ASK, questions: seven });
+      const many = await instance.adapter.sendTurn({ threadId: "t-grok-ask-deny", text: "seven" });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === many.turnId);
+      expect(reply()).toMatchObject({ error: { code: -32602, message: "ask needs 1 to 6 distinct questions with question text" } });
+      expect(recorder.events.filter((e) => e.type === "request.opened")).toHaveLength(1);
+
+      // Two questions with the same text: Grok keys answers by text, so refused.
+      process.env.FAKE_ACP_ASK_PARAMS = JSON.stringify({ ...GROK_ASK, questions: [GROK_ASK.questions[0], GROK_ASK.questions[0]] });
+      const twins = await instance.adapter.sendTurn({ threadId: "t-grok-ask-deny", text: "twins" });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === twins.turnId);
+      expect(reply()).toMatchObject({ error: { code: -32602 } });
+      expect(recorder.events.filter((e) => e.type === "request.opened")).toHaveLength(1);
+    });
+
+    it("cancels a question that arrives between turns", async () => {
+      await ask("t-grok-ask-idle", { FAKE_ACP_ASK_TIMING: "after-result" });
+      await recorder.until((e) => e.type === "turn.completed");
+      for (let i = 0; i < 80 && !existsSync(join(scratch, "grok-ask.json")); i++) await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(reply()).toEqual({ result: { outcome: "cancelled" } });
+      expect(recorder.events.some((e) => e.type === "request.opened")).toBe(false);
     });
   });
 

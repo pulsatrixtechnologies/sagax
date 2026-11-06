@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.107",
   "baseVersion": "0.1.107",
-  "forkVersion": "0.8.53",
+  "forkVersion": "0.8.54",
   "description": "Pulsatrix Sagax: a local-first chat app for running a team of AI agents.",
   "homepage": "https://github.com/pulsatrixtechnologies/sagax",
   "repository": {
@@ -121,6 +121,7 @@
     "@jsquash/webp": "1.5.0",
     "@lezer/highlight": "1.2.5",
     "@lezer/markdown": "1.8.0",
+    "@muse-code/sdk": "1.4.6",
     "@novnc/novnc": "1.7.0",
     "@resvg/resvg-js": "2.6.2",
     "@simplewebauthn/server": "14.0.3",

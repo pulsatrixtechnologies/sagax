@@ -16,7 +16,7 @@ import { resolveCli } from "../../procs.ts";
 import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import type { DeviceSignIn } from "../device-auth.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
-import { createAcpDriver, type AccountErrorCode, type AcpSupport } from "./core.ts";
+import { createAcpDriver, type AccountErrorCode, type AcpQuestionRequest, type AcpSupport } from "./core.ts";
 import { parseModelEffortFacts } from "../../../shared/model-capabilities.ts";
 import type { EffortLevel } from "../../../shared/wire.ts";
 import { grokHostToolArgs, grokOrgAgentProfile } from "../host-tools.ts";
@@ -28,6 +28,9 @@ import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts"
 import { turnReachFor } from "../../turns/turn-reach.ts";
 import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
 import { grokAliasBase, grokToolNameProblem } from "../../mcp/mcp-tool-names.ts";
+import {
+  MAX_QUESTIONS, parseProtocolAskQuestions, pickedOptionLabels, questionAnswersById, repeatsQuestionText,
+} from "../../../shared/ask-question.ts";
 
 /** Fallback only, for when the engine cannot be asked (not installed, or no
  * answer). Grok 1.0.46 and 1.0.50 signed in to grok.com offer exactly these
@@ -476,8 +479,9 @@ export async function probeGrokReach(cli: string, env: Record<string, string | u
     void (async () => {
       const init = await send("initialize", { protocolVersion: 1, clientCapabilities: {} });
       const methods = (init.result as { authMethods?: Array<{ id?: string }> } | undefined)?.authMethods ?? [];
-      if (init.error || !methods.some((method) => method.id === "cached_token")) return finish(null);
-      const auth = await send("authenticate", { methodId: "cached_token" });
+      const methodId = ["cached_token", "grok.com"].find((id) => methods.some((method) => method.id === id));
+      if (init.error || !methodId) return finish(null);
+      const auth = await send("authenticate", { methodId });
       if (auth.error) return finish(null);
       const created = await send("session/new", { cwd: dirname(home), mcpServers: [] });
       const sessionId = (created.result as { sessionId?: unknown } | undefined)?.sessionId;
@@ -752,10 +756,12 @@ export function grokApplyAccess(
   if (key) env.XAI_API_KEY = key;
 }
 
-/** The subscription's cached token when the CLI has one; else the key the
- * turn was given (organization server only). */
+/** The subscription's cached token when the CLI has one; else current CLI's
+ * `grok.com` method for an already-signed-in session; else the key the turn
+ * was given (organization server only). */
 export function grokPickAuthMethod(methods: Array<{ id?: string }>, env?: Record<string, string | undefined>): string | null {
-  if (methods.some((m) => m.id === "cached_token")) return "cached_token";
+  const subscription = ["cached_token", "grok.com"].find((id) => methods.some((m) => m.id === id));
+  if (subscription) return subscription;
   return env?.XAI_API_KEY?.trim() ? "xai.api_key" : null;
 }
 
@@ -936,8 +942,55 @@ export function describeGrokAccountError(code: AccountErrorCode, model?: string)
   }
 }
 
+/** Grok's `ask_user_question` tool blocks its turn on this extension request
+ * (xai-org/grok-build: xai-grok-shell/src/session/acp_session_impl/spawn.rs,
+ * xai-grok-tools/.../ask_user_question/types.rs). The tool is on by default
+ * and needs no client capability. ACP's Rust SDK adds the extension prefix
+ * `_` on the wire, as with `_x.ai/mcp/list`; the bare name is accepted too.
+ * Answers are keyed by the question text Grok sent, one label per pick; the
+ * person's own words ride as "Other" with the text in annotations[].notes. */
+export const GROK_ASK_USER_QUESTION: AcpQuestionRequest = {
+  cancelled: { outcome: "cancelled" },
+  parse(params) {
+    const raw = (params as { questions?: unknown } | null)?.questions;
+    // Refused whole: answering only the first ones would read the rest as accepted.
+    if (!Array.isArray(raw) || raw.length > MAX_QUESTIONS) return null;
+    // The entry index is the protocol id, so each card question maps back
+    // to the exact text Grok keys its answers by. Grok serializes the flag
+    // as `multiSelect`; its model-facing name `multi_select` is read too.
+    const parsed = parseProtocolAskQuestions(raw.map((entry, index) =>
+      entry && typeof entry === "object"
+        ? { ...entry, id: String(index), multiSelect: entry.multiSelect === true || entry.multi_select === true }
+        : entry));
+    if (!parsed || repeatsQuestionText(parsed)) return null;
+    return {
+      questions: parsed.map(({ question }) => question),
+      answered(message) {
+        const byId = questionAnswersById(message, parsed);
+        // Null prototype: a question text such as __proto__ is a real key.
+        const answers: Record<string, string[]> = Object.create(null);
+        const annotations: Record<string, { notes: string }> = Object.create(null);
+        for (const { id, question } of parsed) {
+          const reply = byId[id];
+          if (reply === undefined) continue;
+          const text = (raw[Number(id)] as { question: string }).question;
+          const { labels, other } = pickedOptionLabels(reply, question);
+          answers[text] = other === undefined ? labels : [...labels, "Other"];
+          if (other !== undefined) annotations[text] = { notes: other };
+        }
+        if (!Object.keys(answers).length) return null;
+        return { outcome: "accepted", answers, ...(Object.keys(annotations).length ? { annotations } : {}) };
+      },
+    };
+  },
+};
+
 const support: AcpSupport = {
   driverKind: "grokAgent",
+  questionRequests: {
+    "_x.ai/ask_user_question": GROK_ASK_USER_QUESTION,
+    "x.ai/ask_user_question": GROK_ASK_USER_QUESTION,
+  },
   displayName: "Grok",
   images: true,
   acceptsUnadvertisedImages: grokAcceptsUnadvertisedImages,

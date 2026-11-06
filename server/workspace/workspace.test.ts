@@ -709,6 +709,11 @@ describe("workspace", () => {
     }
   });
 
+  it("tells a managed-memory turn that tool names in memory may be outdated (#2189)", () => {
+    expect(memorySystemPrompt(BOT, { managedWrites: true })).toContain("your current tool list is the authority");
+    expect(memorySystemPrompt(BOT)).not.toContain("your current tool list is the authority");
+  });
+
   it("a withheld or agents-only turn gets relative MEMORY.md / memory/, never a server absolute path", () => {
     writeMemoryFile(BOT, "# Memory\n- prefers CSV\n");
     for (const prompt of [

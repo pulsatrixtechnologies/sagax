@@ -21,6 +21,13 @@ describe("MCP scope configuration", () => {
     expect(() => gateServer({ ...input, toolScope: { allow: null } as never })).toThrow(/tool selection/i);
     expect(() => gateServer({ ...input, server: {}, toolScope: { allow: [] } })).toThrow(/MCP server/i);
   });
+
+  it("mounts a withhold list for agents-preferred names without adding __ (#2189)", () => {
+    const gated = gateServer({ ...input, withhold: ["send_prompt", "api_search", "send_prompt", "cw__x"] });
+    expect(gated).not.toBeNull();
+    expect(JSON.parse(gated!.env.SAGAX_GATE_WITHHOLD)).toEqual(["api_search", "send_prompt"]);
+    expect(gateServer({ ...input, name: "agents", withhold: ["send_prompt"] })).toBeNull();
+  });
 });
 
 describe("tool directory configuration", () => {

@@ -20,7 +20,7 @@ describe("openapi tool call", () => {
   function harness(answer: { ok: boolean; status: number; body: Record<string, unknown> }) {
     const api = vi.fn<HarnessClient["api"]>(async () => ({}));
     const apiResponse = vi.fn<HarnessClient["apiResponse"]>(async () => answer);
-    const context: ToolCallContext = { botId: "bot-a", threadId: "thread-a", depth: 0, externalRuntime: false, coordinating: false, sharedComputers: false, client: { api, apiResponse } };
+    const context: ToolCallContext = { botId: "bot-a", threadId: "thread-a", depth: 0, coordinating: false, externalRuntime: false, sharedComputers: false, client: { api, apiResponse } };
     return { apiResponse, context };
   }
 

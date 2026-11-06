@@ -236,6 +236,35 @@ describe("createInternalIntegrationsRoutes", () => {
     }]);
   });
 
+  it("POST /github-connect posts the sign-in card in a group chat too, for the person who asked (#2109)", async () => {
+    const githubPostCard = vi.fn(() => "msg-card");
+    const route = createInternalIntegrationsRoutes(deps({
+      ownsThread: () => ({ group: true }),
+      principalCan: () => false,
+      isPerspicax: () => true,
+      githubPostCard,
+    }));
+    const { sent, run } = call(route, { path: "/api/internal/github-connect" });
+    await run();
+    expect(githubPostCard).toHaveBeenCalledWith("person-1", "t-1", expect.objectContaining({ userCode: "ABCD-1234" }), { botId: "bot-1", name: "Ada", color: "blue" });
+    expect(sent[0]).toMatchObject({ status: 200, body: { state: "pending", userCode: "ABCD-1234", card: true } });
+  });
+
+  it("POST /github-connect reuses the waiting code and its card", async () => {
+    const githubStartDeviceFlow = vi.fn();
+    const githubPostCard = vi.fn(() => "msg-card");
+    const route = createInternalIntegrationsRoutes(deps({
+      githubProbeStatus: async () => ({ state: "pending", userCode: "QRST-1111", verificationUri: "https://github.com/login/device", expiresAt: Date.now() + 600_000 }),
+      githubStartDeviceFlow,
+      githubPostCard,
+    }));
+    const { sent, run } = call(route, { path: "/api/internal/github-connect" });
+    await run();
+    expect(githubStartDeviceFlow).not.toHaveBeenCalled();
+    expect(githubPostCard).toHaveBeenCalledWith("person-1", "t-1", expect.objectContaining({ userCode: "QRST-1111" }), undefined);
+    expect(sent[0]?.body).toMatchObject({ state: "pending", userCode: "QRST-1111", card: true });
+  });
+
   it("POST /request-credential refuses a foreign source conversation (403)", async () => {
     const route = createInternalIntegrationsRoutes(deps({ ownsThread: () => null }));
     const { sent, run } = call(route, {
@@ -253,7 +282,11 @@ describe("createInternalIntegrationsRoutes", () => {
       body: { credentialId: "not-a-real-key" },
     });
     await run();
-    expect(sent).toEqual([{ status: 400, body: { error: "unsupported credential id" } }]);
+    // Custom secrets need a label; an unknown id without one explains both shapes.
+    expect(sent).toEqual([{
+      status: 400,
+      body: { error: "request_credential needs credential_id for a key Sagax keeps, or label for any other secret." },
+    }]);
   });
 
   it("POST /request-credential appends a secret card (201)", async () => {

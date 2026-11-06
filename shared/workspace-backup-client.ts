@@ -14,6 +14,7 @@ export const WORKSPACE_BACKUP_CLIENT_KEYS = [
   "omb-show-threads",
   "omb-show-run-card",
   "omb-send-key",
+  "omb-color-user-bubbles",
   "openmausbot.sidebarDensity",
   "openmausbot.sidebarCollapsedSections.v1",
   "openmausbot.sidebarSectionOrder.v1",

@@ -101,7 +101,10 @@ export async function postGroupQueueSteer(deps: GroupsHttpDeps, ctx: RouteContex
   // A live steer has no image side channel — the same rule as the
   // 1:1 queue: attachment words wait for a real turn where central
   // admission can hand the images to the engine.
-  if (headGroup.some((item) => extractTurnImages(item.text).images.length > 0)) {
+  if (headGroup.some((item) => {
+    const resolved = extractTurnImages(item.text);
+    return resolved.images.length > 0 || resolved.videos.length > 0;
+  })) {
     restoreHeldChannelQueue(held);
     return json(res, 200, { ok: true, queued: true, threadId: targetThreadId });
   }

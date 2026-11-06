@@ -124,11 +124,11 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   instructionsLead: { drop: "recomputed from SOUL.md" },
   modelSelection: "settings",
   fallback: "settings",
+  cacheKeepWarm: "settings",
   maxConcurrentThreads: "settings",
   maxParallelPerPerson: "settings",
   busySend: "settings",
   automaticRecovery: "settings",
-  cacheKeepWarm: "settings",
   turnLimits: "settings",
   // #1137: who pays is its owner's choice on this server, and the default is computed
   turnPayer: { drop: "who pays is the owner's choice on this server" },
@@ -150,10 +150,12 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   voiceSpeed: "settings",
   voiceLanguage: "settings",
   emailDrafts: "settings",
+  memeReplies: "settings",
   memoryEnabled: "settings",
   loopGuard: "settings",
   teamMemorySharing: "settings",
   memoryUpkeep: "settings",
+  helperModel: "settings",
   parkDirectMessages: "settings",
   approvePeerComms: "settings",
   localPrompt: "settings",
@@ -314,7 +316,7 @@ export interface BotZipHost {
   /** Why no bot can be added now (the workspace's cap), or null. */
   creationRefusal?(): string | null;
   /** Why this person may not give a bot this look (a Mastery look they have
-   * not unlocked, server/achievements-mastery.ts), or null. */
+   * not unlocked, server/achievements/achievements-mastery.ts), or null. */
   lookRefusal?(principalId: string | undefined, look: unknown): string | null;
   browserProfileExists?(id: string): boolean;
   /** A working folder this server can use. */
@@ -791,12 +793,14 @@ const settingsSchema = z.object({
   voiceSpeed: z.number().finite().min(VOICE_MODE_MIN_SPEED).max(VOICE_MODE_MAX_SPEED).optional(),
   voiceLanguage: z.string().refine(isVoiceModeLanguage).optional(),
   emailDrafts: z.boolean().optional(),
+  memeReplies: z.enum(["auto", "off"]).optional(),
   memoryEnabled: z.boolean().optional(),
   loopGuard: z.boolean().optional(),
   // read as the bot reads it (shared/team-memory-sharing.ts): an archive
   // written before export normalized it still imports, unknown as private
   teamMemorySharing: z.unknown().optional(),
   memoryUpkeep: z.boolean().optional(),
+  helperModel: z.boolean().optional(),
   parkDirectMessages: z.boolean().optional(),
   approvePeerComms: z.boolean().optional(),
   localPrompt: z.enum(["compact", "full"]).optional(),
@@ -958,10 +962,12 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       ...(settings.voiceSpeed !== undefined ? { voiceSpeed: settings.voiceSpeed } : {}),
       ...(settings.voiceLanguage !== undefined ? { voiceLanguage: settings.voiceLanguage } : {}),
       ...(settings.emailDrafts !== undefined ? { emailDrafts: settings.emailDrafts } : {}),
+      ...(settings.memeReplies !== undefined ? { memeReplies: settings.memeReplies } : {}),
       ...(settings.memoryEnabled !== undefined ? { memoryEnabled: settings.memoryEnabled } : {}),
       ...(settings.loopGuard !== undefined ? { loopGuard: settings.loopGuard } : {}),
       ...(storedTeamMemorySharing(settings) ? { teamMemorySharing: "private" as const } : {}),
       ...(settings.memoryUpkeep !== undefined ? { memoryUpkeep: settings.memoryUpkeep } : {}),
+      ...(settings.helperModel !== undefined ? { helperModel: settings.helperModel } : {}),
       ...(settings.parkDirectMessages !== undefined ? { parkDirectMessages: settings.parkDirectMessages } : {}),
       ...(settings.approvePeerComms !== undefined ? { approvePeerComms: settings.approvePeerComms } : {}),
       ...(settings.localPrompt !== undefined ? { localPrompt: settings.localPrompt } : {}),

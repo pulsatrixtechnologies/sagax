@@ -10,11 +10,15 @@ import { redactSecretsInText } from "../redact.ts";
 import { MESSAGE_FILE_MAX_BYTES } from "../messages/message-file.ts";
 import { augmentedPath } from "../env-path.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
+import { listsComputerTool } from "../computer/computer-tool-list.ts";
 import { chatImage, type ChatImagePart } from "./chat-images.ts";
 import { CALL_TOOL, bm25Ranker, directoryCallTarget, inputSignature, isDirectoryTool, oneLine, type CatalogTool } from "../mcp/mcp-directory.ts";
 import { mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 import { REMOTE_MCP_STARTUP_MS, remoteMcpSpec } from "../mcp/mcp-http.ts";
 import { compileToolSchema } from "../mcp/mcp-schema-validator.ts";
+import { agentsPreferredToolNames, filterToolsPreferringAgents, resolvedServerLog } from "../mcp/agents-tool-priority.ts";
+import { fitToolList } from "../mcp/mcp-tool-schema.ts";
+import type { ToolSchemaProfile } from "../tool-schema-profile.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { openApiWriteToolNames } from "../mcp/openapi-tools.ts";
 
@@ -370,8 +374,10 @@ function toolTier(entry: { hostTool: boolean; agents: boolean; directory: boolea
 }
 
 /** A tool result over 50KB is saved whole in `resultFolder`, the bot's working folder, after `scrub` masks secrets (see savedOrBounded).
- * A warm mount is reused: `bindResultSave` points the next turn's results at that turn's folder and mask. */
-export async function mountChatTools(integrations: SendTurnInput["integrations"], signal: AbortSignal, computerUse = false, toolScope?: ToolScope, callTimeoutMs: number = DEFAULT_CALL_MS, toolLimit: number = DEFAULT_TOOL_LIMIT, resultFolder?: string, scrub: (text: string) => string = redactSecretsInText): Promise<ChatToolSession> {
+ * A warm mount is reused: `bindResultSave` points the next turn's results at that turn's folder and mask.
+ * Under `schemaProfile` the model reads each tool's schema fitted to its provider; calls are still checked against the full one. */
+export async function mountChatTools(integrations: SendTurnInput["integrations"], signal: AbortSignal, computerUse = false, toolScope?: ToolScope, callTimeoutMs: number = DEFAULT_CALL_MS, toolLimit: number = DEFAULT_TOOL_LIMIT, resultFolder?: string, scrub: (text: string) => string = redactSecretsInText,
+  schemaProfile?: ToolSchemaProfile): Promise<ChatToolSession> {
   let saveFolder = resultFolder;
   let saveScrub = scrub;
   const parsed = parseToolScope(toolScope);
@@ -387,6 +393,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   if (integrations?.agents && eligible("agents")) servers.push(["agents", integrations.agents]);
   if (integrations?.data && eligible("data")) servers.push(["data", integrations.data]);
   if (integrations?.messages && eligible("messages")) servers.push(["messages", integrations.messages]);
+  const besideBrowser = servers.some(([, descriptor]) => descriptor === integrations?.browser);
   for (const [name, server] of Object.entries(integrations?.custom ?? {})) {
     if (!eligible(name)) continue;
     const remote = remoteMcpSpec(server) !== undefined;
@@ -437,28 +444,44 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     agents: boolean; data: boolean; computer: boolean; tools: unknown[]; revision: number;
   };
   const catalogs = new Map<string, CatalogMount>();
-  const includeTool = (server: string, tool: unknown) => scope === undefined || (object(tool) && typeof tool.name === "string"
-    && ((searchable.has(server) && isDirectoryTool(tool.name)) || allowsTool(scope, { kind: "mcp", server, name: tool.name })));
+  const includeTool = (server: string, tool: unknown) => {
+    // #3811: Filter Cua upkeep (and the driver's own browser when the built-in browser is also mounted) before scope checks.
+    if (server === "computer" && object(tool) && typeof tool.name === "string" && !listsComputerTool(tool.name, besideBrowser)) {
+      return false;
+    }
+    return scope === undefined || (object(tool) && typeof tool.name === "string"
+      && ((searchable.has(server) && isDirectoryTool(tool.name)) || allowsTool(scope, { kind: "mcp", server, name: tool.name })));
+  };
+  // #2189: agents bare names win over the same name on a connector.
+  const agentsPreferred = new Set(integrations?.agents ? agentsPreferredToolNames((integrations.agents as { env?: Record<string, string> }).env) : []);
   const registerCatalog = (mount: CatalogMount) => {
-    const { name: server, client, launch, builtInBrowser, agents, data, tools } = mount;
+    const { name: server, client, launch, builtInBrowser, agents, data, tools: advertised } = mount;
     const hostTool = builtInBrowser || mount.computer;
+    const listed = server === "agents" || !agentsPreferred.size
+      ? advertised
+      : filterToolsPreferringAgents(
+        advertised.filter((tool): tool is Record<string, unknown> & { name: string } => object(tool) && typeof tool.name === "string" && Boolean(tool.name.trim())),
+        agentsPreferred,
+      ).tools;
     // Staged so a server that fails halfway leaves none of its tools behind.
     const staged: Array<{ tool: RegisteredTool; candidate: { definition: ChatToolDefinition; tier: number } }> = [];
     const originalNames = new Set<string>();
-    for (const tool of tools) {
+    for (const tool of listed) {
       if (!object(tool) || typeof tool.name !== "string" || !tool.name.trim() || originalNames.has(tool.name)) throw new Error("MCP server advertised an invalid or duplicate tool name");
       originalNames.add(tool.name);
       if (!object(tool.inputSchema) || tool.inputSchema.type !== "object") throw new Error("MCP tools require an object input schema");
       if (Buffer.byteLength(JSON.stringify(tool.inputSchema)) > SCHEMA_BYTES) throw new Error("MCP tool schema exceeds the 64KB limit");
       const schema = compileToolSchema(tool.inputSchema);
-      const parameters = { ...tool.inputSchema };
+      const [listed] = schemaProfile ? fitToolList([tool], schemaProfile, (line) => console.warn(`chat-mcp: ${server}: ${line}`)) : [tool];
+      if (!object(listed) || !object(listed.inputSchema)) continue;
+      const parameters = { ...listed.inputSchema };
       const constraints: Record<string, unknown> = {};
       if (computerUse) {
         for (const key of ["anyOf", "oneOf", "allOf", "not"]) {
           if (key in parameters) { constraints[key] = parameters[key]; delete parameters[key]; }
         }
       }
-      const description = (typeof tool.description === "string" ? tool.description : "Configured MCP tool") +
+      const description = (typeof listed.description === "string" ? listed.description : "Configured MCP tool") +
         (Object.keys(constraints).length ? " Additional argument constraints (validated before execution): " + JSON.stringify(constraints) : "");
       const base = chatToolName(server, tool.name);
       let name = allocatedNames.get(JSON.stringify([server, tool.name])) ?? base;
@@ -727,6 +750,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       if (callSignal.aborted) { await close(); throw aborted(); }
       const tool = registered.get(name)!;
       try {
+        process.stderr.write(resolvedServerLog(tool.server, tool.name));
         const result = await tool.client.call("tools/call", { name: tool.name, arguments: args }, AbortSignal.any([signal, callSignal]), callTimeoutMs);
         if (signal.aborted || callSignal.aborted) throw aborted();
         if (!object(result) || !Array.isArray(result.content) || (result.isError !== undefined && typeof result.isError !== "boolean")) throw new Error("MCP tool returned an invalid result; execution outcome may be uncertain");

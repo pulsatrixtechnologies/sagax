@@ -14,6 +14,8 @@ export function useModelPickerEffects(opts: {
   railDriverKind: InstanceInfo["driverKind"] | undefined;
   railNeedsSetup: boolean;
   botBusy: boolean;
+  /** Close the menu only when the model itself is locked (busy with no reasoning). */
+  locked?: boolean;
   windowOnly: boolean;
   open: boolean;
   menu: boolean;
@@ -38,7 +40,7 @@ export function useModelPickerEffects(opts: {
 }): void {
   const {
     anyOpen, orgMode, refreshInstances, refreshInstanceModels, displayedInstanceId,
-    railDriverKind, railNeedsSetup, botBusy, windowOnly, open, menu, setMenu, setOpen,
+    railDriverKind, railNeedsSetup, botBusy, locked = false, windowOnly, open, menu, setMenu, setOpen,
     closeWindow, closeMenu, dialogRef, menuRef, triggerRef, anchorRef, headless,
     fallbackAnchor, inComposer, botId, toggleMenu, onChip, composerLabel, composerTitle,
     ultracodeChip, menuShownOpen,
@@ -80,10 +82,11 @@ export function useModelPickerEffects(opts: {
   }, [anyOpen, displayedInstanceId, orgMode, railDriverKind, railNeedsSetup, refreshInstances, refreshInstanceModels]);
 
   useEffect(() => {
-    if (!botBusy) return;
+    // Reasoning may change while the bot works; only a locked model closes the menu.
+    if (!locked) return;
     setMenu(false);
     if (!windowOnly) setOpen(false);
-  }, [botBusy, windowOnly, setMenu, setOpen]);
+  }, [locked, windowOnly, setMenu, setOpen]);
 
   const closeWindowRef = useRef(closeWindow);
   closeWindowRef.current = closeWindow;

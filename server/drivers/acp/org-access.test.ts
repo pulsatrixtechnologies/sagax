@@ -48,12 +48,14 @@ describe("Grok Build", () => {
     expect(envB.XAI_API_KEY).toBeUndefined();
   });
 
-  it("authenticates with the cached token when there is one, else the unadvertised xai.api_key method for a key", () => {
+  it("authenticates with the cached token or grok.com subscription method, else the unadvertised xai.api_key method for a key", () => {
     const methods = [{ id: "cached_token" }, { id: "grok.com" }];
     expect(grokPickAuthMethod(methods, { XAI_API_KEY: "xai-bob" })).toBe("cached_token");
-    expect(grokPickAuthMethod([{ id: "grok.com" }], { XAI_API_KEY: "xai-bob" })).toBe("xai.api_key");
-    // never the interactive browser login
-    expect(grokPickAuthMethod([{ id: "grok.com" }], {})).toBeNull();
+    // Current CLI versions advertise grok.com for an already-signed-in session.
+    expect(grokPickAuthMethod([{ id: "grok.com" }], {})).toBe("grok.com");
+    expect(grokPickAuthMethod([{ id: "grok.com" }], { XAI_API_KEY: "xai-bob" })).toBe("grok.com");
+    expect(grokPickAuthMethod([], { XAI_API_KEY: "xai-bob" })).toBe("xai.api_key");
+    expect(grokPickAuthMethod([], {})).toBeNull();
   });
 });
 

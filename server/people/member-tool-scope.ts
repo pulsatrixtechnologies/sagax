@@ -52,6 +52,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   coordinate_bots: "conversation",
   post_to_room: "conversation",
   react_to_message: "conversation",
+  send_meme: "conversation",
   remove_reaction: "conversation",
   start_thread: "conversation",
   route_message: "conversation",
@@ -88,10 +89,15 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   claude_artifact: "conversation",
   // a page proposal: a card in the member's own conversation; publishing is theirs
   propose_page: "conversation",
+  // #2199 / #2048: pick which surface hosts a new page or artifact; stays in
+  // the member's own conversation (same family as ask_choice / propose_page)
+  choose_page_target: "conversation",
   // the annotations of the member's own page, answered in their own conversation
   page_comments: "conversation",
   // a phone call: a card in the member's own conversation, through their own Twilio profile
   place_phone_call: "conversation",
+  phone_call_owner: "conversation",
+  phone_line_contact: "conversation",
   // Live controls and the compatibility alias use that same person's
   // profile; call lookup also binds bot and thread (d352e1751).
   place_call: "conversation",
@@ -192,6 +198,9 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   cloud_agent_follow_up: "own-account",
   cancel_cloud_agent: "own-account",
   archive_cloud_agent: "own-account",
+  // a message to another person in the owner's name (#2118): the person's own
+  // card at their own approval level, never answered by Sagax for them
+  message_user: "own-account",
 });
 
 /** The agents tools that keep the admin gate when they would touch the

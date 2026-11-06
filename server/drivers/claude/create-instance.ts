@@ -207,7 +207,7 @@ export async function createClaudeInstance(
     writeUser,
     controlRequest,
     applyApprovalMode,
-  } = createClaudeSessionRuntime({ environment, active });
+  } = createClaudeSessionRuntime({ environment, active, instanceId });
 
 
   // A signed-out refusal is held until the first model activity, so a turn

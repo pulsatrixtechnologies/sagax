@@ -12,10 +12,13 @@ import type {
 import type { DeviceSignIn } from "../device-auth.ts";
 import type { LinkSignIn } from "../link-sign-in.ts";
 import type { LogSignal } from "./quiet-status.ts";
+import type { AcpQuestionRequest } from "./question-requests.ts";
 import type { TurnLatency } from "./turn-latency.ts";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import type { WarmResourceLease } from "../../resources/warm-resources.ts";
+import type { AcpModelSelection } from "./session-model-controls.ts";
+export type { AcpModelSelection };
 
 /** Failures the person fixes on their provider account, not by retrying:
  * the process that reported one is healthy and stays pooled. */
@@ -62,8 +65,12 @@ export interface AcpTurn {
   latency?: TurnLatency;
   state: {
     settled: boolean; promptSent: boolean; text: string; producedItem: boolean;
+    /** Assistant text was flushed as a reply item (not only tools or images). */
+    repliedText?: boolean;
     /** A reply or an image went out (not only tool calls): a nudge could repeat it. */
     producedReply?: boolean; startupActivity: boolean; stopped: boolean;
+    /** Stop's cancel-timeout is ending the process; child close must not settle as exit_before_result. */
+    cancelling?: boolean;
     /** Compaction detection: peak and last reported context size, and
      * whether a report collapsed below the peak. */
     usagePeak: number | null;
@@ -176,6 +183,8 @@ export interface AcpSession {
 
 /** Per-harness specifics — everything that differs between Grok, Gemini, … */
 export interface AcpSupport {
+  /** Vendor question requests by JSON-RPC method (see AcpQuestionRequest). */
+  questionRequests?: Readonly<Record<string, AcpQuestionRequest>>;
   /** Verified native catalog parameters, applied before both new and restored sessions. */
   toolScopeSessionParams?(turn: SendTurnInput, initializeResult: unknown, hasMcp: boolean,
     context: { config: AcpConfig; env: Record<string, string | undefined>; cwd: string }): Record<string, unknown>;
@@ -248,8 +257,10 @@ export interface AcpSupport {
   /** Select the model through a session config option instead of argv, for
    *  harnesses whose ACP subcommand takes no -m (opencode). The agent must
    *  CONFIRM the requested model before we prompt: silently running a model
-   *  other than the one the picker shows is the failure this guards. */
-  selectModel?: { configId: string };
+   *  other than the one the picker shows is the failure this guards.
+   *  `agentDefault` leaves the native session unchanged; `allowLegacy` also
+   *  accepts ACP's models state and session/set_model (custom ACP). */
+  selectModel?: AcpModelSelection;
   /** With `selectModel`: the model a turn runs when it asked for none, or for
    * one this live session does not offer (a retired id saved on an old bot).
    * Receives the session's config snapshot and the instance catalog default;
@@ -327,10 +338,13 @@ export interface AcpSupport {
   /** The agent's own debug log for a native session, read while a prompt is
    * quiet: any new line proves the process alive, and `parse` picks out what
    * is worth telling the person (a retry, a compression). Return null when
-   * this process keeps no log. */
+   * this process keeps no log. A `shared` log holds every session's and
+   * process's lines, so its lines prove nothing about this turn and only
+   * `parse` reads them. */
   statusLog?: {
     path(env: Record<string, string | undefined>, sessionId: string): string | null;
-    parse(line: string): LogSignal | null;
+    parse(line: string, sessionId: string): LogSignal | null;
+    shared?: true;
   };
   /** Bound provider-native tool payloads before writing diagnostic logs. */
   sanitizeToolPayload?: boolean;
@@ -432,7 +446,7 @@ export interface AcpSupport {
     /** Last model acknowledged by session/new/load/set_model, preserved for pooled turns. */
     currentModelId?: string;
     /** session/new's or session/load's `configOptions`, verbatim. */
-    configOptions: Array<{ id?: unknown; currentValue?: unknown }>;
+    configOptions: Array<{ id?: unknown; currentValue?: unknown; category?: unknown }>;
     /** True when this turn prompts a live session that did not run
      * session/new or session/load (same MCP mounts still connected). */
     reused?: boolean;

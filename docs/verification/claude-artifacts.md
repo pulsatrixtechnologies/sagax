@@ -82,7 +82,7 @@ internal publish-from-file route notes the new owned URL.
 | `parseArtifactPublish` prefers `tool_use_result` | `shared/claude-chat-blocks.ts` |
 | Claude CLI pin | `engines.lock.json` (2.1.318 at the cut) |
 | Desktop / iOS cards for `claude.ai/artifact` links | `ClaudeArtifactCard`, Electron `openClaudeAi`, iOS companion |
-| Comment reply / resolve cards + per-person wake routine | `/api/claude-artifacts/comments/*`, `comments-routine.ts` |
+| Comment reply / resolve cards + per-person wake routine | `/api/claude-artifacts/comments`, `comments-routine.ts` |
 | `claude_artifact` agents tool for non-Claude engines | `agents-artifact-tools.ts`, `/api/internal/claude-artifact`, `runner.ts` |
 
 Rules (also in `AGENTS.md`):

@@ -101,7 +101,9 @@ async function scenario(test: (f: any) => Promise<void>) {
       return sent.body;
     };
     const db = () => readRuntimeDb(dataDir);
-    const roots = () => db().assignments.filter((row) => !row.parentId);
+    // The Chief's own roots: every person's turn is a root now, a teammate's
+    // standing turn (S4's hold) included.
+    const roots = () => db().assignments.filter((row) => !row.parentId && row.assignee?.botId === clive.id);
     const children = () => db().assignments.filter((row) => row.parentId);
     const eventsOf = (id: string) => db().events.filter((event) => event.assignmentId === id);
     /** Every scripted turn a fake Claude bot ran, in order. */

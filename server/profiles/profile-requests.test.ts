@@ -553,24 +553,24 @@ describe("a bot's own profile changes", () => {
     expect(store.messagesFor(bot.threadId)[1]?.card).toMatchObject({ options: ["Confirm", "Cancel"] });
   });
 
-  it("keeps the card for its own working folder below Full access, and applies it at Full", () => {
+  it("applies its own working folder at any level with Undo (omb #3014), and at Full as full-access", () => {
     const { store, bot } = harness({ name: "Scout" });
     const fullAccess = (threadId: string) => threadId === "full-thread";
     const service = new ProfileRequestService({ store, autoApply: (botId, threadId, targetBotId) =>
       directApply({ fullAccess: fullAccess(threadId), botId, targetBotId, blocked: false }) });
     const dir = mkdtempSync(join(tmpdir(), "omb-cwd-"));
+    const other = mkdtempSync(join(tmpdir(), "omb-cwd-full-"));
     try {
-      // A new folder widens what its tools touch without asking.
       const asked = service.submit({ botId: bot.id, threadId: bot.threadId, changes: { cwd: dir, title: "Builder" }, reason: "asked" });
-      expect(asked.state).toBe("pending");
-      expect(store.bot(bot.id)!.cwd).toBeUndefined();
-      expect(store.bot(bot.id)!.title).toBe("");
-      expect(store.messagesFor(bot.threadId)[0]?.card).toMatchObject({ options: ["Confirm", "Cancel"] });
-      const full = service.submit({ botId: bot.id, threadId: "full-thread", changes: { cwd: dir }, reason: "asked" });
-      expect(full).toMatchObject({ state: "applied", appliedBy: "full-access" });
+      expect(asked).toMatchObject({ state: "applied", appliedBy: "self" });
       expect(store.bot(bot.id)!.cwd).toBe(dir);
+      expect(store.bot(bot.id)!.title).toBe("Builder");
+      const full = service.submit({ botId: bot.id, threadId: "full-thread", changes: { cwd: other }, reason: "asked" });
+      expect(full).toMatchObject({ state: "applied", appliedBy: "full-access" });
+      expect(store.bot(bot.id)!.cwd).toBe(other);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+      rmSync(other, { recursive: true, force: true });
     }
   });
 

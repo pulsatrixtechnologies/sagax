@@ -26,6 +26,7 @@ export const COLD_PROMPT_SECTION_BUDGETS: Readonly<Record<string, number>> = {
   browser: 1_200,
   threads: 0,
   reactions: 0,
+  memes: 0,
   coordination: 3_000,
   "user-profile": 2_000,
   recall: 1_500,

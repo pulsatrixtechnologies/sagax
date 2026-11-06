@@ -41,6 +41,7 @@ import { callAgentApiTool } from "./agents-tools/agent-api.ts";
 import { callPhoneFamilyTool } from "./agents-tools/phone.ts";
 import { callExtrasTool } from "./agents-tools/extras.ts";
 import { callPerspicaxTool } from "./agents-tools/perspicax.ts";
+import { callGrokBridgeTool } from "./agents-tools/grok-bridge.ts";
 import { wrapperAct } from "./agents-tools/shared.ts";
 
 export type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
@@ -69,8 +70,8 @@ export function toolCallContextFromEnv(env: NodeJS.ProcessEnv): ToolCallContext 
         return launchedDepth;
       }
     },
-    externalRuntime: profile.externalRuntime,
-    coordinating: profile.coordinating,
+    externalRuntime: profile.externalRuntime === true,
+    coordinating: profile.coordinating === true,
     sharedComputers: profile.sharedComputers,
     client: harnessClientFromEnv(env),
     remoteSupport: remoteSupportFromEnv(env),
@@ -137,6 +138,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
   const familyHandlers = [
     callAgentApiTool,
     callPerspicaxTool,
+    callGrokBridgeTool,
     callCoreTool,
     callRoomsTool,
     callTeamTool,

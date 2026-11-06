@@ -82,7 +82,7 @@ export const WIDGET_SAMPLES: Record<string, unknown> = {
   buildStatus: {
     type: "Card",
     title: "Build 25 to TestFlight",
-    caption: "OpenMausMobile 1.4.0 (25)",
+    caption: "SagaxMobile 1.4.0 (25)",
     status: { text: "Uploading", icon: "upload" },
     children: [
       { type: "Progress", value: 0.62, label: "about 40s left" },

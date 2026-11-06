@@ -100,7 +100,7 @@ export function useComposerCommands({
   // The bot's own enabled skills, each run for one turn with `/name`
   // (shared/skill-command.ts). A 1:1 chat only: in a room the command would
   // reach several bots, each with its own skills.
-  const slashSkills = useSlashSkills(!group ? bot?.id : undefined, Boolean(slash) && slash?.start !== dismissedSlashAt && !group);
+  const slashSkills = useSlashSkills(!group ? bot?.id : undefined, threadId || "", Boolean(slash) && slash?.start !== dismissedSlashAt && !group);
   // In a group: the commands of the bot(s) the command would reach, per bot.
   const groupSlashOpen = Boolean(groupSlash);
   const groupSlashBotId = groupSlash?.botId;

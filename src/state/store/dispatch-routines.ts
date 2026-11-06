@@ -146,6 +146,10 @@ export function dispatchRoutinesEffects(action: Action, env: DispatchEnv): void 
                 for (const queueId of body.queueIds ?? []) {
                   rawDispatch({ type: "consumePendingQueued", threadId: body.threadId, queueId });
                 }
+              } else if (body?.queued === true && body.blockedBy === "images") {
+                // Pressed Steer, but the engine cannot take pictures mid-turn:
+                // say why the message is still queued instead of nothing.
+                rawDispatch({ type: "notice", notice: { kind: "steer-images", botName: null } });
               }
               action.onSettled?.();
             })
@@ -175,6 +179,10 @@ export function dispatchRoutinesEffects(action: Action, env: DispatchEnv): void 
                 for (const queueId of body.queueIds ?? []) {
                   rawDispatch({ type: "consumePendingQueued", threadId: body.threadId, queueId });
                 }
+              } else if (body?.queued === true && body.blockedBy === "images") {
+                // Pressed Steer, but the engine cannot take pictures mid-turn:
+                // say why the message is still queued instead of nothing.
+                rawDispatch({ type: "notice", notice: { kind: "steer-images", botName: null } });
               }
               action.onSettled?.();
             })

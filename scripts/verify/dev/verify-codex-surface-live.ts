@@ -12,7 +12,7 @@ const auth = process.env.SAGAX_VERIFY_CODEX_AUTH;
 const model = process.env.SAGAX_VERIFY_CODEX_MODEL;
 if (!cli || !auth || !model) throw new Error("Supply SAGAX_VERIFY_CODEX_CLI, SAGAX_VERIFY_CODEX_AUTH and SAGAX_VERIFY_CODEX_MODEL explicitly. This test uses real model quota.");
 const browser = await ensureUiBrowser(process.env, console.error);
-const fixture = await launchVerificationServer({}, undefined, undefined,
+const fixture = await launchVerificationServer({ SAGAX_BROWSER_TIMING: process.env.SAGAX_BROWSER_TIMING }, undefined, undefined,
   { binaryPath: browser.binary, executablePath: browser.chrome ?? "" }, undefined, undefined, ["codex"]);
 let preview: Awaited<ReturnType<typeof mountPreview>> | undefined;
 try {

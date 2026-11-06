@@ -134,6 +134,19 @@ describe("provider key check", () => {
       .toEqual({ ok: false, reason: "rejected", status: 401 });
   });
 
+  it("checks Meta at its preset endpoint without claiming chat authentication", async () => {
+    const meta: typeof fetch = async (input, init) => {
+      expect(String(input)).toBe("https://api.meta.ai/v1/models");
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer fixture-meta");
+      expect(init?.redirect).toBe("manual");
+      return Response.json({ data: [{ id: "muse-spark-1.3" }] });
+    };
+    expect(await checkProviderKey({ provider: "meta", key: "fixture-meta" }, meta))
+      .toEqual({ ok: true, check: "models", models: ["muse-spark-1.3"] });
+    expect(await checkProviderKey({ provider: "meta", key: "bad-key", url: base }))
+      .toEqual({ ok: false, reason: "rejected", status: 401 });
+  });
+
   it("does not call a custom compatible server's nonexistent /key endpoint", async () => {
     const paths: string[] = [];
     const custom: typeof fetch = async (input) => { paths.push(String(input)); return Response.json({ data: [] }); };

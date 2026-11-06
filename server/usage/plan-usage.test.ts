@@ -14,6 +14,7 @@ import {
   parseCodexUsage,
   parseGrokUsage,
   planAccountsFromInstances,
+  planUsedPercent,
   spentPlanUntil,
   type PlanAccount,
   type PlanFetch,
@@ -482,5 +483,14 @@ describe("plan threshold alerts (J4)", () => {
     // Any other extra window at 100 % is no allowance.
     const oauth = { ...row(100, weekly), extra: [{ label: "Oauth Apps", usedPercent: 10, remainingPercent: 90, resetsAt: null }] };
     expect(spentPlanUntil(oauth as never)).toBe(Date.parse(weekly));
+  });
+
+  it("reports the fullest window used-percent for same-provider rotation (#2192)", () => {
+    expect(planUsedPercent(row(42) as never)).toBe(42);
+    expect(planUsedPercent({
+      ...row(40),
+      fiveHour: { available: true, usedPercent: 91, remainingPercent: 9, resetsAt: "2026-10-27T00:00:00Z" },
+    } as never)).toBe(91);
+    expect(planUsedPercent({ ...row(50), state: "error" } as never)).toBeNull();
   });
 });

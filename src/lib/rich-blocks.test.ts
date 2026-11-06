@@ -21,6 +21,8 @@ import {
   parseNumeric,
   prefersWideBubble,
   richFenceKind,
+  clipMarkdownPreservingFences,
+  fenceCloseOffset,
   splitAddresses,
   tableToCsv,
   tableToMarkdown,
@@ -294,6 +296,20 @@ describe("markdown extras", () => {
     const text = "intro\n```widget\n<div>";
     expect(unclosedFenceOffset(text)).toBe(text.indexOf("```"));
     expect(unclosedFenceOffset("~~~\nx\n~~~\n````chart\n{")).toBe(10);
+  });
+
+  // 2026-11-06 (#2186): a length cap must never split a fenced widget.
+  it("clips markdown without cutting inside a fence", () => {
+    const prose = "Dispatch done.\n\n";
+    const widget = "```widget-imperfect\n<style>#dgx .fold summary::-webkit-details-marker{display:none}</style>\n<div id=dgx>ok</div>\n```";
+    const whole = `${prose}${widget}`;
+    expect(clipMarkdownPreservingFences(whole, whole.length)).toBe(whole);
+    expect(clipMarkdownPreservingFences(whole, prose.length + 40)).toBe(whole);
+    expect(clipMarkdownPreservingFences(whole, prose.length + 40, prose.length + 20)).toBe(prose.replace(/\s+$/u, ""));
+    expect(unclosedFenceOffset(clipMarkdownPreservingFences(whole, prose.length + 40, prose.length + 20))).toBe(-1);
+    const openAt = whole.indexOf("```");
+    expect(fenceCloseOffset(whole, openAt)).toBe(whole.length);
+    expect(clipMarkdownPreservingFences("x".repeat(50), 20)).toHaveLength(20);
   });
 
   it("widens bubbles for tables and rich fences only", () => {

@@ -61,16 +61,11 @@ describe("assignmentLevel", () => {
       expect(level({ chief: "full", driverKind: "antigravityAgent" })).toEqual({ level: "full", source: "chief" });
       expect(level({ chief: "auto", driverKind: "antigravityAgent" })).toEqual({ level: "edits", source: "engine_cap" });
       expect(level({ chief: "edits", driverKind: "antigravityAgent" })).toEqual({ level: "edits", source: "chief" });
-      // OpenCode and the chat family: Full (the harness answers its own gate
-      // for the chat family), nothing below it
-      for (const driverKind of ["opencodeGo", "openai-compat", "groq"]) {
+      // OpenCode, the chat family, engines with no permissive mode of their
+      // own, and no engine at all: Full (the harness answers what they
+      // leave), nothing below it
+      for (const driverKind of ["opencodeGo", "openai-compat", "groq", "kimiAgent", "piAgent", undefined]) {
         expect(level({ chief: "full", driverKind })).toEqual({ level: "full", source: "chief" });
-        expect(level({ chief: "auto", driverKind })).toEqual({ level: "ask", source: "engine_cap" });
-        expect(level({ chief: "edits", driverKind })).toEqual({ level: "ask", source: "engine_cap" });
-      }
-      // engines with no permission mapping at all, and no engine
-      for (const driverKind of ["kimiAgent", "piAgent", undefined]) {
-        expect(level({ chief: "full", driverKind })).toEqual({ level: "ask", source: "engine_cap" });
         expect(level({ chief: "auto", driverKind })).toEqual({ level: "ask", source: "engine_cap" });
         expect(level({ chief: "edits", driverKind })).toEqual({ level: "ask", source: "engine_cap" });
       }
@@ -79,13 +74,13 @@ describe("assignmentLevel", () => {
     it("says engine_cap whenever the cap lowered the inherited level, down to own included", () => {
       // capped to exactly the bot's own level
       expect(level({ own: "edits", chief: "auto", driverKind: "antigravityAgent" })).toEqual({ level: "edits", source: "engine_cap" });
-      expect(level({ own: "edits", chief: "full", driverKind: "kimiAgent" })).toEqual({ level: "edits", source: "engine_cap" });
       // capped below the bot's own level: own wins, and the cap is still why
-      expect(level({ own: "auto", chief: "full", driverKind: "kimiAgent" })).toEqual({ level: "auto", source: "engine_cap" });
+      expect(level({ own: "edits", chief: "auto", driverKind: "kimiAgent" })).toEqual({ level: "edits", source: "engine_cap" });
       // capped, but still above own
       expect(level({ own: "ask", chief: "auto", driverKind: "antigravityAgent" })).toEqual({ level: "edits", source: "engine_cap" });
-      // not capped: the hand-down as it was
+      // not capped: the hand-down as it was, Full on every engine
       expect(level({ own: "auto", chief: "full", driverKind: "antigravityAgent" })).toEqual({ level: "full", source: "chief" });
+      expect(level({ own: "auto", chief: "full", driverKind: "kimiAgent" })).toEqual({ level: "full", source: "chief" });
     });
 
     it("agrees with the capability flags for every engine that has a row", () => {

@@ -22,7 +22,7 @@ describe("routine effort at turn admission and dispatch", () => {
     const noOp = vi.fn();
     const values: Record<string, unknown> = {
       IDENTITY: { kind: "solo" }, cfg: {}, turnStartLogLine: () => "fixture turn", voiceLatency: { mark: noOp },
-      extractTurnImages: (text: string) => ({ text, images: [] }), promptWithDataContext: (text: string) => text,
+      extractTurnImages: (text: string) => ({ text, images: [], videos: [] }), promptWithDataContext: (text: string) => text,
       quietTurnThreads: new Set(), autoTurnsByThread: new Map(), turnRunByThread: receipt, turnModelRequested: new Map(), turnRunFor: (value: unknown) => value,
       effortAcceptedByEngine, effortForModel, resolveEngineTurnEffort,
       routineModelForTurn: () => routine && !takenOver ? { model: "routine-model" } : null,

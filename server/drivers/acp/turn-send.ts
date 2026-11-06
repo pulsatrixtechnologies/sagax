@@ -3,8 +3,8 @@ import { TurnNotStartedError } from "../../contracts.ts";
 import type { SendTurnInput } from "../../contracts.ts";
 import { stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
 import { ACP_CANCEL_GRACE_MS } from "./constants.ts";
-import { acpVariantOption } from "./helpers.ts";
 import type { AcpAskFinish, AcpTurn } from "./types.ts";
+import { SessionModelControls } from "./session-model-controls.ts";
 import { establishAcpTurn } from "./turn-establish.ts";
 import { promptAcpTurn } from "./turn-prompt.ts";
 import { finishAcpTurnError } from "./turn-finish.ts";
@@ -17,7 +17,7 @@ export function createSendTurn(deps: SendTurnDeps) {
   const {
     support, DRIVER_KIND,
     sessions, active, freshNextTurn, sessionAllows, threadNotices,
-    retiring, retireChild, closeSession, settle, emit, base,
+    retiring, retireChild, closeSession, endUncancelled, settle, emit, base,
     startQuietWatch,
   } = deps;
   const prepareAcpTurn = createPrepareTurn(deps);
@@ -34,7 +34,7 @@ export function createSendTurn(deps: SendTurnDeps) {
     turn = preparedTurn;
     void env;
 
-        const state: AcpTurn["state"] = { settled: false, promptSent: false, text: "", producedItem: false, startupActivity: false, stopped: false, usagePeak: null, usageLast: null, usageCompacted: false };
+        const state: AcpTurn["state"] = { settled: false, promptSent: false, text: "", producedItem: false, repliedText: false, startupActivity: false, stopped: false, usagePeak: null, usageLast: null, usageCompacted: false };
         let acknowledge = () => {};
         let rejectStartup = (_error: TurnNotStartedError) => {};
         const started = { turnId, ...(reused ? { reused: true } : {}) };
@@ -53,36 +53,20 @@ export function createSendTurn(deps: SendTurnDeps) {
         // Still set if that throws: the pooled session may be left on an
         // earlier turn's looser mode, so its process must not be reused.
         let approvalUnconfirmed = false;
-        const modelOf = (result: any): string | null => {
-          const option = (Array.isArray(result?.configOptions) ? result.configOptions : []).find(
-            (entry: any) => entry?.id === (support.selectModel?.configId ?? "model"),
-          );
-          return typeof option?.currentValue === "string" ? option.currentValue : null;
-        };
-        const receiveModelVariants = (result: any) => {
-          session.sessionConfigResult = result;
-          if (!support.modelVariants) return;
-          const nativeModel = modelOf(result) ?? cliTurn.model;
-          if (!nativeModel) return;
-          const option = acpVariantOption(result);
-          emit({
-            ...base(threadId, turnId),
-            type: "session.model-variants",
-            model: nativeModel === cliTurn.model ? (reportedModel ?? nativeModel) : nativeModel,
-            variants: {
-              options: option?.options ?? [],
-              ...(option?.currentValue !== undefined ? { currentValue: option.currentValue } : {}),
-            },
-          });
-        };
-        const requestedVariantOption = () => {
-          if (!support.modelVariants) throw new Error(`${support.displayName} does not support model variants`);
-          const option = acpVariantOption(session.sessionConfigResult);
-          if (!option || !option.options.some((entry) => entry.id === variant)) {
-            throw new Error(`${support.displayName} does not advertise variant ${variant} for this model`);
-          }
-          return option;
-        };
+        // Live model/report targets for SessionModelControls: establish updates
+        // these when it applies a fallback so select/receive stay in sync.
+        const modelLive = { model: cliTurn.model as string | undefined, reported: reportedModel };
+        const modelControls = new SessionModelControls({
+          selection: support.selectModel,
+          variants: support.modelVariants === true,
+          displayName: support.displayName,
+          model: () => modelLive.model,
+          reportedModel: () => modelLive.reported,
+          state: () => session.sessionConfigResult,
+          store: (result) => { session.sessionConfigResult = result; },
+          report: (model, variants) => emit({ ...base(threadId, turnId), type: "session.model-variants", model, variants }),
+        });
+        const receiveModelVariants = (result: any, replace = false) => modelControls.receive(result, replace);
 
         /** Emit buffered assistant text as its own item, then clear it. */
         const flushAssistantText = () => {
@@ -91,6 +75,7 @@ export function createSendTurn(deps: SendTurnDeps) {
           const text = stripLeakedSystemHarnessMessages(raw);
           if (!text.trim()) return;
           state.producedItem = true;
+          state.repliedText = true;
           state.producedReply = true;
           emit({ ...base(threadId, turnId), type: "item.completed", itemType: "assistant_text", text });
         };
@@ -120,9 +105,11 @@ export function createSendTurn(deps: SendTurnDeps) {
             session.acp.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: session.sessionId } });
             if (current.interruptTimer) clearTimeout(current.interruptTimer);
             current.interruptTimer = setTimeout(() => {
-              // an agent that ignores session/cancel must not stay pooled
-              closeSession(threadId, "cancel-timeout");
-              settle(threadId, session, true, "cancelled");
+              // an agent that ignores session/cancel must not stay pooled;
+              // await process end so a failed kill is stop_failed, not cancelled
+              state.cancelling = true;
+              void endUncancelled(threadId, session).then((ended) =>
+                settle(threadId, session, ended, ended ? "cancelled" : "stop_failed"));
             }, ACP_CANCEL_GRACE_MS);
             current.interruptTimer.unref?.();
           } else {
@@ -141,14 +128,14 @@ export function createSendTurn(deps: SendTurnDeps) {
           reportedModel, variant, staleProcess: false, approvalUnconfirmed: false,
           accountModels: deps.getAccountModels(), models: deps.getModels(), pendingSplitReceipt: null, runtimeAcceptsImages: false,
           init: null, selectedModel: null, sessionId: "", rebuiltFromReplay: renewedFromChat,
-          acknowledge, rejectStartup, startupAck, started,
+          acknowledge, rejectStartup, startupAck, started, modelControls, modelLive,
           sessions, active, freshNextTurn, sessionAllows, threadNotices, retiring, retireChild,
           closeSession, settle, emit, base, startQuietWatch, request, initialize, authenticateOnce,
           sessionInputs, launchSession, setAccountModels: deps.setAccountModels,
         };
         ctx.cliTurn = cliTurn;
         ctx.promptTurn = turn;
-        void staleProcess; void approvalUnconfirmed; void requestedVariantOption;
+        void staleProcess; void approvalUnconfirmed;
 
         (async () => {
           try {

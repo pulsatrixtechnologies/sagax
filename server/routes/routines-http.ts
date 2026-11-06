@@ -20,6 +20,7 @@ import {
   type RoutineScopeCaller,
   type RoutineScopeDeps,
 } from "../routines/routine-scope.ts";
+import { routineRunsFor } from "../routines/routine-run-window.ts";
 import type { Routine, RoutineRun } from "../routines/routines.ts";
 import {
   routineRunInFlightRefusal,
@@ -111,10 +112,6 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
     }
 
     if (path === "/api/routines" && method === "GET") {
-      const fromParam = url.searchParams.get("from");
-      const toParam = url.searchParams.get("to");
-      const from = fromParam == null ? undefined : Number(fromParam);
-      const to = toParam == null ? undefined : Number(toParam);
       const query = parseRoutineScopeQuery(url.searchParams);
       if ("error" in query) return json(res, 400, query);
       const viewerId = deps.viewerId(auth);
@@ -125,11 +122,13 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
       // listRuns deps may return raw journal rows (listRunsRaw): this handler
       // JSON.stringifies and drops them, so a full cloneRun pass is wasted CPU
       // on cold start when the client hydrates /api/routines with no window.
+      // `since` loads the app's window; `from`/`to` a range; `thread` one conversation's runs.
+      const runs = routineRunsFor((from, to) => deps.listRuns(from, to), url.searchParams);
       const listing = scopedRoutineListing(
         query,
         caller,
         deps.listRoutines(),
-        deps.listRuns(from != null && Number.isFinite(from) ? from : undefined, to != null && Number.isFinite(to) ? to : undefined),
+        runs,
         deps.scopeDeps(auth, visible, viewerId),
       );
       const listedBots = new Set(listing.routines.map((row) => row.bot.id));

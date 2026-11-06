@@ -2,7 +2,7 @@
 // bot's mascot (16px) and its name in its colour, once per run. A room
 // (GroupView) and an open bot-to-bot conversation (BotExchangeChip) draw it.
 import type { Bot } from "@/state/store";
-import { mausInk, normalizeState } from "@/lib/mascot";
+import { normalizeState } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { BotAvatar } from "./Avatar";
 import { AgentIcon } from "./PartyAvatar";
@@ -13,12 +13,12 @@ import { AgentIcon } from "./PartyAvatar";
  * icon instead of a mascot. */
 export function ClusterLabel({ bot, name, color, end = false, agent = false }: { bot?: Bot; name: string; color: string; end?: boolean; agent?: boolean }) {
   "use memo";
-  const tint = mausInk(bot?.color ?? color) ?? color;
+  const botColor = (bot?.color ?? color) as Bot["color"];
   return (
     <div className={cn("-mb-1.5 mt-3 flex items-center gap-1.5 px-1.5", end ? "me-1.5 justify-end" : "ms-1.5")}>
       {agent ? <AgentIcon size={16} /> : (
         <BotAvatar
-          bot={bot ?? { name, color: color as Bot["color"] }}
+          bot={bot ?? { name, color: botColor }}
           state={normalizeState(bot?.mascotExpression) ?? "happy"}
           size={16}
           motion="none"
@@ -26,7 +26,7 @@ export function ClusterLabel({ bot, name, color, end = false, agent = false }: {
           animated={false}
         />
       )}
-      <span className="text-[12px] font-normal leading-4" style={{ color: tint }}>{name}</span>
+      <span className="text-[12px] font-normal leading-4 bot-identity" data-bot-color={botColor}>{name}</span>
     </div>
   );
 }

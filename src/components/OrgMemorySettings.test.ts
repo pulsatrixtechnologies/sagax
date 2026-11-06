@@ -5,6 +5,10 @@ import { setLocale } from "@/lib/i18n";
 import { resetOrgMemoryForTests, type OrgMemoryBridge, type OrgMemoryState } from "@/lib/org-memory";
 
 vi.mock("@/lib/perspicax-org", () => ({ usePerspicaxOrg: () => null }));
+vi.mock("@/state/store", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/state/store")>(),
+  useStore: () => ({ state: {}, dispatch: vi.fn() }),
+}));
 import { OrgMemoryPanel, OrgMemorySettings } from "./OrgMemorySettings";
 
 const state = (over: Partial<OrgMemoryState> = {}): OrgMemoryState => ({
@@ -65,15 +69,16 @@ describe("Settings > Memory", () => {
     }
   });
 
-  it("shows the synced organization, the last sync, a pending count and Open in Obsidian", () => {
+  it("shows one row: pending count in grey, Open, and a menu for the rest", () => {
     const html = render(state());
-    expect(html).toContain("Synced with Acme");
-    expect(html).toContain("Last sync");
-    expect(html).toContain("Waiting for a review");
+    expect(html).toContain("Organization memory");
     expect(html).toContain("1 pending");
-    expect(html).toContain("Open in Obsidian");
+    expect(html).toContain(">Open<");
+    expect(html).toContain("More memory actions");
     expect(html).not.toContain("Try again");
     expect(html).not.toContain("Erase");
+    // Obsidian and Show folder stay behind the menu until opened
+    expect(html).not.toContain("Open in Obsidian");
   });
 
   it("never lists the memory: no proposal title, reason, state history or team id", () => {
@@ -81,20 +86,14 @@ describe("Settings > Memory", () => {
     for (const hidden of ["Onboarding", "Hourly new tickets", "Dispatch journal", "not the right place", "team-01m2s7h970xc76btmekfvvh5r4", "Approved", "notes.txt is not a memory path", "(org"]) {
       expect(html).not.toContain(hidden);
     }
-    // A recent refusal and a tier that needs the person: a discreet count.
-    expect(html).toContain("1 proposal(s) refused lately");
-    expect(html).toContain("The last sync needs you in 1 tier(s)");
     expect(html).not.toContain("<li");
   });
 
-  it("says why Obsidian did not open, with Show in Finder", () => {
+  it("says why Obsidian did not open", () => {
     const missing = render(state(), "Acme", "not_installed");
     expect(missing).toContain("Obsidian is not installed");
-    expect(missing).toContain("Show in Finder");
     const chooser = render(state(), "Acme", "add_vault");
     expect(chooser).toContain("Open folder as vault");
-    expect(chooser).toContain("Show in Finder");
-    expect(render(state())).not.toContain("Show in Finder");
     expect(missing).not.toContain("Vault not found");
   });
 
@@ -104,15 +103,13 @@ describe("Settings > Memory", () => {
     expect(html).not.toContain("Open in Obsidian");
   });
 
-  it("states a failure in one clear line with Try again, and keeps the copy's Obsidian button", () => {
-    const html = render(state({ autoError: "unreachable" }));
+  it("states a failure in one clear line; Retry stays in the menu", () => {
+    const html = render(state({ autoError: "unreachable", pendingCount: 0 }));
     expect(html).toContain("could not be reached");
-    expect(html).toContain("Try again");
-    expect(html).toContain("Open in Obsidian");
+    expect(html).toContain(">Open<");
+    expect(html).not.toContain("Try again");
     const gone = render(state({ connected: false, cloned: false, autoError: "not_member", tiers: [], pending: [], pendingCount: 0 }));
-    expect(gone).toContain("Memory not synced");
     expect(gone).toContain("no longer in this organization");
-    expect(gone).toContain("Try again");
     expect(gone).not.toContain("<input");
     const older = render(state({ connected: false, cloned: false, autoError: "unsupported", tiers: [], pending: [], pendingCount: 0 }));
     expect(older).toContain("1.8.27");
@@ -121,10 +118,9 @@ describe("Settings > Memory", () => {
 
   it("speaks French", () => {
     setLocale("fr");
-    expect(render(state())).toContain("Synchronisée avec Acme");
-    expect(render(state({ autoError: "unreachable" }))).toContain("Réessayer");
-    expect(render(state())).toContain("En attente de revue");
-    expect(render(state(), "Acme", "add_vault")).toContain("Afficher dans le Finder");
+    expect(render(state())).toContain("Mémoire de l&#x27;organisation");
+    expect(render(state())).toContain("Ouvrir");
+    expect(render(state({ autoError: "unreachable", pendingCount: 0 }))).toContain("injoignable");
   });
 
   it("warns when the vault sits in a cloud folder", () => {

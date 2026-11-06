@@ -90,6 +90,10 @@ export interface RuntimeOptions<Config> {
    * and end the turn without calling a tool. When set, such a reply gets one
    * nudge per turn to act; a question, or anything longer, ends the turn. */
   nudgeAnnouncedAction?: boolean;
+  /** A model on this machine or network: read a tool call it wrote as text,
+   * stop it repeating itself, and send it back to fix a failed call instead
+   * of ending the turn on it. Hosted models stay unchanged. */
+  localModel?: boolean;
   /** GET /models keep-alive for HTTP grok voice calls. Off for other
    * OpenAI-compatible hosts: they did not opt into that ping. */
   warmSession?: boolean;

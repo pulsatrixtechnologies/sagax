@@ -348,6 +348,18 @@ say so.
 - `fleet upgrade` installs exactly `@pulsatrixtechnologies/sagax@<version>`, never a
   floating tag, so a fleet moves only when its operator names a release.
 
+### First publish status (recheck #1103)
+
+The package is still absent from the npm registry (`npm view
+@pulsatrixtechnologies/sagax` returns 404). The GitHub environment `npm`
+exists with a required reviewer, and the optional repository secret
+`NPM_TOKEN` is present for the one-time first publish (trusted publishing
+needs a package that already exists). Every `pulsa-v0.8.*` run of
+`npm-package.yml` has failed at the term scan before publish; keep that
+scan green on the next tag before asking the owner to approve the `npm`
+environment. The owner deferred the first publish (2026-10-31); do not
+publish until that decision changes.
+
 ## Why the gates exist
 
 Each verification step in `release.yml` maps to a real incident from the

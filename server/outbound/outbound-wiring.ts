@@ -9,7 +9,8 @@
 // number, a security code, or an id in its words.
 import { randomBytes } from "node:crypto";
 
-import { formatPhone } from "../../shared/outbound-call.ts";
+import { formatPhone, ownerCallToPlaceArgs } from "../../shared/outbound-call.ts";
+import { lineVerifies } from "../reach-me/sms.ts";
 import { PHONE_CALL_CONSENT_APPROVE, PHONE_CALL_CONSENT_DECLINE } from "../../shared/phone-call-consent.ts";
 import { purchaseContents } from "../../shared/payment-vault.ts";
 import { walletName } from "../../shared/single-use-card.ts";
@@ -53,6 +54,10 @@ export interface OutboundWiringDeps {
   now?: () => number;
   /** Person's approval level for this turn: Auto may skip the per-call card. */
   approvalMode?(botId: string, threadId: string): string | undefined;
+  /** phone_call_owner (#2194): the person's Reach me SMS number for this bot. */
+  ownerSmsNumber?(principalId: string, botId: string): string | undefined;
+  /** phone_call_owner: read voice_line as the person (turn already mounted). */
+  voiceLine?(turn: { threadId: string; generation: string; botId: string }): Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
 }
 
 /** The purchase card as the conversation draws it. */
@@ -247,6 +252,40 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId }, args);
     },
 
+    /** phone_call_owner (#2194): call the person on their verified number
+     * with structured questions, via place_phone_call conversation mode. */
+    async placeOwnerCall(context: { principalId: string | null; botId: string; threadId: string; generation: string; room: boolean }, args: unknown): Promise<{ text: string; isError?: boolean }> {
+      if (context.room) return { text: "phone_call_owner is placed from a direct conversation, not a room. Nothing was placed.", isError: true };
+      if (!context.principalId) return { text: "This conversation has no person to call. Nothing was placed.", isError: true };
+      if (!deps.voice) return { text: "Perspicax Voice is not linked on this server. Nothing was placed.", isError: true };
+      const parsed = ownerCallToPlaceArgs(args, deps.language());
+      if (typeof parsed === "string") return { text: parsed, isError: true };
+      let to = parsed.to;
+      if (!to) {
+        const smsNumber = deps.ownerSmsNumber?.(context.principalId, context.botId)?.trim();
+        if (!smsNumber) {
+          return {
+            text: "phone_call_owner needs the person's own verified number: pass to, or set their Reach me SMS number and verify it on their Perspicax Voice line (voice_number confirm).",
+            isError: true,
+          };
+        }
+        if (!deps.voiceLine) {
+          return { text: "phone_call_owner could not read voice_line on this turn. Pass to explicitly.", isError: true };
+        }
+        const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+        const line = await deps.voiceLine(turn);
+        if (!line.ok) return { text: `Perspicax Voice unavailable (${line.error.slice(0, 120)}). Nothing was placed.`, isError: true };
+        const view = (line.value && typeof line.value === "object" ? (line.value as { line?: unknown }).line : null) as { active?: unknown; callers?: unknown } | null;
+        if (!view) return { text: "The person has no Perspicax Voice line yet (voice_number sets one up). Nothing was placed.", isError: true };
+        if (view.active !== true) return { text: "The person's Perspicax Voice line does not serve now. Nothing was placed.", isError: true };
+        if (!lineVerifies(view, smsNumber)) {
+          return { text: `${formatPhone(smsNumber)} is not one of the line's verified numbers. Verify it with voice_number, or pass to. Nothing was placed.`, isError: true };
+        }
+        to = smsNumber;
+      }
+      return api.placeCall(context, { ...parsed, to });
+    },
+
     async sendDtmf(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
       if (!context.principalId) return { text: "No person on this conversation.", isError: true };
       const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
@@ -344,6 +383,12 @@ export function outboundWiring(deps: OutboundWiringDeps) {
           if (!context.ownsThread(capability.botId, capability.threadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
           const body = await readBody();
           return json(res, 200, await api.placeCall({ ...turn, room: context.inRoom(capability.threadId) }, body));
+        }
+        if (path === "/api/internal/phone-call/owner") {
+          if (method !== "POST") return json(res, 405, { error: "POST only" });
+          if (!context.ownsThread(capability.botId, capability.threadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
+          const body = await readBody();
+          return json(res, 200, await api.placeOwnerCall({ ...turn, room: context.inRoom(capability.threadId) }, body));
         }
         if (path === "/api/internal/phone-call/dtmf" || path === "/api/internal/send-dtmf") {
           if (method !== "POST") return json(res, 405, { error: "POST only" });

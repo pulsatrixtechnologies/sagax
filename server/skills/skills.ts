@@ -1796,8 +1796,9 @@ export function resolveBotSkills(botId: string, assignedLibrary: readonly string
  * A private skill shadows a same-named library skill, so origin reflects
  * what the bot actually reads. */
 export interface BotSkillWithOrigin extends SkillListing {
-  /** private: this bot's copy; library: Organisation assignment; me: person's shared Me library. */
-  origin: "private" | "library" | "me";
+  /** private: this bot's copy; library: Organisation assignment; me: person's shared Me library;
+   * native: loaded by the bot's engine from a skills folder of its own. */
+  origin: "private" | "library" | "me" | "native";
   /** Present for shared Me / library skills: bots that still link to the one copy. */
   assignedBots?: Array<{ id: string; name: string }>;
 }
@@ -1807,6 +1808,8 @@ export function listBotSkillsWithOrigin(
   assignedLibrary: readonly string[] | undefined,
   meSkills: readonly LibrarySkillListing[] = [],
   assignedBotsFor?: (name: string, origin: "me" | "library") => Array<{ id: string; name: string }>,
+  /** Skills the engine loads by itself (server/skills/native-skills.ts); own/me/library names win. */
+  native: ReadonlyArray<SkillListing & { origin: "native" }> = [],
 ): { skills: BotSkillWithOrigin[]; library: LibrarySkillListing[] } {
   const own = listSkills(botId);
   const ownNames = new Set(own.map((skill) => skill.name));
@@ -1830,6 +1833,12 @@ export function listBotSkillsWithOrigin(
       origin: "me",
       ...(assignedBotsFor ? { assignedBots: assignedBotsFor(skill.name, "me") } : {}),
     });
+  }
+  const listedNames = new Set(skills.map((skill) => skill.name));
+  for (const skill of native) {
+    if (listedNames.has(skill.name)) continue;
+    skills.push(skill);
+    listedNames.add(skill.name);
   }
   skills.sort((a, b) => a.name.localeCompare(b.name));
   const library = listLibrarySkills().filter((entry) => !ownNames.has(entry.name) && !assigned.has(entry.name) && !meNames.has(entry.name));

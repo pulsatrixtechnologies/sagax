@@ -20,15 +20,14 @@ import { AntigravityFreeSpace } from "./AntigravityFreeSpace";
 import { EngineConnect, paysWithText } from "./EngineConnect";
 import { EngineConnectorsLine } from "./plugins/EngineCapabilities";
 import { reloadMyEngines, usePerspicaxOrg, type MyEngine } from "@/lib/perspicax-org";
-import { perspicaxConsoleUrl } from "./PerspicaxOrgSettings";
-import { ExternalLinkPill, OrgManagedRow, StatusText } from "./settings/SettingsPatterns";
+import { StatusText } from "./settings/SettingsPatterns";
 import { setVoiceDashes, useVoiceDashes } from "@/lib/voice-dashes-preference";
 import { myTurnsReady } from "../../shared/org-engine-readiness";
 import { canEditConfig, canManageKeys, viewerCan, viewerIsOrgMember } from "@/lib/viewer";
 import { viewerIsOrgAdmin } from "@/lib/group-owner";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
 import { OrgHostToolsNote, orgRefusesEngine } from "./OrgHostToolsNote";
-import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsGroup, Switch } from "./SettingsPrimitives";
+import { CompactRow, DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsFoldSection, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { AutoModelSettings } from "./settings/AutoModelSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
@@ -36,6 +35,7 @@ import { ModelSwitchesSettings } from "./settings/ModelSwitchesSettings";
 import { VoiceProviderSettings } from "./settings/VoiceProviderSettings";
 import { VoiceProviderOptions } from "./settings/VoiceProviderOptions";
 import { MicrophonePermissionRow, MicrophoneSettings } from "./settings/MicrophoneSettings";
+import { PhoneCallsCard } from "./settings/PhoneCallsCard";
 import { LiveCallInstallationSettings } from "./LiveCallSettings";
 import { ApiKeyRow, VpsConnection } from "./ApiKeys";
 
@@ -471,8 +471,7 @@ export function useModelsVoiceAccess() {
  * image generation live in Providers. */
 export function EnginesSettings() {
   const { state } = useStore();
-  const { installation, org } = useModelsVoiceAccess();
-  const issuer = org?.org.identity.issuer;
+  const { installation } = useModelsVoiceAccess();
   const keepWarm = state.config?.cacheKeepWarm;
   const noDashes = useVoiceDashes(activeLocale());
 
@@ -480,44 +479,37 @@ export function EnginesSettings() {
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-models-voice="" data-models-page="">
       {/* #1675: Bot models first (defaults + table + bulk) */}
       <BotModelsSettings />
-      <div data-settings-card="models.advanced">
-        <SettingsGroup title={t("models.advanced.title")} groupId="models-advanced">
-          <FoldRow cardId="models.advanced" label={t("models.advanced.title")} description={t("models.advanced.help")}>
-            <div className="-mx-3.5 flex flex-col gap-4 pt-1" data-models-advanced="">
-              <ModelSwitchesSettings />
-              {/* #2080 (L1): out of Voice, it changes every reply's text */}
-              <SettingsGroup title={t("models.replies.title")} groupId="models-replies">
-                <DescribedRow label={t("voice.noDashes.title")} description={t("voice.noDashes.short")} rowId="voiceNoDashes">
-                  <Switch checked={noDashes} aria-label={t("voice.noDashes.title")} onClick={() => setVoiceDashes(!noDashes)} />
-                </DescribedRow>
-              </SettingsGroup>
-              <SettingsGroup title={t("models.autoNow.title")} groupId="models-auto">
-                <div data-auto-model-explainer=""><AutoModelSettings /></div>
-              </SettingsGroup>
-              {installation && <CacheKeepWarmSettings />}
-              {!installation && keepWarm && (
-                <SettingsGroup title={t("settings.keepWarm.title")} groupId="models-keep-warm">
-                  <DescribedRow label={t("settings.keepWarm.enable")} description={keepWarm.enabled ? t("settings.keepWarm.hours", { hours: Math.round(keepWarm.windowMinutes / 60) }) : t("models.keepWarm.off")} rowId="models.keepWarm">
-                    {org && issuer && (
-                      <span data-perspicax-link="keepWarm"><ExternalLinkPill href={perspicaxConsoleUrl(issuer)}>{t("providers.setInPerspicax")}</ExternalLinkPill></span>
-                    )}
-                  </DescribedRow>
-                </SettingsGroup>
-              )}
-              {installation && (boatComputerEnabled(state.config) || vpsComputerEnabled(state.config)) && (
-                <div data-settings-card="connections.integrations">
-                  <SettingsGroup title={t("keys.integrations.title")} groupId="integrations">
-                    <div className="flex flex-col gap-4 px-3.5 py-2.5">
-                      {boatComputerEnabled(state.config) && <ApiKeyRow section="box" />}
-                      {vpsComputerEnabled(state.config) && <VpsConnection />}
-                    </div>
-                  </SettingsGroup>
+      {/* #2175: a heading with a disclosure, its content sibling groups: never a card in a card */}
+      <SettingsFoldSection cardId="models.advanced" groupId="models-advanced" title={t("models.advanced.title")} description={t("models.advanced.help")}>
+        <div className="flex flex-col gap-6" data-models-advanced="">
+          <ModelSwitchesSettings />
+          {/* #2080 (L1): out of Voice, it changes every reply's text */}
+          <SettingsGroup title={t("models.replies.title")} groupId="models-replies">
+            <DescribedRow label={t("voice.noDashes.title")} description={t("voice.noDashes.short")} rowId="voiceNoDashes">
+              <Switch checked={noDashes} aria-label={t("voice.noDashes.title")} onClick={() => setVoiceDashes(!noDashes)} />
+            </DescribedRow>
+          </SettingsGroup>
+          <SettingsGroup title={t("models.autoNow.title")} groupId="models-auto">
+            <div data-auto-model-explainer=""><AutoModelSettings /></div>
+          </SettingsGroup>
+          {installation && <CacheKeepWarmSettings />}
+          {!installation && keepWarm && (
+            <SettingsGroup title={t("settings.keepWarm.title")} groupId="models-keep-warm">
+              <DescribedRow label={t("settings.keepWarm.enable")} description={keepWarm.enabled ? t("settings.keepWarm.hours", { hours: Math.round(keepWarm.windowMinutes / 60) }) : t("models.keepWarm.off")} rowId="models.keepWarm" />
+            </SettingsGroup>
+          )}
+          {installation && (boatComputerEnabled(state.config) || vpsComputerEnabled(state.config)) && (
+            <div data-settings-card="connections.integrations">
+              <SettingsGroup title={t("keys.integrations.title")} groupId="integrations">
+                <div className="flex flex-col gap-4 px-3.5 py-2.5">
+                  {boatComputerEnabled(state.config) && <ApiKeyRow section="box" />}
+                  {vpsComputerEnabled(state.config) && <VpsConnection />}
                 </div>
-              )}
+              </SettingsGroup>
             </div>
-          </FoldRow>
-        </SettingsGroup>
-      </div>
+          )}
+        </div>
+      </SettingsFoldSection>
     </div>
   );
 }
@@ -529,6 +521,7 @@ export function VoiceSettingsPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-voice-page="">
       <VoiceProviderSettings />
+
       {/* this computer's microphone: everyone's, whoever edits the installation */}
       <div data-settings-card="connections.audio">
         <SettingsGroup title={t("settings.audio.title")} groupId="audio">
@@ -544,26 +537,25 @@ export function VoiceSettingsPage() {
             </div>
           </FoldRow>
         </VoiceProviderOptions>
-      ) : org ? <OrgLiveCallsRow issuer={org.org.identity.issuer} /> : null}
+      ) : org ? <OrgLiveCallsRow /> : null}
+      {/* #2080: org phone calls, same read-only card for every member */}
+      <PhoneCallsCard />
     </div>
   );
 }
 
 /** #2080 (L1): in an organization the installation's live calls are the
- * admins'; the member reads the state and where it changes. */
-function OrgLiveCallsRow({ issuer }: { issuer: string }) {
+ * admins'; the member reads the state (no shortcut to Perspicax, 2026-11-05). */
+function OrgLiveCallsRow() {
   const { state } = useStore();
   const live = state.config?.live;
   const on = Boolean(live?.enabled && live.configured);
   return (
     <div data-settings-card="connections.voice" data-voice-section="">
       <SettingsGroup title={t("voiceMode.call.advanced")} groupId="voice">
-        <OrgManagedRow
-          label={t("voice.live.title")}
-          value={<StatusText tone={on ? "success" : "neutral"}>{t(on ? "settings.card.on" : "settings.card.off")}</StatusText>}
-          href={perspicaxConsoleUrl(issuer)}
-          rowId="voice.live.org"
-        />
+        <CompactRow label={t("voice.live.title")} rowId="voice.live.org">
+          <StatusText tone={on ? "success" : "neutral"}>{t(on ? "settings.card.on" : "settings.card.off")}</StatusText>
+        </CompactRow>
       </SettingsGroup>
     </div>
   );

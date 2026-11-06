@@ -41,7 +41,7 @@ import { contentKeysForExport } from "../content-export.ts";
 import { CHUNK_BYTES, FileSealer, openBuffer, parseBlockLine, parseHeader, plainSizeOf, sealBuffer, type FileKey } from "./content-file-crypto.ts";
 import { azureKeyVaultProvider } from "./content-key-azure.ts";
 import { ContentKeyUnavailable, WORKSPACE_OWNER } from "./content-keys.ts";
-import { appendNative } from "../drivers/native.ts";
+import { appendNative, flushNativeLog } from "../drivers/native.ts";
 import { chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncryption, contentKeyForOwner, contentOwnerChanged, eraseContentOwner, insertMessage, readThread, runContentMigration, saveChatFollowup, unlockContentKeys } from "../messages/message-db.ts";
 import { appendDecision, flushDecisionLog, readDecisions } from "../decision-log.ts";
 import { journalFile, readMemoryJournal, recordMemoryChange, flushMemoryJournal, resetMemoryJournalState } from "../memory/memory-journal.ts";
@@ -255,8 +255,9 @@ describe("event logs", () => {
   it("seals every line under the thread's key and reads the log as before", () => {
     appendNative("t1", { dir: "out", source: "test", msg: { text: "the meadow password" } });
     appendNative("t1", { dir: "in", source: "test", msg: { text: "a second line" } });
+    flushNativeLog("t1");
     const file = join(NATIVE_DIR, "t1.ndjson");
-    // each line is on disk, sealed, when its append returns
+    // out flushes at once; in is sealed with the batch on flush (server/drivers/native.ts)
     expect(readFileSync(file, "utf8").split("\n").filter(Boolean)).toHaveLength(2);
     expect(readFileSync(file, "utf8")).not.toContain("meadow");
     expect(readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line).p[0].dir)).toEqual(["out", "in"]);
@@ -369,6 +370,7 @@ describe("migration", () => {
     const file = join(NATIVE_DIR, "t3.ndjson");
     turn("off");
     appendNative("t3", { dir: "in", source: "test", msg: { text: "velvet" } });
+    flushNativeLog("t3");
     const log = readFileSync(file, "utf8");
     turn("on");
     await runAtRestMigration({ sliceMs: Infinity });

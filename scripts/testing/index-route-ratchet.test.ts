@@ -48,6 +48,8 @@ const EXACT: Record<string, number> = {
   // 23: leftover me/engines, org/bots, people avatar, routine-delegation stub,
   // adminAuditPlan and externalRuntimeMayCall moved out of index (#1388).
   // 18: originGates (hosted health, join, pair) moved to request-pipeline (#1388).
+  // Upstream sync note: upstream still counted ~190 path === before the #1388 moves;
+  // keep the Sagax post-split pins below.
   'path === "/': 18,
   // 90: the package preview path moved with the organization library routes.
   // 91: the thread file pin and the bot history routes moved to server/routes (#1099), after the

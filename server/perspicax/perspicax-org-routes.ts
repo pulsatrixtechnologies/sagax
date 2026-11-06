@@ -55,6 +55,9 @@ export interface OrgSettings {
    * (server/routes/credential-vault.ts): on by default, an admin turns it
    * off. */
   allowVaultExport?: boolean;
+  /** #2193: per-person Grok bridge. On by default; an admin turns it off
+   * for the org without touching anyone's link key. */
+  allowGrokBridge?: boolean;
   /** Where bots' Claude Code plugins may come from (server/bots/bot-plugins.ts):
    * any marketplace by default, or the admin's list. */
   pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };

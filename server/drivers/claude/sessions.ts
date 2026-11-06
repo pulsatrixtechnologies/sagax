@@ -5,6 +5,7 @@ import type { ApprovalMode } from "../../../shared/approval-mode.ts";
 import { newId } from "../../contracts.ts";
 import { killCliTree } from "../../procs.ts";
 import { appendNative } from "../native.ts";
+import { armIdleClose, stopIdleClose } from "../session-idle.ts";
 import { resolveClaudeConfigDir } from "./config.ts";
 import { UNDELIVERED_VOLATILE, diagnosticClaudeUserMessage, type ClaudeUserMessage } from "./messages.ts";
 import type { ClaudeSession } from "./session-types.ts";
@@ -26,12 +27,14 @@ export type SessionHelperDeps = {
   sessionMisses: Map<string, number>;
   liveApprovalModes: Map<string, { turnId: string; mode: ApprovalMode }>;
   SESSION_IDLE_MS: number;
+  instanceId: string;
 };
 
 export function createSessionHelpers(deps: SessionHelperDeps) {
   const {
     environment, sessions, active, warmContracts, warmHolds, heldVolatile,
     sessionConfigDirs, sessionFiles, sessionMisses, liveApprovalModes, SESSION_IDLE_MS,
+    instanceId,
   } = deps;
 
   /** Size of a saved session's file (<config>/projects/<cwd>/<id>.jsonl),
@@ -84,13 +87,15 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
       heldVolatile.set(threadId, { sessionId: s.sessionId, volatile: s.volatile, ...(s.volatileSections ? { sections: s.volatileSections } : {}) });
       if (heldVolatile.size > 500) heldVolatile.delete(heldVolatile.keys().next().value!);
     } else heldVolatile.delete(threadId);
-    if (s.idleTimer) clearTimeout(s.idleTimer);
+    stopIdleClose(`${instanceId}\0${threadId}`, s.idleTimer);
+    s.idleTimer = null;
     // Broker ownership belongs to this session. Detach and close it now,
     // before a replacement can bind the same per-thread socket; the old
     // child's later close event must never unlink a new broker.
     const broker = s.broker;
     s.broker = undefined;
     broker?.close();
+    s.elicit.close();
     appendNative(threadId, { dir: "out", source: "claude.session", msg: { close: why } });
     // A process that ends takes its turn files along. A replacement built
     // for this same thread already holds its values in its own env.
@@ -110,10 +115,16 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
   const armIdle = (threadId: string) => {
     const s = sessions.get(threadId);
     if (!s) return;
-    if (s.idleTimer) clearTimeout(s.idleTimer);
+    stopIdleClose(`${instanceId}\0${threadId}`, s.idleTimer);
     const held = (warmHolds.get(threadId) ?? 0) - Date.now();
-    s.idleTimer = setTimeout(() => closeSession(threadId, "idle"), Math.min(2_147_483_647, Math.max(SESSION_IDLE_MS, held)));
-    s.idleTimer.unref?.();
+    s.idleTimer = armIdleClose(
+      `${instanceId}\0${threadId}`,
+      Math.min(2_147_483_647, Math.max(SESSION_IDLE_MS, held)),
+      {
+        close: () => closeSession(threadId, "idle"),
+        idle: () => sessions.get(threadId) === s && !s.closing && !s.turn && !active.has(threadId) && (warmHolds.get(threadId) ?? 0) <= Date.now(),
+      },
+    );
     s.budget?.idle();
   };
 

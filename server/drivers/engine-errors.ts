@@ -2,13 +2,23 @@
 // overloaded or failing service, or any other HTTP refusal names the provider and keeps its own short reason. Each
 // sentence keeps the words classifyError (retry.ts) reads, so retries, account switching and health codes are unchanged.
 import { redactSecretsInText } from "../redact.ts";
+import { hostTimeZone } from "../turns/turn-clock.ts";
 import { USAGE_LIMIT } from "./retry.ts";
 import { contextFullMessage, isContextFullText } from "../context/context-renewal.ts";
+import { usageLimitWait } from "./acp/quiet-status.ts";
 
-export type EngineFailureKind = "credits" | "usage_limit" | "context_full" | "rate_limit" | "overloaded" | "server" | "refused";
+export type EngineFailureKind = "credits" | "usage_limit" | "context_full" | "rate_limit" | "overloaded" | "server" | "tool_schema" | "refused";
 
 /** A provider refusing for want of credit or payment, in its own words (402 is read from the status). */
 const OUT_OF_CREDITS = /\bpayment required\b|\binsufficient (?:account )?(?:funds|balance|credits?)\b|\b(?:credit|account) balance is too low\b|\bout of credits?\b|\bno credits? (?:left|remaining)\b|\bused all (?:available |of (?:your|its) )?credits\b/i;
+
+/** A provider refusing a tool's parameters schema: Moonshot's "tools.function.parameters is not a valid moonshot flavored
+ * json schema, details: <At path 'root': schema exceeds maximum allowed size>", OpenAI's "Invalid schema for function
+ * 'x'", Anthropic's "tools.3.custom.input_schema: …", Gemini's "function_declarations[3].parameters", Bedrock's
+ * "toolSpec.inputSchema". */
+const TOOL_SCHEMA = /moonshot flavou?red json schema|schema exceeds maximum allowed size|invalid schema for function\b|\btools\.\d+\.custom\.input_schema\b|function_declarations\[\d+\]\.parameters|\btoolSpec\.inputSchema\b/i;
+const SCHEMA_TOOL_NAME = /\b(?:function|tool) ['"`]([\w.:-]{1,128})['"`]/i;
+const SCHEMA_TOO_LARGE = /exceeds maximum allowed size|\btoo (?:large|long|big)\b/i;
 
 /** Grok Build's "API error (status 402 Payment Required): …" (inside ACP's "Internal error: …"), the chat-completions
  * drivers' "xAI HTTP 402: …", and Claude Code's "API Error: 529 …". */
@@ -72,6 +82,7 @@ export function engineFailureKind(text: string, status = httpStatusOf(text)): En
   if (isContextFullText(text)) return "context_full";
   if (status === 529 || /\boverloaded\b/i.test(text)) return "overloaded";
   if (status === 429) return "rate_limit";
+  if (TOOL_SCHEMA.test(text)) return "tool_schema";
   if (status !== null) return status >= 500 ? "server" : "refused";
   return null;
 }
@@ -80,7 +91,7 @@ export function engineFailureKind(text: string, status = httpStatusOf(text)): En
 export function engineFailureMessage(
   provider: string,
   text: string,
-  { kind, status }: { kind?: EngineFailureKind | null; status?: number | null } = {},
+  { kind, status, resetsAt, timeZone }: { kind?: EngineFailureKind | null; status?: number | null; resetsAt?: number; timeZone?: string } = {},
 ): string | null {
   const http = status === undefined ? httpStatusOf(text) : status;
   const what = kind ?? engineFailureKind(text, http);
@@ -92,17 +103,80 @@ export function engineFailureMessage(
   switch (what) {
     case "credits": return `Your ${provider} account is out of credits${detail(says)}. Add credits with ${provider}, then run it again.`;
     case "context_full": return contextFullMessage(provider);
-    case "usage_limit": return `This ${provider} account has reached its usage limit${detail(says)}. Wait for it to reset, or switch this bot to another engine.`;
+    case "usage_limit": return resetsAt
+      ? `This ${provider} account has reached its usage limit${detail(says)}, which resets ${limitResetTime(resetsAt, timeZone)}. Until then, switch this bot to another engine.`
+      : `This ${provider} account has reached its usage limit${detail(says)}. Wait for it to reset, or switch this bot to another engine.`;
     case "rate_limit": return `${provider} hit a rate limit${detail(code, says)}. Wait a minute, then run it again.`;
     case "overloaded": return `${provider} is overloaded right now${detail(code, says)}. This is usually temporary, so try again in a few minutes.`;
     case "server": return `${provider} had a temporary server problem${detail(code, says)}. Try again in a few minutes.`;
+    case "tool_schema": {
+      const tool = SCHEMA_TOOL_NAME.exec(text)?.[1];
+      const problem = SCHEMA_TOO_LARGE.test(text) ? "is too large" : `uses a form ${provider} does not accept`;
+      return `${provider} refused this turn as an invalid request because the input schema of ${tool ? `the "${tool}" tool` : "one of this bot's tools"} `
+        + `${problem}, so nothing ran. Turn off the MCP server or app that tool comes from for this bot, or switch the bot to another AI.`;
+    }
     case "refused": return `${provider} stopped with an error${detail(code, says)}.`;
   }
+}
+
+/** When a usage limit resets, in `timeZone` with its name, or in UTC when the zone is unknown. */
+export function limitResetTime(epochMs: number, timeZone = hostTimeZone()): string {
+  try {
+    return `${new Date(epochMs).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone })} (${timeZone})`;
+  } catch {
+    return `${new Date(epochMs).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  }
+}
+
+/** A provider's HTTP error an engine posted as its whole reply instead of failing the turn (omp 18.12's ACP mode sends
+ * it as message text and ends with end_turn): the status, an Anthropic `{"type":"error",…}` or OpenAI `{"error":{…}}`
+ * body, and omp's ` retry-after-ms=<n>` when the provider named a wait. */
+const ERROR_REPLY = /^([45]\d\d) (\{[\s\S]*\})(?: retry-after-ms=(\d+))?$/;
+
+function isErrorBody(body: string): boolean {
+  try {
+    const value = JSON.parse(body);
+    return value?.type === "error" || (typeof value?.error === "object" && value.error !== null);
+  } catch {
+    return false;
+  }
+}
+
+export interface ErrorReplyFailure {
+  message: string;
+  stopReason: "quota" | "auth_required" | "rpc_error";
+  setup?: true;
+  limit?: "engine";
+  limitResetsAt?: number;
+}
+
+/** A reply that is only a provider's error body, as the failed turn it is; null for any other text. It reads by its
+ * words, as the same failure thrown would, and an account out of credits needs the person's setup. A 429 whose wait is
+ * longer than an engine retries on its own is a usage limit too, and the wait names its reset. */
+export function errorReplyFailure(provider: string, text: string, now = Date.now(), timeZone?: string): ErrorReplyFailure | null {
+  const match = ERROR_REPLY.exec(text.trim());
+  const body = match?.[2];
+  if (!match || !body || !isErrorBody(body)) return null;
+  const status = Number(match[1]);
+  const waitMs = Number(match[3] ?? 0);
+  const said = engineFailureKind(body, status);
+  const kind = said !== "credits" && usageLimitWait(status, waitMs) ? "usage_limit" : said;
+  const resetsAt = kind === "usage_limit" && waitMs > 0 ? now + waitMs : undefined;
+  const message = engineFailureMessage(provider, body, { kind, status, resetsAt, timeZone })!;
+  if (kind === "credits") return { message, stopReason: "auth_required", setup: true };
+  if (kind !== "usage_limit") return { message, stopReason: "rpc_error" };
+  return { message, stopReason: "quota", limit: "engine", ...(resetsAt ? { limitResetsAt: resetsAt } : {}) };
 }
 
 /** Only an out-of-credits failure in plain words; any other text stays as it is. */
 export function outOfCreditsMessage(provider: string, text: string): string {
   return engineFailureKind(text) === "credits" ? engineFailureMessage(provider, text, { kind: "credits" })! : text;
+}
+
+/** Only an out-of-credits failure or a refused tool schema in plain words; any other text stays as it is. */
+export function plainFailureMessage(provider: string, text: string): string {
+  const kind = engineFailureKind(text);
+  return kind === "credits" || kind === "tool_schema" ? engineFailureMessage(provider, text, { kind })! : text;
 }
 
 /** Known stop tokens with plain words. Person cancel, engine empty and harness

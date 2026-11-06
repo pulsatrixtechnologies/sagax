@@ -8,6 +8,7 @@ import { createSessionHelpers } from "./sessions.ts";
 export function createClaudeSessionRuntime(input: {
   environment: (model?: string | null, access?: any) => NodeJS.ProcessEnv | Record<string, string | undefined>;
   active: Map<string, { stop: () => void; turnId: string; broker?: any }>;
+  instanceId: string;
 }) {
   // One live CLI process per thread, kept across turns. Under
   // --input-format stream-json the CLI settles a turn with `result` while
@@ -65,6 +66,7 @@ export function createClaudeSessionRuntime(input: {
     sessionMisses,
     liveApprovalModes,
     SESSION_IDLE_MS,
+    instanceId: input.instanceId,
   });
 
   return {

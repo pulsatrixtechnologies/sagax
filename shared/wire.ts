@@ -9,6 +9,7 @@
  * fails compilation until it is either declared here or explicitly listed
  * as server-private. */
 import type { PersonAttentionCard } from "./person-attention.ts";
+import type { GithubConnectCard } from "./github-connect-card.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
@@ -40,7 +41,7 @@ import type { RemoteSessionView } from "./remote-session.ts";
 import type { ResourceUsageView } from "./resource-usage.ts";
 import type { ConnectorSetupView } from "./connector-setup.ts";
 import type { BotPublicProfile } from "./bot-public-profile.ts";
-import type { CredentialTargetId } from "./credential-request.ts";
+import { CUSTOM_SECRET_TARGET, type CredentialTargetId, type SecretDelivery } from "./credential-request.ts";
 import type { VaultLoginTarget, VaultRequestCardData } from "./credential-vault.ts";
 import type { TeamSetupRequest } from "./team-setup.ts";
 import type { RoutineRequestCardData } from "./routine-request.ts";
@@ -311,6 +312,15 @@ export interface WireTask {
   cwd?: string | null;
 }
 
+/** One thread's keep-warm window as a client shows it. Times are epoch ms. */
+export interface CacheKeepWarmStatus {
+  state: "warm" | "stopped";
+  until?: number;
+  nextPingAt?: number;
+  last?: { at: number; read: number; write: number; costUsd: number | null };
+  stopped?: string;
+}
+
 /** A lightweight organizational label within one bot. */
 export interface BotProject {
   id: string;
@@ -399,6 +409,11 @@ export interface WireBotConversation {
   /** The conversation is working now (a discreet indicator and a Stop). */
   running?: boolean;
 }
+
+/** Fails closed: only an absent switch or a strict true allows the helper
+ * model; a hand-edited "false" or 0 reads as never (server/side-jobs.ts). */
+export const helperModelAllowed = (bot: { helperModel?: unknown }): boolean =>
+  bot.helperModel === undefined || bot.helperModel === true;
 
 export interface WireBot {
   waitingForTeammates?: boolean;
@@ -516,6 +531,9 @@ export interface WireBot {
   /** Whether this bot may write email draft cards. Absent/true = allowed;
    * false refuses ```email fences in the prompt and the send route. */
   emailDrafts?: boolean;
+  /** #2121: whether this bot may reply with memes (send_meme). Absent or
+   * "auto" = the bot decides from the person's style; "off" hides the tool. */
+  memeReplies?: "auto" | "off";
   /** Whether this bot uses native memory. Absent/true = enabled. */
   memoryEnabled?: boolean;
   /** Whether this bot's turns use the loop guard. Absent/true = on (workspace setting still applies); false = off for this bot. */
@@ -587,6 +605,9 @@ export interface WireBot {
    * tidies nightly. On unless explicitly false; every change is journaled
    * and can be undone. */
   memoryUpkeep?: boolean;
+  /** false: the workspace's helper model never writes this bot's background
+   * texts (server/side-jobs.ts). Absent or true: allowed. */
+  helperModel?: boolean;
   /** Prompt-cache keep-warm for this bot's Claude threads: true or false
    * overrides the workspace setting (Settings → Engines); absent follows it. */
   cacheKeepWarm?: boolean;
@@ -784,11 +805,24 @@ export interface Comm {
   text?: string;
 }
 
+/** The longest preview a sender's note keeps of what it sent (Comm.text).
+ * The channel holds the whole message. (main #912, ported from the removed
+ * server/comms-visibility.ts onto the runtime's notes.) */
+export const COMM_PREVIEW_MAX = 280;
+
+/** One line of what a bot sent, cut short for a note's preview, by code
+ * point so an emoji is never cut in half. */
+export function commPreview(message: string): string {
+  const line = message.replace(/\s+/g, " ").trim();
+  const points = Array.from(line);
+  return points.length > COMM_PREVIEW_MAX ? `${points.slice(0, COMM_PREVIEW_MAX - 1).join("").trimEnd()}…` : line;
+}
+
 export interface WireMessage extends WaitLineField {
   roomRequest?: { id: string; phase: "request" | "result" };
   id: string;
   role: "bot" | "user";
-  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
+  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
   text?: string;
   /** kind "routines" (2026-10-15): one compact line in the conversation
    * saying this turn turned routines on or off (server/routines/routine-chat-events.ts).
@@ -824,7 +858,19 @@ export interface WireMessage extends WaitLineField {
    * and video a bot attached with attach_file; they are opened through the
    * message-scoped file route, never by path. */
   attachments?: Array<
-    | { kind: "image"; path: string; mime: string; name?: string }
+    | {
+        kind: "image";
+        path: string;
+        mime: string;
+        name?: string;
+        /** #2121: reaction meme / GIF metadata (attribution required by the provider). */
+        meme?: {
+          provider: "giphy" | "tenor" | "imgflip" | "upload";
+          attribution: string;
+          caption?: string;
+          sourceId?: string;
+        };
+      }
     | { kind: "file"; path: string; mime: string; name: string }
     | { kind: "audio"; path: string; mime: string; durationMs?: number }
   >;
@@ -839,6 +885,8 @@ export interface WireMessage extends WaitLineField {
    * the kind. */
   app?: AppPayload;
   secret?: SecretRequestCardData;
+  /** signin rows: the bot asked the person to sign in to a site themselves. */
+  signIn?: SignInRequestCardData;
   /** One idempotently updated status card for a routine run. */
   routineRun?: RoutineRunCardData;
   /** 2026-11-05: what a bot's finished turn elsewhere (a hand-off, a
@@ -846,6 +894,10 @@ export interface WireMessage extends WaitLineField {
    * into their own conversation with that bot (shared/person-attention.ts).
    * On a routine.run row it rides beside the report. `text` is the fallback. */
   attention?: PersonAttentionCard;
+  /** #2109 (2026-11-05): GitHub sign-in by link and pairing code, posted by
+   * connect_github in the bot's chat and patched to connected in place
+   * (shared/github-connect-card.ts). On a text row; `text` is the fallback. */
+  githubConnect?: GithubConnectCard;
   /** 2026-11-05: a bot's answer in a routine run's task after the run had
    * ended (a teammate's result resumed it), mirrored here: the source id. */
   lateRunReplyOf?: string;
@@ -1023,7 +1075,7 @@ export interface WireMessage extends WaitLineField {
    * not know it ignore it. */
   routedBy?: { provider: "jev"; probability: number };
   /** Set on the user-role line another bot delivered into this bot's own
-   * conversation (ask_bot, start_thread). `incident`: the line is
+   * conversation (coordinate_bots, start_thread). `incident`: the line is
    * Sagax's Team incidents report about that bot's broken run in
    * `threadId` (server/peers/incidents.ts), not its words; `notified`: that
    * failure already buzzed the person (a run that could not start, a
@@ -1356,14 +1408,22 @@ export interface LiveSettings {
 }
 
 export interface SecretRequestCardData {
-  /** Fixed allowlisted credential id; never an arbitrary config path.
+  /** Fixed allowlisted credential id, never a config path; CUSTOM_SECRET_TARGET: a secret the bot names, kept off Settings.
    * vaultLogin: a bot asks to use a login from the credential vault
    * (shared/credential-vault.ts); the card carries `vault` and no field. */
-  target: CredentialTargetId | VaultLoginTarget;
+  target: CredentialTargetId | VaultLoginTarget | typeof CUSTOM_SECRET_TARGET;
   label: string;
   description: string;
   placeholder: string;
   helpUrl: string;
+  /** A custom secret's use the person agrees to: "ref", Sagax's own tools swap it once; "file", a private workspace file for a day. */
+  delivery?: SecretDelivery;
+  /** Why the bot needs a custom secret (shown on the card). */
+  reason?: string;
+  /** When a custom secret was saved behind this card (ms); never the value. */
+  savedAt?: number;
+  /** Local VM target key when a file secret should land in that VM's workspace. */
+  vm?: string;
   requestKey: string;
   phoneOperationId?: string;
   provided?: boolean;
@@ -1375,6 +1435,45 @@ export interface SecretRequestCardData {
   error?: string;
   /** target vaultLogin only: what the bot asked for and what the person chose. */
   vault?: VaultRequestCardData;
+  /** Stop ended the turn this card paused: it offers no entry, and a key
+   * saved afterwards is kept but continues nothing. */
+  stopped?: boolean;
+}
+
+/** A bot asked the person to sign in to a website themselves
+ * (shared/sign-in-request.ts): they type the password into the page, in the
+ * place the bot works. The bot never sees the password. A login kept in the
+ * person's credential vault goes through request_login instead. */
+export interface SignInRequestCardData {
+  /** The page to open, an http(s) address. */
+  url: string;
+  /** Its host, the card's headline. */
+  site: string;
+  /** The bot's own words: why it needs the sign-in. */
+  reason?: string;
+  /** Where the login has to happen: the place the asking turn worked in. */
+  place: Surface;
+  done?: boolean;
+  cancelled?: boolean;
+  /** A newer request for the same site in this conversation replaced this
+   * card; it no longer offers Done or Cancel. */
+  superseded?: boolean;
+  resumed?: boolean;
+  error?: string;
+  /** Stop ended the turn this card paused: it offers no Done or Cancel,
+   * and an answer given afterwards is kept but continues nothing. */
+  stopped?: boolean;
+}
+
+/** The open sign-in request a bot's computer plea stands for, so whichever
+ * panel shows the plea can settle that card. */
+export interface ComputerHelpRef {
+  /** The asking bot: a team computer's plea reaches every member's panel. */
+  botId: string;
+  threadId: string;
+  messageId: string;
+  site: string;
+  place: Surface;
 }
 
 /** Who answers a room message nobody was @mentioned in. `auto` asks the
@@ -1435,6 +1534,10 @@ export interface GroupTask {
 export interface WireGroup {
   /** Computed from the usage ledger, not stored in groups.json. */
   usage?: GroupThreadUsage | null;
+  /** transient: each member's context in the active thread, from its last
+   * turn there (server/room-context.ts), and whether its next turn there
+   * was asked to start compacted. Absent until a member reports one. */
+  memberContext?: Record<string, { tokens: number; window: number; compactRequested?: true }> | null;
   id: string;
   /** The active task's thread. Direct-message channels stay single-threaded. */
   threadId: string;
@@ -1523,6 +1626,26 @@ export interface WireGroup {
   /** A direct-message channel's turn ceiling. Null on the wire means the
    * global group limit. Channel conversations store theirs on each task. */
   turnTimeoutMinutes?: number | null;
+  /** Members the person stopped in this room ("stop @Bot"), by bot id.
+   * A held member gets no turn until it is @mentioned again or resumed.
+   * Room-wide, persisted (server/room-holds.ts). */
+  holds?: Record<string, RoomHold>;
+  /** Room messages addressed to a member while it was held, by bot id;
+   * its next turn is shown them, then they are cleared. */
+  heldMessages?: Record<string, RoomHeldMessage[]>;
+}
+
+/** One member's hold in a room: when the person stopped it, and whether the
+ * room has already said so (the held line is written once per hold). */
+export interface RoomHold {
+  at: number;
+  noted?: boolean;
+}
+
+/** A room message that reached a member while it was held. */
+export interface RoomHeldMessage {
+  threadId: string;
+  messageId: string;
 }
 
 // ── live wire frames ───────────────────────────────────────────────────
@@ -1617,12 +1740,12 @@ export type ServerFrame =
    * one progress line until its first screen frame. `place` names a cloud
    * computer (absent: a Local VM). */
   | { kind: "computer"; botId: string; state: "provisioning" | "waking" | "ready"; place?: "cloud" }
-  | { kind: "computer-control"; botId: string; held: boolean; helpReason: string | null }
+  | { kind: "computer-control"; botId: string; held: boolean; helpReason: string | null; help?: ComputerHelpRef | null }
   /** A bot's data sheet changed (a card added, updated, failed, removed; a
    * table loaded). Whole sheet each time: see shared/data-surface.ts. */
   | DataBroadcast
   | { kind: "bot.deleted"; botId: string }
-  /** A person's own unlocks (server/achievements.ts), to their streams only. */
+  /** A person's own unlocks (server/achievements/achievements.ts), to their streams only. */
   | { kind: "achievements"; audience: string; unlocked: Array<{ id: string; points: number; unlockedAt: number }> }
   /** A person's preferences after a save on any of their devices
    * (server/people/user-preferences.ts), to that person's streams only. */

@@ -39,7 +39,7 @@ describe("independent bot task state", () => {
     });
     expect(restarted.messagesFor(first)).toEqual(history);
     expect(level(restarted, restarted.createTask(bot.id)!.threadId)).toBe("full");
-    expect(approvalModeFor(restarted.bot(other.id)!)).toBe("auto");
+    expect(approvalModeFor(restarted.bot(other.id)!)).toBe("full");
     restarted.setAllThreadApprovalMode(bot.id, "ask");
     const asked = new Store(selection);
     expect(asked.tasks(bot.id).every(task => level(asked, task.threadId) === "ask")).toBe(true);
@@ -103,7 +103,7 @@ describe("independent bot task state", () => {
       expect(() => store.setAllThreadApprovalMode(bot.id, "full")).toThrow("fixture disk full");
       expect(JSON.stringify(bot)).toBe(before);
       const restarted = new Store(selection);
-      expect(restarted.tasks(bot.id).every(task => approvalModeFor(restarted.projectBotForTask(bot.id, task.threadId)!) === "auto")).toBe(true);
+      expect(restarted.tasks(bot.id).every(task => approvalModeFor(restarted.projectBotForTask(bot.id, task.threadId)!) === "full")).toBe(true);
     } finally { save.mockRestore(); }
   });
 
@@ -155,7 +155,7 @@ describe("independent bot task state", () => {
     expect(reloaded.taskByThread(bot.id, second.threadId)).toMatchObject({ routineRunId: "run-2", resumeCursors: {} });
     // #1207: a run keeps no copy of the level; it runs at the bot's
     expect(reloaded.taskByThread(bot.id, second.threadId)?.approvalMode).toBeUndefined();
-    expect(reloaded.projectBotForTask(bot.id, second.threadId)).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    expect(reloaded.projectBotForTask(bot.id, second.threadId)).toMatchObject({ approvalMode: "full", autoApprove: false });
     reloaded.patchTask(bot.id, first.threadId, { routineRunId: undefined });
     expect(new Store(selection).taskByThread(bot.id, first.threadId)?.routineRunId).toBeUndefined();
   });
@@ -445,6 +445,8 @@ describe("independent bot task state", () => {
   });
 
   it("moves Ask bots and threads to Approve for me once, and leaves a later Ask choice", () => {
+    // The Ask→Auto migration only runs when new bots still start on Auto
+    // (org New-bot policy). Solo servers now start on Full (omb #2808).
     mkdirSync(DATA_DIR, { recursive: true });
     writeFileSync(join(DATA_DIR, "bots.json"), JSON.stringify([
       { id: "ask-bot", name: "Ask", threadId: "t1", soul: "", computer: "cloud", approvalMode: "ask", autoApprove: false,
@@ -463,7 +465,7 @@ describe("independent bot task state", () => {
           { threadId: "r2", title: "Already ask", approvalMode: "ask" },
         ] },
     ]));
-    const store = new Store(selection);
+    const store = new Store(selection, (s) => s, () => "auto");
     // #1207: a thread's stored copy of the level (no stated exception) is
     // dropped at startup, and the thread reads its bot's level live.
     const level = (s: Store, botId: string, threadId: string) => s.projectBotForTask(botId, threadId);
@@ -487,7 +489,7 @@ describe("independent bot task state", () => {
     expect(level(store, "revoked-bot", "r2")?.approvalMode).toBe("ask");
     store.patchBot("ask-bot", { approvalMode: "ask", autoApprove: false });
     store.patchTask("ask-bot", "t1", { approvalMode: "ask", autoApprove: false });
-    const again = new Store(selection);
+    const again = new Store(selection, (s) => s, () => "auto");
     expect(again.bot("ask-bot")?.approvalMode).toBe("ask");
     expect(again.taskByThread("ask-bot", "t1")).toMatchObject({ approvalMode: "ask", approvalOwn: "thread" });
     expect(level(again, "ask-bot", "t1")?.approvalMode).toBe("ask");

@@ -11,6 +11,7 @@ import { writeFileAtomicIfChanged } from "../../atomic.ts";
 import { commandVariablesDigest } from "../../vault/credential-command-env.ts";
 import { customServerGate, gateQueryTools, gateServer } from "../../mcp/mcp-gate-config.ts";
 import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
+import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents-tool-priority.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { harnessMcpHttpSpec, loopbackNoProxy } from "../../mcp/harness-mcp-http.ts";
 import { isPerspicaxBridge, PERSPICAX_FLOW_COMPUTE_TOOLS } from "../acp/grok-read-only-tools.ts";
@@ -22,6 +23,7 @@ import {
 import { COMPACT_DIRECTORY_TOOLS } from "./prepare-constants.ts";
 import { CLAUDE_HOST_TOOLS } from "../host-tools.ts";
 import { ARTIFACT_TOOLS } from "../../../shared/claude-chat-blocks.ts";
+import { claudeToolSearchSetting } from "./claude-tool-search.ts";
 import { DWEB_PROXY_PATH, HOOK_HELPER_PATH, NODE_ENV_FLAG, PERM_PROXY_PATH } from "./helpers.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
 
@@ -220,6 +222,8 @@ if (isolated && turn.cwd && !turn.guestConfined) {
 // gate's own tool search (mcp-gate-search.ts): a big catalog lists only
 // the bot's most used tools whole.
 const searchedMounts = new Set<string>(turn.compactPrompt && turn.integrations?.agents ? ["agents"] : []);
+// #2189: agents bare names win over the same name on a connector.
+const agentsPreferred = turn.integrations?.agents ? agentsPreferredToolNames(turn.integrations.agents.env) : [];
 for (const name of turn.toolScope === undefined ? botOwned : Object.keys(mcpServers)) {
   if (!canUseMcpServer(turn.toolScope, name)) { delete mcpServers[name]; continue; }
   // a server may be named like an Object property ("constructor"): own keys only
@@ -230,7 +234,8 @@ for (const name of turn.toolScope === undefined ? botOwned : Object.keys(mcpServ
   const profile = Object.hasOwn(turn.integrations?.custom ?? {}, name) && isPerspicaxBridge(turn.integrations!.custom![name]);
   const search = turn.compactPrompt && botOwned.has(name) ? compactGateSearch(used, profile) : undefined;
   if (search) searchedMounts.add(name);
-  const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...(search ? { search } : {}), ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment) });
+  const withhold = withholdForConnector(name, agentsPreferred);
+  const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment) });
   if (gated) mcpServers[name] = { ...gated, ...((mcpServers[name] as { alwaysLoad?: unknown })?.alwaysLoad === true ? { alwaysLoad: true } : {}) };
 }
 // an allowed name is mcp__<server> or mcp__<server>__<tool> (agentsAllowedTools)
@@ -316,7 +321,18 @@ if (hooks && hookTokenPath) {
   // in the packaged app process.execPath is Electron — run the helper as node
   if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = "1";
 }
-const settings: Record<string, unknown> = { ...authSettings };
+const cwd = turn.cwd ?? homedir();
+// Every MCP server without alwaysLoad loads on demand behind ToolSearch
+// (claude-tool-search.ts). The value rides the private --settings file so it
+// beats project and person Claude settings; an explicit opt-out still holds.
+// Guest turns and instance tool lists without ToolSearch leave it unset.
+const toolSearch = !turn.guestConfined && (config.tools === undefined || config.tools.includes("ToolSearch"))
+  ? claudeToolSearchSetting(cwd, env)
+  : null;
+const settings: Record<string, unknown> = {
+  ...authSettings,
+  ...(toolSearch !== null ? { env: { ...authSettings.env, ENABLE_TOOL_SEARCH: toolSearch } } : {}),
+};
 // Project-only settings still discover the personal memory through ancestor
 // directories when the bot workspace lives below HOME. Keep project memory.
 if (isolated) settings.claudeMdExcludes = [join(homedir(), ".claude", "CLAUDE.md")];
@@ -343,15 +359,6 @@ if (turn.compactPrompt?.memoryDir) {
   adoptLegacyAutoMemory(turn.compactPrompt.memoryDir, legacyClaudeAutoMemoryDir(configDir, turn.cwd ?? homedir()));
   settings.autoMemoryDirectory = turn.compactPrompt.memoryDir;
 }
-// Tool search is always on where the turn can search: MCP
-// tools Sagax does not load up front (alwaysLoad) wait for ToolSearch.
-// The CLI's own default ("auto") sends every schema while they fit in
-// the model's window, which on a 1M-token model is always, and flips
-// when they stop fitting, so the cached tool list is rewritten.
-// Compact MCP catalogs keep Sagax's directory, but native deferred tools
-// such as ArtifactData still need Claude's ToolSearch. A value the person
-// set for the engine stays theirs.
-if (!env.ENABLE_TOOL_SEARCH && !turn.guestConfined && (config.tools === undefined || config.tools.includes("ToolSearch"))) env.ENABLE_TOOL_SEARCH = "true";
 const authSettingsPath = mcpConfigPath && Object.keys(settings).length
   ? join(dirname(mcpConfigPath), "auth-settings.json") : null;
 if (authSettingsPath) args.push("--settings", authSettingsPath);
@@ -376,7 +383,6 @@ if (turn.networkProxy) Object.assign(env, networkProxyEnvironment(turn.networkPr
 if (["browser", "computer", "data"].some((name) => (mcpServers[name] as { type?: unknown } | undefined)?.type === "http")) {
   Object.assign(env, loopbackNoProxy(env));
 }
-const cwd = turn.cwd ?? homedir();
 const commandCwd = permissionLaunchCwd(cwd);
 // Everything that shapes the process, minus session/turn-specific temp
 // paths. Their contents are represented directly in the key instead.
@@ -402,6 +408,8 @@ const contract = {
   proxy: turn.networkProxy?.url ?? null,
   // hooks on/off changes the settings file the process was launched with
   hooks: Boolean(hooks),
+  // ENABLE_TOOL_SEARCH in --settings: a changed choice restarts the process
+  toolSearch,
   // #1276: a compact prompt is another launch (memory folder, tool search)
   compact: turn.compactPrompt ? { memoryDir: turn.compactPrompt.memoryDir ?? null } : null,
   // Slice 4: another person's credentials never reuse this process.

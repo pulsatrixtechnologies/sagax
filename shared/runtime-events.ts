@@ -183,6 +183,11 @@ export type RuntimeEvent = RuntimeEventBase &
          * defaults to the working folder), resolved against the turn's
          * working folder. Absent when the tool names no file. */
         paths?: string[];
+        /** Absolute paths a read tool's ask reads (Claude Read/Grep/Glob/LS/
+         * NotebookRead, or an ACP read call). A request that reads only the
+         * bot's own files is answered without the person
+         * (server/own-file-reads.ts). Like `command`, never broadcast. */
+        reads?: string[];
         choices?: string[];
         /** A provider's structured ask (Claude's AskUserQuestion): the whole
          * set of questions, each with its own options, so the card can offer
@@ -269,7 +274,9 @@ export type RuntimeEvent = RuntimeEventBase &
       limitResetsAt?: number;
       /** The refusal binds this model only (its extra-usage credits, or its
        * own weekly window): the engine stays free for its other models. */
-      limitScope?: "model" }
+      limitScope?: "model";
+      /** The refusal binds the whole engine (every model of it). */
+      limit?: "engine" }
     /** Something the person should know that did not fail the turn — for
      * example, a saved model the engine no longer offers was replaced. */
     | { type: "runtime.notice"; message: string }

@@ -21,7 +21,7 @@ import type { ModelVariantOption, RuntimeEvent } from "../../../shared/runtime-e
 import type { MausColor, MausMotion } from "@/lib/mascot";
 import type { BotAvatarCrop } from "../../../shared/bot-avatar";
 import type { BotPublicProfile } from "../../../shared/bot-public-profile";
-import { threadApprovalFields, type ApprovalMode } from "../../../shared/approval-mode";
+import { approvalModeFor, threadApprovalFields, type ApprovalMode } from "../../../shared/approval-mode";
 import type { ProactiveMode } from "../../../shared/proactive-mode";
 import type { MascotBodyId } from "../../../shared/mascot-bodies";
 import type { MascotSkinId } from "../../../shared/mascot-skins";
@@ -191,13 +191,23 @@ export interface OptionCardData {
 }
 
 export interface SecretRequestCardData {
-  /** vaultLogin: a login request from the credential vault (carries `vault`). */
-  target: import("../../../shared/credential-request").CredentialTargetId | import("../../../shared/credential-vault").VaultLoginTarget;
+  /** Fixed allowlisted credential id; customSecret: a secret the bot names, kept off Settings;
+   * vaultLogin: a login request from the credential vault (carries `vault`). */
+  target:
+    | import("../../../shared/credential-request").CredentialTargetId
+    | import("../../../shared/credential-vault").VaultLoginTarget
+    | "customSecret";
   vault?: import("../../../shared/credential-vault").VaultRequestCardData;
   label: string;
   description: string;
   placeholder: string;
   helpUrl: string;
+  /** A custom secret's use: "ref" for Sagax tools once, "file" for a private workspace file for a day. */
+  delivery?: import("../../../shared/credential-request").SecretDelivery;
+  /** Why the bot needs a custom secret (shown on the card). */
+  reason?: string;
+  /** When a custom secret was saved behind this card (ms); never the value. */
+  savedAt?: number;
   requestKey: string;
   provided?: boolean;
   dismissed?: boolean;
@@ -206,12 +216,14 @@ export interface SecretRequestCardData {
   superseded?: boolean;
   resumed?: boolean;
   error?: string;
+  /** Stop ended the turn this card paused. */
+  stopped?: boolean;
 }
 
-export interface Message extends Pick<import("../../../shared/wire").WireMessage, "widget" | "app" | "routineToggle" | "pagePublish" | "requested" | "outbound" | "dataContext" | "roster"> {
+export interface Message extends Pick<import("../../../shared/wire").WireMessage, "widget" | "app" | "routineToggle" | "pagePublish" | "requested" | "outbound" | "dataContext" | "roster" | "signIn"> {
   id: string;
   role: "bot" | "user";
-  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
+  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
   text?: string;
   /** An accepted nudge. Drawn per viewer from these names, not as a bubble.
    * `groupId` is set when the line belongs to that group chat. */
@@ -314,6 +326,7 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   inputRequest?: import("../../../shared/wire").WireMessage["inputRequest"];
   /** 2026-11-05: what a bot's turn elsewhere left for the person (WireMessage.attention). */
   attention?: import("../../../shared/wire").WireMessage["attention"];
+  githubConnect?: import("../../../shared/wire").WireMessage["githubConnect"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../../shared/wire").WireMessage["dataResult"];
@@ -361,6 +374,10 @@ export interface Group {
   memoryEnabled?: boolean;
   /** A room: @all notifies every person in it (server/rooms/room-mentions.ts). */
   mentionAll?: boolean;
+  /** Members the person stopped in this room, by bot id (shared/wire RoomHold). */
+  holds?: Record<string, import("../../../shared/wire").RoomHold>;
+  /** Per-member context window reading for the room warning chip. */
+  memberContext?: Record<string, { tokens: number; window: number; compactRequested?: true }> | null;
   /** #1137: per bot of this room, who pays for its replies here. */
   botPayers?: Record<string, "owner" | "speaker">;
   busyBotId?: string | null;
@@ -685,6 +702,8 @@ export interface Bot {
   voiceLanguage?: string;
   /** whether this bot may send voice notes (on unless switched off) */
   voiceNotes?: boolean;
+  /** #2121: Auto (absent) or Off. */
+  memeReplies?: "auto" | "off";
   /** whether this bot may write email draft cards (on unless switched off) */
   emailDrafts?: boolean;
   /** whether this bot uses native memory (on unless switched off) */
@@ -796,6 +815,15 @@ export const PERSON_THREADS_HEADER = "x-sagax-person-threads";
 
 /** A conversation uses its own execution settings; the sidebar keeps the
  * original bot's aggregate presence and profile defaults. */
+/** The level each of a bot's threads runs at: its own, else the bot's (as
+ * currentTaskBot resolves it). */
+export function threadApprovalModes(bot: Pick<Bot, "approvalMode" | "autoApprove" | "tasks">): ApprovalMode[] {
+  return (bot.tasks ?? []).map((task) => approvalModeFor({
+    approvalMode: task.approvalMode ?? (task.autoApprove === undefined ? bot.approvalMode : undefined),
+    autoApprove: task.autoApprove ?? bot.autoApprove,
+  }));
+}
+
 export function currentTaskBot(bot: Bot, threadId = bot.threadId): Bot {
   const task = bot.tasks?.find((candidate) => candidate.threadId === threadId);
   if (!task) return bot;
@@ -918,6 +946,7 @@ export interface ConfigStatus {
   mistral?: { configured: boolean };
   cerebras?: { configured: boolean };
   groq?: { configured: boolean };
+  deepseek?: { configured: boolean };
   /** Legacy status field, retained for older servers. New servers return false. */
   anthropic?: { configured: boolean; everyClaudeBot?: boolean };
   openai?: { configured: boolean };
@@ -940,6 +969,8 @@ export interface ConfigStatus {
   billing?: { currency?: string; prices?: Record<string, { inputPerMillion: number; outputPerMillion: number; cachedInputPerMillion?: number }> };
   /** `included`: cloud computers come with Cloud Pro, no key is saved. */
   box: { configured: boolean; included?: boolean };
+  /** Meta AI API key status (never the key). */
+  meta?: { configured: boolean };
   vps: { configured: boolean; sshAlias: string };
   rooms: { turnTimeoutMinutes: number };
   /** Per-call ceiling (minutes) for a bot's MCP tools. Absent from servers
@@ -1013,7 +1044,7 @@ export interface ConfigStatus {
   /** UI language override; "" (or absent) follows the system language. */
   language?: string;
   /** Opt-in flags. Absent means off. */
-  features?: { skillAuthoring: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; routinesInConversation?: boolean; connectedApps?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; savedSteps?: boolean; autoRecall?: boolean };
+  features?: { skillAuthoring: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; llmThreadTitles?: boolean; routinesInConversation?: boolean; connectedApps?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; savedSteps?: boolean; autoRecall?: boolean };
   /** Loop guard: on by default; workspace can turn it off. */
   loopGuard?: { enabled: boolean; steerAt: number; stopAt?: number; correctiveRounds: number };
   /** First-run progress: whether the welcome tour was finished and which
@@ -1122,7 +1153,7 @@ export interface BrowserProfile {
 // Settings shows (a saved key's Test button used to vanish that way).
 export type ConfigStatusFrame = Pick<
   ConfigStatus,
-  "xai" | "mistral" | "cerebras" | "groq" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "loopGuard" | "onboarding" | "browserEngine" | "browserProfiles" | "personalSettings" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "ownAccountsOutsideList" | "disabledModels" | "myDisabledModels" | "confidentialThreadsByDefault" | "orgCapabilities"
+  "xai" | "mistral" | "cerebras" | "groq" | "deepseek" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "box" | "meta" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "loopGuard" | "onboarding" | "browserEngine" | "browserProfiles" | "personalSettings" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "ownAccountsOutsideList" | "disabledModels" | "myDisabledModels" | "confidentialThreadsByDefault" | "orgCapabilities"
 >;
 
 export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
@@ -1131,12 +1162,14 @@ export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
     mistral: frame.mistral,
     cerebras: frame.cerebras,
     groq: frame.groq,
+    deepseek: frame.deepseek,
     anthropic: frame.anthropic,
     openai: frame.openai,
     openrouter: frame.openrouter,
     openaiCompat: frame.openaiCompat,
     fleet: frame.fleet,
     box: frame.box,
+    meta: frame.meta,
     vps: frame.vps,
     rooms: frame.rooms,
     mcp: frame.mcp,
@@ -1334,6 +1367,8 @@ export interface AppState {
   routines: Routine[];
   routineRuns: RoutineRun[];
   routinesLoadState: "loading" | "ready" | "error";
+  /** Where the app's loaded routine runs begin (`GET /api/routines?since=`); null until hydrated or when every run is loaded. */
+  routineRunsSince: number | null;
   /** 2026-10-28: each bot's routine folders in order (shared/routine-folders.ts). */
   routineFolders: Record<string, string[]>;
   routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; /** Opens this routine's editor in the side panel. */ editRoutineId?: string; nonce: number };
@@ -1464,8 +1499,11 @@ export interface AppState {
   deletingBots: Record<string, true>;
   /** who is driving each bot's computer: held = the person has the wheel
    * (the bot's hands are refused server-side); helpReason = the bot's open
-   * plea for the person to take over */
-  computerControl: Record<string, { held: boolean; helpReason: string | null }>;
+   * plea for the person to take over; help = the sign-in card it stands for */
+  computerControl: Record<string, { held: boolean; helpReason: string | null; help?: import("../../../shared/wire").ComputerHelpRef | null }>;
+  /** A sign-in card's Open: the Computer panel goes to the place the bot
+   * works, the Browser tab already in the person's control. */
+  signInFocus: { botId: string; messageId: string; url: string; site: string; place: import("../../../shared/wire").Surface; requestId: number; consumed: boolean } | null;
   /** Each bot's data sheet (cards and loaded tables, never rows), loaded
    * when its Data tab first opens and replaced whole by every `data` frame.
    * The grid pages rows itself, so a sheet stays small. */
@@ -1499,7 +1537,7 @@ export interface AppState {
   hydrated?: true;
   error: string | null;
   /** a quiet, non-error line above the transcript; clears itself */
-  notice: { kind: "thread-gone" | "bot-gone"; botName: string | null } | null;
+  notice: { kind: "thread-gone" | "bot-gone" | "steer-images"; botName: string | null } | null;
   /** a thread the person asked to open (chip or #Title link): the sidebar
    * expands its bot and scrolls the row into view once it is current */
   revealThread: { threadId: string; nonce: number } | null;
@@ -1614,7 +1652,7 @@ export type Action =
       bots: Bot[];
       groups: Group[];
       sections?: string[];
-      computerControl: Record<string, { held: boolean; helpReason: string | null }>;
+      computerControl: Record<string, { held: boolean; helpReason: string | null; help?: import("../../../shared/wire").ComputerHelpRef | null }>;
       botQueuedMessages?: AppState["pendingQueued"];
       /** the conversation open on this device last launch, for the first hydrate */
       resumeId?: string;
@@ -1640,9 +1678,10 @@ export type Action =
   | { type: "showOrgImport"; staged?: OrgImportDocument | null }
   | { type: "closeOrgImport" }
   | { type: "showChat" }
-  | { type: "routinesHydrated"; routines: Routine[]; runs: RoutineRun[]; folders?: Record<string, string[]> }
+  | { type: "routinesHydrated"; routines: Routine[]; runs: RoutineRun[]; folders?: Record<string, string[]>; since?: number }
   | { type: "routineFoldersPatched"; botId: string; folders: string[] }
   | { type: "routinesLoadFailed" }
+  | { type: "routineRunsLoaded"; runs: RoutineRun[]; from?: number; to?: number }
   | { type: "routinePatched"; routine: Routine }
   | { type: "routineDeleted"; routineId: string }
   | { type: "routineRunPatched"; run: RoutineRun }
@@ -1700,6 +1739,8 @@ export type Action =
    * same fields as a bot thread's updateTask). */
   | { type: "updateGroupTask"; groupId: string; threadId: string; patch: GroupTaskUpdatePatch; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   | { type: "interruptGroup"; groupId: string; threadId?: string; onError?: () => void }
+  /** Hold or release a room member for the current turn (POST /api/groups/<id>/holds). */
+  | { type: "setGroupHold"; groupId: string; botId: string; held: boolean }
   | { type: "instances"; instances: InstanceInfo[] }
   | { type: "configStatus"; config: ConfigStatus }
   | { type: "liveCall"; call: LiveCallState | null }
@@ -1822,7 +1863,9 @@ export type Action =
    * plain send falls back to the removed row's parent. */
   | { type: "optimisticMessageRemoved"; threadId: string; sendId: string; restoreLeafId?: string | null }
   | { type: "computerStart"; botId: string; start: ComputerStart | null }
-  | { type: "computerControl"; botId: string; held: boolean; helpReason: string | null }
+  | { type: "computerControl"; botId: string; held: boolean; helpReason: string | null; help?: import("../../../shared/wire").ComputerHelpRef | null }
+  | { type: "openSignIn"; botId: string; messageId: string; url: string; site: string; place: import("../../../shared/wire").Surface }
+  | { type: "signInFocusConsumed"; requestId: number }
   /** A whole sheet from the server: a `data` frame or the first GET. */
   /** threadId: a confidential thread's own sheet (dataSheetKey). */
   | { type: "dataSheet"; sheet: DataSheet; tables?: DataTable[]; threadId?: string }
@@ -2543,6 +2586,7 @@ export const initialState: AppState = {
   routines: [],
   routineRuns: [],
   routinesLoadState: "loading",
+  routineRunsSince: null,
   routineFolders: {},
   routinesFocus: { nonce: 0 },
   codeFocus: { nonce: 0 },
@@ -2592,6 +2636,7 @@ export const initialState: AppState = {
   computerStarts: {},
   deletingBots: {},
   computerControl: {},
+  signInFocus: null,
   dataSheets: {},
   dataTables: {},
   dataView: null,

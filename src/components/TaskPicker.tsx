@@ -16,10 +16,10 @@ import { moveFolder } from "@/lib/folder-order";
 import { folderUnreadThreadIds, markFolderRead, markGroupFolderRead } from "@/lib/folder-read";
 import { personPickerThreads } from "@/lib/person-threads";
 import { threadRefUrl } from "@/lib/thread-refs";
-import { FullAccessWarning } from "./FullAccessWarning";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import { cn } from "@/lib/cn";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
+import { roomThreadsWorkingElsewhere } from "@/lib/room-threads";
 import { useMenuMotion } from "./MenuMotion";
 import { AnchoredPopover } from "./AnchoredPopover";
 import { t } from "@/lib/i18n";
@@ -170,6 +170,7 @@ function ConversationTaskPicker({
   folderActions,
   background,
   initialOpen = false,
+  workingElsewhere = 0,
 }: {
   threadId: string;
   tasks: PickerTask[];
@@ -183,6 +184,9 @@ function ConversationTaskPicker({
   /** The owner's own New thread control (it opens in the current folder);
    * absent: a plain New thread row that calls onNew. */
   newButton?: (close: () => void) => ReactNode;
+  /** Threads other than the open one working right now (a room's run side
+   * by side); the switcher marks them so background work stays visible. */
+  workingElsewhere?: number;
   onNew: () => void;
   onSwitch: (threadId: string) => void;
   onRename: (threadId: string, title: string) => void;
@@ -341,9 +345,18 @@ function ConversationTaskPicker({
         title={switchTitle}
         aria-label={t("task.switch")}
         aria-expanded={open}
-        className={cn(CIRCLE_BUTTON, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", open && "bg-elevated-hover")}
+        className={cn(CIRCLE_BUTTON, "relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", open && "bg-elevated-hover")}
       >
         <MessagesSquare size={18} strokeWidth={1.75} aria-hidden="true" />
+        {workingElsewhere > 0 && (
+          <span
+            role="img"
+            data-working-elsewhere={workingElsewhere}
+            aria-label={t("task.workingElsewhere", { count: workingElsewhere })}
+            title={t("task.workingElsewhere", { count: workingElsewhere })}
+            className="absolute right-0.5 top-0.5 size-1.5 animate-pulse rounded-full bg-accent"
+          />
+        )}
       </button>
 
       {motion.shown && (
@@ -609,7 +622,7 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
   // In the chat header mode only (useThreadsMode): the sidebar mode lists a
   // bot's threads under its row instead, and one conversation has none.
   const threadsMode = useThreadsMode();
-  const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "full" | "local-auto" } | null>(null);
+  const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "local-auto" } | null>(null);
   const [folderSaving, setFolderSaving] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   if (threadsMode !== "header") return null;
@@ -630,7 +643,7 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
     onRefreshPermissions: (threadId) => {
       const mode = botApprovalSetting(bot);
       const threadMode = approvalModeFor(currentTaskBot(bot, threadId));
-      if (mode === "full" && threadMode !== "full") { setPermissionRefresh({ threadId, kind: "full" }); return; }
+      // Full applies at once with no confirmation (omb #2701).
       if (mode === "auto" && bot.computer === "local" && threadMode !== "auto") { setPermissionRefresh({ threadId, kind: "local-auto" }); return; }
       dispatch({ type: "refreshTaskPermissions", botId: bot.id, threadId });
     },
@@ -688,16 +701,6 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
       initialOpen={initialOpen}
     />
     {folderError && <p role="alert" data-thread-overlay className="fixed bottom-4 right-4 z-50 max-w-[320px] rounded-lg border border-hairline/50 bg-card px-3 py-2 text-[12px] text-danger shadow-xl" onClick={() => setFolderError(null)}>{folderError}</p>}
-    <FullAccessWarning
-      open={permissionRefresh?.kind === "full"}
-      scope="thread"
-      onCancel={() => setPermissionRefresh(null)}
-      onConfirm={() => {
-        const threadId = permissionRefresh?.threadId;
-        setPermissionRefresh(null);
-        if (threadId) dispatch({ type: "refreshTaskPermissions", botId: bot.id, threadId });
-      }}
-    />
     <LocalComputerAutoWarning
       open={permissionRefresh?.kind === "local-auto"}
       onCancel={() => setPermissionRefresh(null)}
@@ -731,6 +734,7 @@ export function GroupTaskPicker({ group }: { group: Group }) {
       threadId={group.threadId}
       tasks={orderedThreadList(tasks)}
       busy={false}
+      workingElsewhere={roomThreadsWorkingElsewhere(group)}
       onNew={() => dispatch({ type: "newGroupTask", groupId: group.id })}
       onSwitch={(threadId) => dispatch({ type: "switchGroupTask", groupId: group.id, threadId })}
       onRename={(threadId, title) => dispatch({ type: "renameGroupTask", groupId: group.id, threadId, title })}

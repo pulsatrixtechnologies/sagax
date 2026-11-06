@@ -11,9 +11,10 @@ export const CLIENT_BOT_PATCH_FIELDS = [
   "avatarCrop", "avatarZoom", "avatarFocusX", "avatarFocusY",
 ] as const;
 
-/** What an organization member may set on a bot they own: look, name,
- * instructions, notifications, avatar and model. Never where it runs, what
- * it may reach, or how much it may do unasked. */
+/** What an organization member may set on a bot they own without an extra
+ * permission key: look, name, instructions, notifications, avatar and model.
+ * Teams and Primary Bot reach use bots.create (#2045); cloud computer cost
+ * and shared browser profiles stay permission-gated or admin. */
 export const MEMBER_BOT_FIELDS = [
   ...CLIENT_BOT_PATCH_FIELDS,
   "name", "title", "description", "soul", "notifications", "avatarUrl", "modelSelection", "requireAvailableModel",

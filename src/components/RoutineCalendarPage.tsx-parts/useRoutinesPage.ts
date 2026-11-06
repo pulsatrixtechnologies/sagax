@@ -23,6 +23,7 @@ import {
   type RoutineRunStatusFilter,
 } from "@/lib/routines";
 import { api, openRoutineRun } from "@/state/store";
+import { useRoutineRunsFrom } from "@/state/older-routine-runs";
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { resetMarkers, useEngineLimits, type ResetMarker } from "@/lib/limit-resets";
 import type { ResetDrop } from "@/components/routines/LimitResetMarkers";
@@ -74,6 +75,7 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
   const visibleBots = state.bots.filter((bot) => !bot.hidden);
   const rangeStart = viewDays === 7 ? startOfWeek(anchor) : startOfDay(anchor);
   const rangeEnd = addDays(rangeStart, viewDays);
+  useRoutineRunsFrom(rangeStart);
   const engineLimits = useEngineLimits();
   const markers = useMemo(() => resetMarkers(engineLimits, rangeStart, rangeEnd), [engineLimits, rangeStart, rangeEnd]);
 

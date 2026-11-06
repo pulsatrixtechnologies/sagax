@@ -900,34 +900,30 @@ describe("a routine run another model took over", () => {
   });
 });
 
-// 2026-11-02 (review): never another sign-in to a subscription engine this payer is held on, whatever engine refused
-// (limitBackupAllowed's no-rotation rule, as autoExcluded applies it): a chat backup and a run's takeover agree.
-describe("a backup while another sign-in of a held subscription is connected", () => {
+// #2192: sibling accounts of the same provider are a silent rotation pool.
+describe("account rotation within a provider (#2192)", () => {
   const HOUR = 3_600_000;
 
-  it("never moves a person's message to the second sign-in of an engine held for them", async () => {
+  it("moves a person's message to the second sign-in of the same provider before another engine", async () => {
     const w = world({ allowed: ["codex", "grok", "grok-work"] });
-    w.store.block("server", "grok", w.clock.now + 3 * HOUR);
-    w.state.selection = { ...B };
-    w.dispatch();
+    w.state.selection = { ...C };
+    w.dispatch(C);
     w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
     await w.host.idle();
-    expect(w.state.switches).toEqual([]);
-    expect(w.state.lines[0]!.line).toMatchObject({ kind: "waiting", from: "Codex" });
+    expect(w.state.switches).toEqual([{ instanceId: "grok-work", model: "grok-4.5" }]);
+    expect(w.state.lines[0]!.line).toMatchObject({ kind: "switched", from: "Grok", to: "Grok (work)" });
   });
 
-  it("never hands a run to it after a quick model on another engine refused", () => {
+  it("hands a run to the sibling account of the engine that refused", () => {
     const w = world({ allowed: ["codex", "grok", "grok-work"] });
     const host = createLimitFailoverHost({ ...w.deps, candidatesNow: () => ["codex", "grok", "grok-work"].map((id) => ({ instanceId: id, driverKind: DRIVERS[id]!, models: ["m"] })) });
     w.state.selection = { ...C };
-    w.store.block("server", "grok", w.clock.now + 3 * HOUR);
-    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "codex", driverKind: "codex" }, selection: B, payer: "server", at: w.clock.now, detour: true });
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "grok", driverKind: "grokAgent" }, selection: C, payer: "server", at: w.clock.now });
     const verdict = host.routineLimit({ threadId: "thread", cause: LIMIT, takeover: true });
-    expect(verdict).toMatchObject({ from: "Codex (gpt)", detour: true, noTaker: "none" });
-    expect(verdict?.to).toBeUndefined();
+    expect(verdict).toMatchObject({ from: "Grok", to: "Grok (work)", selection: { instanceId: "grok-work", model: "m" } });
   });
 
-  it("still takes a pay-per-use key on the same engine", async () => {
+  it("still takes a pay-per-use key on the same engine when preferred", async () => {
     const w = world({ allowed: ["codex", "grok", "grok-work"] });
     const host = createLimitFailoverHost({ ...w.deps, config: (id) => id === "grok-work" ? { access: "api" } : undefined, preferred: () => [{ instanceId: "grok-work" }] });
     w.store.block("server", "grok", w.clock.now + 3 * HOUR);
@@ -936,6 +932,69 @@ describe("a backup while another sign-in of a held subscription is connected", (
     host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
     await host.idle();
     expect(w.state.switches).toEqual([{ instanceId: "grok-work", model: "grok-4.5" }]);
+  });
+
+  it("rotates before the turn when the plan is near its limit and a sibling has headroom", async () => {
+    const w = world({ allowed: ["claude", "claude-work", "codex"] });
+    const drivers: Record<string, string> = { ...DRIVERS, "claude-work": "claudeAgent" };
+    const names: Record<string, string> = { ...NAMES, "claude-work": "Claude (work)" };
+    const used = new Map<string, number>([["claude", 92], ["claude-work", 20]]);
+    const host = createLimitFailoverHost({
+      ...w.deps,
+      engine: (id) => drivers[id] ? { instanceId: id, driverKind: drivers[id]! } : undefined,
+      engineName: (id) => names[id] ?? id,
+      candidates: async () => ["claude", "claude-work", "codex"].map((id) => ({
+        instanceId: id, driverKind: drivers[id]!, models: [id === "codex" ? "gpt" : "opus"],
+      })),
+      planUsedPercent: (_payer, id) => used.get(id) ?? null,
+    });
+    const pending = host.beforeTurn("bot", "thread", undefined);
+    expect(pending).not.toBeNull();
+    await pending;
+    expect(w.state.switches).toEqual([{ instanceId: "claude-work", model: "opus" }]);
+    expect(w.state.lines[0]!.line).toMatchObject({ kind: "switched", from: "Claude", to: "Claude (work)", estimated: true });
+  });
+
+  it("retries an empty reply once on the next pool member", async () => {
+    const w = world({ allowed: ["claude", "claude-work", "codex"] });
+    const drivers: Record<string, string> = { ...DRIVERS, "claude-work": "claudeAgent" };
+    const names: Record<string, string> = { ...NAMES, "claude-work": "Claude (work)" };
+    const host = createLimitFailoverHost({
+      ...w.deps,
+      engine: (id) => drivers[id] ? { instanceId: id, driverKind: drivers[id]! } : undefined,
+      engineName: (id) => names[id] ?? id,
+      candidates: async () => ["claude", "claude-work", "codex"].map((id) => ({
+        instanceId: id, driverKind: drivers[id]!, models: [id === "codex" ? "gpt" : "opus"],
+      })),
+      candidatesNow: () => ["claude", "claude-work", "codex"].map((id) => ({
+        instanceId: id, driverKind: drivers[id]!, models: [id === "codex" ? "gpt" : "opus"],
+      })),
+    });
+    expect(host.emptyReplyRetry({ botId: "bot", threadId: "thread", speaker: undefined, messageId: "m1", turnId: "turn-1" })).toBe(true);
+    await host.idle();
+    expect(w.state.switches).toEqual([{ instanceId: "claude-work", model: "opus" }]);
+    expect(w.state.resent).toEqual([{ messageId: "m1", on: { instanceId: "claude-work", model: "opus" } }]);
+    expect(w.state.lines[0]!.line).toMatchObject({ kind: "switched", from: "Claude", to: "Claude (work)" });
+  });
+
+  it("surfaces exhausted only when every account of every allowed engine is spent", async () => {
+    const w = world({ allowed: ["claude", "claude-work"] });
+    const drivers: Record<string, string> = { ...DRIVERS, "claude-work": "claudeAgent" };
+    const names: Record<string, string> = { ...NAMES, "claude-work": "Claude (work)" };
+    const host = createLimitFailoverHost({
+      ...w.deps,
+      engine: (id) => drivers[id] ? { instanceId: id, driverKind: drivers[id]! } : undefined,
+      engineName: (id) => names[id] ?? id,
+      candidates: async () => ["claude", "claude-work"].map((id) => ({
+        instanceId: id, driverKind: drivers[id]!, models: ["opus"],
+      })),
+    });
+    w.store.block("server", "claude-work", w.clock.now + HOUR);
+    host.noteDispatch("thread", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: A, payer: "server", at: w.clock.now });
+    host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+    await host.idle();
+    expect(w.state.switches).toEqual([]);
+    expect(w.state.lines[0]!.line).toMatchObject({ kind: "waiting", from: "Claude" });
   });
 });
 

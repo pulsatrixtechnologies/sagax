@@ -19,8 +19,8 @@ import { isStopIntent } from "../../shared/stop-intent.ts";
 import {
   masterySendFacts,
   modelFamily,
-} from "../achievements-mastery.ts";
-import { achievementSendEvents } from "../achievements.ts";
+} from "../achievements/achievements-mastery.ts";
+import { achievementSendEvents } from "../achievements/achievements.ts";
 import { admit } from "../admission.ts";
 import {
   classifyWithoutSteer,
@@ -258,7 +258,8 @@ async function runSequencedBotSend(input: {
     // A live text steer has no image side channel. Keep an attachment
     // message intact for the next ordinary turn, where central image
     // admission can hand it to the provider natively.
-    const carriesImages = extractTurnImages(text).images.length > 0;
+    const resolvedAttachments = extractTurnImages(text);
+    const carriesImages = resolvedAttachments.images.length > 0 || resolvedAttachments.videos.length > 0;
     const steerTarget = handoffs.current(threadId);
     const busyAdmission = admit("direct-busy", {
       carriesImages,

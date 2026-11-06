@@ -15,7 +15,8 @@ import { agentToolAnnotations } from "../tools/agent-tool-policy.ts";
 import { PAGE_TOOL_DEFINITIONS } from "./agents-page-tools.ts";
 import { WIDGET_TOOL_DEFINITIONS } from "./agents-widget-tools.ts";
 import { APP_TOOL_DEFINITIONS } from "./agents-app-tools.ts";
-import { PLACE_PHONE_CALL_TOOL_SPEC } from "../../shared/outbound-call.ts";
+import { PHONE_CALL_OWNER_TOOL_SPEC, PLACE_PHONE_CALL_TOOL_SPEC } from "../../shared/outbound-call.ts";
+import { PHONE_LINE_CONTACT_TOOL_SPEC } from "../../shared/phone-line-contacts.ts";
 import {
   HANG_UP_TOOL_SPEC, PLACE_CALL_TOOL_SPEC, SEND_DTMF_TOOL_SPEC, TRANSFER_CALL_TOOL_SPEC,
 } from "../../shared/phone-call-live.ts";
@@ -37,6 +38,8 @@ import { AGENT_API_TOOLS } from "./agents-tools/agent-api.ts";
 export { AGENT_API_TOOL_NAMES } from "./agents-tools/agent-api.ts";
 import { PERSPICAX_TOOLS, CLAIM_TOOLS } from "./agents-tools/perspicax.ts";
 export { PERSPICAX_TOOLS, PERSPICAX_TOOL_NAMES, CLAIM_TOOLS } from "./agents-tools/perspicax.ts";
+import { GROK_BRIDGE_TOOLS } from "./agents-tools/grok-bridge.ts";
+export { GROK_BRIDGE_TOOLS, GROK_BRIDGE_TOOL_NAMES } from "./agents-tools/grok-bridge.ts";
 import * as agentApiTools from "./agents-tools/agent-api.ts";
 import * as cloudAgentsTools from "./agents-tools/cloud-agents.ts";
 import * as computersTools from "./agents-tools/computers.ts";
@@ -74,6 +77,8 @@ export interface CatalogProfile {
   sharedComputers: boolean;
   /** A voice is actually configured for this bot (tts voiceReady). */
   voiceNotes: boolean;
+  /** #2121: meme replies allowed for this bot (absent/true = auto). */
+  memeReplies?: boolean;
   /** Settings > Experimental > Meeting notetaker is on, in a direct
    * conversation: join_meeting is offered. */
   meetings?: boolean;
@@ -103,7 +108,7 @@ export interface CatalogProfile {
    * but may create bots for its person is shown create_bot (without the
    * Primary Bot's suggestion). Absent is off, so the wire goldens stay. */
   createBots?: boolean;
-  /** Written into start_thread's schema in a coordinating turn. */
+  /** Watcher's own tool only. Never written into a schema: a list that names its bot can't share a prompt cache with other bots of the same role. */
   botId: string;
   /** The agent-to-agent tools (server/agent-api.ts), in direct turns. */
   agentApi?: boolean;
@@ -113,6 +118,9 @@ export interface CatalogProfile {
   /** The claim tools (server/perspicax/perspicax-claims.ts): the Perspicax
    * account connection is mounted for the person speaking. Absent is off. */
   claims?: boolean;
+  /** Per-person Grok bridge tools (#2193): the speaker has a live link.
+   * Absent is off, so the wire goldens stay. */
+  grokBridge?: boolean;
   /** The tools a phone of the person speaking offers right now (phone_tool,
    * agents-phone-tools.ts). Absent or empty is off, so the wire goldens stay. */
   phoneTools?: PhoneToolId[];
@@ -129,7 +137,10 @@ export interface CatalogProfile {
 }
 
 /** The profile a spawned proxy was given. Everything is off unless the
- * harness says "1". */
+ * harness says "1". SAGAX_ROOM_TURN marks coordinating (a person's direct
+ * chat or a room). SAGAX_GROUP_TURN marks a real room (profile.room), which
+ * alone drops ROOM_ABSENT_TOOLS. SAGAX_EXTERNAL_RUNTIME narrows the list to
+ * the peer tools. */
 export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
   const externalRuntime = env.SAGAX_EXTERNAL_RUNTIME === "1";
   return {
@@ -141,6 +152,7 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     skillAuthoring: env.SAGAX_SKILL_AUTHORING_ENABLED === "1",
     sharedComputers: env.SAGAX_SHARED_COMPUTERS_ENABLED === "1",
     voiceNotes: env.SAGAX_VOICE_NOTES === "1",
+    memeReplies: env.SAGAX_MEME_REPLIES !== "0",
     meetings: !externalRuntime && env.SAGAX_MEETINGS === "1",
     singleStream: !externalRuntime && env.SAGAX_SINGLE_STREAM === "1",
     routeMessages: !externalRuntime && env.SAGAX_ROUTE_MESSAGES === "1",
@@ -156,6 +168,7 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     agentApi: env.SAGAX_AGENT_API === "1",
     perspicax: !externalRuntime && env.SAGAX_PERSPICAX_TOOLS === "1",
     claims: env.SAGAX_CLAIMS === "1",
+    grokBridge: !externalRuntime && env.SAGAX_GROK_BRIDGE === "1",
     phoneTools: externalRuntime ? [] : phoneToolsFromEnv(env.SAGAX_PHONE_TOOLS),
     ...(!externalRuntime && env.SAGAX_WEB_SEARCH === "1" ? { webSearch: true } : {}),
     vaultHttp: !externalRuntime && env.SAGAX_VAULT_HTTP === "1",
@@ -187,6 +200,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   teamTools.DEF_START_THREAD,
   computersTools.DEF_VM_EXEC,
   coreTools.DEF_ATTACH_FILE,
+  coreTools.DEF_SEND_MEME,
   ...WIDGET_TOOL_DEFINITIONS,
   ...APP_TOOL_DEFINITIONS,
   ...ARTIFACT_TOOL_DEFINITIONS,
@@ -198,6 +212,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   ...APPROVALS_TOOL_DEFINITIONS,
   ...WAIT_TOOL_DEFINITIONS,
   roomsTools.DEF_POST_TO_ROOM,
+  roomsTools.DEF_MESSAGE_USER,
   coreTools.DEF_REACT_TO_MESSAGE,
   extrasTools.DEF_REMOVE_REACTION,
   teamTools.DEF_CREATE_BOT,
@@ -270,7 +285,8 @@ const VOICE_TOOL_NAMES = new Set(["send_voice_note"]);
 const CALL_TOOL_NAMES = new Set(["end_call"]);
 // On a live call the bot answers by voice: a reaction would land silently in
 // the transcript while the person is listening (2026-10-18).
-const NOT_ON_CALL_TOOL_NAMES = new Set(["react_to_message", "remove_reaction"]);
+const NOT_ON_CALL_TOOL_NAMES = new Set(["react_to_message", "remove_reaction", "send_meme"]);
+const MEME_TOOL_NAMES = new Set(["send_meme"]);
 // The meeting notetaker is experimental and off by default: join_meeting is
 // shown only while it is on (SAGAX_MEETINGS); its routes refuse otherwise.
 const MEETING_TOOL_NAMES = new Set(["join_meeting"]);
@@ -362,7 +378,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // #2023 / #1944: fleet Edit-bot writes are occasional; keep them behind ToolSearch.
   "list_agent_models", "update_agent_model", "update_agent_settings", "update_routine",
   "workspace_read", "workspace_search", "session_read", "close_thread", "list_threads",
-  "request_login", "place_phone_call", "place_call", "send_dtmf", "transfer", "hang_up",
+  "request_login", "place_phone_call", "phone_call_owner", "phone_line_contact", "place_call", "send_dtmf", "transfer", "hang_up",
   // The person's iPhone (agents-phone-tools.ts): rare, and long.
   "phone_tool",
   // A post into a room from a 1:1 chat: rare.
@@ -380,7 +396,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const COMPACT_CORE_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_bots", "ask_bot", "coordinate_bots", "send_to_bot", "route_message", "list_room_targets",
   "delegate_bot", "check_delegation", "wait_delegation",
-  "react_to_message", "show_widget", "update_widget", "check_widget", "attach_file", "select_computer", "request_credential",
+  "react_to_message", "send_meme", "show_widget", "update_widget", "check_widget", "attach_file", "select_computer", "request_credential",
   "memory_update", "memory_log", "session_search", "tool_result_read", "answer_approval", "act",
   // #1989: same always-loaded rule as DEFERRED: every bot can list and check/run its routines
   "list_routines", "run_routine",
@@ -538,9 +554,10 @@ function catalogTools(profile: CatalogProfile) {
     // coordinates too, so this reads room, never coordinating (the route
     // refuses a room only, server/outbound/outbound-wiring.ts placeCall).
     ...(profile.perspicax && !profile.externalRuntime && profile.room !== true
-      ? [PLACE_PHONE_CALL_TOOL_SPEC, PLACE_CALL_TOOL_SPEC, SEND_DTMF_TOOL_SPEC, TRANSFER_CALL_TOOL_SPEC, HANG_UP_TOOL_SPEC]
+      ? [PLACE_PHONE_CALL_TOOL_SPEC, PHONE_CALL_OWNER_TOOL_SPEC, PHONE_LINE_CONTACT_TOOL_SPEC, PLACE_CALL_TOOL_SPEC, SEND_DTMF_TOOL_SPEC, TRANSFER_CALL_TOOL_SPEC, HANG_UP_TOOL_SPEC]
       : []),
     ...(profile.claims && !profile.externalRuntime ? CLAIM_TOOLS : []),
+    ...(profile.grokBridge && !profile.externalRuntime ? GROK_BRIDGE_TOOLS : []),
     ...(profile.phoneTools?.length && !profile.externalRuntime ? [phoneToolDefinition(profile.phoneTools)] : []),
     ...(profile.webSearch === true && !profile.externalRuntime ? [WEB_SEARCH_TOOL_DEFINITION] : []),
     ...(profile.openapiTools?.length && !profile.externalRuntime ? profile.openapiTools.map(openApiToolDefinition) : []),
@@ -564,9 +581,9 @@ export function knownAgentToolName(name: string): boolean {
   if (!everyAgentTool) {
     const widest: Omit<CatalogProfile, "coordinating" | "voiceCall"> = {
       externalRuntime: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
-      voiceNotes: true, meetings: true, singleStream: true, routeMessages: true, githubConnect: true, cloudHome: false,
+      voiceNotes: true, memeReplies: true, meetings: true, singleStream: true, routeMessages: true, githubConnect: true, cloudHome: false,
       memoryEnabled: true, groupMemory: true, chief: true, createBots: true, botId: WATCHER_OPTIONS_CARD_BOT_ID,
-      agentApi: true, perspicax: true, claims: true, phoneTools: [...PHONE_TOOLS], webSearch: true, vaultHttp: true,
+      agentApi: true, perspicax: true, claims: true, grokBridge: true, phoneTools: [...PHONE_TOOLS], webSearch: true, vaultHttp: true,
     };
     everyAgentTool = new Set([false, true].flatMap((voiceCall) => [false, true].flatMap((coordinating) =>
       availableTools({ ...widest, voiceCall, coordinating }).map((tool) => tool.name))));
@@ -592,9 +609,12 @@ function coreCatalogTools(profile: CatalogProfile) {
   const VOICE_READY_TOOLS = profile.voiceNotes
     ? SHAREABLE_TOOLS
     : SHAREABLE_TOOLS.filter((tool) => !VOICE_TOOL_NAMES.has(tool.name));
+  const MEME_READY_TOOLS = profile.memeReplies === false
+    ? VOICE_READY_TOOLS.filter((tool) => !MEME_TOOL_NAMES.has(tool.name))
+    : VOICE_READY_TOOLS;
   const CALL_TOOLS = (profile.voiceCall
-    ? VOICE_READY_TOOLS.filter((tool) => !NOT_ON_CALL_TOOL_NAMES.has(tool.name))
-    : VOICE_READY_TOOLS.filter((tool) => !CALL_TOOL_NAMES.has(tool.name)))
+    ? MEME_READY_TOOLS.filter((tool) => !NOT_ON_CALL_TOOL_NAMES.has(tool.name))
+    : MEME_READY_TOOLS.filter((tool) => !CALL_TOOL_NAMES.has(tool.name)))
     .filter((tool) => profile.meetings === true || !MEETING_TOOL_NAMES.has(tool.name))
     .filter((tool) => profile.singleStream === true || !STREAM_TOOL_NAMES.has(tool.name))
     .filter((tool) => profile.routeMessages === true || !ROUTE_TOOL_NAMES.has(tool.name))
@@ -614,12 +634,15 @@ function coreCatalogTools(profile: CatalogProfile) {
     ? BOT_SCOPED_TOOLS.filter(tool => EXTERNAL_TOOL_NAMES.has(tool.name))
     : profile.coordinating
     ? PLACE_TOOLS.filter(tool => !ROOM_REPLACED_TOOLS.has(tool.name) || (tool.name === "start_thread" && profile.ownThreadCreation))
-      .map(tool => tool.name === "start_thread" ? {
-        ...tool,
-        description: "Open a separate job on yourself with its own history and run, without switching the person's selected conversation. Use only when the user requests independent jobs (for example one review per pull request). Give a short specific title and complete instructions; you can open at most five per turn. This is not a teammate handoff: use coordinate_bots for teammates and their automatic replies. Self-opened jobs cannot recursively open more jobs. If refused, do not retry; explain what remains.",
-        inputSchema: { ...tool.inputSchema, properties: { ...tool.inputSchema.properties,
-          bot_id: { type: "string", enum: [profile.botId], description: "Leave out, or use your own bot ID. For teammates use coordinate_bots." },
-        } },
-      } : tool)
+      .map(tool => {
+        if (tool.name !== "start_thread") return tool;
+        // No bot_id in the schema: an id here made every bot of the role rewrite the whole tool list (prompt cache).
+        const properties = Object.fromEntries(Object.entries(tool.inputSchema.properties).filter(([key]) => key !== "bot_id"));
+        return {
+          ...tool,
+          description: "Open a separate job on yourself with its own history and run, without switching the person's selected conversation. Use only when the user requests independent jobs (for example one review per pull request). Give a short specific title and complete instructions; you can open at most five per turn. This is not a teammate handoff: use coordinate_bots for teammates and their automatic replies. Self-opened jobs cannot recursively open more jobs. If refused, do not retry; explain what remains.",
+          inputSchema: { ...tool.inputSchema, properties },
+        };
+      })
     : PLACE_TOOLS.filter(tool => !ROOM_ONLY_TOOLS.has(tool.name));
 }

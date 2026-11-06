@@ -29,6 +29,7 @@ import { startFakeOAuthMcp } from "./testing/fake-oauth-mcp-server.ts";
 import { freePortBlock } from "./testing/ports.ts";
 import { openSse } from "./testing/sse.ts";
 import { fileMaxBytes, imageMaxBytes } from "./attachments/attachments.ts";
+import { readHandoffs } from "./testing/handoff-rows.ts";
 import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
 import { computerPrompt, RUN_YOURSELF_PROMPT, SIGN_IN_PROMPT, VERIFY_FIRST_PROMPT, WORK_STYLE_PROMPT } from "./system-prompt.ts";
 import { onDemandPromptParts, systemPromptReference } from "./context/prompt-references.ts";
@@ -180,6 +181,10 @@ let fakeClaudeDump: string;
 /** Every prompt a fake Claude process receives, one JSON line each: the
  * signal that a turn was granted its computer and its engine started. */
 let fakeClaudePrompts: string;
+/** While this file exists, the hanging fake engine ends its turn normally
+ * (FAKE_CLAUDE_RELEASE): how a test ends a turn as a finished turn, never
+ * as a Stop, which also cancels what the turn's root still owes. */
+let fakeClaudeRelease: string;
 let oneShotTextFile: string;
 let oneShotTextDump: string;
 let fakeDockerFixture: string;
@@ -256,6 +261,19 @@ const foreignTeammate = async (id: (typeof FOREIGN_TEAMMATES)[number], fields: R
   const bot = (await api("GET", "/api/bots?messages=0")).body.bots.find((candidate: { id: string }) => candidate.id === id);
   expect(bot?.ownerUserId).toBe(FOREIGN_OWNER);
   return bot as { id: string; threadId: string; name: string };
+};
+
+/** End the bot's hanging fixture turn as a finished turn ends (the fake's
+ * release file), so what the turn leaves open parks its root on the
+ * runtime; a Stop would cancel that park instead (decision 4). */
+const releaseTurn = async (botId: string) => {
+  writeFileSync(fakeClaudeRelease, "release");
+  try {
+    await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).body.bots
+      .find((candidate: { id: string }) => candidate.id === botId)?.busy, { timeout: 10_000, interval: 20 }).toBe(false);
+  } finally {
+    rmSync(fakeClaudeRelease, { force: true });
+  }
 };
 
 /** Pair a device the way a phone or a second person does, and act as them. */
@@ -339,6 +357,8 @@ const delayedJsonBody = async (
 /** The prompts fake Claude engines have received so far, in order. */
 const claudePrompts = (file = fakeClaudePrompts): string[] =>
   existsSync(file) ? readFileSync(file, "utf8").split("\n").filter(Boolean) : [];
+/** The continuation a freed computer seat opens with (index.ts COMPUTER_FREE_NOTE). */
+const COMPUTER_FREE_NOTE = "Sagax computer update: the computer this conversation waited for is free again. Continue the task that parked waiting for it.";
 
 const readJsonFileWhenReady = async <T = unknown>(file: string, timeout = 5_000): Promise<T> => {
   let parsed: unknown;
@@ -394,6 +414,7 @@ beforeAll(async () => {
   staticDir = join(home, "static");
   fakeClaudeDump = join(home, "fake-claude-dump.json");
   fakeClaudePrompts = join(home, "fake-claude-prompts.jsonl");
+  fakeClaudeRelease = join(home, "fake-claude-release");
   oneShotTextFile = join(home, "fake-claude-one-shot.txt");
   oneShotTextDump = join(home, "fake-claude-one-shot-dump.json");
   const fakeDockerDir = join(home, "fake-docker-bin");
@@ -1258,6 +1279,7 @@ beforeAll(async () => {
       FAKE_CLAUDE_DUMP: fakeClaudeDump,
       FAKE_CLAUDE_PROMPTS: fakeClaudePrompts,
       FAKE_CLAUDE_PERMISSION_LOG: join(home, "fake-claude-permission-modes.log"),
+      FAKE_CLAUDE_RELEASE: fakeClaudeRelease,
       // the one-shot text helper fails by default (its reply file is
       // missing), so first-message generated titles stay off until a test
       // writes that file — and its dump never overwrites a turn's dump
@@ -2666,7 +2688,8 @@ describe("harness HTTP API", () => {
     const [chief, peer, second, excluded, foreign] = bots;
     const roomIds: string[] = [];
     try {
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, peers: [peer.id, second.id] })).status).toBe(200);
+      // Ask so peer-approval cards still open (Full skips them; omb #2808).
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, peers: [peer.id, second.id], approvalMode: "ask" })).status).toBe(200);
       const token = await mintTestCapability(BASE, chief.id, chief.threadId);
       const create = (body: unknown) => chiefRoomRequest(BASE, token, "create-room", body);
       const managed = await create({ name: "Managed room", memberIds: [peer.id, peer.id], bulletin: "A short brief." });
@@ -2833,7 +2856,8 @@ describe("harness HTTP API", () => {
     const chief = (await api("POST", "/api/bots")).body.bot;
     let createdId: string | undefined;
     try {
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true })).status).toBe(200);
+      // Below Full access create_bot stays on its card (omb #2808 defaults to Full).
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, approvalMode: "ask" })).status).toBe(200);
       const token = await mintTestCapability(BASE, chief.id, chief.threadId);
       const create = async (name: string, cwd: unknown) => {
         const response = await fetch(`${BASE}/api/internal/create-bot`, {
@@ -2872,7 +2896,7 @@ describe("harness HTTP API", () => {
   it("keeps create_bot on its review card below Full Access, whatever the Chief always allows", async () => {
     const chief = (await api("POST", "/api/bots")).body.bot;
     try {
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true })).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, approvalMode: "ask" })).status).toBe(200);
       // Every key a standing grant could plausibly carry for this tool.
       const grants = ["create_bot", "mcp__agents__create_bot", "mcp__openmausbot__create_bot", "propose_team_setup", "set_up_team"];
       expect((await api("PATCH", `/api/bots/${chief.id}`, { alwaysAllow: grants })).status).toBe(200);
@@ -2999,7 +3023,8 @@ describe("harness HTTP API", () => {
     const bot = (await api("POST", "/api/bots", { name: "Pending Chief", section: "Pending room" })).body.bot;
     // a teammate of another person: a change for it keeps its card (#1138)
     const peer = await foreignTeammate("test-foreign-room", { name: "Pending peer", section: "Pending room" });
-    await api("PATCH", `/api/bots/${bot.id}`, { chiefOfStaff: true });
+    // Ask so Full does not auto-apply the foreign profile change (omb #2808).
+    await api("PATCH", `/api/bots/${bot.id}`, { chiefOfStaff: true, approvalMode: "ask" });
     const room = (await api("POST", "/api/groups", { name: "Pending room", memberIds: [bot.id], section: "Pending room" })).body.group;
     try {
       const roomToken = await mintTestCapability(BASE, bot.id, room.threadId);
@@ -3901,9 +3926,11 @@ describe("harness HTTP API", () => {
       expect((await isolatedApi("POST", `/api/bots/${botId}/interrupt`, { threadId: holderThreadId })).status).toBe(200);
       await expect.poll(promptsOnParkBox, { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
 
-      // A room speaker hits the same deadline against the sibling's resumed
-      // turn and parks the same way, while the room still settles its
-      // dispatch without a failure chip.
+      // A room member hits the same deadline against the sibling's resumed
+      // turn and parks the same way: its turn is a root of the runtime like
+      // the sibling's (docs/runtime-contract.md §10 PR 5), queued to continue
+      // on the seat with the computer line, no hand-off rows, and the room
+      // settles its dispatch without a failure chip.
       const roomBot = (await isolatedApi("POST", "/api/bots", {
         name: "Park room speaker", section,
         modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },
@@ -3914,20 +3941,25 @@ describe("harness HTTP API", () => {
         setup: { bulletin: "", defaultResponder: { kind: "member", botId: roomBot.id } },
       })).body.group;
       roomId = room.id;
+      // The room thread's rows in runtime.db: [bot, parent, status, executions, continuation note].
+      const roomRows = () => readHandoffs(isolatedData).filter((node) => node.threadId === room.threadId)
+        .map((node) => [node.botId, node.parentId ?? null, node.status, node.executions, node.continuation?.note ?? null]);
       expect((await isolatedApi("POST", `/api/groups/${room.id}/messages`, { text: "wait for the same occupied desktop" })).status).toBe(202);
       await expect.poll(async () => JSON.stringify((await isolatedApi("GET", `/api/threads/${room.threadId}/messages`)).body),
         { timeout: 8_000 }).toMatch(/Parked — it continues automatically when the computer is free/);
-      await expect.poll(async () => (await isolatedApi("GET", "/api/bots?messages=0")).body.groups
-        .find((group: any) => group.id === room.id)?.working, { timeout: 5_000 }).toBe(false);
+      await expect.poll(roomRows, { timeout: 5_000 }).toEqual([[roomBot.id, null, "queued", 1, COMPUTER_FREE_NOTE]]);
       const roomMessages = (await isolatedApi("GET", `/api/threads/${room.threadId}/messages`)).body.messages;
       expect(roomMessages.filter((message: any) => message.tool?.ok === false && /Computer still busy|Parked/.test(message.tool.name))).toHaveLength(0);
       const roomEvents = (await isolatedApi("GET", `/api/threads/${room.threadId}/events`)).body.entries;
       expect(roomEvents.filter((entry: any) => entry.kind === "runtime" && entry.data.type === "turn.wait_ended"))
         .toMatchObject([{ data: { outcome: "parked" } }]);
 
-      // Freeing the seat again continues the parked room the same way.
+      // Freeing the seat again continues the parked room member the same
+      // way: the same root, one more execution, opening with the computer line.
       expect((await isolatedApi("POST", `/api/bots/${botId}/interrupt`, { threadId: sibling.threadId })).status).toBe(200);
       await expect.poll(promptsOnParkBox, { timeout: 10_000 }).toBeGreaterThanOrEqual(3);
+      await expect.poll(roomRows, { timeout: 5_000 }).toEqual([[roomBot.id, null, "running", 2, null]]);
+      expect(claudePrompts(join(isolatedHome, "desktop-prompts.jsonl")).at(-1)).toContain("Continue the task that parked waiting for it");
 
       // Supersede (#1651): a newer user message replaces parked work, so
       // the superseded park must never resume. The sibling parks behind the
@@ -3945,6 +3977,8 @@ describe("harness HTTP API", () => {
       await expect.poll(promptsOnParkBox, { timeout: 10_000 }).toBeGreaterThanOrEqual(4);
       await new Promise((resolve) => setTimeout(resolve, 3_000));
       expect(promptsOnParkBox()).toBe(4);
+      // Stop ended the room member's continued turn: its root is cancelled.
+      expect(roomRows()).toEqual([[roomBot.id, null, "cancelled", 2, null]]);
       await expect.poll(async () => {
         const task = (await isolatedApi("GET", "/api/bots?messages=0")).body.bots
           .find((entry: any) => entry.id === botId)?.tasks.find((task: any) => task.threadId === siblingThreadId);
@@ -3965,7 +3999,12 @@ describe("harness HTTP API", () => {
       expect((await isolatedApi("POST", `/api/groups/${roomId}/messages`, { text: "park then stop this room" })).status).toBe(202);
       await expect.poll(async () => JSON.stringify((await isolatedApi("GET", `/api/threads/${room.threadId}/messages`)).body),
         { timeout: 8_000 }).toMatch(/park then stop this room[\s\S]*Parked — it continues automatically when the computer is free/);
+      await expect.poll(roomRows, { timeout: 5_000 }).toEqual([[roomBot.id, null, "cancelled", 2, null], [roomBot.id, null, "queued", 1, COMPUTER_FREE_NOTE]]);
       expect((await isolatedApi("POST", `/api/groups/${roomId}/interrupt`, {})).status).toBe(200);
+      // Stop while queued on the seat cancels the room member's root, as it
+      // does the direct task's: nothing is left to continue (the row keeps
+      // the note it was queued with; its status is what counts).
+      await expect.poll(roomRows, { timeout: 5_000 }).toEqual([[roomBot.id, null, "cancelled", 2, null], [roomBot.id, null, "cancelled", 1, COMPUTER_FREE_NOTE]]);
       expect((await isolatedApi("POST", `/api/bots/${botId}/interrupt`, { threadId: siblingThreadId })).status).toBe(200);
       await new Promise((resolve) => setTimeout(resolve, 3_000));
       expect(promptsOnParkBox()).toBe(4);
@@ -3990,7 +4029,7 @@ describe("harness HTTP API", () => {
     expectStoppedTestServerCleanly(isolatedChild, isolatedStderr);
   }, 75_000);
 
-  it("routes a goal run around a member parked at the computer wait ceiling, then resumes it", async () => {
+  it("routes a goal run around a member parked at the computer wait ceiling and never runs that step again", async () => {
     const requestId = randomUUID();
     const section = `Park goal machine ${requestId.slice(0, 8)}`;
     // Same shape as the park test above: an isolated server with a
@@ -4073,8 +4112,9 @@ describe("harness HTTP API", () => {
       });
       return { status: response.status, body: await response.json() };
     };
-    // Turns granted the shared desktop: the holder's, then the parked
-    // member's resume. Each starts its own engine; Boat's runner is never asked.
+    // Turns granted the shared desktop: the holder's alone (the parked goal
+    // step never gets a second run). Each starts its own engine; Boat's
+    // runner is never asked.
     const promptsOnGoalBox = () => {
       expect(boatRouteCalls.filter((call) => call.method === "POST" && call.path === "/boxes/bx_parkedsk/prompt")).toHaveLength(0);
       return claudePrompts(join(isolatedHome, "desktop-prompts.jsonl")).length;
@@ -4136,20 +4176,27 @@ describe("harness HTTP API", () => {
         mode: "goal",
       })).status).toBe(202);
 
+      // Every goal step is a root of the runtime (docs/runtime-contract.md
+      // §10 PR 5): [bot, parent, status, executions, continuation note].
+      const goalRows = () => readHandoffs(isolatedData).filter((node) => node.threadId === room.threadId)
+        .map((node) => [node.botId, node.parentId ?? null, node.status, node.executions, node.continuation?.note ?? null]);
       // The run delegates, the member parks exactly once, and the lead gets
       // the park as reassignment data — never as an in-step retry that would
       // wait the ceiling out again for every goal turn left in the budget.
       // On that bug this completion poll times out: the worker re-parks
       // every ceiling until the turn budget is gone and the lead never gets
-      // the note.
+      // the note. The rows: the lead's two turns and the parked member's,
+      // which ended with its park (the run routed around it), not queued to
+      // continue; no hand-off rows under any of them; the room is not working.
       await expect.poll(async () => {
         const { working, card } = await goalCard();
-        return { working, status: card?.goalRun?.status, detail: card?.goalRun?.detail, turnCount: card?.goalRun?.turnCount };
+        return { working, status: card?.goalRun?.status, detail: card?.goalRun?.detail, turnCount: card?.goalRun?.turnCount, rows: goalRows() };
       }, { timeout: 15_000 }).toEqual({
         working: false,
         status: "completed",
         detail: "Parker parked at the computer; the lead finished the goal directly.",
         turnCount: 3,
+        rows: [[leadId, null, "completed", 1, null], [workerId, null, "failed", 1, null], [leadId, null, "completed", 1, null]],
       });
       expect((await parkedChips()).length).toBe(1);
       expect((await parkedChips()).every((message: any) => message.tool?.ok === true)).toBe(true);
@@ -4158,11 +4205,13 @@ describe("harness HTTP API", () => {
       await new Promise((resolve) => setTimeout(resolve, 3_000));
       expect((await parkedChips()).length).toBe(1);
 
-      // Freeing the seat resumes the parked member on its own through the
-      // registered entry: the resumed turn takes the desktop (its Box prompt
-      // hangs, holding the seat) without any new user message.
+      // Freeing the seat starts nothing: the parked step is never run a
+      // second time, with or without a new message.
       expect((await isolatedApi("POST", `/api/bots/${holderBotId}/interrupt`, { threadId: holderThreadId })).status).toBe(200);
-      await expect.poll(promptsOnGoalBox, { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+      expect(promptsOnGoalBox()).toBe(1);
+      expect(goalRows()).toHaveLength(3);
+      expect((await goalCard()).working).toBe(false);
     } finally {
       await isolatedApi("POST", `/api/groups/${roomId}/interrupt`, {}).catch(() => undefined);
       await isolatedApi("POST", `/api/bots/${holderBotId}/interrupt`, {}).catch(() => undefined);
@@ -4465,7 +4514,8 @@ describe("harness HTTP API", () => {
     const target = (await api("POST", "/api/bots", { name: "Deletion Target", section: "Deletion race" })).body.bot;
     let targetDeleted = false;
     try {
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true })).status).toBe(200);
+      // Ask so deletion stays on its review card (Full applies at once; omb #2808).
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, approvalMode: "ask" })).status).toBe(200);
       expect((await api("PUT", "/api/config", { box: { token: "box_route" } })).status).toBe(200);
       managedBoatRows = [{
         id: "bx_456789ab",
@@ -4671,7 +4721,7 @@ describe("harness HTTP API", () => {
         const snapshot = (await api("GET", "/api/bots?messages=30")).body;
         const currentRoom = snapshot.groups.find((candidate: { id: string }) => candidate.id === room.id);
         return currentRoom?.messages.some((message: { tool?: { name?: string } }) =>
-          message.tool?.name === "Target's cloud computer is being changed — skipped this round"
+          message.tool?.name === "Target's cloud computer is being changed  -  skipped this round"
         ) ?? false;
       }, { timeout: 5_000 }).toBe(true);
       listGate.release();
@@ -5530,7 +5580,7 @@ describe("harness HTTP API", () => {
     }
   });
 
-  it("refuses paired model changes while the bot is working", async () => {
+  it("refuses paired model changes while the bot is working but saves a reasoning level", async () => {
     const instances = (await api("GET", "/api/instances")).body.instances;
     const claude = instances.find((instance: { instanceId: string }) => instance.instanceId === "claude");
     const selection = { instanceId: claude.instanceId, model: claude.models.default };
@@ -5547,16 +5597,23 @@ describe("harness HTTP API", () => {
         return current?.busy;
       }).toBe(true);
 
-      const blocked = await api("PATCH", `/api/bots/${bot.id}/model`, {
-        ...selection,
-        effort: "high",
-      });
+      const otherModel = claude.models.options.find((option: { id: string }) => option.id !== selection.model).id;
+      const blocked = await api("PATCH", `/api/bots/${bot.id}/model`, { ...selection, model: otherModel });
       expect(blocked.status).toBe(409);
       expect(blocked.body.error).toMatch(/working.*stop it before changing models/i);
       const unchanged = (await api("GET", "/api/bots?messages=0")).body.bots.find(
         (candidate: { id: string }) => candidate.id === bot.id,
       );
       expect(unchanged.modelSelection).toEqual(selection);
+
+      // The reasoning level is read when each turn starts, so it can change while the bot works.
+      const effort = await api("PATCH", `/api/bots/${bot.id}/model`, { ...selection, effort: "high" });
+      expect(effort.status).toBe(200);
+      const saved = (await api("GET", "/api/bots?messages=0")).body.bots.find(
+        (candidate: { id: string }) => candidate.id === bot.id,
+      );
+      expect(saved.modelSelection).toEqual({ ...selection, effort: "high" });
+      expect(saved.busy).toBe(true);
     } finally {
       await api("POST", `/api/bots/${bot.id}/interrupt`, {});
       await expect.poll(async () => {
@@ -5600,7 +5657,13 @@ describe("harness HTTP API", () => {
       autoApprove: false,
       alwaysAllow: ["Read"],
     }));
-    writeFileSync(join(isolatedData, "bots.json"), JSON.stringify(trustedBots));
+    // An Ask bot with one conversation still on Custom.
+    const customThread = { ...trustedBots[0], id: "custom-thread", threadId: "custom-thread-main", name: "custom thread", createdAt: 4,
+      approvalMode: "ask", tasks: [
+        { threadId: "custom-thread-main", title: "Main", createdAt: 4, resumeCursors: {} },
+        { threadId: "custom-thread-own", title: "Own Custom", createdAt: 5, resumeCursors: {}, approvalMode: "custom", autoApprove: false },
+      ] };
+    writeFileSync(join(isolatedData, "bots.json"), JSON.stringify([...trustedBots, customThread]));
 
     let isolatedStderr = "";
     const isolatedChild = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
@@ -5988,8 +6051,8 @@ describe("harness HTTP API", () => {
         requiredApps: [{ slug: "reddit", label: "Reddit" }],
       },
     });
-    // The package sets no approval: the bot starts at the new-bot default, Approve for me (51647a630).
-    expect(scout).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    // The package sets no approval: the bot starts at the new-bot default, Full access (omb #2808).
+    expect(scout).toMatchObject({ approvalMode: "full", autoApprove: false });
     const importedSkills = await api("GET", `/api/bots/${scout.id}/skills`);
     expect(importedSkills.body.skills).toMatchObject([{
       name: "source-check",
@@ -6130,8 +6193,8 @@ describe("harness HTTP API", () => {
     expect(impostor.threadId).not.toBe(trusted.threadId);
     expect(impostor.name).toBe("Mira 2");
     // EVERY privilege-bearing field lands at its safe default
-    // approval is the new-bot default, Approve for me (51647a630), never the claimed "full"
-    expect(impostor).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    // approval is the new-bot default, Full access (omb #2808); claimed elevation is dropped
+    expect(impostor).toMatchObject({ approvalMode: "full", autoApprove: false });
     expect(impostor.alwaysAllow).toBeUndefined();
     expect(impostor.chiefOfStaff).toBeUndefined();
     expect(impostor.approvePeerComms).toBeUndefined();
@@ -6278,7 +6341,11 @@ describe("harness HTTP API", () => {
     }
   });
 
-  it("leaves a failed credential-card continuation on the card without buzzing twice", async () => {
+  // A credential card parks the root whose turn raised it; the person's
+  // act on the card runs that root again (decision 2). When that execution
+  // cannot start, the failure is the root's own failed turn, read where the
+  // person is, once: no second turn-failed notification.
+  it("shows a card continuation that cannot start as the root's failed turn, without buzzing twice", async () => {
     let botId: string | undefined;
     let stream: Awaited<ReturnType<typeof openSse>> | undefined;
     try {
@@ -6359,43 +6426,45 @@ describe("harness HTTP API", () => {
       );
       expect(developmentProvision.status).toBe(503);
 
-      expect((await api("POST", `/api/bots/${bot.id}/interrupt`)).status).toBe(200);
-      await expect.poll(async () => {
-        const current = (await api("GET", "/api/bots?messages=0")).body.bots
-          .find((candidate: { id: string }) => candidate.id === bot.id);
-        return current?.busy;
-      }).toBe(false);
+      // The turn ends with the card open: its root parks on the card.
+      await releaseTurn(bot.id);
       const originalUserMessage = directState?.messages.find(
         (message: { role?: string; kind?: string; text?: string }) =>
           message.role === "user" && message.kind === "text" && message.text === "stay active",
       );
       expect(originalUserMessage?.id).toEqual(expect.any(String));
+      // A card off the active branch cannot be acted on. The typed line on
+      // the other branch is its own root (decision 3) and leaves the parked
+      // one answerable once its branch is active again.
+      rmSync(fakeClaudeDump, { force: true });
       expect((await api("POST", `/api/bots/${bot.id}/messages/${originalUserMessage.id}/edit`, {
         text: "take another branch",
       })).status).toBe(202);
+      await readJsonFileWhenReady(fakeClaudeDump);
       expect((await api("POST", `/api/bots/${bot.id}/secret-cards/${messageId}/dismiss`, {
         threadId: bot.threadId,
       })).status).toBe(404);
-      expect((await api("POST", `/api/bots/${bot.id}/interrupt`)).status).toBe(200);
-      await expect.poll(async () => {
-        const current = (await api("GET", "/api/bots?messages=0")).body.bots
-          .find((candidate: { id: string }) => candidate.id === bot.id);
-        return current?.busy;
-      }).toBe(false);
+      await releaseTurn(bot.id);
       expect((await api("POST", `/api/bots/${bot.id}/active-branch`, {
         messageId,
       })).status).toBe(200);
 
+      // The execution the dismissal answers cannot start: the bot now works
+      // on a cloud computer and no Box account is connected.
       expect((await api("PATCH", `/api/bots/${bot.id}`, { computer: "cloud" })).status).toBe(200);
+      rmSync(fakeClaudeDump, { force: true });
       expect((await api("POST", `/api/bots/${bot.id}/secret-cards/${messageId}/dismiss`, {
         threadId: bot.threadId,
       })).status).toBe(200);
-
-      await expect.poll(async () => {
-        const current = (await api("GET", "/api/bots?messages=20")).body.bots
-          .find((candidate: { id: string }) => candidate.id === bot.id);
-        return current?.messages.find((message: { id: string }) => message.id === messageId)?.secret?.error;
-      }).toMatch(/box|cloud/i);
+      const thread = async () => (await api("GET", `/api/threads/${bot.threadId}/messages`)).body.messages as Array<{
+        id: string; tool?: { name?: string; ok?: boolean }; secret?: { dismissed?: boolean; resumed?: boolean };
+      }>;
+      await expect.poll(async () => (await thread()).filter((message) => message.tool?.ok === false)
+        .map((message) => message.tool!.name).join("\n"), { timeout: 10_000 }).toMatch(/box|cloud/i);
+      expect((await thread()).find((message) => message.id === messageId)?.secret).toMatchObject({ dismissed: true, resumed: true });
+      await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).body.bots
+        .find((candidate: { id: string }) => candidate.id === bot.id)?.busy).toBe(false);
+      expect(existsSync(fakeClaudeDump)).toBe(false);
       expect(stream.frames.some(
         (frame) => frame.kind === "notify" && frame.notification?.kind === "turn-failed",
       )).toBe(false);
@@ -6405,6 +6474,193 @@ describe("harness HTTP API", () => {
       if (botId) await api("DELETE", `/api/bots/${botId}`);
       await api("PUT", "/api/config", { box: { token: "" } });
       rmSync(fakeClaudeDump, { force: true });
+    }
+  });
+
+  it("asks the person to sign in with one card and one notification, supersedes the older card, and resumes the bot on Done or Cancel", async () => {
+    let botId: string | undefined;
+    let stream: Awaited<ReturnType<typeof openSse>> | undefined;
+    try {
+      const bot = (await api("POST", "/api/bots")).body.bot;
+      botId = bot.id;
+      // No turn is running yet, so the bot's Works on names the place.
+      expect((await api("PATCH", `/api/bots/${bot.id}`, {
+        computer: "browser",
+        modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },
+      })).status).toBe(200);
+      stream = await openSse(`${BASE}/api/events`);
+      await stream.until((frame) => frame.kind === "hello");
+      // A sign-in request comes from a turn: when that turn ends with the
+      // card open, its root parks on the card, and Done or Cancel is what
+      // runs the root again (decision 2).
+      const turn = async (text: string) => {
+        rmSync(fakeClaudeDump, { force: true });
+        expect((await api("POST", `/api/bots/${bot.id}/messages`, { text })).status).toBe(202);
+        await readJsonFileWhenReady(fakeClaudeDump);
+        rmSync(fakeClaudeDump, { force: true });
+        return mintTestCapability(BASE, bot.id, bot.threadId);
+      };
+      let token = await turn("get the monthly report");
+      const request = (site: unknown, reason?: string) => fetch(`${BASE}/api/internal/request-sign-in`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ fromBotId: bot.id, fromThreadId: bot.threadId, site, ...(reason ? { reason } : {}) }),
+      });
+      const notices = () => stream!.frames.filter((frame) => frame.kind === "notify" && frame.notification?.kind === "sign-in");
+      for (const site of ["javascript:alert(1)", "file:///etc/passwd", "https://user:pw@example.com/", "example", ""]) {
+        expect((await request(site)).status, site).toBe(400);
+      }
+      expect(notices()).toHaveLength(0);
+
+      const first = await request("https://example.com/login", "The monthly report is behind a login.");
+      expect(first.status).toBe(201);
+      const firstCard = await first.json() as { messageId: string; site: string; place: string };
+      expect(firstCard).toMatchObject({ site: "example.com", place: "browser" });
+      const notice = await stream.until((frame) => frame.kind === "notify" && frame.notification?.kind === "sign-in");
+      expect(notice.notification).toMatchObject({
+        botId: bot.id, threadId: bot.threadId,
+        title: `${bot.name} needs you to sign in to example.com`,
+        body: "The monthly report is behind a login.",
+      });
+      await stream.until((frame) => frame.kind === "computer-control" && frame.botId === bot.id && frame.help?.messageId === firstCard.messageId);
+      expect(notices()).toHaveLength(1);
+
+      const second = await request("www.example.com", "Still behind a login.");
+      expect(second.status).toBe(201);
+      const secondCard = await second.json() as { messageId: string };
+      await stream.until((frame) => frame.kind === "computer-control" && frame.help?.messageId === secondCard.messageId);
+      await expect.poll(() => notices().length).toBe(2);
+      const card = async (id: string) => (await api("GET", `/api/threads/${bot.threadId}/messages`)).body.messages
+        .find((message: { id: string }) => message.id === id);
+      expect((await card(firstCard.messageId)).signIn).toMatchObject({ site: "example.com", superseded: true });
+      expect(await card(secondCard.messageId)).toMatchObject({
+        kind: "signin",
+        text: `${bot.name} needs you to sign in to example.com. Open this conversation in Sagax to sign in, then press Done.`,
+        signIn: { url: "https://www.example.com/", site: "example.com", place: "browser", reason: "Still behind a login." },
+      });
+      expect((await card(secondCard.messageId)).signIn.superseded).toBeUndefined();
+      const answer = (id: string, choice: "done" | "cancel") => api("POST", `/api/bots/${bot.id}/sign-in-cards/${id}/${choice}`, { threadId: bot.threadId });
+      expect((await answer(firstCard.messageId, "done")).status).toBe(409);
+
+      // The turn ends with the card open: the root waits on the person, and
+      // Done hands back, drops the plea and runs it again with the news.
+      await releaseTurn(bot.id);
+      expect(await answer(secondCard.messageId, "done")).toMatchObject({ status: 200, body: { done: true, resumed: true } });
+      const resumed = await readJsonFileWhenReady<{ prompt: unknown }>(fakeClaudeDump, 10_000);
+      expect(JSON.stringify(resumed.prompt)).toContain("the person finished signing in to example.com. Check you are signed in, then continue");
+      expect((await card(secondCard.messageId)).signIn).toMatchObject({ done: true, resumed: true });
+      await stream.until((frame) => frame.kind === "computer-control" && frame.botId === bot.id && frame.helpReason === null && !frame.help);
+      // Pressing it again changes nothing; the other answer is refused.
+      expect(await answer(secondCard.messageId, "done")).toMatchObject({ status: 200, body: { done: true, resumed: true } });
+      expect((await answer(secondCard.messageId, "cancel")).status).toBe(409);
+      // This suite's engine hangs every turn; stop the resumed one.
+      expect((await api("POST", `/api/bots/${bot.id}/interrupt`)).status).toBe(200);
+      await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).body.bots
+        .find((candidate: { id: string }) => candidate.id === bot.id)?.busy, { timeout: 10_000 }).toBe(false);
+
+      // Cancel resumes it too, with the person's no.
+      token = await turn("check the mail archive");
+      const thirdResponse = await request("mail.example.org");
+      const third = await thirdResponse.json() as { messageId: string };
+      expect(thirdResponse.status, JSON.stringify(third)).toBe(201);
+      await releaseTurn(bot.id);
+      expect(await answer(third.messageId, "cancel")).toMatchObject({ status: 200, body: { cancelled: true, resumed: true } });
+      const declined = await readJsonFileWhenReady<{ prompt: unknown }>(fakeClaudeDump, 10_000);
+      expect(JSON.stringify(declined.prompt)).toContain("the person declined to sign in to mail.example.org");
+      expect((await card(third.messageId)).signIn).toMatchObject({ cancelled: true, resumed: true });
+      await expect.poll(() => notices().length).toBe(3);
+    } finally {
+      if (botId) await api("POST", `/api/bots/${botId}/interrupt`, {}).catch(() => undefined);
+      stream?.close();
+      if (botId) await api("DELETE", `/api/bots/${botId}`);
+      rmSync(fakeClaudeDump, { force: true });
+    }
+  }, 60_000);
+
+  // A sign-in finished while its turn still runs is saved at once and
+  // continues nothing yet: the turn has the thread. When the turn ends, its
+  // root parks on the card the person already acted on, and the next tick
+  // answers it (reconcileParkedRoot). After a Stop, nothing runs again.
+  it("answers a sign-in finished while its turn still runs once that turn ends, and never after a Stop", async () => {
+    let botId: string | undefined;
+    try {
+      const bot = (await api("POST", "/api/bots")).body.bot;
+      botId = bot.id;
+      expect((await api("PATCH", `/api/bots/${bot.id}`, {
+        computer: "browser",
+        modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },
+      })).status).toBe(200);
+      const busy = () => api("GET", "/api/bots?messages=0").then(({ body }) => body.bots
+        .find((candidate: { id: string }) => candidate.id === bot.id)?.busy);
+      const card = async (id: string) => (await api("GET", `/api/threads/${bot.threadId}/messages`)).body.messages
+        .find((message: { id: string }) => message.id === id)?.signIn;
+      // A turn that keeps running (this suite's engine hangs every turn).
+      const turn = async (text: string) => {
+        rmSync(fakeClaudeDump, { force: true });
+        expect((await api("POST", `/api/bots/${bot.id}/messages`, { text })).status).toBe(202);
+        await readJsonFileWhenReady(fakeClaudeDump);
+        rmSync(fakeClaudeDump, { force: true });
+        const token = await mintTestCapability(BASE, bot.id, bot.threadId);
+        const requested = await fetch(`${BASE}/api/internal/request-sign-in`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({ fromBotId: bot.id, fromThreadId: bot.threadId, site: "example.com" }),
+        });
+        expect(requested.status).toBe(201);
+        return ((await requested.json()) as { messageId: string }).messageId;
+      };
+      const done = (id: string) => api("POST", `/api/bots/${bot.id}/sign-in-cards/${id}/done`, { threadId: bot.threadId });
+
+      const messageId = await turn("keep working on the dashboard");
+      expect(await done(messageId)).toMatchObject({ status: 200, body: { done: true, resumed: false } });
+      // The running turn keeps the thread: nothing starts under it.
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      expect(existsSync(fakeClaudeDump)).toBe(false);
+      expect(await card(messageId)).toMatchObject({ done: true });
+      expect((await card(messageId)).resumed).toBeUndefined();
+      // The turn ends: the root parks on the done card, and is answered.
+      await releaseTurn(bot.id);
+      const resumed = await readJsonFileWhenReady<{ prompt: unknown }>(fakeClaudeDump, 10_000);
+      expect(JSON.stringify(resumed.prompt)).toContain("the person finished signing in to example.com");
+      await expect.poll(async () => (await card(messageId)).resumed).toBe(true);
+      expect((await api("POST", `/api/bots/${bot.id}/interrupt`)).status).toBe(200);
+      await expect.poll(busy, { timeout: 10_000 }).toBe(false);
+
+      // Stop means stop: the person stopped the turn that asked, so Done
+      // afterwards is saved and starts nothing.
+      const stoppedId = await turn("keep working on the dashboard again");
+      expect((await api("POST", `/api/bots/${bot.id}/interrupt`)).status).toBe(200);
+      await expect.poll(busy, { timeout: 10_000 }).toBe(false);
+      expect(await done(stoppedId)).toMatchObject({ status: 200, body: { done: true, resumed: false } });
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      expect(existsSync(fakeClaudeDump)).toBe(false);
+      expect(await busy()).toBe(false);
+      expect(await card(stoppedId)).toMatchObject({ done: true });
+      expect((await card(stoppedId)).resumed).toBeUndefined();
+    } finally {
+      if (botId) await api("POST", `/api/bots/${botId}/interrupt`, {}).catch(() => undefined);
+      if (botId) await api("DELETE", `/api/bots/${botId}`);
+      rmSync(fakeClaudeDump, { force: true });
+    }
+  }, 60_000);
+
+  it("refuses a sign-in request where nothing names a place to sign in", async () => {
+    let botId: string | undefined;
+    try {
+      const bot = (await api("POST", "/api/bots")).body.bot;
+      botId = bot.id;
+      const token = await mintTestCapability(BASE, bot.id, bot.threadId);
+      const response = await fetch(`${BASE}/api/internal/request-sign-in`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ fromBotId: bot.id, fromThreadId: bot.threadId, site: "example.com" }),
+      });
+      expect(response.status).toBe(409);
+      expect((await response.json() as { error: string }).error).toMatch(/no browser or computer/);
+      const messages = (await api("GET", `/api/threads/${bot.threadId}/messages`)).body.messages;
+      expect(messages.some((message: { kind: string }) => message.kind === "signin")).toBe(false);
+    } finally {
+      if (botId) await api("DELETE", `/api/bots/${botId}`);
     }
   });
 
@@ -6689,7 +6945,22 @@ describe("harness HTTP API", () => {
         const state = (await isolatedApi("GET", "/api/bots?messages=0")).body;
         return state.bots.find((bot: { id: string }) => bot.id === direct.id)?.busy;
       }).toBe(false);
+      // The room's member raises its card mid-turn the same way, and the
+      // person stops the room: a room member's turn is a root too
+      // (docs/runtime-contract.md §10 PR 5), so Stop cancels it like the
+      // direct one, and the key saved later starts nothing.
+      expect((await isolatedApi("POST", `/api/groups/${group.id}/messages`, { text: "request a private key in the room" })).status).toBe(202);
+      await expect.poll(async () => (await isolatedApi("GET", "/api/bots?messages=0")).body.groups
+        .find((candidate: { id: string }) => candidate.id === group.id)?.busyBotId, { timeout: 10_000 }).toBe(channelOwner.id);
       const groupRequest = await requestCredential(channelOwner.id, groupOriginalThread);
+      expect((await isolatedApi("POST", `/api/groups/${group.id}/interrupt`, {})).status).toBe(200);
+      await expect.poll(async () => {
+        const state = (await isolatedApi("GET", "/api/bots?messages=0")).body;
+        return {
+          working: state.groups.find((candidate: { id: string }) => candidate.id === group.id)?.working,
+          busy: state.bots.find((bot: { id: string }) => bot.id === channelOwner.id)?.busy,
+        };
+      }, { timeout: 10_000 }).toEqual({ working: false, busy: false });
 
       const state = (await isolatedApi("GET", "/api/bots?messages=20")).body;
       const directState = state.bots.find((bot: { id: string }) => bot.id === direct.id);
@@ -6784,7 +7055,8 @@ describe("harness HTTP API", () => {
       }, "sk-test-fresh-card");
       const freshProvide = await provide(raceBot.id, freshRequest.messageId, freshEnvelope);
       expect(freshProvide.status).toBe(200);
-      expect(await freshProvide.json()).toEqual({ provided: true, resumed: true });
+      // Saved; nothing resumes: no turn raised this card, so no root parks on it.
+      expect(await freshProvide.json()).toEqual({ provided: true, resumed: false });
       // Hand the gate back to the ownership fixtures below: their saves must
       // start held, with a clean slate of started markers.
       for (const name of readdirSync(isolatedGate)) rmSync(join(isolatedGate, name));
@@ -6842,17 +7114,19 @@ describe("harness HTTP API", () => {
 
       writeFileSync(releaseFile, "release");
       const completed = await Promise.all(provideRequests);
-      for (const response of completed) {
-        expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ provided: true, resumed: true });
-      }
+      for (const response of completed) expect(response.status).toBe(200);
+      // Both cards' turns were stopped by the person: the keys are saved
+      // and nothing runs again (Stop means stop), in the room as in the
+      // direct chat.
+      expect(await completed[0]!.json()).toEqual({ provided: true, resumed: false });
+      expect(await completed[1]!.json()).toEqual({ provided: true, resumed: false });
 
       // A lost HTTP response may replay the exact randomized envelope, but a
       // new envelope could contain a different value and must never inherit
       // the first save's success result.
       const exactRetry = await provide(direct.id, directRequest.messageId, directEnvelope);
       expect(exactRetry.status).toBe(200);
-      expect(await exactRetry.json()).toEqual({ provided: true, resumed: true });
+      expect(await exactRetry.json()).toEqual({ provided: true, resumed: false });
       const replacementEnvelope = await sealPhoneSecretForTest({
         version: 1,
         keyId: PHONE_SECRET_TEST_IDENTITY.keyId,
@@ -7331,7 +7605,7 @@ describe("harness HTTP API", () => {
     await api("DELETE", `/api/bots/${bot.id}`);
   });
 
-  it("stores safe approval levels and refuses trusted modes over HTTP", async () => {
+  it("stores safe approval levels and Full over HTTP, and keeps Custom on the desktop", async () => {
     const bot = (await api("POST", "/api/bots", {
       modelSelection: { instanceId: "codex", model: "fixture-codex-model" },
     })).body.bot;
@@ -7348,18 +7622,23 @@ describe("harness HTTP API", () => {
       expect(ask.status).toBe(200);
       expect(ask.body.bot).toMatchObject({ approvalMode: "ask", autoApprove: false });
 
-      // Both modes are equivalent to native Codex configuration grants. A
-      // tool can call this loopback route, so even a forged renderer-only
-      // acknowledgement must not cross the trusted desktop boundary.
-      for (const approvalMode of ["full", "custom"]) {
-        for (const body of [
-          { approvalMode },
-          { approvalMode, acknowledgeFullAccess: true },
-        ]) {
-          const rejected = await api("PATCH", `/api/bots/${bot.id}`, body);
-          expect(rejected.status, JSON.stringify(body)).toBe(403);
-          expect(rejected.body.error).toMatch(/desktop app/i);
-        }
+      // Full needs no desktop channel and no consent field (omb #2701): any
+      // client that can reach this API turns it on.
+      const full = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
+      expect(full.status).toBe(200);
+      expect(full.body.bot).toMatchObject({ approvalMode: "full", autoApprove: false });
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "ask" })).status).toBe(200);
+
+      // Custom still crosses only the desktop's private channel: a tool can
+      // call this loopback route, and even a forged acknowledgement must not
+      // get it past the trusted desktop boundary.
+      for (const body of [
+        { approvalMode: "custom" },
+        { approvalMode: "custom", acknowledgeFullAccess: true },
+      ]) {
+        const rejected = await api("PATCH", `/api/bots/${bot.id}`, body);
+        expect(rejected.status, JSON.stringify(body)).toBe(403);
+        expect(rejected.body.error).toMatch(/desktop app/i);
       }
 
       const stored = (await api("GET", "/api/bots")).body.bots.find(
@@ -7371,23 +7650,151 @@ describe("harness HTTP API", () => {
     }
   });
 
-  it("requires private desktop consent for Claude Full and rejects Codex-only Custom", async () => {
+  it("turns Claude Full on over HTTP and still rejects Codex-only Custom", async () => {
     const bot = (await api("POST", "/api/bots", {
       modelSelection: { instanceId: "claude", model: "fixture-claude-model" },
     })).body.bot;
     try {
-      for (const approvalMode of ["full", "custom"]) {
-        const rejected = await api("PATCH", `/api/bots/${bot.id}`, {
-          approvalMode,
-          acknowledgeFullAccess: true,
-        });
-        expect(rejected.status, approvalMode).toBe(approvalMode === "full" ? 403 : 400);
-        expect(rejected.body.error).toMatch(approvalMode === "full" ? /desktop app/i : /does not support/i);
-      }
+      const full = await api("PATCH", `/api/bots/${bot.id}`, {
+        approvalMode: "full",
+        acknowledgeFullAccess: true,
+      });
+      expect(full.status).toBe(200);
+      expect(full.body.bot).toMatchObject({ approvalMode: "full", autoApprove: false });
+      const rejected = await api("PATCH", `/api/bots/${bot.id}`, {
+        approvalMode: "custom",
+        acknowledgeFullAccess: true,
+      });
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.error).toMatch(/does not support/i);
       const stored = (await api("GET", "/api/bots")).body.bots.find(
         (candidate: { id: string }) => candidate.id === bot.id,
       );
-      expect(stored.approvalMode).toBe("auto");
+      expect(stored.approvalMode).toBe("full");
+    } finally {
+      await api("DELETE", `/api/bots/${bot.id}`);
+    }
+  });
+
+  it("sets a team-wide level on every thread, New-thread threads included, the same way for every safe level", async () => {
+    const permissionModeOf = async (botId: string, threadId: string) => {
+      rmSync(fakeClaudeDump, { force: true });
+      expect((await api("POST", `/api/bots/${botId}/messages`, { text: "check the level", threadId })).status).toBe(202);
+      const { argv } = await readJsonFileWhenReady<{ argv: string[] }>(fakeClaudeDump, 15_000);
+      expect((await api("POST", `/api/bots/${botId}/interrupt`, { threadId })).status).toBe(200);
+      await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).body.bots
+        .find((entry: { id: string }) => entry.id === botId)?.tasks
+        .find((task: { threadId: string }) => task.threadId === threadId)?.busy, { timeout: 5_000 }).toBe(false);
+      return argv[argv.indexOf("--permission-mode") + 1];
+    };
+    type WireBot = { approvalMode?: string; tasks: Array<{ threadId: string; approvalMode?: string }> };
+    const bot = (await api("POST", "/api/bots", {
+      modelSelection: { instanceId: "claude", model: "claude-sonnet-5" }, settings: { approvalMode: "ask" },
+    })).body.bot;
+    const opened: string[] = [];
+    // Effective level: a following thread has no approvalMode of its own and
+    // runs at the bot's (#1169/#1170).
+    const levels = (saved: WireBot) => [bot.threadId, ...opened].map((threadId) =>
+      saved.tasks.find((task) => task.threadId === threadId)?.approvalMode ?? saved.approvalMode);
+    try {
+      for (const title of ["New thread one", "New thread two"]) {
+        const task = (await api("POST", `/api/bots/${bot.id}/tasks`, { title })).body.task;
+        expect(task.approvalMode).toBeUndefined();
+        opened.push(task.threadId);
+      }
+      // The bot's panel moves the level; every following thread moves with it.
+      const panel = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto" });
+      expect(panel.status).toBe(200);
+      expect(panel.body.bot.approvalMode).toBe("auto");
+      expect(levels(panel.body.bot)).toEqual(["auto", "auto", "auto"]);
+
+      // applyToAllThreads is obsolete: the bot level always reaches every
+      // following thread. Orphan or mistyped flags must not fail the patch.
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { applyToAllThreads: true })).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto", applyToAllThreads: "yes" })).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { alwaysAllow: ["Read"] })).status).toBe(200);
+      for (const mode of ["auto", "edits", "ask"] as const) {
+        const team = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: mode, applyToAllThreads: true });
+        expect(team.status, mode).toBe(200);
+        expect(team.body.bot, mode).toMatchObject({ approvalMode: mode, autoApprove: mode === "auto" });
+        expect(levels(team.body.bot), mode).toEqual([mode, mode, mode]);
+        expect(team.body.bot.alwaysAllow, mode).toEqual(["Read"]);
+        const saved = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
+        expect(levels(saved), mode).toEqual([mode, mode, mode]);
+        if (mode === "auto") expect(await permissionModeOf(bot.id, opened[0]!)).toBe("acceptEdits");
+      }
+      const full = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full", applyToAllThreads: true });
+      expect(full.status).toBe(403);
+      expect(full.body.error).toMatch(/desktop app/i);
+      const after = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
+      expect(levels(after)).toEqual(["ask", "ask", "ask"]);
+      expect(await permissionModeOf(bot.id, opened[1]!)).toBe("default");
+    } finally {
+      await api("DELETE", `/api/bots/${bot.id}`);
+    }
+  }, 60_000);
+
+  it("asks for the local-computer warning when a team-wide Auto reaches a thread not on Auto yet", async () => {
+    const bot = (await api("POST", "/api/bots", { settings: { approvalMode: "ask" } })).body.bot;
+    try {
+      const opened = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "New thread" })).body.task;
+      expect(opened.approvalMode).toBeUndefined();
+      // First Auto on local computer needs the warning.
+      const blindFirst = await api("PATCH", `/api/bots/${bot.id}`, { computer: "local", approvalMode: "auto" });
+      expect(blindFirst.status).toBe(400);
+      expect(blindFirst.body.error).toMatch(/acknowledgeLocalAuto/);
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { computer: "local", approvalMode: "auto", acknowledgeLocalAuto: true })).status).toBe(200);
+      // Following threads already run Auto with the bot; re-asserting needs no warning.
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto", applyToAllThreads: true })).status).toBe(200);
+      const saved = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
+      expect(saved.approvalMode).toBe("auto");
+      expect(saved.tasks.every((task: { approvalMode?: string }) => task.approvalMode === undefined || task.approvalMode === "auto")).toBe(true);
+    } finally {
+      await api("DELETE", `/api/bots/${bot.id}`);
+    }
+  });
+
+  it("moves a team's following threads to a new bot model and leaves each thread's own model, on screen or not", async () => {
+    const claude = (model: string) => ({ instanceId: "claude", model });
+    type WireBot = { modelSelection: { model: string }; tasks: Array<{ threadId: string; modelSelection: { model: string }; followsBotModel: boolean }> };
+    const thread = (bot: WireBot, threadId: string) => {
+      const task = bot.tasks.find((candidate) => candidate.threadId === threadId)!;
+      return { model: task.modelSelection.model, follows: task.followsBotModel };
+    };
+    const bot = (await api("POST", "/api/bots", { modelSelection: claude("team-start") })).body.bot;
+    try {
+      const own = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Own model, not on screen" })).body.task;
+      const onScreen = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Own model, on screen" })).body.task;
+      const follower = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Follows the bot" })).body.task;
+      for (const picked of [own, onScreen]) {
+        expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${picked.threadId}`, { modelSelection: claude("thread-pick") })).status).toBe(200);
+      }
+      expect((await api("POST", `/api/bots/${bot.id}/tasks/${onScreen.threadId}?messages=0`)).body.bot.threadId).toBe(onScreen.threadId);
+      // Thread picks stick until the bot's model changes.
+      const before = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
+      expect(thread(before, onScreen.threadId)).toEqual({ model: "thread-pick", follows: false });
+      expect(thread(before, own.threadId)).toEqual({ model: "thread-pick", follows: false });
+      expect(thread(before, follower.threadId)).toEqual({ model: "team-start", follows: true });
+
+      // keepThreadModels is a client hint the server ignores.
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { keepThreadModels: true })).status).toBe(200);
+      // Changing the bot's model makes every thread follow it again
+      // (store.patchBot strips per-thread copies).
+      for (const model of ["team-pick", "team-start"]) {
+        const team = await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: claude(model), keepThreadModels: true });
+        expect(team.status, model).toBe(200);
+        expect(team.body.bot.modelSelection.model).toBe(model);
+        expect(thread(team.body.bot, onScreen.threadId), model).toEqual({ model, follows: true });
+        expect(thread(team.body.bot, own.threadId), model).toEqual({ model, follows: true });
+        expect(thread(team.body.bot, follower.threadId), model).toEqual({ model, follows: true });
+        expect(thread(team.body.bot, bot.threadId), model).toEqual({ model, follows: true });
+      }
+      // A fresh thread pick after the bot moved stays until the next bot change.
+      expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${own.threadId}`, { modelSelection: claude("thread-pick") })).status).toBe(200);
+      const panel = await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: claude("panel-pick") });
+      expect(panel.status).toBe(200);
+      expect(thread(panel.body.bot, onScreen.threadId)).toEqual({ model: "panel-pick", follows: true });
+      expect(thread(panel.body.bot, own.threadId)).toEqual({ model: "panel-pick", follows: true });
     } finally {
       await api("DELETE", `/api/bots/${bot.id}`);
     }
@@ -7424,15 +7831,18 @@ describe("harness HTTP API", () => {
       modelSelection: { instanceId: "ghost", model: "fixture-ghost-model" },
     })).body.bot;
     try {
-      // An engine without a Full mapping: the bot-level PATCH must refuse
-      // Full before the trusted-desktop transition.
-      const refused = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
+      // Full runs on every engine (omb #2808). Custom stays Codex-only and
+      // still refuses here before any store write.
+      const full = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
+      expect(full.status).toBe(200);
+      expect(full.body.bot).toMatchObject({ approvalMode: "full", autoApprove: false });
+      const refused = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "custom" });
       expect(refused.status).toBe(400);
       expect(refused.body.error).toMatch(/does not support the selected approval level, or changing providers requires choosing Ask first/);
       const stored = (await api("GET", "/api/bots")).body.bots.find(
         (candidate: { id: string }) => candidate.id === bot.id,
       );
-      expect(stored.approvalMode).toBe("auto");
+      expect(stored.approvalMode).toBe("full");
     } finally {
       await api("DELETE", `/api/bots/${bot.id}`);
     }
@@ -7450,7 +7860,7 @@ describe("harness HTTP API", () => {
     await api("DELETE", `/api/bots/${bot.id}`);
   });
 
-  it("refuses approval-level changes while a bot is working", async () => {
+  it("saves an approval-level change while a bot is working", async () => {
     const instances = (await api("GET", "/api/instances")).body.instances;
     const claude = instances.find((instance: { instanceId: string }) => instance.instanceId === "claude");
     const bot = (await api("POST", "/api/bots", {
@@ -7464,16 +7874,18 @@ describe("harness HTTP API", () => {
         return state.bots.find((candidate: { id: string }) => candidate.id === bot.id)?.busy;
       }, { timeout: 5_000 }).toBe(true);
 
+      // omb #3627: Auto and Full both save while the turn runs; the next
+      // Sagax decision reads the saved level through liveApprovalMode.
       const changed = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto" });
-      expect(changed.status).toBe(200);
+      expect(changed.status, JSON.stringify(changed.body)).toBe(200);
       const stored = (await api("GET", "/api/bots?messages=0")).body.bots.find(
         (candidate: { id: string }) => candidate.id === bot.id,
       );
       expect(stored.busy).toBe(true);
       expect(stored.approvalMode).toBe("auto");
-      const blocked = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
-      expect(blocked.status).toBe(409);
-      expect(blocked.body.error).toMatch(/stop this bot's turn before changing its approval level|does not support|trusted desktop/i);
+      const full = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
+      expect(full.status, JSON.stringify(full.body)).toBe(200);
+      expect(full.body.bot).toMatchObject({ approvalMode: "full", autoApprove: false });
     } finally {
       await api("POST", `/api/bots/${bot.id}/interrupt`, {}).catch(() => undefined);
       await expect.poll(async () => {
@@ -8328,11 +8740,11 @@ describe("harness HTTP API", () => {
       expect(filed.status, isolatedStderr.slice(-2000)).toBe(201);
       expect(await filed.json()).toMatchObject({ name: "botfull", enabled: true, transport: "command" });
       expect(readInstallationMcpServers(isolatedData).botfull.enabled).toBe(true);
-      // Ask is not a block: the person's bot files its server switched on too.
+      // Ask/Edits keep the server off until the person turns it on (#1098).
       const below = await file(ask, "botask");
       expect(below.status).toBe(201);
-      expect(await below.json()).toMatchObject({ name: "botask", enabled: true, transport: "command" });
-      expect(readInstallationMcpServers(isolatedData).botask.enabled).toBe(true);
+      expect(await below.json()).toMatchObject({ name: "botask", enabled: false, transport: "command" });
+      expect(readInstallationMcpServers(isolatedData).botask.enabled).toBe(false);
     } finally {
       await waitForExit(isolatedChild, { signal: "SIGTERM" });
       await removeTempDir(isolatedHome);
@@ -8375,6 +8787,9 @@ describe("harness HTTP API", () => {
       expect(on.body.features.claudeUserMcp).toBe(true);
       const off = await api("PUT", "/api/config", { features: { claudeUserMcp: false } });
       expect(off.body.features.claudeUserMcp).toBe(false);
+      const skills = await api("PUT", "/api/config", { features: { claudeUserSkills: true } });
+      expect(skills.body.features).toMatchObject({ claudeUserSkills: true, claudeUserMcp: false });
+      expect((await api("PUT", "/api/config", { features: { claudeUserSkills: false } })).body.features.claudeUserSkills).toBe(false);
       // An explicit off stays off. Put the solo default back so a later test
       // is not left looking at that choice.
       const restored = await api("PUT", "/api/config", { features: { claudeUserMcp: true } });
@@ -8514,6 +8929,12 @@ describe("harness HTTP API", () => {
     const bot = (await api("POST", "/api/bots", { name: "Quill" })).body.bot;
     const conns: Socket[] = [];
     try {
+      expect((await api("POST", "/api/mcp/servers", {
+        name: "linear",
+        command: process.execPath,
+        args: ["--experimental-strip-types", FAKE_MCP_SERVER],
+      })).status).toBe(201);
+      expect((await api("PATCH", "/api/mcp/servers/linear", { enabled: true })).status).toBe(200);
       expect((await api("PATCH", `/api/bots/${bot.id}`, {
         modelSelection: { instanceId: "claude", model: "claude-haiku-4-5" },
         approvalMode: "ask",
@@ -8526,7 +8947,12 @@ describe("harness HTTP API", () => {
         mcpConfig: z.object({ mcpServers: z.object({ ogb: z.object({ args: z.array(z.string()) }) }) }),
       }).parse(await readJsonFileWhenReady(fakeClaudeDump));
       const socketPath = dump.mcpConfig.mcpServers.ogb.args[1];
-      const raise = async (id: string, command: string, extra: Record<string, unknown> = {}) => {
+      const raise = async (
+        id: string,
+        command: string,
+        extra: Record<string, unknown> = {},
+        tool = "Bash",
+      ) => {
         const conn = connect(socketPath);
         conns.push(conn);
         const answered = new Promise<{ behavior: string; always?: boolean }>((resolve) => {
@@ -8541,7 +8967,7 @@ describe("harness HTTP API", () => {
           conn.on("connect", resolve);
           conn.on("error", reject);
         });
-        conn.write(JSON.stringify({ t: "ask", id, tool: "Bash", input: { command, ...extra } }) + "\n");
+        conn.write(JSON.stringify({ t: "ask", id, tool, input: { command, ...extra } }) + "\n");
         return answered;
       };
       type Msg = { kind: string; tool?: { name: string }; card?: { title: string; subtitle: string; requestId?: string; held?: string; heldCode?: string; allowKey?: string; allowSession?: boolean; answered?: string } };
@@ -8575,6 +9001,35 @@ describe("harness HTTP API", () => {
       expect(plain).toMatchObject({ behavior: "allow" });
       expect(plain).not.toHaveProperty("always");
 
+      // A configured, read-shaped MCP tool offers an app-owned durable grant.
+      // The first request still waits for the person; the exact second one is
+      // answered automatically, even though this Claude session has no native
+      // reviewer. A different/write-shaped tool gets no such grant.
+      const firstLinear = raise("ask-linear-list-1", "list KAT issues", { team: "KAT" }, "mcp__linear__list_issues");
+      const linearCard = await expect.poll(async () => (await messages()).find((m) => m.card?.subtitle === "list KAT issues")?.card).toBeTruthy()
+        .then(async () => (await messages()).find((m) => m.card?.subtitle === "list KAT issues")!.card!);
+      expect(linearCard.allowKey).toMatch(/^provider-tool:claude:linear:list_issues:/);
+      expect((await api("POST", `/api/bots/${bot.id}/always-allow`, {
+        threadId: bot.threadId,
+        allowKey: linearCard.allowKey,
+      })).status).toBe(200);
+      expect((await api("POST", `/api/bots/${bot.id}/respond`, {
+        requestId: linearCard.requestId,
+        behavior: "allow",
+      })).status).toBe(200);
+      await expect(firstLinear).resolves.toMatchObject({ behavior: "allow" });
+
+      const repeatedLinear = raise("ask-linear-list-2", "list KAT issues again", { team: "KAT" }, "mcp__linear__list_issues");
+      await expect(repeatedLinear).resolves.toMatchObject({ behavior: "allow" });
+      expect((await messages()).find((m) => m.card?.subtitle === "list KAT issues again")).toBeUndefined();
+
+      const linearWrite = raise("ask-linear-create", "create KAT issue", { team: "KAT" }, "mcp__linear__create_issue");
+      await expect.poll(async () => (await messages()).find((m) => m.card?.subtitle === "create KAT issue")?.card?.title).toBe("Approval needed");
+      const writeCard = (await messages()).find((m) => m.card?.subtitle === "create KAT issue")!.card!;
+      expect(writeCard.allowKey).toBeUndefined();
+      expect((await api("POST", `/api/bots/${bot.id}/respond`, { requestId: writeCard.requestId, behavior: "deny" })).status).toBe(200);
+      await expect(linearWrite).resolves.toMatchObject({ behavior: "deny" });
+
       // A card that offers no session allow keeps none, whatever the answer
       // claims: widening the sandbox is allowed once at most.
       const widen = raise("ask-widen", "ls /", { dangerouslyDisableSandbox: true });
@@ -8585,10 +9040,18 @@ describe("harness HTTP API", () => {
       const once = await widen;
       expect(once).toMatchObject({ behavior: "allow" });
       expect(once).not.toHaveProperty("always");
+
+      // The grant belongs to the bot, not only to the conversation where the
+      // card appeared. A later delegated/direct task must inherit it instead
+      // of asking the person for the same exact read again.
+      const nextTask = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Later work" });
+      expect(nextTask.status).toBe(201);
+      expect(nextTask.body.task.alwaysAllow).toContain(linearCard.allowKey);
     } finally {
       for (const conn of conns) conn.destroy();
       await api("POST", `/api/bots/${bot.id}/interrupt`);
       await api("DELETE", `/api/bots/${bot.id}`);
+      await api("DELETE", "/api/mcp/servers/linear").catch(() => undefined);
     }
   });
 
@@ -8800,6 +9263,9 @@ describe("harness HTTP API", () => {
     }
   });
 
+  // Upstream's "/setup turn connects an app itself" (Composio's
+  // COMPOSIO_MANAGE_CONNECTIONS) is not here: Sagax removed Composio.
+
   it("never lets an out-of-band SOUL.md edit reach the prompt, and surfaces it as drift instead", async () => {
     const bot = (await api("POST", "/api/bots", { name: "Kiwi", title: "Tracker" })).body.bot;
     try {
@@ -8880,38 +9346,53 @@ describe("harness HTTP API", () => {
   it("keeps skill authoring on by default and persists an explicit opt-out", async () => {
     const before = await api("GET", "/api/config");
     expect(before.status).toBe(200);
-    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
+    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false, claudeUserMcp: true, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
     // the default is the absence of the key: nothing is written until the toggle is used
     const untouched = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
     expect(untouched.features?.skillAuthoring).toBeUndefined();
+    // learning skills automatically is opt-in: off, and not written, by default
+    expect(untouched.features?.skillReview).toBeUndefined();
     // computer sharing has no toggle at all: only a hand-edited config.json
     // can set it, so the shipped default is reported off and never written
     expect(untouched.features?.sharedComputers).toBeUndefined();
 
+    const featuresAfterOptOut = {
+      browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: true,
+      showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false,
+      decisionModel: false, dataWindow: false, routineGroupSettings: false, connectedApps: false, sharedComputers: false,
+      claudeUserMcp: true, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, llmThreadTitles: true, meetingNotetaker: false,
+      savedSteps: true, savedStepsHere: process.platform === "darwin",
+    };
+    const saved = await api("PATCH", "/api/config", {
+      features: { skillAuthoring: false },
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.body.features).toEqual(featuresAfterOptOut);
+
+    const disk = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
+    // Earlier browser coverage may have persisted its own toggle. Opting out
+    // of skill authoring must preserve those sibling settings, not erase them.
+    expect(disk.features).toEqual({ ...untouched.features, skillAuthoring: false });
+
+    // the opt-out survives patches to sibling flags
+    const tools = await api("PATCH", "/api/config", { features: { showToolCalls: true } });
+    expect(tools.status).toBe(200);
+    expect(tools.body.features).toEqual({ ...featuresAfterOptOut, showToolCalls: true });
+
+    // Templates is an experimental opt-in, persisted like its siblings
+    const templates = await api("PATCH", "/api/config", { features: { templates: true } });
+    expect(templates.status).toBe(200);
+    expect(templates.body.features.templates).toBe(true);
+    expect(templates.body.features.showToolCalls).toBe(true);
+    expect((await api("PATCH", "/api/config", { features: { templates: false } })).body.features.templates).toBe(false);
+
+    // Connected apps is an experimental opt-in too (off by default)
+    const apps = await api("PATCH", "/api/config", { features: { connectedApps: true } });
+    expect(apps.status).toBe(200);
+    expect(apps.body.features.connectedApps).toBe(true);
+    expect((await api("PATCH", "/api/config", { features: { connectedApps: false } })).body.features.connectedApps).toBe(false);
+
     try {
-      const saved = await api("PATCH", "/api/config", {
-        features: { skillAuthoring: false },
-      });
-      expect(saved.status).toBe(200);
-      expect(saved.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
-
-      const disk = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
-      // Earlier browser coverage may have persisted its own toggle. Opting out
-      // of skill authoring must preserve those sibling settings, not erase them.
-      expect(disk.features).toEqual({ ...untouched.features, skillAuthoring: false });
-
-      // the opt-out survives patches to sibling flags
-      const tools = await api("PATCH", "/api/config", { features: { showToolCalls: true } });
-      expect(tools.status).toBe(200);
-      expect(tools.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: true, showToolCalls: true, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
-
-      // Templates is an experimental opt-in, persisted like its siblings
-      const templates = await api("PATCH", "/api/config", { features: { templates: true } });
-      expect(templates.status).toBe(200);
-      expect(templates.body.features.templates).toBe(true);
-      expect(templates.body.features.showToolCalls).toBe(true);
-      expect((await api("PATCH", "/api/config", { features: { templates: false } })).body.features.templates).toBe(false);
-
       // An opted-out workspace still lets a turn read its skills (discovery is
       // independent of authoring), but refuses to stage a write, even when the
       // turn's own capability allows authoring.
@@ -10115,7 +10596,7 @@ describe("harness HTTP API", () => {
     }
   });
 
-  it("tracks and cancels a queued channel credential continuation before provider dispatch", async () => {
+  it("keeps a room credential card owned by the member that raised it", async () => {
     const first = (await api("POST", "/api/bots", {})).body.bot;
     const second = (await api("POST", "/api/bots", {})).body.bot;
     const room = (await api("POST", "/api/groups", {
@@ -10195,16 +10676,17 @@ describe("harness HTTP API", () => {
       );
       expect(wrongOwnerPhone.status).toBe(404);
 
-      const resumed = await api("POST", `/api/bots/${second.id}/secret-cards/${messageId}/dismiss`, {
+      // The member that raised it may dismiss it. No turn of that member is
+      // parked on this card (the lead's turn is the one running), so the
+      // dismissal records the fact and starts nothing: the lead's process
+      // stays the room's only one, before and after the room is stopped.
+      const dismissed = await api("POST", `/api/bots/${second.id}/secret-cards/${messageId}/dismiss`, {
         threadId: room.threadId,
       });
-      expect(resumed).toEqual({ status: 200, body: { dismissed: true, resumed: true } });
-
-      const queued = (await api("GET", "/api/bots?messages=0")).body;
-      expect(queued.groups.find((group: { id: string }) => group.id === room.id)?.working).toBe(true);
-      const deletion = await api("DELETE", `/api/groups/${room.id}`);
-      expect(deletion.status).toBe(409);
-      expect(deletion.body.error).toMatch(/working/i);
+      expect(dismissed).toEqual({ status: 200, body: { dismissed: true, resumed: false } });
+      const roomState = (await api("GET", "/api/bots?messages=0")).body;
+      expect(roomState.groups.find((group: { id: string }) => group.id === room.id)?.busyBotId).toBe(first.id);
+      expect(Boolean(roomState.bots.find((bot: { id: string }) => bot.id === second.id)?.busy)).toBe(false);
 
       expect((await api("POST", `/api/groups/${room.id}/interrupt`, { threadId: room.threadId })).status).toBe(200);
       await expect.poll(async () => {
@@ -10214,9 +10696,6 @@ describe("harness HTTP API", () => {
           secondBusy: Boolean(state.bots.find((bot: { id: string }) => bot.id === second.id)?.busy),
         };
       }, { timeout: 5_000 }).toEqual({ working: false, secondBusy: false });
-
-      // The continuation sat behind the lead's hanging provider. Interrupting
-      // the room must cancel it before a second provider process is spawned.
       await new Promise((resolve) => setTimeout(resolve, 250));
       expect(JSON.parse(readFileSync(fakeClaudeDump, "utf8")).pid).toBe(firstDump.pid);
     } finally {
@@ -10252,7 +10731,8 @@ describe("harness HTTP API", () => {
   it("applies a bot's own chat-created routine at once and keeps a teammate's behind its card", async () => {
     // (2026-10-26, #1138: "a teammate" is a bot of another person; a bot of
     // the same person applies at once, checked below)
-    const bot = (await api("POST", "/api/bots", {})).body.bot;
+    // Ask so the receipt is appliedBy self (omb #2808 defaults new bots to Full).
+    const bot = (await api("POST", "/api/bots", { settings: { approvalMode: "ask" } })).body.bot;
     let routineId = "";
     let orphanRoutineId = "";
     let legacyRoutineId = "";
@@ -10641,6 +11121,7 @@ describe("harness HTTP API", () => {
       const legacy = await api("POST", "/api/routines", {
         name: `Legacy ${fakeNameSecret}`,
         continuity: true,
+        runOnStartup: true,
         prompt: `${fakeSecret}\n${"Review the archive. ".repeat(180)}`,
         botId: bot.id,
         runOn: "maus",
@@ -10684,6 +11165,7 @@ describe("harness HTTP API", () => {
       }).parse(await listed.json());
       const legacyResult = listedBody.routine;
       expect(legacyResult.continuity).toBe(true);
+      expect(legacyResult.runOnStartup).toBe(true);
       expect(legacyResult.instructions).not.toContain(fakeSecret);
       expect(legacyResult.name).not.toContain(fakeNameSecret);
       expect(legacyResult.instructions).toContain("redacted");
@@ -10718,7 +11200,8 @@ describe("harness HTTP API", () => {
   });
 
   it("gates targeted routine actions like creation and re-checks the target at confirm", async () => {
-    const chief = (await api("POST", "/api/bots", { name: "Acting chief" })).body.bot;
+    // Ask so foreign teammate routine actions keep their card (omb #2808).
+    const chief = (await api("POST", "/api/bots", { name: "Acting chief", settings: { approvalMode: "ask" } })).body.bot;
     let teammateId = "";
     let outsiderId = "";
     try {
@@ -10836,7 +11319,8 @@ describe("harness HTTP API", () => {
   });
 
   it("lets a bot change its own routines while 8 cards for a teammate are open", async () => {
-    const bot = (await api("POST", "/api/bots", {})).body.bot;
+    // Ask so foreign teammate proposals stay on cards (omb #2808).
+    const bot = (await api("POST", "/api/bots", { settings: { approvalMode: "ask" } })).body.bot;
     // a teammate of another person, whose routines keep a card (#1138)
     const teammate = await foreignTeammate("test-foreign-budget");
     try {
@@ -10875,7 +11359,8 @@ describe("harness HTTP API", () => {
 
   it("applies a bot's own profile change at once, records history, and undoes it from its receipt", async () => {
     const soulFileOf = (botId: string) => join(home, ".sagax", "bots", botId, "SOUL.md");
-    const bot = (await api("POST", "/api/bots", { name: "Scout" })).body.bot;
+    // Ask so the receipt is appliedBy self (omb #2808 defaults new bots to Full).
+    const bot = (await api("POST", "/api/bots", { name: "Scout", settings: { approvalMode: "ask" } })).body.bot;
     try {
       await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } });
 
@@ -10992,8 +11477,9 @@ describe("harness HTTP API", () => {
       expect(refused.status).toBe(403);
       expect(await botTitle(b.id)).toBe("");
 
-      // (b) Promote A to Chief of Staff: the same proposal now stages a card.
-      expect((await api("PATCH", `/api/bots/${a.id}`, { chiefOfStaff: true })).status).toBe(200);
+      // (b) Promote A to Chief of Staff at Ask: the same proposal stages a card
+      // (Full would apply a foreign peer change at once; omb #2808).
+      expect((await api("PATCH", `/api/bots/${a.id}`, { chiefOfStaff: true, approvalMode: "ask" })).status).toBe(200);
       const proposedResponse = await fetch(`${BASE}/api/internal/profile-requests`, {
         method: "POST",
         headers: internalHeaders,
@@ -11085,7 +11571,8 @@ describe("harness HTTP API", () => {
   });
 
   it("applies a bot's own learned skill at once and undoes it from its receipt", async () => {
-    const bot = (await api("POST", "/api/bots", {})).body.bot;
+    // Ask so decisions log auto-approved:self (omb #2808 defaults new bots to Full).
+    const bot = (await api("POST", "/api/bots", { settings: { approvalMode: "ask" } })).body.bot;
     try {
       expect((await api("PATCH", `/api/bots/${bot.id}`, {
         modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },

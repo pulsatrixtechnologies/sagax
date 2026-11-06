@@ -17,12 +17,11 @@ describe("Full access in the menu", () => {
     expect(orgFullAccessFor(org(), {}, "alice")).toBe("hidden");
   });
 
-  it("asks for the confirmation once per bot", () => {
-    expect(fullAccessNeedsConfirmation({}, "alice", true)).toBe(true);
+  it("never asks for a confirmation (omb #2701)", () => {
+    expect(fullAccessNeedsConfirmation({}, "alice", true)).toBe(false);
     expect(fullAccessNeedsConfirmation({ fullAccessConsent: { principalId: "alice" } }, "alice", true)).toBe(false);
-    expect(fullAccessNeedsConfirmation({ fullAccessConsent: { principalId: "bob" } }, "alice", true)).toBe(true);
-    // a solo server has one owner
+    expect(fullAccessNeedsConfirmation({ fullAccessConsent: { principalId: "bob" } }, "alice", true)).toBe(false);
     expect(fullAccessNeedsConfirmation({ fullAccessConsent: { principalId: "local" } }, null, false)).toBe(false);
-    expect(fullAccessNeedsConfirmation({}, null, false)).toBe(true);
+    expect(fullAccessNeedsConfirmation({}, null, false)).toBe(false);
   });
 });

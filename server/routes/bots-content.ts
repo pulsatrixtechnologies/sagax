@@ -58,6 +58,8 @@ export interface BotsContentStore {
   readonly bots: readonly BotRecord[];
   bot(id: string): BotRecord | null | undefined;
   patchBot(id: string, patch: Record<string, unknown>): BotRecord | null | undefined;
+  /** Present when the route merges engine-native skills for a thread's folder. */
+  taskByThread?(botId: string, threadId: string): { cwd?: string | null } | undefined;
 }
 
 export interface BotsContentRouteDeps {
@@ -78,6 +80,10 @@ export interface BotsContentRouteDeps {
   personalSkillsList: (person: string) => readonly LibrarySkillListing[];
   /** Legacy list when the skills library feature is off. */
   listBotSkills: (bot: BotRecord) => readonly SkillListing[];
+  /** Skills the bot's engine loads by itself for turns in this thread's folder. */
+  listNativeBotSkills?: (bot: BotRecord, threadId: string) => ReadonlyArray<SkillListing & { origin: "native" }>;
+  /** Folder a thread's turns run in; null when pinned to none. */
+  threadFolder?: (bot: BotRecord, threadId: string) => string | null;
   listStagedSkillWrites: (botId: string) => readonly StagedSkillWrite[];
   stagedSkillListing: (staged: StagedSkillWrite) => Record<string, unknown>;
   githubCredentialsFor: (actor: string | null | undefined) => readonly GithubCredential[];
@@ -104,6 +110,7 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
       samePerson,
       personalSkillsList,
       listBotSkills,
+      listNativeBotSkills,
       listStagedSkillWrites: listStaged,
       stagedSkillListing,
       githubCredentialsFor,
@@ -153,11 +160,15 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
 
     m = path.match(/^\/api\/bots\/([\w-]+)\/skills$/);
     if (m && method === "GET") {
-      if (!store.bot(m[1])) return json(res, 404, { error: "no such bot" });
+      const bot = store.bot(m[1]);
+      if (!bot) return json(res, 404, { error: "no such bot" });
+      // The thread names a folder on disk: only one of this bot's own threads may pick it.
+      const asked = url.searchParams.get("threadId");
+      const threadId = asked && store.taskByThread?.(bot.id, asked) ? asked : bot.threadId;
+      const natives = listNativeBotSkills?.(bot, threadId) ?? [];
       if (skillsLibraryEnabled()) {
-        const target = store.bot(m[1]!)!;
         const person = identity.kind === "perspicax"
-          ? sessionPrincipal(auth) ?? effectiveBotOwner(target)
+          ? sessionPrincipal(auth) ?? effectiveBotOwner(bot)
           : localPrincipalId();
         const personBots = person
           ? store.bots.filter((entry) => identity.kind !== "perspicax" || samePerson(effectiveBotOwner(entry), person))
@@ -166,21 +177,24 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
         const meSkills = person ? personalSkillsList(person) : [];
         const { skills, library } = listBotSkillsWithOrigin(
           m[1]!,
-          target.assignedSkills,
+          bot.assignedSkills,
           meSkills,
           (name, origin) => origin === "me"
             ? botsUsingSharedSkill({ name, scope: "me", bots: personBots, personId: person })
             : store.bots.filter((entry) => entry.assignedSkills?.includes(name)).map((entry) => ({ id: entry.id, name: entry.name })),
+          natives,
         );
         return json(res, 200, {
           skills,
           library,
-          assignedSkills: target.assignedSkills,
+          assignedSkills: bot.assignedSkills,
           staged: listStaged(m[1]).map(stagedSkillListing),
         });
       }
+      const own = listBotSkills(bot);
+      const names = new Set(own.map((skill) => skill.name));
       return json(res, 200, {
-        skills: listBotSkills(store.bot(m[1])!),
+        skills: [...own, ...natives.filter((skill) => !names.has(skill.name))],
         staged: listStaged(m[1]).map(stagedSkillListing),
       });
     }

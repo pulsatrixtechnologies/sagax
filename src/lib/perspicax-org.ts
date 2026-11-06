@@ -35,6 +35,9 @@ export interface PerspicaxOrg {
     /** Whether people may export their credential vault in clear (absent:
      * allowed; false: Settings > Credentials > Export is refused). */
     allowVaultExport?: boolean;
+    /** Whether people may use their Linked Grok Bot bridge (absent: allowed;
+     * false: org kill switch, keys kept). */
+    allowGrokBridge?: boolean;
     /** Where bots' Claude Code plugins may come from (any by default). */
     pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };
     /** Capabilities lot 4: "perspicax" when Perspicax owns the rule. */

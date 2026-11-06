@@ -34,8 +34,11 @@ export function createSetupStartTurn(host: StartTurnHost) {
     engineIsFresh,
     engineRead,
     expandLearnTurnText,
+    expandNativeSkillCommand,
     expandSetupTurnText,
     expandSkillCommandTurnText,
+    listNativeSkillsForTurn,
+    resolveBotSkills,
     handedStateUsable,
     handoffs,
     isExternalContextMarker,
@@ -72,6 +75,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     turnTrace,
     unseenMessages,
     vaultPrincipalForThread,
+    videoFramesWithin,
     voiceBriefText,
     voiceCalls,
     voiceSessions,
@@ -115,6 +119,11 @@ export function createSetupStartTurn(host: StartTurnHost) {
         throw new DirectTurnSetupCancelled("turn stopped during cloud readiness");
       }
       if (!readiness.ready) throw new Error(readiness.reason ?? "The cloud computer is not ready");
+    }
+    // Sample video frames after the turn is claimed so an ffmpeg run never
+    // opens a window before the turn registers. Videos were held plain during admit.
+    if (state.instance.adapter.capabilities.nativeImageInput === true && !state.opts?.compactOnly) {
+      state.turnImages.push(...await videoFramesWithin(state.turnImages.length, state.resolvedImages.videos ?? []));
     }
     // A call turn starts its own short session: the conversation's fold
     // waits for its next written turn, off the person's silence.
@@ -231,17 +240,27 @@ export function createSetupStartTurn(host: StartTurnHost) {
     // organization turn whose files are the person's environment) gets the
     // reviewed instructions inlined, while skills_list/workspace_read still
     // serve the managed index when those tools are allowed.
-    const skillCommandText = expandSkillCommandTurnText(
+    const assignedForTurn = skillsLibraryEnabled(cfg) ? (store.bot(state.bot.id)?.assignedSkills ?? state.bot.assignedSkills) : undefined;
+    const inlineSkill = skillCommandInline({ workspaceFiles: supportsWorkspaceFiles(state.instance.driverKind), organization: IDENTITY.kind === "perspicax" });
+    const ownSkillCommand = expandSkillCommandTurnText(
       state.bot.id,
       state.providerText,
-      skillsLibraryEnabled(cfg) ? (store.bot(state.bot.id)?.assignedSkills ?? state.bot.assignedSkills) : undefined,
-      { inline: skillCommandInline({ workspaceFiles: supportsWorkspaceFiles(state.instance.driverKind), organization: IDENTITY.kind === "perspicax" }),
+      assignedForTurn,
+      { inline: inlineSkill,
         overrides: (() => {
           state.person = IDENTITY.kind === "perspicax" ? orgSpeakerPrincipal(state.bot, state.speaker) : localPrincipalId();
           return skillsLibraryEnabled(cfg) && state.person ? personalSkills.commands(state.person, new Set(personalSkillInputs(state.bot, state.person).filter((skill: any) => skill.shadowed).map((skill: any) => skill.name))) : [];
         })()
       },
     );
+    // A skill switched off on the Skills page stays off, even when the engine holds one of the same name.
+    const skillCommandText = ownSkillCommand !== state.providerText || inlineSkill
+      ? ownSkillCommand
+      : expandNativeSkillCommand(
+        state.providerText,
+        listNativeSkillsForTurn(state.bot, state.threadId, state.instance).filter((skill: { name: string }) =>
+          !resolveBotSkills(state.bot.id, assignedForTurn).some((entry: { name: string; enabled: boolean }) => entry.name === skill.name && !entry.enabled)),
+      );
     const setupText = state.peerToolsMounted ? expandSetupTurnText(skillCommandText) : skillCommandText;
     const userTurnText = promptWithReply(
       state.skillAuthoring ? expandLearnTurnText(setupText) : setupText,

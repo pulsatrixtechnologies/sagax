@@ -274,7 +274,7 @@ export function configChangeRows(before: unknown, after: unknown): Array<Omit<Ad
 export const BOT_AUDIT_FIELDS = [
   "approvalMode", "autoApprove", "alwaysAllow", "allowedRecipients", "peers", "approvePeerComms", "computer", "cloudBackend", "autoStartVps",
   "cwd", "browser", "browserProfile", "mcpServers", "mcpAccounts", "chiefOfStaff", "managedSections", "section",
-  "parkDirectMessages", "hidden", "modelSelection", "visibility",
+  "parkDirectMessages", "hidden", "modelSelection", "helperModel", "visibility",
 ] as const;
 
 export function botAuditSnapshot(bot: Record<string, unknown> | null | undefined): Record<string, unknown> | null {

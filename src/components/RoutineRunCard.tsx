@@ -471,7 +471,11 @@ export function RoutineRunCard({
               : cn("mt-2.5 pl-[42px] text-[14px] leading-relaxed", detail && failedTone ? "text-danger" : "text-ink"),
           )}
         >
-          {report ? <ChatMarkdown text={report} inert /> : <p className="whitespace-pre-wrap">{detail}</p>}
+          {/* 2026-11-06 (#2186): a routine report is the bot's own message.
+              Widgets (```widget / ```widget-imperfect) draw like chat, never
+              as a raw CodeBlock. inert would force that path. An unclosed
+              fence at the end still waits as a pending widget. */}
+          {report ? <ChatMarkdown text={report} /> : <p className="whitespace-pre-wrap">{detail}</p>}
           {details && <RunResultDetails details={details} />}
         </div>
       )}

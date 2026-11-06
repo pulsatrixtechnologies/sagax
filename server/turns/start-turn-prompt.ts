@@ -19,6 +19,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
     HOSTED_WORKSPACE,
     LOCAL_RECALL_BUDGET,
     LOCAL_RECENT_WORK_LINES,
+    MEME_PROMPT,
     REACTION_PROMPT,
     ROUTINE_EXECUTION_PROMPT,
     TEAM_MEMORY_PROMPT,
@@ -205,6 +206,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       // its own paragraph, so a smaller model reads it as a rule of its
       // own; never on a call (the tools are not shown there either)
       { id: "reactions", label: "Reactions", text: state.integrations.agents && !state.onCall ? REACTION_PROMPT : "" },
+      { id: "memes", label: "Memes", text: state.integrations.agents && !state.onCall && (state.liveBot ?? state.bot).memeReplies !== "off" ? MEME_PROMPT : "" },
       { id: "recall", label: "Recall", text: state.recallPrompt },
       { id: "routine", label: "Routines", text: state.routinePrompt },
       { id: "routine-execution", label: "Routine execution", text: state.opts?.automationSource === "schedule" || state.opts?.automationSource === "manual" ? ROUTINE_EXECUTION_PROMPT : "" },

@@ -65,7 +65,7 @@ beforeAll(async () => {
   vi.stubGlobal("EventSource", FixtureEventSource);
   vi.stubGlobal("fetch", (path: string, init?: RequestInit) => {
     requests.push({ path, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    return path.startsWith("/api/bots?") ? json({ bots: [bot], groups: [] }) : json(answers[path] ?? {});
+    return path.startsWith("/api/bots?") ? json({ bots: [bot], groups: [] }) : path.startsWith("/api/routines") ? json(answers["/api/routines"] ?? {}) : json(answers[path] ?? {});
   });
   const container = document.createElement("div");
   document.body.append(container);

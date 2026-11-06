@@ -62,7 +62,7 @@ export function RoutinesInConversationRow() {
  * that is another computer's client does not show it, as before. */
 export function OrganizationBotRows() {
   const { state } = useStore();
-  const remoteActive = window.ogb?.remoteClient?.active === true;
+  const remoteActive = typeof window !== "undefined" && window.ogb?.remoteClient?.active === true;
   if (!canEditConfig(state.config)) return null;
   return (
     <>

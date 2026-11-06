@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FullAccessWarning } from "./FullAccessWarning";
 
 import {
   ApprovalModeSelector,
@@ -13,14 +12,6 @@ import {
 } from "./ApprovalModeSelector";
 
 describe("approval mode selector", () => {
-  it("discloses delegated work in the Full access confirmation", () => {
-    const html = renderToStaticMarkup(createElement(FullAccessWarning, {
-      open: true, onCancel: () => {}, onConfirm: () => {},
-    }));
-    expect(html).toContain("tasks delegated by your Primary Bot or other bots");
-    expect(html).toContain("does not enable Full access on other bots");
-    expect(html).not.toContain("Requests that come from another bot still get the usual checks");
-  });
   it("lists the approval levels with their plain-language copy", () => {
     expect(approvalModeOptions().map(({ mode, label, description }) => ({ mode, label, description }))).toEqual([
       {
@@ -68,12 +59,12 @@ describe("approval mode selector", () => {
 
   it.each(["cursorAgent", "opencodeGo"])("offers Full access for %s, and no Edits level it cannot map", (kind) => {
     expect(approvalModeOptionsFor(kind).map((option) => option.mode)).toEqual(["ask", "auto", "full"]);
-    expect(approvalModeOptionsFor(kind, false).map((option) => option.mode)).toEqual(["ask", "auto"]);
+    expect(approvalModeOptionsFor(kind, false).map((option) => option.mode)).toEqual(["ask", "auto", "full"]);
   });
 
   it("offers Grok its native acceptEdits as Auto-accept edits", () => {
     expect(approvalModeOptionsFor("grokAgent").map((option) => option.mode)).toEqual(["ask", "edits", "auto", "full"]);
-    expect(approvalModeOptionsFor("grokAgent", false).map((option) => option.mode)).toEqual(["ask", "edits", "auto"]);
+    expect(approvalModeOptionsFor("grokAgent", false).map((option) => option.mode)).toEqual(["ask", "edits", "auto", "full"]);
   });
 
   it("offers Antigravity Auto as the explicit full-access grant, not native review", () => {
@@ -85,7 +76,7 @@ describe("approval mode selector", () => {
     ]);
     expect(options[2].chip).toBe("Auto");
     expect(options[2].description).toContain("Automatically approve tool requests");
-    expect(approvalModeOptionsFor("antigravityAgent", false).map((option) => option.mode)).toEqual(["ask", "edits"]);
+    expect(approvalModeOptionsFor("antigravityAgent", false).map((option) => option.mode)).toEqual(["ask", "edits", "full"]);
   });
 
   it("shows the effective Antigravity mode without upgrading saved Auto settings", () => {
@@ -101,17 +92,21 @@ describe("approval mode selector", () => {
     expect(render("full", false, false)).toContain('aria-label="Auto (full access) for Antigravity"');
   });
 
-  it("explains Auto fallbacks and does not elevate unknown providers", () => {
+  it("explains Auto fallbacks for unknown providers and still offers Full", () => {
     expect(approvalModeOptionsFor("grokAgent").find((option) => option.mode === "auto")?.description).toContain("automatic review to approve routine actions");
     expect(approvalModeOptionsFor("customAgent").find((option) => option.mode === "auto")?.description).toContain("behaves like Ask");
-    expect(approvalModeOptionsFor("customAgent").map((option) => option.mode)).toEqual(["ask", "auto"]);
+    // Full is offered on every engine (omb #2701). Auto without a native
+    // reviewer still behaves like Ask; that is the only "non-elevation".
+    expect(approvalModeOptionsFor("customAgent").map((option) => option.mode)).toEqual(["ask", "auto", "full"]);
   });
 
-  it("hides trusted modes when the packaged desktop bridge is unavailable", () => {
+  it("offers Full without the packaged desktop bridge and hides only Custom", () => {
     expect(approvalModeOptionsFor("codex", false).map((option) => option.mode)).toEqual([
       "ask",
       "auto",
+      "full",
     ]);
+    expect(approvalModeOptionsFor("claudeAgent", false).map((option) => option.mode)).toEqual(["ask", "edits", "auto", "full"]);
   });
 
   it("keeps the composer trigger icon-only and the settings trigger labeled", () => {

@@ -9,6 +9,17 @@ import { verificationServerEnvironment } from "./control-omb.ts";
 
 const childEnv = (parentEnv: NodeJS.ProcessEnv) => verificationServerEnvironment(parentEnv, join(tmpdir(), "omb-fixture-env"), 9100);
 
+describe("the fixture's fake engine knobs", () => {
+  it("lets the Claude fake's knobs and the Codex fake's background-call knobs cross, and nothing else", () => {
+    const env = childEnv({
+      FAKE_CLAUDE_TEXT_ROUTES: "/tmp/routes.json", FAKE_CODEX_TEXT_ROUTES: "/tmp/codex-routes.json", FAKE_CODEX_TEXT_LOG: "/tmp/codex.jsonl",
+      FAKE_CODEX_MODE: "approval", FAKE_CODEX_DUMP: "/tmp/codex-dump.json", SOME_SECRET: "x",
+    });
+    expect(env).toMatchObject({ FAKE_CLAUDE_TEXT_ROUTES: "/tmp/routes.json", FAKE_CODEX_TEXT_ROUTES: "/tmp/codex-routes.json", FAKE_CODEX_TEXT_LOG: "/tmp/codex.jsonl" });
+    for (const key of ["FAKE_CODEX_MODE", "FAKE_CODEX_DUMP", "SOME_SECRET"]) expect(env, key).not.toHaveProperty(key);
+  });
+});
+
 describe("a fixture driven from a real browser", () => {
   it("trusts this machine's browsers as `pnpm dev` does, unless the caller tests the sign-in", () => {
     expect(childEnv({}).SAGAX_DEV_TRUST_LOCAL_BROWSER).toBe("1");

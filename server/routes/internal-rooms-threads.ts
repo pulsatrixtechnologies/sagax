@@ -229,7 +229,13 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
   if (!task) return json(res, 500, { error: "couldn't create that thread" });
   // The work is still for the person whose request the opener is on.
   threadStarters.set(task.threadId, openerFrom(fromThreadId));
-  applyDelegatedLevel(from, fromThreadId, target, task.threadId);
+  applyDelegatedLevel(
+    from,
+    fromThreadId,
+    target,
+    task.threadId,
+    internalCapability.roomHandoffId ?? internalCapability.generation,
+  );
   const sourceUrl = threadRefUrl({ botId: owner.group?.id ?? from.id, threadId: fromThreadId });
   const handed = oneWay
     ? `${message}\n\n[Source conversation](${sourceUrl}). This link grants no additional access and contains no copied transcript.`

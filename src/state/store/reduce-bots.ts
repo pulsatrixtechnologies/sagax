@@ -196,9 +196,26 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
         ...state,
         computerControl: {
           ...state.computerControl,
-          [action.botId]: { held: action.held, helpReason: action.helpReason },
+          [action.botId]: { held: action.held, helpReason: action.helpReason, help: action.help ?? null },
         },
       };
+    case "openSignIn":
+      return {
+        ...state,
+        signInFocus: {
+          botId: action.botId,
+          messageId: action.messageId,
+          url: action.url,
+          site: action.site,
+          place: action.place,
+          requestId: (state.signInFocus?.requestId ?? 0) + 1,
+          consumed: false,
+        },
+      };
+    case "signInFocusConsumed":
+      return state.signInFocus?.requestId === action.requestId
+        ? { ...state, signInFocus: { ...state.signInFocus, consumed: true } }
+        : state;
     case "modelVariantRuntime": {
       const event = action.event;
       if (!event.turnId) return state;

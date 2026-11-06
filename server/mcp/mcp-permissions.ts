@@ -61,6 +61,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("connectors:setup", "read", "open_connector_setup"),
   p("delegation:check", "read", "check_delegation"),
   p("delegation:wait", "read", "wait_delegation"),
+  // the runtime's read of a hand-off (docs/runtime-contract.md §9)
+  p("assignment:status", "read", "assignment_status"),
   p("sessions:search", "read", "session_search"),
   p("sessions:read", "read", "session_read"),
   p("topics:recall", "read", "recall_topic"),
@@ -102,9 +104,13 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("artifacts:delete", "own", "delete_artifact"),
   p("artifacts:claude", "own", "claude_artifact"),
   p("pages:propose", "own", "propose_page"),
+  // #2199 / #2048: pick which surface hosts a page or artifact the member asked for
+  p("pages:choose", "own", "choose_page_target"),
   p("pages:comments", "own", "page_comments"),
   // place_call is the same tool under its compatibility name
-  p("phone:call", "own", "place_phone_call", "sagax", ["place_call"]),
+  p("phone:call", "own", "place_phone_call", "sagax", ["place_call", "phone_call_owner"]),
+  // #2194: allowlisted SMS contact persona (numbers live on Perspicax)
+  p("phone:contacts", "own", "phone_line_contact"),
   // mid-call controls on the person's own live call (server/outbound/outbound-calls.ts)
   p("phone:dtmf", "own", "send_dtmf"),
   p("phone:transfer", "own", "transfer"),
@@ -113,7 +119,9 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("cards:ask", "own", "ask_choice"),
   p("rooms:react", "own", "react_to_message"),
   p("rooms:unreact", "own", "remove_reaction"),
+  p("rooms:meme", "own", "send_meme"),
   p("rooms:post", "own", "post_to_room"),
+  p("people:message", "own", "message_user"),
   p("threads:close", "own", "close_thread"),
   p("voice:note", "own", "send_voice_note"),
   p("voice:end", "own", "end_call"),
@@ -155,6 +163,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // own GitHub account (device flow).
   p("phone:tool", "own", "phone_tool"),
   p("github:connect", "own", "connect_github"),
+  // a sign-in request card for the speaker in this conversation
+  p("credentials:signin", "own", "request_sign_in"),
   p("computers:select", "own", "select_computer"),
   p("pairing:manage", "own", "manage_pairing"),
   // Dispatch
@@ -359,6 +369,7 @@ export const ROLE_OVERRIDES: Partial<Record<McpRole, Record<string, McpScope | n
   // docs are lasting instructions untrusted text must not write.
   service: {
     "vm:exec": null, "actions:invoke": null, "settings:manage": null, "pairing:manage": null, "credentials:login": null,
+    "credentials:signin": null,
     "teamsetup:propose": null, "rules:update": null, "docs:update": null,
   },
 };

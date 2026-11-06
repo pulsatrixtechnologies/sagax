@@ -4,9 +4,11 @@ import type { RequestOutcome } from "../../contracts.ts";
 import { newId } from "../../contracts.ts";
 import { acpPermissionCommand } from "../permission-command.ts";
 import { acpHostToolRequest } from "../host-tools.ts";
+import { acpReadPaths } from "../../own-file-reads.ts";
 import { connectorAsk } from "./connector-ask.ts";
 import { gatedMcpAsk } from "./gated-mcp-ask.ts";
 import { sessionOperationKey } from "./helpers.ts";
+import { openQuestionRequest, questionRequestFor } from "./question-requests.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
 import { reportBackgroundError } from "../../background-error.ts";
 
@@ -43,6 +45,10 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
           if (msg.method === "fs/read_text_file" || msg.method === "fs/write_text_file") {
             void handleClientFileRequest(msg).catch(reportBackgroundError);
             return;
+          }
+          const questionRequest = questionRequestFor(support.questionRequests, msg.method);
+          if (questionRequest) {
+            return openQuestionRequest(msg, questionRequest, current, send, emit, () => base(threadId, current.turnId));
           }
           if (msg.method !== "session/request_permission") {
             // never leave an unknown server request hanging — the agent blocks
@@ -243,6 +249,7 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
             summary,
             ...(mcpTool ? { mcpTool } : {}),
             command: isShellCommand ? acpPermissionCommand(toolCall.rawInput, commandCwd) : undefined,
+            ...(!isQuestion && acpReadPaths(toolCall) ? { reads: acpReadPaths(toolCall) } : {}),
             requiresExplicitApproval: isShellCommand && (
               toolCall.rawInput?.dangerouslyDisableSandbox === true || toolCall.rawInput?.sandbox_permissions === "require_escalated"
             ) || undefined,

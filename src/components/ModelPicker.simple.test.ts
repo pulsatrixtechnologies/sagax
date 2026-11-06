@@ -67,8 +67,10 @@ describe("model picker in Simple mode", () => {
     expect(markup).toContain('data-model-search-list="popover"');
     expect(markup).toContain('placeholder="Search models"');
     expect(markup).toContain("Opus");
-    // Every model of the provider, in one list, in Simple too.
-    expect(markup).toContain("Extra three");
+    // #2181: at most 4 models per provider, then Show more for the rest.
+    expect(markup).toContain("data-model-show-more=\"claude\"");
+    expect(markup).toContain("Show more");
+    expect(markup).not.toContain("Extra three");
     expect(markup).not.toContain("Suggested");
     expect(markup).not.toContain("data-model-effort");
     expect(markup).not.toContain("data-model-add-api-keys");
@@ -95,6 +97,9 @@ describe("model picker in Simple mode", () => {
 
   it("shows a local model by its name alone, with the server only when a name is duplicated (2026-10-26)", () => {
     const instance = claude(true);
+    // Keep the Local group at 4 models so the preview (#2181) still shows the
+    // duplicate-name and shared-by cases without needing Show more.
+    instance.models.options = instance.models.options.filter((option) => option.id !== "ollama::qwen");
     instance.models.options.push(
       { id: "desk8000abc::Ornith-1.5-122B-oQ4e-mtp", label: "Ornith-1.5-122B-oQ4e-mtp", custom: true, local: true, anthropic: true },
       { id: "desk8000abc::Twin-Model", label: "Twin-Model", server: "oMLX", custom: true, local: true, anthropic: true },

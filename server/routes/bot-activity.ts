@@ -54,7 +54,7 @@ import {
   type BotCodeWork,
 } from "../../shared/bot-activity.ts";
 import type { BotLaunchedAgentItem } from "../../shared/bot-launched-agents.ts";
-import { PASS, type RouteHandler } from "./table.ts";
+import { PASS, type RouteContext, type RouteHandler } from "./table.ts";
 import { addCodingSignal, isCodingWork, type CodingSignals } from "../activity/activity-coding.ts";
 import { CodeWorkCollector, type RepositoryInfo } from "../activity/activity-code-work.ts";
 import type { CloudAgentManager } from "../cloud-agents/manager.ts";
@@ -308,13 +308,39 @@ export function turnChildren<T extends { startedAt: number }>(children: readonly
 }
 
 export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandler {
-  const now = deps.now ?? Date.now;
+  const state = createBotActivityState(deps);
+  const listed = activityListMethods(state);
+  const detail = activityDetailMethods(state, listed);
+  return (ctx) => handleBotActivityRequest(state, listed, detail, ctx);
+}
 
+interface BotActivityState {
+  deps: BotActivityRouteDeps;
+  now: () => number;
+  messagePages: Map<string, { messages: ActivityMessage[]; hasMore: boolean; limit: number }>;
+  inRepoCache: Map<string, boolean>;
+  repositoryCache: Map<string, RepositoryInfo | undefined>;
+  scanCache: Map<string, { at: number; scannedAt: number; scan: ThreadScan }>;
+}
+
+function createBotActivityState(deps: BotActivityRouteDeps): BotActivityState {
+  const now = deps.now ?? Date.now;
+  return {
+    deps,
+    now,
+    messagePages: new Map(),
+    inRepoCache: new Map(),
+    repositoryCache: new Map(),
+    scanCache: new Map(),
+  };
+}
+
+function activityListMethods(state: BotActivityState) {
+  const { deps, now, messagePages, inRepoCache, repositoryCache, scanCache } = state;
   // One list/detail request used to call messagesTail three or four times per
   // thread (untouched, settled status, coding scan, current step). Cache the
   // largest page per thread for the life of this handler closure so each
   // thread pays one SQLite/memory read.
-  const messagePages = new Map<string, { messages: ActivityMessage[]; hasMore: boolean; limit: number }>();
   function messages(threadId: string, limit: number): { messages: ActivityMessage[]; hasMore: boolean } {
     const hit = messagePages.get(threadId);
     if (hit && (hit.limit >= limit || !hit.hasMore)) {
@@ -331,8 +357,6 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
 
   // inRepository / repository walk the filesystem; the same cwd is common
   // across a bot's coding threads.
-  const inRepoCache = new Map<string, boolean>();
-  const repositoryCache = new Map<string, RepositoryInfo | undefined>();
   function inRepository(cwd: string): boolean {
     let hit = inRepoCache.get(cwd);
     if (hit === undefined) {
@@ -426,7 +450,6 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
    * is read off every turn of the page and carried whenever the thread did
    * coding work, so the Coding section's code work keeps what earlier turns
    * produced. */
-  const scanCache = new Map<string, { at: number; scannedAt: number; scan: ThreadScan }>();
   function threadScan(bot: ActivityBot, task: ActivityTask): ThreadScan {
     const at = task.updatedAt ?? task.createdAt;
     const cached = scanCache.get(task.threadId);
@@ -575,7 +598,12 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
       .sort(newestRunningFirst)
       .slice(0, limit);
   }
+  return { messages, inRepository, repositoryOf, startedBy, threadItem, threadScan, currentStep, runItem, untouched, cloudVisible, cloudItems, list };
+}
 
+function activityDetailMethods(state: BotActivityState, listed: ReturnType<typeof activityListMethods>) {
+  const { deps, now } = state;
+  const { threadItem, messages, threadScan, cloudVisible } = listed;
   async function cloudDetail(bot: ActivityBot, cloudId: string, viewerId: string | undefined): Promise<BotActivityDetail | null> {
     if (!deps.cloudAgents) return null;
     const record = deps.cloudAgents.get(cloudId);
@@ -725,7 +753,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
     const note = run.status === "waiting" ? run.attention : run.status === "failed" || run.status === "blocked" ? run.error : undefined;
     const card = runCard(run, viewerId);
     return {
-      ...runItem(bot, run),
+      ...listed.runItem(bot, run),
       steps: [],
       stepsTruncated: false,
       files: [],
@@ -735,49 +763,59 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
       ...(card ? { access: card } : {}),
     };
   }
+  return { cloudDetail, subagents, childItems, threadDetail, runCard, runDetail };
+}
 
-  return async ({ res, url, path, method, auth, json }) => {
-    const match = path.match(/^\/api\/bots\/([\w-]+)\/activity(\/item)?$/);
-    if (!match) return PASS;
-    if (method !== "GET") return json(res, 405, { error: "method not allowed" });
-    // Fresh message pages for this request only. scanCache keeps its
-    // updatedAt key across polls; message tails must not.
-    messagePages.clear();
-    const bot = deps.bot(match[1]!);
-    if (!bot) return json(res, 404, { error: "no such bot" });
-    const viewerId = deps.viewerId(auth);
-    if (!match[2]) {
-      const requested = Number(url.searchParams.get("limit"));
-      const limit = Number.isFinite(requested) && requested > 0 ? Math.min(requested, LIST_MAX) : BOT_ACTIVITY_LIMIT;
-      const asked = url.searchParams.get("filter");
-      const filter = asked === "coding" || asked === "other" ? asked : undefined;
-      const all = list(bot, viewerId, LIST_MAX);
-      const items = all.filter((item) => !filter || (filter === "coding") === Boolean(item.coding)).slice(0, limit);
-      const launchedAgents = filter === "other" ? [] : (deps.launchedAgents?.(bot.id, viewerId) ?? []);
-      return json(res, 200, { items, subagents: filter === "coding" ? [] : subagents(bot, all, viewerId), launchedAgents });
-    }
-    const threadId = url.searchParams.get("threadId");
-    const runId = url.searchParams.get("runId");
-    const cloudId = url.searchParams.get("cloudId");
-    if (cloudId) {
-      const item = await cloudDetail(bot, cloudId, viewerId);
-      if (!item) return json(res, 404, { error: "no such activity" });
-      return json(res, 200, { item });
-    }
-    if (threadId) {
-      const task = deps.tasks(bot.id).find((entry) => entry.threadId === threadId);
-      // Not theirs reads exactly like not there.
-      if (!task || !deps.threadReadable(bot.id, threadId, viewerId)) return json(res, 404, { error: "no such activity" });
-      return json(res, 200, { item: threadDetail(bot, task, viewerId) });
-    }
-    if (runId) {
-      const run = deps.runs(bot.id).find((entry) => entry.id === runId);
-      if (!run || !deps.runSeen(run, viewerId)) return json(res, 404, { error: "no such activity" });
-      const thread = run.threadId ?? run.executionThreadId;
-      const task = thread ? deps.tasks(bot.id).find((entry) => entry.threadId === thread) : undefined;
-      if (task && deps.threadReadable(bot.id, task.threadId, viewerId)) return json(res, 200, { item: threadDetail(bot, task, viewerId, run) });
-      return json(res, 200, { item: runDetail(bot, run, viewerId) });
-    }
-    return json(res, 400, { error: "threadId or runId is required" });
-  };
+async function handleBotActivityRequest(
+  state: BotActivityState,
+  listed: ReturnType<typeof activityListMethods>,
+  detail: ReturnType<typeof activityDetailMethods>,
+  ctx: RouteContext,
+): Promise<typeof PASS | void> {
+  const { deps, messagePages } = state;
+  const { list } = listed;
+  const { subagents, cloudDetail, threadDetail, runDetail } = detail;
+  const { res, url, path, method, auth, json } = ctx;
+  const match = path.match(/^\/api\/bots\/([\w-]+)\/activity(\/item)?$/);
+  if (!match) return PASS;
+  if (method !== "GET") return json(res, 405, { error: "method not allowed" });
+  // Fresh message pages for this request only. scanCache keeps its
+  // updatedAt key across polls; message tails must not.
+  messagePages.clear();
+  const bot = deps.bot(match[1]!);
+  if (!bot) return json(res, 404, { error: "no such bot" });
+  const viewerId = deps.viewerId(auth);
+  if (!match[2]) {
+    const requested = Number(url.searchParams.get("limit"));
+    const limit = Number.isFinite(requested) && requested > 0 ? Math.min(requested, LIST_MAX) : BOT_ACTIVITY_LIMIT;
+    const asked = url.searchParams.get("filter");
+    const filter = asked === "coding" || asked === "other" ? asked : undefined;
+    const all = list(bot, viewerId, LIST_MAX);
+    const items = all.filter((item) => !filter || (filter === "coding") === Boolean(item.coding)).slice(0, limit);
+    const launchedAgents = filter === "other" ? [] : (deps.launchedAgents?.(bot.id, viewerId) ?? []);
+    return json(res, 200, { items, subagents: filter === "coding" ? [] : subagents(bot, all, viewerId), launchedAgents });
+  }
+  const threadId = url.searchParams.get("threadId");
+  const runId = url.searchParams.get("runId");
+  const cloudId = url.searchParams.get("cloudId");
+  if (cloudId) {
+    const item = await cloudDetail(bot, cloudId, viewerId);
+    if (!item) return json(res, 404, { error: "no such activity" });
+    return json(res, 200, { item });
+  }
+  if (threadId) {
+    const task = deps.tasks(bot.id).find((entry) => entry.threadId === threadId);
+    // Not theirs reads exactly like not there.
+    if (!task || !deps.threadReadable(bot.id, threadId, viewerId)) return json(res, 404, { error: "no such activity" });
+    return json(res, 200, { item: threadDetail(bot, task, viewerId) });
+  }
+  if (runId) {
+    const run = deps.runs(bot.id).find((entry) => entry.id === runId);
+    if (!run || !deps.runSeen(run, viewerId)) return json(res, 404, { error: "no such activity" });
+    const thread = run.threadId ?? run.executionThreadId;
+    const task = thread ? deps.tasks(bot.id).find((entry) => entry.threadId === thread) : undefined;
+    if (task && deps.threadReadable(bot.id, task.threadId, viewerId)) return json(res, 200, { item: threadDetail(bot, task, viewerId, run) });
+    return json(res, 200, { item: runDetail(bot, run, viewerId) });
+  }
+  return json(res, 400, { error: "threadId or runId is required" });
 }

@@ -139,6 +139,7 @@ const routineToolFieldsSchema = z.object({
    * Requirements > computer); skills and MCP requirements are kept. */
   requiresComputer: z.boolean().optional(),
   effort: z.union([z.enum(EFFORT_LEVELS), z.literal("")]).nullable().optional(),
+  runOnStartup: z.boolean().optional(),
   /** Create only: true starts the routine live, false paused; absent
    * follows `routines.newPaused`. A webhook or email trigger follows the
    * same rule. Pause and resume are actions of their own. */
@@ -312,6 +313,7 @@ const storedDefinitionSchema = z.object({
   actAs: z.string().max(120).optional(),
   requiresComputer: z.boolean().optional(),
   effort: z.enum(EFFORT_LEVELS).optional(),
+  runOnStartup: z.boolean().optional(),
 }).strict();
 const storedChangesSchema = storedDefinitionSchema
   .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, subagentModel: true, actAs: true, effort: true })
@@ -830,6 +832,7 @@ function normalizeDefinition(input: RoutineToolDefinitionInput, now: number): Ro
     ...(actAsInput(input.actAs) !== undefined ? { actAs: actAsInput(input.actAs)! } : {}),
     ...(input.requiresComputer === true ? { requiresComputer: true } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
+    ...(input.runOnStartup === true ? { runOnStartup: true } : {}),
   };
 }
 
@@ -855,6 +858,7 @@ function normalizeChanges(
   if (input.actAs !== undefined) changes.actAs = actAsInput(input.actAs) ?? null;
   if (input.requiresComputer !== undefined) changes.requiresComputer = input.requiresComputer === true;
   if (input.effort !== undefined) changes.effort = input.effort || null;
+  if (input.runOnStartup !== undefined) changes.runOnStartup = input.runOnStartup === true;
   return changes;
 }
 
@@ -1156,6 +1160,7 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
     ...(existing.actAs !== undefined ? { actAs: existing.actAs } : {}),
     ...(existing.requires?.computer ? { requiresComputer: true } : {}),
     ...(existing.effort ? { effort: existing.effort } : {}),
+    ...(existing.runOnStartup ? { runOnStartup: true } : {}),
   };
   if (operation.action !== "update") return base;
   const { schedule, timeoutMinutes, watch, folder, model, subagentModel, actAs, effort, ...changes } = operation.changes;
@@ -1178,6 +1183,8 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
   else if (actAs !== undefined) merged.actAs = actAs;
   if (effort === null) delete merged.effort;
   else if (effort !== undefined) merged.effort = effort;
+  // Becoming a one-time routine drops it, as the routine itself does.
+  if (merged.schedule.type === "once") delete merged.runOnStartup;
   return merged;
 }
 
@@ -1281,6 +1288,9 @@ function cardCopy(
       ...(definition.actAs !== undefined ? [`Acts as: ${definition.actAs ? redactSecretsInText(definition.actAs) : "the person's own access"} (Perspicax role)`] : []),
       ...(definition.requiresComputer ? ["Needs its computer: yes (the pre-run check waits for the bot's computer to be online)"] : []),
       ...(definition.effort ? [`Effort: ${definition.effort} (chat keeps the bot's effort)`] : []),
+      ...(definition.runOnStartup || (operation.action === "update" && operation.changes.runOnStartup !== undefined)
+        ? [`On startup: ${definition.runOnStartup ? "Also runs once each time Sagax starts" : "Runs only on its schedule"}`]
+        : []),
       // Last before the instructions: the one sentence that says what
       // confirming actually does, in the reader's terms.
       ...(operation.action === "create" || operation.action === "update"
@@ -1317,6 +1327,7 @@ function inputFromDefinition(definition: RoutineRequestDefinition, botId: string
     ...(definition.actAs !== undefined ? { actAs: definition.actAs } : {}),
     ...(definition.requiresComputer ? { requires: { computer: true } } : {}),
     ...(definition.effort ? { effort: definition.effort } : {}),
+    ...(definition.runOnStartup ? { runOnStartup: true } : {}),
   };
 }
 
@@ -1343,6 +1354,7 @@ function updateFromChanges(
   if (changes.actAs !== undefined) patch.actAs = changes.actAs;
   if (changes.requiresComputer !== undefined) patch.requires = withRequiredComputer(currentRequires, changes.requiresComputer);
   if (changes.effort !== undefined) patch.effort = changes.effort;
+  if (changes.runOnStartup !== undefined) patch.runOnStartup = changes.runOnStartup;
   return patch;
 }
 
@@ -1428,6 +1440,7 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
         || Boolean(routine.requires?.computer) !== Boolean(definition.requiresComputer)
         || routine.effort !== definition.effort
         || !isDeepStrictEqual(routine.precheck?.kind === "watch" ? routine.precheck : undefined, definition.watch)
+        || Boolean(routine.runOnStartup) !== Boolean(definition.runOnStartup)
         || (routine.attachments?.length ?? 0) > 0) return false;
       // An omitted start means "every N minutes", not a new phase each time
       // the model retries. Explicit starts and all other constraints stay exact.
@@ -1461,6 +1474,12 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
     } catch (error) {
       throw new RoutineRequestError(error instanceof Error ? error.message : "Invalid cron schedule", 409);
     }
+  }
+  const startsWithApp = operation.action === "create"
+    ? operation.routine.runOnStartup === true
+    : operation.action === "update" && operation.changes.runOnStartup === true;
+  if (startsWithApp && (schedule ?? current?.schedule)?.type === "once") {
+    throw new RoutineRequestError("Only a repeating routine can also run when Sagax starts. A one-time routine just runs at its time.");
   }
   if (schedule?.type === "once" && schedule.at <= now) {
     throw new RoutineRequestError("That one-time schedule is now in the past. Ask the bot to propose a new time.", 409, { terminal: true });
@@ -1523,6 +1542,7 @@ function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
     ...(routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
     ...(routine.requires?.computer ? { requiresComputer: true } : {}),
     ...(routine.effort ? { effort: routine.effort } : {}),
+    ...(routine.runOnStartup ? { runOnStartup: true } : {}),
     enabled: routine.enabled,
     ...(routine.target === "room-goal" ? { target: "room-goal" as const } : {}),
     ...(routine.groupId ? { groupId: routine.groupId } : {}),
@@ -1553,6 +1573,7 @@ function restorePatch(before: RoutineRequestSnapshot, now: number, currentRequir
     actAs: before.actAs ?? null,
     requires: withRequiredComputer(currentRequires, before.requiresComputer === true),
     effort: before.effort ?? null,
+    runOnStartup: before.runOnStartup === true,
   };
 }
 
@@ -1822,6 +1843,7 @@ export class RoutineRequestService {
             ...(before.continuity ? { continuity: true } : {}),
             ...(before.overlap === "queue" ? { overlap: "queue" as const } : {}),
             ...(before.precheck !== undefined ? { precheck: structuredClone(before.precheck) as RoutineInput["precheck"] } : {}),
+            ...(before.runOnStartup ? { runOnStartup: true } : {}),
             ...(before.resultsThreadId ? { resultsThreadId: before.resultsThreadId } : {}),
             ...(before.folder ? { folder: before.folder } : {}),
             ...(before.requiresComputer ? { requires: { computer: true } } : {}),

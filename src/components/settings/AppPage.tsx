@@ -1,7 +1,7 @@
-// Settings > App (id "about", #2080 L2): absorbs the rows that leave Account
-// and Appearance. Card order matches PLAN.md decision 1: Version and updates
-// (drawn by the modal), Startup and windows, Input, Help, Advanced (holding
-// installation rows until L3 / Usage until L1), About.
+// Settings > App (id "about", #2080): startup, input, help, advanced shell,
+// and the installation rows that stay here when Organization is hidden (solo
+// desktop). Card order: Startup, Input, Help, Advanced (mode + GPU), then
+// sibling advanced groups for bot rules / cleanup / usage (no card in a card).
 import { useState } from "react";
 
 import { api, useStore } from "@/state/store";
@@ -71,10 +71,9 @@ export function GuidedToursRow() {
   );
 }
 
-/** Cards L2 mounts on App while Account and Appearance slim down. Version /
- * updates and the About link stay in the modal. Holding cards use one
- * `advanced` plain group so Simple mode folds them under App > Advanced
- * until L1 (Usage) and L3 (Organization) take them. */
+/** Cards L2 mounts on App. On a solo desktop Organization is hidden, so bot
+ * rules, cleanup and the usage meter stay here as sibling advanced groups
+ * (one card level, folded under Advanced in Simple mode). */
 export function AppPageExtras({ remoteActive }: { remoteActive: boolean }) {
   const { state } = useStore();
   const editConfig = canEditConfig(state.config);
@@ -117,24 +116,22 @@ export function AppPageExtras({ remoteActive }: { remoteActive: boolean }) {
 
       {showHolding && (
         <div data-settings-card="about.holding">
-          <SettingsGroup title={t("settings.app.holding")} groupId="appHolding" advanced plain>
-            {solo && (
-              <SettingsGroup title={t("organization.group.bots")} groupId="organizationBots">
-                <OrganizationBotRows />
-              </SettingsGroup>
-            )}
-            {editConfig && (
-              <>
-                <PeopleToolAccessSettings />
-                <ThreadCleanupSettings />
-                <SettingsGroup title={t("settings.loopGuard.title")} groupId="loopGuard">
-                  <LoopGuardRow />
-                </SettingsGroup>
-              </>
-            )}
-            <SettingsGroup title={t("settings.usage.title")} groupId="usageMeter">
-              <UsageMeterRow />
+          {solo && (
+            <SettingsGroup advanced title={t("organization.group.bots")} groupId="organizationBots">
+              <OrganizationBotRows />
             </SettingsGroup>
+          )}
+          {editConfig && (
+            <>
+              <PeopleToolAccessSettings />
+              <ThreadCleanupSettings />
+              <SettingsGroup advanced title={t("settings.loopGuard.title")} groupId="loopGuard">
+                <LoopGuardRow />
+              </SettingsGroup>
+            </>
+          )}
+          <SettingsGroup advanced title={t("settings.usage.title")} groupId="usageMeter">
+            <UsageMeterRow />
           </SettingsGroup>
         </div>
       )}

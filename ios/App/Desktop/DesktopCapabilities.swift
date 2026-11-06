@@ -42,7 +42,7 @@ struct DesktopCapabilitiesModal: View {
         DesktopModalFrame(width: 900, background: \.app, close: close) {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
-                    DesktopText(Text("Capabilities"), size: 17, weight: .semibold, line: 24, tracking: -0.136)
+                    DesktopText(Text("Plugins"), size: 17, weight: .semibold, line: 24, tracking: -0.136)
                         .padding(.trailing, 48)
                     // the scope and the one search share a line (2026-10-29)
                     HStack(spacing: 12) {
@@ -52,8 +52,8 @@ struct DesktopCapabilitiesModal: View {
                     }
                     .padding(.top, 12)
                     DesktopText(scope == .bot ? Text("Plugins installed here go to \(bot?.name ?? "") only, with their agents, commands and skills. Hooks and the plugin's own MCP servers are left out.")
-                                              : scope == .organization ? Text("Capabilities for members of the organization.")
-                                              : Text("These capabilities serve all of your bots. You manage them here."),
+                                              : scope == .organization ? Text("Plugins for members of the organization.")
+                                              : Text("These plugins serve all of your bots. You manage them here."),
                                 size: 12, line: 18, color: \.inkSecondary)
                         .frame(minHeight: 36, alignment: .topLeading)
                         .padding(.top, 8)

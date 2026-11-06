@@ -228,7 +228,7 @@ export function Card(props: CardProps) {
   if (props.collapsible && props.title) return <CollapsibleCard {...props} title={props.title} />;
   const { title, subtitle, children, cardId } = props;
   return (
-    <div data-settings-card={cardId} className="rounded-[14px] border-[0.5px] border-border px-3.5 py-3">
+    <div data-settings-card={cardId} data-settings-surface="" className="rounded-[14px] border-[0.5px] border-border px-3.5 py-3">
       {title && (
         <div className="text-[13px] font-normal leading-[18px] text-ink">{title}</div>
       )}
@@ -242,7 +242,7 @@ function CollapsibleCard({ title, subtitle, children, cardId, defaultOpen = true
   const bodyId = useId();
   const [open, toggle] = useCardOpen(cardId ?? `${ANONYMOUS_CARD}${bodyId}`, defaultOpen);
   return (
-    <div data-settings-card={cardId} data-open={open ? "true" : "false"} className="rounded-[14px] border-[0.5px] border-border">
+    <div data-settings-card={cardId} data-open={open ? "true" : "false"} data-settings-surface="" className="rounded-[14px] border-[0.5px] border-border">
       <h3 className="text-[13px] font-normal leading-[18px]">
         <button
           type="button"
@@ -397,7 +397,7 @@ export function SettingsGroup({
           {accessory}
         </div>
       )}
-      <div className={plain ? "flex flex-col gap-2 empty:hidden" : "flex flex-col rounded-xl border-[0.5px] border-border bg-elevated py-1.5 empty:hidden"}>{children}</div>
+      <div data-settings-surface={plain ? undefined : ""} className={plain ? "flex flex-col gap-2 empty:hidden" : "flex flex-col rounded-xl border-[0.5px] border-border bg-elevated py-1.5 empty:hidden"}>{children}</div>
     </section>
   );
   if (!folded) return section;
@@ -435,7 +435,7 @@ export function SettingsAdvancedScope({ pageId, fold, searching, children }: {
     <AdvancedFoldContext.Provider value={value}>
       {children}
       <section data-settings-group="advanced" data-settings-card={cardId} data-open={open ? "true" : "false"} hidden={titles.length === 0} className="flex flex-col gap-2">
-        <div className={GROUP_CARD}>
+        <div className={GROUP_CARD} data-settings-surface="">
           <DescribedRow label={t("settings.advanced.title")} description={titles.map((entry) => entry.title).join(", ")} rowId="advanced">
             <CountPill open={open} onToggle={toggle} label={t("settings.advanced.title")} count={titles.length} controls={bodyId} />
           </DescribedRow>
@@ -838,6 +838,39 @@ export function FoldRow({ cardId, defaultOpen = false, label, description, help,
   );
 }
 
+/** A page section that folds (#2175): the grey heading of a SettingsGroup
+ * with its description under it and a count pill at its right; open, what
+ * it holds draws below as sibling groups at the same level, each its own
+ * card. Never a card around other cards: a settings page draws one card
+ * level (docs/design/ux-reference-grokbot-cursor.md, 2.5). `cardId`
+ * remembers the choice on this device and lets a search or a link open it
+ * (requestSettingsCard). The body stays mounted while folded. */
+export function SettingsFoldSection({ cardId, groupId, defaultOpen = false, title, description, count, children }: {
+  cardId: string;
+  groupId: string;
+  defaultOpen?: boolean;
+  title: string;
+  description?: React.ReactNode;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  const headingId = useId();
+  const bodyId = useId();
+  const [open, toggle] = useCardOpen(cardId, defaultOpen);
+  return (
+    <section aria-labelledby={headingId} data-settings-group={groupId} data-settings-card={cardId} data-open={open ? "true" : "false"} className="flex flex-col gap-2">
+      <div className="flex min-w-0 items-start gap-1.5 px-1">
+        <div className="min-w-0 flex-1">
+          <h3 id={headingId} className="text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>
+          {description && <p className="text-[13px] leading-[18px] text-ink-secondary">{description}</p>}
+        </div>
+        <CountPill open={open} onToggle={toggle} label={title} count={count} controls={bodyId} />
+      </div>
+      <div id={bodyId} hidden={!open} className="flex flex-col gap-6">{children}</div>
+    </section>
+  );
+}
+
 /** The reference design's filled pill for the one action a window is for ("Update",
  * "Call"), beside grey PILLs. */
 export const PRIMARY_PILL = `${PILL} ui-button-primary`;
@@ -1124,5 +1157,5 @@ export function ConfirmPill({ label, confirmLabel, ariaLabel, title, onConfirm, 
 }
 
 // #2080 (L0): the shared Settings patterns, one import for every page.
-export { ExternalLinkPill, StatusText, OrgManagedRow, OrgBand, FilterChips, SelectionBar, SettingsEmpty } from "./settings/SettingsPatterns";
+export { ExternalLinkPill, StatusText, OrgBand, FilterChips, SelectionBar, SettingsEmpty } from "./settings/SettingsPatterns";
 export type { FilterChip } from "./settings/SettingsPatterns";

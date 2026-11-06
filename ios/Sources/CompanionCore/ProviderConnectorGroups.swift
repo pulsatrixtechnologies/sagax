@@ -1,4 +1,4 @@
-// Capabilities > Installed > Providers (src/components/plugins/
+// Plugins > Installed > Providers (src/components/plugins/
 // HarnessConnectorGroups.tsx `connectorGroups`, AccountsView.tsx
 // `accountServices`): Claude and Grok always have their section (their
 // connectors, or why there are none and how to connect), ChatGPT when the

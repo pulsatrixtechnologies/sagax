@@ -1,11 +1,12 @@
 /** Mutable Codex app-server session bag shared across launch phases. */
 import type { ChildProcess } from "node:child_process";
-import type { RuntimeEvent, SendTurnInput, SteerOutcome, StdioMcpSpec } from "../../contracts.ts";
+import type { RequestOutcome, RuntimeEvent, SendTurnInput, SteerOutcome, StdioMcpSpec } from "../../contracts.ts";
 import type { ApprovalMode } from "../../../shared/approval-mode.ts";
 import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { CodexRoute } from "../codex-errors.ts";
 import type { CodexConfig } from "./config.ts";
 import type { McpApprovalMode } from "./mcp-mount.ts";
+import type { McpStartupTracker } from "./mcp-startup.ts";
 import type { WarmResourceLease } from "../../resources/warm-resources.ts";
 
 /** One retained app-server process for a thread (#1969). Lives with CodexSession
@@ -14,6 +15,8 @@ export type CodexProcess = {
   key: string;
   identity: string;
   initialized: boolean;
+  /** From the initialize reply; reused when the process stays warm. */
+  userAgent?: unknown;
   closing?: boolean;
   session?: CodexSession;
   idle?: ReturnType<typeof setTimeout>;
@@ -38,6 +41,8 @@ export type PreparedCodexLaunch = {
   selectedApprovals: Map<string, McpApprovalMode>;
   /** A selected mount's own `env` table (the person's environment proxy). */
   selectedLiterals: Map<string, Record<string, string>>;
+  /** Mounts written on argv without going through selectedMcp (phone, messages, workplace). */
+  directMounts: string[];
   directoryMounts: Set<string>;
   selectionConfig: { config?: Record<string, unknown> };
   commandCwd: string;
@@ -100,7 +105,7 @@ export type CodexSession = PreparedCodexLaunch & {
     usage?: { input: number; output: number; cachedInput?: number };
     usageBaseline?: { input: number; output: number; cachedInput: number };
   };
-  asks: Map<string, (behavior: "allow" | "deny" | "answer", message?: string, source?: "user" | "timeout" | "system") => void>;
+  asks: Map<string, (behavior: "allow" | "deny" | "answer", message?: string, source?: "user" | "timeout" | "system") => void | Promise<RequestOutcome>>;
   nextId: number;
   sensitiveResponseIds: Set<number>;
   rpcPending: Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>;
@@ -118,6 +123,7 @@ export type CodexSession = PreparedCodexLaunch & {
   controlsHost: boolean;
   handleServerRequest: (msg: any) => void;
   handleNotification: (msg: any) => void;
+  mcpStartup: McpStartupTracker;
   reviewWarning: boolean;
   timedOutReview: boolean;
   seenReviews: Set<string>;

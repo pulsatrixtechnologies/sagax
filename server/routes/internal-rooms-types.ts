@@ -154,7 +154,7 @@ export interface InternalRoomsDeps {
   startParallelTask(input: Record<string, unknown>): Promise<{ parallel: { threadId: string; title: string; state: string } }>;
   globalRuntimeSettings(): GlobalRuntimeSettings;
   turnOrigin(capability: InternalCapabilityView): unknown;
-  applyDelegatedLevel(from: InternalRoomsBot, fromThreadId: string, target: InternalRoomsBot, threadId: string): void;
+  applyDelegatedLevel(from: InternalRoomsBot, fromThreadId: string, target: InternalRoomsBot, threadId: string, fromNodeId?: string): void;
   threadBusy(botId: string, threadId: string): boolean;
   botAtThreadCapacity(botId: string): boolean;
   /** Null when the bot has no active group turn; otherwise the live room address. */

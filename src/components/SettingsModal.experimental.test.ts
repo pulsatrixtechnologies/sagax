@@ -86,44 +86,47 @@ describe("Settings > Experimental", () => {
     expect(html).not.toMatch(/[–—]/);
   });
 
-  it("keeps the Data window row on a server that predates it, greyed with the reason", async () => {
+  it("folds a feature this server predates under Needs a server update (#2093)", async () => {
     // An organization server older than Sagax 0.5.3 does not know the
     // feature: its config has no dataWindow, and it refuses to save one.
     fixture.section = "experimental";
     const html = await render();
     expect(html).toContain('data-experimental-feature="dataWindow"');
-    expect(html).toContain("This server does not offer the Data window yet");
-    const toggle = switchNamed("Turn on the Data window")!;
-    expect(toggle.checked).toBe(false);
-    expect((toggle as { disabled?: boolean }).disabled).toBe(true);
+    expect(html).toContain('data-settings-card="experimental.needsServerUpdate"');
+    expect(html).toContain("Arrives with the next server update.");
+    expect(html).toContain('data-unavailable=""');
+    expect(switchNamed("Turn on the Data window")).toBeUndefined();
   });
 
-  it("is laid out as the reference design's pages: one group, a label and a switch per feature, no help paragraphs", async () => {
+  it("is a switch list with a calculated count, no Experimental features heading, no Decision model (#2093)", async () => {
     fixture.section = "experimental";
-    fixture.features = { dataWindow: false, decisionModel: true };
+    fixture.features = { dataWindow: false, meetingNotetaker: false, llmThreadTitles: false };
     const html = await render();
     expect(html).toContain('data-settings-group="experimental"');
-    expect(html).toContain(">Experimental features</h3>");
-    // skill authoring and the decision model are on
-    expect(html).toContain("· 2 of 7 on");
-    for (const feature of ["skillAuthoring", "browser", "decisionModel", "dataWindow", "meetingNotetaker", "devPods"]) {
+    expect(html).not.toContain(">Experimental features</h3>");
+    // skill authoring on; browser on Computer (#2080 L3); three served switches off; no Decision model (#2093)
+    expect(html).toContain("· 1 of 4 on");
+    for (const feature of ["skillAuthoring", "dataWindow", "meetingNotetaker", "llmThreadTitles", "devPods"]) {
       expect(html, feature).toContain(`data-experimental-feature="${feature}"`);
     }
+    expect(html).not.toContain('data-experimental-feature="browser"');
+    expect(html).not.toContain('data-experimental-feature="decisionModel"');
+    expect(html).not.toContain('data-experimental-feature="browser"');
+    expect(html).toContain('data-settings-card="experimental.developer"');
     expect(html).not.toContain("Early features may change");
     expect(html).not.toContain("Save a bot's verification run as a skill");
     expect(html).not.toContain("Adds the Decision model card");
-    // the deep link of the browser notes still lands here
     expect(html).toContain('data-settings-card="experimental.features"');
     expect(html).not.toMatch(/[–—]/);
   });
 
-  it("greys a feature this server cannot run, with the reason on demand", async () => {
+  it("lists an unserved feature under Needs a server update, with the reason on demand", async () => {
     fixture.section = "experimental";
     const html = await render();
-    const row = /data-experimental-feature="dataWindow"[\s\S]*?<\/button><\/div><\/div><\/div><\/div>/.exec(html)?.[0] ?? html;
-    expect(row).toContain('data-unavailable=""');
-    expect(row).toContain("Not available on this server");
-    expect(row).toContain('aria-label="More about Data window"');
+    expect(html).toContain('data-experimental-feature="dataWindow"');
+    expect(html).toContain('data-unavailable=""');
+    expect(html).toContain("Needs a server update");
+    expect(html).toContain('aria-label="More about Data window"');
   });
 
   it("saves each switch as its own server feature", async () => {

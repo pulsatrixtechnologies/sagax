@@ -163,7 +163,7 @@ export function isToolStep(message: Message): message is Message & { tool: NonNu
 }
 
 /** A settled turn's folded rows and how long the whole turn took. */
-type TurnFold = { turnId: string; elapsedMs: number; messages: Message[] };
+export type TurnFold = { turnId: string; elapsedMs: number; messages: Message[] };
 
 function foldable(message: Message): boolean {
   return isToolStep(message) && message.tool.ok === true;
@@ -217,6 +217,11 @@ function toolStepFolds(messages: Message[]) {
   return settledTurnFolds(messages, (message, turnId) => message.turnId === turnId && foldable(message));
 }
 
+/** A room's settled turns, folded above their final message: in a room every
+ * member's working notes would otherwise read as one reply each (teammates
+ * took them for the answer). Keyed by the final (terminal) message, which
+ * stays in the transcript; the notes leave the room's rows and open from
+ * one "Worked" row above it. A turn still running keeps every line. */
 export function roomTurnFolds(messages: Message[]): {
   byTerminalId: Map<string, TurnFold>;
   hiddenIds: Set<string>;

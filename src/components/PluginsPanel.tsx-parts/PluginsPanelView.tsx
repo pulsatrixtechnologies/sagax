@@ -14,7 +14,7 @@ import { organizationRows } from "@/lib/capabilities";
 import { openSettings } from "@/lib/settings-link";
 import { setMine } from "@/lib/org-capabilities";
 import {
-  ClaudeMcpSwitch,
+  ClaudeCodeSwitches,
   McpImportForm,
   McpMessages,
   McpReservedServers,
@@ -373,7 +373,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               refreshing={harness.loading}
               onRefresh={() => void harness.load(true)}
               servers={organization ? <MyMcpServers /> : undefined}
-              claudeCode={!organization && canEditConfig(state.config) ? <ClaudeMcpSwitch /> : undefined}
+              claudeCode={!organization && canEditConfig(state.config) ? <ClaudeCodeSwitches /> : undefined}
               // a section with no account offers to connect it (2026-10-28):
               // Settings > Models and voice, where each engine signs in
               onSetUp={() => {

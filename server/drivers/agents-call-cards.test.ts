@@ -10,7 +10,7 @@ const PROFILE: CatalogProfile = { externalRuntime: false, coordinating: false, o
 function harness(answer: { ok: boolean; status: number; body: Record<string, unknown> } = { ok: true, status: 201, body: { messageId: "m42" } }) {
   const api = vi.fn<HarnessClient["api"]>(async () => ({}));
   const apiResponse = vi.fn<HarnessClient["apiResponse"]>(async () => answer);
-  const context: ToolCallContext = { botId: "bot-scout", threadId: "thread-scout", depth: 0, externalRuntime: false, coordinating: false, sharedComputers: false, client: { api, apiResponse } };
+  const context: ToolCallContext = { botId: "bot-scout", threadId: "thread-scout", depth: 0, coordinating: false, externalRuntime: false, sharedComputers: false, client: { api, apiResponse } };
   return { api, apiResponse, context };
 }
 

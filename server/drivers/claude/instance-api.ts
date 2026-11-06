@@ -37,17 +37,31 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
    * next model call, or — when no call is left in this turn — as its next
    * native turn, which this driver keeps inside the same logical turn.
    * "refused" when nothing is running here to steer or the stdin write
-   * provably failed; the caller queues those words. */
-  const steer = async (threadId: string, text: string, options?: { steerId?: string }): Promise<SteerOutcome> => {
+   * provably failed; the caller queues those words. Images ride as the
+   * same native blocks a new turn's do (claudeUserMessage). */
+  const steer = async (
+    threadId: string,
+    text: string,
+    options?: { steerId?: string; images?: readonly { path: string; mime: string; bytes: number }[] },
+  ): Promise<SteerOutcome> => {
     const s = sessions.get(threadId);
     if (!s || !s.turn || s.turn.settled || s.closing || s.child.exitCode !== null) return "refused";
     const turn = s.turn;
+    // Materialize before counting or writing anything: an attachment that
+    // vanished since it was admitted refuses the steer, and nothing was
+    // sent, so the caller may queue the words for a real turn.
+    let message: ReturnType<typeof claudeUserMessage>;
+    try {
+      message = claudeUserMessage(text, options?.images);
+    } catch {
+      return "refused";
+    }
     // Counted before the write: a `result` read while the words are still
     // on their way must hold for them too. A failed write takes it back.
     // The uuid is what the CLI's echo names when a model call takes it in.
     const id = options?.steerId && /^[\w-]{8,80}$/.test(options.steerId) ? options.steerId : randomUUID();
     turn.pendingSteers.add(id);
-    if (!(await writeUser(s, threadId, { ...claudeUserMessage(text, undefined), uuid: id }))) {
+    if (!(await writeUser(s, threadId, { ...message, uuid: id }))) {
       turn.pendingSteers.delete(id);
       return "refused";
     }
@@ -230,6 +244,8 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
         dataMcp: true,
         images: true,
         nativeImageInput: true,
+        // Mid-turn pictures ride the same steer path as words (contracts.steerImages).
+        steerImages: true,
         effortLevels: ["low", "medium", "high", "xhigh", "max"],
         queueing: true,
         // Only while this CLI can be told to refresh a resumed session's
@@ -255,6 +271,9 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
       interruptTurn: async (threadId) => active.get(threadId)?.stop(),
       applyApprovalMode,
       respondToRequest: async (threadId, requestId, decision) => {
+        const elicited = await sessions.get(threadId)?.elicit.answer(requestId, decision.behavior);
+        if (elicited === "failed") return "unavailable";
+        if (elicited === "sent") return decision.behavior === "allow" ? "allowed-once" : "rejected";
         // fail-closed by construction: no broker, or an ask that already
         // timed out / settled, is `unavailable` — the caller denies
         const broker = sessions.get(threadId)?.broker ?? active.get(threadId)?.broker;

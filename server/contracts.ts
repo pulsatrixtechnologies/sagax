@@ -86,6 +86,15 @@ export interface TurnImageInput {
   path: string;
   mime: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
   bytes: number;
+  /** Set on a frame sampled from an attached video, so a content-type router can tell it apart from a person's own picture. */
+  source?: "video-frame";
+}
+
+/** A video already admitted to the private attachment store; resolved into TurnImageInput frames before any driver sees it. */
+export interface TurnVideoInput {
+  path: string;
+  mime: "video/mp4" | "video/webm" | "video/quicktime";
+  bytes: number;
 }
 
 // ── instance configuration envelope ────────────────────────────────────
@@ -206,6 +215,12 @@ export interface SendTurnInput {
   /** Per-bot approval policy, reasserted by providers on every turn so a
    * resumed native session cannot retain a stale, more permissive mode. */
   approvalMode?: ApprovalMode;
+  /** The conversation's level right now, which the person may change while
+   * the turn runs (server/host/live-approval.ts). A driver that gates its own
+   * tool calls may read it before each one; a native engine keeps
+   * `approvalMode` until its next turn. Sagax answers request.opened at this
+   * level for every engine. */
+  approvalModeNow?: () => ApprovalMode;
   /** Fresh owner selection, independent of execution approval and resume state. */
   toolScope?: ToolScope;
   /** A guest drives this turn on an OMB Cloud home: it runs with no shell
@@ -318,7 +333,7 @@ export interface SendTurnInput {
      * registers the helper with its engine; the harness only ever observes
      * and injects context through this channel, never decides state. */
     hooks?: { url: string; token: string };
-    /** Peer-agent comms: an MCP proxy (list_bots / ask_bot) that routes back
+    /** Peer-agent comms: an MCP proxy (list_bots / coordinate_bots) that routes back
      * through the harness so this bot can message other bots. The harness
      * owns turns, permissions, and recursion limits; the proxy only forwards. */
     agents?: { command: string; args: string[]; env: Record<string, string> };
@@ -361,6 +376,9 @@ export interface SendTurnInput {
    * config.toml and ignores this; the Claude driver drops
    * --strict-mcp-config for the turn. */
   mcpFromUserConfig?: boolean;
+  /** Claude Code loads the person's own `~/.claude/skills` from this folder's
+   * `.claude/skills` (`--add-dir`). */
+  userSkillsDir?: string;
   /** Per-call ceiling (ms) for this turn's MCP tools, from the server config
    * `mcp.callTimeoutMinutes`. Absent = the driver's default (10 min). */
   mcpCallTimeoutMs?: number;
@@ -494,6 +512,11 @@ export interface ProviderAdapter {
      * others keep the queue-one-and-wait behaviour. Same rule as the other
      * flags: never show a control the driver cannot honour. */
     queueing?: boolean;
+    /** True when steer() delivers `images` into the running turn as
+     * structured provider input, the way sendTurn does for a new turn.
+     * Requires queueing and nativeImageInput. Without it, words that carry
+     * attachments wait in the queue for a real turn, as they always did. */
+    steerImages?: boolean;
     /** True only when local MCP calls can reach the human approval channel.
      * Full-auto/bypass provider instances must leave this false. */
     localComputerMcp?: boolean;
@@ -569,8 +592,12 @@ export interface ProviderAdapter {
    * `steerId` names this input: a driver that learns when a model call takes
    * it in (Claude's --replay-user-messages echo) emits `steer.received` with
    * it, so the harness counts the words as received instead of offering
-   * them again on the next turn as a message "you may already have". */
-  steer?(threadId: ThreadId, text: string, options?: { steerId?: string }): Promise<SteerOutcome>;
+   * them again on the next turn as a message "you may already have".
+   *
+   * `images` are admitted attachments (as SendTurnInput.images). Callers pass
+   * them only to drivers with `capabilities.steerImages`; a driver that cannot
+   * read one refuses the whole steer rather than drop the picture. */
+  steer?(threadId: ThreadId, text: string, options?: { steerId?: string; images?: readonly TurnImageInput[] }): Promise<SteerOutcome>;
   hasSession(threadId: ThreadId): boolean;
   /** Close an idle warm process on this thread. A process whose turn is
    * already running is left alone. */
@@ -834,10 +861,11 @@ export interface ProviderInstance {
    * The signal is a best-effort cap: drivers that can honor it abort the
    * underlying provider call; the rest keep their own timeout. */
   generateText?(prompt: string, options?: TextGenerationOptions): Promise<string>;
-  /** A one-shot text call for memory upkeep only, on an engine whose turns
-   * are a whole agent process (the ACP family). It starts a fresh tool-free
-   * session on the engine's own provider, so it is never offered to titles or
-   * compaction, which would then spawn a process for every new chat. */
+  /** A one-shot text call for the background steps only (memory upkeep, the
+   * skill review), on an engine whose turns are a whole agent process (the
+   * ACP family, Codex). It starts a fresh tool-free session on the engine's
+   * own provider, so it is never offered to titles or compaction, which would
+   * then spawn a process for every new chat. */
   generateMemoryText?(prompt: string, options?: TextGenerationOptions): Promise<string>;
   /** Isolated, tool-free permission review on this same provider. Kept
    * separate from generateText so the UI never infers a security capability

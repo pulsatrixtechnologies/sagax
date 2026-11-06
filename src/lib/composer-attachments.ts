@@ -51,6 +51,13 @@ export type ImageAttachment = {
   uploading?: boolean;
   uploadProgress?: number;
   uploadError?: string;
+  /** #2121: meme metadata persisted into the attached-image tag. */
+  meme?: {
+    provider: "giphy" | "tenor" | "imgflip" | "upload";
+    attribution: string;
+    caption?: string;
+    sourceId?: string;
+  };
 };
 
 export type Attachment = PasteAttachment | FileAttachment | ImageAttachment | CitationAttachment;
@@ -567,12 +574,21 @@ function canonicalImageName(originalName: string, path: string, mime: string): s
 /** Persist a pasted image server-side and return the attachment chip data.
  * The server writes ~/.sagax/attachments/<uuid>.<ext> and answers
  * with the path; the prompt references that path so every CLI can open it. */
+/** A local .gif paste or drag is a meme upload (#2121): keep animation and
+ * attach provider attribution so the bubble renders as a meme. */
+function uploadMemeMeta(file: Pick<File, "name" | "type">, mime: string): ImageAttachment["meme"] | undefined {
+  const gif = mime === "image/gif" || /\.gif$/i.test(file.name);
+  if (!gif) return undefined;
+  return { provider: "upload", attribution: "GIF" };
+}
+
 export function optimisticImageAttachment(file: File, pending: readonly Attachment[] = []): ImageAttachment | null {
   if (!isImageFile(file)) return null;
   if (file.size > imageMaxBytes()) throw Object.assign(new Error(`${file.name} exceeds ${imageMaxBytes() / (1024 * 1024)} MB`), { status: 413 });
   assertImageFitsMessage(file, pending);
   const mime = file.type.split(";", 1)[0]!.trim().toLowerCase();
   const previewUrl = typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
+  const meme = uploadMemeMeta(file, mime);
   return {
     kind: "image",
     id: newId(),
@@ -581,6 +597,7 @@ export function optimisticImageAttachment(file: File, pending: readonly Attachme
     size: file.size,
     mime,
     ...(previewUrl ? { previewUrl } : {}),
+    ...(meme ? { meme } : {}),
     uploading: true,
   };
 }
@@ -601,12 +618,13 @@ export function assertImageFitsMessage(file: Pick<File, "name" | "size">, pendin
 
 export async function imageAttachmentFromFile(
   file: File,
-  optimistic?: Pick<ImageAttachment, "id" | "previewUrl">,
+  optimistic?: Pick<ImageAttachment, "id" | "previewUrl" | "meme">,
   options: AttachmentUploadOptions = {},
 ): Promise<ImageAttachment | null> {
   if (!isImageFile(file)) return null;
   if (file.size > imageMaxBytes()) throw Object.assign(new Error(`${file.name} exceeds ${imageMaxBytes() / (1024 * 1024)} MB`), { status: 413 });
   const saved = await uploadAttachment<{ path: string; mime: string; bytes: number }>(file, "/api/attachments", file.type, options);
+  const meme = optimistic?.meme ?? uploadMemeMeta(file, saved.mime);
   return {
     kind: "image",
     id: optimistic?.id ?? newId(),
@@ -615,6 +633,7 @@ export async function imageAttachmentFromFile(
     size: saved.bytes,
     mime: saved.mime,
     ...(optimistic?.previewUrl ? { previewUrl: optimistic.previewUrl } : {}),
+    ...(meme ? { meme } : {}),
   };
 }
 
@@ -742,7 +761,10 @@ export function composeMessage(text: string, attachments: Attachment[]): string 
     } else if (a.kind === "paste") {
       parts.push(`<pasted-text index="${i + 1}">\n${a.text}\n</pasted-text>`);
     } else if (a.kind === "image") {
-      parts.push(`<attached-image path="${escapeAttribute(a.path)}" name="${escapeAttribute(a.name)}" />`);
+      const memeAttrs = a.meme
+        ? ` meme-provider="${escapeAttribute(a.meme.provider)}" meme-attribution="${escapeAttribute(a.meme.attribution)}"${a.meme.caption ? ` meme-caption="${escapeAttribute(a.meme.caption)}"` : ""}`
+        : "";
+      parts.push(`<attached-image path="${escapeAttribute(a.path)}" name="${escapeAttribute(a.name)}"${memeAttrs} />`);
     } else {
       parts.push(`<attached-file path="${escapeAttribute(a.path)}" name="${escapeAttribute(a.name)}" />`);
     }
@@ -773,6 +795,10 @@ export type TranscriptImageAttachment = {
   path: string;
   name: string;
   private?: boolean;
+  /** #2121 */
+  memeAttribution?: string;
+  memeProvider?: string;
+  memeCaption?: string;
 };
 
 export type TranscriptAttachments = {
@@ -924,7 +950,7 @@ function transcriptBlockStarting(line: string): TranscriptBlock | null {
 }
 
 const TRANSCRIPT_ATTACHMENT_TAG =
-  /^<attached-(image|file)[\t ]+path="([^"\r\n]*)"(?:[\t ]+name="([^"\r\n]*)")?[\t ]*\/>[\t ]*$/;
+  /^<attached-(image|file)[\t ]+path="([^"\r\n]*)"(?:[\t ]+name="([^"\r\n]*)")?(?:[\t ]+meme-provider="([^"\r\n]*)")?(?:[\t ]+meme-attribution="([^"\r\n]*)")?(?:[\t ]+meme-caption="([^"\r\n]*)")?[\t ]*\/>[\t ]*$/;
 
 /** Split a stored user message into its display text and attachments for
  * transcript rendering. Markdown exports preserve whitespace; bubbles trim it.
@@ -979,6 +1005,9 @@ export function splitTranscriptAttachments(
             path,
             name: transcriptFileName(path, match[3]),
             ...(isPrivateAttachmentPath(path) ? { private: true } : {}),
+            ...(kind === "image" && match[4] ? { memeProvider: decodeAttachmentAttribute(match[4]) } : {}),
+            ...(kind === "image" && match[5] ? { memeAttribution: decodeAttachmentAttribute(match[5]) } : {}),
+            ...(kind === "image" && match[6] ? { memeCaption: decodeAttachmentAttribute(match[6]) } : {}),
           };
           if (kind === "image") images.push(attachment);
           else files.push(attachment);

@@ -58,6 +58,7 @@ Use only mapped, tested commands:
 - [Blocking decisions as actionable cards](decisions-as-cards.md)
 - [Exact command allowlist UI and saved rules](command-allowlist.md)
 - [Peer approval denial, expiry, and cancellation](peer-approvals.md)
+- [Approval notifications on the phone and the Watch](approval-notifications.md)
 - [Waiting for an occupied desktop](computer-wait.md)
 - [Chat UI, driven headlessly](chat-ui.md)
 - [Chat widgets](widgets.md)
@@ -98,6 +99,7 @@ Use only mapped, tested commands:
 - [Spend cap and sell prices](spend-cap.md)
 - [Edition loading: every feature on, and the optional enterprise layer](enterprise-license.md)
 - [Reliability qualification harness](qualification.md)
+- [Owed validation after 0.8.22 (#1895): local automation vs device remainder](owed-0.8.22-validation.md)
 
 `control-omb ui` ([Chat UI, driven headlessly](chat-ui.md)) drives the real
 renderer in a headless Chrome by accessible name, so composer sends, transcript
@@ -143,7 +145,8 @@ and HTTP tailnet endpoint refresh without touching a real Tailscale installation
 
 The [external runtimes recipe](external-runtime.md) proves a bot's standing
 comms capability from `external-runtimes.json` against a disposable server and
-the fake engine: scope, on-demand token reads, and immediate delegation drain.
+the fake engine: scope, on-demand token reads, `coordinate_bots` roots polled
+through `assignment_status`, and immediate dispatch to a free teammate.
 
 The [cloud preview fixture](cloud-preview.md) mounts the real Computer panel
 against an isolated server for image decoding, loading, and recovery UI checks.
@@ -232,6 +235,11 @@ The [iOS responsiveness checks](ios-responsiveness.md) exercise ordinary chat
 typing and navigation during a synthetic busy-fleet stream, plus batched
 delivery, compact off-main widget writes and bounded Markdown parse reuse.
 
+The [approval notifications recipe](approval-notifications.md) runs the push
+and CompanionCore contracts for per-ask ids, question choice buttons, and
+silent `settled` / `notify-withdraw` removal, then lists the physical iPhone
+and Apple Watch checklist for #1708. It does not claim a device pass.
+
 The [Android thread checks](android-threads.md) cover the Compose thread tree,
 local selection, draft isolation and installable preview APK.
 
@@ -262,6 +270,10 @@ time-window limits on scheduled routines in that same disposable fixture.
 
 The [server settings recipe](server-settings.md) checks browser provider sign-in
 with an offline CLI and custom-domain validation without touching live accounts.
+
+The [GitHub Copilot engine checks](copilot-engine.md) cover its ACP catalog,
+model and effort selection, sign-in detection, and moving a bot between Claude
+and Copilot with fake engines.
 
 The [engine library fixture](engines-ui.md) checks onboarding and Settings cards,
 responsive layouts, theme contrast, and status refreshes without losing drafts.
@@ -328,3 +340,13 @@ state. A green unit test alone does not prove a user workflow.
 Interrupt the `launch` process with Ctrl-C. It stops the exact child it owns and
 removes only its temporary data directory. The server log remains at the
 printed path. Never kill processes by name and never delete a broad temp root.
+
+## Also
+
+- [Claude cold prewarm](claude-cold-prewarm.md)
+- [Cursor secondary monitors](cursor-secondary-monitors.md)
+- [Flow superseded tenants](flow-superseded.md)
+- [Grok ACP cold start](grok-acp-cold-start.md)
+- [HTTP MCP prewarm](http-mcp-prewarm.md)
+- [Prompt diet](prompt-diet.md)
+- [Routine smoke](routine-smoke.md)

@@ -7,7 +7,8 @@ import { spawnCli } from "../procs.ts";
 import { withoutTurnTokens } from "./spawn-contract.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { piHostToolArgs } from "./host-tools.ts";
-import { parseToolScope } from "../../shared/tool-scope.ts";
+import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
+import { ASK_USER_TOOL } from "../../shared/ask-question.ts";
 import type { SendTurnInput } from "../contracts.ts";
 import { attachPiEvents } from "./pi-send-events.ts";
 import { attachPiRpc } from "./pi-send-rpc.ts";
@@ -59,13 +60,16 @@ export async function preparePiTurn(deps: PiSendDeps, turn: SendTurnInput): Prom
   // integrations → stdio MCP servers for the pi-mcp-extension. The config
   // carries credentials (boat token, comms token), so it goes
   // into a 0600 temp file removed when the turn settles — never on argv.
+  // The same extension registers ask_user: pi ships no ask tool that
+  // works over RPC, so it is the only way a pi model can ask the person.
   // #1276: a compact turn's per-turn tokens ride files (as Claude Code's
   // warm process does), so a standby pi with the same contract can serve it.
   const mcpServers = hooks.buildMcpServers(turn.compactPrompt ? hooks.withWarmTokens(turn, threadId) : turn);
+  const askUser = toolScope === undefined || allowsTool(toolScope, { kind: "native", name: ASK_USER_TOOL });
   let mcpTempDir: string | null = null;
   let scopeReadyPath: string | undefined;
-  const mcpConfig: Record<string, unknown> = { mcpServers: mcpServers ?? {}, toolScope, approvalMode: turn.approvalMode, ...(turn.compactPrompt ? { stableCwd: true, splitStable: true } : {}) };
-  const mounts = Boolean(mcpServers || toolScope !== undefined);
+  const mcpConfig: Record<string, unknown> = { mcpServers: mcpServers ?? {}, toolScope, approvalMode: turn.approvalMode, askUser, ...(turn.compactPrompt ? { stableCwd: true, splitStable: true } : {}) };
+  const mounts = Boolean(mcpServers || toolScope !== undefined || askUser);
   const piArgs = [...deps.piArgs];
   const standbyArgs: string[] = [
     ...(turn.compactPrompt ? piArgs.filter((arg) => arg !== "--no-session") : piArgs),

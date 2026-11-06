@@ -542,6 +542,11 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // 2026-10-26): theirs on an organization server, no admin right; the key is
   // never answered back.
   { methods: ["GET", "PUT", "DELETE", "POST"], path: /^\/api\/me\/web-search(?:\/test)?$/ },
+  // Memes (#2121): the person's Tenor/GIPHY key (never answered back) and the
+  // search / materialize proxy used by the Memes picker.
+  { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/me\/memes$/ },
+  { methods: ["GET"], path: /^\/api\/memes\/(?:search|trending)$/ },
+  { methods: ["POST"], path: /^\/api\/memes\/materialize$/ },
   // The person's own Experimental switches and display preferences
   // (server/routes/person-settings.ts) and own voice keys
   // (server/routes/person-voice-keys.ts), #1098: theirs, no admin right;
@@ -554,6 +559,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // The person's visit signature (server/routes/web-bot-auth.ts): on unless
   // they turn it off. No admin right. The private key is never answered.
   { methods: ["GET", "PUT"], path: /^\/api\/me\/web-bot-auth$/ },
+  // Linked Grok (#2193): the person's own webhook URL and sealed key.
+  // No admin right. The key is never answered back.
+  { methods: ["GET", "PUT", "DELETE", "POST"], path: /^\/api\/me\/grok-bridge(?:\/(?:test|dead|leases))?$/ },
   // Connect apps > Tailscale: the person's bot computer joins their tailnet.
   { methods: ["GET", "DELETE"], path: /^\/api\/me\/tailscale$/ },
   { methods: ["POST"], path: /^\/api\/me\/tailscale\/(setup|join|refresh|disconnect)$/ },
@@ -745,6 +753,16 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/pages\/[\w-]+\/(?:share|place)$/ },
   { methods: ["PATCH"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/(?:resume|dismiss)$/ },
+  // A sign-in card's Done or Cancel. The bot's browser itself stays admin
+  // scope: it can hold the owner's signed-in sessions.
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/sign-in-cards\/[\w-]+\/(?:done|cancel)$/ },
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/connector-cards\/[\w-]+\/status$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/connector-cards\/[\w-]+\/(?:resume|dismiss)$/ },
+  // Connect the app a card asks for (iOS parity S2). It signs an account into
+  // the server's own connected apps, so the handler lets through only the
+  // bot's owner on a personal server or this computer's own person
+  // (clientSessionIsComputerOwner), never on an organization server.
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/connector-cards\/[\w-]+\/authorize$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/always-allow$/ }, // must match a pending card
   // 2026-10-14: a person's own approval rules; the handlers keep them to
   // the person (and the bot's owner).
@@ -768,6 +786,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // body, and refuses anyone who is not listed.
   { methods: ["POST"], path: /^\/api\/groups\/[\w-]+\/leave$/ },
   { methods: ["POST"], path: /^\/api\/groups\/[\w-]+\/interrupt$/ },
+  { methods: ["POST"], path: /^\/api\/groups\/[\w-]+\/members\/[\w-]+\/compact$/ },
   { methods: ["POST"], path: /^\/api\/groups\/[\w-]+\/read$/ },
   { methods: ["DELETE"], path: /^\/api\/groups\/[\w-]+\/queue\/[\w-]+$/ },
   // the room's steer: refused to a read-only member, as posting is
@@ -1175,11 +1194,11 @@ export function requiredScope(method: string, path: string, features: ClientFeat
  * same fields. */
 export const clientBotPatchViolation = sharedClientBotPatchViolation;
 
-/** What an organization member may set on a bot they own, at creation and
- * afterwards: how it looks, its name and instructions, and which of the
- * server's engines it runs on. Never where it runs, what it may reach or
- * how much it may do unasked (computer, folder, approval level, MCP servers,
- * browser profile, peers, teams): those stay server admin settings. */
+/** What an organization member may set on a bot they own via MEMBER_BOT_FIELDS:
+ * look, name, instructions and model. Reach that leaves their environment
+ * (managed cloud computer cost, shared browser profiles, peers, MCP) needs a
+ * permission key or stays admin. Their own teams and Primary Bot managed
+ * teams use bots.create (#2045); they are not an admin-only surface. */
 export const memberBotFieldViolation = sharedMemberBotFieldViolation;
 
 /** The capabilities block GET /api/config puts on `viewer`. An admin scope
@@ -1201,7 +1220,7 @@ export function capabilitiesForAuth(auth: { scopes: readonly string[] }, options
  * off the phone. */
 const COMPANION_BOT_FIELDS = new Set([
   ...MEMBER_BOT_FIELDS,
-  "memoryEnabled", "memoryUpkeep", "voiceNotes",
+  "memoryEnabled", "memoryUpkeep", "helperModel", "voiceNotes",
   // Permissions / Approval / Proactive (BotPanelPatch)
   "approvalMode", "autoApprove", "acknowledgeLocalAuto", "proactiveMode", "pageTargetDefault", "alwaysAllow",
   "chiefOfStaff", "approvePeerComms",

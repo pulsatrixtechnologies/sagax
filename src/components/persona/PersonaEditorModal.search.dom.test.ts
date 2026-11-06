@@ -93,11 +93,13 @@ const actions: string[] = [];
 let host: HTMLElement;
 let root: Root;
 const input = () => host.querySelector<HTMLInputElement>("[data-persona-search]")!;
-// Settings unfolds under General's cards (#2136): the page says which it shows.
+// One tab per setting (#2173): the page says which it shows.
 const selectedTab = () => host.querySelector("[data-bot-profile-tab-current]")!.getAttribute("data-bot-profile-tab-current");
 const shownTab = () => host.querySelector('[data-bot-profile-tab][aria-selected="true"]')!.getAttribute("data-bot-profile-tab");
-const listed = () => [...host.querySelectorAll("#bot-profile-panel-settings [data-bot-profile-section]")].map((el) => el.getAttribute("data-bot-profile-section"));
-const opened = () => [...host.querySelectorAll("#bot-profile-panel-settings [data-bot-profile-section][data-open]")].map((el) => el.getAttribute("data-bot-profile-section"));
+const toggle = () => host.querySelector<HTMLElement>("[data-bot-profile-search-toggle]")!;
+// The tabs the query leads to, best first is the one shown; the others stay plain.
+const matching = () => [...host.querySelectorAll("[data-bot-profile-tab][data-bot-profile-tab-match]")].map((el) => el.getAttribute("data-bot-profile-tab"));
+const opened = () => [...host.querySelectorAll('[role="tabpanel"][data-bot-profile-section][data-open]')].map((el) => el.getAttribute("data-bot-profile-section"));
 
 function type(value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -141,26 +143,38 @@ afterEach(() => {
 });
 
 describe("bot profile settings search", () => {
-  it("sits at the top of Settings, unfolded under General, and lists every section when empty", () => {
-    expect(selectedTab()).toBe("settings");
-    expect(shownTab()).toBe("general");
-    expect(host.querySelector("[data-bot-profile-settings-toggle]")!.getAttribute("aria-expanded")).toBe("true");
-    expect(host.querySelector("#bot-profile-panel-settings [data-persona-search]")).toBe(input());
-    expect(listed().length).toBeGreaterThan(5);
+  it("opens from the magnifier beside the tabs, under them, and dims no tab while empty", () => {
+    expect(selectedTab()).toBe("appearance");
+    expect(shownTab()).toBe("appearance");
+    expect(host.querySelector("[data-persona-search]")).toBeNull();
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    act(() => toggle().click());
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(host.querySelector("[data-bot-profile-search] [data-persona-search]")).toBe(input());
+    expect(matching()).toEqual([]);
+    expect(host.querySelector("[data-bot-profile-tab].opacity-40")).toBeNull();
+    // the magnifier again puts it away
+    act(() => toggle().click());
+    expect(host.querySelector("[data-persona-search]")).toBeNull();
   });
-  it("keeps the sections that hold a word, in English and in French, and opens the first", () => {
+  it("shows the tab that holds a word, in English and in French, and marks the tabs that do", () => {
+    act(() => toggle().click());
     type("mascot");
-    expect(listed()).toEqual(["appearance"]);
+    expect(selectedTab()).toBe("appearance");
+    expect(matching()).toEqual(["appearance"]);
     expect(opened()).toEqual(["appearance"]);
+    expect(host.querySelector('[data-bot-profile-tab="model"]')!.classList.contains("opacity-40")).toBe(true);
     type("effort");
-    expect(listed()[0]).toBe("model");
-    expect(opened()).toContain("model");
+    expect(selectedTab()).toBe("model");
+    expect(matching()[0]).toBe("model");
+    expect(opened()).toEqual(["model"]);
     act(() => setLocale("fr"));
     act(() => root.render(createElement(PersonaEditorModal)));
     type("modèle");
-    expect(listed()[0]).toBe("model");
+    expect(selectedTab()).toBe("model");
   });
-  it("hides the rows that do not match in the open section and marks the first", () => {
+  it("hides the rows that do not match on the tab shown and marks the first", () => {
+    act(() => toggle().click());
     type("effort");
     const rows = [...host.querySelectorAll('[data-bot-profile-section="model"] [data-settings-row]')];
     expect(rows.map((row) => row.hasAttribute("data-settings-search-miss"))).toEqual([false, true]);
@@ -169,30 +183,35 @@ describe("bot profile settings search", () => {
     type("");
     expect(host.querySelector("[data-settings-search-miss]")).toBeNull();
   });
-  it("says so when nothing matches", () => {
+  it("says so when nothing matches, and stays on the tab shown", () => {
+    act(() => toggle().click());
     type("zzzxq");
-    expect(listed()).toEqual([]);
+    expect(matching()).toEqual([]);
+    expect(selectedTab()).toBe("appearance");
     expect(host.querySelector("[data-persona-no-match]")!.textContent).toBe("Nothing matches “zzzxq”");
   });
-  it("goes to the field with a slash or Command-F from another tab, but not while typing", async () => {
+  it("opens the field with a slash or Command-F from any tab, but not while typing", async () => {
     act(() => host.querySelector<HTMLElement>('[data-bot-profile-tab="knowledge"]')!.click());
     expect(selectedTab()).toBe("knowledge");
     const event = key(document.body, "f", { metaKey: true });
     expect(event.defaultPrevented).toBe(true);
     await frame();
-    expect(selectedTab()).toBe("settings");
-    expect(shownTab()).toBe("general");
+    expect(selectedTab()).toBe("knowledge");
     expect(document.activeElement).toBe(input());
     const slash = key(input(), "/");
     expect(slash.defaultPrevented).toBe(false);
   });
-  it("clears with Escape, then lets Escape close the page", () => {
+  it("clears with Escape, then puts the field away, then lets Escape close the page", () => {
+    act(() => toggle().click());
     type("effort");
     const first = key(input(), "Escape");
     expect(input().value).toBe("");
     expect(first.cancelBubble).toBe(true);
     expect(actions).not.toContain("closePersonaEditor");
     key(input(), "Escape");
+    expect(host.querySelector("[data-persona-search]")).toBeNull();
+    expect(actions).not.toContain("closePersonaEditor");
+    key(host.querySelector("[data-bot-profile-page]")!, "Escape");
     expect(actions).toContain("closePersonaEditor");
   });
 });

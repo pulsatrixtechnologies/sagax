@@ -20,8 +20,8 @@ export { RoutineDetailHeader };
 
 export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = false, upcoming = false, createRequest = 0 }: {
   bot: Bot; routines: Routine[]; runs: RoutineRun[]; defaultRunOn?: RoutineRunOn; grouped?: boolean;
-  /** The bot panel's Activity tab (#2125): titled Upcoming, a clock per row,
-   * five rows then Show more. */
+  /** The bot panel's Activity tab (#2125 / #2174): titled Upcoming, one flat
+   * card with `[Category]` title prefixes, five rows then Show more. */
   upcoming?: boolean;
   /** Each bump opens a new routine (Suggested > Add to meeting). */
   createRequest?: number;

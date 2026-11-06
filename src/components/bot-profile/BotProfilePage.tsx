@@ -1,24 +1,28 @@
-// The bot's profile page (#2126, Grok Bot's layout): the surface that edits
-// one bot, in the wide right-hand detail panel. A banner with the mascot over
-// its lower edge, "Name · Label", who sees it ("Private to you"), then three
-// pill tabs:
+// The bot's profile page (#2126, #2173, Grok Bot's layout): the surface that
+// edits one bot, filling the main panel in place of the chat. A banner in the
+// mascot's colour with the mascot over its lower edge, "Name · Label", who
+// sees it ("Private to you"), then one row of pill tabs that scrolls sideways
+// when it overflows:
 //
 // - General: the bot's channels (Slack, email, Reach me, Mac Messages), each
-//   with its state and a Connect / Manage pill, and the bot's accounts (its
+//   with its state and a Connect / Manage pill, the bot's accounts (its
 //   engine and the connectors it receives), "Add" opening Connect apps for
-//   this bot.
+//   this bot, and its identity under the cards.
 // - Knowledge: Skills, Personality, Rules, the Bot folder (where the memory
 //   is managed) and a link to the Memory page.
-// - Settings: every other section of the former editor, folded, with its
-//   search. Nothing of the editor is gone: each section is the same body
-//   (useBotSectionContent) and saves through the same paths.
+// - One tab per setting (Appearance, Shared with, What it does, Model,
+//   Workspace, Access, Permissions, Voice, Usage, Changes): its body in place,
+//   in the same column. Nothing of the editor is gone: each section is the
+//   same body (useBotSectionContent) and saves through the same paths. The
+//   magnifier beside the tabs searches every setting.
 //
 // Opened by the store action openPersonaEditor ("..." > Edit bot, a click on
 // the mascot, the bot panel's gear, a deep link to a section). A section asked
-// for opens its tab, unfolds and scrolls into view. A section this viewer may
-// not change says why (botSectionLock); nothing is hidden for lack of a
-// permission.
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+// for opens its tab and scrolls into view. A section this viewer may not
+// change says why (botSectionLock); nothing is hidden for lack of a
+// permission. The page itself carries no gear: the bot's settings live here
+// and in the right-hand bot panel.
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, type SetStateAction } from "react";
 import { BellRing, Brain, ChevronDown, ChevronRight, Cpu, LayoutDashboard, Lock, Mail, MessageCircle, Plug, Search, Star, Users, X } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
@@ -40,11 +44,16 @@ import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import {
   KNOWLEDGE_SECTIONS,
   SETTINGS_SECTIONS,
+  SETTINGS_TABS,
   botProfileTabFor,
+  isSettingsTab,
   personaCategoryForSection,
   type BotProfileTab,
   type PersonaCategory,
+  type SettingsTab,
 } from "@/lib/persona-sections";
+import { MAUS_COLORS } from "@/lib/mascot";
+import { mascotColorGroup } from "../../../shared/mascot-colors";
 import type { MessagesSetupStatus } from "../../../shared/mac-messages-setup";
 import { BOT_PROFILE_LIMITS } from "../../../shared/bot-profile";
 import { WindowDragStrip, useCaptionChrome } from "../DesktopCapabilities";
@@ -70,11 +79,9 @@ function sectionLabel(id: BotSettingsSection): string {
   return entry.labelKey ? t(entry.labelKey) : entry.label;
 }
 
-/** The tabs shown: Settings is folded into General (#2136). */
-const VISIBLE_TABS = ["general", "knowledge"] as const satisfies readonly BotProfileTab[];
-type VisibleTab = (typeof VISIBLE_TABS)[number];
-
-const TAB_LABEL: Record<VisibleTab, LocaleKey> = {
+/** The two tabs with a name of their own; a setting's tab is named after
+ * its section (#2173). */
+const TAB_LABEL: Record<"general" | "knowledge", LocaleKey> = {
   general: "botProfile.tab.general",
   knowledge: "botProfile.tab.knowledge",
 };
@@ -170,6 +177,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   const rootRef = useRef<HTMLElement>(null);
   const { noDragStyle, controlsShiftStyle } = useCaptionChrome();
   const searchRef = useRef<HTMLInputElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
   const { available, slackUrl } = useBotSectionAvailability(bot.id);
   const viewerId = viewerActorId(state.config);
 
@@ -189,45 +197,83 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
         : id === "sharing" && shown("visibility") ? "visibility"
           : id;
 
-  const [tab, setTab] = useState<BotProfileTab>(() => botProfileTabFor(section));
+  // A tab this viewer does not get lands on its stand-in, else on General.
+  const resolveTab = (next: BotProfileTab): BotProfileTab => {
+    if (!isSettingsTab(next) || shown(next)) return next;
+    const standIn = resolve(next);
+    return standIn !== next && shown(standIn) ? (standIn as SettingsTab) : "general";
+  };
+
+  const [tab, setTab] = useState<BotProfileTab>(() => resolveTab(botProfileTabFor(section)));
+  // Knowledge's folded sections: Skills open, plus the one asked for.
   const [open, setOpen] = useState<ReadonlySet<PersonaCategory>>(() => {
     const first = personaCategoryForSection(section);
     const start = new Set<PersonaCategory>(["skills"]);
-    if (first && first !== "overview" && first !== "slack") start.add(resolve(first));
+    if (first && (KNOWLEDGE_SECTIONS as readonly PersonaCategory[]).includes(first)) start.add(first);
     return start;
   });
-  const [lastOpened, setLastOpened] = useState<PersonaCategory | null>(() => {
-    const first = personaCategoryForSection(section);
-    return first && first !== "overview" && first !== "slack" ? resolve(first) : null;
-  });
   const [channel, setChannel] = useState<Channel | null>(() => (personaCategoryForSection(section) === "slack" ? "slack" : null));
+  const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   const q = settingsQuery(query);
   const scrollTo = useRef<string | null>(null);
+  // The tab row scrolls sideways; a fade on the side that still hides tabs says so,
+  // and the tab shown stays in view.
+  useLayoutEffect(() => {
+    const row = tabsRef.current;
+    if (!row) return;
+    const mark = () => {
+      const more = row.scrollWidth - row.clientWidth > 1;
+      const start = more && row.scrollLeft > 1;
+      const end = more && row.scrollLeft + row.clientWidth < row.scrollWidth - 1;
+      const value = start && end ? "both" : start ? "start" : end ? "end" : null;
+      if (value) row.setAttribute("data-bot-profile-tabs-more", value);
+      else row.removeAttribute("data-bot-profile-tabs-more");
+    };
+    mark();
+    row.addEventListener("scroll", mark, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(mark);
+    observer?.observe(row);
+    return () => {
+      row.removeEventListener("scroll", mark);
+      observer?.disconnect();
+    };
+  }, []);
+  useLayoutEffect(() => {
+    tabsRef.current?.querySelector<HTMLElement>(`[data-bot-profile-tab="${tab}"]`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [tab]);
+
+  // The tab a settings page lives on: the identity is on General.
+  const tabOf = (id: PersonaCategory): BotProfileTab => (id === "overview" ? "general" : resolveTab(id as SettingsTab));
 
   // Opens a section where it lives: its tab, unfolded, scrolled into view.
   const reveal = (target: BotSettingsSection) => {
-    setTab(botProfileTabFor(target));
+    const next = resolveTab(botProfileTabFor(target));
+    setTab(next);
     const category = personaCategoryForSection(target);
-    if (!category || category === "overview" && botProfileTabFor(target) === "general") return;
     if (category === "slack") {
       setChannel("slack");
       scrollTo.current = '[data-bot-profile-row="slack"]';
       return;
     }
-    const id = resolve(category);
-    setOpen((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-    setLastOpened(id);
-    scrollTo.current = `[data-bot-profile-section="${id}"]`;
+    if (!category || category === "overview") return;
+    if (next === "knowledge") {
+      const id = resolve(category);
+      setOpen((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+      scrollTo.current = `[data-bot-profile-section="${id}"]`;
+      return;
+    }
+    scrollTo.current = "[data-bot-profile-tabs]";
   };
 
-  // The store's section (a deep link, the gear, a click on the mascot).
+  // The store's section (a deep link, the panel's gear, a click on the mascot).
   const firstSection = useRef(true);
   useEffect(() => {
     if (firstSection.current) {
       firstSection.current = false;
       const category = personaCategoryForSection(section);
-      if (category && category !== "overview") scrollTo.current = category === "slack" ? '[data-bot-profile-row="slack"]' : `[data-bot-profile-section="${resolve(category)}"]`;
+      if (category === "slack") scrollTo.current = '[data-bot-profile-row="slack"]';
+      else if (category && (KNOWLEDGE_SECTIONS as readonly PersonaCategory[]).includes(category)) scrollTo.current = `[data-bot-profile-section="${category}"]`;
       return;
     }
     reveal(section);
@@ -256,13 +302,14 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
       else next.add(id);
       return next;
     });
-    if (!open.has(id)) setLastOpened(id);
   };
 
-  // The server overview loads with What it does open, the history with
-  // Changes: the section last unfolded drives what the hook fetches.
+  // The server overview loads with General and What it does, the history
+  // with Changes: the tab on screen drives what the hook fetches (Knowledge
+  // fetches nothing).
+  const hookSection: BotSettingsSection = isSettingsTab(tab) && tab !== "summary" ? tab : tab === "knowledge" ? "skills" : "overview";
   const { renderSectionBody, dialogs, derived } = useBotSectionContent(bot, {
-    section: lastOpened === null || lastOpened === "summary" ? "overview" : lastOpened,
+    section: hookSection,
     expanded: true,
     onOpenSection: (next) => {
       if (personaCategoryForSection(next) !== null) {
@@ -318,7 +365,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     return renderSectionBody(id);
   };
 
-  const fold = (id: PersonaCategory, forceOpen = false) => {
+  const fold = (id: PersonaCategory) => {
     const Icon = ENTRY.get(id)?.icon ?? LayoutDashboard;
     return (
       <Fold
@@ -327,7 +374,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
         label={sectionLabel(id)}
         icon={<Icon strokeWidth={1.5} />}
         locked={lockOf(id) !== null}
-        open={forceOpen || open.has(id)}
+        open={open.has(id)}
         keep={KEEP_MOUNTED.has(id) && lockOf(id) === null}
         onToggle={() => toggle(id)}
       >
@@ -336,8 +383,9 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     );
   };
 
-  // Settings' search: the sections the query leads to, best first; the
-  // first one unfolds and hides its rows that do not match.
+  // The search: the settings pages the query leads to, best first. The
+  // first one's tab opens and hides its rows that do not match; the tabs
+  // of the others stay plain, the rest dim.
   const settingsPages = useMemo(
     () => SETTINGS_SECTIONS.filter(shown),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -345,6 +393,14 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   );
   const results = useMemo(() => personaPagesMatching(settingsPages, q, sectionLabel), [settingsPages, q]);
   const searchHit = q ? results[0] ?? null : null;
+  const matching = new Set(results.map(tabOf));
+  const changeQuery = (value: string) => {
+    setQuery(value);
+    const next = settingsQuery(value);
+    if (!next) return;
+    const first = personaPagesMatching(settingsPages, next, sectionLabel)[0];
+    if (first) setTab(tabOf(first));
+  };
   useLayoutEffect(() => {
     const root = searchHit ? rootRef.current?.querySelector<HTMLElement>(`[data-bot-profile-section="${searchHit}"]`) : null;
     if (!root || !q) return;
@@ -363,7 +419,23 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     };
   }, [q, searchHit, tab]);
 
-  // Command-F or a slash goes to Settings' search, from anywhere on the page.
+  const focusSearch = () =>
+    requestAnimationFrame(() => {
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    });
+  const openSearch = () => {
+    setSearching(true);
+    focusSearch();
+  };
+  const closeSearch = () => {
+    setSearching(false);
+    setQuery("");
+  };
+
+  // Command-F or a slash opens the search, from anywhere on the page.
+  const openSearchRef = useRef(openSearch);
+  openSearchRef.current = openSearch;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
@@ -375,21 +447,23 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
       const slash = event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !typing;
       if (!find && !slash) return;
       event.preventDefault();
-      setTab("settings");
-      requestAnimationFrame(() => {
-        searchRef.current?.focus();
-        searchRef.current?.select();
-      });
+      openSearchRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Escape clears the query, then puts the field away; on the page it closes.
   const onSearchKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Escape" || !query) return; // empty: the page closes
+    if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
-    setQuery("");
+    if (query) {
+      setQuery("");
+      return;
+    }
+    closeSearch();
+    rootRef.current?.focus({ preventScroll: true });
   };
 
   // Header: who sees it.
@@ -400,15 +474,9 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   const canName = canEditBotField(state.config, bot, "name");
   const canLabel = canEditBotField(state.config, bot, "title");
 
-  // Two tabs show, General and Knowledge (Grok Bot). Settings is the
-  // "settings" state of General: its sections unfold under the cards.
-  const visibleTab: VisibleTab = tab === "settings" ? "general" : tab;
-  const settingsOpen = tab === "settings";
-  const chooseTab = (next: VisibleTab) => {
-    if (next === visibleTab) return;
-    setTab(next);
-  };
-  const toggleSettings = () => setTab(settingsOpen ? "general" : "settings");
+  // The tabs: General, Knowledge, then each setting this viewer gets.
+  const tabs: readonly BotProfileTab[] = ["general", "knowledge", ...SETTINGS_TABS.filter(shown)];
+  const tabLabel = (id: BotProfileTab) => (id === "general" || id === "knowledge" ? t(TAB_LABEL[id]) : sectionLabel(id));
 
   // The page fills the main panel (#2136): focus moves in when it opens and
   // back to the opener when it closes; Escape closes it (empty search).
@@ -435,9 +503,139 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   }, []);
 
   const privateBot = notShared;
+  // The banner is a wash of the mascot's colour (#2173): its hex goes to the
+  // stylesheet as a variable; a neutral mascot keeps a visible grey there.
+  const bannerColor = MAUS_COLORS[bot.color] ?? MAUS_COLORS.green;
+  const bannerStyle = { "--bot-profile-banner-color": bannerColor } as CSSProperties;
 
   return (
-    <main
+    <BotProfilePageView
+      rootRef={rootRef}
+      bot={bot}
+      tab={tab}
+      setTab={setTab}
+      onClose={onClose}
+      onCloseRef={onCloseRef}
+      noDragStyle={noDragStyle}
+      controlsShiftStyle={controlsShiftStyle}
+      privateBot={privateBot}
+      bannerStyle={bannerStyle}
+      derived={derived}
+      goTo={goTo}
+      canName={canName}
+      canLabel={canLabel}
+      audience={audience}
+      isPrimary={isPrimary}
+      tabs={tabs}
+      tabLabel={tabLabel}
+      tabsRef={tabsRef}
+      searching={searching}
+      matching={matching}
+      lockOf={lockOf}
+      searchRef={searchRef}
+      query={query}
+      changeQuery={changeQuery}
+      onSearchKey={onSearchKey}
+      closeSearch={closeSearch}
+      openSearch={openSearch}
+      q={q}
+      results={results}
+      slackUrl={slackUrl}
+      channel={channel}
+      setChannel={setChannel}
+      fold={fold}
+      shown={shown}
+      body={body}
+      open={open}
+      dispatch={dispatch}
+      dialogs={dialogs}
+    />
+  );
+}
+
+function BotProfilePageView({
+  rootRef,
+  bot,
+  tab,
+  setTab,
+  onClose,
+  onCloseRef,
+  noDragStyle,
+  controlsShiftStyle,
+  privateBot,
+  bannerStyle,
+  derived,
+  goTo,
+  canName,
+  canLabel,
+  audience,
+  isPrimary,
+  tabs,
+  tabLabel,
+  tabsRef,
+  searching,
+  matching,
+  lockOf,
+  searchRef,
+  query,
+  changeQuery,
+  onSearchKey,
+  closeSearch,
+  openSearch,
+  q,
+  results,
+  slackUrl,
+  channel,
+  setChannel,
+  fold,
+  shown,
+  body,
+  open,
+  dispatch,
+  dialogs,
+}: {
+  rootRef: RefObject<HTMLElement | null>;
+  bot: Bot;
+  tab: BotProfileTab;
+  setTab: Dispatch<SetStateAction<BotProfileTab>>;
+  onClose: () => void;
+  onCloseRef: RefObject<() => void>;
+  noDragStyle: CSSProperties | undefined;
+  controlsShiftStyle: CSSProperties | undefined;
+  privateBot: boolean;
+  bannerStyle: CSSProperties;
+  derived: ReturnType<typeof useBotSectionContent>["derived"];
+  goTo: (id: BotSettingsSection) => void;
+  canName: boolean;
+  canLabel: boolean;
+  audience: string;
+  isPrimary: boolean;
+  tabs: readonly BotProfileTab[];
+  tabLabel: (id: BotProfileTab) => string;
+  tabsRef: RefObject<HTMLDivElement | null>;
+  searching: boolean;
+  matching: Set<BotProfileTab>;
+  lockOf: (id: BotSettingsSection) => LocaleKey | null;
+  searchRef: RefObject<HTMLInputElement | null>;
+  query: string;
+  changeQuery: (value: string) => void;
+  onSearchKey: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  closeSearch: () => void;
+  openSearch: () => void;
+  q: string;
+  results: PersonaCategory[];
+  slackUrl: string | null | undefined;
+  channel: Channel | null;
+  setChannel: Dispatch<SetStateAction<Channel | null>>;
+  fold: (id: PersonaCategory) => ReactNode;
+  shown: (id: PersonaCategory) => boolean;
+  body: (id: PersonaCategory) => ReactNode;
+  open: ReadonlySet<PersonaCategory>;
+  dispatch: ReturnType<typeof useStore>["dispatch"];
+  dialogs: ReactNode;
+}) {
+  return (
+<main
       ref={rootRef}
       tabIndex={-1}
       aria-label={`${t("persona.title")}: ${bot.name}`}
@@ -455,9 +653,14 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     >
       <WindowDragStrip />
       <div data-bot-profile-scroll="" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        {/* Banner in the mascot's color, the close button and who sees it
+        {/* Banner in the mascot's colour, the close button and who sees it
             on it, the mascot over its lower edge. */}
-        <div data-bot-profile-banner="" className="bot-profile-banner relative h-[90px] w-full shrink-0">
+        <div
+          data-bot-profile-banner=""
+          data-bot-profile-banner-palette={mascotColorGroup(bot.color)}
+          style={bannerStyle}
+          className="bot-profile-banner relative h-[145px] w-full shrink-0"
+        >
           <button
             type="button"
             onClick={onClose}
@@ -477,7 +680,8 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
             {privateBot ? t("botProfile.private") : t("botProfile.shared")}
           </span>
         </div>
-        <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[622px] flex-col px-4 pb-10 sm:max-w-[670px] sm:px-10 lg:max-w-[730px] lg:px-[70px]">
+        {/* One centred column, 1000px wide at most, a 16px gutter on a phone. */}
+        <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[1000px] flex-col px-4 pb-10 sm:px-6">
           <div className="-mt-[40px] w-fit">
             <BotProfileAvatarCard
               bot={bot}
@@ -522,85 +726,100 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
             )}
           </div>
 
-          <div
-            role="tablist"
-            aria-label={t("botProfile.tabsAria")}
-            onKeyDown={(event) => {
-              const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-              if (!step) return;
-              event.preventDefault();
-              const next = VISIBLE_TABS[(VISIBLE_TABS.indexOf(visibleTab) + step + VISIBLE_TABS.length) % VISIBLE_TABS.length]!;
-              chooseTab(next);
-              event.currentTarget.querySelector<HTMLElement>(`[data-bot-profile-tab="${next}"]`)?.focus();
-            }}
-            className="mt-5 flex w-fit items-center gap-1"
-          >
-            {VISIBLE_TABS.map((id) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                id={`bot-profile-tab-${id}`}
-                aria-controls={`bot-profile-panel-${id}`}
-                data-bot-profile-tab={id}
-                aria-selected={visibleTab === id}
-                tabIndex={visibleTab === id ? 0 : -1}
-                onClick={() => chooseTab(id)}
-                className={cn(
-                  "rounded-full px-3.5 py-1.5 text-[14px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                  visibleTab === id ? "bg-hover text-ink" : "text-ink-secondary hover:text-ink",
-                )}
-              >
-                {t(TAB_LABEL[id])}
-              </button>
-            ))}
+          {/* The pill tabs, one row that scrolls sideways when it overflows,
+              and the search behind the magnifier. */}
+          <div className="mt-5 flex items-center gap-1">
+            <div
+              ref={tabsRef}
+              role="tablist"
+              data-bot-profile-tabs=""
+              aria-label={t("botProfile.tabsAria")}
+              onKeyDown={(event) => {
+                const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+                if (!step) return;
+                event.preventDefault();
+                const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length]!;
+                setTab(next);
+                event.currentTarget.querySelector<HTMLElement>(`[data-bot-profile-tab="${next}"]`)?.focus();
+              }}
+              className="bot-profile-tabs flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {tabs.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  id={`bot-profile-tab-${id}`}
+                  aria-controls={`bot-profile-panel-${id}`}
+                  data-bot-profile-tab={id}
+                  data-bot-profile-tab-match={q && matching.has(id) ? "" : undefined}
+                  aria-selected={tab === id}
+                  tabIndex={tab === id ? 0 : -1}
+                  onClick={() => setTab(id)}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[14px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                    tab === id ? "bg-hover text-ink" : "text-ink-secondary hover:text-ink",
+                    q && !matching.has(id) && "opacity-40",
+                  )}
+                >
+                  {tabLabel(id)}
+                  {isSettingsTab(id) && lockOf(id) !== null && <Lock size={11} aria-label={t("persona.lockedBadge")} className="shrink-0 text-ink-tertiary" />}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              data-bot-profile-search-toggle=""
+              aria-expanded={searching}
+              aria-label={t("persona.searchAria")}
+              title={t("persona.search")}
+              onClick={() => (searching ? closeSearch() : openSearch())}
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                searching ? "bg-hover text-ink" : "text-ink-secondary",
+              )}
+            >
+              <Search size={15} aria-hidden="true" />
+            </button>
           </div>
+          {searching && (
+            <div data-bot-profile-search="" className="mt-3 flex flex-col">
+              <div className="flex items-center gap-2 rounded-xl bg-card px-3 py-2">
+                <Search size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+                <input
+                  ref={searchRef}
+                  data-persona-search=""
+                  value={query}
+                  onChange={(event) => changeQuery(event.target.value)}
+                  onKeyDown={onSearchKey}
+                  placeholder={t("persona.search")}
+                  aria-label={t("persona.searchAria")}
+                  className="w-full bg-transparent text-[13px] leading-[18px] text-ink placeholder:text-ink-secondary focus:outline-none"
+                />
+              </div>
+              {q && results.length === 0 && (
+                <div data-persona-no-match="" role="status" className="px-2.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+                  {t("persona.noMatch", { query: query.trim() })}
+                </div>
+              )}
+            </div>
+          )}
 
-          <div id="bot-profile-panel-general" role="tabpanel" aria-labelledby="bot-profile-tab-general" hidden={visibleTab !== "general"} className="mt-5 flex flex-col gap-6">
-            {visibleTab === "general" && (
+          <div id="bot-profile-panel-general" role="tabpanel" aria-labelledby="bot-profile-tab-general" hidden={tab !== "general"} className="mt-5 flex flex-col gap-6">
+            {tab === "general" && (
               <>
                 <ChannelsCard bot={bot} slackUrl={slackUrl} open={channel} onOpen={setChannel} />
                 <AccountsCard bot={bot} onEngine={() => goTo("model")} />
-                {/* Every other section of the bot, folded under the cards
-                    (progressive disclosure): nothing of the editor is gone. */}
-                <section data-bot-profile-settings="" className="flex flex-col">
-                  <button
-                    type="button"
-                    id="bot-profile-settings-toggle"
-                    data-bot-profile-settings-toggle=""
-                    aria-expanded={settingsOpen}
-                    aria-controls="bot-profile-panel-settings"
-                    onClick={toggleSettings}
-                    className="flex w-fit items-center gap-1.5 rounded-full px-1 py-1 text-[13px] leading-[18px] text-ink-secondary transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-                  >
-                    {settingsOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
-                    {t("botProfile.tab.settings")}
-                  </button>
-                  <div id="bot-profile-panel-settings" role="region" aria-labelledby="bot-profile-settings-toggle" hidden={!settingsOpen} className="mt-2 flex flex-col">
-                    {settingsOpen && (
-                      <>
-                        <div className="mb-2 flex items-center gap-2 rounded-xl bg-card px-3 py-2">
-                          <Search size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
-                          <input
-                            ref={searchRef}
-                            data-persona-search=""
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            onKeyDown={onSearchKey}
-                            placeholder={t("persona.search")}
-                            aria-label={t("persona.searchAria")}
-                            className="w-full bg-transparent text-[13px] leading-[18px] text-ink placeholder:text-ink-secondary focus:outline-none"
-                          />
-                        </div>
-                        {q && results.length === 0 && (
-                          <div data-persona-no-match="" role="status" className="px-2.5 py-4 text-[12.5px] leading-relaxed text-ink-secondary">
-                            {t("persona.noMatch", { query: query.trim() })}
-                          </div>
-                        )}
-                        {results.map((id) => fold(id, id === searchHit))}
-                      </>
-                    )}
-                  </div>
+                {/* The identity (description, owner, facts), under the cards. */}
+                <section
+                  aria-label={sectionLabel("overview")}
+                  data-bot-profile-section="overview"
+                  data-persona-section="overview"
+                  data-open=""
+                  className="flex flex-col gap-2"
+                >
+                  <h3 className="m-0 px-1 text-[13px] font-normal leading-[18px] text-ink-secondary">{sectionLabel("overview")}</h3>
+                  <div className="rounded-2xl bg-card px-4 py-4">{body("overview")}</div>
                 </section>
               </>
             )}
@@ -623,12 +842,29 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
               </button>
             )}
           </div>
+
+          {/* One setting per tab, its body in place: the same body as the
+              bot panel's (useBotSectionContent), saved through the same paths. */}
+          {isSettingsTab(tab) && (
+            <div
+              id={`bot-profile-panel-${tab}`}
+              role="tabpanel"
+              aria-labelledby={`bot-profile-tab-${tab}`}
+              data-bot-profile-section={tab}
+              data-persona-section={tab}
+              data-open=""
+              className="mt-5 flex flex-col gap-3"
+            >
+              {body(tab)}
+            </div>
+          )}
         </div>
       </div>
       {dialogs}
     </main>
   );
 }
+
 
 /** A card of the page: a grey label (and its accessory) over a borderless
  * surface a step lighter than the page (Grok Bot). */

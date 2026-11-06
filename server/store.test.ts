@@ -464,8 +464,8 @@ describe("Store", () => {
   });
 
   // Every turn re-saves the same resume cursor and the same context model;
-  // each rewrite of bots.json used to cost an fsync (~4 ms on macOS) on the
-  // event loop while putting back identical bytes.
+  // OwnedFile skips a write whose text equals the last one written, without
+  // reading the file back (#4151).
   it("leaves bots.json alone when a save changes nothing, and writes the next real change", () => {
     const file = join(DATA_DIR, "bots.json");
     const store = new Store(selection);
@@ -476,20 +476,21 @@ describe("Store", () => {
     const events: unknown[] = [];
     store.onChange((change) => events.push(change));
 
+    // An unchanged resume cursor is dropped before any save or emit.
     store.setResumeCursor(bot.id, "claude", { sessionId: "s-1" }, bot.threadId);
+    // An unchanged task field still emits, but OwnedFile skips the write.
     store.patchTask(bot.id, bot.threadId, { lastContextModel: "claude-sonnet-5" });
     expect(statSync(file).ino).toBe(saved);
-    // Listeners still hear about every save, changed or not.
-    expect(events).toEqual([{ type: "bot", botId: bot.id }, { type: "bot", botId: bot.id }]);
+    expect(events).toEqual([{ type: "bot", botId: bot.id }]);
 
     store.setResumeCursor(bot.id, "claude", { sessionId: "s-2" }, bot.threadId);
     expect(statSync(file).ino).not.toBe(saved);
     expect(new Store(selection).taskByThread(bot.id, bot.threadId)?.resumeCursors).toEqual({ claude: { sessionId: "s-2" } });
   });
 
-  it("still overwrites a bots.json changed on disk when the next save differs from it", () => {
-    // A workspace restore or a hand edit changes the file under the Store;
-    // the skip compares against the disk, not against the last write.
+  it("skips an unchanged save without reading a bots.json edited on disk, and a real change puts memory back", () => {
+    // OwnedFile compares against the last write, not the disk: a hand edit
+    // under an identical in-memory save stays until the next real change.
     const file = join(DATA_DIR, "bots.json");
     const store = new Store(selection);
     const bot = store.createBot({ name: "Original" }, { seedMessages: false });
@@ -499,6 +500,8 @@ describe("Store", () => {
     writeFileSync(file, JSON.stringify(edited, null, 2));
 
     store.setResumeCursor(bot.id, "claude", { sessionId: "s-1" }, bot.threadId);
+    expect(JSON.parse(readFileSync(file, "utf8"))[0].name).toBe("Edited on disk");
+    store.setResumeCursor(bot.id, "claude", { sessionId: "s-2" }, bot.threadId);
     expect(JSON.parse(readFileSync(file, "utf8"))[0].name).toBe("Original");
   });
 
@@ -1294,6 +1297,37 @@ describe("Store", () => {
     const persisted: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
     expect(persisted.find((bot) => bot.id === requester.id)?.alwaysAllow).toEqual(
       reloaded.bot(requester.id)?.alwaysAllow,
+    );
+  });
+
+  it("promotes task-only provider tool grants to the bot default", () => {
+    const store = new Store(selection);
+    const bot = store.createBot();
+    const first = store.activeTask(bot.id)!;
+    const second = store.createTask(bot.id)!;
+    store.patchTask(bot.id, first.threadId, {
+      alwaysAllow: ["provider-tool:claude:linear:list_issues:config-one", "Bash:git status"],
+    });
+    store.patchTask(bot.id, second.threadId, {
+      alwaysAllow: ["provider-tool:claude:linear:list_comments:config-one"],
+    });
+
+    const reloaded = new Store(selection);
+    expect(reloaded.bot(bot.id)?.alwaysAllow).toEqual([
+      "provider-tool:claude:linear:list_comments:config-one",
+      "provider-tool:claude:linear:list_issues:config-one",
+    ]);
+    // New threads follow the bot's standing grants live; they do not copy
+    // alwaysAllow onto the task record at create time.
+    expect(reloaded.createTask(bot.id)?.alwaysAllow).toBeUndefined();
+    expect(reloaded.bot(bot.id)?.alwaysAllow).toEqual([
+      "provider-tool:claude:linear:list_comments:config-one",
+      "provider-tool:claude:linear:list_issues:config-one",
+    ]);
+
+    const persisted: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
+    expect(persisted.find((candidate) => candidate.id === bot.id)?.alwaysAllow).toEqual(
+      reloaded.bot(bot.id)?.alwaysAllow,
     );
   });
 

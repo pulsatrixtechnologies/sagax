@@ -228,7 +228,7 @@ export function foldLiveFrame(frame: ServerFrame, ctx: FoldLiveFrameCtx): void {
         case "routine.folders":
           rawDispatch({ type: "routineFoldersPatched", botId: frame.botId, folders: frame.folders });
           break;
-        // a person's own unlocks (server/achievements.ts sends them to their streams only)
+        // a person's own unlocks (server/achievements/achievements.ts sends them to their streams only)
         case "achievements":
           receiveAchievementsFrame(frame);
           break;

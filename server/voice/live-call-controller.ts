@@ -16,7 +16,7 @@
 import { randomUUID } from "node:crypto";
 import { spokenConsent } from "../../shared/call-consent.ts";
 import {
-  LIVE_COPY, liveCardKind, liveStepLabel, spokenApprovalPrompt, spokenQuestionPrompt, spokenReviewPrompt, spokenSecretPrompt,
+LIVE_COPY, liveCardKind, liveStepLabel, spokenApprovalPrompt, spokenQuestionPrompt, spokenReviewPrompt, spokenSecretPrompt, spokenSignInPrompt,
 } from "../../shared/live-approval.ts";
 import { clampAppend, commentaryChunks, LiveTranscript } from "../../shared/live-call.ts";
 import type { LiveCallRecord, LiveCallState, LiveClient, LiveEndReason } from "../../shared/wire.ts";
@@ -694,7 +694,7 @@ export class LiveCallController {
       this.onCard(call, message);
       return;
     }
-    if (message.kind === "secret") {
+    if (message.kind === "secret" || message.kind === "signin") {
       this.onSetupCard(call, message);
       return;
     }
@@ -716,8 +716,8 @@ export class LiveCallController {
   }
 
   /** A line the caller typed in a client (every client sends a sendId with
-   * what is typed), as the same person. Not a peer bot's line (ask_bot,
-   * start_thread, an aside: the answer goes back to that bot), not a line a
+   * what is typed), as the same person. Not a peer bot's line (coordinate_bots,
+   * start_thread: the answer goes back to that bot), not a line a
    * routine, a webhook or the local API added (no sendId, or via "api"), not
    * a line a worker relayed for someone else (the Slack relay, any guarded
    * send: relayed), and not another member's line in a shared workspace. */
@@ -808,12 +808,14 @@ export class LiveCallController {
    * the chat. The voice says so once; neither can be done by voice, and a
    * credential must never be spoken into the call. */
   private onSetupCard(call: Call, message: Message): void {
-    const { secret } = message;
-    const waiting = Boolean(secret && !secret.provided && !secret.dismissed && !secret.superseded && !secret.resumed);
+    const { secret, signIn } = message;
+    const waiting = message.kind === "signin"
+      ? Boolean(signIn && !signIn.done && !signIn.cancelled && !signIn.superseded)
+      : Boolean(secret && !secret.provided && !secret.dismissed && !secret.superseded && !secret.resumed);
     const key = `${message.kind}:${message.id}`;
     if (!waiting || call.announced.has(key)) return;
     call.announced.add(key);
-    this.append(call, "instructions", spokenSecretPrompt(secret?.label ?? ""));
+    this.append(call, "instructions", signIn ? spokenSignInPrompt(signIn.site) : spokenSecretPrompt(secret?.label ?? ""));
   }
 
   private onCardSettled(call: Call, requestId: string): void {

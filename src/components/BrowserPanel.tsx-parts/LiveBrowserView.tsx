@@ -1,6 +1,6 @@
 // Live browser window chrome and page (extracted from LiveBrowser for #1383).
 import type { RefObject, Dispatch, SetStateAction } from "react";
-import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, Plus, RotateCw, Square, UserRound, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, LockKeyhole, Plus, RotateCw, Square, UserRound, X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";
 import { BrowserProfilesManager } from "../BrowserProfilesManager";
@@ -34,6 +34,10 @@ export interface LiveBrowserViewProps {
   setShowProfiles: Dispatch<SetStateAction<boolean>>;
   showTyping: boolean;
   setShowTyping: Dispatch<SetStateAction<boolean>>;
+  masked: boolean;
+  setMasked: Dispatch<SetStateAction<boolean>>;
+  takeControl: () => void;
+  handBack: () => void;
   viewport: { width: number; height: number };
   takeStatus: BrowserTakeStatus;
   busy: boolean;
@@ -78,10 +82,11 @@ export interface LiveBrowserViewProps {
 export function LiveBrowserView(p: LiveBrowserViewProps) {
   const {
     bot, allowed, placeholder, frame, tabs, address, setAddress, connected, control, pending, error,
-    showProfiles, setShowProfiles, showTyping, setShowTyping, viewport, takeStatus, busy, reconnecting,
+    showProfiles, setShowProfiles, showTyping, setShowTyping, masked, setMasked, takeControl, handBack,
+    viewport, takeStatus, busy, reconnecting,
     showNetwork, setShowNetwork, recording, taught, setTaught, teachNote, addressInput, profilesButton,
     profilesPopover, typingPopover, typingField, menuSummary, profileName, interactive, typingReady,
-    commandsReady, heldElsewhere, taking, mine, pageTitle, holder, pill, generation, viewer, browserControl,
+    commandsReady, heldElsewhere, taking, mine, pageTitle, holder, pill, generation, viewer,
     urlEditing, command, input, reconnect, execute, startRecording, stopRecording, action, confirm, setError,
   } = p;
   return (
@@ -96,7 +101,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
         <button className={`${button} shrink-0`} disabled={!commandsReady} aria-label={t("browser.tab.new")} title={t("browser.tab.new")} onClick={() => command({ type: "tab-new" })}><Plus size={17} /></button>
       </div>
       {/* Profiles can't switch while this window holds the browser: opening them hands it back now, not after the idle wait. */}
-      <button ref={profilesButton} type="button" className={`${button} rounded-xl bg-inset p-2`} title={t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { browserControl.current?.handBack(); setShowProfiles((open) => !open); }}><UserRound size={16} /></button>
+      <button ref={profilesButton} type="button" className={`${button} rounded-xl bg-inset p-2`} title={t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { handBack(); setShowProfiles((open) => !open); }}><UserRound size={16} /></button>
     </div>
     <form className="flex h-12 items-center gap-1 border-b border-hairline/40 px-2" onSubmit={(e) => { e.preventDefault(); const url = resolveAddressBarInput(address); if (commandsReady && url) command({ type: "navigate", url }); else if (address.trim()) setError(t("browser.address.invalid")); }}>
       <div className="flex shrink-0 items-center">
@@ -108,7 +113,8 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
       <details className="relative shrink-0">
         <summary ref={menuSummary} className={`${button} list-none cursor-pointer [&::-webkit-details-marker]:hidden`} aria-label={t("browser.menu.label")} title={t("browser.menu.label")}><EllipsisVertical size={17} /></summary>
         <div className="absolute right-0 top-full z-20 mt-2 flex w-44 flex-col rounded-xl border border-hairline/50 bg-card p-1.5 text-[12px] shadow-xl">
-          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setShowTyping(true); }}>{t("browser.menu.type")}</button>
+          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setMasked(false); setShowTyping(true); }}>{t("browser.menu.type")}</button>
+          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setMasked(true); setShowTyping(true); }}>{t("browser.typeSecret")}</button>
           <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!connected} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setShowNetwork(true); }}>{t("browser.menu.network")}</button>
           <button type="button" data-teach-record="" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!recording && !commandsReady} onClick={(e) => {
             e.currentTarget.closest("details")?.removeAttribute("open");
@@ -147,11 +153,11 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
         {pageTitle && <span className="min-w-0 truncate font-normal text-ink-secondary" title={pageTitle}>· {pageTitle}</span>}
       </span>
       {allowed && connected && !heldElsewhere && (mine
-        ? <button type="button" data-browser-give-back="" onClick={() => browserControl.current?.handBack()}
+        ? <button type="button" data-browser-give-back="" onClick={handBack}
             className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full bg-control px-3 py-1 font-medium text-ink hover:bg-raised-hover md:min-h-0">
             <BotIcon size={12} aria-hidden="true" />{t("browser.control.giveBack")}
           </button>
-        : <button type="button" data-browser-take="" disabled={taking || pending} onClick={() => browserControl.current?.takeNow()}
+        : <button type="button" data-browser-take="" disabled={taking || pending} onClick={takeControl}
             className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full bg-accent px-3 py-1 font-medium text-accent-ink hover:brightness-110 disabled:opacity-50 md:min-h-0">
             <Hand size={12} aria-hidden="true" />{t("sandboxDesktop.takeControl")}
           </button>)}
@@ -221,7 +227,7 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
           setShowTyping(false);
         }}
       >
-        <h2 id="browser-typing-title" className="mb-3 text-[14px] font-medium">{t("browser.typing.title")}</h2>
+        <h2 id="browser-typing-title" className="mb-3 text-[14px] font-medium">{masked ? t("browser.typeSecret.title") : t("browser.typing.title")}</h2>
         <form className="flex flex-col gap-3" onSubmit={(e) => {
           e.preventDefault();
           const field = e.currentTarget.elements.namedItem("pageText") as HTMLInputElement;
@@ -231,7 +237,8 @@ export function LiveBrowserView(p: LiveBrowserViewProps) {
             setShowTyping(false);
           }
         }}>
-          <input ref={typingField} name="pageText" aria-label={t("browser.typing.field")} autoComplete="off" maxLength={4096} placeholder={t("browser.typing.placeholder")} className="rounded-lg bg-inset px-3 py-2 text-[13px] outline-none focus:ring-1 focus:ring-accent" />
+          <input key={masked ? "secret" : "text"} ref={typingField} name="pageText" type={masked ? "password" : "text"} aria-label={masked ? t("browser.typeSecret.field") : t("browser.typing.field")} autoComplete={masked ? "new-password" : "off"} spellCheck={false} maxLength={4096} placeholder={masked ? "••••••••" : t("browser.typing.placeholder")} className="rounded-lg bg-inset px-3 py-2 text-[13px] outline-none focus:ring-1 focus:ring-accent" />
+          {masked && <p className="flex items-center gap-1 text-[11.5px] text-ink-tertiary"><LockKeyhole size={11} aria-hidden="true" />{t("browser.typeSecret.note")}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" className={PILL} onClick={() => setShowTyping(false)}>{t("browser.typing.close")}</button>
             <button type="submit" disabled={!typingReady} className={PRIMARY_PILL}>{t("browser.typing.send")}</button>

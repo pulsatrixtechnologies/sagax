@@ -26,6 +26,7 @@ authRecovery.frame(threadId, o, session.costTotal);
 // A stdin message echoed back (--replay-user-messages) carries its
 // images again: keep their bytes out of the log, as when it was sent.
 appendNative(threadId, { dir: "in", source: "claude.sdk.message", msg: o?.type === "user" && o.isReplay === true && o.message ? diagnosticClaudeUserMessage(o) : o });
+if (session.elicit.frame(o)) return;
 // #1373: the answer to a control request this driver sent on stdin.
 if (o?.type === "control_response") {
   const response = o.response && typeof o.response === "object" ? o.response as { request_id?: unknown; subtype?: unknown } : null;

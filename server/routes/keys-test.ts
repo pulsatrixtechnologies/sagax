@@ -35,7 +35,7 @@ export function createKeysTestRoutes(deps: KeysTestRouteDeps): RouteHandler {
     }
     const kind = provider as ProviderKeyKind;
     const cfg = deps.cfg();
-    const saved = { anthropic: cfg.anthropic, openai: cfg.openai, openrouter: cfg.openrouter, openaiCompat: cfg.openaiCompat, mistral: cfg.mistral, cerebras: cfg.cerebras, groq: cfg.groq, xai: cfg.xai }[kind];
+    const saved = { anthropic: cfg.anthropic, openai: cfg.openai, openrouter: cfg.openrouter, openaiCompat: cfg.openaiCompat, mistral: cfg.mistral, cerebras: cfg.cerebras, groq: cfg.groq, xai: cfg.xai, meta: cfg.meta }[kind];
     if (body?.key !== undefined && typeof body.key !== "string") {
       return json(res, 400, { error: "key must be a string" });
     }

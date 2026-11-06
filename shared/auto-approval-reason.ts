@@ -32,6 +32,7 @@ const BY_SOURCE: Readonly<Record<string, AutoApprovalReason>> = {
   "perspicax-lease": "trusted",
   "sagax-internal": "trusted",
   "own-read-only": "trusted",
+  "own-files": "trusted",
   "own-attachment": "trusted",
   "own-computer-choice": "trusted",
   "email-draft-approval": "answered",

@@ -15,18 +15,17 @@ import { useShowThreads } from "@/lib/thread-preferences";
 import { noteBackAtBot, noteLeftBot, readNewChats, setOnScreenBot, writeNewChats } from "@/lib/fresh-topic";
 import { isEarlierSegment } from "@/lib/single-stream";
 import { t, activeLocale } from "@/lib/i18n";
-import { stepUpApprovals } from "@/lib/step-up-client";
 import { createBotPatchQueue } from "./bot-patch-queue";
 import { useChatErrorClear } from "./chat-error";
 import { migrateInstalledVoiceSettings } from "@/lib/voice-mode/settings";
 import { StoreCommandsContext, StoreSourceContext, usePublishedStoreSource } from "./store-source";
 import { ThreadPrefetchContext } from "./thread-prefetch";
 import { createThreadPrefetcher, ThreadPageCache } from "@/lib/thread-page-cache";
-import { PERSON_THREADS_HEADER, currentTaskBot, visibleMessages, configStatusFromFrame, pinBotThreadAction, openRoutineRun, continueRoutineRunInConversation, routineRunOfThread, visibleNotificationThread, openNotificationTarget, opensBesideStream, sendsToFreshTopic, freshTopicCovers, botOpensTo, awayFromMainThread, openBot, landOnBot, startNewTopic, openBotThread, openThread, threadsReadOnScreen, folderOwnerPath, personThreadKept, peopleDmReadTarget, panelFollowsSelection, openBotCatalog, closeBotCatalog, dataTablesFromResponse, dataSheetFromResponse, initialState, liveCallFromFrame, nextLiveCallLookup, ApiError, taskPatchFields, type OptionCardData, type SecretRequestCardData, type Message, type GroupDefaultResponder, type Group, type GroupTask, type ModelSelection, type Task, type ThreadOpener, type ThreadCloser, type TaskUsage, type Bot, type BotProject, type ProjectUpdatePatch, type FolderOwnerKind, type GroupTaskUpdatePatch, type TaskUpdatePatch, type ConfigStatus, type ConfigViewer, type ManagedPolicySummary, type BrowserEngineSummary, type BrowserProfile, type ConfigStatusFrame, type EngineInstall, type InstanceInfo, type AchievementsCategory, type ModelVariantSession, type AppState, type BotAnnouncement, type Action, type ThreadTarget, type BotCatalogTarget, type PanelOwner } from "./store/model";
+import { PERSON_THREADS_HEADER, currentTaskBot, threadApprovalModes, visibleMessages, configStatusFromFrame, pinBotThreadAction, openRoutineRun, continueRoutineRunInConversation, routineRunOfThread, visibleNotificationThread, openNotificationTarget, opensBesideStream, sendsToFreshTopic, freshTopicCovers, botOpensTo, awayFromMainThread, openBot, landOnBot, startNewTopic, openBotThread, openThread, threadsReadOnScreen, folderOwnerPath, personThreadKept, peopleDmReadTarget, panelFollowsSelection, openBotCatalog, closeBotCatalog, dataTablesFromResponse, dataSheetFromResponse, initialState, liveCallFromFrame, nextLiveCallLookup, ApiError, taskPatchFields, type OptionCardData, type SecretRequestCardData, type Message, type GroupDefaultResponder, type Group, type GroupTask, type ModelSelection, type Task, type ThreadOpener, type ThreadCloser, type TaskUsage, type Bot, type BotProject, type ProjectUpdatePatch, type FolderOwnerKind, type GroupTaskUpdatePatch, type TaskUpdatePatch, type ConfigStatus, type ConfigViewer, type ManagedPolicySummary, type BrowserEngineSummary, type BrowserProfile, type ConfigStatusFrame, type EngineInstall, type InstanceInfo, type AchievementsCategory, type ModelVariantSession, type AppState, type BotAnnouncement, type Action, type ThreadTarget, type BotCatalogTarget, type PanelOwner } from "./store/model";
 import { reducer } from "./store/reducer";
 import { createStoreDispatch } from "./store/create-store-dispatch";
 import { useStoreLive } from "./store/use-store-live";
-import { MESSAGE_PAGE_SIZE, api, createBotWithRole, persistTaskApproval, persistBotUpdate, requestConfirmedBotDeletion, loadSnapshotBoundary, runtimeFrameAction, type PeripheralSnapshotLoad } from "./store/api";
+import { MESSAGE_PAGE_SIZE, api, createBotWithRole, desktopApprovalBridge, persistTaskApproval, persistBotUpdate, requestConfirmedBotDeletion, loadSnapshotBoundary, runtimeFrameAction, type PeripheralSnapshotLoad } from "./store/api";
 
 export type { PeripheralSnapshotLoad };
 
@@ -37,6 +36,7 @@ export type { AppSettingsSection, BotSettingsSection } from "./settings-section"
 export {
   PERSON_THREADS_HEADER,
   currentTaskBot,
+  threadApprovalModes,
   visibleMessages,
   configStatusFromFrame,
   pinBotThreadAction,
@@ -72,6 +72,7 @@ export {
   MESSAGE_PAGE_SIZE,
   api,
   createBotWithRole,
+  desktopApprovalBridge,
   persistTaskApproval,
   persistBotUpdate,
   requestConfirmedBotDeletion,
@@ -306,7 +307,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () =>
       createBotPatchQueue<BotAnnouncement>({
         send: (botId, patch, signal, currentBot) =>
-          persistBotUpdate(botId, patch, signal, api, stepUpApprovals(window.ogb?.approvals), currentBot),
+          persistBotUpdate(botId, patch, signal, api, desktopApprovalBridge(), currentBot),
         reconcile: async (botId, signal) => {
           const result: { bots: BotAnnouncement[] } = await api(`/api/bots?messages=${MESSAGE_PAGE_SIZE}`, { signal });
           return result.bots.find((candidate) => candidate.id === botId) ?? null;
@@ -355,7 +356,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }),
     [botPatchQueue],
   );
-
 
   // The app opens the bot it remembers as that bot's row would (openBot):
   // with threads hidden at its main thread, not at a thread an activity row
@@ -491,7 +491,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     botPatchQueue,
     showThreadsRef,
   });
-
 
   // Re-probe the engines on demand. A CLI installed while the app is running
   // is invisible until something asks again — the setup screens expose this

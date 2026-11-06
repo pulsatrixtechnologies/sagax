@@ -69,6 +69,7 @@ import { MODEL_SERVER_DEFAULT_CONTEXT, MODEL_SERVER_DEFAULT_MAX_TOKENS, MODEL_SE
 import { canUseMcpServer, parseToolScope } from "../../shared/tool-scope.ts";
 import { customServerGate, gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 import { compactGateSearch } from "../mcp/mcp-gate-search.ts";
+import { agentsPreferredToolNames, withholdForConnector } from "../mcp/agents-tool-priority.ts";
 import { isPerspicaxBridge } from "./acp/grok-read-only-tools.ts";
 import { remoteMcpSpec } from "../mcp/mcp-http.ts";
 
@@ -504,6 +505,8 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
   if (turn.integrations?.browser) servers.browser = { ...turn.integrations.browser, scope: "approval" };
   if (turn.integrations?.data) servers.data = { ...turn.integrations.data, scope: "approval" };
   for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) servers[name] = { ...server, scope: "custom" };
+  // #2189: agents bare names win over the same name on a connector.
+  const agentsPreferred = turn.integrations?.agents ? agentsPreferredToolNames(turn.integrations.agents.env) : [];
   for (const [name, server] of Object.entries(servers)) {
     if (parsed.scope !== undefined && !canUseMcpServer(parsed.scope, name)) { delete servers[name]; continue; }
     // Pi registers every tool it is given and has no tool search of its own,
@@ -517,7 +520,8 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
     const search = turn.compactPrompt && botOwned && !directory
       ? compactGateSearch(Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [], isPerspicaxBridge(turn.integrations!.custom![name]))
       : undefined;
-    const gated = gateServer({ name, server, toolScope: parsed.scope, threadId: turn.threadId, nodeEnv: NODE_ENV_FLAG, directory, ...(search ? { search } : {}), ...customServerGate(name, botOwned, turn.integrations?.customResultBudgets) });
+    const withhold = withholdForConnector(name, agentsPreferred);
+    const gated = gateServer({ name, server, toolScope: parsed.scope, threadId: turn.threadId, nodeEnv: NODE_ENV_FLAG, directory, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), ...customServerGate(name, botOwned, turn.integrations?.customResultBudgets) });
     const stdio = gated ?? mcpStdioServer(server, { nodeEnv: NODE_ENV_FLAG, ...(directory ? { directory: { name } } : {}) });
     if (!stdio) throw new Error("Pi MCP server configuration is invalid");
     const original = server as { scope?: string };

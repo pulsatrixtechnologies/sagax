@@ -57,9 +57,9 @@ const flag = (on: boolean) => (on ? "1" : "0");
 
 /** Every combination server/index.ts agentsIntegration() can produce, plus the
  * standing external runtime (docs/self-hosting.md), which sets only its own
- * switch. The bot id is fixed because a room turn writes it into the
- * start_thread schema. A name without "+non-chief" is a Primary Bot's turn,
- * which mounts the most. */
+ * switch. The bot id is fixed for the spawn env only; start_thread never names
+ * it in its schema (one tool list per role for the prompt cache). A name
+ * without "+non-chief" is a Primary Bot's turn, which mounts the most. */
 function profiles(): Record<string, Profile> {
   const all: Record<string, Profile> = {};
   for (const chief of [true, false]) {
@@ -179,56 +179,59 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // person's own Claude account) joins the catalog; baselines move to the
 // measured wire.
 const BUDGET_BASELINE: Record<string, number> = {
+  // #2118: message_user joins the direct catalog (measured wire).
 
-  "direct": 94738,
-  "direct+voice": 95705,
-  "direct+shared": 96739,
-  "direct+shared+voice": 97706,
-  "direct+skills": 96360,
-  "direct+skills+voice": 97327,
-  "direct+skills+shared": 98361,
-  "direct+skills+shared+voice": 99328,
-  "room": 83709,
-  "room+voice": 84676,
-  "room+shared": 85710,
-  "room+shared+voice": 86677,
-  "room+skills": 85331,
-  "room+skills+voice": 86298,
-  "room+skills+shared": 87332,
-  "room+skills+shared+voice": 88299,
-  "room+own-thread": 85897,
-  "room+own-thread+voice": 86864,
-  "room+own-thread+shared": 87898,
-  "room+own-thread+shared+voice": 88865,
-  "room+own-thread+skills": 87519,
-  "room+own-thread+skills+voice": 88486,
-  "room+own-thread+skills+shared": 89520,
-  "room+own-thread+skills+shared+voice": 90487,
+  "direct": 97901,
+  "direct+voice": 98868,
+  "direct+shared": 99902,
+  "direct+shared+voice": 100869,
+  "direct+skills": 99523,
+  "direct+skills+voice": 100490,
+  "direct+skills+shared": 101524,
+  "direct+skills+shared+voice": 102491,
+  "room": 85780,
+  "room+voice": 86747,
+  "room+shared": 87781,
+  "room+shared+voice": 88748,
+  "room+skills": 87402,
+  "room+skills+voice": 88369,
+  "room+skills+shared": 89403,
+  "room+skills+shared+voice": 90370,
+  "room+own-thread": 87833,
+  "room+own-thread+voice": 88800,
+  "room+own-thread+shared": 89834,
+  "room+own-thread+shared+voice": 90801,
+  "room+own-thread+skills": 89455,
+  "room+own-thread+skills+voice": 90422,
+  "room+own-thread+skills+shared": 91456,
+  "room+own-thread+skills+shared+voice": 92423,
   // #2048: choose_page_target joins the catalog (measured wire).
-  "direct+non-chief": 85930,
-  "direct+voice+non-chief": 85209,
-  "direct+shared+non-chief": 86243,
-  "direct+shared+voice+non-chief": 87210,
-  "direct+skills+non-chief": 85864,
-  "direct+skills+voice+non-chief": 86831,
-  "direct+skills+shared+non-chief": 87865,
-  "direct+skills+shared+voice+non-chief": 88832,
-  "room+non-chief": 73207,
-  "room+voice+non-chief": 74174,
-  "room+shared+non-chief": 75208,
-  "room+shared+voice+non-chief": 76175,
-  "room+skills+non-chief": 74829,
-  "room+skills+voice+non-chief": 75796,
-  "room+skills+shared+non-chief": 76830,
-  "room+skills+shared+voice+non-chief": 77797,
-  "room+own-thread+non-chief": 75395,
-  "room+own-thread+voice+non-chief": 76362,
-  "room+own-thread+shared+non-chief": 77396,
-  "room+own-thread+shared+voice+non-chief": 78363,
-  "room+own-thread+skills+non-chief": 77017,
-  "room+own-thread+skills+voice+non-chief": 77984,
-  "room+own-thread+skills+shared+non-chief": 79018,
-  "room+own-thread+skills+shared+voice+non-chief": 79985,
+  "direct+non-chief": 87405,
+  "direct+voice+non-chief": 88372,
+  "direct+shared+non-chief": 89406,
+  "direct+shared+voice+non-chief": 90373,
+  "direct+skills+non-chief": 89027,
+  "direct+skills+voice+non-chief": 89994,
+  "direct+skills+shared+non-chief": 91028,
+  "direct+skills+shared+voice+non-chief": 91995,
+  "room+non-chief": 75278,
+  "room+voice+non-chief": 76245,
+  "room+shared+non-chief": 77279,
+  "room+shared+voice+non-chief": 78246,
+  "room+skills+non-chief": 76900,
+  "room+skills+voice+non-chief": 77867,
+  "room+skills+shared+non-chief": 78901,
+  "room+skills+shared+voice+non-chief": 79868,
+  "room+own-thread+non-chief": 77331,
+  "room+own-thread+voice+non-chief": 78298,
+  "room+own-thread+shared+non-chief": 79332,
+  "room+own-thread+shared+voice+non-chief": 80299,
+  "room+own-thread+skills+non-chief": 78953,
+  "room+own-thread+skills+voice+non-chief": 79920,
+  "room+own-thread+skills+shared+non-chief": 80954,
+  "room+own-thread+skills+shared+voice+non-chief": 81921,
+  // Annotations on check_delegation / wait_delegation (read-only policy).
+  // External runtime does not mount send_meme (or the rest of the agents catalog).
   "external": 5083,
   "external+everything": 5083,
 };
@@ -385,6 +388,21 @@ describe("agents proxy tools/list golden", () => {
     for (const [name, profile] of Object.entries(PROFILES)) {
       const tools = availableTools(catalogProfileFromEnv({ SAGAX_BOT_ID: "bot-golden", ...profile.env }));
       expect(JSON.stringify({ tools }), name).toBe(wires[name]);
+    }
+  });
+
+  // Providers cache a prompt from its start, tools first: one bot's id in a schema makes every other bot rewrite the whole list.
+  it("lists the same bytes for two bots of the same role", () => {
+    for (const chief of [true, false]) {
+      for (const coordinating of [false, true]) {
+        const env = coordinating
+          ? { SAGAX_ROOM_TURN: "1", SAGAX_OWN_THREAD_CREATION: "1", SAGAX_GROUP_TURN: "0" }
+          : {};
+        const lists = ["bot-one", "bot-two"].map((botId) =>
+          JSON.stringify(availableTools({ ...catalogProfileFromEnv(env), chief, botId })));
+        expect(lists[1]).toBe(lists[0]);
+        expect(lists[0]).not.toContain("bot-one");
+      }
     }
   });
 

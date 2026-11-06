@@ -5,7 +5,7 @@
 import type { IncomingMessage } from "node:http";
 
 import type { ApprovalViewer } from "../approvals/approval-audience.ts";
-import type { LookRefusal } from "../achievements-mastery.ts";
+import type { LookRefusal } from "../achievements/achievements-mastery.ts";
 import type { Level } from "../auth/authz.ts";
 import type { RemoteCwdDeps } from "../bots/bot-cwd.ts";
 import type { NewBotDefaults } from "../bots/new-bot-defaults.ts";
@@ -128,7 +128,7 @@ export interface BotsCoreRouteDeps {
   knowsPersonThreads(req: IncomingMessage): boolean;
   publicGroupState(group: GroupRecord): object;
   botComputerControlSnapshot(botId: string): { held: unknown; helpReason: unknown };
-  newBotApprovalMode(): "ask" | "auto";
+  newBotApprovalMode(): "ask" | "auto" | "full";
   memberDefaultSelection(principalId: string | null | undefined): Promise<ModelSelection>;
   defaultSelection(): Promise<ModelSelection>;
   githubCredentialsFor(actor: string | null | undefined): readonly GithubCredential[];

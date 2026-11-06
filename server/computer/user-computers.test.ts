@@ -197,7 +197,7 @@ describe("the server's own machine on an organization server", () => {
     // the bot's owner and routine trigger, so the person's own routine reaches
     // the computer they lent; userComputers decides, see the routine cases above)
     expect(source).toMatch(/function userComputerSpeaking\(principal: string \| null[\s\S]{0,300}?\{\s*if \(principal\) return \{ speaker: personSpeaker\(principal\), context: \{\} \};/);
-    const environments = readFileSync(new URL("../routes/internal-environments.ts", import.meta.url), "utf8");
+    const environments = readFileSync(new URL("../routes/internal-environments-handlers.ts", import.meta.url), "utf8");
     expect(source).toMatch(/userComputerSpeaking: \(principal, capability\) => userComputerSpeaking\(principal, capability\)/);
     expect(source).toMatch(/userComputersList: \(speaker, context\) => userComputers\.list\(speaker as never, context as never\)/);
     expect(source).toMatch(/userComputersRequest: \(speaker, operation, active, context\) => userComputers\.request\(speaker as never, operation as never, active, context as never\)/);

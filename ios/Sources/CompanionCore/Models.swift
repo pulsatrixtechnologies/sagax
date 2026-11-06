@@ -791,12 +791,24 @@ public struct ModelSelection: Codable, Hashable, Sendable {
     /// Auto (#153): the server picks the best model per task; `model` stays
     /// the fallback. Choosing a model pins it again (absent).
     public var auto: Bool? = nil
+    /// #2106: when Auto is on, how Auto ranks models (Intelligence / Balance /
+    /// Cost). Absent means Balance. Cleared when a model is pinned.
+    public var autoOptimize: ModelAutoOptimize? = nil
 
-    public init(instanceId: String, model: String, effort: String? = nil, variant: String? = nil) {
+    public init(
+        instanceId: String,
+        model: String,
+        effort: String? = nil,
+        variant: String? = nil,
+        auto: Bool? = nil,
+        autoOptimize: ModelAutoOptimize? = nil
+    ) {
         self.instanceId = instanceId
         self.model = model
         self.effort = effort
         self.variant = variant
+        self.auto = auto
+        self.autoOptimize = autoOptimize
     }
 }
 

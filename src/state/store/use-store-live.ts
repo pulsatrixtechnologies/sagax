@@ -19,6 +19,7 @@ import {
   loadSnapshotBoundary,
   normalizeSnapshotFailure,
 } from "./api";
+import { ROUTINE_RUNS_WINDOW_MS } from "../routine-runs";
 
 export type UseStoreLiveArgs = {
   stateRef: { current: AppState };
@@ -94,11 +95,12 @@ export function useStoreLive(args: UseStoreLiveArgs): void {
       {
         key: "routines",
         request: async () => {
-          const listing = await api("/api/routines");
+          const since = Date.now() - ROUTINE_RUNS_WINDOW_MS;
+          const listing = await api(`/api/routines?since=${since}`);
           const { routines, runs, folders } = listing;
           // A server from before routine folders sends no `folders`.
           noteRoutinesListing(listing);
-          return () => rawDispatch({ type: "routinesHydrated", routines, runs, ...(folders && typeof folders === "object" ? { folders } : {}) });
+          return () => rawDispatch({ type: "routinesHydrated", routines, runs, since, ...(folders && typeof folders === "object" ? { folders } : {}) });
         },
       },
       {

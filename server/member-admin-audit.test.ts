@@ -114,7 +114,10 @@ describe("member admin audit, section 1: bot tool calls", () => {
     expect(answerer(`mcp__agents__${tool}`)).toBe("admin");
     expect(answerer(`mcp__agents__${tool}`, { holder: true })).toBe("owner");
   });
-  it.each(["list_bots", "ask_bot", "memory_write", "offer_shell_terminal", "list_terminal_resources", "propose_team_setup"])("agents %s (the member's own scope): the owner's card", (tool) => {
+  it.each(["list_bots", "ask_bot", "memory_write", "offer_shell_terminal", "list_terminal_resources", "propose_team_setup",
+    // #2199: page/artifact target choice stays in the member's own conversation
+    "choose_page_target", "ask_choice", "propose_page", "save_artifact", "claude_artifact", "create_options_card",
+  ])("agents %s (the member's own scope): the owner's card", (tool) => {
     expect(answerer(`mcp__agents__${tool}`)).toBe("owner");
   });
   it("act: a read or a write of the member's own bot is theirs (#1269, #1098); someone else's bot or the organization stays an admin's", () => {

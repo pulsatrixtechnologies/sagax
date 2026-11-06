@@ -1,7 +1,7 @@
 /** Server-request (tools / approvals) handler for a Codex app-server session. */
 import { codexHostToolRequest } from "../host-tools.ts";
 import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, directoryCallTarget } from "../../mcp/mcp-directory.ts";
-import { parseProtocolAskQuestions, questionAnswersById, questionChoices } from "../../../shared/ask-question.ts";
+import { parseProtocolAskQuestions, questionChoices } from "../../../shared/ask-question.ts";
 import { permissionCommand } from "../permission-command.ts";
 import {
   additionalPermissionSummary,
@@ -14,6 +14,8 @@ import { commandSummary } from "../../tools/tool-summary.ts";
 import { CODEX_MISSING_CREDENTIALS, codexContextFull, codexSignInExpired, codexSignInRefused, codexUserError } from "../codex-errors.ts";
 import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { renewalPrompt } from "../../context/context-renewal.ts";
+import { codexQuestionReply } from "./questions.ts";
+import { boundedLabel } from "./plain.ts";
 
 export const DENY_TIMEOUT_NOTE =
   "Sagax: nobody answered this permission request in time. Skip this action and finish what you can without it.";
@@ -45,11 +47,11 @@ s.handleServerRequest = (msg: any) => {
   }
   // A normal MCP elicitation is a form or URL asking for real user input,
   // not a permission. We cannot safely synthesize its structured answer.
-  // Unknown future server requests also fail closed instead of being
-  // mistaken for commands and accepted by Full Access.
+  // Unknown future server requests also fail closed instead of being accepted by Full Access.
   if (!isQuestion && !isPermission) {
     if (isMcpElicitation) {
       s.send({ jsonrpc: "2.0", id: msg.id, result: { action: "decline" } });
+      s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.notice", message: `${boundedLabel(params.serverName) ?? "An MCP server"} asked for input Sagax can't show yet, so the request was declined.` });
     } else {
       s.send({
         jsonrpc: "2.0",
@@ -153,21 +155,10 @@ s.handleServerRequest = (msg: any) => {
     if (!s.asks.delete(requestId)) return;
     clearTimeout(timer);
     if (isQuestion) {
-      // Only the person's reply is filed: Q:/A: blocks mapped to the
-      // id that asked them, or the flat fallback for a single
-      // question. Timeout and turn teardown send empty answers so
-      // every id reads unanswered — system notes never occupy the
-      // slot the model reads as the person's words (the rule
-      // permission-proxy already follows).
-      const mapped =
-        behavior === "answer" && source === "user" && typeof message === "string"
-          ? questionAnswersById(message, protocolQuestions ?? [])
-          : {};
-      // Null prototype so an opaque id like __proto__ becomes a real
-      // answer key instead of hitting the inherited setter.
-      const answers: Record<string, { answers: string[] }> = Object.create(null);
-      for (const [id, answer] of Object.entries(mapped)) answers[id] = { answers: [answer] };
-      s.send({ jsonrpc: "2.0", id: msg.id, result: { answers } });
+      // Only the person's reply is filed: timeout and turn teardown send
+      // empty answers so every id reads unanswered — system notes never
+      // occupy the slot the model reads as the person's words.
+      s.send({ jsonrpc: "2.0", id: msg.id, result: codexQuestionReply(behavior, message, source, protocolQuestions ?? []) });
     } else {
       s.send({
         jsonrpc: "2.0",

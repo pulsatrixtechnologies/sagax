@@ -52,6 +52,14 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
     }
     patch.memoryUpkeep = body.memoryUpkeep;
   }
+  // false: the helper model never writes for this bot (server/side-jobs.ts)
+  if (body.helperModel !== undefined) {
+    if (typeof body.helperModel !== "boolean") {
+      env.json(env.res, 400, { error: "helperModel must be true or false" });
+      return true;
+    }
+    patch.helperModel = body.helperModel;
+  }
   // Prompt-cache keep-warm: true/false overrides the workspace, null follows it.
   if (body.cacheKeepWarm !== undefined) {
     if (body.cacheKeepWarm !== null && typeof body.cacheKeepWarm !== "boolean") {
@@ -182,13 +190,8 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
     env.json(env.res, 409, env.MEMBER_BOT_FULL_ACCESS);
     return true;
   }
-  if (existingBot?.busy && approvalChangeRequested && requestedApprovalMode !== currentApprovalMode && !env.primaryAskedReplay()
-    && !env.liveApprovalChange(currentApprovalMode, requestedApprovalMode)) {
-    env.json(env.res, 409, {
-      error: "stop this bot's turn before changing its approval level"
-    });
-    return true;
-  }
+  // omb #3627: any level may change while the bot works; liveApprovalMode
+  // reads the saved level on the next Sagax decision.
   if (approvalChangeRequested && existingBot && env.memberAutoRefused(existingBot, [currentApprovalMode], requestedApprovalMode)) {
     env.json(env.res, 403, env.MEMBER_AUTO_NOT_ALLOWED);
     return true;
@@ -207,8 +210,10 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
     patch.autoApprove = requestedApprovalMode === "auto";
   }
   const targetSelection = normalizedSelection ?? existingBot?.modelSelection;
+  // Full runs on every engine (omb #2808). Custom stays Codex-only and never
+  // crosses engines.
   if (
-    (requestedApprovalMode === "full" || requestedApprovalMode === "custom") &&
+    requestedApprovalMode === "custom" &&
     body.approvalMode !== undefined &&
     (!targetSelection || !env.supportsApprovalMode(targetSelection, requestedApprovalMode) ||
       (existingBot && normalizedSelection && env.engineSwitchNeedsAsk(requestedApprovalMode, existingBot.modelSelection, normalizedSelection)))
@@ -218,13 +223,16 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
     });
     return true;
   }
+  // Full access applies at once from any client that can reach this API
+  // (PRO-RÈGLE / omb #2701): no desktop channel, no consent field. Custom
+  // keeps the packaged desktop's private channel, into it and out of it,
+  // because it holds restrictions the person wrote themselves.
   const requiresPrivateApprovalTransition =
-    ((requestedApprovalMode === "full" || requestedApprovalMode === "custom") &&
-      currentApprovalMode !== requestedApprovalMode) ||
+    (requestedApprovalMode === "custom" && currentApprovalMode !== "custom") ||
     (currentApprovalMode === "custom" && requestedApprovalMode !== "custom");
   if (requiresPrivateApprovalTransition) {
     env.json(env.res, 403, {
-      error: "Full access and Custom approval are turned on in the Sagax desktop app on the computer that runs this server"
+      error: "Custom approval is turned on in the Sagax desktop app on the computer that runs this server"
     });
     return true;
   }

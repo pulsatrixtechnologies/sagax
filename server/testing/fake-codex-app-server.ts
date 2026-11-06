@@ -11,7 +11,7 @@
 //                     config-profile-unsupported | config-read-error | image |
 //                     logged-in-stdout | logged-out | unauthorized | late-request |
 //                     retry-then-complete | signin-refused | auth-recovery | mcp-401 | legacy-error |
-//                     key-401 | recovered-403 | recovered-401 | recovering-403 | usage-limit |
+//                     key-401 | recovered-403 | recovered-401 | recovering-403 | usage-limit | async-question |
 //                     context-full (one shell step, then contextWindowExceeded; a prompt that
 //                     already carries Sagax's fresh-session note answers normally unless
 //                     FAKE_CODEX_CONTEXT_FULL_AGAIN=1)
@@ -35,6 +35,9 @@
 //                              confirms the reasoning delta was parsed
 //   FAKE_CODEX_ASK_HOLD        question modes: record the ask reply and hold the turn open, for
 //                              timeout tests that advance the clock
+//   FAKE_CODEX_ASYNC_QUESTIONS  async-question mode: JSON replacing the message's `questions`
+//   FAKE_CODEX_ASYNC_QUESTION_GATE  async-question mode: the turn keeps running until this file exists (default 300 ms)
+//   FAKE_CODEX_ACTION_LOG  early-tool-timeout/error: append an action before turn/start times out or fails
 //   FAKE_CODEX_DUMP   path to write {pid, argv, env, calls, decision} as JSON
 //   FAKE_CODEX_IGNORE_FEATURES  "1": config/read reports no `-c features.*` override
 //                     (a Codex that did not take them)
@@ -65,6 +68,15 @@
 //                         MCP server and replies with its text
 //   FAKE_CODEX_COMPLETE_BEFORE_ACK  with FAKE_CODEX_ROOM_PLAN: stream the whole
 //                         turn, completion included, before acknowledging turn/start
+//   FAKE_CODEX_TEXT_*  `codex exec` (the background one-shot, server/drivers/codex-background-text.ts):
+//     FAKE_CODEX_TEXT_ROUTES  JSON file {"marker": "reply"}, re-read each run; the first
+//                             marker the stdin prompt contains picks the reply
+//     FAKE_CODEX_TEXT_REPLY   the reply when no route matches (default "fake background answer")
+//     FAKE_CODEX_TEXT_LOG     append {argv, cwd, prompt, env} per call, one JSON object per line
+//     FAKE_CODEX_TEXT_MODE    ok (default) | fail (turn.failed) | exit (exit 1, stderr only) |
+//                             hang (never answer) | tool (a command_execution item first) |
+//                             noisy (a non-JSON line, a non-fatal error item, reasoning)
+//   FAKE_CODEX_LUNA   "1": model/list also offers gpt-6-luna (the background calls' model)
 //   FAKE_CODEX_MCP_START  "1": on thread/start, start every `-c mcp_servers.*` mount
 //                         the way codex-cli 0.160.1 does (a command with only PATH,
 //                         HOME, its env_vars and its env table; a url with its
@@ -72,6 +84,10 @@
 //                         (FAKE_CODEX_MCP_HANDSHAKE JSON overrides it), list the
 //                         tools, and dump each result as mcpStartup[name]:
 //                         {status: "ready", tools} | {status: "failed", error}
+//   FAKE_CODEX_MCP_READY_MS  each `-c mcp_servers.*` mount is reported starting after the thread/start or
+//                         thread/resume reply and ready at once, as codex-cli 0.166.0 does; with this, ready only this many ms
+//                         later, and the dump records mcpReadyAtTurnStart
+//   FAKE_CODEX_USER_AGENT  initialize reply's userAgent (default codex_cli_rs/0.166.0)
 //
 // Keep this file dependency-free — it runs as a bare `node` subprocess.
 import { spawn } from "node:child_process";
@@ -130,6 +146,59 @@ if (process.argv[2] === "login" && process.argv[3] === "status") {
   // older versions that wrote the same status on stdout.
   const statusStream = mode === "logged-in-stdout" ? process.stdout : process.stderr;
   statusStream.write("Logged in using ChatGPT\n");
+  process.exit(0);
+}
+if (process.argv[2] === "exec") {
+  // `codex exec --json … -`: the prompt arrives on stdin, the answer as
+  // exec's JSONL events (codex-cli 0.160.1), then the process exits.
+  const prompt = await new Promise<string>((resolve) => {
+    let input = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => { input += chunk; });
+    process.stdin.on("end", () => resolve(input));
+  });
+  const textMode = process.env.FAKE_CODEX_TEXT_MODE ?? "ok";
+  if (process.env.FAKE_CODEX_TEXT_LOG) {
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:HOME|CODEX_HOME|OPENAI_API_KEY|SAGAX_.*)$/.test(key)));
+    appendFileSync(process.env.FAKE_CODEX_TEXT_LOG, `${JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd(), prompt, env })}\n`);
+  }
+  const event = (value: unknown) => process.stdout.write(`${JSON.stringify(value)}\n`);
+  if (textMode === "hang") {
+    // a repeating timer keeps the loop alive without settling the
+    // top-level await, which Node would otherwise treat as fatal
+    await new Promise(() => setInterval(() => {}, 1 << 30));
+  }
+  if (textMode === "exit") {
+    process.stderr.write("Error: stream disconnected before completion\n");
+    process.exit(1);
+  }
+  event({ type: "thread.started", thread_id: "fake-exec-thread" });
+  event({ type: "turn.started" });
+  if (textMode === "fail") {
+    event({ type: "error", message: "unexpected status 401 Unauthorized" });
+    event({ type: "turn.failed", error: { message: "unexpected status 401 Unauthorized" } });
+    process.exit(1);
+  }
+  if (textMode === "tool") {
+    event({ type: "item.started", item: { id: "item_0", type: "command_execution", command: "ls", aggregated_output: "", status: "in_progress" } });
+  }
+  if (textMode === "noisy") {
+    process.stdout.write("Reading prompt from stdin...\n");
+    event({ type: "item.completed", item: { id: "item_0", type: "error", message: "a non-fatal notice" } });
+    event({ type: "item.completed", item: { id: "item_1", type: "reasoning", text: "thinking" } });
+  }
+  let reply = process.env.FAKE_CODEX_TEXT_REPLY ?? "fake background answer";
+  if (process.env.FAKE_CODEX_TEXT_ROUTES && existsSync(process.env.FAKE_CODEX_TEXT_ROUTES)) {
+    try {
+      const routes = JSON.parse(readFileSync(process.env.FAKE_CODEX_TEXT_ROUTES, "utf8")) as Record<string, string>;
+      const hit = Object.entries(routes).find(([marker]) => prompt.includes(marker));
+      if (hit) reply = hit[1];
+    } catch {
+      // a malformed routes file falls back to the plain reply
+    }
+  }
+  event({ type: "item.completed", item: { id: "item_2", type: "agent_message", text: reply } });
+  event({ type: "turn.completed", usage: { input_tokens: 120, cached_input_tokens: 20, output_tokens: 7 } });
   process.exit(0);
 }
 const calls: Array<{ method: string; params: unknown }> = [];
@@ -282,7 +351,34 @@ const startMcpServers = async (): Promise<Record<string, McpStartup>> => {
   return Object.fromEntries(entries);
 };
 
+let mcpPending: string[] = [];
+let mcpReadyAtTurnStart: boolean | undefined;
+// codex-cli 0.166.0 answers the thread request first and reports each server's startup after it.
+const announceMcpStartup = () => {
+  const report = (name: string, status: string, error: string | null = null) =>
+    out({ jsonrpc: "2.0", method: "mcpServer/startupStatus/updated", params: { threadId: null, name, status, error, failureReason: null } });
+  mcpPending = Object.entries(mcpMounts())
+    .filter(([name, fields]) => "command" in fields && fields.enabled !== false && name !== process.env.FAKE_CODEX_MCP_FAILED)
+    .map(([name]) => name);
+  for (const name of mcpPending) report(name, "starting");
+  const settle = (name: string) => {
+    mcpPending = mcpPending.filter((pending) => pending !== name);
+    const started = mcpStartup?.[name];
+    if (started?.status === "failed") report(name, "failed", started.error);
+    else report(name, "ready");
+  };
+  const delayMs = Number(process.env.FAKE_CODEX_MCP_READY_MS) || 0;
+  for (const [index, name] of [...mcpPending].entries()) {
+    const delay = delayMs * (process.env.FAKE_CODEX_MCP_STAGGER === "1" ? index + 1 : 1);
+    if (delay > 0) setTimeout(() => settle(name), delay);
+    else settle(name);
+  }
+};
 const threadReply = (response: unknown) => {
+  replyToThread(response);
+  announceMcpStartup();
+};
+const replyToThread = (response: unknown) => {
   if (!process.env.FAKE_CODEX_RESTORED_USAGE) return out(response);
   const restored = {
     jsonrpc: "2.0", method: "thread/tokenUsage/updated",
@@ -333,7 +429,8 @@ const dump = () => {
   if (process.env.FAKE_CODEX_DUMP) {
     writeDumpAtomic(
       process.env.FAKE_CODEX_DUMP,
-      JSON.stringify({ pid: process.pid, argv: process.argv.slice(2), env: process.env, calls, decision, ...(mcpStartup ? { mcpStartup } : {}) }, null, 2),
+      JSON.stringify({ pid: process.pid, argv: process.argv.slice(2), env: process.env, calls, decision, ...(mcpStartup ? { mcpStartup } : {}),
+        ...(mcpReadyAtTurnStart !== undefined ? { mcpReadyAtTurnStart } : {}) }, null, 2),
     );
   }
 };
@@ -443,7 +540,7 @@ process.stdin.on("data", (chunk) => {
         if (process.env.FAKE_CODEX_LAUNCH_LOG) appendFileSync(process.env.FAKE_CODEX_LAUNCH_LOG, `${JSON.stringify({ pid: process.pid })}\n`);
         experimentalApi = msg.params?.capabilities?.experimentalApi === true;
         logStartup("initialize");
-        const reply = () => out({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
+        const reply = () => out({ jsonrpc: "2.0", id: msg.id, result: { ok: true, userAgent: process.env.FAKE_CODEX_USER_AGENT ?? "codex_cli_rs/0.166.0" } });
         if (process.env.FAKE_CODEX_STARTUP_DELAY_MS) setTimeout(reply, Number(process.env.FAKE_CODEX_STARTUP_DELAY_MS));
         else reply();
         break;
@@ -508,6 +605,9 @@ process.stdin.on("data", (chunk) => {
                   : []),
                 ...(updated ? [{ id: "gpt-6.1-sol", displayName: "GPT-6.1 Sol", hidden: false, isDefault: false }] : []),
                 { id: "gpt-fake-default", displayName: "GPT Fake Default", hidden: false, isDefault: !hasAstra },
+                ...(process.env.FAKE_CODEX_LUNA === "1"
+                  ? [{ id: "gpt-6-luna", displayName: "GPT-6 Luna", hidden: false, isDefault: false }]
+                  : []),
               ],
               nextCursor: "page-2",
             },
@@ -569,7 +669,7 @@ process.stdin.on("data", (chunk) => {
           threadReply({ jsonrpc: "2.0", id: msg.id, result: { thread: { id: msg.params?.threadId }, sandbox: resolvedSandbox(msg.params ?? {}) } });
         } else if (msg.params?.permissions && (!experimentalApi || mode === "config-profile-unsupported")) {
           out({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "experimental API required for permissions" } });
-        } else if (mode === "voice" || mode === "resume" || mode === "review-events" || mode === "helper-events" || mode === "instructions-unsupported" || mode === "config-profile" || mode === "config-profile-unsupported" ||
+        } else if (mode === "voice" || mode === "resume" || mode === "review-events" || mode === "helper-events" || mode === "instructions-unsupported" || mode === "config-profile" || mode === "config-profile-unsupported" || mode === "async-question" ||
             (mode === "resume-then-missing" && !existsSync(process.env.FAKE_CODEX_STATE ?? ""))) {
           threadReply({ jsonrpc: "2.0", id: msg.id, result: { thread: { id: msg.params?.threadId }, sandbox: resolvedSandbox(msg.params ?? {}) } });
         } else {
@@ -640,8 +740,15 @@ process.stdin.on("data", (chunk) => {
           setTimeout(() => process.exit(1), 25);
           break;
         }
+        if (process.env.FAKE_CODEX_MCP_READY_MS) mcpReadyAtTurnStart = mcpPending.length === 0;
         dump();
         logStartup("turn/start");
+        if (mode === "early-tool-timeout" || mode === "early-tool-error") {
+          if (process.env.FAKE_CODEX_ACTION_LOG) appendFileSync(process.env.FAKE_CODEX_ACTION_LOG, `${JSON.stringify({ action: "record", pid: process.pid })}\n`);
+          notify("item/completed", { item: { id: "early-tool", type: "commandExecution", command: "record", status: "completed", aggregatedOutput: "recorded" } });
+          if (mode === "early-tool-error") out({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: "connection reset by peer" } });
+          break;
+        }
         if (mode === "voice") {
           out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
           const text = process.env.FAKE_CODEX_VOICE_REPLY ?? "done from fake codex";
@@ -1067,6 +1174,27 @@ process.stdin.on("data", (chunk) => {
                     { id: "q-review", question: "Who reviews?", options: [{ label: "Ada" }, { label: "Lin" }] },
                   ],
             },
+          });
+        } else if (mode === "async-question") {
+          // request_user_input_async: no server request, an agentMessage
+          // carrying the questions, and the turn keeps running after.
+          const item = {
+            type: "agentMessage",
+            id: "call_async_question",
+            text: "Which source should I use?\n- Directly in Sagax\n- The official server in Executor",
+            phase: "final_answer",
+            memoryCitation: null,
+            delivery: "async",
+            questions: process.env.FAKE_CODEX_ASYNC_QUESTIONS
+              ? JSON.parse(process.env.FAKE_CODEX_ASYNC_QUESTIONS)
+              : [{ title: "Which source should I use?", options: ["Directly in Sagax", "The official server in Executor"] }],
+          };
+          notify("item/started", { item, startedAtMs: Date.now() });
+          notify("item/completed", { item, completedAtMs: Date.now() });
+          const gate = process.env.FAKE_CODEX_ASYNC_QUESTION_GATE;
+          void waitForGate(gate, gate ? 15_000 : 300).then(() => {
+            dump();
+            finishTurn();
           });
         } else if (mode === "approval" || mode === "windows-command") {
           const approvalCommand = mode === "windows-command" ? command : "rm -rf scratch";

@@ -27,13 +27,13 @@
 // chosen column entry, each with its star and the check on the current
 // one. The left and right arrows step the column entries. Typing lists
 // every provider's matches flat, as in the other modes.
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { TriangleAlert, Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import {
-  activeRowKey, filterModelSections, groupedModelMenuEntries, modelMenuRoot, modelMenuRootEntries, pickableRows, stepRow,
+  activeRowKey, filterModelSections, groupedModelMenuEntries, modelMenuRoot, modelMenuRootEntries, pickableRows, previewProviderRows, stepRow,
   ALL_MODELS_KEY, CURRENT_KEY_PREFIX, FAVORITE_KEY_PREFIX,
   type ModelMenuProvider, type ModelMenuRow, type ModelMenuSection,
 } from "@/lib/model-menu";
@@ -45,7 +45,7 @@ const STYLE = {
     field: "mx-1.5 mb-1 flex items-center gap-2 border-b border-popover-hairline px-2 py-2",
     input: "w-full bg-transparent text-[13px] text-popover-ink placeholder:text-popover-placeholder focus:outline-none",
     icon: "text-popover-ink-secondary",
-    list: "max-h-[min(400px,56dvh)] overflow-y-auto overscroll-contain px-1.5 pb-1",
+    list: "max-h-[min(280px,39dvh)] overflow-y-auto overscroll-contain px-1.5 pb-1",
     heading: "px-2 pb-1 pt-2 text-[11.5px] text-popover-ink-secondary",
     divider: "border-t border-popover-hairline",
     row: "text-popover-ink",
@@ -155,6 +155,99 @@ export function defaultPaneKey(groups: readonly PaneGroup[]): string | undefined
   return (groups.find((group) => group.current) ?? groups.find((group) => group.key === PANE_FAVORITES_KEY && group.count > 0) ?? groups.find((group) => group.key !== PANE_FAVORITES_KEY) ?? groups[0])?.key;
 }
 
+/** Two-column empty-search body for ModelSearchList (Favorites / providers | models). */
+function ModelPanesBody({
+  pane,
+  activePane,
+  activePanePreview,
+  expandedProviders,
+  listRef,
+  listboxId,
+  label,
+  after,
+  variant,
+  style,
+  rowProps,
+  choosePane,
+  toggleProviderExpanded,
+}: {
+  pane: { top: ModelMenuRow[]; groups: PaneGroup[] };
+  activePane: PaneGroup;
+  activePanePreview: { rows: ModelMenuRow[]; hidden: number };
+  expandedProviders: Record<string, boolean>;
+  listRef: RefObject<HTMLDivElement | null>;
+  listboxId: string;
+  label?: string;
+  after?: ReactNode;
+  variant: "popover" | "window";
+  style: Style;
+  rowProps: (row: ModelMenuRow, key: string) => Parameters<typeof ModelSearchRow>[0];
+  choosePane: (key: string) => void;
+  toggleProviderExpanded: (key: string) => void;
+}) {
+  return (
+    <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list data-model-panes
+      data-model-list-scroll={after !== undefined ? "" : undefined}
+      className={cn("@container flex min-h-0", after !== undefined ? "flex-1 overflow-hidden px-1.5 pb-1" : variant === "popover" ? "max-h-[min(280px,39dvh)] px-1.5 pb-1" : "")}>
+      <div className="flex min-h-0 w-full flex-col @min-[26rem]:flex-row">
+        <div role="group" aria-label={t("model.providers")} data-model-panes-left
+          className={cn("flex shrink-0 flex-col overflow-y-auto overscroll-contain py-0.5 @max-[26rem]:border-b @min-[26rem]:w-[11rem] @min-[26rem]:border-r @min-[26rem]:pr-1.5", variant === "popover" ? "border-popover-hairline" : "border-hairline/50")}>
+          {pane.top.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
+          {pane.groups.map((group) => {
+            const selected = group.key === activePane.key;
+            return (
+              <button
+                key={group.key}
+                type="button"
+                data-model-pane-group={group.key}
+                data-model-pane-selected={selected || undefined}
+                aria-pressed={selected}
+                // keep the focus in the search field
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => choosePane(group.key)}
+                className={cn(
+                  "flex min-h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none",
+                  style.row, selected && style.active, group.count === 0 && "opacity-50",
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {group.key === PANE_FAVORITES_KEY && <Star size={12} aria-hidden="true" fill="currentColor" className={cn("shrink-0", style.check)} />}
+                  <span className="truncate">{group.label}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {group.current && <span data-model-provider-current aria-hidden="true" className={cn("size-1.5 rounded-full bg-current", style.check)} />}
+                  <span data-model-pane-count className={cn("text-[11.5px] tabular-nums", style.detail)}>{group.count}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div role="group" aria-label={activePane.label} data-model-panes-right={activePane.key}
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain py-0.5 @min-[26rem]:pl-1.5">
+          <div aria-hidden="true" className={cn("flex items-baseline gap-1.5", style.heading)}>
+            <span className="truncate">{activePane.label}</span>
+            {activePane.note && <span data-model-section-note className="truncate opacity-80">· {activePane.note}</span>}
+          </div>
+          {activePanePreview.rows.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
+          {(activePanePreview.hidden > 0 || expandedProviders[activePane.key]) && activePane.key !== PANE_FAVORITES_KEY && (
+            <ShowMoreRow
+              sectionKey={activePane.key}
+              expanded={Boolean(expandedProviders[activePane.key])}
+              style={style}
+              onToggle={() => toggleProviderExpanded(activePane.key)}
+            />
+          )}
+          {activePane.rows.length === 0 && (
+            <div data-model-pane-empty className={style.empty}>
+              {activePane.key === PANE_FAVORITES_KEY ? t("model.panes.noFavorites") : t("model.noMatch")}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, panes = false, onPreview, onAutoEdit, after, autoPanel }: {
   sections: ModelMenuSection[];
   onPick: (row: ModelMenuRow) => void;
@@ -177,9 +270,8 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   panes?: boolean;
   /** #2106: Edit on the Auto row opens Optimize for Intelligence / Balance / Cost. */
   onAutoEdit?: () => void;
-  /** #2106: drawn at the end of the flat list, inside the same scrolling
-   * zone (the Auto Optimize choices, the model's settings, the links), and
-   * the list fills the menu's height instead of its own cap. */
+  /** #2181: Effort, Provider and the other links sit in a fixed footer
+   * under the scrolling list in every mode (flat, nested, panes, search). */
   after?: ReactNode;
   /** #2106: drawn right under the Auto row of the flat list (its Optimize
    * choices), so opening Edit shows them where the eye already is. */
@@ -191,6 +283,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   const [openSub, setOpenSub] = useState<OpenSubmenu | null>(null);
   const [allOpen, setAllOpen] = useState(false);
   const [paneKey, setPaneKey] = useState<string | null>(null);
+  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -200,13 +293,36 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   const paned = panes && !searching;
   const nested = submenus && !searching && !paned;
   const shown = filterModelSections(sections, query);
-  const root = nested ? modelMenuRoot(shown, favorites?.keys ?? []) : null;
-  const pane = paned ? paneGroups(shown, favorites?.keys ?? []) : null;
+  const favoriteKeys = favorites?.keys ?? [];
+  const previewSection = (section: ModelMenuSection): { section: ModelMenuSection; hidden: number } => {
+    if (searching || !section.label) return { section, hidden: 0 };
+    const preview = previewProviderRows(section.rows, {
+      expanded: Boolean(expandedProviders[section.key]),
+      favoriteKeys,
+    });
+    return { section: { ...section, rows: preview.rows }, hidden: preview.hidden };
+  };
+  const displaySections = shown.map((section) => previewSection(section).section);
+  const root = nested ? modelMenuRoot(shown, favoriteKeys) : null;
+  const pane = paned ? paneGroups(shown, favoriteKeys) : null;
   const activePane = pane ? (pane.groups.find((group) => group.key === paneKey) ?? pane.groups.find((group) => group.key === defaultPaneKey(pane.groups))) : undefined;
+  const activePanePreview = activePane && activePane.key !== PANE_FAVORITES_KEY
+    ? previewProviderRows(activePane.rows, { expanded: Boolean(expandedProviders[activePane.key]), favoriteKeys })
+    : activePane
+      ? { rows: activePane.rows, hidden: 0 }
+      : undefined;
   const grouped = Boolean(root) && groupProviders;
   const showingAll = grouped && allOpen;
   const entries = root ? (groupProviders ? groupedModelMenuEntries(root, allOpen) : modelMenuRootEntries(root)) : null;
-  const rows = entries ?? (pane ? [...pane.top, ...(activePane?.rows ?? [])] : pickableRows(shown));
+  const rows = entries ?? (pane
+    ? [...pane.top, ...(activePanePreview?.rows ?? [])]
+    : pickableRows(displaySections));
+  const listScrollClass = after !== undefined
+    ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1"
+    : style.list;
+  const toggleProviderExpanded = (key: string) => {
+    setExpandedProviders((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
   const active = activeRowKey(rows, moved, searching);
   const flatIds = shown.flatMap((section) => section.rows);
   const optionId = (key: string) => entries
@@ -397,59 +513,26 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
           className={style.input}
         />
       </label>
-      {pane && activePane ? (
-        <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list data-model-panes
-          className={cn("@container flex min-h-0", variant === "popover" ? "max-h-[min(400px,56dvh)] px-1.5 pb-1" : "")}>
-          <div className="flex min-h-0 w-full flex-col @min-[26rem]:flex-row">
-            <div role="group" aria-label={t("model.providers")} data-model-panes-left
-              className={cn("flex shrink-0 flex-col overflow-y-auto overscroll-contain py-0.5 @max-[26rem]:border-b @min-[26rem]:w-[11rem] @min-[26rem]:border-r @min-[26rem]:pr-1.5", variant === "popover" ? "border-popover-hairline" : "border-hairline/50")}>
-              {pane.top.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
-              {pane.groups.map((group) => {
-                const selected = group.key === activePane.key;
-                return (
-                  <button
-                    key={group.key}
-                    type="button"
-                    data-model-pane-group={group.key}
-                    data-model-pane-selected={selected || undefined}
-                    aria-pressed={selected}
-                    // keep the focus in the search field
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => choosePane(group.key)}
-                    className={cn(
-                      "flex min-h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none",
-                      style.row, selected && style.active, group.count === 0 && "opacity-50",
-                    )}
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      {group.key === PANE_FAVORITES_KEY && <Star size={12} aria-hidden="true" fill="currentColor" className={cn("shrink-0", style.check)} />}
-                      <span className="truncate">{group.label}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      {group.current && <span data-model-provider-current aria-hidden="true" className={cn("size-1.5 rounded-full bg-current", style.check)} />}
-                      <span data-model-pane-count className={cn("text-[11.5px] tabular-nums", style.detail)}>{group.count}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <div role="group" aria-label={activePane.label} data-model-panes-right={activePane.key}
-              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain py-0.5 @min-[26rem]:pl-1.5">
-              <div aria-hidden="true" className={cn("flex items-baseline gap-1.5", style.heading)}>
-                <span className="truncate">{activePane.label}</span>
-                {activePane.note && <span data-model-section-note className="truncate opacity-80">· {activePane.note}</span>}
-              </div>
-              {activePane.rows.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
-              {activePane.rows.length === 0 && (
-                <div data-model-pane-empty className={style.empty}>
-                  {activePane.key === PANE_FAVORITES_KEY ? t("model.panes.noFavorites") : t("model.noMatch")}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {pane && activePane && activePanePreview ? (
+        <ModelPanesBody
+          pane={pane}
+          activePane={activePane}
+          activePanePreview={activePanePreview}
+          expandedProviders={expandedProviders}
+          listRef={listRef}
+          listboxId={listboxId}
+          label={label}
+          after={after}
+          variant={variant}
+          style={style}
+          rowProps={rowProps}
+          choosePane={choosePane}
+          toggleProviderExpanded={toggleProviderExpanded}
+        />
       ) : root ? (
-        <div ref={listRef} id={listboxId} role="menu" aria-label={label ?? t("model.models")} data-model-list className={style.list}>
+        <div ref={listRef} id={listboxId} role="menu" aria-label={label ?? t("model.models")} data-model-list
+          data-model-list-scroll={after !== undefined ? "" : undefined}
+          className={listScrollClass}>
           {showingAll && (
             <button type="button" data-model-all-back onMouseDown={(event) => event.preventDefault()} onClick={closeAll}
               aria-label={t("model.settings.back", { title: t("model.providerRow") })}
@@ -501,27 +584,40 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
       ) : (
         <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list
           data-model-list-scroll={after !== undefined ? "" : undefined}
-          className={after !== undefined ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1" : style.list}>
+          className={listScrollClass}>
           {shown.length === 0 && <div data-model-no-match className={style.empty}>{t("model.noMatch")}</div>}
-          {shown.map((section, index) => (
-            <div key={section.key} role="group" aria-label={section.label} data-model-section={section.key}
-              className={cn("py-0.5", index > 0 && style.divider)}>
-              {section.label && (
-                <div aria-hidden="true" className={cn("flex items-baseline gap-1.5", style.heading)}>
-                  <span className="truncate">{section.label}</span>
-                  {section.note && <span data-model-section-note className="truncate opacity-80">· {section.note}</span>}
-                </div>
-              )}
-              {section.rows.map((row) => (
-                <Fragment key={row.key}>
-                  <ModelSearchRow {...rowProps(row, row.key)} />
-                  {row.kind === "auto" && autoPanel}
-                </Fragment>
-              ))}
-            </div>
-          ))}
-          {after !== undefined && <div role="presentation" data-model-list-after className="-mx-1.5">{after}</div>}
+          {shown.map((section, index) => {
+            const preview = previewSection(section);
+            return (
+              <div key={section.key} role="group" aria-label={section.label} data-model-section={section.key}
+                className={cn("py-0.5", index > 0 && style.divider)}>
+                {section.label && (
+                  <div aria-hidden="true" className={cn("flex items-baseline gap-1.5", style.heading)}>
+                    <span className="truncate">{section.label}</span>
+                    {section.note && <span data-model-section-note className="truncate opacity-80">· {section.note}</span>}
+                  </div>
+                )}
+                {preview.section.rows.map((row) => (
+                  <Fragment key={row.key}>
+                    <ModelSearchRow {...rowProps(row, row.key)} />
+                    {row.kind === "auto" && autoPanel}
+                  </Fragment>
+                ))}
+                {(preview.hidden > 0 || expandedProviders[section.key]) && section.label && (
+                  <ShowMoreRow
+                    sectionKey={section.key}
+                    expanded={Boolean(expandedProviders[section.key])}
+                    style={style}
+                    onToggle={() => toggleProviderExpanded(section.key)}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
+      )}
+      {after !== undefined && (
+        <div role="presentation" data-model-menu-footer className="shrink-0">{after}</div>
       )}
       {openSub && openProvider && (
         <ModelSubmenu
@@ -532,6 +628,8 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
           style={style}
           disabled={disabled}
           favorites={favorites}
+          expanded={Boolean(expandedProviders[openProvider.section.key])}
+          onToggleExpanded={() => toggleProviderExpanded(openProvider.section.key)}
           onPick={onPick}
           onStay={clearTimer}
           onClose={() => closeSubmenu(true)}
@@ -624,15 +722,42 @@ function ProviderRow({ provider, id, style, active, expanded, onHover, onOpen }:
   );
 }
 
+/** "Show more" / "Show less" under a provider's truncated model list (#2181). */
+function ShowMoreRow({ sectionKey, expanded, style, onToggle }: {
+  sectionKey: string;
+  expanded: boolean;
+  style: Style;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-model-show-more={sectionKey}
+      aria-expanded={expanded}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onToggle}
+      className={cn(
+        "flex min-h-8 w-full cursor-default items-center rounded-lg px-2 py-1.5 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-focus",
+        style.row,
+        style === STYLE.popover ? "hover:bg-popover-hover text-popover-ink-secondary" : "hover:bg-hover text-ink-secondary",
+      )}
+    >
+      {expanded ? t("model.showLess") : t("model.showMore")}
+    </button>
+  );
+}
+
 /** A provider's models, beside the menu or in its place. The focus moves
  * through the rows themselves; the right arrow reaches a row's star. */
-function ModelSubmenu({ provider, placement, focus, style, disabled, favorites, onPick, onStay, onClose, onType }: {
+function ModelSubmenu({ provider, placement, focus, style, disabled, favorites, expanded, onToggleExpanded, onPick, onStay, onClose, onType }: {
   provider: ModelMenuProvider;
   placement: Placement;
   focus: boolean;
   style: Style;
   disabled: boolean;
   favorites?: ModelMenuFavorites;
+  expanded: boolean;
+  onToggleExpanded: () => void;
   onPick: (row: ModelMenuRow) => void;
   onStay: () => void;
   onClose: () => void;
@@ -641,6 +766,7 @@ function ModelSubmenu({ provider, placement, focus, style, disabled, favorites, 
   const ref = useRef<HTMLDivElement>(null);
   const [shift, setShift] = useState(0);
   const { section } = provider;
+  const preview = previewProviderRows(section.rows, { expanded, favoriteKeys: favorites?.keys });
   const items = () => [...(ref.current?.querySelectorAll<HTMLElement>("[data-model-submenu-item]") ?? [])];
 
   // a flyout that would leave the window moves up until it fits
@@ -686,7 +812,7 @@ function ModelSubmenu({ provider, placement, focus, style, disabled, favorites, 
       onClose();
     } else if ((event.key === "Enter" || event.key === " ") && item && !onStar) {
       event.preventDefault();
-      const row = section.rows.find((candidate) => candidate.key === item.dataset.modelRowKey);
+      const row = preview.rows.find((candidate) => candidate.key === item.dataset.modelRowKey);
       if (row && !row.unavailable && !disabled) onPick(row);
     } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && event.key !== " ") {
       // typing searches, as in the root
@@ -698,13 +824,16 @@ function ModelSubmenu({ provider, placement, focus, style, disabled, favorites, 
   const stacked = placement.side === "stacked";
   const list = (
     <div role="menu" aria-label={section.label} data-model-submenu-list
-      className={cn("overflow-y-auto overscroll-contain px-1.5 pb-1", stacked ? "min-h-0 flex-1 py-1" : "max-h-[min(400px,calc(100dvh-16px))] pt-1")}>
+      className={cn("overflow-y-auto overscroll-contain px-1.5 pb-1", stacked ? "min-h-0 flex-1 py-1" : "max-h-[min(280px,calc(100dvh-16px))] pt-1")}>
       {section.note && <div data-model-section-note className={style.heading}>{section.note}</div>}
-      {section.rows.map((row) => (
+      {preview.rows.map((row) => (
         <ModelSearchRow key={row.key} row={row} domKey={row.key} active={false} style={style} disabled={disabled} nested submenu
           favorite={favorites ? { on: favorites.keys.includes(row.key), onToggle: () => favorites.onToggle(row) } : undefined}
           onHover={() => {}} onPick={() => onPick(row)} />
       ))}
+      {(preview.hidden > 0 || expanded) && (
+        <ShowMoreRow sectionKey={section.key} expanded={expanded} style={style} onToggle={onToggleExpanded} />
+      )}
     </div>
   );
   return (

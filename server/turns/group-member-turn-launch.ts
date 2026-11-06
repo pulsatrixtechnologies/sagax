@@ -38,6 +38,16 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     try {
       tools.prepareRoomImages(ctx);
       if (ctx.roomAttachmentsHold) await ctx.roomAttachmentsHold;
+      // Frames after the hold so ffmpeg reads the plain clip (content-at-rest).
+      if (ctx.usesNativeImageInput && !ctx.cardContinuation) {
+        for (const video of ctx.burstVideos ?? []) {
+          ctx.burstImages.push(...await host.videoFramesWithin(ctx.burstImages.length, [video]));
+        }
+        ctx.latestVideoFrames = await host.videoFramesWithin(
+          ctx.burstImages.length + (ctx.resolvedLatestImages?.images?.length ?? 0),
+          ctx.resolvedLatestImages?.videos ?? [],
+        );
+      }
       tools.placeAndSkills(ctx);
       if (ctx.instance.adapter.capabilities.customMcp === true) {
         await host.refreshMcpOAuth(ctx.bot);

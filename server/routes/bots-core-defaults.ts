@@ -36,6 +36,12 @@ export function createBotsCoreDefaultsRoutes(deps: BotsCoreRouteDeps): RouteHand
       // (POST /api/bots): the model it starts on is the one chosen for them,
       // among what they can run.
       const member = auth.kind === "session" && !auth.scopes.includes("admin");
+      // #2045: suggestedName only avoids the viewer's own bot names. Another
+      // person's bots on the same server stay out of this list.
+      const viewer = (sessionPrincipal(auth) ?? deps.viewerId(auth) ?? "").trim().toLowerCase();
+      const taken = viewer
+        ? store.bots.filter((bot) => deps.effectiveBotOwner(bot).trim().toLowerCase() === viewer).map((bot) => bot.name)
+        : store.bots.map((bot) => bot.name);
       return json(res, 200, {
         defaults: structuredClone(cfg.newBotDefaults ?? newBotDefaultsSchema.parse({})),
         // 2026-10-11: what a new bot starts on when the template names no
@@ -46,7 +52,7 @@ export function createBotsCoreDefaultsRoutes(deps: BotsCoreRouteDeps): RouteHand
         // model wins over this on the client, so an advanced default is kept.
         modelSelection: member ? await memberDefaultSelection(sessionPrincipal(auth)) : autoNewBotSelection(await defaultSelection()),
         ...(member ? { memberDefault: true } : {}),
-        suggestedName: pickBotName(store.bots.map(bot => bot.name)),
+        suggestedName: pickBotName(taken),
       });
     }
     if (method === "POST" && path === "/api/bot-defaults/skills/preview") {

@@ -6,6 +6,7 @@ import { classifyError } from "../retry.ts";
 import { engineFailureKind, engineFailureMessage } from "../engine-errors.ts";
 import { redactSecretsInText } from "../../redact.ts";
 import { isAccountError } from "./helpers.ts";
+import { LIMIT_WORDS } from "./quiet-status.ts";
 import type { AcpTurnCtx } from "./turn-context.ts";
 
 export async function finishAcpTurnError(ctx: AcpTurnCtx, e: unknown): Promise<void> {
@@ -53,6 +54,8 @@ if (!state.settled) {
   // to leave in the chat: before the prompt ("turn stopped"), or
   // during the handshake, where closing the session rejects the
   // pending request ("session closed").
+  // Cancel-timeout owns settle after it awaits the kill (cancelled or stop_failed).
+  if (state.cancelling) return;
   if (message === "turn stopped" || state.stopped) {
     settle(threadId, session, true, "cancelled");
     return;
@@ -104,6 +107,10 @@ if (!state.settled) {
   }
   const contextFull = engineFailureKind(message) === "context_full";
   if (contextFull) freshNextTurn.add(threadId);
+  // Waited out a usage limit, or the engine gave up on one: another AI can carry on
+  // (server/usage/limit-failover-host.ts) via stopReason "quota".
+  const usageLimit = (e as any)?.acpUsageLimit === true
+    || (code === "quota_or_region_restriction" && LIMIT_WORDS.test(message));
   emit({
     ...base(threadId, turnId),
     type: "runtime.error",
@@ -117,7 +124,7 @@ if (!state.settled) {
   // resume the recorded session on a fresh process. A context-full
   // failure must not leave the already-full native session pooled
   // either: Retry starts lightened from the chat rebuild.
-  if (!needsAuth && !accountError && ((e as any)?.acpPromptStall === true || (e as any)?.acpSessionFailure === true
+  if (!needsAuth && !accountError && ((e as any)?.acpPromptStall === true || (e as any)?.acpUsageLimit === true || (e as any)?.acpSessionFailure === true
       || code === "upstream_outage" || contextFull) && session.child.exitCode === null && !session.closing) {
     closeSession(threadId, contextFull ? "context-full" : ((e as any)?.acpPromptStall === true ? "prompt-stall" : "rpc-failure"));
   } else if (approvalUnconfirmed && session.child.exitCode === null && !session.closing) {
@@ -129,7 +136,7 @@ if (!state.settled) {
   } else if (staleProcess && !state.promptSent && session.child.exitCode === null && !session.closing) {
     closeSession(threadId, "stale-models");
   }
-  settle(threadId, session, false, needsAuth ? "auth_required" : contextFull ? "context_full" : "rpc_error");
+  settle(threadId, session, false, needsAuth ? "auth_required" : contextFull ? "context_full" : usageLimit ? "quota" : "rpc_error");
 }
 
   ctx.session = session;

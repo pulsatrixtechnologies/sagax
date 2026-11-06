@@ -2,17 +2,20 @@
 // Returns the next state when it handles the action, otherwise undefined.
 import type {Action, AppState} from "./model";
 import {trimRoutineRuns} from "./model";
+import { olderRunsSince, withOlderRoutineRuns } from "../routine-runs";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
 
 export function reduceRoutines(state: AppState, action: Action, _reduce: ReduceFn): AppState | undefined {
   switch (action.type) {
     case "routinesHydrated":
-      return { ...state, routines: action.routines, routineRuns: trimRoutineRuns(action.runs), routinesLoadState: "ready", ...(action.folders ? { routineFolders: action.folders } : {}) };
+      return { ...state, routines: action.routines, routineRuns: trimRoutineRuns(action.runs), routineRunsSince: action.since ?? null, routinesLoadState: "ready", ...(action.folders ? { routineFolders: action.folders } : {}) };
     case "routineFoldersPatched":
       return { ...state, routineFolders: { ...state.routineFolders, [action.botId]: action.folders } };
     case "routinesLoadFailed":
       return { ...state, routinesLoadState: "error" };
+    case "routineRunsLoaded":
+      return { ...state, routineRuns: withOlderRoutineRuns(state.routineRuns, action.runs), routineRunsSince: olderRunsSince(state.routineRunsSince, action) };
     case "routinePatched": {
       const exists = state.routines.some((routine) => routine.id === action.routine.id);
       return {

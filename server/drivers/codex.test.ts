@@ -28,6 +28,7 @@ import {
   ownerKeyCodexArgs,
 } from "./codex.ts";
 import { codexCliOverrides } from "./codex-process.ts";
+import * as codexProcess from "./codex-process.ts";
 import { CODEX_SIGN_IN_EXPIRED, codexContextFull, codexNotSignedIn, codexSignInRefused, codexUserError } from "./codex-errors.ts";
 import { contextFullMessage, contextRenewedNotice } from "../context/context-renewal.ts";
 import { CODEX_USAGE_LIMIT_REACHED } from "../../shared/codex-usage-limit.ts";
@@ -436,6 +437,8 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     delete process.env.FAKE_CODEX_APPROVAL_REQUEST;
     delete process.env.FAKE_CODEX_DUMP;
     delete process.env.FAKE_CODEX_ASK_HOLD;
+    delete process.env.FAKE_CODEX_ASYNC_QUESTIONS;
+    delete process.env.FAKE_CODEX_ASYNC_QUESTION_GATE;
     delete process.env.FAKE_CODEX_TRANSIENTS;
     delete process.env.FAKE_CODEX_PARTIAL_FAILS;
     delete process.env.FAKE_CODEX_STATE;
@@ -454,6 +457,9 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     delete process.env.FAKE_CODEX_RESOLVED_SANDBOX;
     delete process.env.FAKE_CODEX_MCP_START;
     delete process.env.FAKE_CODEX_MCP_HANDSHAKE;
+    delete process.env.FAKE_CODEX_MCP_READY_MS;
+    delete process.env.FAKE_CODEX_MCP_STAGGER;
+    delete process.env.FAKE_CODEX_USER_AGENT;
     delete process.env.FAKE_CODEX_STEER_ERROR;
     delete process.env.FAKE_CODEX_STEER_ERROR_FILE;
     delete process.env.FAKE_CODEX_STEER_HANG;
@@ -1292,10 +1298,15 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     const argv = seen.argv.join(" ");
     expect(argv).toContain("mcp_servers.notes.command");
-    // env value stays in the child env; argv carries names only
-    expect(argv).toContain("NOTES_TOKEN");
+    // #2189: agents is mounted, so notes goes through the gate (withhold of agents' bare names).
+    // The token stays in the gate record, never on argv.
+    expect(argv).toContain("SAGAX_GATE_CONFIG_");
+    expect(argv).toContain("mcp-gate.ts");
     expect(argv).not.toContain("tok-notes");
-    expect(seen.env.NOTES_TOKEN).toBe("tok-notes");
+    expect(argv).not.toContain("NOTES_TOKEN");
+    const gateKey = Object.keys(seen.env).find((name) => name.startsWith("SAGAX_GATE_CONFIG_"));
+    expect(gateKey).toBeTruthy();
+    expect(JSON.parse(JSON.parse(seen.env[gateKey!]).SAGAX_GATE_UPSTREAM).env.NOTES_TOKEN).toBe("tok-notes");
   });
 
   it("mounts a custom server under its own name when the user's config.toml already has one by that name", async () => {
@@ -1359,6 +1370,57 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.argv).toContain("features.shell_snapshot=false");
     const thread = seen.calls.find((call: { method: string }) => call.method === "thread/start");
     expect(thread.params.config["shell_environment_policy.exclude"]).toEqual(["SAGAX_REMOTE_MCP_CONFIG_*", "ELECTRON_RUN_AS_NODE"]);
+  });
+
+  const startupMounts = {
+    custom: {
+      composio: { command: process.execPath, args: ["connector-proxy.js"], env: {} },
+      agents: { command: process.execPath, args: ["agents-proxy.js"], env: {} },
+    },
+  };
+
+  it("starts a new thread's turn only once the MCP servers it mounted finished starting", async () => {
+    const dump = join(scratch, "mcp-ready.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_READY_MS: "400", FAKE_CODEX_MCP_STAGGER: "1" } });
+    await instance.adapter.sendTurn({ threadId: "mcp-ready", text: "Fixture", integrations: startupMounts });
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv).toContain(`mcp_servers.composio.command=${JSON.stringify(process.execPath)}`);
+    expect(seen.mcpReadyAtTurnStart).toBe(true);
+    expect(recorder.events.find((event) => event.type === "turn.completed")).toMatchObject({ ok: true });
+  });
+
+  it("does not wait for startup notifications on older Codex", async () => {
+    const dump = join(scratch, "mcp-old.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_USER_AGENT: "codex_cli_rs/0.116.0", FAKE_CODEX_MCP_READY_MS: "600000" } });
+    await instance.adapter.sendTurn({ threadId: "mcp-old", text: "Fixture", integrations: startupMounts });
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.mcpReadyAtTurnStart).toBe(false);
+  });
+
+  it("waits for the MCP servers of a resumed thread too", async () => {
+    const dump = join(scratch, "mcp-ready-resume.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ mode: "resume", environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_READY_MS: "400" } });
+    await instance.adapter.sendTurn({ threadId: "mcp-ready-resume", text: "Continue", resumeCursor: "codex-thread-1", integrations: startupMounts });
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.calls.map((call: { method: string }) => call.method)).toContain("thread/resume");
+    expect(seen.mcpReadyAtTurnStart).toBe(true);
+  });
+
+  it("stops a turn still waiting for its MCP servers without starting it", async () => {
+    mkdirSync(NATIVE_DIR, { recursive: true });
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_READY_MS: "600000" } });
+    await instance.adapter.sendTurn({ threadId: "mcp-stop", text: "Fixture", integrations: startupMounts });
+    await recorder.until((event) => event.type === "session.started");
+    await instance.adapter.interruptTurn("mcp-stop");
+    await recorder.until((event) => event.type === "turn.completed");
+    expect(recorder.events.find((event) => event.type === "turn.completed")).toMatchObject({ ok: false, stopReason: "interrupted" });
+    const sent = readFileSync(join(NATIVE_DIR, "mcp-stop.ndjson"), "utf8").trim().split("\n").map((line) => JSON.parse(line))
+      .filter((entry) => entry.dir === "out").map((entry) => entry.msg?.method);
+    expect(sent).toContain("thread/start");
+    expect(sent).not.toContain("turn/start");
   });
 
   // A server that deserializes initialize strictly refuses the field
@@ -1466,10 +1528,12 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(await recorder.until((event) => event.type === "turn.completed")).toMatchObject({ ok: true });
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     expect(seen.argv).toContain("features.shell_snapshot=false");
+    // #2189: agents is mounted, so custom notes and the URL docs server both go through the gate;
+    // their secrets (GITHUB_PERSONAL_ACCESS_TOKEN, OVERRIDDEN, docs Authorization) stay inside
+    // SAGAX_GATE_CONFIG_* records and never appear as separate shell exclusions.
     expect(seen.calls.find((call: { method: string }) => call.method === "thread/start").params.config["shell_environment_policy.exclude"]).toEqual([
-      "USER_SECRET_*", "SAGAX_REMOTE_MCP_CONFIG_*",
-      // sorted: the Sagax names sort after OVERRIDDEN (upstream's SAGAX_ names sorted before it)
-      "ELECTRON_RUN_AS_NODE", "GITHUB_PERSONAL_ACCESS_TOKEN", "OVERRIDDEN", "SAGAX_COMMS_TOKEN", "SAGAX_COMMS_TOKEN_FILE",
+      "USER_SECRET_*", "SAGAX_GATE_CONFIG_*",
+      "ELECTRON_RUN_AS_NODE", "SAGAX_COMMS_TOKEN", "SAGAX_COMMS_TOKEN_FILE",
       // the agents mount asks for the tools merged by family (#1604)
       "SAGAX_MERGED_TOOLS", "SAGAX_PHONE_TOKEN",
     ]);
@@ -1912,7 +1976,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
           args: ["/tmp/harness-mcp-proxy.js"],
           env: {
             SAGAX_HARNESS_URL: "http://127.0.0.1:8799",
-            SAGAX_MCP_TOKEN: "browser-capability-secret",
+            SAGAX_MCP_TOKEN_BROWSER: "browser-capability-secret",
           },
         },
       },
@@ -1931,7 +1995,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.argv).not.toContain('mcp_servers.browser.default_tools_approval_mode="approve"');
     expect(seen.argv.join(" ")).toContain("/tmp/harness-mcp-proxy.js");
     expect(seen.argv.join(" ")).not.toContain("browser-capability-secret");
-    expect(seen.env.SAGAX_MCP_TOKEN).toBe("browser-capability-secret");
+    expect(seen.env.SAGAX_MCP_TOKEN_BROWSER).toBe("browser-capability-secret");
     for (const method of ["thread/start", "turn/start"]) {
       expect(seen.calls.find((call: { method: string }) => call.method === method)?.params).toMatchObject({
         approvalPolicy: "on-request",
@@ -2813,6 +2877,57 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(decision.error.message).toContain("array of questions");
   });
 
+  it("opens one question card for an async question and steers the answer into the running turn", async () => {
+    const dump = join(scratch, "codex-async.json");
+    const gate = join(scratch, "async-gate");
+    process.env.FAKE_CODEX_DUMP = dump;
+    await create({ mode: "async-question", environment: { FAKE_CODEX_ASYNC_QUESTION_GATE: gate } });
+    await instance.adapter.sendTurn({ threadId: "t-async-question", text: "which source?" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    expect(opened).toMatchObject({
+      requestType: "question",
+      tool: "ask_user",
+      summary: "Which source should I use?",
+      choices: ["Directly in Sagax", "The official server in Executor"],
+      questions: [{ question: "Which source should I use?", options: [{ label: "Directly in Sagax" }, { label: "The official server in Executor" }] }],
+    });
+    expect(recorder.events.find((e) => e.type === "item.completed" && e.itemType === "assistant_text")).toMatchObject({
+      text: "Which source should I use?\n- Directly in Sagax\n- The official server in Executor",
+    });
+
+    const answer = "The user answered your questions.\n\nQ: Which source should I use?\nA: Directly in Sagax";
+    await expect(instance.adapter.respondToRequest("t-async-question", opened.requestId!, { behavior: "answer", message: answer })).resolves.toBe("answered");
+    expect(await recorder.until((e) => e.type === "request.resolved")).toMatchObject({ requestId: opened.requestId, behavior: "answer", source: "user" });
+    expect(JSON.parse(readFileSync(dump, "utf8")).calls.find((c: any) => c.method === "turn/steer")?.params?.input).toEqual([{ type: "text", text: answer }]);
+
+    writeFileSync(gate, "");
+    await recorder.until((e) => e.type === "turn.completed");
+    expect(recorder.events.filter((e) => e.type === "request.opened")).toHaveLength(1);
+    await expect(instance.adapter.respondToRequest("t-async-question", opened.requestId!, { behavior: "answer", message: answer })).resolves.toBe("unavailable");
+  });
+
+  it("leaves an async question the turn outlived to the harness's late answer", async () => {
+    await create({ mode: "async-question" });
+    await instance.adapter.sendTurn({ threadId: "t-async-late", text: "which source?" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    await recorder.until((e) => e.type === "turn.completed");
+    expect(recorder.events.find((e) => e.type === "request.resolved")).toMatchObject({ requestId: opened.requestId, behavior: "deny", source: "system" });
+    await expect(instance.adapter.respondToRequest("t-async-late", opened.requestId!, { behavior: "answer", message: "Directly" })).resolves.toBe("unavailable");
+  });
+
+  it("keeps an async message as plain text when its questions offer nothing to pick", async () => {
+    for (const questions of ["please", [], [{ title: "   ", options: ["Orphan"] }, { title: "Anything else?", options: null }]]) {
+      await create({ mode: "async-question", environment: { FAKE_CODEX_ASYNC_QUESTIONS: JSON.stringify(questions) } });
+      await instance.adapter.sendTurn({ threadId: "t-async-plain", text: "ask loosely" });
+      await recorder.until((e) => e.type === "turn.completed");
+      const first = recorder.events.find((e) => e.type === "item.completed" && e.itemType === "assistant_text");
+      expect(first).toMatchObject({ text: expect.stringContaining("Which source should I use?") });
+      expect(recorder.events.some((e) => e.type === "request.opened")).toBe(false);
+      recorder.stop();
+      await instance.dispose();
+    }
+  });
+
   it("times out an ask with empty answers and a timeout-sourced resolve", async () => {
     // Hold the ask reply without completing the turn: a completed turn
     // starts the driver's child-reap loop, whose 25ms setTimeout poll would
@@ -2923,6 +3038,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
 
     expect(recorder.events.some((event) => event.type === "request.opened")).toBe(false);
     expect(JSON.parse(readFileSync(dump, "utf8")).decision).toEqual({ action: "decline" });
+    expect(recorder.events.find((event) => event.type === "runtime.notice")?.message).toBe("example asked for input Sagax can't show yet, so the request was declined.");
   });
 
   it("grants Codex additional permissions with their native response shape", async () => {
@@ -3678,6 +3794,25 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
   }, 20_000);
 
+  it.each(["timeout", "error"])("does not replay a tool completed before a turn/start %s", async (reply) => {
+    const actions = join(scratch, "early-tool-actions.jsonl");
+    const rpcTimeout = codexProcess.codexRpcTimeoutMs;
+    vi.spyOn(codexProcess, "codexRpcTimeoutMs").mockImplementation((method) => method === "turn/start" ? 300 : rpcTimeout(method));
+    vi.stubEnv("FAKE_CODEX_ACTION_LOG", actions);
+    vi.stubEnv("FAKE_CODEX_RETRY_SCALE", "0.001");
+    await create({ mode: `early-tool-${reply}`, environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex") } });
+    await instance.adapter.sendTurn({ threadId: `t-early-tool-${reply}`, text: "record one action" });
+    const done = await recorder.until((event) => event.type === "turn.completed");
+
+    expect(readFileSync(actions, "utf8").trim().split("\n")).toHaveLength(1);
+    expect(done).toMatchObject({ ok: false, stopReason: "rpc_error" });
+    expect(recorder.events.filter((event) => event.type === "turn.retrying")).toHaveLength(0);
+    expect(recorder.events.filter((event) => event.type === "turn.completed")).toHaveLength(1);
+    expect(recorder.events.filter((event) => event.type === "runtime.error")).toEqual([
+      expect.objectContaining({ message: expect.stringContaining("A tool action may have run. Check its effects before trying again.") }),
+    ]);
+    expect(recorder.events.filter((event) => (event.type === "item.started" || event.type === "item.completed") && event.itemType === "tool")).toHaveLength(0);
+  });
 
   it("retries a transient app-server crash before the turn starts", async () => {
     process.env.FAKE_CODEX_LAUNCH_CRASHES = "1";

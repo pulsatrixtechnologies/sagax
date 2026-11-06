@@ -16,6 +16,8 @@ export const CREDENTIAL_ENV_NAMES = [
   "MISTRAL_API_KEY",
   "CEREBRAS_API_KEY",
   "SAGAX_GROQ_API_KEY",
+  "SAGAX_META_API_KEY",
+  "SAGAX_DEEPSEEK_API_KEY",
   "SAGAX_ANTHROPIC_API_KEY",
   "SAGAX_ANTHROPIC_API_URL",
   "SAGAX_HOSTED_MODEL_TOKEN",
@@ -57,7 +59,7 @@ const CREDENTIAL_TOKEN_FORMATS = [
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/g,
   /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
   /\bxox[abposr]-[A-Za-z0-9-]{20,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g,
   /\bAIza[0-9A-Za-z_-]{30,}/g,
   /\bnpm_[A-Za-z0-9]{20,}/g,
 ];

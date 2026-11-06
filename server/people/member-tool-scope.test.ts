@@ -93,7 +93,15 @@ describe("member tool scope on an organization server", () => {
     expect(memberOwnScopeTool("notes__openapi_getnote")).toBeNull();
   });
 
+  // #2199: choose_page_target only picks a surface in the member's own chat;
+  // it must never wait for an organization admin as a host-level command.
   it.each([
+    ["choose_page_target", "conversation"],
+    ["ask_choice", "conversation"],
+    ["propose_page", "conversation"],
+    ["save_artifact", "conversation"],
+    ["claude_artifact", "conversation"],
+    ["create_options_card", "conversation"],
     ["wait_until", "own-work"],
     ["cancel_wait", "own-work"],
     ["propose_rule", "own-setup"],

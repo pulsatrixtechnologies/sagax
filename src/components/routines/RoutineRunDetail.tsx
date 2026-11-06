@@ -200,7 +200,7 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   const result = showResult && (
     <section data-run-result aria-label={t("routineRun.result")} className="rounded-xl border border-hairline/40 bg-card px-4 py-3">
       {run.redacted ? <p className="text-[12.5px] text-ink-secondary">{t("routines.scope.redacted")}</p>
-        : reported ? <div className="chat-markdown max-w-[72ch] text-[13.5px] leading-relaxed text-ink"><ChatMarkdown text={readable?.structured ? readable.text : run.output!} inert />{readable?.details && <RunResultDetails details={readable.details} />}</div>
+        : reported ? <div className="chat-markdown max-w-[72ch] text-[13.5px] leading-relaxed text-ink"><ChatMarkdown text={readable?.structured ? readable.text : run.output!} />{readable?.details && <RunResultDetails details={readable.details} />}</div>
         : quiet ? <p className="text-[12.5px] text-ink-secondary">{t("routineRun.quiet")}</p>
         : run.status === "running" || run.status === "queued" ? <p className="flex items-center gap-2 text-[12.5px] text-ink-secondary"><Loader2 size={13} className="animate-spin text-accent motion-reduce:animate-none" aria-hidden="true" />{t(run.status === "running" ? "routineRun.resultPending" : "routineRun.resultQueued")}</p>
         : <p className="text-[12.5px] text-ink-secondary">{t("routines.noOutput")}</p>}

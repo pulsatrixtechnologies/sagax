@@ -47,7 +47,7 @@ export function withWarmTokens(turn: SendTurnInput, threadId: string): SendTurnI
  * tokens masked when their files were written. */
 export function chatToolsFingerprint(
   integrations: SendTurnInput["integrations"],
-  opts: { computerUse: boolean; toolScope?: unknown; toolLimit: number; callTimeoutMs?: number },
+  opts: { computerUse: boolean; toolScope?: unknown; toolLimit: number; callTimeoutMs?: number; schemaProfile?: string },
 ): string {
   const servers: Record<string, unknown> = {};
   if (integrations?.localComputer) servers.computer = integrations.localComputer;
@@ -62,6 +62,7 @@ export function chatToolsFingerprint(
     toolScope: opts.toolScope ?? null,
     toolLimit: opts.toolLimit,
     callTimeoutMs: opts.callTimeoutMs ?? null,
+    schemaProfile: opts.schemaProfile ?? null,
   };
   return createHash("sha256").update(JSON.stringify(body)).digest("hex");
 }

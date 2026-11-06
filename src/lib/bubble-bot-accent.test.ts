@@ -47,7 +47,11 @@ describe("my bubble in a 1:1 takes the bot's colour", () => {
   });
 
   it("is applied where my bubble shows next to a bot, without the accent setting", () => {
-    const chat = read("src/components/ChatView.tsx");
+    const chat = [
+      read("src/components/ChatView.tsx"),
+      read("src/components/ChatView.tsx-parts/useChatViewPresence.tsx"),
+      read("src/components/ChatView.tsx-parts/ChatViewShell.tsx"),
+    ].join("\n");
     expect(chat).toMatch(/botBubbleVars\(MAUS_COLORS\[bot\.color\]\)/);
     expect(chat).toMatch(/style=\{bubbleStyle\}/);
     expect(read("src/components/code/RunTimeline.tsx")).toMatch(/style=\{botBubbleVars\(botColor\)/);

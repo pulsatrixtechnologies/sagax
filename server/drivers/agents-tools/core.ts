@@ -183,24 +183,45 @@ export const DEF_REACT_TO_MESSAGE = {
     },
   };
 
+export const DEF_SEND_MEME = {
+    name: "send_meme",
+    description:
+      "Search reaction memes (animated GIFs and still captioned meme images) and post the best match into this chat. Use sparingly, only when the person's style invites it (they send memes or emojis, playful tone, memory of that preference). Never in serious or work contexts: tickets, invoices, errors, approvals, or anything they are waiting on as a real answer. Optional caption for a still meme (top/bottom style text). A meme never replaces a needed written answer.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        query: { type: "string", minLength: 1, maxLength: 120, description: "What meme to look for, for example \"this is fine\" or \"high five\"." },
+        caption: { type: "string", maxLength: 200, description: "Optional short caption for a still meme template." },
+      },
+      required: ["query"],
+    },
+  };
+
 export const DEF_REQUEST_CREDENTIAL = {
     name: "request_credential",
     description:
-      "Ask the user for a supported API key through Sagax's secure credential flow. The desktop app and a freshly QR-paired mobile app show a secure entry card; older mobile pairings show how to pair again or finish on the computer. Never claim a secure field opened unless this request succeeds, and never ask the user to paste a secret into chat. The secret is saved by the desktop app and is never returned to you. After calling this tool, end the turn; Sagax resumes the task after the user saves or declines.",
+      "Ask the person for a secret on a secure card in the app or a QR-paired phone, never in chat. credential_id: a key Sagax keeps. Other secrets: label, reason, delivery. You never see the value; end the turn, and you resume when they save or decline.",
     inputSchema: {
       type: "object",
       properties: {
         credential_id: {
           type: "string",
           enum: Object.keys(CREDENTIAL_TARGETS),
-          description: "The credential the current task requires.",
+          description: "A key Sagax keeps for a supported provider.",
         },
+        label: { type: "string", description: "Other secret's card title, e.g. Stripe secret key." },
         reason: {
           type: "string",
-          description: "Optional short, non-sensitive explanation of why the task needs it.",
+          description: "Short, non-sensitive: why, and where to find it.",
+        },
+        placeholder: { type: "string" },
+        delivery: {
+          type: "string",
+          enum: ["ref", "file"],
+          description: "ref: a one-use secretRef for add_mcp_server. file: a private file your commands read.",
         },
       },
-      required: ["credential_id"],
     },
   };
 
@@ -333,11 +354,11 @@ export const DEF_ACT = {
     },
   };
 
-export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act'] as const);
+export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'send_meme', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callCoreTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
-  const { botId: BOT_ID, threadId: THREAD_ID, depth: DEPTH, externalRuntime: EXTERNAL_RUNTIME, coordinating: COORDINATING } = context;
+  const { externalRuntime: EXTERNAL_RUNTIME } = context;
   const { api, apiResponse } = context.client;
   const OURS = new Set([...CORE_TOOL_NAMES, "remove_reaction"]);
   if (!OURS.has(name)) return null;
@@ -348,6 +369,20 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
     });
     if (!ok) return { text: String(body.error ?? "Could not attach that file."), isError: true };
     return { text: `Attached ${String(body.name ?? "the file")} (${Number(body.bytes ?? 0)} bytes). It now appears in the chat with a preview.` };
+  }
+  if (name === "send_meme") {
+    if (typeof args.query !== "string" || !args.query.trim()) {
+      return { text: "query: what meme to look for.", isError: true };
+    }
+    const { ok, body } = await apiResponse("/api/internal/send-meme", {
+      method: "POST",
+      body: JSON.stringify({
+        query: args.query,
+        ...(typeof args.caption === "string" ? { caption: args.caption } : {}),
+      }),
+    });
+    if (!ok) return { text: String(body.error ?? "Could not send that meme."), isError: true };
+    return { text: String(body.text ?? "Sent a meme.") };
   }
   if (name === "act") {
     if (EXTERNAL_RUNTIME) return { text: "Unknown tool: act", isError: true };
@@ -410,6 +445,13 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
     // a red error. A real refusal still carries error and stays isError.
     return { text: JSON.stringify(r), ...(r.error ? { isError: true } : {}) };
   }
+  return callCoreMessagingTool(name, args, context);
+}
+
+/** Messaging, memory, credential and session tools of the core family. */
+async function callCoreMessagingTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
+  const { botId: BOT_ID, threadId: THREAD_ID, depth: DEPTH, externalRuntime: EXTERNAL_RUNTIME, coordinating: COORDINATING } = context;
+  const { api, apiResponse } = context.client;
   if (name === "send_to_bot") {
     const botId = String(args.bot_id ?? "").trim();
     const title = String(args.title ?? "").trim();
@@ -612,6 +654,9 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
   }
   if (name === "request_credential") {
     const credentialId = args.credential_id;
+    if (credentialId === undefined || credentialId === "") {
+      return requestCustomSecret(args, context);
+    }
     if (!isCredentialTargetId(credentialId)) {
       return { text: "request_credential needs a supported credential_id.", isError: true };
     }
@@ -749,5 +794,31 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
     return { text: `${r.already ? "Already routed: " : ""}it waits and starts as soon as your current work is done. Tell the person in one short line that you will do it right after, then go on with your current work.` };
   }
   return null;
+}
+
+/** A secret Sagax does not keep: the person agrees to one use, and the bot gets a secretRef or a file path back. */
+async function requestCustomSecret(args: Json, context: ToolCallContext): Promise<ToolCallResult> {
+  const r = await context.client.apiResponse("/api/internal/request-credential", {
+    method: "POST",
+    body: JSON.stringify({
+      fromBotId: context.botId,
+      fromThreadId: context.threadId,
+      label: args.label,
+      reason: args.reason,
+      placeholder: args.placeholder,
+      delivery: args.delivery,
+    }),
+  });
+  const label = typeof r.body.label === "string" ? r.body.label : "the secret";
+  if (!r.ok) return { text: String(r.body.error ?? `request_credential failed (HTTP ${r.status}).`), isError: true };
+  if (typeof r.body.text === "string") return { text: `${r.body.text} Continue the task.` };
+  const asked = r.body.savedAs === "ref"
+    ? ` ${label} was saved earlier for Sagax's tools only, not as a file for your commands, so this card asks for it again.`
+    : r.body.savedAs === "file"
+      ? ` ${label} was saved earlier as a file for your commands, not as a secretRef, so this card asks for it again.`
+      : "";
+  return {
+    text: `A secure card for ${label} is ready in Sagax, on the computer and on a freshly QR-paired phone.${asked} End this turn now and say in one line that you are waiting for it; Sagax resumes you when the person saves or declines, and tells you how to use it. Never ask for it in chat.`,
+  };
 }
 

@@ -1,7 +1,8 @@
 // Native (un-normalized) protocol tee — the debugging trick from upstream's
 // EventNdjsonLogger and agentcal's onRaw: every provider-native message is
 // written verbatim next to the canonical stream, so protocol drift can be
-// diagnosed by diffing the two.
+// diagnosed by diffing the two. Lines are held per thread and appended
+// together every FLUSH_MS, when a caller flushes, and at exit.
 import { appendFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -17,6 +18,14 @@ import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotatio
 // of log per frame.
 const INLINE_DATA_CHARS = 1024;
 const DATA_URL = /^data:[^,;]{0,100};base64,/;
+const FLUSH_MS = 250;
+const MAX_HELD_CHARS = 256 * 1024;
+
+type HeldLine = { record: Record<string, unknown>; line: string };
+
+const held = new Map<string, HeldLine[]>();
+let heldChars = 0;
+let timer: ReturnType<typeof setTimeout> | null = null;
 
 function imageMedia(record: Record<string, unknown>): boolean {
   const media = record.media_type ?? record.mimeType ?? record.mime_type;
@@ -54,6 +63,18 @@ export function withoutInlineData(value: unknown, depth = 0): unknown {
   return copy ?? value;
 }
 
+/** A fragment a later record of the same protocol carries whole: Claude Code's content_block_delta stream events (then
+ * the assistant message), Codex app-server item deltas (then item/completed), Pi's message and tool updates (then
+ * message_end and tool_execution_end). */
+export function streamedFragment(source: string, msg: unknown): boolean {
+  if (msg === null || typeof msg !== "object") return false;
+  const record = msg as Record<string, unknown>;
+  if (source === "claude.sdk.message") return record.type === "stream_event" && (record.event as { type?: unknown } | undefined)?.type === "content_block_delta";
+  if (source === "codex.app-server") return typeof record.method === "string" && record.method.startsWith("item/") && /delta$/i.test(record.method);
+  if (source === "pi.rpc") return record.type === "message_update" || record.type === "tool_execution_update";
+  return false;
+}
+
 // The provider's own protocol messages: sealed line by line under the
 // thread's key (docs/content-encryption.md), direction and time in the clear.
 registerSealedLog({
@@ -66,21 +87,46 @@ registerSealedLog({
 export function appendNative(threadId: string, entry: { dir: "in" | "out"; source: string; msg: unknown }) {
   // a deleted confidential thread's log is never written again
   if (threadLogsForgotten(threadId)) return;
-  const file = join(NATIVE_DIR, `${threadId}.ndjson`);
+  if (streamedFragment(entry.source, entry.msg)) return;
+  let record: Record<string, unknown>;
+  let line: string;
   try {
     // The session-setup messages carry the credentials the agent is handed —
     // the boat and comms tokens ride inside session/new's mcpServers env, and
     // an MCP header can carry a provider key. These files are ordinary
     // 0644 files people paste into bug reports, so values are masked while
     // the shape stays intact.
-    const record = { at: new Date().toISOString(), ...entry, msg: redactSecrets(withoutInlineData(entry.msg)) };
+    record = { at: new Date().toISOString(), ...entry, msg: redactSecrets(withoutInlineData(entry.msg)) };
+    line = JSON.stringify(record);
+  } catch {
+    return;
+  }
+  const lines = held.get(threadId);
+  if (lines) lines.push({ record, line });
+  else held.set(threadId, [{ record, line }]);
+  heldChars += line.length;
+  // What OpenMausBot sent is a few lines a turn, and the line a bug report most needs: it lands at once.
+  if (entry.dir === "out") flushNativeLog(threadId);
+  else if (heldChars >= MAX_HELD_CHARS) flushNativeLogs();
+  else if (!timer) {
+    timer = setTimeout(flushNativeLogs, FLUSH_MS);
+    timer.unref?.();
+  }
+}
+
+export function flushNativeLog(threadId: string): void {
+  const items = take(threadId);
+  if (!items) return;
+  const file = join(NATIVE_DIR, `${threadId}.ndjson`);
+  try {
     // sealed at rest under the thread's key (server/encryption/content-at-rest.ts), on
     // disk when this returns, as before; the migration gathers the lines into
     // blocks once the log is quiet
-    const line = JSON.stringify(record);
-    const data = `${sealLogLines(file, [record], [line]).join("\n")}\n`;
+    const originals = items.map((item) => item.line);
+    const sealed = sealLogLines(file, items.map((item) => item.record), originals);
+    const data = `${sealed.join("\n")}\n`;
     appendFileSync(file, data, { mode: 0o600 });
-    logAppended(file, [line], data);
+    logAppended(file, originals, data);
     // Best-effort size cap (#1280) — same rule as the write itself: never
     // let logging break the run it is observing.
     capThreadLog(file, currentThreadLogCap());
@@ -88,3 +134,24 @@ export function appendNative(threadId: string, entry: { dir: "in" | "out"; sourc
     /* never let logging break a run */
   }
 }
+
+export function flushNativeLogs(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  for (const threadId of Array.from(held.keys())) flushNativeLog(threadId);
+}
+
+/** A deleted thread's held lines are dropped, so a later flush cannot recreate its log. */
+export function discardNativeLog(threadId: string): void {
+  take(threadId);
+}
+
+function take(threadId: string): HeldLine[] | undefined {
+  const lines = held.get(threadId);
+  if (!lines) return undefined;
+  held.delete(threadId);
+  for (const item of lines) heldChars -= item.line.length;
+  return lines;
+}
+
+process.once("exit", flushNativeLogs);

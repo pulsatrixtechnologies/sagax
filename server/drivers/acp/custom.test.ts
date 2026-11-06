@@ -45,7 +45,10 @@ describe("CustomAcpDriver config", () => {
       models: [{ id: "fast", label: "Fast" }, { id: " " }, { id: "deep" }],
       effortLevels: ["low", "high", "nope"],
     });
-    expect(decoded.models).toEqual({ default: "fast", options: [{ id: "fast", label: "Fast" }, { id: "deep", label: "deep" }] });
+    expect(decoded.models).toEqual({
+      default: "fast",
+      options: [{ id: "fast", label: "Fast", custom: true }, { id: "deep", label: "deep", custom: true }],
+    });
     expect(decoded.effortLevels).toEqual(["low", "high"]);
     const instance = await CustomAcpDriver.create({
       instanceId: "custom-levels",
@@ -66,7 +69,7 @@ describe("CustomAcpDriver config", () => {
     });
     expect(CustomAcpDriver.models).toEqual({
       default: "agent-default",
-      options: [{ id: "agent-default", label: "Agent default" }],
+      options: [{ id: "agent-default", label: "Agent default", custom: true }],
     });
     // no install descriptor: there is nothing generic to install
     expect(CustomAcpDriver.install).toBeUndefined();

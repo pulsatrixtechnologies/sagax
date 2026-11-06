@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { engineFailureKind, engineFailureMessage, httpStatusOf, localModelFailureMessage, outOfCreditsMessage, providerReason, stopCause } from "./engine-errors.ts";
+import { engineFailureKind, engineFailureMessage, errorReplyFailure, httpStatusOf, localModelFailureMessage, outOfCreditsMessage, plainFailureMessage, providerReason, stopCause } from "./engine-errors.ts";
 import { classifyError } from "./retry.ts";
 
 const reason = (text: string) => classifyError({ text }).reason;
@@ -50,7 +50,36 @@ describe("engineFailureMessage", () => {
     expect(engineFailureMessage("Grok", "Internal error: could not change mode")).toBeNull();
     expect(engineFailureMessage("Grok", "Grok could not confirm its MCP catalog in time. No prompt was sent.")).toBeNull();
     expect(outOfCreditsMessage("xAI", "xAI HTTP 401: Incorrect API key provided (invalid_api_key)")).toBe("xAI HTTP 401: Incorrect API key provided (invalid_api_key)");
+    expect(plainFailureMessage("xAI", "xAI HTTP 401: Incorrect API key provided (invalid_api_key)")).toBe("xAI HTTP 401: Incorrect API key provided (invalid_api_key)");
     expect(engineFailureKind("Stopped after 64 steps without a final answer.")).toBeNull();
+  });
+});
+
+describe("a provider refusing a tool's schema", () => {
+  /** Kimi Code's prompt failure as acpRpcError relays it; Moonshot's line is quoted in https://github.com/MoonshotAI/kimi-code/issues/4231. */
+  const KIMI = "Internal error: 400 tools.function.parameters is not a valid moonshot flavored json schema, details: <At path 'root': schema exceeds maximum allowed size> (session/prompt)";
+
+  it("says in plain words that a tool was too large, keeping the words that class it an invalid request", () => {
+    const plain = engineFailureMessage("Kimi", KIMI);
+    expect(plain).toBe("Kimi refused this turn as an invalid request because the input schema of one of this bot's tools is too large, so nothing ran. "
+      + "Turn off the MCP server or app that tool comes from for this bot, or switch the bot to another AI.");
+    expect(engineFailureKind(KIMI)).toBe("tool_schema");
+    expect([reason(KIMI), reason(plain!)]).toEqual(["invalid_request", "invalid_request"]);
+    expect(classifyError({ text: plain! }).transient).toBe(false);
+  });
+
+  it("names the tool when the provider does", () => {
+    expect(engineFailureMessage("OpenAI", "OpenAI HTTP 400: Invalid schema for function 'computer_browser_prepare': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"None\"'."))
+      .toBe('OpenAI refused this turn as an invalid request because the input schema of the "computer_browser_prepare" tool uses a form OpenAI does not accept, so nothing ran. '
+        + "Turn off the MCP server or app that tool comes from for this bot, or switch the bot to another AI.");
+    expect(engineFailureKind("API Error: 400 tools.12.custom.input_schema: JSON schema is invalid")).toBe("tool_schema");
+    expect(engineFailureKind("Invalid JSON payload received. Unknown name \"additionalProperties\" at 'tools[0].function_declarations[3].parameters'")).toBe("tool_schema");
+  });
+
+  it("is in plain words on the chat runtime too, where any other failure keeps its text", () => {
+    expect(plainFailureMessage("Kimi", KIMI)).toBe(engineFailureMessage("Kimi", KIMI));
+    expect(plainFailureMessage("Groq", "Groq HTTP 400: model_decommissioned")).toBe("Groq HTTP 400: model_decommissioned");
+    expect(engineFailureKind("Mistral HTTP 400: Invalid model: kimi")).toBe("refused");
   });
 });
 
@@ -74,6 +103,68 @@ describe("providerReason", () => {
     expect(httpStatusOf("API Error: 529 Overloaded")).toBe(529);
     expect(httpStatusOf("returned HTTP 200 with no body")).toBeNull();
     expect(httpStatusOf("the routine ran 402 times")).toBeNull();
+  });
+});
+
+describe("errorReplyFailure", () => {
+  const NOW = Date.parse("2026-10-27T06:12:46Z");
+  const anthropic = (status: number, type: string, message: string) =>
+    `${status} {"type":"error","error":{"type":"${type}","message":"${message}"},"request_id":"req_011CgY35mSFzqEa1NBU5nq8i"}`;
+
+  it("names a usage limit and its reset from a 429's retry-after, in the zone given", () => {
+    const reply = `${anthropic(429, "rate_limit_error", "[1308][Usage limit reached for 5 hour. Your limit will reset at 2026-10-27 15:22:19][2026]")} retry-after-ms=4171000`;
+    expect(errorReplyFailure("omp", reply, NOW, "UTC")).toEqual({
+      message: 'This omp account has reached its usage limit (omp says: "[1308][Usage limit reached for 5 hour. Your limit will reset at 2026-10-27 15:22:19][2026]"), which resets Oct 27, 7:22 AM (UTC). Until then, switch this bot to another engine.',
+      stopReason: "quota",
+      limit: "engine",
+      limitResetsAt: NOW + 4_171_000,
+    });
+  });
+
+  it("reads a 429 without a wait by its words, and an OpenAI-style body too", () => {
+    const limit = errorReplyFailure("omp", anthropic(429, "rate_limit_error", "You've reached your 5-hour usage limit."), NOW);
+    expect(limit).toMatchObject({ stopReason: "quota", limit: "engine" });
+    expect(limit).not.toHaveProperty("limitResetsAt");
+    expect(errorReplyFailure("omp", '429 {"error":{"message":"Rate limit reached for requests","type":"requests","code":"rate_limit_exceeded"}}'))
+      .toEqual({ message: 'omp hit a rate limit (HTTP 429; omp says: "Rate limit reached for requests"). Wait a minute, then run it again.', stopReason: "rpc_error" });
+    expect(errorReplyFailure("omp", '  529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}\n'))
+      .toEqual({ message: "omp is overloaded right now (HTTP 529). This is usually temporary, so try again in a few minutes.", stopReason: "rpc_error" });
+  });
+
+  it("keeps a 429 whose wait an engine retries on its own a rate limit, and reads a longer one as a usage limit", () => {
+    const perMinute = anthropic(429, "rate_limit_error", "This request would exceed your organization's rate limit of 30,000 input tokens per minute.");
+    const rateLimit = { message: `omp hit a rate limit (HTTP 429; omp says: "This request would exceed your organization's rate limit of 30,000 input tokens per minute"). Wait a minute, then run it again.`, stopReason: "rpc_error" };
+    expect(errorReplyFailure("omp", `${perMinute} retry-after-ms=20000`, NOW)).toEqual(rateLimit);
+    expect(errorReplyFailure("omp", `${perMinute} retry-after-ms=120000`, NOW)).toEqual(rateLimit);
+    expect(errorReplyFailure("omp", `${perMinute} retry-after-ms=120001`, NOW)).toMatchObject({ stopReason: "quota", limit: "engine", limitResetsAt: NOW + 120_001 });
+  });
+
+  it("never reads another status's wait as a usage limit", () => {
+    expect(errorReplyFailure("omp", `${anthropic(529, "overloaded_error", "Overloaded")} retry-after-ms=300000`, NOW))
+      .toEqual({ message: "omp is overloaded right now (HTTP 529). This is usually temporary, so try again in a few minutes.", stopReason: "rpc_error" });
+  });
+
+  it("asks for the person's setup on an account out of credits, as the same failure thrown does, whatever its wait", () => {
+    const outOfCredits = {
+      message: 'Your omp account is out of credits (omp says: "Your credit balance is too low to access the Anthropic API"). Add credits with omp, then run it again.',
+      stopReason: "auth_required",
+      setup: true,
+    };
+    expect(errorReplyFailure("omp", anthropic(402, "billing_error", "Your credit balance is too low to access the Anthropic API."), NOW)).toEqual(outOfCredits);
+    expect(errorReplyFailure("omp", `${anthropic(429, "billing_error", "Your credit balance is too low to access the Anthropic API.")} retry-after-ms=300000`, NOW))
+      .toEqual(outOfCredits);
+  });
+
+  it("leaves any other text a reply: an error quoted in words, a success status, a body that is no error", () => {
+    for (const text of [
+      `Here is what came back: ${anthropic(403, "permission_error", "OAuth authentication is currently not allowed for this organization.")}`,
+      `${anthropic(403, "permission_error", "refused")} and then I stopped`,
+      '200 {"type":"error","error":{"type":"x","message":"y"}}',
+      '403 {"type":"message","content":[]}',
+      '403 {"error":"refused"}',
+      "403 {not json}",
+      `${anthropic(429, "rate_limit_error", "slow down")} retry-after-ms=soon`,
+    ]) expect(errorReplyFailure("omp", text), text).toBeNull();
   });
 });
 

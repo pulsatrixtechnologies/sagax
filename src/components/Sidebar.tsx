@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -128,7 +129,6 @@ import { folderUnreadThreadIds, markFolderRead, markGroupFolderRead } from "@/li
 import { personPickerThreads } from "@/lib/person-threads";
 import { approvalModeFor, botApprovalSetting } from "../../shared/approval-mode";
 import { liveActivityLabel } from "@/lib/live-activity";
-import { FullAccessWarning } from "./FullAccessWarning";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import {
   orderedThreadList,
@@ -158,6 +158,7 @@ import { openSideThread } from "@/lib/side-thread";
 import { moveRailFocus } from "@/lib/sidebar-rail";
 import { isClientCancellation } from "../../shared/client-cancel";
 import { readableError } from "@/lib/plain-error";
+import { roomSpeakerIds, roomThreadSpeakerId, roomThreadWorking } from "@/lib/room-threads";
 
 import {
   COMPOSE_DISMISS,
@@ -236,9 +237,10 @@ function openBotContextMenu(onMenu: (menu: MenuState) => void, botId: string, ev
  * a received direct message included. */
 export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | null, instances: InstanceInfo[]): string {
   const viewerId = viewerActorId(config);
-  if (group.busyBotId) {
+  const speakerId = group.busyBotId ?? roomSpeakerIds(group)[0];
+  if (speakerId) {
     return t("sidebar.preview.botWorking", {
-      name: bots.find((b) => b.id === group.busyBotId)?.name ?? t("sidebar.preview.aBot"),
+      name: bots.find((b) => b.id === speakerId)?.name ?? t("sidebar.preview.aBot"),
     });
   }
   if (group.working) return t("sidebar.preview.teamWorking");
@@ -472,12 +474,14 @@ export function GroupThreadList({ group, selected, density = "comfortable", quer
   }), (a, b) => equalRows(a.bots, b.bots) && Object.is(a.revealThread, b.revealThread));
   const now = useRelativeNow();
   const [showAll, setShowAll] = useState(false);
-  const busy = Boolean(group.working || group.busyBotId);
-  const waiting = state.bots.find((bot) => bot.id === group.busyBotId)?.activity === "waiting-on-you";
-  const tasks = (group.tasks ?? [{ threadId: group.threadId, title: group.name, createdAt: group.createdAt }]).map((task) => ({
-    ...task, busy: task.threadId === group.threadId && busy, unread: task.threadId === group.threadId && group.unread,
-    activity: task.threadId === group.threadId && waiting ? "waiting-on-you" as const : undefined,
-  }));
+  const tasks = (group.tasks ?? [{ threadId: group.threadId, title: group.name, createdAt: group.createdAt }]).map((task) => {
+    const speakerId = roomThreadSpeakerId(group, task.threadId);
+    const waiting = Boolean(speakerId) && state.bots.find((bot) => bot.id === speakerId)?.activity === "waiting-on-you";
+    return {
+      ...task, busy: roomThreadWorking(group, task.threadId), unread: task.threadId === group.threadId && group.unread,
+      activity: waiting ? "waiting-on-you" as const : undefined,
+    };
+  });
   const visible = orderedThreadList(visibleSidebarThreads(tasks, group.threadId, query, [], showAll));
   useRevealedThreadRow(state.revealThread, selected ? group.threadId : null);
   // One set of row actions per room; they read the room as it is when used.
@@ -1706,7 +1710,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   const tasks = personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId)
     .map((task) => ({ ...task, queued: Boolean(pendingQueued[task.threadId]?.length) }));
   const background = backgroundThreads(bot.tasks ?? []);
-  const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "full" | "local-auto" } | null>(null);
+  const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "local-auto" } | null>(null);
   // the same live verb the chat pane derives from the visible tail
   // ("Reading a file"), passed to the active thread's row while it works
   const activeActivityLabel = liveActivityLabel(visibleMessages(bot).at(-1));
@@ -1747,7 +1751,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
         const current = latest.current;
         const mode = botApprovalSetting(current);
         const threadMode = approvalModeFor(currentTaskBot(current, task.threadId));
-        if (mode === "full" && threadMode !== "full") { setPermissionRefresh({ threadId: task.threadId, kind: "full" }); return; }
+        // Full applies at once with no confirmation (omb #2701).
         if (mode === "auto" && current.computer === "local" && threadMode !== "auto") { setPermissionRefresh({ threadId: task.threadId, kind: "local-auto" }); return; }
         dispatch({ type: "refreshTaskPermissions", botId, threadId: task.threadId });
       },
@@ -1781,16 +1785,6 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
       {folderDialog && <NewTaskFolderDialog bot={bot} onClose={() => setFolderDialog(false)} onReturnFocus={() => {
         document.querySelector<HTMLElement>(`[data-sidebar-bot-row="${CSS.escape(bot.id)}"]`)?.focus();
       }} />}
-      <FullAccessWarning
-        open={permissionRefresh?.kind === "full"}
-        scope="thread"
-        onCancel={() => setPermissionRefresh(null)}
-        onConfirm={() => {
-          const threadId = permissionRefresh?.threadId;
-          setPermissionRefresh(null);
-          if (threadId) dispatch({ type: "refreshTaskPermissions", botId: bot.id, threadId });
-        }}
-      />
       <LocalComputerAutoWarning
         open={permissionRefresh?.kind === "local-auto"}
         onCancel={() => setPermissionRefresh(null)}
@@ -2363,6 +2357,33 @@ export function ArchivedBotsPanel({
 /** A named team's context menu: add bots, rename, share the whole team,
  * delete. Exported for a markup test. */
 
+function RoomMenuSlot({
+  actions,
+  sidebarRef,
+}: {
+  actions: ReturnType<typeof useSidebarBotActions>;
+  sidebarRef: RefObject<HTMLElement | null>;
+}) {
+  return (
+    <RoomContextMenu
+      menu={actions.roomMenu}
+      onClose={() => actions.setRoomMenu(null)}
+      onMoveToSection={(groupId) => {
+        if (!actions.roomMenu) return;
+        actions.setRoomSectionPicker({ groupId, x: actions.roomMenu.x, y: actions.roomMenu.y });
+      }}
+      onDelete={(groupId) => {
+        sidebarRef.current?.focus();
+        actions.setDeletingRoomId(groupId);
+      }}
+      onLeave={(groupId) => {
+        sidebarRef.current?.focus();
+        actions.setLeavingRoomId(groupId);
+      }}
+    />
+  );
+}
+
 export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   open: boolean;
   onClose: () => void;
@@ -2735,24 +2756,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         multi={multi}
         dnd={dnd}
         roster={roster}
-        roomMenuSlot={
-          <RoomContextMenu
-            menu={actions.roomMenu}
-            onClose={() => actions.setRoomMenu(null)}
-            onMoveToSection={(groupId) => {
-              if (!actions.roomMenu) return;
-              actions.setRoomSectionPicker({ groupId, x: actions.roomMenu.x, y: actions.roomMenu.y });
-            }}
-            onDelete={(groupId) => {
-              sidebarRef.current?.focus();
-              actions.setDeletingRoomId(groupId);
-            }}
-            onLeave={(groupId) => {
-              sidebarRef.current?.focus();
-              actions.setLeavingRoomId(groupId);
-            }}
-          />
-        }
+        roomMenuSlot={<RoomMenuSlot actions={actions} sidebarRef={sidebarRef} />}
       />
       <SidebarResizeHandle
         autoRail={autoRail}

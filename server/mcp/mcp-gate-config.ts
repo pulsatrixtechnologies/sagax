@@ -11,6 +11,7 @@ import { DEFAULT_RESULT_BUDGET, QUERY_TOOL_NAME } from "./mcp-trim.ts";
 import { gateSearchEnv } from "./mcp-gate-search.ts";
 import { REMOTE_MCP_CONFIG_ENV, remoteMcpSpec } from "./mcp-http.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { TOOL_SCHEMA_PROFILE_ENV, type ToolSchemaProfileId } from "../tool-schema-profile.ts";
 
 /** Characters of a single tool result allowed into context, or 0 to mount
  * bot servers directly as before. `SAGAX_MCP_RESULT_BUDGET=0` is the escape
@@ -216,8 +217,13 @@ export function gateServer(input: {
   /** #1276: the gate searches a big catalog itself (mcp-gate-search.ts) and
    * lists whole only `pinned`. Mounts the gate always, stdio or URL. */
   search?: { pinned?: readonly string[]; pinnedSuffixes?: readonly string[]; maxTools?: number; maxChars?: number };
+  /** #2189: bare tool names the agents server already owns. The gate leaves
+   * them out of tools/list and refuses a call, so the model uses agents. */
+  withhold?: readonly string[];
+  /** The engine's provider limits each listed tool schema, so the gate fits them to its profile. */
+  schemaProfile?: ToolSchemaProfileId;
 }): { command: string; args: string[]; env: Record<string, string> } | null {
-  const { name, server, budget } = input;
+  const { name, server, budget, schemaProfile } = input;
   const parsed = parseToolScope(input.toolScope);
   if (!parsed.ok) throw new Error(parsed.error);
   const scoped = parsed.scope !== undefined;
@@ -225,8 +231,11 @@ export function gateServer(input: {
   const approval = input.approval;
   if (approval && (!approval.socket || !approval.token)) throw new Error("An approval gate needs its socket and token.");
   const search = input.search && !aliased ? gateSearchEnv(input.search) : undefined;
-  if (budget <= 0 && !scoped && !aliased && !approval && !search) return null;
-  if (!scoped && !aliased && !approval && !search && input.gateRemote !== true && remoteMcpSpec(server)) return null;
+  const withhold = name !== "agents"
+    ? [...new Set((input.withhold ?? []).filter((tool) => typeof tool === "string" && tool.length > 0 && !tool.includes("__")))].sort()
+    : [];
+  if (budget <= 0 && !scoped && !aliased && !approval && !search && !withhold.length && !schemaProfile) return null;
+  if (!scoped && !aliased && !approval && !search && !withhold.length && input.gateRemote !== true && remoteMcpSpec(server)) return null;
   // The directory is the remote proxy's; it sits inside the gate, which
   // knows to look through call_tool at the tool underneath.
   // The gate's own search replaces the remote proxy's directory.
@@ -257,8 +266,9 @@ export function gateServer(input: {
     } : {}),
     SAGAX_GATE_MISUSE_MODE: process.env.SAGAX_MISUSE_GUARDRAILS?.trim() || "shadow",
     ...(search ? { SAGAX_GATE_SEARCH: search } : {}),
+    ...(withhold.length ? { SAGAX_GATE_WITHHOLD: JSON.stringify(withhold) } : {}),
   };
-  if (input.configEnvName && ((!scoped && !search) || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
+  if (input.configEnvName && ((!scoped && !search && !withhold.length) || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
     throw new Error("Invalid private MCP gate configuration.");
   }
   return {
@@ -266,6 +276,7 @@ export function gateServer(input: {
     args: [SPAWNED_PROXIES.mcpGate, ...(input.configEnvName ? ["--config-env", input.configEnvName] : [])],
     env: {
       ...input.nodeEnv,
+      ...(schemaProfile ? { [TOOL_SCHEMA_PROFILE_ENV]: schemaProfile } : {}),
       ...(input.configEnvName ? { [input.configEnvName]: JSON.stringify(env) } : env),
     },
   };

@@ -1,4 +1,4 @@
-// The app's side of achievements (shared/achievements.ts, server/achievements.ts):
+// The app's side of achievements (shared/achievements.ts, server/achievements/achievements.ts):
 // the person's snapshot from GET /api/me/achievements, the client events the
 // app reports (batched, POST /api/me/achievements/events), the unlock frames
 // that feed the toast queue, and what the mascot editor and the app icon

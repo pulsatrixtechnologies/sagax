@@ -10,17 +10,27 @@
 // card for everything (`blocked`). Team setup about the person's own bots
 // applies at Full access and at Approve for me on their own turn
 // (teamSetupDirectSource, 2026-10-26); peer approvals keep their card.
+// Team memory keeps its card (Sagax choice, omb #3014 adapted).
 
 /** Why a change applied without a person. Also the decision log's source. */
 /** "primary-bot" (2026-10-20): the person asked their own Primary Bot for
- * this change in this turn's message; it applies like Full access. */
-export type DirectApply = "full-access" | "self" | "primary-bot";
+ * this change in this turn's message; it applies like Full access.
+ * "level" (omb #3014): any non-Full level that still applies without a card. */
+export type DirectApply = "full-access" | "self" | "primary-bot" | "level";
 
 /** Server-owned and decided per request, never from request input. */
 export type DirectApplyCheck = (botId: string, threadId: string, targetBotId: string) => DirectApply | null;
 
 /** What Undo says, applying nothing, once the thing changed since. */
 export const UNDO_STALE = "Changed since, so it can't be undone here.";
+
+/** Null only where the owner confirms on a card (a guest turn, or a rule that
+ * still asks). Full access reports as "full-access"; every other allowed
+ * level reports as "level". */
+export function appliesNow(args: { fullAccess: boolean; ownerMustConfirm: boolean }): DirectApply | null {
+  if (args.ownerMustConfirm) return null;
+  return args.fullAccess ? "full-access" : "level";
+}
 
 /** A bot applying its own routines directly keeps at most this many
  * enabled; past it, a create or resume shows today's card instead. */

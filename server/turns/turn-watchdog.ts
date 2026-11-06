@@ -1,6 +1,6 @@
 // Stall watchdog for admitted turns, including setup.
 //
-// ask_bot has a short inline wait budget, while room turns have a separately
+// Teammate hand-offs run on the job runtime's clocks, while room turns have a separately
 // configurable absolute ceiling. The main 1:1 path had none: a wedged CLI
 // (hung network call, dead MCP child,
 // a provider that stops streaming without exiting) left its bot busy

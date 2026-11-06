@@ -116,19 +116,22 @@ import { unwrapAgentsBridge } from "../../shared/searched-tool-call.ts";
  * macOS Keychain for OAuth, a JSON file on some platforms, and may gain other
  * backends over time. Presence checks also accept stale credentials. The CLI's
  * own machine-readable auth command is the source of truth for every backend.
+ * Only `loggedIn: false` means signed out. A check that timed out (a Keychain
+ * prompt left open) or gave no readable status says nothing, so `authenticated`
+ * is left out.
  */
-function claudeAuthStatus(
+export function claudeAuthStatus(
   cli: string,
   env: NodeJS.ProcessEnv,
   run: typeof execCli = execCli,
-): Promise<{ authenticated: boolean; account?: ProviderSnapshot["account"] }> {
+): Promise<{ authenticated?: boolean; account?: ProviderSnapshot["account"] }> {
   return new Promise((resolve) => {
-    run(cli, ["auth", "status", "--json"], { timeout: 8000, maxBuffer: 65_536, env }, (_error, stdout) => {
+    run(cli, ["auth", "status", "--json"], { timeout: 8000, maxBuffer: 65_536, env }, (error, stdout) => {
+      if ((error as { killed?: boolean } | null)?.killed) return resolve({});
       try {
         const status: unknown = JSON.parse(stdout);
-        if (!status || typeof status !== "object" || !("loggedIn" in status) || status.loggedIn !== true) {
-          return resolve({ authenticated: false });
-        }
+        const loggedIn = status && typeof status === "object" && "loggedIn" in status ? (status as { loggedIn?: unknown }).loggedIn : undefined;
+        if (loggedIn !== true) return resolve(loggedIn === false ? { authenticated: false } : {});
         // Only display identity fields, never the CLI's full auth response.
         const identity = status as { email?: unknown; orgName?: unknown; authMethod?: unknown };
         const boundedText = (value: unknown, max: number): string | undefined =>
@@ -146,7 +149,7 @@ function claudeAuthStatus(
         };
         resolve({ authenticated: true, ...(Object.keys(account).length ? { account } : {}) });
       } catch {
-        resolve({ authenticated: false });
+        resolve({});
       }
     });
   });
@@ -157,7 +160,7 @@ export async function claudeSignedIn(
   env: NodeJS.ProcessEnv,
   run: typeof execCli = execCli,
 ): Promise<boolean> {
-  return (await claudeAuthStatus(cli, env, run)).authenticated;
+  return (await claudeAuthStatus(cli, env, run)).authenticated === true;
 }
 
 /** Parent-session credentials/routing that a named account must not inherit.

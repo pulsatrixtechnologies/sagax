@@ -41,26 +41,23 @@ export function threadApprovalFields<B extends { approvalMode?: unknown; autoApp
  * `edits` (auto-accept edits) exists where the engine has such a mode:
  * Claude and Grok `acceptEdits`, Antigravity `auto_edit`, Qwen `auto-edit`,
  * Gemini `auto_edit`. Codex's Ask already runs `workspace-write`, so an edits
- * level would change nothing there. */
+ * level would change nothing there. Full access, the default level (omb #2808),
+ * runs on every engine: in the engine's own most permissive mode, or, where
+ * it has none, with the harness answering the permission requests it leaves. */
 export function supportsApprovalMode(driverKind: string | undefined, mode: ApprovalMode): boolean {
   if (mode === "custom") return driverKind === "codex";
   if (mode === "edits") return ["claudeAgent", "grokAgent", "antigravityAgent", "qwenAgent", "geminiAgent"].includes(driverKind ?? "");
-  if (mode !== "full") return true;
-  // The chat-completions family has no provider-side reviewer, so Full is
-  // implemented in the harness: createOpenAIChatRuntime answers its own tool
-  // gate instead of opening a card. Without this a bot on one of these
-  // engines could never stop asking — not by its own level, and not through
-  // a Primary Bot's delegated Full access either.
-  return ["codex", "claudeAgent", "antigravityAgent", "cursorAgent", "grokAgent", "opencodeGo", "qwenAgent", "geminiAgent",
-    "clineAgent", "openai-compat", "grok", "minimax", "mistral", "cerebras", "groq"].includes(driverKind ?? "");
+  // Full access runs on every engine (omb #2808), including the
+  // chat-completions family where the harness answers its own tool gate.
+  return true;
 }
 
-/** Whether switching engines must first drop this level to Ask. Every mode
- * stops at an engine that cannot run it. 2026-10-26: Full carries to
- * any engine that runs it, as upstream does since 295f947d: the owner chose
- * Full for their own bot, a model change is not a reason to take it back.
- * A Custom grant belongs to one provider's tool semantics and still never
- * crosses engines. Adapted from tahodev's provider-switch guard (#1120). */
+/** Whether switching engines must first drop this level to Ask. A Custom
+ * grant's rules belong to one provider's tool semantics, so it never crosses
+ * engines. Full carries silently to any engine: the person gave this bot Full
+ * access, and changing its engine must not take it back or ask again (owner
+ * decision, Oct 12). Auto-accept edits stops at an engine without it.
+ * Adapted from tahodev's provider-switch guard (#1120). */
 export function modelSwitchNeedsAsk(
   mode: ApprovalMode,
   fromDriver: string | undefined,
@@ -86,10 +83,25 @@ export function isApprovalMode(value: unknown): value is ApprovalMode {
   return typeof value === "string" && (APPROVAL_MODES as readonly string[]).includes(value);
 }
 
-/** Resolve the durable mode without turning the legacy Auto bit into Full
- * access. Records written before approvalMode existed keep their exact old
- * behavior: autoApprove=true is safe Auto; everything else asks. Unknown
- * persisted values also fail closed to that legacy behavior. */
+/** The level a bot or conversation runs at until a person picks one: Full
+ * access, as in t3code (omb #2808 / PRO-RÈGLE). Each provider maps it to
+ * its own most permissive mode; a real question or a missing credential
+ * still reaches a person. */
+export const DEFAULT_APPROVAL_MODE: ApprovalMode = "full";
+
+let defaultApprovalMode: ApprovalMode = DEFAULT_APPROVAL_MODE;
+
+/** On a shared company / organization workspace Full access comes only from
+ * the owner's own grant, so those servers make Ask (or the org New-bot
+ * policy) the default once, at startup. */
+export function setDefaultApprovalMode(mode: ApprovalMode): void {
+  defaultApprovalMode = mode;
+}
+
+/** Resolve the durable mode. A bot or conversation nobody has set a level on
+ * runs at the default. The legacy Auto bit, written before approvalMode
+ * existed, stays safe Auto, and an unknown persisted value fails closed to
+ * Ask. */
 export function approvalModeFor(bot: {
   approvalMode?: unknown;
   autoApprove?: unknown;
@@ -103,27 +115,29 @@ export function approvalModeFor(bot: {
     "threadId" in grant && typeof grant.threadId === "string" && typeof bot.threadId === "string" && grant.threadId !== bot.threadId;
   if (grant && !otherThread) return "ask";
   if (isApprovalMode(bot.approvalMode)) return bot.approvalMode;
-  return bot.autoApprove === true ? "auto" : "ask";
+  if (bot.autoApprove === true) return "auto";
+  return bot.approvalMode === undefined ? defaultApprovalMode : "ask";
 }
 
-/** Ask, Edits and Auto can change while the bot is working. The next
- * approval in that turn reads the new level. A stricter one also reaches the
- * running engine, or stops the turn when the engine cannot take it (#1373,
- * applyStricterApprovalLive). Full and Custom still wait. */
-const LIVE_APPROVAL_LEVELS = new Set<ApprovalMode>(["ask", "edits", "auto"]);
+/** Any saved level may change while the bot is working (omb #3627). The next
+ * Sagax decision (request.opened, API tool gate) reads it. A stricter Ask /
+ * Edits / Auto change also reaches the running engine, or stops the turn when
+ * the engine cannot take it (#1373, applyStricterApprovalLive). Engine-native
+ * Full (bypass, sandbox) still applies from the next turn. */
+const LIVE_ENGINE_LEVELS = new Set<ApprovalMode>(["ask", "edits", "auto"]);
 
-export function liveApprovalChange(current: ApprovalMode, next: ApprovalMode): boolean {
-  return LIVE_APPROVAL_LEVELS.has(current) && LIVE_APPROVAL_LEVELS.has(next);
+export function liveApprovalChange(_current: ApprovalMode, _next: ApprovalMode): boolean {
+  return true;
 }
 
 /** #1373: Auto to Edits or Ask, or Edits to Ask, while a turn runs. */
 export function liveApprovalTightens(current: ApprovalMode, next: ApprovalMode): boolean {
-  return liveApprovalChange(current, next) && APPROVAL_RANK[next] < APPROVAL_RANK[current];
+  return LIVE_ENGINE_LEVELS.has(current) && LIVE_ENGINE_LEVELS.has(next) && APPROVAL_RANK[next] < APPROVAL_RANK[current];
 }
 
 /** A private late-grant recovery may revoke an elevated mode even after a
- * turn began. It can only move to the fail-closed Ask mode. Ask, Edits and
- * Auto use liveApprovalChange instead. */
+ * turn began. It can only move to the fail-closed Ask mode, and it also stops
+ * the running turn, which a native engine would otherwise finish elevated. */
 export function isEmergencyApprovalDowngrade(
   current: ApprovalMode,
   next: ApprovalMode,

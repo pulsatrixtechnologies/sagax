@@ -1,14 +1,14 @@
 import { botRoutineRuns } from "@/state/view-slices";
 // The bot panel, as the reference design draws it (#2125): a round gear at
 // the top left (the bot's profile page) and a round X at the top right, a
-// small mascot and "Name · Label" on one line, then two tabs, Activity and
-// Library. Once the body scrolls past the tabs, the head compacts into one
-// row: gear, tabs centered, X. The bot's menu (archive, primary, export,
-// copy link, float) opens on a right click on the mascot or the name, and the
-// profile page holds the same actions. Every section lives under
-// bot-settings/; their bodies and reads are useBotSectionContent, shared
-// with the persona editor. Activity > Computer opens the computer view in
-// this same panel, with a back arrow to Activity.
+// mascot sized to Grok Bot (#2196) and "Name · Label" on one line, then two
+// tabs, Activity and Library. Once the body scrolls past the tabs, the head
+// compacts into one row: gear, tabs centered, X. The bot's menu (archive,
+// primary, export, copy link, float) opens on a right click on the mascot or
+// the name, and the profile page holds the same actions. Every section lives
+// under bot-settings/; their bodies and reads are useBotSectionContent, shared
+// with the persona editor. Activity > Computer opens the live desktop
+// window directly (SandboxDesktopModal); other links may still open ComputerPanel.
 import { useEffect, useRef, useState } from "react";
 import { BOT_PANEL_BOUNDS, DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { ArrowLeft, Settings, X } from "lucide-react";
@@ -47,6 +47,13 @@ import { RemoteSessionsSection } from "./remote-session/RemoteSessionsSection";
 /** #2149: the panel body's scroll per bot and tab, put back when the header
  * pill reopens the panel it closed. */
 const panelScroll = new Map<string, number>();
+
+/**
+ * Bot panel mascot box size (#2196). A shape's painted body fills ~65% of its
+ * box (30×28 in a 46 box); 92 yields a ~60px visible form, matching Grok Bot.
+ * Locked by BotSettingsDialog.mascot-size.test.ts — do not shrink.
+ */
+export const BOT_PANEL_AVATAR_SIZE = 92;
 
 export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   bot: Bot;
@@ -296,7 +303,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               <div className="flex shrink-0 flex-col items-center px-4 pb-1">
                 <BotProfileAvatarCard
                   bot={bot}
-                  size={46}
+                  size={BOT_PANEL_AVATAR_SIZE}
                   activeState={derived.activeState}
                   mascotMotion={derived.mascotMotion}
                   onPatch={derived.patch}
@@ -304,9 +311,11 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                 />
                 {/* "Name · Label" on one line, both edited where they show (the
                     hover pencils float outside, taking no room); adding a
-                    label is in the profile page. */}
+                    label is in the profile page. Spacing matches Grok Bot's
+                    panel header (#2196): ~17px semibold, ~65px under the
+                    mascot centre. */}
                 <div
-                  className="mt-2 flex max-w-full items-center justify-center gap-1 text-[16px] font-normal leading-[22px] text-ink"
+                  className="mt-5 flex max-w-full items-center justify-center gap-1 text-[17px] font-semibold leading-[22px] text-ink"
                   // the bot's menu on the name too, as on the mascot
                   onContextMenu={openActionsAt}
                 >
@@ -318,7 +327,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                     ariaLabel={t("botPanel.name.edit")}
                     onSave={canEditBotField(state.config, bot, "name") ? (name) => derived.patch({ name }) : undefined}
                     editRequest={renameRequest}
-                    className="min-w-0 shrink gap-0 px-0.5 text-[16px] font-normal leading-[22px] text-ink [&>svg]:absolute [&>svg]:-left-3.5"
+                    className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-semibold leading-[22px] text-ink [&>svg]:absolute [&>svg]:-left-3.5"
                   />
                   {bot.title?.trim() && (
                     <>
@@ -329,14 +338,15 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                         placeholder={t("botPanel.label.add")}
                         ariaLabel={t("botPanel.label.edit")}
                         onSave={canEditBotField(state.config, bot, "title") ? (title) => derived.patch({ title }) : undefined}
-                        className="min-w-0 shrink gap-0 px-0.5 text-[16px] font-normal leading-[22px] text-ink [&>svg]:absolute [&>svg]:-right-3.5"
+                        className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-semibold leading-[22px] text-ink [&>svg]:absolute [&>svg]:-right-3.5"
                       />
                     </>
                   )}
                 </div>
               </div>
-              {/* The tabs; once scrolled to the top they move into the top bar */}
-              <div ref={tabsRef} data-bot-panel-tabs="" className={cn("flex justify-center px-4 pb-4 pt-4", showCompact && "invisible")}>
+              {/* The tabs; once scrolled to the top they move into the top bar.
+                  pt-10 keeps ~40px under the title, as on Grok Bot (#2196). */}
+              <div ref={tabsRef} data-bot-panel-tabs="" className={cn("flex justify-center px-4 pb-4 pt-10", showCompact && "invisible")}>
                 {tabList(false)}
               </div>
 
@@ -351,7 +361,13 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                     slackUrl={slackUrl}
                     onAddToMeeting={() => setMeetingRequest((count) => count + 1)}
                   />
-                  {computerShown && <ComputerCard bot={bot} />}
+                  {computerShown && (
+                    <ComputerCard
+                      bot={bot}
+                      onPatch={derived.patch}
+                      readOnly={!canEditBotField(state.config, bot, "computer")}
+                    />
+                  )}
                   <VoiceChatCard bot={bot} onPatch={derived.patch} readOnly={!canEditBotField(state.config, bot, "voice")} />
                   {/* What the bot does now and did: each folds away when empty. */}
                   <BotTaskSection botId={bot.id} />

@@ -12,9 +12,14 @@ import type { PerspicaxOrg } from "@/lib/perspicax-org";
 
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
-  api: vi.fn(async () => ({ bots: [], approvals: [] })),
-  // an admin sees OrgTeamSecrets (#932), which reads the bots from the store
-  useStore: () => ({ state: { bots: [] }, dispatch: vi.fn() }),
+  api: vi.fn(async () => ({ bots: [], approvals: [], secrets: [], pages: [] })),
+  useStore: () => ({
+    state: {
+      bots: [],
+      config: { viewer: { role: "member", capabilities: { editConfig: false, manageKeys: false, manageComputers: false, viewUsage: false, manageBackups: false, pairDevices: false } } },
+    },
+    dispatch: vi.fn(),
+  }),
 }));
 
 const org = (viewerRole: "admin" | "member"): PerspicaxOrg => ({
@@ -28,18 +33,41 @@ beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
 
 describe("Settings > Organization without Sharing in the organization", () => {
-  it("does not show the organization's bots, for an admin or a member, in English or French", async () => {
+  it("draws the same rules for an admin and a member, with no shortcut to Perspicax", async () => {
     const { PerspicaxOrgSettings } = await import("./PerspicaxOrgSettings");
     for (const locale of ["en", "fr"] as const) {
       setLocale(locale);
-      for (const role of ["admin", "member"] as const) {
-        const html = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org(role), onChanged: () => {} }));
-        expect(html, `${locale} ${role}`).toContain('data-settings-card="organization.perspicax"');
+      const admin = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
+      const member = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("member"), onChanged: () => {} }));
+      for (const [role, html] of [["admin", admin], ["member", member]] as const) {
+        expect(html, `${locale} ${role}`).toContain('data-org-band=""');
+        expect(html, `${locale} ${role}`).toContain('data-settings-group="organizationRules"');
+        expect(html, `${locale} ${role}`).toContain('data-settings-row="vaultExport"');
+        // a count not loaded yet draws no row, never its label twice
+        expect(html, `${locale} ${role}`).not.toContain('data-settings-row="teamSecrets"');
+        expect(html, `${locale} ${role}`).not.toContain('data-settings-row="orgPages"');
+        expect(html, `${locale} ${role}`).not.toContain("<a ");
+        expect(html, `${locale} ${role}`).not.toContain("data-external-link-pill");
+        expect(html, `${locale} ${role}`).not.toContain("/console");
         expect(html, `${locale} ${role}`).not.toContain('data-settings-card="organization.sharing"');
         expect(html, `${locale} ${role}`).not.toContain("data-org-sharing");
-        expect(html, `${locale} ${role}`).not.toContain("Sharing in the organization");
-        expect(html, `${locale} ${role}`).not.toContain("Partage dans l&#x27;organisation");
       }
+      // #2193: admins keep the Grok bridge kill switch; members stay read-only
+      expect(admin, locale).toContain('data-settings-card="organization.grokBridge"');
+      expect(admin, locale).toContain('role="switch"');
+      expect(member, locale).not.toContain('data-settings-card="organization.grokBridge"');
+      expect(member, locale).not.toContain('role="switch"');
+      // the GitHub OAuth App's client id, a server setting, is an admin input
+      expect(admin, locale).toContain("data-org-github-app");
+      expect(member, locale).not.toContain("data-org-github-app");
+      expect(member, locale).not.toContain("<input");
+      // the read-only rules block is the same for both roles
+      const rules = (html: string) => {
+        const start = html.indexOf('data-settings-group="organizationRules"');
+        const end = html.indexOf("</section>", start) + "</section>".length;
+        return html.slice(start, end);
+      };
+      expect(rules(admin), locale).toBe(rules(member));
     }
   });
 

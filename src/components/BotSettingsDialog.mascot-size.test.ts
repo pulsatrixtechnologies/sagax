@@ -11,6 +11,7 @@ import { BOT_PANEL_AVATAR_SIZE } from "./BotSettingsDialog";
 const here = dirname(fileURLToPath(import.meta.url));
 const panelSource = readFileSync(join(here, "BotSettingsDialog.tsx"), "utf8");
 const cardSource = readFileSync(join(here, "BotProfileAvatarCard.tsx"), "utf8");
+const headingSource = readFileSync(join(here, "bot-settings", "BotNameTitleStack.tsx"), "utf8");
 
 describe("bot panel mascot size (#2196)", () => {
   it("keeps the panel avatar box at 92 (visible hexagon ~60px)", () => {
@@ -25,7 +26,10 @@ describe("bot panel mascot size (#2196)", () => {
   });
 
   it("keeps Grok Bot header spacing under the mascot", () => {
-    expect(panelSource).toMatch(/mt-5 flex max-w-full items-center justify-center gap-1 text-\[17px\] font-medium/);
+    // the name 20px under the mascot, 17px medium; the title stacked under it
+    expect(panelSource).toMatch(/<BotNameTitleStack/);
+    expect(headingSource).toMatch(/mt-5 flex w-full min-w-0 max-w-full flex-col items-center/);
+    expect(headingSource).toMatch(/text-\[17px\] font-medium/);
     expect(panelSource).toMatch(/data-bot-panel-tabs="" className=\{cn\("flex justify-center px-4 pb-4 pt-10"/);
   });
 });

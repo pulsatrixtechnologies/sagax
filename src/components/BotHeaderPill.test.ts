@@ -65,9 +65,55 @@ describe("chat header bot pill", () => {
     expect(click(onComputer)).toMatchObject({ settingsOpen: false, computerOpen: false });
   });
 
-  it("dispatches open alone when closed and both closes when open", () => {
-    expect(botPillActions(false)).toEqual([{ type: "toggleSettings", open: true }]);
-    expect(botPillActions(true)).toEqual([{ type: "toggleSettings", open: false }, { type: "toggleComputer", open: false }]);
+  it("remembers the panel when it closes and restores it when it opens", () => {
+    expect(botPillActions(false)).toEqual([{ type: "restoreBotPanel" }]);
+    expect(botPillActions(true)).toEqual([{ type: "rememberBotPanel" }, { type: "toggleSettings", open: false }, { type: "toggleComputer", open: false }]);
+  });
+
+  // #2149 (JC 2026-11-06): one click closes the panel, a second reopens
+  // exactly the panel it closed: same tab, same content.
+  describe("toggle back to the same panel", () => {
+    it("reopens on the Library tab it closed on", () => {
+      const opened = click(base);
+      const onLibrary = reducer(opened, { type: "pickBotPanelTab", botId: "pepper", tab: "library" });
+      const closed = click(onLibrary);
+      expect(closed).toMatchObject({ settingsOpen: false, computerOpen: false });
+      const reopened = click(closed);
+      expect(reopened.settingsOpen).toBe(true);
+      expect(reopened.botPanelTab).toEqual({ botId: "pepper", tab: "library" });
+      expect(reopened.botPanelRestored).toBe(true);
+    });
+
+    it("reopens on the Computer tab it closed on", () => {
+      const onComputer = reducer(click(base), { type: "toggleComputer", open: true });
+      const reopened = click(click(onComputer));
+      expect(reopened).toMatchObject({ computerOpen: true, settingsOpen: false });
+    });
+
+    it("reopens the same section, expanded as it was", () => {
+      const onRoutines = reducer(base, { type: "toggleSettings", open: true, section: "routines" });
+      expect(onRoutines.botSettingsExpandAccordion).toBe(true);
+      const reopened = click(click(onRoutines));
+      expect(reopened).toMatchObject({ settingsOpen: true, botSettingsSection: "routines", botSettingsExpandAccordion: true });
+      expect(reopened.botPanelTab).toEqual({ botId: "pepper", tab: "activity" });
+    });
+
+    it("opens plainly for another bot, on Activity", () => {
+      const other = { ...bot, id: "wren", name: "Wren", threadId: "t-wren" } as Bot;
+      const withTwo = { ...base, bots: [bot, other] };
+      const onLibrary = reducer(click(withTwo), { type: "pickBotPanelTab", botId: "pepper", tab: "library" });
+      const closed = click(onLibrary);
+      const elsewhere = reducer(closed, { type: "restoreBotPanel", botId: "wren" });
+      expect(elsewhere).toMatchObject({ settingsOpen: true, selectedId: "wren", botPanelRestored: false });
+      expect(elsewhere.botPanelTab).toBeNull();
+    });
+
+    it("lands on Activity for any opening that is not the pill's", () => {
+      const onLibrary = reducer(click(base), { type: "pickBotPanelTab", botId: "pepper", tab: "library" });
+      const closed = reducer(onLibrary, { type: "toggleSettings", open: false });
+      const deepLink = reducer(closed, { type: "toggleSettings", open: true });
+      expect(deepLink.botPanelTab).toBeNull();
+    });
   });
 
   it("never shows a reasoning effort label under the pill", () => {

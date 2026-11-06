@@ -44,6 +44,10 @@ import { useBotSectionAvailability, useBotSectionContent } from "./bot-settings/
 import { botsReadOnlyText } from "@/lib/permissions";
 import { RemoteSessionsSection } from "./remote-session/RemoteSessionsSection";
 
+/** #2149: the panel body's scroll per bot and tab, put back when the header
+ * pill reopens the panel it closed. */
+const panelScroll = new Map<string, number>();
+
 export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   bot: Bot;
   onOpenVmWorkspace?: (botId: string) => void;
@@ -52,7 +56,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 }) {
   const advanced = useAdvancedMode();
   const dispatch = useStoreDispatch();
-  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config }), shallowEqual);
+  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored }), shallowEqual);
   const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
@@ -62,11 +66,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // this panel is already mounted, including after collapsing the same row.
   const collapsed = !state.botSettingsExpandAccordion;
   // Every deep link that reaches the panel (the old Details, Routines)
-  // lands on Activity.
-  const [pickedTab, setPickedTab] = useState<PanelTab>("activity");
-  useEffect(() => {
-    if (!collapsed) setPickedTab("activity");
-  }, [collapsed, section]);
+  // lands on Activity: the store resets the tab then (#2149: kept in the
+  // store so the header pill can reopen the panel on the tab it closed).
+  const pickedTab: PanelTab = state.botPanelTab?.botId === bot.id ? state.botPanelTab.tab : "activity";
   // The computer view is the store's computerOpen, so every existing "open
   // the computer" link (the old Computer tab's included) still lands on it,
   // pushed over Activity. A bot that works nowhere (Works on: Off) and
@@ -85,7 +87,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   }, [tab, computerView]);
   const chooseTab = (next: PanelTab) => {
     if (state.computerOpen || !collapsed) dispatch({ type: "toggleSettings", open: true });
-    setPickedTab(next);
+    dispatch({ type: "pickBotPanelTab", botId: bot.id, tab: next });
   };
   // Suggested > Add to meeting opens a new routine in Upcoming.
   const [meetingRequest, setMeetingRequest] = useState(0);
@@ -104,6 +106,18 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
     if (!body || !tabs) return;
     setCompact(body.scrollTop > 0 && tabs.offsetTop - body.scrollTop <= 0);
   };
+  // #2149: reopened by the header pill, the panel scrolls back where it was.
+  const restoredScroll = useRef(state.botPanelRestored ? panelScroll.get(`${bot.id}:${tab}`) : undefined);
+  useEffect(() => {
+    const top = restoredScroll.current;
+    restoredScroll.current = undefined;
+    if (!top) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (bodyRef.current) bodyRef.current.scrollTop = top;
+      onBodyScroll();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   // The bot's "..." menu: under its button in the header, or where a right
   // click on the mascot or the name happened.
   const [actionsMenu, setActionsMenu] = useState<BotActionsMenuAnchor | null>(null);
@@ -261,7 +275,14 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
           </div>
         </div>
 
-        <div ref={bodyRef} onScroll={onBodyScroll} className="content-card-body relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [&>*]:shrink-0">
+        <div
+          ref={bodyRef}
+          onScroll={(event) => {
+            panelScroll.set(`${bot.id}:${tab}`, event.currentTarget.scrollTop);
+            onBodyScroll();
+          }}
+          className="content-card-body relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [&>*]:shrink-0"
+        >
           {viewerBotsReadOnly(state.config) && (
             <p role="note" data-bots-read-only className="mx-4 mb-2 rounded-lg bg-raised/60 px-3 py-2 text-center text-[12.5px] leading-snug text-ink-secondary">{botsReadOnlyText(state.config)}</p>
           )}

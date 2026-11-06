@@ -6,7 +6,9 @@
 // `+A -R`, the human's line with "›", the bot's as plain text; the status
 // once, in the head, with Stop beside it; the composer always there; no
 // "Continue", no "Close Chat", no "Open thread", no side panel; and no server
-// path or id on the screen.
+// path or id on the screen. A coding window (#2149): the X of a page opened
+// by Sagax closes it, the bot's real composer (+, micro, voice) is aimed at the
+// task's thread, and the </> panel lives here, never in the normal chat.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -26,6 +28,17 @@ vi.mock("@/state/store", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/live-events", () => ({ listenLiveFrames: () => () => {} }));
+// The window hands its own composer and pods the task's thread: what they draw
+// is their own tests' business.
+const composerProps = vi.fn();
+const podsProps = vi.fn();
+vi.mock("../Composer", () => ({
+  Composer: (props: { bot: Bot }) => { composerProps(props); return createElement("div", { "data-test-composer": props.bot.threadId }); },
+}));
+vi.mock("../dev-pods/DevPods", () => ({
+  DevPods: (props: { bot: Bot; forced?: boolean }) => { podsProps(props); return createElement("div", { "data-test-pods": props.bot.threadId }); },
+  DevPodsToggle: (props: { bot?: Bot }) => createElement("button", { type: "button", "data-test-pods-toggle": props.bot?.threadId ?? "" }),
+}));
 
 const { setLocale } = await import("@/lib/i18n");
 const { CodingChat, CodingChatSheet } = await import("./CodingChat");
@@ -186,7 +199,7 @@ describe("CodingChatSheet", () => {
     expect(column.querySelector("[data-coding-stop]")).toBeNull();
   });
 
-  it("keeps the composer on screen and sends the follow-up; the way back is the arrow, no Continue, no Close Chat, no thread", async () => {
+  it("keeps the composer on screen and sends the follow-up; the way back is the X, no Continue, no Close Chat, no thread", async () => {
     const props = mountSheet("finished");
     expect(column.querySelector("[data-coding-continue]")).toBeNull();
     expect(column.textContent).not.toContain("Close Chat");
@@ -198,8 +211,25 @@ describe("CodingChatSheet", () => {
     flushSync(() => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
     await vi.waitFor(() => expect(props.onSend).toHaveBeenCalledWith("Also add a test for the empty column"));
     expect(column.querySelector("[data-coding-followup]")).not.toBeNull();
-    flushSync(() => column.querySelector<HTMLButtonElement>("[data-coding-close]")!.click());
+    const close = column.querySelector<HTMLButtonElement>("[data-coding-close]")!;
+    // the same X as a page opened by Sagax (the bot's profile page)
+    expect(close.hasAttribute("data-window-close")).toBe(true);
+    expect(close.getAttribute("aria-label")).toBe("Close");
+    flushSync(() => close.click());
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws the composer, the pods and the header tools it is given", () => {
+    mountSheet("finished", {
+      composer: createElement("div", { "data-test-given-composer": "" }),
+      pods: createElement("div", { "data-test-given-pods": "" }),
+      headerTools: createElement("button", { type: "button", "data-test-given-tools": "" }),
+    });
+    expect(column.querySelector("[data-coding-composer] [data-test-given-composer]")).not.toBeNull();
+    // the given composer replaces the fallback follow-up field
+    expect(column.querySelector("[data-coding-followup]")).toBeNull();
+    expect(column.querySelector("[data-coding-pane] [data-test-given-pods]")).not.toBeNull();
+    expect(column.querySelector("[data-coding-tools] [data-test-given-tools]")).not.toBeNull();
   });
 
   it("shows no server path and no id", () => {
@@ -212,20 +242,21 @@ describe("CodingChatSheet", () => {
 });
 
 describe("CodingChat", () => {
-  it("reads the task's thread and sends a follow-up to it, joining the turn while it runs", async () => {
+  it("reads the task's thread, aims the bot's composer at it and opens the </> panel there", async () => {
     apiMock.mockImplementation(async (url: string) => {
       if (url.includes("/activity/item")) return { item: detail("running") };
       if (url.startsWith("/api/threads/th-1/messages")) return { messages, hasMore: false };
       return {};
     });
+    composerProps.mockReset();
+    podsProps.mockReset();
     flushSync(() => root.render(createElement(CodingChat, { target: { botId: "wren", itemId: "thread:th-1", threadId: "th-1", seed: item("running") }, onClose: vi.fn() })));
     await vi.waitFor(() => expect(column.querySelector("[data-coding-row]")).not.toBeNull());
-    const field = column.querySelector<HTMLTextAreaElement>("[data-coding-followup] textarea")!;
-    typeInto(field, "Keep the order stable for ties");
-    flushSync(() => column.querySelector<HTMLButtonElement>("[data-coding-send]")!.click());
-    await vi.waitFor(() => expect(apiMock).toHaveBeenCalledWith("/api/bots/wren/messages", expect.objectContaining({ method: "POST" })));
-    const call = apiMock.mock.calls.find(([url]) => url === "/api/bots/wren/messages")!;
-    expect(JSON.parse(call[1].body)).toMatchObject({ text: "Keep the order stable for ties", threadId: "th-1", busyMode: "steer" });
+    expect(column.querySelector('[data-coding-composer] [data-test-composer="th-1"]')).not.toBeNull();
+    expect(composerProps).toHaveBeenLastCalledWith(expect.objectContaining({ bot: expect.objectContaining({ id: "wren", threadId: "th-1", busy: true }) }));
+    expect(column.querySelector('[data-coding-pane] [data-test-pods="th-1"]')).not.toBeNull();
+    expect(podsProps).toHaveBeenLastCalledWith(expect.objectContaining({ forced: true }));
+    expect(column.querySelector('[data-coding-tools] [data-test-pods-toggle="th-1"]')).not.toBeNull();
   });
 
   it("Stop interrupts the task's turn", async () => {

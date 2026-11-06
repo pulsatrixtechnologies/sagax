@@ -1,4 +1,1 @@
 # Unused files knip still reports (#1385). Drop a line when the file is deleted or gains an importer. Grow only after review: pnpm check:unused --write-allow
-src/components/ModelPickerPayers.tsx
-src/components/OrganizationIdentity.tsx
-src/lib/use-organization-branding.ts

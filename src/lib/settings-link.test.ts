@@ -26,10 +26,10 @@ describe("settings links", () => {
     // Security and Vault are pages again (2026-10-28); Published pages are in Capabilities
     expect(settingsSectionLabel("security")).toBe("Security");
     expect(settingsSectionLabel("credentials")).toBe("Vault");
-    expect(settingsSectionLabel("pages")).toBe("Capabilities");
+    expect(settingsSectionLabel("pages")).toBe("Plugins");
     expect(settingsSectionLabel("experimental")).toBe("Experimental");
-    // #2090: no App page; About and Updates keep their own names
-    expect(settingsSectionLabel("about")).toBe("About");
+    // #2090: Updates is its own page; #2080: about is the App page; Import label is Backups
+    expect(settingsSectionLabel("about")).toBe("App");
     expect(settingsSectionLabel("updates")).toBe("Updates");
     expect(settingsSectionLabel("import")).toBe("Backups");
     setLocale("fr");
@@ -39,7 +39,7 @@ describe("settings links", () => {
     expect(settingsSectionLabel("credentials")).toBe("Coffre");
     expect(settingsSectionLabel("privacy")).toBe("Notifications");
     expect(settingsSectionLabel("memory")).toBe("Organisation");
-    expect(settingsSectionLabel("about")).toBe("À propos");
+    expect(settingsSectionLabel("about")).toBe("Application");
     setLocale("en");
   });
 

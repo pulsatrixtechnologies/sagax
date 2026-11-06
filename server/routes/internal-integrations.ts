@@ -6,10 +6,13 @@
 import { randomUUID } from "node:crypto";
 import {
   CREDENTIAL_TARGETS,
+  CUSTOM_SECRET_TARGET,
   isCredentialTargetId,
   isPendingCredentialRequest,
+  isPendingCustomSecretRequest,
   type CredentialTargetId,
 } from "../../shared/credential-request.ts";
+import { deliveryNote, parseCustomSecretRequest } from "../host/custom-secrets.ts";
 import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import {
   botAddedMcpServerEnabled,
@@ -81,6 +84,8 @@ export interface InternalIntegrationsDeps {
   githubStartDeviceFlow(principalId: string): Promise<{ userCode: string; verificationUri: string; expiresAt: number }>;
   githubTokenKind(token: string | undefined): string;
   credentialConfigured(credentialId: CredentialTargetId): boolean;
+  /** Swap secretRef values in an add_mcp_server body before it is saved. */
+  redeemMcpBody?<T>(body: T, botId: string, threadId: string): { ok: true; value: T; commit(): void } | { ok: false; error: string };
   appendMessage(threadId: string, message: Record<string, unknown>): { id: string };
   activePath(threadId: string): ReadonlyArray<{
     id: string;
@@ -197,7 +202,45 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       // not interleave a read of cfg.mcpServers with a save.
       if (!deps.tryBeginMcpConfigUpdate()) return json(res, 409, { error: "MCP servers are already being updated." });
       try {
-        const body = await readBody();
+        let body = await readBody();
+        if (deps.redeemMcpBody) {
+          const redeemed = deps.redeemMcpBody(body, sender.id, capability.threadId);
+          if (!redeemed.ok) return json(res, 400, { error: redeemed.error });
+          body = redeemed.value;
+          const added = deps.addDisabledMcpServer(deps.mcpServers(), body);
+          if (!added.ok) return json(res, added.status, { error: added.error });
+          const personalRefusal = deps.sharedMcpPersonalRefusal(added.name, added.server);
+          if (personalRefusal) return json(res, 400, { error: personalRefusal });
+          const refusal = deps.mcpPolicyRefusal(added.name, added.server);
+          if (refusal) return json(res, 403, { error: refusal, code: "managed_policy" });
+          const server = added.server;
+          const remote = isRemoteMcpServerLeaf(server);
+          const enabled = botAddedMcpServerEnabled({
+            approvalMode: deps.sourceApprovalMode(sender.id, capability.threadId),
+            organization: deps.isPerspicax(),
+            remote,
+          });
+          deps.persistMcpServers(enabled ? { ...added.next, [added.name]: { ...server, enabled: true } } : added.next);
+          redeemed.commit();
+          if (remote) {
+            return json(res, 201, {
+              name: added.name,
+              enabled,
+              transport: server.type,
+              target: server.url,
+              envKeys: [],
+              headerKeys: Object.keys(server.headers).sort(),
+            });
+          }
+          return json(res, 201, {
+            name: added.name,
+            enabled,
+            transport: "command",
+            target: server.command,
+            envKeys: Object.keys(server.env).sort(),
+            headerKeys: [],
+          });
+        }
         const added = deps.addDisabledMcpServer(deps.mcpServers(), body);
         if (!added.ok) return json(res, added.status, { error: added.error });
         const personalRefusal = deps.sharedMcpPersonalRefusal(added.name, added.server);
@@ -312,8 +355,32 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       const fromThreadId = capability.threadId;
       const owner = deps.ownsThread(from.id, fromThreadId);
       if (!owner) return json(res, 403, { error: "source conversation does not belong to sender" });
+      // Custom secret: label + reason + delivery, kept off Settings.
       if (!isCredentialTargetId(body.credentialId)) {
-        return json(res, 400, { error: "unsupported credential id" });
+        const custom = parseCustomSecretRequest(body);
+        if ("error" in custom) return json(res, 400, { error: custom.error });
+        const message = deps.appendMessage(fromThreadId, {
+          role: "bot",
+          kind: "secret",
+          text: credentialDesktopHandoff(custom.label),
+          ...(owner.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}),
+          secret: {
+            target: CUSTOM_SECRET_TARGET,
+            label: custom.label,
+            description: `${custom.reason} ${deliveryNote(from.name, custom.delivery)}`,
+            placeholder: custom.placeholder || "Paste the secret",
+            helpUrl: "",
+            reason: custom.reason,
+            delivery: custom.delivery,
+            requestKey: randomUUID(),
+          },
+        });
+        for (const prior of deps.activePath(fromThreadId)) {
+          if (prior.id === message.id) continue;
+          if (!prior.secret || !isPendingCustomSecretRequest(prior, custom.label, from.id, Boolean(owner.group))) continue;
+          deps.patchMessage(fromThreadId, prior.id, { secret: { ...prior.secret, superseded: true } });
+        }
+        return json(res, 201, { messageId: message.id, label: custom.label, delivery: custom.delivery });
       }
       const credentialId: CredentialTargetId = body.credentialId;
       const target = CREDENTIAL_TARGETS[credentialId];

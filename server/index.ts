@@ -14,6 +14,12 @@ import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
 import { createBotObservabilityRoutes } from "./routes/bot-observability.ts";
 import { createFleetRoutes } from "./routes/fleet.ts";
 import { createBotSecretCardRoutes } from "./routes/bot-secret-cards.ts";
+import {
+  createCustomSecretVault,
+  isCustomSecret,
+  savedSecretText,
+  SECRET_VALUE_MAX_BYTES,
+} from "./host/custom-secrets.ts";
 import { createBotsMutateRoutes } from "./routes/bots-mutate.ts";
 // Sagax server — the harness host. Clients hold no transports
 // (upstream rule): the React app dispatches typed commands over HTTP and
@@ -28785,6 +28791,39 @@ function drainComputerResumes(): void {
   }
 }
 
+const customSecretVault = createCustomSecretVault({
+  dataDir: DATA_DIR,
+  savedAt: (threadId, messageId) => store.messagesFor(threadId).find((message) => message.id === messageId)?.secret?.savedAt ?? null,
+  threadExists: (threadId) => Boolean(store.botByThread(threadId) || store.groupByThread(threadId)),
+  onChange: (listener) => { store.onChange((change) => listener(change)); },
+});
+function saveCustomSecret(botId: string, threadId: string, messageId: string, raw: unknown): { status: number; body: Record<string, unknown> } {
+  const message = secretMessage(botId, threadId, messageId);
+  if (!message?.secret) return { status: 404, body: { error: "no such credential request" } };
+  const secret = message.secret;
+  if (!isCustomSecret(secret)) return { status: 400, body: { error: "this card saves a key in Settings" } };
+  if (phoneSecretSubmissions.has(phoneSecretSubmissionKey(threadId, message.id, secret.requestKey))) {
+    return { status: 409, body: { error: "this secret is currently being saved from a phone" } };
+  }
+  if (secret.dismissed) return { status: 409, body: { error: "this request was declined" } };
+  if (secret.superseded) return { status: 409, body: { error: "this request was replaced by a newer one" } };
+  if (secret.provided || secret.savedAt !== undefined) return { status: 409, body: { error: "this secret was already saved" } };
+  const value = typeof raw === "string" ? raw.trim() : "";
+  if (!value || Buffer.byteLength(value) > SECRET_VALUE_MAX_BYTES) {
+    return { status: 400, body: { error: `Enter the secret: up to ${SECRET_VALUE_MAX_BYTES} bytes.` } };
+  }
+  try {
+    const home = { host: workspaceDir(botId), shown: workspaceDir(botId) };
+    customSecretVault.storeCustom({ botId, threadId }, message.id, secret, value, home);
+    store.patchMessage(threadId, message.id, { secret: { ...secret, savedAt: Date.now() } });
+  } catch (error) {
+    console.warn(`secret card: could not keep a secret: ${error instanceof Error ? error.message : String(error)}`);
+    return { status: 500, body: { error: "The secret could not be kept safely. Nothing was saved." } };
+  }
+  if (!resumeSecretCard(botId, threadId, message.id, "provided")) return { status: 409, body: { error: "this credential request is no longer available" } };
+  return { status: 200, body: currentSecretState(botId, threadId, message.id) ?? { provided: true, resumed: false } };
+}
+
 type SecretResumeEntry = {
   botId: string;
   threadId: string;
@@ -28854,10 +28893,15 @@ function markSecretResumeFailed(threadId: string, messageId: string, error: stri
 function dispatchSecretResume(entry: SecretResumeEntry) {
   const owner = connectorThread(entry.botId, entry.threadId);
   if (!owner) return;
+  const customCard = secretMessage(entry.botId, entry.threadId, entry.messageId)?.secret;
   const prompt = entry.prompt ?? (
-    entry.outcome === "provided"
-      ? `Sagax credential update: the user securely provided ${entry.label}. Continue the task that paused for it. You do not receive the secret and must not ask them to paste it into chat.`
-      : `Sagax credential update: the user declined to provide ${entry.label}. Continue without it if possible, or briefly explain the limitation. Do not ask them to paste it into chat.`);
+    isCustomSecret(customCard)
+      ? (entry.outcome === "provided"
+        ? `Sagax secret update: ${savedSecretText(entry.label, customSecretVault.savedFor(entry.messageId))} Continue the task that paused for it.`
+        : `Sagax secret update: the person declined to provide ${entry.label}. Continue without it if you can, or say briefly what you cannot do. Do not ask for it in chat.`)
+      : (entry.outcome === "provided"
+        ? `Sagax credential update: the user securely provided ${entry.label}. Continue the task that paused for it. You do not receive the secret and must not ask them to paste it into chat.`
+        : `Sagax credential update: the user declined to provide ${entry.label}. Continue without it if possible, or briefly explain the limitation. Do not ask them to paste it into chat.`));
   if (!canAdmitDirectTurn(entry.botId, entry.threadId)) {
     pendingSecretResumes.set(`${entry.threadId}:${entry.messageId}`, entry);
     return;
@@ -32557,6 +32601,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     endMcpConfigUpdate: () => { mcpConfigBusy = false; },
     mcpServers: () => cfg.mcpServers ?? {},
     addDisabledMcpServer,
+    redeemMcpBody: (body, botId, threadId) => customSecretVault.redeemMcpServer(body, botId, threadId),
     sharedMcpPersonalRefusal,
     mcpPolicyRefusal,
     persistMcpServers,
@@ -45849,7 +45894,7 @@ const widgetCheckAttempts = new WidgetCheckAttempts();
 ROUTES.push(createBotAvatarGenerateRoutes({ store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal, wireBot, broadcast }));
 ROUTES.push(createBotObservabilityRoutes({ store, DATA_DIR, EVENTS_DIR, ownerOrAdminOf, computerOwner, outboundCounts }));
 ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleetRequest }));
-ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState }));
+ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret }));
 ROUTES.push(createBotsMutateRoutes({
   resolveSectionId,
   originApprovals,

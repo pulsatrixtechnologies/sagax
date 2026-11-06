@@ -86,4 +86,21 @@ describe("SecretRequestCard ask card", () => {
     expect(html).toContain("The bot could not be resumed.");
     expect(html).not.toContain('type="password"');
   });
+
+  it("shows a custom secret card with the delivery note and no help link", () => {
+    const html = view({
+      target: "customSecret",
+      label: "Stripe secret key",
+      reason: "To create a webhook for the shop.",
+      delivery: "ref",
+      placeholder: "sk_live_…",
+      helpUrl: "",
+      description: "To create a webhook for the shop. Scout gets a one-use reference for Sagax's own tools and never sees it.",
+    });
+    expect(html).toContain("Stripe secret key");
+    expect(html).toContain("To create a webhook for the shop.");
+    expect(html).toContain("one use by its own tools");
+    expect(html).toContain('type="password"');
+    expect(html).not.toContain("Where to get this key");
+  });
 });

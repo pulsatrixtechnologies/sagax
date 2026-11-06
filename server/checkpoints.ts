@@ -46,6 +46,8 @@ const EXCLUDES = `# Pulsa Bot checkpoint excludes — never snapshotted
 .git/
 .svn/
 .hg/
+.sagax-secrets/
+.openmausbot-secrets/
 node_modules/
 bower_components/
 .pnpm-store/

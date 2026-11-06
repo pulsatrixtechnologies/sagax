@@ -190,13 +190,23 @@ export interface OptionCardData {
 }
 
 export interface SecretRequestCardData {
-  /** vaultLogin: a login request from the credential vault (carries `vault`). */
-  target: import("../../../shared/credential-request").CredentialTargetId | import("../../../shared/credential-vault").VaultLoginTarget;
+  /** Fixed allowlisted credential id; customSecret: a secret the bot names, kept off Settings;
+   * vaultLogin: a login request from the credential vault (carries `vault`). */
+  target:
+    | import("../../../shared/credential-request").CredentialTargetId
+    | import("../../../shared/credential-vault").VaultLoginTarget
+    | "customSecret";
   vault?: import("../../../shared/credential-vault").VaultRequestCardData;
   label: string;
   description: string;
   placeholder: string;
   helpUrl: string;
+  /** A custom secret's use: "ref" for Sagax tools once, "file" for a private workspace file for a day. */
+  delivery?: import("../../../shared/credential-request").SecretDelivery;
+  /** Why the bot needs a custom secret (shown on the card). */
+  reason?: string;
+  /** When a custom secret was saved behind this card (ms); never the value. */
+  savedAt?: number;
   requestKey: string;
   provided?: boolean;
   dismissed?: boolean;

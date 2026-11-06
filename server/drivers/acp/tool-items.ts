@@ -1,4 +1,5 @@
 import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
+import { foreignMailboxAccessDenied } from "../../../shared/mailbox-user.ts";
 import { toolFailureText } from "../../../shared/tool-failure-text.ts";
 import { toolDetailPreview } from "../../tools/tool-summary.ts";
 
@@ -17,7 +18,17 @@ export type AcpToolEndEvent = { type: "item.completed" } & (
  * only. The words win over a JSON envelope, and `content` stands in when
  * `rawOutput` says nothing, so the step and the bot always get the real reason.
  */
-export function acpFailedToolText(rawOutput: unknown, content: unknown): string | undefined {
+export function acpFailedToolText(
+  rawOutput: unknown,
+  content: unknown,
+  call?: { tool?: string; input?: unknown },
+): string | undefined {
+  // #1943: a 403 on another mailbox is the retry sentence. Any other failure
+  // keeps the engine's own words.
+  const denied = call
+    ? foreignMailboxAccessDenied(call.tool, call.input, rawOutput) ?? foreignMailboxAccessDenied(call.tool, call.input, content)
+    : null;
+  if (denied) return denied;
   const words = toolFailureText(rawOutput) ?? toolFailureText(content);
   return words ? toolDetailPreview(words) : undefined;
 }
@@ -33,13 +44,14 @@ export function acpToolEndEvents(
   itemId: string | undefined,
   ended: Set<string>,
   toolFields: Record<string, unknown> = {},
+  call?: { tool?: string; input?: unknown },
 ): AcpToolEndEvent[] {
   if (itemId !== undefined) {
     if (ended.has(itemId)) return [];
     ended.add(itemId);
   }
   const failed = update.status === "failed";
-  const output = (failed ? acpFailedToolText(update.rawOutput, update.content) : undefined)
+  const output = (failed ? acpFailedToolText(update.rawOutput, update.content, call) : undefined)
     ?? toolDetailPreview(update.rawOutput ?? update.content)
     ?? (update.rawOutput !== undefined && update.rawOutput !== null ? toolDetailPreview(update.content) : undefined);
   return [

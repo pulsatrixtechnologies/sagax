@@ -41,6 +41,17 @@ describe("acpToolEndEvents", () => {
     expect(done).toMatchObject({ ok: false, output: "quota exceeded" });
   });
 
+  it("#1943 maps a vendor 403 on another mailbox to the /me retry", () => {
+    const graph = "Managed MCP gateway tool call failed: Microsoft Graph API error: 403 Forbidden: {\"error\":{\"code\":\"ErrorAccessDenied\",\"message\":\"Access is denied.\"}}";
+    const call = { tool: "outlook__list_messages", input: { userId: "ceo@example.com" } };
+    expect(acpFailedToolText({ error: "tool_execution_failed", message: graph }, undefined, call))
+      .toBe("Access denied for that mailbox; for your own mail retry with /me");
+    const [done] = acpToolEndEvents({ status: "failed", rawOutput: { error: "tool_execution_failed", message: graph } }, "t4", new Set(), {}, call);
+    expect(done).toMatchObject({ type: "item.completed", itemType: "tool", ok: false, output: "Access denied for that mailbox; for your own mail retry with /me" });
+    expect(acpFailedToolText({ error: "tool_execution_failed", message: graph }, undefined, { tool: "outlook__list_messages", input: { userId: "me" } }))
+      .toBe(graph);
+  });
+
   it("a completed call keeps its preview", () => {
     const [done] = acpToolEndEvents({ status: "completed", rawOutput: { output: "two bots" } }, "t3", new Set());
     expect(done).toMatchObject({ ok: true });

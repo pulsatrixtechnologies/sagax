@@ -76,6 +76,8 @@ export interface AcpTurn {
   };
   /** inputs of this turn's tool calls by id, for onToolCompleted */
   toolInputs?: Map<string, unknown>;
+  /** mail calls of this turn by id, so a vendor 403 can say to retry on /me (#1943) */
+  mailboxCalls?: Map<string, { tool?: string; input?: unknown }>;
   /** ConnectWise calls of this turn by id, for their widget */
   cwToolNames?: Map<string, string>;
   acknowledge: () => void;

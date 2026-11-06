@@ -3,6 +3,7 @@ import { describeSpawnFailure } from "../../procs.ts";
 import { appendNative } from "../native.ts";
 import { classifyError } from "../retry.ts";
 import { commandSummary, cwToolResult, inputPreviewMax, toolDetailPreview, toolFailurePreview, toolFailureSource } from "../../tools/tool-summary.ts";
+import { foreignMailboxAccessDenied } from "../../../shared/mailbox-user.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared/phone-tools.ts";
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
 import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
@@ -163,10 +164,17 @@ s.handleNotification = (msg: any) => {
         }
       } else if (["commandExecution", "fileChange", "mcpToolCall", "webSearch"].includes(item.type)) {
         const ok = item.status !== "failed" && item.status !== "declined";
-        const output = item.type === "mcpToolCall" && isPhoneToolCallName(typeof item.tool === "string" ? item.tool : undefined)
+        const mailboxTool = item.type === "mcpToolCall"
+          ? (typeof item.server === "string" && typeof item.tool === "string" ? `${item.server}__${item.tool}` : typeof item.tool === "string" ? item.tool : undefined)
+          : undefined;
+        const mailboxInput = item.type === "mcpToolCall" ? item.arguments : undefined;
+        const mailboxVendor = item.type === "mcpToolCall" ? toolFailureSource(item.error, item.result) : undefined;
+        const vendorDenied = !ok ? foreignMailboxAccessDenied(mailboxTool, mailboxInput, mailboxVendor) : null;
+        const output = vendorDenied
+          ?? (item.type === "mcpToolCall" && isPhoneToolCallName(typeof item.tool === "string" ? item.tool : undefined)
           ? PHONE_TOOL_OUTPUT_NOT_KEPT
           // a failed call's own words (shared/tool-failure-text.ts), else its preview
-          : (ok ? toolDetailPreview : toolFailurePreview)(item.type === "commandExecution" ? { output: item.aggregatedOutput, exitCode: item.exitCode } : item.type === "mcpToolCall" ? toolFailureSource(item.error, item.result) : item.type === "fileChange" ? item.changes : item.action);
+          : (ok ? toolDetailPreview : toolFailurePreview)(item.type === "commandExecution" ? { output: item.aggregatedOutput, exitCode: item.exitCode } : item.type === "mcpToolCall" ? toolFailureSource(item.error, item.result) : item.type === "fileChange" ? item.changes : item.action));
         if (typeof item.id === "string") {
           const step = s.renewalSteps.find((entry) => entry.id === item.id);
           if (step) {

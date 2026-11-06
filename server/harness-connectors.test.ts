@@ -67,6 +67,15 @@ describe("claudeAiConnectorsForTurn", () => {
     expect(claudeAiConnectorsPrompt(true)).toContain("mcp__claude_ai_");
     expect(claudeAiConnectorsPrompt(true)).not.toMatch(/[–—]/);
   });
+  it("#1943 tells the bot to keep the owner's mail on /me without another userId", () => {
+    const prompt = claudeAiConnectorsPrompt(true);
+    expect(prompt).toContain("omit userId and user_id");
+    expect(prompt).toContain("/me");
+    expect(prompt).toContain("bot inbound address");
+    expect(engineConnectorsPrompt({
+      driver: "grokAgent", claudeAi: false, grokCloud: true,
+    })).toContain("omit userId and user_id");
+  });
 });
 
 describe("whose account connectors a turn reaches (review of #943, point 5)", () => {

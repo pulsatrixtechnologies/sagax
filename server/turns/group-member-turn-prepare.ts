@@ -1,6 +1,7 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: runGroupMemberTurn phase. Never imports server/index.ts.
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
+import { NO_ENGINE_PERSON } from "../bots/bot-engine.ts";
 import type { GroupMemberTurnCtx, GroupPrepareResult } from "./group-member-turn-ctx.ts";
 
 export function createPrepareGroupMemberTurn(host: GroupMemberTurnHost) {

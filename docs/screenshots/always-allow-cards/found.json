@@ -1,0 +1,34 @@
+{
+  "rule-request-add-en": {
+    "alwaysAllow": 1,
+    "orgOnce": 0
+  },
+  "engine-command-en": {
+    "alwaysAllow": 1,
+    "orgOnce": 0
+  },
+  "org-ask-first-en": {
+    "alwaysAllow": 0,
+    "orgOnce": 1
+  },
+  "flow-go-en": {
+    "alwaysAllow": 1,
+    "orgOnce": 0
+  },
+  "rule-request-add-fr": {
+    "alwaysAllow": 1,
+    "orgOnce": 0
+  },
+  "engine-command-fr": {
+    "alwaysAllow": 1,
+    "orgOnce": 0
+  },
+  "org-ask-first-fr": {
+    "alwaysAllow": 0,
+    "orgOnce": 1
+  },
+  "flow-go-fr": {
+    "alwaysAllow": 1,
+    "orgOnce": 0
+  }
+}

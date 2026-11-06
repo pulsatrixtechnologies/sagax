@@ -14,7 +14,6 @@ import {
   McpMessages,
   McpServerEditor,
 } from "../McpServersPanel";
-import { PluginStatusLabel } from "../plugins/PluginParts";
 import { AddAccountButton, SignInButton, type DetailAccount, type DetailTool } from "../plugins/PluginDetailView";
 import { grokConnectorDetail } from "./GrokConnectors";
 import { pluginSourceLabel, safeHost } from "./helpers";
@@ -305,23 +304,7 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
         <section>
           <h3 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.plugin.brings")}</h3>
           {item.description && <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{item.description}</p>}
-          {children.length === 0 ? (
-            <p className="text-[12px] text-ink-secondary">{t("connectApps.plugin.bringsNothing")}</p>
-          ) : (
-            <ul className="divide-y divide-hairline/60">
-              {children.map((child) => (
-                <li key={child.key}>
-                  <button type="button" onClick={() => openItem(child)} className="flex w-full items-center gap-3 py-2 text-left hover:text-ink">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] text-ink">{child.name}</span>
-                      <span className="block truncate text-[11px] text-ink-secondary">{child.kind === "skill" ? t("connectApps.filter.skills") : t("connectApps.filter.mcp")}</span>
-                    </span>
-                    <PluginStatusLabel status={child.status} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          {children.length === 0 && <p className="text-[12px] text-ink-secondary">{t("connectApps.plugin.bringsNothing")}</p>}
           <p className="mt-2 text-[11.5px] text-ink-secondary">{t("connectApps.plugin.note")}</p>
         </section>
       </>

@@ -334,12 +334,13 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
   );
 }
 
-/** "✓ Connected" on the home's rows: gray words, a green check. */
+/** "✓ Installed" on Discover / app-store rows: gray check and gray words
+ * (Grok Bot Connect Apps; Accounts keep a green Connected elsewhere). */
 export function ConnectedMark() {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 text-[13px] text-ink-secondary" data-plugin-status="connected">
-      <Check size={15} className="text-success" aria-hidden="true" />
-      {t("connectApps.status.connected")}
+    <span className="inline-flex shrink-0 items-center gap-1 text-[13px] text-ink-secondary" data-plugin-status="installed">
+      <Check size={15} className="text-ink-secondary" aria-hidden="true" />
+      {t("connectApps.status.installed")}
     </span>
   );
 }

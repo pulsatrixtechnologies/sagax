@@ -28,6 +28,7 @@ import {
   ownerKeyCodexArgs,
 } from "./codex.ts";
 import { codexCliOverrides } from "./codex-process.ts";
+import * as codexProcess from "./codex-process.ts";
 import { CODEX_SIGN_IN_EXPIRED, codexContextFull, codexNotSignedIn, codexSignInRefused, codexUserError } from "./codex-errors.ts";
 import { contextFullMessage, contextRenewedNotice } from "../context/context-renewal.ts";
 import { CODEX_USAGE_LIMIT_REACHED } from "../../shared/codex-usage-limit.ts";
@@ -3678,6 +3679,25 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
   }, 20_000);
 
+  it.each(["timeout", "error"])("does not replay a tool completed before a turn/start %s", async (reply) => {
+    const actions = join(scratch, "early-tool-actions.jsonl");
+    const rpcTimeout = codexProcess.codexRpcTimeoutMs;
+    vi.spyOn(codexProcess, "codexRpcTimeoutMs").mockImplementation((method) => method === "turn/start" ? 300 : rpcTimeout(method));
+    vi.stubEnv("FAKE_CODEX_ACTION_LOG", actions);
+    vi.stubEnv("FAKE_CODEX_RETRY_SCALE", "0.001");
+    await create({ mode: `early-tool-${reply}`, environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex") } });
+    await instance.adapter.sendTurn({ threadId: `t-early-tool-${reply}`, text: "record one action" });
+    const done = await recorder.until((event) => event.type === "turn.completed");
+
+    expect(readFileSync(actions, "utf8").trim().split("\n")).toHaveLength(1);
+    expect(done).toMatchObject({ ok: false, stopReason: "rpc_error" });
+    expect(recorder.events.filter((event) => event.type === "turn.retrying")).toHaveLength(0);
+    expect(recorder.events.filter((event) => event.type === "turn.completed")).toHaveLength(1);
+    expect(recorder.events.filter((event) => event.type === "runtime.error")).toEqual([
+      expect.objectContaining({ message: expect.stringContaining("A tool action may have run. Check its effects before trying again.") }),
+    ]);
+    expect(recorder.events.filter((event) => (event.type === "item.started" || event.type === "item.completed") && event.itemType === "tool")).toHaveLength(0);
+  });
 
   it("retries a transient app-server crash before the turn starts", async () => {
     process.env.FAKE_CODEX_LAUNCH_CRASHES = "1";

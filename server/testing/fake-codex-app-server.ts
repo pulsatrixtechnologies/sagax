@@ -35,6 +35,7 @@
 //                              confirms the reasoning delta was parsed
 //   FAKE_CODEX_ASK_HOLD        question modes: record the ask reply and hold the turn open, for
 //                              timeout tests that advance the clock
+//   FAKE_CODEX_ACTION_LOG  early-tool-timeout/error: append an action before turn/start times out or fails
 //   FAKE_CODEX_DUMP   path to write {pid, argv, env, calls, decision} as JSON
 //   FAKE_CODEX_IGNORE_FEATURES  "1": config/read reports no `-c features.*` override
 //                     (a Codex that did not take them)
@@ -707,6 +708,12 @@ process.stdin.on("data", (chunk) => {
         }
         dump();
         logStartup("turn/start");
+        if (mode === "early-tool-timeout" || mode === "early-tool-error") {
+          if (process.env.FAKE_CODEX_ACTION_LOG) appendFileSync(process.env.FAKE_CODEX_ACTION_LOG, `${JSON.stringify({ action: "record", pid: process.pid })}\n`);
+          notify("item/completed", { item: { id: "early-tool", type: "commandExecution", command: "record", status: "completed", aggregatedOutput: "recorded" } });
+          if (mode === "early-tool-error") out({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: "connection reset by peer" } });
+          break;
+        }
         if (mode === "voice") {
           out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
           const text = process.env.FAKE_CODEX_VOICE_REPLY ?? "done from fake codex";

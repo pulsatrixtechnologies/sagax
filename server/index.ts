@@ -15,12 +15,9 @@ import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
 import { createBotObservabilityRoutes } from "./routes/bot-observability.ts";
 import { createFleetRoutes } from "./routes/fleet.ts";
 import { createBotSecretCardRoutes } from "./routes/bot-secret-cards.ts";
-import {
-  createCustomSecretVault,
+import { createCustomSecretVault,
   isCustomSecret,
-  savedSecretText,
-  SECRET_VALUE_MAX_BYTES,
-} from "./host/custom-secrets.ts";
+  SECRET_VALUE_MAX_BYTES} from "./host/custom-secrets.ts";
 import { createBotsMutateRoutes } from "./routes/bots-mutate.ts";
 // Sagax server — the harness host. Clients hold no transports
 // (upstream rule): the React app dispatches typed commands over HTTP and
@@ -89,7 +86,6 @@ import {
   type ComposedTurn,
   type Coordinator,
   type HandoffView,
-  type HandoffOpener,
   type HostTurnResult
 } from "./coordinator.ts";
 import { queuedBehindPersonText, UnansweredApprovals } from "./waits/waiting-on-person.ts";
@@ -103,8 +99,7 @@ import { SafePointPreempts } from "./safe-point-preempt.ts";
 import { atThreadCapacity, interruptKeepsTeammates } from "./team/teammate-replies.ts";
 
 import { canWorkOnCloud, type CloudEngine } from "../shared/cloud-computer.ts";
-import {
-  approvalModeFor,
+import { approvalModeFor,
   engineApprovalMode,
   modelSwitchNeedsAsk,
   isEmergencyApprovalDowngrade,
@@ -112,12 +107,7 @@ import {
   isApprovalMode,
   staleThreadException,
   type ApprovalMode,
-  hasNativeAutoReview,
-  liveApprovalTightens,
-  setDefaultApprovalMode,
-  appliedLevelReason,
-  type AppliedApprovalLevel
-} from "../shared/approval-mode.ts";
+  setDefaultApprovalMode } from "../shared/approval-mode.ts";
 import { isProactiveMode, normalizeProactiveMode, proactiveModeFor } from "../shared/proactive-mode.ts";
 import { parsePageTargetDefault } from "../shared/page-targets.ts";
 import { createProactiveProposalRoutes } from "./routes/proactive-proposals.ts";
@@ -133,7 +123,7 @@ import { personAttention } from "../shared/person-attention.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
 import { markDeadThreadChip } from "./threads/dead-thread-chips.ts";
-import { credentialIsConfigured, isCredentialTargetId } from "../shared/credential-request.ts";
+import { credentialIsConfigured } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
 import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../shared/host-control.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
@@ -147,15 +137,7 @@ import { createTeamBotVaultRoutes, soloMayManage } from "./routes/team-bot-vault
 import { withCommandVariables } from "./vault/credential-command-env.ts";
 
 import { createRoomTurnLevels } from "./rooms/room-turn-level.ts";
-import {
-  approvalModeForOrigin,
-  HELD_NOTE,
-  approvalHeldNote,
-  approvalHeldReason,
-  autoVerdict,
-  deliverFullAccessApproval
-} from "./approvals/auto-approve.ts";
-import { readsOwnFiles } from "./own-file-reads.ts";
+import { approvalModeForOrigin } from "./approvals/auto-approve.ts";
 import { CommandAllowlistStore, commandAllowlistCandidate, sandboxCommandCandidate } from "./command-allowlist.ts";
 import type { CommandAllowlistCandidate } from "../shared/command-allowlist.ts";
 import { claudeAccountInfo } from "./engines/claude-accounts.ts";
@@ -292,7 +274,7 @@ import {
   skillReviewSteps
 } from "./config.ts";
 import { claudeUserSkillsEnabled } from "./turn-settings.ts";
-import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./threads/thread-retention.ts";
+import { sweepThreadEventLogsPaced } from "./threads/thread-retention.ts";
 import { ComputerControl } from "./computer/computer-control.ts";
 import { augmentedPath, resetPathCache } from "./env-path.ts";
 import { registerEnginesBinDir } from "./engines/engine-install.ts";
@@ -344,7 +326,7 @@ import { isIP } from "node:net";
 import { createSettingsActionsInternalRoutes } from "./routes/settings-actions-internal.ts";
 import { createPrimaryApprovalsInternalRoutes } from "./routes/primary-approvals-internal.ts";
 import { createPrimaryApprovals, primaryAnswerable } from "./approvals/primary-approvals.ts";
-import { reviewedSkillSha256, type SkillRequestCardData } from "../shared/skill-request.ts";
+import { reviewedSkillSha256 } from "../shared/skill-request.ts";
 import { checkPersonQuote, personWordsForTurn } from "../shared/primary-request.ts";
 import { sessionIdlePolicy } from "./drivers/session-idle.ts";
 import { wireCodexSessionLifecycle } from "./drivers/codex/lifecycle.ts";
@@ -360,16 +342,13 @@ import {
   type UsageRow,
   type UsageTrigger
 } from "./usage/usage-ledger.ts";
-import {
-  newPlanUsageAlerts,
+import { newPlanUsageAlerts,
   orgPlanAccounts,
   planAccountsFromInstances,
   planUsageAlertText,
   spentPlanUntil,
   type PlanAccount,
-  type PlanUsageReport,
-  planUsedPercent
-} from "./usage/plan-usage.ts";
+  planUsedPercent } from "./usage/plan-usage.ts";
 import { GroupUsageReader } from "./groups/group-thread-usage.ts";
 import { ledgerCost, listPriceFor } from "./models/model-prices.ts";
 import type { PriceList } from "./usage/prices.ts";
@@ -520,48 +499,22 @@ import { type DataContext } from "./data-context.ts";
 import { DevPodsThreads, devPodsPrompt } from "./dev-pods-prompt.ts";
 import { promptWithDataContext, setPageContextSource } from "../shared/data-context.ts";
 import { admit, DRAIN_COALESCE_MAX_ITEMS } from "./admission.ts";
-import {
-  DelegationWakeBudget,
-  loadDelegationReceipts,
-  buildDelegationFailurePrompt,
-  buildDelegationRevivalPrompt,
-  recordDelegationReceipt,
-  summarizeDelegatedActivity,
-  takeLegacyDelegations,
-  type DelegationReceipt
-} from "./peers/delegation-receipts.ts";
-import {
-  hasQueuedSteeredMessages,
+import { DelegationWakeBudget,
+  loadDelegationReceipts } from "./peers/delegation-receipts.ts";
+import { hasQueuedSteeredMessages,
   isSteeredMessageQueued,
   onSteeredQueueChange,
   queuedSteerSnapshot,
   queuedThreadPosition,
   queueSteeredMessage,
-  restoreSteeredMessages,
-  drainSteeredMessages,
-  cancelThreadQueue,
-  discardSteeredQueue,
-  queuedSteeredMessage
-} from "./turns/steer-queue.ts";
-import {
-  parallelBlocked,
-  parallelPending,
-  parallelAdmission,
-  parallelBrief,
-  parallelResourceBlocked,
-  parallelOutcome,
-  parallelResultText,
-  parallelTaskTitle,
-  prepareParallelWorkspace,
-  type BriefLine
-} from "./parallel-tasks.ts";
-import type { ParallelTaskRef, ParallelTaskState } from "../shared/parallel-tasks.ts";
+  restoreSteeredMessages } from "./turns/steer-queue.ts";
+import { parallelBlocked,
+  parallelPending } from "./parallel-tasks.ts";
+import type { ParallelTaskRef } from "../shared/parallel-tasks.ts";
 import { RoomMemberLock } from "./room-member-lock.ts";
-import { providerMcpTool, providerToolAllowKey } from "./provider-tool-allow.ts";
 import { listSignedInSites, signOutOfSites } from "./browser-sites.ts";
 import { roomTurnNarrationIds } from "./room-reply.ts";
 import { RoomContextTracker } from "./room-context.ts";
-import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeldMessage, stopWordPlacement } from "./room-holds.ts";
 import {
   parseSurface,
   autoOnlyDestination,
@@ -629,8 +582,7 @@ import { fitTurnImagesForModel, modelImageCopyPath } from "./models/model-image.
 import { callTitleExcerpt } from "./threads/thread-title.ts";
 import { stallLimitMs, TurnWatchdog } from "./turns/turn-watchdog.ts";
 import { TurnResources, type TurnOwner } from "./turns/turn-resources.ts";
-import {
-  ensureWorkspace,
+import { ensureWorkspace,
   ensureTaskWorkspace,
   workspaceCwdPrompt,
   workspaceLocationsPrompt,
@@ -644,7 +596,6 @@ import {
   TASK_WORKSPACES_DIR,
   workspaceDir,
   memoryLogPath,
-  memorySystemPrompt,
   holdBotMemoryPlain,
   listMemoryTopics,
   memoryDate,
@@ -653,8 +604,7 @@ import {
   readMemoryTopic,
   readMemoryTopicAsync,
   writeMemoryFile,
-  writeMemoryTopic
-} from "./workspace/workspace.ts";
+  writeMemoryTopic } from "./workspace/workspace.ts";
 import { holdPlain, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, setAtRestHolderCheck, setAtRestThreadFiles, waitPlain } from "./encryption/content-at-rest.ts";
 import {
   beginMemoryTurn,
@@ -712,8 +662,7 @@ import { expandLearnTurnText, learnSource } from "./skills/skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "./context/prompt-references.ts";
 import { checkSoulDrift } from "./bots/bot-folder.ts";
-import {
-  buildSystemPrompt,
+import { buildSystemPrompt,
   userProfileSystemPrompt,
   computerPrompt,
   customMcpPrompt,
@@ -736,9 +685,7 @@ import {
   resolveComputerPromptKind,
   teamAvailabilityPart,
   modelPrompt,
-  aiClientPrompt,
-  MEME_PROMPT
-} from "./system-prompt.ts";
+  MEME_PROMPT } from "./system-prompt.ts";
 import { lightenColdPrompt } from "./context/cold-prompt-budget.ts";
 import { shellTimeoutHookResult } from "./shell-timeout-hint.ts";
 import { readCuaConnection, readCuaUnavailableReason, gatedLocalComputer } from "./local-computer.ts";
@@ -759,7 +706,7 @@ import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits
 import { createReadAndDraft } from "./read-and-draft.ts";
 import { createSavedSteps, savedStepsEnabled } from "./saved-steps/saved-steps.ts";
 import { redactSecretsInText } from "./redact.ts";
-import { pickRoutineFullReport, routineRunCard, routineRunFallbackText } from "./routines/routine-run-card.ts";
+import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-card.ts";
 
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
@@ -834,33 +781,18 @@ import { PersonalSkills, createPersonalSkillRoutes } from "./skills/personal-ski
 import { createSkillShareRoutes } from "./routes/skill-share.ts";
 import { runSkillsLibraryBootSweep } from "./skills/skills-library-migration.ts";
 import { installedPlaybookInstructions } from "./installed-playbooks.ts";
-import {
-  createLibraryPackageExport,
+import { createLibraryPackageExport,
   createTeamPackageExport,
-  TeamExportError,
-  picture as sharedPicture,
-  type ExportablePackageSkill,
-  type TeamExportSkip
-} from "./packages/package-export.ts";
-import {
-  createPresetStore,
+  TeamExportError } from "./packages/package-export.ts";
+import { createPresetStore,
   readPublishedLibrary,
-  writePublishedLibrary,
-  DEFAULTS_PRESET_KEY,
-  presetFromDefaults
-} from "./presets.ts";
+  writePublishedLibrary } from "./presets.ts";
 import {
   readPublishedTeam,
   renamePublishedTeam,
   writePublishedTeam,
   migratePublishedTeamKeys
 } from "./pages/published-teams.ts";
-import {
-  importPackageDocument,
-  PackageImportError,
-  type PackageImportDeps,
-  type PackageImportResult
-} from "./packages/package-import.ts";
 import { OrgLibrary } from "./org/org-library.ts";
 import { createTeamBackup, importTeamBackup } from "./backup/team-backup.ts";
 import { shouldMountLocalComputer } from "./local-routing.ts";
@@ -870,23 +802,9 @@ import { modelContextWindow } from "./models/model-context-window.ts";
 import { cloudRefusal } from "../shared/place-view.ts";
 import { PendingTurnCancellations, ProviderTurnGenerationRegistry, RetiredTurnRegistry, guardTurnDispatch } from "./turns/turn-dispatch-guard.ts";
 import { createGracefulShutdown } from "./process/graceful-shutdown.ts";
-import {
-  shutdownDrainMs,
-  drainTurns,
-  saveInterruptedTurns,
-  takeInterruptedTurns,
-  TURN_RESUME_PROMPT,
-  type InterruptedTurn
-} from "./turns/interrupted-turns.ts";
-import {
-  clearHeldSteersForThread,
-  recordHeldSteer,
-  joinHeldSteerTexts,
-  migrateLegacyHeldSteers,
-  resumePromptWithHeld,
-  takeHeldSteersForThread,
-  takeRemainingHeldSteers
-} from "./turns/held-steers.ts";
+import { shutdownDrainMs } from "./turns/interrupted-turns.ts";
+import { clearHeldSteersForThread,
+  recordHeldSteer } from "./turns/held-steers.ts";
 import { continuationSpeaker } from "./turns/continuation-speaker.ts";
 import { acquireDataDirLeaseForProcess } from "./data-dir-lease.ts";
 import { environmentDescriptor, environmentLabel, loadEnvironmentId, releaseVersion, serverVersion } from "./environment.ts";
@@ -967,13 +885,8 @@ import { systemVoicesAvailable } from "./tts/system-voices.ts";
 import { ClaudeAiConnectorInventory, claudeAiConnectorsForTurn, connectorPrincipalFor, createHarnessConnectorRoutes, grokCloudConnectorsForTurn, runClaudeCli, type ClaudeAiTurnInput } from "./harness-connectors.ts";
 import { connectorSwitchText } from "./connector-switch.ts";
 import { connectorNeed } from "../shared/engine-connectors.ts";
-import {
-  forgetTurnReach,
-  noteTurnReach,
-  reachContributions,
-  reachSummaryPrompt,
-  registerReachProvider
-} from "./turns/turn-reach.ts";
+import { forgetTurnReach,
+  registerReachProvider } from "./turns/turn-reach.ts";
 import { setTurnActiveProfileResolver } from "./turns/turn-active-profile.ts";
 import { turnConnectorsRecord } from "./turns/turn-connectors.ts";
 import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
@@ -1120,12 +1033,9 @@ import { readMessagesSettings } from "./imessage/imessage-settings.ts";
 import { messagesOnBotMac } from "../shared/imessage.ts";
 import { fileInsideRoots } from "./imessage/imessage-db.ts";
 import { spawnPcHook } from "./hooks/lifecycle-hook-exec.ts";
-import {
-  GithubConnect,
+import { GithubConnect,
   githubGitEnvironment,
-  githubTokenKind,
-  githubSandboxArgv
-} from "./github/github-connect.ts";
+  githubTokenKind } from "./github/github-connect.ts";
 import { GithubConnectCards } from "./github/github-connect-cards.ts";
 import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox/sandbox-plugins.ts";
 import { OrgCapabilities, type OrgCapabilityMount } from "./org/org-capabilities.ts";
@@ -1403,7 +1313,6 @@ import { createMachineRunRoutes, createMachineRuns } from "./machine-run.ts";
 import { createDeciderRoutes } from "./routes/decider.ts";
 import { createBrowserSiteRoutes } from "./routes/browser-sites.ts";
 import { createSignInCardRoutes } from "./routes/sign-in-cards.ts";
-import { createInternalSignInRoutes } from "./routes/sign-in.ts";
 import { createRoomHoldRoutes } from "./routes/room-holds.ts";
 import { createThreadModelRoutes } from "./routes/thread-models.ts";
 import { createUndoRoutes } from "./routes/undo.ts";
@@ -3935,10 +3844,6 @@ function externalCompletion(capability: InternalCapability): { completionOwner?:
 }
 const externalRuntimeCapability = createExternalRuntimeCapability(getLeafHost);
 
-/** Roots the test capability route began for a thread with no live turn:
- * no turn end ever comes for them, so the revoke of their generation ends
- * them (upstream OpenMausBot, after 34cbd59b). */
-const standInRoots = new Set<string>();
 function beginInternalCapabilityGeneration(threadId: string, generation = randomUUID()): string {
   const previous = activeInternalGenerationByThread.get(threadId);
   if (previous) revokeInternalCapabilityGeneration(threadId, previous);
@@ -4323,6 +4228,7 @@ function answerCardNode(threadId: string, messageId: string, text: string): bool
   if (coordinator.answerNode(node.id, text)) return true;
   return node.status === "queued";
 }
+Object.assign(leafHostBindings, { answerCardNode, credentialUpdateText });
 
 /** Stop means stop (decision 4): the cards a node parked in this thread
  * waits on (or is queued on, its answer taken) offer no action any more.
@@ -4357,10 +4263,6 @@ export function directRootQueued(threadId: string): boolean {
   return coordinator.all().some((n) => !n.parentId && !n.groupId && n.threadId === threadId && n.status === "queued");
 }
 
-function directRootPending(threadId: string): boolean {
-  return coordinator.all().some((n) => !n.parentId && !n.groupId && n.threadId === threadId &&
-    (n.status === "waiting" || n.status === "resume" || n.status === "queued"));
-}
 
 /** The conversation awaits teammates: work it handed out is still out, or
  * its root waits on that work or is due the resume that returns it. Never
@@ -8209,14 +8111,6 @@ function groupMemberBotAvailability(botId: string, operation: GroupTurnOperation
   return "ready";
 }
 
-/** Availability, and on "ready" the member's claim for this thread, in one
- * synchronous step: several threads woken by the same release must not all
- * read the member as free. */
-function claimGroupMemberBot(botId: string, operation: GroupTurnOperation): GroupMemberBotAvailability {
-  const availability = groupMemberBotAvailability(botId, operation);
-  if (availability === "ready") roomMemberLock.claim(botId, operation.threadId);
-  return availability;
-}
 
 /** A room is patient with a member's work already in progress: a busy bot
  * is woken later, never dropped. Goal runs and ordinary chat rounds share
@@ -11968,42 +11862,6 @@ const dispatchDelegationWake = createDispatchDelegationWake(getLeafHost);
 
 const wakeDelegationSource = createWakeDelegationSource(getLeafHost);
 
-/** Who hands work on from this turn, for the root the first hand-off of the
- * turn opens (docs/runtime-contract.md §9): a standing external runtime
- * (its results wait in its inbox, `reply: poll`), a routine run (a webhook's
- * is outside lineage), a Cloud guest's conversation. Undefined for a
- * person's chat, whose origin the request's own record settles (turnOrigin). */
-function externalRunId(grant: InternalCapability["externalRuntime"]): string {
-  if (grant && typeof grant === "object" && "threadId" in grant) return grant.threadId;
-  return "external";
-}
-
-function handoffOpener(capability: Pick<InternalCapability, "botId" | "threadId" | "externalRuntime">, threadId: string): HandoffOpener | undefined {
-  if (capability.externalRuntime) {
-    return {
-      requester: { kind: "external_runtime", runId: externalRunId(capability.externalRuntime), botId: capability.botId, threadId },
-      origin: { kind: "outside", source: "external_runtime", ref: threadId },
-    };
-  }
-  const run = activeRoutineRunForThread(threadId);
-  if (run) {
-    return {
-      requester: { kind: "routine_run", runId: run.id, botId: run.botId, threadId },
-      origin: run.triggerSource === "webhook"
-        ? { kind: "outside", source: "webhook", ref: run.routineId }
-        : { kind: "routine", source: "routine", ref: run.routineId },
-    };
-  }
-  if (cloudGuestDriven(threadId)) {
-    const guest = threadPersonKey(threadId);
-    return {
-      requester: { kind: "person", botId: capability.botId, threadId },
-      origin: { kind: "outside", source: "guest", ref: threadId, ...(guest ? { onBehalfOf: guest } : {}) },
-    };
-  }
-  return undefined;
-}
-
 /** A routine run's "waiting": the runtime still owes this conversation
  * something for the work its turns handed out. Either a teammate's turn is
  * outstanding, or every teammate settled while the run's own turn was still
@@ -15033,6 +14891,7 @@ export function requestSignIn(from: BotRecord, threadId: string, rawSite: unknow
   }));
   return { messageId: message.id, site: target.site, place };
 }
+Object.assign(leafHostBindings, { requestSignIn });
 
 /** A sign-in card while it is visible on the conversation's chosen branch;
  * in a room, only the asking bot's own. */
@@ -27289,11 +27148,6 @@ const resumeTurnsCutByRestart = createResumeTurnsCutByRestart(getLeafHost);
  * resume already answered. */
 const resumeHeldSteersAfterCrash = createResumeHeldSteersAfterCrash(getLeafHost);
 
-/** A root in this thread (a bot's or a room's) the runtime still holds:
- * what a restart does to it, the runtime says, in this thread, once. */
-function runtimeHoldsRoot(threadId: string): boolean {
-  return coordinator.all().some((n) => !n.parentId && n.threadId === threadId && !ENDED.has(n.status));
-}
 
 const gracefulShutdown = createGracefulShutdown({
   drain: drainTurnsBeforeShutdown,

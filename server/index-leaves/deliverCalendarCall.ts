@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** deliverCalendarCall (#1388). Pure move from server/index.ts. */
+import { escapeAttribute } from "../../src/lib/composer-attachments.ts";
 export type Host = Record<string, any>;
 
 export function createDeliverCalendarCall(getHost: () => Host): any {

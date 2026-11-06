@@ -6,6 +6,7 @@ import { json, readBody } from "../harness/http.ts";
 import { botmailConfinedInternalRefusal } from "../mail/bot-inbound-mail.ts";
 import { reachablePeers } from "../peers/peer-roster.ts";
 import { PASS, dispatchRoutes } from "../routes/table.ts";
+import { createInternalSignInRoutes } from "../routes/sign-in.ts";
 import { COMPUTER_JOURNAL_PATH } from "../saved-steps/journal-tap.ts";
 import { fillPluginBot } from "../../shared/bot-act.ts";
 import { CONFIDENTIAL_PEER_REFUSED, confidentialInternalRefusal, mcpConfidentialVerdict } from "../threads/confidential-threads.ts";
@@ -330,6 +331,10 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       return true;
     }
     if (await dispatchRoutes([host.savedSteps.journalRoutes({ capability: internalCapability, readBody: readInternalBody })], { req, res, url, path, method, auth, json, readBody })) return true;
+    if (await dispatchRoutes([createInternalSignInRoutes({
+      readBody: readInternalBody,
+      request: (site, reason) => host.requestSignIn(internalSender, internalCapability.threadId, site, reason),
+    })], { req, res, url, path, method, auth, json, readBody })) return true;
     // The cloud computer's tools (harness-mcp-proxy computer): the turn's
     // capability names its Boat, and the Boat credential stays here. A
     // capability minted before the Boat existed (boxId null) acts on the

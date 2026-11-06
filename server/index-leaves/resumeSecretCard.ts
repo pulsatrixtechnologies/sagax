@@ -9,16 +9,17 @@ function resumeSecretCard(botId: string, threadId: string, messageId: string, ou
   const message = host.secretMessage(botId, threadId, messageId);
   if (!message?.secret) return false;
   if (message.secret.resumed) return true;
+  // Vault login cards carry their own note (routes/credential-vault.ts). Mirror
+  // sign-in: mark resumed only when a parked root takes the answer (R4).
+  const resumed = host.answerCardNode(threadId, messageId, prompt ?? host.credentialUpdateText(message.secret.label, outcome));
   host.store.patchMessage(threadId, message.id, {
     secret: {
       ...message.secret,
       provided: outcome === "provided" ? true : message.secret.provided,
       dismissed: outcome === "dismissed" ? true : message.secret.dismissed,
-      resumed: true,
-      error: undefined
+      ...(resumed ? { resumed: true, error: undefined } : { error: undefined }),
     }
   });
-  host.dispatchSecretResume({ botId, threadId, messageId, label: message.secret.label, outcome, ...(prompt ? { prompt } : {}) });
   return true;
 
 }

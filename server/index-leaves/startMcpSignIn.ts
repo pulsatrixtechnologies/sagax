@@ -5,9 +5,10 @@ import {randomBytes} from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createStartMcpSignIn(getHost: () => Host): any {
-async function startMcpSignIn(req: IncomingMessage, auth: RequestAuth, name: string, server: RemoteMcpSpec, body: unknown, manager: McpOAuthManager = mcpOAuth):
+async function startMcpSignIn(req: IncomingMessage, auth: RequestAuth, name: string, server: RemoteMcpSpec, body: unknown, manager?: McpOAuthManager):
   Promise<{ status: number; body: Record<string, unknown> }> {
   const host = getHost();
+  manager ??= host.mcpOAuth;
 
   const input = host.mcpOAuthStartSchema.safeParse(body ?? {});
   if (!input.success) return { status: 400, body: { error: input.error.issues[0]?.message ?? "Invalid sign-in request." } };
@@ -30,7 +31,8 @@ async function startMcpSignIn(req: IncomingMessage, auth: RequestAuth, name: str
     return { status: 409, body: { error: "Send the address the phone reaches this computer on (callbackOrigin).", code: "callback_unreachable" } };
   }
   try {
-    const started = await manager.start(name, host.server, {
+    // `server` is the RemoteMcpSpec argument, not the HTTP listener on the host.
+    const started = await manager.start(name, server, {
       redirectUri, ...client, ...(returnTo ? { returnTo } : {}),
       ...(account ? { account } : {}), ...(newAccount ? { label: newAccount.label } : {})
     }, AbortSignal.timeout(15_000));

@@ -24,6 +24,7 @@ describe("local switches: setter stores, consumer reads", () => {
     ["Routines badge", "lib/routines-badge-preferences", "setShowRoutinesBadge", "components/SidebarProfileMenu.tsx", "useShowRoutinesBadge", ""],
     ["Show suggestions", "lib/panel-visibility", "setShowSuggestions", "components/bot-settings/SuggestionsSection.tsx", "useShowSuggestions", ""],
     ["Show All history", "lib/panel-visibility", "setShowAllHistory", "components/bot-settings/ActivitySection.tsx", "useShowAllHistory", ""],
+    ["Show permissions", "lib/panel-visibility", "setShowPermissions", "components/bot-settings/RolePermissionsSection.tsx", "useShowPermissions", ""],
     ["Conversation threads", "lib/thread-preferences", "setShowThreads", "components/ThreadChip.tsx", "useShowThreads", ""],
   ];
   for (const [name, module, setter, consumer, symbol] of table) {

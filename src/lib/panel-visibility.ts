@@ -1,4 +1,4 @@
-// Two person-wide switches for the bot panel (Settings > Appearance), each
+// Three person-wide switches for the bot panel (Settings > Appearance), each
 // kept on this computer and followed across the person's devices on an
 // organization server (shared/user-preferences.ts):
 //  - the Suggestions card: shown until the person hides it once ("Hide"),
@@ -8,16 +8,21 @@
 //  - the "All history" row: hidden by default. History stays reachable from
 //    the Coding / Activity section titles, the command palette ("<bot>
 //    history") and the bot panel.
+//  - the Permissions section (missing permission alert, Details >
+//    Permissions): hidden by default (JC, 2026-11-07); Settings > Appearance
+//    > Sidebar shows it again.
 import { useSyncExternalStore } from "react";
 import { localChoice } from "./local-choice";
 
 export const SHOW_SUGGESTIONS_KEY = "sagax.showSuggestions.v1";
 export const SHOW_ALL_HISTORY_KEY = "sagax.showAllHistory.v1";
+export const SHOW_PERMISSIONS_KEY = "sagax.showPermissions.v1";
 export const LEGACY_SUGGESTIONS_HIDDEN_KEY = "sagax.botSuggestions.hidden.v1";
 
 const ON_OFF = ["1", "0"] as const;
 const suggestionsChoice = localChoice(SHOW_SUGGESTIONS_KEY, ON_OFF, "1");
 const historyChoice = localChoice(SHOW_ALL_HISTORY_KEY, ON_OFF, "0");
+const permissionsChoice = localChoice(SHOW_PERMISSIONS_KEY, ON_OFF, "0");
 
 type Store = Pick<Storage, "getItem" | "setItem">;
 
@@ -56,6 +61,11 @@ export function useShowSuggestions(): boolean {
 export function setShowAllHistory(on: boolean): void { historyChoice.set(on ? "1" : "0"); }
 export function useShowAllHistory(): boolean {
   return useSyncExternalStore(historyChoice.subscribe, () => historyChoice.get() === "1", () => false);
+}
+
+export function setShowPermissions(on: boolean): void { permissionsChoice.set(on ? "1" : "0"); }
+export function useShowPermissions(): boolean {
+  return useSyncExternalStore(permissionsChoice.subscribe, () => permissionsChoice.get() === "1", () => false);
 }
 
 // The command palette asks the open bot panel to show a bot's history, even

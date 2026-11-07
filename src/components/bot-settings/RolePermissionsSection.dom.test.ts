@@ -15,6 +15,7 @@ vi.mock("@/state/store", () => ({ api: (...args: unknown[]) => apiMock(...args) 
 
 const { setLocale } = await import("@/lib/i18n");
 const { setShowThreads } = await import("@/lib/thread-preferences");
+const { setShowPermissions, SHOW_PERMISSIONS_KEY } = await import("@/lib/panel-visibility");
 const { RolePermissionsSection, RolePermissionsView, placeNodes, easternTime } = await import("./RolePermissionsSection");
 
 const AT = Date.UTC(2026, 10, 5, 19, 3);
@@ -35,6 +36,7 @@ let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
   setLocale("fr");
+  setShowPermissions(true);
   dispatchMock.mockReset();
   apiMock.mockReset();
   host = document.createElement("div");
@@ -151,6 +153,42 @@ describe("Details > Permissions", () => {
     expect(apiMock).toHaveBeenCalledWith("/api/bots/nova/roles/missing/send", { method: "POST", body: JSON.stringify({ id: "r2" }) });
     expect(host.querySelector("[data-missing-send]")).toBeNull();
     expect(host.querySelector("[data-missing-sent]")?.textContent).toBe(`Envoyé ${easternTime(AT + 60_000)}`);
+  });
+
+  it("says Vous, never Moi, when the person's own credentials were refused", () => {
+    const own = { ...body, missing: [{ ...body.missing[0]!, role: { slug: "", name: "" } }] };
+    flushSync(() => root.render(createElement(RolePermissionsView, { botId: "nova", body: own, now: AT })));
+    expect(host.querySelector("[data-missing-label]")?.textContent).toBe("Vous ne pouvez pas modifier les billets");
+  });
+
+  describe("Settings > Appearance > Show permissions (JC 2026-11-07)", () => {
+    const render = async () => {
+      apiMock.mockResolvedValue({ ...body, missing: body.missing.map((entry) => ({ ...entry, lastAt: Date.now() })) });
+      flushSync(() => root.render(createElement(RolePermissionsSection, { botId: "nova" })));
+      await settle();
+      flushSync(() => {});
+    };
+
+    it("is hidden by default: no section and no roles read", async () => {
+      localStorage.removeItem(SHOW_PERMISSIONS_KEY);
+      await render();
+      expect(host.querySelector('[data-bot-settings-section="permissions"]')).toBeNull();
+      expect(apiMock).not.toHaveBeenCalled();
+    });
+
+    it("stays hidden when switched off", async () => {
+      setShowPermissions(false);
+      await render();
+      expect(host.querySelector('[data-bot-settings-section="permissions"]')).toBeNull();
+    });
+
+    it("shows the section when switched on, and hides it again live", async () => {
+      setShowPermissions(true);
+      await render();
+      expect(host.querySelector('[data-bot-settings-section="permissions"]')).not.toBeNull();
+      flushSync(() => setShowPermissions(false));
+      expect(host.querySelector('[data-bot-settings-section="permissions"]')).toBeNull();
+    });
   });
 
   it("places one node in the middle and several on a circle", () => {

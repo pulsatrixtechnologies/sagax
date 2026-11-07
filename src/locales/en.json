@@ -6382,6 +6382,7 @@
   "settings.experimental.devPodsDescription": "A throwaway container per coding task.",
   "settings.experimental.needsServerUpdate": "Needs a server update",
   "settings.experimental.developer": "Developer",
+  "settings.experimental.features": "Features",
   "settings.experimental.orgLocked": "Set by your organization",
   "settings.experimental.skillReviewNoEngine": "Bots on {engines} won't learn skills this way: their engine can't run the background review.",
   "settings.experimental.title": "Experimental features",

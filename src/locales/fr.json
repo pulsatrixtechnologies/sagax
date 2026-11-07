@@ -6118,6 +6118,7 @@
   "settings.experimental.devPodsDescription": "Un conteneur jetable par tâche de code.",
   "settings.experimental.needsServerUpdate": "Demande une mise à jour du serveur",
   "settings.experimental.developer": "Développeur",
+  "settings.experimental.features": "Fonctionnalités",
   "settings.experimental.orgLocked": "Réglé par ton organisation",
   "settings.experimental.skillReviewNoEngine": "Les bots sur {engines} n'apprendront pas de compétences ainsi : leur moteur ne peut pas lancer la revue en arrière-plan.",
   "settings.font.aria": "Police de l'interface",

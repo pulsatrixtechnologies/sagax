@@ -11,7 +11,7 @@ import {
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { canEditConfig, canManageExperimental } from "@/lib/viewer";
-import { Switch } from "../SettingsPrimitives";
+import { DescribedRow, Switch } from "../SettingsPrimitives";
 
 /** "Learn skills automatically" and its threshold, under "Bots may write
  * their own skills" (server/skills/skill-review.ts). Both live in `features`. */
@@ -62,15 +62,17 @@ export function SkillReviewSettings() {
     if (await save({ skillReviewSteps: steps })) setDirty(false);
   };
 
+  // Shared rows in the Experimental card, next to "Bots may write their own
+  // skills", not a hand-drawn row indented under it (JC 2026-11-07).
   return (
-    <div className="mt-2 border-l-[0.5px] border-border pl-3" data-testid="skill-review-settings">
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-[13px] leading-[18px] text-ink">{t("settings.experimental.skillReview")}</div>
-          <div className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">
-            {t(authoring ? "settings.experimental.skillReviewDetail" : "settings.experimental.skillReviewNeedsAuthoring")}
-          </div>
-        </div>
+    <div data-testid="skill-review-settings" className="contents">
+      <DescribedRow
+        label={t("settings.experimental.skillReview")}
+        rowId="skillReview"
+        description={error && !enabled
+          ? <span role="alert" className="text-danger">{error}</span>
+          : t(authoring ? "settings.experimental.skillReviewDetail" : "settings.experimental.skillReviewNeedsAuthoring")}
+      >
         <Switch
           checked={enabled}
           aria-label={t("settings.experimental.skillReviewAria")}
@@ -78,12 +80,13 @@ export function SkillReviewSettings() {
           onClick={() => void save({ skillReview: !enabled })}
           className="disabled:cursor-not-allowed disabled:opacity-50"
         />
-      </div>
+      </DescribedRow>
       {enabled ? (
-        <div className="mt-3 flex items-center gap-3">
-          <label htmlFor="skill-review-steps" className="text-[13px] text-ink">
-            {t("settings.experimental.skillReviewSteps")}
-          </label>
+        <DescribedRow
+          label={t("settings.experimental.skillReviewSteps")}
+          rowId="skillReviewSteps"
+          description={error ? <span role="alert" className="text-danger">{error}</span> : undefined}
+        >
           <div
             className={`flex w-[96px] items-center rounded-lg border bg-inset ${
               error ? "border-danger/60" : "border-hairline/40 focus-within:border-focus"
@@ -99,6 +102,7 @@ export function SkillReviewSettings() {
               value={value}
               disabled={saving || !manage}
               aria-invalid={Boolean(error)}
+              aria-label={t("settings.experimental.skillReviewSteps")}
               onChange={(event) => {
                 setValue(event.target.value);
                 setDirty(true);
@@ -111,9 +115,8 @@ export function SkillReviewSettings() {
               className="min-w-0 flex-1 bg-transparent px-3 py-1.5 text-[14px] tabular-nums text-ink focus:outline-none"
             />
           </div>
-        </div>
+        </DescribedRow>
       ) : null}
-      {error ? <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p> : null}
     </div>
   );
 }

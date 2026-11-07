@@ -4,13 +4,14 @@
 // "Developer". Decision model lives only on Models (its own master switch).
 // #2080 L3: built-in browser and My Chrome live on Computer.
 // #2080: phone calls live on Voice (same read-only card for every org member).
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { dataWindowEnabled, llmThreadTitlesEnabled, meetingNotetakerEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import type { LocaleKey } from "@/locales";
-import { DescribedRow, FoldRow, HelpTip, SettingsGroup, Switch } from "../SettingsPrimitives";
+import { Container } from "lucide-react";
+import { DescribedRow, HelpTip, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
 import { canManageExperimental } from "@/lib/viewer";
 import { useServerFeature } from "@/lib/server-features";
@@ -153,6 +154,8 @@ export function ExperimentalSettings() {
     reason?: React.ReactNode;
     note?: React.ReactNode;
     below?: React.ReactNode;
+    /** Rows of its own right after this one, in the same card. */
+    after?: React.ReactNode;
   };
   const main: MainRow[] = [
     {
@@ -161,7 +164,7 @@ export function ExperimentalSettings() {
       aria: "settings.experimental.skillAuthoringAria",
       description: "settings.experimental.skillAuthoringDescription",
       checked: skillAuthoring,
-      below: <SkillReviewSettings />,
+      after: <SkillReviewSettings />,
     },
   ];
   const unavailable: Array<{ feature: ExperimentalFeature; label: LocaleKey; reason: React.ReactNode }> = [];
@@ -221,51 +224,57 @@ export function ExperimentalSettings() {
     <div data-settings-card="experimental.features" className="flex flex-col gap-2">
       <SettingsGroup
         groupId="experimental"
+        title={t("settings.experimental.features")}
         accessory={<span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary" data-experimental-count="">· {t("settings.card.countOn", { count: on, total })}</span>}
       >
         {main.map((row) => (
-          <FeatureRow
-            key={row.feature}
-            feature={row.feature}
-            label={t(row.label)}
-            ariaKey={row.aria}
-            checked={row.checked}
-            unavailable={row.unavailable}
-            reason={row.reason}
-            note={row.note ?? t(row.description)}
-            busy={busy}
-            locked={!mayToggle(row.feature)}
-            onToggle={() => void toggle(row.feature, !row.checked)}
-            below={row.below}
-          />
+          <Fragment key={row.feature}>
+            <FeatureRow
+              feature={row.feature}
+              label={t(row.label)}
+              ariaKey={row.aria}
+              checked={row.checked}
+              unavailable={row.unavailable}
+              reason={row.reason}
+              note={row.note ?? t(row.description)}
+              busy={busy}
+              locked={!mayToggle(row.feature)}
+              onToggle={() => void toggle(row.feature, !row.checked)}
+              below={row.below}
+            />
+            {row.after}
+          </Fragment>
         ))}
       </SettingsGroup>
 
+      {/* JC 2026-11-07: every group is a grey heading over one card of
+          shared rows, as General; no loose fold row with a round chevron. */}
       {unavailable.length > 0 && (
-        <FoldRow
-          cardId="experimental.needsServerUpdate"
-          label={t("settings.experimental.needsServerUpdate")}
-          count={unavailable.length}
-        >
-          <div data-experimental-needs-server="" className="flex flex-col">
-            {unavailable.map((row) => (
-              <UnavailableRow key={row.feature} feature={row.feature} label={t(row.label)} reason={row.reason} />
-            ))}
-          </div>
-        </FoldRow>
+        <div data-settings-card="experimental.needsServerUpdate">
+          <SettingsGroup groupId="experimental.needsServerUpdate" title={t("settings.experimental.needsServerUpdate")}>
+            <div data-experimental-needs-server="" className="flex flex-col">
+              {unavailable.map((row) => (
+                <UnavailableRow key={row.feature} feature={row.feature} label={t(row.label)} reason={row.reason} />
+              ))}
+            </div>
+          </SettingsGroup>
+        </div>
       )}
 
-      <FoldRow cardId="experimental.developer" label={t("settings.experimental.developer")}>
-        <div data-experimental-feature="devPods">
-          <DescribedRow
-            label={t("settings.experimental.devPods")}
-            description={t("settings.experimental.devPodsDescription")}
-            rowId="devPods"
-          >
-            <Switch checked={devPods} aria-label={t("settings.experimental.devPodsAria")} onClick={() => setDevPodsEnabled(!devPods)} />
-          </DescribedRow>
-        </div>
-      </FoldRow>
+      <div data-settings-card="experimental.developer">
+        <SettingsGroup groupId="experimental.developer" title={t("settings.experimental.developer")}>
+          <div data-experimental-feature="devPods">
+            <DescribedRow
+              icon={<Container size={14} />}
+              label={t("settings.experimental.devPods")}
+              description={t("settings.experimental.devPodsDescription")}
+              rowId="devPods"
+            >
+              <Switch checked={devPods} aria-label={t("settings.experimental.devPodsAria")} onClick={() => setDevPodsEnabled(!devPods)} />
+            </DescribedRow>
+          </div>
+        </SettingsGroup>
+      </div>
 
       {personalMissing && <p role="note" data-needs-server-update="" className="px-1 text-[12px] text-ink-secondary">{t("serverRoute.needsUpdate")}</p>}
       {error ? <p role="alert" className="px-1 text-[12px] text-danger">{error}</p> : null}

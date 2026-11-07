@@ -28,7 +28,7 @@ import { RoutinesSection } from "./bot-settings/RoutinesSection";
 import { showsComputer, visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
 import { ComputerCard } from "./bot-settings/ComputerCard";
 import { VoiceChatCard } from "./bot-settings/VoiceChatCard";
-import { ActivitySection } from "./bot-settings/ActivitySection";
+import { ActivitySectionBody, CodingWorkSection, useBotCodingPanel } from "./bot-settings/ActivitySection";
 import { BotTaskSection } from "./bot-settings/BotTaskSection";
 import { SuggestionsSection } from "./bot-settings/SuggestionsSection";
 import { BotNameTitleStack } from "./bot-settings/BotNameTitleStack";
@@ -90,11 +90,14 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // an organization server's bots act as Perspicax roles: a recent refusal
   // shows as one row in Activity > Permissions
   const rolesOn = Boolean(state.config?.viewer?.role);
-  // The Coding tab shows only while this bot's coding chat is the open
-  // conversation (JC 2026-11-06); leaving it, a Coding pick falls back to
-  // Activity.
+  // The Coding tab shows while this bot's coding chat is the open
+  // conversation (JC 2026-11-06), and while the bot has pull requests,
+  // branches or commits to show, which live there (#2599, JC 2026-11-07);
+  // without either, a Coding pick falls back to Activity.
   const codingChatKey = state.codingChat?.botId === bot.id ? state.codingChat.itemId : null;
-  const panelTabs = visiblePanelTabs({ advanced, computerOff, coding: codingChatKey !== null });
+  // One activity fetch for both tabs: Activity's agent rows, Coding's code work.
+  const codingPanel = useBotCodingPanel(bot);
+  const panelTabs = visiblePanelTabs({ advanced, computerOff, coding: codingChatKey !== null || codingPanel.hasCodeWork });
   const tab: PanelTab = panelTabs.includes(pickedTab) ? pickedTab : "activity";
   // Opening a coding chat brings its tab forward, where its session is.
   useEffect(() => {
@@ -118,7 +121,6 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // Compact head: once the in-flow tabs reach the top bar, they move into it.
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const codingHost = useCallback((element: HTMLDivElement | null) => setCodingPanelHost(bot.id, element), [bot.id]);
-  const codingActivityHost = useCallback((element: HTMLDivElement | null) => setCodingPanelHost(bot.id, element, "activity"), [bot.id]);
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [compact, setCompact] = useState(false);
   const onBodyScroll = () => {
@@ -345,9 +347,6 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
               {tab === "activity" && (
                 <div className="flex flex-col gap-5 px-4 pb-6">
-                  {/* #2285: an open coding window's pods that are not coding
-                      work of their own (Connectors) stay here. */}
-                  <div ref={codingActivityHost} data-coding-activity-host="" className="flex flex-col gap-5 empty:hidden" />
                   <section data-bot-settings-section="routines" className="flex flex-col gap-2">
                     <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped upcoming createRequest={meetingRequest} />
                   </section>
@@ -367,7 +366,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                   <VoiceChatCard bot={bot} onPatch={derived.patch} readOnly={!canEditBotField(state.config, bot, "voice")} />
                   {/* What the bot does now and did: each folds away when empty. */}
                   <BotTaskSection botId={bot.id} />
-                  <ActivitySection bot={bot} />
+                  {/* #2599: the agent rows only; the pull requests and
+                      branches are in the Coding tab. */}
+                  <ActivitySectionBody bot={bot} panel={codingPanel} codeWork={false} />
                   {/* Temporary attended remote sessions: only while active.
                       Unattended hosts live in the Computer place picker. */}
                   <RemoteSessionsSection bot={bot} />
@@ -380,10 +381,13 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
               {/* #2285, JC 2026-11-06: the open coding chat's session
                   (Status, Duration, Tokens) and dev pods (Environment,
-                  Context, Changes, Background tasks, Outputs). */}
+                  Connectors, Context, Changes, Background tasks, Outputs);
+                  #2599, JC 2026-11-07: then the bot's pull requests,
+                  branches and commits. */}
               {tab === "coding" && (
                 <div data-bot-panel-coding="" className="flex flex-col gap-5 px-4 pb-6">
                   <div ref={codingHost} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
+                  <CodingWorkSection panel={codingPanel} />
                 </div>
               )}
             </>

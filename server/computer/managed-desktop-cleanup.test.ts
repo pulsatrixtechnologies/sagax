@@ -24,14 +24,25 @@ function section(start: string, end: string) {
   if (from < 0 || to <= from) throw new Error(`Cleanup test section moved: ${start}`);
   return source.slice(from, to);
 }
-const code = transpileTs([
-  section("async function interruptDirectThread(", "/** Stop left teammates"),
-  section("export async function interruptParkedTurn(", "async function interruptAllDirectThreads("),
-  section("function releaseTurnResources(", "async function bindTurnComputer("),
-  section("async function stopCompanyInstances(", "async function persistProviderInstance("),
-].join("\n").replace(/^export\s+/m, ""));
-const reloadProvidersCode = transpileTs(
-  section("/** The engine a bot's process in a conversation runs on", "// Config writes replace the engines they change."));
+// The cleanup functions live in server/index-leaves since the split (#2331):
+// each is `create<Name>(getHost)` reading `host.<dep>`. The fixture context is
+// that host, so every leaf runs against the same synthetic state.
+const leafNames = ["interruptDirectThread", "interruptParkedTurn", "interruptAllDirectThreads", "releaseTurnResources", "stopCompanyInstances"];
+function leaf(name: string) {
+  const text = readFileSync(new URL(`../index-leaves/${name}.ts`, import.meta.url), "utf8");
+  const factory = `create${name[0].toUpperCase()}${name.slice(1)}`;
+  if (!text.includes(`export function ${factory}(getHost`)) throw new Error(`Cleanup test leaf moved: ${name}`);
+  // Leaf imports are host globals in the fixture (stoppedTurnOutcome).
+  return text.replace(/^import .*$/gm, "").replace(/^export\s+/gm, "");
+}
+const code = transpileTs(leafNames.map(leaf).join("\n"));
+// threadEngineId stays in index.ts; the reload and the capability revoke are leaves.
+const reloadLeafNames = ["revokeEngineCapabilities", "reloadProviders"];
+const reloadProvidersCode = transpileTs([
+  section("/** The engine a bot's process in a conversation runs on", "// Config writes replace the engines they change."),
+  ...reloadLeafNames.map(leaf),
+  ...reloadLeafNames.map(name => `${name} = create${name[0].toUpperCase()}${name.slice(1)}(() => globalThis);`),
+].join("\n"));
 
 function deferred() {
   let resolve!: () => void;
@@ -118,6 +129,9 @@ function fixture(kind: "direct" | "group", threadIds = ["first"]) {
   });
   context.runningTurnInstance = (bot: Bot) => context.registry.get(bot.modelSelection.instanceId);
   vm.runInContext(code, context, { filename: "index.ts (Company cleanup ownership fixture)" });
+  for (const name of leafNames) {
+    context[name] = context[`create${name[0].toUpperCase()}${name.slice(1)}`](() => context);
+  }
   return {
     bots, tasks, groups, owners, directBots, speakers, vmLeases, approvals, screens, watched,
     autoVmClaims,
@@ -432,7 +446,8 @@ it("ends a room stopped by the harness with its cause, and one the person stoppe
       finishGroupGoalRun: (_groupId: string, _operation: unknown, status: string, detail: string) => calls.push(`goal:${status}|${detail}`),
       markCancelledProviderHandshake() {},
     });
-    vm.runInContext(transpileTs(section("function cancelGroupTurnOperations(", "function groupProviderHandshakeStarted(")), context);
+    vm.runInContext(transpileTs(leaf("cancelGroupTurnOperations")), context);
+    context.cancelGroupTurnOperations = context.createCancelGroupTurnOperations(() => context);
     context.cancelGroupTurnOperations("g", "room", outcome);
     return calls;
   };

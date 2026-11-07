@@ -17,12 +17,16 @@ export interface DriverCapabilities {
   agentsMcp: boolean;
 }
 
-/** The widest turn the harness can build: every optional integration on and
- * a Chief of Staff (the only role shown the Chief-only tools); every turn
- * gets the same teamwork tools. So the count is an upper bound, not one
- * bot's catalog. Both sides of a comparison get the same profile; only the
- * driver's own capability can differ. */
-const ENVELOPE: CatalogProfile = {externalRuntime: false, coordinating: false, ownThreadCreation: false, 
+/** The widest turn the harness can build: every optional integration on, a
+ * Chief of Staff (the only role shown the Chief-only tools) and a
+ * coordinating turn, where coordinate_bots and the other room-only tools
+ * exist. So the count is an upper bound, not one bot's catalog. Both sides of
+ * a comparison get the same profile; only the driver's own capability can
+ * differ. */
+const ENVELOPE: CatalogProfile = {
+  externalRuntime: false,
+  coordinating: true,
+  ownThreadCreation: true,
   skillAuthoring: true,
   sharedComputers: true,
   voiceNotes: true,

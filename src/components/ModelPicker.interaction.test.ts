@@ -441,7 +441,7 @@ describe("the composer's model menu (2026-10-12)", () => {
   // Owner, 2026-10-14: no Model › (the provider submenus list the same models)
   // and no Context line.
   it("carries the model's settings below the list, its effort as Effort ›, without Model › or Context, Advanced only", () => {
-    fixture.instances = [{ ...signedIn(), capabilities: { withholdsHostTools: true, effortLevels: ["low", "high"] } }];
+    fixture.instances = [{ ...signedIn(), capabilities: { withholdsHostTools: true, effortLevels: ["low", "high", "ultracode"] } }];
     const opened = open(bot("claude", "claude-opus-5-5"), composer);
     expect(opened.html).toContain("data-model-settings-effort");
     expect(opened.html).not.toContain("data-model-settings-model");
@@ -465,9 +465,9 @@ describe("the composer's model menu (2026-10-12)", () => {
 
   it("offers each model only the levels it takes, Default naming the model's own", () => {
     fixture.instances = [grokEngine()];
-    expect(settings(open(bot("grok", "grok-4.7"), composer))!.props.effort).toMatchObject({ levels: ["low", "medium", "high", "xhigh", "ultracode"], modelDefault: "high" });
+    expect(settings(open(bot("grok", "grok-4.7"), composer))!.props.effort).toMatchObject({ levels: ["low", "medium", "high", "xhigh"], modelDefault: "high" });
     fixture.values = [];
-    expect(settings(open(bot("grok", "grok-4.5"), composer))!.props.effort!.levels).toEqual(["low", "medium", "high", "ultracode"]);
+    expect(settings(open(bot("grok", "grok-4.5"), composer))!.props.effort!.levels).toEqual(["low", "medium", "high"]);
     fixture.values = [];
     // a model with no effort control gets no Effort row at all
     const local = open(bot("grok", "dwarfstar::qwen"), composer);

@@ -2,6 +2,7 @@
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
 import { randomUUID } from "node:crypto";
 import { pinnedWorkspaceStart } from "../computer/auto-computer.ts";
+import { effortForEngine } from "../../shared/ultracode-effort.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 
@@ -183,7 +184,7 @@ export function createPrepareAdmitStartTurn(
   if (routineSubagent && "model" in routineSubagent) state.routineSubagentModel = routineSubagent.model;
   const routineEffort = state.warmOnly ? null : routineEffortForTurn?.(state.bot.id, state.threadId, state.instance, state.model);
   state.routineEffort = routineEffort?.effort;
-  const askedEffort = state.routineEffort ?? state.bot.modelSelection.effort;
+  const askedEffort = effortForEngine(state.routineEffort ?? state.bot.modelSelection.effort, state.instance.adapter.capabilities.effortLevels);
   state.variant = state.routineModel || state.routineEffort ? undefined : state.bot.modelSelection.variant;
   // What this turn runs on, kept for the bot text it writes (a quiet line
   // under the reply shows it). A warm-up writes no reply.

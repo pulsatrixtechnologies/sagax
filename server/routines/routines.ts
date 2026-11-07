@@ -13,6 +13,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
+import { MAX_DATE_MS, loadMailAlias, loadAutoPauseAfter, loadFolderOrder, loadAutoPaused } from "./routine-loaders.ts";
 import { DATA_DIR } from "../config.ts";
 import type { RuntimeEvent } from "../contracts.ts";
 import { OwnedFile } from "../atomic.ts";
@@ -828,7 +829,6 @@ const ROUTINE_RESTART_RESUMES = 1;
 /** Errors of a start that only met a busy conversation or bot: the run goes
  * back to the queue instead of failing. */
 const BUSY_START = new Set(["thread_busy", "thread_limit"]);
-const MAX_DATE_MS = 8_640_000_000_000_000;
 const LOCAL_DAY_MS = 24 * 60 * 60_000;
 const INTERVAL_RESTRICTION_SEARCH_MS = 9 * LOCAL_DAY_MS;
 const CLOCK_TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -1483,50 +1483,12 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   };
 }
 
-function loadMailAlias(value: unknown): string | undefined {
-  const parsed = parseMailAlias(value);
-  return parsed.ok ? parsed.alias : undefined;
-}
-
-function loadAutoPauseAfter(value: unknown): number | undefined {
-  try {
-    return cleanRoutineAutoPauseAfter(value);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Each bot's saved folder order; anything unreadable is dropped (folders
- * then come back from the routines that name them). */
-function loadFolderOrder(value: unknown): Map<string, string[]> {
-  const order = new Map<string, string[]>();
-  if (!value || typeof value !== "object" || Array.isArray(value)) return order;
-  for (const [botId, names] of Object.entries(value as Record<string, unknown>)) {
-    if (!botId || !Array.isArray(names)) continue;
-    const clean = orderedRoutineFolders(names.flatMap((name) => {
-      const folder = cleanRoutineFolder(name);
-      return folder ? [folder] : [];
-    }), []).slice(0, ROUTINE_FOLDERS_PER_BOT);
-    if (clean.length) order.set(botId, clean);
-  }
-  return order;
-}
-
 /** The answer of a folder action: the bot's folders in order, the routines
  * it changed, and (for Sort by prefix) what Undo puts back. */
 export interface RoutineFolderResult {
   folders: string[];
   routines: Routine[];
   undo?: RoutineFolderUndo;
-}
-
-function loadAutoPaused(value: unknown): RoutineAutoPause | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const { at, failures, runId } = value as Partial<RoutineAutoPause>;
-  if (typeof at !== "number" || !Number.isFinite(at) || at < 0 || at > MAX_DATE_MS) return undefined;
-  if (typeof failures !== "number" || !Number.isSafeInteger(failures) || failures < 1) return undefined;
-  if (typeof runId !== "string" || !runId || runId.length > 100) return undefined;
-  return { at, failures, runId };
 }
 
 export class RoutineManager {

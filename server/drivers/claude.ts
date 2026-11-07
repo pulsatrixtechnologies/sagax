@@ -29,7 +29,7 @@ import type {
   ProviderSnapshot,
 } from "../contracts.ts";
 import { newId } from "../contracts.ts";
-import { askInputDetail, askInputSummary } from "../tools/tool-summary.ts";
+import { askInputDetail } from "../tools/tool-summary.ts";
 import { claudeAuthFailure } from "./claude-auth-recovery.ts";
 import { claudeSignInExpired } from "./claude-errors.ts";
 import { parseVersionTriple, versionAtLeast } from "./acp/core.ts";
@@ -44,15 +44,11 @@ import { permissionCommand, permissionPaths, withAbsolutePaths } from "./permiss
 import { extractMcpImages } from "../mcp/mcp-tool-images.ts";
 import { availableTools, catalogProfileFromEnv } from "./agents-catalog.ts";
 import {
-  ASK_USER_QUESTION_TOOL,
-  ASK_USER_TOOL,
-  askQuestionSummary,
-  parseAskQuestions,
   parseChoices,
   questionChoices,
-  type AskQuestion,
 } from "../../shared/ask-question.ts";
 import { CLAUDE_UNUSED_COMMANDS } from "./host-tools.ts";
+import { DENY_TIMEOUT_NOTE, QUESTION_TIMEOUT_NOTE, DUPLICATE_ASK_ID_NOTE, systemEndedReply, askQuestions, askSummary, type Ask, type AskBehavior, type AskResolutionSource } from "./claude-asks.ts";
 
 export {
   claudeApiErrorMessage,
@@ -595,43 +591,6 @@ export function readClaudeModelCatalog(env: Record<string, string | undefined> =
 // the claude CLI) forwards asks over it and waits. Unanswered permission
 // asks deny after timeoutMs with a keep-moving note; unanswered questions
 // answer with "use your best judgment" — guidance, never a block.
-interface Ask {
-  id: string;
-  kind: "permission" | "question";
-  tool: string;
-  input: Record<string, unknown>;
-  at: number;
-}
-type AskBehavior = "allow" | "deny" | "answer";
-type AskResolutionSource = "user" | "timeout" | "system";
-
-const DENY_TIMEOUT_NOTE =
-  "Sagax: nobody answered this permission request in time. Skip this action and finish what you can without it.";
-const QUESTION_TIMEOUT_NOTE = "Sagax: nobody answered in time. Use your best judgment and continue.";
-const DUPLICATE_ASK_ID_NOTE = "Sagax: duplicate ask id — skipping this request.";
-
-/** The system-source reply for an ask that outlives the turn — used both to
- * drain in-flight `pending` asks on close() and to answer one that arrives
- * on an already-closed broker (see the `closed` branch below). */
-function systemEndedReply(kind: Ask["kind"]): { behavior: AskBehavior; message: string } {
-  return kind === "question"
-    ? { behavior: "answer", message: "Sagax: the turn is ending — wrap up." }
-    : { behavior: "deny", message: "Sagax: the turn ended" };
-}
-
-/** The structured questions behind an ask, when it is one. Claude's own
- * AskUserQuestion carries them, and so does a multiSelect ask_user;
- * everything else answers null and keeps the plain summary/choices card. */
-function askQuestions(ask: Ask): AskQuestion[] | null {
-  return ask.tool === ASK_USER_QUESTION_TOOL || ask.tool === ASK_USER_TOOL ? parseAskQuestions(ask.input) : null;
-}
-
-/** One human-readable line for an ask — what the card subtitle shows. */
-function askSummary(ask: Ask): string {
-  const questions = askQuestions(ask);
-  if (questions) return askQuestionSummary(questions);
-  return askInputSummary(ask.input) ?? ask.tool ?? "tool";
-}
 
 export const sumNativeTurnResults = sumNativeTurnResultsFromSession;
 

@@ -6,7 +6,7 @@
 // (ModelCatalog option `effortLevels`, `defaultEffort`) and every surface,
 // server and app, reads it through these functions only.
 import { isEffortLevel, type EffortLevel } from "./wire.ts";
-import { effortAcceptedByEngine, NATIVE_EFFORT_LEVELS, pickerEffortLevels, ULTRACODE_EFFORT } from "./ultracode-effort.ts";
+import { effortAcceptedByEngine, engineOffersUltracode, NATIVE_EFFORT_LEVELS, ULTRACODE_EFFORT } from "./ultracode-effort.ts";
 
 export interface ModelEffortFacts {
   /** Native levels this model takes, ascending. `[]`: the model has no
@@ -25,9 +25,11 @@ export function modelNativeEffortLevels(option: ModelEffortFacts | undefined, en
 }
 
 /** The levels a picker offers for this model: its native levels, plus
- * Ultracode wherever the model takes effort at all. Empty: no control. */
+ * Ultracode only when the engine offers it (Claude Code). Empty: no control. */
 export function modelEffortLevels(option: ModelEffortFacts | undefined, engineLevels: readonly EffortLevel[] | undefined): EffortLevel[] {
-  return pickerEffortLevels(modelNativeEffortLevels(option, engineLevels));
+  const native = modelNativeEffortLevels(option, engineLevels);
+  if (native.length === 0) return [];
+  return engineOffersUltracode(engineLevels) ? [...native, ULTRACODE_EFFORT] : native;
 }
 
 /** The level this model runs at when the selection sends none, if known. */
@@ -38,6 +40,7 @@ export function modelDefaultEffort(option: ModelEffortFacts | undefined, engineL
 
 /** Whether a stored level is valid for this model on this engine. */
 export function effortAcceptedByModel(effort: EffortLevel, option: ModelEffortFacts | undefined, engineLevels: readonly EffortLevel[] | undefined): boolean {
+  if (effort === ULTRACODE_EFFORT) return engineOffersUltracode(engineLevels) && modelNativeEffortLevels(option, engineLevels).length > 0;
   return effortAcceptedByEngine(effort, modelNativeEffortLevels(option, engineLevels));
 }
 

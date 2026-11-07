@@ -96,7 +96,7 @@ describe("EffortRow", () => {
     const markup = renderToStaticMarkup(createElement(EffortRow, { bot: bot(), compact: true }));
     expect(markup).toContain('aria-label="Reasoning effort"');
     expect(markup).not.toContain("<button");
-    expect([...markup.matchAll(/<option[^>]*>([^<]+)</g)].map((match) => match[1])).toEqual(["Default", "None", "Low", "High", "Ultracode"]);
+    expect([...markup.matchAll(/<option[^>]*>([^<]+)</g)].map((match) => match[1])).toEqual(["Default", "None", "Low", "High"]);
   });
   it("can apply effort to the pinned thread and bot default together", () => {
     fixture.instances = [engine(["high"])];
@@ -114,20 +114,24 @@ describe("EffortRow", () => {
     high.props.onClick();
     expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "setModel", botId: "atlas", threadId: "independent-thread", selection: { instanceId: "codex", model: "gpt-5.6", effort: "high" } });
   });
-  it("lists ultracode after native effort levels", () => {
-    fixture.instances = [engine(["low", "high", "max"])];
+  it("lists ultracode after native effort levels, only when the engine offers it (Claude Code)", () => {
+    fixture.instances = [engine(["low", "high", "max", "ultracode"])];
     const row = EffortRow({ bot: bot() })!;
     const levels = Children.toArray(row.props.children).at(-1) as ReactElement<{ children: ReactNode }>;
     const labels = Children.toArray(levels.props.children).map(
       (child) => (child as ReactElement<{ children: ReactNode }>).props.children,
     );
-    expect(labels).toContain("Ultracode");
+    expect(labels.slice(-1)).toEqual(["Ultracode"]);
+    fixture.instances = [engine(["low", "high", "max"])];
+    const plain = EffortRow({ bot: bot() })!;
+    const plainLevels = Children.toArray(plain.props.children).at(-1) as ReactElement<{ children: ReactNode }>;
+    expect(Children.toArray(plainLevels.props.children).map((child) => (child as ReactElement<{ children: ReactNode }>).props.children)).not.toContain("Ultracode");
   });
   it("lists only the levels the bot's model takes, Default naming its own (2026-10-13)", () => {
     const perModel = (options: InstanceInfo["models"]["options"]): InstanceInfo => ({ ...engine(["low", "medium", "high", "xhigh", "max"]), models: { default: "gpt-5.6", options } });
     fixture.instances = [perModel([{ id: "gpt-5.6", label: "GPT-5.6", effortLevels: ["low", "medium", "high"], defaultEffort: "medium" }])];
     const markup = renderToStaticMarkup(createElement(EffortRow, { bot: bot(), compact: true }));
-    expect([...markup.matchAll(/<option[^>]*>([^<]+)</g)].map((match) => match[1])).toEqual(["Default (Medium)", "Low", "Medium", "High", "Ultracode"]);
+    expect([...markup.matchAll(/<option[^>]*>([^<]+)</g)].map((match) => match[1])).toEqual(["Default (Medium)", "Low", "Medium", "High"]);
     // a level kept from another model reads as Default, which is what runs
     expect(levelButtons(renderToStaticMarkup(createElement(EffortRow, { bot: bot("max") }))).find((button) => button.pressed)?.label).toBe("Default (Medium)");
     // a model with no effort control gets no row
@@ -153,7 +157,7 @@ describe("EffortRow", () => {
   it("offers only the levels the selected engine accepts, plus Default", () => {
     const markup = renderEffort([engine(["low", "medium", "high"])]);
 
-    expect(levelButtons(markup).map((button) => button.label)).toEqual(["Default", "Low", "Medium", "High", "Ultracode"]);
+    expect(levelButtons(markup).map((button) => button.label)).toEqual(["Default", "Low", "Medium", "High"]);
     // the server rejects a level its engine does not offer, so one that is
     // never shown is one that can never be persisted
     expect(markup).not.toContain(">X-High<");
@@ -163,7 +167,7 @@ describe("EffortRow", () => {
   it("keeps Default and None apart — Default sends no level, None sends one", () => {
     const markup = renderEffort([engine(["none", "low"])]);
 
-    expect(levelButtons(markup).map((button) => button.label)).toEqual(["Default", "None", "Low", "Ultracode"]);
+    expect(levelButtons(markup).map((button) => button.label)).toEqual(["Default", "None", "Low"]);
   });
 
   it("marks the active level, and Default when the bot carries no level", () => {

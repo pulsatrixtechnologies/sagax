@@ -5,7 +5,7 @@ import { useState } from "react";
 import { t } from "@/lib/i18n";
 import { loadPerspicaxOrg } from "@/lib/perspicax-org";
 import { api } from "@/state/store";
-import { DescribedRow, Switch } from "../SettingsPrimitives";
+import { DescribedRow, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 export function saveOrgGrokBridge(allowed: boolean): Promise<{ settings: { allowGrokBridge?: boolean } }> {
@@ -35,13 +35,16 @@ export function OrgGrokBridgePolicy({ initial, onChanged }: { initial: boolean; 
 
   return (
     <div data-settings-card="organization.grokBridge" data-org-grok-bridge={allowed ? "on" : "off"}>
-      <DescribedRow
-        label={t("organization.grokBridge.title")}
-        rowId="grokBridge"
-        description={error ? <span role="alert" className="text-danger">{error}</span> : t("organization.grokBridge.short")}
-      >
-        <Switch checked={allowed} disabled={busy} aria-label={t("organization.grokBridge.label")} onClick={() => void toggle()} />
-      </DescribedRow>
+      {/* A shared row in a card, under its grey heading (JC 2026-11-07). */}
+      <SettingsGroup groupId="organizationGrokBridge" title={t("organization.grokBridge.title")}>
+        <DescribedRow
+          label={t("organization.grokBridge.label")}
+          rowId="grokBridge"
+          description={error ? <span role="alert" className="text-danger">{error}</span> : t("organization.grokBridge.short")}
+        >
+          <Switch checked={allowed} disabled={busy} aria-label={t("organization.grokBridge.label")} onClick={() => void toggle()} />
+        </DescribedRow>
+      </SettingsGroup>
     </div>
   );
 }

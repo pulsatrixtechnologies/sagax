@@ -54,7 +54,7 @@ import { modelOn } from "../../../shared/offered-models";
 import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSettings";
 import { MemesSettings } from "./MemesSettings";
 import { WebSearchSettings } from "./WebSearchSettings";
-import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, PRIMARY_PILL, SettingsFoldSection, SettingsGroup, Switch, requestSettingsCard } from "../SettingsPrimitives";
+import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, PRIMARY_PILL, SettingsFoldSection, SettingsGroup, SettingsIconTile, Switch, requestSettingsCard } from "../SettingsPrimitives";
 import { ExternalLinkPill, SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { LocalModelsSettings } from "./LocalModelsSettings";
 import { LinkedGrokBotSettings } from "./LinkedGrokBotSettings";
@@ -120,13 +120,13 @@ function RowAction({ action, open }: { action: ProviderAction; open: boolean }) 
 
 function RowIcon({ row, instance }: { row: ProviderRow; instance?: InstanceInfo }) {
   return (
-    <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-lg border-[0.5px] border-border bg-panel text-ink-secondary">
+    <SettingsIconTile>
       {instance && (row.kind === "account" || row.instanceIds.length === 1) ? <InstanceProviderMark instance={instance} size={16} />
         : row.kind === "server" ? <Server size={14} />
         : row.kind === "local" ? <Cpu size={14} />
         : row.kind === "account" ? <UserRound size={14} />
         : <KeyRound size={14} />}
-    </span>
+    </SettingsIconTile>
   );
 }
 
@@ -544,7 +544,7 @@ export function ProvidersSettings() {
             <li data-provider-group="local" data-open={openGroup === "local" ? "true" : "false"} className="min-w-0">
               <button type="button" onClick={() => setOpenGroup(openGroup === "local" ? null : "local")} aria-expanded={openGroup === "local"}
                 className="mx-1.5 flex min-h-[44px] w-[calc(100%-12px)] min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none">
-                <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-lg border-[0.5px] border-border bg-panel text-ink-secondary"><Cpu size={14} /></span>
+                <SettingsIconTile><Cpu size={14} /></SettingsIconTile>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] leading-[18px] text-ink">{t("localModels.title")}</span>
                   <span className="block truncate text-[12px] leading-4 text-ink-secondary">

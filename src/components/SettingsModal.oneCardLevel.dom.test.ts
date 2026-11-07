@@ -13,7 +13,7 @@ import type { Action, AppSettingsSection } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
 import { setAdvancedMode } from "@/lib/interface-mode";
 import { settingsPagesApi } from "@/gallery/settings-pages-api";
-import { nestedSurfaces, openFolds } from "./settings/nested-surfaces";
+import { nestedSurfaces, openFolds, rowsOffReference } from "./settings/nested-surfaces";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -111,6 +111,22 @@ describe("Settings keep one card level (#2175)", () => {
         expect(hits).toEqual([]);
       });
     }
+  }
+
+  // JC 2026-11-07 (Experimental > Developer): a loose fold row under a
+  // heading with a round chevron, its switch row indented outside any card.
+  // Every row is a shared row (SettingsPrimitives) inside a card.
+  for (const [variant, query] of Object.entries(VARIANTS)) {
+    it(`advanced, ${variant}: every row is a shared row in a card on every page`, async () => {
+      setAdvancedMode(true);
+      await mount(query);
+      const hits: string[] = [];
+      for (const section of SECTIONS) {
+        const node = await page(section);
+        for (const hit of rowsOffReference(node)) hits.push(`${section}: ${hit}`);
+      }
+      expect(hits).toEqual([]);
+    });
   }
 
   it("Models > Advanced is a heading with a disclosure whose content unfolds beside it, not a card of cards", async () => {

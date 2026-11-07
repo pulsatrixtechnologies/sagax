@@ -199,9 +199,15 @@ final class SettingsAppearanceUITests: XCTestCase {
 
         // The category select narrows the cards: Productivity drops Getting
         // started's own.
-        app.element("achievements-category").tap()
+        // Opening the page can unlock a badge: its banner takes the first
+        // touch (it closes and goes no further), so the select opens on the
+        // next one.
         let productivity = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Productivity' AND elementType != %d", XCUIElement.ElementType.other.rawValue)).firstMatch
-        XCTAssertTrue(productivity.waitForExistence(timeout: 5), app.debugDescription)
+        for _ in 0..<3 where !productivity.exists {
+            app.element("achievements-category").tap()
+            if productivity.waitForExistence(timeout: 3) { break }
+        }
+        XCTAssertTrue(productivity.exists, app.debugDescription)
         productivity.tap()
         XCTAssertTrue(app.element("achievement.on-schedule").waitForExistence(timeout: 5))
         XCTAssertFalse(app.element("achievement.first-words").exists)
@@ -225,7 +231,7 @@ final class SettingsAppearanceUITests: XCTestCase {
     // MARK: ST8, AU19 (organization server)
 
     @MainActor
-    func testOrganizationPageShowsTheServerAndSavesFullAccess() throws {
+    func testOrganizationPageShowsTheServerWithoutAFullAccessSwitch() throws {
         guard organization else { throw XCTSkip("start the fixture with PARITY_ORG=1 PARITY_ORG_PHONE=1") }
         let org = api("GET", "/api/org").1
         let admin = org["viewerRole"] as? String == "admin"
@@ -236,22 +242,23 @@ final class SettingsAppearanceUITests: XCTestCase {
         // #149: routines act in the owner's name, one read-only line
         XCTAssertTrue(app.element("org-delegation-state").waitForExistence(timeout: 10))
 
-        // Sharing lists the bots the server says this person sees.
+        // #531: Sharing in the organization is hidden (2026-10-15, as on the
+        // desktop): the app shows the person signed in, never everyone's bots.
         let bots = api("GET", "/api/org/bots").1["bots"] as? [[String: Any]] ?? []
         if let first = bots.first?["id"] as? String {
             let row = app.element("org-bot.\(first)")
-            for _ in 0..<8 where !row.exists { app.swipeUp() }
-            XCTAssertTrue(row.waitForExistence(timeout: 10))
+            XCTAssertFalse(row.exists, "Sharing in the organization stays hidden")
+            XCTAssertFalse(app.staticTexts["Sharing in the organization"].exists)
         }
 
+        // no organization Full access switch any more (server
+        // org-full-access.ts, 2026-10-26): the bot owner's own confirmation
+        // is the only gate, a saved allowFullAccess is ignored
         guard admin else { return }
-        let allowed = (org["settings"] as? [String: Any])?["allowFullAccess"] as? Bool ?? true
-        let toggle = app.element("org-full-access.toggle")
-        for _ in 0..<10 where !toggle.isHittable { app.swipeUp() }
-        toggle.tap()
-        XCTAssertTrue(eventually { ((self.api("GET", "/api/org").1["settings"] as? [String: Any])?["allowFullAccess"] as? Bool) == !allowed })
-        toggle.tap()
-        XCTAssertTrue(eventually { ((self.api("GET", "/api/org").1["settings"] as? [String: Any])?["allowFullAccess"] as? Bool) == allowed })
+        XCTAssertTrue(app.element("org-delegation-state").exists)
+        for _ in 0..<4 { app.swipeUp() }
+        XCTAssertFalse(app.element("org-full-access").exists, "no dead Full access switch")
+        XCTAssertFalse(app.element("org-full-access.toggle").exists, "no dead Full access switch")
     }
 
     /// #149: a quick create on the Automations calendar no longer sends the

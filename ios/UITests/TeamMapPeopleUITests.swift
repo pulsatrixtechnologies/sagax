@@ -251,9 +251,10 @@ final class TeamMapPeopleUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["person-role"].exists)
         let teams = app.descendants(matching: .any).matching(identifier: "person-teams").firstMatch
         XCTAssertTrue(teams.label.contains("Service Desk (manager)"), "teams: \(teams.label)")
-        // the sheet offers Message only, no Close conversation (owner 2026-10-14)
+        // no Close conversation (owner 2026-10-14), and no Message either:
+        // the sheet was opened from their own conversation (#1157)
         XCTAssertFalse(app.buttons["person-close-conversation"].exists)
-        XCTAssertTrue(app.buttons["person-message"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["person-message"].exists, "no Message inside their conversation")
     }
 
     /// Search lists the members beside the bots (type "Member" on the

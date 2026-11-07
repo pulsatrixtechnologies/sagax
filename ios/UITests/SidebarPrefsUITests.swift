@@ -245,6 +245,12 @@ final class SidebarPrefsUITests: XCTestCase {
     @MainActor
     func testHideFromSidebarAndShowItBack() throws {
         if organization { throw XCTSkip("solo fixture test") }
+        // the fixture pins its one group since the home's reference set
+        // (#754, 2026-10-18): unpin it so it has an ordinary row to hide
+        let seeded = (try api("GET", "/api/groups") as? [String: Any])?["groups"] as? [[String: Any]] ?? []
+        for group in seeded where group["dm"] as? Bool != true && group["pinned"] as? Bool == true {
+            if let id = group["id"] as? String { _ = try api("PATCH", "/api/groups/\(id)", ["pinned": false]) }
+        }
         let app = launch()
         let lux = row("Lux", in: app)
         reveal(lux, in: app, "Lux")
@@ -263,8 +269,9 @@ final class SidebarPrefsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["section.__hidden"].exists)
 
         // a group chat hides from its own row menu (RM13), the same way
-        let groups = (try api("GET", "/api/bots") as? [String: Any])?["groups"] as? [[String: Any]] ?? []
-        let group = try XCTUnwrap(groups.first { $0["dm"] as? Bool != true && $0["pinned"] as? Bool != true })
+        let groups = (try api("GET", "/api/groups") as? [String: Any])?["groups"] as? [[String: Any]] ?? []
+        // unpinned before launch (top of the test)
+        let group = try XCTUnwrap(groups.first { $0["dm"] as? Bool != true })
         let groupId = try XCTUnwrap(group["id"] as? String)
         let groupRow = app.buttons["chat-row.\(groupId)"]
         reveal(groupRow, in: app, "group row")
@@ -287,6 +294,12 @@ final class SidebarPrefsUITests: XCTestCase {
         let toggle = app.switches["settings.showThreads.toggle"].firstMatch
         for _ in 0..<8 where !toggle.exists || !toggle.isHittable { app.swipeUp() }
         XCTAssertTrue(toggle.waitForExistence(timeout: 5), "Show threads switch")
+        // threads are off by default, as on the desktop (SHOW_THREADS_DEFAULT,
+        // single stream): turn them on first, then check the switch hides them
+        if toggle.value as? String == "0" {
+            toggle.tap()
+            try eventually("switch on") { toggle.value as? String == "1" }
+        }
         XCTAssertEqual(toggle.value as? String, "1")
         toggle.tap()
         try eventually("switch off") { toggle.value as? String == "0" }

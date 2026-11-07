@@ -123,6 +123,10 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
     } = ctx;
   const worksInWorkspace = supportsWorkspaceFiles(instance.driverKind);
   ctx.replyText = "";
+  // Every assistant message of this turn, in order: the room hears the last
+  // one (room-reply.ts), the rest are working notes.
+  ctx.turnTexts = [];
+  ctx.turnCompletedOk = false;
   ctx.providerTurnId = undefined;
   let abandoned = false;
   const retirementOwner = `room-abandoned:${randomUUID()}`;
@@ -170,8 +174,11 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
       if (shouldIgnoreProviderEvent(e)) return;
       if (e.threadId !== threadId) return;
       if (ctx.providerTurnId && e.turnId && e.turnId !== ctx.providerTurnId) return;
-      if (e.type === "item.completed" && e.itemType === "assistant_text") ctx.replyText += `\n${e.text}`;
-      else if (e.type === "turn.completed") {
+      if (e.type === "item.completed" && e.itemType === "assistant_text") {
+        ctx.replyText += `\n${e.text}`;
+        ctx.turnTexts.push(e.text);
+      } else if (e.type === "turn.completed") {
+        ctx.turnCompletedOk = e.ok;
         const end = roomTurnEnd(e, Boolean(orchestration), ctx.roomClaimFailure);
         // An assignment's requester hears the runtime's cause, not "error".
         if (orchestration && end.stopReason !== undefined) {
@@ -208,6 +215,7 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
     });
     onProviderHandshakeStarted?.();
     ctx.providerDispatched = true;
+    host.clearHeldReplay(group.id, bot.id, ctx.heldReplayIds ?? []);
     if (roomConsumedId) noteBotRead(readyBot.id, threadId, [roomConsumedId]);
     turnPromptBytes.set(threadId, { stable: Buffer.byteLength(roomSystem.stable), volatile: Buffer.byteLength(roomSystem.volatile) });
     markWorkspaceUse(bot.id, promptSectionPaths(roomSystem.sections));

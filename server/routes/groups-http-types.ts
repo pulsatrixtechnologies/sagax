@@ -68,6 +68,8 @@ export interface GroupsHttpDeps {
   pageSize(raw: string | null): number | null | undefined;
   messagePage(threadId: string, limit: number | undefined, before: string | null | undefined, viewer: ApprovalViewer): { messages: unknown[]; [key: string]: unknown };
   groupThreadIsWorking(groupId: string, threadId: string): boolean;
+  /** Applies a room hold directive ("stop @Bot") when the message is accepted, before it queues behind a busy room. */
+  applyRoomHoldsFromMessage(groupId: string, text: string): void;
   groupOwnerRuleApplies(auth: RequestAuth): boolean;
   groupActor(auth: RequestAuth): GroupActor;
   /** One-arg owner lookup (local operator already bound). */

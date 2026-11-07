@@ -1375,6 +1375,10 @@ import { createRoutinesHttpRoutes } from "./routes/routines-http.ts";
 import { createCalendarCallsRoutes } from "./routes/calendar-calls.ts";
 import { createWebhooksRoutes } from "./routes/webhooks.ts";
 import { createBotsMessagesRoutes } from "./routes/bots-messages.ts";
+import { createFeedbackRoutes } from "./routes/feedback.ts";
+import { createFeedbackService } from "./feedback/service.ts";
+import { readFeedbackConfig } from "./feedback/config.ts";
+import { readToolSpans } from "./telemetry/usage-stats.ts";
 import { createThreadsHttpRoutes } from "./routes/threads-http.ts";
 import { resolveAndSendPhoneCallConsent as resolvePhoneCallConsentCard } from "./routes/phone-call-consent.ts";
 import { createUploadsRoutes, encryptionOwnerForUpload } from "./routes/uploads.ts";
@@ -25258,8 +25262,8 @@ function botGrants(bot: { grants?: unknown; directGrants?: unknown; ownerUserId?
 /** Owner and grants of a bot, for server/auth/authz.ts. Sections are personal:
  * a bot takes no access from one (the legacy shared sections became bot
  * grants at boot, section-channels.ts header). */
-function botFacts(bot: { id?: unknown; ownerUserId?: unknown; grants?: unknown; directGrants?: unknown; section?: unknown; createdAt?: unknown }): BotFacts {
-  return { ownerPrincipalId: effectiveBotOwner(bot), grants: botGrants(bot), sections: [] };
+function botFacts(bot: { id?: unknown; ownerUserId?: unknown; grants?: unknown; directGrants?: unknown; section?: unknown; createdAt?: unknown; systemBot?: unknown }): BotFacts {
+  return { ownerPrincipalId: effectiveBotOwner(bot), grants: botGrants(bot), sections: [], ...(bot.systemBot === "feedback" ? { everyone: "use" as const } : {}) };
 }
 /** A person's teams, for the manager rules. */
 function principalTeams(principalId: string): TeamRef[] {
@@ -30423,7 +30427,33 @@ ROUTES.push(createWebhooksRoutes({
   savePollerCredentials: (id, credentials) => savePollerCredentials(id, credentials),
   isBotAct: (auth) => auth.kind === "session" && isBotActSession(auth.session)
 }));
+// #2618: the shared Feedback bot. Reports are anonymized on the server and
+// filed as GitHub issues with the server's own token (feedback/config.json
+// or SAGAX_FEEDBACK_GITHUB_TOKEN); without one they wait in a local queue.
+const feedbackService = createFeedbackService({
+  dataDir: DATA_DIR,
+  store,
+  config: () => readFeedbackConfig(DATA_DIR),
+  threadFor: (bot) => routeThreadId(store.bot(bot.id)!, undefined),
+  names: () => ({
+    people: principals.list().map((person) => personDisplayName(person)).filter((name): name is string => Boolean(name)),
+    orgs: [process.env.SAGAX_ORG_NAME?.trim() ?? ""].filter(Boolean),
+    bots: store.bots.filter((bot) => bot.systemBot !== "feedback").map((bot) => bot.name),
+  }),
+  serverLines: () => serverLog.read({ level: "warn", limit: 40 }).lines.reverse().map((line) => `${new Date(line.at).toISOString()} ${line.level} ${line.message}`),
+  spans: () => readToolSpans(DATA_DIR, { from: new Date(Date.now() - 15 * 60_000), to: new Date() })
+    .slice(-20).map((span) => ({ name: span.toolName ? `${span.name} ${span.toolName}` : span.name, ms: span.endMs - span.startMs, ok: span.ok })),
+  serverVersion: () => serverVersion(),
+});
+try {
+  feedbackService.ensureBot();
+} catch (error) {
+  console.warn(`[feedback] the Feedback bot could not be created: ${error instanceof Error ? error.message : String(error)}`);
+}
+setInterval(() => { void feedbackService.tick().catch(() => {}); }, 5 * 60_000).unref();
+ROUTES.push(createFeedbackRoutes({ dataDir: DATA_DIR, service: feedbackService, actorPrincipalId }));
 ROUTES.push(createBotsMessagesRoutes({
+  feedback: feedbackService,
   // 2026-11-05 (#2032): chat no longer picks a role; Flow routines use actAs
   pickPerspicaxRole: (_bot: BotRecord, _threadId: string, _auth: RequestAuth, _slug: string) => {},
   originApprovals,

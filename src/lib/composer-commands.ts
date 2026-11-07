@@ -15,7 +15,7 @@ import { LOOP_SUBCOMMANDS, type LoopSubcommand } from "./composer-loop";
 export const GOAL_SUBCOMMANDS = ["status", "pause", "resume", "stop"] as const;
 export type GoalSubcommand = (typeof GOAL_SUBCOMMANDS)[number];
 
-export type ComposerSlashCommandId = "goal" | `goal-${GoalSubcommand}` | "loop" | `loop-${LoopSubcommand}` | "learn" | "setup";
+export type ComposerSlashCommandId = "goal" | `goal-${GoalSubcommand}` | "loop" | `loop-${LoopSubcommand}` | "learn" | "setup" | "feedback";
 
 /** Sagax's own commands sit under two headings: the room's goal (/goal and
  * its subcommands, Objective) and the rest (Sagax). */

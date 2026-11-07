@@ -418,6 +418,9 @@ export const helperModelAllowed = (bot: { helperModel?: unknown }): boolean =>
   bot.helperModel === undefined || bot.helperModel === true;
 
 export interface WireBot {
+  /** A bot the server runs for everyone (#2618: "feedback", the Feedback
+   * bot every signed-in person may write to). Absent: an ordinary bot. */
+  systemBot?: "feedback";
   waitingForTeammates?: boolean;
   /** Bot-to-bot conversations this viewer may read, both ends. Absent: none. */
   botConversations?: WireBotConversation[];
@@ -885,6 +888,9 @@ export interface WireMessage extends WaitLineField {
     | { kind: "audio"; path: string; mime: string; durationMs?: number }
   >;
   card?: OptionCardData;
+  /** The Feedback bot's own question or status (#2618): which step of which
+   * report it belongs to, so the next answer knows what it answers. */
+  feedback?: { step: import("./feedback.ts").FeedbackStep; reportId: string; field?: "steps" | "expected" | "actual" | "describe" };
   /** widget rows (kind "widget"): a bot-authored UI tree (shared/widget.ts).
    * `text` is always its readable fallback, for clients that do not know
    * the kind. */

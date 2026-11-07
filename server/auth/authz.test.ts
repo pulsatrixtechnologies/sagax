@@ -69,6 +69,13 @@ describe("botLevel", () => {
     expect(botLevel({ viewer: viewer(DAVE), ...facts })).toBeNull();
   });
 
+  it("a bot open to everyone (#2618 Feedback) gives every signed-in person use, not a disabled one", () => {
+    const facts: BotFacts = { ...bot([grant(`user:${BOB}`, "edit")]), everyone: "use" };
+    expect(botLevel({ viewer: viewer(MIA), ...facts })).toBe("use");
+    expect(botLevel({ viewer: viewer(BOB), ...facts })).toBe("edit");
+    expect(botLevel({ viewer: viewer(MIA, { disabled: true }), ...facts })).toBeNull();
+  });
+
   it("a read-only person (Perspicax sagax_bots use) holds use at most, their own bots included; never an admin", () => {
     const facts = bot([grant(`user:${BOB}`, "manage"), grant(`user:${CAROL}`, "use")]);
     expect(botLevel({ viewer: viewer(ALICE, { botsReadOnly: true }), ...facts })).toBe("use");

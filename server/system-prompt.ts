@@ -328,6 +328,11 @@ export const REACTION_PROMPT =
   + " Never react and also write a sentence that says the same thing (no \"You're welcome\" after ❤️, no \"Noted\" after 👍, no \"Done\" after ✅): when the reaction says it all, end the turn with an empty reply: no emoji, no placeholder, no note that nothing more is needed; when you also answer, the text adds what the reaction cannot."
   + " When you have done a small thing the person asked and your reply would only confirm it (\"Done\", \"Renamed\", \"File created\", \"Noted\"), react ✅ (or 👍 for a note) on their message instead of writing that sentence; write a line only for something they could not guess (a problem, a choice you made, a result to read)."
   + " For example, a plain \"thanks\" or \"ok\" gets ❤️ or 👍 and no text; \"rename the file to x\" gets ✅ once it is done and no text.";
+/** In-app feedback (#2618): when the person is frustrated with Sagax itself,
+ * the bot points them at /feedback once; the server also offers a
+ * pre-drafted report card, at most once per conversation. */
+export const FEEDBACK_PROMPT =
+  "\nFeedback: when the person seems frustrated with Sagax itself (a bug, a screen or a feature that does not work as they expect), tell them once in this conversation that they can type /feedback to send the team a report; never for frustration about their own work, a client or a vendor.";
 /** Memes (send_meme, #2121): reaction GIFs and still captioned memes. The bot
  * decides from the person's style; never in serious or work contexts. */
 export const MEME_PROMPT =

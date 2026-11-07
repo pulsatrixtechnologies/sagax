@@ -660,7 +660,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // (server/routes/usage.ts, 2026-10-15 / 2026-10-23): the handler keeps the
   // caller's own turns only, never another person's; the whole ledger and the
   // whole-ledger traces (/api/usage, /api/usage/traces) stay admin or usage.view.
-  { methods: ["GET"], path: /^\/api\/me\/usage(?:\/traces)?$/ },
+  { methods: ["GET"], path: /^\/api\/me\/usage(?:\/traces|\/stats)?$/ },
   // The person's own monthly spend limit: anyone signed in reads it; changing
   // it stays admin scope (server/routes/usage.ts).
   { methods: ["GET"], path: /^\/api\/me\/spend-cap$/ },

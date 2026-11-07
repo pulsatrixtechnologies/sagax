@@ -301,6 +301,10 @@ import { videoStatusRow } from "./video/video-status.ts";
 import { createXaiVideoProvider, generatedMp4Chunks, openGeneratedVideo } from "./video/video-provider.ts";
 import { mediaProxyPolicyFromEnv, blockedAddressReason, defaultMediaProxyResolver } from "./media/media-proxy-guard.ts";
 import { createWebSearchRoutes } from "./routes/web-search.ts";
+import { createTelemetryRoutes } from "./routes/telemetry.ts";
+import { createTracer } from "./telemetry/otel.ts";
+import { createAgentSpans } from "./telemetry/agent-spans.ts";
+import { createTelemetrySettingsStore } from "./telemetry/settings-store.ts";
 import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createGrokBridgeRoutes } from "./routes/grok-bridge.ts";
 import { createGrokBridgeInboundRoutes } from "./routes/grok-bridge-inbound.ts";
@@ -2216,6 +2220,7 @@ bindLeafHost({
   get personForJoin() { return personForJoin; },
   get isAutoOptimize() { return isAutoOptimize; },
   get reportBackgroundError() { return reportBackgroundError; },
+  get agentSpans() { return agentSpans; },
   get scrubThreadDecisions() { return scrubThreadDecisions; },
   get appendProblem() { return appendProblem; },
   get peerApprovalFailure() { return peerApprovalFailure; },
@@ -11768,6 +11773,21 @@ function vaultPrincipalForThread(threadId: string): string | null {
 // payer's), and the address guard for a SearXNG instance on an
 // organization server (its own network is not a member's to reach).
 const webSearchStore = createWebSearchStore(DATA_DIR);
+// OpenTelemetry traces (#2609, server/telemetry/): every bot turn, model
+// call, tool/MCP call, sub-agent and routine becomes a span. Local JSONL
+// always (the usage statistics read it); OTLP only while Settings > General
+// > Telemetry holds a collector address. Never on the hot path: emit() only
+// queues, the exporters run on an unref'd timer.
+const telemetrySettings = createTelemetrySettingsStore(DATA_DIR);
+const tracer = createTracer({ dataDir: DATA_DIR, target: () => telemetrySettings.target(), onError: reportBackgroundError });
+const agentSpans = createAgentSpans({
+  emit: (span) => tracer.emit(span),
+  botFor: (threadId) => {
+    const bot = store.botByThread(threadId);
+    return bot ? { id: bot.id, name: bot.name } : null;
+  },
+});
+setInterval(() => { try { agentSpans.sweep(); } catch (error) { reportBackgroundError(error); } }, 10_000).unref();
 const memeStore = createMemeStore(DATA_DIR);
 const openApiStore = new OpenApiStore(DATA_DIR);
 const workflowStore = new WorkflowStore(DATA_DIR);
@@ -15569,6 +15589,10 @@ const cacheKeepWarm = createCacheKeepWarm({
   }
 });
 cacheKeepWarmStatus = (threadId) => cacheKeepWarm.status(threadId);
+bus.subscribe((event: RuntimeEvent) => {
+  if (shouldIgnoreProviderEvent(event)) return;
+  try { agentSpans.onEvent(event); } catch (error) { reportBackgroundError(error); }
+});
 onConfigSaved((before, after) => {
   if (JSON.stringify(before.cacheKeepWarm ?? null) !== JSON.stringify(after.cacheKeepWarm ?? null)) setImmediate(() => cacheKeepWarm.refresh());
 });
@@ -23012,6 +23036,8 @@ ROUTES.push(createUsageRoutes({
   currency: () => cfg.billing?.currency ?? "USD",
   organization: () => IDENTITY.kind === "perspicax"
 }));
+// OTLP export settings (#2609), admin scope.
+ROUTES.push(createTelemetryRoutes({ store: telemetrySettings, tracer }));
 // "Switch them too": a bot's threads on a model of their own follow its model again.
 ROUTES.push(createThreadModelRoutes({
   bot: (id) => store.bot(id),
@@ -32768,6 +32794,7 @@ const gracefulShutdown = createGracefulShutdown({
     () => flushAllProfileHistory(),
     () => flushAllMemoryJournals(),
     () => flushUsageLedger(DATA_DIR),
+    () => tracer.flush(),
     () => flushDecisionLog(DATA_DIR),
     () => flushAdminActivity(DATA_DIR),
     () => runtimeDeltaCoalescer.flushAll(),

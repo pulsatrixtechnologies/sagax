@@ -22,6 +22,7 @@ import {
 } from "./AdvancedSettings";
 import { OrganizationBotRows } from "./OrganizationBotRules";
 import { ThreadCleanupSettings } from "../ThreadCleanupSettings";
+import { TelemetrySettings } from "./TelemetrySettings";
 import { PeopleToolAccessSettings } from "../ToolAccessSettings";
 import { canEditConfig } from "@/lib/viewer";
 import {
@@ -117,6 +118,13 @@ export function GeneralPage({ remoteActive = false }: { remoteActive?: boolean }
         <div data-settings-card="general.loopGuard">
           <SettingsGroup advanced title={t("settings.loopGuard.title")} groupId="loopGuard">
             <LoopGuardRow />
+          </SettingsGroup>
+        </div>
+      )}
+      {editConfig && (
+        <div data-settings-card="general.telemetry">
+          <SettingsGroup advanced title={t("telemetry.title")} groupId="telemetry">
+            <TelemetrySettings />
           </SettingsGroup>
         </div>
       )}

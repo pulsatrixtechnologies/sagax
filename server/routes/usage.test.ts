@@ -2,6 +2,7 @@
 // the caller's own turns and nothing else; the whole ledger (/api/usage)
 // stays an admin read.
 import { mkdtempSync, rmSync } from "node:fs";
+import { appendFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -9,7 +10,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
+import { requiredScope, routePermission, type RequestAuth } from "../auth/request-auth.ts";
 import { appendUsage, type UsageTrigger } from "../usage/usage-ledger.ts";
 import { createUsageRoutes, ownUsageViewer } from "./usage.ts";
 import { dispatchRoutes } from "./table.ts";
@@ -142,6 +143,28 @@ describe("GET /api/me/usage", () => {
     const api = await serve();
     expect((await api("/api/me/usage?from=2026-10-15&to=2026-10-01", ADA)).status).toBe(400);
     expect((await api(`/api/me/usage?${RANGE}&groupBy=nope`, ADA)).status).toBe(400);
+  });
+
+  it("serves the usage statistics (#2609): whole ledger behind usage.view, a member's own turns and threads only", async () => {
+    expect(requiredScope("GET", "/api/me/usage/stats")).toBe("client");
+    expect(requiredScope("GET", "/api/usage/stats")).toBe("admin");
+    expect(routePermission("GET", "/api/usage/stats", { orgDirectory: true })).toBe("usage.view");
+    await appendFile(join(dataDir, "usage", "spans-2026-10.jsonl"), [
+      { t: "a", s: "1", n: "execute_tool mcp__cw__q", k: 1, a: Date.UTC(2026, 9, 14), b: Date.UTC(2026, 9, 14) + 5, st: 1, at: { "sagax.tool.kind": "mcp", "gen_ai.tool.name": "mcp__cw__q", "sagax.mcp.server": "cw", "sagax.thread.id": "t-ada-bot" } },
+      { t: "b", s: "2", n: "execute_tool Bash", k: 1, a: Date.UTC(2026, 9, 14), b: Date.UTC(2026, 9, 14), st: 1, at: { "sagax.tool.kind": "builtin", "gen_ai.tool.name": "Bash", "sagax.thread.id": "t-bob-bot" } },
+    ].map((line) => JSON.stringify(line)).join("\n") + "\n");
+    const api = await serve();
+    const all = await api(`/api/usage/stats?${RANGE}`, ADA, true);
+    expect(all.status).toBe(200);
+    expect(all.body.totals).toMatchObject({ turns: 6, toolCalls: 2, mcpCalls: 1 });
+    expect(all.body.bySource.map((group: { key: string }) => group.key).sort()).toEqual(["owner", "routine", "user"]);
+    const mine = await api(`/api/me/usage/stats?${RANGE}`, ADA);
+    expect(mine.status).toBe(200);
+    expect(mine.body.totals).toMatchObject({ turns: 3, toolCalls: 1, mcpCalls: 1 });
+    expect(JSON.stringify(mine.body)).not.toContain("bob");
+    expect(JSON.stringify(mine.body)).not.toContain("Bash");
+    expect((await api(`/api/me/usage/stats?${RANGE}`, undefined)).status).toBe(403);
+    expect((await api("/api/usage/stats?from=bad&to=2026-10-15", ADA, true)).status).toBe(400);
   });
 });
 

@@ -21,6 +21,8 @@ function bookTurnUsage(row: Omit<UsageRow, "at" | "costSource">, tokensReported 
   // The append lands asynchronously; the cap counts the row from memory
   // until it does, so the check below (and the next turn start) sees it.
   noteSpend(DATA_DIR, booked, appendUsage(DATA_DIR, booked));
+  // #2609: the turn's OpenTelemetry span and its per-model chat spans.
+  try { host.agentSpans?.settleTurn(booked); } catch (error) { host.reportBackgroundError?.(error); }
   const state = spendState(host.cfg, DATA_DIR);
   const alert = takeSpendAlert(DATA_DIR, state);
   if (alert && state) {

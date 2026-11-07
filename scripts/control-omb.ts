@@ -404,6 +404,9 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // Per-step turn path timing on stderr (server/turns/turn-trace.ts). Off
   // unless the parent sets it; no test change.
   if (parentEnv.SAGAX_TURN_TRACE === "1") childEnv.SAGAX_TURN_TRACE = "1";
+  // A suite about the usage limit itself turns the automatic backup engine
+  // off (server/usage/limit-failover-host.ts); only "0" crosses.
+  if (parentEnv.SAGAX_LIMIT_FAILOVER?.trim() === "0") childEnv.SAGAX_LIMIT_FAILOVER = "0";
   // A Vitest run owns this namespace and removes exactly its containers.
   if (parentEnv.SAGAX_LOCAL_VM_TEST_NAMESPACE) childEnv.SAGAX_LOCAL_VM_TEST_NAMESPACE = parentEnv.SAGAX_LOCAL_VM_TEST_NAMESPACE;
   // A suite that checks how a failed turn reads (a rate limit, a refused key)

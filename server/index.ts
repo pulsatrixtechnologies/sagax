@@ -18759,7 +18759,9 @@ const routineReadinessDeps: RoutineReadinessDeps = {
         const option = (await selectableComputers(bot)).find(option => option.surface === surface);
         // A managed computer that can wake or be provisioned is available to
         // dispatch. The pre-flight must not require an already warm desktop.
-        if (option) rows.push({ name: option.label, online: option.available, ...(option.reason ? { detail: option.reason } : {}) });
+        // A status check that failed (a temporary Boat error) is unknown, not
+        // offline: dispatch rechecks it and the run retries later (#841).
+        if (option) rows.push({ name: option.label, online: option.checkFailed ? undefined : option.available, ...(option.reason ? { detail: option.reason } : {}) });
       }
       return rows.map(row => ({ ...row, needed: required && (row.name === "Cloud computer" || row.name === surfaceLabel(surface)) }));
     }

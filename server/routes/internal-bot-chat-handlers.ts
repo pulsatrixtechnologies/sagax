@@ -14,6 +14,7 @@ import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peers/peer-approval.ts";
 import { peerDeliveryReceipt, receiptName, type PeerDeliveryReceipt } from "../peers/peer-delivery.ts";
 import { quoteInNote } from "../peers/peer-provenance.ts";
+import { threadRefUrl } from "../../src/lib/thread-refs.ts";
 import {
   PEER_ACCESS_HELP,
   canAccessBot,
@@ -823,10 +824,15 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
             internalCapability.roomHandoffId ?? internalCapability.generation,
           );
         }
+        // A one-way note links back to the conversation it came from
+        // (send_to_bot does the same): no copied transcript, no access.
+        const handedMessage = oneWay
+          ? `${parsed.data.message}\n\n[Source conversation](${threadRefUrl({ botId: source?.id ?? internalSender.id, threadId: address.threadId })}). This link grants no additional access and contains no copied transcript.`
+          : parsed.data.message;
         // No mode: a question to the bot that sent this work (an
         // ancestor) is a consultation, anything else is work.
         const { node, duplicate, joined } = coordinator.enqueue(address, generation, EXTERNAL ? undefined : internalCapability.roomHandoffId,
-          target, target.botId, parsed.data.message, approvalGranted, parsed.data.rework, [...store.messagesFor(address.threadId)].reverse().find(m => m.role === "user" && m.kind === "text")?.text ?? "",
+          target, target.botId, handedMessage, approvalGranted, parsed.data.rework, [...store.messagesFor(address.threadId)].reverse().find(m => m.role === "user" && m.kind === "text")?.text ?? "",
           requestBatchKey, origin, mode ?? "auto", joinPerson(address.threadId),
           // One teammate, outside a room: several replies need combining.
           parsed.data.relay && !destination && targets.length === 1,

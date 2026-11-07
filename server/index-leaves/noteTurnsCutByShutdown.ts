@@ -11,7 +11,14 @@ function noteTurnsCutByShutdown(final = true): void {
   const runtimeAccounts = (threadId: string) => host.coordinator.continuesAfterRestart(threadId) || host.runtimeHoldsRoot(threadId);
   const cut: InterruptedTurn[] = [];
   for (const { botId, threadId } of host.busyDirectThreads()) {
-    if (runtimeAccounts(threadId)) continue;
+    if (runtimeAccounts(threadId)) {
+      // A person's own turn the runtime holds as a root runs again at the
+      // next start under its restart policy (no record here, or it would run
+      // twice). Its conversation still says why it stopped, as a direct turn's.
+      // A teammate's work turn says so when it resumes, not here.
+      if (final && host.runtimeHoldsRoot(threadId)) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Sagax restarted during this turn; it resumes when Sagax is back", ok: true } });
+      continue;
+    }
     // A turn held on an approval card is not resumed: the card cannot answer
     // the engine that asked; it ends here with the cut line, as before.
     const held = host.threadWaitsOnPerson(threadId);

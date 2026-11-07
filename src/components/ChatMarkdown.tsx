@@ -57,6 +57,8 @@ import { githubRefFromProps, remarkGithubRefs } from "@/lib/github-refs";
 import { GITHUB_REF_ICONS, LinkHoverCard } from "@/components/LinkHoverCard";
 import { useThreadLinkMenu } from "@/components/ThreadLinkMenu";
 import { looksLikeThreadRefUrl, parseThreadRefUrl, resolveThreadRefAddress, remarkThreadRefs } from "../lib/thread-refs";
+import { looksLikePermissionLink, parsePermissionLink } from "../lib/os-permissions";
+import { OsPermissionChatButton } from "./settings/OsPermissions";
 import { MarkdownImagePreview, MessageFolderFiles, OutsideWorkspaceFile, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "./AttachmentPreview";
 import { ThreadLink, ThreadRefsContext, threadLinkFromProps, type ThreadRefsValue } from "./ThreadRefs";
 import { t } from "../lib/i18n";
@@ -174,6 +176,8 @@ export function chatUrlTransform(value: string, key?: string): string {
   // thread links render as chips below, never as external anchors; the
   // scheme must survive the allow-list so the anchor component sees it
   if (looksLikeThreadRefUrl(value)) return value;
+  // a bot's sagax://permission/<id> is a button that grants it (#2614)
+  if (looksLikePermissionLink(value)) return value;
   // an inline raster image needs no network and runs no script; only an
   // image source may use one (a link to data: stays stripped)
   if (key === "src" && isInlineRasterDataUrl(value)) return value;
@@ -1368,6 +1372,11 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         const ref = address ? resolveThreadRefAddress(threads, address, currentBotId) : null;
         if (ref) return <ThreadLink target={ref} ambiguous={ref.ambiguous}>{children}</ThreadLink>;
         if (address || (href && looksLikeThreadRefUrl(href))) return <span className="break-words">{children}</span>;
+        // sagax://permission/<id>: the same one-click action as Settings >
+        // Permissions; an unknown id keeps its label as plain text
+        const permission = parsePermissionLink(href);
+        if (permission) return <OsPermissionChatButton id={permission}>{children}</OsPermissionChatButton>;
+        if (href && looksLikePermissionLink(href)) return <span className="break-words">{children}</span>;
         const localPath = localFilePath(href);
         if (localPath) {
           // a link to a file the bot delivered saves that delivered copy, so

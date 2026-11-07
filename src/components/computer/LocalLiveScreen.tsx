@@ -15,6 +15,8 @@ import { Loader2, MonitorOff } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { isMacPlatform } from "@/lib/is-mac-platform";
 import { SCREEN_PROBLEM_LINE, localScreenProblem, useScreenPermission } from "@/lib/computer-screen-state";
+import { useOsPermissions } from "@/lib/os-permissions";
+import { OsPermissionButtons, permissionActionLabel } from "@/components/settings/OsPermissions";
 
 /** Empty frames in a row before the window stops waiting and says why. */
 export const LOCAL_LIVE_MISSES = 2;
@@ -61,7 +63,13 @@ export function LocalLiveScreen({ control }: { desktopId?: string; control: bool
 
   const stuck = !inApp || (!frame && misses >= LOCAL_LIVE_MISSES);
   const problem = localScreenProblem({ inApp, mac: isMacPlatform(), screenPermission, failed: failure !== null, failure });
-  const canOpenSettings = problem === "permission" && typeof window.ogb?.permOpenSettings === "function";
+  // Every screen problem the person can fix has its button here (#2614):
+  // allow, Relaunch Sagax, reset a stale entry. Never the sentence alone.
+  // "empty" (allowed, nothing failed, still no picture) is a relaunch too.
+  const refusedOrStuck = problem === "permission" || problem === "relaunch";
+  const permissions = useOsPermissions({ captureFailed: problem === "relaunch" || (stuck && problem === "empty") });
+  const screenView = refusedOrStuck || problem === "empty" ? permissions.view("screen") : null;
+  const canOpenSettings = refusedOrStuck && !screenView && typeof window.ogb?.permOpenSettings === "function";
   return (
     <div data-computer-card-local-live={control ? "control" : "watch"} className="absolute inset-0 flex items-center justify-center bg-black">
       {frame && inApp ? (
@@ -73,14 +81,25 @@ export function LocalLiveScreen({ control }: { desktopId?: string; control: bool
           {problem === "capture-failed" && failure && (
             <p data-local-live-failure="" className="break-words text-[11px] text-white/50">{failure}</p>
           )}
+          {screenView && permissions.answer && (
+            <div data-local-live-actions="" className="mt-1 flex flex-wrap items-center justify-center gap-2">
+              <OsPermissionButtons
+                view={screenView}
+                platform={permissions.answer.platform}
+                busy={permissions.busy === "screen"}
+                onAct={(secondary) => void permissions.act("screen", secondary)}
+                tone="dark"
+              />
+            </div>
+          )}
           {canOpenSettings && (
             <button
               type="button"
               data-local-live-settings=""
               onClick={() => void window.ogb?.permOpenSettings?.("screen")}
-              className="mt-1 rounded-lg bg-white/10 px-3 py-1.5 text-[12px] text-white hover:bg-white/15"
+              className="mt-1 rounded-lg bg-white/15 px-3 py-1.5 text-[12px] text-white hover:bg-white/20"
             >
-              {t("computerThumb.allowScreen")}
+              {permissionActionLabel("settings", "darwin")}
             </button>
           )}
         </div>

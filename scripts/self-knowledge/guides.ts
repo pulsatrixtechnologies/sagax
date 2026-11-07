@@ -150,6 +150,14 @@ export const GUIDES: Guide[] = [
     refs: ["bot-setting:model", "tool:propose_model"],
   },
   {
+    id: "os-permissions",
+    title: "Give Sagax a missing OS permission in one click",
+    where: "Settings > Permissions (Autorisations); a sagax://permission/<id> link in a reply",
+    keywords: "permission permissions autorisation autorisations microphone micro ecran screen recording enregistrement accessibilite accessibility notifications reconnaissance vocale speech automation automatisation full disk acces complet disque reglages systeme system settings parametres windows relancer relaunch tcc",
+    text: "Never send the person to look for a setting. Settings > Permissions lists what this computer allows Sagax (macOS: microphone, screen, accessibility, notifications, speech, automation, fullDisk; Windows: microphone, notifications), each with its one button: the system's own prompt when it can still ask, otherwise the exact System Settings or Windows Settings pane, and Relaunch Sagax for Screen Recording (macOS applies it at the next launch; still refused after a relaunch, the button resets the entry and reopens the pane). The page reads again when the person comes back. In a reply, write [Allow Screen Recording](sagax://permission/screen) (ids: microphone, screen, accessibility, notifications, speech, automation, fullDisk): in the desktop app it is a button that runs the same action, and once allowed it reads as plain text.",
+    refs: ["file:docs/desktop-chat-links.md"],
+  },
+  {
     id: "confidential",
     title: "Make a conversation confidential",
     where: "new thread menu > New confidential thread; thread menu > Make confidential (Rendre confidentiel)",

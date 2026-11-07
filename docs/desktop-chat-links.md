@@ -55,3 +55,19 @@ local-shell actions: a page loaded from a remote server never receives them, and
 the browser build has no such links at all. An app connected to another
 computer as its companion (**Settings → Remote access → Connect to another
 computer**) opens them against that computer's chats, the ones it shows.
+
+## Permission buttons (`sagax://permission/<id>`)
+
+A bot that needs an operating system permission writes a link such as
+`[Allow Screen Recording](sagax://permission/screen)` in its reply. In the
+desktop app the link is a button that runs the same action as **Settings →
+Permissions**: the system's own prompt while it can still ask, otherwise the
+exact System Settings or Windows Settings pane, and **Relaunch Sagax** for
+Screen Recording (macOS applies a new grant at the next launch; still refused
+after a relaunch, the button resets the entry and opens the pane again). Once
+the permission is allowed, the label reads as plain text with "(Allowed)".
+
+Ids: `microphone`, `screen`, `accessibility`, `notifications`, `speech`,
+`automation`, `fullDisk`. An unknown id, the browser build or a page loaded
+from a remote server keep the label as plain text: the link never reaches the
+shell.

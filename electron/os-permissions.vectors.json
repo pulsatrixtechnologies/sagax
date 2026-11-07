@@ -1,0 +1,244 @@
+{
+  "comment": "#2614 permission -> action vectors, shared by electron/os-permissions.test.mjs and the iOS Swift tests.",
+  "desktop": [
+    {
+      "platform": "darwin",
+      "id": "microphone",
+      "status": "not-determined",
+      "run": {},
+      "expect": {
+        "kind": "prompt"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "microphone",
+      "status": "not-determined",
+      "run": {
+        "asked": true
+      },
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "microphone",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "microphone",
+      "status": "granted",
+      "run": {},
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "not-determined",
+      "run": {},
+      "expect": {
+        "kind": "prompt",
+        "secondary": "relaunch"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "secondary": "relaunch"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "denied",
+      "run": {
+        "openedSettings": true
+      },
+      "expect": {
+        "kind": "relaunch",
+        "secondary": "settings"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "denied",
+      "run": {
+        "relaunched": true
+      },
+      "expect": {
+        "kind": "reset",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "secondary": "settings"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "granted",
+      "run": {
+        "captureFailed": true
+      },
+      "expect": {
+        "kind": "relaunch",
+        "secondary": "settings"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "granted",
+      "run": {},
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "accessibility",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "notifications",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "prompt"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "notifications",
+      "status": "unknown",
+      "run": {
+        "asked": true
+      },
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "notifications",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "speech",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "automation",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "fullDisk",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+      }
+    },
+    {
+      "platform": "win32",
+      "id": "microphone",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "ms-settings:privacy-microphone"
+      }
+    },
+    {
+      "platform": "win32",
+      "id": "microphone",
+      "status": "granted",
+      "run": {},
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "platform": "win32",
+      "id": "notifications",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "prompt"
+      }
+    },
+    {
+      "platform": "win32",
+      "id": "notifications",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "ms-settings:notifications"
+      }
+    },
+    {
+      "platform": "linux",
+      "id": "microphone",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "granted",
+      "run": {
+        "captureFailed": true,
+        "relaunched": true
+      },
+      "expect": {
+        "kind": "reset",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "secondary": "settings"
+      }
+    }
+  ]
+}

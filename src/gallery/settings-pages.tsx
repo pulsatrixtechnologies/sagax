@@ -26,6 +26,30 @@ if (params.get("mode") === "simple") { try { localStorage.setItem("sagax.interfa
 
 const API = settingsPagesApi(params);
 
+// ?perm=mac|win (#2614): the desktop app's permission answers, so Settings >
+// Permissions and the in-context banners draw as on a computer.
+const permPlatform = params.get("perm");
+if (permPlatform) {
+  const pane = (name: string) => `x-apple.systempreferences:com.apple.preference.security?Privacy_${name}`;
+  const answer = permPlatform === "win"
+    ? { platform: "win32", permissions: [
+      { id: "microphone", status: "denied", action: { kind: "settings", url: "ms-settings:privacy-microphone" } },
+      { id: "notifications", status: "granted", action: { kind: "none" } },
+    ] }
+    : { platform: "darwin", permissions: [
+      { id: "microphone", status: "granted", action: { kind: "none" } },
+      { id: "screen", status: "denied", action: { kind: "settings", url: pane("ScreenCapture"), secondary: { kind: "relaunch" } } },
+      { id: "accessibility", status: "not-determined", action: { kind: "prompt" } },
+      { id: "notifications", status: "denied", action: { kind: "settings", url: "x-apple.systempreferences:com.apple.Notifications-Settings.extension" } },
+      { id: "speech", status: "unknown", action: { kind: "settings", url: pane("SpeechRecognition") } },
+      { id: "automation", status: "unknown", action: { kind: "settings", url: pane("Automation") } },
+      { id: "fullDisk", status: "unknown", action: { kind: "settings", url: pane("AllFiles") } },
+    ] };
+  const ogb = ((window as { ogb?: Record<string, unknown> }).ogb ??= {});
+  ogb.permAll = async () => answer;
+  ogb.permAct = async () => ({ ok: true });
+}
+
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {

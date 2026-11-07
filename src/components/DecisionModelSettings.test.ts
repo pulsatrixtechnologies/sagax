@@ -66,7 +66,7 @@ beforeEach(() => {
 describe("DecisionModelSettings", () => {
   it("is Fast decisions: one switch with its state, then a Details fold with the key and what it decides", () => {
     const view = render();
-    const order = ["Fast decisions", "A fast decision model that picks things for your bots", "Let a fast model pick for your bots", "Details", "Jev API key", "Who answers in rooms"]
+    const order = ["Fast decisions", "A fast decision model that picks things for your bots", "Add a key under Details to turn this on.", "Details<", "Jev API key", "Who answers in rooms"]
       .map((text) => view.html.indexOf(text));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);

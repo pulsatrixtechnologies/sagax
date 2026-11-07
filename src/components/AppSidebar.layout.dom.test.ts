@@ -162,7 +162,7 @@ describe("the sidebar at 700 px (the automatic rail)", () => {
     const atlas = row("atlas");
     expect(atlas.getAttribute("aria-label")).toBe("Atlas");
     expect(atlas.getAttribute("tabindex")).toBe("0");
-    expect(atlas.parentElement?.getAttribute("title")).toBe("Atlas · Service desk");
+    expect(atlas.parentElement?.getAttribute("title")).toBe("Atlas\nService desk");
     expect(classes(atlas.querySelector("[data-sidebar-row-name]"))).toContain("hidden");
     // the mascot stays one assembled avatar in the rail
     expect(atlas.querySelectorAll("[data-sidebar-row-avatar]")).toHaveLength(1);

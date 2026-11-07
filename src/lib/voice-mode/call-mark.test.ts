@@ -86,10 +86,12 @@ describe("the call views", () => {
 
     // The remaining pipeline keeps the shared mark, bot hang-up and the
     // spoken-prefix filter: a written follow-up is never read as speech.
-    const legacy = read("../../components/voice-mode/LiveCall.tsx");
+    // LiveCall reads as its view plus the hooks it was split into (#1383)
+    const legacy = ["../../components/voice-mode/LiveCall.tsx", "../../components/voice-mode/useLiveCallEngineSession.ts",
+      "../../components/voice-mode/useLiveCallEngineTurns.ts"].map(read).join("\n");
     expect(legacy).toContain("useVoiceCallMark(bot.id, bot.threadId)");
     expect(legacy).toContain("VOICE_CALL_ENDED_EVENT");
-    expect(legacy).toContain('item.kind === "done" ? live.replyDone(item.text)');
+    expect(legacy).toContain('item.kind === "done" ? liveCall.replyDone(item.text)');
     const pipeline = read("./call.ts");
     const replyDone = pipeline.slice(pipeline.indexOf("  replyDone(text: string)"), pipeline.indexOf("  replyDone(text: string)") + 600);
     expect(replyDone).toContain("const kept = spokenAnswer(text).text;");

@@ -20,8 +20,10 @@ describe("chat text follows the writer's direction", () => {
     expectDirAuto("CitationUI.tsx", "value={comment}");
     expectDirAuto("ChatFindBar.tsx", "value={query}");
     expectDirAuto("RawMarkdownToggle.tsx", 'data-testid="raw-markdown-view"');
-    expectDirAuto("GroupView.tsx", "value={bulletinDraft}");
-    expectDirAuto("GroupView.tsx", "group.bulletin.split");
+    // the group's instructions left the chat for the group panel (#2343): its
+    // editor and its preview are the shared description popover
+    expectDirAuto("bot-settings/DescriptionInfo.tsx", "value={draft}");
+    expectDirAuto("bot-settings/DescriptionInfo.tsx", "{text || emptyText}");
     expectDirAuto("TaskPicker.tsx", "{task.title}");
     expectDirAuto("SearchResults.tsx", "line-clamp-2");
 

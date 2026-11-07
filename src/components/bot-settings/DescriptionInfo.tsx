@@ -101,6 +101,7 @@ export function DescriptionInfo({
             <>
               <textarea
                 autoFocus
+                dir="auto"
                 aria-label={label}
                 value={draft}
                 maxLength={maxLength}
@@ -116,7 +117,7 @@ export function DescriptionInfo({
             </>
           ) : (
             <>
-              <p className={cn("max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[12.5px] leading-relaxed", text ? "text-ink" : "text-ink-secondary")}>
+              <p dir="auto" className={cn("max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-[12.5px] leading-relaxed", text ? "text-ink" : "text-ink-secondary")}>
                 {text || emptyText}
               </p>
               {onSave && (

@@ -31,6 +31,7 @@ const json = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body
 const answers: Record<string, unknown> = {
   "/api/instances": { instances: [] },
   "/api/config": {},
+  // asked with ?since= (its window of runs): answered on the path alone
   "/api/routines": { routines: [], runs: [] },
   "/api/webhooks": { webhooks: [], attempts: [] },
 };
@@ -56,7 +57,7 @@ const send = async (frame: ServerFrame) => {
 
 beforeAll(async () => {
   vi.stubGlobal("EventSource", FixtureEventSource);
-  vi.stubGlobal("fetch", (path: string) => path.startsWith("/api/bots?") ? json({ bots: [bot], groups: [] }) : json(answers[path] ?? {}));
+  vi.stubGlobal("fetch", (path: string) => path.startsWith("/api/bots?") ? json({ bots: [bot], groups: [] }) : json(answers[path.split("?")[0]!] ?? {}));
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -73,7 +74,8 @@ afterAll(() => {
 describe("live frames the store does not keep", () => {
   it("come from the app's one stream", () => {
     expect(seen.bots.map((candidate) => candidate.id)).toEqual(["bot"]);
-    expect(FixtureEventSource.opened.map((source) => source.url)).toEqual(["/api/events"]);
+    // no panel draws a live screen yet: the stream leaves screen frames out (#2166)
+    expect(FixtureEventSource.opened.map((source) => source.url)).toEqual(["/api/events?screens=off"]);
   });
 
   it("hand a screen frame to its listener without touching app state", async () => {

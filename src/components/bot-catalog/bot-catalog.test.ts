@@ -26,6 +26,7 @@ import {
   type CatalogItem,
 } from "@/lib/bot-catalog";
 import { setLocale } from "@/lib/i18n";
+import { plainTimeZone } from "../../../shared/plain-time-zone";
 import { BOT_ROLES } from "@/lib/bot-roles";
 import { orgSectionMenuItems } from "../OrgSectionMenu";
 import { BotCatalogView, SECTION_PREVIEW, type BotCatalogViewProps } from "./BotCatalogView";
@@ -352,7 +353,9 @@ describe("the detail pane", () => {
       const fr = renderToStaticMarkup(createElement(BotCatalogDetailView, { item: pixel, content, tab: "routines", onTab: () => {}, onBack: () => {}, actions: null }));
       expect(fr).toContain("Morning digest");
       expect(fr).toContain("Du lundi au vendredi à 8 h 30");
-      expect(fr).toContain("America/Toronto");
+      // the zone is said the way people say it (#2162), never the IANA id
+      expect(fr).toContain(plainTimeZone("America/Toronto"));
+      expect(fr).not.toContain("America/Toronto");
       expect(fr).not.toMatch(/30 8 \* \* 1-5/);
       expect(fr).not.toMatch(/\bUTC\b/);
       expect(fr).toContain("On mail");
@@ -475,7 +478,7 @@ describe("the Templates section (the old Templates library)", () => {
   });
 
   it("says what an import added", () => {
-    expect(teamImportedText({ name: "Sales desk", members: 3, connections: 1 })).toBe("3 bots added · existing bots and chats kept · Connections to finish in Capabilities > Installed: 1");
+    expect(teamImportedText({ name: "Sales desk", members: 3, connections: 1 })).toBe("3 bots added · existing bots and chats kept · Connections to finish in Plugins > Installed: 1");
     expect(teamImportedText({ name: "Presets", members: 0, presets: 2 })).toBe("Preset bots added to New bot: 2");
   });
 });

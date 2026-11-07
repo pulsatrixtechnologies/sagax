@@ -1,5 +1,5 @@
 import { ChevronRight, Loader2, PauseCircle, Play } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { isValidElement, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { chatBubbleWidth, useChatBubbleWidthClasses } from "@/lib/chat-bubble-width";
 import { cn } from "@/lib/cn";
@@ -149,9 +149,12 @@ const QUIET_LINK = "inline-flex items-center gap-0.5 rounded text-ink-tertiary t
  * an absent part (false, null, undefined, "") never leaves its separator. */
 export function provenanceLine(parts: ReadonlyArray<ReactNode>): ReactNode[] {
   const present = parts.filter((part) => part !== false && part !== null && part !== undefined && part !== "");
+  // each separator is keyed by the part it leads, so a part that leaves takes
+  // its own separator with it and the others stay the same nodes (flash rule,
+  // 2026-11-03): an index key moved them when the status settled
   return present.flatMap((part, index) => index === 0
     ? [part]
-    : [<span key={`sep-${index}`} aria-hidden="true" data-routine-run-sep>·</span>, part]);
+    : [<span key={`sep-${isValidElement(part) && part.key != null ? part.key : index}`} aria-hidden="true" data-routine-run-sep>·</span>, part]);
 }
 
 /** Now, for a running run's elapsed time: a quarter-minute tick is enough

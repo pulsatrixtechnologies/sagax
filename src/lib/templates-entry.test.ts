@@ -17,6 +17,7 @@ import { BotCreationDraft, EMPTY_BOT_DEFAULTS } from "@/lib/bot-creation-draft";
 import { StartingRole, startOptions } from "@/components/NewBotDialog";
 import { PillSelect } from "@/components/SettingsPrimitives";
 import { PluginsPanel } from "@/components/PluginsPanel";
+import { PluginsPanelView } from "@/components/PluginsPanel.tsx-parts/PluginsPanelView";
 import { ConnectAppsView } from "@/components/plugins/ConnectAppsView";
 import { templatesEntryActions } from "./templates-entry";
 
@@ -24,7 +25,11 @@ type Node = ReactElement<{ children?: ReactNode; onClick?: () => void; onBotTemp
 function nodes(value: ReactNode): Node[] {
   if (!isValidElement(value)) return [];
   const node = value as Node;
-  return [node, ...Children.toArray(node.props.children).flatMap(nodes)];
+  // the panel hands its body to its frame as a prop (content), not children
+  const slots = Object.entries(node.props as Record<string, unknown>)
+    .filter(([key, prop]) => key !== "children" && isValidElement(prop))
+    .map(([, prop]) => prop as ReactNode);
+  return [node, ...Children.toArray(node.props.children).flatMap(nodes), ...slots.flatMap(nodes)];
 }
 
 const templates = { type: "openBotCatalog", section: "templates" };
@@ -75,8 +80,15 @@ describe("the templates entry points", () => {
 
   it("Connect apps no longer offers Browse Bots (Owner 2026-10-14)", () => {
     vi.stubGlobal("window", { addEventListener: () => {}, removeEventListener: () => {} });
-    let tree!: ReturnType<typeof PluginsPanel>;
-    renderToStaticMarkup(createElement(() => { tree = PluginsPanel(); return null; }));
+    // the panel's markup lives in PluginsPanelView since the split: render it
+    // with the props PluginsPanel hands it
+    let tree!: ReturnType<typeof PluginsPanelView>;
+    renderToStaticMarkup(createElement(() => {
+      const panel = PluginsPanel() as ReactElement<Parameters<typeof PluginsPanelView>[0]>;
+      expect(panel.type).toBe(PluginsPanelView);
+      tree = PluginsPanelView(panel.props);
+      return null;
+    }));
     const view = nodes(tree).find((node) => node.type === ConnectAppsView);
     expect(view).toBeDefined();
     expect(view?.props.onBotTemplates).toBeUndefined();

@@ -254,7 +254,8 @@ describe("cards, computer, and catalog", () => {
     const cleared = reducer(withStart, { type: "computerStart", botId: "maya", start: null });
     expect(cleared.computerStarts.maya).toBeUndefined();
     const held = reducer(base(), { type: "computerControl", botId: "maya", held: true, helpReason: "need-help" });
-    expect(held.computerControl.maya).toEqual({ held: true, helpReason: "need-help" });
+    // the help reference rides along since #2204, null when the frame has none
+    expect(held.computerControl.maya).toEqual({ held: true, helpReason: "need-help", help: null });
   });
 
   it("openBotCatalog and closeBotCatalog open and close the Browse Bots window", () => {

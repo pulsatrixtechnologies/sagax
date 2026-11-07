@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { myDevices, useDesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { Bot, FileText, KeyRound, Monitor, Plus, RefreshCw, Search, ShieldOff } from "lucide-react";
 
 import { formatEndLabel, type RemoteSessionView } from "../../../shared/remote-session";
@@ -175,6 +176,8 @@ export function RemoteSessionsAdminPage() {
   const [computersOpen, setComputersOpen] = useState(false);
   const [addRequest, setAddRequest] = useState(0);
   const hosts = useUnattendedHosts();
+  // every device of the person, this one first (the Computer menu reads the same list)
+  const devices = myDevices(useDesktopBridgeStatus());
   // An unattended open from the hosts section: once its row connects (the
   // host picked the session at its beat), take control as from a chat card.
   const [awaiting, setAwaiting] = useState<{ code: string; botId: string } | null>(null);
@@ -225,7 +228,7 @@ export function RemoteSessionsAdminPage() {
         name="remote-sessions"
         icon={Monitor}
         title={t("remoteSessionsAdmin.title")}
-        count={countLabel(rows.length, hosts.hosts.length)}
+        count={countLabel(rows.length, hosts.hosts.length + devices.length)}
         subtitle={t("remoteSessionsAdmin.subtitle")}
         {...dragProps}
         topbar
@@ -247,7 +250,7 @@ export function RemoteSessionsAdminPage() {
       <div className="content-card-body flex min-h-0 flex-1">
         <div className={PAGE_SCROLL}>
           <div className={PAGE_COLUMN}>
-            <UnattendedHostsSection state={hosts} onAdd={addComputer} onOpened={(opened) => { setAwaiting(opened); reload(); }} />
+            <UnattendedHostsSection state={hosts} devices={devices} onAdd={addComputer} onOpened={(opened) => { setAwaiting(opened); reload(); }} />
             <PageSection title={t("remoteSessionsAdmin.sessionsTitle")} count={rows.length || undefined} data-remote-admin-sessions="">
               {rows.length === 0 && (
                 <div data-remote-admin-empty="" data-loading={loading ? "" : undefined}>

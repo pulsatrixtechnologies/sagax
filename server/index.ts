@@ -8504,7 +8504,7 @@ function liveSessionPerson(sessionId: string): string | null {
 // (server/desktop/desktop-bridge.ts): bots in their conversations run shell, files,
 // search, fetch, browser, computer use and Local VM there, and their network
 // traffic leaves through it (server/desktop/desktop-egress.ts).
-const desktopBridges = new DesktopBridges(liveSessionPerson, Date.now, join(DATA_DIR, "desktop-computer-names.json"), join(DATA_DIR, "desktop-mac-apps.json"));
+const desktopBridges = new DesktopBridges(liveSessionPerson, Date.now, join(DATA_DIR, "desktop-computer-names.json"), join(DATA_DIR, "desktop-mac-apps.json"), join(DATA_DIR, "desktop-devices.json"));
 /** The last model fallback per thread (session.model-fallback). */
 const modelFallbackByThread = new Map<string, { requested: string; actual: string }>();
 /** #1154: the last model fallback per person, engine and picked model, so a
@@ -20096,6 +20096,13 @@ const roomPostBudgets = new Map<string, RoomPostBudget>();
 // them — its pending map lives in the module so the two respond endpoints
 // can call resolvePeerComms without holding a reference back to here.
 const approvalBus: ApprovalBus = { store, broadcast, notify, autoApply: fullAccessForSource };
+// A device set to Ask every time (Remote sessions > Enrolled hosts): the bot's
+// use waits on the person's card, Always allow remembered per bot and device.
+desktopBridges.setAskHook(async ({ device, context }) => {
+  const bot = store.bot(context.botId);
+  if (!bot) return false;
+  return (await requestPeerApproval(approvalBus, bot, device, `Use ${device.name} for this turn`, "use_computer", context.threadId)) === "allow";
+});
 
 // Approvals live only in memory, so any peer card still open on disk is one
 // whose resolver died with the previous process. Left alone it can never be
@@ -21977,7 +21984,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     stdioRelay: (input) => stdioRelay.relay(input as never),
     desktopConnected: (person) => desktopBridges.connected(person),
     handleDesktopBridgeMcp,
-    desktopBridgesRequest: (person, operation, active, onProgress) => desktopBridges.request(person, operation, active, onProgress),
+    desktopBridgesRequest: (person, operation, active, onProgress, context) => desktopBridges.request(person, operation, active, onProgress, undefined, context),
     desktopBridgeMacApps: (person) => desktopBridges.current(person)?.capabilities.macApps === true,
     desktopBridgeMacAppsOn: (person) => desktopBridges.macAppsOn(person),
     bridgeAuditRecord: (row) => bridgeAudit.record(row as never),
@@ -22801,7 +22808,12 @@ ROUTES.push(createDesktopBridgeRoutes({
   organization: () => IDENTITY.kind === "perspicax",
   bridges: desktopBridges, tunnels: desktopTunnels, audit: bridgeAudit,
   workplace: (person) => workplacePreference(person),
-  localModels: desktopLocalModels
+  localModels: desktopLocalModels,
+  // the person's iPhones (push registrations), online while a stream is open
+  phones: (person) => {
+    const live = new Set(tokensOfConnectedDevices(sseClients, person));
+    return pushDevices.list(person).map((phone) => ({ name: phone.deviceName || "iPhone", platform: phone.platform, lastSeenAt: phone.updatedAt, online: live.has(phone.token) }));
+  },
 }));
 // A personal computer hands its look to the paired phone (shared/desktop-appearance.ts).
 ROUTES.push(createDesktopAppearanceRoutes({ store: createDesktopAppearanceStore(DATA_DIR), organization: () => IDENTITY.kind === "perspicax" }));

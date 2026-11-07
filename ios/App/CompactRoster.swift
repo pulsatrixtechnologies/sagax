@@ -157,28 +157,17 @@ struct CompactBotEntry: View {
         }
     }
 
-    /// Name first: the role takes what is left and truncates, and when too
-    /// little is left for a word of it the role steps aside rather than
-    /// showing a sliver. At the accessibility text sizes the name wraps
-    /// rather than clips.
+    /// The name, then the role on its own line BELOW it, smaller and grey
+    /// (JC 2026-11-06: never the name and the title side by side).
     private func nameAndRole(_ bot: Bot, _ row: CompactBotRow) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) {
-                // Laid out first, so the role takes only what the name
-                // leaves rather than an equal share of the line.
-                name(bot, row)
-                    .layoutPriority(1)
-                if !bot.displayRole.isEmpty {
-                    Text(verbatim: bot.displayRole)
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
-                        .lineLimit(1)
-                        // Measured at its minimum, so this line is chosen
-                        // whenever the name fits with room for a word of role.
-                        .frame(minWidth: 40, idealWidth: 40, maxWidth: .infinity, alignment: .leading)
-                }
-            }
+        VStack(alignment: .leading, spacing: 2) {
             name(bot, row)
+            if !bot.displayRole.isEmpty {
+                Text(verbatim: bot.displayRole)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
+                    .lineLimit(1)
+            }
         }
     }
 

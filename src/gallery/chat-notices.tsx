@@ -74,7 +74,7 @@ function Gallery() {
     return <JsonViewer path="/w/sample.json" name="sample.json" message={{ threadId: "t", messageId: "m" }} onClose={() => {}} returnFocus={null} />;
   }
   if (view === "bot-pill") {
-    // The bot chat's header pill: "Name · Title" on one line, like Grok Bot
+    // The bot chat's header pill: the name with the title stacked under it
     // (JC 2026-11-06), then a long title that ends in an ellipsis.
     const mascot = <span className="flex size-[22px] items-center justify-center rounded-full bg-raised text-[11px]">M</span>;
     return (

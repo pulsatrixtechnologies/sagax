@@ -178,12 +178,22 @@ struct DesktopCommandPalette: View {
                 } else {
                     HStack(spacing: 12) {
                         DesktopIconView(icon: Self.icon(item), size: 16).foregroundStyle(theme.inkSecondary)
-                        Text(verbatim: recent ? "\(Self.label(item.group)): \(item.label)" : item.label)
-                            .font(theme.font(14)).foregroundStyle(theme.ink).lineLimit(1)
-                            // the body's 1.5 line height
-                            .frame(height: 21)
-                        if let detail = item.detail, !recent {
-                            Text(verbatim: detail).font(theme.font(12.5)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                        if item.group == .bots, let detail = item.detail, !recent {
+                            // a bot's title UNDER its name (JC 2026-11-06)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(verbatim: item.label)
+                                    .font(theme.font(14)).foregroundStyle(theme.ink).lineLimit(1)
+                                Text(verbatim: detail)
+                                    .font(theme.font(12)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                            }
+                        } else {
+                            Text(verbatim: recent ? "\(Self.label(item.group)): \(item.label)" : item.label)
+                                .font(theme.font(14)).foregroundStyle(theme.ink).lineLimit(1)
+                                // the body's 1.5 line height
+                                .frame(height: 21)
+                            if let detail = item.detail, !recent {
+                                Text(verbatim: detail).font(theme.font(12.5)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                            }
                         }
                         Spacer(minLength: 0)
                         if !item.shortcut.isEmpty {

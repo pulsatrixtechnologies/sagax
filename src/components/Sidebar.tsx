@@ -1943,7 +1943,7 @@ export function BotListItem({
     <>
       {/* flex, not inline: an inline wrapper adds a baseline gap under the
           avatar and makes the row taller than before the presence dot. */}
-      <span data-sidebar-row-avatar className="relative flex shrink-0" title={iconOnly ? undefined : [bot.name, title].filter(Boolean).join(" · ")}>
+      <span data-sidebar-row-avatar className="relative flex shrink-0" title={iconOnly ? undefined : [bot.name, title].filter(Boolean).join("\n")}>
         <SidebarMascotAvatar
           botId={bot.id}
           bot={bot}

@@ -28,6 +28,13 @@ export interface SwitchColors {
   offEdge: string;
 }
 
+/** The one on colour of every switch in the app (Grok Bot's blue, measured
+ * 2026-11-07, #1362c7). The skin's accent, a brand and a bot's colour no longer
+ * recolour it, and its lightness never moves per skin. */
+export const SWITCH_ON_BLUE = "#1362c7";
+/** The off track on a dark skin: Grok Bot's dark track (the panel's #3a3a3a). */
+export const SWITCH_OFF_DARK = "#3a3a3a";
+
 /** The thumb, white in both states. */
 export const SWITCH_THUMB = "#ffffff";
 /** WCAG 1.4.11, non-text contrast. */
@@ -168,15 +175,18 @@ function fitTrack(base: Rgb, ink: Rgb, grounds: Rgb[], pick: "closest" | "lighte
 export function switchColors({ accent, ink, surfaces, scheme }: { accent: string; ink: string; surfaces: string[]; scheme: Scheme }): SwitchColors {
   const grounds = surfaces.map(parseHex).filter((c): c is Rgb => c !== null);
   const inkRgb = parseHex(ink) ?? (scheme === "dark" ? WHITE : BLACK);
-  const accentRgb = parseHex(accent) ?? inkRgb;
-  const on = fitTrack(accentRgb, inkRgb, grounds, "closest");
+  void accent; // the accent no longer drives the switch: one on colour, SWITCH_ON_BLUE
+  // one value on every skin, light and dark: no lightness search
+  const on = { track: parseHex(SWITCH_ON_BLUE) as Rgb, edge: null };
   // a neutral: the ink's own tint, kept faint
   const off = fitTrack(inkRgb, inkRgb, grounds, scheme === "light" ? "lightest" : "darkest", 0.12);
+  // dark skins: Grok's dark track, the thumb's position says off
+  const dark = scheme === "dark";
   return {
     on: toHex(on.track),
-    off: toHex(off.track),
+    off: dark ? SWITCH_OFF_DARK : toHex(off.track),
     onEdge: on.edge ? toHex(on.edge) : "transparent",
-    offEdge: off.edge ? toHex(off.edge) : "transparent",
+    offEdge: dark ? "transparent" : off.edge ? toHex(off.edge) : "transparent",
   };
 }
 
@@ -203,12 +213,9 @@ export function switchVars(colors: SwitchColors): Record<string, string> {
 }
 
 /**
- * A deployment's brand accent (brand.ts) replaces the skin's accent at run
- * time, on any skin, so its track cannot come from the generated blocks.
- * It is derived once per scheme against the extremes of that scheme's
- * surfaces (the test holds every skin's surfaces inside them), and the
- * generated blocks read it first: `var(--brand-switch-on-light, <skin's>)`.
- * Hibou 98 keeps its own navy track.
+ * A deployment's brand accent (brand.ts) no longer recolours the switch
+ * (2026-11-07): every switch has the one on colour. The properties stay so
+ * the callers keep working; they are empty.
  */
 export const BRAND_SURFACES: Record<Scheme, string[]> = {
   light: ["#ffffff", "#dcdcdc"],
@@ -220,14 +227,8 @@ export const BRAND_SWITCH_VARS = ["--brand-switch-on-light", "--brand-switch-on-
 
 /** The brand's on track per scheme, as custom properties (empty for a colour that is not `#rrggbb`). */
 export function brandSwitchVars(accent: string | undefined): Record<string, string> {
-  if (!accent || !parseHex(accent)) return {};
-  const out: Record<string, string> = {};
-  for (const scheme of ["light", "dark"] as const) {
-    const colors = switchColors({ accent, ink: scheme === "light" ? "#000000" : "#ffffff", surfaces: BRAND_SURFACES[scheme], scheme });
-    out[`--brand-switch-on-${scheme}`] = colors.on;
-    out[`--brand-switch-on-edge-${scheme}`] = colors.onEdge;
-  }
-  return out;
+  void accent;
+  return {};
 }
 
 /**
@@ -248,12 +249,6 @@ export const BOT_SWITCH_VARS = ["--bot-switch-on-light", "--bot-switch-on-edge-l
 
 /** The bot's on track per scheme, as custom properties (empty for a colour that is not `#rrggbb`). */
 export function botSwitchVars(color: string | null | undefined): Record<string, string> {
-  if (!color || !parseHex(color)) return {};
-  const out: Record<string, string> = {};
-  for (const scheme of ["light", "dark"] as const) {
-    const colors = switchColors({ accent: color, ink: scheme === "light" ? "#000000" : "#ffffff", surfaces: BOT_SURFACES[scheme], scheme });
-    out[`--bot-switch-on-${scheme}`] = colors.on;
-    out[`--bot-switch-on-edge-${scheme}`] = colors.onEdge;
-  }
-  return out;
+  void color;
+  return {};
 }

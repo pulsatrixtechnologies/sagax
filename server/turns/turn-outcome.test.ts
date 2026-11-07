@@ -73,14 +73,14 @@ describe("TurnStops", () => {
 });
 
 describe("stoppedTurnOutcome", () => {
-  it("leads with the cause, then what the turn did and where its handoff is", () => {
+  it("leads with the cause, then what the turn did, and never asks anyone to assign what is left", () => {
     const text = stoppedTurnOutcome({
-      reason: STEP_CAP, turnId: "turn-1", handoffPath: "/data/handoffs/cap-1.md",
+      reason: STEP_CAP, turnId: "turn-1",
       activities: [tool("Bash", true), tool("Bash", false), tool("Read", true), tool("Edit", true, "turn-0")],
     });
     expect(text.startsWith(STEP_CAP)).toBe(true);
     expect(text).toContain("Before it stopped it made 3 tool calls: Bash ×2 (1 failed), Read ×1.");
-    expect(text).toContain("Every step it took is listed in /data/handoffs/cap-1.md; to finish, assign what is left and point to that file.");
+    expect(text).not.toContain("assign what is left");
     expect(text).not.toContain("Edit");
   });
 

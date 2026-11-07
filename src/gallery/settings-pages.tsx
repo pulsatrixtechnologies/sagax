@@ -26,6 +26,13 @@ if (params.get("mode") === "simple") { try { localStorage.setItem("sagax.interfa
 
 const API = settingsPagesApi(params);
 
+// #2636: the desktop shell's diagnostics and logs exist, so Settings > Developer draws its Diagnostics card.
+{
+  const ogb = ((window as { ogb?: Record<string, unknown> }).ogb ??= {});
+  ogb.exportDiagnostics ??= async () => null;
+  ogb.exportLogs ??= async () => null;
+}
+
 // ?perm=mac|win (#2614): the desktop app's permission answers, so Settings >
 // Permissions and the in-context banners draw as on a computer.
 const permPlatform = params.get("perm");

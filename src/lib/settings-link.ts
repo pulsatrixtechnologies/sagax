@@ -17,6 +17,7 @@ const SECTION_LABEL = {
   organization: "settings.section.organization",
   appearance: "settings.section.appearance",
   experimental: "settings.section.experimental",
+  developer: "settings.section.developer",
   // Integrations, Connected apps and Decision model are in Models
   // (2026-10-14, "Models and voice" until 2026-10-28, when Voice became a
   // page of its own); Privacy and Memory are cards of Notifications and

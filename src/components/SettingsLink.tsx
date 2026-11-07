@@ -27,7 +27,7 @@ export function SettingsText({
             key={index}
             type="button"
             className="text-accent underline"
-            onClick={() => openSettings(dispatch, target.section, target.cardId)}
+            onClick={() => { target.prepare?.(); openSettings(dispatch, target.section, target.cardId); }}
           >
             {settingsSectionLabel(currentSettingsSection(target.section, target.cardId))}
           </button>

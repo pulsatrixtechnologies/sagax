@@ -164,6 +164,27 @@ runs:
   # Run images, exactly as `registry/name:tag@sha256:<digest>`. Nothing else
   # is admitted in the run namespace, not even another Pulsatrix image.
   allowedImages: []
+  # Build cache of coding runs (gap I5, decision D3: Rust builds are big and
+  # must stay fast). One disk per person and concurrent slot, kept between
+  # runs and reattached to the next one: sccache, the cargo targets (one per
+  # environment), the cargo registry, pnpm. Deleted after retentionDays idle.
+  # The provisioner needs the matching env (docs/sandbox-kubernetes.md,
+  # "Build cache"): SAGAX_RUNS_CACHE_ENABLED=1,
+  # SAGAX_RUNS_CACHE_STORAGE_CLASS=<className>, SAGAX_RUNS_CACHE_GIB=<sizeGi>.
+  # Enabling it also needs room in quota: requestsStorage grows by sizeGi and
+  # persistentVolumeClaims by one per slot (values-azure-run-cache.yaml).
+  cache:
+    enabled: false
+    className: px-run-cache
+    sizeGi: 64
+    provisioner: driver.longhorn.io
+    # Delete: an idle cache is rebuilt, never restored.
+    reclaimPolicy: Delete
+    volumeBindingMode: WaitForFirstConsumer
+    allowExpansion: true
+    parameters:
+      encrypted: "true"
+      numberOfReplicas: "1"
 
 # One warm worker from 07:00 to 19:00 America/Toronto, none at night.
 # The sandbox pool's autoscaler min is 0; this pod is what holds a node.

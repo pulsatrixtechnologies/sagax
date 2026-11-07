@@ -418,6 +418,9 @@ export const helperModelAllowed = (bot: { helperModel?: unknown }): boolean =>
   bot.helperModel === undefined || bot.helperModel === true;
 
 export interface WireBot {
+  /** A bot the server runs for everyone (#2618: "feedback", the Feedback
+   * bot every signed-in person may write to). Absent: an ordinary bot. */
+  systemBot?: "feedback";
   waitingForTeammates?: boolean;
   /** Bot-to-bot conversations this viewer may read, both ends. Absent: none. */
   botConversations?: WireBotConversation[];
@@ -564,6 +567,9 @@ export interface WireBot {
   chiefOfStaff?: boolean;
   /** Owner-selected additional teams this Primary Bot may coordinate. */
   managedSections?: string[];
+  /** I2: settings this bot keeps as its own instead of following its team's
+   * model or computer. Absent: the bot follows the team for both. */
+  teamOverrides?: Array<"model" | "computer">;
   /** Pause for human approval before this bot talks to a peer. */
   approvePeerComms?: boolean;
   /** #1276: on a local model, "full" sends the whole prompt as before;
@@ -607,6 +613,11 @@ export interface WireBot {
    * tidies nightly. On unless explicitly false; every change is journaled
    * and can be undone. */
   memoryUpkeep?: boolean;
+  /** Skill learning (Bot settings > Skills): after a failure or a
+   * correction while a skill is in play, the bot revises that skill; after a
+   * long task that went well, it proposes a new one (server/skills/skill-review.ts).
+   * On unless explicitly false. */
+  skillLearning?: boolean;
   /** false: the workspace's helper model never writes this bot's background
    * texts (server/side-jobs.ts). Absent or true: allowed. */
   helperModel?: boolean;
@@ -880,6 +891,9 @@ export interface WireMessage extends WaitLineField {
     | { kind: "audio"; path: string; mime: string; durationMs?: number }
   >;
   card?: OptionCardData;
+  /** The Feedback bot's own question or status (#2618): which step of which
+   * report it belongs to, so the next answer knows what it answers. */
+  feedback?: { step: import("./feedback.ts").FeedbackStep; reportId: string; field?: "steps" | "expected" | "actual" | "describe" };
   /** widget rows (kind "widget"): a bot-authored UI tree (shared/widget.ts).
    * `text` is always its readable fallback, for clients that do not know
    * the kind. */

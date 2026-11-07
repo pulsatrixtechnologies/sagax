@@ -11,12 +11,13 @@ import type { AppState } from "@/state/store";
 
 const fixture = vi.hoisted(() => ({ state: {} as Partial<AppState> }));
 vi.mock("@/lib/routines-badge-preferences", () => ({ useShowRoutinesBadge: () => false }));
+vi.mock("@/lib/use-open-feedback", () => ({ useOpenFeedback: () => async () => {} }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return { ...original, useStore: () => ({ state: { ...original.initialState, ...fixture.state }, dispatch: vi.fn() }) };
 });
 
-import { FootConnectApps, SidebarFoot } from "./SidebarFoot";
+import { FootConnectApps, FootFeedback, SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { connectedAppItems } from "@/lib/connected-apps";
 
 const apps = connectedAppItems({
@@ -97,5 +98,26 @@ describe("foot row", () => {
   it("Sidebar.tsx lays the foot out with SidebarFoot, not a bare text button", () => {
     const source = readFileSync(new URL("./Sidebar.tsx", import.meta.url), "utf8");
     expect(source).toContain("<SidebarFoot");
+  });
+});
+
+describe("foot feedback button (#2618)", () => {
+  it("is the same round button as the apps grid, with a label and no words", () => {
+    const html = renderToStaticMarkup(createElement(FootFeedback, { onOpen: () => {} }));
+    expect(html).toContain("data-sidebar-feedback");
+    expect(html).toContain("size-9 shrink-0");
+    expect(html).toContain("rounded-full bg-sidebar-card");
+    expect(html).toMatch(/aria-label="[^"]+"/);
+  });
+
+  it("sits right beside the apps grid, in the wide foot and in the rail", () => {
+    vi.stubGlobal("window", {});
+    const wide = renderToStaticMarkup(createElement(SidebarFoot, { onOpenApps: () => {} }));
+    const rail = renderToStaticMarkup(createElement(SidebarRailFoot, { onOpenApps: () => {} }));
+    vi.unstubAllGlobals();
+    for (const html of [wide, rail]) {
+      expect(html).toContain("data-sidebar-feedback");
+      expect(html.indexOf("data-sidebar-feedback")).toBeLessThan(html.indexOf("data-sidebar-connect-apps"));
+    }
   });
 });

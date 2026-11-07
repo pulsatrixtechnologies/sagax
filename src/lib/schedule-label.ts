@@ -3,6 +3,11 @@ import type { RoutineSchedule } from "@/lib/routines";
 import { activeLocale, t } from "@/lib/i18n";
 import { cronScheduleLabel } from "../../shared/cron-label";
 
+/** The GitHub kinds a routine waits for, or "any event" (I3). */
+function githubKinds(events: readonly string[]): string {
+  return events.length ? events.join(", ") : t("schedule.github.anyEvent");
+}
+
 /** Cron wording follows the app language: French (Québec) or English. */
 export function cronLocale(): "fr" | "en" {
   return activeLocale().toLowerCase().startsWith("fr") ? "fr" : "en";
@@ -107,7 +112,9 @@ export function scheduleLabel(schedule: RoutineSchedule | { type: "once"; at: nu
     return note ? t("schedule.aroundTheTime", { label, note }) : label;
   }
   if (schedule.type === "webhook") return t("schedule.incomingWebhook");
-  if (schedule.type === "event") return t("schedule.incomingEmail");
+  if (schedule.type === "event") {
+    return schedule.source === "github" ? t("schedule.incomingGithub", { events: githubKinds(schedule.events) }) : t("schedule.incomingEmail");
+  }
   if (schedule.type === "limit_reset") {
     return schedule.at === null
       ? t("schedule.limitReset", { engine: schedule.engine })
@@ -152,7 +159,9 @@ export function scheduleSentence(schedule: RoutineSchedule): string {
     return t("schedule.sentence.once", { date: niceDate(schedule.at), time: niceTime(schedule.at) });
   }
   if (schedule.type === "webhook") return t("schedule.sentence.webhook");
-  if (schedule.type === "event") return t("schedule.sentence.email");
+  if (schedule.type === "event") {
+    return schedule.source === "github" ? t("schedule.sentence.github", { events: githubKinds(schedule.events) }) : t("schedule.sentence.email");
+  }
   if (schedule.type === "limit_reset") {
     return schedule.at === null
       ? t("schedule.sentence.limitReset", { engine: schedule.engine })
@@ -187,7 +196,9 @@ export function scheduleLabelCompact(schedule: RoutineSchedule | { type: "once";
   const locale = activeLocale();
   const clock = (hour: number, minute: number) => new Date(2000, 0, 1, hour, minute).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
   if (schedule.type === "webhook") return t("schedule.compact.webhook");
-  if (schedule.type === "event") return t("schedule.compact.email");
+  if (schedule.type === "event") {
+    return schedule.source === "github" ? t("schedule.compact.github", { events: githubKinds(schedule.events) }) : t("schedule.compact.email");
+  }
   if (schedule.type === "once") {
     const sameYear = new Date(schedule.at).getFullYear() === new Date().getFullYear();
     const date = new Date(schedule.at).toLocaleDateString(locale, sameYear ? { month: "long", day: "numeric" } : { month: "long", day: "numeric", year: "numeric" });

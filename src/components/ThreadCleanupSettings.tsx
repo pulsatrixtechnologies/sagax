@@ -159,7 +159,7 @@ export function ThreadCleanupSettings() {
   // heading. Each knob is a switch with its value beside it; the one grey
   // line says what is never deleted, the errors take its place.
   return (
-    <SettingsGroup advanced title={t("settings.threadCleanup.title")} groupId="threadCleanup">
+    <SettingsGroup title={t("settings.threadCleanup.title")} groupId="threadCleanup">
       <div data-settings-card="general.threadCleanup" data-thread-cleanup={threadCleanupSummary(confirmedRetentionDays, confirmedCapBytes)}>
         <DescribedRow
           label={t("settings.threadCleanup.retention.enable")}

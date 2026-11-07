@@ -1052,6 +1052,8 @@ import { systemIdleSnapshot } from "./system-idle.mjs";
 import { installFetchGuard, installSessionBlock } from "./upstream-hosts.mjs";
 import { reportOwnListeners, serverRequestRefusal } from "./server-session.mjs";
 import { isYoutubeEmbedUrl, withYoutubeEmbedReferer } from "./youtube-referer.mjs";
+import { isPermissionSettingsUrl, normalizePermissionStatus, permissionAction, permissionsFor } from "./os-permissions.mjs";
+import { execFile } from "node:child_process";
 
 // No request from this app reaches the original OpenMausBot services, the
 // upstream author's repositories or an analytics host: main's own fetch is
@@ -2846,6 +2848,9 @@ function refreshApplicationMenu() {
       },
       onOpenAbout: () => {
         mainPage()?.send("app:open-about");
+      },
+      onSendFeedback: () => {
+        mainPage()?.send("app:send-feedback");
       },
       serverModeId: serverModeEnvironment(environmentsState)?.id ?? null,
       onLeaveServerMode: () => void workspaceMenuAction(leaveServerMode),
@@ -4820,6 +4825,20 @@ ipcMain.handle("window:set-fullscreen", (event, on) => {
   const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
   return setWindowFullScreen(win, on === true);
 });
+// #2618: the Feedback bot's picture of the sender's own window (never the
+// screen, so no Screen Recording prompt); a PNG data URL, null when it fails.
+ipcMain.handle("window:capture", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  if (!win || win.isDestroyed()) return null;
+  try {
+    const image = await win.webContents.capturePage();
+    const size = image.getSize();
+    const scaled = size.width > 1600 ? image.resize({ width: 1600 }) : image;
+    return `data:image/png;base64,${scaled.toPNG().toString("base64")}`;
+  } catch {
+    return null;
+  }
+});
 ipcMain.handle("window:fullscreen-state", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
   return windowFullScreenState(win);
@@ -4925,6 +4944,110 @@ ipcMain.handle("perm:open-settings", desktopUiOnly("perm:open-settings", (_event
   // would otherwise resolve up the prototype chain to a truthy object
   const anchor = Object.hasOwn(panes, pane) ? panes[pane] : "Privacy";
   return shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${anchor}`);
+}));
+
+// #2614: every missing OS permission has one button that grants it
+// (os-permissions.mjs decides which). perm:all reads every status of this
+// platform with the action behind its button; perm:act runs it. The renderer
+// never passes a URL: main recomputes the action from the live status.
+const permissionsRun = { asked: new Set(), opened: new Set(), startedAt: Date.now() };
+const SCREEN_RELAUNCH_FILE = () => path.join(app.getPath("userData"), "screen-permission-relaunch.json");
+
+/** Sagax was relaunched for Screen Recording by an earlier run and macOS
+ * still refuses it: the entry is stale. Granted clears the mark. */
+function screenRelaunchedStillRefused(status, captureFailed = false) {
+  const file = SCREEN_RELAUNCH_FILE();
+  if (status === "granted" && !captureFailed) {
+    fs.rmSync(file, { force: true });
+    return false;
+  }
+  try {
+    const mark = JSON.parse(fs.readFileSync(file, "utf8"));
+    return typeof mark?.at === "number" && mark.at < permissionsRun.startedAt;
+  } catch {
+    return false;
+  }
+}
+
+function osPermissionStatus(id) {
+  try {
+    if (id === "microphone") return normalizePermissionStatus(systemPreferences.getMediaAccessStatus?.("microphone"));
+    if (id === "screen") return normalizePermissionStatus(systemPreferences.getMediaAccessStatus?.("screen"));
+    if (id === "accessibility") return normalizePermissionStatus(systemPreferences.isTrustedAccessibilityClient?.(false));
+    if (id === "notifications") return normalizePermissionStatus(desktopAttention.deliveryStatus().state);
+  } catch { /* unreadable: unknown */ }
+  return "unknown";
+}
+
+function osPermissionView(id, context = {}) {
+  const status = osPermissionStatus(id);
+  const run = {
+    asked: permissionsRun.asked.has(id),
+    openedSettings: permissionsRun.opened.has(id),
+    relaunched: id === "screen" ? screenRelaunchedStillRefused(status, context?.captureFailed === true) : false,
+    captureFailed: id === "screen" && context?.captureFailed === true,
+  };
+  return { id, status, action: permissionAction(id, process.platform, status, run) };
+}
+
+/** This app's bundle id from its Info.plist (tccutil resets one app only). */
+function macBundleId() {
+  try {
+    const plist = fs.readFileSync(path.resolve(process.execPath, "../../Info.plist"), "utf8");
+    return /<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/.exec(plist)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function openPermissionPane(id, url) {
+  if (!isPermissionSettingsUrl(url)) return false;
+  permissionsRun.opened.add(id);
+  await shell.openExternal(url);
+  return true;
+}
+
+async function promptOsPermission(id, text) {
+  permissionsRun.asked.add(id);
+  if (id === "microphone") return systemPreferences.askForMediaAccess("microphone").catch(() => false);
+  // The first real in-process capture is what makes macOS ask (see above).
+  if (id === "screen") return desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } }).then(() => true, () => false);
+  // A first notification is what makes the OS ask (macOS) or list Sagax (Windows).
+  if (id === "notifications") {
+    await desktopAttention.test({
+      title: typeof text?.title === "string" ? text.title : "Sagax",
+      body: typeof text?.body === "string" ? text.body : "",
+    });
+    return true;
+  }
+  return false;
+}
+
+ipcMain.handle("perm:all", desktopUiOnly("perm:all", (_event, context) => ({
+  platform: process.platform,
+  permissions: permissionsFor(process.platform).map((entry) => osPermissionView(entry.id, context)),
+})));
+
+ipcMain.handle("perm:act", desktopUiOnly("perm:act", async (_event, id, options) => {
+  if (typeof id !== "string" || !permissionsFor(process.platform).some((entry) => entry.id === id)) return null;
+  const view = osPermissionView(id, options);
+  const action = options?.secondary === true && view.action.secondary ? view.action.secondary : view.action;
+  if (action.kind === "prompt") await promptOsPermission(id, options?.notification);
+  else if (action.kind === "settings") await openPermissionPane(id, action.url);
+  else if (action.kind === "relaunch") {
+    if (id === "screen") fs.writeFileSync(SCREEN_RELAUNCH_FILE(), JSON.stringify({ at: Date.now() }), { mode: 0o600 });
+    relaunchAfterDesktopRemoteChange();
+    return { ...view, done: "relaunch" };
+  } else if (action.kind === "reset" && id === "screen") {
+    // A stale entry (the app's signature changed with an update while the
+    // switch still looks on): forget it, ask again, reopen the pane.
+    const bundleId = macBundleId();
+    if (bundleId) await new Promise((resolve) => execFile("/usr/bin/tccutil", ["reset", "ScreenCapture", bundleId], () => resolve()));
+    fs.rmSync(SCREEN_RELAUNCH_FILE(), { force: true });
+    await promptOsPermission(id);
+    await openPermissionPane(id, action.url);
+  }
+  return { ...osPermissionView(id, options), done: action.kind };
 }));
 
 ipcMain.handle("desktop:relaunch", localOnly("desktop:relaunch", (event) => {

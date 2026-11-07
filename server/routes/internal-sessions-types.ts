@@ -6,6 +6,7 @@ import type { RosterMember } from "../peers/peer-roster.ts";
 import type { skillDiscoveryPage } from "../skills/skill-discovery.ts";
 import type { applySkillWriteWithReceipt, listStagedSkillWrites, stageSkillWrite } from "../skills/skills.ts";
 import type { InternalCapabilityView } from "./internal-route.ts";
+import type { SummarySession } from "../recall/session-summary.ts";
 
 export interface InternalSessionsBot extends RosterMember {
   color: string;
@@ -39,6 +40,9 @@ export interface InternalSessionsGroup {
 export type InternalSessionsVm = { workspaceDir: string };
 
 export interface InternalSessionsDeps {
+  /** session_search: a short model summary of the matching conversations
+   * (#2610). Absent or null: the search answers with its hits alone. */
+  summarizeRecall?(bot: InternalSessionsBot, query: string, sessions: readonly SummarySession[]): Promise<string | null>;
   bot(id: string): InternalSessionsBot | null | undefined;
   bots(): readonly InternalSessionsBot[];
   tasks(botId: string): readonly InternalSessionsTask[];

@@ -8,6 +8,7 @@ import { routinesInConversationEnabled } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
 import type { RecurrenceChoice, IntervalDayChoice, IntervalWindowChoice, IntervalEndChoice } from "./types";
 import type { ScheduleDraft } from "@/components/routines/schedule-editor";
+import type { RoutineSchedule } from "@/lib/routines";
 import type { LimitResetChoice } from "@/components/routines/LimitResetFields";
 
 type WhenArgs = {
@@ -19,16 +20,18 @@ type WhenArgs = {
   botIds: string[];
   intervalMinutes: number;
   at: number;
+  /** The saved schedule: a GitHub event routine reads its own events (I3). */
+  eventSchedule?: RoutineSchedule;
 };
 
 export function eventEditorWhenSentence(args: WhenArgs): string {
-  const { recurrence, pattern, limitReset, bots, lockedBotId, botIds, intervalMinutes, at } = args;
+  const { recurrence, pattern, limitReset, bots, lockedBotId, botIds, intervalMinutes, at, eventSchedule } = args;
   return recurrence === "pattern" || recurrence === "advanced"
     ? pattern?.sentence || t("routineCalendar.validSchedule")
     : recurrence === "webhook"
       ? t("schedule.compact.webhook")
       : recurrence === "email"
-        ? t("schedule.compact.email")
+        ? eventSchedule?.type === "event" && eventSchedule.source === "github" ? scheduleLabelCompact(eventSchedule) : t("schedule.compact.email")
         : recurrence === "limit_reset"
           ? limitResetWhen({ engine: limitReset.engine || bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection?.instanceId || "", repeat: limitReset.repeat })
           : recurrence === "interval"

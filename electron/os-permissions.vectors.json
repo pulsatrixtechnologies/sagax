@@ -1,0 +1,411 @@
+{
+  "comment": "#2614 permission -> action vectors, shared by electron/os-permissions.test.mjs and the iOS Swift tests.",
+  "desktop": [
+    {
+      "platform": "darwin",
+      "id": "microphone",
+      "status": "not-determined",
+      "run": {},
+      "expect": {
+        "kind": "prompt"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "microphone",
+      "status": "not-determined",
+      "run": {
+        "asked": true
+      },
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "microphone",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "microphone",
+      "status": "granted",
+      "run": {},
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "not-determined",
+      "run": {},
+      "expect": {
+        "kind": "prompt",
+        "secondary": "relaunch"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "secondary": "relaunch"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "denied",
+      "run": {
+        "openedSettings": true
+      },
+      "expect": {
+        "kind": "relaunch",
+        "secondary": "settings"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "denied",
+      "run": {
+        "relaunched": true
+      },
+      "expect": {
+        "kind": "reset",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "secondary": "settings"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "granted",
+      "run": {
+        "captureFailed": true
+      },
+      "expect": {
+        "kind": "relaunch",
+        "secondary": "settings"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "granted",
+      "run": {},
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "accessibility",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "notifications",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "prompt"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "notifications",
+      "status": "unknown",
+      "run": {
+        "asked": true
+      },
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "notifications",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "speech",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "automation",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "fullDisk",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+      }
+    },
+    {
+      "platform": "win32",
+      "id": "microphone",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "ms-settings:privacy-microphone"
+      }
+    },
+    {
+      "platform": "win32",
+      "id": "microphone",
+      "status": "granted",
+      "run": {},
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "platform": "win32",
+      "id": "notifications",
+      "status": "unknown",
+      "run": {},
+      "expect": {
+        "kind": "prompt"
+      }
+    },
+    {
+      "platform": "win32",
+      "id": "notifications",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "settings",
+        "url": "ms-settings:notifications"
+      }
+    },
+    {
+      "platform": "linux",
+      "id": "microphone",
+      "status": "denied",
+      "run": {},
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "platform": "darwin",
+      "id": "screen",
+      "status": "granted",
+      "run": {
+        "captureFailed": true,
+        "relaunched": true
+      },
+      "expect": {
+        "kind": "reset",
+        "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "secondary": "settings"
+      }
+    }
+  ],
+  "ios": [
+    {
+      "id": "notifications",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "notifications",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "notifications",
+      "status": "denied",
+      "expect": "notification-settings"
+    },
+    {
+      "id": "notifications",
+      "status": "restricted",
+      "expect": "notification-settings"
+    },
+    {
+      "id": "microphone",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "microphone",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "microphone",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "microphone",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "speech",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "speech",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "speech",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "speech",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "camera",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "camera",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "camera",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "camera",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "contacts",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "contacts",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "contacts",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "contacts",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "calendars",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "calendars",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "calendars",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "calendars",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "reminders",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "reminders",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "reminders",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "reminders",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "location",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "location",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "location",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "location",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "location",
+      "status": "limited",
+      "expect": "none"
+    }
+  ]
+}

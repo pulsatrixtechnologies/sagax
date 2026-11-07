@@ -103,6 +103,7 @@ type FieldPolicy =
  * (memberImportReset). */
 export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy } = {
   id: { drop: "a new id on import" },
+  systemBot: { drop: "the shared Feedback bot is the server's own (#2618), never a package" },
   name: "identity",
   title: "identity",
   description: "identity",
@@ -154,6 +155,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   loopGuard: "settings",
   teamMemorySharing: "settings",
   memoryUpkeep: "settings",
+  skillLearning: "settings",
   builtinPlugins: "settings",
   helperModel: "settings",
   parkDirectMessages: "settings",
@@ -169,6 +171,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   section: "settings",
   sectionId: "settings",
   managedSections: "settings",
+  // I2: which team settings the bot set itself; it follows its team on import.
+  teamOverrides: { drop: "the importing team decides" },
   projects: "settings",
   playbooks: "settings",
   pinned: "settings",
@@ -885,6 +889,7 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       ...(settings.loopGuard !== undefined ? { loopGuard: settings.loopGuard } : {}),
       ...(storedTeamMemorySharing(settings) ? { teamMemorySharing: "private" as const } : {}),
       ...(settings.memoryUpkeep !== undefined ? { memoryUpkeep: settings.memoryUpkeep } : {}),
+      ...(settings.skillLearning !== undefined ? { skillLearning: settings.skillLearning } : {}),
       ...(settings.builtinPlugins !== undefined ? { builtinPlugins: { ...settings.builtinPlugins } } : {}),
       ...(settings.helperModel !== undefined ? { helperModel: settings.helperModel } : {}),
       ...(settings.parkDirectMessages !== undefined ? { parkDirectMessages: settings.parkDirectMessages } : {}),

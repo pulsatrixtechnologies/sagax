@@ -1,0 +1,22 @@
+{{- if and .Values.runs.enabled .Values.runs.cache.enabled }}
+# Build cache of coding runs (runs.cache): fast disks the provisioner creates
+# one per person and slot, deleted after their idle retention.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.runs.cache.className | quote }}
+  labels:
+    {{- include "sandboxes.labels" . | nindent 4 }}
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: {{ .Values.runs.cache.provisioner | quote }}
+reclaimPolicy: {{ .Values.runs.cache.reclaimPolicy | quote }}
+volumeBindingMode: {{ .Values.runs.cache.volumeBindingMode | quote }}
+allowVolumeExpansion: {{ .Values.runs.cache.allowExpansion }}
+parameters:
+  {{- range $key, $value := .Values.runs.cache.parameters }}
+  {{- if ne ($value | toString) "" }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}

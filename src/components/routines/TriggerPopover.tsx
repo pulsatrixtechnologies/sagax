@@ -13,7 +13,7 @@ import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import type { Routine, RoutineScheduleInput } from "@/lib/routines";
 import { fromLocalDateAndTime, intervalAnchorForSave, toLocalDateInput, toLocalTimeInput } from "@/lib/routine-calendar";
-import { intervalLabel } from "@/lib/schedule-label";
+import { intervalLabel, scheduleSentence } from "@/lib/schedule-label";
 import { readableError } from "@/lib/plain-error";
 import type { Bot } from "@/state/store";
 import type { ScheduleFrequency } from "../../../shared/schedule-model";
@@ -162,7 +162,7 @@ export function TriggerPopover({ routine, bot, anchorRef, onApply, onClose }: {
     { value: "interval", label: t("scheduleEditor.frequency.every") },
     { value: "cron", label: t("routineTrigger.cron") },
     ...(routine.target !== "room-goal" ? [{ value: "webhook", label: t("routineEditor.whenWebhook") }] : []),
-    ...(choice === "email" ? [{ value: "email", label: t("schedule.sentence.email") }] : []),
+    ...(choice === "email" ? [{ value: "email", label: routine.schedule.type === "event" && routine.schedule.source === "github" ? scheduleSentence(routine.schedule) : t("schedule.sentence.email") }] : []),
     ...(choice === "limit_reset" ? [{ value: "limit_reset", label: t("routines.limitReset.option") }] : []),
   ];
 

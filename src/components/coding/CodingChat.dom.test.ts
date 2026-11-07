@@ -290,26 +290,13 @@ describe("CodingChatSheet", () => {
     expect(column.querySelector("[data-coding-tools]")).toBeNull();
   });
 
-  it("puts the session and pods in the Coding tab's host and Connectors in Activity's (JC 2026-11-06)", () => {
-    const activity = document.createElement("div");
-    document.body.append(activity);
-    setCodingPanelHost("wren", activity, "activity");
-    try {
-      mountSheet("finished", {
-        side: createElement("div", { "data-test-given-pods": "" }),
-        activitySide: createElement("div", { "data-test-connectors": "" }),
-      });
-      expect(panel.querySelector("[data-coding-session-card]")).not.toBeNull();
-      expect(panel.querySelector("[data-test-given-pods]")).not.toBeNull();
-      expect(panel.querySelector("[data-test-connectors]")).toBeNull();
-      expect(activity.querySelector("[data-test-connectors]")).not.toBeNull();
-      expect(activity.querySelector("[data-coding-session-card]")).toBeNull();
-    } finally {
-      flushSync(() => root.unmount());
-      root = createRoot(host);
-      setCodingPanelHost("wren", null, "activity");
-      activity.remove();
-    }
+  it("puts the session and every pod, Connectors included, in the Coding tab's host (#2599, JC 2026-11-07)", () => {
+    mountSheet("finished", {
+      side: createElement("div", { "data-test-given-pods": "" }, createElement("section", { "data-dev-pod": "connectors" })),
+    });
+    expect(panel.querySelector("[data-coding-session-card]")).not.toBeNull();
+    expect(panel.querySelector("[data-test-given-pods] [data-dev-pod='connectors']")).not.toBeNull();
+    expect(document.querySelectorAll("[data-dev-pod='connectors']")).toHaveLength(1);
   });
 
   it("puts the working line just above the composer while the task runs, never in the transcript (JC 2026-11-06)", () => {

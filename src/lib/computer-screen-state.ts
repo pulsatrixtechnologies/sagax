@@ -15,7 +15,11 @@ import type { LocaleKey } from "@/locales";
 export type ScreenProblem =
   /** macOS has not allowed Sagax to record the screen. */
   | "permission"
-  /** The capture came back empty although it is allowed (just granted: relaunch). */
+  /** Screen Recording is allowed but the capture is refused: this run of
+   * Sagax still sees the old answer (macOS applies it at the next launch),
+   * or the entry is stale. Relaunch Sagax, then reset the entry. */
+  | "relaunch"
+  /** No picture yet although it is allowed and nothing failed. */
   | "empty"
   /** The capture itself failed (its error is shown with it). */
   | "capture-failed"
@@ -48,8 +52,12 @@ export function localScreenProblem({ inApp, mac, screenPermission, failed = fals
 }): ScreenProblem {
   if (!inApp) return "desktop-app-only";
   // on a Mac, Electron's "Failed to get sources" is macOS
-  // refusing Screen Recording. Say how to allow it, not the raw IPC error.
-  if (mac && (screenPermission !== "granted" || MAC_SCREEN_REFUSED.test(failure ?? ""))) return "permission";
+  // refusing Screen Recording. Not allowed: the permission. Allowed (JC
+  // 2026-11-07: Sagax checked in System Settings, still no picture): this
+  // run still sees the old answer, so the step is Relaunch Sagax, never the
+  // pane again.
+  if (mac && screenPermission !== "granted") return "permission";
+  if (mac && MAC_SCREEN_REFUSED.test(failure ?? "")) return "relaunch";
   if (failed) return "capture-failed";
   return "empty";
 }
@@ -85,6 +93,7 @@ export function computerCardView({ busy, off = false, source, online = true, clo
 /** Short words for the row's second line next to Awake / Working. */
 export const SCREEN_PROBLEM_SHORT: Record<ScreenProblem, LocaleKey> = {
   "permission": "computerThumb.short.permission",
+  "relaunch": "computerThumb.short.relaunch",
   "empty": "computerThumb.short.empty",
   "capture-failed": "computerThumb.short.failed",
   "desktop-app-only": "computerThumb.short.desktopApp",
@@ -95,6 +104,7 @@ export const SCREEN_PROBLEM_SHORT: Record<ScreenProblem, LocaleKey> = {
 /** The full reason, for the thumbnail's tooltip and the live window. */
 export const SCREEN_PROBLEM_LINE: Record<ScreenProblem, LocaleKey> = {
   "permission": "computerThumb.line.permission",
+  "relaunch": "computerThumb.line.relaunch",
   "empty": "computerThumb.line.empty",
   "capture-failed": "computerThumb.line.failed",
   "desktop-app-only": "computerThumb.line.desktopApp",

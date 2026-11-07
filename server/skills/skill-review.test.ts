@@ -18,6 +18,8 @@ import {
   SKILL_REVIEW_MARKER,
   skillReviewPrompt,
   TRANSCRIPT_MAX_CHARS,
+  looksLikeCorrection,
+  turnSignal,
   turnToolSteps,
   type ReviewChange,
   type ReviewMessage,
@@ -45,6 +47,41 @@ describe("counting tool steps", () => {
     const other = { botId: "bot-2", name: "Pixel", color: "blue" };
     const messages = [tool("t1", "Read", {}, me), tool("t1", "Bash", {}, other), tool("t1", "Edit", {}, me)];
     expect(turnToolSteps(messages, "t1", BOT.id, true)).toBe(2);
+  });
+});
+
+describe("failure and correction signals (#2610)", () => {
+  const known = ["weekly-report", "chart-making"];
+  const read = (turnId: string, ok = true) => tool(turnId, "Read", { ok, input: "skills/weekly-report/SKILL.md" });
+
+  it("flags a failed step while a skill is in play", () => {
+    const messages = [say("user", "the weekly report"), read("t1"), tool("t1", "Bash", { ok: false }), say("bot", "failed", "t1")];
+    expect(turnSignal(messages, "t1", BOT.id, false, known)).toEqual({ kind: "failure", skills: ["weekly-report"] });
+  });
+
+  it("ignores a failure when no skill was used, and a skill used without trouble", () => {
+    expect(turnSignal([say("user", "hi"), tool("t1", "Bash", { ok: false }), say("bot", "x", "t1")], "t1", BOT.id, false, known)).toBeNull();
+    expect(turnSignal([say("user", "go"), read("t1"), say("bot", "done", "t1")], "t1", BOT.id, false, known)).toBeNull();
+  });
+
+  it("flags the person's correction of an answer that used a skill", () => {
+    const messages = [
+      say("user", "the weekly report"), read("t1"), say("bot", "Here is a long report", "t1"),
+      say("user", "No, keep it to five bullets instead"), say("bot", "Sure", "t2"),
+    ];
+    expect(turnSignal(messages, "t2", BOT.id, false, known)).toEqual({ kind: "correction", skills: ["weekly-report"] });
+    // the same words after an answer that used no skill raise nothing
+    const plain = [say("user", "hi"), say("bot", "hello", "t1"), say("user", "No, keep it to five bullets instead"), say("bot", "Sure", "t2")];
+    expect(turnSignal(plain, "t2", BOT.id, false, known)).toBeNull();
+  });
+
+  it("reads corrections in English and French, not ordinary words", () => {
+    for (const text of ["No, that's wrong", "you forgot the totals", "Non, c'est pas ça", "tu as oublié le total", "refais-le plutôt en tableau"]) {
+      expect(looksLikeCorrection(text), text).toBe(true);
+    }
+    for (const text of ["Nothing else, thanks", "Notes for Monday", "Nonante items", "great, thanks", undefined]) {
+      expect(looksLikeCorrection(text), String(text)).toBe(false);
+    }
   });
 });
 
@@ -320,5 +357,26 @@ describe("the scheduler", () => {
     noEngine.review.noteTurn(BOT.id, "gone", 3);
     expect(await noEngine.review.run(BOT.id, "gone")).toMatchObject({ state: "skipped" });
     expect(noEngine.review.status(BOT.id, "gone").steps).toBe(0);
+  });
+  it("a failure or correction makes the review due at once, focused on that skill", async () => {
+    const { review, state, nextCall } = harness({ answer: () => updateAnswer });
+    review.noteTurn(BOT.id, "thread-a", 1);
+    review.noteSignal(BOT.id, "thread-a", { kind: "correction", skills: ["weekly-report"] });
+    expect(review.status(BOT.id, "thread-a")).toMatchObject({ steps: 1, signal: "correction" });
+    const called = nextCall();
+    review.botSettled(BOT.id);
+    await called;
+    await review.idle();
+    expect(state.prompts).toHaveLength(1);
+    expect(state.prompts[0]).toContain('FOCUS: this review runs because the person corrected Scout while Scout was following "weekly-report"');
+    expect(state.applied).toEqual([{ threadId: "thread-a", change: expect.objectContaining({ action: "update", name: "weekly-report" }) }]);
+    expect(review.status(BOT.id, "thread-a").signal).toBeUndefined();
+  });
+
+  it("keeps a pending signal across a restart", () => {
+    const first = harness();
+    first.review.noteSignal(BOT.id, "thread-a", { kind: "failure", skills: ["weekly-report"] });
+    first.review.stop();
+    expect(harness().review.status(BOT.id, "thread-a").signal).toBe("failure");
   });
 });

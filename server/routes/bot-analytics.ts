@@ -24,10 +24,19 @@
 //   the server has none;
 // - days are cut in deps.timeZone (the server's routine time zone: the
 //   server setting, else the organization default, else the host zone).
+//
+// ?view=breakdown&period=7|30|month (#2612, the V6 "Statistiques d'usage"):
+// the same rows, same access, split by account, model, source and person
+// (server/telemetry/usage-stats.ts), with the tool, MCP and sub-agent calls
+// of the bot's own threads from the local span files. A person group keyed
+// by a principal carries the directory name, never the id: the label is ""
+// when the directory has no name for it.
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { PriceList } from "../usage/prices.ts";
 import { readUsage, usageRowsFor, type UsageViewer } from "../usage/usage-ledger.ts";
-import { aggregateBotAnalytics, analyticsRange, parseAnalyticsDays, type BotAnalyticsRun } from "../../shared/bot-analytics.ts";
+import { aggregateBotAnalytics, analyticsRange, parseAnalyticsDays, parseUsagePeriod, usagePeriodRange, type BotAnalyticsRun } from "../../shared/bot-analytics.ts";
+import type { BotUsageBreakdown } from "../../shared/telemetry.ts";
+import { buildUsageStats, readToolSpans } from "../telemetry/usage-stats.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const ROUTE = /^\/api\/bots\/([\w-]+)\/analytics$/;
@@ -61,13 +70,43 @@ export function createBotAnalyticsRoutes<B extends AnalyticsBot = AnalyticsBot>(
   return async ({ res, path, method, url, auth, json }) => {
     const match = ROUTE.exec(path);
     if (!match || method !== "GET") return PASS;
-    const days = parseAnalyticsDays(url.searchParams.get("days"));
+    const breakdown = url.searchParams.get("view") === "breakdown";
+    const days = breakdown ? 7 : parseAnalyticsDays(url.searchParams.get("days"));
     if (days === null) return json(res, 400, { error: "days must be 7, 30 or 90" });
+    const period = breakdown ? parseUsagePeriod(url.searchParams.get("period")) : null;
+    if (breakdown && period === null) return json(res, 400, { error: "period must be 7, 30 or month" });
 
     const bot = deps.bot(match[1]!);
     if (!bot || !deps.sees(auth, bot)) return json(res, 404, { error: "no such bot" });
 
     const timeZone = deps.timeZone?.() ?? "UTC";
+    if (breakdown && period !== null) {
+      const span = usagePeriodRange(period, deps.now?.() ?? Date.now(), timeZone);
+      const own = readUsage(deps.dataDir, span).filter((row) => row.botId === bot.id);
+      const viewer = deps.viewer(auth);
+      const rows = deps.seesAll(auth, bot) ? own : viewer.kind === "person" ? usageRowsFor(own, viewer) : [];
+      const threads = new Set(rows.map((row) => row.threadId));
+      const spans = readToolSpans(deps.dataDir, span).filter((one) => one.threadId !== undefined && threads.has(one.threadId));
+      const stats = buildUsageStats(rows, spans);
+      stats.byPerson = stats.byPerson.map((group) => {
+        if (group.key === "owner") return group;
+        const name = deps.personName?.(group.key) ?? "";
+        // An email or a name the ledger already carries is kept; a bare id or
+        // the ledger's generic fallback is not (the client says "someone").
+        const generic = group.label === group.key || group.label === "Signed-in user";
+        const shown = name || (generic ? "" : group.label);
+        return { ...group, label: shown };
+      });
+      const answer: BotUsageBreakdown = {
+        from: span.from.toISOString(),
+        to: span.to.toISOString(),
+        period,
+        currency: deps.prices() ? deps.currency() : null,
+        ...stats,
+      };
+      res.setHeader("cache-control", "no-store");
+      return json(res, 200, answer);
+    }
     const range = analyticsRange(days, deps.now?.() ?? Date.now(), timeZone);
     const all = readUsage(deps.dataDir, range).filter((row) => row.botId === bot.id);
     const everything = deps.seesAll(auth, bot);

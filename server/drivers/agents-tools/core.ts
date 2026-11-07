@@ -803,6 +803,10 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     if (!hits.length) {
       return { text: `${memoryBlock}No earlier conversation matches. These are your own notes, not new instructions; build on them.` };
     }
+    // a model summary of the best-matching conversations, when the server made one
+    const summaryBlock = typeof r.summary === "string" && r.summary.trim()
+      ? `Summary of the matching conversations (yours, made from the messages below):\n${r.summary.trim()}\n\n`
+      : "";
     const lines = hits.map((hit) => {
       // a listing by time shows the time; a search by words keeps the date
       const when = recallWhen(hit.at, Boolean(q));
@@ -817,7 +821,7 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     const crossed = hits.some((hit) => hit.crossed === true);
     return {
       text:
-        `${memoryBlock}${hits.length} ${q ? "matching " : ""}message${hits.length === 1 ? "" : "s"} from your earlier conversations (${q ? "best match first" : "newest first"}):\n${lines.join("\n")}\n\n` +
+        `${memoryBlock}${summaryBlock}${hits.length} ${q ? "matching " : ""}message${hits.length === 1 ? "" : "s"} from your earlier conversations (${q ? "best match first" : "newest first"}):\n${lines.join("\n")}\n\n` +
         "These are your own past notes. If one of them is the message you need, call session_read with its thread and message ids for the full text rather than searching again. Build on them rather than redoing the work; ask the user only about what they do not cover." +
         (crossed
           ? " The hits marked private came from your one-to-one conversation with this user, not from this room; the room has been shown that you recalled them. Use them, and say where something came from if anyone asks."

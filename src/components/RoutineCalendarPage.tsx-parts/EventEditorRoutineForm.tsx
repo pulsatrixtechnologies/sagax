@@ -17,7 +17,7 @@ import { PillSelect } from "@/components/SettingsPrimitives";
 import { PICKER_FREQUENCIES } from "@/components/routines/schedule-editor";
 import { boatComputerEnabled } from "@/lib/feature-flags";
 import { CALENDAR_SLOT_MINUTES, toLocalDateInput } from "@/lib/routine-calendar";
-import { dayNames, durationLabel } from "@/lib/schedule-label";
+import { dayNames, durationLabel, scheduleSentence } from "@/lib/schedule-label";
 import { routineAutoPauseChoices, routineAutoPauseOption } from "@/lib/routine-display";
 import { modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/model-selection";
@@ -156,7 +156,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                     { value: "limit_reset", label: t("routines.limitReset.option") },
                     ...(recurrence === "advanced" ? [{ value: "advanced", label: t("scheduleEditor.frequency.advanced") }] : []),
                     ...(!isRoomGoal ? [{ value: "webhook", label: t("routineEditor.whenWebhook") }] : []),
-                    ...(recurrence === "email" ? [{ value: "email", label: t("schedule.sentence.email") }] : []),
+                    ...(recurrence === "email" ? [{ value: "email", label: existingRoutine?.schedule.type === "event" && existingRoutine.schedule.source === "github" ? scheduleSentence(existingRoutine.schedule) : t("schedule.sentence.email") }] : []),
                   ]}
                 />
               </div>

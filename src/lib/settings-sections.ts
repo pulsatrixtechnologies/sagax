@@ -63,20 +63,32 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   // what stays on Models: online computers, Decision model
   "connections.integrations": "engines",
   "engines.decisionModel": "engines",
-  // JC 2026-11-06: the App catch-all split. Cleanup lives on Backups and
-  // storage, people's tool access on Security, the usage meter on Usage,
-  // startup, keys and the loop guard on General, help rows on About.
-  "general.threadCleanup": "backups",
+  // JC 2026-11-06: the App catch-all split. People's tool access lives on
+  // Security, startup and keys on General, feedback on About.
   "general.peopleToolAccess": "security",
-  "general.usage": "usage",
-  "general.loopGuard": "general",
   "general.system": "general",
   "general.input": "general",
   "general.interface": "general",
   "general.bots": "general",
-  "general.diagnostics": "about",
-  "general.logs": "about",
   "general.feedback": "about",
+  // #2636 (JC 2026-11-07): the technical options are one page, Developer.
+  // An old card id (its page of 2026-11-06, or Organization > Bot rules)
+  // opens Developer; the card ids themselves did not change.
+  "general.threadCleanup": "developer",
+  "general.usage": "developer",
+  "general.loopGuard": "developer",
+  "general.telemetry": "developer",
+  "general.diagnostics": "developer",
+  "general.logs": "developer",
+  "experimental.developer": "developer",
+  "developer.conversation": "developer",
+  "developer.diagnostics": "developer",
+  "developer.devPods": "developer",
+  "organization.roomTurns": "developer",
+  "organization.mcpCalls": "developer",
+  // #2658 (lot 2): the bot page's technical cards and the Claude Code switches
+  "developer.bot": "developer",
+  "developer.claudeCode": "developer",
   // old App card ids (#2080 L2) open the page that holds their rows now
   "about.startup": "general",
   "about.input": "general",
@@ -107,6 +119,7 @@ const HIDDEN: Partial<Record<AppSettingsSection, AppSettingsSection>> = {
  * same cards stay in General > Advanced, under their new ids. */
 export const ORGANIZATION_CARDS_MOVED: Record<string, string> = {
   "general.routinesInConversation": "organization.routinesInConversation",
+  // #2636: the two timeouts are on Developer now (CARD_HOME); their ids stay.
   "general.roomTurns": "organization.roomTurns",
   "general.mcpCalls": "organization.mcpCalls",
 };
@@ -125,10 +138,12 @@ export function isMovedOrganizationCard(cardId: string | null | undefined): bool
 }
 
 export function currentSettingsSection(section: AppSettingsSection, cardId?: string): AppSettingsSection {
+  // A card that has a page of its own since 2026-10-28 opens that page
+  // (#2636: the timeouts of Bot rules are on Developer, checked first).
+  const card = cardId && currentSettingsCard(cardId);
+  if (card && Object.hasOwn(CARD_HOME, card)) return CARD_HOME[card]!;
   // A link to a card moved to Organization opens Organization.
-  if (cardId && isMovedOrganizationCard(cardId)) return "organization";
-  // A card that has a page of its own since 2026-10-28 opens that page.
-  if (cardId && Object.hasOwn(CARD_HOME, cardId)) return CARD_HOME[cardId]!;
+  if (card && isMovedOrganizationCard(card)) return "organization";
   return MERGED[section]?.section ?? HIDDEN[section] ?? section;
 }
 

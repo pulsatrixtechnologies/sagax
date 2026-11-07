@@ -72,6 +72,9 @@ export interface BotFacts {
   grants: readonly BotGrant[];
   /** The shared section the bot sits in, if any. */
   sections?: readonly SectionAccess[];
+  /** A level every signed-in person holds (#2618: the shared Feedback bot,
+   * which each person writes to in their own conversation). */
+  everyone?: Level;
 }
 
 export function isLevel(value: unknown): value is Level {
@@ -160,6 +163,7 @@ function heldBotLevel(input: { viewer: Viewer } & BotFacts): Level | "owner" | n
   if (viewer.disabled) return null;
   if (key(input.ownerPrincipalId) === key(viewer.principalId)) return "owner";
   let best: Level | null = grantLevel(viewer, input.grants);
+  if (input.everyone && levelRank(input.everyone) > levelRank(best)) best = input.everyone;
   for (const section of input.sections ?? []) {
     // Member entries only: owning a section never opens the bots others
     // placed in it before it was shared.

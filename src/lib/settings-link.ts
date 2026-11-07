@@ -17,6 +17,7 @@ const SECTION_LABEL = {
   organization: "settings.section.organization",
   appearance: "settings.section.appearance",
   experimental: "settings.section.experimental",
+  developer: "settings.section.developer",
   // Integrations, Connected apps and Decision model are in Models
   // (2026-10-14, "Models and voice" until 2026-10-28, when Voice became a
   // page of its own); Privacy and Memory are cards of Notifications and
@@ -31,6 +32,7 @@ const SECTION_LABEL = {
   // Installations too (2026-10-15): a pointer names the page an old link opens.
   companion: "settings.section.account",
   computer: "settings.section.computer",
+  permissions: "settings.section.permissions",
   usage: "settings.section.usage",
   // 2026-10-28: Security and Vault are pages again.
   credentials: "settings.section.vault",
@@ -51,7 +53,9 @@ const SECTION_LABEL = {
   pages: "connectApps.title",
 } as const satisfies Record<AppSettingsSection, LocaleKey>;
 
-export type SettingsLinkTarget = { section: AppSettingsSection; cardId?: string };
+/** `prepare` runs just before the page opens (#2658: the bot page's link
+ * names the bot that Developer > Per bot should show). */
+export type SettingsLinkTarget = { section: AppSettingsSection; cardId?: string; prepare?: () => void };
 
 export function settingsSectionLabel(section: AppSettingsSection): string {
   return t(SECTION_LABEL[section]);

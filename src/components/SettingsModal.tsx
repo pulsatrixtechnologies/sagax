@@ -15,11 +15,11 @@ import { generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings
 import { CompactRow, LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
 import { AboutPage, GeneralPage } from "./settings/AppPage";
-import { UsageMeterRow } from "./settings/UsageMeterRow";
-import { ThreadCleanupSettings } from "./ThreadCleanupSettings";
+import { DeveloperLink } from "./settings/DeveloperLink";
 import { PeopleToolAccessSettings } from "./ToolAccessSettings";
 import {
   AppearanceSettings,
+  DeveloperSettings,
   CredentialsSettings,
   DecisionModelSettings,
   EnginesSettings,
@@ -46,6 +46,7 @@ import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/l
 import { focusSettingsSearchLabel } from "@/lib/settings-search";
 import { useSettingsModal } from "./settings/useSettingsModal";
 import { NAV_GROUPS } from "./settings/settings-nav";
+import { OsPermissionsSection } from "./settings/OsPermissions";
 
 // The threads choice moved with Appearance (0.5.6); old imports still work.
 // Re-exported from the thin preference module so this shell chunk does not
@@ -372,7 +373,8 @@ export function SettingsModal() {
               )}
             </div>
             <div className="flex flex-col gap-3 px-4 pb-6 pt-4 sm:px-8">
-            <SettingsAdvancedScope key={section} pageId={section} fold={!advanced} searching={Boolean(q)}>
+            {/* Developer is the technical page (#2636): nothing folds there, in Simple mode too */}
+            <SettingsAdvancedScope key={section} pageId={section} fold={!advanced && section !== "developer"} searching={Boolean(q)}>
             {/* 0.5.6: the reference design's layout (OrganizationSettings): grey
                 headings over cards of rows. Memory and, from General >
                 Advanced (2026-10-15), routines in the conversation, group
@@ -463,9 +465,18 @@ export function SettingsModal() {
             {/* About (JC 2026-11-07, was Help and about): the About window, tours, help rows. */}
             {section === "about" && <AboutPage remoteActive={remoteActive} openAbout={openAbout} />}
 
-            {section === "appearance" && <AppearanceSettings />}
+            {section === "appearance" && (
+              <>
+                <AppearanceSettings />
+                {/* run card, inspector and turn timing are on Developer (#2636) */}
+                <DeveloperLink />
+              </>
+            )}
 
             {section === "experimental" && <ExperimentalSettings />}
+
+            {/* Developer (#2636, JC 2026-11-07): every technical option, for every member. */}
+            {section === "developer" && <DeveloperSettings remoteActive={remoteActive} />}
 
             {/* Providers (2026-10-30) */}
             {section === "providers" && (
@@ -489,20 +500,21 @@ export function SettingsModal() {
             {section === "backups" && (
               <>
                 <WorkspaceBackupSettings />
-                {/* event log cleanup and retention (JC 2026-11-06, out of App) */}
-                {editConfig && <ThreadCleanupSettings />}
+                {/* event log cleanup and retention are on Developer (#2636) */}
+                <DeveloperLink />
               </>
             )}
 
             {section === "computer" && <LocalComputerSection />}
 
+            {/* every OS permission with its button (#2614) */}
+            {section === "permissions" && <OsPermissionsSection />}
+
             {section === "usage" && (
               <>
                 <UsageSection />
-                {/* the usage meter in the chat (JC 2026-11-06, out of App) */}
-                <SettingsGroup advanced title={t("settings.usage.title")} groupId="usageMeter">
-                  <UsageMeterRow />
-                </SettingsGroup>
+                {/* the usage meter in the chat is on Developer (#2636) */}
+                <DeveloperLink />
               </>
             )}
             {/* Privacy (2026-10-14): a group of Notifications on an organization server. */}

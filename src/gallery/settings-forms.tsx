@@ -22,6 +22,9 @@ import { ConnectedWorkspacesSettings } from "../components/ConnectedWorkspacesSe
 import { RemoteComputerSection } from "../components/RemoteComputerSection";
 import { ComputerSharingSettings } from "../components/ComputerSharingSettings";
 import { SettingsGroup } from "../components/SettingsPrimitives";
+import { LoopGuardRow } from "../components/settings/AdvancedSettings";
+import { TelemetrySettings } from "../components/settings/TelemetrySettings";
+import { WebSearchSettings } from "../components/settings/WebSearchSettings";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, initialState } from "../state/store";
@@ -53,6 +56,10 @@ window.fetch = async (input, init) => {
   if (path === "/api/org/phone-calls") {
     return json({ settings: { enabled: false, doNotCall: ["+15145550142", "+14385550199"] } });
   }
+  if (path === "/api/telemetry") {
+    return json({ endpoint: "https://otel.example.org:4318", headerNames: ["Authorization"], serviceName: "sagax-bureau", enabled: true, stats: { queued: 0, dropped: 0, exported: 1284, failed: 0 } });
+  }
+  if (path === "/api/me/web-search") return json({ provider: "brave", keyConfigured: true, last4: "7f2c", baseUrl: null, ready: true });
   if (path === "/api/org/settings") return json({ settings: { allowVaultExport: true, allowGrokBridge: true } });
   if (path === "/api/me/grok-bridge") {
     return json({
@@ -176,6 +183,11 @@ function Gallery() {
         <SettingsGroup title={t("settings.experimental.title")} groupId="experimental">
           <OrgPhoneCalls initial={{ enabled: true, callbackNumber: "+15145550100", doNotCall: ["+15145550142", "+14385550199"] }} />
         </SettingsGroup>
+      </Sample>
+      <Sample id="telemetry">
+        <SettingsGroup title={t("settings.loopGuard.title")} groupId="loopGuard"><LoopGuardRow /></SettingsGroup>
+        <SettingsGroup title={t("telemetry.title")} groupId="telemetry"><TelemetrySettings /></SettingsGroup>
+        <WebSearchSettings />
       </Sample>
       <Sample id="credentials"><CredentialsSettings /></Sample>
       <Sample id="credentials-export">

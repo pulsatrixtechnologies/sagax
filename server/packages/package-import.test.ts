@@ -204,3 +204,30 @@ describe("importing a whole team", () => {
       .toThrow("not published by the organization");
   });
 });
+
+describe("a plugin's agents as one team (I1)", () => {
+  it("gives each bot the model its agent asks for and marks it as its own over the team's", async () => {
+    const app = await installation();
+    const { pluginTeamToPackage } = await import("../../shared/plugin-team.ts");
+    const built = pluginTeamToPackage({
+      plugin: "pulsatrix-dev",
+      manifest: { displayName: "Pulsatrix Dev" },
+      agents: [
+        { file: "px-architect.md", text: "---\nname: px-architect\nmodel: claude-fable-5-1\ntools: Read, Grep\n---\nYou design." },
+        { file: "px-docs.md", text: "---\nname: px-docs\nmodel: inherit\n---\nYou write docs." },
+      ],
+    });
+    const result = app.importer.importPackageDocument(built.document, {
+      trust: "file", mode: "add", models: { "px-architect": { instanceId: "claude", model: "claude-fable-5-1" } },
+    }, app.deps);
+    if (result.alreadyAdded) throw new Error("unexpected");
+    expect(result.section).toBe("Pulsatrix Dev");
+    const byKey = new Map(result.bots.map((bot) => [bot.installedPackage!.agentKey, app.store.bot(bot.id)!]));
+    expect(byKey.get("px-architect")).toMatchObject({
+      modelSelection: { instanceId: "claude", model: "claude-fable-5-1" }, teamOverrides: ["model"], section: "Pulsatrix Dev",
+    });
+    expect(byKey.get("px-architect")!.soul).toMatch(/^Allowed tools: Read, Grep\./);
+    expect(byKey.get("px-docs")!.modelSelection).toEqual({ instanceId: "claude", model: "default-model" });
+    expect(byKey.get("px-docs")!.teamOverrides ?? []).toEqual([]);
+  });
+});

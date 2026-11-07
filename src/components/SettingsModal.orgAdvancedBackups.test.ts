@@ -80,14 +80,17 @@ describe("Settings > Organization (Perspicax)", () => {
 });
 
 describe("About", () => {
-  it("draws diagnostics as rows under the Help heading", async () => {
+  it("keeps Send feedback under Help; diagnostics are rows on Developer (#2636)", async () => {
     vi.stubGlobal("window", { ogb: { exportDiagnostics: async () => null } });
     const { AboutPage } = await import("./settings/AppPage");
     const html = renderToStaticMarkup(createElement(AboutPage, { remoteActive: false, openAbout: () => {} }));
     expect(html).toContain('data-settings-card="about.help"');
     expect(html).toContain('data-settings-group="appHelp"');
     expect(html).not.toContain('type="checkbox"');
-    expect(html).toContain("Export Diagnostics…");
+    expect(html).not.toContain("Export Diagnostics…");
+    expect(html).toContain('data-developer-link=""');
+    const { DeveloperSettings } = await import("./settings/DeveloperSettings");
+    expect(renderToStaticMarkup(createElement(DeveloperSettings, { remoteActive: false }))).toContain("Export Diagnostics…");
   });
 
   it("hides Diagnostics where the desktop app does not answer", async () => {
@@ -113,10 +116,12 @@ describe("Settings search", () => {
     }
     // #2080 (L0): one word, one page; a password is found on the Vault
     expect(sectionMatches(section("credentials"), "mot de passe")).toBe(true);
-    for (const query of ["journaux", "diagnostic"]) expect(sectionMatches(section("about"), query), query).toBe(true);
-    // JC 2026-11-06: cleanup is found on Backups and storage, not on About
-    expect(sectionMatches(section("backups"), "nettoyage")).toBe(true);
-    expect(sectionMatches(section("about"), "nettoyage")).toBe(false);
+    // #2636: logs, diagnostics and cleanup are found on Developer only
+    for (const query of ["journaux", "diagnostic", "nettoyage"]) {
+      expect(sectionMatches(section("developer"), query), query).toBe(true);
+      expect(sectionMatches(section("about"), query), query).toBe(false);
+      expect(sectionMatches(section("backups"), query), query).toBe(false);
+    }
     // 2026-10-26: no Full access card any more
     expect(cardsMatching("accès complet")).not.toContain("organization.fullAccess");
     // #2090: Grok Bot / preferences import card is gone; restore stays a section keyword.

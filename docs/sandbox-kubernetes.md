@@ -237,6 +237,9 @@ the first command until the provisioner's idle stop
 command still running is never stopped, and a voice call's heartbeat
 counts as use (`markUsed`). So the cluster stays up while anyone works,
 and the stop timer of the runbook starts when the last Pod is gone.
+After `SAGAX_SANDBOX_HIBERNATE_MINUTES` (default 60) a stopped sandbox is
+hibernated: its NetworkPolicy goes too, the claim stays, and the next
+command wakes it on the same claim.
 
 ### Cold start (2026-10-26)
 
@@ -448,6 +451,75 @@ The admission policy also covers `pods/ephemeralcontainers`.
 The idle signal of the cluster stop must also count run Pods: label
 `com.pulsatrix.sagax.run=1` in the run namespace. A stopped cluster is
 woken by Perspicax before it calls `POST /v1/runs`.
+
+### Build cache (coding runs)
+
+Rust builds are big and must stay fast (gap I5, decision D3). A coding run
+gets a second disk, its **build cache**, that outlives the run and goes to
+the same person's next run: sccache, the cargo targets, the cargo registry,
+the toolchains a repository pins, the pnpm store. Off unless
+`SAGAX_RUNS_CACHE_ENABLED=1`; without it a run is exactly as above and the
+image keeps its caches in `$HOME/.px-cache` on the run's own disk.
+
+- One disk per person and concurrent slot: PVC
+  `run-cache-<ownerKey>-<slot>`, labels `com.pulsatrix.sagax.run-cache=1`,
+  `px.owner`, `px.cache-slot` (never `com.pulsatrix.sagax.run`, so it is
+  never listed or swept as a run). A run takes the warmest free disk of its
+  person; a concurrent run opens the next slot, up to
+  `SAGAX_RUNS_CACHE_SLOTS`. The choice is made in the create queue, so two
+  runs never get the same ReadWriteOnce disk.
+- Mounted at `/cache` (`PX_CACHE_DIR`), the Pod labelled `px.cache=<claim>`.
+  The run spec check refuses a cache disk of another person and any other
+  foreign claim.
+- The cache class must advertise encryption, like the run class.
+- Retention: the sweep deletes a cache disk idle for
+  `SAGAX_RUNS_CACHE_RETENTION_DAYS` (`sagax.pulsatrix.com/cache-used-at`)
+  that no Pod references, audit `run.sweep.delete-cache`.
+
+The image (`deploy/run-dev/Dockerfile`, `sagax-run-dev`, built by
+`scripts/build-run-dev-image.sh`, never pushed by a script) is the run image
+plus Rust (`rust-toolchain.toml` pin, clippy, rustfmt), clang and mold,
+sccache, pnpm, Playwright's headless Chromium and `fast-gate`. Its entrypoint
+`px-cache-init` sets `CARGO_TARGET_DIR=/cache/target/<envId>` (one target per
+environment, so repositories never collide), `SCCACHE_DIR=/cache/sccache`
+(40 % of the disk, shared by all environments), `CARGO_HOME`,
+`RUSTUP_HOME`, `PNPM_STORE_DIR`, then starts `px-cache-gc`: every 30 min,
+above 80 % of the disk, it frees down to 60 %: old incremental sessions,
+target files unread for 7 days, the other environments' targets (least
+recently used first), the extracted cargo sources, the current target last.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SAGAX_RUNS_CACHE_ENABLED` | off | give coding runs a build cache disk |
+| `SAGAX_RUNS_CACHE_STORAGE_CLASS` | `px-run-cache` | encrypted, fast class |
+| `SAGAX_RUNS_CACHE_GIB` | 64 | disk size, 8 to 1024 |
+| `SAGAX_RUNS_CACHE_SLOTS` | `SAGAX_RUNS_MAX_PER_OWNER` | disks per person |
+| `SAGAX_RUNS_CACHE_RETENTION_DAYS` | 14 | idle days before the sweep deletes it |
+
+Turning it on (an operator step, after the go-ahead): build and publish the
+image by digest and add it to `runs.allowedImages` and
+`SAGAX_RUNS_ALLOWED_IMAGES`; apply the chart with
+`values-azure-run-cache.yaml` (StorageClass `px-run-cache`, Premium SSD v2,
+quota raised for the cache disks; `deploy/k8s/sandboxes/adapters/azure/storageclass-run-cache.yaml`
+for the kustomize path); pin the runs node pool to zones (Premium SSD v2 is
+zonal); set the variables above on the provisioner.
+
+Measured with `scripts/measure-rust-build.sh` on Perspicax `px-agents`
+(16 CPU, dev profile, line-tables-only), 2026-11-07:
+
+| Build | Time | What it stands for |
+|---|---|---|
+| cold, no cache | 48.4 s | a run without the cache disk, every run |
+| cold, filling sccache | 56.7 s | the person's first run |
+| empty target, warm sccache | 36.1 s | a new environment, or a target the GC emptied |
+| one file touched, target kept | 1.1 s | the next run on the same environment |
+| nothing changed | 0.3 s | |
+
+Target 2.3 GB and sccache 248 MB for this crate: a 64 GiB disk holds about
+20 such environments before the GC starts at 80 %. sccache refuses a
+set `CARGO_INCREMENTAL`, so the image leaves it unset: the workspace's own
+crates stay incremental in the dev profile (in the target, uncached) and
+sccache caches the dependencies.
 
 ## Images
 

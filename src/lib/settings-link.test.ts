@@ -77,10 +77,11 @@ describe("settings links", () => {
     // 2026-11-06: General is the app's system page again; the cards the
     // old App page held go where a person looks for them
     expect(currentSettingsSection("general")).toBe("general");
-    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("backups");
+    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("developer"); // #2636
     expect(currentSettingsSection("general", "general.peopleToolAccess")).toBe("security");
-    expect(currentSettingsSection("general", "general.usage")).toBe("usage");
-    expect(currentSettingsSection("general", "general.diagnostics")).toBe("about");
+    // #2636: the usage meter and diagnostics are technical options, on Developer
+    expect(currentSettingsSection("general", "general.usage")).toBe("developer");
+    expect(currentSettingsSection("general", "general.diagnostics")).toBe("developer");
     expect(currentSettingsSection("about", "about.startup")).toBe("general");
     expect(currentSettingsSection("about", "about.input")).toBe("general");
     expect(currentSettingsSection("about", "about.holding")).toBe("general");

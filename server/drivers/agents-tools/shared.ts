@@ -475,20 +475,36 @@ export function routineAction(value: unknown): RoutineAction | null {
     : null;
 }
 
-export function normalizeTrigger(raw: unknown): { trigger?: { type: "webhook" | "email" }; error?: string } {
+const TRIGGER_SHAPE = "trigger must be { type: \"webhook\" }, { type: \"email\" } or { type: \"github\", events?, filters? }.";
+
+/** A routine's own trigger as a bot passes it. GitHub (I3) also carries the
+ * event kinds and filters; the service validates them against the catalog. */
+export function normalizeTrigger(raw: unknown): {
+  trigger?: { type: "webhook" | "email" } | { type: "github"; events?: unknown; filters?: unknown };
+  error?: string;
+} {
   if (raw === undefined || raw === null) return {};
   let value: unknown = raw;
   if (typeof raw === "string") {
     const trimmed = raw.trim();
-    if (!trimmed) return { error: "trigger must be { type: \"webhook\" } or { type: \"email\" }." };
+    if (!trimmed) return { error: TRIGGER_SHAPE };
     try { value = JSON.parse(trimmed); }
-    catch { return { error: "trigger must be { type: \"webhook\" } or { type: \"email\" }." }; }
+    catch { return { error: TRIGGER_SHAPE }; }
   }
-  if (!jsonRecord(value)) return { error: "trigger must be { type: \"webhook\" } or { type: \"email\" }." };
+  if (!jsonRecord(value)) return { error: TRIGGER_SHAPE };
+  if (value.type === "github") {
+    const extra = Object.keys(value).filter((key) => key !== "type" && key !== "events" && key !== "filters");
+    if (extra.length > 0) return { error: TRIGGER_SHAPE };
+    return {
+      trigger: {
+        type: "github",
+        ...(value.events !== undefined && value.events !== null ? { events: value.events } : {}),
+        ...(value.filters !== undefined && value.filters !== null ? { filters: value.filters } : {}),
+      },
+    };
+  }
   const extra = Object.keys(value).filter((key) => key !== "type");
-  if (extra.length > 0 || (value.type !== "webhook" && value.type !== "email")) {
-    return { error: "trigger must be { type: \"webhook\" } or { type: \"email\" }." };
-  }
+  if (extra.length > 0 || (value.type !== "webhook" && value.type !== "email")) return { error: TRIGGER_SHAPE };
   return { trigger: { type: value.type } };
 }
 

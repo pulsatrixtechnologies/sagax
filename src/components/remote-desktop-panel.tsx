@@ -32,7 +32,7 @@ function routineScheduleLabel(routine: Routine) {
     });
   }
   if (routine.schedule.type === "webhook") return "Incoming webhook";
-  if (routine.schedule.type === "event") return "Incoming email";
+  if (routine.schedule.type === "event") return routine.schedule.source === "github" ? scheduleLabel(routine.schedule) : "Incoming email";
   if (routine.schedule.type === "interval") {
     const cadence = routine.schedule.everyMinutes % 60 === 0
       ? `Every ${routine.schedule.everyMinutes / 60} hr`

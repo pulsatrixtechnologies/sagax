@@ -38,6 +38,17 @@ export const RUN_OWNER_LABEL = "px.owner";
 export const RUN_ENDED_ANNOTATION = "sagax.pulsatrix.com/run-ended-at";
 export const RUN_EGRESS_ANNOTATION = "sagax.pulsatrix.com/run-egress";
 
+/** A person's build cache disk (Rust target, sccache, pnpm store,
+ * Playwright browsers). Not a run object: no RUN_LABEL, so the run sweep and
+ * listRuns never see it. */
+export const RUN_CACHE_LABEL = "com.pulsatrix.sagax.run-cache";
+export const RUN_CACHE_SLOT_LABEL = "px.cache-slot";
+/** On the run Pod: the cache disk it mounts (a disk is ReadWriteOnce). */
+export const RUN_CACHE_CLAIM_LABEL = "px.cache";
+export const RUN_CACHE_USED_ANNOTATION = "sagax.pulsatrix.com/cache-used-at";
+export const RUN_CACHE_MOUNT = "/cache";
+export const RUN_CACHE_STORAGE_CLASS_DEFAULT = "px-run-cache";
+
 export const RUNS_NAMESPACE_DEFAULT = "sandbox-runs";
 export const RUNS_QUOTA_NAME = "sagax-run-quota";
 export const RUN_WORKLOAD_SA = "sagax-run-workload";
@@ -75,6 +86,18 @@ export function runNames(id: string): RunNames {
   return { pod: `run-${id}`, volume: `run-${id}-ws`, network: `run-${id}-net`, token: `run-${id}-token` };
 }
 
+/** D3: Rust agents take a lot of disk and must not be slow. One fast
+ * disk per person and slot, kept between runs, so a build is incremental
+ * instead of cold. The image cleans it at a threshold (deploy/run-dev). */
+export interface RunBuildCache {
+  storageClass: string;
+  sizeGiB: number;
+  /** Disks per person: at most one per concurrent run (ReadWriteOnce). */
+  slots: number;
+  /** A disk no run has used for this long is removed by the sweep. */
+  retentionMs: number;
+}
+
 export interface RunsConfig {
   namespace: string;
   instance: string;
@@ -100,6 +123,8 @@ export interface RunsConfig {
   diskRetentionMs: number;
   runtimeClass?: string;
   pullSecret?: string;
+  /** Unset: runs build on their workspace disk, cold every time. */
+  buildCache?: RunBuildCache;
   listenHost: string;
   listenPort: number;
   keyFile: string;
@@ -214,6 +239,19 @@ export function runsConfigFromEnv(
   const clientSubject = env.SAGAX_RUNS_TLS_CLIENT_CN?.trim() ?? "";
   if (!/^[A-Za-z0-9 ._-]{1,64}$/.test(clientSubject)) throw new Error("SAGAX_RUNS_TLS_CLIENT_CN is required (the common name of the Perspicax client certificate)");
 
+  const maxPerOwner = boundedInt(env.SAGAX_RUNS_MAX_PER_OWNER, 4, "SAGAX_RUNS_MAX_PER_OWNER", 1, 200);
+  let buildCache: RunBuildCache | undefined;
+  if (enabled(env.SAGAX_RUNS_CACHE_ENABLED, "SAGAX_RUNS_CACHE_ENABLED")) {
+    const cacheClass = env.SAGAX_RUNS_CACHE_STORAGE_CLASS?.trim() || RUN_CACHE_STORAGE_CLASS_DEFAULT;
+    if (!DNS_NAME.test(cacheClass)) throw new Error("SAGAX_RUNS_CACHE_STORAGE_CLASS is not a StorageClass name");
+    buildCache = {
+      storageClass: cacheClass,
+      sizeGiB: boundedInt(env.SAGAX_RUNS_CACHE_GIB, 64, "SAGAX_RUNS_CACHE_GIB", 8, 1024),
+      slots: boundedInt(env.SAGAX_RUNS_CACHE_SLOTS, maxPerOwner, "SAGAX_RUNS_CACHE_SLOTS", 1, maxPerOwner),
+      retentionMs: boundedInt(env.SAGAX_RUNS_CACHE_RETENTION_DAYS, 14, "SAGAX_RUNS_CACHE_RETENTION_DAYS", 1, 90) * 86_400_000,
+    };
+  }
+
   return {
     namespace,
     instance: base.sandbox.instance,
@@ -231,11 +269,12 @@ export function runsConfigFromEnv(
     defaults,
     ceilings,
     maxPods: boundedInt(env.SAGAX_RUNS_MAX_PODS, 12, "SAGAX_RUNS_MAX_PODS", 1, 200),
-    maxPerOwner: boundedInt(env.SAGAX_RUNS_MAX_PER_OWNER, 4, "SAGAX_RUNS_MAX_PER_OWNER", 1, 200),
+    maxPerOwner,
     podRetentionMs: boundedInt(env.SAGAX_RUNS_POD_RETENTION_MIN, 15, "SAGAX_RUNS_POD_RETENTION_MIN", 1, 24 * 60) * 60_000,
     diskRetentionMs: boundedInt(env.SAGAX_RUNS_DISK_RETENTION_HOURS, 24, "SAGAX_RUNS_DISK_RETENTION_HOURS", 1, 24 * 30) * 3_600_000,
     ...(base.k8s.runtimeClass ? { runtimeClass: base.k8s.runtimeClass } : {}),
     ...(base.k8s.pullSecret ? { pullSecret: base.k8s.pullSecret } : {}),
+    ...(buildCache ? { buildCache } : {}),
     listenHost: listenMatch[1]!.replace(/^\[|\]$/g, ""),
     listenPort,
     keyFile,
@@ -327,7 +366,7 @@ export function runLabels(config: Pick<RunsConfig, "instance">, request: Pick<Ru
 /** The Pod of one run. Its image's own entrypoint runs (the runner); the
  * request names no command. The only credential inside is the run token,
  * mounted read-only from a Secret. */
-export function runPod(config: RunsConfig, request: RunRequest): Obj {
+export function runPod(config: RunsConfig, request: RunRequest, cacheClaim?: string): Obj {
   const names = runNames(request.id);
   const cpu = `${request.cpuMillis}m`;
   const memory = `${request.memoryMiB}Mi`;
@@ -338,7 +377,7 @@ export function runPod(config: RunsConfig, request: RunRequest): Obj {
     metadata: {
       name: names.pod,
       namespace: config.namespace,
-      labels: runLabels(config, request),
+      labels: { ...runLabels(config, request), ...(cacheClaim ? { [RUN_CACHE_CLAIM_LABEL]: cacheClaim } : {}) },
       annotations: { [IMAGE_ANNOTATION]: request.image, [RUN_EGRESS_ANNOTATION]: request.egress },
     },
     spec: {
@@ -386,6 +425,7 @@ export function runPod(config: RunsConfig, request: RunRequest): Obj {
           { name: "PX_ENV_ID", value: request.envId },
           { name: "PX_CONTROL_URL", value: config.controlUrl },
           { name: "PX_RUN_TOKEN_FILE", value: `${RUN_TOKEN_DIR}/token` },
+          ...(cacheClaim ? [{ name: "PX_CACHE_DIR", value: RUN_CACHE_MOUNT }] : []),
         ],
         resources: {
           requests: { cpu, memory, "ephemeral-storage": tmp },
@@ -396,6 +436,7 @@ export function runPod(config: RunsConfig, request: RunRequest): Obj {
           { name: "tmp", mountPath: "/tmp", readOnly: false },
           { name: "shm", mountPath: "/dev/shm", readOnly: false },
           { name: "run-token", mountPath: RUN_TOKEN_DIR, readOnly: true },
+          ...(cacheClaim ? [{ name: "cache", mountPath: RUN_CACHE_MOUNT, readOnly: false }] : []),
         ],
       }],
       volumes: [
@@ -403,15 +444,16 @@ export function runPod(config: RunsConfig, request: RunRequest): Obj {
         { name: "tmp", emptyDir: { sizeLimit: tmp } },
         { name: "shm", emptyDir: { medium: "Memory", sizeLimit: `${RUN_SHM_BYTES / MiB}Mi` } },
         { name: "run-token", secret: { secretName: names.token, defaultMode: 0o440, items: [{ key: "token", path: "token" }] } },
+        ...(cacheClaim ? [{ name: "cache", persistentVolumeClaim: { claimName: cacheClaim } }] : []),
       ],
     },
   };
 }
 
-const RUN_VOLUMES = new Set(["workspace", "tmp", "shm", "run-token"]);
+const RUN_VOLUMES = new Set(["workspace", "tmp", "shm", "run-token", "cache"]);
 
 /** Isolation of the Pod we send. A failure refuses the create. */
-export function runPodProblems(pod: Obj, config: RunsConfig, id: string): string[] {
+export function runPodProblems(pod: Obj, config: RunsConfig, id: string, cacheClaim?: string): string[] {
   const names = runNames(id);
   const problems: string[] = [];
   const meta = asObj(pod.metadata);
@@ -461,10 +503,16 @@ export function runPodProblems(pod: Obj, config: RunsConfig, id: string): string
     const name = String(volume.name ?? "");
     if (!RUN_VOLUMES.has(name)) problems.push(`unexpected volume ${name}`);
     if (volume.hostPath || volume.nfs || volume.iscsi || volume.projected || volume.csi) problems.push(`host or projected volume ${name}`);
-    if (volume.persistentVolumeClaim && asObj(volume.persistentVolumeClaim).claimName !== names.volume) problems.push("foreign volume claim");
+    const claimName = volume.persistentVolumeClaim ? asObj(volume.persistentVolumeClaim).claimName : undefined;
+    if (claimName !== undefined) {
+      if (name === "cache" && cacheClaim && claimName === cacheClaim) {
+        if (!String(claimName).startsWith(`run-cache-${labels[RUN_OWNER_LABEL] ?? "?"}-`)) problems.push("cache disk of another person");
+      } else if (name !== "workspace" || claimName !== names.volume) problems.push("foreign volume claim");
+    }
     if (volume.secret && asObj(volume.secret).secretName !== names.token) problems.push("foreign secret");
   }
   if (!volumes.some((volume) => asObj(volume.persistentVolumeClaim).claimName === names.volume)) problems.push("workspace volume missing");
+  if (cacheClaim && !volumes.some((volume) => volume.name === "cache" && asObj(volume.persistentVolumeClaim).claimName === cacheClaim)) problems.push("cache volume missing");
   if (JSON.stringify(pod).includes("docker.sock") || JSON.stringify(pod).includes("containerd.sock")) problems.push("container runtime socket");
   return problems;
 }
@@ -486,6 +534,86 @@ export function runPvc(config: RunsConfig, request: RunRequest): Obj {
       resources: { requests: { storage: `${request.diskGiB}Gi` } },
     },
   };
+}
+
+/** The cache disk of one person and slot. The owner key is already an
+ * opaque hash of the person; one disk is never mounted by two people. */
+export function runCacheClaimName(ownerKey: string, slot: number): string {
+  if (!RUN_OWNER_RE.test(ownerKey) || !Number.isInteger(slot) || slot < 0 || slot > 199) throw new Error("invalid cache owner or slot");
+  return `run-cache-${ownerKey}-${slot}`;
+}
+
+export function runCachePvc(config: RunsConfig, ownerKey: string, slot: number, now: number): Obj {
+  if (!config.buildCache) throw new Error("the build cache is off");
+  return {
+    apiVersion: "v1",
+    kind: "PersistentVolumeClaim",
+    metadata: {
+      name: runCacheClaimName(ownerKey, slot),
+      namespace: config.namespace,
+      labels: { [RUN_CACHE_LABEL]: "1", [SANDBOX_INSTANCE_LABEL]: config.instance, [RUN_OWNER_LABEL]: ownerKey, [RUN_CACHE_SLOT_LABEL]: String(slot) },
+      annotations: { [RUN_CACHE_USED_ANNOTATION]: new Date(now).toISOString() },
+    },
+    spec: {
+      accessModes: ["ReadWriteOnce"],
+      storageClassName: config.buildCache.storageClass,
+      resources: { requests: { storage: `${config.buildCache.sizeGiB}Gi` } },
+    },
+  };
+}
+
+/** Claims Pods still reference (a disk is ReadWriteOnce). */
+function cacheClaimsHeld(pods: Obj[], activeOnly: boolean): Set<string> {
+  const held = new Set<string>();
+  for (const pod of pods) {
+    if (activeOnly && !runPodActive(pod)) continue;
+    const claim = (asObj(asObj(pod.metadata).labels) as Record<string, string>)[RUN_CACHE_CLAIM_LABEL];
+    if (claim) held.add(claim);
+  }
+  return held;
+}
+
+/** Which cache disk a new run of this person mounts: the most recently used
+ * free one (warmest target), else a new slot, else none (the run builds on
+ * its workspace disk). */
+export function chooseRunCache(claims: Obj[], pods: Obj[], ownerKey: string, config: Pick<RunsConfig, "buildCache">): { claim: string; slot: number; create: boolean } | null {
+  const cache = config.buildCache;
+  if (!cache) return null;
+  const held = cacheClaimsHeld(pods, true);
+  const taken = new Set<number>();
+  const free: { claim: string; slot: number; used: number }[] = [];
+  for (const claim of claims) {
+    const meta = asObj(claim.metadata);
+    const labels = asObj(meta.labels) as Record<string, string>;
+    if (labels[RUN_OWNER_LABEL] !== ownerKey) continue;
+    const slot = Number(labels[RUN_CACHE_SLOT_LABEL]);
+    if (!Number.isInteger(slot) || slot < 0 || String(meta.name) !== runCacheClaimName(ownerKey, slot)) continue;
+    taken.add(slot);
+    if (meta.deletionTimestamp || slot >= cache.slots || held.has(String(meta.name))) continue;
+    free.push({ claim: String(meta.name), slot, used: time(asObj(meta.annotations)[RUN_CACHE_USED_ANNOTATION]) ?? 0 });
+  }
+  free.sort((a, b) => b.used - a.used || a.slot - b.slot);
+  if (free[0]) return { claim: free[0].claim, slot: free[0].slot, create: false };
+  for (let slot = 0; slot < cache.slots; slot += 1) {
+    if (!taken.has(slot)) return { claim: runCacheClaimName(ownerKey, slot), slot, create: true };
+  }
+  return null;
+}
+
+/** Cache disks no run used within the retention, and no Pod references. */
+export function planCacheSweep(claims: Obj[], pods: Obj[], now: number, config: Pick<RunsConfig, "buildCache">): string[] {
+  const cache = config.buildCache;
+  if (!cache) return [];
+  const held = cacheClaimsHeld(pods, false);
+  const out: string[] = [];
+  for (const claim of claims) {
+    const meta = asObj(claim.metadata);
+    const name = String(meta.name ?? "");
+    if (!name.startsWith("run-cache-") || meta.deletionTimestamp || held.has(name)) continue;
+    const used = time(asObj(meta.annotations)[RUN_CACHE_USED_ANNOTATION]);
+    if (used !== null && now - used >= cache.retentionMs) out.push(name);
+  }
+  return out;
 }
 
 /** No ingress at all. Egress: the cluster DNS, Perspicax, and GitHub for
@@ -637,7 +765,9 @@ export type SweepAction =
   | { kind: "delete-pod"; id: string; reason: "retention" | "pending-timeout" | "hard-cap" }
   | { kind: "mark-ended"; id: string; at: string }
   | { kind: "delete-workspace"; id: string }
-  | { kind: "delete-network"; id: string };
+  | { kind: "delete-network"; id: string }
+  /** A build cache disk idle past its retention (planCacheSweep). */
+  | { kind: "delete-cache"; claim: string };
 
 function runIdOf(obj: Obj): string | null {
   const id = (asObj(asObj(obj.metadata).labels) as Record<string, string>)[RUN_ID_LABEL] ?? "";

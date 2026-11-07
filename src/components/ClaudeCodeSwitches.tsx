@@ -3,15 +3,15 @@ import { claudeUserMcpEnabled, claudeUserSkillsEnabled } from "@/lib/feature-fla
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { api, useStore, type ConfigStatus } from "@/state/store";
-import { Switch } from "./SettingsPrimitives";
+import { DescribedRow, Switch } from "./SettingsPrimitives";
 
 type Feature = "claudeUserMcp" | "claudeUserSkills";
 
-function ClaudeConfigSwitch({ feature, enabled, prefix }: { feature: Feature; enabled: boolean; prefix: "mcp.claude" | "mcp.claudeSkills" }) {
+/** The PATCH behind each switch; one request at a time, the error kept for the row. */
+function useClaudeFeatureToggle(feature: Feature, enabled: boolean) {
   const { dispatch } = useStore();
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
-
   const toggle = async () => {
     if (saving) return;
     setSaving(true);
@@ -28,7 +28,45 @@ function ClaudeConfigSwitch({ feature, enabled, prefix }: { feature: Feature; en
       setSaving(false);
     }
   };
+  return { saving, failed, toggle };
+}
 
+/** One row of Settings > Developer > Claude Code (#2658): a described row
+ * in the card, the switch at the right, as every other settings row. */
+function ClaudeConfigRow({ feature, enabled, prefix }: { feature: Feature; enabled: boolean; prefix: "mcp.claude" | "mcp.claudeSkills" }) {
+  const { saving, failed, toggle } = useClaudeFeatureToggle(feature, enabled);
+  return (
+    <DescribedRow
+      label={t(`${prefix}.title` as LocaleKey)}
+      description={t(`${prefix}.desc` as LocaleKey)}
+      rowId={feature}
+      below={failed ? <p role="alert" className="text-[12px] text-danger">{t("mcp.claude.error")}</p> : undefined}
+    >
+      <Switch
+        checked={enabled}
+        aria-label={t(`${prefix}.aria` as LocaleKey)}
+        disabled={saving}
+        onClick={() => void toggle()}
+        className="disabled:cursor-wait disabled:opacity-50"
+      />
+    </DescribedRow>
+  );
+}
+
+/** The two switches as rows of a SettingsGroup (Settings > Developer, #2658):
+ * what Claude bots take from this computer's Claude Code setup. */
+export function ClaudeCodeRows() {
+  const { state } = useStore();
+  return (
+    <>
+      <ClaudeConfigRow feature="claudeUserMcp" enabled={claudeUserMcpEnabled(state.config)} prefix="mcp.claude" />
+      <ClaudeConfigRow feature="claudeUserSkills" enabled={claudeUserSkillsEnabled(state.config)} prefix="mcp.claudeSkills" />
+    </>
+  );
+}
+
+function ClaudeConfigSwitch({ feature, enabled, prefix }: { feature: Feature; enabled: boolean; prefix: "mcp.claude" | "mcp.claudeSkills" }) {
+  const { saving, failed, toggle } = useClaudeFeatureToggle(feature, enabled);
   return (
     <div className="mt-4 flex items-start justify-between gap-4 rounded-2xl border border-hairline/50 bg-card px-4 py-4 sm:px-5">
       <div className="min-w-0">

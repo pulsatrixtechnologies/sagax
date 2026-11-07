@@ -1,14 +1,14 @@
 // Learn skills automatically, through the real server: tool steps from two
 // short turns add up past the threshold, the bot's own engine reviews the
-// conversation in the background, and the skill it proposes is applied
-// through skill_manage's path — the receipt with Undo is the only thing the
-// review adds to the chat.
+// conversation in the background, and a new skill it proposes comes as an
+// Enable / Deny card the person keeps in one click (#2610); that card is the
+// only thing the review adds to the chat.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import type { WireBot, WireMessage } from "../shared/wire.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import type { WireBot, WireMessage } from "../../shared/wire.ts";
 import { SKILL_REVIEW_MARKER } from "./skill-review.ts";
 
 const SKILL_MD = "---\nname: weekly-report\ndescription: Writes the weekly status report.\n---\n\n# Weekly report\n\nWrites the weekly status report from the project notes.\n\n## When to Use\n- \"write the weekly report\"\n\n## Procedure\n1. Read notes/status.md.\n2. Keep it to five bullets.\n\n## Pitfalls\n- Ask which week when the notes span two.\n\n## Verification\n- The report has at most five bullets.\n";
@@ -44,6 +44,15 @@ it("reviews a conversation in the background once its tool steps reach the thres
   };
   const messages = async (bot: WireBot) =>
     ((await api<{ bots: Array<WireBot & { messages: WireMessage[] }> }>("/api/bots")).bots.find((candidate) => candidate.id === bot.id)?.messages ?? []);
+  // A new skill is a proposal, not applied: Enable keeps it in one click.
+  const keepProposal = async (bot: WireBot) => {
+    const card = await expect.poll(async () => (await messages(bot)).find((message) => message.card?.skillRequest)?.card, { timeout: 20_000 })
+      .toMatchObject({ options: ["Enable", "Deny"] }).then(async () => (await messages(bot)).find((message) => message.card?.skillRequest)!.card!);
+    expect(card.answered).toBeUndefined();
+    await api(`/api/bots/${bot.id}/skills/weekly-report`, "GET", undefined, 404);
+    await api(`/api/threads/${bot.threadId}/respond`, "POST", { requestId: card.requestId, behavior: "allow", reviewedSha256: card.skillRequest!.sha256 });
+    expect((await api<{ text: string }>(`/api/bots/${bot.id}/skills/weekly-report`)).text).toContain("Keep it to five bullets.");
+  };
   try {
     const config = await api("/api/config", "PATCH", { features: { skillReview: true, skillReviewSteps: 3 } });
     expect(config.features).toMatchObject({ skillAuthoring: true, skillReview: true, skillReviewSteps: 3 });
@@ -55,11 +64,9 @@ it("reviews a conversation in the background once its tool steps reach the thres
     expect(counters).toEqual([expect.objectContaining({ botId: bot.id, threadId: bot.threadId, steps: 2 })]);
     expect((await messages(bot)).some((message) => message.card?.skillRequest)).toBe(false);
 
-    // Two more: the review runs on the bot's engine and the skill applies.
+    // Two more: the review runs on the bot's engine and proposes the skill.
     await turn(bot, "Shorter please, five bullets at most.");
-    await expect.poll(async () => (await messages(bot)).find((message) => message.card?.skillRequest)?.card, { timeout: 20_000 })
-      .toMatchObject({ answered: "allow", autoApplied: true, title: 'Skill "weekly-report" enabled' });
-    expect((await api<{ text: string }>(`/api/bots/${bot.id}/skills/weekly-report`)).text).toContain("Keep it to five bullets.");
+    await keepProposal(bot);
 
     const review = JSON.parse(readFileSync(join(scratch, "one-shot.json"), "utf8")) as { prompt: string };
     expect(review.prompt).toContain("Shorter please, five bullets at most.");
@@ -101,6 +108,15 @@ it("reviews a Codex bot's conversation through Codex's own background call", asy
   };
   const messages = async (bot: WireBot) =>
     ((await api<{ bots: Array<WireBot & { messages: WireMessage[] }> }>("/api/bots")).bots.find((candidate) => candidate.id === bot.id)?.messages ?? []);
+  // A new skill is a proposal, not applied: Enable keeps it in one click.
+  const keepProposal = async (bot: WireBot) => {
+    const card = await expect.poll(async () => (await messages(bot)).find((message) => message.card?.skillRequest)?.card, { timeout: 20_000 })
+      .toMatchObject({ options: ["Enable", "Deny"] }).then(async () => (await messages(bot)).find((message) => message.card?.skillRequest)!.card!);
+    expect(card.answered).toBeUndefined();
+    await api(`/api/bots/${bot.id}/skills/weekly-report`, "GET", undefined, 404);
+    await api(`/api/threads/${bot.threadId}/respond`, "POST", { requestId: card.requestId, behavior: "allow", reviewedSha256: card.skillRequest!.sha256 });
+    expect((await api<{ text: string }>(`/api/bots/${bot.id}/skills/weekly-report`)).text).toContain("Keep it to five bullets.");
+  };
   try {
     await api("/api/config", "PATCH", { features: { skillReview: true, skillReviewSteps: 3 } });
     const { instances } = await api<{ instances: Array<{ instanceId: string; models: { default: string } }> }>("/api/instances");
@@ -110,9 +126,7 @@ it("reviews a Codex bot's conversation through Codex's own background call", asy
     // Each fake Codex turn runs a command and a web search: two tool steps.
     await turn(bot, "Write the weekly report from the notes.");
     await turn(bot, "Shorter please, five bullets at most.");
-    await expect.poll(async () => (await messages(bot)).find((message) => message.card?.skillRequest)?.card, { timeout: 20_000 })
-      .toMatchObject({ answered: "allow", autoApplied: true, title: 'Skill "weekly-report" enabled' });
-    expect((await api<{ text: string }>(`/api/bots/${bot.id}/skills/weekly-report`)).text).toContain("Keep it to five bullets.");
+    await keepProposal(bot);
     // SAFETY: the fake CLI appends exactly this shape, one object per line
     const review = readFileSync(textLog, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { argv: string[]; prompt: string })
       .find((call) => call.prompt.includes(SKILL_REVIEW_MARKER));

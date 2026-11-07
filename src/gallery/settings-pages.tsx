@@ -26,6 +26,37 @@ if (params.get("mode") === "simple") { try { localStorage.setItem("sagax.interfa
 
 const API = settingsPagesApi(params);
 
+// #2636: the desktop shell's diagnostics and logs exist, so Settings > Developer draws its Diagnostics card.
+{
+  const ogb = ((window as { ogb?: Record<string, unknown> }).ogb ??= {});
+  ogb.exportDiagnostics ??= async () => null;
+  ogb.exportLogs ??= async () => null;
+}
+
+// ?perm=mac|win (#2614): the desktop app's permission answers, so Settings >
+// Permissions and the in-context banners draw as on a computer.
+const permPlatform = params.get("perm");
+if (permPlatform) {
+  const pane = (name: string) => `x-apple.systempreferences:com.apple.preference.security?Privacy_${name}`;
+  const answer = permPlatform === "win"
+    ? { platform: "win32", permissions: [
+      { id: "microphone", status: "denied", action: { kind: "settings", url: "ms-settings:privacy-microphone" } },
+      { id: "notifications", status: "granted", action: { kind: "none" } },
+    ] }
+    : { platform: "darwin", permissions: [
+      { id: "microphone", status: "granted", action: { kind: "none" } },
+      { id: "screen", status: "denied", action: { kind: "settings", url: pane("ScreenCapture"), secondary: { kind: "relaunch" } } },
+      { id: "accessibility", status: "not-determined", action: { kind: "prompt" } },
+      { id: "notifications", status: "denied", action: { kind: "settings", url: "x-apple.systempreferences:com.apple.Notifications-Settings.extension" } },
+      { id: "speech", status: "unknown", action: { kind: "settings", url: pane("SpeechRecognition") } },
+      { id: "automation", status: "unknown", action: { kind: "settings", url: pane("Automation") } },
+      { id: "fullDisk", status: "unknown", action: { kind: "settings", url: pane("AllFiles") } },
+    ] };
+  const ogb = ((window as { ogb?: Record<string, unknown> }).ogb ??= {});
+  ogb.permAll = async () => answer;
+  ogb.permAct = async () => ({ ok: true });
+}
+
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -45,7 +76,14 @@ function OpenModelPicker() {
 
 function OpenSettings() {
   const { dispatch } = useStore();
-  useEffect(() => { if (!params.has("picker")) dispatch({ type: "toggleAppSettings", open: true, section }); }, [dispatch]);
+  useEffect(() => {
+    // The store hydrates only after the live stream says hello; this page has
+    // no stream, so it hands the store its bots itself (#2658: Settings >
+    // Developer > Per bot draws the first bot's technical cards).
+    const { bots } = API["/api/bots"] as { bots: unknown[] };
+    dispatch({ type: "hydrate", bots, groups: [], sections: [], computerControl: {} } as never);
+    if (!params.has("picker")) dispatch({ type: "toggleAppSettings", open: true, section });
+  }, [dispatch]);
   return null;
 }
 

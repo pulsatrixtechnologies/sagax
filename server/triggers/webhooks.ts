@@ -438,6 +438,13 @@ function cleanInput(input: WebhookTriggerInput): CleanWebhookInput {
   return clean;
 }
 
+/** The kind of trigger a routine owns, read from its source. */
+function ownedKind(trigger: StoredWebhookTrigger): "webhook" | "email" | "github" | "other" {
+  if (!trigger.source) return "webhook";
+  if (trigger.source.type === "email" || trigger.source.type === "github") return trigger.source.type;
+  return "other";
+}
+
 /** Only events the source knows, filter keys the source offers, values
  * trimmed and deduplicated. */
 function cleanSource(input: z.input<typeof sourceConfigSchema>): TriggerSourceConfig {
@@ -1060,17 +1067,26 @@ export class WebhookManager {
     prompt: string;
     botId: string;
     runOn: RoutineRunOn;
-    kind: "webhook" | "email";
+    kind: "webhook" | "email" | "github";
+    /** GitHub (I3): the kinds and filters the routine's schedule names. */
+    github?: { events: string[]; filters: Partial<Record<TriggerFilterKey, string[]>> };
     enabled?: boolean;
   }): { id: string } {
     this.assertWritable();
     const routineId = input.routineId.trim();
     if (!routineId) fail(400, "Choose a routine");
     const existing = this.webhooks.find((candidate) => candidate.routineId === routineId);
-    if (existing) return { id: existing.id };
+    if (existing) {
+      // A routine switched to another kind of trigger gets a new one: the old
+      // endpoint and key stop at once.
+      if (ownedKind(existing) === input.kind) return { id: existing.id };
+      this.removeOwnedRoutine(routineId);
+    }
     const source = input.kind === "email"
       ? cleanSource({ type: "email", events: ["email.received"], filters: {} })
-      : undefined;
+      : input.kind === "github"
+        ? cleanSource({ type: "github", events: input.github?.events ?? [], filters: input.github?.filters ?? {} })
+        : undefined;
     const clean = cleanInput({
       name: input.name,
       prompt: input.prompt,
@@ -1094,7 +1110,9 @@ export class WebhookManager {
       updatedAt: now,
       deliveryCount: 0,
     };
-    if (input.kind === "email") {
+    if (input.kind === "email" || input.kind === "github") {
+      // GitHub signs with the secret Sagax makes; the owner pastes it in the
+      // repository's webhook settings, once.
       const signing = newSecret();
       trigger.signingSecret = signing;
       trigger.pendingToken = signing;
@@ -1154,9 +1172,14 @@ export class WebhookManager {
     botId: string;
     runOn: RoutineRunOn;
     enabled: boolean;
+    /** GitHub (I3): the schedule's kinds and filters, followed by the source. */
+    github?: { events: string[]; filters: Partial<Record<TriggerFilterKey, string[]>> };
   }): void {
     const trigger = this.webhooks.find((candidate) => candidate.routineId === routine.id);
     if (!trigger) return;
+    const source = routine.github && trigger.source?.type === "github"
+      ? { ...trigger.source, events: routine.github.events, filters: routine.github.filters }
+      : trigger.source;
     const clean = cleanInput({
       name: routine.name,
       prompt: routine.prompt,
@@ -1164,7 +1187,7 @@ export class WebhookManager {
       runOn: routine.runOn,
       enabled: routine.enabled,
       verificationPending: routine.enabled ? false : trigger.verificationPending === true,
-      ...(trigger.source ? { source: trigger.source } : {}),
+      ...(source ? { source } : {}),
       ...(trigger.delivery ? { delivery: trigger.delivery } : {}),
       ...(trigger.eventTypes ? { eventTypes: trigger.eventTypes } : {}),
       ...(trigger.maxPendingRuns === undefined ? {} : { maxPendingRuns: trigger.maxPendingRuns }),

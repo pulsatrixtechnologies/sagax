@@ -71,7 +71,7 @@ import { formatTokens } from "@/lib/usage";
 import { avatarBot, useExchangePortalHost } from "../BotExchangeChip";
 import { Composer } from "../Composer";
 import { TurnPresence } from "../TurnPresence";
-import { ACTIVITY_DEV_PODS, DevPodsPanel } from "../dev-pods/DevPods";
+import { DevPodsPanel } from "../dev-pods/DevPods";
 
 import { BotChatHeader, useChatWindow } from "../BotHeaderPill";
 import { CHAT_UNDER_BAR_PAD, ChatBottomEdge, ChatHeaderBar } from "../ChatHeaderBar";
@@ -81,8 +81,6 @@ import { PartyAvatar } from "../PartyAvatar";
 import { WaitingOnYou } from "../task/WaitingOnYou";
 import { TestCounts, ToolLine } from "./ToolLine";
 
-const activityPod = (id: string) => ACTIVITY_DEV_PODS.includes(id);
-const codingPod = (id: string) => !activityPod(id);
 
 const POLL_MS = 3_000;
 /** After a follow-up, keep reading the entry this long so the new turn shows. */
@@ -268,11 +266,8 @@ export interface CodingChatSheetProps {
    * follow-up field stands in without it (tests, galleries). */
   composer?: ReactNode;
   /** The dev pods as sections of the bot panel (#2285), put in its Coding
-   * tab under the "This session" card. */
+   * tab under the "This session" card; Connectors too (#2599). */
   side?: ReactNode;
-  /** The pods that are not coding work of their own (Connectors): at the top
-   * of the bot panel's Activity tab. */
-  activitySide?: ReactNode;
 }
 
 /** #2285: what the header used to say on its meta line (status, duration,
@@ -306,7 +301,7 @@ function SessionCard({ glyph, lead, live, elapsed, tokens }: { glyph: string; le
 }
 
 /** The sheet, without fetching: tests and galleries draw it with fixed data. */
-export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, side, activitySide }: CodingChatSheetProps) {
+export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, side }: CodingChatSheetProps) {
   const chat = useChatWindow();
   const chatColumnClassName = useChatColumnClass();
   const column = useExchangePortalHost();
@@ -371,7 +366,6 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
     : activityStatusLabel(shown.status);
   const tokensLabel = tokens !== undefined && tokens > 0 ? formatTokens(tokens) : undefined;
   const panelHost = useCodingPanelHost(shown.botId);
-  const activityHost = useCodingPanelHost(shown.botId, "activity");
 
   const sheet = (
     <div
@@ -527,8 +521,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
   );
   // #2285: the session card and the dev pods go to the bot panel on the
   // right, in its Coding tab, shown only while this window is open (JC
-  // 2026-11-06); Connectors stay at the top of Activity.
-  const activityPanel = activityHost && activitySide ? createPortal(activitySide, activityHost) : null;
+  // 2026-11-06); Connectors there too, never in Activity (#2599, JC 2026-11-07).
   const panel = panelHost
     ? createPortal(
       <>
@@ -538,7 +531,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       panelHost,
     )
     : null;
-  return <>{column ? createPortal(sheet, column) : sheet}{panel}{activityPanel}</>;
+  return <>{column ? createPortal(sheet, column) : sheet}{panel}</>;
 }
 
 /** The task's thread, read and followed (a child so the hook runs only with a thread). */
@@ -616,8 +609,8 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
   const follow = useCallback(() => setFollowUntil(Date.now() + FOLLOW_MS), []);
   const computerStart = state.computerStarts[target.botId];
   const taskBot = bot && threadId ? { ...bot, threadId } : undefined;
-  const side = (messages: readonly Message[], only: (id: string) => boolean) => taskBot
-    ? <DevPodsPanel bot={taskBot} messages={messages} computerStart={computerStart} dispatch={dispatch} only={only} />
+  const side = (messages: readonly Message[]) => taskBot
+    ? <DevPodsPanel bot={taskBot} messages={messages} computerStart={computerStart} dispatch={dispatch} />
     : undefined;
   // The chat's own composer ("Message <bot>", +, microphone, voice) aimed at
   // the task's thread; a person who may not write there keeps the plain field.
@@ -644,8 +637,7 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
       <CodingChatSheet
         {...common}
         composer={composer}
-        side={side(transcript.messages, codingPod)}
-        activitySide={side(transcript.messages, activityPod)}
+        side={side(transcript.messages)}
         messages={transcript.messages}
         loaded={transcript.loaded}
         failed={transcript.failed}

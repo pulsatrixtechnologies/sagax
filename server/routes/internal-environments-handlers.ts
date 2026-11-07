@@ -235,6 +235,8 @@ export interface InternalEnvironmentsDeps {
     operation: DesktopBridgeOperation,
     active: () => boolean,
     onProgress?: () => void,
+    /** The bot turn asking, so a device set to Ask every time raises its card. */
+    context?: { botId: string; threadId: string },
   ): Promise<unknown>;
   bridgeAuditRecord(row: Record<string, unknown>): void;
   broadcast(event: Record<string, unknown>): void;
@@ -735,7 +737,7 @@ async function handleDesktopMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
         }
         : undefined;
       try {
-        const answer = await deps.desktopBridgesRequest(person, operation, active, onProgress).finally(() => {
+        const answer = await deps.desktopBridgesRequest(person, operation, active, onProgress, { botId: capability.botId, threadId: capability.threadId }).finally(() => {
           if (provisioning) deps.broadcast({ kind: "computer", botId: capability.botId, state: "ready" });
         });
         deps.bridgeAuditRecord({

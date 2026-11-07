@@ -21,6 +21,7 @@ import {
   afterLibrarySkillPersonSave,
   afterLibrarySkillRemoved,
   botSkillFolder,
+  ensureBotReviewedSnapshot,
   librarySkillFolder,
   loadBotSkillEditor,
   loadLibrarySkillEditor,
@@ -42,8 +43,10 @@ import {
 import {
   installSkill,
   listBotSkillsWithOrigin,
+  listSkillHistory,
   listSkills,
   removeSkill,
+  restoreSkillVersion,
   setSkillEnabled,
   type SkillListing,
   type StagedSkillWrite,
@@ -95,7 +98,7 @@ export interface BotsContentRouteDeps {
 
 export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandler {
   return async ({ req, res, url, path, method, auth, json, readBody }) => {
-    const botSkillGate = /^\/api\/bots\/([\w-]+)\/(?:skill-template|skills(?:\/[a-z0-9-]+(?:\/(?:review|files))?)?|skills-library)$/.exec(path);
+    const botSkillGate = /^\/api\/bots\/([\w-]+)\/(?:skill-template|skills(?:\/[a-z0-9-]+(?:\/(?:review|files|history(?:\/restore)?))?)?|skills-library)$/.exec(path);
     const libraryGate = path === "/api/skills-library" || /^\/api\/skills-library\/[a-z0-9-]+(?:\/(?:review|files))?$/.test(path);
     if (!botSkillGate && !libraryGate) return PASS;
 
@@ -132,7 +135,7 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
     // Bot skills and skill-template: owner / manage / admin for changes.
     // skills-library assignment on a bot keeps the original (no refusal call).
     {
-      const skillRoute = /^\/api\/bots\/([\w-]+)\/(?:skill-template|skills(?:\/[a-z0-9-]+(?:\/(?:review|files))?)?)$/.exec(path);
+      const skillRoute = /^\/api\/bots\/([\w-]+)\/(?:skill-template|skills(?:\/[a-z0-9-]+(?:\/(?:review|files|history(?:\/restore)?))?)?)$/.exec(path);
       if (skillRoute) {
         const refused = botSkillsRefusal(auth, skillRoute[1]!, method !== "GET");
         if (refused) return json(res, refused.status, refused.body);
@@ -222,6 +225,24 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
         : revertBotSkillReview(m[1]!, m[2]!);
       if ("error" in result) return json(res, result.status, { error: result.error });
       return json(res, 200, { skill: result });
+    }
+
+    // Versions of one skill (#2610): every change by the bot or the person,
+    // with the text before and after, and Restore of any of them.
+    m = path.match(/^\/api\/bots\/([\w-]+)\/skills\/([a-z0-9-]+)\/history$/);
+    if (m && method === "GET") {
+      if (!store.bot(m[1])) return json(res, 404, { error: "no such bot" });
+      return json(res, 200, { versions: listSkillHistory(m[1]!, m[2]!) });
+    }
+    m = path.match(/^\/api\/bots\/([\w-]+)\/skills\/([a-z0-9-]+)\/history\/restore$/);
+    if (m && method === "POST") {
+      if (!store.bot(m[1])) return json(res, 404, { error: "no such bot" });
+      const parsed = z.object({ id: z.string().min(1).max(64), side: z.enum(["before", "after"]).optional() }).safeParse(await readBody(req));
+      if (!parsed.success) return json(res, 400, { error: "id is required" });
+      const result = restoreSkillVersion(m[1]!, m[2]!, parsed.data.id, parsed.data.side);
+      if ("error" in result) return json(res, result.status, { error: result.error });
+      ensureBotReviewedSnapshot(m[1]!, m[2]!);
+      return json(res, 200, { skill: result.skill });
     }
 
     m = path.match(/^\/api\/bots\/([\w-]+)\/skills\/([a-z0-9-]+)\/files$/);

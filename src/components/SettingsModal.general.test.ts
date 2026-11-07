@@ -121,10 +121,9 @@ describe("Settings > General, the reference design's layout", () => {
     const general = render();
     expect(general).toContain('data-settings-card="general.system"');
     expect(general).toContain('data-settings-card="general.input"');
-    expect(general).toContain('data-settings-card="general.loopGuard"');
-    // a member who cannot edit the installation, in a browser: no loop guard
-    fixture.config = { rooms: { turnTimeoutMinutes: 5 }, viewer: { operator: false, role: "member" } };
-    expect(render()).not.toContain('data-settings-card="general.loopGuard"');
+    // #2636: the loop guard is on Developer; General keeps one link there
+    expect(general).not.toContain('data-settings-card="general.loopGuard"');
+    expect(general).toContain('data-developer-link=""');
   });
 
   it("reads in French", () => {
@@ -171,9 +170,15 @@ describe("Settings search after the move", () => {
     for (const query of ["language", "langue", "account", "copy email"]) {
       expect(sectionMatches(section("account"), query), query).toBe(true);
     }
-    for (const query of ["tour", "diagnostic", "help", "feedback", "logs"]) {
+    for (const query of ["tour", "help", "feedback"]) {
       expect(sectionMatches(section("about"), query), query).toBe(true);
       expect(sectionMatches(section("account"), query), query).toBe(false);
+      expect(sectionMatches(section("general"), query), query).toBe(false);
+    }
+    // #2636: diagnostics and logs are on Developer
+    for (const query of ["diagnostic", "logs"]) {
+      expect(sectionMatches(section("developer"), query), query).toBe(true);
+      expect(sectionMatches(section("about"), query), query).toBe(false);
       expect(sectionMatches(section("general"), query), query).toBe(false);
     }
     for (const query of ["open at login", "hotkey", "send key", "spellcheck", "advanced mode", "hardware acceleration", "app icon"]) {

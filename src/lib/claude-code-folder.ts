@@ -21,8 +21,8 @@ export interface ClaudeCodeFolder {
   skippedSecrets: string[];
 }
 
-/** Secret-looking files worth naming: at the folder's top or under .claude/. */
-const NAMED_SECRET_PLACE = /^(?:[^/]+|\.claude\/.+)$/;
+/** Secret-looking files worth naming: at the folder's top, under .claude/, or at the top of a Hermes profile. */
+const NAMED_SECRET_PLACE = /^(?:[^/]+|\.claude\/.+|profiles\/[^/]+\/[^/]+)$/;
 
 export async function readClaudeCodeFolder(list: ArrayLike<PickedFile>): Promise<ClaudeCodeFolder> {
   const picked = Array.from(list);

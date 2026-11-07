@@ -201,7 +201,8 @@ import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
-import { createSkillReview, turnToolSteps } from "./skills/skill-review.ts";
+import { createSkillReview, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
+import { summarizeSessions } from "./recall/session-summary.ts";
 import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
@@ -278,7 +279,6 @@ import {
   liveSettingsFor,
   liveCallKey,
   newRoutinesPaused,
-  skillReviewEnabled,
   skillReviewSteps
 } from "./config.ts";
 import { claudeUserSkillsEnabled } from "./turn-settings.ts";
@@ -301,6 +301,10 @@ import { videoStatusRow } from "./video/video-status.ts";
 import { createXaiVideoProvider, generatedMp4Chunks, openGeneratedVideo } from "./video/video-provider.ts";
 import { mediaProxyPolicyFromEnv, blockedAddressReason, defaultMediaProxyResolver } from "./media/media-proxy-guard.ts";
 import { createWebSearchRoutes } from "./routes/web-search.ts";
+import { createTelemetryRoutes } from "./routes/telemetry.ts";
+import { createTracer } from "./telemetry/otel.ts";
+import { createAgentSpans } from "./telemetry/agent-spans.ts";
+import { createTelemetrySettingsStore } from "./telemetry/settings-store.ts";
 import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createGrokBridgeRoutes } from "./routes/grok-bridge.ts";
 import { createGrokBridgeInboundRoutes } from "./routes/grok-bridge-inbound.ts";
@@ -628,11 +632,13 @@ import {
   migrateSectionContextKeys,
   readSectionContext,
   readSections,
+  readTeamDefaults,
   sectionContextKey,
   sectionContextLabel,
   sectionContextSystemPrompt,
   teamDataKey,
-  writeSectionContext
+  writeSectionContext,
+  writeTeamDefaults
 } from "./rooms/section-context.ts";
 import {
   installOrgSkill,
@@ -1364,6 +1370,7 @@ import { createTeamLibraryRoutes } from "./routes/team-library.ts";
 import { createTeamExportImportRoutes } from "./routes/team-export-import.ts";
 import { createTeamMemoryHttpRoutes } from "./routes/team-memory-http.ts";
 import { createSectionContextRoutes } from "./routes/section-context.ts";
+import { createTeamDefaultsRoutes } from "./routes/team-defaults.ts";
 import { createSidebarSectionsRoutes } from "./routes/sidebar-sections.ts";
 import { createTeamComputersRoutes } from "./routes/team-computers.ts";
 // IMPORT-ANCHOR:routines-http
@@ -1371,6 +1378,10 @@ import { createRoutinesHttpRoutes } from "./routes/routines-http.ts";
 import { createCalendarCallsRoutes } from "./routes/calendar-calls.ts";
 import { createWebhooksRoutes } from "./routes/webhooks.ts";
 import { createBotsMessagesRoutes } from "./routes/bots-messages.ts";
+import { createFeedbackRoutes } from "./routes/feedback.ts";
+import { createFeedbackService } from "./feedback/service.ts";
+import { readFeedbackConfig } from "./feedback/config.ts";
+import { readToolSpans } from "./telemetry/usage-stats.ts";
 import { createThreadsHttpRoutes } from "./routes/threads-http.ts";
 import { resolveAndSendPhoneCallConsent as resolvePhoneCallConsentCard } from "./routes/phone-call-consent.ts";
 import { createUploadsRoutes, encryptionOwnerForUpload } from "./routes/uploads.ts";
@@ -1882,6 +1893,7 @@ import { createGroupThreadIsWorking } from "./index-leaves/groupThreadIsWorking.
 import { createForgetThreadEngineSessions } from "./index-leaves/forgetThreadEngineSessions.ts";
 import { createEngineInstalled } from "./index-leaves/engineInstalled.ts";
 import { createBindOwnedTrigger } from "./index-leaves/bindOwnedTrigger.ts";
+import { ownedTriggerOf } from "../shared/routine-github.ts";
 import { createAuthorizedInternalCapability } from "./index-leaves/authorizedInternalCapability.ts";
 import { createAuditFullAccessTurn } from "./index-leaves/auditFullAccessTurn.ts";
 import { createAuditApprovalModeChange } from "./index-leaves/auditApprovalModeChange.ts";
@@ -2216,6 +2228,7 @@ bindLeafHost({
   get personForJoin() { return personForJoin; },
   get isAutoOptimize() { return isAutoOptimize; },
   get reportBackgroundError() { return reportBackgroundError; },
+  get agentSpans() { return agentSpans; },
   get scrubThreadDecisions() { return scrubThreadDecisions; },
   get appendProblem() { return appendProblem; },
   get peerApprovalFailure() { return peerApprovalFailure; },
@@ -8504,7 +8517,7 @@ function liveSessionPerson(sessionId: string): string | null {
 // (server/desktop/desktop-bridge.ts): bots in their conversations run shell, files,
 // search, fetch, browser, computer use and Local VM there, and their network
 // traffic leaves through it (server/desktop/desktop-egress.ts).
-const desktopBridges = new DesktopBridges(liveSessionPerson, Date.now, join(DATA_DIR, "desktop-computer-names.json"), join(DATA_DIR, "desktop-mac-apps.json"));
+const desktopBridges = new DesktopBridges(liveSessionPerson, Date.now, join(DATA_DIR, "desktop-computer-names.json"), join(DATA_DIR, "desktop-mac-apps.json"), join(DATA_DIR, "desktop-devices.json"));
 /** The last model fallback per thread (session.model-fallback). */
 const modelFallbackByThread = new Map<string, { requested: string; actual: string }>();
 /** #1154: the last model fallback per person, engine and picked model, so a
@@ -11768,6 +11781,21 @@ function vaultPrincipalForThread(threadId: string): string | null {
 // payer's), and the address guard for a SearXNG instance on an
 // organization server (its own network is not a member's to reach).
 const webSearchStore = createWebSearchStore(DATA_DIR);
+// OpenTelemetry traces (#2609, server/telemetry/): every bot turn, model
+// call, tool/MCP call, sub-agent and routine becomes a span. Local JSONL
+// always (the usage statistics read it); OTLP only while Settings > General
+// > Telemetry holds a collector address. Never on the hot path: emit() only
+// queues, the exporters run on an unref'd timer.
+const telemetrySettings = createTelemetrySettingsStore(DATA_DIR);
+const tracer = createTracer({ dataDir: DATA_DIR, target: () => telemetrySettings.target(), onError: reportBackgroundError });
+const agentSpans = createAgentSpans({
+  emit: (span) => tracer.emit(span),
+  botFor: (threadId) => {
+    const bot = store.botByThread(threadId);
+    return bot ? { id: bot.id, name: bot.name } : null;
+  },
+});
+setInterval(() => { try { agentSpans.sweep(); } catch (error) { reportBackgroundError(error); } }, 10_000).unref();
 const memeStore = createMemeStore(DATA_DIR);
 const openApiStore = new OpenApiStore(DATA_DIR);
 const workflowStore = new WorkflowStore(DATA_DIR);
@@ -15569,6 +15597,10 @@ const cacheKeepWarm = createCacheKeepWarm({
   }
 });
 cacheKeepWarmStatus = (threadId) => cacheKeepWarm.status(threadId);
+bus.subscribe((event: RuntimeEvent) => {
+  if (shouldIgnoreProviderEvent(event)) return;
+  try { agentSpans.onEvent(event); } catch (error) { reportBackgroundError(error); }
+});
 onConfigSaved((before, after) => {
   if (JSON.stringify(before.cacheKeepWarm ?? null) !== JSON.stringify(after.cacheKeepWarm ?? null)) setImmediate(() => cacheKeepWarm.refresh());
 });
@@ -16291,6 +16323,37 @@ bus.subscribe((event: RuntimeEvent) => {
   });
 });
 
+// A bot's own model for a short background text call (skill review, the
+// session_search summary): its spend is booked to the bot, and a workspace
+// at its spend limit makes none. Null when the engine cannot run it.
+function botTextEngine(botId: string, purpose: string): { generateText: (prompt: string, options?: { noThinking?: boolean }) => Promise<string> } | null {
+  const bot = store.bot(botId);
+  const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
+  if (!bot || !instance || policyModelRefusal(instance) || instance.adapter.capabilities.agentsMcp !== true) return null;
+  const generate = (instance.generateText ?? instance.generateMemoryText)?.bind(instance);
+  if (!generate) return null;
+  return {
+    generateText: async (prompt, options) => {
+      // a workspace at its spend limit runs no review
+      assertWithinBudget(cfg, DATA_DIR);
+      const threadId = `${purpose}-${randomUUID()}`;
+      return generate(prompt, { ...options, onUsage: (usage) => bookTurnUsage({
+        botId: bot.id,
+        botName: bot.name,
+        threadId,
+        instanceId: instance.instanceId,
+        driverKind: instance.driverKind,
+        model: usage.model,
+        input: usage.input ?? 0,
+        output: usage.output ?? 0,
+        ...(usage.cachedInput !== undefined ? { cachedInput: usage.cachedInput } : {}),
+        costUsd: usage.costUsd ?? null,
+        trigger: { kind: "bot", botId: bot.id },
+      }, usage.input !== undefined && usage.output !== undefined, bot.threadId) });
+    },
+  };
+}
+
 // Learn skills automatically (server/skills/skill-review.ts): tool steps are counted
 // per bot and conversation, and past the threshold the bot's own engine
 // reviews the conversation in the background. Its changes go through the
@@ -16299,36 +16362,11 @@ bus.subscribe((event: RuntimeEvent) => {
 // agents tools, a turn the person started (not a peer hop, routine or
 // unattended run), and a conversation that is the bot's own.
 const skillReview = createSkillReview({
-  enabled: () => skillReviewEnabled(cfg),
+  // One switch per bot, in its Skills page (#2610): on unless turned off.
+  enabled: (botId) => skillAuthoringEnabled(cfg) && store.bot(botId)?.skillLearning !== false,
   threshold: () => skillReviewSteps(cfg),
   bot: (botId) => store.bot(botId) ?? undefined,
-  engine: (botId) => {
-    const bot = store.bot(botId);
-    const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
-    if (!bot || !instance || policyModelRefusal(instance) || instance.adapter.capabilities.agentsMcp !== true) return null;
-    const generate = (instance.generateText ?? instance.generateMemoryText)?.bind(instance);
-    if (!generate) return null;
-    return {
-      generateText: async (prompt, options) => {
-        // a workspace at its spend limit runs no review
-        assertWithinBudget(cfg, DATA_DIR);
-        const threadId = `skill-review-${randomUUID()}`;
-        return generate(prompt, { ...options, onUsage: (usage) => bookTurnUsage({
-          botId: bot.id,
-          botName: bot.name,
-          threadId,
-          instanceId: instance.instanceId,
-          driverKind: instance.driverKind,
-          model: usage.model,
-          input: usage.input ?? 0,
-          output: usage.output ?? 0,
-          ...(usage.cachedInput !== undefined ? { cachedInput: usage.cachedInput } : {}),
-          costUsd: usage.costUsd ?? null,
-          trigger: { kind: "bot", botId: bot.id },
-        }, usage.input !== undefined && usage.output !== undefined, bot.threadId) });
-      },
-    };
-  },
+  engine: (botId) => botTextEngine(botId, "skill-review"),
   busy: (botId) => workspaceMaintenance.active || botHasActiveTurn(botId),
   transcript: (botId, threadId) => {
     const owned = connectorThread(botId, threadId);
@@ -16359,6 +16397,13 @@ const skillReview = createSkillReview({
       source: learnSource("automatic review of this conversation"),
     });
     if ("error" in staged) return { ok: false, error: staged.error };
+    // A new skill drawn from a finished task is a proposal (#2610): the
+    // person keeps it in one click on the card, or turns it down. A fix to
+    // a skill in use applies at once, with its receipt, Undo and history.
+    if (change.action === "create") {
+      appendSkillRequestCard({ botId, threadId, staged });
+      return { ok: true };
+    }
     const applied = applyOwnStagedSkill(bot, threadId, staged, direct);
     return "error" in applied ? { ok: false, error: applied.error } : { ok: true };
   },
@@ -16382,7 +16427,16 @@ bus.subscribe((event: RuntimeEvent) => {
       && !(CLOUD_HOME && !cloudOwnerOnlyThread(event.threadId))
       // a confidential conversation is never read back (confidential-threads.ts)
       && !store.isConfidentialThread(event.threadId);
+    const attended = !isInternalTurn(event.threadId) && !isUnattended(bot.id, event.threadId)
+      && !routines?.runForThread(event.threadId) && !(CLOUD_HOME && !cloudOwnerOnlyThread(event.threadId))
+      && !store.isConfidentialThread(event.threadId);
     if (counts) skillReview.noteTurn(bot.id, event.threadId, turnToolSteps(messages, event.turnId, bot.id, Boolean(room)));
+    // A failure or a correction while a skill was in play brings the review
+    // forward, focused on that skill (#2610).
+    if (attended && skillAuthoringEnabled(cfg) && bot.skillLearning !== false) {
+      const signal = turnSignal(messages, event.turnId, bot.id, Boolean(room), listSkills(bot.id).map((skill) => skill.name));
+      if (signal) skillReview.noteSignal(bot.id, event.threadId, signal);
+    }
     skillReview.botSettled(bot.id);
   } catch (error) {
     console.warn(`skill review: could not count a turn: ${(error as Error).message}`);
@@ -18868,7 +18922,8 @@ routines = new RoutineManager({
       prompt: routine.prompt,
       botId: routine.botId,
       runOn: routine.runOn,
-      enabled: routine.enabled
+      enabled: routine.enabled,
+      ...(ownedTriggerOf(routine.schedule).github ? { github: ownedTriggerOf(routine.schedule).github } : {})
     });
   },
   goalState: (groupId, coordinatorBotId) => {
@@ -20096,6 +20151,13 @@ const roomPostBudgets = new Map<string, RoomPostBudget>();
 // them — its pending map lives in the module so the two respond endpoints
 // can call resolvePeerComms without holding a reference back to here.
 const approvalBus: ApprovalBus = { store, broadcast, notify, autoApply: fullAccessForSource };
+// A device set to Ask every time (Remote sessions > Enrolled hosts): the bot's
+// use waits on the person's card, Always allow remembered per bot and device.
+desktopBridges.setAskHook(async ({ device, context }) => {
+  const bot = store.bot(context.botId);
+  if (!bot) return false;
+  return (await requestPeerApproval(approvalBus, bot, device, `Use ${device.name} for this turn`, "use_computer", context.threadId)) === "allow";
+});
 
 // Approvals live only in memory, so any peer card still open on disk is one
 // whose resolver died with the previous process. Left alone it can never be
@@ -21977,7 +22039,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     stdioRelay: (input) => stdioRelay.relay(input as never),
     desktopConnected: (person) => desktopBridges.connected(person),
     handleDesktopBridgeMcp,
-    desktopBridgesRequest: (person, operation, active, onProgress) => desktopBridges.request(person, operation, active, onProgress),
+    desktopBridgesRequest: (person, operation, active, onProgress, context) => desktopBridges.request(person, operation, active, onProgress, undefined, context),
     desktopBridgeMacApps: (person) => desktopBridges.current(person)?.capabilities.macApps === true,
     desktopBridgeMacAppsOn: (person) => desktopBridges.macAppsOn(person),
     bridgeAuditRecord: (row) => bridgeAudit.record(row as never),
@@ -22024,6 +22086,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   }),
 
   createInternalSessionsRoutes({
+    summarizeRecall: async (bot, query, sessions) => {
+      const engine = botTextEngine(bot.id, "session-summary");
+      return engine ? summarizeSessions((prompt, options) => engine.generateText(prompt, options), bot.name, query, sessions) : null;
+    },
     bot: (id) => (store.bot(id) ?? undefined) as ReturnType<Parameters<typeof createInternalSessionsRoutes>[0]["bot"]>,
     bots: () => store.bots as unknown as ReturnType<Parameters<typeof createInternalSessionsRoutes>[0]["bots"]>,
     tasks: (botId) => store.tasks(botId) as unknown as ReturnType<Parameters<typeof createInternalSessionsRoutes>[0]["tasks"]>,
@@ -22801,7 +22867,12 @@ ROUTES.push(createDesktopBridgeRoutes({
   organization: () => IDENTITY.kind === "perspicax",
   bridges: desktopBridges, tunnels: desktopTunnels, audit: bridgeAudit,
   workplace: (person) => workplacePreference(person),
-  localModels: desktopLocalModels
+  localModels: desktopLocalModels,
+  // the person's iPhones (push registrations), online while a stream is open
+  phones: (person) => {
+    const live = new Set(tokensOfConnectedDevices(sseClients, person));
+    return pushDevices.list(person).map((phone) => ({ name: phone.deviceName || "iPhone", platform: phone.platform, lastSeenAt: phone.updatedAt, online: live.has(phone.token) }));
+  },
 }));
 // A personal computer hands its look to the paired phone (shared/desktop-appearance.ts).
 ROUTES.push(createDesktopAppearanceRoutes({ store: createDesktopAppearanceStore(DATA_DIR), organization: () => IDENTITY.kind === "perspicax" }));
@@ -23000,6 +23071,8 @@ ROUTES.push(createUsageRoutes({
   currency: () => cfg.billing?.currency ?? "USD",
   organization: () => IDENTITY.kind === "perspicax"
 }));
+// OTLP export settings (#2609), admin scope.
+ROUTES.push(createTelemetryRoutes({ store: telemetrySettings, tracer }));
 // "Switch them too": a bot's threads on a model of their own follow its model again.
 ROUTES.push(createThreadModelRoutes({
   bot: (id) => store.bot(id),
@@ -25194,8 +25267,8 @@ function botGrants(bot: { grants?: unknown; directGrants?: unknown; ownerUserId?
 /** Owner and grants of a bot, for server/auth/authz.ts. Sections are personal:
  * a bot takes no access from one (the legacy shared sections became bot
  * grants at boot, section-channels.ts header). */
-function botFacts(bot: { id?: unknown; ownerUserId?: unknown; grants?: unknown; directGrants?: unknown; section?: unknown; createdAt?: unknown }): BotFacts {
-  return { ownerPrincipalId: effectiveBotOwner(bot), grants: botGrants(bot), sections: [] };
+function botFacts(bot: { id?: unknown; ownerUserId?: unknown; grants?: unknown; directGrants?: unknown; section?: unknown; createdAt?: unknown; systemBot?: unknown }): BotFacts {
+  return { ownerPrincipalId: effectiveBotOwner(bot), grants: botGrants(bot), sections: [], ...(bot.systemBot === "feedback" ? { everyone: "use" as const } : {}) };
 }
 /** A person's teams, for the manager rules. */
 function principalTeams(principalId: string): TeamRef[] {
@@ -25898,6 +25971,11 @@ function teamStorageKeyFor(sectionName: string | null | undefined, ownerPrincipa
 function teamStorageKeyForAuth(auth: RequestAuth, sectionName: string): string {
   const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
   return teamStorageKeyFor(sectionName, owner);
+}
+
+/** I2: the caller's team model and computer. */
+function teamDefaultsForAuth(auth: RequestAuth, sectionName: string) {
+  return sectionName ? readTeamDefaults(teamStorageKeyForAuth(auth, sectionName)) : null;
 }
 
 
@@ -28173,6 +28251,7 @@ const orgBotsDeps: BotsDeps = {
       ...(source.loopGuard !== undefined ? { loopGuard: source.loopGuard } : {}),
       ...(storedTeamMemorySharing(source) ? { teamMemorySharing: "private" as const } : {}),
       ...(source.memoryUpkeep !== undefined ? { memoryUpkeep: source.memoryUpkeep } : {}),
+      ...(source.skillLearning !== undefined ? { skillLearning: source.skillLearning } : {}),
       ...(source.builtinPlugins !== undefined ? { builtinPlugins: { ...source.builtinPlugins } } : {}),
       ...(source.helperModel !== undefined ? { helperModel: source.helperModel } : {}),
       ...(source.browser !== undefined ? { browser: source.browser } : {}),
@@ -30136,7 +30215,13 @@ ROUTES.push(createTeamExportImportRoutes({
   broadcast,
   viewerForApproval,
   projectBotTranscript,
-  projectGroupTranscript
+  projectGroupTranscript,
+  // I1: "Import as a team" reads a marketplace plugin without installing it.
+  readPlugin: (marketplace, plugin, auth) => pluginMarketplaces.readPlugin(marketplace, plugin, sessionPrincipal(auth) ?? undefined, marketplaceViewer(auth)),
+  engines: async (auth) => ({
+    instances: selectableInstances(await registry.describe()),
+    refusal: selectionContextFor(sessionPrincipal(auth)).refusal
+  })
 }));
 ROUTES.push(createTeamLibraryRoutes());
 ROUTES.push(createSidebarSectionsRoutes({
@@ -30222,6 +30307,18 @@ ROUTES.push(createSectionContextRoutes({
   storageKey: (auth, section) => teamStorageKeyForAuth(auth, section),
   read: readSectionContext,
   write: writeSectionContext
+}));
+ROUTES.push(createTeamDefaultsRoutes({
+  sections: () => store.sections,
+  bots: () => store.bots,
+  groups: () => store.groups,
+  sectionKey,
+  storageKey: (auth, section) => teamStorageKeyForAuth(auth, section),
+  sectionsFor: sectionChannels
+    ? (auth) => orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId())
+    : undefined,
+  read: readTeamDefaults,
+  write: writeTeamDefaults
 }));
 ROUTES.push(createTeamComputersRoutes({
   listPayload: teamComputersPayload,
@@ -30358,7 +30455,33 @@ ROUTES.push(createWebhooksRoutes({
   savePollerCredentials: (id, credentials) => savePollerCredentials(id, credentials),
   isBotAct: (auth) => auth.kind === "session" && isBotActSession(auth.session)
 }));
+// #2618: the shared Feedback bot. Reports are anonymized on the server and
+// filed as GitHub issues with the server's own token (feedback/config.json
+// or SAGAX_FEEDBACK_GITHUB_TOKEN); without one they wait in a local queue.
+const feedbackService = createFeedbackService({
+  dataDir: DATA_DIR,
+  store,
+  config: () => readFeedbackConfig(DATA_DIR),
+  threadFor: (bot) => routeThreadId(store.bot(bot.id)!, undefined),
+  names: () => ({
+    people: principals.list().map((person) => personDisplayName(person)).filter((name): name is string => Boolean(name)),
+    orgs: [process.env.SAGAX_ORG_NAME?.trim() ?? ""].filter(Boolean),
+    bots: store.bots.filter((bot) => bot.systemBot !== "feedback").map((bot) => bot.name),
+  }),
+  serverLines: () => serverLog.read({ level: "warn", limit: 40 }).lines.reverse().map((line) => `${new Date(line.at).toISOString()} ${line.level} ${line.message}`),
+  spans: () => readToolSpans(DATA_DIR, { from: new Date(Date.now() - 15 * 60_000), to: new Date() })
+    .slice(-20).map((span) => ({ name: span.toolName ? `${span.name} ${span.toolName}` : span.name, ms: span.endMs - span.startMs, ok: span.ok })),
+  serverVersion: () => serverVersion(),
+});
+try {
+  feedbackService.ensureBot();
+} catch (error) {
+  console.warn(`[feedback] the Feedback bot could not be created: ${error instanceof Error ? error.message : String(error)}`);
+}
+setInterval(() => { void feedbackService.tick().catch(() => {}); }, 5 * 60_000).unref();
+ROUTES.push(createFeedbackRoutes({ dataDir: DATA_DIR, service: feedbackService, actorPrincipalId }));
 ROUTES.push(createBotsMessagesRoutes({
+  feedback: feedbackService,
   // 2026-11-05 (#2032): chat no longer picks a role; Flow routines use actAs
   pickPerspicaxRole: (_bot: BotRecord, _threadId: string, _auth: RequestAuth, _slug: string) => {},
   originApprovals,
@@ -30673,6 +30796,7 @@ ROUTES.push(createGroupsHttpRoutes({
 ROUTES.push(createBotsCoreRoutes({
   store,
   resolveSectionId,
+  teamDefaultsFor: teamDefaultsForAuth,
   cfg,
   identity: IDENTITY,
   desktopManaged: DESKTOP_MANAGED,
@@ -31324,6 +31448,7 @@ ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleet
 ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret }));
 ROUTES.push(createBotsMutateRoutes({
   resolveSectionId,
+  teamDefaultsFor: teamDefaultsForAuth,
   originApprovals,
   ADMIN_APPROVAL_REQUIRED,
   BOTS_READ_ONLY,
@@ -31411,6 +31536,7 @@ ROUTES.push(createBotsMutateRoutes({
   memberOwnedInOrg,
   memberOwnsBot,
   memoryUpkeep,
+  skillReview,
   myChrome,
   normalizeAllowedRecipients,
   normalizeOutboundPolicy,
@@ -32756,6 +32882,7 @@ const gracefulShutdown = createGracefulShutdown({
     () => flushAllProfileHistory(),
     () => flushAllMemoryJournals(),
     () => flushUsageLedger(DATA_DIR),
+    () => tracer.flush(),
     () => flushDecisionLog(DATA_DIR),
     () => flushAdminActivity(DATA_DIR),
     () => runtimeDeltaCoalescer.flushAll(),

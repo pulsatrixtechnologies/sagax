@@ -8,6 +8,8 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { readableError } from "@/lib/plain-error";
 import { cn } from "@/lib/cn";
 import { UnattendedHostSetup } from "./remote-session/UnattendedHostSetup";
+import { MyDevicesList } from "./remote-session/MyDevicesList";
+import { myDevices, useDesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { unattendedHostLabel } from "./remote-session/UnattendedHostsSection";
 import { fetchRemoteHosts, placeRemoteHost, type RemoteHostCard, type RemoteHostsAnswer } from "./remote-session/remote-hosts-client";
 
@@ -45,6 +47,8 @@ export function CanvasComputers({ cloud: cloudEnabled = true, open, createReques
   onChange: (computers: TeamComputer[]) => void;
 }) {
   const { dispatch } = useStore();
+  // the person's own devices, this one first (Remote sessions > Enrolled hosts)
+  const devices = myDevices(useDesktopBridgeStatus());
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -225,6 +229,7 @@ export function CanvasComputers({ cloud: cloudEnabled = true, open, createReques
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         <p className="text-[12px] leading-relaxed text-ink-secondary">{t("canvasComputers.intro")}</p>
         {(error || readError || inventory?.problem) && <p role="alert" className="rounded-lg bg-danger/10 p-3 text-[12px] text-danger">{error || readError || inventory?.problem}</p>}
+        <MyDevicesList devices={devices} />
         <UnattendedHostSetup available={remote?.available ?? true} reason={remote?.reason} startRequest={createRequest} disabled={busy !== null} onIssued={() => void refresh()} />
         {remote?.hosts.filter((host) => host.state === "enrolled").map((host) => {
           const item = hostPlaceable(host);

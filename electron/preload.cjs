@@ -41,6 +41,17 @@ ipcRenderer.on("app:open-settings", (_event, section) => {
   for (const listener of appSettingsListeners) listener(fixedSection);
 });
 
+let pendingFeedback = false;
+const feedbackListeners = new Set();
+ipcRenderer.on("app:send-feedback", () => {
+  if (!feedbackListeners.size) {
+    pendingFeedback = true;
+    return;
+  }
+  pendingFeedback = false;
+  for (const listener of feedbackListeners) listener();
+});
+
 let pendingAbout = false;
 const aboutListeners = new Set();
 ipcRenderer.on("app:open-about", () => {
@@ -80,7 +91,7 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "
 // computer's files, logins or secrets is handed to the page, and its screen
 // only as the bot panel's 320x200 Computer thumbnail, once the person
 // granted Screen Recording (screen:thumbnail, never a prompt).
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail", "screenFrame", "permOpenSettings"]);
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "onSendFeedback", "captureWindow", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail", "screenFrame", "permOpenSettings", "permAll", "permAct"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).
@@ -269,6 +280,18 @@ const bridge = {
     });
     return () => appSettingsListeners.delete(cb);
   },
+  /** Help > Send Feedback… (#2618). */
+  onSendFeedback: (cb) => {
+    feedbackListeners.add(cb);
+    queueMicrotask(() => {
+      if (!pendingFeedback || !feedbackListeners.size) return;
+      pendingFeedback = false;
+      for (const listener of feedbackListeners) listener();
+    });
+    return () => feedbackListeners.delete(cb);
+  },
+  /** A PNG of this window for a feedback report (#2618), or null. */
+  captureWindow: () => ipcRenderer.invoke("window:capture"),
   onOpenAbout: (cb) => {
     aboutListeners.add(cb);
     queueMicrotask(() => {
@@ -295,6 +318,9 @@ const bridge = {
   permRequestMic: () => ipcRenderer.invoke("perm:request-mic"),
   /** Opens System Settings on the given privacy pane: mic|screen|speech. */
   permOpenSettings: (pane) => ipcRenderer.invoke("perm:open-settings", pane),
+  // #2614: every OS permission with the action behind its button, and that action.
+  permAll: (context) => ipcRenderer.invoke("perm:all", context),
+  permAct: (id, options) => ipcRenderer.invoke("perm:act", id, options),
   /** Relaunch the local desktop app through its normal shutdown cleanup. */
   relaunch: () => ipcRenderer.invoke("desktop:relaunch"),
 

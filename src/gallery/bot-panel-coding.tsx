@@ -6,7 +6,10 @@
  * with each branch read now. Above the branches, the agent rows (#2099):
  * Claude Code's agent list, one row each, "↓ N more" past five. Not shipped
  * in the app.
- * ?skin=<id>&lang=<code> */
+ * Since #2599 the pull requests, branches and commits live in the Coding tab:
+ * ?tab=coding draws that tab (code work above Upcoming), the default the
+ * Activity tab (agent rows only).
+ * ?skin=<id>&lang=<code>&tab=coding */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { PANEL_LABEL } from "../lib/grouped-card";
@@ -24,6 +27,7 @@ const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "fr");
+const codingTab = params.get("tab") === "coding";
 
 const NOW = Date.now();
 const H = 3_600_000;
@@ -71,11 +75,16 @@ function Panel() {
   return (
     <aside data-gallery-panel="" data-panel-bot="" className="min-h-screen w-[380px] border-r border-hairline/40 bg-panel text-ink">
       <div className="flex flex-col gap-6 px-4 pb-6 pt-4">
-        <section data-bot-settings-section="coding" className="flex flex-col gap-2">
-          <SectionHeader title={t("botPanel.coding.title")} name="coding" onOpenHistory={() => {}} />
-          <AgentRows items={agents} launched={launched} onOpen={() => {}} onOpenLaunched={() => {}} onStop={() => {}} onIgnore={() => {}} />
-          <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", botName: "Pepper", onArchive: async () => {}, onIgnore: () => {} }} />
-        </section>
+        {codingTab ? (
+          <section data-bot-settings-section="code-work" className="flex flex-col gap-2">
+            <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", botName: "Pepper", onArchive: async () => {}, onIgnore: () => {} }} />
+          </section>
+        ) : (
+          <section data-bot-settings-section="coding" className="flex flex-col gap-2">
+            <SectionHeader title={t("botPanel.coding.title")} name="coding" onOpenHistory={() => {}} />
+            <AgentRows items={agents} launched={launched} onOpen={() => {}} onOpenLaunched={() => {}} onStop={() => {}} onIgnore={() => {}} />
+          </section>
+        )}
         {/* The real panel's Upcoming (PANEL_LABEL + PANEL_CARD), so the two compare side by side. */}
         <section data-bot-settings-section="routines" className="flex flex-col gap-2">
           <h2 className={PANEL_LABEL}>{t("routines.upcoming.title")}</h2>

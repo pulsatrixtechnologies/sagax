@@ -13,6 +13,11 @@ export type ClientFeatures = Partial<Record<ClientFeature, boolean>>;
 export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: RegExp; feature?: ClientFeature }> = [
   // own session
   { methods: ["GET"], path: /^\/api\/auth\/session$/ },
+  // in-app feedback (#2618, server/routes/feedback.ts): open the Feedback
+  // bot's conversation and list the session person's own reports. The token
+  // config stays admin.
+  { methods: ["POST"], path: /^\/api\/feedback\/start$/ },
+  { methods: ["GET"], path: /^\/api\/feedback$/ },
   // own preferences (organization server; the handler answers the session's person only)
   { methods: ["GET", "PUT", "PATCH"], path: /^\/api\/me\/preferences$/ },
   // Content between people (server/routes/moderation.ts, App Store 1.2): the
@@ -650,6 +655,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // #2045: a member creates, renames, fills and deletes their own teams. The
   // route answers only with the caller's teams and files only their own bots.
   { methods: ["GET", "POST", "PATCH", "PUT", "DELETE"], path: /^\/api\/sidebar-sections$/, feature: "orgDirectory" },
+  // I2: a team's model and computer. The handler answers only on the
+  // caller's own teams; each bot then follows through its own PATCH.
+  { methods: ["GET", "PUT"], path: /^\/api\/team-defaults$/ },
   // A person's own engines: what their own turns run on, and their own
   // subscription sign-in (server/engines/principal-engine-logins.ts).
   { methods: ["GET"], path: /^\/api\/me\/engines$/, feature: "orgDirectory" },
@@ -660,7 +668,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // (server/routes/usage.ts, 2026-10-15 / 2026-10-23): the handler keeps the
   // caller's own turns only, never another person's; the whole ledger and the
   // whole-ledger traces (/api/usage, /api/usage/traces) stay admin or usage.view.
-  { methods: ["GET"], path: /^\/api\/me\/usage(?:\/traces)?$/ },
+  { methods: ["GET"], path: /^\/api\/me\/usage(?:\/traces|\/stats)?$/ },
   // The person's own monthly spend limit: anyone signed in reads it; changing
   // it stays admin scope (server/routes/usage.ts).
   { methods: ["GET"], path: /^\/api\/me\/spend-cap$/ },

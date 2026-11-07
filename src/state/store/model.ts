@@ -571,6 +571,8 @@ export interface Bot {
   chiefOfStaff?: boolean;
   /** Additional teams the owner explicitly lets this Primary Bot work with. */
   managedSections?: string[];
+  /** I2: the team settings this bot set itself; the team leaves them alone. */
+  teamOverrides?: Array<"model" | "computer">;
   /** When this bot wants to talk to another bot (ask_bot/delegate_bot),
    * pause and ask the user first. Off by default. */
   approvePeerComms?: boolean;
@@ -601,6 +603,9 @@ export interface Bot {
   /** Memory upkeep (Bot settings → Memory): background capture and the
    * nightly tidy-up. On unless explicitly false. */
   memoryUpkeep?: boolean;
+  /** Skill learning (Bot settings > Skills): revise skills after a failure
+   * or correction, propose one after a long task. On unless false. */
+  skillLearning?: boolean;
   /** Built-in plugins this bot switched (shared/builtin-plugins.ts): absent
    * or true on, false off. */
   builtinPlugins?: Record<string, boolean>;

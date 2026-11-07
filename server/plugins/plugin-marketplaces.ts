@@ -60,6 +60,7 @@ const MAX_MARKETPLACES = 40;
 const GIT_TIMEOUT_MS = 120_000;
 const MAX_MANIFEST_BYTES = 1_048_576;
 const MAX_SKILL_BYTES = 256 * 1024;
+const MAX_AGENT_FILES = 40;
 
 export { BotPluginError as MarketplaceError };
 
@@ -188,6 +189,9 @@ export interface MarketplaceView {
 export interface PluginInstallPlan {
   servers: Array<{ name: string; entry: Record<string, unknown> }>;
   skills: Array<{ name: string; text: string }>;
+  /** I1 (2026-11-07): the plugin's `agents/*.md` (Claude Code subagents),
+   * read for "Import as a team"; "Add" does not install them. */
+  agents: Array<{ file: string; text: string }>;
   /** what was left out and why, for the person */
   skipped: string[];
 }
@@ -197,7 +201,7 @@ const record = (value: unknown): Json | null => (value && typeof value === "obje
 
 /** Read one plugin folder into an install plan. */
 export function pluginInstallPlan(root: string): PluginInstallPlan {
-  const plan: PluginInstallPlan = { ...readPluginMcpServers(root), skills: [] };
+  const plan: PluginInstallPlan = { ...readPluginMcpServers(root), skills: [], agents: [] };
   const skillsDir = join(root, "skills");
   if (existsSync(skillsDir) && statSync(skillsDir).isDirectory()) {
     for (const folder of readdirSync(skillsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -217,7 +221,38 @@ export function pluginInstallPlan(root: string): PluginInstallPlan {
       plan.skills.push({ name: parsed.name, text });
     }
   }
+  const agentsDir = join(root, "agents");
+  if (existsSync(agentsDir) && lstatSync(agentsDir).isDirectory()) {
+    for (const entry of readdirSync(agentsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!entry.isFile() || !/\.md$/i.test(entry.name)) continue;
+      const file = join(agentsDir, entry.name);
+      if (statSync(file).size > MAX_SKILL_BYTES) {
+        plan.skipped.push(`agent ${entry.name} (too large)`);
+        continue;
+      }
+      if (plan.agents.length >= MAX_AGENT_FILES) {
+        plan.skipped.push(`agent ${entry.name} (more than ${MAX_AGENT_FILES} agents)`);
+        continue;
+      }
+      plan.agents.push({ file: entry.name, text: readFileSync(file, "utf8") });
+    }
+  }
   return plan;
+}
+
+/** The plugin's own manifest (`.claude-plugin/plugin.json`): its name, shown
+ * name, description and version, or nothing when it is absent or unreadable. */
+export function readPluginManifestInfo(root: string): { name?: string; displayName?: string; description?: string; version?: string } {
+  const file = join(root, ".claude-plugin", "plugin.json");
+  if (!existsSync(file) || lstatSync(file).isSymbolicLink() || statSync(file).size > MAX_MANIFEST_BYTES) return {};
+  try {
+    const value = record(JSON.parse(readFileSync(file, "utf8")));
+    if (!value) return {};
+    const text = (key: string) => (typeof value[key] === "string" && (value[key] as string).trim() ? (value[key] as string).trim() : undefined);
+    return Object.fromEntries(Object.entries({ name: text("name"), displayName: text("displayName"), description: text("description"), version: text("version") }).filter(([, v]) => v !== undefined));
+  } catch {
+    return {};
+  }
 }
 
 /** The MCP server name a plugin's server is added under: its own name made
@@ -689,7 +724,25 @@ export class PluginMarketplaces {
   /** Put a plugin's files in place and read what it brings. The caller
    * adds the servers and skills, then records them with `recordInstall`. */
   prepare(marketplace: string, plugin: string, actor: string | undefined, viewer?: MarketplaceViewer): Promise<{ dir: string; plan: PluginInstallPlan; version?: string; revision?: string }> {
+    return this.serial(() => this.materialize(marketplace, plugin, actor, viewer, this.pluginDir(marketplace, plugin)));
+  }
+
+  /** I1: a plugin's files read into a scratch folder, nothing installed:
+   * its plan (agents included) and manifest, for "Import as a team". */
+  readPlugin(marketplace: string, plugin: string, actor: string | undefined, viewer?: MarketplaceViewer): Promise<{ plan: PluginInstallPlan; manifest: ReturnType<typeof readPluginManifestInfo>; version?: string }> {
     return this.serial(async () => {
+      const scratch = join(this.root, "plugins", `.read-${this.now()}-${Math.random().toString(36).slice(2, 8)}`);
+      try {
+        const { plan, version } = await this.materialize(marketplace, plugin, actor, viewer, scratch);
+        return { plan, manifest: readPluginManifestInfo(scratch), ...(version ? { version } : {}) };
+      } finally {
+        rmSync(scratch, { recursive: true, force: true });
+      }
+    });
+  }
+
+  private materialize(marketplace: string, plugin: string, actor: string | undefined, viewer: MarketplaceViewer | undefined, target: string): Promise<{ dir: string; plan: PluginInstallPlan; version?: string; revision?: string }> {
+    return (async () => {
       const state = this.read();
       const market = state.marketplaces[marketplace];
       if (!market || !marketplaceVisibleTo(market, viewer)) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
@@ -701,7 +754,6 @@ export class PluginMarketplaces {
       const entry = readMarketplaceManifest(repo).plugins.find((candidate) => candidate.name === plugin);
       if (!entry) throw new BotPluginError("That plugin is not in this marketplace.", "not_found", 404);
       const revision = pluginRevision(repo, entry, market.manifestUrl);
-      const target = this.pluginDir(marketplace, plugin);
       if (entry.source.kind === "git") {
         this.checkPolicy(entry.source.git);
         const checkout = join(this.root, "plugins", `.checkout-${this.now()}`);
@@ -719,7 +771,7 @@ export class PluginMarketplaces {
         copyPlain(insideRoot(repo, entry.source.path), target);
       }
       return { dir: target, plan: pluginInstallPlan(target), ...(entry.version ? { version: entry.version } : {}), ...(revision ? { revision } : {}) };
-    });
+    })();
   }
 
   private async fetchPluginFiles(manifestUrl: string, path: string, target: string): Promise<void> {

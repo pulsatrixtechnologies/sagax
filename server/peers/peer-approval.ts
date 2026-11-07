@@ -120,11 +120,12 @@ const ACTION_VERB: Record<PeerAction, string> = {
   delegate_bot: "delegate to",
   post_to_room: "post in",
   message_person: "message",
+  use_computer: "use",
 };
 
 function peerTargetLabel(action: PeerAction, target: PeerApprovalTarget): string {
   if (action === "post_to_room") return `“${target.name}”`;
-  if (action === "message_person") return target.name;
+  if (action === "message_person" || action === "use_computer") return target.name;
   return `@${target.name}`;
 }
 
@@ -203,7 +204,7 @@ export function requestPeerApproval(
   // no card. A room (post_to_room) and a person (message_person) are not
   // recipients. A standing grant: off while the organization turned standing
   // grants off.
-  if (action !== "post_to_room" && action !== "message_person"
+  if (action !== "post_to_room" && action !== "message_person" && action !== "use_computer"
     && standingGrantsAllowed() && botRecipientAllowed(from.allowedRecipients, target.id)) {
     return Promise.resolve("allow");
   }

@@ -9,8 +9,9 @@ import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, useExchangeColumn } from "../components/BotExchangeChip";
 import { ChatWindowProvider } from "../components/BotHeaderPill";
 import { Composer } from "../components/Composer";
+import { CodeWorkList } from "../components/bot-settings/ActivitySection";
 import { CodingChatSheet } from "../components/coding/CodingChat";
-import { ACTIVITY_DEV_PODS, DevPodsPanel } from "../components/dev-pods/DevPods";
+import { DevPodsPanel } from "../components/dev-pods/DevPods";
 import { setCodingPanelHost } from "../lib/coding-panel-host";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -24,8 +25,8 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 await loadLocale(params.get("lang") ?? "en");
 const live = params.get("status") === "running";
 const withPanel = params.get("panel") === "1";
-// The bot panel's tab while the coding chat is open: Coding (the session and
-// the pods) by default, ?tab=activity for Connectors (JC 2026-11-06).
+// The bot panel's tab while the coding chat is open: Coding (the session, the
+// pods with Connectors, #2599) by default, ?tab=activity for Activity.
 const panelTab = params.get("tab") === "activity" ? "activity" : "coding";
 try {
   localStorage.setItem("sagax.devPods.v1", JSON.stringify({ enabled: params.get("pods") === "1" }));
@@ -134,6 +135,17 @@ const detail: BotActivityDetail = {
   steps: [], stepsTruncated: false, files: [], children: [],
 };
 
+// The bot's pull requests and branches, below the session in the Coding tab (#2599).
+const codePr = { repo: "acme/board", number: 12, title: "Sort the column by due date", url: "https://github.com/acme/board/pull/12", action: "opened" as const, branch: "fix/column-order", at: NOW - 600_000 };
+const codeWork = {
+  pullRequests: [codePr],
+  branches: [
+    { name: "fix/column-order", repo: "acme/board", pushed: true, url: "https://github.com/acme/board/tree/fix/column-order", at: NOW - 700_000, threadId: "t1", folder: "/srv/board", pull: codePr },
+    { name: "feat/swimlanes", repo: "acme/board", pushed: false, at: NOW - 7_200_000, threadId: "t1", folder: "/srv/board" },
+  ],
+  commits: [],
+};
+
 function Ready() {
   const { dispatch } = useStore();
   const column = useExchangeColumn();
@@ -158,8 +170,7 @@ function Ready() {
               onClose={() => {}}
               onStop={live ? () => {} : undefined}
               onSend={async () => {}}
-              side={<DevPodsPanel bot={bot} messages={messages} computerStart={undefined} dispatch={dispatch} only={(id) => !ACTIVITY_DEV_PODS.includes(id)} />}
-              activitySide={<DevPodsPanel bot={bot} messages={messages} computerStart={undefined} dispatch={dispatch} only={(id) => ACTIVITY_DEV_PODS.includes(id)} />}
+              side={<DevPodsPanel bot={bot} messages={messages} computerStart={undefined} dispatch={dispatch} />}
               composer={<Composer bot={{ ...bot, busy: live }} />}
             />
             </ChatWindowProvider>
@@ -174,8 +185,15 @@ function Ready() {
             ))}
           </div>
           {panelTab === "coding"
-            ? <div key="coding" ref={(element) => setCodingPanelHost(bot.id, element)} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
-            : <div key="activity" ref={(element) => setCodingPanelHost(bot.id, element, "activity")} data-coding-activity-host="" className="flex flex-col gap-5 empty:hidden" />}
+            ? (
+              <div key="coding" className="flex flex-col gap-5">
+                <div ref={(element) => setCodingPanelHost(bot.id, element)} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
+                <section data-bot-settings-section="code-work" className="flex flex-col gap-2">
+                  <CodeWorkList work={codeWork} now={NOW} branchActions={{ botId: bot.id, botName: bot.name, onArchive: async () => {}, onIgnore: () => {} }} />
+                </section>
+              </div>
+            )
+            : <div key="activity" data-gallery-activity="" className="flex flex-col gap-5" />}
         </aside>
       )}
     </div>

@@ -155,7 +155,7 @@ describe("import an agent", () => {
       store.state = { ...store.state, instances, bots: [] };
       const first = render({ onDone: vi.fn(), initialStep: "bot" });
       expect(collect(first.tree).some((el) => el.type === AgentImportDialog)).toBe(false);
-      button(first.tree, "Import an agent (Grok Bot, Claude Code)").props.onClick!();
+      button(first.tree, "Import an agent (Grok Bot, Claude Code, Hermes)").props.onClick!();
       const opened = render({ onDone: vi.fn(), initialStep: "bot" });
       const dialog = collect(opened.tree).find((el) => el.type === AgentImportDialog)!;
       expect(dialog).toBeDefined();

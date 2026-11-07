@@ -7,7 +7,7 @@ const claude = {
   driverKind: "claudeAgent",
   snapshot: { state: "available" as const, authenticated: true },
   models: { default: "opus", options: [{ id: "opus", label: "Opus" }] },
-  capabilities: { effortLevels: ["low", "medium", "high", "max"] as const },
+  capabilities: { effortLevels: ["low", "medium", "high", "max", "ultracode"] as const },
 };
 
 describe("ultracode in default model selection", () => {

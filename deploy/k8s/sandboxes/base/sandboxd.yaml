@@ -85,6 +85,8 @@ spec:
               value: "64"
             - name: SAGAX_SANDBOX_IDLE_MINUTES
               value: "10"
+            - name: SAGAX_SANDBOX_HIBERNATE_MINUTES
+              value: "60"
             # The cluster API's name (AKS: az aks show --query fqdn), or IPv4
             # addresses: resolved at start and every minute, each address is
             # denied as a /32 in every person's policy. The public API IP of a

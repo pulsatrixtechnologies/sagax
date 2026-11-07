@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -13,6 +13,7 @@ import {
   PluginMarketplaces,
   pluginInstallPlan,
   pluginRevision,
+  readPluginManifestInfo,
   pluginUpdateAvailable,
   planServerUpdate,
   updatedServerEntry,
@@ -87,6 +88,14 @@ describe("install mapping: a plugin becomes MCP servers and skills", () => {
     expect(plan.skipped).toEqual([expect.stringContaining("skill broken")]);
   });
 
+  it("I1: reads agents/*.md and the plugin's shown name, for an import as a team", () => {
+    const root = join(dir, "repo");
+    marketplaceRepo(root);
+    const pluginRoot = join(root, "plugins", "notes");
+    expect(pluginInstallPlan(pluginRoot).agents).toEqual([{ file: "helper.md", text: "agent" }]);
+    expect(readPluginManifestInfo(pluginRoot)).toEqual({ name: "notes", version: "1.2.0" });
+  });
+
   it("names servers safely and puts the plugin in front on a clash", () => {
     expect(marketplaceServerName("Notes Server", "notes", new Set())).toBe("notes-server");
     expect(marketplaceServerName("github", "devtools", new Set(["github"]))).toBe("devtools-github");
@@ -121,6 +130,12 @@ describe("the installation's marketplaces", () => {
     expect(clones).toEqual(["https://github.com/example-org/marketplace.git"]);
     expect(view).toMatchObject({ name: "devjc", source: "example-org/marketplace", ref: "main" });
     expect(view.plugins.map((plugin) => plugin.name)).toEqual(["notes", "remote-one", "by-url"]);
+    const read = await markets.readPlugin("devjc", "notes", undefined);
+    expect(read.plan.agents.map((agent) => agent.file)).toEqual(["helper.md"]);
+    expect(read.manifest).toMatchObject({ name: "notes", version: "1.2.0" });
+    // I1: reading a plugin leaves nothing behind and installs nothing
+    expect(readdirSync(join(dir, "data", "marketplaces", "plugins")).filter((name) => name.startsWith(".read-"))).toEqual([]);
+    expect(markets.list()[0]!.plugins[0]).toMatchObject({ installed: false });
     const prepared = await markets.prepare("devjc", "notes", undefined);
     expect(prepared.dir).toBe(join(dir, "data", "marketplaces", "plugins", "devjc", "notes"));
     expect(prepared.plan.servers.map((server) => server.name)).toEqual(["notes", "search"]);
@@ -232,7 +247,7 @@ describe("updating an installed plugin in place", () => {
   });
 
   it("keeps each server under the name it was added as, adds new ones and drops the rest", () => {
-    const plan = { servers: [{ name: "notes", entry: { command: "node" } }, { name: "search", entry: { url: "https://x.test/mcp" } }], skills: [], skipped: [] };
+    const plan = { servers: [{ name: "notes", entry: { command: "node" } }, { name: "search", entry: { url: "https://x.test/mcp" } }], skills: [], agents: [], skipped: [] };
     expect(planServerUpdate(plan, { name: "notes", servers: ["notes-x", "old"], serverNames: { notes: "notes-x", gone: "old" } })).toEqual({
       keep: [{ name: "notes", stored: "notes-x", entry: { command: "node" } }],
       add: [{ name: "search", entry: { url: "https://x.test/mcp" } }],

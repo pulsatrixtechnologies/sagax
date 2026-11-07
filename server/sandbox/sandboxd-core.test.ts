@@ -200,3 +200,83 @@ describe("ttyArgv (2026-11-02)", () => {
     expect(argv[2]).toContain("exec /bin/bash -l");
   });
 });
+
+describe("hibernation of idle sandboxes (#2611)", () => {
+  it("hibernates a sandbox stopped past the hibernation period: container and network go, /workspace stays", async () => {
+    const { docker, service, advance } = setup({ SAGAX_SANDBOX_IDLE_MINUTES: "10", SAGAX_SANDBOX_HIBERNATE_MINUTES: "60" });
+    await service.installEgressPolicy();
+    await service.exec(alice, { argv: ["true"] });
+    const names = sandboxNames(alice);
+    advance(10 * 60_000 + 1);
+    expect(await service.sweepIdle()).toEqual([alice]);
+    expect(await service.hibernateIdle()).toEqual([]);
+    advance(50 * 60_000);
+    expect(await service.hibernateIdle()).toEqual([alice]);
+    expect(docker.containers.has(names.container)).toBe(false);
+    expect(docker.networks.has(names.network)).toBe(false);
+    expect(docker.volumes.has(names.volume)).toBe(true);
+    const status = await service.status(alice);
+    expect(status.state).toBe("missing");
+    expect(status.hibernated).toBe(true);
+    // Nothing more to do on the next sweeps.
+    advance(60 * 60_000);
+    expect(await service.hibernateIdle()).toEqual([]);
+  });
+
+  it("wakes a hibernated sandbox on demand with the same /workspace", async () => {
+    const { docker, service, advance } = setup({ SAGAX_SANDBOX_HIBERNATE_MINUTES: "30" });
+    await service.installEgressPolicy();
+    await service.exec(alice, { argv: ["true"] });
+    const names = sandboxNames(alice);
+    advance(31 * 60_000);
+    await service.sweepIdle();
+    await service.hibernateIdle();
+    const volumes = docker.calls.filter((call) => call.startsWith("vol ")).length;
+    await service.exec(alice, { argv: ["true"] });
+    const status = await service.status(alice);
+    expect(status.state).toBe("running");
+    expect(status.hibernated).toBeUndefined();
+    expect(docker.calls.filter((call) => call.startsWith("vol "))).toHaveLength(volumes);
+    expect(docker.calls.filter((call) => call.startsWith("create "))).toHaveLength(2);
+    expect(docker.volumes.has(names.volume)).toBe(true);
+    expect(sandboxIsolationProblems(docker.containers.get(names.container)!.spec, alice)).toEqual([]);
+  });
+
+  it("never hibernates a running, busy or paused sandbox", async () => {
+    const { docker, service, advance } = setup({ SAGAX_SANDBOX_HIBERNATE_MINUTES: "1" });
+    await service.installEgressPolicy();
+    await service.ensure(alice);
+    await service.ensure(bob);
+    await service.pause(bob);
+    advance(5 * 60_000);
+    expect(await service.hibernateIdle()).toEqual([]);
+    expect(docker.containers.has(sandboxNames(alice).container)).toBe(true);
+    expect(docker.containers.has(sandboxNames(bob).container)).toBe(true);
+  });
+
+  it("counts a sandbox first seen stopped (provisioner restart) from now", async () => {
+    const { docker, service, advance } = setup({ SAGAX_SANDBOX_HIBERNATE_MINUTES: "60" });
+    await service.installEgressPolicy();
+    await service.ensure(carol);
+    await service.stop(carol);
+    const config = sandboxdConfigFromEnv({ SAGAX_SANDBOX_IMAGE: "sagax-sandbox:test", SAGAX_SANDBOX_HIBERNATE_MINUTES: "60" });
+    let now = 5_000_000;
+    const restarted = new SandboxService(docker, config, () => now);
+    expect(await restarted.hibernateIdle()).toEqual([]);
+    now += 59 * 60_000;
+    expect(await restarted.hibernateIdle()).toEqual([]);
+    now += 2 * 60_000;
+    expect(await restarted.hibernateIdle()).toEqual([carol]);
+    advance(0);
+  });
+
+  it("is off with SAGAX_SANDBOX_HIBERNATE_MINUTES=off", async () => {
+    const { docker, service, advance } = setup({ SAGAX_SANDBOX_HIBERNATE_MINUTES: "off" });
+    await service.installEgressPolicy();
+    await service.ensure(alice);
+    await service.stop(alice);
+    advance(30 * 24 * 60 * 60_000);
+    expect(await service.hibernateIdle()).toEqual([]);
+    expect(docker.containers.has(sandboxNames(alice).container)).toBe(true);
+  });
+});

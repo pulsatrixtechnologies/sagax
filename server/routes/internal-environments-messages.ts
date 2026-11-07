@@ -35,7 +35,7 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
       run: (tool: string, args: Record<string, unknown>) => relayMacAppCall(async (operation) => {
         const detail = `mac_app ${tool}`;
         try {
-          const answer = await deps.desktopBridgesRequest(relayPerson, operation, () => deps.isActive(capability));
+          const answer = await deps.desktopBridgesRequest(relayPerson, operation, () => deps.isActive(capability), undefined, { botId: capability.botId, threadId: capability.threadId });
           deps.bridgeAuditRecord({ person: relayPerson, botId: capability.botId, threadId: capability.threadId, target: "user-desktop", kind: "tool", detail, ok: (answer as { isError?: boolean } | null)?.isError !== true });
           return answer;
         } catch (error) {

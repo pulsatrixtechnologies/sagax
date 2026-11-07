@@ -35,6 +35,7 @@ export const settingsSchema = z.object({
   // written before export normalized it still imports, unknown as private
   teamMemorySharing: z.unknown().optional(),
   memoryUpkeep: z.boolean().optional(),
+  skillLearning: z.boolean().optional(),
   builtinPlugins: z.record(z.string(), z.boolean()).optional(),
   helperModel: z.boolean().optional(),
   parkDirectMessages: z.boolean().optional(),

@@ -2,8 +2,10 @@
 // "about"), JC 2026-11-06: the old App page was a catch-all. General holds
 // how this app behaves on the computer (System), the composer keys
 // (Keyboard and typing) and Advanced mode; About holds the About
-// window, the tours and the help rows. Cleanup went to Backups and storage,
-// people's tool access to Security, the usage meter to Usage.
+// window, the tours and Send feedback. People's tool access went to
+// Security. #2636 (JC 2026-11-07): the loop guard, OpenTelemetry, event log
+// cleanup, the usage meter, diagnostics and logs are on Developer; each page
+// here keeps one discreet link to it.
 import { useState } from "react";
 
 import { api, useStore } from "@/state/store";
@@ -12,16 +14,9 @@ import { withTourReset } from "@/lib/guided-tour";
 import { completionPatch } from "@/lib/onboarding";
 import { CompactRow, LinkRow, SettingsGroup } from "../SettingsPrimitives";
 import { OpenAtLoginRow } from "../OpenAtLoginOffer";
-import {
-  DiagnosticsRow,
-  DownloadLogsRow,
-  generalAdvancedShown,
-  isSoloDesktop,
-  LoopGuardRow,
-  SendFeedbackRow,
-} from "./AdvancedSettings";
+import { isSoloDesktop, SendFeedbackRow } from "./AdvancedSettings";
+import { DeveloperLink } from "./DeveloperLink";
 import { OrganizationBotRows } from "./OrganizationBotRules";
-import { ThreadCleanupSettings } from "../ThreadCleanupSettings";
 import { PeopleToolAccessSettings } from "../ToolAccessSettings";
 import { canEditConfig } from "@/lib/viewer";
 import {
@@ -113,24 +108,16 @@ export function GeneralPage({ remoteActive = false }: { remoteActive?: boolean }
           </SettingsGroup>
         </div>
       )}
-      {editConfig && (
-        <div data-settings-card="general.loopGuard">
-          <SettingsGroup advanced title={t("settings.loopGuard.title")} groupId="loopGuard">
-            <LoopGuardRow />
-          </SettingsGroup>
-        </div>
-      )}
       {remoteActive && editConfig && <PeopleToolAccessSettings />}
-      {remoteActive && editConfig && <ThreadCleanupSettings />}
+      <DeveloperLink />
     </>
   );
 }
 
 /** About: the About window (version, license, documentation,
- * release notes) and the tours, then Help (diagnostics, logs, feedback). */
+ * release notes) and the tours, then Help (Send feedback; diagnostics and
+ * logs are on Developer, #2636). */
 export function AboutPage({ remoteActive, openAbout }: { remoteActive: boolean; openAbout: () => void }) {
-  const { state } = useStore();
-  const showHelp = !remoteActive || generalAdvancedShown(state.config);
   return (
     <>
       <div data-settings-card="about.about">
@@ -140,15 +127,12 @@ export function AboutPage({ remoteActive, openAbout }: { remoteActive: boolean; 
         </SettingsGroup>
       </div>
 
-      {showHelp && (
-        <div data-settings-card="about.help">
-          <SettingsGroup title={t("settings.app.help")} groupId="appHelp">
-            <DiagnosticsRow />
-            <DownloadLogsRow />
-            <SendFeedbackRow />
-          </SettingsGroup>
-        </div>
-      )}
+      <div data-settings-card="about.help">
+        <SettingsGroup title={t("settings.app.help")} groupId="appHelp">
+          <SendFeedbackRow />
+        </SettingsGroup>
+      </div>
+      <DeveloperLink />
     </>
   );
 }

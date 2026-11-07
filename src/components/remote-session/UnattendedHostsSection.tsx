@@ -3,7 +3,8 @@
 // "Unattended access" (opens a session against the host, then the usual
 // control flow) and "Revoke". Unattended access is always enabled
 // (2026-11-01). Hosts are cards (Tools page standard, 2026-11-06). No host id on screen: the readable name, the id only in a
-// tooltip and the Copy action.
+// tooltip and the Copy action. The person's own devices (every Sagax install,
+// this one first, 2026-11-07) come first, as Grok's "Manage devices" rows.
 import { useState } from "react";
 import { Copy, KeyRound, Monitor, Plus, ShieldOff } from "lucide-react";
 
@@ -17,6 +18,8 @@ import { PAGE_ACTION_BUTTON, PageEmpty, PageSection } from "@/components/content
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { activeLocale, t } from "@/lib/i18n";
+import type { MyDevice } from "@/lib/desktop-bridge";
+import { MyDevicesList } from "./MyDevicesList";
 import {
   openUnattendedHost,
   revokeUnattendedHost,
@@ -38,8 +41,10 @@ export function unattendedHostLabel(row: Pick<UnattendedHostRow, "hostname">): s
 
 type Notice = { kind: "pending" | "revoked"; host: string } | { kind: "error"; error: UnattendedHostFailure };
 
-export function UnattendedHostsSection({ state, onOpened, onAdd }: {
+export function UnattendedHostsSection({ state, devices = [], onOpened, onAdd }: {
   state: Pick<UnattendedHostsState, "hosts" | "available" | "loading" | "reload">;
+  /** The person's own devices, listed first (src/lib/desktop-bridge.ts myDevices). */
+  devices?: readonly MyDevice[];
   /** A session was opened against a host: the page takes over once its row connects. */
   onOpened?: (opened: { code: string; botId: string }) => void;
   /** The empty state's action: enrol a computer (the page's "Add computer"). */
@@ -74,13 +79,14 @@ export function UnattendedHostsSection({ state, onOpened, onAdd }: {
   };
 
   return (
-    <PageSection title={t("remoteSessionsAdmin.hosts.title")} count={hosts.length || undefined} data-unattended-hosts="">
+    <PageSection title={t("remoteSessionsAdmin.hosts.title")} count={hosts.length + devices.length || undefined} data-unattended-hosts="">
       {notice && (
         <p data-unattended-hosts-notice={notice.kind} role="status" className={cn("rounded-lg border px-3 py-2 text-[12.5px]", notice.kind === "error" ? "border-danger/30 bg-danger/10 text-danger" : "border-hairline/50 bg-panel text-ink-secondary")}>
           {notice.kind === "error" ? t(`remoteSessionsAdmin.hosts.error.${notice.error}`) : t(`remoteSessionsAdmin.hosts.${notice.kind}`, { host: notice.host })}
         </p>
       )}
-      {hosts.length === 0 && (
+      <MyDevicesList devices={devices} />
+      {hosts.length === 0 && devices.length === 0 && (
         <div data-unattended-hosts-empty="">
           <PageEmpty icon={Monitor} action={!loading && available && onAdd
             ? <button type="button" data-unattended-hosts-add="" onClick={onAdd} className={PAGE_ACTION_BUTTON}><Plus size={15} aria-hidden="true" />{t("remoteSessionsAdmin.addComputer")}</button>

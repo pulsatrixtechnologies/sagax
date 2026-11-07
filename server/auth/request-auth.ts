@@ -372,8 +372,9 @@ export function clearSessionCookie(name: string): string {
  * listed here stays admin scope, which the catalogue names server.settings
  * or another admin-only key. */
 export const PERMISSION_ROUTES: ReadonlyArray<{ methods: readonly string[]; path: RegExp; permission: PermissionKey | readonly PermissionKey[] }> = [
-  // the usage ledger, its export and the per-job traces (server/routes/usage.ts)
-  { methods: ["GET"], path: /^\/api\/usage(?:\.csv|\/traces)?$/, permission: "usage.view" },
+  // the usage ledger, its export, the per-job traces and the usage
+  // statistics (server/routes/usage.ts, server/telemetry/usage-stats.ts)
+  { methods: ["GET"], path: /^\/api\/usage(?:\.csv|\/traces|\/stats)?$/, permission: "usage.view" },
   // the admin activity log and its export
   { methods: ["GET"], path: /^\/api\/admin-activity(?:\.csv)?$/, permission: "people.activityLog" },
   // plugin marketplaces (server/routes/marketplaces.ts)
@@ -499,7 +500,7 @@ export function capabilitiesForAuth(auth: { scopes: readonly string[] }, options
  * off the phone. */
 const COMPANION_BOT_FIELDS = new Set([
   ...MEMBER_BOT_FIELDS,
-  "memoryEnabled", "memoryUpkeep", "helperModel", "voiceNotes", "builtinPlugins",
+  "memoryEnabled", "memoryUpkeep", "skillLearning", "helperModel", "voiceNotes", "builtinPlugins",
   // Permissions / Approval / Proactive (BotPanelPatch)
   "approvalMode", "autoApprove", "acknowledgeLocalAuto", "proactiveMode", "pageTargetDefault", "alwaysAllow",
   "chiefOfStaff", "approvePeerComms",

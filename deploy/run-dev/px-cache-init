@@ -1,0 +1,70 @@
+#!/bin/sh
+# px-cache-init: the entrypoint of a coding run (deploy/run-dev/Dockerfile).
+# It points every build cache at the run's build cache disk, starts the
+# cache GC beside the run, then execs the run (its arguments).
+#
+#   PX_CACHE_DIR   the cache disk (the provisioner mounts it at /cache when
+#                  SAGAX_RUNS_CACHE_ENABLED=1); missing or read-only: the
+#                  run's own workspace, $HOME/.px-cache (smaller, not shared)
+#   PX_ENV_ID      the environment: one cargo target per environment, so two
+#                  repositories never share a target; sccache, the cargo
+#                  registry and the toolchains are shared by all of them
+#
+# Rust:   CARGO_HOME, CARGO_TARGET_DIR, RUSTUP_HOME, SCCACHE_DIR (40 % of
+#         the disk, 20 % on the workspace fallback)
+# Node:   PNPM_STORE_DIR, npm_config_cache
+# Browser: PLAYWRIGHT_BROWSERS_PATH stays on the image (read-only, seeded)
+set -eu
+
+cache="${PX_CACHE_DIR:-}"
+share=40
+if [ -z "$cache" ] || ! mkdir -p "$cache" 2>/dev/null || [ ! -w "$cache" ]; then
+  cache="${HOME:-/workspace}/.px-cache"
+  share=20
+  mkdir -p "$cache"
+fi
+
+env_id="${PX_ENV_ID:-default}"
+case "$env_id" in
+  "" | *[!a-z0-9]*) env_id=default ;;
+esac
+
+export PX_CACHE_DIR="$cache"
+export CARGO_HOME="$cache/cargo-home"
+export CARGO_TARGET_DIR="$cache/target/$env_id"
+export SCCACHE_DIR="$cache/sccache"
+export RUSTUP_HOME="$cache/rustup"
+export PNPM_STORE_DIR="$cache/pnpm-store"
+export npm_config_cache="$cache/npm"
+mkdir -p "$CARGO_HOME" "$CARGO_TARGET_DIR" "$SCCACHE_DIR" "$RUSTUP_HOME/toolchains" "$PNPM_STORE_DIR" "$npm_config_cache"
+# The GC empties the targets of the environments used the longest ago first.
+touch "$CARGO_TARGET_DIR/.px-used"
+
+# Toolchains: the image's (read-only, /opt/rustup) linked in, so a repository
+# that pins another one (rust-toolchain.toml) installs it on the cache disk.
+seed="${PX_RUSTUP_SEED:-/opt/rustup}"
+if [ -d "$seed/toolchains" ]; then
+  [ -e "$RUSTUP_HOME/settings.toml" ] || cp "$seed/settings.toml" "$RUSTUP_HOME/settings.toml" 2>/dev/null || true
+  [ -d "$RUSTUP_HOME/update-hashes" ] || cp -R "$seed/update-hashes" "$RUSTUP_HOME/update-hashes" 2>/dev/null || true
+  for toolchain in "$seed"/toolchains/*; do
+    [ -d "$toolchain" ] || continue
+    name="${toolchain##*/}"
+    [ -e "$RUSTUP_HOME/toolchains/$name" ] || ln -s "$toolchain" "$RUSTUP_HOME/toolchains/$name"
+  done
+fi
+
+if [ -z "${SCCACHE_CACHE_SIZE:-}" ]; then
+  disk_kb="$(df -Pk "$cache" 2>/dev/null | awk 'NR == 2 { print $2 }')"
+  case "$disk_kb" in
+    "" | *[!0-9]*) SCCACHE_CACHE_SIZE=10G ;;
+    *) SCCACHE_CACHE_SIZE="$((disk_kb * share / 100 / 1024 / 1024))G" ;;
+  esac
+  [ "$SCCACHE_CACHE_SIZE" != "0G" ] || SCCACHE_CACHE_SIZE=1G
+  export SCCACHE_CACHE_SIZE
+fi
+
+if [ "${PX_CACHE_GC:-1}" = "1" ] && command -v px-cache-gc >/dev/null 2>&1; then
+  nice -n 10 px-cache-gc --loop &
+fi
+
+exec "$@"

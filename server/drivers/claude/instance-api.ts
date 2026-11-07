@@ -246,7 +246,9 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
         nativeImageInput: true,
         // Mid-turn pictures ride the same steer path as words (contracts.steerImages).
         steerImages: true,
-        effortLevels: ["low", "medium", "high", "xhigh", "max"],
+        // Ultracode (`--effort ultracode`) is a Claude Code mode: only this
+        // driver lists it, so no other engine's picker offers it.
+        effortLevels: ["low", "medium", "high", "xhigh", "max", "ultracode"],
         queueing: true,
         // Only while this CLI can be told to refresh a resumed session's
         // recorded system prompt (--system-prompt-snapshot). Keeping a

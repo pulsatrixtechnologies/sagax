@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { osPermissionsAvailable } from "@/lib/os-permissions";
 
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { servedPage } from "@/lib/desktop";
@@ -77,6 +78,8 @@ export function useSettingsModal() {
     if (remoteActive && !["appearance", "organization", "privacy", "notifications", "memory", "updates", "general", "about"].includes(id)) return false;
     // this app's own updates: where the desktop app answers
     if (id === "updates" && !window.ogb?.updater) return false;
+    // the OS permissions of this computer: where the desktop app reads them
+    if (id === "permissions" && !osPermissionsAvailable()) return false;
     // the organization memory's local cache is the desktop app's (main
     // process), set up by itself on an organization server signed in with
     // Perspicax: nothing to show anywhere else

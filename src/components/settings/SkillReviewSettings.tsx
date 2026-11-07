@@ -5,20 +5,19 @@ import {
   MIN_SKILL_REVIEW_STEPS,
   parseSkillReviewSteps,
   skillAuthoringEnabled,
-  skillReviewEnabled,
   skillReviewSteps,
 } from "@/lib/feature-flags";
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { canEditConfig, canManageExperimental } from "@/lib/viewer";
-import { DescribedRow, Switch } from "../SettingsPrimitives";
+import { DescribedRow } from "../SettingsPrimitives";
 
-/** "Learn skills automatically" and its threshold, under "Bots may write
- * their own skills" (server/skills/skill-review.ts). Both live in `features`. */
+/** The review threshold, under "Bots may write their own skills"
+ * (server/skills/skill-review.ts). Whether a bot learns is the bot's own
+ * switch on its Skills page (#2610), not an org switch here. */
 export function SkillReviewSettings() {
   const { state, dispatch } = useStore();
   const authoring = skillAuthoringEnabled(state.config);
-  const enabled = skillReviewEnabled(state.config);
   const confirmedSteps = skillReviewSteps(state.config);
   const manage = canManageExperimental(state.config) || canEditConfig(state.config);
   const [value, setValue] = useState(String(confirmedSteps));
@@ -31,7 +30,7 @@ export function SkillReviewSettings() {
     if (!dirty) setValue(String(confirmedSteps));
   }, [confirmedSteps, dirty]);
 
-  const save = async (features: { skillReview?: boolean; skillReviewSteps?: number }) => {
+  const save = async (features: { skillReviewSteps?: number }) => {
     if (inFlight.current || !manage) return false;
     inFlight.current = true;
     setSaving(true);
@@ -66,22 +65,7 @@ export function SkillReviewSettings() {
   // skills", not a hand-drawn row indented under it (JC 2026-11-07).
   return (
     <div data-testid="skill-review-settings" className="contents">
-      <DescribedRow
-        label={t("settings.experimental.skillReview")}
-        rowId="skillReview"
-        description={error && !enabled
-          ? <span role="alert" className="text-danger">{error}</span>
-          : t(authoring ? "settings.experimental.skillReviewDetail" : "settings.experimental.skillReviewNeedsAuthoring")}
-      >
-        <Switch
-          checked={enabled}
-          aria-label={t("settings.experimental.skillReviewAria")}
-          disabled={saving || !authoring || !manage}
-          onClick={() => void save({ skillReview: !enabled })}
-          className="disabled:cursor-not-allowed disabled:opacity-50"
-        />
-      </DescribedRow>
-      {enabled ? (
+      {authoring ? (
         <DescribedRow
           label={t("settings.experimental.skillReviewSteps")}
           rowId="skillReviewSteps"

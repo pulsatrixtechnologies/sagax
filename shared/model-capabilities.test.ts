@@ -37,8 +37,13 @@ describe("each model offers only the levels it takes", () => {
     expect(modelNativeEffortLevels(undefined, GROK_EFFORT_LEVELS)).toEqual([...GROK_EFFORT_LEVELS]);
   });
 
-  it("adds Ultracode wherever the model takes effort, and nowhere else", () => {
-    expect(modelEffortLevels(grok("grok-4.5"), GROK_EFFORT_LEVELS)).toEqual(["low", "medium", "high", "ultracode"]);
+  it("offers Ultracode only on Claude Code, never on Grok", () => {
+    expect(modelEffortLevels(grok("grok-4.5"), GROK_EFFORT_LEVELS)).toEqual(["low", "medium", "high"]);
+    expect(effortAcceptedByModel("ultracode", grok("grok-4.5"), GROK_EFFORT_LEVELS)).toBe(false);
+    const claudeLevels = ["low", "medium", "high", "xhigh", "max", "ultracode"] as const;
+    expect(modelEffortLevels({}, claudeLevels)).toEqual(["low", "medium", "high", "xhigh", "max", "ultracode"]);
+    expect(effortAcceptedByModel("ultracode", {}, claudeLevels)).toBe(true);
+    expect(modelEffortLevels({ effortLevels: [] }, claudeLevels)).toEqual([]);
     expect(modelEffortLevels({ effortLevels: [] }, GROK_EFFORT_LEVELS)).toEqual([]);
   });
 });

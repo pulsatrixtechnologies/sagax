@@ -2,6 +2,7 @@
 // Definitions and handlers. Assembled in order by agents-catalog.ts;
 // dispatched by agents-call.ts. Never import server/index.ts.
 
+import { TRIGGER_SOURCES } from "../../../shared/trigger-sources.ts";
 import { formatRoutinePage, type RoutinePage } from "../../../shared/routine-listing.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
@@ -51,9 +52,20 @@ export const DEF_PROPOSE_ROUTINE = {
           type: "object",
           additionalProperties: false,
           description:
-            "Instead of schedule. type is webhook or email. The routine starts active unless enabled is false, and the owner copies its key in the app.",
+            "Instead of schedule. type is webhook, email or github. github runs on GitHub events (issue opened or labeled, PR opened, review requested...): events lists the kinds (omit for every kind) and filters narrows them, e.g. { repo: [\"org/repo\"], label: [\"ready\"] }. The routine starts active unless enabled is false, and the owner copies its key (for github: the webhook URL and secret to paste in the repository settings) in the app.",
           properties: {
-            type: { type: "string", enum: ["webhook", "email"] },
+            type: { type: "string", enum: ["webhook", "email", "github"] },
+            events: {
+              type: "array",
+              items: { type: "string", enum: [...TRIGGER_SOURCES.github.events] },
+              description: "github only: the GitHub event kinds that start the routine.",
+            },
+            filters: {
+              type: "object",
+              additionalProperties: false,
+              description: "github only: each key keeps an event only when one of its values matches.",
+              properties: Object.fromEntries(TRIGGER_SOURCES.github.filters.map((key) => [key, { type: "array", items: { type: "string" } }])),
+            },
           },
           required: ["type"],
         },
@@ -90,7 +102,7 @@ export const DEF_PROPOSE_ROUTINE_ACTION = {
         action: {
           type: "string",
           enum: ["update", "pause", "resume", "run_now", "delete", "rotate_webhook_key"],
-          description: "The requested action. Supply changes only for update. rotate_webhook_key replaces the key of a webhook or email trigger.",
+          description: "The requested action. Supply changes only for update. rotate_webhook_key replaces the key of a webhook, email or GitHub trigger.",
         },
         changes: {
           type: "object",

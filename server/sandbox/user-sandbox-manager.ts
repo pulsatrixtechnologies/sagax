@@ -41,6 +41,9 @@ export interface UserSandboxView {
    * attaching, the image pulling): the screen says "starting", not off.
    * Read from the provisioner's status, which never starts anything. */
   starting?: true;
+  /** Hibernated (#2611): its container was removed after a long idle,
+   * /workspace kept; the next call wakes it. */
+  hibernated?: true;
 }
 
 export { UserSandboxUnavailable };
@@ -253,6 +256,7 @@ export class UserSandboxManager {
       return {
         state: status.state,
         ...(status.starting ? { starting: true as const } : {}),
+        ...(status.hibernated ? { hibernated: true as const } : {}),
         lastUsedAt: status.lastUsedAt,
         workspaceBytes: status.workspaceBytes,
         overQuota: status.overQuota,

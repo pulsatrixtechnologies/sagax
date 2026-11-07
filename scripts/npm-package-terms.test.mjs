@@ -112,9 +112,13 @@ describe("npm package term scan", () => {
     expect(blocked('"grokImport.title":`Import a Grok Bot`', "dist/assets/i18n-abc.js")).toEqual([]);
     expect(blocked('"onboarding.firstRun.bot.import":`Import an agent (Grok Bot, Claude Code)`', "dist/assets/i18n-abc.js")).toEqual([]);
     expect(blocked('"onboarding.firstRun.bot.import": "Importer un agent (Grok Bot, Claude Code)"', "dist/assets/fr-abc.js")).toEqual([]);
+    expect(blocked('"onboarding.firstRun.bot.import":`Import an agent (Grok Bot, Claude Code, Hermes)`', "dist/assets/i18n-abc.js")).toEqual([]);
+    expect(blocked('"onboarding.firstRun.bot.import": "Importer un agent (Grok Bot, Claude Code, Hermes)"', "dist/assets/fr-abc.js")).toEqual([]);
     expect(blocked('"agentImport.grok":`Grok Bot`', "dist/assets/i18n-abc.js")).toEqual([]);
     expect(blocked('"newBot.importAgentOption":`Grok Bot or Claude Code…`', "dist-server/index.js")).toEqual([]);
     expect(blocked('"botWizard.other.importAgent":`Importer de Grok Bot ou Claude Code`', "dist/assets/fr-abc.js")).toEqual([]);
+    expect(blocked('"newBot.importAgentOption":`Grok Bot, Claude Code or Hermes…`', "dist-server/index.js")).toEqual([]);
+    expect(blocked('"botWizard.other.importAgent":`Importer de Grok Bot, Claude Code ou Hermes`', "dist/assets/fr-abc.js")).toEqual([]);
     expect(blocked("import a Grok Bot agent (desktop and iOS)", "dist/assets/index-abc.js")).toEqual([]);
     expect(blocked("importez un agent Grok Bot (bureau et iOS)", "dist/assets/index-abc.js")).toEqual([]);
     expect(blocked("From Grok Bot is the public product", "dist-server/self-knowledge/knowledge.generated.json")).toEqual([]);

@@ -182,6 +182,11 @@ describe("configuration", () => {
   it("parses idle minutes, refuses zero and more than a day", () => {
     const image = { SAGAX_SANDBOX_IMAGE: "x:1" };
     expect(sandboxdConfigFromEnv({ ...image, SAGAX_SANDBOX_IDLE_MINUTES: "15" }).idleStopMs).toBe(15 * 60_000);
+    expect(config.hibernateAfterMs).toBe(60 * 60_000);
+    expect(sandboxdConfigFromEnv({ ...image, SAGAX_SANDBOX_HIBERNATE_MINUTES: "240" }).hibernateAfterMs).toBe(240 * 60_000);
+    expect(sandboxdConfigFromEnv({ ...image, SAGAX_SANDBOX_HIBERNATE_MINUTES: "off" }).hibernateAfterMs).toBe(0);
+    expect(() => sandboxdConfigFromEnv({ ...image, SAGAX_SANDBOX_HIBERNATE_MINUTES: "0" })).toThrow(/SAGAX_SANDBOX_HIBERNATE_MINUTES/);
+    expect(() => sandboxdConfigFromEnv({ ...image, SAGAX_SANDBOX_HIBERNATE_MINUTES: "43201" })).toThrow(/SAGAX_SANDBOX_HIBERNATE_MINUTES/);
     expect(sandboxdConfigFromEnv({ ...image, SAGAX_SANDBOX_IDLE_MINUTES: "1440" }).idleStopMs).toBe(1440 * 60_000);
     expect(sandboxdConfigFromEnv({ ...image, SAGAX_SANDBOX_IDLE_MINUTES: "  " }).idleStopMs).toBe(10 * 60_000);
     expect(() => sandboxdConfigFromEnv({ ...image, SAGAX_SANDBOX_IDLE_MINUTES: "0" })).toThrow(/SAGAX_SANDBOX_IDLE_MINUTES/);

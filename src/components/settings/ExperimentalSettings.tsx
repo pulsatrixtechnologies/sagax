@@ -1,7 +1,7 @@
 // Settings > Experimental (#2093 / #2080): a list of switches and nothing else.
 // One row = a label, a consequence line, a switch. Features this server
-// cannot run sit under "Needs a server update". Developer pods sit under
-// "Developer". Decision model lives only on Models (its own master switch).
+// cannot run sit under "Needs a server update". Context pods are on
+// Settings > Developer (#2636). Decision model lives only on Models (its own master switch).
 // #2080 L3: built-in browser and My Chrome live on Computer.
 // #2080: phone calls live on Voice (same read-only card for every org member).
 import { Fragment, useEffect, useState } from "react";
@@ -11,7 +11,7 @@ import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import type { LocaleKey } from "@/locales";
 import { DescribedRow, HelpTip, SettingsGroup, Switch } from "../SettingsPrimitives";
-import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
+import { DeveloperLink } from "./DeveloperLink";
 import { canManageExperimental } from "@/lib/viewer";
 import { useServerFeature } from "@/lib/server-features";
 import { featureMissingOnServer } from "@/lib/server-route";
@@ -141,7 +141,6 @@ export function ExperimentalSettings() {
     }
   };
   const busy = saving !== null;
-  const devPods = useDevPodPrefs().enabled;
 
   type MainRow = {
     feature: ExperimentalFeature;
@@ -260,22 +259,9 @@ export function ExperimentalSettings() {
         </div>
       )}
 
-      <div data-settings-card="experimental.developer">
-        <SettingsGroup groupId="experimental.developer" title={t("settings.experimental.developer")}>
-          <div data-experimental-feature="devPods">
-            <DescribedRow
-              label={t("settings.experimental.devPods")}
-              description={t("settings.experimental.devPodsDescription")}
-              rowId="devPods"
-            >
-              <Switch checked={devPods} aria-label={t("settings.experimental.devPodsAria")} onClick={() => setDevPodsEnabled(!devPods)} />
-            </DescribedRow>
-          </div>
-        </SettingsGroup>
-      </div>
-
       {personalMissing && <p role="note" data-needs-server-update="" className="px-1 text-[12px] text-ink-secondary">{t("serverRoute.needsUpdate")}</p>}
       {error ? <p role="alert" className="px-1 text-[12px] text-danger">{error}</p> : null}
+      <DeveloperLink />
     </div>
   );
 }

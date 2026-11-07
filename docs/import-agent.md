@@ -1,6 +1,6 @@
 # Import an agent you already use
 
-**New bot > Start from > Grok Bot or Claude Code…**, or **Import an agent** on
+**New bot > Start from > Grok Bot, Claude Code or Hermes…**, or **Import an agent** on
 the "create your first bot" step of the guided first run, brings an existing
 agent into Sagax as a new bot. Anyone who may create bots can do it. No admin
 is needed, and in an organization the bot is the person's own.
@@ -19,7 +19,7 @@ Nothing existing is changed: every bot it creates is new. A preview lists
 what will be created and what was left out (with the original text, to
 redo it by hand) before anything is created.
 
-Under the hood both sources become an ordinary Sagax package
+Under the hood every source becomes an ordinary Sagax package
 (`openmaus.package` v2) in the app. It is then staged and imported through the
 same bot import as **New bot > Zip file…** (`POST /api/bots/import/upload`,
 member scope), so the rules of `server/packages/package-import.ts` apply unchanged.
@@ -80,6 +80,27 @@ A file that may hold a secret (`.env*`, `.envrc`, `.netrc`, `*.pem`, `*.key`,
 of the folder or under `.claude/`, it is named under Left out. Everything else
 in the folder (source code, `node_modules`, ...) is not read.
 
+## From Hermes
+
+Choose your `~/.hermes` folder, or one profile folder under it (the Hermes
+Agent layout, hermes-agent.nousresearch.com/docs). Same tab row as Claude
+Code; the same file picker and converter (`shared/claude-code-import.ts`,
+`isHermesHome`, `hermesToPackage`). A folder holding a `CLAUDE.md` or a
+`.claude/` stays a Claude Code import.
+
+| File | Becomes |
+|---|---|
+| `SOUL.md` (comments removed), plus `HERMES.md`, `.hermes.md` and `AGENTS.md` | The bot's standing instructions. |
+| `memories/MEMORY.md`, `memories/USER.md` (entries split by `§`) | The bot's memory seed (`MEMORY.md`), under "What the agent noted" and "About you". |
+| `skills/<category>/<name>/SKILL.md` | A skill (off). The hub cache (`skills/.hub`) is not read. |
+| `cron/jobs.json` | A routine (paused) per cron job, with its prompt and the skills it loads named first. An interval job of whole hours or days becomes a cron; other intervals and one-time jobs are under Left out with their prompt. |
+| `config.yaml` `mcp_servers` | Each server with an `https://` `url` becomes a connection slot (header **names** only); a `command` server is under Left out. Nothing else of `config.yaml` (model, provider, keys) is read. |
+| `profiles/<name>/` | One more bot per profile, with the same mapping. Identical skills and apps are shared. |
+
+`.env`, `auth.json`, `state.db`, `sessions/` and every other file are never
+opened; a secret file at the top of the folder or of a profile is named under
+Left out.
+
 ## On iPhone and iPad
 
 **Create New Bot > Import from Grok Bot** does the Grok Bot import: Copy export
@@ -89,7 +110,7 @@ has no copy of the converter, so it sends the reply to
 the server makes the same package with `shared/grok-import.ts` and stages it
 like an uploaded zip, for this person only, then the zip import's own
 `/api/bots/import/:id` finishes. Same rights as the upload: anyone who may
-create bots. The Claude Code folder import is desktop only.
+create bots. The Claude Code and Hermes folder imports are desktop only.
 
 ## Left out, in the person's language
 
@@ -101,7 +122,7 @@ stays as the fallback.
 ## Code
 
 - `shared/grok-import.ts`: the Grok Bot export, the share link, the package.
-- `shared/claude-code-import.ts`: the Claude Code folder to a package.
+- `shared/claude-code-import.ts`: the Claude Code or Hermes folder to a package.
 - `src/lib/claude-code-folder.ts`: which picked files are read.
 - `src/components/AgentImport.tsx`: the dialog (New bot, guided first run).
   It reuses `GrokImportBox` and the bot import panel (`BotZipImport.tsx`).

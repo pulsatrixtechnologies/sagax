@@ -4,6 +4,7 @@ import type { MemoryDestination } from "../memory/memory-audience.ts";
 import { webhookPostText } from "../peers/peer-provenance.ts";
 import { claimRecallCrossings, recallCrossingLabel } from "../recall/recall-disclosure.ts";
 import { sessionMemoryHitFor } from "../recall/recall.ts";
+import { sessionsForSummary } from "../recall/session-summary.ts";
 import { parseSince, parseUntil } from "../recent-work.ts";
 import { searchMemoryFiles } from "../workspace/workspace.ts";
 import type { InternalRouteContext } from "./internal-route.ts";
@@ -144,7 +145,22 @@ export async function handleInternalSessionsRecall(
     if (inRoom) {
       discloseRecall(deps, from, fromThreadId, hits.filter((hit) => hit.crossed).map((hit) => hit.threadId));
     }
-    return json(res, 200, { hits, memoryHits });
+    // One short model summary of the best-matching conversations (#2610),
+    // above the hits; a search by time alone has nothing to focus it.
+    let summary: string | null = null;
+    if (q && hits.length && deps.summarizeRecall) {
+      const sessions = sessionsForSummary(
+        hits.map((hit) => ({
+          threadId: hit.threadId,
+          messageId: hit.messageId,
+          at: hit.at,
+          where: hit.current ? "this conversation" : hit.room ? `room "${hit.room}"${hit.task ? `, task "${hit.task}"` : ""}` : hit.task ? `task "${hit.task}"` : "an earlier task",
+        })),
+        (threadId, messageId) => readMessageText(threadId, messageId),
+      );
+      summary = sessions.length ? await deps.summarizeRecall(from, q, sessions).catch(() => null) : null;
+    }
+    return json(res, 200, { hits, memoryHits, ...(summary ? { summary } : {}) });
   }
   // session_read: the whole message behind a session_search hit. Same
   // own-bot scope — a message id from another bot's thread reads as

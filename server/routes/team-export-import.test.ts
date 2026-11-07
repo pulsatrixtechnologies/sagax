@@ -5,6 +5,20 @@ import type { BotRecord } from "../store.ts";
 import { createTeamExportImportRoutes, type TeamExportImportRouteDeps } from "./team-export-import.ts";
 import { PASS, type RouteContext } from "./table.ts";
 
+// I1: the plugin import's package and options, seen where the importer gets them.
+const imports = vi.hoisted(() => ({ calls: [] as Array<{ document: any; options: any }> }));
+vi.mock("../packages/package-import.ts", async (original) => {
+  const actual = await original<typeof import("../packages/package-import.ts")>();
+  return {
+    ...actual,
+    importPackageDocument: (document: any, options: any, importDeps: any) => {
+      if (!importDeps?.__capture) return actual.importPackageDocument(document, options, importDeps);
+      imports.calls.push({ document, options });
+      return { name: document.package.team.name, section: document.package.team.name, bots: [], groups: [], group: null, routines: [], offeredSkills: [], connections: [], skipped: [], notes: [] };
+    },
+  };
+});
+
 const owner = { kind: "loopback", trust: "owner", scopes: ["admin"] } as unknown as RequestAuth;
 const member = {
   kind: "session",
@@ -157,5 +171,56 @@ describe("createTeamExportImportRoutes", () => {
     const names = document?.package?.agents?.map((agent) => agent.name) ?? [];
     expect(names).toContain("Boris");
     expect(names).not.toContain("Aria");
+  });
+
+  describe("I1: POST /api/teams/import-plugin", () => {
+    const AGENT = "---\nname: px-architect\ndescription: Designs.\nmodel: claude-fable-5-1\ntools: Read, Grep\n---\nYou design.";
+    const claude = {
+      instanceId: "claude", driverKind: "claudeAgent",
+      snapshot: { status: "ready", installed: true, auth: { status: "authenticated" } },
+      models: { default: "claude-fable-5-1", options: [{ id: "claude-fable-5-1" }, { id: "claude-sonnet-5-5" }] },
+    } as never;
+
+    it("is absent where the server reads no plugins", async () => {
+      const { context, sent } = ctx("/api/teams/import-plugin", "POST", { marketplace: "pulsatrix", plugin: "pulsatrix-dev" });
+      await createTeamExportImportRoutes(deps())(context);
+      expect(sent[0]!.status).toBe(404);
+    });
+
+    it("asks for the marketplace and the plugin", async () => {
+      const route = createTeamExportImportRoutes(deps({ readPlugin: vi.fn(), engines: vi.fn() }));
+      const { context, sent } = ctx("/api/teams/import-plugin", "POST", { marketplace: "pulsatrix" });
+      await route(context);
+      expect(sent[0]!.status).toBe(400);
+    });
+
+    it("refuses a plugin with no agents (422)", async () => {
+      const route = createTeamExportImportRoutes(deps({
+        readPlugin: async () => ({ plan: { agents: [], skipped: [] }, manifest: {} }),
+        engines: async () => ({ instances: [] }),
+      }));
+      const { context, sent } = ctx("/api/teams/import-plugin", "POST", { marketplace: "pulsatrix", plugin: "empty" });
+      await route(context);
+      expect(sent[0]).toMatchObject({ status: 422, body: { code: "no_agents" } });
+    });
+
+    it("imports the agents as one team with each agent's model (claude-fable-5-1)", async () => {
+      const seen: unknown[] = [];
+      const readPlugin = vi.fn(async () => ({ plan: { agents: [{ file: "px-architect.md", text: AGENT }], skipped: ["agent huge.md (too big)", "skill broken (no frontmatter)"] }, manifest: { displayName: "Pulsatrix Dev" } }));
+      const route = createTeamExportImportRoutes(deps({
+        readPlugin,
+        engines: async (auth) => { seen.push(auth); return { instances: [claude] }; },
+        packageImportDeps: () => ({ __capture: true }) as never,
+      }));
+      const { context, sent } = ctx("/api/teams/import-plugin", "POST", { marketplace: "pulsatrix", plugin: "pulsatrix-dev" });
+      await route(context);
+      expect(readPlugin).toHaveBeenCalledWith("pulsatrix", "pulsatrix-dev", owner);
+      expect(seen).toEqual([owner]);
+      const call = imports.calls.at(-1)!;
+      expect(call.document.package.team).toEqual({ name: "Pulsatrix Dev" });
+      expect(call.document.package.agents.map((agent: { key: string }) => agent.key)).toEqual(["px-architect"]);
+      expect(call.options).toMatchObject({ mode: "add", trust: "file", models: { "px-architect": { instanceId: "claude", model: "claude-fable-5-1" } } });
+      expect(sent[0]).toMatchObject({ status: 201, body: { name: "Pulsatrix Dev", skipped: [{ part: "plugin", reason: "agent huge.md (too big)" }] } });
+    });
   });
 });

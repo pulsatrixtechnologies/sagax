@@ -9,6 +9,7 @@ import type { Switch } from "./SettingsPrimitives";
 import { chooseThreadsView, SECTIONS, sectionMatches, SettingsModal } from "./SettingsModal";
 import {
   AppearanceSettings,
+  DeveloperSettings,
   NotificationSettings,
   OrganizationSettings,
   WorkspaceBackupSettings,
@@ -129,6 +130,7 @@ vi.mock("./SettingsPrimitives", async (importOriginal) => {
 beforeAll(async () => {
   await Promise.all([
     AppearanceSettings.preload(),
+    DeveloperSettings.preload(),
     NotificationSettings.preload(),
     OrganizationSettings.preload(),
     WorkspaceBackupSettings.preload(),
@@ -206,7 +208,8 @@ describe("Settings → Appearance", () => {
   it("is laid out as Theme, Conversations, Sidebar, Mascots, Accessibility (#2080 L2)", () => {
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    expect(groups).toEqual(["theme", "conversation", "conversationAdvanced", "sidebar", "sidebarAdvanced", "mascots", "accessibility"]);
+    // #2636: the run card, inspector and turn timing switches are on Developer
+    expect(groups).toEqual(["theme", "conversation", "sidebar", "sidebarAdvanced", "mascots", "accessibility"]);
     for (const heading of ["Theme", "Conversations", "Sidebar", "Mascots", "Accessibility"]) expect(html).toContain(`>${heading}</h3>`);
     expect(html).not.toContain('data-settings-group="interface"');
     expect(html).not.toContain('data-settings-group="desktop"');
@@ -328,8 +331,10 @@ describe("Settings → Appearance", () => {
     }
   });
 
-  it("offers the run card visibility toggle in Appearance", () => {
+  it("offers the run card visibility toggle on Developer (#2636), no longer in Appearance", () => {
     fixture.showRunCard = true;
+    expect(render()).not.toContain('aria-label="Show the run card"');
+    fixture.section = "developer";
     const html = render();
     expect(html).toContain('aria-label="Show the run card"');
     expect(html).toContain("This run");

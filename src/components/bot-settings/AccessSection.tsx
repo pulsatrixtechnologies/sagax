@@ -39,7 +39,7 @@ import { readableError } from "@/lib/plain-error";
  * per project folder, so a folder must not move under a live task). The
  * PATCH is made directly rather than through updateBot: the server
  * validates the path and a rejected folder must not stick in local state. */
-function WorkingFolder({ bot }: { bot: Bot }) {
+export function WorkingFolder({ bot }: { bot: Bot }) {
   const { request: api } = useBotEditor();
   const solo = usePerspicaxOrg() === null;
   const { capabilities } = useDesktopCapabilities();
@@ -234,6 +234,36 @@ function McpServersCard({ bot, patch }: {
   );
 }
 
+/** The tools the bot may use without asking (#2658: on Settings > Developer
+ * and in the editor dialogs' fold). */
+export function AlwaysAllowedCard({ bot, patch }: { bot: Bot; patch: (p: { alwaysAllow: string[] }) => void }) {
+  const rows = usePaneRows();
+  const alwaysAllow = bot.alwaysAllow ?? [];
+  return (
+    <PaneSection data-bot-always-allowed="" title={<>{t("botPanel.access.always")}<ProposalStatus bot={bot} /></>} help={t("botPanel.access.alwaysHelp")}>
+      {alwaysAllow.length === 0 ? (
+        <PaneEmpty>{t("botPanel.access.nothing")}</PaneEmpty>
+      ) : (
+        <div className={cn(rows.bleed, "-my-1", rows.list)}>
+          {alwaysAllow.map((entry) => (
+            <div key={entry} className={cn("flex min-h-[44px] items-center justify-between gap-3 py-2", rows.row)}>
+              <span title={entry} className={cn("min-w-0 flex-1 truncate text-ink", alwaysLabel(entry) ? rows.title : "font-mono text-[12.5px]")}>{alwaysLabel(entry) ?? entry}</span>
+              <button
+                type="button"
+                aria-label={t("botPanel.access.removeAlways", { entry })}
+                onClick={() => patch({ alwaysAllow: alwaysAllow.filter((key) => key !== entry) })}
+                className={cn(PILL, "shrink-0")}
+              >
+                {t("botPanel.access.remove")}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </PaneSection>
+  );
+}
+
 export function AccessSection({
   bot,
   derived,
@@ -241,8 +271,13 @@ export function AccessSection({
 }: {
   bot: Bot;
   derived: ReturnType<typeof useBotSettingsDerived>;
-  /** One card alone (the bot creation wizard's Tools step, 2026-10-26). */
-  part?: "all" | "mcp" | "browser";
+  /** One card alone (the bot creation wizard's Tools step, 2026-10-26).
+   * The bot page's V6 sub-pages (#2612): "brief" (the background brief,
+   * When it acts alone) and "advanced" (the worksite and the browser). The
+   * working folder, tools, webhooks and always-allowed list are on
+   * Settings > Developer since #2658; the editor dialogs (part "all") keep
+   * them folded. */
+  part?: "all" | "mcp" | "browser" | "brief" | "advanced";
 }) {
   const { draft, bulk, mixedFields } = useBotEditor();
   const { state } = useStore();
@@ -260,10 +295,7 @@ export function AccessSection({
   } = derived;
   const browserInstallable = state.config?.browserEngine?.installable === true;
   const browserMixed = Boolean(bulk && mixedFields?.has("browser"));
-  const rows = usePaneRows();
-  const { plain } = rows;
-
-  const alwaysAllow = bot.alwaysAllow ?? [];
+  const { plain } = usePaneRows();
 
   // Where the bot runs, what it may reach, and which tools it may use are
   // not member fields. Hide the whole section when none of them can be saved.
@@ -274,7 +306,7 @@ export function AccessSection({
     <div className="flex flex-col gap-5">
       {/* Boat or VPS is which cloud computer Auto and Cloud use. It is not
           a second Works on: that control is More > Computer. */}
-      {part === "all" && !organization && (!bot.computer || bot.computer === "cloud") && cloudComputersOffered(state.config) && (
+      {(part === "all" || part === "advanced") && !organization && (!bot.computer || bot.computer === "cloud") && cloudComputersOffered(state.config) && (
         // the profile page: the card carries its own grey label, the note is
         // text and the start switch is a row, nothing boxed inside the card
         <PaneSection data-cloud-backend="" title={plain ? t("botPanel.cloud.backend") : undefined}>
@@ -319,9 +351,9 @@ export function AccessSection({
       )}
 
       {(part === "all" || part === "mcp") && <McpServersCard bot={bot} patch={patch} />}
-      {part === "all" && !draft && <BackgroundBriefCard botId={bot.id} />}
+      {(part === "all" || part === "brief") && !draft && <BackgroundBriefCard botId={bot.id} />}
 
-      {(part === "all" || part === "browser") && browserFeature && <PaneSection title={<>{t("botPanel.access.browser")}<ProposalStatus bot={bot} /></>}>
+      {(part === "all" || part === "browser" || part === "advanced") && browserFeature && <PaneSection title={<>{t("botPanel.access.browser")}<ProposalStatus bot={bot} /></>}>
         <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
           {plain && <Globe aria-hidden="true" className="mt-px size-5 shrink-0 text-ink-secondary" />}
@@ -362,27 +394,7 @@ export function AccessSection({
         <WorkingFolder bot={bot} />
         <ToolSelectionCard key={bot.id} bot={bot} engineKind={derived.engine?.driverKind} />
         {!draft && <BotWebhooks bot={bot} />}
-        {!draft && <PaneSection title={<>{t("botPanel.access.always")}<ProposalStatus bot={bot} /></>} help={t("botPanel.access.alwaysHelp")}>
-          {alwaysAllow.length === 0 ? (
-            <PaneEmpty>{t("botPanel.access.nothing")}</PaneEmpty>
-          ) : (
-            <div className={cn(rows.bleed, "-my-1", rows.list)}>
-              {alwaysAllow.map((entry) => (
-                <div key={entry} className={cn("flex min-h-[44px] items-center justify-between gap-3 py-2", rows.row)}>
-                  <span title={entry} className={cn("min-w-0 flex-1 truncate text-ink", alwaysLabel(entry) ? rows.title : "font-mono text-[12.5px]")}>{alwaysLabel(entry) ?? entry}</span>
-                  <button
-                    type="button"
-                    aria-label={t("botPanel.access.removeAlways", { entry })}
-                    onClick={() => patch({ alwaysAllow: alwaysAllow.filter((key) => key !== entry) })}
-                    className={cn(PILL, "shrink-0")}
-                  >
-                    {t("botPanel.access.remove")}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </PaneSection>}
+        {!draft && <AlwaysAllowedCard bot={bot} patch={patch} />}
       </AdvancedFold>}
     </div>
   );

@@ -46,6 +46,10 @@ export interface SandboxStatus {
   /** Kubernetes: the sandbox's Pod is on its way up (state stays
    * "stopped" for older readers). Absent otherwise. */
   starting?: true;
+  /** Hibernated (#2611): unused past the hibernation period, its container
+   * and network were removed and /workspace kept; the next call wakes it.
+   * Absent otherwise. */
+  hibernated?: true;
 }
 
 /** The usage panel of the person's Computer tab: a light sample, scoped to
@@ -117,6 +121,9 @@ const CONTROL_TOUCH_MS = 30_000;
 
 export class SandboxService {
   private readonly lastUsed = new Map<string, number>();
+  /** Sandboxes hibernated by this process (Kubernetes keeps reporting a
+   * claim without a Pod as "stopped", so the flag cannot be read back). */
+  private readonly hibernated = new Set<string>();
   private readonly busy = new Map<string, number>();
   private readonly usage = new Map<string, { bytes: number; at: number; freeBytes?: number; totalBytes?: number }>();
   private readonly locks = new Map<string, Promise<void>>();
@@ -194,10 +201,14 @@ export class SandboxService {
     if (container && !this.owned(container.labels, key)) throw new SandboxError(409, "conflict", "a container with this name is not managed by this provisioner");
     const state: SandboxState = !container ? "missing" : container.paused ? "paused" : container.running ? "running" : "stopped";
     const usage = this.usage.get(key);
+    const hibernated = state === "missing"
+      ? Boolean((await this.docker.inspectVolume(names.volume).then((volume) => volume && this.owned(volume.labels, key), () => false)))
+      : state === "stopped" && !container?.starting && this.hibernated.has(key);
     return {
       key,
       state,
       ...(state === "stopped" && container?.starting ? { starting: true as const } : {}),
+      ...(hibernated ? { hibernated: true as const } : {}),
       lastUsedAt: this.lastUsed.get(key) ?? null,
       workspaceBytes: usage?.bytes ?? null,
       overQuota: usage ? usage.bytes > this.config.limits.workspaceQuotaBytes : false,
@@ -305,6 +316,7 @@ export class SandboxService {
       // before the start (best effort; Docker has nothing to grow).
       await this.docker.growVolume?.(names.volume).catch(() => {});
       await this.docker.startContainer(names.container);
+      this.hibernated.delete(key);
       this.touch(key);
       return this.status(key);
     });
@@ -338,6 +350,7 @@ export class SandboxService {
         this.usage.delete(key);
       }
       this.lastUsed.delete(key);
+      this.hibernated.delete(key);
       this.osInfo.delete(key);
       return this.status(key);
     });
@@ -633,5 +646,39 @@ export class SandboxService {
       stopped.push(row.key);
     }
     return stopped;
+  }
+
+  /** Hibernate every stopped sandbox unused for longer than the hibernation
+   * period (#2611): remove its container (Kubernetes: Pod) and network, keep
+   * /workspace. ensure() wakes it: network and container are created again
+   * on the same volume. A sandbox first seen stopped (provisioner restart)
+   * counts from now. Running, paused, starting or busy ones are left alone. */
+  async hibernateIdle(): Promise<string[]> {
+    if (this.config.hibernateAfterMs <= 0) return [];
+    const done: string[] = [];
+    const now = this.now();
+    const rows = await this.docker.listContainers(this.ownLabels());
+    for (const row of rows) {
+      const key = row.labels[SANDBOX_USER_LABEL] ?? "";
+      if (!SANDBOX_KEY_RE.test(key) || row.running || row.paused || row.starting) continue;
+      if (this.hibernated.has(key)) continue;
+      if (!this.lastUsed.has(key)) { this.lastUsed.set(key, now); continue; }
+      if ((this.busy.get(key) ?? 0) > 0) continue;
+      if (now - this.lastUsed.get(key)! < this.config.hibernateAfterMs) continue;
+      const hibernated = await this.withLock(key, async () => {
+        const names = sandboxNames(key);
+        const container = await this.docker.inspectContainer(names.container);
+        if (!container || !this.owned(container.labels, key) || container.running || container.paused || container.starting) return false;
+        if ((this.busy.get(key) ?? 0) > 0) return false;
+        await this.docker.removeContainer(names.container);
+        const network = await this.docker.inspectNetwork(names.network);
+        if (network && this.owned(network.labels, key)) await this.docker.removeNetwork(names.network);
+        this.osInfo.delete(key);
+        this.hibernated.add(key);
+        return true;
+      });
+      if (hibernated) done.push(key);
+    }
+    return done;
   }
 }

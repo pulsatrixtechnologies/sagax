@@ -214,6 +214,12 @@ export const MediaPlayerChrome = memo(function MediaPlayerChrome({
                 {t("video.retry")}
               </button>
             )}
+            {/* an unplayable stream still offers its link, never a dead box */}
+            {native?.playbackUrl && /^https?:\/\//i.test(native.playbackUrl) && (
+              <a className="vpc-chip" href={native.playbackUrl} target="_blank" rel="noopener noreferrer">
+                {t("video.popOut")}
+              </a>
+            )}
           </div>
         )}
 

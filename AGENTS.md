@@ -10210,6 +10210,18 @@ the person asked for are not views.
   any other stored row, for every client.
 - Video players from a tool's output (Glitcho `list_followed`, any
   `sagaxVideo`/`url` JSON): `videoMessagesFromTool` needs an ask ("video").
+  "is she live?", "play her", "watch", "en direct" count as a video ask
+  (2026-11-06).
+- Video cards the bot writes (2026-11-06): one `video` code fence holding
+  `{"sagaxVideos":[{"kind":"live"|"vod","url":"https://.../index.m3u8",
+  "title","streamer","format"?:"hls"|"mp4"}]}` (`RICH_OUTPUT_PROMPT`). The
+  server (`videoMessagesFromText`, `server/runtime-events/preamble.ts`) takes
+  it out of the reply and adds a proxied player row; the same envelope in a
+  `json` fence, an unlabeled fence or bare JSON is accepted too
+  (`extractSagaxVideoBlocks`, `fenceBareSagaxVideos`). `ChatMarkdown` draws a
+  fence still in the text as the player (`SagaxVideoFenceView`); invalid JSON
+  or no URL shows a note with the link, never raw JSON; a stream that fails to
+  play keeps an "Open in new tab" link.
 - Settled screenshot at the end of a computer turn: needs an ask ("screen");
   the live screen panel is unchanged.
 - Video and screen rows the server lets through carry `requested: true`;

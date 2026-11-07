@@ -7,6 +7,7 @@ import { clearHeldSteersForThread } from "../turns/held-steers.ts";
 import { noteFirstResponse } from "../turns/turn-trace.ts";
 import { dropCancelledVoiceEvent, isStaleAssistantOutput } from "../voice/voice-call-duplex.ts";
 import { stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
+import { videoMessagesFromText } from "../video/video-widget-turn.ts";
 export function runRuntimeEventPreamble(event: any, host: any): any | null {
   if (host.shouldIgnoreProviderEvent(event)) return;
   const localVmTarget = host.localVmThreadTargets.get(event.threadId);
@@ -191,7 +192,14 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
     // #1329: the condition's marker is read, then taken out of what is shown.
     if (bot) host.finishUntilRuns.noteReply(event.threadId, spoken.text);
     spoken.text = withoutFinishUntilMarker(spoken.text);
-    if (!spoken.text.trim()) return;
+    // a video card the bot wrote (```video, or the envelope as ```json or
+    // bare JSON) becomes a player row after the text, never raw JSON
+    const written = videoMessagesFromText(spoken.text, event.threadId);
+    spoken.text = written.text;
+    if (!spoken.text.trim()) {
+      for (const videoMsg of written.messages) pushMessage({ ...videoMsg, turnId });
+      return;
+    }
     spoken.text = host.citeAppFigures(host.dashFreeReply(spoken.text, event.threadId, bot), host.appPiecesByThread.get(event.threadId) ?? []);
     // "👍" written after reacting 👍 says the same thing twice: the
     // reaction stands alone and no bubble is written.
@@ -203,6 +211,7 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
     const roomRan = !bot && speaker ? host.roomTurnRuns.get(event.threadId) : undefined;
     const ran = bot ? host.turnRunByThread.get(event.threadId) : roomRan && roomRan.botId === speaker?.botId ? roomRan.run : undefined;
     pushMessage({ role: "bot", kind: "text", text: spoken.text, turnId, ...(ran ? { turnRun: ran } : {}) });
+    for (const videoMsg of written.messages) pushMessage({ ...videoMsg, turnId });
     host.lastReply.set(event.threadId, spoken.text);
   };
 

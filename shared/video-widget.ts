@@ -267,3 +267,142 @@ export function youtubeIdsInText(text: string): string[] {
   for (const match of text.matchAll(/\[[^\]]*]\((https?:\/\/[^)]+)\)/gi)) add(youtubeVideoId(match[1]!));
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Video cards a bot writes in its own reply (2026-11-06: a model wrote the
+// envelope as a ```json fence and the person saw raw JSON, no player).
+//
+// The taught form is one ```video fence holding {"sagaxVideos":[...]}; the
+// renderer also accepts the same envelope in a ```json fence, a fence with no
+// language, or bare JSON on its own lines.
+
+const VIDEO_FENCE_LANGS = new Set(["video", "videos", "sagax-video", "sagax-videos", "sagaxvideo", "sagaxvideos"]);
+const JSON_FENCE_LANGS = new Set(["", "json", "jsonc", "json5"]);
+const ENVELOPE_KEY = /"sagaxVideos?"\s*:/;
+
+/** Outcome of reading one fence as a video card: null when it is not one. */
+export type SagaxVideoFence =
+  | { status: "videos"; videos: SagaxVideoEmit[] }
+  | { status: "invalid"; url?: string };
+
+function firstHttpUrl(text: string): string | undefined {
+  const match = /https?:\/\/[^\s"'<>\\]+/i.exec(text);
+  return match?.[0];
+}
+
+/**
+ * Read a fenced block as a Sagax video card. A ```video fence is always one;
+ * a ```json (or unlabeled) fence is one when its root holds `sagaxVideos` or
+ * `sagaxVideo`. Unparsable JSON or a card without a URL is `invalid` (the
+ * renderer then shows a fallback with the first link it finds).
+ */
+export function parseSagaxVideoFence(code: string, lang: string): SagaxVideoFence | null {
+  const language = lang.trim().toLowerCase();
+  const declared = VIDEO_FENCE_LANGS.has(language);
+  if (!declared && !(JSON_FENCE_LANGS.has(language) && ENVELOPE_KEY.test(code))) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(code.trim());
+  } catch {
+    return { status: "invalid", url: firstHttpUrl(code) };
+  }
+  const root = asRecord(parsed);
+  if (!declared && !(root && ("sagaxVideos" in root || "sagaxVideo" in root))) return null;
+  const videos = Array.isArray(parsed)
+    ? parsed.map((entry) => rowToWidget(asRecord(entry) ?? {})).filter((v): v is SagaxVideoEmit => v !== null)
+    : sagaxVideosFromJson(parsed);
+  const playable = videos.filter((v) => /^https?:\/\//i.test(v.url) || v.url.startsWith("/"));
+  if (!playable.length) return { status: "invalid", url: firstHttpUrl(code) };
+  return { status: "videos", videos: playable };
+}
+
+/** End index (exclusive) of the JSON object that opens at `start`, or -1. */
+function balancedObjectEnd(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+const BARE_ENVELOPE_LINE = /^[ \t]{0,3}\{\s*"sagaxVideos?"\s*:/;
+const FENCE_OPEN = /^[ \t]{0,3}(`{3,}|~{3,})/;
+
+/**
+ * Wrap bare `{"sagaxVideos":...}` JSON written outside any fence into a
+ * ```video fence, so the renderer (and the server) see one form. Text inside
+ * existing fences is left alone.
+ */
+export function fenceBareSagaxVideos(text: string): string {
+  if (!text.includes("sagaxVideo")) return text;
+  const out: string[] = [];
+  let fence: string | null = null;
+  let pos = 0;
+  while (pos <= text.length) {
+    const nl = text.indexOf("\n", pos);
+    const lineEnd = nl === -1 ? text.length : nl;
+    const line = text.slice(pos, lineEnd);
+    const open = FENCE_OPEN.exec(line);
+    if (fence) {
+      if (open && open[1]![0] === fence[0] && open[1]!.length >= fence.length && !line.trim().slice(open[1]!.length).trim()) fence = null;
+      out.push(line);
+    } else if (open) {
+      fence = open[1]!;
+      out.push(line);
+    } else if (BARE_ENVELOPE_LINE.test(line)) {
+      const start = pos + line.indexOf("{");
+      const end = balancedObjectEnd(text, start);
+      if (end > 0) {
+        const afterNl = text.indexOf("\n", end);
+        const blockEnd = afterNl === -1 ? text.length : afterNl;
+        out.push("```video", text.slice(start, end).trim(), "```");
+        const tail = text.slice(end, blockEnd).trim();
+        if (tail) out.push(tail);
+        if (afterNl === -1) break;
+        pos = afterNl + 1;
+        continue;
+      }
+      out.push(line);
+    } else {
+      out.push(line);
+    }
+    if (nl === -1) break;
+    pos = nl + 1;
+  }
+  return out.join("\n");
+}
+
+const VIDEO_BLOCK = /(^|\n)[ \t]{0,3}(`{3,}|~{3,})[ \t]*([\w-]*)[^\n]*\n([\s\S]*?)\n[ \t]{0,3}\2[ \t]*(?=\n|$)/g;
+
+/**
+ * Take the video cards a bot wrote in its reply out of the text: every
+ * fence (or bare JSON) that parses as a card becomes a video emit and leaves
+ * the text. Invalid blocks stay in the text for the renderer's fallback.
+ */
+export function extractSagaxVideoBlocks(text: string): { text: string; videos: SagaxVideoEmit[] } {
+  if (!text.includes("sagaxVideo") && !/(`{3,}|~{3,})[ \t]*(?:sagax-?)?videos?\b/i.test(text)) return { text, videos: [] };
+  const fenced = fenceBareSagaxVideos(text);
+  const videos: SagaxVideoEmit[] = [];
+  const stripped = fenced.replace(VIDEO_BLOCK, (whole, lead: string, _fence: string, lang: string, body: string) => {
+    const card = parseSagaxVideoFence(body, lang);
+    if (card?.status !== "videos") return whole;
+    videos.push(...card.videos);
+    return lead;
+  });
+  if (!videos.length) return { text, videos: [] };
+  return { text: stripped.replace(/\n{3,}/g, "\n\n").trim(), videos };
+}

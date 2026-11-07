@@ -294,6 +294,7 @@ export const RICH_OUTPUT_PROMPT =
   + PAGE_TARGET_PROMPT
   + CW_FENCE_PROMPT
   + " To show a YouTube video the person wants to watch, put its link alone on its own line: it plays inline (any other time, keep the link inside a sentence); never wrap it in an ```artifact or ```widget fence."
+  + " To show a stream or video file the person asked to watch (an HLS m3u8 or an MP4 URL, such as a Glitcho share link), write one ```video fence holding exactly {\"sagaxVideos\":[{\"kind\":\"live\",\"url\":\"https://host/v1/share/live/channel/index\",\"format\":\"hls\",\"title\":\"Stream title\",\"streamer\":\"channel\"}]} (kind live or vod, a real URL from a tool, never invented; \"format\" is hls or mp4, needed when the URL does not end in m3u8 or mp4): it becomes the player card, so never also paste that JSON in a ```json block or as plain text. A player a tool's result already added shows on its own: do not repeat it, and never say a player is on screen unless you wrote that fence or the tool added one."
   + " To show an image, a video file or a document, attach it or link its absolute path; a remote image loads only after the person allows it.";
 
 /** The rich-output paragraph for one bot. Drafts off replaces the email

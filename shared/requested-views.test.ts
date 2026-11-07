@@ -17,6 +17,11 @@ describe("askedForView", () => {
     expect(askedForView("make me a chart", "view")).toBe(true);
     expect(askedForView("joue la vidéo", "video")).toBe(true);
     expect(askedForView("play the stream", "video")).toBe(true);
+    expect(askedForView("is she live?", "video")).toBe(true);
+    expect(askedForView("play her", "video")).toBe(true);
+    expect(askedForView("est-ce qu'elle est en direct ?", "video")).toBe(true);
+    expect(askedForView("I want to watch it", "video")).toBe(true);
+    expect(askedForView("I dont see the widget", "video")).toBe(false);
     expect(askedForView("fais une capture d'écran", "screen")).toBe(true);
     expect(askedForView("montre-moi l'écran", "screen")).toBe(true);
     expect(askedForView("take a screenshot", "screen")).toBe(true);

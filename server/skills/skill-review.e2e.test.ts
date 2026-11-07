@@ -7,8 +7,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import type { WireBot, WireMessage } from "../shared/wire.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import type { WireBot, WireMessage } from "../../shared/wire.ts";
 import { SKILL_REVIEW_MARKER } from "./skill-review.ts";
 
 const SKILL_MD = "---\nname: weekly-report\ndescription: Writes the weekly status report.\n---\n\n# Weekly report\n\nWrites the weekly status report from the project notes.\n\n## When to Use\n- \"write the weekly report\"\n\n## Procedure\n1. Read notes/status.md.\n2. Keep it to five bullets.\n\n## Pitfalls\n- Ask which week when the notes span two.\n\n## Verification\n- The report has at most five bullets.\n";

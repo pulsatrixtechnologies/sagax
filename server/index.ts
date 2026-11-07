@@ -7242,6 +7242,7 @@ bindLeafHost({
   get ENDED() { return ENDED; },
   get cloudAgentManager() { return cloudAgentManager; },
   get computerParks() { return computerParks; },
+  get parkedSeats() { return parkedSeats; },
   get customSecretVault() { return customSecretVault; },
   get grokBridgeService() { return grokBridgeService; },
   get listNativeBotSkills() { return listNativeBotSkills; },
@@ -16004,20 +16005,11 @@ bus.subscribe((event: RuntimeEvent) => {
   }
 });
 
-// Automatic continuity: a turn that died on its step budget gets a
-// `Continue:` task on the same bot, seeded with the persisted handoff — the
-// work moves forward without a person noticing and re-dispatching. Assigned
-// work is its requester's to continue: the stop and the handoff return in its
-// outcome (stoppedTurnText), and the requester sends what is left.
-// A step cap's Continue: thread runs on the job runtime (lot 3): the bot's
-// one-way notice to itself, under the origin of the work that stopped, at
-// the level of the new thread. A restart reruns a cut continuation once.
-bus.subscribe(makeCapContinuationSubscriber({ store, reportsToRequester,
-  dispatch: (botId, fromThreadId, threadId, text) => {
-    const owner = directRequestOwners.get(fromThreadId);
-    coordinator.enqueueContinuation({ botId, threadId: fromThreadId }, { botId, threadId }, text, owner && !owner.stopped ? owner.origin : undefined);
-    coordinator.tick();
-  } }));
+// A step cap continues the same turn in place (decision 11, upstream
+// a5b2e437fd): the handoff rides the turn's outcome (turn.completed above)
+// and the runtime runs the node again with it, root or teammate alike. No
+// `Continue:` thread, no second owner of the work, so the older
+// makeCapContinuationSubscriber is no longer subscribed.
 
 // Memory journal turn boundary (server/memory/memory-journal.ts). A bot's own
 // file-tool writes to MEMORY.md and memory/ have no hook to tap, so the
@@ -20305,6 +20297,10 @@ type ComputerResumeEntry = {
 const pendingComputerResumes = new Map<string, ComputerResumeEntry>();
 
 function registerComputerResume(entry: ComputerResumeEntry): void {
+  // A turn the runtime owns parks on the seat there and continues in place
+  // once it frees (#2204, hostTurnResult): a host resume as well ran the
+  // member a third time. Every park site (the lazy claims too) defers to it.
+  if (coordinator.node(entry.generation) || directCoordinationSettlers.has(entry.generation)) return;
   // One per thread: the newest park replaces an older one.
   pendingComputerResumes.set(entry.threadId, entry);
   // The seat may already be free (it freed before this park registered):

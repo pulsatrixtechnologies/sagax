@@ -387,6 +387,7 @@ export class RuntimeCoordinator implements Coordinator {
       ...(opener?.requester.kind === "external_runtime" ? { reply: "poll" as const } : {}),
       ...(req.goalRunId ? { goalRunId: req.goalRunId } : {}),
       ...(req.person ? { person: req.person } : {}),
+      ...(req.request ? { request: req.request } : {}),
     });
     return this.project(row);
   }

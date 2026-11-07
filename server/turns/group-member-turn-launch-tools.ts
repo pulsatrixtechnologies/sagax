@@ -372,6 +372,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       brief: roomTurnBrief(threadId, bot, hop > 0 && !orchestration ? hop : 0, latestUser),
       level: preparedApprovalMode, ...(opener ? { opener } : {}), origin: requestWorkOrigin({ line: latestUser }),
       ...(orchestration?.goalRunId ? { goalRunId: orchestration.goalRunId } : {}),
+      ...(operation?.humanRequestMessageId ? { request: operation.humanRequestMessageId } : {}),
     });
   }
   ctx.roomRootOpened = !orchestration?.roomHandoffId;

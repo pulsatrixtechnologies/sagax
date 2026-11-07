@@ -33,8 +33,9 @@ const EMITTERS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
  * it); an exempt card blocks nothing. */
 const DECIDED_IN: Record<FullAccessSurface, string | null> = {
   // #1388: request.opened (tool-approval / question) lives in runtime-events/
-  "tool-approval": "server/runtime-events/request-opened.ts",
-  "question": "server/runtime-events/request-opened.ts",
+  // The card and the Full access choice answer moved with the present split.
+  "tool-approval": "server/runtime-events/request-opened-present.ts",
+  "question": "server/runtime-events/request-opened-present.ts",
   "safety-review": "server/safety/safety-review.ts",
   // safety-confirm card is in index-leaves/confirmHeldCard.ts; Full access is
   // still wired from index.ts via setSafetyFullAccess (central, like send)
@@ -97,7 +98,7 @@ describe("every approval or choice card reads the Full access decision", () => {
     expect(hits.length).toBeGreaterThan(20);
     // #1388: options cards that lived in index.ts now emit from request.opened
     // and index-leaves (confirmHeldCard, send, proposal, …)
-    expect(hits.some((hit) => hit.file === "server/runtime-events/request-opened.ts" && hit.emitter === "options card")).toBe(true);
+    expect(hits.some((hit) => hit.file === "server/runtime-events/request-opened-present.ts" && hit.emitter === "options card")).toBe(true);
     expect(hits.some((hit) => hit.file.startsWith("server/index-leaves/") && hit.emitter === "options card")).toBe(true);
     expect(hits.some((hit) => hit.file === "server/widgets/chat-widgets.ts")).toBe(true);
     expect(hits.some((hit) => hit.file === "server/drivers/openai-chat-turn.ts" && hit.emitter === "permission request")).toBe(true);
@@ -152,8 +153,13 @@ describe("every approval or choice card reads the Full access decision", () => {
     expect(opened).toBeGreaterThan(0);
     const handler = openedSrc.slice(opened);
     expect(handler).toMatch(/const fullTurn = host\.fullAccessDecision\(effectiveApprovalMode\)/);
-    expect(handler).toMatch(/fullAccessChoiceAnswer\(effectiveApprovalMode/);
     expect(handler).toMatch(/fullAccess: fullTurn\.acts/);
+    // The choice answer is read in the present split, before the question card.
+    const presentSrc = readFileSync(join(SERVER, "runtime-events/request-opened-present.ts"), "utf8");
+    const choiceAt = presentSrc.indexOf("host.fullAccessChoiceAnswer(effectiveApprovalMode");
+    const questionCardAt = presentSrc.indexOf("// full-access: question");
+    expect(choiceAt).toBeGreaterThan(0);
+    expect(questionCardAt).toBeGreaterThan(choiceAt);
     // the level is read before the safety review runs, so the review sees it
     expect(handler.indexOf("const effectiveApprovalMode")).toBeLessThan(handler.indexOf("safetyPermissionEffect("));
     expect(handler.indexOf("const fullTurn")).toBeLessThan(handler.indexOf("safetyPermissionEffect("));

@@ -11,12 +11,12 @@ import { organizationRows } from "@/lib/capabilities";
 import { openSettings } from "@/lib/settings-link";
 import { setMine } from "@/lib/org-capabilities";
 import {
-  ClaudeCodeSwitches,
   McpImportForm,
   McpMessages,
   McpReservedServers,
   McpServerEditor,
 } from "../McpServersPanel";
+import { DeveloperLink } from "../settings/DeveloperLink";
 import { MyGithubSummary } from "../settings/MyConnectionsSettings";
 import { usePersonalMcp } from "../plugins/PersonalServers";
 import { ConnectAppsView, connectAppsTabLabel, connectedCounts, type ConnectAppsTab } from "../plugins/ConnectAppsView";
@@ -250,7 +250,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               accounts={{ sections: accountSections, refreshing: harness.loading, onRefresh: () => void harness.load(true), onSetUp: setUpEngine, onOpen: openAccount }}
               providers={(
                 <AccountsView
-                  claudeCode={!organization && canEditConfig(state.config) ? <ClaudeCodeSwitches /> : undefined}
+                  claudeCode={!organization && canEditConfig(state.config) ? <DeveloperLink /> : undefined}
                 />
               )}
               forms={scope === "workspace" || (scope === "me" && !personalHere) ? (

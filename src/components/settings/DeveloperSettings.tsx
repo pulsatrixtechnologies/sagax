@@ -13,14 +13,17 @@ import { t } from "@/lib/i18n";
 import { setShowInspectorButton, useShowInspectorButton } from "@/lib/inspector-preferences";
 import { setShowRunCard, useShowRunCard } from "@/lib/run-card-preferences";
 import { setShowTurnTiming, useShowTurnTiming } from "@/lib/turn-timing-preferences";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useStore } from "@/state/store";
 
+import { ClaudeCodeRows } from "../ClaudeCodeSwitches";
 import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
 import { McpCallTimeoutSettings } from "../McpCallTimeoutSettings";
 import { RoomTurnTimeoutSettings } from "../RoomTurnTimeoutSettings";
 import { CompactRow, DescribedRow, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { ThreadCleanupSettings } from "../ThreadCleanupSettings";
 import { DiagnosticsRow, DownloadLogsRow, generalAdvancedShown, LoopGuardRow } from "./AdvancedSettings";
+import { DeveloperBotCard } from "./DeveloperBotCard";
 import { canEditConfig } from "@/lib/viewer";
 import { TelemetrySettings } from "./TelemetrySettings";
 import { UsageMeterRow } from "./UsageMeterRow";
@@ -41,6 +44,8 @@ export function DeveloperSettings({ remoteActive }: { remoteActive: boolean }) {
   const inspector = useShowInspectorButton();
   const turnTiming = useShowTurnTiming();
   const devPods = useDevPodPrefs().enabled;
+  // Claude Code on this computer: a solo installation only (as Connect apps showed it).
+  const organization = usePerspicaxOrg();
   // Diagnostics and logs: this computer's, or the server's when the config allows it (as About did).
   const showDiagnostics = !remoteActive || generalAdvancedShown(state.config);
   return (
@@ -78,6 +83,16 @@ export function DeveloperSettings({ remoteActive }: { remoteActive: boolean }) {
         </div>
       )}
       {editConfig && <ThreadCleanupSettings />}
+      {/* Per bot (#2658): the bot page's technical cards, one bot at a time */}
+      <DeveloperBotCard />
+      {/* Claude Code on this computer (#2658, was Connect apps > Installed) */}
+      {!organization && editConfig && (
+        <div data-settings-card="developer.claudeCode">
+          <SettingsGroup title={t("settings.developer.claudeCode")} groupId="developerClaudeCode">
+            <ClaudeCodeRows />
+          </SettingsGroup>
+        </div>
+      )}
       {showDiagnostics && (
         <div data-settings-card="developer.diagnostics">
           <SettingsGroup title={t("settings.developer.diagnostics")} groupId="developerDiagnostics">

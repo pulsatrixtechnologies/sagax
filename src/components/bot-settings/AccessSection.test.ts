@@ -229,6 +229,24 @@ describe("AccessSection on the profile page (plain surface)", () => {
     }
   });
 
+  // #2658 (lot 2 of Settings > Developer): the technical cards (working
+  // folder, tool selection, webhooks, always-allowed list) left the bot
+  // page's Advanced sub-page for Settings > Developer. The editor dialogs
+  // (part "all") keep them in their fold.
+  it("renders no technical card on the bot page's Advanced sub-page", () => {
+    fixture.servers = [{ name: "notes", enabled: true }];
+    fixture.config = { features: { boatComputer: true } } as Partial<ConfigStatus>;
+    const markup = renderToStaticMarkup(
+      createElement(StoreProvider, null, createElement(SettingsSurfaceProvider, { surface: "plain", children: createElement(AccessSection, { bot: makeBot({ alwaysAllow: ["shell.run"] }), derived: makeDerived(), part: "advanced" }) })),
+    );
+    expect(markup).toContain(">Cloud backend<");
+    for (const label of ["Tool selection", "Webhooks", "Always allowed", "Working folder"]) {
+      expect(markup, label).not.toContain(`>${label}<`);
+    }
+    expect(markup).not.toContain("shell.run");
+    expect(markup).not.toContain('data-bot-webhooks=""');
+  });
+
   it("offers Manage in Plugins exactly once", () => {
     fixture.servers = [{ name: "notes", enabled: true }];
     const markup = renderPlain(makeBot({ mcpServers: ["notes"] }));

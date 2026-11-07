@@ -76,7 +76,14 @@ function OpenModelPicker() {
 
 function OpenSettings() {
   const { dispatch } = useStore();
-  useEffect(() => { if (!params.has("picker")) dispatch({ type: "toggleAppSettings", open: true, section }); }, [dispatch]);
+  useEffect(() => {
+    // The store hydrates only after the live stream says hello; this page has
+    // no stream, so it hands the store its bots itself (#2658: Settings >
+    // Developer > Per bot draws the first bot's technical cards).
+    const { bots } = API["/api/bots"] as { bots: unknown[] };
+    dispatch({ type: "hydrate", bots, groups: [], sections: [], computerControl: {} } as never);
+    if (!params.has("picker")) dispatch({ type: "toggleAppSettings", open: true, section });
+  }, [dispatch]);
   return null;
 }
 

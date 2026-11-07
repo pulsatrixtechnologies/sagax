@@ -63,6 +63,7 @@ import { RulesSection } from "../bot-settings/RulesSection";
 import { WorkspaceFilesSection } from "../bot-settings/WorkspaceFilesSection";
 import { PermissionsSection, type PermissionsPart } from "../bot-settings/PermissionsSection";
 import { AccessSection } from "../bot-settings/AccessSection";
+import { DeveloperLink } from "../settings/DeveloperLink";
 import { botSectionLock, useBotSectionAvailability, useBotSectionContent } from "../bot-settings/useBotSectionContent";
 import { AccountsCard, Block, CardRow, ChannelsCard, Note, ProfileCard, sectionLabel, type Channel } from "./BotProfilePage.tsx-parts/cards";
 import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
@@ -329,7 +330,8 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
       case "voice":
         return block("voice");
       case "advanced":
-        return <>{permissions("advanced")}{access("advanced")}</>;
+        // #2658: the technical cards are on Settings > Developer > Per bot
+        return <>{permissions("advanced")}{access("advanced")}<DeveloperLink bot={bot} /></>;
       case "versions":
         return block("history");
       case "routines":

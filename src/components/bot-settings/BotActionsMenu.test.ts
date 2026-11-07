@@ -53,7 +53,7 @@ describe("bot actions menu", () => {
 
   it("offers Edit bot, Rename, the desktop, primary bot, the bot's link, reset, export, archive and the Inspector", () => {
     open();
-    expect(items()).toEqual(["edit-bot", "rename", "put-on-desktop", "make-primary", "copy-bot-link", "reset-history", "export-zip", "archive", "inspector"]);
+    expect(items()).toEqual(["edit-bot", "rename", "put-on-desktop", "make-primary", "copy-bot-link", "reset-history", "archive", "inspector"]);
     // no messages yet: the conversation export says so instead of offering nothing
     expect(document.querySelector("[data-bot-actions-menu]")?.textContent).toContain("No messages to export yet.");
   });
@@ -117,7 +117,7 @@ describe("bot actions menu", () => {
     setLocale("fr");
     open();
     const text = document.querySelector("[data-bot-actions-menu]")?.textContent ?? "";
-    for (const label of ["Modifier le bot", "Renommer le bot", "Mettre sur le bureau", "Définir comme bot principal", "Exporter la conversation", "Exporter le bot (.zip)", "Archiver…", "Inspecteur"]) {
+    for (const label of ["Modifier le bot", "Renommer le bot", "Mettre sur le bureau", "Définir comme bot principal", "Exporter la conversation", "Archiver…", "Inspecteur"]) {
       expect(text).toContain(label);
     }
     expect(text).not.toMatch(/robot/i);

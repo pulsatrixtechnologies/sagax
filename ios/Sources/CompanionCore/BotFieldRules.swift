@@ -41,6 +41,7 @@ public enum BotFieldRules {
         "teamMemorySharing": "bots.behaviour",
         "memoryUpkeep": "bots.behaviour",
         "voiceNotes": "bots.behaviour",
+        "memeReplies": "bots.behaviour",
         "emailDrafts": "bots.behaviour",
         "fallback": "bots.behaviour",
         "parkDirectMessages": "bots.behaviour",

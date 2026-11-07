@@ -1,0 +1,87 @@
+#!/bin/sh
+# px-cache-gc: keeps a coding run's build cache disk under its threshold
+# (deploy/run-dev/Dockerfile; px-cache-init starts it with --loop).
+#
+#   px-cache-gc [--once | --loop]
+#
+# Above PX_CACHE_GC_HIGH (default 80 %) of the disk it frees, in this order,
+# until the disk is under PX_CACHE_GC_LOW (default 60 %):
+#   1. incremental sessions older than 2 days (rebuilt on the next build)
+#   2. target files not read for 7 days (rebuilt from sccache)
+#   3. the targets of the other environments, least recently used first
+#   4. the extracted cargo sources and git checkouts (kept as .crate files)
+#   5. the current environment's target, last
+# sccache keeps itself under SCCACHE_CACHE_SIZE (LRU). Nothing outside
+# PX_CACHE_DIR is ever touched.
+#
+# PX_CACHE_GC_INTERVAL: seconds between passes with --loop (default 1800).
+# PX_CACHE_GC_CAPACITY_KB: measure the usage as du against this capacity
+# instead of df (a cache that shares its disk, and the tests).
+set -u
+
+dir="${PX_CACHE_DIR:-}"
+case "$dir" in
+  "" | /) echo "px-cache-gc: PX_CACHE_DIR is not set" >&2; exit 2 ;;
+esac
+[ -d "$dir" ] || exit 0
+high="${PX_CACHE_GC_HIGH:-80}"
+low="${PX_CACHE_GC_LOW:-60}"
+interval="${PX_CACHE_GC_INTERVAL:-1800}"
+current="${CARGO_TARGET_DIR:-}"
+
+log() { echo "px-cache-gc: $*" >&2; }
+
+used() {
+  if [ -n "${PX_CACHE_GC_CAPACITY_KB:-}" ]; then
+    kb="$(du -sk "$dir" 2>/dev/null | awk '{ print $1 }')"
+    echo $(( ${kb:-0} * 100 / PX_CACHE_GC_CAPACITY_KB ))
+  else
+    df -P "$dir" 2>/dev/null | awk 'NR == 2 { sub("%", "", $5); print $5 + 0 }'
+  fi
+}
+
+below_low() {
+  now="$(used)"
+  [ "${now:-0}" -lt "$low" ]
+}
+
+pass() {
+  start="$(used)"
+  [ "${start:-0}" -ge "$high" ] || return 0
+  log "disk at ${start}% (threshold ${high}%), freeing down to ${low}%"
+
+  if [ -d "$dir/target" ]; then
+    find "$dir/target" -type d -path '*/incremental/*/s-*' -mtime +2 -prune -exec rm -rf {} + 2>/dev/null
+    below_low && { log "step 1 (old incremental): ${now}%"; return 0; }
+
+    find "$dir/target" -type f -atime +7 ! -name .px-used -delete 2>/dev/null
+    below_low && { log "step 2 (unread for 7 days): ${now}%"; return 0; }
+
+    # shellcheck disable=SC2012 # names are environment ids, [a-z0-9] only
+    for stamp in $(ls -1tr "$dir"/target/*/.px-used 2>/dev/null); do
+      env_dir="${stamp%/.px-used}"
+      [ "$env_dir" = "$current" ] && continue
+      rm -rf "$env_dir"
+      below_low && { log "step 3 (target ${env_dir##*/}): ${now}%"; return 0; }
+    done
+  fi
+
+  rm -rf "$dir/cargo-home/registry/src" "$dir/cargo-home/git/checkouts"
+  below_low && { log "step 4 (cargo sources): ${now}%"; return 0; }
+
+  if [ -n "$current" ] && [ -d "$current" ]; then
+    find "$current" -mindepth 1 ! -name .px-used -delete 2>/dev/null
+  fi
+  log "step 5 (current target): $(used)%"
+}
+
+case "${1:---once}" in
+  --once) pass ;;
+  --loop)
+    while :; do
+      pass
+      sleep "$interval"
+    done
+    ;;
+  *) echo "usage: px-cache-gc [--once | --loop]" >&2; exit 2 ;;
+esac

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { kubernetesSandboxConfigFromEnv } from "../sandboxd-k8s/sandboxd-k8s-spec.ts";
 import {
+  RUN_CACHE_CLAIM_LABEL,
+  RUN_CACHE_LABEL,
+  RUN_CACHE_MOUNT,
+  RUN_CACHE_USED_ANNOTATION,
   RUN_CEILINGS,
   RUN_DEADLINE_MARGIN_SEC,
   RUN_ENDED_ANNOTATION,
@@ -10,8 +14,12 @@ import {
   RUN_PENDING_TIMEOUT_MS,
   RUN_TOKEN_DIR,
   RUN_WORKLOAD_SA,
+  chooseRunCache,
   parseRunRequest,
+  planCacheSweep,
   planRunSweep,
+  runCacheClaimName,
+  runCachePvc,
   runNetworkPolicy,
   runPod,
   runPodProblems,
@@ -306,5 +314,95 @@ describe("planRunSweep", () => {
     const cap = (RUN_CEILINGS.maxDurationSec + RUN_DEADLINE_MARGIN_SEC) * 1000 + cfg.podRetentionMs;
     expect(planRunSweep({ pods: [pod("ffffffff", "Running", -cap)], claims: [], policies: [] }, now, cfg)[0]).toEqual({ kind: "delete-pod", id: "ffffffff", reason: "hard-cap" });
     expect(planRunSweep({ pods: [pod("ffffffff", "Running", -cap + 1000)], claims: [claim("ffffffff")], policies: [policy("ffffffff")] }, now, cfg)).toEqual([]);
+  });
+});
+
+describe("build cache (Rust target, sccache, pnpm and Playwright stores)", () => {
+  const cacheEnv = { SAGAX_RUNS_CACHE_ENABLED: "1", SAGAX_RUNS_MAX_PER_OWNER: "2" };
+  const now = Date.parse("2026-11-07T12:00:00Z");
+  const iso = (offsetMs: number) => new Date(now + offsetMs).toISOString();
+
+  it("is off unless enabled, then reads its class, size, slots and retention", () => {
+    expect(config().buildCache).toBeUndefined();
+    expect(config(cacheEnv).buildCache).toEqual({ storageClass: "px-run-cache", sizeGiB: 64, slots: 2, retentionMs: 14 * 86_400_000 });
+    expect(config({ ...cacheEnv, SAGAX_RUNS_CACHE_STORAGE_CLASS: "fast-nvme", SAGAX_RUNS_CACHE_GIB: "128", SAGAX_RUNS_CACHE_SLOTS: "1", SAGAX_RUNS_CACHE_RETENTION_DAYS: "7" }).buildCache)
+      .toEqual({ storageClass: "fast-nvme", sizeGiB: 128, slots: 1, retentionMs: 7 * 86_400_000 });
+    // more slots than runs per person would only park idle disks
+    expect(() => config({ ...cacheEnv, SAGAX_RUNS_CACHE_SLOTS: "3" })).toThrow(/SAGAX_RUNS_CACHE_SLOTS/);
+    expect(() => config({ ...cacheEnv, SAGAX_RUNS_CACHE_GIB: "4" })).toThrow(/SAGAX_RUNS_CACHE_GIB/);
+    expect(() => config({ ...cacheEnv, SAGAX_RUNS_CACHE_STORAGE_CLASS: "Bad_Name" })).toThrow(/SAGAX_RUNS_CACHE_STORAGE_CLASS/);
+  });
+
+  it("names one disk per person and slot, never shared between people", () => {
+    expect(runCacheClaimName(OWNER, 0)).toBe(`run-cache-${OWNER}-0`);
+    expect(runCacheClaimName("f".repeat(32), 0)).not.toBe(runCacheClaimName(OWNER, 0));
+    expect(() => runCacheClaimName("not-an-owner", 0)).toThrow();
+    const cfg = config(cacheEnv);
+    const pvc = runCachePvc(cfg, OWNER, 1, now);
+    const meta = pvc.metadata as Obj;
+    expect(meta.name).toBe(`run-cache-${OWNER}-1`);
+    const labels = meta.labels as Record<string, string>;
+    expect(labels[RUN_CACHE_LABEL]).toBe("1");
+    // not a run object: the run sweep and listRuns never see it
+    expect(labels[RUN_LABEL]).toBeUndefined();
+    expect(labels[RUN_ID_LABEL]).toBeUndefined();
+    expect((meta.annotations as Obj)[RUN_CACHE_USED_ANNOTATION]).toBe(iso(0));
+    expect(pvc.spec).toEqual({ accessModes: ["ReadWriteOnce"], storageClassName: "px-run-cache", resources: { requests: { storage: "64Gi" } } });
+  });
+
+  const cacheClaim = (owner: string, slot: number, usedAt: number, extra: Obj = {}): Obj => ({
+    metadata: { name: runCacheClaimName(owner, slot), labels: { [RUN_CACHE_LABEL]: "1", "px.owner": owner, "px.cache-slot": String(slot) }, annotations: { [RUN_CACHE_USED_ANNOTATION]: iso(usedAt) }, ...extra },
+  });
+  const podUsing = (claim: string | null, phase = "Running"): Obj => ({ metadata: { name: "run-x", labels: claim ? { [RUN_CACHE_CLAIM_LABEL]: claim } : {} }, status: { phase } });
+
+  it("reuses the warmest free disk, opens a new slot, or runs without one", () => {
+    const cfg = config(cacheEnv);
+    expect(chooseRunCache([], [], OWNER, cfg)).toEqual({ claim: runCacheClaimName(OWNER, 0), slot: 0, create: true });
+    const older = cacheClaim(OWNER, 0, -3_600_000);
+    const warmer = cacheClaim(OWNER, 1, -60_000);
+    expect(chooseRunCache([older, warmer], [], OWNER, cfg)).toEqual({ claim: runCacheClaimName(OWNER, 1), slot: 1, create: false });
+    // a disk a live run holds is not free (ReadWriteOnce)
+    expect(chooseRunCache([older, warmer], [podUsing(runCacheClaimName(OWNER, 1))], OWNER, cfg)).toEqual({ claim: runCacheClaimName(OWNER, 0), slot: 0, create: false });
+    // an ended Pod no longer holds it
+    expect(chooseRunCache([older], [podUsing(runCacheClaimName(OWNER, 0), "Succeeded")], OWNER, cfg)).toMatchObject({ slot: 0, create: false });
+    expect(chooseRunCache([older], [podUsing(runCacheClaimName(OWNER, 0))], OWNER, cfg)).toEqual({ claim: runCacheClaimName(OWNER, 1), slot: 1, create: true });
+    expect(chooseRunCache([older, warmer], [podUsing(runCacheClaimName(OWNER, 0)), podUsing(runCacheClaimName(OWNER, 1))], OWNER, cfg)).toBeNull();
+    // another person's disk is never a candidate
+    expect(chooseRunCache([cacheClaim("f".repeat(32), 0, 0)], [], OWNER, cfg)).toMatchObject({ claim: runCacheClaimName(OWNER, 0), create: true });
+    // a disk being removed is skipped
+    expect(chooseRunCache([cacheClaim(OWNER, 0, 0, { deletionTimestamp: iso(0) })], [], OWNER, cfg)).toEqual({ claim: runCacheClaimName(OWNER, 1), slot: 1, create: true });
+    expect(chooseRunCache([], [], OWNER, config())).toBeNull();
+  });
+
+  it("mounts the disk at /cache and the isolation check accepts only that person's disk", () => {
+    const cfg = config(cacheEnv);
+    const run = request(cfg);
+    const claim = runCacheClaimName(OWNER, 0);
+    const pod = runPod(cfg, run, claim);
+    expect(runPodProblems(pod, cfg, run.id, claim)).toEqual([]);
+    const spec = pod.spec as Obj;
+    const container = (spec.containers as Obj[])[0]!;
+    expect((container.volumeMounts as Obj[]).map((mount) => mount.mountPath)).toEqual(["/workspace", "/tmp", "/dev/shm", RUN_TOKEN_DIR, RUN_CACHE_MOUNT]);
+    expect(container.env).toContainEqual({ name: "PX_CACHE_DIR", value: RUN_CACHE_MOUNT });
+    expect(((pod.metadata as Obj).labels as Record<string, string>)[RUN_CACHE_CLAIM_LABEL]).toBe(claim);
+    // without a disk: no mount, no variable, the image falls back to the workspace
+    const bare = runPod(cfg, run);
+    expect(runPodProblems(bare, cfg, run.id)).toEqual([]);
+    expect(JSON.stringify(bare)).not.toContain("PX_CACHE_DIR");
+    // another person's disk, or a disk the provisioner did not pick, is refused
+    const foreign = runCacheClaimName("f".repeat(32), 0);
+    expect(runPodProblems(runPod(cfg, run, foreign), cfg, run.id, foreign)).toContain("cache disk of another person");
+    expect(runPodProblems(pod, cfg, run.id)).toContain("foreign volume claim");
+    expect(runPodProblems(bare, cfg, run.id, claim)).toContain("cache volume missing");
+  });
+
+  it("removes a cache disk idle past its retention, never one a Pod holds", () => {
+    const cfg = config(cacheEnv);
+    const idle = cacheClaim(OWNER, 0, -15 * 86_400_000);
+    const recent = cacheClaim(OWNER, 1, -13 * 86_400_000);
+    const held = cacheClaim("f".repeat(32), 0, -30 * 86_400_000);
+    const unmarked: Obj = { metadata: { name: runCacheClaimName("e".repeat(32), 0), labels: { [RUN_CACHE_LABEL]: "1" } } };
+    expect(planCacheSweep([idle, recent, held, unmarked], [podUsing(runCacheClaimName("f".repeat(32), 0), "Succeeded")], now, cfg)).toEqual([runCacheClaimName(OWNER, 0)]);
+    expect(planCacheSweep([idle], [], now, config())).toEqual([]);
   });
 });

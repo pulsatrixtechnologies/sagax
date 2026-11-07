@@ -105,7 +105,13 @@ spec:
         memory: {{ .Values.runs.limits.maxMemory | quote }}
     - type: PersistentVolumeClaim
       max:
+        {{- if .Values.runs.cache.enabled }}
+        # the build cache disk is the largest claim; a run's own disk stays
+        # capped at limits.maxDisk by the provisioner
+        storage: {{ printf "%vGi" .Values.runs.cache.sizeGi | quote }}
+        {{- else }}
         storage: {{ .Values.runs.limits.maxDisk | quote }}
+        {{- end }}
 ---
 # Backstop: a run Pod that lost its own policy has no ingress and no egress.
 apiVersion: networking.k8s.io/v1

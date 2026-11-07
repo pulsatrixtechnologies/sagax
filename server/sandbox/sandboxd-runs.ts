@@ -22,6 +22,8 @@ import { SANDBOXD_AUTH_HEADER, type SandboxdVerifier } from "./sandboxd-auth.ts"
 import type { K8sClient } from "../sandboxd-k8s/sandboxd-k8s-client.ts";
 import { quotaProblems, storageClassEncrypts } from "../sandboxd-k8s/sandboxd-k8s-spec.ts";
 import {
+  RUN_CACHE_LABEL,
+  RUN_CACHE_USED_ANNOTATION,
   RUN_ENDED_ANNOTATION,
   RUN_ENV_LABEL,
   RUN_ID_LABEL,
@@ -29,8 +31,11 @@ import {
   RUN_LABEL,
   RUN_OWNER_LABEL,
   RunsError,
+  chooseRunCache,
   parseRunRequest,
+  planCacheSweep,
   planRunSweep,
+  runCachePvc,
   runNames,
   runNetworkPolicy,
   runPod,
@@ -82,7 +87,7 @@ export class RunService {
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly queue = new Queue();
-  private encryptionOk = false;
+  private readonly encryptedClasses = new Set<string>();
 
   constructor(config: RunsConfig, client: K8sClient, audit: SandboxAudit, options: RunServiceOptions = {}) {
     this.config = config;
@@ -130,8 +135,8 @@ export class RunService {
     if (response.status !== 200 && response.status !== 201) throw new Error(`kubernetes patch failed (${response.status})`);
   }
 
-  private async list(kind: "pods" | "persistentvolumeclaims" | "networkpolicies"): Promise<Obj[]> {
-    const selector = encodeURIComponent(`${RUN_LABEL}=1,${SANDBOX_INSTANCE_LABEL}=${this.config.instance}`);
+  private async list(kind: "pods" | "persistentvolumeclaims" | "networkpolicies", objectLabel = RUN_LABEL): Promise<Obj[]> {
+    const selector = encodeURIComponent(`${objectLabel}=1,${SANDBOX_INSTANCE_LABEL}=${this.config.instance}`);
     const response = await this.client.request("GET", `${this.path(kind)}?labelSelector=${selector}`);
     if (response.status !== 200) throw new Error(`kubernetes list failed (${response.status})`);
     return (asObj(response.body).items ?? []) as Obj[];
@@ -142,18 +147,18 @@ export class RunService {
     return labels[RUN_LABEL] === "1" && labels[RUN_ID_LABEL] === request.id && labels[RUN_ENV_LABEL] === request.envId && labels[RUN_OWNER_LABEL] === request.ownerKey;
   }
 
-  private async ensureEncrypted(): Promise<void> {
-    if (!this.config.requireEncryption || this.encryptionOk) return;
-    const storageClass = await this.read(`/apis/storage.k8s.io/v1/storageclasses/${this.config.storageClass}`);
+  private async ensureEncrypted(className = this.config.storageClass): Promise<void> {
+    if (!this.config.requireEncryption || this.encryptedClasses.has(className)) return;
+    const storageClass = await this.read(`/apis/storage.k8s.io/v1/storageclasses/${className}`);
     const encrypts = storageClass ? storageClassEncrypts({
       parameters: asObj(storageClass.parameters) as Record<string, string>,
       annotations: asObj(asObj(storageClass.metadata).annotations) as Record<string, string>,
     }) : false;
     if (!encrypts) {
-      this.audit.record({ action: "run.storage.encrypt", outcome: "denied", detail: { storageClass: this.config.storageClass } });
-      throw new RunsError(503, "storage", "the run StorageClass does not advertise encryption at rest");
+      this.audit.record({ action: "run.storage.encrypt", outcome: "denied", detail: { storageClass: className } });
+      throw new RunsError(503, "storage", `the StorageClass ${className} does not advertise encryption at rest`);
     }
-    this.encryptionOk = true;
+    this.encryptedClasses.add(className);
   }
 
   auditDenied(reason: string): void {
@@ -223,8 +228,15 @@ export class RunService {
         throw new RunsError(429, "quota", `at most ${this.config.maxPerOwner} runs at once per person`);
       }
 
-      const pod = runPod(this.config, request);
-      const problems = runPodProblems(pod, this.config, request.id);
+      // D3: the person's build cache disk, warm from earlier runs. Picked
+      // inside the queue, so two creates never take the same disk.
+      const cache = this.config.buildCache
+        ? chooseRunCache(await this.list("persistentvolumeclaims", RUN_CACHE_LABEL), pods, request.ownerKey, this.config)
+        : null;
+      if (cache?.create) await this.ensureEncrypted(this.config.buildCache!.storageClass);
+
+      const pod = runPod(this.config, request, cache?.claim);
+      const problems = runPodProblems(pod, this.config, request.id, cache?.claim);
       if (problems.length) {
         this.audit.record({ action: "run.create", outcome: "denied", detail: { run: request.id, problems: problems.length } });
         throw new RunsError(400, "spec_refused", `run spec refused: ${problems.join(", ")}`);
@@ -247,6 +259,11 @@ export class RunService {
       } else {
         await this.ensureEncrypted();
         await this.createObject(this.path("persistentvolumeclaims"), runPvc(this.config, request));
+      }
+      if (cache?.create) {
+        await this.createObject(this.path("persistentvolumeclaims"), runCachePvc(this.config, request.ownerKey, cache.slot, this.now()));
+      } else if (cache) {
+        await this.merge(this.path("persistentvolumeclaims", cache.claim), { metadata: { annotations: { [RUN_CACHE_USED_ANNOTATION]: new Date(this.now()).toISOString() } } });
       }
 
       // A stopped run's token goes with its Pod, but by the garbage
@@ -275,6 +292,7 @@ export class RunService {
           diskGiB: request.diskGiB,
           maxDurationSec: request.maxDurationSec,
           workspace: claim ? "reused" : "new",
+          cache: cache ? (cache.create ? "new" : "reused") : "none",
         },
       });
       return { created: true, run: await this.status(request.id) };
@@ -310,9 +328,23 @@ export class RunService {
   async sweep(): Promise<SweepAction[]> {
     return this.queue.run(async () => {
       const [pods, claims, policies] = await Promise.all([this.list("pods"), this.list("persistentvolumeclaims"), this.list("networkpolicies")]);
-      const actions = planRunSweep({ pods, claims, policies }, this.now(), this.config);
+      const actions: SweepAction[] = planRunSweep({ pods, claims, policies }, this.now(), this.config);
       const claimIds = new Set(claims.map((claim) => labelsOf(claim)[RUN_ID_LABEL]));
+      if (this.config.buildCache) {
+        for (const claim of planCacheSweep(await this.list("persistentvolumeclaims", RUN_CACHE_LABEL), pods, this.now(), this.config)) {
+          actions.push({ kind: "delete-cache", claim });
+        }
+      }
       for (const action of actions) {
+        if (action.kind === "delete-cache") {
+          try {
+            await this.deleteObject(this.path("persistentvolumeclaims", action.claim), false);
+            this.audit.record({ action: "run.sweep.delete-cache", outcome: "ok", detail: { claim: action.claim } });
+          } catch (error) {
+            console.error(`sandboxd: run sweep delete-cache failed: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          continue;
+        }
         const names = runNames(action.id);
         try {
           if (action.kind === "delete-pod") await this.deleteObject(this.path("pods", names.pod), false, 0);

@@ -126,7 +126,9 @@ describe("remaining ACP approval mappings", () => {
           const settings = JSON.parse(readFileSync(`${dump}.config.json`, "utf8"));
           expect(settings[0]).toEqual({
             method: "session/set_mode",
-            params: { sessionId: "fake-acp-session", modeId: "normal" },
+            // Full runs in droid's own most permissive mode (#2218, omb #2808);
+            // Ask and Auto put it back in its interactive mode.
+            params: { sessionId: "fake-acp-session", modeId: approvalMode === "full" ? "auto-high" : "normal" },
           });
         }
         expect(await instance.adapter.respondToRequest("approval-matrix-thread", opened.requestId!, { behavior: "deny" }))

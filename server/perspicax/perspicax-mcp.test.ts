@@ -458,6 +458,32 @@ describe("PerspicaxMcp", () => {
     expect(h.revoked).toEqual(["pxlo1.B.mcp-P1-1"]);
   });
 
+  it("on a live call, a turn that starts while the last one is still closing its session takes the kept token over", async () => {
+    const onCall = new Set(["t1"]);
+    let releaseDelete: (() => void) | undefined;
+    const h = harness({
+      onCall,
+      mcp: ({ method, body }) => {
+        // the warm turn's session DELETE is slow: the call's first sentence lands meanwhile
+        if (method === "DELETE") return new Promise<Response>((resolve) => { releaseDelete = () => resolve(new Response(null, { status: 204 })); });
+        if (body.id === undefined) return new Response(null, { status: 202 });
+        return new Response(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { tools: [] } })}\n\n`, {
+          status: 200, headers: { "content-type": "text/event-stream", "mcp-session-id": "sess-1" },
+        });
+      },
+    });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    const ending = h.mcp.endGeneration("t1", "g1");
+    const next = h.mcp.prepareTurn({ threadId: "t1", generation: "g2", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    for (let i = 0; i < 20 && !releaseDelete; i += 1) await Promise.resolve();
+    releaseDelete!();
+    await ending;
+    expect(await next).toEqual({ mounted: [{ name: "Perspicax" }], unavailable: [] });
+    expect(h.exchanges).toHaveLength(1);
+    expect(h.revoked).toEqual([]);
+  });
+
   it("an engine that goes cold while its generation is retired still gets its token revoked", async () => {
     const engineWarm = new Set(["t1"]);
     let h: ReturnType<typeof harness>;

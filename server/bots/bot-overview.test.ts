@@ -46,9 +46,15 @@ describe("buildBotOverview", () => {
     facts.bot.chiefOfStaff = false;
     expect(buildBotOverview(facts).reaches.join(" ")).not.toContain("Engineering");
   });
-  it("yields all six wont lines in order and no does lines for a fresh bot", () => {
-    const overview = buildBotOverview(baseFacts());
+  it("yields all six wont lines in order and no does lines for a fresh bot at Ask", () => {
+    const overview = buildBotOverview(baseFacts({ bot: { ...baseFacts().bot, approvalMode: "ask" } }));
     expect(overview.wont).toEqual(WONT_ORDER);
+    expect(overview.does).toEqual([]);
+  });
+
+  it("reads a fresh bot with no saved level at the default Full access (#2218)", () => {
+    const overview = buildBotOverview(baseFacts());
+    expect(overview.wont).toEqual([WONT_ORDER[1], WONT_ORDER[2], WONT_ORDER[3]]);
     expect(overview.does).toEqual([]);
   });
 

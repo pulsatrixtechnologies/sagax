@@ -130,3 +130,24 @@ it("binds only names declared at the top level of server/index.ts", () => {
   const undeclared = [...tableNames()].filter((name) => !declared.has(name));
   expect(undeclared).toEqual([]);
 });
+
+it("gives a setter to every top-level let a leaf writes back through host", () => {
+  // A leaf that writes `host.x = ...` on a getter-only binding shadows it on
+  // the bag (bindLeafHost), so index.ts keeps reading the stale let: the
+  // health route listed no engines after probeEngines wrote its map back.
+  const lets = new Set([...codeOnly(source).matchAll(new RegExp(`^let\\s+(${IDENT})`, "gm"))].map((match) => match[1]!));
+  const { start, end } = tableBounds();
+  const table = lines.slice(start + 1, end);
+  const writes = new Map<string, string>();
+  for (const dir of ["server/index-leaves", "server/runtime-events"]) {
+    for (const file of readdirSync(join(ROOT, dir)).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))) {
+      const code = codeOnly(readFileSync(join(ROOT, dir, file), "utf8"));
+      for (const match of code.matchAll(new RegExp(`(?<![\\w$.])host\\.(${IDENT})\\s*(?:[-+*/|&?]{0,2})=(?!=)`, "g"))) writes.set(match[1]!, file);
+    }
+  }
+  const missing = [...writes].filter(([name]) => lets.has(name)
+    && table.some((line) => line.startsWith(`  get ${name}() `))
+    && !table.some((line) => line.includes(` set ${name}(value) `)))
+    .map(([name, file]) => `${name} (${file})`);
+  expect(missing).toEqual([]);
+});

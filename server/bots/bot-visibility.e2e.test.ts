@@ -187,7 +187,9 @@ posixOnly("per-bot visibility on a shared workspace", () => {
     const board = await makeBot("Board Heron", "People");
     Object.assign(ids, { pub: pub.id, pubThread: pub.threadId, hr: hr.id, hrThread: hr.threadId, board: board.id });
     const roomPub = await api("POST", "/api/groups", { memberIds: [pub.id], name: "Front desk", humanIds: EVERYONE }, BOSS);
-    const roomMixed = await api("POST", "/api/groups", { memberIds: [pub.id, hr.id], name: "Pay questions", humanIds: EVERYONE,
+    // Bob is not among this room's people: a room opens to the people it lists
+    // whatever its bots' audience (#2418), so only its bots may decide for him.
+    const roomMixed = await api("POST", "/api/groups", { memberIds: [pub.id, hr.id], name: "Pay questions", humanIds: [BOSS, ADA],
       setup: { bulletin: "", defaultResponder: { kind: "everyone" } } }, BOSS);
     expect(roomPub.status).toBe(201);
     expect(roomMixed.status).toBe(201);

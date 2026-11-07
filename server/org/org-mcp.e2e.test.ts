@@ -232,7 +232,8 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
               { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], mode: "consult", message: "ping from Rita" }, when: "ASK-XAVIER" },
               { server: "agents", tool: "start_thread", arguments: { title: "Own job", message: "ping own job" }, when: "OPEN-OWN" },
               { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], message: "check the board for the person", request_key: "bob-hop" }, when: "COORD-XAVIER" },
-              { server: "perspicax", tool: "api_list", arguments: {} },
+              // #2189: agents owns api_list; it forwards to the account connection in the speaker's name.
+              { server: "agents", tool: "api_list", arguments: {} },
               { server: "perspicax", tool: "flow_stats", arguments: { values: [1.5, 2.25, 10, 0.1] } },
               ...[
                 "plugins/private-owner/skills/check/SKILL.md",
@@ -326,7 +327,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     const exchangesBefore = idp.exchanges.length;
     const callsBefore = idp.mcpRequests.length;
     const reply = await turn(bob, x, "ping");
-    expect(reply).toContain("mcp:api_list:ok");
+    expect(reply, readFileSync(mcpDump, "utf8")).toContain("mcp:api_list:ok");
     const mcp = JSON.parse(readFileSync(mcpDump, "utf8")) as { servers: string[]; calls: Array<{ server: string; tool: string; listed: boolean; ok: boolean; text: string }> };
     // one account connection, whatever roles bob holds; the bot keeps no profile
     expect(mcp.servers).toContain("perspicax");
@@ -337,7 +338,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     // tool. Sagax has no local arithmetic server or fallback implementation.
     expect(mcp.servers).not.toContain("sagax-flow");
     expect(mcp.calls).toEqual([
-      { server: "perspicax", tool: "api_list", listed: true, ok: true, text: `account for ${BOB.sub}` },
+      { server: "agents", tool: "api_list", listed: true, ok: true, text: expect.stringMatching(new RegExp(`^account for ${BOB.sub}\n`)) },
       { server: "perspicax", tool: "flow_stats", listed: true, ok: true, text: `account for ${BOB.sub}` },
     ]);
     const exchanges = idp.exchanges.slice(exchangesBefore);

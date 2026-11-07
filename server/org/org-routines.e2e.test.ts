@@ -242,7 +242,7 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
           driver: "claudeAgent",
           environment: {
             FAKE_CLAUDE_DUMP: dump,
-            FAKE_CLAUDE_TOOL_CALLS: "[]", FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax_*", tool: "api_list", arguments: {} }]),
+            FAKE_CLAUDE_TOOL_CALLS: "[]", FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax", tool: "api_list", arguments: {} }]),
             FAKE_CLAUDE_MCP_DUMP: join(home, "mcp-dump.json"),
           },
           config: { cli: FAKE_CLAUDE, fullAuto: true },
@@ -261,7 +261,8 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     x = { id: created.body.bot.id, threadId: created.body.bot.threadId };
     // 84841aeed: keep unsolicited wakes out of exact delegation and payer counts.
     expect((await api("PATCH", `/api/bots/${x.id}`, alice, { proactiveMode: "off", modelSelection: { instanceId: "claude", model: "fake-model" } })).status).toBe(200);
-    expect((await api("PUT", `/api/bots/${x.id}/perspicax`, alice, { profiles: [PROFILE.id] })).status).toBe(200);
+    // 0.8.44 (#2002): no per-bot profile list; each turn mounts one
+    // `perspicax` account server for the person it runs as.
     expect((await api("PUT", `/api/bots/${x.id}/grants`, alice, { target: `user:${ids.bob}`, level: "run" })).status).toBe(200);
     // the owner's key reaches the engine only once the directory lists it
     await waitFor(async () => (await api("GET", "/api/me/engines", alice)).body.engines?.find((e: { instanceId: string }) => e.instanceId === "claude")?.myKey === true);

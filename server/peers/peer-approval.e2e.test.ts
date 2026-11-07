@@ -42,7 +42,9 @@ it("preserves peer approval expiry through real HTTP responses and durable deleg
     const from = (await cli("new-bot", "--name", "Approval source")).bot;
     const target = (await cli("new-bot", "--name", "Approval target")).bot;
     target.threadId = target.activeTaskId;
-    await api("PATCH", `/api/bots/${from.id}`, { approvePeerComms: true });
+    // A new bot starts at Full access (#2218), which contacts peers without a
+    // card (#2469); Ask is the level whose peer contact waits for a card.
+    await api("PATCH", `/api/bots/${from.id}`, { approvePeerComms: true, approvalMode: "ask" });
     // Reuse the shared launcher's disposable data and restricted environment.
     // The import hook controls only the peer timer, not approval or dispatch.
     await waitForExit(fixture.child, { signal: "SIGTERM" });
@@ -208,7 +210,9 @@ it("never names a teammate hidden and renamed while its peer card is open, on ev
     expect((await cli("doctor")).ok).toBe(true);
     const from = (await cli("new-bot", "--name", "Privacy source")).bot;
     const target = (await cli("new-bot", "--name", "Privacy teammate")).bot;
-    await api("PATCH", `/api/bots/${from.id}`, { approvePeerComms: true });
+    // A new bot starts at Full access (#2218), which contacts peers without a
+    // card (#2469); Ask is the level whose peer contact waits for a card.
+    await api("PATCH", `/api/bots/${from.id}`, { approvePeerComms: true, approvalMode: "ask" });
     // One chat turn held open by its gate: its comms token stays active
     // while each card waits on the person.
     await cli("send", "--bot", from.id, "--task", from.activeTaskId, "--text", "Hold this turn while teammates are reviewed [gate:held]");

@@ -8,7 +8,7 @@
 // (Ask shows a card per call), exactly as the engine's own tools do in solo.
 import { localVmDesktopSpec } from "../computer/container-computer.ts";
 import { cleanCommandVariables } from "../vault/credential-command-env.ts";
-import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
+import { DESKTOP_BRIDGE_MESSAGES, type DesktopBridgeOperation } from "./desktop-bridge.ts";
 import { localVmComputerCall, localVmComputerCatalogText } from "../computer/local-vm-computer.ts";
 import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools/tool-output-bound.ts";
 import { MAC_APP_TOOLS, isMacAppTool, macAppOperation } from "../../electron/mac-apps.mjs";
@@ -215,6 +215,37 @@ export function boundDesktopResult(operation: DesktopBridgeOperation, result: To
 }
 
 /** Keep only a well-formed MCP tool result from the desktop. */
+/** What a mac_* call says when the person's Mac is not connected: the tool
+ * stays listed, and the bot can tell the person why nothing ran. */
+export const MAC_OFFLINE_MESSAGE = "Your Mac is offline: the Sagax app on your Mac is not connected to this server right now. Open the Sagax app on your Mac, signed in to this server, then try again. Nothing was done.";
+
+/** One Apple app tool (mac_*) run on the person's Mac through their desktop
+ * app (organization server). Never throws: offline, a stale desktop app or a
+ * refusal comes back as an error result the bot can read. */
+export async function relayMacAppCall(
+  request: (operation: DesktopBridgeOperation) => Promise<unknown>,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  let operation: DesktopBridgeOperation;
+  try { operation = desktopToolOperation(tool, args); } catch (error) { return text(error instanceof Error ? error.message : String(error), true); }
+  if (operation.action !== "mac_app") return text(`Unknown tool: ${tool}`, true);
+  try {
+    const result = desktopToolResult(await request(operation));
+    const first = result.content[0];
+    if (result.isError === true && first?.type === "text" && (first.text === "Invalid request" || first.text === "Unsupported operation")) {
+      return text("The Sagax app on your Mac is too old to use its Apple apps. Update the Sagax app on your Mac.", true);
+    }
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const code = (error as { code?: unknown }).code;
+    if (message === DESKTOP_BRIDGE_MESSAGES.offline || message === DESKTOP_BRIDGE_MESSAGES.chosenOffline || code === "not_connected") return text(MAC_OFFLINE_MESSAGE, true);
+    if (message === DESKTOP_BRIDGE_MESSAGES.capability) return text("The Sagax app connected for you is not on a Mac that offers its Apple apps, or it is too old. Open the Sagax app on your Mac, updated, signed in to this server.", true);
+    return text(message, true);
+  }
+}
+
 export function desktopToolResult(value: unknown): ToolResult {
   const result = value as { content?: unknown; isError?: unknown } | null;
   if (!result || !Array.isArray(result.content)) return text("Your computer answered with something unexpected.", true);

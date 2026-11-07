@@ -3,7 +3,9 @@
 export type Host = Record<string, any>;
 
 export function createMessagesIntegration(getHost: () => Host): any {
-function messagesIntegration(botId: string, threadId: string, generation: string) {
+/** `desktopPrincipalId` (organization server): the person whose Mac runs
+ * the Apple app tools, through their desktop app (desktop bridge). */
+function messagesIntegration(botId: string, threadId: string, generation: string, desktopPrincipalId?: string) {
   const host = getHost();
 
   const token = host.mintInternalCapability({
@@ -14,7 +16,8 @@ function messagesIntegration(botId: string, threadId: string, generation: string
     kind: "messages",
     skillAuthoring: false,
     createdBots: 0,
-    openedThreads: 0
+    openedThreads: 0,
+    ...(desktopPrincipalId ? { desktopPrincipalId } : {})
   });
   return {
     command: process.execPath,

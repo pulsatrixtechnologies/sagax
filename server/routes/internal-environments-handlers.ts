@@ -15,7 +15,7 @@ import { browserNavigationRefusal } from "../browser/browser-navigation.ts";
 import { pickComputer } from "../computer/computer-selection.ts";
 import { withCommandVariables } from "../vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "../desktop/desktop-bridge.ts";
-import { handleDesktopBridgeMcp } from "../desktop/desktop-bridge-tools.ts";
+import { handleDesktopBridgeMcp, relayMacAppCall } from "../desktop/desktop-bridge-tools.ts";
 import { handleMessagesMcp } from "../imessage/imessage-mcp.ts";
 import { messagesOnBotMac } from "../../shared/imessage.ts";
 import { misusePathRefusal, misuseRefusal, misuseToolFrameText } from "../safety/misuse-guardrails.ts";
@@ -230,6 +230,9 @@ export interface InternalEnvironmentsDeps {
   runMacApp?(tool: string, args: Record<string, unknown>): Promise<MacAppToolResult>;
   /** The person's signed-in desktop is a Mac that offers its Apple apps. */
   desktopBridgeMacApps?(person: string): boolean;
+  /** The Apple apps On in the person's Plugins > This Mac, as their Mac last
+   * reported them (kept while it is offline). */
+  desktopBridgeMacAppsOn?(person: string): readonly string[];
   desktopBridgesRequest(
     person: string,
     operation: DesktopBridgeOperation,
@@ -776,7 +779,9 @@ async function handleDesktopMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
       }),
       commandVariables: () => deps.commandVariablesFor(capability.botId, capability.threadId, person),
       hold: (full) => deps.saveToolResult(capability, full, true),
-      macApps: () => deps.desktopBridgeMacApps?.(person) === true,
+      // A Mac that reports its On apps gets them through the messages
+      // server (every engine, every computer): not listed twice here.
+      macApps: () => deps.desktopBridgeMacApps?.(person) === true && !deps.desktopBridgeMacAppsOn?.(person)?.length,
     });
     deps.requireActive(capability);
     return json(res, 200, { result });
@@ -880,6 +885,32 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
   deps.requireActive(capability);
   const body = await readBody();
   const sender = deps.bot(capability.botId)!;
+  const unasked = ["auto", "full"].includes(deps.sourceApprovalMode(sender.id, capability.threadId));
+  const kept = (tool: string) => Boolean(deps.keptCardRule?.(sender, capability.threadId, macAppRule(tool)));
+  // Organization server: the turn's person's own Mac runs the Apple apps,
+  // through their desktop app. Offline, the tools stay and say so.
+  const relayPerson = capability.desktopPrincipalId
+    && !messagesOnBotMac({ platform: deps.platform(), identityKind: deps.identityKind() }).ok
+    ? capability.desktopPrincipalId : null;
+  const relayMacApps = relayPerson ? {
+    macApps: {
+      enabled: (app: MacAppId) => (deps.desktopBridgeMacAppsOn?.(relayPerson) ?? []).includes(app),
+      run: (tool: string, args: Record<string, unknown>) => relayMacAppCall(async (operation) => {
+        const detail = `mac_app ${tool}`;
+        try {
+          const answer = await deps.desktopBridgesRequest(relayPerson, operation, () => deps.isActive(capability));
+          deps.bridgeAuditRecord({ person: relayPerson, botId: capability.botId, threadId: capability.threadId, target: "user-desktop", kind: "tool", detail, ok: (answer as { isError?: boolean } | null)?.isError !== true });
+          return answer;
+        } catch (error) {
+          deps.bridgeAuditRecord({ person: relayPerson, botId: capability.botId, threadId: capability.threadId, target: "user-desktop", kind: "tool", detail, ok: false, error: (error as Error).message });
+          throw error;
+        }
+      }, tool, args) as Promise<MacAppToolResult>,
+      unasked,
+      kept,
+      relay: { person: relayPerson },
+    },
+  } : null;
   const handled = await deps.handleMessagesMcp(body, {
     host: { platform: deps.platform(), identityKind: deps.identityKind(), bridgeAction: false },
     useMessages: deps.messagesUseMessages(),
@@ -897,15 +928,15 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
     sender: deps.imessageSender as never,
     botId: sender.id,
     threadId: capability.threadId,
-    ...(deps.macAppEnabled && deps.runMacApp ? {
+    ...(relayMacApps ?? (deps.macAppEnabled && deps.runMacApp ? {
       macApps: {
         enabled: (app: MacAppId) => deps.macAppEnabled!(app),
         run: (tool: string, args: Record<string, unknown>) => deps.runMacApp!(tool, args),
-        unasked: ["auto", "full"].includes(deps.sourceApprovalMode(sender.id, capability.threadId)),
+        unasked,
         // Always allow on the card keeps this rule; kept, the write acts unasked.
-        kept: (tool: string) => Boolean(deps.keptCardRule?.(sender, capability.threadId, macAppRule(tool))),
+        kept,
       },
-    } : {}),
+    } : {})),
     openCard: (pending) => {
       if (pending.macApp) {
         // An Apple app write (Mail, Calendar, Reminders, Notes) in Ask mode;

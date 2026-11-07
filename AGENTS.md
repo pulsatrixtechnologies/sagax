@@ -7237,6 +7237,16 @@ Windows, Linux or the web.
   app is on in its own `mac-apps.json` (userData) and runs it. The bridge
   journal keeps the operation and the target (recipient, calendar, list),
   never the content. Setup is read over IPC (`mac-apps:status|set|test|open-settings`).
+- Organization server, any engine or computer (2026-11-06): the desktop
+  reports the apps On (`POST /api/desktop-bridge/<id>/mac-apps {on}`, on
+  connect, every system refresh and after each switch). The server keeps the
+  list per person (`desktop-mac-apps.json`, kept while the Mac is offline)
+  and mounts the `messages` MCP for that person's bots in every sandbox and
+  engine, listing the `mac_*` tools of each app On. A call is relayed through
+  the bridge (`relayMacAppCall`). Mac offline: the tool stays listed and
+  answers "Your Mac is offline" (`MAC_OFFLINE_MESSAGE`), never a missing tool.
+  A bot with an On app never says it has no Calendar, Contacts, Reminders,
+  Notes, Mail or Messages tool: it calls it and reports the answer.
 - Scripts are constant JXA texts; the arguments go as one JSON argv
   (`macAppArgv`, `osascript -l JavaScript -e <script> <json>`), never
   concatenated. Messages reads `chat.db` with `node:sqlite` (read only).

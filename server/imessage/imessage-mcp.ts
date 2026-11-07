@@ -127,6 +127,11 @@ export type MessagesMcpDeps = {
     unasked: boolean;
     /** Always allow kept a rule for this write: it acts unasked. */
     kept?: (tool: string) => boolean;
+    /** Organization server: the apps run on the person's own Mac through
+     * their Sagax desktop app (desktop bridge), and `run` relays there.
+     * `enabled` is what that Mac last reported, Messages included; an
+     * offline Mac keeps the tools listed and `run` says it is offline. */
+    relay?: { person: string };
   };
 };
 
@@ -233,32 +238,42 @@ async function send(deps: MessagesMcpDeps, args: Record<string, unknown>): Promi
 }
 
 function macAppOn(deps: MessagesMcpDeps, app: MacAppId): boolean {
+  if (deps.macApps?.relay) return deps.macApps.enabled(app);
   return app === "messages" ? deps.useMessages : deps.macApps?.enabled(app) === true;
+}
+
+/** The Apple apps reach this process: the solo Mac itself, or the person's
+ * Mac through the desktop bridge (relay). */
+function macAppsReachable(deps: MessagesMcpDeps): boolean {
+  return Boolean(deps.macApps && (deps.macApps.relay || messagesOnBotMac(deps.host).ok));
 }
 
 /** The mac_* tools of the apps the person turned on. */
 function macAppTools(deps: MessagesMcpDeps) {
-  if (!deps.macApps || !messagesOnBotMac(deps.host).ok) return [];
+  if (!macAppsReachable(deps)) return [];
   return MAC_APP_TOOLS.filter((tool) => macAppOn(deps, tool.app)).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 }
 
 async function macAppCall(deps: MessagesMcpDeps, name: string, args: Record<string, unknown>): Promise<ToolResult> {
   const app = macAppOfTool(name)!;
-  if (!deps.macApps || !messagesOnBotMac(deps.host).ok) return text("The Apple apps run only on the Mac where this Sagax app runs.", true);
+  if (!deps.macApps || !macAppsReachable(deps)) return text("The Apple apps run only on the Mac where this Sagax app runs.", true);
   if (!macAppOn(deps, app)) return text(`${app[0]!.toUpperCase()}${app.slice(1)} is off in Plugins > This Mac. Nothing was done.`, true);
-  // The Messages send keeps its recipient list and card (send above).
-  if (name === "mac_messages_send") return send(deps, { to: args.to, text: args.text });
+  const relay = deps.macApps.relay;
+  // The Messages send keeps its recipient list and card (send above). Through
+  // the relay, a listed recipient goes unasked; anyone else gets the card.
+  if (name === "mac_messages_send" && !relay) return send(deps, { to: args.to, text: args.text });
   let op: Record<string, unknown>;
   try { op = macAppOperation(name, args); } catch (error) { return text(error instanceof Error ? error.message : String(error), true); }
+  const listedRecipient = name === "mac_messages_send" && listed(deps, { to: args.to, text: args.text });
   // A write follows the bot's approval mode: Ask shows a card, Auto and Full act.
-  if (macAppToolWrites(name) && !deps.macApps.unasked && !deps.macApps.kept?.(name)) {
+  if (macAppToolWrites(name) && !listedRecipient && !deps.macApps.unasked && !deps.macApps.kept?.(name)) {
     const pending = stageImessageSend({
       threadId: deps.threadId,
       botId: deps.botId,
       to: macAppTarget(name, op),
       text: "",
       service: "iMessage",
-      macApp: { tool: name, args: op },
+      macApp: { tool: name, args: op, ...(relay ? { person: relay.person } : {}) },
     });
     deps.openCard(pending);
     return text(`Not done yet. An approval card is in the conversation for ${pending.to}. Wait for the person. Do not call it again.`);
@@ -270,7 +285,9 @@ export async function handleMessagesMcp(body: unknown, deps: MessagesMcpDeps): P
   const message = body && typeof body === "object" ? body as { method?: unknown; params?: unknown } : {};
   const method = typeof message.method === "string" ? message.method : "";
   const params = message.params && typeof message.params === "object" ? message.params as { name?: unknown; arguments?: unknown } : {};
-  if (method === "tools/list") return { result: { tools: [...TOOLS, ...macAppTools(deps)] } };
+  // Through the relay, the chat.db tools of this process have no Mac: only
+  // the mac_* tools, which run on the person's Mac, are offered.
+  if (method === "tools/list") return { result: { tools: [...(deps.macApps?.relay ? [] : TOOLS), ...macAppTools(deps)] } };
   if (method !== "tools/call") return { result: text("Method not found.", true) };
   const name = typeof params.name === "string" ? params.name : "";
   const args = params.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments)

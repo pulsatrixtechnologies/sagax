@@ -11,6 +11,13 @@ function mountUserSandbox(   integrations: NonNullable<SendTurnInput["integratio
   const { decision } = input;
   const auto = input.auto ?? undefined;
   host.turnWorkplaces.set(input.threadId, { generation: input.generation, botId: input.botId, decision, staging: input.staging, ...(auto ? { auto } : {}) });
+  // Organization server: an Apple app On in the person's Plugins > This Mac
+  // reaches their bots whatever the engine or the computer the turn works
+  // on. Calls go through their desktop app; offline, the tools stay listed
+  // and say the Mac is offline (2026-11-06).
+  if (decision.principal && !integrations.messages && host.IDENTITY.kind === "perspicax" && host.desktopBridges.macAppsOn(decision.principal).length) {
+    integrations.messages = host.messagesIntegration(input.botId, input.threadId, input.generation, decision.principal);
+  }
   if (!input.customMcp || !decision.principal) return;
   // 2026-10-16: the servers Sagax mounts here are the person's environment
   // for this turn, recorded on the turn's workplace: the approval path

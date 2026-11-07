@@ -8454,7 +8454,7 @@ function liveSessionPerson(sessionId: string): string | null {
 // (server/desktop/desktop-bridge.ts): bots in their conversations run shell, files,
 // search, fetch, browser, computer use and Local VM there, and their network
 // traffic leaves through it (server/desktop/desktop-egress.ts).
-const desktopBridges = new DesktopBridges(liveSessionPerson, Date.now, join(DATA_DIR, "desktop-computer-names.json"));
+const desktopBridges = new DesktopBridges(liveSessionPerson, Date.now, join(DATA_DIR, "desktop-computer-names.json"), join(DATA_DIR, "desktop-mac-apps.json"));
 /** The last model fallback per thread (session.model-fallback). */
 const modelFallbackByThread = new Map<string, { requested: string; actual: string }>();
 /** #1154: the last model fallback per person, engine and picked model, so a
@@ -22018,6 +22018,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     handleDesktopBridgeMcp,
     desktopBridgesRequest: (person, operation, active, onProgress) => desktopBridges.request(person, operation, active, onProgress),
     desktopBridgeMacApps: (person) => desktopBridges.current(person)?.capabilities.macApps === true,
+    desktopBridgeMacAppsOn: (person) => desktopBridges.macAppsOn(person),
     bridgeAuditRecord: (row) => bridgeAudit.record(row as never),
     broadcast,
     turnWorkplace: (threadId) => turnWorkplaces.get(threadId) as never,

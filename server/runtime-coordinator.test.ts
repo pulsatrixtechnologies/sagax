@@ -1038,3 +1038,31 @@ describe("a teammate's reply comes back after a cut that is not a Stop", () => {
     expect(w.host.runs.some(run => run.node.id === "gen-1" && run.resumed)).toBe(false);
   });
 });
+
+describe("a confidential thread's own turns (docs/confidential-threads.md)", () => {
+  const secretThread: RoomAddress = { botId: "chief", threadId: "secret-chat" };
+  const confidentialWorld = () => {
+    const host = fakeHost();
+    const coordinator = new RuntimeCoordinator({ dataDir: ":memory:", host, log: () => {}, isConfidential: threadId => threadId === "secret-chat" });
+    return { host, coordinator };
+  };
+
+  it("records the turn without words and forgets it once it settles", () => {
+    const w = confidentialWorld();
+    const root = w.coordinator.beginTurn({ id: "gen-secret", address: secretThread, brief: "ULTRASECRET plan", level: "ask" as Level,
+      origin: { kind: "user", request: "ULTRASECRET plan" } });
+    expect(root.text).toBe("");
+    expect(JSON.stringify(w.coordinator.all())).not.toContain("ULTRASECRET");
+    w.coordinator.endTurn("gen-secret", { ok: true, text: "ULTRASECRET answer" });
+    expect(w.coordinator.all().filter(node => node.threadId === "secret-chat")).toEqual([]);
+    expect(JSON.stringify(w.coordinator.all())).not.toContain("ULTRASECRET");
+  });
+
+  it("keeps an ordinary thread's turn and its words", () => {
+    const w = confidentialWorld();
+    w.coordinator.beginTurn({ id: "gen-plain", address: chief, brief: "Ship the CSV export", level: "ask" as Level, origin: userOrigin });
+    w.coordinator.endTurn("gen-plain", { ok: true, text: "Shipped." });
+    const kept = w.coordinator.all().find(node => node.id === "gen-plain");
+    expect([kept?.text, kept?.result]).toEqual(["Ship the CSV export", "Shipped."]);
+  });
+});

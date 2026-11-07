@@ -11,6 +11,7 @@ import type { RoomPostBudget } from "../rooms/room-post-budget.ts";
 import type { RelayEngine } from "../run-with-engine.ts";
 import type { Message } from "../store.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
+import type { PASS } from "./table.ts";
 
 export const MAX_COMMS_DEPTH = 1;
 export const MAX_CREATED_BOTS_PER_TURN = 4;
@@ -160,6 +161,12 @@ export interface InternalRoomsDeps {
   globalRuntimeSettings(): GlobalRuntimeSettings;
   turnOrigin(capability: InternalCapabilityView): unknown;
   applyDelegatedLevel(from: InternalRoomsBot, fromThreadId: string, target: InternalRoomsBot, threadId: string, fromNodeId?: string): void;
+  /**
+   * start_thread on a teammate from a runtime turn: answered by the
+   * coordinate_bots route with this body (thread "new"). Absent, that
+   * call is refused with a pointer to coordinate_bots.
+   */
+  coordinateTeammateThread?(ctx: InternalRouteContext, body: Record<string, unknown>): Promise<typeof PASS | void>;
   threadBusy(botId: string, threadId: string): boolean;
   botAtThreadCapacity(botId: string): boolean;
   /** Null when the bot has no active group turn; otherwise the live room address. */
@@ -250,6 +257,7 @@ export interface InternalRoomsCall {
   startParallelTask: InternalRoomsDeps["startParallelTask"];
   turnOrigin: InternalRoomsDeps["turnOrigin"];
   applyDelegatedLevel: InternalRoomsDeps["applyDelegatedLevel"];
+  coordinateTeammateThread: ((body: Record<string, unknown>) => Promise<typeof PASS | void>) | undefined;
   threadBusy: InternalRoomsDeps["threadBusy"];
   botAtThreadCapacity: InternalRoomsDeps["botAtThreadCapacity"];
   activeGroupTurnForBot: InternalRoomsDeps["activeGroupTurnForBot"];

@@ -38,6 +38,7 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     startParallelTask,
     turnOrigin,
     applyDelegatedLevel,
+    coordinateTeammateThread,
     threadBusy,
     botAtThreadCapacity,
     activeGroupTurnForBot,
@@ -101,10 +102,15 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
   if (oneWay && target.id === from.id) {
     return json(res, 409, { error: "send_to_bot is cross-bot only; to work on yourself, do it in this turn (start_thread opens a separate job where you have it)" });
   }
+  // A thread on a teammate, asked by a turn on the runtime, is
+  // coordinate_bots with thread "new" (upstream OpenMausBot): a fresh
+  // thread on the teammate titled by the call, answered with the
+  // hand-off's receipts. Without that route, teamwork stays refused.
+  const teammateThread = internalCapability.roomCoordination && target.id !== from.id && !oneWay;
+  if (teammateThread && !coordinateTeammateThread) {
+    return json(res, 409, { error: "Use coordinate_bots for teamwork; it queues actual teammates and resumes you automatically." });
+  }
   if (internalCapability.roomCoordination) {
-    if (target.id !== from.id && !oneWay) {
-      return json(res, 409, { error: "Use coordinate_bots for teamwork; it queues actual teammates and resumes you automatically." });
-    }
     if (target.id === from.id && !internalCapability.ownThreadCreation) {
       return json(res, 409, { error: "Only a direct user request can open separate self-owned threads. Finish this assigned work here; use coordinate_bots for teammates." });
     }
@@ -126,6 +132,14 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
   const sourceTitle = owner.group ? owner.group.name : (store.taskByThread(from.id, fromThreadId)?.title ?? "");
   if ((readOnly || resumeId) && target.id !== from.id) {
     return json(res, 400, { error: "read_only and thread_id are for a thread on yourself: a teammate works at its own level, in its own threads" });
+  }
+  if (teammateThread && coordinateTeammateThread) {
+    // nothing of a confidential conversation goes to another bot
+    if (store.isConfidentialThread(fromThreadId)) return json(res, 403, { error: CONFIDENTIAL_PEER_REFUSED, code: "confidential_thread" });
+    return coordinateTeammateThread({
+      botIds: [target.id], message, thread: "new", reply: "resume", title,
+      ...(projectId ? { projectId } : {}),
+    });
   }
   if (resumeId) {
     const resumed = store.taskByThread(from.id, resumeId);

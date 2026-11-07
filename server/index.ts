@@ -13428,6 +13428,9 @@ const coordinator: Coordinator = createCoordinator({
   // threads that turned confidential before their teammate work was
   // forgotten (an older release): forgotten once the runtime opens
   confidentialThreads: () => store.bots.flatMap(bot => store.tasks(bot.id).filter(task => task.confidential === true).map(task => task.threadId)),
+  // a confidential thread's turns are recorded without words, and forgotten
+  // once settled (docs/confidential-threads.md)
+  isConfidential: threadId => store.isConfidentialThread(threadId),
   now: Date.now,
   log: line => console.error("coordinator:", line),
   // The one-time import of the delegation ledger names threads the ledger
@@ -21418,6 +21421,9 @@ function connectorSetupStore(...args: any[]) {
 function connectorSetupContext(...args: any[]) {
   return (_connectorSetupContextImpl ??= createConnectorSetupContext(getLeafHost) as any)(...args);
 }
+// The coordinate_bots route, also reached by start_thread on a teammate
+// (internal-rooms-threads.ts), which the rooms routes answer through it.
+let internalBotChatRoute: InternalRouteHandler | undefined;
 const INTERNAL_ROUTES: InternalRouteHandler[] = [
   // recall_topic (server/routes/recall-topic-internal.ts, server/streams/single-stream.ts)
   createRecallTopicInternalRoutes({
@@ -22110,7 +22116,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     fullAccessForSource,
     broadcastBot: (bot) => broadcast({ kind: "bot", bot: wireBot(bot as unknown as BotRecord) })
   }),
-  createInternalBotChatRoutes({
+  internalBotChatRoute = createInternalBotChatRoutes({
     store: store as unknown as Parameters<typeof createInternalBotChatRoutes>[0]["store"],
     startTurn: (botId, text, opts) => startTurn(botId, text, opts as Parameters<typeof startTurn>[2]),
     coordinator: coordinator as unknown as Parameters<typeof createInternalBotChatRoutes>[0]["coordinator"],
@@ -22165,6 +22171,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     },
   }),
   createInternalRoomsRoutes({
+    coordinateTeammateThread: (ctx, body) => internalBotChatRoute!({ ...ctx, method: "POST", path: "/api/internal/coordinate-bots", readBody: async () => body }),
     store: store as unknown as Parameters<typeof createInternalRoomsRoutes>[0]["store"],
     coordinator: coordinator as unknown as Parameters<typeof createInternalRoomsRoutes>[0]["coordinator"],
     approvalBus,
@@ -31698,6 +31705,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   store,
   supportsWorkspaceFiles,
   surfaceOfComputerKind,
+  recordTurnPlace,
   surfacePrompt,
   teamAvailabilityPart,
   teamComputerPrompt,
@@ -32155,6 +32163,7 @@ const startTurnRunner = createStartTurn({
   subscriptionExpiredCard,
   supportsWorkspaceFiles,
   surfaceOfComputerKind,
+  recordTurnPlace,
   surfacePrompt,
   teamAvailabilityPart,
   teamComputerPrompt,

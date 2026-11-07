@@ -677,6 +677,10 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       thread: z.enum(["standing", "new"]).default("standing"),
       // resume: the result resumes the requester; none: a one-way notice.
       reply: z.enum(["resume", "none"]).default("resume"),
+      // start_thread on a teammate arrives here (internal-rooms-threads.ts):
+      // the thread it opens carries the call's title, in the named folder.
+      title: z.string().trim().min(1).max(80).optional(),
+      projectId: z.string().min(1).max(128).optional(),
     }).safeParse(await readInternalBody());
     if (!parsed.success) return json(res, 400, { error: "Provide 1-4 distinct botIds and a message of 1-4000 characters." });
     const oneWay = parsed.data.reply === "none";
@@ -803,7 +807,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
         if (!destination) {
           const opened = { botId: internalSender.id, name: internalSender.name, threadId: address.threadId, at: Date.now() };
           const task = continued ?? (fresh
-            ? store.createTask(target.botId, parsed.data.message.replace(/\s+/g, " ").trim().slice(0, 60) || `From ${internalSender.name}`, false, undefined, opened)
+            ? store.createTask(target.botId, parsed.data.title ?? (parsed.data.message.replace(/\s+/g, " ").trim().slice(0, 60) || `From ${internalSender.name}`), false, parsed.data.projectId, opened)
             : store.createTask(target.botId, `@${internalSender.name} · work`, false, undefined, { ...opened, kind: "work" }));
           if (!task) throw new Error("The recipient no longer exists");
           target.threadId = task.threadId;

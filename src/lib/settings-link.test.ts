@@ -28,10 +28,13 @@ describe("settings links", () => {
     expect(settingsSectionLabel("credentials")).toBe("Vault");
     expect(settingsSectionLabel("pages")).toBe("Plugins");
     expect(settingsSectionLabel("experimental")).toBe("Experimental");
-    // #2090: Updates is its own page; #2080: about is the App page; Import label is Backups
-    expect(settingsSectionLabel("about")).toBe("App");
+    // #2090: Updates is its own page. 2026-11-06: the App page splits into
+    // General and Help and about; Import lands on Backups and storage
+    expect(settingsSectionLabel("about")).toBe("Help and about");
+    expect(settingsSectionLabel("general")).toBe("General");
     expect(settingsSectionLabel("updates")).toBe("Updates");
-    expect(settingsSectionLabel("import")).toBe("Backups");
+    expect(settingsSectionLabel("import")).toBe("Backups and storage");
+    expect(settingsSectionLabel("backups")).toBe("Backups and storage");
     setLocale("fr");
     expect(settingsSectionLabel("engines")).toBe("Modèles");
     expect(settingsSectionLabel("voice")).toBe("Voix");
@@ -39,7 +42,9 @@ describe("settings links", () => {
     expect(settingsSectionLabel("credentials")).toBe("Coffre");
     expect(settingsSectionLabel("privacy")).toBe("Notifications");
     expect(settingsSectionLabel("memory")).toBe("Organisation");
-    expect(settingsSectionLabel("about")).toBe("Application");
+    expect(settingsSectionLabel("about")).toBe("Aide et à propos");
+    expect(settingsSectionLabel("general")).toBe("Général");
+    expect(settingsSectionLabel("backups")).toBe("Sauvegardes et stockage");
     setLocale("en");
   });
 
@@ -69,7 +74,17 @@ describe("settings links", () => {
     // 2026-10-28: Security and Vault are pages again
     expect(currentSettingsSection("security")).toBe("security");
     expect(currentSettingsSection("credentials")).toBe("credentials");
-    expect(currentSettingsSection("general")).toBe("account");
+    // 2026-11-06: General is the app's system page again; the cards the
+    // old App page held go where a person looks for them
+    expect(currentSettingsSection("general")).toBe("general");
+    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("backups");
+    expect(currentSettingsSection("general", "general.peopleToolAccess")).toBe("security");
+    expect(currentSettingsSection("general", "general.usage")).toBe("usage");
+    expect(currentSettingsSection("general", "general.diagnostics")).toBe("about");
+    expect(currentSettingsSection("about", "about.startup")).toBe("general");
+    expect(currentSettingsSection("about", "about.input")).toBe("general");
+    expect(currentSettingsSection("about", "about.holding")).toBe("general");
+    expect(currentSettingsSection("about", "about.help")).toBe("about");
     expect(mergedSettingsCard("security")).toBeUndefined();
     expect(mergedSettingsCard("credentials")).toBeUndefined();
     expect(currentSettingsSection("usage")).toBe("usage");

@@ -16,7 +16,10 @@
 // Rooms follow their bots: a member sees a room only when the room has at
 // least one bot and they can see every bot in it. A room is one shared
 // transcript, so a restricted bot's words there would otherwise reach people
-// who cannot see the bot. Teams (sidebar sections) are listed to a member
+// who cannot see the bot. The one exception is the room's own people list
+// (humanIds, #2418): a person the room names was put there by someone who
+// chose to share it with them (me + a person + my bots), so that room is
+// theirs to open and post in, whatever its bots' audience says. Teams (sidebar sections) are listed to a member
 // only when they hold a bot or room that member can see.
 //
 // Bots reach each other only when the same people can see both (see
@@ -34,7 +37,7 @@ export type { BotVisibility };
 /** The person looking, reduced to what visibility needs. `all` is the owner,
  * a local service or an admin session; `member` is any other session, with
  * the email it signed in with when it has one. */
-export type Viewer = { kind: "all" } | { kind: "member"; email?: string } | { kind: "none" };
+export type Viewer = { kind: "all" } | { kind: "member"; email?: string; personId?: string } | { kind: "none" };
 
 export const SEES_EVERYTHING: Viewer = { kind: "all" };
 
@@ -179,6 +182,9 @@ export interface VisibilityGroup {
   memberIds: readonly string[];
   section?: string;
   tasks?: ReadonlyArray<{ threadId: string }>;
+  /** The people the room lists (principal ids, or `team:` entries). A
+   * person listed here opens the room whatever its bots' audience (#2418). */
+  humanIds?: readonly string[];
   /** The narrowest audience the room has ever had. A bot leaving never
    * widens it; only an admin's explicit reset does (server/index.ts). */
   audienceFloor?: unknown;
@@ -227,14 +233,21 @@ export class VisibleSet {
     return seen;
   }
 
-  /** At least one bot, every bot in it visible, and the room's floor — the
-   * narrowest audience it has had — admits the viewer. */
+  /** The room lists the viewer among its people (#2418), or: at least one
+   * bot, every bot in it visible, and the room's floor (the narrowest
+   * audience it has had) admits the viewer. */
   group(id: string): boolean {
     if (this.everything) return true;
     const group = this.groups.get(id);
     if (!group) return false;
+    if (this.listedIn(group)) return true;
     const members = group.memberIds.filter((member) => this.bots.has(member));
     return members.length > 0 && members.every((member) => this.bot(member)) && viewerSees(this.viewer, group.audienceFloor);
+  }
+
+  private listedIn(group: VisibilityGroup): boolean {
+    const personId = this.viewer.kind === "member" ? this.viewer.personId : undefined;
+    return Boolean(personId && group.humanIds?.includes(personId));
   }
 
   /** The bot or room that owns the thread is visible. An unknown thread is not. */

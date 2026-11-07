@@ -14,7 +14,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
 const outDir = resolve(arg("--out") ?? "/Users/Workspace/artifacts/sagax-gif-2121");
 const port = Number(arg("--port") ?? 5186);
-// --bar PREFIX: only the composer bar (the + and the GIF button), as PREFIX-composer-bar-<theme>.png
+// --bar PREFIX: English only, as PREFIX-composer-bar-<theme>.png (the + menu with its GIF row, and the picker)
 const bar = arg("--bar");
 
 async function waitForServer(url, ms = 120_000) {
@@ -48,9 +48,9 @@ try {
       const page = await browser.newPage({ viewport: { width: 900, height: 900 }, deviceScaleFactor: 2 });
       const errors = [];
       page.on("pageerror", (error) => errors.push(String(error?.stack ?? error).slice(0, 800)));
-      await page.goto(`${base}?${new URLSearchParams({ skin, lang })}`, { waitUntil: "load" });
-      await page.waitForSelector("[data-meme-picker]");
-      await page.waitForSelector("[data-meme-image]");
+      await page.goto(`${base}?${new URLSearchParams({ skin, lang, ...(bar ? { picker: "0" } : {}) })}`, { waitUntil: "load" });
+      await page.waitForSelector(bar ? "[data-composer-plus-menu]" : "[data-meme-picker]");
+      if (!bar) await page.waitForSelector("[data-meme-image]");
       await page.waitForTimeout(400);
       const theme = skin === "pulsatrix" ? "dark" : "light";
       const file = join(outDir, bar ? `${bar}-composer-bar-${theme}.png` : `memes-picker-${theme}-${lang}.png`);

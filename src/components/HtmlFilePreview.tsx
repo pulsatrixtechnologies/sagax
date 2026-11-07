@@ -32,6 +32,12 @@ export function HtmlFileButton({ path, name, message }: { path: string; name: st
   </>;
 }
 
+/** The HTML viewer on its own, for a caller with its own trigger (a file
+ * name in a bot message). */
+export function HtmlFileDialog({ path, name, message, returnFocus, onClose }: { path: string; name: string; message: MessageAttachmentContext; returnFocus?: HTMLElement | null; onClose: () => void }) {
+  return <TableDialog title={name} returnFocus={returnFocus ?? null} onClose={onClose}><HtmlFileContent key={`${message.threadId}:${message.messageId}:${path}`} path={path} name={name} message={message} /></TableDialog>;
+}
+
 function HtmlFileContent({ path, name, message }: { path: string; name: string; message: MessageAttachmentContext }) {
   const [attempt, setAttempt] = useState(0);
   const [source, setSource] = useState<string | null>(null);

@@ -181,10 +181,13 @@ describe("#2098 on iOS: a run opens in the bot's chat", () => {
     const row = readSwift("App/Cards/RoutineRunCardView.swift");
     expect(row).toContain('"routine-run-stop"');
     expect(row).toContain("if live, let stop {");
-    expect(row).toContain("MarkdownText(source: summary, inert: true)");
+    // #2432 (iPad parity round 6): the report reads as the bot's bubble.
+    expect(row).toContain("MarkdownText(source: report, inert: true)");
     const chat = readSwift("App/Features/Chat/MessageRow.swift");
     expect(chat).toContain("openThread: threadsShown ? openThread : nil");
-    expect(chat).toContain("stop: card.knownStatus == .running ?");
+    // #2432: the row always hands Stop; the card shows it while live
+    // (queued, running, waiting), as the desktop card does.
+    expect(chat).toContain("stop: { Task { await session.cancelRoutineRun(id: card.runId) } },");
     expect(chat).toContain("reply: threadsShown ? nil :");
     expect(chat).toContain("SidebarPrefsModel.shared.showThreads");
   });
@@ -232,8 +235,12 @@ describe("#2096 Stop on the running card, not in a bottom bar", () => {
 describe("unified chat mode: zero threads, following the threads setting", () => {
   it("a bot's question reads as its message with an inline answer and no Open thread", () => {
     const unified = renderToStaticMarkup(createElement(AttentionCard, { card: attention, onReply: async () => {}, onOpenRun: () => {} }));
-    expect(unified).toContain("data-attention-bubble");
-    expect(unified).toContain("data-attention-reply");
+    // #2417: one conversation draws the shared question sheet (the bot's
+    // question, one-tap choices, a field in words), never the old bubble.
+    expect(unified).toContain("data-attention-sheet");
+    expect(unified).toContain("data-attention-question");
+    expect(unified).toContain("<textarea");
+    expect(unified).not.toContain("data-attention-bubble");
     expect(unified).not.toContain("data-attention-open-thread");
     expect(unified).not.toContain("Open thread");
     const threaded = renderToStaticMarkup(createElement(AttentionCard, { card: attention, onOpenThread: () => {} }));
@@ -611,7 +618,6 @@ describe("JC unified chat guards (#2106)", () => {
  * sit on UNIFIED_THREAD_KEY_ALLOWLIST with a comment. */
 const UNIFIED_THREAD_KEYS = [
   "needsYou.openThread",
-  "routineRun.openTeammateThread",
   "botPanel.activity.openThread",
   "floatingBots.menu.openThread",
   "chat.openThread",
@@ -625,7 +631,6 @@ const UNIFIED_THREAD_KEYS = [
 const UNIFIED_THREAD_KEY_ALLOWLIST: ReadonlyArray<{ file: string; why: string }> = [
   // gated: optional onOpenThread; ChatView only passes it when showThreads
   { file: "src/components/AttentionCard.tsx", why: "renders needsYou.openThread only when onOpenThread is passed (ChatView gates it)" },
-  { file: "src/components/RoutineRunCard.tsx", why: "renders openTeammateThread only when onOpenThread is passed (ChatView gates it)" },
   { file: "src/components/ThreadChip.tsx", why: "returns null when !useShowThreads()" },
   { file: "src/components/ThreadRefs.tsx", why: "openThread(..., showThreads) and chat.openThread titles on a threads-shown ref chip" },
   { file: "src/components/bot-settings/RolePermissionsSection.tsx", why: "passes onOpenThread only when showThreads" },

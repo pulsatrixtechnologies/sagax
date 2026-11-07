@@ -1,7 +1,8 @@
 // A routine's page in the side panel (2026-11-06, JC: "one single pane").
-// One header (< name ×), then everything in place: Instruction (folded, a
-// click edits it), When to run, Runs as, Active, Next run, This week,
-// Skipped while busy, Advanced, then Runs. A change shows Cancel and Save in
+// One header (< name ×, a state badge when it fails), then everything in
+// place: Instruction (at least 45% of the panel), When to run, Next run,
+// Skipped while busy, Runs, then Advanced (Runs as in it; 2026-11-06, JC:
+// no Active toggle, Pause is in the bar; no This week). A change shows Cancel and Save in
 // the bar; otherwise the bar is the routine's own: Run now, Check, Pause,
 // Delete. Shared by the bot panel and the group panel.
 import { api, useStore, type Bot } from "@/state/store";
@@ -11,7 +12,7 @@ import { RoutineEditor } from "../RoutinesPage";
 import { ClipboardCheck, CirclePlay, Pause, Trash2 } from "lucide-react";
 import { ACTION_LABEL_MAIN, ActionBar, ActionButton, actionButtonClass } from "../ActionBar";
 import { canRunRoutineNow, RunNowButton } from "../routines/RunNowButton";
-import { clearRoutineRuns, RoutineRunsSection, RoutineStatusRows } from "../routines/RoutineDetail";
+import { clearRoutineRuns, type RoutinePatch, RoutineRunAsRow, RoutineRunsSection, RoutineStateBadge, RoutineStatusRows } from "../routines/RoutineDetail";
 import { useRoutineReadiness, type RoutineReadinessControl } from "../routines/RoutineReadiness";
 import { useConfirm } from "../ConfirmProvider";
 
@@ -42,6 +43,7 @@ export function RoutinePanelPage({ routine, bot, bots, runs, lockedBotId, defaul
     onOpenRun(run);
     if (["failed", "missed"].includes(run.status) && !run.seenAt && !run.redacted) dispatch({ type: "markRoutineRunSeen", runId: run.id });
   };
+  const patch = async (change: RoutinePatch) => { const response = await api(`/api/routines/${routine.id}`, { method: "PATCH", body: JSON.stringify(change) }); if (response.routine) dispatch({ type: "routinePatched", routine: response.routine }); };
   const remove = async () => {
     if (!(await confirm({ title: t("routineCalendar.deleteConfirm", { title: routine.name }), confirmLabel: t("common.delete"), tone: "danger" }))) return;
     dispatch({ type: "deleteRoutine", routineId: routine.id });
@@ -67,8 +69,13 @@ export function RoutinePanelPage({ routine, bot, bots, runs, lockedBotId, defaul
         canRun={canRun}
         readiness={readiness}
         onToggle={toggle}
-        onPatch={async (patch) => { const response = await api(`/api/routines/${routine.id}`, { method: "PATCH", body: JSON.stringify(patch) }); if (response.routine) dispatch({ type: "routinePatched", routine: response.routine }); }}
+        onPatch={patch}
+        runAs={false}
+        active={false}
+        week={false}
       />,
+      runAs: <RoutineRunAsRow routine={routine} editable={editable} onPatch={patch} />,
+      badge: <RoutineStateBadge routine={routine} runs={runs} />,
       runs: <RoutineRunsSection
         routine={routine}
         runs={runs}

@@ -43,6 +43,7 @@ import { t } from "@/lib/i18n";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { isMacPlatform } from "@/lib/keyboard-shortcuts";
 import { ChatMarkdown } from "../ChatMarkdown";
+import { useSettingsSurface } from "../SettingsPrimitives";
 import {
   countCharacters,
   countWords,
@@ -195,8 +196,8 @@ export interface MarkdownEditorProps {
   /** hard cap in characters, like a textarea's maxLength; the count shows
    * it when showCount is on */
   maxLength?: number;
-  /** minimum height of the writing area in px (default 160) */
-  minHeight?: number;
+  /** minimum height of the writing area in px, or a CSS length (default 160) */
+  minHeight?: number | string;
   /** maximum height before the writing area scrolls (default 60vh) */
   maxHeight?: number | string;
   autoFocus?: boolean;
@@ -245,6 +246,7 @@ export function MarkdownEditor({
   toolbarOnFocus = false,
 }: MarkdownEditorProps) {
   const advanced = useAdvancedMode() && !compact;
+  const plain = useSettingsSurface() === "plain";
   const [full, setFull] = useState(false);
   const [Core, setCore] = useState<CoreComponent | undefined>(() => coreReady);
   const [view, setView] = useState<ViewMode>(() => readView());
@@ -332,7 +334,7 @@ export function MarkdownEditor({
     "--md-font-size": "13px",
     ...(full
       ? { "--md-min-h": "calc(100vh - 9rem)", "--md-max-h": "calc(100vh - 9rem)" }
-      : { "--md-min-h": `${minHeight}px`, "--md-max-h": typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight }),
+      : { "--md-min-h": typeof minHeight === "number" ? `${minHeight}px` : minHeight, "--md-max-h": typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight }),
   } as CSSProperties;
 
   const markEditing = (next: boolean) => {
@@ -426,7 +428,7 @@ export function MarkdownEditor({
         className={cn(
           "flex items-center gap-1 rounded-md px-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
           compact ? "h-6" : "h-7 px-2",
-          active ? "bg-raised text-ink" : "text-ink-secondary hover:bg-hover hover:text-ink",
+          active ? (plain ? "bg-hover text-ink" : "bg-raised text-ink") : "text-ink-secondary hover:bg-hover hover:text-ink",
         )}
       >
         <Icon size={compact ? 12 : 13} aria-hidden="true" />
@@ -446,14 +448,20 @@ export function MarkdownEditor({
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) markEditing(false);
       }}
       className={cn(
-        "markdown-editor flex min-w-0 flex-col rounded-lg border bg-inset outline-none focus-within:border-border-strong focus-visible:ring-2 focus-visible:ring-focus",
-        invalid ? "border-danger/60 ring-1 ring-danger/50" : quiet ? "border-transparent bg-transparent hover:border-hairline/40" : "border-hairline/40",
+        // the profile page (plain surface): the editor is one filled inset
+        // surface of its card, the toolbar inside, no second outline
+        plain
+          ? "markdown-editor flex min-w-0 flex-col rounded-lg bg-inset outline-none focus-within:ring-1 focus-within:ring-focus focus-visible:ring-2 focus-visible:ring-focus"
+          : "markdown-editor flex min-w-0 flex-col rounded-lg border bg-inset outline-none focus-within:border-border-strong focus-visible:ring-2 focus-visible:ring-focus",
+        plain
+          ? invalid ? "ring-1 ring-danger/50" : quiet && "bg-transparent hover:bg-inset"
+          : invalid ? "border-danger/60 ring-1 ring-danger/50" : quiet ? "border-transparent bg-transparent hover:border-hairline/40" : "border-hairline/40",
         disabled && "opacity-60",
         full ? "fixed inset-4 z-[80] bg-elevated shadow-2xl sm:inset-8" : className,
       )}
     >
       {toolbarShown && (
-      <div data-md-toolbar="" className={cn("flex flex-wrap items-center justify-between gap-1 border-hairline/40", toolbarOnFocus ? "order-last border-t" : "border-b", compact ? "px-1 py-0.5" : "px-1.5 py-1")}>
+      <div data-md-toolbar="" className={cn("flex flex-wrap items-center justify-between gap-1", !plain && "border-hairline/40", toolbarOnFocus ? cn("order-last", !plain && "border-t") : !plain && "border-b", compact ? "px-1 py-0.5" : "px-1.5 py-1")}>
         <div
           ref={toolbar}
           role="toolbar"
@@ -531,14 +539,14 @@ export function MarkdownEditor({
       {mode === "split" && (
         <div className="grid min-w-0 grid-cols-1 sm:grid-cols-2">
           {writing}
-          <div className="border-t border-hairline/40 sm:border-l sm:border-t-0">{preview}</div>
+          <div className={plain ? "min-w-0" : "border-t border-hairline/40 sm:border-l sm:border-t-0"}>{preview}</div>
         </div>
       )}
       {(countVisible || footer) && (
-        <div id={statusId} className="flex items-start justify-between gap-3 border-t border-hairline/40 px-2.5 py-1 text-[11px] text-ink-tertiary">
+        <div id={statusId} className={cn("flex items-start justify-between gap-3 px-2.5 py-1 text-[11px] text-ink-tertiary", !plain && "border-t border-hairline/40")}>
           <span className="min-w-0 flex-1">{footer}</span>
           {countVisible && (
-            <span className={cn("shrink-0 tabular-nums", maxLength && value.length >= maxLength && "font-medium text-danger")} data-markdown-count="">
+            <span className={cn("shrink-0 tabular-nums", maxLength && value.length >= maxLength && (plain ? "text-danger" : "font-medium text-danger"))} data-markdown-count="">
               {t("markdownEditor.count", { words: words.toLocaleString(), characters: characters.toLocaleString() })}
               {maxLength ? ` · ${value.length.toLocaleString()} / ${maxLength.toLocaleString()}` : ""}
             </span>

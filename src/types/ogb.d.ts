@@ -7,6 +7,14 @@ declare global {
     | { status: "waiting"; origin: string }
     | { status: "error"; origin: string; error: "timeout" | "unsupported" | "browser" | "unreachable" };
   type CompanyBackupEntry = Omit<import("../../electron/company-backups.mjs").CompanyBackupMetadata, "status"> & { status: "creating" | "uploading" | "completing" | "ready" | "cleanup" };
+  /** Settings > Notifications: what the desktop shell found about native
+   * notifications (electron/desktop-attention.mjs deliveryStatus). */
+  interface NativeNotificationStatus {
+    state: "delivered" | "not-delivered" | "unknown";
+    canCheck: boolean;
+    platform: string;
+    settings: boolean;
+  }
   interface CompanyBackupScheduleState {
     enabled: boolean;
     status: "off" | "waiting" | "running" | "paused" | "error";
@@ -127,6 +135,8 @@ const __BASE_VERSION__: string;
     artifactWindowSelf?: {
       isAlwaysOnTop(): Promise<boolean>;
       setAlwaysOnTop(on: boolean): Promise<boolean>;
+      /** The cursor entered or left this window (#2336). */
+      onPointer?(cb: (inside: boolean) => void): () => void;
       fitContent(size: { width: number; height: number }): Promise<{ width: number; height: number } | null>;
     };
     ogb?: {
@@ -298,6 +308,7 @@ const __BASE_VERSION__: string;
         status(): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
         set(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId, enabled: boolean): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
         test(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId): Promise<import("../../shared/mac-apps-setup.ts").MacAppTestResult>;
+        askAutomation(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
         openSettings(pane: "automation" | "fullDiskAccess"): Promise<boolean>;
       };
       localControl: {
@@ -309,6 +320,8 @@ const __BASE_VERSION__: string;
       /** Arms one user-initiated display capture request from this frame. */
       beginScreenPreviewIntent(): boolean;
       screenFrame(): Promise<string | null>;
+      /** A 320x200 JPEG of this computer once Screen Recording is granted (never prompts). */
+      screenThumbnail?(): Promise<{ image: string; at: number; host: string } | null>;
       androidDevice?: {
         status(): Promise<AndroidDeviceStatus>;
         frame(serial: string): Promise<{ serial: string; dataUrl: string }>;
@@ -475,6 +488,13 @@ const __BASE_VERSION__: string;
       }): void;
       /** Close the shell notifications shown with this withdraw key. */
       withdrawNotification?(withdrawKey: string): void;
+      /** Whether notifications reach the OS notification center (macOS can
+       * tell; elsewhere "unknown"), and whether a settings pane can open. */
+      notificationStatus?(): Promise<NativeNotificationStatus | null>;
+      /** Post a test notification, then the state it found. */
+      testNotification?(text: { title: string; body: string }): Promise<NativeNotificationStatus | null>;
+      /** Open System Settings > Notifications (macOS) or Windows settings. */
+      openNotificationSettings?(): Promise<boolean>;
       /** The id of a shell notification the person clicked. */
       onNotificationClick?(cb: (id: string, target?: { botId?: string; threadId?: string; groupId?: string; routineRunId?: string } | null) => void): () => void;
       /** Inline reply from the OS banner: open that chat and send the text. */
@@ -534,6 +554,12 @@ const __BASE_VERSION__: string;
       /** Points this computer's file manager at a file a bot linked outside
        * its workspace, without opening or reading it. Local app only. */
       revealInFolder?(filePath: string): Promise<"shown" | "missing" | "invalid">;
+      /** Opens a file a bot wrote with this computer's default app (a leading
+       * ~ is the home folder). Local app only. */
+      openLocalFile?(filePath: string): Promise<"opened" | "missing" | "failed" | "invalid">;
+      /** For each path, its absolute form when it exists on this computer,
+       * else null. Local app only; a paired window gets an empty list. */
+      localFilesExist?(filePaths: string[]): Promise<Array<string | null>>;
       /** Opens a PDF the viewer shows in this computer's default PDF app:
        * main writes the bytes to a new private temp .pdf and opens it.
        * Resolves true, or rejects with a short message. */

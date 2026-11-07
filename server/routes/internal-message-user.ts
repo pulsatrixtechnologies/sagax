@@ -48,6 +48,8 @@ export interface MessageUserNotice {
   group: MessageUserGroup;
   text: string;
   audience: string[];
+  /** False when the bot chose to post without alerting (message_user `notify`). */
+  notify?: boolean;
 }
 
 export interface MessageUserDeps {
@@ -110,7 +112,7 @@ export function createInternalMessageUserRoutes(deps: MessageUserDeps): Internal
     const unreadFor = [...new Set([...(group.unreadFor ?? []), ...audience])].sort();
     const updated = store.patchGroup(group.id, { unread: true, unreadFor }) ?? group;
     deps.broadcastGroup(updated);
-    deps.notifyMessage({ bot, group: updated, text, audience });
+    deps.notifyMessage({ bot, group: updated, text, audience, notify: body.notify !== false });
     // The bot's own conversation shows where the message went.
     store.appendMessage(fromThreadId, {
       role: "bot",

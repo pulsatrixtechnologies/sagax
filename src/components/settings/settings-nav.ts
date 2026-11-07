@@ -1,4 +1,4 @@
-import { Archive, AudioLines, Bell, Coins, Download, FlaskConical, Info, KeyRound, Monitor, Palette, Plug, ShieldCheck, Terminal, User, Building2 } from "lucide-react";
+import { Archive, AudioLines, Bell, Coins, Download, FlaskConical, Info, KeyRound, Monitor, Palette, Plug, Settings2, ShieldCheck, Terminal, User, Building2 } from "lucide-react";
 import type { AppSettingsSection } from "@/state/store";
 import type { LocaleKey } from "@/locales";
 import { t } from "@/lib/i18n";
@@ -36,31 +36,35 @@ export const SECTIONS: Array<{
   // #2080 (L0, 2026-11-05): the final rail, which never changes size.
   // Personal: Account, Appearance, Notifications, Security, Vault. AI:
   // Providers, Models, Voice, Usage. Installation: Organization, Computer,
-  // Backups and import. App: Updates (desktop only) and Experimental
-  // (Advanced mode only). Import is a card now (settings-sections.ts MERGED). Each keyword names the one page where its
+  // Backups and storage. App: General, Updates (desktop only), Experimental
+  // (Advanced mode only), Help and about. Import is a card now (settings-sections.ts MERGED). Each keyword names the one page where its
   // option lives (settings-nav.test.ts checks no page shares one).
   { id: "account", group: "you", labelKey: "settings.section.account", introKey: "settings.intro.account", icon: User, keywords: ["account", "compte", "profile", "profil", "name", "nom", "email", "courriel", "copy email", "sign out", "se déconnecter", "déconnexion", "label", "avatar", "photo", "about me", "à propos de moi", "language", "langue", "time zone", "timezone", "fuseau horaire", "fuseau", "region", "région"] },
   { id: "appearance", group: "you", labelKey: "settings.section.appearance", introKey: "settings.intro.appearance", icon: Palette, keywords: ["skin", "theme", "thème", "variant", "variante", "light", "clair", "dark", "sombre", "auto", "appearance", "apparence", "tools", "tool calls", "threads", "show threads", "hide threads", "sidebar", "hidden", "hide", "show", "density", "compact", "comfortable", "avatars", "display", "run", "this run", "run card", "commands", "mascot", "owl", "fly", "floating", "font", "police", "accessibility", "accessibilité", "reduce motion", "motion", "animations", "contrast", "contraste", "text size", "taille du texte", "zoom", "inspector", "inspecteur", "logo", "masqués", "mascottes", "barre latérale", "conversations", "background", "arrière-plan", "customize", "personnaliser"] },
   // 2026-10-14: Privacy is a card of this page on an organization server.
   { id: "notifications", group: "you", labelKey: "settings.section.notifications", introKey: "settings.intro.notifications", icon: Bell, keywords: ["notifications", "notification", "sound", "sounds", "notification sound", "son de notification", "tick", "tic", "carillon", "chime a", "chime b", "blip", "mute", "silent", "chime", "alert", "alerts", "banner", "badge", "dock", "icône", "unread", "nudge", "wizz", "shake", "secousse", "son", "persistent", "stay", "privacy", "read receipts", "seen", "vu", "confidentialité", "accusés de lecture", "presence", "online", "away", "offline", "last seen", "status", "en ligne", "absent", "hors ligne", "privacidade", "alertes", "on screen", "à l'écran"] },
-  { id: "security", group: "you", labelKey: "settings.section.security", introKey: "settings.intro.security", icon: ShieldCheck, keywords: ["security", "sécurité", "security key", "security keys", "clé de sécurité", "clés de sécurité", "passkey", "clé d'accès", "yubikey", "webauthn", "touch id", "face id", "step-up", "sensitive", "sensibles", "approvals", "approbations", "approval level", "niveau d'approbation", "approval rules", "règles d'approbation", "rules", "règles", "always allow", "toujours permettre", "always deny", "toujours refuser", "ask first", "demander d'abord", "deny", "refuser", "tool access", "accès aux outils", "my tool access", "mon accès aux outils", "grants", "autorisations"] },
+  { id: "security", group: "you", labelKey: "settings.section.security", introKey: "settings.intro.security", icon: ShieldCheck, keywords: ["security", "sécurité", "security key", "security keys", "clé de sécurité", "clés de sécurité", "passkey", "clé d'accès", "yubikey", "webauthn", "touch id", "face id", "step-up", "sensitive", "sensibles", "approvals", "approbations", "approval level", "niveau d'approbation", "approval rules", "règles d'approbation", "rules", "règles", "always allow", "toujours permettre", "always deny", "toujours refuser", "ask first", "demander d'abord", "deny", "refuser", "tool access", "accès aux outils", "my tool access", "mon accès aux outils", "grants", "autorisations", "people's tool access", "accès aux outils des personnes"] },
   { id: "credentials", group: "you", labelKey: "settings.section.vault", introKey: "settings.intro.credentials", icon: KeyRound, keywords: ["vault", "coffre", "your vault", "votre coffre", "credentials", "identifiants", "password", "mot de passe", "login", "logins", "connexions", "totp", "2fa", "one-time code", "code à usage unique", "1password", "notes", "note", "autofill", "remplissage", "add an item", "ajouter un élément", "one-time card", "carte à usage unique", "single-use", "shop pay", "link", "card", "carte", "purchase", "achat", "achats", "payments", "paiements", "wallet", "portefeuille", "history", "historique"] },
   // 2026-10-30: Providers, every account, key and server in one list.
   { id: "providers", group: "ai", labelKey: "settings.section.providers", introKey: "settings.intro.providers", icon: Plug, keywords: ["providers", "fournisseurs", "model providers", "accounts", "comptes", "claude", "codex", "grok", "cli", "sign in", "connexion", "subscription", "abonnement", "keys", "clés", "api", "api key", "api keys", "clé api", "clés api", "xai", "mistral", "cerebras", "router", "openrouter", "base url", "openai", "anthropic", "groq", "opencode", "provider", "fournisseur", "elevenlabs", "fish audio", "azure", "foundry", "compatible", "local models", "modèles locaux", "needs setup", "à configurer", "to connect", "à connecter", "view as a member", "voir comme un membre", "connectors", "connecteurs", "claude.ai", "cursor", "cloud agents", "cloud coding agents", "voice keys", "clés de voix", "image", "image provider", "fournisseur d'images", "génération d'images", "web search", "recherche web", "brave", "exa", "firecrawl", "searxng", "grok bot", "linked grok", "linked grok bot", "pont grok", "grok bridge"] },
   { id: "engines", group: "ai", labelKey: "settings.section.models", introKey: "settings.intro.engines", icon: Terminal, keywords: ["models", "modèles", "engines", "moteurs", "connections", "integrations", "intégrations", "box", "decision", "jev", "typesafe", "routing", "who answers", "auto model", "modèle auto", "bot models", "modèles des bots", "bulk", "defaults for new bots", "défauts des nouveaux bots", "new bots", "decision model", "modèle de décision", "who pays", "qui paie", "effort", "reasoning", "backup model", "fallback", "automatic recovery"] },
   { id: "voice", group: "ai", labelKey: "settings.section.voice", introKey: "settings.intro.voice", icon: AudioLines, keywords: ["voice", "voix", "tts", "speech", "parole", "fish", "chatterbox", "grok voice", "voice engine", "moteur de voix", "live call", "live calls", "appels en direct", "read replies", "hang up", "gpt-live", "microphone", "micro", "audio", "input device", "entrée audio", "phone calls", "appels téléphoniques", "callback number", "numéro de rappel", "do not call", "ne pas appeler"] },
   // #2080: Usage is the cost of the models and the person's own cap, so it sits under AI.
-  { id: "usage", group: "ai", labelKey: "settings.section.usage", introKey: "settings.intro.usage", icon: Coins, keywords: ["tokens", "cost", "billing", "plan", "forfait", "coût", "usage", "spend", "this month", "ce mois-ci", "last 30 days", "30 derniers jours", "by bot", "par bot", "by model", "par modèle", "renews", "renouvelle", "sagax business"] },
+  { id: "usage", group: "ai", labelKey: "settings.section.usage", introKey: "settings.intro.usage", icon: Coins, keywords: ["tokens", "cost", "billing", "plan", "forfait", "coût", "usage", "spend", "this month", "ce mois-ci", "last 30 days", "30 derniers jours", "by bot", "par bot", "by model", "par modèle", "renews", "renouvelle", "sagax business", "usage meter", "usage measure", "mesure d'utilisation", "compteur"] },
   // 2026-10-14: Memory is a card of this page (it was its own section).
   { id: "organization", group: "workspace", labelKey: "settings.section.organization", introKey: "settings.intro.organization", icon: Building2, keywords: ["company", "organization", "organisation", "enroll", "managed", "disconnect", "workspace", "cloud", "hosted", "vps", "server", "serveur", "servers", "connect", "pair", "switch", "local", "memory", "obsidian", "sync", "git", "perspicax", "mémoire", "pending", "domain", "dns", "caddy", "full access", "accès complet", "waiting for an admin", "en attente", "people from before", "rattacher", "invite", "inviter", "invitation", "people", "personnes", "serveurs", "oublier", "forget", ...ORGANIZATION_ADVANCED_KEYWORDS] },
   { id: "computer", group: "workspace", labelKey: "settings.section.computer", introKey: "settings.intro.computer", icon: Monitor, keywords: ["computer", "local vm", "vm", "virtual", "desktop", "ordinateur", "this computer", "cet ordinateur", "your computer", "votre ordinateur", "other computers", "autres ordinateurs", "rename", "renommer", "remove computer", "retirer", "network", "réseau", "traffic", "trafic", "server environment", "environnement serveur", "reset", "réinitialiser", "repair", "réparer", "maintenance", "entretien", "disk", "disque", "disk saver", "économiseur de disque", "cache", "clean", "nettoyer", "lend", "prêter", "browser", "navigateur", "profiles", "my chrome"] },
   // #2080: restore is the backups.import card. Grok Bot / preference import left this page (JC 2026-11-06). Updates stays its own page (#2090).
-  { id: "backups", group: "workspace", labelKey: "settings.section.backupsAndImport", introKey: "settings.intro.backups", icon: Archive, keywords: ["backups", "export", "exporter", "import", "importer", "restore", "restaurer", "full backup", "recovery", "backup", "sauvegarde", "sauvegardes", "replace", "remplacer"] },
+  // JC 2026-11-06: event log cleanup and retention live here too (Backups and storage).
+  { id: "backups", group: "workspace", labelKey: "settings.section.backupsAndStorage", introKey: "settings.intro.backups", icon: Archive, keywords: ["backups", "export", "exporter", "import", "importer", "restore", "restaurer", "full backup", "recovery", "backup", "sauvegarde", "sauvegardes", "replace", "remplacer", "storage", "stockage", "cleanup", "retention", "rétention", "nettoyage", "event log", "journal des événements", "log size"] },
   // #2090: Updates is its own page again (desktop only).
   { id: "updates", group: "app", labelKey: "settings.updates.title", introKey: "settings.intro.updates", icon: Download, keywords: ["updates", "update", "version", "mise à jour", "mises à jour", "prerelease", "pre-release", "beta", "bêta", "restart"] },
   { id: "experimental", group: "app", labelKey: "settings.section.experimental", introKey: "settings.intro.experimental", icon: FlaskConical, keywords: ["early", "preview", "learn", "skill", "authoring", "experimental", "expérimental", "data window", "fenêtre data", "compétences", "unavailable", "indisponible"] },
-  // #2080 L2 / #2090: App keeps startup, help, holding and the About link. Updates live on their own page.
-  { id: "about", group: "app", labelKey: "settings.section.app", introKey: "settings.intro.about", icon: Info, keywords: ["app", "application", "about", "à propos", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot", "open at login", "ouvrir à la connexion", "tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "startup", "démarrage", "help", "aide", "send", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "ime", "japanese", "spell check", "spellcheck", "orthographe", "correcteur", "hardware acceleration", "accélération matérielle", "gpu", "app icon", "icon", "taskbar", "hotkey", "raccourci", "advanced mode", "mode avancé", "simple", "mode", "cleanup", "retention", "nettoyage", "people's tool access"] },
+  // JC 2026-11-06: the App catch-all split in two. General: how this app
+  // behaves on the computer, the composer keys and Advanced mode. Help and
+  // about: the About window, the tours, diagnostics, logs and feedback.
+  { id: "general", group: "app", labelKey: "settings.section.general", introKey: "settings.intro.general", icon: Settings2, keywords: ["general", "général", "system", "système", "open at login", "ouvrir à la connexion", "startup", "démarrage", "app icon", "icon", "taskbar", "barre des tâches", "hotkey", "raccourci", "shortcut", "hardware acceleration", "accélération matérielle", "gpu", "send", "send key", "touche d'envoi", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "clavier", "typing", "saisie", "ime", "japanese", "spell check", "spellcheck", "orthographe", "correcteur", "advanced mode", "mode avancé", "simple", "mode", "interface", "loop guard", "garde-fou"] },
+  { id: "about", group: "app", labelKey: "settings.section.helpAbout", introKey: "settings.intro.about", icon: Info, keywords: ["app", "application", "about", "à propos", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot", "tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"] },
 ];
 
 /** Former sections that are a card of another page now (2026-10-14), by the
@@ -80,7 +84,7 @@ export const CARD_KEYWORDS: Record<string, string[]> = {
   "providers.advanced": ["link with grok bot", "lier à grok bot", "linked grok", "grok bot", "grok bridge", "pont grok", "claude.ai", "connectors", "connecteurs", "cloud agent", "cloud coding"],
   "providers.advanced.connectors": ["claude.ai", "connectors", "connecteurs"],
   "myApprovalRules": ["always allow", "always deny", "ask first", "approval rules", "règles d'approbation"],
-  "general.threadCleanup": ["cleanup", "retention", "event log", "event-log", "log size"],
+  "general.threadCleanup": ["cleanup", "retention", "event log", "event-log", "log size", "nettoyage"],
   "organization.mcpCalls": ["mcp", "timeout", "tool call"],
   "connections.integrations": ["box", "vps"],
   "connections.image": ["image", "avatar", "gpt image"],
@@ -91,11 +95,15 @@ export const CARD_KEYWORDS: Record<string, string[]> = {
   "connections.webSearch": ["web search", "recherche web", "brave", "exa", "parallel", "firecrawl", "searxng"],
   "usage.breakdown": ["by bot", "by model", "par bot", "par modèle"],
   "organization.memory": ["obsidian", "vault"],
-  // #2080 L2: App cards (updates moved to its own page in #2090; Grok import hidden in #2090)
-  "about.startup": ["open at login", "ouvrir à la connexion", "startup", "démarrage", "app icon", "hotkey", "raccourci"],
-  "about.input": ["send", "enter", "spell check", "spellcheck", "orthographe", "correcteur", "keyboard"],
-  "about.help": ["tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"],
-  "about.holding": ["cleanup", "retention", "event log", "event-log", "log size", "nettoyage", "people's tool access", "loop guard", "usage meter"],
+  // JC 2026-11-06: General and Help and about cards
+  "general.system": ["open at login", "ouvrir à la connexion", "startup", "démarrage", "app icon", "hotkey", "raccourci", "hardware acceleration", "gpu"],
+  "general.input": ["send", "enter", "spell check", "spellcheck", "orthographe", "correcteur", "keyboard", "clavier"],
+  "general.interface": ["advanced mode", "mode avancé"],
+  "general.loopGuard": ["loop guard"],
+  "about.about": ["license", "licence", "tour", "tours", "visite", "welcome", "bienvenue"],
+  "about.help": ["diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"],
+  "general.peopleToolAccess": ["people's tool access"],
+  "general.usage": ["usage meter", "usage measure"],
   "updates.links": ["release notes", "notes de version"],
   "voice.phoneCalls": ["phone calls", "appels téléphoniques", "callback number", "do not call"],
   "notifications.privacy": ["blocked", "bloquer", "report", "signalement", "privacy", "confidentialité", "read receipts", "accusés de lecture", "presence", "présence"],
@@ -137,9 +145,9 @@ export function memberHidesSection(id: AppSettingsSection, input: {
   // admin gave it sees the section without the rest of the installation.
   if (id === "experimental") return !(input.manageExperimental ?? input.editConfig) && input.personalSettings !== true;
   if (id === "decisionModel" || id === "workspaces") return !input.editConfig;
-  // #2080 L3: a person's own space backup and import stay visible; the page
-  // itself gates the installation-wide Full backup on manageBackups.
-  if (id === "backups" || id === "import") return false;
+  // #2265: Import left Settings, so Backups is only the installation-wide
+  // Full backup (manageBackups); without it the page would be empty.
+  if (id === "backups" || id === "import") return !input.manageBackups;
   if (id === "computer") return !input.manageComputers && !input.organization;
   return false;
 }

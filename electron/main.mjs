@@ -15,6 +15,7 @@ import { createHostScreenLease } from "./host-screen-lease.mjs";
 import { createAndroidDeviceController } from "./android-device.mjs";
 import { finishSpeech, startSpeech, stopSpeech } from "./speech.mjs";
 import { openBlankTerminal } from "./terminal-launch.mjs";
+import { captureScreenThumbnail } from "./screen-thumbnail.mjs";
 import { pasteMenuItem } from "./paste-menu-item.mjs";
 import { blockPageFrameNavigation } from "./page-frame-guard.mjs";
 import { installPageFrameWatch } from "./page-frames.mjs";
@@ -48,14 +49,12 @@ import { attachFullscreenPush, setWindowFullScreen, windowFullScreenState } from
 import { createWindowNudger } from "./window-nudge.mjs";
 import { createDesktopAttention } from "./desktop-attention.mjs";
 import { createAllWindowsClosedQuit } from "./window-all-closed.mjs";
-import { createStartupScreen } from "./startup-screen.mjs";
 import { createPageContexts } from "./page-contexts.mjs";
-import { createLoadRecovery, isAppPage, loadErrorPage, loadingPage, loadOutcome, recoveryStrings, uiBundleState, waitForUiBundle } from "./load-recovery.mjs";
+import { createLoadRecovery, isAppPage, loadErrorPage, loadingPage, loadOutcome, uiBundleState, waitForUiBundle } from "./load-recovery.mjs";
 import { confirmLanguage } from "./update-confirm.mjs";
 import { createSystemTray, normalizeBotHotkeyConfig, normalizeRoster, slotAccelerator } from "./system-tray.mjs";
-let startupScreen = null;
 let desktopTray = null;
-import { collisionFreeDownloadPath, defaultSaveName, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
+import { collisionFreeDownloadPath, defaultSaveName, localFilesExist, openLocalFile, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
 import { openPdfInDefaultApp } from "./open-pdf.mjs";
 import { desktopViewerPermissionAllowed } from "./desktop-viewer-permissions.mjs";
 import { appPermissionHandlers, connectorSetupUrl, externalOpenUrl, externalWebUrl } from "./app-permissions.mjs";
@@ -107,7 +106,7 @@ import localOriginModule from "./local-origin.cjs";
 import { buildApplicationMenu } from "./menu.mjs";
 import { createComputerSharing, validateSharedFolders } from "./computer-sharing.mjs";
 import { createDesktopBridge } from "./desktop-bridge.mjs";
-import { macAppEnabled, macAppOfTool, macAppsStatus, runMacAppCall, testMacApp, writeMacAppSettings } from "./mac-apps.mjs";
+import { macAppEnabled, macAppOfTool, macAppsStatus, macAppsStatusLive, requestMacAppAutomation, runMacAppCall, testMacApp, writeMacAppSettings } from "./mac-apps.mjs";
 import { applyAppIcon, createAppIconStore, parseAppIconRequest, windowIconImage } from "./app-icon.mjs";
 import { WINDOWS_APP_USER_MODEL_ID, shortcutFolders, updateShortcutIcons } from "./windows-shortcuts.mjs";
 import { createProxyCredentialStore, createProxyCredentials, proxyPasswordAnswerScript, proxyPasswordPage } from "./proxy-credentials.mjs";
@@ -460,8 +459,8 @@ let openWindowForLink = null;
 function revealForLink() {
   if (desktopTray?.show()) return;
   // The app window, where the link opens, even when another window (a
-  // desktop viewer) had focus. While the loading screen is up it owns that.
-  const appWindow = !startupScreen && mainWindow && !mainWindow.isDestroyed() ? [mainWindow] : BrowserWindow.getAllWindows();
+  // desktop viewer) had focus.
+  const appWindow = mainWindow && !mainWindow.isDestroyed() ? [mainWindow] : BrowserWindow.getAllWindows();
   if (activateExistingWindow(appWindow)) return;
   openWindowForLink?.();
 }
@@ -756,37 +755,6 @@ const localComputerGrant = createLocalComputerGrant({
 });
 /** Settles once the local server answers /api/health (startServerOn). */
 let localServerAnswering = Promise.resolve();
-// The loading screen, once per launch (see app.whenReady).
-let startupScreenOpened = false;
-function openStartupScreen() {
-  if (startupScreenOpened || desktopShutdownStarted) return;
-  startupScreenOpened = true;
-  if (mainWindow && !mainWindow.isDestroyed()) return;
-  startupScreen = createStartupScreen({
-    BrowserWindow, iconPath: APP_ICON, isQuitting: () => desktopShutdownStarted,
-    onQuit: () => app.quit(),
-    onHide: desktopTray && process.platform === "win32" ? (win) => desktopTray.hide(win) : undefined,
-    isHidden: () => desktopTray?.isHidden() ?? false,
-    onShow: (win) => desktopTray?.windowShown(win),
-    onFinished: () => { startupScreen = null; },
-    onOpenLogs: () => {
-      fs.mkdirSync(LOG_DIR, { recursive: true });
-      void shell.openPath(LOG_DIR).then((error) => { if (error) slog(`startup: open logs failed: ${error}`); });
-    },
-    onRetry: () => {
-      slog("startup: retry requested from the loading screen");
-      app.relaunch();
-      app.quit();
-    },
-  });
-  // The loading screen paints while startup goes on: waiting for it first
-  // held the local server back by the time a window takes to show, on every
-  // launch. Its status lines and the workspace's hand-over work whether it
-  // is on screen yet or not (startup-screen.mjs publishes on load, and
-  // attach() waits for React).
-  void startupScreen.ready.then(() => startupPhase("loading screen shown"));
-}
-
 // The first page load comes from this app's bundle while the server loads
 // (electron/boot-ui.mjs), once per launch.
 let bootUiUsed = false;
@@ -1141,9 +1109,8 @@ const routineWake = createRoutineWakeHold({
 // stalls on someone's machine says where in the log they send us, and the
 // loading screen shows the step it is on.
 const startupClock = Date.now();
-function startupPhase(phase, status) {
+function startupPhase(phase) {
   slog(`startup: ${phase} (+${Date.now() - startupClock}ms)`);
-  if (status) startupScreen?.setStatus(status);
 }
 
 function slog(line) {
@@ -1931,7 +1898,6 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     env: childEnv,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  openStartupScreen();
   let resolveServerExit;
   utilityServerExits.set(proc, new Promise((resolve) => {
     resolveServerExit = resolve;
@@ -2025,7 +1991,7 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
 }
 
 async function startServerPackaged() {
-  startupPhase("starting the local server", "Starting the local server…");
+  startupPhase("starting the local server");
   const started = await startServerPackagedOnce();
   startupPhase(started ? "local server ready" : "local server failed to start");
   return started;
@@ -2501,19 +2467,36 @@ function deliverNotificationToPage(channel, id, ...payload) {
   });
 }
 
-/** macOS: read Notification Center authorization when Electron exposes it.
- * Showing a banner still prompts on first need when status is not-determined. */
+/** macOS asks for Notification Center authorization the first time
+ * Electron posts (UNUserNotificationCenter requestAuthorization, logged by
+ * Electron as "Notification authorization granted"). Electron exposes no
+ * read of that status, so the state Settings shows comes from
+ * desktopAttention.deliveryStatus(): whether macOS lists what was posted. */
 function ensureMacNotificationAuthorized() {
-  if (process.platform !== "darwin") return true;
-  try {
-    const settings = systemPreferences.getNotificationSettings?.();
-    const status = settings?.authorizationStatus ?? settings?.authStatus;
-    if (status === "denied") {
-      console.warn("[desktop] Notification Center authorization is denied for Sagax");
-      return false;
-    }
-  } catch { /* older Electron: show() prompts */ }
   return true;
+}
+
+/** Notifications still listed in Notification Center, mirrored to disk so
+ * the next launch re-attaches their click or posts again what quitting
+ * removed (electron/desktop-attention.mjs). */
+const DELIVERED_NOTIFICATIONS_FILE = () => path.join(app.getPath("userData"), "notifications-delivered.json");
+const deliveredNotificationStore = {
+  read() {
+    try { return JSON.parse(fs.readFileSync(DELIVERED_NOTIFICATIONS_FILE(), "utf8")); } catch { return null; }
+  },
+  write(value) {
+    const file = DELIVERED_NOTIFICATIONS_FILE();
+    const temp = `${file}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(value), { mode: 0o600 });
+    fs.renameSync(temp, file);
+  },
+};
+
+/** Where System Settings lets the person allow Sagax notifications. */
+function notificationSettingsUrl() {
+  if (process.platform === "darwin") return "x-apple.systempreferences:com.apple.Notifications-Settings.extension";
+  if (process.platform === "win32") return "ms-settings:notifications";
+  return null;
 }
 
 // Native notifications, the Dock bounce and the taskbar flash
@@ -2526,8 +2509,15 @@ const desktopAttention = createDesktopAttention({
   Notification,
   getWindow: () => mainWindow,
   ensureAuthorized: ensureMacNotificationAuthorized,
-  onClick: (id, target) => deliverNotificationToPage("desktop:notification-click", id, target),
-  onReply: (id, reply, target) => deliverNotificationToPage("desktop:notification-reply", id, reply, target),
+  store: deliveredNotificationStore,
+  onClick: (id, target, origin) => {
+    if (origin && !notificationAccounts.has(id)) notificationAccounts.set(id, origin);
+    deliverNotificationToPage("desktop:notification-click", id, target);
+  },
+  onReply: (id, reply, target, origin) => {
+    if (origin && !notificationAccounts.has(id)) notificationAccounts.set(id, origin);
+    deliverNotificationToPage("desktop:notification-reply", id, reply, target);
+  },
 });
 
 // A nudge on this computer, received or sent: bring the window to the very
@@ -2548,7 +2538,29 @@ ipcMain.on("desktop:nudge", (event, options) => {
 ipcMain.on("desktop:notify", (event, request) => {
   if (!fromMainWindowTop(event)) return;
   rememberNotificationAccount(event, request);
-  desktopAttention.notify(request);
+  const origin = pageContexts?.originOf(event.sender) ?? "";
+  desktopAttention.notify(request && typeof request === "object" ? { ...request, origin } : request);
+});
+// Settings > Notifications: whether notifications reach Notification Center,
+// a test notification, and the System Settings pane that allows them.
+ipcMain.handle("desktop:notification-status", (event) => {
+  if (!fromMainWindowTop(event)) return null;
+  return { ...desktopAttention.deliveryStatus(), platform: process.platform, settings: Boolean(notificationSettingsUrl()) };
+});
+ipcMain.handle("desktop:notification-test", async (event, text) => {
+  if (!fromMainWindowTop(event)) return null;
+  const asked = text && typeof text === "object" ? text : {};
+  const state = await desktopAttention.test({
+    title: typeof asked.title === "string" ? asked.title : "Sagax",
+    body: typeof asked.body === "string" ? asked.body : "",
+  });
+  return { ...desktopAttention.deliveryStatus(), state, platform: process.platform, settings: Boolean(notificationSettingsUrl()) };
+});
+ipcMain.handle("desktop:open-notification-settings", (event) => {
+  if (!fromMainWindowTop(event)) return false;
+  const url = notificationSettingsUrl();
+  if (!url) return false;
+  return shell.openExternal(url).then(() => true, () => false);
 });
 // The approval a notification asked about was answered elsewhere or expired.
 ipcMain.on("desktop:notify-withdraw", (event, withdrawKey) => {
@@ -3860,7 +3872,7 @@ function createWindow({ deferNavigation = false } = {}) {
     // mirrors it over desktop:skin. Keep Windows hidden until that handshake
     // recolors the native caption-button overlay, otherwise a saved light
     // skin still flashes the Midnight-black block on every cold start.
-    show: !waitsForSkinSync && !startupScreen,
+    show: false,
     icon: currentWindowIcon(),
     backgroundColor: "#070707",
     autoHideMenuBar: process.platform !== "darwin",
@@ -3918,8 +3930,17 @@ function createWindow({ deferNavigation = false } = {}) {
   });
   win.setTitle(workspaceWindowTitle(environmentsState, desktopRemoteAccess));
   attachUpdaterWindow(win, { pages: () => contexts.openOrigins().map((origin) => contexts.contentsFor(origin)).filter(Boolean) });
-  if (startupScreen) startupScreen.attach(win, { maximized: restored.maximized });
-  else if (waitsForSkinSync) {
+  if (!waitsForSkinSync) {
+    // No splash: the window opens straight on the app once its first paint
+    // is ready (backgroundColor above avoids a white flash). Some Wayland
+    // compositors never paint a hidden window, so a loaded page shows it too.
+    const showWindow = () => {
+      if (win.isDestroyed() || win.isVisible() || desktopShutdownStarted || desktopTray?.isHidden()) return;
+      win.show();
+    };
+    win.once("ready-to-show", showWindow);
+    win.webContents.once("did-finish-load", () => setTimeout(showWindow, 500).unref?.());
+  } else {
     // A broken renderer or preload must not strand the app as an invisible
     // process. Normal startup shows from desktop:skin almost immediately;
     // this is only the bounded recovery path.
@@ -3933,7 +3954,7 @@ function createWindow({ deferNavigation = false } = {}) {
   }
   installWindowStatePersistence(win);
   applyUnreadBadge(win);
-  if (restored.maximized && !startupScreen) win.maximize();
+  if (restored.maximized) win.maximize();
   win.once("closed", () => {
     if (mainWindow === win) mainWindow = null;
     contexts.reset();
@@ -4152,6 +4173,18 @@ ipcMain.handle("screen:frame", localOnly("screen:frame", async () => {
   return thumbnail && !thumbnail.isEmpty() ? thumbnail.toDataURL() : null;
 }));
 
+// The bot panel's Computer row thumbnail of this computer: a 320x200 JPEG,
+// only once Screen Recording is granted (never the capture that prompts).
+ipcMain.handle("screen:thumbnail", desktopUiOnly("screen:thumbnail", async () => {
+  const screenStatus = process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("screen") : undefined;
+  return captureScreenThumbnail({
+    platform: process.platform,
+    screenStatus,
+    getSources: (options) => desktopCapturer.getSources(options),
+    hostName: os.hostname(),
+  }).catch(() => null);
+}));
+
 // Onboarding permission checks. Status reads are free; the mic request
 // pops the real TCC prompt attributed to the app.
 //
@@ -4187,7 +4220,15 @@ ipcMain.handle("clipboard:write-text", localOnly("clipboard:write-text", (_event
 // server that was "needs an API key" turns into a listed one without waiting.
 // Plugins > This Mac with an organization server: the Apple apps live here,
 // so the setup pages read and change them over IPC (electron/mac-apps.mjs).
-ipcMain.handle("mac-apps:status", desktopUiOnly("mac-apps:status", () => macAppsStatus(app.getPath("userData"), { platform: process.platform })));
+// Status reads the real Automation grant from macOS (helper "status", never a
+// prompt), so a grant or refusal made in System Settings shows on focus.
+ipcMain.handle("mac-apps:status", desktopUiOnly("mac-apps:status", () => macAppsStatusLive(app.getPath("userData"), { platform: process.platform })));
+// "Ask for access": the helper (a child of Sagax, so macOS files the grant
+// under Sagax) sends the permission check that shows the macOS prompt.
+ipcMain.handle("mac-apps:ask-automation", desktopUiOnly("mac-apps:ask-automation", async (_event, appId) => {
+  await requestMacAppAutomation(app.getPath("userData"), appId, { platform: process.platform });
+  return macAppsStatusLive(app.getPath("userData"), { platform: process.platform });
+}));
 ipcMain.handle("mac-apps:set", desktopUiOnly("mac-apps:set", (_event, appId, enabled) => {
   if (typeof enabled !== "boolean") throw new Error("enabled must be true or false");
   writeMacAppSettings(app.getPath("userData"), appId, { enabled });
@@ -4495,7 +4536,21 @@ ipcMain.handle("app-icon:reset", desktopUiOnly("app-icon:reset", () => {
 // server is refused, because that server's paths mean nothing here.
 ipcMain.handle("desktop:reveal-file", localOnly("desktop:reveal-file", async (_event, rawPath) => {
   if (desktopRemoteAccess) throw new Error("That file is on the computer this app is connected to");
-  return revealInFolder(rawPath, { reveal: (target) => shell.showItemInFolder(target) });
+  return revealInFolder(rawPath, { reveal: (target) => shell.showItemInFolder(target), home: os.homedir() });
+}));
+
+// A file name in a bot message, clicked: open it with this computer's default
+// app. Same local-only rule as reveal.
+ipcMain.handle("desktop:open-file", localOnly("desktop:open-file", async (_event, rawPath) => {
+  if (desktopRemoteAccess) throw new Error("That file is on the computer this app is connected to");
+  return openLocalFile(rawPath, { open: (target) => shell.openPath(target), home: os.homedir() });
+}));
+
+// Which file names a bot message mentions exist on this computer, so the chat
+// links only real files.
+ipcMain.handle("desktop:files-exist", localOnly("desktop:files-exist", async (_event, rawPaths) => {
+  if (desktopRemoteAccess) return [];
+  return localFilesExist(rawPaths, { home: os.homedir() });
 }));
 
 // The renderer owns the skin, including the Windows caption buttons it draws
@@ -5530,6 +5585,14 @@ app.whenReady().then(async () => {
   // identity in this profile without the visibility gate re-running. The
   // first launch of each new version empties the HTTP cache, before any
   // window could serve one of those entries.
+  // Notifications from the last run: re-attach what Notification Center
+  // still lists, post again what quitting (an update) removed.
+  if (process.platform === "darwin") {
+    void desktopAttention.adoptDelivered().then(
+      ({ adopted, reposted }) => { if (adopted || reposted) slog(`notifications: ${adopted} adopted, ${reposted} posted again`); },
+      (error) => slog(`notifications: adopt failed: ${error?.message ?? error}`),
+    );
+  }
   await evictStartupCacheOnce({
     userData: app.getPath("userData"),
     currentVersion: app.getVersion(),
@@ -5540,7 +5603,7 @@ app.whenReady().then(async () => {
     try {
       desktopTray = createSystemTray({
         Tray, Menu, nativeImage, iconPath: APP_ICON,
-        getWindow: () => startupScreen?.window ?? mainWindow,
+        getWindow: () => mainWindow,
         onQuit: () => app.quit(),
         onOpenBot: openBotFromShell,
         templatePath: path.join(__dirname, "resources/trayTemplate.png"),
@@ -5552,31 +5615,20 @@ app.whenReady().then(async () => {
     }
   }
   applyCaptureHotkey();
-  // The loading screen opens just after the local server is forked
-  // (startServerOn): building its window takes the main thread for about a
-  // tenth of a second, and the server's start no longer waits behind it.
-  // When no local server starts (server mode, a remote connection), it opens
-  // a moment later, unless the workspace is already up.
-  setTimeout(openStartupScreen, 150).unref?.();
   if (desktopShutdownStarted) return;
   // Opened while an update was still copying its files (a silent Windows
   // install, 2026-10-19): the window used to come up on a bare "Not Found".
-  // Wait on the loading screen until the bundle is whole, else say so.
+  // Wait until the bundle is whole; if it never is, the window's own load
+  // recovery page says so.
   if (app.isPackaged) {
-    const strings = recoveryStrings(recoveryLanguage());
     const bundle = await waitForUiBundle({
       check: () => uiBundleState({ resourcesPath: process.resourcesPath }),
       onWaiting: (state) => {
         slog(`startup: the app's files are not all in place (${state.missing.slice(0, 5).join(", ")}); waiting, an update may still be installing`);
-        openStartupScreen();
-        startupScreen?.setStatus(strings.installing);
       },
     });
     if (!bundle.complete) {
       slog(`startup: files still missing after the wait (${bundle.missing.slice(0, 5).join(", ")})`);
-      openStartupScreen();
-      startupScreen?.fail(`${strings.bundleTitle}. ${strings.bundleBody}`);
-      return;
     }
     if (bundle.waited) slog("startup: the app's files are in place; starting");
     if (desktopShutdownStarted) return;
@@ -5846,7 +5898,7 @@ app.whenReady().then(async () => {
   void refreshSharedComputersAllowed().then((allowed) => {
     sharingController().start({ maintainer: allowed });
   });
-  startupPhase("opening the workspace", "Opening your workspace…");
+  startupPhase("opening the workspace");
   let restoredOrganizationEntry = false;
   await workspaceMenuAction(async () => { restoredOrganizationEntry = await organizationEntry.restore(); });
   organizationEntryReady = true;
@@ -5920,7 +5972,6 @@ app.on("before-quit", (e) => {
   mascotHotkey.dispose();
   botHotkeys.dispose();
   captureHotkey.dispose();
-  startupScreen?.dispose();
   companyBackupSchedule?.close();
   orgLibrary?.close();
   managedDesktop?.close();

@@ -7,6 +7,8 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import {
+  askMessagesAutomation,
+  automationAction,
   loadMessagesSetup,
   openMessagesPermissionPane,
   permissionTone,
@@ -49,7 +51,8 @@ function permissionLabel(state: string): string {
 export function MessagesSetupView({ onBack, trail }: Props) {
   const [status, setStatus] = useState<MessagesSetupStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"load" | "enable" | "test" | "open" | null>("load");
+  const [busy, setBusy] = useState<"load" | "enable" | "test" | "open" | "ask" | null>("load");
+  const [testError, setTestError] = useState<string | null>(null);
   const [test, setTest] = useState<MessagesSetupTestResult | null>(null);
   const [tested, setTested] = useState(false);
   const [testOk, setTestOk] = useState(false);
@@ -109,9 +112,24 @@ export function MessagesSetupView({ onBack, trail }: Props) {
     }
   };
 
+  // "Ask for access": macOS shows its prompt naming Sagax; the status that
+  // comes back holds the answer (granted, or denied for System Settings).
+  const askAccess = async () => {
+    setBusy("ask");
+    setError(null);
+    try {
+      setStatus(await askMessagesAutomation());
+    } catch (cause) {
+      setError(readableError(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const runTest = async () => {
     setBusy("test");
     setError(null);
+    setTestError(null);
     try {
       const result = await testMessagesSetup();
       setTest(result);
@@ -121,7 +139,8 @@ export function MessagesSetupView({ onBack, trail }: Props) {
     } catch (cause) {
       setTested(true);
       setTestOk(false);
-      setError(readableError(cause));
+      // Shown under the test itself: a read error is not a permission refusal.
+      setTestError(readableError(cause));
     } finally {
       setBusy(null);
     }
@@ -249,17 +268,35 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                       </span>
                     </div>
                     <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.messages.automationBody")}</p>
-                    {permissions.automation !== "granted" && (
-                      <button
-                        type="button"
-                        data-messages-open-automation
-                        disabled={busy !== null}
-                        onClick={() => void openPane("automation")}
-                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
-                      >
-                        {busy === "open" && <Loader2 size={13} className="animate-spin" />}
-                        {t("connectApps.mac.messages.openSettings")}
-                      </button>
+                    {automationAction(permissions.automation) === "ask" && (
+                      <>
+                        <button
+                          type="button"
+                          data-messages-ask-automation
+                          disabled={busy !== null}
+                          onClick={() => void askAccess()}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-medium text-panel hover:opacity-90 disabled:opacity-50"
+                        >
+                          {busy === "ask" && <Loader2 size={13} className="animate-spin" />}
+                          {t("connectApps.mac.askAccess")}
+                        </button>
+                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
+                      </>
+                    )}
+                    {automationAction(permissions.automation) === "openSettings" && (
+                      <>
+                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-danger" data-messages-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
+                        <button
+                          type="button"
+                          data-messages-open-automation
+                          disabled={busy !== null}
+                          onClick={() => void openPane("automation")}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
+                        >
+                          {busy === "open" && <Loader2 size={13} className="animate-spin" />}
+                          {t("connectApps.mac.messages.openSettings")}
+                        </button>
+                      </>
                     )}
                   </div>
                 </li>
@@ -279,6 +316,11 @@ export function MessagesSetupView({ onBack, trail }: Props) {
                       {busy === "test" && <Loader2 size={13} className="animate-spin" />}
                       {t("connectApps.mac.messages.testRun")}
                     </button>
+                    {testError && (
+                      <p role="alert" className="mt-2 text-[12px] leading-relaxed text-danger" data-messages-test-error="">
+                        {t("connectApps.mac.readFailed", { error: testError })}
+                      </p>
+                    )}
                     {test && (
                       <p className="mt-2 text-[12.5px] text-ink" data-messages-test-result="" data-messages-conversation-count={test.conversationCount}>
                         {test.conversationCount === 1

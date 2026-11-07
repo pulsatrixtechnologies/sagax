@@ -59,7 +59,7 @@ try {
   await mkdir(outDir, { recursive: true });
   browser = await chromium.launch({ headless: true, ...(process.env.SAGAX_VERIFY_BROWSER_CHROME ? { executablePath: process.env.SAGAX_VERIFY_BROWSER_CHROME } : {}) });
   for (const skin of skins) {
-    const page = await browser.newPage({ viewport: { width: 1100, height: 900 }, deviceScaleFactor: 2, colorScheme: skin.label });
+    const page = await browser.newPage({ viewport: { width: Number(arg("--width", "1100")), height: Number(arg("--height", "900")) }, deviceScaleFactor: 2, colorScheme: skin.label });
     if (openCards.length) await page.addInitScript((ids) => { localStorage.setItem("openmausbot.settingsCards.v1", JSON.stringify(Object.fromEntries(ids.map((id) => [id, true])))); }, openCards);
     page.on("pageerror", (error) => console.error("page error:", error.stack));
     for (const section of sections) {

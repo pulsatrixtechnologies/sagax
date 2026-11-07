@@ -763,6 +763,19 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(frame.frame.threadId, "t1")
     }
 
+    func testDecodesTheBotsNotifyChoice() throws {
+        let json = """
+        {"kind":"notify","seq":13,"notification":{
+          "kind":"message","botId":"b1","botName":"Scout","threadId":"t1",
+          "title":"Scout","body":"progress log","notify":false}}
+        """
+        let frame = try JSONDecoder().decode(StreamFrame.self, from: Data(json.utf8))
+        guard case let .notify(notification) = frame.frame else {
+            return XCTFail("expected .notify")
+        }
+        XCTAssertEqual(notification.notify, false)
+    }
+
     func testDecodesANudgeFrame() throws {
         let frame = try JSONDecoder().decode(
             StreamFrame.self,

@@ -11,7 +11,7 @@ import {
 } from "@/lib/local-voice";
 import { t } from "@/lib/i18n";
 import { VoiceProviderSettings } from "./settings/VoiceProviderSettings";
-import { CompactRow, DescribedRow, GROUP_CARD, PILL, PillSelect, Switch } from "./SettingsPrimitives";
+import { CompactRow, DescribedRow, GROUP_CARD, PILL, PillSelect, SettingsGroup, Switch, useSettingsSurface } from "./SettingsPrimitives";
 
 export function VoiceSettings({ bot, onPatch, workspaceConfigurationLocked = false, providers = true }: {
   bot: Bot;
@@ -25,6 +25,9 @@ export function VoiceSettings({ bot, onPatch, workspaceConfigurationLocked = fal
   const [deviceVoice, setDeviceVoice] = useState(() => remoteSystemVoice(bot.id));
   const [voices, setVoices] = useState<Array<{ id: string; label: string }>>([]);
   const usesLocalSystem = localMacClient && deviceProvider === "system";
+  // The bot's profile page (#2313): the voice rows sit in one plain card
+  // under the rail's own label ("Voice"), like every other card there.
+  const plain = useSettingsSurface() === "plain";
   useEffect(() => { setDeviceVoice(remoteSystemVoice(bot.id)); }, [bot.id]);
   useEffect(() => {
     if (!usesLocalSystem) return;
@@ -35,10 +38,8 @@ export function VoiceSettings({ bot, onPatch, workspaceConfigurationLocked = fal
   }, [usesLocalSystem]);
 
   if (!state.config?.tts) return null;
-  return (
-    <div className="flex flex-col gap-3" data-voice-settings="">
-      {!usesLocalSystem && providers && <VoiceProviderSettings bot={bot} />}
-      <div className={GROUP_CARD}>
+  const rows = (
+    <>
         {localMacClient && (
           <DescribedRow label={t("botPanel.voice.mac")} help={t("voice.bot.macIntro")}>
             <PillSelect<RemoteVoiceProvider> value={deviceProvider} ariaLabel={t("botPanel.voice.mac")}
@@ -71,7 +72,14 @@ export function VoiceSettings({ bot, onPatch, workspaceConfigurationLocked = fal
           <Switch checked={bot.voiceNotes !== false} aria-label={t("botPanel.voice.notesAria")}
             onClick={() => onPatch({ voiceNotes: bot.voiceNotes === false })} />
         </DescribedRow>
-      </div>
+    </>
+  );
+  return (
+    <div className={plain ? "flex flex-col gap-5" : "flex flex-col gap-3"} data-voice-settings="">
+      {!usesLocalSystem && providers && <VoiceProviderSettings bot={bot} />}
+      {plain
+        ? <SettingsGroup title={t("botSettings.nav.voice")} groupId="botVoice">{rows}</SettingsGroup>
+        : <div className={GROUP_CARD}>{rows}</div>}
     </div>
   );
 }

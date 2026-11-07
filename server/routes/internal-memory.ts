@@ -59,7 +59,7 @@ export interface InternalMemoryDeps {
   bot(id: string): InternalMemoryBot | null | undefined;
   botByThread(threadId: string): InternalMemoryBot | null | undefined;
   groupByThread(threadId: string): InternalMemoryGroup | null | undefined;
-  taskByThread(botId: string, threadId: string): { title?: string; ownerPrincipalId?: string } | null | undefined;
+  taskByThread(botId: string, threadId: string): { title?: string; ownerPrincipalId?: string; openedBy?: { botId?: string } } | null | undefined;
   isConfidentialThread(threadId: string): boolean;
   ownsThread(botId: string, threadId: string): boolean;
   /** Throws Error & { status: 401 } when the turn is no longer live. */
@@ -106,6 +106,9 @@ export interface InternalMemoryDeps {
     spent: number;
   }): { ok: true; messageId: string; emoji: string; changed: boolean; removed?: string[] } | { ok: false; status: number; error: string; code: string };
   recordPlacedReaction(threadId: string, botId: string, info: { messageId: string; emoji: string; at: number }): void;
+  /** The bot's choice for the next reply settled in `threadId` (set_reply_notify):
+   * false keeps that reply's notification and push off. */
+  setReplyNotify(threadId: string, notify: boolean): void;
   roomFeedsBot(group: InternalMemoryGroup, bot: Pick<InternalMemoryBot, "visibility">): boolean;
   turnSpeaker(threadId: string): string | undefined;
   localPrincipalId(): string;
@@ -297,6 +300,25 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
         deps.recordPlacedReaction(capability.threadId, sender.id, { messageId: outcome.messageId, emoji: outcome.emoji, at: Date.now() });
       }
       return json(res, outcome.ok ? 200 : outcome.status, outcome.ok ? outcome : { error: outcome.error, code: outcome.code });
+    }
+    if (method === "POST" && path === "/api/internal/reply-notify") {
+      // set_reply_notify: this turn's reply (or a thread this bot just opened
+      // with send_to_bot) settles with or without a notification.
+      const body = await readBody();
+      deps.requireActive(capability);
+      if (body.notify !== undefined && typeof body.notify !== "boolean") {
+        return json(res, 400, { error: "notify must be true or false" });
+      }
+      const notify = body.notify !== false;
+      const asked = typeof body.threadId === "string" ? body.threadId.trim() : "";
+      const threadId = asked || capability.threadId;
+      if (threadId !== capability.threadId) {
+        const toBotId = typeof body.toBotId === "string" ? body.toBotId.trim() : "";
+        const opened = toBotId ? deps.taskByThread(toBotId, threadId) : null;
+        if (opened?.openedBy?.botId !== sender.id) return json(res, 403, { error: "That thread is not one you opened." });
+      }
+      deps.setReplyNotify(threadId, notify);
+      return json(res, 200, { ok: true, notify, threadId });
     }
     if ((path === "/api/internal/memory" || path === "/api/internal/memory/log") && method === "POST") {
       if (sender.memoryEnabled === false) {

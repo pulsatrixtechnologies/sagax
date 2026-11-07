@@ -27,6 +27,7 @@ vi.mock("../DesktopCapabilities", () => ({
 }));
 
 const { AccessSection } = await import("./AccessSection");
+const { SettingsSurfaceProvider } = await import("../SettingsPrimitives");
 
 // WorkingFolder (moved into this file) reads window.ogb?.pickFolder directly
 // at render time, same "node" environment gap as above: stub per test, the
@@ -195,5 +196,44 @@ describe("AccessSection Works on", () => {
     const markup = render(makeBot());
     expect(markup).toContain("Auto and cloud computers.");
     expect(markup).toContain("Cloud backend");
+  });
+});
+
+// The bot's profile page (#2313): the reference look under the plain
+// surface. Every card carries its own grey label, nothing is bordered,
+// underlined or a primary pill, and "Manage in Plugins" shows once, as the
+// MCP servers card's pill.
+describe("AccessSection on the profile page (plain surface)", () => {
+  const renderPlain = (bot: Bot, derived = makeDerived()) => renderToStaticMarkup(
+    createElement(StoreProvider, null, createElement(SettingsSurfaceProvider, { surface: "plain", children: createElement(AccessSection, { bot, derived }) })),
+  );
+  // HelpTip popovers keep their own outline (a floating surface, not a card).
+  const withoutPopovers = (markup: string) => markup.replace(/<div[^>]*popover-surface[\s\S]*?<\/div>/g, "");
+  const BORDER = /\bborder(-\[|-border|-hairline|-accent)/;
+
+  it("has no border, no underline and no primary pill", () => {
+    fixture.servers = [{ name: "notes", enabled: true }];
+    fixture.config = { features: { boatComputer: true } } as Partial<ConfigStatus>;
+    const markup = withoutPopovers(renderPlain(makeBot({ alwaysAllow: ["shell.run"] }), makeDerived({ browserSelectable: true })));
+    expect(markup).not.toMatch(BORDER);
+    expect(markup).not.toContain("underline");
+    expect(markup).not.toContain("ui-button-primary");
+  });
+
+  it("labels every card with its grey label", () => {
+    fixture.servers = [{ name: "notes", enabled: true }];
+    fixture.config = { features: { boatComputer: true } } as Partial<ConfigStatus>;
+    const markup = renderPlain(makeBot());
+    for (const label of ["MCP servers", "Background brief", "Tool selection", "Webhooks", "Always allowed", "Working folder", "Cloud backend"]) {
+      expect(markup).toContain(`>${label}<`);
+    }
+  });
+
+  it("offers Manage in Plugins exactly once", () => {
+    fixture.servers = [{ name: "notes", enabled: true }];
+    const markup = renderPlain(makeBot({ mcpServers: ["notes"] }));
+    expect(markup.match(/Manage in Plugins/g)).toHaveLength(1);
+    expect(markup).toContain("Engine tools");
+    expect(markup).toContain("Nothing allowed yet.");
   });
 });

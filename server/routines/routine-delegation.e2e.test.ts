@@ -51,9 +51,11 @@ describe("routine delegation through the isolated harness", () => {
     return await runState(run.id);
   };
   /** The thread the job runtime runs the routine's delegation in (lot 3). */
+  // The peer can also hold an unrelated task of its own: pick the delegated one.
+  const delegatedWork = () => readHandoffs(fixture.info.dataDir).find((node) => node.botId === peer.id && node.text === "Produce the fixture report.");
   const workThread = async () => {
     let threadId = "";
-    await expect.poll(() => (threadId = readHandoffs(fixture.info.dataDir).find((node) => node.botId === peer.id)?.threadId ?? ""), { timeout: 15_000 }).not.toBe("");
+    await expect.poll(() => (threadId = delegatedWork()?.threadId ?? ""), { timeout: 15_000 }).not.toBe("");
     return threadId;
   };
   const delegate = async (threadId: string) => {
@@ -116,15 +118,15 @@ describe("routine delegation through the isolated harness", () => {
     const { bots } = await api("GET", "/api/bots");
     const peerThread = bots.find((bot: any) => bot.id === peer.id).threadId;
     await control(["send", "--bot", peer.id, "--text", "An existing task occupies the peer."]);
-    expect((await dump(peerThread)).systemPrompt).not.toContain("Execute this routine now:");
+    expect((await dump(peerThread)).systemPrompt).not.toContain("Execute now; required handoffs");
     const run = await start();
-    expect((await dump(run.threadId)).systemPrompt).toContain("Execute this routine now:");
+    expect((await dump(run.threadId)).systemPrompt).toContain("Execute now; required handoffs");
     await delegate(run.threadId);
     finish(run.threadId);
     await expect.poll(async () => (await runState(run.id))?.status, { timeout: 15_000 }).toBe("waiting");
     expect((await runState(run.id)).finishedAt).toBeUndefined();
     // The peer's only slot is taken: the work waits queued.
-    expect(readHandoffs(fixture.info.dataDir).find((node) => node.botId === peer.id)?.status).toBe("queued");
+    expect(delegatedWork()?.status).toBe("queued");
     finish(peerThread);
     const work = await workThread();
     await dump(work);
@@ -137,7 +139,8 @@ describe("routine delegation through the isolated harness", () => {
   }, 60_000);
 
   it("wakes the routine with a denied handoff instead of leaving it waiting forever", async () => {
-    await api("PATCH", `/api/bots/${source.id}`, { approvePeerComms: true });
+    // New bots start at Full access (#2111), which acts without a peer card; pin Ask so the card is raised.
+    await api("PATCH", `/api/bots/${source.id}`, { approvePeerComms: true, approvalMode: "ask" });
     const run = await start();
     await delegate(run.threadId);
     finish(run.threadId);
@@ -185,7 +188,8 @@ describe("routine delegation through the isolated harness", () => {
   }, 45_000);
 
   it("does not dispatch an approved handoff after the routine was cancelled", async () => {
-    await api("PATCH", `/api/bots/${source.id}`, { approvePeerComms: true });
+    // New bots start at Full access (#2111), which acts without a peer card; pin Ask so the card is raised.
+    await api("PATCH", `/api/bots/${source.id}`, { approvePeerComms: true, approvalMode: "ask" });
     const run = await start();
     await delegate(run.threadId);
     finish(run.threadId);
@@ -218,7 +222,7 @@ describe("routine delegation through the isolated harness", () => {
     await api("PUT", "/api/config", { anthropic: { key: FIXTURE_ANTHROPIC_KEY_V2 } });
     await expect.poll(async () => (await runState(run.id))?.status).toBe("failed");
     // Work that never started is dropped with the run (contract: Stop).
-    await expect.poll(() => readHandoffs(fixture.info.dataDir).find((node) => node.botId === peer.id)?.status).toBe("cancelled");
+    await expect.poll(() => delegatedWork()?.status).toBe("cancelled");
     evidence.push({ providerFailureDroppedQueuedWork: true, runId: run.id });
   }, 45_000);
 

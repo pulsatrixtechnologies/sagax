@@ -12,7 +12,7 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { ApiError } from "@/state/store";
 import { useBotEditor } from "./BotEditorContext";
-import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
+import { PILL, PRIMARY_PILL, useSettingsSurface } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 /** Mirrors server/skills/skill-upload.ts. */
@@ -82,10 +82,13 @@ function base64(file: File): Promise<string> {
 }
 
 export function SkillUploadPreview({ items, onRemove, disabled }: { items: UploadPreviewItem[]; onRemove?: (index: number) => void; disabled?: boolean }) {
+  // The bot's profile page (plain surface, #2313): each file a filled tile,
+  // no outline; the skill's name in 14px, its lines in 12px grey.
+  const plain = useSettingsSurface() === "plain";
   return (
     <ul className="flex flex-col gap-2" data-skill-upload-preview="">
       {items.map((item, index) => (
-        <li key={`${item.file}-${index}`} className="rounded-lg border border-hairline/40 px-3 py-2" data-skill-upload-item={item.file}>
+        <li key={`${item.file}-${index}`} className={plain ? "rounded-lg bg-card px-3 py-2" : "rounded-lg border border-hairline/40 px-3 py-2"} data-skill-upload-item={item.file}>
           <div className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink-secondary">{item.file}</span>
             {onRemove && (
@@ -95,7 +98,10 @@ export function SkillUploadPreview({ items, onRemove, disabled }: { items: Uploa
                 aria-label={t("botPanel.skills.upload.remove", { file: item.file })}
                 title={t("botPanel.skills.upload.remove", { file: item.file })}
                 onClick={() => onRemove(index)}
-                className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-40"
+                className={cn(
+                  "flex size-6 shrink-0 items-center justify-center text-ink-secondary hover:text-ink disabled:opacity-40",
+                  plain ? "rounded-full hover:bg-hover" : "rounded-md hover:bg-control",
+                )}
               >
                 <X size={13} aria-hidden="true" />
               </button>
@@ -103,23 +109,23 @@ export function SkillUploadPreview({ items, onRemove, disabled }: { items: Uploa
           </div>
           {item.skills.map((skill) => (
             <div key={skill.name} className="mt-1.5">
-              <div className="font-mono text-[12.5px] text-ink">{skill.name}</div>
-              <div className="line-clamp-2 text-[11.5px] text-ink-secondary">{skill.description}</div>
-              {skill.warnings.length > 0 && <div className="mt-0.5 text-[10.5px] text-warning">{skill.warnings.join(" · ")}</div>}
+              <div className={plain ? "text-[14px] leading-5 text-ink" : "font-mono text-[12.5px] text-ink"}>{skill.name}</div>
+              <div className={cn("line-clamp-2 text-ink-secondary", plain ? "text-[12px] leading-4" : "text-[11.5px]")}>{skill.description}</div>
+              {skill.warnings.length > 0 && <div className={cn("mt-0.5 text-warning", plain ? "text-[12px] leading-4" : "text-[10.5px]")}>{skill.warnings.join(" · ")}</div>}
               {skill.skippedCount > 0 && (
-                <div className="mt-0.5 break-all text-[10.5px] text-ink-secondary">
+                <div className={cn("mt-0.5 break-all text-ink-secondary", plain ? "text-[12px] leading-4" : "text-[10.5px]")}>
                   {t("botPanel.skills.upload.skipped", { files: skill.skippedFiles.join(", ") + (skill.skippedCount > skill.skippedFiles.length ? ", …" : "") })}
                 </div>
               )}
             </div>
           ))}
           {item.ignoredCount > 0 && (
-            <div className="mt-1 break-all text-[10.5px] text-ink-secondary">
+            <div className={cn("mt-1 break-all text-ink-secondary", plain ? "text-[12px] leading-4" : "text-[10.5px]")}>
               {t("botPanel.skills.upload.ignored", { files: item.ignored.join(", ") + (item.ignoredCount > item.ignored.length ? ", …" : "") })}
             </div>
           )}
           {item.errors.map((error, at) => (
-            <div key={at} role="alert" className="mt-1 text-[11.5px] text-danger" data-skill-upload-error={error.code}>
+            <div key={at} role="alert" className={cn("mt-1 text-danger", plain ? "text-[12px] leading-4" : "text-[11.5px]")} data-skill-upload-error={error.code}>
               {uploadErrorText(item, error)}
             </div>
           ))}
@@ -137,6 +143,7 @@ export function SkillUpload({ botId, disabled, onAdded }: { botId: string; disab
   const [phase, setPhase] = useState<"idle" | "reading" | "adding">("idle");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const plain = useSettingsSurface() === "plain";
 
   const preview = async (files: Picked[]) => {
     setPicked(files);
@@ -232,18 +239,18 @@ export function SkillUpload({ botId, disabled, onAdded }: { botId: string; disab
           <Upload size={14} aria-hidden="true" />
           {phase === "reading" ? t("botPanel.skills.upload.reading") : t("botPanel.skills.upload.button")}
         </button>
-        <span className="text-[11.5px] leading-snug text-ink-secondary">{t("botPanel.skills.upload.help")}</span>
+        <span className={cn("leading-snug text-ink-secondary", plain ? "text-[12px]" : "text-[11.5px]")}>{t("botPanel.skills.upload.help")}</span>
       </div>
       {items && (
         <div className="flex flex-col gap-2 rounded-xl bg-inset p-3">
-          <div className="text-[13px] font-medium text-ink">{t("botPanel.skills.upload.previewTitle")}</div>
-          <div className="text-[11.5px] text-ink-secondary">{t("botPanel.skills.upload.previewIntro")}</div>
+          <div className={plain ? "text-[14px] leading-5 text-ink" : "text-[13px] font-medium text-ink"}>{t("botPanel.skills.upload.previewTitle")}</div>
+          <div className={cn("text-ink-secondary", plain ? "text-[12px] leading-4" : "text-[11.5px]")}>{t("botPanel.skills.upload.previewIntro")}</div>
           <SkillUploadPreview
             items={items}
             disabled={phase !== "idle"}
             onRemove={(index) => void preview(picked.filter((_entry, at) => at !== index))}
           />
-          {refused && <div className="text-[11.5px] text-danger">{t("botPanel.skills.upload.fixFirst")}</div>}
+          {refused && <div className={cn("text-danger", plain ? "text-[12px] leading-4" : "text-[11.5px]")}>{t("botPanel.skills.upload.fixFirst")}</div>}
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -252,7 +259,7 @@ export function SkillUpload({ botId, disabled, onAdded }: { botId: string; disab
                 setPicked([]);
                 setItems(null);
               }}
-              className="rounded-lg px-3 py-1.5 text-[13px] text-ink-secondary hover:bg-raised disabled:opacity-40"
+              className={plain ? PILL : "rounded-lg px-3 py-1.5 text-[13px] text-ink-secondary hover:bg-raised disabled:opacity-40"}
             >
               {t("common.cancel")}
             </button>
@@ -261,7 +268,7 @@ export function SkillUpload({ botId, disabled, onAdded }: { botId: string; disab
               data-skill-upload-add=""
               disabled={phase !== "idle" || refused || count === 0}
               onClick={() => void add()}
-              className={PRIMARY_PILL}
+              className={plain ? PILL : PRIMARY_PILL}
             >
               {phase === "adding" ? t("botPanel.skills.upload.adding") : t("botPanel.skills.upload.add", { count: String(count) })}
             </button>

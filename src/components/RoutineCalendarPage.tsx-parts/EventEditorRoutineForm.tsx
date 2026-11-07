@@ -60,6 +60,39 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
   // focused from the start when an old Edit entry opened the page).
   const onPage = Boolean(page) && panel;
   const [instructionEditing, setInstructionEditing] = useState(() => !existingRoutine || Boolean(page?.focusInstruction));
+  // 2026-11-06 (JC): on the panel's page the rarely used rows (required
+  // skills and MCP servers, the mail tag, Duplicate, the server note) sit
+  // under a folded More at the end of Advanced; nothing is lost.
+  const requiredRows = <>
+            <PanelRow label={t("routineReadiness.requiresSkills")} help={t("routineReadiness.requiresHelp")}>
+              {viewing ? <PanelValue>{requiredSkills || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresSkills")} className={cn(PANEL_INPUT, "w-full")} value={requiredSkills} onChange={event => setRequiredSkills(event.target.value)} />}
+            </PanelRow>
+            <PanelRow label={t("routineReadiness.requiresMcp")} help={t("routineReadiness.requiresHelp")}>
+              {viewing ? <PanelValue>{requiredMcp || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresMcp")} className={cn(PANEL_INPUT, "w-full")} value={requiredMcp} onChange={event => setRequiredMcp(event.target.value)} />}
+            </PanelRow>
+  </>;
+  const moreRows = <>
+            {!isRoomGoal && (
+              <PanelRow data-routine-mail-alias="" label={t("routines.mailAlias.label")} hint={t("routineEditor.hint.mailAlias")} help={t("routines.mailAlias.help")}>
+                {viewing
+                  ? <PanelValue muted={!mailAlias.trim()}>{mailAlias.trim() ? `+${mailAlias.trim()}` : t("routineEditor.none")}</PanelValue>
+                  : <input
+                    value={mailAlias}
+                    maxLength={32}
+                    spellCheck={false}
+                    autoCapitalize="none"
+                    aria-label={t("routines.mailAlias.label")}
+                    placeholder={t("routines.mailAlias.placeholder")}
+                    onChange={(event) => setMailAlias(event.target.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 32))}
+                    className={cn(PANEL_INPUT, "w-[140px]")}
+                  />}
+              </PanelRow>
+            )}
+            {existingRoutine && onDuplicate && <PanelRow data-routine-duplicate-row="" label={t("routineEditor.copy")} hint={t("routineEditor.hint.duplicate")}>
+              <button type="button" data-routine-duplicate onClick={() => onDuplicate(existingRoutine)} className={PANEL_TEXT_ACTION}><Copy size={13} aria-hidden="true" />{t("routineDetail.duplicate")}</button>
+            </PanelRow>}
+            {!triggered && <div className="py-2"><RoutineScheduleNote /></div>}
+  </>;
   return (
     <>
           {(otherOwner || readOnly || existingRoutine?.redacted) && <div className="space-y-1.5 pb-3">
@@ -71,7 +104,9 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
               the value: Instruction, When to run, the trigger's details,
               then Advanced as rows. View mode shows the same layout read-only. */}
           <div className="min-w-0 space-y-5">
-          <section data-routine-editor-section="what" className="min-w-0 space-y-1">
+          {/* 2026-11-06 (JC): on the panel's page the Instruction takes at
+              least 45% of the panel's height and grows with the window. */}
+          <section data-routine-editor-section="what" data-routine-instruction-fill={onPage ? "" : undefined} className={cn("min-w-0 space-y-1", onPage && "flex min-h-[45cqh] flex-col")}>
             <div className="flex min-w-0 items-center justify-between gap-2">
               <h3 className={PANEL_LABEL}>{t("routineEditor.instruction")}</h3>
               {/* 2026-11-03 (audit N-1): view mode only. In edit mode the form
@@ -80,10 +115,10 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
               {(viewing || (onPage && !dirty)) && existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
             </div>
             {viewing
-              ? <InstructionText text={description} />
+              ? <InstructionText text={description} fill={onPage} />
               : onPage && existingRoutine && !instructionEditing
-              ? <InstructionText text={description} short onEdit={() => setInstructionEditing(true)} />
-              : <MarkdownEditor compact expandable toolbarOnFocus autoFocus={onPage && Boolean(existingRoutine)} value={description} onChange={setDescription} minHeight={onPage ? 88 : panel ? 120 : 160} maxHeight={panel ? "40vh" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
+              ? <InstructionText text={description} short fill onEdit={() => setInstructionEditing(true)} />
+              : <MarkdownEditor compact expandable toolbarOnFocus autoFocus={onPage && Boolean(existingRoutine)} value={description} onChange={setDescription} minHeight={onPage ? "45cqh" : panel ? 120 : 160} maxHeight={onPage ? "80cqh" : panel ? "40vh" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
           </section>
 
           <section data-routine-editor-section="when" className="min-w-0 space-y-1">
@@ -140,7 +175,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                 />
               )}
               {recurrence === "pattern" && pattern && <HumanScheduleFields mode="essentials" draft={scheduleDraft} value={pattern} onChange={changeScheduleDraft} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />}
-              {recurrence === "advanced" && pattern && <AdvancedScheduleFields value={pattern} onSimplify={simplifySchedule} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />}
+              {recurrence === "advanced" && pattern && <AdvancedScheduleFields value={pattern} preview={!onPage} onSimplify={simplifySchedule} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />}
               {recurrence === "interval" && (
                 <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink">
                   <span className="text-[12px] font-medium text-ink-secondary">{t("routineCalendar.runsEvery")}</span>
@@ -177,7 +212,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                 {scheduleDraft.model.times.length <= 2 && scheduleDraft.model.times.map((time, index) => <PanelChip key={`${time}-${index}`} data-schedule-time-view="">{scheduleTimeLabel(time)}</PanelChip>)}
               </PanelRow>}
               <PanelRow data-schedule-zone-view="" label={t("scheduleEditor.timeZone")}><PanelValue>{timeZoneLabel(pattern.schedule?.timeZone ?? scheduleDraft.timeZone)}</PanelValue></PanelRow>
-              {pattern.schedule && !pattern.error && pattern.runs.length > 0 && <div className="py-2"><CronRunDates runs={pattern.runs} timeZone={pattern.schedule.timeZone} paused={Boolean(existingRoutine && !existingRoutine.enabled)} /></div>}
+              {!onPage && pattern.schedule && !pattern.error && pattern.runs.length > 0 && <div className="py-2"><CronRunDates runs={pattern.runs} timeZone={pattern.schedule.timeZone} paused={Boolean(existingRoutine && !existingRoutine.enabled)} /></div>}
             </PanelRows>}
             {viewing && recurrence === "interval" && <PanelRows data-routine-when-details="interval" className="pt-1">
               <PanelRow label={t("routineCalendar.intervalOn")}><PanelValue>{intervalDays === "every-day" ? t("routines.repeat.daily") : intervalDays === "weekdays" ? t("routines.repeat.weekdays") : intervalWeekdays.map((day) => dayNames()[day]?.slice(0, 3)).join(", ")}</PanelValue></PanelRow>
@@ -228,13 +263,16 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
             )}
           </section>}
 
+          {onPage && page?.runs}
+
           <details data-routine-editor-more className="group min-w-0" open={moreOpen} onToggle={(event) => toggleMore((event.currentTarget as HTMLDetailsElement).open)}>
             <summary data-routine-editor-more-summary className="-mx-2 flex cursor-pointer select-none list-none items-start gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] text-ink-secondary hover:bg-hover hover:text-ink [&::-webkit-details-marker]:hidden">
               <ChevronRight size={14} aria-hidden="true" className="mt-[3px] shrink-0 text-ink-tertiary transition-transform group-open:rotate-90" />
               <span className="min-w-0"><span className="font-medium text-ink">{t("routineEditor.advanced")}</span><span data-routine-advanced-summary className="ml-1.5 text-ink-tertiary">· {advancedSummary}</span></span>
             </summary>
             <PanelRows data-routine-advanced-rows="" className="mt-1">
-            {/* 2026-11-03: an existing routine's Runs as is changed on its page (one place). */}
+            {/* 2026-11-06 (JC): the page's Runs as, changed in place, lives here. */}
+            {onPage && existingRoutine && page?.runAs}
             {!existingRoutine && runAsOptions && (runAsOptions.canChoose || runAsOptions.current) && <RunAsField compact viewing={viewing} options={runAsOptions} value={runAs} onChange={setRunAs} />}
             {isRoomGoal ? (
               <PanelRow data-routine-run-on="" label={t("routineEditor.runsOn")} help={t("routineCalendar.runsHereHelp")}><PanelValue>{t("routineCalendar.runsHere")}</PanelValue></PanelRow>
@@ -277,7 +315,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
             </PanelRow>}
             {!viewing && recurrence === "pattern" && pattern && (
               <div data-routine-editor-more-schedule className="min-w-0">
-                <HumanScheduleFields mode="advanced" draft={scheduleDraft} value={pattern} onChange={changeScheduleDraft} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />
+                <HumanScheduleFields mode="advanced" preview={!onPage} draft={scheduleDraft} value={pattern} onChange={changeScheduleDraft} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />
               </div>
             )}
             {repeatsOnClock && (
@@ -335,41 +373,25 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
               options={[{ value: "", label: t("settings.card.noLimit") }, ...EVENT_DURATION_OPTIONS.map((minutes) => ({ value: String(minutes), label: durationLabel(minutes) })), ...(timeoutMinutes != null && !EVENT_DURATION_OPTIONS.includes(timeoutMinutes) ? [{ value: String(timeoutMinutes), label: durationLabel(timeoutMinutes) }] : [])]} />
             {repeatsOnClock && <PanelSelect<"skip" | "queue"> data-routine-overlap="" label={t("routines.overlapLabel")} hint={t("routineEditor.hint.overlap")} help={t(overlap === "queue" ? "routines.overlapQueueHelp" : "routines.overlapSkipHelp")} viewing={viewing} value={overlap} onChange={setOverlap}
               options={[{ value: "skip", label: t("routines.overlapSkip") }, { value: "queue", label: t("routines.overlapQueue") }]} />}
-            <PanelRow label={t("routineReadiness.requiresSkills")} help={t("routineReadiness.requiresHelp")}>
-              {viewing ? <PanelValue>{requiredSkills || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresSkills")} className={cn(PANEL_INPUT, "w-full")} value={requiredSkills} onChange={event => setRequiredSkills(event.target.value)} />}
-            </PanelRow>
-            <PanelRow label={t("routineReadiness.requiresMcp")} help={t("routineReadiness.requiresHelp")}>
-              {viewing ? <PanelValue>{requiredMcp || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresMcp")} className={cn(PANEL_INPUT, "w-full")} value={requiredMcp} onChange={event => setRequiredMcp(event.target.value)} />}
-            </PanelRow>
+            {!onPage && requiredRows}
             <PanelToggle label={t("routineReadiness.requiresComputer")} viewing={viewing} checked={requiresComputer} onChange={setRequiresComputer} />
             {repeatsOnClock && <PanelSelect data-routine-auto-pause="" label={t("routines.autoPause.label")} hint={t("routineEditor.hint.autoPause")} help={t("routines.autoPause.help")} viewing={viewing} value={String(autoPauseAfter)} onChange={(value) => setAutoPauseAfter(Number(value))}
               options={routineAutoPauseChoices(autoPauseAfter).map((count) => ({ value: String(count), label: routineAutoPauseOption(count) }))} />}
             {!isRoomGoal && repeatsOnClock && <PanelToggle data-routine-continuity="" label={t("routines.continuityLabel")} hint={t("routineEditor.hint.continuity")} help={t("routines.continuityHelp")} viewing={viewing} checked={continuity} onChange={setContinuity} />}
             <PanelToggle data-routine-only-present="" label={t("routines.away.onlyLabel")} hint={t("routineEditor.hint.onlyPresent")} help={t("routines.away.onlyHelp")} viewing={viewing} checked={onlyWhenPresent} onChange={setOnlyWhenPresent} />
             {(recurrence === "none" || (recurrence === "interval" && intervalEnd === "on-date")) && <PanelToggle data-routine-delete-when-finished="" label={t("routines.deleteWhenFinished.label")} hint={t("routineEditor.hint.deleteWhenFinished")} help={t("routines.deleteWhenFinished.help")} viewing={viewing} checked={deleteWhenFinished} onChange={setDeleteWhenFinished} />}
-            {!isRoomGoal && (
-              <PanelRow data-routine-mail-alias="" label={t("routines.mailAlias.label")} hint={t("routineEditor.hint.mailAlias")} help={t("routines.mailAlias.help")}>
-                {viewing
-                  ? <PanelValue muted={!mailAlias.trim()}>{mailAlias.trim() ? `+${mailAlias.trim()}` : t("routineEditor.none")}</PanelValue>
-                  : <input
-                    value={mailAlias}
-                    maxLength={32}
-                    spellCheck={false}
-                    autoCapitalize="none"
-                    aria-label={t("routines.mailAlias.label")}
-                    placeholder={t("routines.mailAlias.placeholder")}
-                    onChange={(event) => setMailAlias(event.target.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 32))}
-                    className={cn(PANEL_INPUT, "w-[140px]")}
-                  />}
-              </PanelRow>
-            )}
-            {existingRoutine && onDuplicate && <PanelRow data-routine-duplicate-row="" label={t("routineEditor.copy")} hint={t("routineEditor.hint.duplicate")}>
-              <button type="button" data-routine-duplicate onClick={() => onDuplicate(existingRoutine)} className={PANEL_TEXT_ACTION}><Copy size={13} aria-hidden="true" />{t("routineDetail.duplicate")}</button>
-            </PanelRow>}
-            {!triggered && <div className="py-2"><RoutineScheduleNote /></div>}
+            {onPage ? <details data-routine-advanced-more="" className="group/more min-w-0 py-1">
+              <summary data-routine-advanced-more-summary className="-mx-2 flex cursor-pointer select-none list-none items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] text-ink-secondary hover:bg-hover hover:text-ink [&::-webkit-details-marker]:hidden">
+                <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-ink-tertiary transition-transform group-open/more:rotate-90" />
+                <span className="font-medium">{t("routineEditor.more")}</span>
+              </summary>
+              <PanelRows data-routine-advanced-more-rows="" className="mt-1">
+                {requiredRows}
+                {moreRows}
+              </PanelRows>
+            </details> : moreRows}
             </PanelRows>
           </details>
-          {onPage && page?.runs}
           </div>
     </>
   );

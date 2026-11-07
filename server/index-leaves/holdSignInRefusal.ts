@@ -16,12 +16,12 @@ function holdSignInRefusal(
   const slot = typeof instance.instanceId === "string" ? host.turnSlotFor(bot, { instanceId: instance.instanceId }) : "primary";
   if (!resendable) {
     handlers.show(false);
-    void host.signInRecheck?.refused(card.payerPrincipalId, instance.driverKind, slot).catch(() => false);
+    void host.signInRecheck?.refused(card.payerPrincipalId, instance.driverKind, slot, instance.instanceId).catch(() => false);
     return false;
   }
   let held = false;
   held = host.settleSignInRefusal(host.signInRecheck, {
-    principalId: card.payerPrincipalId, driver: instance.driverKind, slot,
+    principalId: card.payerPrincipalId, driver: instance.driverKind, slot, instanceId: instance.instanceId,
     show: () => {
       if (held) console.info(`[sign-in-recheck] ${threadId}: renew failed, sign-in card shown`);
       handlers.show(held);

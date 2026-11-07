@@ -26,6 +26,7 @@ export function createFinishStartTurn(host: StartTurnHost) {
     computerSelectionTurns,
     cfg,
     deliverableNotification,
+    coordinator,
     directCoordinationSettlers,
     directFollowupSettlers,
     directRequestOwners,
@@ -127,7 +128,10 @@ let e: any = cause;
       }
       if (e instanceof ComputerWaitParked) {
         settleDirectFollowup(state.dispatchClaimId, { ok: false, text: e.message });
-        registerComputerResume({
+        // A turn the runtime owns (its root, or a coordination node) parks on
+        // the seat there and continues in place once it frees (#2204): only a
+        // turn outside the runtime registers the host's own resume.
+        if (!coordinator.node(e.generation) && !directCoordinationSettlers.has(e.generation)) registerComputerResume({
           botId: state.bot.id,
           threadId: state.threadId,
           resource: e.resource,

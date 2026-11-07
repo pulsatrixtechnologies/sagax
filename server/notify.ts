@@ -23,6 +23,7 @@ import type { Notification, NotifyKind } from "../shared/notification.ts";
 // The notification wire shape lives in shared/notification.ts now (part of
 // the wire model); re-exported here so existing importers keep working.
 export type { Notification, NotifyKind } from "../shared/notification.ts";
+export { botNotifyArg, notificationAlerts, withBotNotify } from "../shared/notification.ts";
 
 /** One line, short enough for a lock screen, with the newlines and code
  * fences of a model's answer flattened out of it. */

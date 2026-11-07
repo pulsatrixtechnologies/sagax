@@ -76,9 +76,31 @@ const recordSchema = z.object({
   placedBots: z.array(z.object({ botId: z.string().min(1).max(80), ownerPrincipalId: z.string().min(1).max(64) })).max(2000).optional(),
   /** Rooms placed with consent (see the header). */
   placedRooms: z.array(z.string().min(1).max(80)).max(2000).optional(),
+  /** #2045 isolation: who held an empty record before it became unclaimed. */
+  formerOwnerPrincipalId: z.string().min(1).max(64).optional(),
   createdAt: z.number(),
 });
-const fileSchema = z.object({ version: z.literal(1), sections: z.array(z.unknown()), botSharesMigratedAt: z.number().optional() });
+const fileSchema = z.object({ version: z.literal(1), sections: z.array(z.unknown()), botSharesMigratedAt: z.number().optional(), ownersVerifiedAt: z.number().optional() });
+
+/** #2045 isolation: the owner of a record nobody can be shown to own. It
+ * matches no principal, so the record stays on disk and nobody lists it. */
+export const UNCLAIMED_OWNER = "unclaimed";
+
+export function isUnclaimed(record: Pick<SectionRecord, "ownerPrincipalId">): boolean {
+  return record.ownerPrincipalId.trim().toLowerCase() === UNCLAIMED_OWNER;
+}
+
+/** Evidence about who owns an empty record, for {@link SectionChannels.verifyOwners}. */
+export interface SectionOwnerEvidence {
+  /** Whether the section still holds a bot or a group (only empty records move). */
+  inUse(record: SectionRecord): boolean;
+  /** The person the audit log shows creating this record, if any. */
+  creatorOf(record: SectionRecord): string | null;
+  /** People who keep this name in their own personal sections. */
+  personalOwners(name: string): readonly string[];
+  /** People who keep this name in their own sidebar order. */
+  orderOwners(name: string): readonly string[];
+}
 
 export type SectionRecord = z.infer<typeof recordSchema>;
 
@@ -94,11 +116,12 @@ export function validSectionName(name: unknown): name is string {
   return trimmed.length > 0 && trimmed.length <= 60 && ![...trimmed].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 }
 
-/** Who owns a section at the first organization boot: the owner of most of
- * its bots; on a tie, the owner of the oldest of the tied owners' bots; with
- * no bot, the first organization admin. */
-export function migrationOwner(bots: readonly { ownerPrincipalId: string; createdAt: number }[], firstAdmin: string): string {
-  if (!bots.length) return firstAdmin;
+/** Who owns a section from its bots: the owner of most of its bots; on a
+ * tie, the owner of the oldest of the tied owners' bots; with no bot, null.
+ * #2045 isolation: never the first admin, which handed every empty section
+ * of other people to that admin and listed it in their sidebar. */
+export function migrationOwner(bots: readonly { ownerPrincipalId: string; createdAt: number }[]): string | null {
+  if (!bots.length) return null;
   const counts = new Map<string, number>();
   for (const bot of bots) counts.set(bot.ownerPrincipalId, (counts.get(bot.ownerPrincipalId) ?? 0) + 1);
   const top = Math.max(...counts.values());
@@ -113,6 +136,7 @@ export class SectionChannels {
   private readonly newId: () => string;
   private records: SectionRecord[] = [];
   private migratedAt: number | undefined;
+  private ownersVerifiedAt: number | undefined;
 
   constructor(options: { path: string; now?: () => number; newId?: () => string }) {
     this.path = options.path;
@@ -123,6 +147,7 @@ export class SectionChannels {
       const parsed = fileSchema.safeParse(JSON.parse(readFileSync(this.path, "utf8")));
       if (!parsed.success) throw new Error("not a version 1 file");
       this.migratedAt = parsed.data.botSharesMigratedAt;
+      this.ownersVerifiedAt = parsed.data.ownersVerifiedAt;
       // #2045: the same team name may belong to two people. Uniqueness is
       // (owner, name); skip only a second copy of the exact same pair.
       const ownedNames = new Set<string>();
@@ -260,18 +285,18 @@ export class SectionChannels {
     return structuredClone(record);
   }
 
-  /** First organization boot: every section name without a record becomes a
-   * private record. Returns how many were created. */
-  migrate(names: readonly string[], ownerFor: (name: string) => string): number {
+  /** Every section name without a record becomes a private record. Returns
+   * how many were created. #2045 isolation: a name nobody can be shown to
+   * own (ownerFor gives null) becomes an unclaimed record nobody lists. */
+  migrate(names: readonly string[], ownerFor: (name: string) => string | null): number {
     let created = 0;
     for (const name of names) {
       const key = name.trim();
       if (!key) continue;
-      const owner = ownerFor(key);
-      if (this.records.some((record) => record.name === key && record.ownerPrincipalId.trim().toLowerCase() === owner.trim().toLowerCase())) continue;
       // A legacy unique name already owned by someone else keeps its record;
       // do not invent a second copy for the same historical name.
       if (this.records.some((record) => record.name === key)) continue;
+      const owner = ownerFor(key) ?? UNCLAIMED_OWNER;
       this.records.push({ id: this.newId(), name: key, ownerPrincipalId: owner, members: [], defaultLevel: "use", createdAt: this.now() });
       created += 1;
     }
@@ -351,6 +376,42 @@ export class SectionChannels {
     this.save();
   }
 
+  /** Whether the empty records were checked against their real owner. */
+  ownersVerified(): boolean {
+    return this.ownersVerifiedAt !== undefined;
+  }
+
+  /** #2045 isolation, once per data dir: an empty record without members
+   * keeps its owner only with strong evidence (the audit shows that person
+   * creating it, or the name is in their own personal sections). Otherwise
+   * it goes to the one person the evidence names (creator, then personal
+   * sections, then the sidebar order, never the current owner's order,
+   * which the old listing polluted), else it becomes unclaimed with the
+   * former owner kept. Nothing is deleted. Returns the records changed. */
+  verifyOwners(evidence: SectionOwnerEvidence): Array<{ id: string; name: string; from: string; to: string }> {
+    if (this.ownersVerifiedAt !== undefined) return [];
+    const changed: Array<{ id: string; name: string; from: string; to: string }> = [];
+    const lower = (value: string) => value.trim().toLowerCase();
+    for (const record of this.records) {
+      if (record.members.length > 0 || isUnclaimed(record) || evidence.inUse(record)) continue;
+      const current = lower(record.ownerPrincipalId);
+      const creator = evidence.creatorOf(record);
+      const personal = evidence.personalOwners(record.name);
+      if ((creator && lower(creator) === current) || personal.some((owner) => lower(owner) === current)) continue;
+      const order = evidence.orderOwners(record.name).filter((owner) => lower(owner) !== current);
+      const single = (owners: readonly string[]) => (new Set(owners.map(lower)).size === 1 ? owners[0]! : null);
+      let target = creator ?? single(personal) ?? single(order);
+      if (target && this.records.some((other) => other !== record && other.name === record.name && lower(other.ownerPrincipalId) === lower(target!))) target = null;
+      const next = target ?? UNCLAIMED_OWNER;
+      changed.push({ id: record.id, name: record.name, from: record.ownerPrincipalId, to: next });
+      if (!target) record.formerOwnerPrincipalId = record.ownerPrincipalId;
+      record.ownerPrincipalId = next;
+    }
+    this.ownersVerifiedAt = this.now();
+    this.save();
+    return changed;
+  }
+
   /** Whether the legacy shared sections already became bot grants. */
   botSharesMigrated(): boolean {
     return this.migratedAt !== undefined;
@@ -366,7 +427,12 @@ export class SectionChannels {
   private save(): void {
     try {
       mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
-      const file = { version: 1, sections: this.records, ...(this.migratedAt !== undefined ? { botSharesMigratedAt: this.migratedAt } : {}) };
+      const file = {
+        version: 1,
+        sections: this.records,
+        ...(this.migratedAt !== undefined ? { botSharesMigratedAt: this.migratedAt } : {}),
+        ...(this.ownersVerifiedAt !== undefined ? { ownersVerifiedAt: this.ownersVerifiedAt } : {}),
+      };
       writeFileAtomic(this.path, JSON.stringify(file, null, 2), { mode: 0o600 });
     } catch (error) {
       console.error(`section-channels: could not save ${this.path}: ${error instanceof Error ? error.message : String(error)}`);

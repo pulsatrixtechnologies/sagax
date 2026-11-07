@@ -29,6 +29,9 @@ export interface PersonAttentionItem {
 export interface PersonAttention {
   kind: PersonAttentionKind;
   items: PersonAttentionItem[];
+  /** The answers the bot offered, when it listed them as data; otherwise
+   * read from the question's own closing list (attentionChoices). */
+  choices?: string[];
 }
 
 /** At most this many items ride one card; the thread keeps the rest. */
@@ -187,4 +190,50 @@ export function personAttentionText(card: Pick<PersonAttentionCard, "kind" | "it
   const lead = card.kind === "question" ? `${card.botName} has a question for you` : card.kind === "failure" ? `${card.botName} needs a decision` : `${card.botName} needs you`;
   const list = card.items.map((entry) => `- ${entry.text.replace(/\s+/g, " ")}`).join("\n");
   return `${lead}:\n${list}`;
+}
+
+const CHOICE_MAX = 80;
+const CHOICES_MAX = 8;
+/** "(create, archive only, or nothing for now) ?" closing the question. */
+const CLOSING_PARENS = /\(([^()]{3,400})\)\s*[?\uFF1F]\s*[*_]*\s*$/;
+/** "...: create, archive only or nothing?" closing the question. */
+const CLOSING_COLON = /:\s*([^:]{3,400}?)\s*[?\uFF1F]\s*[*_]*\s*$/;
+const SEPARATOR = /\s*[,;/|]\s*(?:(?:ou|or)\s+)?|\s+(?:ou|or)\s+/i;
+
+function splitChoices(list: string, needsOr: boolean): string[] {
+  if (needsOr && !/\s(?:ou|or)\s/i.test(list)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of list.split(SEPARATOR)) {
+    const choice = raw.replace(/^[\s*_`"«»]+|[\s*_`"«».]+$/g, "").trim();
+    if (!choice) continue;
+    if (choice.length > CHOICE_MAX || /[?:]/.test(choice)) return [];
+    const key = choice.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(choice);
+  }
+  return out.length >= 2 && out.length <= CHOICES_MAX ? out : [];
+}
+
+/**
+ * The answers a question card offers as one-tap choices (2026-11-06, the
+ * maintainer: the hand-off question "felt cheap like a form"): the bot's own
+ * list when it gave one, else the list closing a single question, between
+ * parentheses ("(create, archive only, or nothing for now)?") or after a
+ * colon with an "or" ("Next: create, archive or nothing?"). Empty when there
+ * is none; the person can always answer in words.
+ */
+export function attentionChoices(card: Pick<PersonAttention, "items" | "choices">): string[] {
+  const given = (card.choices ?? []).map((choice) => choice.trim()).filter(Boolean);
+  if (given.length) return given.slice(0, CHOICES_MAX);
+  if (card.items.length !== 1) return [];
+  const text = card.items[0]!.text.trim();
+  const inParens = CLOSING_PARENS.exec(text);
+  if (inParens) {
+    const found = splitChoices(inParens[1]!, false);
+    if (found.length) return found;
+  }
+  const afterColon = CLOSING_COLON.exec(text);
+  return afterColon ? splitChoices(afterColon[1]!, true) : [];
 }

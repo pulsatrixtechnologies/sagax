@@ -10,7 +10,7 @@ import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";
 import { FINISH_UNTIL_DEFAULT_ROUNDS, FINISH_UNTIL_MAX_ROUNDS, finishUntilRounds } from "../../../shared/finish-until-line";
 import { useBotEditor } from "./BotEditorContext";
-import { DescribedRow, HelpTip, PillSelect, SettingsGroup } from "../SettingsPrimitives";
+import { DescribedRow, HelpTip, PILL, PillSelect, PLAIN_FIELD, SettingsGroup, useSettingsSurface } from "../SettingsPrimitives";
 
 /** Same cap as the server (server/finish-until.ts FINISH_UNTIL_MAX). */
 const CONDITION_MAX = 400;
@@ -21,6 +21,9 @@ const buttonCls = "rounded-lg border border-hairline/50 px-3 py-1.5 text-[12px] 
 
 export function FinishUntilSettings({ bot }: { bot: Bot }) {
   const { request } = useBotEditor();
+  // The bot's profile page (#2313): the condition a row of the card, its
+  // field filled with no outline, Save and Clear pills.
+  const plain = useSettingsSurface() === "plain";
   const stored = bot.finishUntil ?? "";
   const [draft, setDraft] = useState(stored);
   const [saving, setSaving] = useState(false);
@@ -52,12 +55,12 @@ export function FinishUntilSettings({ bot }: { bot: Bot }) {
         groupId="botFinishUntil"
         accessory={<HelpTip label={t("settings.moreAbout", { title })}>{t("botPanel.finishUntil.help")}</HelpTip>}
       >
-        <div className="flex flex-col gap-2 px-3.5 py-2">
+        <div className={plain ? "flex flex-col gap-2 px-4 py-2.5" : "flex flex-col gap-2 px-3.5 py-2"}>
           <label className="flex flex-col gap-1">
-            <span className="text-[13px] leading-[18px] text-ink">{t("botPanel.finishUntil.condition")}</span>
+            <span className={plain ? "text-[14px] leading-5 text-ink" : "text-[13px] leading-[18px] text-ink"}>{t("botPanel.finishUntil.condition")}</span>
             <input
               data-finish-until-input=""
-              className={inputCls}
+              className={plain ? PLAIN_FIELD : inputCls}
               value={draft}
               maxLength={CONDITION_MAX}
               placeholder={t("botPanel.finishUntil.placeholder")}
@@ -79,12 +82,12 @@ export function FinishUntilSettings({ bot }: { bot: Bot }) {
               data-finish-until-save=""
               disabled={!changed || saving}
               onClick={() => void save({ finishUntil: oneLine.trim() })}
-              className={cn(buttonCls, "border-transparent bg-accent text-accent-ink hover:brightness-110")}
+              className={plain ? PILL : cn(buttonCls, "border-transparent bg-accent text-accent-ink hover:brightness-110")}
             >
               {t("botPanel.finishUntil.save")}
             </button>
             {stored && (
-              <button type="button" data-finish-until-clear="" disabled={saving} onClick={() => void save({ finishUntil: "" })} className={buttonCls}>
+              <button type="button" data-finish-until-clear="" disabled={saving} onClick={() => void save({ finishUntil: "" })} className={plain ? PILL : buttonCls}>
                 {t("botPanel.finishUntil.clear")}
               </button>
             )}

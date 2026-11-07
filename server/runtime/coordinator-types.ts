@@ -145,7 +145,7 @@ export interface HandedOutOutcome {
   root: { status: string; outcome?: string; detail: string; result: string };
   failed: Array<{ botId: string; outcome: string; detail: string }>;
   /** 2026-11-03: every teammate the work went to and the thread it runs in. */
-  handed?: Array<{ botId: string; threadId: string; status: string }>;
+  handed?: Array<{ botId: string; threadId: string; status: string; task?: string; startedAt?: number; finishedAt?: number; note?: string }>;
   /** A root of it is still live (waiting, resuming, running). */
   pending: boolean;
 }

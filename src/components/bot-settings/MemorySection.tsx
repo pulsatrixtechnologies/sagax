@@ -9,8 +9,8 @@
 // re-reads, so notes the bot wrote mid-session show up on the next look.
 // The dialog keeps this mounted while hidden so an unsaved draft survives
 // a visit to another section. A file opens only when the person clicks it.
-import { FileText, RotateCcw, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ChevronDown, FileText, RotateCcw, TriangleAlert, Trash2 } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider";
 import { cn } from "@/lib/cn";
@@ -51,7 +51,7 @@ import { canEditConfig } from "@/lib/viewer";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { teamMemorySharingOf } from "../../../shared/team-memory-sharing";
 import { ApiError, api, useStore, type Bot, type ConfigStatus } from "@/state/store";
-import { HelpTip, InlineFold, PILL, PillSelect, SettingRow, SwitchRow } from "../SettingsPrimitives";
+import { HelpTip, InlineFold, PILL, PillSelect, SettingRow, SwitchRow, useSettingsSurface } from "../SettingsPrimitives";
 import { AdvancedFold } from "./AdvancedFold";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import { inputCls } from "./field";
@@ -232,7 +232,38 @@ export function MemoryEditorDialog({
  * the owner has looked. It names the files that changed; one click accepts
  * them as shown (no confirmation), and the server refuses it if anything
  * changed since. */
-export function LendingReviewNotice({ changed, stale, busy, onReviewed }: { changed: readonly string[]; stale: boolean; busy: boolean; onReviewed: () => void }) {
+export function LendingReviewNotice({ changed, stale, busy, onReviewed, plain = false }: {
+  changed: readonly string[];
+  stale: boolean;
+  busy: boolean;
+  onReviewed: () => void;
+  /** The bot's profile page (#2313): a row of the Bot folder's card, its
+   * warning icon in place of the red outline. */
+  plain?: boolean;
+}) {
+  if (plain) {
+    return (
+      <div role="status" className="flex items-start gap-3 px-4 py-2.5" data-lending-review="">
+        <span className="flex size-5 shrink-0 items-center justify-center pt-0.5 text-danger [&>svg]:size-5" aria-hidden="true"><TriangleAlert /></span>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="text-[14px] leading-5 text-ink">{t(stale ? "memory.lendingReviewStale" : "memory.lendingReview")}</p>
+          {changed.length > 0 && (
+            <>
+              <p className="text-[12px] leading-4 text-ink-secondary">{t("memory.lendingReviewChanged")}</p>
+              <ul className="space-y-0.5">
+                {changed.map((file) => (
+                  <li key={file} className="break-all text-[12px] leading-4 text-ink-secondary">{file}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+        <button type="button" className={cn(buttonCls, "shrink-0")} disabled={busy} onClick={onReviewed}>
+          {t("memory.lendingReviewed")}
+        </button>
+      </div>
+    );
+  }
   return (
     <div role="status" className="rounded-xl border border-danger/40 bg-card p-4">
       <p className="text-[13px] leading-relaxed text-ink">{t(stale ? "memory.lendingReviewStale" : "memory.lendingReview")}</p>
@@ -626,8 +657,9 @@ export function MemoryUpkeepCard({
   // the receipt's other half (parity M3): what the capture found already there
   const known = status?.lastCapture?.known ?? 0;
   const knownText = known ? t(known === 1 ? "botPanel.memory.knownOne" : "botPanel.memory.knownMany", { count: String(known) }) : "";
+  const plain = useSettingsSurface() === "plain";
   return (
-    <PaneSection title={t("botPanel.memory.upkeep")}>
+    <PaneSection title={t("botPanel.memory.upkeep")} data-memory-upkeep="">
       <SwitchRow
         label={t("botPanel.memory.upkeepSwitch")}
         help={t("botPanel.memory.upkeepHelp")}
@@ -643,7 +675,7 @@ export function MemoryUpkeepCard({
       {/* Learn from group chats (off by default): one switch for every bot
           on this server, so only whoever edits the installation sees it. */}
       {enabled && rooms && (
-        <div className="mt-3 border-t border-hairline/40 pt-3">
+        <div className={plain ? "mt-3" : "mt-3 border-t border-hairline/40 pt-3"}>
           <SwitchRow
             label={t("memory.learnFromRooms.title")}
             description={t("memory.learnFromRooms.subtitle")}
@@ -892,8 +924,21 @@ export function MemoryJournalList({
   onRevert: (row: MemoryJournalRow) => void;
   now?: number;
 }) {
+  const plain = useSettingsSurface() === "plain";
   if (!rows) return <div className="text-[13px] text-ink-secondary">{t("botPanel.loading")}</div>;
   if (rows.length === 0) return <div className="text-[13px] text-ink-secondary">{t("botPanel.history.empty")}</div>;
+  // The bot's profile page (#2313): each change is a row of the card (the
+  // sentence in 14px, when and where in grey under it, Undo a pill), its
+  // diff behind a chevron pill.
+  if (plain) {
+    return (
+      <div className="-my-1 flex flex-col" data-memory-journal="">
+        {rows.map((row) => (
+          <JournalRowPlain key={row.id} row={row} botName={botName} reverting={reverting} onRevert={onRevert} now={now} />
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2">
       {rows.map((row) => {
@@ -938,6 +983,61 @@ export function MemoryJournalList({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** One change on the profile page: the sentence in 14px, when and where in
+ * grey under it, its diff behind a chevron pill ("+3 / -1"), Undo a pill. */
+function JournalRowPlain({ row, botName, reverting, onRevert, now }: {
+  row: MemoryJournalRow;
+  botName: string;
+  reverting: string | null;
+  onRevert: (row: MemoryJournalRow) => void;
+  now: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const bodyId = useId();
+  const source = journalSource(row);
+  return (
+    <div className="flex flex-col py-1.5" data-journal-row={row.id}>
+      <div className="flex min-h-[44px] items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="break-words text-[14px] leading-5 text-ink">{journalSummary(row, botName)}</span>
+          <span className="text-[12px] leading-4 text-ink-secondary">
+            {relativeTime(row.at, now)}
+            {source && ` · ${source}`}
+          </span>
+        </div>
+        {row.diff && (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            data-inline-fold={open ? "open" : "closed"}
+            onClick={() => setOpen(!open)}
+            className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full px-2.5 text-[12px] text-ink-secondary transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 aria-expanded:bg-hover motion-reduce:transition-none md:min-h-0 md:py-1"
+          >
+            {t("botPanel.memory.diff", { added: String(row.added), removed: String(row.removed) })}
+            <ChevronDown size={13} aria-hidden="true" className={cn("transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+          </button>
+        )}
+        {row.canRevert ? (
+          <button type="button" className={cn(PILL, "inline-flex shrink-0 items-center gap-1.5")} disabled={reverting !== null} onClick={() => onRevert(row)}>
+            <RotateCcw size={14} aria-hidden="true" />
+            {reverting === row.id ? t("botPanel.memory.undoing") : t("botPanel.memory.undo")}
+          </button>
+        ) : (
+          <span className="shrink-0 text-[12px] text-ink-secondary" title={row.revertUnavailableReason}>
+            {t("botPanel.memory.cantUndo")}
+          </span>
+        )}
+      </div>
+      {row.diff && (
+        <pre id={bodyId} hidden={!open} className="mt-1 max-h-[240px] overflow-auto whitespace-pre-wrap rounded-lg bg-inset p-3 font-mono text-[12px] leading-relaxed text-ink">
+          {row.diff}
+        </pre>
+      )}
     </div>
   );
 }

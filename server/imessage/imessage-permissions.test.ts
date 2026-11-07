@@ -2,9 +2,10 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { probeFullDiskAccess, testMessagesConversationNames } from "./imessage-permissions.ts";
+import { appleDate } from "./imessage-db.ts";
+import { askMessagesAutomation, probeAutomation, probeFullDiskAccess, testMessagesConversationNames } from "./imessage-permissions.ts";
 
 const dirs: string[] = [];
 
@@ -61,5 +62,28 @@ describe("imessage-permissions", () => {
     writeFileSync(join(home, "Library", "Messages", "chat.db"), "not-a-db");
     expect(probeFullDiskAccess(home)).toBe("denied");
     expect(testMessagesConversationNames(home)).toEqual({ conversationCount: 0, names: [] });
+  });
+  // Native layer mocked: the status never prompts, the ask goes to Sagax's helper.
+  it.runIf(process.platform === "darwin")("reads the live Automation state without prompting", async () => {
+    const probe = vi.fn(async () => "denied" as const);
+    await expect(probeAutomation(probe as never)).resolves.toBe("denied");
+    expect(probe).toHaveBeenCalledWith("messages");
+    await expect(probeAutomation((async () => null) as never)).resolves.toBe("unknown");
+    await expect(probeAutomation((async () => { throw new Error("helper gone"); }) as never)).resolves.toBe("unknown");
+  });
+
+  it.runIf(process.platform === "darwin")("asks for Messages through the request layer", async () => {
+    const request = vi.fn(async () => "granted" as const);
+    await expect(askMessagesAutomation("/data", request as never)).resolves.toBe("granted");
+    expect(request).toHaveBeenCalledWith("/data", "messages");
+  });
+
+  // "Value is too large to be represented as a JavaScript number" (2026-11-06):
+  // chat.db dates are nanoseconds since 2001, beyond 2^53.
+  it("converts BigInt chat.db dates, and old ones stored in seconds", () => {
+    expect(appleDate(815692699090360064n)).toBe("2026-11-06T21:18:19.090Z");
+    expect(appleDate(815692699)).toBe("2026-11-06T21:18:19.000Z");
+    expect(appleDate(0)).toBeNull();
+    expect(appleDate(null)).toBeNull();
   });
 });

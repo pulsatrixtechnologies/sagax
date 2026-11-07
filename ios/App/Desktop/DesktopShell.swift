@@ -91,6 +91,9 @@ final class DesktopShellModel: ObservableObject {
     @Published var page: DesktopPage?
     @Published var panelOpen = false
     @Published var panelTab: BotPanelTab = .activity
+    /// The routine page that covers the whole bot panel (desktop PanelPage,
+    /// ff87bf7daf): one header row (back, title, X), no gear, no toggle.
+    @Published var panelRoutineId: String?
     /// The bot's profile page fills the main column (#2136 / #1939).
     @Published var personaOpen = false
     /// The section a deep link asked for (kept for the panel's callers).

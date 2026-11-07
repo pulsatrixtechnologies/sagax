@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RuntimeEvent } from "../contracts.ts";
 import type { Message } from "../store.ts";
+import { createStoppedTurnText } from "../index-leaves/stoppedTurnText.ts";
 import { TurnStops, stoppedTurnOutcome } from "./turn-outcome.ts";
 import { stallLimitMs, TurnWatchdog, type WatchedTurn } from "./turn-watchdog.ts";
 
@@ -207,7 +208,8 @@ describe("the stall handler", () => {
     const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
     const from = source.indexOf("\nconst TURN_STALL_MS"), to = source.indexOf("\nwatchdog.start();");
     if (from < 0 || to <= from) throw new Error("Stall handler section moved");
-    const code = transpileTs(`${source.slice(from, to)}\nglobalThis.watchdog = watchdog;`);
+    // the section reads the stopped-turn text through the leaf host (#1388): bind it to the section's own turnStops
+    const code = transpileTs(`globalThis.leafHost = {};\n${source.slice(from, to)}\nObject.assign(leafHost, { turnStops, store, stoppedTurnOutcome });\nglobalThis.watchdog = watchdog;\nglobalThis.stoppedTurnText = stoppedTurnText;`);
     const messages: Message[] = [
       { id: "a", role: "bot", kind: "activity", at: 1, turnId: "turn-1", tool: { name: "Bash", ok: true, itemId: "i1" } } as Message,
       { id: "b", role: "bot", kind: "text", at: 2, turnId: "turn-1", text: "Exporting the second half now." } as Message,
@@ -219,7 +221,7 @@ describe("the stall handler", () => {
     const context = vm.createContext({
       process: { env },
       RoomTurnStallRegistry: class { stall() {} },
-      TurnStops, stoppedTurnOutcome, reportsToRequester: () => true, stallLimitMs,
+      TurnStops, stoppedTurnOutcome, createStoppedTurnText, getLeafHost: () => context.leafHost, reportsToRequester: () => true, stallLimitMs,
       TurnWatchdog: class { options: unknown; constructor(options: { onStall: (turn: WatchedTurn) => void }) { this.options = options; } },
       store: { messagesFor: () => messages, activePath: () => messages, appendMessage() {} },
       turnResourceOwners: new Map(), directTurnGenerationByThread: new Map([["t1", "gen-1"]]), directRequestOwners: new Map(),

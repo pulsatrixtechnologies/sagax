@@ -19,6 +19,7 @@ vi.mock("@/lib/mcp-servers", async (importOriginal) => ({
 
 const { ToolSelectionCard } = await import("./ToolSelectionCard");
 const { BotEditorContext } = await import("./BotEditorContext");
+const { SettingsSurfaceProvider } = await import("../SettingsPrimitives");
 
 const bot = (over: Partial<Bot> = {}) => ({ id: "bot-1", name: "Scout", mcpServers: null, ...over }) as unknown as Bot;
 
@@ -83,5 +84,41 @@ describe("ToolSelectionCard groups (#2092)", () => {
     expect(allow().split("\n")).toEqual(["native:*", "mcp:mail:*"]);
     await click('[data-tool-group="native"] [role="switch"]');
     expect(allow()).toBe("mcp:mail:*");
+  });
+});
+
+// The bot's profile page (#2313): the tool selection card carries its own
+// grey label; the groups, the exceptions, Advanced and Save are all there,
+// drawn with filled fields and plain pills, never a border, an underline or
+// a primary pill.
+describe("ToolSelectionCard on the profile page (plain surface)", () => {
+  const BORDER = /\bborder(-\[|-border|-hairline|-accent)/;
+  const expectReferenceLook = () => {
+    for (const popover of host.querySelectorAll(".popover-surface")) popover.remove();
+    for (const element of host.querySelectorAll("*")) {
+      const classes = element.getAttribute("class") ?? "";
+      expect(classes, element.outerHTML.slice(0, 160)).not.toMatch(BORDER);
+      expect(classes).not.toContain("underline");
+      expect(classes).not.toContain("ui-button-primary");
+    }
+  };
+
+  it("keeps every group, exception and action in the reference look", async () => {
+    await act(async () => {
+      root.render(createElement(SettingsSurfaceProvider, { surface: "plain", children:
+        createElement(BotEditorContext.Provider, { value: { request: fixture.api as never } },
+          createElement(ToolSelectionCard, { bot: bot({ toolScope: { deny: ["mcp:mail:send"] } } as Partial<Bot>), engineKind: "grokAgent" })) }));
+    });
+    await flush();
+    expect(host.textContent).toContain("Tool selection");
+    expect([...host.querySelectorAll("[data-tool-group]")].map((row) => row.getAttribute("data-tool-group"))).toEqual(["native", "mcp:mail", "mcp:github"]);
+    await click('[data-tool-group="mcp:mail"] button[aria-expanded]');
+    expect($('[data-tool-row="mcp:mail:send"]')?.textContent).toContain("Blocked");
+    expect(host.textContent).toContain("Advanced");
+    // Save appears once there is a change, as a plain pill.
+    await click('[data-tool-group="mcp:github"] [role="switch"]');
+    const save = [...host.querySelectorAll("button")].find((button) => button.textContent === "Save tool selection");
+    expect(save?.className).toContain("ui-button");
+    expectReferenceLook();
   });
 });

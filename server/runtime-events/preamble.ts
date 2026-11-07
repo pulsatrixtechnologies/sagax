@@ -6,6 +6,7 @@ import { soloGoalLine, withoutSoloGoalMarker } from "../solo-goal.ts";
 import { clearHeldSteersForThread } from "../turns/held-steers.ts";
 import { noteFirstResponse } from "../turns/turn-trace.ts";
 import { dropCancelledVoiceEvent, isStaleAssistantOutput } from "../voice/voice-call-duplex.ts";
+import { stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
 export function runRuntimeEventPreamble(event: any, host: any): any | null {
   if (host.shouldIgnoreProviderEvent(event)) return;
   const localVmTarget = host.localVmThreadTargets.get(event.threadId);
@@ -177,7 +178,8 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
     pushMessage({ role: "bot", kind: "activity", tool: { name: host.STOPPED_TURN_NAME, ok: true }, turnId });
   };
   const pushAssistantText = (text: string, turnId: string | undefined) => {
-    const spoken = host.assistantTranscript(text);
+    // a reply that is only `<|eos|>` writes no bubble (shared/chat-special-tokens.ts)
+    const spoken = host.assistantTranscript(stripChatSpecialTokens(text));
     if (spoken.kind === "stopped") {
       pushStoppedTurn(turnId);
       return;

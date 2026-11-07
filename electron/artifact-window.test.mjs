@@ -15,6 +15,8 @@ import {
   claudeAiPermissionAllowed,
   createArtifactWindows,
   MAX_REMEMBERED_PLACES,
+  pageWindowChromeOptions,
+  watchWindowPointer,
   parseArtifactWindowPlaces,
   resolveArtifactWindowBounds,
   sanitizeArtifactWindowRequest,
@@ -217,6 +219,28 @@ describe("artifact windows", () => {
     expect(await fake.handlers.get("artifact-window:set-top")({ sender: {} }, { on: false })).toBe(false);
     win.close();
     expect(store.get().windows["page:pageAAAA1111"].alwaysOnTop).toBe(true);
+  });
+
+  it("a page window has no native title bar; an artifact window keeps its own (#2336)", async () => {
+    expect(pageWindowChromeOptions("darwin")).toEqual({ titleBarStyle: "customButtonsOnHover" });
+    expect(pageWindowChromeOptions("win32")).toEqual({ frame: false });
+    expect(pageWindowChromeOptions("linux")).toEqual({ frame: false });
+  });
+
+  it("tells the page when the cursor enters or leaves its window (#2336)", () => {
+    const sent = [];
+    const win = { isDestroyed: () => false, getBounds: () => ({ x: 100, y: 100, width: 400, height: 300 }), webContents: { send: (...args) => sent.push(args) } };
+    let cursor = { x: 10, y: 10 };
+    const watch = watchWindowPointer(win, { getCursorScreenPoint: () => cursor }, 60_000);
+    watch.tick();
+    cursor = { x: 200, y: 200 };
+    watch.tick();
+    watch.tick();
+    cursor = { x: 500, y: 200 };
+    watch.tick();
+    watch.stop();
+    expect(sent).toEqual([["artifact-window:pointer", false], ["artifact-window:pointer", true], ["artifact-window:pointer", false]]);
+    expect(watchWindowPointer(win, {})).toBeNull();
   });
 
   it("remembers always-on-top and puts it back the next time (#2046)", async () => {

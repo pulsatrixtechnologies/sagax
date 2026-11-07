@@ -206,4 +206,15 @@ describe("Apple apps on the solo Mac", () => {
     expect(off.result.isError).toBe(true);
     expect(runs).toEqual(["mac_notes_create"]);
   });
+
+  it("acts without a card when the person kept Always allow for that tool", async () => {
+    const cards: Array<{ to: string; macApp?: unknown }> = [];
+    const runs: string[] = [];
+    const base = deps(false, cards, runs);
+    const kept = { ...base, macApps: { ...base.macApps, kept: (tool: string) => tool === "mac_notes_create" } };
+    const res = await handleMessagesMcp({ method: "tools/call", params: { name: "mac_notes_create", arguments: { title: "Plan", body: "x" } } }, kept) as { result: { content: { text: string }[] } };
+    expect(res.result.content[0]!.text).toBe("done");
+    expect(cards).toEqual([]);
+    expect(runs).toEqual(["mac_notes_create"]);
+  });
 });

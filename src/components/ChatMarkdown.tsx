@@ -48,7 +48,7 @@ import {
   getLanguageDisplayName,
   getSnippetFileName,
 } from "../lib/code-block";
-import { wrapCodeChildren } from "../lib/code-wrap";
+import { ChatCodeSpan, ChatFileHref } from "./ChatFileLink";
 import { repairMarkdownTables } from "../lib/markdown-tables";
 import { TRANSCRIPT_WINDOW_SIZE } from "../lib/transcript-window";
 import { windowsPathDestinations } from "../../shared/markdown-windows-paths";
@@ -1485,9 +1485,8 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
       code({ children }: { children?: ReactNode }) {
         // Compact monospace chip: wrap at path separators (see code-wrap.ts)
         // so a long cron or script path never falls to one glyph per line.
-        return (
-          <code dir="ltr" className="ui-code-chip break-words [unicode-bidi:isolate]">{wrapCodeChildren(children)}</code>
-        );
+        // A file the conversation touched becomes a file link (#file-links).
+        return <ChatCodeSpan threadId={scopedMessage?.threadId}>{children}</ChatCodeSpan>;
       },
       // markdown never emits a span itself (no raw HTML); the only
       // spans are the ones our remark plugins produced: a thread link,
@@ -1544,11 +1543,13 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
           );
         }
         if (!href || !/^https?:\/\//i.test(href)) {
-          return (
+          const plain = (
             <a href={href} target="_blank" rel="noreferrer" dir="auto" className={LINK_CLASS}>
               {children}
             </a>
           );
+          // a relative file name the conversation wrote opens that file
+          return href ? <ChatFileHref threadId={scopedMessage?.threadId} href={href} fallback={plain}>{children}</ChatFileHref> : plain;
         }
         // SAFETY: react-markdown hands hast data-* attributes through as string props
         const github = githubRefFromProps(rest as Record<string, unknown>, href);

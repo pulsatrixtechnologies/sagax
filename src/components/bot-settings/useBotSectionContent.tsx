@@ -35,7 +35,7 @@ import { ModelSection } from "./ModelSection";
 import { PermissionsSection } from "./PermissionsSection";
 import { VoiceSection } from "./VoiceSection";
 import { HistorySection, type HistoryRow } from "./HistorySection";
-import { UsageSection } from "./UsageSection";
+import { BotAnalyticsSection } from "./BotAnalyticsSection";
 import { VisibilitySection } from "./VisibilitySection";
 import { SharingSection } from "./SharingSection";
 import { BotPayerCard } from "./BotPayerSettings";
@@ -96,6 +96,7 @@ export function useBotSectionContent(bot: Bot, {
   returnFocusRef,
   slackUrl,
   channelsElsewhere = false,
+  sharingElsewhere = false,
 }: {
   /** The section on screen: the overview and history load when it is theirs. */
   section: BotSettingsSection;
@@ -108,6 +109,10 @@ export function useBotSectionContent(bot: Bot, {
   /** The bot's address and "Me joindre" are shown elsewhere (the profile
    * page's Channels, #2126): What it does leaves them out. */
   channelsElsewhere?: boolean;
+  /** The people the bot is shared with are managed elsewhere (the profile
+   * page's Share popover, JC 2026-11-06: one option in one place): the
+   * Sharing section keeps only who pays and the shared vault. */
+  sharingElsewhere?: boolean;
 }): { renderSectionBody: (id: BotSettingsSection) => ReactNode; dialogs: ReactNode; derived: ReturnType<typeof useBotSettingsDerived> } {
   const dispatch = useStoreDispatch();
   const { flushBotPatches } = useStoreCommands();
@@ -320,7 +325,7 @@ export function useBotSectionContent(bot: Bot, {
         // not in the bot's side panel (JC 2026-11-03).
         return (
           <>
-            <SharingSection bot={bot} />
+            {!sharingElsewhere && <SharingSection bot={bot} />}
             {/* #1137: who pays for the replies of the people it is shared with */}
             <BotPayerCard bot={bot} />
             {Boolean(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(config, bot) || canSetBotHost(config, bot)) && (
@@ -347,7 +352,7 @@ export function useBotSectionContent(bot: Bot, {
           />
         );
       case "usage":
-        return <UsageSection bot={bot} />;
+        return <BotAnalyticsSection bot={bot} />;
       default:
         return null;
     }

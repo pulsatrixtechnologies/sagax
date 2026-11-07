@@ -80,16 +80,19 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
 /** The bot's profile page (#2126, #2173, #2271, Grok Bot's layout). Its
  * top is the bot's appearance: the banner, the mascot, "Name · Label", the
  * description and the colour, edited in place, with the full Appearance
- * pane unfolding under them. Under that, four pill tabs, each a page of
- * cards in two columns (one under 900px):
+ * pane unfolding under them. Under that, five pill tabs, each one column
+ * of cards (JC 2026-11-06: one column, one option in one place):
  *
- * - General: the channels, the bot's accounts, What it does, Shared with,
- *   Who can see it.
+ * - General: the channels, the bot's accounts, What it does, Shared with
+ *   (a summary row; the people are managed in the Share popover of the
+ *   top bar), Who pays, Who can see it.
  * - Knowledge: Skills, Personality, Rules, the Bot folder.
  * - Model & tools: Model, Workspace, Access, Permissions, Voice & alerts.
- * - Activity: Usage, Changes. */
-export type BotProfileTab = "general" | "knowledge" | "tools" | "activity";
-export const BOT_PROFILE_TABS = ["general", "knowledge", "tools", "activity"] as const satisfies readonly BotProfileTab[];
+ * - Activity: Changes.
+ * - Analytics: Usage (messages, hours saved, top users, turns, tokens,
+ *   cost, routines) over 7, 30 or 90 days. */
+export type BotProfileTab = "general" | "knowledge" | "tools" | "activity" | "analytics";
+export const BOT_PROFILE_TABS = ["general", "knowledge", "tools", "activity", "analytics"] as const satisfies readonly BotProfileTab[];
 
 /** The sections the page's header shows itself (the identity and the
  * appearance): on every tab, never a tab. */
@@ -105,7 +108,8 @@ export const BOT_PROFILE_TAB_SECTIONS: Readonly<Record<BotProfileTab, readonly P
   general: ["slack", "summary", "sharing", "visibility"],
   knowledge: KNOWLEDGE_SECTIONS,
   tools: ["model", "worksOn", "access", "permissions", "voice"],
-  activity: ["usage", "history"],
+  activity: ["history"],
+  analytics: ["usage"],
 };
 
 export function isHeaderSection(id: PersonaCategory): id is HeaderSection {

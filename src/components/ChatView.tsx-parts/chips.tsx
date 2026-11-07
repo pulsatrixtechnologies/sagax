@@ -12,6 +12,7 @@ import { stepLabel } from "@/lib/step-label";
 import { ThreadChip } from "../ThreadChip";
 import { InputRequestCard } from "../InputRequestCard";
 import { RenameTitle } from "../RenameTitle";
+import { delegateModelLabel } from "../DelegationList";
 import { RoutineRunCard } from "../RoutineRunCard";
 import { BotAvatar } from "../Avatar";
 import { normalizeState } from "@/lib/mascot";
@@ -132,6 +133,7 @@ export function RoutineRunRow({ message, botId, onResume }: { message: Message; 
     return state.bots.filter((candidate) => ids.has(candidate.id));
   }, shallowEqual);
   const owner = bots.find((candidate) => candidate.id === ownerId);
+  const instances = useStoreSelector((state) => state.instances);
   return (
     <RoutineRunCard
       message={message}
@@ -144,6 +146,8 @@ export function RoutineRunRow({ message, botId, onResume }: { message: Message; 
       // 2026-11-03: a run that handed work to a teammate links that thread;
       // threads shown only (#2081): one conversation names the teammate, no link.
       onOpenThread={showThreads ? (botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); } : undefined}
+      // 2026-11-06: each teammate's row names the model it works on.
+      modelOf={(id, threadId) => delegateModelLabel(bots.find((candidate) => candidate.id === id), instances, threadId)}
     />
   );
 }

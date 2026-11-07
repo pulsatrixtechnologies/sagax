@@ -125,6 +125,8 @@ export type MessagesMcpDeps = {
     run: (tool: string, args: Record<string, unknown>) => Promise<MacAppToolResult>;
     /** The bot's approval mode acts without asking (auto, full). */
     unasked: boolean;
+    /** Always allow kept a rule for this write: it acts unasked. */
+    kept?: (tool: string) => boolean;
   };
 };
 
@@ -249,7 +251,7 @@ async function macAppCall(deps: MessagesMcpDeps, name: string, args: Record<stri
   let op: Record<string, unknown>;
   try { op = macAppOperation(name, args); } catch (error) { return text(error instanceof Error ? error.message : String(error), true); }
   // A write follows the bot's approval mode: Ask shows a card, Auto and Full act.
-  if (macAppToolWrites(name) && !deps.macApps.unasked) {
+  if (macAppToolWrites(name) && !deps.macApps.unasked && !deps.macApps.kept?.(name)) {
     const pending = stageImessageSend({
       threadId: deps.threadId,
       botId: deps.botId,

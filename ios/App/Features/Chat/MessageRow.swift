@@ -403,8 +403,8 @@ struct MessageRow: View {
                     tint: MausPalette.color(chat.color),
                     bot: runBot,
                     openRun: routineRunOpener(card),
-                    // #2096: Stop sits on the running card, beside View run
-                    stop: card.knownStatus == .running ? { Task { await session.cancelRoutineRun(id: card.runId) } } : nil,
+                    // #2096: Stop on the muted line while the run is live (queued, running, waiting)
+                    stop: { Task { await session.cancelRoutineRun(id: card.runId) } },
                     resume: card.autoPausedAfter == nil ? nil : {
                         // 2026-10-26: back on, the failure count from zero
                         Task {

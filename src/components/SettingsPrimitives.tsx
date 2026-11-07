@@ -223,12 +223,34 @@ type CardProps = {
  * and the body. The body stays mounted while collapsed so drafts, saves and
  * loads are unaffected. `cardId` keys the remembered state on this device
  * and is the target of `requestSettingsCard`. */
+/** How the surfaces of a settings page draw (#2313, the bot's profile):
+ * "bordered" is Settings' thin outline over the page's background; "plain"
+ * is the profile page's one filled card (rounded, no border, the
+ * background of Channels and Bot accounts), every group, card and editor
+ * alike, so a page reads as one system. */
+export type SettingsSurface = "bordered" | "plain";
+const SettingsSurfaceContext = createContext<SettingsSurface>("bordered");
+export function SettingsSurfaceProvider({ surface, children }: { surface: SettingsSurface; children: React.ReactNode }) {
+  return <SettingsSurfaceContext.Provider value={surface}>{children}</SettingsSurfaceContext.Provider>;
+}
+export function useSettingsSurface(): SettingsSurface {
+  return useContext(SettingsSurfaceContext);
+}
+/** The plain surface: one filled rounded card, no border. */
+export const PLAIN_CARD = "flex flex-col rounded-2xl bg-card py-1";
+/** A text field inside a plain card: filled, no outline, a focus ring. */
+export const PLAIN_FIELD = "min-h-[44px] w-full min-w-0 rounded-lg bg-inset px-2.5 py-1.5 text-[13px] leading-[18px] text-ink placeholder:text-ink-secondary focus:outline-none focus:ring-1 focus:ring-focus disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0";
+
 export function Card(props: CardProps) {
   // A plain card stays hook-free; only a collapsible one needs state.
   if (props.collapsible && props.title) return <CollapsibleCard {...props} title={props.title} />;
-  const { title, subtitle, children, cardId } = props;
+  return <PlainAwareCard {...props} />;
+}
+
+function PlainAwareCard({ title, subtitle, children, cardId }: CardProps) {
+  const plain = useSettingsSurface() === "plain";
   return (
-    <div data-settings-card={cardId} data-settings-surface="" className="rounded-[14px] border-[0.5px] border-border px-3.5 py-3">
+    <div data-settings-card={cardId} data-settings-surface="" className={plain ? "rounded-2xl bg-card px-4 py-3" : "rounded-[14px] border-[0.5px] border-border px-3.5 py-3"}>
       {title && (
         <div className="text-[13px] font-normal leading-[18px] text-ink">{title}</div>
       )}
@@ -241,8 +263,9 @@ export function Card(props: CardProps) {
 function CollapsibleCard({ title, subtitle, children, cardId, defaultOpen = true, summary }: CardProps & { title: string }) {
   const bodyId = useId();
   const [open, toggle] = useCardOpen(cardId ?? `${ANONYMOUS_CARD}${bodyId}`, defaultOpen);
+  const plain = useSettingsSurface() === "plain";
   return (
-    <div data-settings-card={cardId} data-open={open ? "true" : "false"} data-settings-surface="" className="rounded-[14px] border-[0.5px] border-border">
+    <div data-settings-card={cardId} data-open={open ? "true" : "false"} data-settings-surface="" className={plain ? "rounded-2xl bg-card" : "rounded-[14px] border-[0.5px] border-border"}>
       <h3 className="text-[13px] font-normal leading-[18px]">
         <button
           type="button"
@@ -385,10 +408,12 @@ export function SettingsGroup({
 }) {
   const headingId = useId();
   const fold = useContext(AdvancedFoldContext);
+  const surface = useSettingsSurface();
   const folded = Boolean(advanced && fold);
   const register = fold?.register;
   const foldTitle = title ?? groupId;
   useLayoutEffect(() => (folded && register ? register(foldTitle) : undefined), [folded, register, foldTitle]);
+  const card = surface === "plain" ? `${PLAIN_CARD} empty:hidden` : "flex flex-col rounded-xl border-[0.5px] border-border bg-elevated py-1.5 empty:hidden";
   const section = (
     <section aria-labelledby={title ? headingId : undefined} data-settings-group={groupId} data-settings-advanced={advanced ? "" : undefined} className="flex flex-col gap-2 has-[>div:empty]:hidden">
       {(title || accessory) && (
@@ -397,7 +422,7 @@ export function SettingsGroup({
           {accessory}
         </div>
       )}
-      <div data-settings-surface={plain ? undefined : ""} className={plain ? "flex flex-col gap-2 empty:hidden" : "flex flex-col rounded-xl border-[0.5px] border-border bg-elevated py-1.5 empty:hidden"}>{children}</div>
+      <div data-settings-surface={plain ? undefined : ""} className={plain ? "flex flex-col gap-2 empty:hidden" : card}>{children}</div>
     </section>
   );
   if (!folded) return section;
@@ -576,12 +601,17 @@ export function UnitField({
   onChange: (value: string) => void;
   onCommit: () => void;
 }) {
+  // In a plain card (bot profile) the field is a filled well, no outline;
+  // focus and the invalid state show as a ring instead of a border.
+  const plain = useSettingsSurface() === "plain";
   return (
     <span
       data-unit-field=""
       className={cn(
-        "inline-flex h-7 min-h-[44px] items-center gap-1 rounded-lg border-[0.5px] bg-inset pl-2 pr-2.5 md:min-h-0",
-        invalid ? "border-danger/60" : "border-border focus-within:border-focus",
+        "inline-flex h-7 min-h-[44px] items-center gap-1 rounded-lg bg-inset pl-2 pr-2.5 md:min-h-0",
+        plain
+          ? invalid ? "ring-1 ring-danger/60" : "focus-within:ring-1 focus-within:ring-focus"
+          : invalid ? "border-[0.5px] border-danger/60" : "border-[0.5px] border-border focus-within:border-focus",
         disabled && "opacity-50",
       )}
     >
@@ -782,9 +812,12 @@ export function PillSelect<T extends string>({
  * right, no help text. */
 export function CompactRow({ label, children, className, rowId, keywords }: { label: string; children: React.ReactNode; className?: string; rowId?: string; keywords?: string }) {
   const labelId = useId();
+  // The plain surface (the bot's profile page): the Channels row's type,
+  // 14px titles in a 16px gutter.
+  const plain = useSettingsSurface() === "plain";
   return (
-    <div role="group" aria-labelledby={labelId} data-settings-row={rowId} data-settings-keywords={keywords} className={cn("flex min-h-[44px] items-center justify-between gap-5 px-3.5 py-2", className)}>
-      <div id={labelId} className="min-w-0 text-[13px] leading-[18px] text-ink">{label}</div>
+    <div role="group" aria-labelledby={labelId} data-settings-row={rowId} data-settings-keywords={keywords} className={cn("flex min-h-[44px] items-center justify-between gap-5 py-2", plain ? "px-4" : "px-3.5", className)}>
+      <div id={labelId} className={cn("min-w-0 text-ink", plain ? "text-[14px] leading-5" : "text-[13px] leading-[18px]")}>{label}</div>
       <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">{children}</div>
     </div>
   );
@@ -815,14 +848,17 @@ export function DescribedRow({
   keywords?: string;
 }) {
   const labelId = useId();
+  // The plain surface (the bot's profile page): the Channels row's type,
+  // 14px titles, a 20px line icon in a 16px gutter.
+  const plain = useSettingsSurface() === "plain";
   return (
-    <div role="group" aria-labelledby={labelId} data-settings-row={rowId} data-settings-keywords={keywords} className="px-3.5 py-2.5">
+    <div role="group" aria-labelledby={labelId} data-settings-row={rowId} data-settings-keywords={keywords} className={plain ? "px-4 py-2.5" : "px-3.5 py-2.5"}>
       <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-x-5 gap-y-2">
-        <div className="flex min-w-0 flex-1 basis-[240px] items-start gap-2">
-          {icon && <span aria-hidden="true" className="mt-px shrink-0 text-ink-secondary">{icon}</span>}
+        <div className={cn("flex min-w-0 flex-1 basis-[240px] items-start", plain ? "gap-3" : "gap-2")}>
+          {icon && <span aria-hidden="true" className={cn("shrink-0 text-ink-secondary", plain ? "flex size-5 items-center justify-center [&>svg]:size-5" : "mt-px")}>{icon}</span>}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <div id={labelId} className="text-[13px] leading-[18px] text-ink">{label}</div>
+              <div id={labelId} className={cn("text-ink", plain ? "text-[14px] leading-5" : "text-[13px] leading-[18px]")}>{label}</div>
               {help && <HelpTip label={t("settings.moreAbout", { title: label })}>{help}</HelpTip>}
             </div>
             {description && <div className="mt-0.5 text-[12px] leading-4 text-ink-secondary">{description}</div>}
@@ -1117,13 +1153,16 @@ export function EditorBox({ label, actions, onSubmit, className, children, ...da
   className?: string;
   children: React.ReactNode;
 } & { [key: `data-${string}`]: string | undefined }) {
+  const plain = useSettingsSurface() === "plain";
   const body = (
     <>
       <div className="flex flex-col py-1">{children}</div>
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t-[0.5px] border-border px-3 py-2">{actions}</div>
+      <div className={cn("flex flex-wrap items-center justify-end gap-2 px-3 py-2", !plain && "border-t-[0.5px] border-border")}>{actions}</div>
     </>
   );
-  const frame = cn("flex min-w-0 flex-col rounded-lg border-[0.5px] border-border", className);
+  // In a plain card the editor is the card's own rows: no frame inside the
+  // frame (#2313), only its actions at the bottom right.
+  const frame = cn("flex min-w-0 flex-col", plain ? "rounded-lg" : "rounded-lg border-[0.5px] border-border", className);
   return onSubmit
     ? <form {...data} aria-label={label} className={frame} onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>{body}</form>
     : <div {...data} role="group" aria-label={label} className={frame}>{body}</div>;

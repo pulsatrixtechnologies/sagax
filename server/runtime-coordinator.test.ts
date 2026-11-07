@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CoordinatorHost, HandoffView } from "./coordinator.ts";
 import type { RoomAddress } from "./coordinator.ts";
-import { needsInputQuestion, RuntimeCoordinator, view } from "./runtime-coordinator.ts";
+import { briefTitle, needsInputQuestion, RuntimeCoordinator, view } from "./runtime-coordinator.ts";
 import { ENVELOPE_MARK } from "./runtime/envelope.ts";
 import type { Assignment, Level, Limits } from "./runtime/types.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
@@ -975,6 +975,13 @@ describe("a room goal's worker assignment on the runtime", () => {
 });
 
 // 2026-11-01: a routine run ends as the work its thread handed out did.
+describe("briefTitle", () => {
+  it("names a hand-off by the brief's first line, without markdown marks", () => {
+    expect(briefTitle("\n## **Reconcile** the `bank` sheet\nThen send it.")).toBe("Reconcile the bank sheet");
+    expect(briefTitle("x".repeat(200)).length).toBeLessThanOrEqual(81);
+  });
+});
+
 describe("handedOutOutcome", () => {
   it("reads the latest root's ending and the teammates whose work did not complete", async () => {
     const w = world(hold);
@@ -991,6 +998,8 @@ describe("handedOutOutcome", () => {
     expect(outcome.pending).toBe(false);
     expect(outcome.root.status).toBe("completed");
     expect(outcome.failed).toEqual([expect.objectContaining({ botId: "builder" })]);
+    // the sub-agent list names the task, its times and how it ended (2026-11-06)
+    expect(outcome.handed).toEqual([expect.objectContaining({ botId: "builder", task: "Build it", startedAt: expect.any(Number), finishedAt: expect.any(Number), note: expect.stringContaining("the build server refused") })]);
     // Only work handed out since the run started counts.
     expect(w.coordinator.handedOutOutcome("chief-chat", Date.now() + 60_000)).toBeNull();
   });

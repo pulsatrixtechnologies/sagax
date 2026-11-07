@@ -3,7 +3,7 @@
 // attachment to the composer. Without a provider key, Imgflip templates
 // still show and local GIF upload remains available.
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { ImagePlay, LoaderCircle, Search, Upload } from "lucide-react";
+import { LoaderCircle, Search, Upload } from "lucide-react";
 
 import { useAnchoredPopover } from "@/hooks/use-anchored-popover";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
@@ -11,7 +11,6 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { materializeMeme, searchMemes, type MemeSearchHit } from "@/lib/memes";
 import { readableErrorMessage } from "@/lib/readable-error";
-import { SECONDARY_CIRCLE } from "./ComposerControls";
 
 export interface MemeAttachmentPick {
   kind: "image";
@@ -191,34 +190,5 @@ export function MemePicker({ open, onClose, anchorRef, onPick, onUploadLocal }: 
       </div>
       <p className="px-1 pb-0.5 text-[10.5px] text-ink-tertiary">{t("memes.attributionNote")}</p>
     </div>
-  );
-}
-
-export function MemePickerButton({
-  open,
-  onToggle,
-  buttonRef,
-  disabled,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  buttonRef: RefObject<HTMLButtonElement | null>;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      ref={buttonRef}
-      type="button"
-      data-composer-memes=""
-      aria-label={t("memes.button")}
-      title={t("memes.button")}
-      aria-expanded={open}
-      disabled={disabled}
-      onClick={onToggle}
-      className={SECONDARY_CIRCLE}
-    >
-      {/* #2295: the composer's own icon button, the same as the + beside it */}
-      <ImagePlay size={15} strokeWidth={2.25} aria-hidden="true" />
-    </button>
   );
 }

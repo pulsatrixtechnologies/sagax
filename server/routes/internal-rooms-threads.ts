@@ -45,6 +45,7 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
     joinPerson,
     threadRefUrl,
     notePeerNotice,
+    setReplyNotify,
     botMaxConcurrentThreadsLocal,
     botMaxParallelPerPersonLocal,
     botTurnLimitLocal,
@@ -286,6 +287,8 @@ export async function handleInternalThreads(call: InternalRoomsCall): Promise<ty
   }
   const threadId = node.threadId;
   if (oneWay) notePeerNotice?.(threadId, fromThreadId);
+  // send_to_bot notify false: the teammate's reply there lands without alerting anyone
+  if (oneWay && body.notify === false) setReplyNotify?.(threadId, false);
   const openedTitle = store.taskByThread(target.id, threadId)?.title ?? task.title;
   if (threadId === task.threadId) {
     const chip: Omit<Message, "id" | "at"> = {

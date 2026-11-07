@@ -62,6 +62,7 @@ export function EventEditorBody(props: EventEditorBodyProps) {
             {viewing
               ? <h2 data-editor-title className="min-w-0 flex-1 truncate px-0.5 text-[15px] font-medium leading-6 text-ink" title={name}>{name || titleText}</h2>
               : <input autoFocus={!existingRoutine} data-editor-title data-routine-editor-name value={name} onChange={(event) => setName(event.target.value)} aria-label={t("routineEditor.name")} placeholder={t("routineCalendar.addTitle")} className="h-8 min-w-0 flex-1 rounded-md bg-transparent px-1.5 text-[15px] font-medium leading-6 text-ink outline-none placeholder:text-ink-tertiary hover:bg-hover focus:bg-inset focus:ring-2 focus:ring-accent/40" />}
+            {panel && page?.badge}
             {dirty && !viewing && <span data-editor-dirty className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent-text"><span aria-hidden="true" className="size-1.5 rounded-full bg-accent" />{t("routineEditor.unsaved")}</span>}
             <button type="button" data-editor-close onClick={() => void requestDismiss()} aria-label={t("common.close")} title={t("common.close")} className={cn(CIRCLE_BUTTON, "shrink-0", !panel && "size-8")}>
               <X size={panel ? 18 : 15} strokeWidth={1.75} />
@@ -82,7 +83,9 @@ export function EventEditorBody(props: EventEditorBodyProps) {
           {!panel && <button onClick={requestClose} className="rounded-full p-2 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("common.close")}><X size={18} /></button>}
         </div>
         )}
-        <div className={panel ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
+        {/* 2026-11-06 (JC): the page's Instruction takes at least 45% of the
+            panel's height (cqh of this scroll area), so it is a size container. */}
+        <div data-routine-editor-scroll="" className={panel ? cn("min-h-0 flex-1 overflow-y-auto", page && "[container-type:size]") : undefined}>
 
         <div className={cn(panel ? "px-4 py-4" : "space-y-5 px-6 py-5 sm:px-8")}>
           {canSwitchKind && (

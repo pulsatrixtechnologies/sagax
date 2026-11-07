@@ -3,6 +3,7 @@
 // dispatched by agents-call.ts. Never import server/index.ts.
 
 import { BOT_REACTIONS } from "../../../shared/reactions.ts";
+import { BOT_NOTIFY_PARAM, botNotifyArg } from "../../../shared/notification.ts";
 import { CREDENTIAL_TARGETS, isCredentialTargetId } from "../../../shared/credential-request.ts";
 import { peerName } from "../../peers/peer-roster.ts";
 import { PRIORITY_DOWNGRADED_NOTE, parseWakePriority } from "../../proactive/priority-wake.ts";
@@ -61,7 +62,16 @@ export const DEF_SEND_TO_BOT = {
       title: { type: "string", description: "A short one-line title, at most 80 characters." },
       message: { type: "string", description: "Complete instructions; the recipient does not inherit this conversation." },
       priority: { type: "string", enum: ["now", "normal"], description: "now wakes an idle recipient at once or moves this to the front of its queue. It never interrupts a running turn. Default normal. At most 10 now sends per sender per hour; past that it is delivered as normal." },
+      notify: { ...BOT_NOTIFY_PARAM, description: "Default true. false: the teammate's reply there is shown and unread, but no desktop notification or phone push." },
     }, required: ["bot_id", "title", "message"] },
+  };
+
+export const DEF_SET_REPLY_NOTIFY = {
+    name: "set_reply_notify",
+    description: "Whether this turn's reply (or routine report) alerts the person. notify false: shown and unread, but no desktop notification or phone push. Not called: it notifies as usual.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      notify: BOT_NOTIFY_PARAM,
+    }, required: ["notify"] },
   };
 
 export const DEF_LIST_BOTS = {
@@ -354,7 +364,7 @@ export const DEF_ACT = {
     },
   };
 
-export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'send_meme', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act'] as const);
+export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'send_meme', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act', 'set_reply_notify'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callCoreTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -452,6 +462,13 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
 async function callCoreMessagingTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
   const { botId: BOT_ID, threadId: THREAD_ID, depth: DEPTH, externalRuntime: EXTERNAL_RUNTIME, coordinating: COORDINATING } = context;
   const { api, apiResponse } = context.client;
+  if (name === "set_reply_notify") {
+    const r = await api("/api/internal/reply-notify", { method: "POST", body: JSON.stringify({
+      fromBotId: context.botId, fromThreadId: context.threadId, notify: botNotifyArg(args.notify),
+    }) });
+    if (r.error) return { text: `Couldn't set that: ${String(r.error)}`, isError: true };
+    return { text: r.notify === false ? "This reply will not notify anyone. It still appears in the chat." : "This reply will notify as usual." };
+  }
   if (name === "send_to_bot") {
     const botId = String(args.bot_id ?? "").trim();
     const title = String(args.title ?? "").trim();
@@ -466,7 +483,7 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     if (asked === "invalid") return { text: "priority is now or normal.", isError: true };
     const r = await api("/api/internal/threads", { method: "POST", body: JSON.stringify({
       fromBotId: context.botId, fromThreadId: context.threadId, toBotId: botId,
-      title, message, depth: context.depth, oneWay: true,
+      title, message, depth: context.depth, oneWay: true, notify: botNotifyArg(args.notify),
       ...(asked === "now" || asked === "normal" ? { priority: asked } : {}),
     }) });
     if (r.error) return { text: `Couldn't send to that bot: ${String(r.error)}`, isError: true };

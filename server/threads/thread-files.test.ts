@@ -9,8 +9,10 @@ import {
   acpWrittenFiles,
   activePath,
   filesField,
+  isShellTool,
   isWriteTool,
   listThreadFiles,
+  shellWrittenFiles,
   threadFileId,
   threadFileRefs,
   writtenFilesForMessage,
@@ -33,9 +35,9 @@ describe("written files from tool calls", () => {
     expect(acpWrittenFiles({ title: "anything", kind: "edit", rawInput: { abs_path: "/w/x.txt" } })).toEqual(["/w/x.txt"]);
   });
 
-  it("ignores reads, shells, attach_file, web URLs and malformed paths", () => {
+  it("ignores reads, shell reads, attach_file, web URLs and malformed paths", () => {
     expect(writtenFilesFromToolInput("Read", { file_path: "/w/a.ts" })).toEqual([]);
-    expect(writtenFilesFromToolInput("Bash", { command: "echo > x" })).toEqual([]);
+    expect(writtenFilesFromToolInput("Bash", { command: "cat x | grep y" })).toEqual([]);
     expect(writtenFilesFromToolInput("mcp__maus__attach_file", { path: "/w/a.pdf" })).toEqual([]);
     expect(writtenFilesFromToolInput("Write", { file_path: "https://example.com/x" })).toEqual([]);
     expect(writtenFilesFromToolInput("Write", { file_path: "a\0b" })).toEqual([]);
@@ -152,5 +154,26 @@ describe("sizes and availability", () => {
       ["remote-only.png", null, false, undefined],
       ["report.md", 7, true, "text/markdown; charset=utf-8"],
     ]);
+  });
+});
+
+describe("files a shell command writes (#file-links)", () => {
+  it("reads redirects, tee and -o targets", () => {
+    expect(shellWrittenFiles("cat > ~/Desktop/pelican-a-velo.html <<'EOF'\n<html></html>\nEOF")).toEqual(["~/Desktop/pelican-a-velo.html"]);
+    expect(shellWrittenFiles("echo hi >> notes.md && echo x 2>/dev/null")).toEqual(["notes.md"]);
+    expect(shellWrittenFiles("ls | tee -a \"out file.txt\" list.txt")).toEqual(["list.txt"]);
+    expect(shellWrittenFiles("curl -sL https://x.test/a.png -o /tmp/a.png; wget --output=b.zip x")).toEqual(["/tmp/a.png", "b.zip"]);
+    expect(shellWrittenFiles('printf x > "$OUT"; echo y > /dev/null; cmd 2>&1')).toEqual([]);
+  });
+
+  it("records them for shell tools only, from the driver or the stored preview", () => {
+    expect(isShellTool("Bash")).toBe(true);
+    expect(isShellTool("mcp__x__exec_command")).toBe(true);
+    expect(isShellTool("Read")).toBe(false);
+    expect(isShellTool("Run tests", "execute")).toBe(true);
+    expect(writtenFilesFromToolInput("Bash", { command: "echo hi > /tmp/a.txt" })).toEqual(["/tmp/a.txt"]);
+    expect(writtenFilesFromToolInput("exec_command", { cmd: ["bash", "-lc", "echo hi > a.txt"] })).toEqual(["a.txt"]);
+    expect(writtenFilesFromToolInput("Read", { command: "echo hi > a.txt" })).toEqual([]);
+    expect(writtenFilesFromPreview("Bash", JSON.stringify({ command: "echo hi > b.txt" }))).toEqual(["b.txt"]);
   });
 });

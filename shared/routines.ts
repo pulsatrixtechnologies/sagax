@@ -247,6 +247,12 @@ export interface RoutineRunHandoff {
   name?: string;
   /** Where that work stands: queued, running, completed, failed... */
   status: string;
+  /** 2026-11-06: the work as one short title (the brief's first line). */
+  task?: string;
+  startedAt?: number;
+  finishedAt?: number;
+  /** How it ended, one short line (its outcome detail or result). */
+  note?: string;
 }
 
 export interface RoutineRun {

@@ -167,9 +167,13 @@ export function seedPersonalSections(input: { bots: readonly SeedBot[]; groups: 
     const name = bot.section?.trim();
     if (name && own(bot)) placed.push([name, itemKey("bot", bot.id)]);
   }
+  // #2045 isolation: a room's section is its owner's team. Only a name the
+  // server lists for this viewer (their own teams) is copied; an admin who
+  // sees other people's rooms never inherits their team names.
+  const mine = new Set(input.sections.map((name) => name.trim()));
   for (const group of input.groups) {
     const name = group.section?.trim();
-    if (name && !group.dm) placed.push([name, itemKey("group", group.id)]);
+    if (name && !group.dm && mine.has(name)) placed.push([name, itemKey("group", group.id)]);
   }
   const used = new Set(placed.map(([name]) => name));
   const order = [...input.sections.map((name) => name.trim()).filter((name) => used.has(name)), ...placed.map(([name]) => name)];

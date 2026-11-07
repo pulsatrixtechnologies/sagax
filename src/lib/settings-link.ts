@@ -13,7 +13,7 @@ export { currentSettingsSection, mergedSettingsCard };
 
 const SECTION_LABEL = {
   account: "settings.section.account",
-  general: "settings.section.account",
+  general: "settings.section.general",
   organization: "settings.section.organization",
   appearance: "settings.section.appearance",
   experimental: "settings.section.experimental",
@@ -37,15 +37,15 @@ const SECTION_LABEL = {
   people: "settings.section.account",
   mail: "settings.section.account",
   activity: "settings.section.account",
-  backups: "settings.section.backupsAndImport",
-  import: "settings.section.backupsAndImport",
+  backups: "settings.section.backupsAndStorage",
+  import: "settings.section.backupsAndStorage",
   workspaces: "settings.section.account",
   privacy: "settings.section.notifications",
   notifications: "settings.section.notifications",
   memory: "settings.section.organization",
   updates: "settings.updates.title",
-  // #2080 L2: about is the App page; the About window opens via requestAbout / the App link.
-  about: "settings.section.app",
+  // Help and about (JC 2026-11-06); a bare link opens the About window (requestAbout).
+  about: "settings.section.helpAbout",
   security: "settings.section.security",
   // Published pages are a section of Connect apps > Manage (2026-10-26).
   pages: "connectApps.title",
@@ -69,8 +69,8 @@ export function openSettings(dispatch: SettingsDispatch, section: AppSettingsSec
     dispatch({ type: "togglePlugins", open: true, page: "pages" });
     return;
   }
-  // The About window is its own centred modal; a card of the App page
-  // (about.* / general.*) opens the App page instead.
+  // The About window is its own centred modal; a card (about.* /
+  // general.*) opens the page that holds it (CARD_HOME) instead.
   if (section === "about" && !(cardId && /^(about|general)\./.test(cardId))) {
     requestAbout();
     return;

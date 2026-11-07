@@ -94,21 +94,15 @@ export function createLoadRecovery({ delays = RETRY_DELAYS_MS } = {}) {
 const STRINGS = {
   fr: {
     loading: "Ouverture de Sagax…",
-    installing: "Installation de la mise à jour en cours…",
     errorTitle: "Sagax n'a pas pu s'ouvrir",
     errorBody: "La page de Sagax ne répond pas encore. Si une mise à jour vient de s'installer, attendez qu'elle se termine, puis réessayez.",
     retry: "Réessayer",
-    bundleTitle: "La mise à jour n'est pas terminée",
-    bundleBody: "Des fichiers de Sagax manquent encore. Si l'installateur est ouvert, laissez-le finir. Sinon, réinstallez Sagax depuis la dernière version.",
   },
   en: {
     loading: "Opening Sagax…",
-    installing: "Installing the update…",
     errorTitle: "Sagax could not open",
     errorBody: "Sagax's page is not answering yet. If an update was just installed, let it finish, then try again.",
     retry: "Try again",
-    bundleTitle: "The update has not finished",
-    bundleBody: "Some of Sagax's files are still missing. If the installer is open, let it finish. Otherwise, reinstall Sagax from the latest version.",
   },
 };
 
@@ -121,7 +115,7 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
 
-// The loading screen's look (electron/startup-screen.mjs): night ground,
+// The loading page look: night ground,
 // the mark, one line. No script; the retry is a plain link to the page.
 function page({ language, iconDataUrl, body }) {
   const icon = iconDataUrl ? `<img src="${escapeHtml(iconDataUrl)}" alt="" width="64" height="64" style="margin-bottom:16px">` : "";

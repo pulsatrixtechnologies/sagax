@@ -7,7 +7,11 @@
 //
 // On an OMB Cloud home, the notice that memory changed where the owner did
 // not write shows above the folder whenever there is one.
-import { useEffect, useState } from "react";
+//
+// On the bot's profile page (plain surface, #2313) the folder lays these out
+// itself through `children`: the notice and the status lines are rows of the
+// Bot folder's card, tidying and the change log two labelled cards under it.
+import { useEffect, useState, type ReactNode } from "react";
 
 import { t } from "@/lib/i18n";
 import {
@@ -25,11 +29,23 @@ import {
 import { ApiError, useStore, type Bot } from "@/state/store";
 import { LendingReviewNotice, MemoryJournalList, MemoryUpkeepCard } from "./MemorySection";
 import { PaneSection } from "./PaneSection";
+import { useSettingsSurface } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 const errorText = (e: unknown) => (readableError(e));
 
-export function MemoryFolderOptions({ bot, active, showOptions, onChanged }: {
+/** What the profile page's Bot folder places itself (plain surface). */
+export interface MemoryFolderParts {
+  /** The lending notice: a row of the folder's card, or null. */
+  notice: ReactNode;
+  /** Tidied / restored / failed: rows of the folder's card, or null. */
+  status: ReactNode;
+  /** Tidying and the change log, two labelled cards: null while the "..."
+   * menu is closed. */
+  options: ReactNode;
+}
+
+export function MemoryFolderOptions({ bot, active, showOptions, onChanged, children }: {
   bot: Bot;
   /** The folder is on screen: the lending notice is read then. */
   active: boolean;
@@ -37,7 +53,10 @@ export function MemoryFolderOptions({ bot, active, showOptions, onChanged }: {
   showOptions: boolean;
   /** A file changed (undo, tidy): the folder re-reads its list. */
   onChanged: () => void;
+  /** The plain surface: the folder lays out the parts. */
+  children?: (parts: MemoryFolderParts) => ReactNode;
 }) {
+  const plain = useSettingsSurface() === "plain";
   const { dispatch } = useStore();
   const [journal, setJournal] = useState<MemoryJournalRow[] | null>(null);
   const [upkeep, setUpkeep] = useState<UpkeepStatus | null>(null);
@@ -105,42 +124,63 @@ export function MemoryFolderOptions({ bot, active, showOptions, onChanged }: {
     setUpkeep((current) => (current ? { ...current, enabled } : current));
   };
 
-  return (
+  const lendingNotice = lendingReview && (
+    <LendingReviewNotice
+      changed={lendingReview.changed}
+      stale={lendingStale}
+      busy={reviewing}
+      plain={plain}
+      onReviewed={() => {
+        setReviewing(true);
+        markMemoryReviewed(bot.id, lendingReview.token)
+          .then(() => { setLendingReview(null); setLendingStale(false); })
+          .catch((e: unknown) => {
+            if (e instanceof ApiError && e.status === 409) {
+              setLendingStale(true);
+              return readLending();
+            }
+            setError(errorText(e));
+          })
+          .finally(() => setReviewing(false));
+      }}
+    />
+  );
+  const cards = (
     <>
-      {lendingReview && (
-        <LendingReviewNotice
-          changed={lendingReview.changed}
-          stale={lendingStale}
-          busy={reviewing}
-          onReviewed={() => {
-            setReviewing(true);
-            markMemoryReviewed(bot.id, lendingReview.token)
-              .then(() => { setLendingReview(null); setLendingStale(false); })
-              .catch((e: unknown) => {
-                if (e instanceof ApiError && e.status === 409) {
-                  setLendingStale(true);
-                  return readLending();
-                }
-                setError(errorText(e));
-              })
-              .finally(() => setReviewing(false));
-          }}
+      {bot.memoryEnabled !== false && (
+        <MemoryUpkeepCard
+          enabled={bot.memoryUpkeep !== false}
+          status={upkeep}
+          tidying={tidying}
+          onToggle={toggleUpkeep}
+          onTidy={() => void tidyNow()}
         />
       )}
+      <PaneSection title={t("botPanel.memory.changes")} help={t("botPanel.memory.changesHelp")} data-memory-changes="">
+        <MemoryJournalList rows={journal} botName={bot.name} reverting={reverting} onRevert={(row) => void revert(row)} />
+      </PaneSection>
+    </>
+  );
+
+  if (plain && children) {
+    return children({
+      notice: lendingNotice || null,
+      status: notice || error ? (
+        <>
+          {notice && <div role="status" className="px-4 py-2.5 text-[12.5px] text-ink-secondary">{notice}</div>}
+          {error && <div role="alert" className="px-4 py-2.5 text-[12.5px] text-danger">{error}</div>}
+        </>
+      ) : null,
+      options: showOptions ? <div className="flex flex-col gap-5" data-folder-options="">{cards}</div> : null,
+    });
+  }
+
+  return (
+    <>
+      {lendingNotice}
       {showOptions && (
         <div className="flex flex-col gap-4 rounded-xl border-[0.5px] border-border bg-elevated p-3" data-folder-options="">
-          {bot.memoryEnabled !== false && (
-            <MemoryUpkeepCard
-              enabled={bot.memoryUpkeep !== false}
-              status={upkeep}
-              tidying={tidying}
-              onToggle={toggleUpkeep}
-              onTidy={() => void tidyNow()}
-            />
-          )}
-          <PaneSection title={t("botPanel.memory.changes")} help={t("botPanel.memory.changesHelp")}>
-            <MemoryJournalList rows={journal} botName={bot.name} reverting={reverting} onRevert={(row) => void revert(row)} />
-          </PaneSection>
+          {cards}
         </div>
       )}
       {notice && <div role="status" className="text-[12.5px] text-ink-secondary">{notice}</div>}

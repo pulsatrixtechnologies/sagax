@@ -9,7 +9,9 @@ import { useCallback, useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 import { localTimeZone } from "@/lib/reach-me";
 import { routeMissingOnServer } from "@/lib/server-route";
-import { Switch } from "../SettingsPrimitives";
+import { Sunrise } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { PILL, PLAIN_FIELD, Switch, useSettingsSurface } from "../SettingsPrimitives";
 import { useBotEditor } from "./BotEditorContext";
 import { PaneSection } from "./PaneSection";
 import { readableError } from "@/lib/plain-error";
@@ -77,6 +79,7 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
   const enabled = view?.settings?.enabled === true;
   const at = view?.settings?.at ?? "08:00";
   const pending = (view?.suggestions ?? []).filter((item) => item.status === "pending");
+  const plain = useSettingsSurface() === "plain";
   if (needsUpdate) {
     return (
       <PaneSection title={t("brief.title")}>
@@ -84,19 +87,55 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
       </PaneSection>
     );
   }
+  const time = (
+    <input
+      type="time"
+      aria-label={t("brief.at")}
+      value={at}
+      disabled={!enabled}
+      onChange={(event) => { if (event.target.value) void saveSchedule({ at: event.target.value }); }}
+      className={plain ? cn(PLAIN_FIELD, "w-auto") : "rounded-lg border border-hairline/40 bg-inset px-2 py-1 text-[12.5px] text-ink disabled:opacity-50"}
+    />
+  );
+  const toggle = <Switch checked={enabled} aria-label={t("brief.daily")} onClick={() => void saveSchedule({ enabled: !enabled })} />;
+  // The bot's profile page (#2313): the daily brief is one row (icon,
+  // title, the delivery note as its subtitle, the time and the switch at
+  // the right), the queue is text, and Read is a pill.
+  if (plain) {
+    return (
+      <PaneSection title={t("brief.title")}>
+        <div className="flex min-h-[44px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex min-w-0 flex-1 basis-[200px] items-center gap-3">
+            <Sunrise aria-hidden="true" className="size-5 shrink-0 text-ink-secondary" />
+            <div className="min-w-0">
+              <div className="text-[14px] leading-5 text-ink">{t("brief.daily")}</div>
+              {enabled && <div className="text-[12px] leading-4 text-ink-secondary">{t("brief.delivery")}</div>}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">{time}{toggle}</div>
+        </div>
+        <div className="mt-2 flex flex-col gap-1 text-[12px] leading-4 text-ink-secondary">
+          {note && <p role="status" data-brief-empty="">{note}</p>}
+          {!note && pending.length === 0 && <p>{t("brief.queueEmpty")}</p>}
+          {pending.length > 0 && (
+            <ul className="flex flex-col gap-1 text-[13px] leading-[18px] text-ink">
+              {pending.map((item) => <li key={item.id}>{item.text}</li>)}
+            </ul>
+          )}
+          {error && <p role="alert" className="text-danger">{error}</p>}
+        </div>
+        <div className="mt-3 flex">
+          <button type="button" onClick={() => void read()} className={PILL}>{t("brief.read")}</button>
+        </div>
+      </PaneSection>
+    );
+  }
   return (
     <PaneSection title={t("brief.title")}>
       <div className="mb-2 flex flex-wrap items-center gap-2 text-[12.5px] text-ink">
-        <Switch checked={enabled} aria-label={t("brief.daily")} onClick={() => void saveSchedule({ enabled: !enabled })} />
+        {toggle}
         <span>{t("brief.daily")}</span>
-        <input
-          type="time"
-          aria-label={t("brief.at")}
-          value={at}
-          disabled={!enabled}
-          onChange={(event) => { if (event.target.value) void saveSchedule({ at: event.target.value }); }}
-          className="rounded-lg border border-hairline/40 bg-inset px-2 py-1 text-[12.5px] text-ink disabled:opacity-50"
-        />
+        {time}
       </div>
       {enabled && <p className="mb-2 text-[12px] text-ink-secondary">{t("brief.delivery")}</p>}
       {note && <p role="status" data-brief-empty="">{note}</p>}

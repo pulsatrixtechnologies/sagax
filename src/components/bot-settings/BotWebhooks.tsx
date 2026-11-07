@@ -10,7 +10,8 @@ import { t } from "@/lib/i18n";
 import { viewerOwnsBot } from "@/lib/bot-capabilities";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { statusFor } from "../WebhooksPanel";
-import { PaneEmpty, PaneSection } from "./PaneSection";
+import { PILL } from "../SettingsPrimitives";
+import { PaneEmpty, PaneSection, usePaneRows } from "./PaneSection";
 
 /** The bot's owner manages its webhooks: solo, an admin or the owner. */
 export function canManageBotWebhooks(config: Parameters<typeof viewerOwnsBot>[0], bot: Pick<Bot, "ownerUserId">): boolean {
@@ -21,24 +22,26 @@ export function BotWebhooks({ bot }: { bot: Bot }) {
   const { state, dispatch } = useStore();
   const webhooks = state.webhooks.filter((webhook) => webhook.botId === bot.id);
   const routines = state.routines ?? [];
+  // The bot's profile page (#2313): reference rows and a pill to open each.
+  const rows = usePaneRows();
 
   return (
     <PaneSection data-bot-webhooks="" title={t("botPanel.access.webhooks")} help={t("botWebhooks.listHelp")}>
       {webhooks.length === 0 ? (
         <PaneEmpty>{t("botPanel.access.noWebhooks")}</PaneEmpty>
       ) : (
-        <ul className="-mx-3.5 -my-1 divide-y divide-hairline/40">
+        <ul className={cn(rows.bleed, "-my-1", rows.list)}>
           {webhooks.map((webhook) => {
             const status = statusFor(webhook);
             const routine = webhook.routineId ? routines.find((candidate) => candidate.id === webhook.routineId) : undefined;
             return (
-              <li key={webhook.id} data-bot-webhook={webhook.id} className="flex items-center gap-2 px-3.5 py-2">
-                <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{routine?.name ?? webhook.name}</span>
-                <span className={cn("flex shrink-0 items-center gap-1.5 text-[11.5px]", status.tone)}>
+              <li key={webhook.id} data-bot-webhook={webhook.id} className={cn("flex items-center gap-2 py-2", rows.plain && "min-h-[44px]", rows.row)}>
+                <span className={cn("min-w-0 flex-1 truncate text-ink", rows.title)}>{routine?.name ?? webhook.name}</span>
+                <span className={cn("flex shrink-0 items-center gap-1.5", rows.note, status.tone)}>
                   <span className={cn("size-1.5 rounded-full", status.dot)} aria-hidden="true" />
                   {status.label}
                 </span>
-                <span className="shrink-0 text-[11.5px] tabular-nums text-ink-secondary">
+                <span className={cn("shrink-0 tabular-nums text-ink-secondary", rows.note)}>
                   {t("botPanel.access.deliveries", { count: String(webhook.deliveryCount) })}
                 </span>
                 <button
@@ -47,7 +50,7 @@ export function BotWebhooks({ bot }: { bot: Bot }) {
                   onClick={() => dispatch(routine
                     ? { type: "openRoutine", botId: routine.botId, routineId: routine.id }
                     : { type: "showRoutines", section: "webhooks" })}
-                  className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-medium text-accent-text hover:bg-raised"
+                  className={rows.plain ? cn(PILL, "shrink-0 gap-1") : "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-medium text-accent-text hover:bg-raised"}
                 >
                   {routine ? t("botWebhooks.openRoutine") : t("botWebhooks.openAutomations")}
                   <ExternalLink size={12} aria-hidden="true" />

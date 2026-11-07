@@ -7,10 +7,10 @@ import { useState } from "react";
 
 import type { BotOverview } from "@/lib/bot-overview-types";
 import { t } from "@/lib/i18n";
-import { whenLabel } from "@/lib/schedule-label";
 import type { BotSettingsSection } from "@/state/store";
 import { PromptPreview, type PromptPreviewData } from "./PromptPreview";
-import { GROUP_CARD, LinkRow, SettingsGroup } from "../SettingsPrimitives";
+import { ProfileLine } from "./ProfileRow";
+import { GROUP_CARD, LinkRow, SettingsGroup, useSettingsSurface } from "../SettingsPrimitives";
 
 export function OverviewSection({
   overview,
@@ -26,6 +26,11 @@ export function OverviewSection({
   onOpen: (section: BotSettingsSection) => void;
 }) {
   const [promptOpen, setPromptOpen] = useState(false);
+  const plain = useSettingsSurface() === "plain";
+
+  if (plain) {
+    return <PlainOverview overview={overview} refreshError={refreshError} prompt={prompt} promptError={promptError} promptOpen={promptOpen} onTogglePrompt={() => setPromptOpen((current) => !current)} onOpen={onOpen} />;
+  }
 
   if (!overview) {
     return <div className="text-[13px] text-ink-secondary">{t("botPanel.loading")}</div>;
@@ -80,32 +85,56 @@ export function OverviewSection({
         onToggle={() => setPromptOpen((current) => !current)}
       />
 
-      <SettingsGroup
-        title={t("botPanel.overview.recent")}
-        groupId="overviewRecent"
-        accessory={(
-          <button
-            type="button"
-            onClick={() => onOpen("history")}
-            className="ml-auto shrink-0 text-[12.5px] text-ink-secondary hover:text-ink"
-          >
-            {t("botPanel.overview.viewAll")}
-          </button>
-        )}
-      >
-        {overview.recent.length === 0 ? (
-          <p className="px-3.5 py-2.5 text-[13px] leading-[18px] text-ink-secondary">{t("botPanel.overview.nothingChanged")}</p>
-        ) : (
-          <ul className="flex flex-col">
-            {overview.recent.map((entry, i) => (
-              <li key={i} className="flex items-baseline justify-between gap-3 px-3.5 py-2 text-[13px] leading-[18px] text-ink">
-                <span className="min-w-0 truncate">{entry.summary}</span>
-                <span className="shrink-0 text-[12px] text-ink-secondary">{whenLabel(entry.at)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+    </div>
+  );
+}
+
+/** The bot profile's "What it does" (2026-11-06): the profile's card look.
+ * One card under the section's name holds who the bot is, "Read all" and
+ * the prompt preview; Does, Can reach and Won't follow, each its own card
+ * under its grey label, one sentence per row. The changes live in the
+ * History tab. */
+function PlainOverview({ overview, refreshError, prompt, promptError, promptOpen, onTogglePrompt, onOpen }: {
+  overview: BotOverview | null;
+  refreshError?: boolean;
+  prompt: PromptPreviewData | null;
+  promptError?: boolean;
+  promptOpen: boolean;
+  onTogglePrompt: () => void;
+  onOpen: (section: BotSettingsSection) => void;
+}) {
+  const lines = (items: readonly string[], empty?: string) => items.length === 0
+    ? empty ? <ProfileLine muted>{empty}</ProfileLine> : null
+    : (
+      <ul className="flex flex-col">
+        {items.map((line, i) => <li key={i}><ProfileLine>{line}</ProfileLine></li>)}
+      </ul>
+    );
+
+  return (
+    <div className="flex flex-col gap-5" data-overview-plain="">
+      <SettingsGroup title={t("persona.overview.summary")} groupId="overviewSummary">
+        {!overview && <ProfileLine muted>{t("botPanel.loading")}</ProfileLine>}
+        {refreshError && <p role="status" className="px-4 py-2.5 text-[12px] leading-4 text-ink-secondary">{t("botPanel.overview.refresh")}</p>}
+        {overview?.who.blurb && <ProfileLine>{overview.who.blurb}</ProfileLine>}
+        {overview?.who.soulLead && <p className="px-4 py-2.5 text-[13px] leading-[18px] text-ink-secondary">{overview.who.soulLead}</p>}
+        {overview?.who.soulLead && <LinkRow label={t("botPanel.overview.readAll")} onClick={() => onOpen("soul")} rowId="readSoul" />}
+        {overview && <PromptPreview data={prompt} error={promptError} open={promptOpen} onToggle={onTogglePrompt} />}
       </SettingsGroup>
+
+      {overview && (
+        <>
+          <SettingsGroup title={t("botPanel.overview.does")} groupId="overviewDoes">
+            {lines(overview.does, t("botPanel.overview.nothingScheduled"))}
+          </SettingsGroup>
+          <SettingsGroup title={t("botPanel.overview.reach")} groupId="overviewReach">
+            {lines(overview.reaches, t("botPanel.overview.nothingYet"))}
+          </SettingsGroup>
+          <SettingsGroup title={t("botPanel.overview.wont")} groupId="overviewWont">
+            {lines(overview.wont)}
+          </SettingsGroup>
+        </>
+      )}
     </div>
   );
 }

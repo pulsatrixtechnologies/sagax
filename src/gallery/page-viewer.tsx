@@ -43,6 +43,15 @@ window.__alwaysOnTop = onTop;
 if (ownWindow) {
   window.artifactWindowSelf = {
     fitContent: async () => null,
+    // the desktop app tells when the cursor is over the window (#2336); here
+    // the document's own mouse events stand in for it
+    onPointer: (cb) => {
+      const enter = () => cb(true);
+      const leave = () => cb(false);
+      document.addEventListener("mousemove", enter);
+      document.documentElement.addEventListener("mouseleave", leave);
+      return () => { document.removeEventListener("mousemove", enter); document.documentElement.removeEventListener("mouseleave", leave); };
+    },
     isAlwaysOnTop: async () => onTop,
     setAlwaysOnTop: async (on) => {
       onTop = on === true;

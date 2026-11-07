@@ -8,7 +8,7 @@ import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import { api } from "@/state/store";
 import type { VaultItemListing } from "../../../shared/credential-vault";
-import { DescribedRow } from "../SettingsPrimitives";
+import { DescribedRow, HelpTip, PILL as PLAIN_PILL, PLAIN_FIELD, SettingsGroup, useSettingsSurface } from "../SettingsPrimitives";
 
 const FIELD = "w-full rounded-lg border border-hairline/60 bg-inset px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-accent/50";
 const PILL = "rounded-full border border-hairline/60 px-2.5 py-1 text-[12px] text-ink hover:bg-hover disabled:opacity-50";
@@ -23,6 +23,7 @@ export function TeamBotVaultSection({ botId, botName }: { botId: string; botName
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [domains, setDomains] = useState("");
+  const plain = useSettingsSurface() === "plain";
 
   const load = useCallback(async () => {
     setError(null);
@@ -76,6 +77,71 @@ export function TeamBotVaultSection({ botId, botName }: { botId: string; botName
       setBusy(false);
     }
   };
+
+  // The bot's profile page (#2313): the reference look. The grey label
+  // carries the title, its help and the Add pill; the logins are rows of
+  // one plain card (icon, name, sites, Remove pill); the form opens in the
+  // card with filled fields and plain pills.
+  if (plain) {
+    const title = t("botPanel.teamVault.title");
+    return (
+      <div data-settings-card="bot.teamVault">
+        <SettingsGroup
+          title={title}
+          groupId="botTeamVault"
+          accessory={<>
+            <HelpTip label={t("settings.moreAbout", { title })}>{t("botPanel.teamVault.help", { bot: botName })}</HelpTip>
+            {!adding && (
+              <button type="button" className={cn(PLAIN_PILL, "ml-auto shrink-0 gap-1")} disabled={busy} onClick={() => setAdding(true)}>
+                <Plus size={13} aria-hidden="true" /> {t("botPanel.teamVault.add")}
+              </button>
+            )}
+          </>}
+        >
+          <div data-settings-row="teamVault" className="flex flex-col">
+            {items && items.length > 0 && (
+              <ul className="flex flex-col" aria-label={title}>
+                {items.map((item) => (
+                  <li key={item.id} className="flex min-h-[56px] items-center gap-3 px-4 py-2.5">
+                    <KeyRound aria-hidden="true" className="size-5 shrink-0 text-ink-secondary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] leading-5 text-ink">{item.name}</p>
+                      <p className="truncate text-[12px] leading-4 text-ink-secondary">
+                        {item.domains.join(", ") || t("botPanel.teamVault.noSite")}
+                        {item.hasPassword ? ` · ${t("botPanel.teamVault.hasPassword")}` : ""}
+                      </p>
+                    </div>
+                    <button type="button" className={cn(PLAIN_PILL, "shrink-0")} disabled={busy} onClick={() => void remove(item.id)} aria-label={t("botPanel.teamVault.remove")} title={t("botPanel.teamVault.remove")}>
+                      <Trash2 size={13} aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {items && !items.length && !adding && (
+              <p className="px-4 py-2.5 text-[12px] leading-4 text-ink-secondary">{t("botPanel.teamVault.empty")}</p>
+            )}
+            {adding && (
+              <form
+                className="flex flex-col gap-2 px-4 py-2.5"
+                onSubmit={(event) => { event.preventDefault(); void add(); }}
+              >
+                <input className={PLAIN_FIELD} value={name} onChange={(event) => setName(event.target.value)} placeholder={t("botPanel.teamVault.name")} aria-label={t("botPanel.teamVault.name")} />
+                <input className={PLAIN_FIELD} value={domains} onChange={(event) => setDomains(event.target.value)} placeholder={t("botPanel.teamVault.sites")} aria-label={t("botPanel.teamVault.sites")} autoComplete="off" />
+                <input className={PLAIN_FIELD} value={username} onChange={(event) => setUsername(event.target.value)} placeholder={t("botPanel.teamVault.username")} aria-label={t("botPanel.teamVault.username")} autoComplete="off" />
+                <input className={PLAIN_FIELD} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t("botPanel.teamVault.password")} aria-label={t("botPanel.teamVault.password")} autoComplete="new-password" />
+                <div className="flex justify-end gap-2">
+                  <button type="button" className={PLAIN_PILL} disabled={busy} onClick={() => setAdding(false)}>{t("botPanel.teamVault.cancel")}</button>
+                  <button type="submit" className={PLAIN_PILL} disabled={busy || !domains.trim() || !password}>{t("botPanel.teamVault.save")}</button>
+                </div>
+              </form>
+            )}
+            {error && <p className="px-4 pb-2 text-[12px] text-danger" role="alert">{error}</p>}
+          </div>
+        </SettingsGroup>
+      </div>
+    );
+  }
 
   return (
     <div data-settings-card="bot.teamVault" className="flex flex-col gap-2">

@@ -77,8 +77,10 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "
 // confirmed in a native dialog). Main checks
 // every one of these channels again (local-origin.cjs desktopUiOnly, and
 // sharingUiOnly for the server-mode server only). Nothing that reads this
-// computer's files, screen, logins or secrets is handed to the page.
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps"]);
+// computer's files, logins or secrets is handed to the page, and its screen
+// only as the bot panel's 320x200 Computer thumbnail, once the person
+// granted Screen Recording (screen:thumbnail, never a prompt).
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).
@@ -220,6 +222,7 @@ const bridge = {
     status: () => ipcRenderer.invoke("mac-apps:status"),
     set: (app, enabled) => ipcRenderer.invoke("mac-apps:set", app, enabled),
     test: (app) => ipcRenderer.invoke("mac-apps:test", app),
+    askAutomation: (app) => ipcRenderer.invoke("mac-apps:ask-automation", app),
     openSettings: (pane) => ipcRenderer.invoke("mac-apps:open-settings", pane),
   },
   localControl: {
@@ -232,6 +235,8 @@ const bridge = {
   beginScreenPreviewIntent: () => ipcRenderer.sendSync("screen:preview-intent"),
   /** One frame of this computer's screen as a data: URL when supported. */
   screenFrame: () => ipcRenderer.invoke("screen:frame"),
+  /** A small capture of this computer for the bot panel, only once Screen Recording is granted. */
+  screenThumbnail: () => ipcRenderer.invoke("screen:thumbnail"),
   /** Physical USB Android devices. Network ADB is deliberately excluded. */
   androidDevice: {
     status: () => ipcRenderer.invoke("android-device:status"),
@@ -421,6 +426,16 @@ const bridge = {
    * from the main window's top frame. */
   notify: (request) => ipcRenderer.send("desktop:notify", request),
   withdrawNotification: (withdrawKey) => ipcRenderer.send("desktop:notify-withdraw", withdrawKey),
+  /** Settings > Notifications: whether notifications reach Notification
+   * Center ({state: "delivered" | "not-delivered" | "unknown", canCheck,
+   * platform, settings}), a test notification that returns the state it
+   * found, and the System Settings pane that allows Sagax notifications. */
+  notificationStatus: () => ipcRenderer.invoke("desktop:notification-status"),
+  testNotification: (text) => ipcRenderer.invoke("desktop:notification-test", {
+    title: text && typeof text.title === "string" ? text.title : "",
+    body: text && typeof text.body === "string" ? text.body : "",
+  }),
+  openNotificationSettings: () => ipcRenderer.invoke("desktop:open-notification-settings"),
   /** The person clicked one of those notifications: its id and the
    * conversation it is about ({botId, threadId, groupId, routineRunId}). */
   onNotificationClick: (cb) => {
@@ -517,6 +532,11 @@ const bridge = {
   /** Point the file manager at a file a bot linked outside its workspace,
    * without opening it. Resolves "shown", "missing" or "invalid". */
   revealInFolder: (filePath) => ipcRenderer.invoke("desktop:reveal-file", filePath),
+  /** Open a file a bot wrote with this computer's default app. Resolves
+   * "opened", "missing", "failed" or "invalid". A leading ~ is the home folder. */
+  openLocalFile: (filePath) => ipcRenderer.invoke("desktop:open-file", filePath),
+  /** For each path, its absolute form when it exists on this computer, else null. */
+  localFilesExist: (filePaths) => ipcRenderer.invoke("desktop:files-exist", filePaths),
   /** Store a provider credential with OS-backed encryption. */
   setCredential: (name, value) => ipcRenderer.invoke("credential:set", name, value),
 

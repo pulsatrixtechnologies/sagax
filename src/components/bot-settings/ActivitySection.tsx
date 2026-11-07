@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, GitCommitHorizontal, GitMerge, GitPullRequest, GitPullRequestClosed } from "lucide-react";
 
-import { api, openRoutineRun, type Action, type Bot, type TaskUsage } from "@/state/store";
+import { api, openRoutineRun, type Action, type Bot } from "@/state/store";
 import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -246,7 +246,7 @@ export function SectionHeader({ icon, title, name, onOpenHistory }: { icon?: Rea
  * keeps the history one click away. A first load that failed
  * is one quiet line; a later failed refresh keeps the last list. Split out so
  * it renders without the fetching. */
-export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, usageOf, onIgnore }: {
+export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, onIgnore }: {
   list: BotActivityList | null;
   live?: LiveView;
   actions: CardActions;
@@ -262,8 +262,6 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
   branchActions?: BranchListActions;
   /** The quiet "All history" row (Settings > Appearance; hidden by default in the panel). */
   showAllHistory?: boolean;
-  /** A task's usage by thread, for the agent rows' tokens (#2099). */
-  usageOf?: (threadId: string) => TaskUsage | undefined;
   /** #2148: Ignore on a finished coding job (by its ignoredJobKey). */
   onIgnore?: (key: string) => void;
 }) {
@@ -284,7 +282,7 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
           />
           {/* #2099 (JC, 2026-11-05): Claude Code's agent list, one row each; a
               click opens the task in the chat column, never a side panel. */}
-          <AgentRows items={coding} launched={onOpenLaunched ? launched : []} onOpen={actions.onOpen} onOpenLaunched={onOpenLaunched} onStop={actions.onStop} stopping={actions.stopping} now={actions.now} usageOf={usageOf} onIgnore={onIgnore ? (id) => onIgnore(ignoredJobKey(id)) : undefined} />
+          <AgentRows items={coding} launched={onOpenLaunched ? launched : []} onOpen={actions.onOpen} onOpenLaunched={onOpenLaunched} onStop={actions.onStop} stopping={actions.stopping} onIgnore={onIgnore ? (id) => onIgnore(ignoredJobKey(id)) : undefined} />
           <CodeWorkList work={work} now={actions.now ?? Date.now()} branchActions={branchActions} />
         </section>
       )}
@@ -326,7 +324,6 @@ export function ActivitySection({ bot }: { bot: Bot }) {
     else setOpen(item);
   };
   const actions: CardActions = { onOpen: openItem, onStop: stop, stopping: feed.stopping, now: feed.now, fading: feed.live.fading };
-  const usageOf = useCallback((threadId: string) => bot.tasks?.find((task) => task.threadId === threadId)?.usage, [bot.tasks]);
   // The branches this person archived from their Coding list (kept on the
   // server per person and bot; the branches themselves stay).
   const [archived, setArchived] = useState<ReadonlySet<string>>(() => new Set());
@@ -371,7 +368,7 @@ export function ActivitySection({ bot }: { bot: Bot }) {
 
   return (
     <>
-      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} usageOf={usageOf} onIgnore={ignore} />
+      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} onIgnore={ignore} />
       {all && (
         <ActivityListModal
           botId={bot.id}

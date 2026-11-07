@@ -124,6 +124,16 @@ describe("personal sections are per person", () => {
       { name: "Ops", items: ["bot:mine", "group:room"] },
     ]);
   });
+
+  it("#2045 isolation: a room filed in someone else's team never brings that team name along", () => {
+    const seeded = seedPersonalSections({
+      viewerId: "pr_admin",
+      sections: ["Ops"],
+      bots: [],
+      groups: [{ id: "their-room", section: "Finance" }, { id: "my-room", section: "Ops" }],
+    });
+    expect(seeded.sections).toEqual([{ name: "Ops", items: ["group:my-room"] }]);
+  });
 });
 
 describe("unassigned items are always visible", () => {

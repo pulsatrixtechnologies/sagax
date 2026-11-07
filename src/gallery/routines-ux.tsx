@@ -5,7 +5,7 @@
  * over three bots (active, paused, paused by itself, one deleted since), with
  * runs of every outcome. A mocked fetch answers the page's reads so nothing
  * connects. Not shipped in the app.
- * ?view=list|calendar|logs|run|routine|panel&case=completed|waiting|failed|running
+ * ?view=list|calendar|logs|run|routine|panel&case=completed|waiting|failed|running|failing (panel: the first routine failing)
  * &width=<px>&height=<px>&lang=<code>&skin=<id> (pulsatrix: dark, pulsatrix-light: light) */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -41,7 +41,7 @@ const TZ = "America/Toronto";
 const base = { target: "bot", runOn: "maus", durationMinutes: 30, timeoutMinutes: 45, createdAt: 1, updatedAt: 1, canRun: true, canEdit: true };
 const briefingPrompt = "Every weekday morning, read the shared inbox and the calendar of the day. Write a short briefing with three sections: what needs an answer today, what is waiting on someone else, and what can wait. Put the open items in a table with the area, the count and whether it needs me. Keep it under 200 words.";
 export const routines = [
-  { ...base, id: "r1", botId: "atlas", name: "Morning briefing", prompt: briefingPrompt, enabled: true, schedule: { type: "cron", expression: "11 8 * * 1-5", timeZone: TZ }, nextRunAt: NOW + 16 * H, weekRuns: { ok: 4, total: 5 }, failureStreak: 0 },
+  { ...base, id: "r1", botId: "atlas", name: "Morning briefing", prompt: briefingPrompt, enabled: true, schedule: { type: "cron", expression: "11 8 * * 1-5", timeZone: TZ }, nextRunAt: NOW + 16 * H, weekRuns: { ok: 4, total: 5 }, failureStreak: params.get("case") === "failing" ? 2 : 0 },
   { ...base, id: "r2", botId: "boreas", name: "Weekly planning digest", prompt: "Every Monday, gather last week's closed items and this week's deadlines into a digest.", enabled: true, schedule: { type: "cron", expression: "0 10 * * 1", timeZone: TZ }, nextRunAt: NOW + 30 * H, weekRuns: { ok: 1, total: 1 } },
   { ...base, id: "r3", botId: "cirrus", name: "Release checklist", prompt: "Walk the release checklist and report what is missing.", enabled: false, schedule: { type: "cron", expression: "0 17 * * 5", timeZone: TZ }, nextRunAt: null },
   { ...base, id: "r4", botId: "atlas", name: "Hourly status sweep", prompt: "Check the status page and report any incident.", enabled: true, schedule: { type: "interval", everyMinutes: 60, anchorAt: NOW - 5 * H }, nextRunAt: NOW + 0.5 * H, weekRuns: { ok: 40, total: 42 } },
@@ -140,6 +140,8 @@ window.fetch = async (input, init) => {
       ...(found?.attention ? { note: found.attention } : {}), ...(found?.error ? { note: found.error } : {}),
     } });
   }
+  // The panel's store loads the engines (an empty list, not {}) and the bots itself.
+  if (url.includes("/api/instances")) return json({ instances: [] });
   // The panel's store loads the bots itself.
   if (url.includes("/api/bots?")) return json({ bots, groups: [], sections: [], computerControl: {} });
   // The waiting run's thread holds one open approval, answered in place.

@@ -151,7 +151,9 @@ describe("an organization member", () => {
     expect(memberHidesSection("decisionModel", hidden)).toBe(true);
     // 2026-10-15: Usage is the person's own (GET /api/me/usage): every member sees it
     expect(memberHidesSection("usage", hidden)).toBe(false);
-    expect(memberHidesSection("backups", hidden)).toBe(false);
+    // #2265: Import left Settings, so Backups stays behind manageBackups (Full backup only)
+    expect(memberHidesSection("backups", hidden)).toBe(true);
+    expect(memberHidesSection("backups", { ...hidden, manageBackups: true })).toBe(false);
     expect(memberHidesSection("general", hidden)).toBe(false);
     expect(memberHidesSection("computer", hidden)).toBe(false);
     expect(memberHidesSection("computer", { ...hidden, organization: false })).toBe(true);
@@ -162,8 +164,8 @@ describe("an organization member", () => {
     expect(nav).not.toContain(">API keys<");
     expect(nav).not.toContain(">Decision model<");
     expect(nav).toContain(">Usage<");
-    // #2080 L3: Backups and import stays visible; the page gates Full backup on manageBackups.
-    expect(nav).toContain(">Backups<");
+    // #2265: no manageBackups, no Backups page (it would be empty without Import).
+    expect(nav).not.toContain(">Backups<");
     // General is out of the navigation (2026-10-26); Account is first
     expect(nav).not.toContain(">General<");
     expect(nav).toContain(">Account<");

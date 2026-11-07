@@ -91,6 +91,7 @@ import {
   createCoordinator,
   type ComposedTurn,
   type Coordinator,
+  type HandoffOpener,
   type HandoffView,
   type HostTurnResult
 } from "./coordinator.ts";
@@ -413,7 +414,8 @@ import {
   routineRunTitle,
   summarize,
   type Notification,
-  buildNoticeNotification
+  buildNoticeNotification,
+  withBotNotify
 } from "./notify.ts";
 import {
   describeAllowRule
@@ -916,7 +918,10 @@ import {
   isGeneralName,
   migrationOwner,
   SectionChannels,
+  type SectionOwnerEvidence,
+  type SectionRecord,
   validSectionName,
+  UNCLAIMED_OWNER,
 } from "./rooms/section-channels.ts";
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bots/bot-grants.ts";
 import { identityWarning } from "./perspicax/perspicax-identity.ts";
@@ -925,6 +930,7 @@ import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "
 import { ThreadStarters } from "./threads/thread-starters.ts";
 import {
   appendAdminAction,
+  readAdminActivityRange,
   botAuditSnapshot,
   flushAdminActivity,
   pruneAdminActivity,
@@ -1072,6 +1078,8 @@ import { diskSpace, folderBytes } from "./process/disk-usage.ts";
 import { createBotSettingsStore, defaultOrgTimeZone, hostTimeZone } from "./bots/bot-settings.ts";
 import { turnClockEnabled, turnTimeZone, withTurnClock } from "./turns/turn-clock.ts";
 import { createComputerInputRoutes, createVmScreenshotRoute } from "./routes/computer-input.ts";
+import { createComputerThumbnailRoutes } from "./routes/computer-thumbnail.ts";
+import { ComputerThumbnails, thumbnailComputerForResource, thumbnailMime } from "./computer/computer-thumbnails.ts";
 import { createComputerTeachRoutes } from "./routes/computer-teach.ts";
 import { ComputerTeachRecordings } from "./computer/computer-teach.ts";
 import { createLocalComputerAutoRoutes } from "./routes/local-computer-auto.ts";
@@ -1287,6 +1295,7 @@ import { SandboxClusterWaker } from "./sandbox/sandbox-k8s-wake.ts";
 import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE } from "../shared/sandbox-wake.ts";
 import { UserSandboxManager, userSandboxSettingsFromEnv } from "./sandbox/user-sandbox-manager.ts";
 import { createUserSandboxRoutes } from "./sandbox/user-sandbox-routes.ts";
+import { createBotAnalyticsRoutes } from "./routes/bot-analytics.ts";
 import { createBotHistoryRoutes } from "./routes/bot-history.ts";
 import { createBotSendStateRoutes } from "./routes/bot-send-state.ts";
 import { createMeEngineModelsRoutes } from "./routes/me-engine-models.ts";
@@ -1333,7 +1342,7 @@ import { createAntigravityLeftoverRoutes } from "./routes/antigravity-leftovers.
 import { createAntigravityAccountRoutes } from "./routes/antigravity-accounts.ts";
 import { findAntigravityLeftovers, removeAntigravityLeftovers } from "./drivers/antigravity-temp.ts";
 import { createLiveRoutes } from "./routes/live.ts";
-import { createUsageRoutes } from "./routes/usage.ts";
+import { createUsageRoutes, usageViewerOf } from "./routes/usage.ts";
 import { createOrgLibraryRoutes } from "./routes/org-library.ts";
 // #1388 wave 0b: empty import anchors for the index split. Each slice worker
 // replaces only its own line with `import { createXRoutes } from "./routes/x.ts"`.
@@ -1466,6 +1475,7 @@ import { createRelayEnginesFor } from "./index-leaves/relayEnginesFor.ts";
 import { createPrewarmThread } from "./index-leaves/prewarmThread.ts";
 import { createPerformBotActRoute } from "./index-leaves/performBotActRoute.ts";
 import { createWaitForGroupMemberBot } from "./index-leaves/waitForGroupMemberBot.ts";
+import { roomMemberAvailability, type GroupMemberBotAvailability } from "./room-member-availability.ts";
 import { createStreamOpenedHttpFile } from "./index-leaves/streamOpenedHttpFile.ts";
 import { createSettleParallelTask } from "./index-leaves/settleParallelTask.ts";
 import { createScopedSkillsPrompt } from "./index-leaves/scopedSkillsPrompt.ts";
@@ -2187,6 +2197,5088 @@ import { createResolveSectionId } from "./index-leaves/resolveSectionId.ts";
 // getHost runs per call (after module init), never at create*() time.
 const leafHostBindings: Record<string, any> = Object.create(null);
 function getLeafHost(): Record<string, any> { return leafHostBindings; }
+// #2436: the whole leaf host is bound here, before the first top-level await
+// and before any boot code below can call a leaf. 0.8.58 died at start: a
+// routine run left waiting on a question card reached openQuestionCard ->
+// host.isPersistentQuestionCard from the RoutineManager constructor, and the
+// host was only filled at the end of this file. Accessors stay lazy (a
+// binding is read when a leaf reads it, so no TDZ here) and live (a later
+// reassignment is seen). A `let` the leaves write back has a setter; a leaf
+// that writes any other name shadows it on the bag, as Object.assign did.
+// Add a binding a leaf reads HERE, never in an Object.assign further down
+// (server/boot-host-order.test.ts).
+bindLeafHost({
+  get modelName() { return modelName; },
+  get stderrOf() { return stderrOf; },
+  get handoffOpener() { return handoffOpener; },
+  get personForJoin() { return personForJoin; },
+  get isAutoOptimize() { return isAutoOptimize; },
+  get reportBackgroundError() { return reportBackgroundError; },
+  get scrubThreadDecisions() { return scrubThreadDecisions; },
+  get appendProblem() { return appendProblem; },
+  get peerApprovalFailure() { return peerApprovalFailure; },
+  get CONFIDENTIAL_INCIDENT_TEXT() { return CONFIDENTIAL_INCIDENT_TEXT; },
+  get ORG_ALWAYS_ALLOW_OFF() { return ORG_ALWAYS_ALLOW_OFF; },
+  get signInAllowList() { return signInAllowList; },
+  get liveSessionPerson() { return liveSessionPerson; },
+  get recordMastery() { return recordMastery; },
+  get masteryPrice() { return masteryPrice; },
+  get masteryThreadModel() { return masteryThreadModel; },
+  get masteryCensus() { return masteryCensus; },
+  get recordPersonaSave() { return recordPersonaSave; },
+  get achievementThreadPerson() { return achievementThreadPerson; },
+  get samePerson() { return samePerson; },
+  get personSpeaker() { return personSpeaker; },
+  get reviewCustomRules() { return reviewCustomRules; },
+  get savedCustomDomain() { return savedCustomDomain; },
+  get publicUrl() { return publicUrl; },
+  get customDomainStatus() { return customDomainStatus; },
+  get routineTriggerOf() { return routineTriggerOf; },
+  get legacyReactionUser() { return legacyReactionUser; },
+  get sharedMembership() { return sharedMembership; },
+  get linePersonKey() { return linePersonKey; },
+  get sharedComputerPrincipal() { return sharedComputerPrincipal; },
+  get sessionLendingPrincipal() { return sessionLendingPrincipal; },
+  get actorKey() { return actorKey; },
+  get withRoutineWriter() { return withRoutineWriter; },
+  get cloudGuestOpened() { return cloudGuestOpened; },
+  get openerFrom() { return openerFrom; },
+  get confinedWhy() { return confinedWhy; },
+  get guestEngineRefusal() { return guestEngineRefusal; },
+  get cloudGuestDriven() { return cloudGuestDriven; },
+  get cloudOwnerSession() { return cloudOwnerSession; },
+  get cloudOwnerPerson() { return cloudOwnerPerson; },
+  get cloudOwnerDevice() { return cloudOwnerDevice; },
+  get personMayUseTeamSection() { return personMayUseTeamSection; },
+  get teamMemoryShared() { return teamMemoryShared; },
+  get viewerUsesTeamSection() { return viewerUsesTeamSection; },
+  get teamMemoryContextAllows() { return teamMemoryContextAllows; },
+  get teamMemoryThreadReadable() { return teamMemoryThreadReadable; },
+  get canManageCommandAllowlist() { return canManageCommandAllowlist; },
+  get mayActOnPerson() { return mayActOnPerson; },
+  get webhookBotAimable() { return webhookBotAimable; },
+  get configAddressField() { return configAddressField; },
+  get configProviderKeyField() { return configProviderKeyField; },
+  get adminOrDelegate() { return adminOrDelegate; },
+  get decisionActorFor() { return decisionActorFor; },
+  get viewerFor() { return viewerFor; },
+  get forgetVisibility() { return forgetVisibility; },
+  get routineBotId() { return routineBotId; },
+  get routineNeedsRun() { return routineNeedsRun; },
+  get hiddenRoutineTarget() { return hiddenRoutineTarget; },
+  get roomFeedsBot() { return roomFeedsBot; },
+  get roomMemberAudiences() { return roomMemberAudiences; },
+  get settleRoomFloor() { return settleRoomFloor; },
+  get recentWorkFilter() { return recentWorkFilter; },
+  get recentWorkSources() { return recentWorkSources; },
+  get withRecalled() { return withRecalled; },
+  get adminActorFor() { return adminActorFor; },
+  get requestedBotFields() { return requestedBotFields; },
+  get operatorPrices() { return operatorPrices; },
+  get queuedTurnTrigger() { return queuedTurnTrigger; },
+  get hostComputerRefusal() { return hostComputerRefusal; },
+  get orgAccountComputerRefusal() { return orgAccountComputerRefusal; },
+  get computerPlaceRefusal() { return computerPlaceRefusal; },
+  get externalCompletion() { return externalCompletion; },
+  get beginInternalCapabilityGeneration() { return beginInternalCapabilityGeneration; },
+  get sessionGrants() { return sessionGrants; },
+  get endForeignTurns() { return endForeignTurns; },
+  get revokeInternalCapabilitiesForThread() { return revokeInternalCapabilitiesForThread; },
+  get bindInternalCapabilityToProviderTurn() { return bindInternalCapabilityToProviderTurn; },
+  get revokeInternalCapabilityForProviderEvent() { return revokeInternalCapabilityForProviderEvent; },
+  get peerHopTurn() { return peerHopTurn; },
+  get groupMemoryWritable() { return groupMemoryWritable; },
+  get personRunBots() { return personRunBots; },
+  get personOwnScope() { return personOwnScope; },
+  get clearFailedAutoPin() { return clearFailedAutoPin; },
+  get boatNotConfigured() { return boatNotConfigured; },
+  get settleDirectCoordination() { return settleDirectCoordination; },
+  get claimTurnResource() { return claimTurnResource; },
+  get releaseTurnComputer() { return releaseTurnComputer; },
+  get botForThread() { return botForThread; },
+  get directClaimOccupies() { return directClaimOccupies; },
+  get threadBusy() { return threadBusy; },
+  get parksBehindCoordination() { return parksBehindCoordination; },
+  get hasDirectDispatch() { return hasDirectDispatch; },
+  get botBusyThreadCount() { return botBusyThreadCount; },
+  get clearThreadStopping() { return clearThreadStopping; },
+  get stopDirectThread() { return stopDirectThread; },
+  get turnAttachmentKey() { return turnAttachmentKey; },
+  get markCancelledProviderHandshake() { return markCancelledProviderHandshake; },
+  get clearCancelledProviderHandshake() { return clearCancelledProviderHandshake; },
+  get directTurnClaimIsCurrent() { return directTurnClaimIsCurrent; },
+  get directTurnClaimExists() { return directTurnClaimExists; },
+  get markDirectTurnDispatching() { return markDirectTurnDispatching; },
+  get isMyChromeSession() { return isMyChromeSession; },
+  get myChromeBotHasShell() { return myChromeBotHasShell; },
+  get effectiveBrowserProfile() { return effectiveBrowserProfile; },
+  get myChromePromptFor() { return myChromePromptFor; },
+  get dataScopeForTurn() { return dataScopeForTurn; },
+  get dataDownloadDir() { return dataDownloadDir; },
+  get browserEngineSummary() { return browserEngineSummary; },
+  get turnWorksOn() { return turnWorksOn; },
+  get autoWorkspaceWanted() { return autoWorkspaceWanted; },
+  get noteAutoWorkspace() { return noteAutoWorkspace; },
+  get storedNamesIn() { return storedNamesIn; },
+  get openForComingTurn() { return openForComingTurn; },
+  get workplaceNoteText() { return workplaceNoteText; },
+  get autoComputerSelectionFor() { return autoComputerSelectionFor; },
+  get parseArchiveOutcome() { return parseArchiveOutcome; },
+  get engineReference() { return engineReference; },
+  get withholdHostToolsFor() { return withholdHostToolsFor; },
+  get messagesWanted() { return messagesWanted; },
+  get perspicaxSubOf() { return perspicaxSubOf; },
+  get headlessBotByName() { return headlessBotByName; },
+  get selectionContextFor() { return selectionContextFor; },
+  get refreshUnsetModelSelections() { return refreshUnsetModelSelections; },
+  get engineEligibility() { return engineEligibility; },
+  get teammateEngineProblem() { return teammateEngineProblem; },
+  get retryComputerEngineMove() { return retryComputerEngineMove; },
+  get engineSwitchNeedsAsk() { return engineSwitchNeedsAsk; },
+  get turnSelection() { return turnSelection; },
+  get checkedGroupResponder() { return checkedGroupResponder; },
+  get turnHolder() { return turnHolder; },
+  get contentBotOwnerOf() { return contentBotOwnerOf; },
+  get contentOwnerOf() { return contentOwnerOf; },
+  get sandboxBotFolder() { return sandboxBotFolder; },
+  get noteSandboxClusterWait() { return noteSandboxClusterWait; },
+  get workplaceUsesSandbox() { return workplaceUsesSandbox; },
+  get userSandboxTurnRunning() { return userSandboxTurnRunning; },
+  get vaultKeySource() { return vaultKeySource; },
+  get hostScreenTurn() { return hostScreenTurn; },
+  get vaultHttpMounted() { return vaultHttpMounted; },
+  get commandVariablesFor() { return commandVariablesFor; },
+  get turnCommandEnvironment() { return turnCommandEnvironment; },
+  get vaultPrincipalForThread() { return vaultPrincipalForThread; },
+  get workflowCallerScope() { return workflowCallerScope; },
+  get personSettingsOwner() { return personSettingsOwner; },
+  get personalFeatureOn() { return personalFeatureOn; },
+  get personalProfileTarget() { return personalProfileTarget; },
+  get personalProfileOf() { return personalProfileOf; },
+  get webSearchScopeForThread() { return webSearchScopeForThread; },
+  get credentialVaultPersonRefusal() { return credentialVaultPersonRefusal; },
+  get personBrowserSession() { return personBrowserSession; },
+  get personGithub() { return personGithub; },
+  get usablePersonGithub() { return usablePersonGithub; },
+  get githubClientId() { return githubClientId; },
+  get historicalPluginMarketplacePolicy() { return historicalPluginMarketplacePolicy; },
+  get orgCapabilitiesOwner() { return orgCapabilitiesOwner; },
+  get pluginMarketplacePolicy() { return pluginMarketplacePolicy; },
+  get credentialOwner() { return credentialOwner; },
+  get githubAccountToken() { return githubAccountToken; },
+  get orgCapabilityMounts() { return orgCapabilityMounts; },
+  get orgMemberActive() { return orgMemberActive; },
+  get personalRemoteSpec() { return personalRemoteSpec; },
+  get pageReaderFor() { return pageReaderFor; },
+  get pageThreadName() { return pageThreadName; },
+  get botLoadsPlugins() { return botLoadsPlugins; },
+  get linkedFlowAlias() { return linkedFlowAlias; },
+  get flowAliasFolders() { return flowAliasFolders; },
+  get pluginDirsFor() { return pluginDirsFor; },
+  get personalSkillInputs() { return personalSkillInputs; },
+  get readableInstaller() { return readableInstaller; },
+  get listedTasks() { return listedTasks; },
+  get shownBotActivity() { return shownBotActivity; },
+  get threadHasMessages() { return threadHasMessages; },
+  get toolScopeForTurn() { return toolScopeForTurn; },
+  get sourceApprovalMode() { return sourceApprovalMode; },
+  get fullAccessForSource() { return fullAccessForSource; },
+  get selfApplyBlocked() { return selfApplyBlocked; },
+  get withPrimaryAsked() { return withPrimaryAsked; },
+  get journalRefusedQuote() { return journalRefusedQuote; },
+  get peerReviewRequired() { return peerReviewRequired; },
+  get ownThreadLevel() { return ownThreadLevel; },
+  get applyDelegatedLevel() { return applyDelegatedLevel; },
+  get roomTurnApprovalMode() { return roomTurnApprovalMode; },
+  get addGroupGoalCoordinatorTurn() { return addGroupGoalCoordinatorTurn; },
+  get removeGroupGoalCoordinatorTurn() { return removeGroupGoalCoordinatorTurn; },
+  get hasUnboundDiscardedGroupGoalTurn() { return hasUnboundDiscardedGroupGoalTurn; },
+  get groupThreadIds() { return groupThreadIds; },
+  get allInflightIds() { return allInflightIds; },
+  get channelTurnOpen() { return channelTurnOpen; },
+  get partialAlreadyWritten() { return partialAlreadyWritten; },
+  get openTurnMessage() { return openTurnMessage; },
+  get machineBotFrom() { return machineBotFrom; },
+  get oneOwnerRoom() { return oneOwnerRoom; },
+  get teammateNameFor() { return teammateNameFor; },
+  get coordinationSystemInstructions() { return coordinationSystemInstructions; },
+  get queuedStatus() { return queuedStatus; },
+  get clearRelayedStream() { return clearRelayedStream; },
+  get markBotActSend() { return markBotActSend; },
+  get isBotActSend() { return isBotActSend; },
+  get newestQuestionCard() { return newestQuestionCard; },
+  get readCursor() { return readCursor; },
+  get groupMemberProfiles() { return groupMemberProfiles; },
+  get groupMemberBotAvailability() { return groupMemberBotAvailability; },
+  get groupProviderHandshakeStarted() { return groupProviderHandshakeStarted; },
+  get groupProviderHandshakeSettled() { return groupProviderHandshakeSettled; },
+  get pageIfThreadChanged() { return pageIfThreadChanged; },
+  get pageSize() { return pageSize; },
+  get messagePage() { return messagePage; },
+  get audienceChanged() { return audienceChanged; },
+  get terminalPrincipalId() { return terminalPrincipalId; },
+  get terminalDesktopAllowed() { return terminalDesktopAllowed; },
+  get terminalSize() { return terminalSize; },
+  get remoteSessionSpeaker() { return remoteSessionSpeaker; },
+  get dropRemoteSupportSeat() { return dropRemoteSupportSeat; },
+  get broadcast() { return broadcast; },
+  get approvalHostOf() { return approvalHostOf; },
+  get approvalOwnerId() { return approvalOwnerId; },
+  get vaultExportAllowed() { return vaultExportAllowed; },
+  get confidentialThreadsByDefault() { return confidentialThreadsByDefault; },
+  get threadEngineKeys() { return threadEngineKeys; },
+  get releaseThreadEngines() { return releaseThreadEngines; },
+  get liveCoordination() { return liveCoordination; },
+  get forgetConfidentialCoordination() { return forgetConfidentialCoordination; },
+  get confidentialThreadOwner() { return confidentialThreadOwner; },
+  get approvalOwnerName() { return approvalOwnerName; },
+  get approvalViewerOf() { return approvalViewerOf; },
+  get isApprovalCardMessage() { return isApprovalCardMessage; },
+  get approvalCallerUserId() { return approvalCallerUserId; },
+  get orgAdminStream() { return orgAdminStream; },
+  get adminPerson() { return adminPerson; },
+  get inboxViewer() { return inboxViewer; },
+  get managedTeamIds() { return managedTeamIds; },
+  get inboxBulkVerdict() { return inboxBulkVerdict; },
+  get plainPersonName() { return plainPersonName; },
+  get inboxPersonName() { return inboxPersonName; },
+  get routineNameOfThread() { return routineNameOfThread; },
+  get consoleRuleAuth() { return consoleRuleAuth; },
+  get privateRowHidden() { return privateRowHidden; },
+  get threadStillExists() { return threadStillExists; },
+  get routineToggleForApprovalViewer() { return routineToggleForApprovalViewer; },
+  get projectGroupTranscript() { return projectGroupTranscript; },
+  get projectBotTranscript() { return projectBotTranscript; },
+  get temporaryAgentFrame() { return temporaryAgentFrame; },
+  get toolsRunning() { return toolsRunning; },
+  get confirmStop() { return confirmStop; },
+  get capturedReply() { return capturedReply; },
+  get requestBehavior() { return requestBehavior; },
+  get turnFailureCause() { return turnFailureCause; },
+  get limitAfterResetMs() { return limitAfterResetMs; },
+  get planLimitUntil() { return planLimitUntil; },
+  get keepWarmBotFor() { return keepWarmBotFor; },
+  get limitScopeFor() { return limitScopeFor; },
+  get limitScopeOfTurn() { return limitScopeOfTurn; },
+  get limitClockText() { return limitClockText; },
+  get routineRunThread() { return routineRunThread; },
+  get harnessQuestionThread() { return harnessQuestionThread; },
+  get routineApprovalWaitMs() { return routineApprovalWaitMs; },
+  get pendingExpireDaysForThread() { return pendingExpireDaysForThread; },
+  get settleWaitingActivity() { return settleWaitingActivity; },
+  get settledCardRequest() { return settledCardRequest; },
+  get notificationInHiddenThread() { return notificationInHiddenThread; },
+  get notificationIsInterBotChatter() { return notificationIsInterBotChatter; },
+  get notificationInAgentConversation() { return notificationInAgentConversation; },
+  get lastPersonMessage() { return lastPersonMessage; },
+  get forgetTurnCheckpoint() { return forgetTurnCheckpoint; },
+  get turnDuration() { return turnDuration; },
+  get clearTurnDigestState() { return clearTurnDigestState; },
+  get markUnattended() { return markUnattended; },
+  get clearUnattended() { return clearUnattended; },
+  get markInternalTurn() { return markInternalTurn; },
+  get clearInternalTurn() { return clearInternalTurn; },
+  get isInternalTurn() { return isInternalTurn; },
+  get noteLocalVmSeen() { return noteLocalVmSeen; },
+  get vpsThreadStarted() { return vpsThreadStarted; },
+  get vpsThreadEnded() { return vpsThreadEnded; },
+  get teamComputerPrompt() { return teamComputerPrompt; },
+  get botComputerControlKey() { return botComputerControlKey; },
+  get settledWithinOrStop() { return settledWithinOrStop; },
+  get botComputerControlSnapshot() { return botComputerControlSnapshot; },
+  get cloudComputerMount() { return cloudComputerMount; },
+  get claimedBoatId() { return claimedBoatId; },
+  get withinBudget() { return withinBudget; },
+  get botHasActiveTurn() { return botHasActiveTurn; },
+  get providerTransitionMessage() { return providerTransitionMessage; },
+  get computerPreviewBot() { return computerPreviewBot; },
+  get idleEngineTtl() { return idleEngineTtl; },
+  get runningTurnInstance() { return runningTurnInstance; },
+  get engineSteersImages() { return engineSteersImages; },
+  get claimBoatInventoryRequest() { return claimBoatInventoryRequest; },
+  get localVmTargetForBot() { return localVmTargetForBot; },
+  get localVmPoolSeatHolder() { return localVmPoolSeatHolder; },
+  get localVmTargetForThread() { return localVmTargetForThread; },
+  get localVmLeaseFor() { return localVmLeaseFor; },
+  get appendSoloGoalRow() { return appendSoloGoalRow; },
+  get appendFinishUntilRow() { return appendFinishUntilRow; },
+  get noteRelayParent() { return noteRelayParent; },
+  get routineActor() { return routineActor; },
+  get orgAuditActor() { return orgAuditActor; },
+  get orgAudit() { return orgAudit; },
+  get routineConsentEnded() { return routineConsentEnded; },
+  get effectiveRunAs() { return effectiveRunAs; },
+  get routineRunNowParties() { return routineRunNowParties; },
+  get routineRunInFlight() { return routineRunInFlight; },
+  get routineInFlightRun() { return routineInFlightRun; },
+  get auditRoutineRunNow() { return auditRoutineRunNow; },
+  get auditRoutineRunNowBy() { return auditRoutineRunNowBy; },
+  get auditRoutineRunsCleared() { return auditRoutineRunsCleared; },
+  get routineGoalSender() { return routineGoalSender; },
+  get routineRunSpeaker() { return routineRunSpeaker; },
+  get roomRoutineSpeaker() { return roomRoutineSpeaker; },
+  get attentionPerson() { return attentionPerson; },
+  get perspicaxTurnRole() { return perspicaxTurnRole; },
+  get activeRoutineRunForThread() { return activeRoutineRunForThread; },
+  get engineModelIds() { return engineModelIds; },
+  get routineDelegationCanResume() { return routineDelegationCanResume; },
+  get incidentContext() { return incidentContext; },
+  get isExternalContextMarker() { return isExternalContextMarker; },
+  get latestCompaction() { return latestCompaction; },
+  get sagaxCompactionOn() { return sagaxCompactionOn; },
+  get peerReplayText() { return peerReplayText; },
+  get reservedThreadUnused() { return reservedThreadUnused; },
+  get voiceCallEndedAudience() { return voiceCallEndedAudience; },
+  get broadcastVoiceCallEnded() { return broadcastVoiceCallEnded; },
+  get reportsToRequester() { return reportsToRequester; },
+  get delegationReportsBack() { return delegationReportsBack; },
+  get startOrQueueDirectMessage() { return startOrQueueDirectMessage; },
+  get pendingParallelTask() { return pendingParallelTask; },
+  get parallelTaskBlocked() { return parallelTaskBlocked; },
+  get patchParallelCard() { return patchParallelCard; },
+  get autoRoutableThread() { return autoRoutableThread; },
+  get runningRequestText() { return runningRequestText; },
+  get misuseActor() { return misuseActor; },
+  get safetyPrincipal() { return safetyPrincipal; },
+  get serverPathView() { return serverPathView; },
+  get serverBotRoots() { return serverBotRoots; },
+  get stopScreenPoller() { return stopScreenPoller; },
+  get shownScreenHash() { return shownScreenHash; },
+  get generateThreadTitle() { return generateThreadTitle; },
+  get startTurn() { return startTurn; },
+  get routineRunReceiptFacts() { return routineRunReceiptFacts; },
+  get botMainThread() { return botMainThread; },
+  get conversationThreadFor() { return conversationThreadFor; },
+  get startConversationFor() { return startConversationFor; },
+  get conversationOrStart() { return conversationOrStart; },
+  get legacyResultsThread() { return legacyResultsThread; },
+  get personMainThread() { return personMainThread; },
+  get routineSourceThread() { return routineSourceThread; },
+  get routineRunNeedsPerson() { return routineRunNeedsPerson; },
+  get routineEffectivePostResults() { return routineEffectivePostResults; },
+  get stricterApprovalStopError() { return stricterApprovalStopError; },
+  get routineAwayVerdict() { return routineAwayVerdict; },
+  get routineReadinessBot() { return routineReadinessBot; },
+  get routineReadinessEngine() { return routineReadinessEngine; },
+  get refusalAccount() { return refusalAccount; },
+  get proactiveHopsFromThread() { return proactiveHopsFromThread; },
+  get notePeerNotice() { return notePeerNotice; },
+  get proactiveWakeForThread() { return proactiveWakeForThread; },
+  get proactiveEventsLine() { return proactiveEventsLine; },
+  get primaryBotSameOwner() { return primaryBotSameOwner; },
+  get drainTeamSetupResumes() { return drainTeamSetupResumes; },
+  get routineKeyReveal() { return routineKeyReveal; },
+  get roomContextRows() { return roomContextRows; },
+  get roomConsumedMessageId() { return roomConsumedMessageId; },
+  get noteBotRead() { return noteBotRead; },
+  get runGroupMemberTurn() { return runGroupMemberTurn; },
+  get sameCalendarRoster() { return sameCalendarRoster; },
+  get deliverCalendarCall() { return deliverCalendarCall; },
+  get threadFileRefsFor() { return threadFileRefsFor; },
+  get threadFileRoots() { return threadFileRoots; },
+  get proposalPersistence() { return proposalPersistence; },
+  get stagedSkillListing() { return stagedSkillListing; },
+  get rejectDeletedThreadSkillStages() { return rejectDeletedThreadSkillStages; },
+  get skillCardCopy() { return skillCardCopy; },
+  get sendSkillResolution() { return sendSkillResolution; },
+  get registerComputerResume() { return registerComputerResume; },
+  get phoneSecretSubmissionKey() { return phoneSecretSubmissionKey; },
+  get markSecretResumeFailed() { return markSecretResumeFailed; },
+  get drainSecretResumes() { return drainSecretResumes; },
+  get cliProbeEnvironment() { return cliProbeEnvironment; },
+  get existingPerBotLocalVmCount() { return existingPerBotLocalVmCount; },
+  get mcpViewer() { return mcpViewer; },
+  get sharedMcpPersonalRefusal() { return sharedMcpPersonalRefusal; },
+  get mcpPolicyRefusal() { return mcpPolicyRefusal; },
+  get mcpServerBody() { return mcpServerBody; },
+  get mcpServersAsPerson() { return mcpServersAsPerson; },
+  get refreshMcpOAuth() { return refreshMcpOAuth; },
+  get phoneCallbackOrigin() { return phoneCallbackOrigin; },
+  get mcpOAuthRedirectUri() { return mcpOAuthRedirectUri; },
+  get persistMcpServers() { return persistMcpServers; },
+  get selfCheckedEngine() { return selfCheckedEngine; },
+  get engineProbeOf() { return engineProbeOf; },
+  get engineNotAvailableReason() { return engineNotAvailableReason; },
+  get engineDisplayName() { return engineDisplayName; },
+  get peerOwnerPrincipal() { return peerOwnerPrincipal; },
+  get driverDisplayName() { return driverDisplayName; },
+  get personIsOrgAdmin() { return personIsOrgAdmin; },
+  get orgSpeakerPrincipal() { return orgSpeakerPrincipal; },
+  get keyOnlyInstance() { return keyOnlyInstance; },
+  get engineNameForPerson() { return engineNameForPerson; },
+  get turnSlotFor() { return turnSlotFor; },
+  get turnPayerPrincipal() { return turnPayerPrincipal; },
+  get grokAccountKindFor() { return grokAccountKindFor; },
+  get turnPayerModeFor() { return turnPayerModeFor; },
+  get speakerPayerMode() { return speakerPayerMode; },
+  get ownerPaysTurn() { return ownerPaysTurn; },
+  get desktopModelPersonFor() { return desktopModelPersonFor; },
+  get fixSendState() { return fixSendState; },
+  get payerAccountModels() { return payerAccountModels; },
+  get piLocalModel() { return piLocalModel; },
+  get orgXaiMediaGiven() { return orgXaiMediaGiven; },
+  get requesterPrincipal() { return requesterPrincipal; },
+  get turnMediaPrincipal() { return turnMediaPrincipal; },
+  get orgAvatarImageConfig() { return orgAvatarImageConfig; },
+  get orgXaiMediaView() { return orgXaiMediaView; },
+  get orgPersonFacts() { return orgPersonFacts; },
+  get autoPayerKey() { return autoPayerKey; },
+  get ownerPaysForMember() { return ownerPaysForMember; },
+  get rememberAutoRefusal() { return rememberAutoRefusal; },
+  get autoRecordUsable() { return autoRecordUsable; },
+  get parsedQuickTask() { return parsedQuickTask; },
+  get orgRefusalOf() { return orgRefusalOf; },
+  get principalLoginDir() { return principalLoginDir; },
+  get piModelServersForViewer() { return piModelServersForViewer; },
+  get claudeAiConnectorRows() { return claudeAiConnectorRows; },
+  get grokCloudOnTurn() { return grokCloudOnTurn; },
+  get claudeAiConnectorsFor() { return claudeAiConnectorsFor; },
+  get catalogPrice() { return catalogPrice; },
+  get perspicaxKeysUrl() { return perspicaxKeysUrl; },
+  get refusalPayerOf() { return refusalPayerOf; },
+  get refusedModelsFor() { return refusedModelsFor; },
+  get orgOfferedEngines() { return orgOfferedEngines; },
+  get personalEngine() { return personalEngine; },
+  get stopCompanyInstances() { return stopCompanyInstances; },
+  get threadEngineId() { return threadEngineId; },
+  get serveStatic() { return serveStatic; },
+  get streamOpenedHttpFile() { return streamOpenedHttpFile; },
+  get botMailResync() { return botMailResync; },
+  get soloClaudeCli() { return soloClaudeCli; },
+  get botMemoryMayEdit() { return botMemoryMayEdit; },
+  get threadWarmRequest() { return threadWarmRequest; },
+  get backgroundBriefConnected() { return backgroundBriefConnected; },
+  get backgroundBriefThread() { return backgroundBriefThread; },
+  get computerManagementPrincipal() { return computerManagementPrincipal; },
+  get sharedLocalVmInUse() { return sharedLocalVmInUse; },
+  get scheduledLocalVmUpdate() { return scheduledLocalVmUpdate; },
+  get mayManageMarketplaces() { return mayManageMarketplaces; },
+  get marketplaceViewer() { return marketplaceViewer; },
+  get mayShareMarketplaceOrgWide() { return mayShareMarketplaceOrgWide; },
+  get cloudAgentPrincipal() { return cloudAgentPrincipal; },
+  get cloudAgentRecordVisible() { return cloudAgentRecordVisible; },
+  get inboxJournal() { return inboxJournal; },
+  get moderationViewer() { return moderationViewer; },
+  get moderationAdminAudience() { return moderationAdminAudience; },
+  get knowsPersonThreads() { return knowsPersonThreads; },
+  get peopleDmOpenThread() { return peopleDmOpenThread; },
+  get peopleDmThreadOf() { return peopleDmThreadOf; },
+  get groupOwnerCaller() { return groupOwnerCaller; },
+  get soloServerRecord() { return soloServerRecord; },
+  get localPrincipalId() { return localPrincipalId; },
+  get auditValue() { return auditValue; },
+  get primaryTurnGate() { return primaryTurnGate; },
+  get primaryListAuth() { return primaryListAuth; },
+  get actSharedServer() { return actSharedServer; },
+  get isBotActCard() { return isBotActCard; },
+  get finishBotAct() { return finishBotAct; },
+  get languageOfPerson() { return languageOfPerson; },
+  get languageOfRequest() { return languageOfRequest; },
+  get cwActionActor() { return cwActionActor; },
+  get cwWidgetRule() { return cwWidgetRule; },
+  get confidentialPerspicaxRefusal() { return confidentialPerspicaxRefusal; },
+  get isConfidentialMemoryCard() { return isConfidentialMemoryCard; },
+  get emailConnectorsFor() { return emailConnectorsFor; },
+  get requestEmailDraftSend() { return requestEmailDraftSend; },
+  get emailSendMessage() { return emailSendMessage; },
+  get patchEmailSend() { return patchEmailSend; },
+  get takeEmailSendPass() { return takeEmailSendPass; },
+  get emailDraftStatus() { return emailDraftStatus; },
+  get mintActConfirmation() { return mintActConfirmation; },
+  get takeActConfirmation() { return takeActConfirmation; },
+  get actConfirmed() { return actConfirmed; },
+  get primaryAskedReplay() { return primaryAskedReplay; },
+  get actConfirmedCovers() { return actConfirmedCovers; },
+  get mintOwnerContinuation() { return mintOwnerContinuation; },
+  get confidentialThreadIds() { return confidentialThreadIds; },
+  get namesConfidentialThread() { return namesConfidentialThread; },
+  get scrubConfidentialThreads() { return scrubConfidentialThreads; },
+  get delegatedRequest() { return delegatedRequest; },
+  get confidentialFileOf() { return confidentialFileOf; },
+  get groupReaderId() { return groupReaderId; },
+  get channelFilterViewerId() { return channelFilterViewerId; },
+  get actorEmail() { return actorEmail; },
+  get channelActorId() { return channelActorId; },
+  get creatingBotOwnerId() { return creatingBotOwnerId; },
+  get effectiveBotOwner() { return effectiveBotOwner; },
+  get botOwnerOrgRole() { return botOwnerOrgRole; },
+  get memberOwnedInOrg() { return memberOwnedInOrg; },
+  get principalIsOrgAdmin() { return principalIsOrgAdmin; },
+  get turnDrivesOrgServer() { return turnDrivesOrgServer; },
+  get botHasOwnComputerForTurn() { return botHasOwnComputerForTurn; },
+  get safetyOwnEnvironment() { return safetyOwnEnvironment; },
+  get mountedDestinationOf() { return mountedDestinationOf; },
+  get cardAnswererId() { return cardAnswererId; },
+  get noteCard() { return noteCard; },
+  get principalCan() { return principalCan; },
+  get turnStartFor() { return turnStartFor; },
+  get sameOwnerRosterMember() { return sameOwnerRosterMember; },
+  get ownerModeLineageFor() { return ownerModeLineageFor; },
+  get ownWorkOrigin() { return ownWorkOrigin; },
+  get botProfilePrompt() { return botProfilePrompt; },
+  get orgFullAccessPolicy() { return orgFullAccessPolicy; },
+  get ownerBypassAllowed() { return ownerBypassAllowed; },
+  get ruleManager() { return ruleManager; },
+  get threadActionClassContext() { return threadActionClassContext; },
+  get stepUpPolicyPerson() { return stepUpPolicyPerson; },
+  get botActStepUpContent() { return botActStepUpContent; },
+  get alwaysAllowStepUpGate() { return alwaysAllowStepUpGate; },
+  get memberAutoRefused() { return memberAutoRefused; },
+  get approvalModeAllowanceKey() { return approvalModeAllowanceKey; },
+  get everyThreadMode() { return everyThreadMode; },
+  get stepUpAnswerOf() { return stepUpAnswerOf; },
+  get workspaceAdminPrincipal() { return workspaceAdminPrincipal; },
+  get keptCardRule() { return keptCardRule; },
+  get botsOwnedBy() { return botsOwnedBy; },
+  get newBotGreetingLanguage() { return newBotGreetingLanguage; },
+  get newBotApprovalMode() { return newBotApprovalMode; },
+  get orgDeniesFull() { return orgDeniesFull; },
+  get memberFolderPrincipal() { return memberFolderPrincipal; },
+  get memberFolderRefusal() { return memberFolderRefusal; },
+  get engineTurnLevel() { return engineTurnLevel; },
+  get orgAdminCaller() { return orgAdminCaller; },
+  get orgKeyConfigured() { return orgKeyConfigured; },
+  get botDirectGrants() { return botDirectGrants; },
+  get botGrants() { return botGrants; },
+  get botFacts() { return botFacts; },
+  get principalTeams() { return principalTeams; },
+  get authzViewerFor() { return authzViewerFor; },
+  get groupPostAllowed() { return groupPostAllowed; },
+  get roomOfSubject() { return roomOfSubject; },
+  get recordRoomMove() { return recordRoomMove; },
+  get viewerBotLevel() { return viewerBotLevel; },
+  get scopedThreadViewer() { return scopedThreadViewer; },
+  get botThreadReadable() { return botThreadReadable; },
+  get threadsShownTo() { return threadsShownTo; },
+  get selectViewerThread() { return selectViewerThread; },
+  get routeThreadId() { return routeThreadId; },
+  get threadKeyedForViewer() { return threadKeyedForViewer; },
+  get personWroteIn() { return personWroteIn; },
+  get streamCandidates() { return streamCandidates; },
+  get segmentHistory() { return segmentHistory; },
+  get segmentStamp() { return segmentStamp; },
+  get streamTurn() { return streamTurn; },
+  get noteStreamSend() { return noteStreamSend; },
+  get searchHitVisibleNow() { return searchHitVisibleNow; },
+  get deleteRoutineAs() { return deleteRoutineAs; },
+  get channelActorRole() { return channelActorRole; },
+  get botCreationAllowed() { return botCreationAllowed; },
+  get personBotsReadOnly() { return personBotsReadOnly; },
+  get personSheetBotsUseOnly() { return personSheetBotsUseOnly; },
+  get callerPermissions() { return callerPermissions; },
+  get sessionPermits() { return sessionPermits; },
+  get callerCan() { return callerCan; },
+  get callerBotsReadOnly() { return callerBotsReadOnly; },
+  get ownerBotsReadOnly() { return ownerBotsReadOnly; },
+  get botsReadOnlyRefusal() { return botsReadOnlyRefusal; },
+  get sharedBrowserProfileValue() { return sharedBrowserProfileValue; },
+  get ownerChosenVisibility() { return ownerChosenVisibility; },
+  get ownIntegrationsRefusal() { return ownIntegrationsRefusal; },
+  get memberOwnsBot() { return memberOwnsBot; },
+  get ownerOrAdminOf() { return ownerOrAdminOf; },
+  get companionRequest() { return companionRequest; },
+  get botEditsNeedOwner() { return botEditsNeedOwner; },
+  get computerOwnerFields() { return computerOwnerFields; },
+  get profileManagedFor() { return profileManagedFor; },
+  get botUserProfile() { return botUserProfile; },
+  get botUserName() { return botUserName; },
+  get groupOwnerRuleApplies() { return groupOwnerRuleApplies; },
+  get groupActor() { return groupActor; },
+  get botAccessChanged() { return botAccessChanged; },
+  get engineOfBot() { return engineOfBot; },
+  get sectionMigrationOwner() { return sectionMigrationOwner; },
+  get orgSectionNames() { return orgSectionNames; },
+  get teamStorageKeyFor() { return teamStorageKeyFor; },
+  get teamStorageKeyForAuth() { return teamStorageKeyForAuth; },
+  get providerAccountOwner() { return providerAccountOwner; },
+  get syncPersonalProviders() { return syncPersonalProviders; },
+  get syncPersonalProviderDirectory() { return syncPersonalProviderDirectory; },
+  get presenceHiddenFor() { return presenceHiddenFor; },
+  get reachMePerson() { return reachMePerson; },
+  get reachMeAnswerer() { return reachMeAnswerer; },
+  get shapeAvatarGenerator() { return shapeAvatarGenerator; },
+  get principalEmail() { return principalEmail; },
+  get persistOrgState() { return persistOrgState; },
+  get claudeArtifactSummaryCache() { return claudeArtifactSummaryCache; },
+  get claudeArtifactTracked() { return claudeArtifactTracked; },
+  get claudeArtifactWorkspaceFile() { return claudeArtifactWorkspaceFile; },
+  get claudeArtifactPrincipal() { return claudeArtifactPrincipal; },
+  get connectorSetupStore() { return connectorSetupStore; },
+  get connectorSetupSpeaker() { return connectorSetupSpeaker; },
+  get connectorSetupContext() { return connectorSetupContext; },
+  get groupCommandCwd() { return groupCommandCwd; },
+  get harnessCommandSpeaker() { return harnessCommandSpeaker; },
+  get botThreadIds() { return botThreadIds; },
+  get orgConsolePeople() { return orgConsolePeople; },
+  get consoleOwner() { return consoleOwner; },
+  get orgMcpServers() { return orgMcpServers; },
+  get settleMemberAutoLevels() { return settleMemberAutoLevels; },
+  get consoleEngineAllowed() { return consoleEngineAllowed; },
+  get orgDisabledModels() { return orgDisabledModels; },
+  get personDisabledModels() { return personDisabledModels; },
+  get modelSwitchesFor() { return modelSwitchesFor; },
+  get modelSwitchRefusal() { return modelSwitchRefusal; },
+  get orgOwnAccountsOutsideList() { return orgOwnAccountsOutsideList; },
+  get orgAllowedEngines() { return orgAllowedEngines; },
+  get personPaysEngine() { return personPaysEngine; },
+  get orgEngineName() { return orgEngineName; },
+  get insideDataDir() { return insideDataDir; },
+  get agentApiSecret() { return agentApiSecret; },
+  get agentApiMounted() { return agentApiMounted; },
+  get agentModelSummary() { return agentModelSummary; },
+  get agentPeersOf() { return agentPeersOf; },
+  get issueTemporaryCreateToken() { return issueTemporaryCreateToken; },
+  get botLastActivity() { return botLastActivity; },
+  get temporaryAudit() { return temporaryAudit; },
+  get personAgentThreads() { return personAgentThreads; },
+  get agentOwnerPrincipal() { return agentOwnerPrincipal; },
+  get agentUnifiedThread() { return agentUnifiedThread; },
+  get agentConversationsOf() { return agentConversationsOf; },
+  get agentUnifiedThreadForBot() { return agentUnifiedThreadForBot; },
+  get markAiClientLine() { return markAiClientLine; },
+  get memberForAgentCaller() { return memberForAgentCaller; },
+  get agentApiForMember() { return agentApiForMember; },
+  get liveBotFor() { return liveBotFor; },
+  get liveHistoryFor() { return liveHistoryFor; },
+  get liveSignedIn() { return liveSignedIn; },
+  get liveCallTitle() { return liveCallTitle; },
+  get runRoutes() { return runRoutes; },
+  get fallback() { return fallback; },
+  get joinPerson() { return joinPerson; },
+  get coordinationRequestId() { return coordinationRequestId; },
+  get idempotencyKeyOf() { return idempotencyKeyOf; },
+  get pollOnlyCaller() { return pollOnlyCaller; },
+  get busyDirectThreads() { return busyDirectThreads; },
+  get threadWaitsOnPerson() { return threadWaitsOnPerson; },
+  get ACCOUNT_REAUTH_PATH() { return ACCOUNT_REAUTH_PATH; },
+  get ADMIN_ACTIVITY_CATEGORIES() { return ADMIN_ACTIVITY_CATEGORIES; },
+  get ATTACHMENTS_DIR() { return ATTACHMENTS_DIR; },
+  get AUTO_COMPUTER_RULES() { return AUTO_COMPUTER_RULES; },
+  get AccountReauth() { return AccountReauth; },
+  get ArtifactSummaryCache() { return ArtifactSummaryCache; },
+  get AsyncLocalStorage() { return AsyncLocalStorage; },
+  get BOT_ACT_ROUTE_HEADER() { return BOT_ACT_ROUTE_HEADER; },
+  get BOT_MAIL_ASSERTION_ACTORS() { return BOT_MAIL_ASSERTION_ACTORS; },
+  get BOT_PACKAGE_MAX_SKILLS() { return BOT_PACKAGE_MAX_SKILLS; },
+  get BOT_WORKPLACE_PREFERENCE() { return BOT_WORKPLACE_PREFERENCE; },
+  get BUILT_IN_BROWSER_SYSTEM_PROMPT() { return BUILT_IN_BROWSER_SYSTEM_PROMPT; },
+  get BUILT_IN_DATA_SYSTEM_PROMPT() { return BUILT_IN_DATA_SYSTEM_PROMPT; },
+  get BUILT_IN_DRIVERS() { return BUILT_IN_DRIVERS; },
+  get BotCapabilityStore() { return BotCapabilityStore; },
+  get BotFolderRegistry() { return BotFolderRegistry; },
+  get BotMailAddresses() { return BotMailAddresses; },
+  get BotPluginError() { return BotPluginError; },
+  get BotPlugins() { return BotPlugins; },
+  get BotTailscaleService() { return BotTailscaleService; },
+  get BotZipError() { return BotZipError; },
+  get BranchArchive() { return BranchArchive; },
+  get BriefStore() { return BriefStore; },
+  get BrowserCleanupCoordinator() { return BrowserCleanupCoordinator; },
+  get BrowserLive() { return BrowserLive; },
+  get BrowserNetworkDebug() { return BrowserNetworkDebug; },
+  get BrowserRuntime() { return BrowserRuntime; },
+  get BrowserSweep() { return BrowserSweep; },
+  get CALL_RECALL_BUDGET() { return CALL_RECALL_BUDGET; },
+  get CLAUDE_ARTIFACT_COMMENTS_ROUTINE() { return CLAUDE_ARTIFACT_COMMENTS_ROUTINE; },
+  get CLAUDE_REUSE_VOLATILE_SECTIONS() { return CLAUDE_REUSE_VOLATILE_SECTIONS; },
+  get CLOUD_COMPUTER_BUSY_ERROR() { return CLOUD_COMPUTER_BUSY_ERROR; },
+  get COMPACT_VOLATILE_SECTIONS() { return COMPACT_VOLATILE_SECTIONS; },
+  get COMPANY_TOPIC() { return COMPANY_TOPIC; },
+  get CONFIDENTIAL_PEER_REFUSED() { return CONFIDENTIAL_PEER_REFUSED; },
+  get CONSENT_RULE() { return CONSENT_RULE; },
+  get CONTROL_ACT_WITHIN_MS() { return CONTROL_ACT_WITHIN_MS; },
+  get CONTROL_WAIT_MS() { return CONTROL_WAIT_MS; },
+  get CREDENTIAL_PROMPT() { return CREDENTIAL_PROMPT; },
+  get CalendarCallManager() { return CalendarCallManager; },
+  get ClaudeAiConnectorInventory() { return ClaudeAiConnectorInventory; },
+  get CloudAgentCredentialStore() { return CloudAgentCredentialStore; },
+  get CloudAgentManager() { return CloudAgentManager; },
+  get CloudAgentStore() { return CloudAgentStore; },
+  get CommandAllowlistStore() { return CommandAllowlistStore; },
+  get CompanyMemoryCache() { return CompanyMemoryCache; },
+  get ComputerAppReader() { return ComputerAppReader; },
+  get ComputerControl() { return ComputerControl; },
+  get ComputerTeachRecordings() { return ComputerTeachRecordings; },
+  get ConfidentialMemoryPasses() { return ConfidentialMemoryPasses; },
+  get ConsoleRefusal() { return ConsoleRefusal; },
+  get CredentialVault() { return CredentialVault; },
+  get CustomRuleStore() { return CustomRuleStore; },
+  get DATA_DOWNLOADS_DIR() { return DATA_DOWNLOADS_DIR; },
+  get DATA_INTERNAL_MCP_PATH() { return DATA_INTERNAL_MCP_PATH; },
+  get DEFAULT_REBUILD_BYTES() { return DEFAULT_REBUILD_BYTES; },
+  get DESKTOP_BRIDGE_MCP_NAME() { return DESKTOP_BRIDGE_MCP_NAME; },
+  get DEVICE_REQUEST_KEYS() { return DEVICE_REQUEST_KEYS; },
+  get DEVICE_SETTINGS_FRAME() { return DEVICE_SETTINGS_FRAME; },
+  get DISPATCH_KPI_TOOL() { return DISPATCH_KPI_TOOL; },
+  get DRAIN_COALESCE_MAX_ITEMS() { return DRAIN_COALESCE_MAX_ITEMS; },
+  get DataFailure() { return DataFailure; },
+  get DataSheetRegistry() { return DataSheetRegistry; },
+  get DelegationWakeBudget() { return DelegationWakeBudget; },
+  get DesktopBridges() { return DesktopBridges; },
+  get DesktopLocalModels() { return DesktopLocalModels; },
+  get DesktopTerminals() { return DesktopTerminals; },
+  get DesktopTunnels() { return DesktopTunnels; },
+  get DevPodsThreads() { return DevPodsThreads; },
+  get DirectoryRefreshScheduler() { return DirectoryRefreshScheduler; },
+  get ENGINE_DRIVER() { return ENGINE_DRIVER; },
+  get ENGINE_PURGE_DONE() { return ENGINE_PURGE_DONE; },
+  get ENVIRONMENT_PATHS() { return ENVIRONMENT_PATHS; },
+  get EVENTS_DIR() { return EVENTS_DIR; },
+  get EmailOtpStore() { return EmailOtpStore; },
+  get EngineSelfCheck() { return EngineSelfCheck; },
+  get EventBus() { return EventBus; },
+  get FcmSender() { return FcmSender; },
+  get FinishUntilRuns() { return FinishUntilRuns; },
+  get GROK_CLOUD_CONNECTORS() { return GROK_CLOUD_CONNECTORS; },
+  get GithubConnect() { return GithubConnect; },
+  get GithubCredentials() { return GithubCredentials; },
+  get GraphSubscriptions() { return GraphSubscriptions; },
+  get GroupUsageReader() { return GroupUsageReader; },
+  get HEALTH_IDENTITY() { return HEALTH_IDENTITY; },
+  get HOSTED_PROVIDER_SETTINGS_ERROR() { return HOSTED_PROVIDER_SETTINGS_ERROR; },
+  get HOST_COMPUTER_REFUSAL() { return HOST_COMPUTER_REFUSAL; },
+  get HOST_COMPUTER_RESOURCE() { return HOST_COMPUTER_RESOURCE; },
+  get HOST_CONTROL_NOTICE() { return HOST_CONTROL_NOTICE; },
+  get HOST_CONTROL_PATH() { return HOST_CONTROL_PATH; },
+  get Handoffs() { return Handoffs; },
+  get HarnessCommandCatalog() { return HarnessCommandCatalog; },
+  get IDP_SWEEP_INTERVAL_MS() { return IDP_SWEEP_INTERVAL_MS; },
+  get IMAGE_SERVER_ENGINE() { return IMAGE_SERVER_ENGINE; },
+  get INTERIM_WINDOW_DAYS() { return INTERIM_WINDOW_DAYS; },
+  get IdleEnginePool() { return IdleEnginePool; },
+  get IdpGrantVault() { return IdpGrantVault; },
+  get IdpSessionManager() { return IdpSessionManager; },
+  get IncidentLedger() { return IncidentLedger; },
+  get InstallationCapabilityStore() { return InstallationCapabilityStore; },
+  get InstallationPlugins() { return InstallationPlugins; },
+  get LEARN_PROMPT() { return LEARN_PROMPT; },
+  get LOCAL_OWNER() { return LOCAL_OWNER; },
+  get LOCAL_RECALL_BUDGET() { return LOCAL_RECALL_BUDGET; },
+  get LOCAL_RECENT_WORK_LINES() { return LOCAL_RECENT_WORK_LINES; },
+  get LOCAL_VAULT_PRINCIPAL() { return LOCAL_VAULT_PRINCIPAL; },
+  get LOGIN_ENGINE_LABEL() { return LOGIN_ENGINE_LABEL; },
+  get LOGIN_MARKER() { return LOGIN_MARKER; },
+  get LimitFailoverStore() { return LimitFailoverStore; },
+  get LiveActivityHub() { return LiveActivityHub; },
+  get LiveCallController() { return LiveCallController; },
+  get LiveCallSignedOutError() { return LiveCallSignedOutError; },
+  get LiveSessionError() { return LiveSessionError; },
+  get LocalAwayTracker() { return LocalAwayTracker; },
+  get LocalSemanticIndex() { return LocalSemanticIndex; },
+  get LocalVmAutoStarter() { return LocalVmAutoStarter; },
+  get LocalVmIdleTimer() { return LocalVmIdleTimer; },
+  get LocalVmLease() { return LocalVmLease; },
+  get LocalVmLeasePool() { return LocalVmLeasePool; },
+  get LocalVmSeatPool() { return LocalVmSeatPool; },
+  get MANAGED_PROFILE_REFUSAL() { return MANAGED_PROFILE_REFUSAL; },
+  get MAX_MCP_SERVERS() { return MAX_MCP_SERVERS; },
+  get MEMBER_AUTO_NOT_ALLOWED() { return MEMBER_AUTO_NOT_ALLOWED; },
+  get MEMBER_FOLDER_REFUSED() { return MEMBER_FOLDER_REFUSED; },
+  get MEMORY_INDEX() { return MEMORY_INDEX; },
+  get MODEL_ACCESS_DISABLED_MESSAGE() { return MODEL_ACCESS_DISABLED_MESSAGE; },
+  get MY_CHROME_PROFILE() { return MY_CHROME_PROFILE; },
+  get MY_CHROME_SHELL_PROMPT() { return MY_CHROME_SHELL_PROMPT; },
+  get MY_CHROME_SYSTEM_PROMPT() { return MY_CHROME_SYSTEM_PROMPT; },
+  get MaintenanceScheduler() { return MaintenanceScheduler; },
+  get MaintenanceStore() { return MaintenanceStore; },
+  get ManagedDesktopPolicy() { return ManagedDesktopPolicy; },
+  get ManagedDesktopProviders() { return ManagedDesktopProviders; },
+  get MarketplaceTokens() { return MarketplaceTokens; },
+  get McpOAuthManager() { return McpOAuthManager; },
+  get McpOAuthVault() { return McpOAuthVault; },
+  get MemberLiveText() { return MemberLiveText; },
+  get MemoryWatch() { return MemoryWatch; },
+  get ModelCatalogStore() { return ModelCatalogStore; },
+  get ModelRequestService() { return ModelRequestService; },
+  get MyChromeService() { return MyChromeService; },
+  get NATIVE_DIR() { return NATIVE_DIR; },
+  get NudgeCooldown() { return NudgeCooldown; },
+  get OFFICE_IMAGES_MAX_TOTAL_BYTES() { return OFFICE_IMAGES_MAX_TOTAL_BYTES; },
+  get OFFICE_IMAGE_MAX_COUNT() { return OFFICE_IMAGE_MAX_COUNT; },
+  get ONE_PASSWORD_WAITING() { return ONE_PASSWORD_WAITING; },
+  get ORG_CAPABILITIES_CALL() { return ORG_CAPABILITIES_CALL; },
+  get ORG_FULL_ACCESS_DEFAULT_MARKER() { return ORG_FULL_ACCESS_DEFAULT_MARKER; },
+  get ORG_FULL_ACCESS_DISABLED() { return ORG_FULL_ACCESS_DISABLED; },
+  get ORG_MEMBER_ASSERTION_ACTORS() { return ORG_MEMBER_ASSERTION_ACTORS; },
+  get ORG_OWNER() { return ORG_OWNER; },
+  get OUTSIDE() { return OUTSIDE; },
+  get OidcRelyingParty() { return OidcRelyingParty; },
+  get OnePassword() { return OnePassword; },
+  get OpenApiStore() { return OpenApiStore; },
+  get OrderFollowUps() { return OrderFollowUps; },
+  get OrgBotSecrets() { return OrgBotSecrets; },
+  get OrgCapabilities() { return OrgCapabilities; },
+  get OrgFlowPlugins() { return OrgFlowPlugins; },
+  get OrgGithubTokens() { return OrgGithubTokens; },
+  get OrgLibrary() { return OrgLibrary; },
+  get OrgSettingOwnedElsewhere() { return OrgSettingOwnedElsewhere; },
+  get OrgTeams() { return OrgTeams; },
+  get OutboundCounts() { return OutboundCounts; },
+  get OutboundRequestService() { return OutboundRequestService; },
+  get OwnerApprovalStore() { return OwnerApprovalStore; },
+  get OwnerIdentityStore() { return OwnerIdentityStore; },
+  get PASS() { return PASS; },
+  get PEER_ACCESS_HELP() { return PEER_ACCESS_HELP; },
+  get PEOPLE_DM_THREADS_HEADER() { return PEOPLE_DM_THREADS_HEADER; },
+  get PERSONAL_STDIO_TOOL_SERVER() { return PERSONAL_STDIO_TOOL_SERVER; },
+  get PERSPICAX_CONVENTIONS_PROMPT() { return PERSPICAX_CONVENTIONS_PROMPT; },
+  get PERSPICAX_TOOL_NAMES() { return PERSPICAX_TOOL_NAMES; },
+  get PHONE_TOOLS_FRAME() { return PHONE_TOOLS_FRAME; },
+  get PLUGIN_CATALOG() { return PLUGIN_CATALOG; },
+  get PRESENCE_SWEEP_MS() { return PRESENCE_SWEEP_MS; },
+  get PRESENCE_VISIBLE_PREFERENCE() { return PRESENCE_VISIBLE_PREFERENCE; },
+  get PREWARM_ENGINE_LEAD_MS() { return PREWARM_ENGINE_LEAD_MS; },
+  get PRE_AUTH_AFTER_RESOLVE() { return PRE_AUTH_AFTER_RESOLVE; },
+  get PRE_AUTH_ROUTES() { return PRE_AUTH_ROUTES; },
+  get PROFILE_CREATOR_PROMPT() { return PROFILE_CREATOR_PROMPT; },
+  get PROFILE_PROMPT() { return PROFILE_PROMPT; },
+  get PROVIDER_CREDENTIAL_ENV() { return PROVIDER_CREDENTIAL_ENV; },
+  get PROVIDER_KEY_KINDS() { return PROVIDER_KEY_KINDS; },
+  get PageLive() { return PageLive; },
+  get PeerNoticeHops() { return PeerNoticeHops; },
+  get PendingTurnCancellations() { return PendingTurnCancellations; },
+  get PeopleDmSelections() { return PeopleDmSelections; },
+  get PersonConnections() { return PersonConnections; },
+  get PersonConnectionsError() { return PersonConnectionsError; },
+  get PersonSettingsStore() { return PersonSettingsStore; },
+  get PersonalProviderInstances() { return PersonalProviderInstances; },
+  get PersonalSkills() { return PersonalSkills; },
+  get PerspicaxAgentsClient() { return PerspicaxAgentsClient; },
+  get PerspicaxDirectory() { return PerspicaxDirectory; },
+  get PerspicaxMcp() { return PerspicaxMcp; },
+  get PerspicaxMemory() { return PerspicaxMemory; },
+  get PerspicaxMemoryNotesClient() { return PerspicaxMemoryNotesClient; },
+  get PerspicaxReachability() { return PerspicaxReachability; },
+  get PhoneSecretBridge() { return PhoneSecretBridge; },
+  get PhoneSecretSubmissionRegistry() { return PhoneSecretSubmissionRegistry; },
+  get PluginMarketplaces() { return PluginMarketplaces; },
+  get PreSendRefusals() { return PreSendRefusals; },
+  get PresenceTracker() { return PresenceTracker; },
+  get PrincipalEngineLogins() { return PrincipalEngineLogins; },
+  get PrincipalRegistry() { return PrincipalRegistry; },
+  get ProactiveEngine() { return ProactiveEngine; },
+  get ProactivePendingFile() { return ProactivePendingFile; },
+  get ProactiveProposals() { return ProactiveProposals; },
+  get ProactiveWaker() { return ProactiveWaker; },
+  get ProfileRequestService() { return ProfileRequestService; },
+  get ProviderAccounts() { return ProviderAccounts; },
+  get ProviderAuthSessions() { return ProviderAuthSessions; },
+  get ProviderRegistry() { return ProviderRegistry; },
+  get ProviderTurnGenerationRegistry() { return ProviderTurnGenerationRegistry; },
+  get PublishedPages() { return PublishedPages; },
+  get PushHub() { return PushHub; },
+  get REACH_TEAMS_RUN_NAME() { return REACH_TEAMS_RUN_NAME; },
+  get REACH_TEAMS_WEBHOOK() { return REACH_TEAMS_WEBHOOK; },
+  get REACTION_PROMPT() { return REACTION_PROMPT; },
+  get REALTIME_WORK_TIMEOUT_MS() { return REALTIME_WORK_TIMEOUT_MS; },
+  get RESERVED_RUN_PREFIX() { return RESERVED_RUN_PREFIX; },
+  get ROUTES() { return ROUTES; },
+  get ROUTINE_EXECUTION_PROMPT() { return ROUTINE_EXECUTION_PROMPT; },
+  get ROUTINE_PROMPT() { return ROUTINE_PROMPT; },
+  get ROUTINE_RESTARTED() { return ROUTINE_RESTARTED; },
+  get ReachMe() { return ReachMe; },
+  get ReachMeSecrets() { return ReachMeSecrets; },
+  get ReachTeams() { return ReachTeams; },
+  get ReachTelegram() { return ReachTelegram; },
+  get ReachWhatsApp() { return ReachWhatsApp; },
+  get RemoteMcpClient() { return RemoteMcpClient; },
+  get ReplayBuffer() { return ReplayBuffer; },
+  get RetiredTurnRegistry() { return RetiredTurnRegistry; },
+  get RevocationQueue() { return RevocationQueue; },
+  get RoleJournal() { return RoleJournal; },
+  get RoomTurnDeadline() { return RoomTurnDeadline; },
+  get RoomTurnStallRegistry() { return RoomTurnStallRegistry; },
+  get RoutableSteers() { return RoutableSteers; },
+  get RoutineConsents() { return RoutineConsents; },
+  get RoutineManager() { return RoutineManager; },
+  get RoutineRequestService() { return RoutineRequestService; },
+  get RoutineWatchStates() { return RoutineWatchStates; },
+  get RuleRequestService() { return RuleRequestService; },
+  get SANDBOX_ATTACHMENTS_DIR() { return SANDBOX_ATTACHMENTS_DIR; },
+  get SANDBOX_PLUGINS_DIR() { return SANDBOX_PLUGINS_DIR; },
+  get SANDBOX_VIEWER_TARGET() { return SANDBOX_VIEWER_TARGET; },
+  get SANDBOX_WAKE_NOTICE() { return SANDBOX_WAKE_NOTICE; },
+  get SANDBOX_WAKE_TIMEOUT_NOTICE() { return SANDBOX_WAKE_TIMEOUT_NOTICE; },
+  get SEES_EVERYTHING() { return SEES_EVERYTHING; },
+  get SEES_NOTHING() { return SEES_NOTHING; },
+  get SERVER_LIMIT_SCOPE() { return SERVER_LIMIT_SCOPE; },
+  get SESSION_SEARCH_SYSTEM_PROMPT() { return SESSION_SEARCH_SYSTEM_PROMPT; },
+  get SETTINGS_ACTION_CLASS() { return SETTINGS_ACTION_CLASS; },
+  get SHARED_LOCAL_VM_TARGET() { return SHARED_LOCAL_VM_TARGET; },
+  get SMALL_TALK_TURN_NOTE() { return SMALL_TALK_TURN_NOTE; },
+  get SPAWNED_PROXIES() { return SPAWNED_PROXIES; },
+  get STEP_UP_CLASSES() { return STEP_UP_CLASSES; },
+  get STOPPED_TURN_NAME() { return STOPPED_TURN_NAME; },
+  get SUBAGENT_SWEEP_WINDOW_MS() { return SUBAGENT_SWEEP_WINDOW_MS; },
+  get SafePointPreempts() { return SafePointPreempts; },
+  get SandboxClusterWaker() { return SandboxClusterWaker; },
+  get SandboxControlHolds() { return SandboxControlHolds; },
+  get SandboxStdioRelay() { return SandboxStdioRelay; },
+  get SectionChannels() { return SectionChannels; },
+  get SecurityKeyStore() { return SecurityKeyStore; },
+  get SecurityKeys() { return SecurityKeys; },
+  get SendSequencer() { return SendSequencer; },
+  get SessionRegistry() { return SessionRegistry; },
+  get SharedComputerControl() { return SharedComputerControl; },
+  get SharedComputers() { return SharedComputers; },
+  get SmsConversation() { return SmsConversation; },
+  get SoloGoals() { return SoloGoals; },
+  get SseRuntimeDeltaCoalescer() { return SseRuntimeDeltaCoalescer; },
+  get StdioRelayError() { return StdioRelayError; },
+  get Store() { return Store; },
+  get SubscriptionDepositor() { return SubscriptionDepositor; },
+  get TASK_WORKSPACES_DIR() { return TASK_WORKSPACES_DIR; },
+  get TEAM_MEMORY_PROMPT() { return TEAM_MEMORY_PROMPT; },
+  get TEAM_SETUP_DESKTOP_MESSAGE() { return TEAM_SETUP_DESKTOP_MESSAGE; },
+  get TEAM_SETUP_DESKTOP_ONLY() { return TEAM_SETUP_DESKTOP_ONLY; },
+  get TELEPHONY_ASSERTION_ACTORS() { return TELEPHONY_ASSERTION_ACTORS; },
+  get TEMP_AGENT_QUOTA() { return TEMP_AGENT_QUOTA; },
+  get TEMP_AGENT_SWEEP_MS() { return TEMP_AGENT_SWEEP_MS; },
+  get THREADS_PROMPT() { return THREADS_PROMPT; },
+  get TeamComputers() { return TeamComputers; },
+  get TeamExportError() { return TeamExportError; },
+  get TeamMemory() { return TeamMemory; },
+  get TeamSetupError() { return TeamSetupError; },
+  get TeamSetupRequestService() { return TeamSetupRequestService; },
+  get TemplateLinks() { return TemplateLinks; },
+  get ThreadPrewarm() { return ThreadPrewarm; },
+  get ThreadStarters() { return ThreadStarters; },
+  get ToolGrantStore() { return ToolGrantStore; },
+  get ToolResults() { return ToolResults; },
+  get TrackedArtifactStore() { return TrackedArtifactStore; },
+  get TriggerPollerCredentials() { return TriggerPollerCredentials; },
+  get TriggerPollers() { return TriggerPollers; },
+  get TurnAuthenticationRefusedError() { return TurnAuthenticationRefusedError; },
+  get TurnNotStartedError() { return TurnNotStartedError; },
+  get TurnReplyRepeats() { return TurnReplyRepeats; },
+  get TurnResources() { return TurnResources; },
+  get TurnStops() { return TurnStops; },
+  get TurnWatchdog() { return TurnWatchdog; },
+  get TypingPrewakeThrottle() { return TypingPrewakeThrottle; },
+  get UNDO_STALE() { return UNDO_STALE; },
+  get USAGE_LIMIT() { return USAGE_LIMIT; },
+  get UnansweredApprovals() { return UnansweredApprovals; },
+  get UsageMeter() { return UsageMeter; },
+  get UserSandboxManager() { return UserSandboxManager; },
+  get VAULT_LOGIN_TARGET() { return VAULT_LOGIN_TARGET; },
+  get VM_WORKSPACE_GUEST() { return VM_WORKSPACE_GUEST; },
+  get VOICE_CALL_WATCHDOG_MS() { return VOICE_CALL_WATCHDOG_MS; },
+  get VOICE_DASHES_PREFERENCE() { return VOICE_DASHES_PREFERENCE; },
+  get VOICE_FIRST_SENTENCE_SYSTEM() { return VOICE_FIRST_SENTENCE_SYSTEM; },
+  get VOICE_KEYTERM_RECENT_MESSAGES() { return VOICE_KEYTERM_RECENT_MESSAGES; },
+  get VOICE_MODE_STORAGE_KEY() { return VOICE_MODE_STORAGE_KEY; },
+  get VOICE_SERVER_ENGINE() { return VOICE_SERVER_ENGINE; },
+  get VideoGenerations() { return VideoGenerations; },
+  get VideoJobError() { return VideoJobError; },
+  get VisibleSet() { return VisibleSet; },
+  get VoiceCallSessions() { return VoiceCallSessions; },
+  get VoiceCallWarmup() { return VoiceCallWarmup; },
+  get VoiceFirstSentenceJobs() { return VoiceFirstSentenceJobs; },
+  get VoiceLatencyLog() { return VoiceLatencyLog; },
+  get VoiceTurnSessions() { return VoiceTurnSessions; },
+  get WEBHOOK_PROMPT() { return WEBHOOK_PROMPT; },
+  get WIDGET_APPROVAL_PROMPT() { return WIDGET_APPROVAL_PROMPT; },
+  get WIDGET_PROMPT() { return WIDGET_PROMPT; },
+  get WITHHELD_HOST_TOOLS_PROMPT() { return WITHHELD_HOST_TOOLS_PROMPT; },
+  get WORKSPACE_OWNER() { return WORKSPACE_OWNER; },
+  get WebBotAuthStore() { return WebBotAuthStore; },
+  get WebhookManager() { return WebhookManager; },
+  get WidgetCheckAttempts() { return WidgetCheckAttempts; },
+  get WidgetRenderer() { return WidgetRenderer; },
+  get WorkflowStore() { return WorkflowStore; },
+  get WorkspaceBackupMaintenance() { return WorkspaceBackupMaintenance; },
+  get WorkspaceTidier() { return WorkspaceTidier; },
+  get XaiMarketplaceSource() { return XaiMarketplaceSource; },
+  get acceptOpenInvitesForEmail() { return acceptOpenInvitesForEmail; },
+  get acceptedSendMatch() { return acceptedSendMatch; },
+  get accessCardAudience() { return accessCardAudience; },
+  get accessCardForViewer() { return accessCardForViewer; },
+  get accessCardVisibleTo() { return accessCardVisibleTo; },
+  get achievementById() { return achievementById; },
+  get acquireDataDirLeaseForProcess() { return acquireDataDirLeaseForProcess; },
+  get actionClassContext() { return actionClassContext; },
+  get activeEngineRefusal() { return activeEngineRefusal; },
+  get activePath() { return activePath; },
+  get addDisabledMcpServer() { return addDisabledMcpServer; },
+  get adminApprovalDecision() { return adminApprovalDecision; },
+  get adminAuditPlan() { return adminAuditPlan; },
+  get adminBotEngine() { return adminBotEngine; },
+  get admit() { return admit; },
+  get agentBrowserFrame() { return agentBrowserFrame; },
+  get agentConversationNotifies() { return agentConversationNotifies; },
+  get agentPromptWithFiles() { return agentPromptWithFiles; },
+  get agentRefuse() { return agentRefuse; },
+  get allowedFallbackSelection() { return allowedFallbackSelection; },
+  get allowedScopes() { return allowedScopes; },
+  get alwaysAllowStepUp() { return alwaysAllowStepUp; },
+  get alwaysDenyOffered() { return alwaysDenyOffered; },
+  get ambientRefusalFor() { return ambientRefusalFor; },
+  get ambiguousPersonalHeaderRefusal() { return ambiguousPersonalHeaderRefusal; },
+  get appRuleOffered() { return appRuleOffered; },
+  get appendAboutMe() { return appendAboutMe; },
+  get appendAdminAction() { return appendAdminAction; },
+  get appendMemoryLog() { return appendMemoryLog; },
+  get appendStep() { return appendStep; },
+  get appendUsage() { return appendUsage; },
+  get applyIdentityMigration() { return applyIdentityMigration; },
+  get applyPendingWorkspaceRestore() { return applyPendingWorkspaceRestore; },
+  get applySignedBrowserHeaders() { return applySignedBrowserHeaders; },
+  get applyViewerModelOverride() { return applyViewerModelOverride; },
+  get approvalGrantsFor() { return approvalGrantsFor; },
+  get approvalLevelPrompt() { return approvalLevelPrompt; },
+  get approvalModeFor() { return approvalModeFor; },
+  get approvalModeForOrigin() { return approvalModeForOrigin; },
+  get approvalModeLoosens() { return approvalModeLoosens; },
+  get approvalTypeOf() { return approvalTypeOf; },
+  get archiveInlineTexts() { return archiveInlineTexts; },
+  get archiveMark() { return archiveMark; },
+  get archiveNote() { return archiveNote; },
+  get archivedAgent() { return archivedAgent; },
+  get askedBotChange() { return askedBotChange; },
+  get askedChange() { return askedChange; },
+  get askedForView() { return askedForView; },
+  get assertModelVariantSupported() { return assertModelVariantSupported; },
+  get assertRequestTarget() { return assertRequestTarget; },
+  get assertWithinBudget() { return assertWithinBudget; },
+  get assignBotHost() { return assignBotHost; },
+  get assistantTranscript() { return assistantTranscript; },
+  get atLeast() { return atLeast; },
+  get atThreadCapacity() { return atThreadCapacity; },
+  get attachCustomMcp() { return attachCustomMcp; },
+  get attachDesktopTerminal() { return attachDesktopTerminal; },
+  get attachDesktopTunnel() { return attachDesktopTunnel; },
+  get attachedFilesInText() { return attachedFilesInText; },
+  get attachmentChunks() { return attachmentChunks; },
+  get attachmentExists() { return attachmentExists; },
+  get attachmentIsTheirs() { return attachmentIsTheirs; },
+  get attachmentsInText() { return attachmentsInText; },
+  get attentionCard() { return attentionCard; },
+  get attributeEntries() { return attributeEntries; },
+  get attributionFragments() { return attributionFragments; },
+  get audienceEquals() { return audienceEquals; },
+  get auditSampleFromEnv() { return auditSampleFromEnv; },
+  get augmentedPath() { return augmentedPath; },
+  get authorizeExternalRuntime() { return authorizeExternalRuntime; },
+  get autoComputerToolRefusal() { return autoComputerToolRefusal; },
+  get autoLocalVmAttachable() { return autoLocalVmAttachable; },
+  get autoModelRecord() { return autoModelRecord; },
+  get autoOnlyDestination() { return autoOnlyDestination; },
+  get autoRecallEnabled() { return autoRecallEnabled; },
+  get autoRecallLogLine() { return autoRecallLogLine; },
+  get autoStartLine() { return autoStartLine; },
+  get autoStartTarget() { return autoStartTarget; },
+  get avatarImageStatus() { return avatarImageStatus; },
+  get awaySkipsDetail() { return awaySkipsDetail; },
+  get backgroundIdleMs() { return backgroundIdleMs; },
+  get basename() { return basename; },
+  get beginMemoryTurn() { return beginMemoryTurn; },
+  get bindConfidentialDecisions() { return bindConfidentialDecisions; },
+  get bindDecisionRetention() { return bindDecisionRetention; },
+  get bindImessageMessage() { return bindImessageMessage; },
+  get bindThreadLogCapProvider() { return bindThreadLogCapProvider; },
+  get blockedAddressReason() { return blockedAddressReason; },
+  get blockedTarget() { return blockedTarget; },
+  get boatCreateRecoverySnapshot() { return boatCreateRecoverySnapshot; },
+  get boatDeletionSnapshot() { return boatDeletionSnapshot; },
+  get botActClasses() { return botActClasses; },
+  get botAuditSnapshot() { return botAuditSnapshot; },
+  get botAvatarUrlFromStoredPath() { return botAvatarUrlFromStoredPath; },
+  get botCreationOffered() { return botCreationOffered; },
+  get botFolderPath() { return botFolderPath; },
+  get botLevel() { return botLevel; },
+  get botLook() { return botLook; },
+  get botMaxParallelPerPerson() { return botMaxParallelPerPerson; },
+  get botParticipant() { return botParticipant; },
+  get botPersona() { return botPersona; },
+  get botPublicProfile() { return botPublicProfile; },
+  get botRecoveryBackups() { return botRecoveryBackups; },
+  get botReplyQuoteId() { return botReplyQuoteId; },
+  get botTailscaleScopeFor() { return botTailscaleScopeFor; },
+  get botTasksFrameAllowed() { return botTasksFrameAllowed; },
+  get botmailEvent() { return botmailEvent; },
+  get botmailTaggedPrompt() { return botmailTaggedPrompt; },
+  get botsRoutes() { return botsRoutes; },
+  get branchRemoteDeps() { return branchRemoteDeps; },
+  get briefCrossingLabel() { return briefCrossingLabel; },
+  get briefMessageText() { return briefMessageText; },
+  get briefNoticeLines() { return briefNoticeLines; },
+  get browserEgress() { return browserEgress; },
+  get browserEngineAttachCdpUrl() { return browserEngineAttachCdpUrl; },
+  get browserEngineEncryptionKey() { return browserEngineEncryptionKey; },
+  get browserEngineStatus() { return browserEngineStatus; },
+  get browserIdleMs() { return browserIdleMs; },
+  get browserIsThePlace() { return browserIsThePlace; },
+  get browserNavigationRefusal() { return browserNavigationRefusal; },
+  get browserOwner() { return browserOwner; },
+  get browserProfileChangeRefusal() { return browserProfileChangeRefusal; },
+  get browserProfileDirectory() { return browserProfileDirectory; },
+  get browserRuntimeEnv() { return browserRuntimeEnv; },
+  get browserSessionId() { return browserSessionId; },
+  get buildBotOverview() { return buildBotOverview; },
+  get buildRecoveryText() { return buildRecoveryText; },
+  get buildSpendNotification() { return buildSpendNotification; },
+  get buildSystemPrompt() { return buildSystemPrompt; },
+  get buildTurnContext() { return buildTurnContext; },
+  get builtInBrowserEnabled() { return builtInBrowserEnabled; },
+  get builtinAgentToolName() { return builtinAgentToolName; },
+  get bundledKnowledgeIndex() { return bundledKnowledgeIndex; },
+  get cacheKeepWarmSettings() { return cacheKeepWarmSettings; },
+  get cacheUntilConfigChanges() { return cacheUntilConfigChanges; },
+  get callHasParkableWork() { return callHasParkableWork; },
+  get callLinesBlock() { return callLinesBlock; },
+  get callTitleExcerpt() { return callTitleExcerpt; },
+  get callTurnEffort() { return callTurnEffort; },
+  get callbackPage() { return callbackPage; },
+  get can() { return can; },
+  get canAccessBot() { return canAccessBot; },
+  get canAccessTeam() { return canAccessTeam; },
+  get canInChannel() { return canInChannel; },
+  get canOnBot() { return canOnBot; },
+  get canOnThread() { return canOnThread; },
+  get canReachPeer() { return canReachPeer; },
+  get canUseMcpServer() { return canUseMcpServer; },
+  get cancelWaitFromCard() { return cancelWaitFromCard; },
+  get cancelledChatFollowup() { return cancelledChatFollowup; },
+  get capInstructions() { return capInstructions; },
+  get capabilityPrompt() { return capabilityPrompt; },
+  get capabilityPromptGroups() { return capabilityPromptGroups; },
+  get captureQuietMs() { return captureQuietMs; },
+  get cardRiskClasses() { return cardRiskClasses; },
+  get cardScanRequester() { return cardScanRequester; },
+  get chainRoleRoutes() { return chainRoleRoutes; },
+  get channelViewerId() { return channelViewerId; },
+  get chartRenderer() { return chartRenderer; },
+  get chatFollowups() { return chatFollowups; },
+  get checkPersonQuote() { return checkPersonQuote; },
+  get checkRoutineReadiness() { return checkRoutineReadiness; },
+  get checkSoulDrift() { return checkSoulDrift; },
+  get checkWidgetForTurn() { return checkWidgetForTurn; },
+  get checkpoints() { return checkpoints; },
+  get chiefOfStaffSystemPrompt() { return chiefOfStaffSystemPrompt; },
+  get citeAppFigures() { return citeAppFigures; },
+  get claimRecallCrossings() { return claimRecallCrossings; },
+  get classifyVoiceIntent() { return classifyVoiceIntent; },
+  get claudeAccountInfo() { return claudeAccountInfo; },
+  get claudeAccountLinked() { return claudeAccountLinked; },
+  get claudeActivityEvents() { return claudeActivityEvents; },
+  get claudeAiConnectorsForTurn() { return claudeAiConnectorsForTurn; },
+  get claudeAiOwnerScopedServer() { return claudeAiOwnerScopedServer; },
+  get claudeArtifactCommentsNote() { return claudeArtifactCommentsNote; },
+  get claudeSignedIn() { return claudeSignedIn; },
+  get claudeSubscriptionHomeKey() { return claudeSubscriptionHomeKey; },
+  get claudeUserMcpEnabled() { return claudeUserMcpEnabled; },
+  get cleanBotGrants() { return cleanBotGrants; },
+  get cleanDisabledModels() { return cleanDisabledModels; },
+  get cleanFavoriteModels() { return cleanFavoriteModels; },
+  get cleanupResumableUploads() { return cleanupResumableUploads; },
+  get cleanupStaleAttachmentPartials() { return cleanupStaleAttachmentPartials; },
+  get clearAmbientRefusal() { return clearAmbientRefusal; },
+  get clearBrowserSessionState() { return clearBrowserSessionState; },
+  get clearEngineRefusal() { return clearEngineRefusal; },
+  get clearHeldSteersForThread() { return clearHeldSteersForThread; },
+  get clearSectionContext() { return clearSectionContext; },
+  get clearSessionCookie() { return clearSessionCookie; },
+  get cliWalletIssuer() { return cliWalletIssuer; },
+  get clientBotPatchViolation() { return clientBotPatchViolation; },
+  get clientInstanceView() { return clientInstanceView; },
+  get closeBrowserSession() { return closeBrowserSession; },
+  get closeInspected() { return closeInspected; },
+  get closeMessageDb() { return closeMessageDb; },
+  get closeMessageSearch() { return closeMessageSearch; },
+  get closeRowsLeftByRestart() { return closeRowsLeftByRestart; },
+  get cloudAgentInternalAction() { return cloudAgentInternalAction; },
+  get cloudAgentWakePrompt() { return cloudAgentWakePrompt; },
+  get cloudAgentWireItem() { return cloudAgentWireItem; },
+  get cloudBackendChangeError() { return cloudBackendChangeError; },
+  get cloudComputerRpc() { return cloudComputerRpc; },
+  get cloudGuestSendRefusal() { return cloudGuestSendRefusal; },
+  get cloudOnlyBot() { return cloudOnlyBot; },
+  get cloudPlaceRefusal() { return cloudPlaceRefusal; },
+  get cloudRefusal() { return cloudRefusal; },
+  get cloudThreadRefusal() { return cloudThreadRefusal; },
+  get coalescedRun() { return coalescedRun; },
+  get commandAllowlistCandidate() { return commandAllowlistCandidate; },
+  get commandReceipt() { return commandReceipt; },
+  get commentsForModel() { return commentsForModel; },
+  get commitLearned() { return commitLearned; },
+  get compactVolatileOrder() { return compactVolatileOrder; },
+  get companionBotFieldViolation() { return companionBotFieldViolation; },
+  get companyTextForBots() { return companyTextForBots; },
+  get compatServerOwner() { return compatServerOwner; },
+  get compatServerVisible() { return compatServerVisible; },
+  get compatServers() { return compatServers; },
+  get compileChart() { return compileChart; },
+  get computerPrompt() { return computerPrompt; },
+  get computerSelectTarget() { return computerSelectTarget; },
+  get computerSkippedNote() { return computerSkippedNote; },
+  get computerToolsRefusal() { return computerToolsRefusal; },
+  get computersRoutes() { return computersRoutes; },
+  get confidentialBrowserSession() { return confidentialBrowserSession; },
+  get configForViewer() { return configForViewer; },
+  get configureContentEncryption() { return configureContentEncryption; },
+  get configuredKeyterms() { return configuredKeyterms; },
+  get connectorNeed() { return connectorNeed; },
+  get connectorPrincipalFor() { return connectorPrincipalFor; },
+  get connectorSwitchText() { return connectorSwitchText; },
+  get containerComputerAction() { return containerComputerAction; },
+  get containerComputerExists() { return containerComputerExists; },
+  get containerComputerFrame() { return containerComputerFrame; },
+  get containerComputerMcp() { return containerComputerMcp; },
+  get containerComputerScreenshot() { return containerComputerScreenshot; },
+  get containerComputerStatus() { return containerComputerStatus; },
+  get containerExec() { return containerExec; },
+  get containerRuntimeStatus() { return containerRuntimeStatus; },
+  get contentEncryptionFromEnv() { return contentEncryptionFromEnv; },
+  get contentOwnerChanged() { return contentOwnerChanged; },
+  get conversationThreadId() { return conversationThreadId; },
+  get cookieMaxAgeSeconds() { return cookieMaxAgeSeconds; },
+  get correctiveRounds() { return correctiveRounds; },
+  get createAcceptDirectSend() { return createAcceptDirectSend; },
+  get createAccessCardFor() { return createAccessCardFor; },
+  get createAccountConnectorInput() { return createAccountConnectorInput; },
+  get createAccountRoutes() { return createAccountRoutes; },
+  get createAchievementRoutes() { return createAchievementRoutes; },
+  get createAchievementStore() { return createAchievementStore; },
+  get createActAnswerer() { return createActAnswerer; },
+  get createActTurnFacts() { return createActTurnFacts; },
+  get createActiveGroupSpeaker() { return createActiveGroupSpeaker; },
+  get createActiveGroupTurnForBot() { return createActiveGroupTurnForBot; },
+  get createActivityChildren() { return createActivityChildren; },
+  get createActorPrincipalId() { return createActorPrincipalId; },
+  get createAddMarketplaceServers() { return createAddMarketplaceServers; },
+  get createAddPersonalMcpServer() { return createAddPersonalMcpServer; },
+  get createAdminActivityRecording() { return createAdminActivityRecording; },
+  get createAdminActivityRoutes() { return createAdminActivityRoutes; },
+  get createAdminAnswersPendingApproval() { return createAdminAnswersPendingApproval; },
+  get createAdminApprovalCheck() { return createAdminApprovalCheck; },
+  get createAdminAuditRows() { return createAdminAuditRows; },
+  get createAdoptReservedWorkThread() { return createAdoptReservedWorkThread; },
+  get createAgentApi() { return createAgentApi; },
+  get createAgentApiAudit() { return createAgentApiAudit; },
+  get createAgentApiBotScopes() { return createAgentApiBotScopes; },
+  get createAgentApiSecret() { return createAgentApiSecret; },
+  get createAgentApiSourceFile() { return createAgentApiSourceFile; },
+  get createAgentApiStageFiles() { return createAgentApiStageFiles; },
+  get createAgentCard() { return createAgentCard; },
+  get createAgentCardGuard() { return createAgentCardGuard; },
+  get createAgentConversationFor() { return createAgentConversationFor; },
+  get createAgentModelSummary() { return createAgentModelSummary; },
+  get createAgentScopesFor() { return createAgentScopesFor; },
+  get createAgentSummary() { return createAgentSummary; },
+  get createAgentTurnState() { return createAgentTurnState; },
+  get createAgentsIntegration() { return createAgentsIntegration; },
+  get createAiClientThreadPerson() { return createAiClientThreadPerson; },
+  get createAllowCwAction() { return createAllowCwAction; },
+  get createAndroidPushDeviceStore() { return createAndroidPushDeviceStore; },
+  get createAnnouncePlanThresholds() { return createAnnouncePlanThresholds; },
+  get createAnnounceProfileChange() { return createAnnounceProfileChange; },
+  get createAnswerCardFromConsole() { return createAnswerCardFromConsole; },
+  get createAnswerInboxCard() { return createAnswerInboxCard; },
+  get createAnswerProactiveProposal() { return createAnswerProactiveProposal; },
+  get createAnswerRequest() { return createAnswerRequest; },
+  get createAnswerRoleTransition() { return createAnswerRoleTransition; },
+  get createAnsweringCardAs() { return createAnsweringCardAs; },
+  get createAntigravityAccountRoutes() { return createAntigravityAccountRoutes; },
+  get createAntigravityLeftoverRoutes() { return createAntigravityLeftoverRoutes; },
+  get createAppendSkillRequestCard() { return createAppendSkillRequestCard; },
+  get createAppliesDirectly() { return createAppliesDirectly; },
+  get createApplyAutoReviewDefault() { return createApplyAutoReviewDefault; },
+  get createApplyConfigHttpPatch() { return createApplyConfigHttpPatch; },
+  get createApplyDesktopMutationTokenMessage() { return createApplyDesktopMutationTokenMessage; },
+  get createApplyModelSwitches() { return createApplyModelSwitches; },
+  get createApplyOrgEngineAllowList() { return createApplyOrgEngineAllowList; },
+  get createApplyStricterApprovalLive() { return createApplyStricterApprovalLive; },
+  get createApprovalAnswerRefusal() { return createApprovalAnswerRefusal; },
+  get createApprovalBot() { return createApprovalBot; },
+  get createApprovalLevelOf() { return createApprovalLevelOf; },
+  get createApprovalModeStepUpGate() { return createApprovalModeStepUpGate; },
+  get createApprovalModeSupport() { return createApprovalModeSupport; },
+  get createApprovalsInboxRoutes() { return createApprovalsInboxRoutes; },
+  get createArtifactInternalRoutes() { return createArtifactInternalRoutes; },
+  get createArtifactRefresher() { return createArtifactRefresher; },
+  get createArtifactRoutes() { return createArtifactRoutes; },
+  get createArtifactSourceRunner() { return createArtifactSourceRunner; },
+  get createArtifactStore() { return createArtifactStore; },
+  get createAsPlaceFailure() { return createAsPlaceFailure; },
+  get createAskBotAndWait() { return createAskBotAndWait; },
+  get createAssertTeamComputerChangeIdle() { return createAssertTeamComputerChangeIdle; },
+  get createAssertTurnAdmission() { return createAssertTurnAdmission; },
+  get createAttachBotBoat() { return createAttachBotBoat; },
+  get createAttachInterimPerson() { return createAttachInterimPerson; },
+  get createAttachTeamBoat() { return createAttachTeamBoat; },
+  get createAttachmentReferences() { return createAttachmentReferences; },
+  get createAttachmentSeenBy() { return createAttachmentSeenBy; },
+  get createAttachmentVmForTurn() { return createAttachmentVmForTurn; },
+  get createAttentionTicketUrl() { return createAttentionTicketUrl; },
+  get createAttributeSandboxEntries() { return createAttributeSandboxEntries; },
+  get createAuditApprovalModeChange() { return createAuditApprovalModeChange; },
+  get createAuditFullAccessTurn() { return createAuditFullAccessTurn; },
+  get createAuditRoutineRunAs() { return createAuditRoutineRunAs; },
+  get createAuthPublicRoutes() { return createAuthPublicRoutes; },
+  get createAuthRefusalLogger() { return createAuthRefusalLogger; },
+  get createAuthSessionRoutes() { return createAuthSessionRoutes; },
+  get createAuthenticate() { return createAuthenticate; },
+  get createAuthorizedInternalCapability() { return createAuthorizedInternalCapability; },
+  get createAuthzViewerFromId() { return createAuthzViewerFromId; },
+  get createAutoAnswerStepUp() { return createAutoAnswerStepUp; },
+  get createAutoApprovalNotes() { return createAutoApprovalNotes; },
+  get createAutoCatalogLookup() { return createAutoCatalogLookup; },
+  get createAutoComputerStateFor() { return createAutoComputerStateFor; },
+  get createAutoEnginesFor() { return createAutoEnginesFor; },
+  get createAutoPickForTurn() { return createAutoPickForTurn; },
+  get createAutoRecallPrompt() { return createAutoRecallPrompt; },
+  get createAutoRefusalsFor() { return createAutoRefusalsFor; },
+  get createAutoReviewRuleRoutes() { return createAutoReviewRuleRoutes; },
+  get createBackgroundBriefReads() { return createBackgroundBriefReads; },
+  get createBackgroundBriefRoutes() { return createBackgroundBriefRoutes; },
+  get createBeginAdminAudit() { return createBeginAdminAudit; },
+  get createBeginGroupTurnOperation() { return createBeginGroupTurnOperation; },
+  get createBindOwnedTrigger() { return createBindOwnedTrigger; },
+  get createBindTurnComputer() { return createBindTurnComputer; },
+  get createBodyForThreadViewer() { return createBodyForThreadViewer; },
+  get createBookTurnUsage() { return createBookTurnUsage; },
+  get createBotActivityRoutes() { return createBotActivityRoutes; },
+  get createBotActs() { return createBotActs; },
+  get createBotAtThreadCapacity() { return createBotAtThreadCapacity; },
+  get createBotAvatarGenerateRoutes() { return createBotAvatarGenerateRoutes; },
+  get createBotCapabilitiesAs() { return createBotCapabilitiesAs; },
+  get createBotCapabilitiesFor() { return createBotCapabilitiesFor; },
+  get createBotCapabilitiesRoutes() { return createBotCapabilitiesRoutes; },
+  get createBotCatalogRoutes() { return createBotCatalogRoutes; },
+  get createBotCodeBranchRoutes() { return createBotCodeBranchRoutes; },
+  get createBotAnalyticsRoutes() { return createBotAnalyticsRoutes; },
+  get createBotComputerShell() { return createBotComputerShell; },
+  get createBotCreationTurnOrigin() { return createBotCreationTurnOrigin; },
+  get createBotForApproval() { return createBotForApproval; },
+  get createBotForViewer() { return createBotForViewer; },
+  get createBotGrantRoutes() { return createBotGrantRoutes; },
+  get createBotHistoryRoutes() { return createBotHistoryRoutes; },
+  get createBotInboundMailReadRoutes() { return createBotInboundMailReadRoutes; },
+  get createBotInboundMailRoute() { return createBotInboundMailRoute; },
+  get createBotInboundTelephonyRoute() { return createBotInboundTelephonyRoute; },
+  get createBotLibraryRoutes() { return createBotLibraryRoutes; },
+  get createBotMailOwner() { return createBotMailOwner; },
+  get createBotMemoryReachable() { return createBotMemoryReachable; },
+  get createBotMemoryRoutes() { return createBotMemoryRoutes; },
+  get createBotObservabilityRoutes() { return createBotObservabilityRoutes; },
+  get createBotOverview() { return createBotOverview; },
+  get createBotPluginRoutes() { return createBotPluginRoutes; },
+  get createBotPresetRoutes() { return createBotPresetRoutes; },
+  get createBotReaction() { return createBotReaction; },
+  get createBotRulesRoutes() { return createBotRulesRoutes; },
+  get createBotRunning() { return createBotRunning; },
+  get createBotRuntimeSettingsRoutes() { return createBotRuntimeSettingsRoutes; },
+  get createBotSecretCardRoutes() { return createBotSecretCardRoutes; },
+  get createBotSendStateRoutes() { return createBotSendStateRoutes; },
+  get createBotSettingsRoutes() { return createBotSettingsRoutes; },
+  get createBotSettingsStore() { return createBotSettingsStore; },
+  get createBotSkillUploadRoutes() { return createBotSkillUploadRoutes; },
+  get createBotSkillsRefusal() { return createBotSkillsRefusal; },
+  get createBotTailscaleRoutes() { return createBotTailscaleRoutes; },
+  get createBotTaskInternalRoutes() { return createBotTaskInternalRoutes; },
+  get createBotTaskRoutes() { return createBotTaskRoutes; },
+  get createBotTaskStore() { return createBotTaskStore; },
+  get createBotVersionRoutes() { return createBotVersionRoutes; },
+  get createBotWizardRoutes() { return createBotWizardRoutes; },
+  get createBotWizardStore() { return createBotWizardStore; },
+  get createBotWorkspaceRoutes() { return createBotWorkspaceRoutes; },
+  get createBotZipRoutes() { return createBotZipRoutes; },
+  get createBotmailConfined() { return createBotmailConfined; },
+  get createBotsContentRoutes() { return createBotsContentRoutes; },
+  get createBotsCoreRoutes() { return createBotsCoreRoutes; },
+  get createBotsMessagesRoutes() { return createBotsMessagesRoutes; },
+  get createBotsMutateRoutes() { return createBotsMutateRoutes; },
+  get createBridgeAudit() { return createBridgeAudit; },
+  get createBridgeTerminal() { return createBridgeTerminal; },
+  get createBroadcastPresence() { return createBroadcastPresence; },
+  get createBrowserEngineRoutes() { return createBrowserEngineRoutes; },
+  get createBrowserIntegration() { return createBrowserIntegration; },
+  get createBrowserNetworkRoutes() { return createBrowserNetworkRoutes; },
+  get createBusyClassifyEngine() { return createBusyClassifyEngine; },
+  get createCacheKeepWarm() { return createCacheKeepWarm; },
+  get createCachedGroupEngineCommandRoute() { return createCachedGroupEngineCommandRoute; },
+  get createCalendarCallsRoutes() { return createCalendarCallsRoutes; },
+  get createCallHandoffHistory() { return createCallHandoffHistory; },
+  get createCanAdmitDirectTurn() { return createCanAdmitDirectTurn; },
+  get createCancelDirectTurnDispatch() { return createCancelDirectTurnDispatch; },
+  get createCancelGroupTurnOperations() { return createCancelGroupTurnOperations; },
+  get createCancelTeamSetupResumesForThread() { return createCancelTeamSetupResumesForThread; },
+  get createCaptureMailer() { return createCaptureMailer; },
+  get createCaptureTurnFor() { return createCaptureTurnFor; },
+  get createCapturedReply() { return createCapturedReply; },
+  get createCardAnswerRefusal() { return createCardAnswerRefusal; },
+  get createCardAnswererFor() { return createCardAnswererFor; },
+  get createCardRequesterKey() { return createCardRequesterKey; },
+  get createCheckedExportSkillNames() { return createCheckedExportSkillNames; },
+  get createCheckedGroupResponder() { return createCheckedGroupResponder; },
+  get createCheckedMemberIds() { return createCheckedMemberIds; },
+  get createCheckedModelSelection() { return createCheckedModelSelection; },
+  get createCheckedTaskModelSwitch() { return createCheckedTaskModelSwitch; },
+  get createClaimBotComputerLifecycle() { return createClaimBotComputerLifecycle; },
+  get createClaimManagedBoatMutation() { return createClaimManagedBoatMutation; },
+  get createClaimManagedVpsMutation() { return createClaimManagedVpsMutation; },
+  get createClaimPhoneSecretBotDeletion() { return createClaimPhoneSecretBotDeletion; },
+  get createClaimTeamComputerLifecycle() { return createClaimTeamComputerLifecycle; },
+  get createClaudeAccountForPrincipal() { return createClaudeAccountForPrincipal; },
+  get createClaudeArtifactCommentsCheck() { return createClaudeArtifactCommentsCheck; },
+  get createClaudeArtifactInternalRoutes() { return createClaudeArtifactInternalRoutes; },
+  get createClaudeArtifactRoutes() { return createClaudeArtifactRoutes; },
+  get createClaudeArtifactWorkspaceFile() { return createClaudeArtifactWorkspaceFile; },
+  get createClearDirectTurnDispatch() { return createClearDirectTurnDispatch; },
+  get createCliTestRoutes() { return createCliTestRoutes; },
+  get createCloseCutToolRows() { return createCloseCutToolRows; },
+  get createCloseOpenApprovals() { return createCloseOpenApprovals; },
+  get createCloseSessionStreams() { return createCloseSessionStreams; },
+  get createCloudAgentRoutes() { return createCloudAgentRoutes; },
+  get createCloudComputerHolders() { return createCloudComputerHolders; },
+  get createCloudComputerTools() { return createCloudComputerTools; },
+  get createCloudGuestDrivenHandoff() { return createCloudGuestDrivenHandoff; },
+  get createCloudRoutineReadiness() { return createCloudRoutineReadiness; },
+  get createCodeBranchCredentials() { return createCodeBranchCredentials; },
+  get createCodeRoutes() { return createCodeRoutes; },
+  get createCollectExportSkills() { return createCollectExportSkills; },
+  get createCollectTeamSkills() { return createCollectTeamSkills; },
+  get createCommandAllowlistResponse() { return createCommandAllowlistResponse; },
+  get createCommandRememberRefusal() { return createCommandRememberRefusal; },
+  get createCommitFailedTurn() { return createCommitFailedTurn; },
+  get createCompactConversation() { return createCompactConversation; },
+  get createCompactPromptFor() { return createCompactPromptFor; },
+  get createCompanionPairRoutes() { return createCompanionPairRoutes; },
+  get createComputerCallGate() { return createComputerCallGate; },
+  get createComputerCareRoutes() { return createComputerCareRoutes; },
+  get createComputerInputRoutes() { return createComputerInputRoutes; },
+  get createComputerOwner() { return createComputerOwner; },
+  get createComputerPreviewSurface() { return createComputerPreviewSurface; },
+  get createComputerStatusRoutes() { return createComputerStatusRoutes; },
+  get createComputerTeachRoutes() { return createComputerTeachRoutes; },
+  get createComputerWorkingBotsRoutes() { return createComputerWorkingBotsRoutes; },
+  get createComputersRoutes() { return createComputersRoutes; },
+  get createConfidentialPerspicaxRefusal() { return createConfidentialPerspicaxRefusal; },
+  get createConfidentialThreadAttachments() { return createConfidentialThreadAttachments; },
+  get createConfigAddressField() { return createConfigAddressField; },
+  get createConfigForAccess() { return createConfigForAccess; },
+  get createConfigForPerson() { return createConfigForPerson; },
+  get createConfigHttpRoutes() { return createConfigHttpRoutes; },
+  get createConfigProviderKeyField() { return createConfigProviderKeyField; },
+  get createConfigStatus() { return createConfigStatus; },
+  get createConfirmHeldCard() { return createConfirmHeldCard; },
+  get createConnectorSetupContext() { return createConnectorSetupContext; },
+  get createConnectorSetupInternalRoutes() { return createConnectorSetupInternalRoutes; },
+  get createConnectorSetupProofs() { return createConnectorSetupProofs; },
+  get createConnectorSetupRoutes() { return createConnectorSetupRoutes; },
+  get createConnectorSetupStore() { return createConnectorSetupStore; },
+  get createConnectorStatusRoutes() { return createConnectorStatusRoutes; },
+  get createConnectorSwitchForTurn() { return createConnectorSwitchForTurn; },
+  get createConnectorThread() { return createConnectorThread; },
+  get createConnectorsElsewhereFor() { return createConnectorsElsewhereFor; },
+  get createConsoleBotCapabilities() { return createConsoleBotCapabilities; },
+  get createContinueComputerSelection() { return createContinueComputerSelection; },
+  get createControlIntegration() { return createControlIntegration; },
+  get createCoordinationLiveRosterBlock() { return createCoordinationLiveRosterBlock; },
+  get createCoordinator() { return createCoordinator; },
+  get createCoordinatorSlotUse() { return createCoordinatorSlotUse; },
+  get createCoordinatorValidate() { return createCoordinatorValidate; },
+  get createCreateChannel() { return createCreateChannel; },
+  get createCredentialVaultInternalRoutes() { return createCredentialVaultInternalRoutes; },
+  get createCredentialVaultPersonRefusal() { return createCredentialVaultPersonRefusal; },
+  get createCredentialVaultRoutes() { return createCredentialVaultRoutes; },
+  get createCurrentBrowserSession() { return createCurrentBrowserSession; },
+  get createCurrentSecretState() { return createCurrentSecretState; },
+  get createCursorSeq() { return createCursorSeq; },
+  get createCustomDomainPublicRoutes() { return createCustomDomainPublicRoutes; },
+  get createCustomDomainSettingsRoutes() { return createCustomDomainSettingsRoutes; },
+  get createCustomDomainVerifier() { return createCustomDomainVerifier; },
+  get createCustomRuleRoutes() { return createCustomRuleRoutes; },
+  get createCustomRulesModelReviewer() { return createCustomRulesModelReviewer; },
+  get createCwActionPasses() { return createCwActionPasses; },
+  get createDashFreeReply() { return createDashFreeReply; },
+  get createDataConfinedRoots() { return createDataConfinedRoots; },
+  get createDataExportRoots() { return createDataExportRoots; },
+  get createDataFrameAudience() { return createDataFrameAudience; },
+  get createDataIntegration() { return createDataIntegration; },
+  get createDataRoutes() { return createDataRoutes; },
+  get createDataScopeForViewer() { return createDataScopeForViewer; },
+  get createDataSelfAnswerRoots() { return createDataSelfAnswerRoots; },
+  get createDataThreadFolders() { return createDataThreadFolders; },
+  get createDecideWorkplace() { return createDecideWorkplace; },
+  get createDecider() { return createDecider; },
+  get createDeciderRoutes() { return createDeciderRoutes; },
+  get createDecisionActorFor() { return createDecisionActorFor; },
+  get createDecisionsRoutes() { return createDecisionsRoutes; },
+  get createDeclaredToolProduct() { return createDeclaredToolProduct; },
+  get createDefaultSelection() { return createDefaultSelection; },
+  get createDefaultTurnPayerFor() { return createDefaultTurnPayerFor; },
+  get createDefaultsPresetFor() { return createDefaultsPresetFor; },
+  get createDelegateOnRuntime() { return createDelegateOnRuntime; },
+  get createDelegatedLevel() { return createDelegatedLevel; },
+  get createDelegatorOf() { return createDelegatorOf; },
+  get createDeleteBotWithLifecycle() { return createDeleteBotWithLifecycle; },
+  get createDeletePersonData() { return createDeletePersonData; },
+  get createDeliverCalendarCall() { return createDeliverCalendarCall; },
+  get createDeliverLateQuestionAnswer() { return createDeliverLateQuestionAnswer; },
+  get createDescribeActForRule() { return createDescribeActForRule; },
+  get createDescribeGrantTarget() { return createDescribeGrantTarget; },
+  get createDescribeInstances() { return createDescribeInstances; },
+  get createDesktopAppearanceRoutes() { return createDesktopAppearanceRoutes; },
+  get createDesktopAppearanceStore() { return createDesktopAppearanceStore; },
+  get createDesktopBridgeRoutes() { return createDesktopBridgeRoutes; },
+  get createDesktopViewer() { return createDesktopViewer; },
+  get createDestinationOfCall() { return createDestinationOfCall; },
+  get createDestinationTurnOrigin() { return createDestinationTurnOrigin; },
+  get createDevPullRoutes() { return createDevPullRoutes; },
+  get createDeviceSettingRoutes() { return createDeviceSettingRoutes; },
+  get createDeviceSettingsBroker() { return createDeviceSettingsBroker; },
+  get createDirectContext() { return createDirectContext; },
+  get createDirectGrantRoutes() { return createDirectGrantRoutes; },
+  get createDirectSendRefusal() { return createDirectSendRefusal; },
+  get createDiskSaverTarget() { return createDiskSaverTarget; },
+  get createDispatchComputerResume() { return createDispatchComputerResume; },
+  get createDispatchDelegationWake() { return createDispatchDelegationWake; },
+  get createDispatchKpiService() { return createDispatchKpiService; },
+  get createDispatchSecretResume() { return createDispatchSecretResume; },
+  get createDispatchTeamSetupResume() { return createDispatchTeamSetupResume; },
+  get createDrainComputerResumes() { return createDrainComputerResumes; },
+  get createDrainDelegationWakes() { return createDrainDelegationWakes; },
+  get createDrainQueuedChannelSends() { return createDrainQueuedChannelSends; },
+  get createDrainQueuedSends() { return createDrainQueuedSends; },
+  get createDrainTurnsBeforeShutdown() { return createDrainTurnsBeforeShutdown; },
+  get createDuplexEpochFor() { return createDuplexEpochFor; },
+  get createEchoesOwnReaction() { return createEchoesOwnReaction; },
+  get createElevenLabsVoice() { return createElevenLabsVoice; },
+  get createEmailDraftBot() { return createEmailDraftBot; },
+  get createEmailDraftRoutes() { return createEmailDraftRoutes; },
+  get createEmailDraftStatus() { return createEmailDraftStatus; },
+  get createEmailSendPasses() { return createEmailSendPasses; },
+  get createEmailSignInAllowList() { return createEmailSignInAllowList; },
+  get createEmptyResponseRetry() { return createEmptyResponseRetry; },
+  get createEngineConnectorsPromptFor() { return createEngineConnectorsPromptFor; },
+  get createEngineHomes() { return createEngineHomes; },
+  get createEngineInstalled() { return createEngineInstalled; },
+  get createEngineMcpServers() { return createEngineMcpServers; },
+  get createEngineReachFor() { return createEngineReachFor; },
+  get createEnsureCalendarCallRoom() { return createEnsureCalendarCallRoom; },
+  get createEnsureClaudeArtifactCommentsRoutine() { return createEnsureClaudeArtifactCommentsRoutine; },
+  get createEnsureViewerThread() { return createEnsureViewerThread; },
+  get createEnterRequestScopes() { return createEnterRequestScopes; },
+  get createErasePersonDataNow() { return createErasePersonDataNow; },
+  get createExecLifecycleHook() { return createExecLifecycleHook; },
+  get createExpireDueApprovalsInThread() { return createExpireDueApprovalsInThread; },
+  get createExternalRuntimeCapability() { return createExternalRuntimeCapability; },
+  get createFailQueuedMessage() { return createFailQueuedMessage; },
+  get createFailTurnIfMemberLeft() { return createFailTurnIfMemberLeft; },
+  get createFailWorkerTurns() { return createFailWorkerTurns; },
+  get createFanoutSsePayload() { return createFanoutSsePayload; },
+  get createFinalScreenFrame() { return createFinalScreenFrame; },
+  get createFinalizeDelegationWatch() { return createFinalizeDelegationWatch; },
+  get createFinishGroupGoalRun() { return createFinishGroupGoalRun; },
+  get createFinishGroupTurnOperation() { return createFinishGroupTurnOperation; },
+  get createFinishMachineTurn() { return createFinishMachineTurn; },
+  get createFinishVoiceCallRequestedByBot() { return createFinishVoiceCallRequestedByBot; },
+  get createFishVoice() { return createFishVoice; },
+  get createFleetRoutes() { return createFleetRoutes; },
+  get createForceStopBot() { return createForceStopBot; },
+  get createForeignMcpServerNames() { return createForeignMcpServerNames; },
+  get createForgetConfidentialBrowser() { return createForgetConfidentialBrowser; },
+  get createForgetInflight() { return createForgetInflight; },
+  get createForgetTemporaryBrowser() { return createForgetTemporaryBrowser; },
+  get createForgetThreadEngineSessions() { return createForgetThreadEngineSessions; },
+  get createGenerateThreadTitle() { return createGenerateThreadTitle; },
+  get createGithubCredentialRoutes() { return createGithubCredentialRoutes; },
+  get createGithubCredentialsFor() { return createGithubCredentialsFor; },
+  get createGracefulShutdown() { return createGracefulShutdown; },
+  get createGroupBotPayerRoutes() { return createGroupBotPayerRoutes; },
+  get createGroupEngineCommandRoute() { return createGroupEngineCommandRoute; },
+  get createGroupFolderRoutes() { return createGroupFolderRoutes; },
+  get createGroupGoalCoordinatorTurnForEvent() { return createGroupGoalCoordinatorTurnForEvent; },
+  get createGroupIsWorking() { return createGroupIsWorking; },
+  get createGroupMemoryRoutes() { return createGroupMemoryRoutes; },
+  get createGroupThreadIsWorking() { return createGroupThreadIsWorking; },
+  get createGroupVisible() { return createGroupVisible; },
+  get createGroupsHttpRoutes() { return createGroupsHttpRoutes; },
+  get createGuardedRequestSnapshot() { return createGuardedRequestSnapshot; },
+  get createHandleDesktopTrustedApprovalMessage() { return createHandleDesktopTrustedApprovalMessage; },
+  get createHarnessCommandAccount() { return createHarnessCommandAccount; },
+  get createHarnessCommandRoutes() { return createHarnessCommandRoutes; },
+  get createHarnessCommandSource() { return createHarnessCommandSource; },
+  get createHarnessConnectorRoutes() { return createHarnessConnectorRoutes; },
+  get createHash() { return createHash; },
+  get createHeadlessTaskRunner() { return createHeadlessTaskRunner; },
+  get createHealBotEngine() { return createHealBotEngine; },
+  get createHealOrgRefusedThreadModel() { return createHealOrgRefusedThreadModel; },
+  get createHealThreadModel() { return createHealThreadModel; },
+  get createHealthPublicRoutes() { return createHealthPublicRoutes; },
+  get createHealthReportRoutes() { return createHealthReportRoutes; },
+  get createHeldRolesRoute() { return createHeldRolesRoute; },
+  get createHideBotThreadsOnce() { return createHideBotThreadsOnce; },
+  get createHideEarlierAgentThreads() { return createHideEarlierAgentThreads; },
+  get createHoldBootEngineSlot() { return createHoldBootEngineSlot; },
+  get createHoldDirectMachineTurn() { return createHoldDirectMachineTurn; },
+  get createHoldSignInRefusal() { return createHoldSignInRefusal; },
+  get createHoldTurnAttachments() { return createHoldTurnAttachments; },
+  get createHooksIntegration() { return createHooksIntegration; },
+  get createHostedSlackRoutes() { return createHostedSlackRoutes; },
+  get createImportLegacyDelegations() { return createImportLegacyDelegations; },
+  get createImportPackageFor() { return createImportPackageFor; },
+  get createInboxDestination() { return createInboxDestination; },
+  get createInboxHistory() { return createInboxHistory; },
+  get createInboxPending() { return createInboxPending; },
+  get createInboxTestRule() { return createInboxTestRule; },
+  get createIncidentRefused() { return createIncidentRefused; },
+  get createIndexPrimaryApprovals() { return createIndexPrimaryApprovals; },
+  get createIndexSettingsActions() { return createIndexSettingsActions; },
+  get createIngestEngineHook() { return createIngestEngineHook; },
+  get createInsideDataDir() { return createInsideDataDir; },
+  get createInstallationCapabilityRoutes() { return createInstallationCapabilityRoutes; },
+  get createInstalledVoices() { return createInstalledVoices; },
+  get createInstancesForViewer() { return createInstancesForViewer; },
+  get createInstancesRoutes() { return createInstancesRoutes; },
+  get createInterimAttachRoutes() { return createInterimAttachRoutes; },
+  get createInternalBotChatRoutes() { return createInternalBotChatRoutes; },
+  get createInternalCapabilityIsActive() { return createInternalCapabilityIsActive; },
+  get createInternalEnvironmentsRoutes() { return createInternalEnvironmentsRoutes; },
+  get createInternalIntegrationsRoutes() { return createInternalIntegrationsRoutes; },
+  get createInternalMemoryRoutes() { return createInternalMemoryRoutes; },
+  get createInternalRequestsRoutes() { return createInternalRequestsRoutes; },
+  get createInternalRoomsRoutes() { return createInternalRoomsRoutes; },
+  get createInternalSessionsRoutes() { return createInternalSessionsRoutes; },
+  get createInterruptAllDirectThreads() { return createInterruptAllDirectThreads; },
+  get createInterruptDirectThread() { return createInterruptDirectThread; },
+  get createInterruptRoutineGroupGoal() { return createInterruptRoutineGroupGoal; },
+  get createIsApprovalCardMessage() { return createIsApprovalCardMessage; },
+  get createIsUnattended() { return createIsUnattended; },
+  get createJoinPrewarm() { return createJoinPrewarm; },
+  get createJournalRowsFor() { return createJournalRowsFor; },
+  get createKeysTestRoutes() { return createKeysTestRoutes; },
+  get createLastAutoPlace() { return createLastAutoPlace; },
+  get createLastHumanRoomMessageAt() { return createLastHumanRoomMessageAt; },
+  get createLatestCompaction() { return createLatestCompaction; },
+  get createLatestFailedTurnCause() { return createLatestFailedTurnCause; },
+  get createLatestPersonText() { return createLatestPersonText; },
+  get createLibraryPackageExport() { return createLibraryPackageExport; },
+  get createLifecycleHookRoutes() { return createLifecycleHookRoutes; },
+  get createLimitBackupRefusedInThread() { return createLimitBackupRefusedInThread; },
+  get createLimitCandidatesNow() { return createLimitCandidatesNow; },
+  get createLimitFailoverHost() { return createLimitFailoverHost; },
+  get createLimitFailoverRow() { return createLimitFailoverRow; },
+  get createLimitResetHost() { return createLimitResetHost; },
+  get createLimitResetRoutes() { return createLimitResetRoutes; },
+  get createLimitResumeText() { return createLimitResumeText; },
+  get createLinkedSubjectsRoute() { return createLinkedSubjectsRoute; },
+  get createListedBotVisible() { return createListedBotVisible; },
+  get createLiveActivityTokenStore() { return createLiveActivityTokenStore; },
+  get createLiveRoutes() { return createLiveRoutes; },
+  get createLiveSession() { return createLiveSession; },
+  get createLocalComputerAutoRoutes() { return createLocalComputerAutoRoutes; },
+  get createLocalComputerLifecycle() { return createLocalComputerLifecycle; },
+  get createLocalComputerRoutes() { return createLocalComputerRoutes; },
+  get createLocalComputerSummary() { return createLocalComputerSummary; },
+  get createLocalVmAutoLifecycle() { return createLocalVmAutoLifecycle; },
+  get createLocalVmIdleFor() { return createLocalVmIdleFor; },
+  get createLocalVmInventoryPayload() { return createLocalVmInventoryPayload; },
+  get createLocalVmPayload() { return createLocalVmPayload; },
+  get createLocalVmTargetForStatus() { return createLocalVmTargetForStatus; },
+  get createLocateChannelMessage() { return createLocateChannelMessage; },
+  get createLockedLookRefusal() { return createLockedLookRefusal; },
+  get createMachineRunRoutes() { return createMachineRunRoutes; },
+  get createMachineRuns() { return createMachineRuns; },
+  get createMailSettingsRoutes() { return createMailSettingsRoutes; },
+  get createMailer() { return createMailer; },
+  get createMaintainedComputer() { return createMaintainedComputer; },
+  get createMakeThreadConfidential() { return createMakeThreadConfidential; },
+  get createManagedBoatOwners() { return createManagedBoatOwners; },
+  get createMarkComputerResumeFailed() { return createMarkComputerResumeFailed; },
+  get createMarkRoutineResultsThreads() { return createMarkRoutineResultsThreads; },
+  get createMarkTaskContextExternallyUpdated() { return createMarkTaskContextExternallyUpdated; },
+  get createMarkThreadStopping() { return createMarkThreadStopping; },
+  get createMarketplaceRoutes() { return createMarketplaceRoutes; },
+  get createMasteryNightly() { return createMasteryNightly; },
+  get createMayCancelRoutineRun() { return createMayCancelRoutineRun; },
+  get createMayPlaceRoomIn() { return createMayPlaceRoomIn; },
+  get createMayRunRoutineNow() { return createMayRunRoutineNow; },
+  get createMaySetBotHost() { return createMaySetBotHost; },
+  get createMcpAuditInternalRoutes() { return createMcpAuditInternalRoutes; },
+  get createMcpIdentityOf() { return createMcpIdentityOf; },
+  get createMcpOAuthCallbackRoutes() { return createMcpOAuthCallbackRoutes; },
+  get createMcpServerBody() { return createMcpServerBody; },
+  get createMcpServerNamesResponse() { return createMcpServerNamesResponse; },
+  get createMcpServerRenameRoutes() { return createMcpServerRenameRoutes; },
+  get createMcpServerResponse() { return createMcpServerResponse; },
+  get createMcpServerSummary() { return createMcpServerSummary; },
+  get createMcpServersHttpRoutes() { return createMcpServersHttpRoutes; },
+  get createMcpToolNameRoutes() { return createMcpToolNameRoutes; },
+  get createMeAvatarRoutes() { return createMeAvatarRoutes; },
+  get createMeEngineModelsRoutes() { return createMeEngineModelsRoutes; },
+  get createMeEnginesRoutes() { return createMeEnginesRoutes; },
+  get createMeMemoryNotesRoutes() { return createMeMemoryNotesRoutes; },
+  get createMediaWidgetRoutes() { return createMediaWidgetRoutes; },
+  get createMeetingBrowserRefusal() { return createMeetingBrowserRefusal; },
+  get createMeetingInternalRoutes() { return createMeetingInternalRoutes; },
+  get createMeetingRoutes() { return createMeetingRoutes; },
+  get createMeetingService() { return createMeetingService; },
+  get createMemberBotFieldRefusal() { return createMemberBotFieldRefusal; },
+  get createMemberDefaultSelection() { return createMemberDefaultSelection; },
+  get createMemberFolderRoots() { return createMemberFolderRoots; },
+  get createMemberForAgentCaller() { return createMemberForAgentCaller; },
+  get createMemberFrame() { return createMemberFrame; },
+  get createMemberFrameContext() { return createMemberFrameContext; },
+  get createMemberHostToolPlace() { return createMemberHostToolPlace; },
+  get createMemberInstanceView() { return createMemberInstanceView; },
+  get createMemberSeesFrame() { return createMemberSeesFrame; },
+  get createMemoryManagerRoutes() { return createMemoryManagerRoutes; },
+  get createMemoryPromptFor() { return createMemoryPromptFor; },
+  get createMemorySyncTokenRoute() { return createMemorySyncTokenRoute; },
+  get createMemoryUpkeep() { return createMemoryUpkeep; },
+  get createMessageFileRootsForThread() { return createMessageFileRootsForThread; },
+  get createMessageSender() { return createMessageSender; },
+  get createMessageWindow() { return createMessageWindow; },
+  get createMessagesIntegration() { return createMessagesIntegration; },
+  get createMessagesRoutes() { return createMessagesRoutes; },
+  get createMigrateBotRuntimeSettings() { return createMigrateBotRuntimeSettings; },
+  get createMigrateCapabilitiesConfigStores() { return createMigrateCapabilitiesConfigStores; },
+  get createMigrateGithubCredentials() { return createMigrateGithubCredentials; },
+  get createMigrateSectionSharesToBotGrants() { return createMigrateSectionSharesToBotGrants; },
+  get createMigrateThreadOwners() { return createMigrateThreadOwners; },
+  get createMintInternalCapability() { return createMintInternalCapability; },
+  get createMisuseTextRefusal() { return createMisuseTextRefusal; },
+  get createModelAccessRefusals() { return createModelAccessRefusals; },
+  get createModelSwitchRoutes() { return createModelSwitchRoutes; },
+  get createModerationRoutes() { return createModerationRoutes; },
+  get createModerationStore() { return createModerationStore; },
+  get createMountBotBoat() { return createMountBotBoat; },
+  get createMountBotVps() { return createMountBotVps; },
+  get createMountHostComputer() { return createMountHostComputer; },
+  get createMountPersonalMcp() { return createMountPersonalMcp; },
+  get createMountPluginMcp() { return createMountPluginMcp; },
+  get createMountUserSandbox() { return createMountUserSandbox; },
+  get createMoveOffComputerEngine() { return createMoveOffComputerEngine; },
+  get createMyChromeNavigationRefusal() { return createMyChromeNavigationRefusal; },
+  get createMyChromeRoutes() { return createMyChromeRoutes; },
+  get createMyToolGrantRoutes() { return createMyToolGrantRoutes; },
+  get createNewestPeerActivityAt() { return createNewestPeerActivityAt; },
+  get createNonPrimaryCreationRefusal() { return createNonPrimaryCreationRefusal; },
+  get createNoteAutoApproval() { return createNoteAutoApproval; },
+  get createNoteCallBesideConversation() { return createNoteCallBesideConversation; },
+  get createNotePlanLimits() { return createNotePlanLimits; },
+  get createNoteQueuedBehindPerson() { return createNoteQueuedBehindPerson; },
+  get createNoteSandboxClusterWait() { return createNoteSandboxClusterWait; },
+  get createNoteTeammatesLeftRunning() { return createNoteTeammatesLeftRunning; },
+  get createNoteTurnsCutByShutdown() { return createNoteTurnsCutByShutdown; },
+  get createNoteWakeDryRun() { return createNoteWakeDryRun; },
+  get createNotificationQuietOnPhones() { return createNotificationQuietOnPhones; },
+  get createNotify() { return createNotify; },
+  get createNotifyAccess() { return createNotifyAccess; },
+  get createNotifyRoomMentions() { return createNotifyRoomMentions; },
+  get createNudgeRoutes() { return createNudgeRoutes; },
+  get createObserveAchievementFrame() { return createObserveAchievementFrame; },
+  get createObserveLiveActivityFrame() { return createObserveLiveActivityFrame; },
+  get createObservePushFrame() { return createObservePushFrame; },
+  get createOfferPeerNotice() { return createOfferPeerNotice; },
+  get createOfferProactive() { return createOfferProactive; },
+  get createOfferRoomPostToBots() { return createOfferRoomPostToBots; },
+  get createOfficeTurnText() { return createOfficeTurnText; },
+  get createOidcLoginRoutes() { return createOidcLoginRoutes; },
+  get createOnePasswordReaderFor() { return createOnePasswordReaderFor; },
+  get createOpenAiCompatServerRoutes() { return createOpenAiCompatServerRoutes; },
+  get createOpenAiStt() { return createOpenAiStt; },
+  get createOpenAiVoice() { return createOpenAiVoice; },
+  get createOpenApiInternalRoutes() { return createOpenApiInternalRoutes; },
+  get createOpenApiRoutes() { return createOpenApiRoutes; },
+  get createOpenApiToolsEnv() { return createOpenApiToolsEnv; },
+  get createOpenMeetingBrowser() { return createOpenMeetingBrowser; },
+  get createOpenPersonCard() { return createOpenPersonCard; },
+  get createOpenQuestionCard() { return createOpenQuestionCard; },
+  get createOpenTurnMessage() { return createOpenTurnMessage; },
+  get createOpenedThreadOwner() { return createOpenedThreadOwner; },
+  get createOrgAdminBots() { return createOrgAdminBots; },
+  get createOrgAdminEngines() { return createOrgAdminEngines; },
+  get createOrgAdminNames() { return createOrgAdminNames; },
+  get createOrgAdminRoutes() { return createOrgAdminRoutes; },
+  get createOrgBotAttachments() { return createOrgBotAttachments; },
+  get createOrgBotFileRoots() { return createOrgBotFileRoots; },
+  get createOrgBotForceRoutes() { return createOrgBotForceRoutes; },
+  get createOrgBotReach() { return createOrgBotReach; },
+  get createOrgBotsRoutes() { return createOrgBotsRoutes; },
+  get createOrgCapabilityRoutes() { return createOrgCapabilityRoutes; },
+  get createOrgDeclarationInputs() { return createOrgDeclarationInputs; },
+  get createOrgDirectoryTeams() { return createOrgDirectoryTeams; },
+  get createOrgEngineInput() { return createOrgEngineInput; },
+  get createOrgEngineRefusal() { return createOrgEngineRefusal; },
+  get createOrgEngineTurnRefusal() { return createOrgEngineTurnRefusal; },
+  get createOrgExportRoute() { return createOrgExportRoute; },
+  get createOrgFullAccessRefusalFor() { return createOrgFullAccessRefusalFor; },
+  get createOrgImportRoute() { return createOrgImportRoute; },
+  get createOrgJoinsRunningTurn() { return createOrgJoinsRunningTurn; },
+  get createOrgLibraryRoutes() { return createOrgLibraryRoutes; },
+  get createOrgLinkRoutes() { return createOrgLinkRoutes; },
+  get createOrgMemberRoutes() { return createOrgMemberRoutes; },
+  get createOrgPersonConnectionRoutes() { return createOrgPersonConnectionRoutes; },
+  get createOrgRefusalOf() { return createOrgRefusalOf; },
+  get createOrgSettings() { return createOrgSettings; },
+  get createOrgTurnAccess() { return createOrgTurnAccess; },
+  get createOrgUsageFacts() { return createOrgUsageFacts; },
+  get createOrgVisibleSections() { return createOrgVisibleSections; },
+  get createOriginApprovals() { return createOriginApprovals; },
+  get createOriginGates() { return createOriginGates; },
+  get createOsascriptSender() { return createOsascriptSender; },
+  get createOutstandingAssignmentsPrompt() { return createOutstandingAssignmentsPrompt; },
+  get createOwnAttachmentRoots() { return createOwnAttachmentRoots; },
+  get createOwnComputerChoiceRequest() { return createOwnComputerChoiceRequest; },
+  get createOwnDestinationRequest() { return createOwnDestinationRequest; },
+  get createOwnEnvironmentOrigin() { return createOwnEnvironmentOrigin; },
+  get createOwnEnvironmentRequest() { return createOwnEnvironmentRequest; },
+  get createOwnLineageFields() { return createOwnLineageFields; },
+  get createOwnPageContext() { return createOwnPageContext; },
+  get createOwnerApprovalRoutes() { return createOwnerApprovalRoutes; },
+  get createOwnerAvatarRoute() { return createOwnerAvatarRoute; },
+  get createOwnerLineageFor() { return createOwnerLineageFor; },
+  get createOwnerModelOfflineRefusal() { return createOwnerModelOfflineRefusal; },
+  get createOwnerScopedMcpServerFor() { return createOwnerScopedMcpServerFor; },
+  get createOwnerSettingsForbidden() { return createOwnerSettingsForbidden; },
+  get createPackageImportDeps() { return createPackageImportDeps; },
+  get createPagesSeparation() { return createPagesSeparation; },
+  get createPairingAdminRoutes() { return createPairingAdminRoutes; },
+  get createParentThreadModel() { return createParentThreadModel; },
+  get createParseArchiveOutcome() { return createParseArchiveOutcome; },
+  get createPartialAlreadyWritten() { return createPartialAlreadyWritten; },
+  get createPatchRoutineAs() { return createPatchRoutineAs; },
+  get createPeerSpeaker() { return createPeerSpeaker; },
+  get createPeerThreadFor() { return createPeerThreadFor; },
+  get createPendingAdminApprovals() { return createPendingAdminApprovals; },
+  get createPendingApprovalCards() { return createPendingApprovalCards; },
+  get createPendingApprovalsFor() { return createPendingApprovalsFor; },
+  get createPendingExpireDaysForPerson() { return createPendingExpireDaysForPerson; },
+  get createPendingExpiryDeps() { return createPendingExpiryDeps; },
+  get createPendingInboxCards() { return createPendingInboxCards; },
+  get createPeopleAvatarRoutes() { return createPeopleAvatarRoutes; },
+  get createPeopleDmFrameAllowed() { return createPeopleDmFrameAllowed; },
+  get createPeopleDmProjection() { return createPeopleDmProjection; },
+  get createPeopleDmRoutes() { return createPeopleDmRoutes; },
+  get createPerBotLocalVmCountForModeChange() { return createPerBotLocalVmCountForModeChange; },
+  get createPerformAsMember() { return createPerformAsMember; },
+  get createPerformBotActRoute() { return createPerformBotActRoute; },
+  get createPerformBotActRouteOutsideConfidential() { return createPerformBotActRouteOutsideConfidential; },
+  get createPersistMcpServers() { return createPersistMcpServers; },
+  get createPersistProviderInstance() { return createPersistProviderInstance; },
+  get createPersonClaudeArtifactCall() { return createPersonClaudeArtifactCall; },
+  get createPersonConnectionRoutes() { return createPersonConnectionRoutes; },
+  get createPersonDirectTurn() { return createPersonDirectTurn; },
+  get createPersonEngineAccess() { return createPersonEngineAccess; },
+  get createPersonLabelRoutes() { return createPersonLabelRoutes; },
+  get createPersonOAuth() { return createPersonOAuth; },
+  get createPersonPaysEngine() { return createPersonPaysEngine; },
+  get createPersonRunsEngine() { return createPersonRunsEngine; },
+  get createPersonSendsReadReceipts() { return createPersonSendsReadReceipts; },
+  get createPersonSettingsRoutes() { return createPersonSettingsRoutes; },
+  get createPersonalHostRefusalCached() { return createPersonalHostRefusalCached; },
+  get createPersonalMcpNamesForGuard() { return createPersonalMcpNamesForGuard; },
+  get createPersonalPluginRoutes() { return createPersonalPluginRoutes; },
+  get createPersonalServerListing() { return createPersonalServerListing; },
+  get createPersonalSkillRoutes() { return createPersonalSkillRoutes; },
+  get createPersonalStdioIntegration() { return createPersonalStdioIntegration; },
+  get createPerspicaxAccessToken() { return createPerspicaxAccessToken; },
+  get createPerspicaxClaimsInternalRoutes() { return createPerspicaxClaimsInternalRoutes; },
+  get createPerspicaxLinkSubjectToken() { return createPerspicaxLinkSubjectToken; },
+  get createPerspicaxOrgRoutes() { return createPerspicaxOrgRoutes; },
+  get createPerspicaxReadAlone() { return createPerspicaxReadAlone; },
+  get createPerspicaxRoleRoutes() { return createPerspicaxRoleRoutes; },
+  get createPerspicaxSessionAlone() { return createPerspicaxSessionAlone; },
+  get createPerspicaxToolInternalRoutes() { return createPerspicaxToolInternalRoutes; },
+  get createPerspicaxTurnIntegration() { return createPerspicaxTurnIntegration; },
+  get createPerspicaxTurnPrepare() { return createPerspicaxTurnPrepare; },
+  get createPhoneCallbackOrigin() { return createPhoneCallbackOrigin; },
+  get createPhoneCardScanRoutes() { return createPhoneCardScanRoutes; },
+  get createPhoneIntegration() { return createPhoneIntegration; },
+  get createPhoneToolBroker() { return createPhoneToolBroker; },
+  get createPhoneToolInternalRoutes() { return createPhoneToolInternalRoutes; },
+  get createPhoneToolRoutes() { return createPhoneToolRoutes; },
+  get createPiKitIdentityFor() { return createPiKitIdentityFor; },
+  get createPiLocalTurnAccess() { return createPiLocalTurnAccess; },
+  get createPiTurnPerson() { return createPiTurnPerson; },
+  get createPlanUsageRoutes() { return createPlanUsageRoutes; },
+  get createPluginFolderCapability() { return createPluginFolderCapability; },
+  get createPluginRoutes() { return createPluginRoutes; },
+  get createPokeScreenPoller() { return createPokeScreenPoller; },
+  get createPostDesktopPrivateMessage() { return createPostDesktopPrivateMessage; },
+  get createPostInputRequest() { return createPostInputRequest; },
+  get createPreemptAtSafePoint() { return createPreemptAtSafePoint; },
+  get createPreferenceImportRoutes() { return createPreferenceImportRoutes; },
+  get createPreferenceStore() { return createPreferenceStore; },
+  get createPresenceRoutes() { return createPresenceRoutes; },
+  get createPresenceViewer() { return createPresenceViewer; },
+  get createPresetStore() { return createPresetStore; },
+  get createPreviewSystemPrompt() { return createPreviewSystemPrompt; },
+  get createPrewakeComputerWhileTyping() { return createPrewakeComputerWhileTyping; },
+  get createPrewarmNamedTeammates() { return createPrewarmNamedTeammates; },
+  get createPrewarmRefusal() { return createPrewarmRefusal; },
+  get createPrewarmThread() { return createPrewarmThread; },
+  get createPrimaryApprovals() { return createPrimaryApprovals; },
+  get createPrimaryApprovalsInternalRoutes() { return createPrimaryApprovalsInternalRoutes; },
+  get createPrimaryAskedProposal() { return createPrimaryAskedProposal; },
+  get createPrimaryTurnGate() { return createPrimaryTurnGate; },
+  get createPrincipalMayRunRoutine() { return createPrincipalMayRunRoutine; },
+  get createPrincipalPermissions() { return createPrincipalPermissions; },
+  get createPrivateFolderThread() { return createPrivateFolderThread; },
+  get createPrivateRecallFilter() { return createPrivateRecallFilter; },
+  get createProactiveProposalRoutes() { return createProactiveProposalRoutes; },
+  get createProbeEngines() { return createProbeEngines; },
+  get createProbeMcpOAuth() { return createProbeMcpOAuth; },
+  get createProjectMessages() { return createProjectMessages; },
+  get createProposalPersistence() { return createProposalPersistence; },
+  get createProposalRuleCandidate() { return createProposalRuleCandidate; },
+  get createProvideSecretFromPhone() { return createProvideSecretFromPhone; },
+  get createProviderAccountsRoutes() { return createProviderAccountsRoutes; },
+  get createProviderOperationConflict() { return createProviderOperationConflict; },
+  get createProviderRegistry() { return createProviderRegistry; },
+  get createProviderTransitionForTurn() { return createProviderTransitionForTurn; },
+  get createPublicBot() { return createPublicBot; },
+  get createPublicGroupState() { return createPublicGroupState; },
+  get createPublicInviteRoutes() { return createPublicInviteRoutes; },
+  get createPublishVoiceNotice() { return createPublishVoiceNotice; },
+  get createPublishedPageOptions() { return createPublishedPageOptions; },
+  get createPublishedPageRoutes() { return createPublishedPageRoutes; },
+  get createPublishedPageViewer() { return createPublishedPageViewer; },
+  get createPurgeConfidentialEngineKeys() { return createPurgeConfidentialEngineKeys; },
+  get createPurgeDeletedThreadEngines() { return createPurgeDeletedThreadEngines; },
+  get createPurgeTurnAttachmentsForThread() { return createPurgeTurnAttachmentsForThread; },
+  get createPushActivityRoutes() { return createPushActivityRoutes; },
+  get createPushDeviceRoutes() { return createPushDeviceRoutes; },
+  get createPushDeviceStore() { return createPushDeviceStore; },
+  get createQuestionAnsweredBy() { return createQuestionAnsweredBy; },
+  get createQueuedBehindPerson() { return createQueuedBehindPerson; },
+  get createRaiseHarnessQuestion() { return createRaiseHarnessQuestion; },
+  get createReachCodeStore() { return createReachCodeStore; },
+  get createReachMeAudit() { return createReachMeAudit; },
+  get createReachMeCard() { return createReachMeCard; },
+  get createReachMeLanguage() { return createReachMeLanguage; },
+  get createReachMeRespond() { return createReachMeRespond; },
+  get createReachMeRoutes() { return createReachMeRoutes; },
+  get createReachMeStore() { return createReachMeStore; },
+  get createReachMeVoice() { return createReachMeVoice; },
+  get createReachable() { return createReachable; },
+  get createReactionPersonFor() { return createReactionPersonFor; },
+  get createReadAndDraft() { return createReadAndDraft; },
+  get createReadWorkerTurn() { return createReadWorkerTurn; },
+  get createReadyLocalVmForTurn() { return createReadyLocalVmForTurn; },
+  get createRecallTopicInternalRoutes() { return createRecallTopicInternalRoutes; },
+  get createRecentToolUses() { return createRecentToolUses; },
+  get createRecentWorkFor() { return createRecentWorkFor; },
+  get createRecordAchievements() { return createRecordAchievements; },
+  get createRecordAdminConfigChange() { return createRecordAdminConfigChange; },
+  get createRecordPerspicaxWork() { return createRecordPerspicaxWork; },
+  get createRefreshDispatchKpiAfterRun() { return createRefreshDispatchKpiAfterRun; },
+  get createRefreshStreamDigests() { return createRefreshStreamDigests; },
+  get createRefreshUnsetModelSelectionsFrom() { return createRefreshUnsetModelSelectionsFrom; },
+  get createRefreshWidens() { return createRefreshWidens; },
+  get createRefuseHumanEdit() { return createRefuseHumanEdit; },
+  get createRefusePlacedBots() { return createRefusePlacedBots; },
+  get createRegisteredDeviceFor() { return createRegisteredDeviceFor; },
+  get createRegistrySearch() { return createRegistrySearch; },
+  get createRelayEnginesFor() { return createRelayEnginesFor; },
+  get createReleaseBootEngineSlot() { return createReleaseBootEngineSlot; },
+  get createReleaseDataDirLeaseAtExit() { return createReleaseDataDirLeaseAtExit; },
+  get createReleaseLocalVmThread() { return createReleaseLocalVmThread; },
+  get createReleaseReservedWorkThread() { return createReleaseReservedWorkThread; },
+  get createReleaseTurnResources() { return createReleaseTurnResources; },
+  get createReleaseWarmEngine() { return createReleaseWarmEngine; },
+  get createReloadProviders() { return createReloadProviders; },
+  get createRemoteBotHosts() { return createRemoteBotHosts; },
+  get createRemoteBotHostsRoutes() { return createRemoteBotHostsRoutes; },
+  get createRemoteControlRoutes() { return createRemoteControlRoutes; },
+  get createRemoteMcpServers() { return createRemoteMcpServers; },
+  get createRemoteSessionActionsAudit() { return createRemoteSessionActionsAudit; },
+  get createRemoteSessionFileRoutes() { return createRemoteSessionFileRoutes; },
+  get createRemoteSessionInternalRoutes() { return createRemoteSessionInternalRoutes; },
+  get createRemoteSessionRegistrar() { return createRemoteSessionRegistrar; },
+  get createRemoteSessionRoutes() { return createRemoteSessionRoutes; },
+  get createRemoteSessionService() { return createRemoteSessionService; },
+  get createRemoteSessionsAdmin() { return createRemoteSessionsAdmin; },
+  get createRemoteSessionsAdminRoutes() { return createRemoteSessionsAdminRoutes; },
+  get createRemoteSupportSeat() { return createRemoteSupportSeat; },
+  get createRemoteSupportWatcher() { return createRemoteSupportWatcher; },
+  get createReplaceQueuedWorkerTurns() { return createReplaceQueuedWorkerTurns; },
+  get createReplayPendingProactive() { return createReplayPendingProactive; },
+  get createReportIncident() { return createReportIncident; },
+  get createRequestCwAction() { return createRequestCwAction; },
+  get createRequestEmailDraftSend() { return createRequestEmailDraftSend; },
+  get createRequestedBotFields() { return createRequestedBotFields; },
+  get createRequestedTaskBot() { return createRequestedTaskBot; },
+  get createResendUserMessage() { return createResendUserMessage; },
+  get createResetMemberAutoLevelsOnce() { return createResetMemberAutoLevelsOnce; },
+  get createResolveAndSendCwAction() { return createResolveAndSendCwAction; },
+  get createResolveAndSendEmailDraft() { return createResolveAndSendEmailDraft; },
+  get createResolveAndSendMeeting() { return createResolveAndSendMeeting; },
+  get createResolveAndSendModel() { return createResolveAndSendModel; },
+  get createResolveAndSendPhoneCallConsent() { return createResolveAndSendPhoneCallConsent; },
+  get createResolveAndSendProfile() { return createResolveAndSendProfile; },
+  get createResolveAndSendRoutine() { return createResolveAndSendRoutine; },
+  get createResolveAndSendRule() { return createResolveAndSendRule; },
+  get createResolveAndSendTeamSetup() { return createResolveAndSendTeamSetup; },
+  get createResolveAndSendTrust() { return createResolveAndSendTrust; },
+  get createResolveImessageCard() { return createResolveImessageCard; },
+  get createResolveLiveProposal() { return createResolveLiveProposal; },
+  get createResolveManagedNameFor() { return createResolveManagedNameFor; },
+  get createResolveOrgGrantee() { return createResolveOrgGrantee; },
+  get createResolveReplyTarget() { return createResolveReplyTarget; },
+  get createResolveSectionId() { return createResolveSectionId; },
+  get createResolveSkillRequest() { return createResolveSkillRequest; },
+  get createRespondToCard() { return createRespondToCard; },
+  get createResumeHeldSteersAfterCrash() { return createResumeHeldSteersAfterCrash; },
+  get createResumeSecretCard() { return createResumeSecretCard; },
+  get createResumeTurnsCutByRestart() { return createResumeTurnsCutByRestart; },
+  get createResyncOpenCodeProviderKeys() { return createResyncOpenCodeProviderKeys; },
+  get createRetireProviderTurn() { return createRetireProviderTurn; },
+  get createRetryDelegationsWaitingOn() { return createRetryDelegationsWaitingOn; },
+  get createReviewHolds() { return createReviewHolds; },
+  get createRevokeAllInternalCapabilities() { return createRevokeAllInternalCapabilities; },
+  get createRevokeEarlierTurnCapabilities() { return createRevokeEarlierTurnCapabilities; },
+  get createRevokeEngineCapabilities() { return createRevokeEngineCapabilities; },
+  get createRevokeInternalCapabilityGeneration() { return createRevokeInternalCapabilityGeneration; },
+  get createRevokeLegacyKey() { return createRevokeLegacyKey; },
+  get createRoleEvents() { return createRoleEvents; },
+  get createRoleTabRoutes() { return createRoleTabRoutes; },
+  get createRoomAudienceConflict() { return createRoomAudienceConflict; },
+  get createRoomHandoffProblem() { return createRoomHandoffProblem; },
+  get createRoomPostEligibility() { return createRoomPostEligibility; },
+  get createRoomRoutingInput() { return createRoomRoutingInput; },
+  get createRoomSectionAccess() { return createRoomSectionAccess; },
+  get createRoomSectionMoveRefusal() { return createRoomSectionMoveRefusal; },
+  get createRoomTurnLevels() { return createRoomTurnLevels; },
+  get createRouteMessageInternalRoutes() { return createRouteMessageInternalRoutes; },
+  get createRouteSteeredMessage() { return createRouteSteeredMessage; },
+  get createRouteThreadIdUnguarded() { return createRouteThreadIdUnguarded; },
+  get createRoutineAdmission() { return createRoutineAdmission; },
+  get createRoutineAudit() { return createRoutineAudit; },
+  get createRoutineAwayRoutes() { return createRoutineAwayRoutes; },
+  get createRoutineBulkRoutes() { return createRoutineBulkRoutes; },
+  get createRoutineConversationOf() { return createRoutineConversationOf; },
+  get createRoutineDelegationStubRoutes() { return createRoutineDelegationStubRoutes; },
+  get createRoutineEffortForTurn() { return createRoutineEffortForTurn; },
+  get createRoutineEngineForBot() { return createRoutineEngineForBot; },
+  get createRoutineFolderRoutes() { return createRoutineFolderRoutes; },
+  get createRoutineFullReport() { return createRoutineFullReport; },
+  get createRoutineMemoryHint() { return createRoutineMemoryHint; },
+  get createRoutineModelForTurn() { return createRoutineModelForTurn; },
+  get createRoutineModelRefusal() { return createRoutineModelRefusal; },
+  get createRoutineOnWire() { return createRoutineOnWire; },
+  get createRoutineOwnerAuthorizationFor() { return createRoutineOwnerAuthorizationFor; },
+  get createRoutineResultsRefusalFor() { return createRoutineResultsRefusalFor; },
+  get createRoutineRunAccessCard() { return createRoutineRunAccessCard; },
+  get createRoutineRunAsChoice() { return createRoutineRunAsChoice; },
+  get createRoutineRunInternalRoutes() { return createRoutineRunInternalRoutes; },
+  get createRoutineScopeCaller() { return createRoutineScopeCaller; },
+  get createRoutineScopeDeps() { return createRoutineScopeDeps; },
+  get createRoutineScopeFacts() { return createRoutineScopeFacts; },
+  get createRoutineSeenBy() { return createRoutineSeenBy; },
+  get createRoutineSourceOwner() { return createRoutineSourceOwner; },
+  get createRoutineSubagentModelForTurn() { return createRoutineSubagentModelForTurn; },
+  get createRoutineSuspended() { return createRoutineSuspended; },
+  get createRoutineWatchCallTool() { return createRoutineWatchCallTool; },
+  get createRoutineWatchCheckRoutes() { return createRoutineWatchCheckRoutes; },
+  get createRoutineWatchEvaluator() { return createRoutineWatchEvaluator; },
+  get createRoutineWatchPlace() { return createRoutineWatchPlace; },
+  get createRoutinesHttpRoutes() { return createRoutinesHttpRoutes; },
+  get createRuleManager() { return createRuleManager; },
+  get createRuleProductsOf() { return createRuleProductsOf; },
+  get createRuleProductsOfPerson() { return createRuleProductsOfPerson; },
+  get createRulesHoldTurn() { return createRulesHoldTurn; },
+  get createRunAsChooserFor() { return createRunAsChooserFor; },
+  get createRunAsPeople() { return createRunAsPeople; },
+  get createRunDispatchKpiSource() { return createRunDispatchKpiSource; },
+  get createRunGoalWorkerOnRuntime() { return createRunGoalWorkerOnRuntime; },
+  get createRunGroupGoalOperation() { return createRunGroupGoalOperation; },
+  get createRunGroupGoalStep() { return createRunGroupGoalStep; },
+  get createRunGroupMemberTurn() { return createRunGroupMemberTurn; },
+  get createRunInternal() { return createRunInternal; },
+  get createRunLifecycleEvent() { return createRunLifecycleEvent; },
+  get createRunPendingApprovalExpirySweep() { return createRunPendingApprovalExpirySweep; },
+  get createRunPreAuth() { return createRunPreAuth; },
+  get createRunRoutes() { return createRunRoutes; },
+  get createRunningTurnLevels() { return createRunningTurnLevels; },
+  get createRuntimeDelegationStatus() { return createRuntimeDelegationStatus; },
+  get createSafetyReviewer() { return createSafetyReviewer; },
+  get createSaveOrgAllowFullAccess() { return createSaveOrgAllowFullAccess; },
+  get createSaveOrgAllowVaultExport() { return createSaveOrgAllowVaultExport; },
+  get createSaveOrgConfidentialThreadsByDefault() { return createSaveOrgConfidentialThreadsByDefault; },
+  get createSaveOrgInterimAttachDays() { return createSaveOrgInterimAttachDays; },
+  get createSaveOrgMemberAutoApproval() { return createSaveOrgMemberAutoApproval; },
+  get createSaveOrgMemberEnvironmentAutonomy() { return createSaveOrgMemberEnvironmentAutonomy; },
+  get createSaveOrgPendingApprovalExpireDays() { return createSaveOrgPendingApprovalExpireDays; },
+  get createSaveOrgPluginMarketplaces() { return createSaveOrgPluginMarketplaces; },
+  get createSaveOwnerRuleFromCard() { return createSaveOwnerRuleFromCard; },
+  get createSavePersonPreferences() { return createSavePersonPreferences; },
+  get createSavePollerCredentials() { return createSavePollerCredentials; },
+  get createSavedSteps() { return createSavedSteps; },
+  get createScheduleAdminApprovalsAnnounce() { return createScheduleAdminApprovalsAnnounce; },
+  get createScheduleApprovalExpiry() { return createScheduleApprovalExpiry; },
+  get createScheduleFinishUntilRound() { return createScheduleFinishUntilRound; },
+  get createScheduleSoloGoalRound() { return createScheduleSoloGoalRound; },
+  get createScheduleThreadEventLogRetentionSweep() { return createScheduleThreadEventLogRetentionSweep; },
+  get createScheduleTurnDigest() { return createScheduleTurnDigest; },
+  get createScheduleUnfinishedTurn() { return createScheduleUnfinishedTurn; },
+  get createScheduleVoiceCallWatchdog() { return createScheduleVoiceCallWatchdog; },
+  get createScopeApprovalMessage() { return createScopeApprovalMessage; },
+  get createScopeChannelApproval() { return createScopeChannelApproval; },
+  get createScopedPluginFolders() { return createScopedPluginFolders; },
+  get createScopedPluginMcp() { return createScopedPluginMcp; },
+  get createScopedSkillInventory() { return createScopedSkillInventory; },
+  get createScopedSkillsPrompt() { return createScopedSkillsPrompt; },
+  get createScreenFrameSource() { return createScreenFrameSource; },
+  get createScrubConfidentialThreads() { return createScrubConfidentialThreads; },
+  get createSearchRoutes() { return createSearchRoutes; },
+  get createSecretMessage() { return createSecretMessage; },
+  get createSectionChannelRoutes() { return createSectionChannelRoutes; },
+  get createSectionContextRoutes() { return createSectionContextRoutes; },
+  get createSecurityKeyRoutes() { return createSecurityKeyRoutes; },
+  get createSegmentDigestText() { return createSegmentDigestText; },
+  get createSelectableComputers() { return createSelectableComputers; },
+  get createSelfKnowledgeInternalRoutes() { return createSelfKnowledgeInternalRoutes; },
+  get createSendMissingRoleToAdmins() { return createSendMissingRoleToAdmins; },
+  get createSendPeopleDmMessage() { return createSendPeopleDmMessage; },
+  get createSendRoutineResolution() { return createSendRoutineResolution; },
+  get createSendSkillResolution() { return createSendSkillResolution; },
+  get createSendStateFor() { return createSendStateFor; },
+  get createSendStateLimit() { return createSendStateLimit; },
+  get createSerializeRoomContext() { return createSerializeRoomContext; },
+  get createServer() { return createServer; },
+  get createServerEmailSignIn() { return createServerEmailSignIn; },
+  get createServerEngineAllowedFor() { return createServerEngineAllowedFor; },
+  get createServerPathView() { return createServerPathView; },
+  get createSessionBearer() { return createSessionBearer; },
+  get createSessionPersonFields() { return createSessionPersonFields; },
+  get createSetBotApprovalModeFromConsole() { return createSetBotApprovalModeFromConsole; },
+  get createSettingsActions() { return createSettingsActions; },
+  get createSettingsActionsInternalRoutes() { return createSettingsActionsInternalRoutes; },
+  get createSettingsStepUpGate() { return createSettingsStepUpGate; },
+  get createSettleBotActCard() { return createSettleBotActCard; },
+  get createSettleConfidentialMemoryCard() { return createSettleConfidentialMemoryCard; },
+  get createSettleDirectFollowup() { return createSettleDirectFollowup; },
+  get createSettleInputRequests() { return createSettleInputRequests; },
+  get createSettleMemberAutoLevelsFor() { return createSettleMemberAutoLevelsFor; },
+  get createSettleOrphanedParallelTasks() { return createSettleOrphanedParallelTasks; },
+  get createSettleParallelFallback() { return createSettleParallelFallback; },
+  get createSettleParallelTask() { return createSettleParallelTask; },
+  get createSettleProposalByRule() { return createSettleProposalByRule; },
+  get createSettleTeamMemoryCards() { return createSettleTeamMemoryCards; },
+  get createSettleTrackedRequest() { return createSettleTrackedRequest; },
+  get createSettleWaitingOnPersonChips() { return createSettleWaitingOnPersonChips; },
+  get createSettledWithinOrStop() { return createSettledWithinOrStop; },
+  get createShapeAvatarGenerateInternalRoutes() { return createShapeAvatarGenerateInternalRoutes; },
+  get createShapeAvatarGenerateRoutes() { return createShapeAvatarGenerateRoutes; },
+  get createShapeAvatarGenerator() { return createShapeAvatarGenerator; },
+  get createSharedComputersRoutes() { return createSharedComputersRoutes; },
+  get createShouldIgnoreProviderEvent() { return createShouldIgnoreProviderEvent; },
+  get createShowWaitingOnPersonChip() { return createShowWaitingOnPersonChip; },
+  get createShownPathRoutes() { return createShownPathRoutes; },
+  get createSidebarSectionsRoutes() { return createSidebarSectionsRoutes; },
+  get createSignInRecheck() { return createSignInRecheck; },
+  get createSingleBotPackage() { return createSingleBotPackage; },
+  get createSkillCardCopy() { return createSkillCardCopy; },
+  get createSkillProposalPersistence() { return createSkillProposalPersistence; },
+  get createSkillShareRoutes() { return createSkillShareRoutes; },
+  get createSlimMessage() { return createSlimMessage; },
+  get createSmsChannel() { return createSmsChannel; },
+  get createSmsReplyAfter() { return createSmsReplyAfter; },
+  get createSoloArchiveText() { return createSoloArchiveText; },
+  get createSoloOrgRoutes() { return createSoloOrgRoutes; },
+  get createSpeakerMayRunRoutineNow() { return createSpeakerMayRunRoutineNow; },
+  get createSpeakerOwnWordsTurn() { return createSpeakerOwnWordsTurn; },
+  get createSpeakerTurnSelection() { return createSpeakerTurnSelection; },
+  get createSseFrameFor() { return createSseFrameFor; },
+  get createStagePendingAttachments() { return createStagePendingAttachments; },
+  get createStagedSkillCleanupsForThread() { return createStagedSkillCleanupsForThread; },
+  get createStaleEngineSession() { return createStaleEngineSession; },
+  get createStartAgentPrompt() { return createStartAgentPrompt; },
+  get createStartBotBoat() { return createStartBotBoat; },
+  get createStartDuplexCallTurn() { return createStartDuplexCallTurn; },
+  get createStartGroupTurn() { return createStartGroupTurn; },
+  get createStartMcpSignIn() { return createStartMcpSignIn; },
+  get createStartMeetingSummary() { return createStartMeetingSummary; },
+  get createStartOrQueueDirectMessageNow() { return createStartOrQueueDirectMessageNow; },
+  get createStartOrQueueOpenedThread() { return createStartOrQueueOpenedThread; },
+  get createStartParallelTask() { return createStartParallelTask; },
+  get createStartProactiveWake() { return createStartProactiveWake; },
+  get createStartScreenPoller() { return createStartScreenPoller; },
+  get createStartTurn() { return createStartTurn; },
+  get createStarterNotes() { return createStarterNotes; },
+  get createStepUpGate() { return createStepUpGate; },
+  get createStopBotForEmergencyApprovalDowngrade() { return createStopBotForEmergencyApprovalDowngrade; },
+  get createStopCompanyInstances() { return createStopCompanyInstances; },
+  get createStopDirectThreadByPerson() { return createStopDirectThreadByPerson; },
+  get createStopGroupThreads() { return createStopGroupThreads; },
+  get createStopOwnSubagents() { return createStopOwnSubagents; },
+  get createStopParallelTask() { return createStopParallelTask; },
+  get createStopTurnForStricterApproval() { return createStopTurnForStricterApproval; },
+  get createStoppedRowSinceLastPerson() { return createStoppedRowSinceLastPerson; },
+  get createStoppedTurnText() { return createStoppedTurnText; },
+  get createStoredFamily() { return createStoredFamily; },
+  get createStoredNamesIn() { return createStoredNamesIn; },
+  get createStreamDigestEngine() { return createStreamDigestEngine; },
+  get createStreamDigestPrompt() { return createStreamDigestPrompt; },
+  get createStreamOpenedHttpFile() { return createStreamOpenedHttpFile; },
+  get createStrictCardRule() { return createStrictCardRule; },
+  get createStrictRuleQualifies() { return createStrictRuleQualifies; },
+  get createSubjectSeesChannel() { return createSubjectSeesChannel; },
+  get createSubjectVisible() { return createSubjectVisible; },
+  get createSubscriptionCli() { return createSubscriptionCli; },
+  get createSubscriptionExpiredCard() { return createSubscriptionExpiredCard; },
+  get createSurfacePeerNotice() { return createSurfacePeerNotice; },
+  get createSweepBackgroundThreads() { return createSweepBackgroundThreads; },
+  get createSweepTemporaryAgents() { return createSweepTemporaryAgents; },
+  get createSweepThreadEventLogsDeferred() { return createSweepThreadEventLogsDeferred; },
+  get createSyncGithubForTurn() { return createSyncGithubForTurn; },
+  get createSyncGithubToSandbox() { return createSyncGithubToSandbox; },
+  get createSyncHeadlessTeam() { return createSyncHeadlessTeam; },
+  get createSyncOrgCapabilities() { return createSyncOrgCapabilities; },
+  get createSyncPluginFoldersForTurn() { return createSyncPluginFoldersForTurn; },
+  get createSyncPluginsForTurn() { return createSyncPluginsForTurn; },
+  get createSyncRoutineRunToSource() { return createSyncRoutineRunToSource; },
+  get createTakeOwnerContinuation() { return createTakeOwnerContinuation; },
+  get createTakeTemporaryCreateToken() { return createTakeTemporaryCreateToken; },
+  get createTeamBackup() { return createTeamBackup; },
+  get createTeamBotFromThreadRoutes() { return createTeamBotFromThreadRoutes; },
+  get createTeamBotVaultRoutes() { return createTeamBotVaultRoutes; },
+  get createTeamComputerInUse() { return createTeamComputerInUse; },
+  get createTeamComputersPayload() { return createTeamComputersPayload; },
+  get createTeamComputersRoutes() { return createTeamComputersRoutes; },
+  get createTeamExportImportRoutes() { return createTeamExportImportRoutes; },
+  get createTeamLibraryGrokRoutes() { return createTeamLibraryGrokRoutes; },
+  get createTeamLibraryRoutes() { return createTeamLibraryRoutes; },
+  get createTeamMapRoutes() { return createTeamMapRoutes; },
+  get createTeamMemoryHttpRoutes() { return createTeamMemoryHttpRoutes; },
+  get createTeamMemoryMemberMayAnswer() { return createTeamMemoryMemberMayAnswer; },
+  get createTeamPackageExport() { return createTeamPackageExport; },
+  get createTeamSetupApplyRefusal() { return createTeamSetupApplyRefusal; },
+  get createTeamSetupDirectSource() { return createTeamSetupDirectSource; },
+  get createTeamStorageForBot() { return createTeamStorageForBot; },
+  get createTeammateReportContext() { return createTeammateReportContext; },
+  get createTemplateLinkRoutes() { return createTemplateLinkRoutes; },
+  get createTemporaryAgentRoutes() { return createTemporaryAgentRoutes; },
+  get createTemporaryAgentSetting() { return createTemporaryAgentSetting; },
+  get createTemporaryAudit() { return createTemporaryAudit; },
+  get createTerminalAccessFor() { return createTerminalAccessFor; },
+  get createTerminalAnswerExtras() { return createTerminalAnswerExtras; },
+  get createTerminalWorkPlace() { return createTerminalWorkPlace; },
+  get createTestCliBinary() { return createTestCliBinary; },
+  get createThreadEngine() { return createThreadEngine; },
+  get createThreadFilePinRoutes() { return createThreadFilePinRoutes; },
+  get createThreadFilePins() { return createThreadFilePins; },
+  get createThreadFileRefForId() { return createThreadFileRefForId; },
+  get createThreadFileRefForPath() { return createThreadFileRefForPath; },
+  get createThreadModelGivingWay() { return createThreadModelGivingWay; },
+  get createThreadModelRoutes() { return createThreadModelRoutes; },
+  get createThreadOwner() { return createThreadOwner; },
+  get createThreadPersonKey() { return createThreadPersonKey; },
+  get createThreadReadFrameAllowed() { return createThreadReadFrameAllowed; },
+  get createThreadReadsFor() { return createThreadReadsFor; },
+  get createThreadTitleGate() { return createThreadTitleGate; },
+  get createThreadWarmRequest() { return createThreadWarmRequest; },
+  get createThreadWarmRoutes() { return createThreadWarmRoutes; },
+  get createThreadsHttpRoutes() { return createThreadsHttpRoutes; },
+  get createThreadsUsingAttachment() { return createThreadsUsingAttachment; },
+  get createToolGrantRoutes() { return createToolGrantRoutes; },
+  get createTranscriptPage() { return createTranscriptPage; },
+  get createTtsProviderRoutes() { return createTtsProviderRoutes; },
+  get createTurnAnswers() { return createTurnAnswers; },
+  get createTurnBell() { return createTurnBell; },
+  get createTurnConnectorsFor() { return createTurnConnectorsFor; },
+  get createTurnNetworkProxy() { return createTurnNetworkProxy; },
+  get createTurnOrigin() { return createTurnOrigin; },
+  get createTurnProvider() { return createTurnProvider; },
+  get createTurnReachPrompt() { return createTurnReachPrompt; },
+  get createTurnStartFor() { return createTurnStartFor; },
+  get createTurnSurfacePlan() { return createTurnSurfacePlan; },
+  get createTurnToolEvidence() { return createTurnToolEvidence; },
+  get createTurnZoneFor() { return createTurnZoneFor; },
+  get createTurnsHeldOnGroup() { return createTurnsHeldOnGroup; },
+  get createUnattendedConsentStore() { return createUnattendedConsentStore; },
+  get createUnattendedDispatchState() { return createUnattendedDispatchState; },
+  get createUnattendedHosts() { return createUnattendedHosts; },
+  get createUnauthHealthBrandRoutes() { return createUnauthHealthBrandRoutes; },
+  get createUndoAppliedChange() { return createUndoAppliedChange; },
+  get createUndoRoutes() { return createUndoRoutes; },
+  get createUndoSkillCard() { return createUndoSkillCard; },
+  get createUnfinishedTurnGuard() { return createUnfinishedTurnGuard; },
+  get createUpdateChannel() { return createUpdateChannel; },
+  get createUpdateGroupGoalRunProgress() { return createUpdateGroupGoalRunProgress; },
+  get createUpdateInstallationPlugin() { return createUpdateInstallationPlugin; },
+  get createUpdateRoutinePathsAfterTidy() { return createUpdateRoutinePathsAfterTidy; },
+  get createUpdatedMarketplaceServer() { return createUpdatedMarketplaceServer; },
+  get createUploadsRoutes() { return createUploadsRoutes; },
+  get createUsableCredential() { return createUsableCredential; },
+  get createUsageMeterRoutes() { return createUsageMeterRoutes; },
+  get createUsageRoutes() { return createUsageRoutes; },
+  get createUsageTriggerFor() { return createUsageTriggerFor; },
+  get createUserComputerRouter() { return createUserComputerRouter; },
+  get createUserComputerSpeaking() { return createUserComputerSpeaking; },
+  get createUserDesktopIntegration() { return createUserDesktopIntegration; },
+  get createUserPreferenceRoutes() { return createUserPreferenceRoutes; },
+  get createUserPreferenceStore() { return createUserPreferenceStore; },
+  get createUserSandboxIntegration() { return createUserSandboxIntegration; },
+  get createUserSandboxRoutes() { return createUserSandboxRoutes; },
+  get createVideoInputMessage() { return createVideoInputMessage; },
+  get createVideoInternalRoutes() { return createVideoInternalRoutes; },
+  get createVideoScopeValid() { return createVideoScopeValid; },
+  get createViewerBotActivity() { return createViewerBotActivity; },
+  get createViewerBotOverrideRoutes() { return createViewerBotOverrideRoutes; },
+  get createViewerBotOverrideStore() { return createViewerBotOverrideStore; },
+  get createViewerForApproval() { return createViewerForApproval; },
+  get createViewerIdentity() { return createViewerIdentity; },
+  get createViewerIsOperator() { return createViewerIsOperator; },
+  get createViewerMayAnswerOnThread() { return createViewerMayAnswerOnThread; },
+  get createViewerNotificationMuted() { return createViewerNotificationMuted; },
+  get createViewerThreadOf() { return createViewerThreadOf; },
+  get createVisibleTo() { return createVisibleTo; },
+  get createVmScreenshotRoute() { return createVmScreenshotRoute; },
+  get createVoiceFor() { return createVoiceFor; },
+  get createVoiceModeRoutes() { return createVoiceModeRoutes; },
+  get createVoicePickForTurn() { return createVoicePickForTurn; },
+  get createVoiceProviderKeys() { return createVoiceProviderKeys; },
+  get createWaitForChatRoomMember() { return createWaitForChatRoomMember; },
+  get createWaitForGroupMemberBot() { return createWaitForGroupMemberBot; },
+  get createWaitsBootstrap() { return createWaitsBootstrap; },
+  get createWakeDelegationSource() { return createWakeDelegationSource; },
+  get createWakeFromCloudAgentCompletion() { return createWakeFromCloudAgentCompletion; },
+  get createWarmPayerAccountModels() { return createWarmPayerAccountModels; },
+  get createWebBotAuthRoutes() { return createWebBotAuthRoutes; },
+  get createWebSearchAddressRefusal() { return createWebSearchAddressRefusal; },
+  get createWebSearchInternalRoutes() { return createWebSearchInternalRoutes; },
+  get createWebSearchRoutes() { return createWebSearchRoutes; },
+  get createWebSearchStore() { return createWebSearchStore; },
+  get createWebhookDelegateRefusal() { return createWebhookDelegateRefusal; },
+  get createWebhookSeenBy() { return createWebhookSeenBy; },
+  get createWebhooksRoutes() { return createWebhooksRoutes; },
+  get createWipeConfidentialThread() { return createWipeConfidentialThread; },
+  get createWithCreatorListed() { return createWithCreatorListed; },
+  get createWithPiModelServers() { return createWithPiModelServers; },
+  get createWithWorkplaceNote() { return createWithWorkplaceNote; },
+  get createWithdrawApprovalNotice() { return createWithdrawApprovalNotice; },
+  get createWorkerRoutes() { return createWorkerRoutes; },
+  get createWorkflowDeliver() { return createWorkflowDeliver; },
+  get createWorkflowOwned() { return createWorkflowOwned; },
+  get createWorkflowRoutes() { return createWorkflowRoutes; },
+  get createWorkplaceIntegration() { return createWorkplaceIntegration; },
+  get createWorkplaceNoteText() { return createWorkplaceNoteText; },
+  get createWorkplacePreference() { return createWorkplacePreference; },
+  get createWorkplaceTurnText() { return createWorkplaceTurnText; },
+  get createWorkspaceAccess() { return createWorkspaceAccess; },
+  get createWorkspaceBackupRoutes() { return createWorkspaceBackupRoutes; },
+  get createWriteWorkerTurn() { return createWriteWorkerTurn; },
+  get createXaiMarketplaceRoutes() { return createXaiMarketplaceRoutes; },
+  get createXaiVideoProvider() { return createXaiVideoProvider; },
+  get credentialIsConfigured() { return credentialIsConfigured; },
+  get customDomainIpv4() { return customDomainIpv4; },
+  get customMcpPrompt() { return customMcpPrompt; },
+  get customMcpServers() { return customMcpServers; },
+  get cwActionInstruction() { return cwActionInstruction; },
+  get cwRecordLink() { return cwRecordLink; },
+  get cwSite() { return cwSite; },
+  get dataEngine() { return dataEngine; },
+  get dataRpc() { return dataRpc; },
+  get dataScopeFolder() { return dataScopeFolder; },
+  get dataScopeKey() { return dataScopeKey; },
+  get decideRoomResponder() { return decideRoomResponder; },
+  get decideUnfinishedTurn() { return decideUnfinishedTurn; },
+  get deciderReady() { return deciderReady; },
+  get decisionRetentionDays() { return decisionRetentionDays; },
+  get decodeGeneratedImage() { return decodeGeneratedImage; },
+  get defaultIdleHours() { return defaultIdleHours; },
+  get defaultMediaProxyResolver() { return defaultMediaProxyResolver; },
+  get defaultOrgTimeZone() { return defaultOrgTimeZone; },
+  get defaultTurnPayerMode() { return defaultTurnPayerMode; },
+  get deleteAttachment() { return deleteAttachment; },
+  get deliverableNotification() { return deliverableNotification; },
+  get deniedResourcesFromEnv() { return deniedResourcesFromEnv; },
+  get deployFacts() { return deployFacts; },
+  get describeAllowRule() { return describeAllowRule; },
+  get describeBrand() { return describeBrand; },
+  get describeEdition() { return describeEdition; },
+  get describeSpawnFailure() { return describeSpawnFailure; },
+  get desktopViewerUrl() { return desktopViewerUrl; },
+  get destinationForBot() { return destinationForBot; },
+  get deterministicSummary() { return deterministicSummary; },
+  get devPodsPrompt() { return devPodsPrompt; },
+  get deviceSettingsFrameAllowed() { return deviceSettingsFrameAllowed; },
+  get directApply() { return directApply; },
+  get directMachinePlan() { return directMachinePlan; },
+  get directoryIntervalMs() { return directoryIntervalMs; },
+  get dirname() { return dirname; },
+  get discoverExistingPerBotLocalVms() { return discoverExistingPerBotLocalVms; },
+  get discoverExistingPoolLocalVms() { return discoverExistingPoolLocalVms; },
+  get discoverPersonIds() { return discoverPersonIds; },
+  get diskSpace() { return diskSpace; },
+  get diskStateForFree() { return diskStateForFree; },
+  get dismissStalePeerCards() { return dismissStalePeerCards; },
+  get dispatchInternalRoutes() { return dispatchInternalRoutes; },
+  get dispatchLoopStop() { return dispatchLoopStop; },
+  get dispatchRoutineMatches() { return dispatchRoutineMatches; },
+  get docsIndexPrompt() { return docsIndexPrompt; },
+  get draftSummary() { return draftSummary; },
+  get drainHttpServers() { return drainHttpServers; },
+  get driverKeyBacked() { return driverKeyBacked; },
+  get dropRetiredOrganizationKeys() { return dropRetiredOrganizationKeys; },
+  get duplexEpoch() { return duplexEpoch; },
+  get duplicateNote() { return duplicateNote; },
+  get editionStatus() { return editionStatus; },
+  get effectiveMarketplacePolicy() { return effectiveMarketplacePolicy; },
+  get effectivePermissions() { return effectivePermissions; },
+  get effectiveRoomTurnTimeoutMinutes() { return effectiveRoomTurnTimeoutMinutes; },
+  get effectiveTurnPayerMode() { return effectiveTurnPayerMode; },
+  get effortAcceptedByEngine() { return effortAcceptedByEngine; },
+  get effortAcceptedByModel() { return effortAcceptedByModel; },
+  get effortForModel() { return effortForModel; },
+  get encryptionOwnerForUpload() { return encryptionOwnerForUpload; },
+  get endMemoryTurn() { return endMemoryTurn; },
+  get endedToolOutput() { return endedToolOutput; },
+  get engineAccessNotice() { return engineAccessNotice; },
+  get engineAccountConnectorCall() { return engineAccountConnectorCall; },
+  get engineAllowed() { return engineAllowed; },
+  get engineApprovalMode() { return engineApprovalMode; },
+  get engineBrowsers() { return engineBrowsers; },
+  get engineHasNativeWebSearch() { return engineHasNativeWebSearch; },
+  get engineIsFresh() { return engineIsFresh; },
+  get engineLabel() { return engineLabel; },
+  get engineLaunches() { return engineLaunches; },
+  get engineNameForViewer() { return engineNameForViewer; },
+  get enginePluginCommandRefusal() { return enginePluginCommandRefusal; },
+  get engineProblem() { return engineProblem; },
+  get engineStartGate() { return engineStartGate; },
+  get engineWorksInFiles() { return engineWorksInFiles; },
+  get enqueueOfflineTurn() { return enqueueOfflineTurn; },
+  get ensureClaudeSubscriptionFresh() { return ensureClaudeSubscriptionFresh; },
+  get ensureDirs() { return ensureDirs; },
+  get ensureTaskWorkspace() { return ensureTaskWorkspace; },
+  get ensureWorkspace() { return ensureWorkspace; },
+  get entitled() { return entitled; },
+  get environmentDescriptor() { return environmentDescriptor; },
+  get environmentLabel() { return environmentLabel; },
+  get eraseContentOwner() { return eraseContentOwner; },
+  get erasePersonData() { return erasePersonData; },
+  get erasePersonThreadFiles() { return erasePersonThreadFiles; },
+  get errorTranscript() { return errorTranscript; },
+  get escapeNotes() { return escapeNotes; },
+  get eventLogSessionIds() { return eventLogSessionIds; },
+  get execCli() { return execCli; },
+  get existsSync() { return existsSync; },
+  get expandLearnTurnText() { return expandLearnTurnText; },
+  get expandSetupTurnText() { return expandSetupTurnText; },
+  get expandSkillCommandTurnText() { return expandSkillCommandTurnText; },
+  get experimentalOnlyConfigViolation() { return experimentalOnlyConfigViolation; },
+  get expireApprovalsAfterRestart() { return expireApprovalsAfterRestart; },
+  get expireWorkers() { return expireWorkers; },
+  get explainPick() { return explainPick; },
+  get externalRuntimeIsActive() { return externalRuntimeIsActive; },
+  get externalRuntimeMayCall() { return externalRuntimeMayCall; },
+  get extractTurnImages() { return extractTurnImages; },
+  get videoFramesWithin() { return videoFramesWithin; },
+  get extractedFolderName() { return extractedFolderName; },
+  get failPulledOnAuthorCancel() { return failPulledOnAuthorCancel; },
+  get failedTurnCause() { return failedTurnCause; },
+  get failedTurnTool() { return failedTurnTool; },
+  get fileInsideRoots() { return fileInsideRoots; },
+  get fileKeyConfigured() { return fileKeyConfigured; },
+  get fileViewToolPaths() { return fileViewToolPaths; },
+  get fillResolverFor() { return fillResolverFor; },
+  get finalConfirmation() { return finalConfirmation; },
+  get finalConfirmationOptions() { return finalConfirmationOptions; },
+  get findAntigravityLeftovers() { return findAntigravityLeftovers; },
+  get findPeopleDm() { return findPeopleDm; },
+  get findWaitPeer() { return findWaitPeer; },
+  get finishUntilLineText() { return finishUntilLineText; },
+  get finishUntilPrompt() { return finishUntilPrompt; },
+  get finishUntilRounds() { return finishUntilRounds; },
+  get fitTurnImagesForModel() { return fitTurnImagesForModel; },
+  get fixAmbientMcp() { return fixAmbientMcp; },
+  get fleetAvailable() { return fleetAvailable; },
+  get fleetRequest() { return fleetRequest; },
+  get fleetSocketPath() { return fleetSocketPath; },
+  get flowSkillsNote() { return flowSkillsNote; },
+  get flushAdminActivity() { return flushAdminActivity; },
+  get flushAllMemoryJournals() { return flushAllMemoryJournals; },
+  get flushAllProfileHistory() { return flushAllProfileHistory; },
+  get flushDecisionLog() { return flushDecisionLog; },
+  get flushProfileHistory() { return flushProfileHistory; },
+  get flushUsageLedger() { return flushUsageLedger; },
+  get foldPoint() { return foldPoint; },
+  get folderBytes() { return folderBytes; },
+  get followUpNote() { return followUpNote; },
+  get foreignToolSpelling() { return foreignToolSpelling; },
+  get forgetKey() { return forgetKey; },
+  get forgetThreadLogs() { return forgetThreadLogs; },
+  get forgetTurnReach() { return forgetTurnReach; },
+  get formatEngineCandidates() { return formatEngineCandidates; },
+  get fullAccessActs() { return fullAccessActs; },
+  get fullAccessChoiceAnswer() { return fullAccessChoiceAnswer; },
+  get fullAccessChoiceLine() { return fullAccessChoiceLine; },
+  get fullAccessDecision() { return fullAccessDecision; },
+  get gatedLocalComputer() { return gatedLocalComputer; },
+  get gatewayProbe() { return gatewayProbe; },
+  get generatedMp4Chunks() { return generatedMp4Chunks; },
+  get getOrCreateChannel() { return getOrCreateChannel; },
+  get githubGitEnvironment() { return githubGitEnvironment; },
+  get githubServersAsPerson() { return githubServersAsPerson; },
+  get githubTokenKind() { return githubTokenKind; },
+  get githubWithheldPrompt() { return githubWithheldPrompt; },
+  get grandfatheredFromBots() { return grandfatheredFromBots; },
+  get grantRemoteExecApproval() { return grantRemoteExecApproval; },
+  get grantsFromDirect() { return grantsFromDirect; },
+  get graphConnectorOptions() { return graphConnectorOptions; },
+  get greetingLanguage() { return greetingLanguage; },
+  get grokAccountReach() { return grokAccountReach; },
+  get grokCloudConnectorsForTurn() { return grokCloudConnectorsForTurn; },
+  get grokReachConnectorNames() { return grokReachConnectorNames; },
+  get grokVoice() { return grokVoice; },
+  get groupLeftFrameAllowed() { return groupLeftFrameAllowed; },
+  get groupMemoryEnabled() { return groupMemoryEnabled; },
+  get groupMemorySystemPrompt() { return groupMemorySystemPrompt; },
+  get groupOwnerId() { return groupOwnerId; },
+  get groupTurnCwd() { return groupTurnCwd; },
+  get guardDecision() { return guardDecision; },
+  get guardRemoteSupportOpen() { return guardRemoteSupportOpen; },
+  get guardTurnDispatch() { return guardTurnDispatch; },
+  get gzipTunnelReplies() { return gzipTunnelReplies; },
+  get handedStateUsable() { return handedStateUsable; },
+  get handleCloudAgentInternal() { return handleCloudAgentInternal; },
+  get handleDesktopBridgeMcp() { return handleDesktopBridgeMcp; },
+  get handleMediaProxy() { return handleMediaProxy; },
+  get handleMessagesMcp() { return handleMessagesMcp; },
+  get handlePagesOriginRequest() { return handlePagesOriginRequest; },
+  get handleRemoteSupportCall() { return handleRemoteSupportCall; },
+  get handleTemplateLinkPublic() { return handleTemplateLinkPublic; },
+  get handleUserSandboxMcp() { return handleUserSandboxMcp; },
+  get harnessMcpHttpKind() { return harnessMcpHttpKind; },
+  get hasQueuedSteeredMessages() { return hasQueuedSteeredMessages; },
+  get hasShellOnThisComputer() { return hasShellOnThisComputer; },
+  get healthzBody() { return healthzBody; },
+  get healthzUnreadyBody() { return healthzUnreadyBody; },
+  get hideServerPathsInSections() { return hideServerPathsInSections; },
+  get holdBotMemoryPlain() { return holdBotMemoryPlain; },
+  get holdIncludedServices() { return holdIncludedServices; },
+  get holdPlain() { return holdPlain; },
+  get homedir() { return homedir; },
+  get honouredPin() { return honouredPin; },
+  get hostFacts() { return hostFacts; },
+  get hostTimeZone() { return hostTimeZone; },
+  get hostWaitRefusal() { return hostWaitRefusal; },
+  get hostedAccessEntitled() { return hostedAccessEntitled; },
+  get hostedModelPolicy() { return hostedModelPolicy; },
+  get hostedWorkspaceConfiguration() { return hostedWorkspaceConfiguration; },
+  get hostedWorkspaceConfigured() { return hostedWorkspaceConfigured; },
+  get hostname() { return hostname; },
+  get humanApprovalRoot() { return humanApprovalRoot; },
+  get identityConfigFromEnv() { return identityConfigFromEnv; },
+  get identityDescriptor() { return identityDescriptor; },
+  get identityWarning() { return identityWarning; },
+  get importBotZip() { return importBotZip; },
+  get importTeamBackup() { return importTeamBackup; },
+  get inBotFolder() { return inBotFolder; },
+  get inGitRepository() { return inGitRepository; },
+  get inboxSpecialCard() { return inboxSpecialCard; },
+  get incidentRequest() { return incidentRequest; },
+  get initMediaProxy() { return initMediaProxy; },
+  get insideFolderRoots() { return insideFolderRoots; },
+  get inspectBotZip() { return inspectBotZip; },
+  get installLibrarySkill() { return installLibrarySkill; },
+  get installMainRuntimeEventSubscriber() { return installMainRuntimeEventSubscriber; },
+  get installOrgSkill() { return installOrgSkill; },
+  get installResourceUsage() { return installResourceUsage; },
+  get installSkill() { return installSkill; },
+  get installTerminalFeature() { return installTerminalFeature; },
+  get installationCapabilityBridge() { return installationCapabilityBridge; },
+  get installedPlaybookInstructions() { return installedPlaybookInstructions; },
+  get instanceConfigs() { return instanceConfigs; },
+  get instructionsLead() { return instructionsLead; },
+  get interBotConversations() { return interBotConversations; },
+  get interBotWaiting() { return interBotWaiting; },
+  get internalAgentApiTool() { return internalAgentApiTool; },
+  get interruptKeepsTeammates() { return interruptKeepsTeammates; },
+  get inviteMailMessage() { return inviteMailMessage; },
+  get ipcPeer() { return ipcPeer; },
+  get isAccountEmail() { return isAccountEmail; },
+  get isAgentConversation() { return isAgentConversation; },
+  get isApprovalMode() { return isApprovalMode; },
+  get isArchiveAttachment() { return isArchiveAttachment; },
+  get isBotActSession() { return isBotActSession; },
+  get isBotPackage() { return isBotPackage; },
+  get isClaudeComputerTool() { return isClaudeComputerTool; },
+  get isCodexAmbientMcpRefusal() { return isCodexAmbientMcpRefusal; },
+  get isContextMessage() { return isContextMessage; },
+  get isCwViewTool() { return isCwViewTool; },
+  get isDesktopInjectModel() { return isDesktopInjectModel; },
+  get isDispatchKpi() { return isDispatchKpi; },
+  get isEmergencyApprovalDowngrade() { return isEmergencyApprovalDowngrade; },
+  get isIP() { return isIP; },
+  get isInterBotThread() { return isInterBotThread; },
+  get isInterimSignInRoute() { return isInterimSignInRoute; },
+  get isInternalVoiceCallEnd() { return isInternalVoiceCallEnd; },
+  get isLocalModelId() { return isLocalModelId; },
+  get isLoginDriver() { return isLoginDriver; },
+  get isLoopbackHost() { return isLoopbackHost; },
+  get isMcpAccountId() { return isMcpAccountId; },
+  get isMemberBotField() { return isMemberBotField; },
+  get isModelRefusal() { return isModelRefusal; },
+  get isOpaqueId() { return isOpaqueId; },
+  get isOutboundTool() { return isOutboundTool; },
+  get isPeopleDmParticipant() { return isPeopleDmParticipant; },
+  get isPersistentQuestionCard() { return isPersistentQuestionCard; },
+  get isPersonalBrowserProfileId() { return isPersonalBrowserProfileId; },
+  get isPiServedModel() { return isPiServedModel; },
+  get isProactiveMode() { return isProactiveMode; },
+  get isProxied() { return isProxied; },
+  get isReadOnlyCommand() { return isReadOnlyCommand; },
+  get isRemoteControlPath() { return isRemoteControlPath; },
+  get isRemoteMcpServer() { return isRemoteMcpServer; },
+  get isReportPath() { return isReportPath; },
+  get isSameOrigin() { return isSameOrigin; },
+  get isShuttingDown() { return isShuttingDown; },
+  get isSmallTalk() { return isSmallTalk; },
+  get isSteeredMessageQueued() { return isSteeredMessageQueued; },
+  get isStreamSegment() { return isStreamSegment; },
+  get isSyncedPreference() { return isSyncedPreference; },
+  get isTeamMemorySharing() { return isTeamMemorySharing; },
+  get isTechnicalNoticeName() { return isTechnicalNoticeName; },
+  get isTemporaryBrowserSession() { return isTemporaryBrowserSession; },
+  get isTerminalSessionWsPath() { return isTerminalSessionWsPath; },
+  get isTriggerSchedule() { return isTriggerSchedule; },
+  get isVoiceSocketPath() { return isVoiceSocketPath; },
+  get isWorkspaceBackupRoute() { return isWorkspaceBackupRoute; },
+  get isWorkspaceBackupSessionControl() { return isWorkspaceBackupSessionControl; },
+  get join() { return join; },
+  get journalMemoryWrite() { return journalMemoryWrite; },
+  get journalWire() { return journalWire; },
+  get json() { return json; },
+  get keyEngineProvider() { return keyEngineProvider; },
+  get keyLast4() { return keyLast4; },
+  get keyRefusedCard() { return keyRefusedCard; },
+  get knownAgentToolName() { return knownAgentToolName; },
+  get launchedAgentsForBot() { return launchedAgentsForBot; },
+  get launchedByDesktopApp() { return launchedByDesktopApp; },
+  get ledgerCost() { return ledgerCost; },
+  get legacyPendingAsides() { return legacyPendingAsides; },
+  get legacyPersonKey() { return legacyPersonKey; },
+  get libraryThreadsOfSharedBot() { return libraryThreadsOfSharedBot; },
+  get licenseWarning() { return licenseWarning; },
+  get lightenColdPrompt() { return lightenColdPrompt; },
+  get limitBackupRefusedText() { return limitBackupRefusedText; },
+  get limitFailoverText() { return limitFailoverText; },
+  get limitKindOf() { return limitKindOf; },
+  get lineageEnvironmentCall() { return lineageEnvironmentCall; },
+  get listBriefApps() { return listBriefApps; },
+  get listClaudeArtifactComments() { return listClaudeArtifactComments; },
+  get listLibrarySkills() { return listLibrarySkills; },
+  get listMcpServers() { return listMcpServers; },
+  get listMemoryTopics() { return listMemoryTopics; },
+  get listPriceFor() { return listPriceFor; },
+  get listSkills() { return listSkills; },
+  get listStagedSkillWrites() { return listStagedSkillWrites; },
+  get listThreadFiles() { return listThreadFiles; },
+  get listenForDesktopComputer() { return listenForDesktopComputer; },
+  get listenWebhookIngress() { return listenWebhookIngress; },
+  get liveActivityUpdatesForFrame() { return liveActivityUpdatesForFrame; },
+  get liveApprovalChange() { return liveApprovalChange; },
+  get liveAttachUrl() { return liveAttachUrl; },
+  get liveCallKey() { return liveCallKey; },
+  get liveCallsEnabled() { return liveCallsEnabled; },
+  get liveCardKind() { return liveCardKind; },
+  get liveDecisionRefusal() { return liveDecisionRefusal; },
+  get liveHistoryFrom() { return liveHistoryFrom; },
+  get liveProposal() { return liveProposal; },
+  get liveSettingsFor() { return liveSettingsFor; },
+  get llmThreadTitlesEnabled() { return llmThreadTitlesEnabled; },
+  get loadBrand() { return loadBrand; },
+  get loadBundledSkills() { return loadBundledSkills; },
+  get loadConfig() { return loadConfig; },
+  get loadDelegationReceipts() { return loadDelegationReceipts; },
+  get loadEnterpriseLayer() { return loadEnterpriseLayer; },
+  get loadEnvironmentId() { return loadEnvironmentId; },
+  get loadUserSkills() { return loadUserSkills; },
+  get localDesktopTarget() { return localDesktopTarget; },
+  get localExtractedPath() { return localExtractedPath; },
+  get localVmIdleTimeoutMinutes() { return localVmIdleTimeoutMinutes; },
+  get localVmMaxInstances() { return localVmMaxInstances; },
+  get localVmMode() { return localVmMode; },
+  get localVmStopReason() { return localVmStopReason; },
+  get localVmViewerStatus() { return localVmViewerStatus; },
+  get localVmWorkspaceExists() { return localVmWorkspaceExists; },
+  get lockedLookChange() { return lockedLookChange; },
+  get loginCliFor() { return loginCliFor; },
+  get loginShellArgv() { return loginShellArgv; },
+  get loginSlotOf() { return loginSlotOf; },
+  get longCommandsPrompt() { return longCommandsPrompt; },
+  get loopGuardSettings() { return loopGuardSettings; },
+  get loopGuardSettingsFrom() { return loopGuardSettingsFrom; },
+  get mailConnectorsOf() { return mailConnectorsOf; },
+  get makeCapContinuationSubscriber() { return makeCapContinuationSubscriber; },
+  get makeInstallationCapabilityBridge() { return makeInstallationCapabilityBridge; },
+  get makeLoopStopSubscriber() { return makeLoopStopSubscriber; },
+  get markDeadThreadChip() { return markDeadThreadChip; },
+  get markOomVictim() { return markOomVictim; },
+  get markShuttingDown() { return markShuttingDown; },
+  get markWorkspaceUse() { return markWorkspaceUse; },
+  get marketplaceAllowed() { return marketplaceAllowed; },
+  get marketplacePolicySchema() { return marketplacePolicySchema; },
+  get masteryFrameFacts() { return masteryFrameFacts; },
+  get matchOwnerRule() { return matchOwnerRule; },
+  get mayDeleteTemporary() { return mayDeleteTemporary; },
+  get mcpAuditRow() { return mcpAuditRow; },
+  get mcpCallTimeoutMinutes() { return mcpCallTimeoutMinutes; },
+  get mcpDisabledTools() { return mcpDisabledTools; },
+  get mcpIdentityEnv() { return mcpIdentityEnv; },
+  get mcpServerNameError() { return mcpServerNameError; },
+  get meWriteSummary() { return meWriteSummary; },
+  get measureContextBuckets() { return measureContextBuckets; },
+  get mediaProxyPolicyFromEnv() { return mediaProxyPolicyFromEnv; },
+  get meetingNotetakerEnabled() { return meetingNotetakerEnabled; },
+  get memberAutoApprovalAllowed() { return memberAutoApprovalAllowed; },
+  get memberAutoChangeRefused() { return memberAutoChangeRefused; },
+  get memberAutoSettle() { return memberAutoSettle; },
+  get memberBotAdminApproval() { return memberBotAdminApproval; },
+  get memberBotFieldViolation() { return memberBotFieldViolation; },
+  get memberImportReset() { return memberImportReset; },
+  get memberOwnScopeTool() { return memberOwnScopeTool; },
+  get memberOwnedBot() { return memberOwnedBot; },
+  get memberTeamSetupRefusal() { return memberTeamSetupRefusal; },
+  get memberTurnLevel() { return memberTurnLevel; },
+  get memberTurnSelection() { return memberTurnSelection; },
+  get memoryDate() { return memoryDate; },
+  get memoryEntryExpired() { return memoryEntryExpired; },
+  get memoryGuardSettings() { return memoryGuardSettings; },
+  get memoryOverview() { return memoryOverview; },
+  get memorySourceLabel() { return memorySourceLabel; },
+  get mentionPrompt() { return mentionPrompt; },
+  get mentionedBots() { return mentionedBots; },
+  get mergeSkills() { return mergeSkills; },
+  get messageAttachmentTags() { return messageAttachmentTags; },
+  get messagesOnBotMac() { return messagesOnBotMac; },
+  get migrateBotMarketplaces() { return migrateBotMarketplaces; },
+  get migrateSectionContextKeys() { return migrateSectionContextKeys; },
+  get migratedCrabFromBots() { return migratedCrabFromBots; },
+  get migrationOwner() { return migrationOwner; },
+  get mirrorActivity() { return mirrorActivity; },
+  get mirrorLateRunReply() { return mirrorLateRunReply; },
+  get mirrorReply() { return mirrorReply; },
+  get missingCitedPaths() { return missingCitedPaths; },
+  get missingRoleMessage() { return missingRoleMessage; },
+  get misusePathRefusal() { return misusePathRefusal; },
+  get misuseRefusal() { return misuseRefusal; },
+  get misuseToolFrameText() { return misuseToolFrameText; },
+  get modelContextWindow() { return modelContextWindow; },
+  get modelImageCopyPath() { return modelImageCopyPath; },
+  get modelOffer() { return modelOffer; },
+  get modelPrompt() { return modelPrompt; },
+  get modelServerAccess() { return modelServerAccess; },
+  get modelSwitchNeedsAsk() { return modelSwitchNeedsAsk; },
+  get myChromeToolRefusal() { return myChromeToolRefusal; },
+  get namedTeammates() { return namedTeammates; },
+  get narrateTool() { return narrateTool; },
+  get narrowBotForViewer() { return narrowBotForViewer; },
+  get narrowestAudience() { return narrowestAudience; },
+  get newId() { return newId; },
+  get newPlanUsageAlerts() { return newPlanUsageAlerts; },
+  get newRoutinesPaused() { return newRoutinesPaused; },
+  get newestOf() { return newestOf; },
+  get nextInChain() { return nextInChain; },
+  get nextOccurrence() { return nextOccurrence; },
+  get noEngineError() { return noEngineError; },
+  get normalizeAllowedRecipients() { return normalizeAllowedRecipients; },
+  get normalizeCustomDomain() { return normalizeCustomDomain; },
+  get normalizeOutboundPolicy() { return normalizeOutboundPolicy; },
+  get normalizeProactiveMode() { return normalizeProactiveMode; },
+  get noteAppRead() { return noteAppRead; },
+  get noteAtRestWrite() { return noteAtRestWrite; },
+  get noteEngineRefusal() { return noteEngineRefusal; },
+  get noteRemoteExecRequest() { return noteRemoteExecRequest; },
+  get noteSpend() { return noteSpend; },
+  get noteTurnQueued() { return noteTurnQueued; },
+  get nudgeFrameAllowed() { return nudgeFrameAllowed; },
+  get observedFetch() { return observedFetch; },
+  get offeredEngines() { return offeredEngines; },
+  get officeKind() { return officeKind; },
+  get officeMediaFolder() { return officeMediaFolder; },
+  get officeNote() { return officeNote; },
+  get oidcSessionFields() { return oidcSessionFields; },
+  get onArtifactPublished() { return onArtifactPublished; },
+  get onClaudeSubscriptionRenewed() { return onClaudeSubscriptionRenewed; },
+  get onConfigSaved() { return onConfigSaved; },
+  get onDemandPromptParts() { return onDemandPromptParts; },
+  get onKeyRejectionChange() { return onKeyRejectionChange; },
+  get onMemoryTopicWritten() { return onMemoryTopicWritten; },
+  get onSteeredQueueChange() { return onSteeredQueueChange; },
+  get openApiScope() { return openApiScope; },
+  get openCodeProviderKeysAllowed() { return openCodeProviderKeysAllowed; },
+  get openGeneratedVideo() { return openGeneratedVideo; },
+  get openTriggerSeenStore() { return openTriggerSeenStore; },
+  get opsRoutes() { return opsRoutes; },
+  get orderedSkillDiscovery() { return orderedSkillDiscovery; },
+  get orgConnectionListing() { return orgConnectionListing; },
+  get orgDirectoryEntries() { return orgDirectoryEntries; },
+  get orgFlowGuarded() { return orgFlowGuarded; },
+  get orgFullAccessAllowed() { return orgFullAccessAllowed; },
+  get orgFullAccessGrandfathered() { return orgFullAccessGrandfathered; },
+  get orgFullAccessHolds() { return orgFullAccessHolds; },
+  get orgKeyEngineName() { return orgKeyEngineName; },
+  get orgNewBotApprovalMode() { return orgNewBotApprovalMode; },
+  get orgPeerInScope() { return orgPeerInScope; },
+  get orgPlanAccounts() { return orgPlanAccounts; },
+  get orgWithholdHostTools() { return orgWithholdHostTools; },
+  get orgXaiKeyAllowed() { return orgXaiKeyAllowed; },
+  get orgXaiMediaStatusFor() { return orgXaiMediaStatusFor; },
+  get orgXaiRefusal() { return orgXaiRefusal; },
+  get otherPerson() { return otherPerson; },
+  get outboundWiring() { return outboundWiring; },
+  get overlayModelServers() { return overlayModelServers; },
+  get overviewRoutes() { return overviewRoutes; },
+  get ownEnvironmentSensitiveRead() { return ownEnvironmentSensitiveRead; },
+  get ownEnvironmentTurnOrigin() { return ownEnvironmentTurnOrigin; },
+  get ownThreads() { return ownThreads; },
+  get ownerKeepsSight() { return ownerKeepsSight; },
+  get ownsGroup() { return ownsGroup; },
+  get packageSummary() { return packageSummary; },
+  get pageOwnerFor() { return pageOwnerFor; },
+  get parallelBlocked() { return parallelBlocked; },
+  get parallelPending() { return parallelPending; },
+  get parseAllowList() { return parseAllowList; },
+  get parseAutoComputerTarget() { return parseAutoComputerTarget; },
+  get parseBotProfilePatch() { return parseBotProfilePatch; },
+  get parseBotWorkplace() { return parseBotWorkplace; },
+  get parseConfigPatch() { return parseConfigPatch; },
+  get parseCookies() { return parseCookies; },
+  get parseCwAction() { return parseCwAction; },
+  get parseDispatchKpiArgs() { return parseDispatchKpiArgs; },
+  get parseEvalJson() { return parseEvalJson; },
+  get parseGitSource() { return parseGitSource; },
+  get parseHideList() { return parseHideList; },
+  get parseLocalPromptMode() { return parseLocalPromptMode; },
+  get parseMcpAccountChoices() { return parseMcpAccountChoices; },
+  get parseMcpServerMutation() { return parseMcpServerMutation; },
+  get parseMemoryEntries() { return parseMemoryEntries; },
+  get parseOrgFullAccessBody() { return parseOrgFullAccessBody; },
+  get parseOwnerIdentityMessage() { return parseOwnerIdentityMessage; },
+  get parsePackageDocument() { return parsePackageDocument; },
+  get parsePageTargetDefault() { return parsePageTargetDefault; },
+  get parseRequest() { return parseRequest; },
+  get parseStoredMcpServer() { return parseStoredMcpServer; },
+  get parseSupportCheck() { return parseSupportCheck; },
+  get parseTerminalDestinationPick() { return parseTerminalDestinationPick; },
+  get parseToolScope() { return parseToolScope; },
+  get parseVisibility() { return parseVisibility; },
+  get parseWorkspaceLine() { return parseWorkspaceLine; },
+  get partitionAgentSettings() { return partitionAgentSettings; },
+  get pauseBrowserStream() { return pauseBrowserStream; },
+  get peerAllowed() { return peerAllowed; },
+  get peerContactCardRequired() { return peerContactCardRequired; },
+  get peerContactPrompt() { return peerContactPrompt; },
+  get peerDeliveryReceipt() { return peerDeliveryReceipt; },
+  get peerInScope() { return peerInScope; },
+  get peerLineText() { return peerLineText; },
+  get peerName() { return peerName; },
+  get peerProvenanceNote() { return peerProvenanceNote; },
+  get peerRosterSystemPrompt() { return peerRosterSystemPrompt; },
+  get pendingApprovalExpiresAt() { return pendingApprovalExpiresAt; },
+  get peopleDmForViewer() { return peopleDmForViewer; },
+  get peopleDmRouteRefusal() { return peopleDmRouteRefusal; },
+  get peopleDmThreadUnreadPatch() { return peopleDmThreadUnreadPatch; },
+  get peopleRoutes() { return peopleRoutes; },
+  get perBotLocalVmTarget() { return perBotLocalVmTarget; },
+  get permissionList() { return permissionList; },
+  get permissionModeFromEnv() { return permissionModeFromEnv; },
+  get permissionRefusal() { return permissionRefusal; },
+  get persistableInstanceConfigs() { return persistableInstanceConfigs; },
+  get personAttention() { return personAttention; },
+  get personAvatarUrl() { return personAvatarUrl; },
+  get personDisplayName() { return personDisplayName; },
+  get personKey() { return personKey; },
+  get personLanguageOf() { return personLanguageOf; },
+  get personParticipant() { return personParticipant; },
+  get personPayer() { return personPayer; },
+  get personSettingsPrincipal() { return personSettingsPrincipal; },
+  get personWordsForTurn() { return personWordsForTurn; },
+  get personalCapNotice() { return personalCapNotice; },
+  get personalHeaderRefusal() { return personalHeaderRefusal; },
+  get personalPluginStorage() { return personalPluginStorage; },
+  get personalProfilePartition() { return personalProfilePartition; },
+  get personalSharedNameRefusal() { return personalSharedNameRefusal; },
+  get perspicaxDeletion() { return perspicaxDeletion; },
+  get perspicaxOwnerScopedServer() { return perspicaxOwnerScopedServer; },
+  get perspicaxUnavailableWhy() { return perspicaxUnavailableWhy; },
+  get phoneConnectionTransport() { return phoneConnectionTransport; },
+  get phoneReturnLocation() { return phoneReturnLocation; },
+  get phoneToolTurn() { return phoneToolTurn; },
+  get piKitDir() { return piKitDir; },
+  get piLocalKeyRefusalLifted() { return piLocalKeyRefusalLifted; },
+  get pickFastSentenceModel() { return pickFastSentenceModel; },
+  get plainFieldRefusalReason() { return plainFieldRefusalReason; },
+  get planAccountsFromInstances() { return planAccountsFromInstances; },
+  get planBackgroundSweep() { return planBackgroundSweep; },
+  get planBotZip() { return planBotZip; },
+  get planHiddenAgentThreads() { return planHiddenAgentThreads; },
+  get planHiddenBotThreads() { return planHiddenBotThreads; },
+  get planLearned() { return planLearned; },
+  get planPersonThreadErasure() { return planPersonThreadErasure; },
+  get planUsageAlertText() { return planUsageAlertText; },
+  get pluginMetadataCacheRoot() { return pluginMetadataCacheRoot; },
+  get pluginServerName() { return pluginServerName; },
+  get pluginTurnInventory() { return pluginTurnInventory; },
+  get poolLocalVmTarget() { return poolLocalVmTarget; },
+  get preSendRefusalKind() { return preSendRefusalKind; },
+  get preferencesFrameAllowed() { return preferencesFrameAllowed; },
+  get prepareEveryClaudeRetirement() { return prepareEveryClaudeRetirement; },
+  get prepareSemanticRecall() { return prepareSemanticRecall; },
+  get prepareTurnSkillLinks() { return prepareTurnSkillLinks; },
+  get presenceFrameAllowed() { return presenceFrameAllowed; },
+  get presenceHidden() { return presenceHidden; },
+  get previewBotZip() { return previewBotZip; },
+  get prewarmPerPersonPerMinute() { return prewarmPerPersonPerMinute; },
+  get prewarmWindowMs() { return prewarmWindowMs; },
+  get primaryAnswerable() { return primaryAnswerable; },
+  get primaryCovers() { return primaryCovers; },
+  get primaryOutboundDecision() { return primaryOutboundDecision; },
+  get primaryPurchaseCard() { return primaryPurchaseCard; },
+  get principalDir() { return principalDir; },
+  get principalFromEnv() { return principalFromEnv; },
+  get principalIdFor() { return principalIdFor; },
+  get privateThreadOwner() { return privateThreadOwner; },
+  get proactiveDryRunSummary() { return proactiveDryRunSummary; },
+  get proactiveModeFor() { return proactiveModeFor; },
+  get proactivePrompt() { return proactivePrompt; },
+  get procedureSignal() { return procedureSignal; },
+  get profileManagement() { return profileManagement; },
+  get profileRevision() { return profileRevision; },
+  get profileSections() { return profileSections; },
+  get profileSnapshot() { return profileSnapshot; },
+  get promptReferencesAvailable() { return promptReferencesAvailable; },
+  get promptSectionPaths() { return promptSectionPaths; },
+  get promptWithDataContext() { return promptWithDataContext; },
+  get promptWithReply() { return promptWithReply; },
+  get proposalReplacements() { return proposalReplacements; },
+  get provenRequestPerson() { return provenRequestPerson; },
+  get providersOfDriver() { return providersOfDriver; },
+  get providersOfInstance() { return providersOfInstance; },
+  get pruneAdminActivity() { return pruneAdminActivity; },
+  get pruneDecisions() { return pruneDecisions; },
+  get pruneProblemLog() { return pruneProblemLog; },
+  get publicPresence() { return publicPresence; },
+  get publishPersonalCopy() { return publishPersonalCopy; },
+  get pushSenderLook() { return pushSenderLook; },
+  get pushesForFrame() { return pushesForFrame; },
+  get queueSteeredMessage() { return queueSteeredMessage; },
+  get queuedBehindPersonText() { return queuedBehindPersonText; },
+  get queuedSteerSnapshot() { return queuedSteerSnapshot; },
+  get queuedThreadPosition() { return queuedThreadPosition; },
+  get quotedIdOr() { return quotedIdOr; },
+  get randomBytes() { return randomBytes; },
+  get randomUUID() { return randomUUID; },
+  get reachablePeers() { return reachablePeers; },
+  get readApnsConfig() { return readApnsConfig; },
+  get readAtRestSync() { return readAtRestSync; },
+  get readAttachment() { return readAttachment; },
+  get readBackupStatus() { return readBackupStatus; },
+  get readBody() { return readBody; },
+  get readBotAvatar() { return readBotAvatar; },
+  get readBriefTool() { return readBriefTool; },
+  get readCuaConnection() { return readCuaConnection; },
+  get readCuaUnavailableReason() { return readCuaUnavailableReason; },
+  get readDecisionRange() { return readDecisionRange; },
+  get readEngineManifest() { return readEngineManifest; },
+  get readFcmConfig() { return readFcmConfig; },
+  get readFileSync() { return readFileSync; },
+  get readHistory() { return readHistory; },
+  get readLastWorkspaceRestore() { return readLastWorkspaceRestore; },
+  get readLibrarySkillFile() { return readLibrarySkillFile; },
+  get readMemoryDoc() { return readMemoryDoc; },
+  get readMemoryFile() { return readMemoryFile; },
+  get readMemoryTopic() { return readMemoryTopic; },
+  get readMemoryTopicAsync() { return readMemoryTopicAsync; },
+  get readMessagesSettings() { return readMessagesSettings; },
+  get readOfficeMedia() { return readOfficeMedia; },
+  get readOrgAuditPage() { return readOrgAuditPage; },
+  get readPendingPurges() { return readPendingPurges; },
+  get readPersonalCopy() { return readPersonalCopy; },
+  get readProblems() { return readProblems; },
+  get readPublishedLibrary() { return readPublishedLibrary; },
+  get readPublishedTeam() { return readPublishedTeam; },
+  get readRemoteSessionLog() { return readRemoteSessionLog; },
+  get readSealedChain() { return readSealedChain; },
+  get readSectionContext() { return readSectionContext; },
+  get readSections() { return readSections; },
+  get readSkillFile() { return readSkillFile; },
+  get readSkillLibraryIndex() { return readSkillLibraryIndex; },
+  get readSubscriptionAccess() { return readSubscriptionAccess; },
+  get readToolRuns() { return readToolRuns; },
+  get readUsage() { return readUsage; },
+  get readWorkerRelayToken() { return readWorkerRelayToken; },
+  get readWorkspaceText() { return readWorkspaceText; },
+  get readinessFailureClass() { return readinessFailureClass; },
+  get readsGithubToken() { return readsGithubToken; },
+  get realpathSync() { return realpathSync; },
+  get realtimeUrl() { return realtimeUrl; },
+  get realtimeWork() { return realtimeWork; },
+  get reapOrphanEngineGroups() { return reapOrphanEngineGroups; },
+  get recallQuery() { return recallQuery; },
+  get recallSupportSession() { return recallSupportSession; },
+  get recallTopicPage() { return recallTopicPage; },
+  get receiptName() { return receiptName; },
+  get recentPersonSignIn() { return recentPersonSignIn; },
+  get recentWorkPrompt() { return recentWorkPrompt; },
+  get recordHanded() { return recordHanded; },
+  get recordHeldSteer() { return recordHeldSteer; },
+  get recordLiveCall() { return recordLiveCall; },
+  get recordLocalVmIdleStop() { return recordLocalVmIdleStop; },
+  get recordNudgeLine() { return recordNudgeLine; },
+  get recordProcedure() { return recordProcedure; },
+  get recordProfileChange() { return recordProfileChange; },
+  get recordRoutineChange() { return recordRoutineChange; },
+  get recordRoutineToggle() { return recordRoutineToggle; },
+  get recordedBotOwner() { return recordedBotOwner; },
+  get recoverArchiveUpload() { return recoverArchiveUpload; },
+  get recoveryCapabilityError() { return recoveryCapabilityError; },
+  get redactSecretsInText() { return redactSecretsInText; },
+  get refreshAfterMs() { return refreshAfterMs; },
+  get registerAtRestRoot() { return registerAtRestRoot; },
+  get registerEnginesBinDir() { return registerEnginesBinDir; },
+  get registerReachProvider() { return registerReachProvider; },
+  get rejectStagedSkillWrite() { return rejectStagedSkillWrite; },
+  get relayAccountLabel() { return relayAccountLabel; },
+  get relayPersonAttention() { return relayPersonAttention; },
+  get releasePlain() { return releasePlain; },
+  get releaseVersion() { return releaseVersion; },
+  get remoteCallerIsAgent() { return remoteCallerIsAgent; },
+  get remoteComputerForTurn() { return remoteComputerForTurn; },
+  get remoteSessionReach() { return remoteSessionReach; },
+  get remoteSessionToolCall() { return remoteSessionToolCall; },
+  get removeAntigravityLeftovers() { return removeAntigravityLeftovers; },
+  get removeDirectory() { return removeDirectory; },
+  get removeLibrarySkillFrom() { return removeLibrarySkillFrom; },
+  get removeSkill() { return removeSkill; },
+  get renamePublishedTeam() { return renamePublishedTeam; },
+  get renderSkillInstructions() { return renderSkillInstructions; },
+  get renderUnseen() { return renderUnseen; },
+  get renewWithCli() { return renewWithCli; },
+  get renewalPrompt() { return renewalPrompt; },
+  get repeatsShownFailure() { return repeatsShownFailure; },
+  get replaceDashes() { return replaceDashes; },
+  get replaysNatively() { return replaysNatively; },
+  get repositoryInfo() { return repositoryInfo; },
+  get requestConflict() { return requestConflict; },
+  get requestOrigin() { return requestOrigin; },
+  get requestPeerApproval() { return requestPeerApproval; },
+  get requestSource() { return requestSource; },
+  get requestWorkOrigin() { return requestWorkOrigin; },
+  get reservedMcpName() { return reservedMcpName; },
+  get resetClockText() { return resetClockText; },
+  get resetPathCache() { return resetPathCache; },
+  get resolveBotOwner() { return resolveBotOwner; },
+  get resolveBotSkills() { return resolveBotSkills; },
+  get resolveBotWorkplace() { return resolveBotWorkplace; },
+  get resolveClaudeConfigDir() { return resolveClaudeConfigDir; },
+  get resolveComputerPromptKind() { return resolveComputerPromptKind; },
+  get resolveConsoleBotCapabilities() { return resolveConsoleBotCapabilities; },
+  get resolveEngineAccess() { return resolveEngineAccess; },
+  get resolveEngineInstance() { return resolveEngineInstance; },
+  get resolveEngineTurnEffort() { return resolveEngineTurnEffort; },
+  get resolveIdpVaultKey() { return resolveIdpVaultKey; },
+  get resolveLoopbackTrust() { return resolveLoopbackTrust; },
+  get resolveMailSettings() { return resolveMailSettings; },
+  get resolvePhoneCallConsentCard() { return resolvePhoneCallConsentCard; },
+  get resolveRequestAuth() { return resolveRequestAuth; },
+  get resolveSurface() { return resolveSurface; },
+  get resolveTurnSpeaker() { return resolveTurnSpeaker; },
+  get resolveVaultKey() { return resolveVaultKey; },
+  get resolveVoiceKey() { return resolveVoiceKey; },
+  get resolveWebhookPublicUrl() { return resolveWebhookPublicUrl; },
+  get resolvedSkillFiles() { return resolvedSkillFiles; },
+  get restoreChannelMessages() { return restoreChannelMessages; },
+  get restoreSteeredMessages() { return restoreSteeredMessages; },
+  get resumeDueWorkflows() { return resumeDueWorkflows; },
+  get retireDeletedBoatCreate() { return retireDeletedBoatCreate; },
+  get retireEveryClaudeBot() { return retireEveryClaudeBot; },
+  get reviewedSkillSha256() { return reviewedSkillSha256; },
+  get revokeOrgConnections() { return revokeOrgConnections; },
+  get rewriteMovedPaths() { return rewriteMovedPaths; },
+  get rewritePeopleForAttach() { return rewritePeopleForAttach; },
+  get richOutputPrompt() { return richOutputPrompt; },
+  get rmSync() { return rmSync; },
+  get roomFeeds() { return roomFeeds; },
+  get roomMentionNotification() { return roomMentionNotification; },
+  get roomPeerRosterSystemPrompt() { return roomPeerRosterSystemPrompt; },
+  get roomResponders() { return roomResponders; },
+  get roomRosterLine() { return roomRosterLine; },
+  get roomTurnEnd() { return roomTurnEnd; },
+  get roomTurnTimeoutMessage() { return roomTurnTimeoutMessage; },
+  get roomTurnTimeoutMinutes() { return roomTurnTimeoutMinutes; },
+  get routeTurnModel() { return routeTurnModel; },
+  get routineAccessNotifications() { return routineAccessNotifications; },
+  get routineEngineGate() { return routineEngineGate; },
+  get routineEngineRefusal() { return routineEngineRefusal; },
+  get routineFlowInput() { return routineFlowInput; },
+  get routineFlowSkills() { return routineFlowSkills; },
+  get routineIncidentTitle() { return routineIncidentTitle; },
+  get routineLineage() { return routineLineage; },
+  get routineOwnerAuthorization() { return routineOwnerAuthorization; },
+  get routineReadinessTarget() { return routineReadinessTarget; },
+  get routineRenewMs() { return routineRenewMs; },
+  get routineReportOutcome() { return routineReportOutcome; },
+  get routineRoleCoverageRoute() { return routineRoleCoverageRoute; },
+  get routineRunCard() { return routineRunCard; },
+  get routineRunFallbackText() { return routineRunFallbackText; },
+  get routineRunNowAllowed() { return routineRunNowAllowed; },
+  get routineRunReportable() { return routineRunReportable; },
+  get routineRunTitle() { return routineRunTitle; },
+  get routineRunsRoutes() { return routineRunsRoutes; },
+  get routineScheduleLabel() { return routineScheduleLabel; },
+  get routineToggleForViewer() { return routineToggleForViewer; },
+  get routineTurnEffort() { return routineTurnEffort; },
+  get routineTurnModel() { return routineTurnModel; },
+  get routineVisible() { return routineVisible; },
+  get routinesInConversationEnabled() { return routinesInConversationEnabled; },
+  get routinesRoutes() { return routinesRoutes; },
+  get ruleCoversCard() { return ruleCoversCard; },
+  get ruleCoversExactScope() { return ruleCoversExactScope; },
+  get rulesSystemPrompt() { return rulesSystemPrompt; },
+  get runAsBotEngine() { return runAsBotEngine; },
+  get runAsRefusal() { return runAsRefusal; },
+  get runClaudeArtifact() { return runClaudeArtifact; },
+  get runClaudeCli() { return runClaudeCli; },
+  get runCommandOf() { return runCommandOf; },
+  get runEngineSelfCheck() { return runEngineSelfCheck; },
+  get runFailureWakesBot() { return runFailureWakesBot; },
+  get runMyChromeTool() { return runMyChromeTool; },
+  get runPermissionModeMigration() { return runPermissionModeMigration; },
+  get runSkillsLibraryBootSweep() { return runSkillsLibraryBootSweep; },
+  get safetyArm() { return safetyArm; },
+  get safetyHttpRefusal() { return safetyHttpRefusal; },
+  get safetyPermissionEffect() { return safetyPermissionEffect; },
+  get safetyToolHold() { return safetyToolHold; },
+  get sagaxInternalSelfAnswers() { return sagaxInternalSelfAnswers; },
+  get sagaxInternalTool() { return sagaxInternalTool; },
+  get sameBotTaskOwner() { return sameBotTaskOwner; },
+  get sameModelSelection() { return sameModelSelection; },
+  get sameOwnerBots() { return sameOwnerBots; },
+  get sameOwnerBrowserBots() { return sameOwnerBrowserBots; },
+  get sandboxArchiveArgv() { return sandboxArchiveArgv; },
+  get sandboxBackendFor() { return sandboxBackendFor; },
+  get sandboxCommandCandidate() { return sandboxCommandCandidate; },
+  get sandboxDesktopTarget() { return sandboxDesktopTarget; },
+  get sandboxPrincipalForTurn() { return sandboxPrincipalForTurn; },
+  get sandboxRouteFromEnv() { return sandboxRouteFromEnv; },
+  get sandboxdClient() { return sandboxdClient; },
+  get sandboxdHealth() { return sandboxdHealth; },
+  get sandboxdKeySource() { return sandboxdKeySource; },
+  get saveAudio() { return saveAudio; },
+  get saveFile() { return saveFile; },
+  get savedStepsEnabled() { return savedStepsEnabled; },
+  get scanSkillText() { return scanSkillText; },
+  get scopeOwnersFromEnv() { return scopeOwnersFromEnv; },
+  get screenFrameHash() { return screenFrameHash; },
+  get searchDocFiles() { return searchDocFiles; },
+  get searchHitVisible() { return searchHitVisible; },
+  get searchMessagesAsync() { return searchMessagesAsync; },
+  get secondLoginSupported() { return secondLoginSupported; },
+  get sectionContextKey() { return sectionContextKey; },
+  get sectionContextLabel() { return sectionContextLabel; },
+  get sectionContextSystemPrompt() { return sectionContextSystemPrompt; },
+  get sectionKey() { return sectionKey; },
+  get secureTokenMatch() { return secureTokenMatch; },
+  get securityKeyCeremonyRoutes() { return securityKeyCeremonyRoutes; },
+  get selectBundledSkills() { return selectBundledSkills; },
+  get selectReplay() { return selectReplay; },
+  get selectionOnMachine() { return selectionOnMachine; },
+  get selfCheckEngines() { return selfCheckEngines; },
+  get semanticEmbeddingEndpoint() { return semanticEmbeddingEndpoint; },
+  get semanticIndexFile() { return semanticIndexFile; },
+  get semanticRecallEnabled() { return semanticRecallEnabled; },
+  get sendBlockFor() { return sendBlockFor; },
+  get sendFingerprint() { return sendFingerprint; },
+  get sendRecipientsAllowed() { return sendRecipientsAllowed; },
+  get sendWithMailer() { return sendWithMailer; },
+  get senderDomain() { return senderDomain; },
+  get serializeSessionCookie() { return serializeSessionCookie; },
+  get serveHarnessMcpHttp() { return serveHarnessMcpHttp; },
+  get serveStaticUi() { return serveStaticUi; },
+  get serverApprovalWords() { return serverApprovalWords; },
+  get serverHome() { return serverHome; },
+  get serverLog() { return serverLog; },
+  get serverMcpAsPerson() { return serverMcpAsPerson; },
+  get serverVersion() { return serverVersion; },
+  get serviceThreadViewer() { return serviceThreadViewer; },
+  get serviceViewerClosed() { return serviceViewerClosed; },
+  get sessionCookieName() { return sessionCookieName; },
+  get sessionIdlePolicy() { return sessionIdlePolicy; },
+  get sessionPrincipal() { return sessionPrincipal; },
+  get sessionStart() { return sessionStart; },
+  get setAtRestHolderCheck() { return setAtRestHolderCheck; },
+  get setAtRestThreadFiles() { return setAtRestThreadFiles; },
+  get setAttachmentStillShown() { return setAttachmentStillShown; },
+  get setBrowserViewport() { return setBrowserViewport; },
+  get setConfidentialThreadResolver() { return setConfidentialThreadResolver; },
+  get setDesktopInjectModels() { return setDesktopInjectModels; },
+  get setInstallationCapabilityBridge() { return setInstallationCapabilityBridge; },
+  get setMisuseAlert() { return setMisuseAlert; },
+  get setMisuseOwnPaths() { return setMisuseOwnPaths; },
+  get setOpenCodeProviderKeyPolicy() { return setOpenCodeProviderKeyPolicy; },
+  get setPageContextSource() { return setPageContextSource; },
+  get setPeerScope() { return setPeerScope; },
+  get setPersonalCapOrganization() { return setPersonalCapOrganization; },
+  get setPrimaryCover() { return setPrimaryCover; },
+  get setReachMeSmsHandler() { return setReachMeSmsHandler; },
+  get setRoutineTimeZone() { return setRoutineTimeZone; },
+  get setSafetyConfirm() { return setSafetyConfirm; },
+  get setSafetyFullAccess() { return setSafetyFullAccess; },
+  get setSameOwner() { return setSameOwner; },
+  get setSemanticIndex() { return setSemanticIndex; },
+  get setSharedHost() { return setSharedHost; },
+  get setSkillEnabled() { return setSkillEnabled; },
+  get setSoloClaudeLinkedHandler() { return setSoloClaudeLinkedHandler; },
+  get setTurnTimingWriter() { return setTurnTimingWriter; },
+  get settingsStepUp() { return settingsStepUp; },
+  get settleChatFollowups() { return settleChatFollowups; },
+  get settleSignInRefusal() { return settleSignInRefusal; },
+  get settledChipLabel() { return settledChipLabel; },
+  get settledWithin() { return settledWithin; },
+  get setupCommands() { return setupCommands; },
+  get setupModeActive() { return setupModeActive; },
+  get setupSystemPrompt() { return setupSystemPrompt; },
+  get sharedBotForViewer() { return sharedBotForViewer; },
+  get sharedComputerOperation() { return sharedComputerOperation; },
+  get sharedComputersEnabled() { return sharedComputersEnabled; },
+  get sharedLibraryGetAllowed() { return sharedLibraryGetAllowed; },
+  get sharedSignIn() { return sharedSignIn; },
+  get sharedWorkspaceFullAccessConfigured() { return sharedWorkspaceFullAccessConfigured; },
+  get shellTimeoutHookResult() { return shellTimeoutHookResult; },
+  get shouldArmLocalVmIdle() { return shouldArmLocalVmIdle; },
+  get shouldEmptyResponseRetry() { return shouldEmptyResponseRetry; },
+  get shouldMountLocalComputer() { return shouldMountLocalComputer; },
+  get shouldSettleRequestCard() { return shouldSettleRequestCard; },
+  get shutdownDrainMs() { return shutdownDrainMs; },
+  get signBrowserVisit() { return signBrowserVisit; },
+  get signInExpiredCard() { return signInExpiredCard; },
+  get signInListWithOpenInvites() { return signInListWithOpenInvites; },
+  get signatureStillCovers() { return signatureStillCovers; },
+  get skillAuthoringEnabled() { return skillAuthoringEnabled; },
+  get skillCommandInline() { return skillCommandInline; },
+  get skillDiscoveryAvailable() { return skillDiscoveryAvailable; },
+  get skillPackageStamps() { return skillPackageStamps; },
+  get skillsLibraryEnabled() { return skillsLibraryEnabled; },
+  get soloClaudeAccountLinked() { return soloClaudeAccountLinked; },
+  get soloGoalLineText() { return soloGoalLineText; },
+  get soloGoalSystemPrompt() { return soloGoalSystemPrompt; },
+  get soloMayManage() { return soloMayManage; },
+  get spawnPcHook() { return spawnPcHook; },
+  get spawnScriptPty() { return spawnScriptPty; },
+  get speakerFor() { return speakerFor; },
+  get speakerPrincipal() { return speakerPrincipal; },
+  get spendAlertText() { return spendAlertText; },
+  get spendState() { return spendState; },
+  get spokenLineFields() { return spokenLineFields; },
+  get stageBotZipUpload() { return stageBotZipUpload; },
+  get stageTurnAttachments() { return stageTurnAttachments; },
+  get stagedName() { return stagedName; },
+  get staleSessionReason() { return staleSessionReason; },
+  get staleThreadException() { return staleThreadException; },
+  get stallLimitMs() { return stallLimitMs; },
+  get standingGrantsAllowed() { return standingGrantsAllowed; },
+  get startAutoVmClaim() { return startAutoVmClaim; },
+  get startBriefTimer() { return startBriefTimer; },
+  get startContainerRuntime() { return startContainerRuntime; },
+  get startEgressProxy() { return startEgressProxy; },
+  get startEventLoopLagMonitor() { return startEventLoopLagMonitor; },
+  get startLowDiskWatch() { return startLowDiskWatch; },
+  get statMessageFile() { return statMessageFile; },
+  get stepFromToolEvent() { return stepFromToolEvent; },
+  get stoppedTurnOutcome() { return stoppedTurnOutcome; },
+  get storedArchiveManifest() { return storedArchiveManifest; },
+  get storedTeamMemorySharing() { return storedTeamMemorySharing; },
+  get streamCandidate() { return streamCandidate; },
+  get streamTerminalAttachment() { return streamTerminalAttachment; },
+  get stripWorkspaceCredentialEnv() { return stripWorkspaceCredentialEnv; },
+  get subscribeLoopGuard() { return subscribeLoopGuard; },
+  get subscriptionDriver() { return subscriptionDriver; },
+  get summarize() { return summarize; },
+  get supportFolderOwner() { return supportFolderOwner; },
+  get supportOwnersOfId() { return supportOwnersOfId; },
+  get supportsWorkspaceFiles() { return supportsWorkspaceFiles; },
+  get surfaceLabel() { return surfaceLabel; },
+  get surfaceOfComputerKind() { return surfaceOfComputerKind; },
+  get surfacePrompt() { return surfacePrompt; },
+  get sweepThreadEventLogsPaced() { return sweepThreadEventLogsPaced; },
+  get syncPluginsToSandbox() { return syncPluginsToSandbox; },
+  get systemVoicesAvailable() { return systemVoicesAvailable; },
+  get takeImessageSend() { return takeImessageSend; },
+  get takeSpendAlert() { return takeSpendAlert; },
+  get taskEngineKeys() { return taskEngineKeys; },
+  get teamAvailabilityPart() { return teamAvailabilityPart; },
+  get teamComputerOwner() { return teamComputerOwner; },
+  get teamDataKey() { return teamDataKey; },
+  get teamMemoryCardSettled() { return teamMemoryCardSettled; },
+  get teamMemoryLateAnswer() { return teamMemoryLateAnswer; },
+  get teamMemoryReviewRefusal() { return teamMemoryReviewRefusal; },
+  get teamMemorySharingOf() { return teamMemorySharingOf; },
+  get teamSetupDirectApply() { return teamSetupDirectApply; },
+  get temporaryActiveCount() { return temporaryActiveCount; },
+  get temporaryOwner() { return temporaryOwner; },
+  get temporaryQuotaKey() { return temporaryQuotaKey; },
+  get testStdioMcpCommand() { return testStdioMcpCommand; },
+  get testStdioMcpStream() { return testStdioMcpStream; },
+  get threadCensus() { return threadCensus; },
+  get threadEventLogMaxBytes() { return threadEventLogMaxBytes; },
+  get threadFileId() { return threadFileId; },
+  get threadFileRefs() { return threadFileRefs; },
+  get threadFollowsFullGrant() { return threadFollowsFullGrant; },
+  get threadKeys() { return threadKeys; },
+  get threadModelFallback() { return threadModelFallback; },
+  get threadRefUrl() { return threadRefUrl; },
+  get threadTitleFrom() { return threadTitleFrom; },
+  get threadWantsClaude() { return threadWantsClaude; },
+  get threadsReferencing() { return threadsReferencing; },
+  get threadsReferencingAsync() { return threadsReferencingAsync; },
+  get tidyHour() { return tidyHour; },
+  get titleLiveCall() { return titleLiveCall; },
+  get toUtterances() { return toUtterances; },
+  get toWireTask() { return toWireTask; },
+  get tokensOfConnectedDevices() { return tokensOfConnectedDevices; },
+  get toolDefinitionBytes() { return toolDefinitionBytes; },
+  get toolErrorCorrectiveRoundsFor() { return toolErrorCorrectiveRoundsFor; },
+  get toolGuardMode() { return toolGuardMode; },
+  get toolResultValue() { return toolResultValue; },
+  get toolScopeWidens() { return toolScopeWidens; },
+  get toolWorkingStep() { return toolWorkingStep; },
+  get transcriptText() { return transcriptText; },
+  get trustedChannelFullRefusal() { return trustedChannelFullRefusal; },
+  get tts() { return tts; },
+  get turnClockEnabled() { return turnClockEnabled; },
+  get turnConnectorsRecord() { return turnConnectorsRecord; },
+  get turnOutcomeLine() { return turnOutcomeLine; },
+  get turnPayer() { return turnPayer; },
+  get turnRunFor() { return turnRunFor; },
+  get turnStartLogLine() { return turnStartLogLine; },
+  get turnTimeZone() { return turnTimeZone; },
+  get turnTrace() { return turnTrace; },
+  get typedCommandForTurn() { return typedCommandForTurn; },
+  get unansweredCallMessage() { return unansweredCallMessage; },
+  get unavailableCommandError() { return unavailableCommandError; },
+  get unfinishedTurnPrompt() { return unfinishedTurnPrompt; },
+  get uniquePeerName() { return uniquePeerName; },
+  get unknownAgentToolRefusal() { return unknownAgentToolRefusal; },
+  get unlockContentKeys() { return unlockContentKeys; },
+  get unseenMessages() { return unseenMessages; },
+  get unwrapAgentsBridge() { return unwrapAgentsBridge; },
+  get updateDoc() { return updateDoc; },
+  get updateGroupMemory() { return updateGroupMemory; },
+  get updateMemory() { return updateMemory; },
+  get updateRules() { return updateRules; },
+  get upkeepEnabled() { return upkeepEnabled; },
+  get usageMeterScope() { return usageMeterScope; },
+  get userInfo() { return userInfo; },
+  get userProfileSystemPrompt() { return userProfileSystemPrompt; },
+  get userSandboxSettingsFromEnv() { return userSandboxSettingsFromEnv; },
+  get usesCompactPrompt() { return usesCompactPrompt; },
+  get usesStablePrompt() { return usesStablePrompt; },
+  get vacuumAfterSealing() { return vacuumAfterSealing; },
+  get validateBotCwd() { return validateBotCwd; },
+  get validateBotCwdFor() { return validateBotCwdFor; },
+  get validateVegaLite() { return validateVegaLite; },
+  get vaultPrincipalFor() { return vaultPrincipalFor; },
+  get verdictFromPresence() { return verdictFromPresence; },
+  get videoCredential() { return videoCredential; },
+  get videoMessagesFromTool() { return videoMessagesFromTool; },
+  get videoSourceMessage() { return videoSourceMessage; },
+  get videoStatusRow() { return videoStatusRow; },
+  get viewerTargetId() { return viewerTargetId; },
+  get visibleGrants() { return visibleGrants; },
+  get visitTarget() { return visitTarget; },
+  get voiceBriefText() { return voiceBriefText; },
+  get voiceCallRecoveryPrompt() { return voiceCallRecoveryPrompt; },
+  get voiceCallSection() { return voiceCallSection; },
+  get voiceCallTurnPrompt() { return voiceCallTurnPrompt; },
+  get voiceCallTurnSettle() { return voiceCallTurnSettle; },
+  get voiceCostUsd() { return voiceCostUsd; },
+  get voiceCredential() { return voiceCredential; },
+  get voiceDashesEnabled() { return voiceDashesEnabled; },
+  get voiceKeyterms() { return voiceKeyterms; },
+  get voiceTranscript() { return voiceTranscript; },
+  get voiceUnseenBlock() { return voiceUnseenBlock; },
+  get vps() { return vps; },
+  get waitPlain() { return waitPlain; },
+  get waitRunChat() { return waitRunChat; },
+  get waitSourceRefusal() { return waitSourceRefusal; },
+  get warmBotAccessRefusal() { return warmBotAccessRefusal; },
+  get warnReservedMcpServers() { return warnReservedMcpServers; },
+  get wasOldestThread() { return wasOldestThread; },
+  get webBotAuthScope() { return webBotAuthScope; },
+  get webSearchScope() { return webSearchScope; },
+  get webhookExecTargetAdminOnly() { return webhookExecTargetAdminOnly; },
+  get wireAuditRow() { return wireAuditRow; },
+  get wireCodexSessionLifecycle() { return wireCodexSessionLifecycle; },
+  get wireGrants() { return wireGrants; },
+  get wireLoopGuard() { return wireLoopGuard; },
+  get withClaimsFlag() { return withClaimsFlag; },
+  get withCommandVariables() { return withCommandVariables; },
+  get withDecisionActor() { return withDecisionActor; },
+  get withDesktopModelPerson() { return withDesktopModelPerson; },
+  get withDisabledTools() { return withDisabledTools; },
+  get withPersonalVoiceKeys() { return withPersonalVoiceKeys; },
+  get withRequiredComputer() { return withRequiredComputer; },
+  get withTurnClock() { return withTurnClock; },
+  get withUnseenMessages() { return withUnseenMessages; },
+  get withoutPrivateFields() { return withoutPrivateFields; },
+  get withoutWiderAudience() { return withoutWiderAudience; },
+  get workOrigin() { return workOrigin; },
+  get workflowScope() { return workflowScope; },
+  get workingBots() { return workingBots; },
+  get workplaceIsBotComputer() { return workplaceIsBotComputer; },
+  get workspaceCwdPrompt() { return workspaceCwdPrompt; },
+  get workspaceDir() { return workspaceDir; },
+  get workspaceDiskWarning() { return workspaceDiskWarning; },
+  get workspaceLineName() { return workspaceLineName; },
+  get workspaceLocationsPrompt() { return workspaceLocationsPrompt; },
+  get writeBotZip() { return writeBotZip; },
+  get writeFileAtomic() { return writeFileAtomic; },
+  get writeFileSync() { return writeFileSync; },
+  get writeMemoryFile() { return writeMemoryFile; },
+  get writeMemoryTopic() { return writeMemoryTopic; },
+  get writePublishedLibrary() { return writePublishedLibrary; },
+  get writePublishedTeam() { return writePublishedTeam; },
+  get writeSectionContext() { return writeSectionContext; },
+  get writesManagedProfile() { return writesManagedProfile; },
+  get z() { return z; },
+  get dataDirLease() { return dataDirLease; },
+  get releaseDataDirLeaseAtExit() { return releaseDataDirLeaseAtExit; },
+  get IDENTITY() { return IDENTITY; },
+  get observePushFrame() { return observePushFrame; },
+  get observeLiveActivityFrame() { return observeLiveActivityFrame; },
+  get observeAchievementFrame() { return observeAchievementFrame; },
+  get adminActorScope() { return adminActorScope; },
+  get AGENTS_NODE_FLAG() { return AGENTS_NODE_FLAG; },
+  get agentsProxyPath() { return agentsProxyPath; },
+  get perspicaxBridgePath() { return perspicaxBridgePath; },
+  get phoneProxyPath() { return phoneProxyPath; },
+  get messagesProxyPath() { return messagesProxyPath; },
+  get ComputerWaitParked() { return ComputerWaitParked; },
+  get DirectTurnSetupCancelled() { return DirectTurnSetupCancelled; },
+  get PlaceUnavailableError() { return PlaceUnavailableError; },
+  get placeUnavailable() { return placeUnavailable; },
+  get answerCardNode() { return answerCardNode; },
+  get credentialUpdateText() { return credentialUpdateText; },
+  get registry() { return registry; },
+  get store() { return store; },
+  get cfg() { return cfg; },
+  get hostedModels() { return hostedModels; },
+  get selectableInstances() { return selectableInstances; },
+  get defaultSelection() { return defaultSelection; },
+  get selectionContext() { return selectionContext; },
+  get healBotEngine() { return healBotEngine; },
+  get namesEngine() { return namesEngine; },
+  get withNewBotEffort() { return withNewBotEffort; },
+  get policyModelRefusal() { return policyModelRefusal; },
+  get orgEngineAllowRefusal() { return orgEngineAllowRefusal; },
+  get removedComputerInstanceIds() { return removedComputerInstanceIds; },
+  get writeComputerEngineMoveLines() { return writeComputerEngineMoveLines; },
+  get computerEngineMoveText() { return computerEngineMoveText; },
+  get canWorkOnCloud() { return canWorkOnCloud; },
+  get cloudEngine() { return cloudEngine; },
+  get boat() { return boat; },
+  get inheritedTeamComputer() { return inheritedTeamComputer; },
+  get newBotDefaultsSchema() { return newBotDefaultsSchema; },
+  get saveConfig() { return saveConfig; },
+  get managedDesktop() { return managedDesktop; },
+  get DATA_DIR() { return DATA_DIR; },
+  get migrateCapabilitiesStores() { return migrateCapabilitiesStores; },
+  get principals() { return principals; },
+  get isPrincipalId() { return isPrincipalId; },
+  get migrateGithubCredentials() { return migrateGithubCredentials; },
+  get botCapabilityStore() { return botCapabilityStore; },
+  get installationCapabilityStore() { return installationCapabilityStore; },
+  get spentPlans() { return spentPlans; },
+  get planUsedPercents() { return planUsedPercents; },
+  get spentPlanUntil() { return spentPlanUntil; },
+  get planUsedPercent() { return planUsedPercent; },
+  get pendingExpiryDeps() { return pendingExpiryDeps; },
+  get openPendingInboxCards() { return openPendingInboxCards; },
+  get openApprovalCardMessages() { return openApprovalCardMessages; },
+  get appendDecision() { return appendDecision; },
+  get runPendingApprovalExpirySweep() { return runPendingApprovalExpirySweep; },
+  get pendingDelegationWakes() { return pendingDelegationWakes; },
+  get delegationWakeBudget() { return delegationWakeBudget; },
+  get roomMemberLock() { return roomMemberLock; },
+  get roomMemberContexts() { return roomMemberContexts; },
+  get CLOUD_HOME() { return CLOUD_HOME; },
+  get cloudOwnerOnlyThread() { return cloudOwnerOnlyThread; },
+  get requestSignIn() { return requestSignIn; },
+  get _configForAccessImpl() { return _configForAccessImpl; },
+  get configForAccess() { return configForAccess; },
+  get configStatus() { return configStatus; },
+  get editionForSettings() { return editionForSettings; },
+  get privateThreads() { return privateThreads; },
+  get AGENT_API_KEY_FILE() { return AGENT_API_KEY_FILE; },
+  get DirectSendRefused() { return DirectSendRefused; },
+  get EngineAccessLost() { return EngineAccessLost; },
+  get dataDirLeaseReleaseAttempted() { return dataDirLeaseReleaseAttempted; }, set dataDirLeaseReleaseAttempted(value) { dataDirLeaseReleaseAttempted = value; },
+  get bootSelection() { return bootSelection; }, set bootSelection(value) { bootSelection = value; },
+  get lastSeq() { return lastSeq; }, set lastSeq(value) { lastSeq = value; },
+  get providerConfigBusy() { return providerConfigBusy; }, set providerConfigBusy(value) { providerConfigBusy = value; },
+  get mcpConfigBusy() { return mcpConfigBusy; }, set mcpConfigBusy(value) { mcpConfigBusy = value; },
+  get localVmModeChangeBusy() { return localVmModeChangeBusy; }, set localVmModeChangeBusy(value) { localVmModeChangeBusy = value; },
+  get localVmImageBusy() { return localVmImageBusy; }, set localVmImageBusy(value) { localVmImageBusy = value; },
+  get localVmProvisionBusy() { return localVmProvisionBusy; }, set localVmProvisionBusy(value) { localVmProvisionBusy = value; },
+  get companyShutdown() { return companyShutdown; }, set companyShutdown(value) { companyShutdown = value; },
+  get audienceChangedAt() { return audienceChangedAt; }, set audienceChangedAt(value) { audienceChangedAt = value; },
+  get mcpProbesInFlight() { return mcpProbesInFlight; }, set mcpProbesInFlight(value) { mcpProbesInFlight = value; },
+  get followupsReady() { return followupsReady; }, set followupsReady(value) { followupsReady = value; },
+  get customDomainRevision() { return customDomainRevision; }, set customDomainRevision(value) { customDomainRevision = value; },
+  get routineReadinessConfigRevision() { return routineReadinessConfigRevision; }, set routineReadinessConfigRevision(value) { routineReadinessConfigRevision = value; },
+  get providerFleetReloading() { return providerFleetReloading; }, set providerFleetReloading(value) { providerFleetReloading = value; },
+  get browserCleanupReferencesReconciled() { return browserCleanupReferencesReconciled; }, set browserCleanupReferencesReconciled(value) { browserCleanupReferencesReconciled = value; },
+  get githubCredentialsMigrated() { return githubCredentialsMigrated; }, set githubCredentialsMigrated(value) { githubCredentialsMigrated = value; },
+  get engineUnavailableLogged() { return engineUnavailableLogged; }, set engineUnavailableLogged(value) { engineUnavailableLogged = value; },
+  get dataUnavailableLogged() { return dataUnavailableLogged; }, set dataUnavailableLogged(value) { dataUnavailableLogged = value; },
+  get PORT() { return PORT; },
+  get orgCapabilitiesRevision() { return orgCapabilitiesRevision; },
+  get WEBHOOK_PORT() { return WEBHOOK_PORT; },
+  get WEBHOOK_PUBLIC_URL() { return WEBHOOK_PUBLIC_URL; },
+  get STATIC_DIR() { return STATIC_DIR; },
+  get templateLinks() { return templateLinks; },
+  get publishedPages() { return publishedPages; },
+  get pageLive() { return pageLive; },
+  get workspaceRestore() { return workspaceRestore; },
+  get workspaceMaintenance() { return workspaceMaintenance; },
+  get ENVIRONMENT_ID() { return ENVIRONMENT_ID; },
+  get ORG_ENGINE_NOT_ALLOWED() { return ORG_ENGINE_NOT_ALLOWED; },
+  get MODEL_TURNED_OFF_BY_ORG() { return MODEL_TURNED_OFF_BY_ORG; },
+  get MODEL_TURNED_OFF_BY_PERSON() { return MODEL_TURNED_OFF_BY_PERSON; },
+  get PROFILE_MANAGEMENT() { return PROFILE_MANAGEMENT; },
+  get EMPTY_SIGN_IN() { return EMPTY_SIGN_IN; },
+  get cachedSignInAllowList() { return cachedSignInAllowList; },
+  get emailSignInAllowList() { return emailSignInAllowList; },
+  get sessions() { return sessions; },
+  get sharedComputers() { return sharedComputers; },
+  get userComputers() { return userComputers; },
+  get desktopBridges() { return desktopBridges; },
+  get modelFallbackByThread() { return modelFallbackByThread; },
+  get modelFallbackByPayer() { return modelFallbackByPayer; },
+  get modelFallbackPayerKey() { return modelFallbackPayerKey; },
+  get turnModelSwitches() { return turnModelSwitches; },
+  get roomTurnRuns() { return roomTurnRuns; },
+  get turnModelRequested() { return turnModelRequested; },
+  get desktopLocalModels() { return desktopLocalModels; },
+  get desktopTunnels() { return desktopTunnels; },
+  get bridgeAudit() { return bridgeAudit; },
+  get userPreferenceStore() { return userPreferenceStore; },
+  get botWizardStore() { return botWizardStore; },
+  get viewerBotOverrideStore() { return viewerBotOverrideStore; },
+  get achievementBots() { return achievementBots; },
+  get achievementStore() { return achievementStore; },
+  get achievementCallStarts() { return achievementCallStarts; },
+  get apnsConfig() { return apnsConfig; },
+  get pushDevices() { return pushDevices; },
+  get fcmConfig() { return fcmConfig; },
+  get androidPushDevices() { return androidPushDevices; },
+  get pushActivities() { return pushActivities; },
+  get liveActivityHub() { return liveActivityHub; },
+  get pushHub() { return pushHub; },
+  get reachMeService() { return reachMeService; },
+  get reachMeTeams() { return reachMeTeams; },
+  get reachMeWhatsApp() { return reachMeWhatsApp; },
+  get phoneToolTaintedThreads() { return phoneToolTaintedThreads; },
+  get phoneTools() { return phoneTools; },
+  get recordAchievements() { return recordAchievements; },
+  get autoTurnsByThread() { return autoTurnsByThread; },
+  get masteryFrameLookups() { return masteryFrameLookups; },
+  get lockedLookRefusal() { return lockedLookRefusal; },
+  get masteryReconciledDay() { return masteryReconciledDay; },
+  get masteryNightly() { return masteryNightly; },
+  get workplacePreference() { return workplacePreference; },
+  get turnWorkplaces() { return turnWorkplaces; },
+  get egressProxy() { return egressProxy; },
+  get declaredToolProduct() { return declaredToolProduct; },
+  get ruleProductsOf() { return ruleProductsOf; },
+  get ruleProductsOfPerson() { return ruleProductsOfPerson; },
+  get userComputerSpeaking() { return userComputerSpeaking; },
+  get lendingEnabled() { return lendingEnabled; },
+  get threadStarters() { return threadStarters; },
+  get commandAllowlist() { return commandAllowlist; },
+  get ownerApprovals() { return ownerApprovals; },
+  get securityKeys() { return securityKeys; },
+  get securityKeyCeremonies() { return securityKeyCeremonies; },
+  get artifactStore() { return artifactStore; },
+  get preferenceStore() { return preferenceStore; },
+  get botTaskStore() { return botTaskStore; },
+  get threadFilePins() { return threadFilePins; },
+  get customRules() { return customRules; },
+  get botSettings() { return botSettings; },
+  get SESSION_COOKIE() { return SESSION_COOKIE; },
+  get HOSTED_WORKSPACE() { return HOSTED_WORKSPACE; },
+  get workspaceAccess() { return workspaceAccess; },
+  get DESKTOP_MANAGED() { return DESKTOP_MANAGED; },
+  get SHARED_WORKSPACE_FULL_ACCESS() { return SHARED_WORKSPACE_FULL_ACCESS; },
+  get sharedWorkspaceFullAccessEnabled() { return sharedWorkspaceFullAccessEnabled; },
+  get LOOPBACK() { return LOOPBACK; },
+  get WORKER_RELAY_TOKEN() { return WORKER_RELAY_TOKEN; },
+  get cliOwnerToken() { return cliOwnerToken; },
+  get desktopMutationToken() { return desktopMutationToken; },
+  get companionMutationToken() { return companionMutationToken; },
+  get FALLBACK_PUBLIC_URL() { return FALLBACK_PUBLIC_URL; },
+  get claudeRetirement() { return claudeRetirement; },
+  get providerConfigs() { return providerConfigs; },
+  get decorateHostedProvider() { return decorateHostedProvider; },
+  get deletedConfidentialThreads() { return deletedConfidentialThreads; },
+  get decider() { return decider; },
+  get customDomainVerifier() { return customDomainVerifier; },
+  get emailOtp() { return emailOtp; },
+  get mailResolved() { return mailResolved; },
+  get FIXED_WORKSPACE_SEAM() { return FIXED_WORKSPACE_SEAM; },
+  get requestedWorksOn() { return requestedWorksOn; },
+  get MAIL_CAPTURE_FILE() { return MAIL_CAPTURE_FILE; },
+  get mailCaptureFile() { return mailCaptureFile; },
+  get cachedMailerKey() { return cachedMailerKey; },
+  get cachedMailer() { return cachedMailer; },
+  get mailer() { return mailer; },
+  get emailSignIn() { return emailSignIn; },
+  get resumeEngineReconnectForPerson() { return resumeEngineReconnectForPerson; },
+  get supportsApprovalMode() { return supportsApprovalMode; },
+  get engineSelfCheck() { return engineSelfCheck; },
+  get engineSelfCheckAt() { return engineSelfCheckAt; },
+  get SERVER_STARTED_AT() { return SERVER_STARTED_AT; },
+  get turnTriggers() { return turnTriggers; },
+  get turnSpeakers() { return turnSpeakers; },
+  get connectorSetupProofs() { return connectorSetupProofs; },
+  get turnSpeakerPrincipals() { return turnSpeakerPrincipals; },
+  get turnAccessByThread() { return turnAccessByThread; },
+  get turnRoutineLineage() { return turnRoutineLineage; },
+  get turnRoutinePayers() { return turnRoutinePayers; },
+  get turnRoutineTriggers() { return turnRoutineTriggers; },
+  get routineConsents() { return routineConsents; },
+  get messageSender() { return messageSender; },
+  get reactionPersonFor() { return reactionPersonFor; },
+  get REACTION_ROUTE() { return REACTION_ROUTE; },
+  get MAX_BOT_REACTIONS_PER_TURN() { return MAX_BOT_REACTIONS_PER_TURN; },
+  get botReaction() { return botReaction; },
+  get placedBotReactions() { return placedBotReactions; },
+  get NOTHING_TO_ADD() { return NOTHING_TO_ADD; },
+  get echoesOwnReaction() { return echoesOwnReaction; },
+  get cardRequesterKey() { return cardRequesterKey; },
+  get actTurnFacts() { return actTurnFacts; },
+  get threadPersonKey() { return threadPersonKey; },
+  get turnOrigin() { return turnOrigin; },
+  get CLOUD_OWNER_KEY() { return CLOUD_OWNER_KEY; },
+  get CLOUD_NOBODY_KEY() { return CLOUD_NOBODY_KEY; },
+  get cloudEarlierOwners() { return cloudEarlierOwners; },
+  get routineWriterInFlight() { return routineWriterInFlight; },
+  get guestDrivenTurns() { return guestDrivenTurns; },
+  get cloudGuestDrivenHandoff() { return cloudGuestDrivenHandoff; },
+  get parentThreadModel() { return parentThreadModel; },
+  get ROUTINE_FROM_BEFORE() { return ROUTINE_FROM_BEFORE; },
+  get CONVERSATION_FROM_BEFORE() { return CONVERSATION_FROM_BEFORE; },
+  get BOTMAIL_ENGINE_REFUSAL() { return BOTMAIL_ENGINE_REFUSAL; },
+  get BOTMAIL_CONFINED_WHY() { return BOTMAIL_CONFINED_WHY; },
+  get cardAnswerRefusal() { return cardAnswerRefusal; },
+  get teamMemoryMemberMayAnswer() { return teamMemoryMemberMayAnswer; },
+  get viewerMayAnswerOnThread() { return viewerMayAnswerOnThread; },
+  get applyAutoReviewDefault() { return applyAutoReviewDefault; },
+  get COMMAND_ALLOWLIST_ADD_REFUSAL() { return COMMAND_ALLOWLIST_ADD_REFUSAL; },
+  get webhookDelegateRefusal() { return webhookDelegateRefusal; },
+  get webhookSeenBy() { return webhookSeenBy; },
+  get _configAddressFieldImpl() { return _configAddressFieldImpl; },
+  get _configProviderKeyFieldImpl() { return _configProviderKeyFieldImpl; },
+  get COMMAND_ALLOWLIST_DRIVERS() { return COMMAND_ALLOWLIST_DRIVERS; },
+  get commandAllowlistResponse() { return commandAllowlistResponse; },
+  get _decisionActorForImpl() { return _decisionActorForImpl; },
+  get cardAnswererFor() { return cardAnswererFor; },
+  get answeringCardAs() { return answeringCardAs; },
+  get threadOwners() { return threadOwners; },
+  get visibleSets() { return visibleSets; },
+  get threadOwner() { return threadOwner; },
+  get visibleTo() { return visibleTo; },
+  get attachmentThreads() { return attachmentThreads; },
+  get threadsUsingAttachment() { return threadsUsingAttachment; },
+  get subjectVisible() { return subjectVisible; },
+  get NEEDS_RUN() { return NEEDS_RUN; },
+  get autoRecallPrompt() { return autoRecallPrompt; },
+  get roomAudienceConflict() { return roomAudienceConflict; },
+  get memberFrameContext() { return memberFrameContext; },
+  get adminActivityRecording() { return adminActivityRecording; },
+  get recordAdminConfigChange() { return recordAdminConfigChange; },
+  get WEBHOOK_AUDIT_FIELDS() { return WEBHOOK_AUDIT_FIELDS; },
+  get auditBot() { return auditBot; },
+  get auditHook() { return auditHook; },
+  get hookFields() { return hookFields; },
+  get _requestedBotFieldsImpl() { return _requestedBotFieldsImpl; },
+  get beginAdminAudit() { return beginAdminAudit; },
+  get adminAuditRows() { return adminAuditRows; },
+  get guardedSendSchema() { return guardedSendSchema; },
+  get usageTriggerFor() { return usageTriggerFor; },
+  get orgUsageFacts() { return orgUsageFacts; },
+  get bookTurnUsage() { return bookTurnUsage; },
+  get providerAuthSessions() { return providerAuthSessions; },
+  get openCodeOrganisationManaged() { return openCodeOrganisationManaged; },
+  get openCodeKeysAllowed() { return openCodeKeysAllowed; },
+  get openCodeKeysLastAllowed() { return openCodeKeysLastAllowed; },
+  get resyncOpenCodeProviderKeys() { return resyncOpenCodeProviderKeys; },
+  get bundledSkills() { return bundledSkills; },
+  get availableSkills() { return availableSkills; },
+  get listBotSkills() { return listBotSkills; },
+  get readBotSkillFile() { return readBotSkillFile; },
+  get utilityParentPort() { return utilityParentPort; },
+  get postDesktopPrivateMessage() { return postDesktopPrivateMessage; },
+  get applyDesktopMutationTokenMessage() { return applyDesktopMutationTokenMessage; },
+  get browserCleanup() { return browserCleanup; },
+  get phoneSecrets() { return phoneSecrets; },
+  get ownerIdentity() { return ownerIdentity; },
+  get bus() { return bus; },
+  get personalProviderInstances() { return personalProviderInstances; },
+  get machineRuns() { return machineRuns; },
+  get companyRuntimeStarted() { return companyRuntimeStarted; },
+  get managedPolicy() { return managedPolicy; },
+  get mcpOAuthKey() { return mcpOAuthKey; },
+  get mcpOAuth() { return mcpOAuth; },
+  get orgLibrary() { return orgLibrary; },
+  get pendingOrgLibraryRelay() { return pendingOrgLibraryRelay; },
+  get INTERNAL_CAPABILITY_ORPHAN_MS() { return INTERNAL_CAPABILITY_ORPHAN_MS; },
+  get internalCapabilities() { return internalCapabilities; },
+  get perspicaxMcp() { return perspicaxMcp; },
+  get perspicaxReach() { return perspicaxReach; },
+  get perspicaxMemory() { return perspicaxMemory; },
+  get perspicaxEnding() { return perspicaxEnding; },
+  get activeInternalGenerationByThread() { return activeInternalGenerationByThread; },
+  get internalGenerationByProviderTurn() { return internalGenerationByProviderTurn; },
+  get computerSelectionTurns() { return computerSelectionTurns; },
+  get computerSelectionMoves() { return computerSelectionMoves; },
+  get EXTERNAL_RUNTIME_GENERATION() { return EXTERNAL_RUNTIME_GENERATION; },
+  get EXTERNAL_RUNTIMES_FILE() { return EXTERNAL_RUNTIMES_FILE; },
+  get externalRuntimeCapability() { return externalRuntimeCapability; },
+  get sessionCredentials() { return sessionCredentials; },
+  get sessionBearer() { return sessionBearer; },
+  get mintInternalCapability() { return mintInternalCapability; },
+  get revokeInternalCapabilityGeneration() { return revokeInternalCapabilityGeneration; },
+  get revokeEarlierTurnCapabilities() { return revokeEarlierTurnCapabilities; },
+  get revokeAllInternalCapabilities() { return revokeAllInternalCapabilities; },
+  get authorizedInternalCapability() { return authorizedInternalCapability; },
+  get internalCapabilityIsActive() { return internalCapabilityIsActive; },
+  get MAX_COMMS_DEPTH() { return MAX_COMMS_DEPTH; },
+  get MAX_WORKSPACE_BOTS() { return MAX_WORKSPACE_BOTS; },
+  get mcpIdentityOf() { return mcpIdentityOf; },
+  get agentsIntegration() { return agentsIntegration; },
+  get hooksEnabled() { return hooksEnabled; },
+  get hooksIntegration() { return hooksIntegration; },
+  get asPlaceFailure() { return asPlaceFailure; },
+  get cloudComputerHolders() { return cloudComputerHolders; },
+  get directTurnDispatchClaims() { return directTurnDispatchClaims; },
+  get directTurnGenerationByThread() { return directTurnGenerationByThread; },
+  get directRequestOwners() { return directRequestOwners; },
+  get turnToolEvidence() { return turnToolEvidence; },
+  get directFollowupTurns() { return directFollowupTurns; },
+  get directFollowupSettlers() { return directFollowupSettlers; },
+  get directCoordinationSettlers() { return directCoordinationSettlers; },
+  get settleDirectFollowup() { return settleDirectFollowup; },
+  get directTurnBots() { return directTurnBots; },
+  get turnPromptBytes() { return turnPromptBytes; },
+  get turnContextBuckets() { return turnContextBuckets; },
+  get turnResources() { return turnResources; },
+  get sharedComputerControl() { return sharedComputerControl; },
+  get turnResourceOwners() { return turnResourceOwners; },
+  get turnComputerResources() { return turnComputerResources; },
+  get teamComputerTurns() { return teamComputerTurns; },
+  get settlingResourceOwners() { return settlingResourceOwners; },
+  get releaseTurnResources() { return releaseTurnResources; },
+  get bindTurnComputer() { return bindTurnComputer; },
+  get botAtThreadCapacity() { return botAtThreadCapacity; },
+  get canAdmitDirectTurn() { return canAdmitDirectTurn; },
+  get coordinatorSlotUse() { return coordinatorSlotUse; },
+  get unattendedDispatchState() { return unattendedDispatchState; },
+  get requestedTaskBot() { return requestedTaskBot; },
+  get stoppingThreads() { return stoppingThreads; },
+  get threadStoppedAt() { return threadStoppedAt; },
+  get threadStoppedUtterance() { return threadStoppedUtterance; },
+  get markThreadStopping() { return markThreadStopping; },
+  get stopDirectThreadByPerson() { return stopDirectThreadByPerson; },
+  get interruptDirectThread() { return interruptDirectThread; },
+  get noteTeammatesLeftRunning() { return noteTeammatesLeftRunning; },
+  get interruptAllDirectThreads() { return interruptAllDirectThreads; },
+  get devPodsThreads() { return devPodsThreads; },
+  get retiredProviderTurns() { return retiredProviderTurns; },
+  get pendingCancelledProviderHandshakes() { return pendingCancelledProviderHandshakes; },
+  get turnAttachmentsByTurn() { return turnAttachmentsByTurn; },
+  get purgeTurnAttachmentsForThread() { return purgeTurnAttachmentsForThread; },
+  get retireProviderTurn() { return retireProviderTurn; },
+  get shouldIgnoreProviderEvent() { return shouldIgnoreProviderEvent; },
+  get clearDirectTurnDispatch() { return clearDirectTurnDispatch; },
+  get compactionControllers() { return compactionControllers; },
+  get cancelDirectTurnDispatch() { return cancelDirectTurnDispatch; },
+  get sharedEgressHost() { return sharedEgressHost; },
+  get browserSessionBots() { return browserSessionBots; },
+  get webBotAuthStore() { return webBotAuthStore; },
+  get signedVisits() { return signedVisits; },
+  get browserRuntime() { return browserRuntime; },
+  get browserLive() { return browserLive; },
+  get browserNetworkDebug() { return browserNetworkDebug; },
+  get usedBrowserSessions() { return usedBrowserSessions; },
+  get browserSweep() { return browserSweep; },
+  get myChrome() { return myChrome; },
+  get MY_CHROME_SESSION_PREFIX() { return MY_CHROME_SESSION_PREFIX; },
+  get myChromeNavigationRefusal() { return myChromeNavigationRefusal; },
+  get temporaryBrowserSessions() { return temporaryBrowserSessions; },
+  get confidentialBrowserSessions() { return confidentialBrowserSessions; },
+  get currentBrowserSession() { return currentBrowserSession; },
+  get forgetTemporaryBrowser() { return forgetTemporaryBrowser; },
+  get forgetConfidentialBrowser() { return forgetConfidentialBrowser; },
+  get browserIntegration() { return browserIntegration; },
+  get dataSheets() { return dataSheets; },
+  get dataFrameAudience() { return dataFrameAudience; },
+  get dataScopeForViewer() { return dataScopeForViewer; },
+  get dataConfinedRoots() { return dataConfinedRoots; },
+  get dataThreadFolders() { return dataThreadFolders; },
+  get dataSelfAnswerRoots() { return dataSelfAnswerRoots; },
+  get dataExportRoots() { return dataExportRoots; },
+  get dataIntegration() { return dataIntegration; },
+  get browserEngineInstall() { return browserEngineInstall; },
+  get browserEngineInstallError() { return browserEngineInstallError; },
+  get userSandboxIntegration() { return userSandboxIntegration; },
+  get userDesktopIntegration() { return userDesktopIntegration; },
+  get workplaceIntegration() { return workplaceIntegration; },
+  get autoComputerStateFor() { return autoComputerStateFor; },
+  get lastAutoPlace() { return lastAutoPlace; },
+  get decideWorkplace() { return decideWorkplace; },
+  get _storedNamesInImpl() { return _storedNamesInImpl; },
+  get storedFamily() { return storedFamily; },
+  get holdTurnAttachments() { return holdTurnAttachments; },
+  get soloArchiveText() { return soloArchiveText; },
+  get workplaceTurnText() { return workplaceTurnText; },
+  get officeTurnText() { return officeTurnText; },
+  get withWorkplaceNote() { return withWorkplaceNote; },
+  get _workplaceNoteTextImpl() { return _workplaceNoteTextImpl; },
+  get attachmentReferences() { return attachmentReferences; },
+  get turnNetworkProxy() { return turnNetworkProxy; },
+  get mountUserSandbox() { return mountUserSandbox; },
+  get _parseArchiveOutcomeImpl() { return _parseArchiveOutcomeImpl; },
+  get stagePendingAttachments() { return stagePendingAttachments; },
+  get phoneIntegration() { return phoneIntegration; },
+  get messagesIntegration() { return messagesIntegration; },
+  get imessageSender() { return imessageSender; },
+  get recordPerspicaxWork() { return recordPerspicaxWork; },
+  get routineMemoryHint() { return routineMemoryHint; },
+  get perspicaxTurnPrepare() { return perspicaxTurnPrepare; },
+  get perspicaxTurnIntegration() { return perspicaxTurnIntegration; },
+  get computerControlRevision() { return computerControlRevision; },
+  get computerControl() { return computerControl; },
+  get controlIntegration() { return controlIntegration; },
+  get awaitedAsks() { return awaitedAsks; },
+  get askBotAndWait() { return askBotAndWait; },
+  get syncHeadlessTeam() { return syncHeadlessTeam; },
+  get HEADLESS_TASK_WAIT_MS() { return HEADLESS_TASK_WAIT_MS; },
+  get headlessTasks() { return headlessTasks; },
+  get memberDefaultSelection() { return memberDefaultSelection; },
+  get personRunsEngine() { return personRunsEngine; },
+  get refreshUnsetModelSelectionsShared() { return refreshUnsetModelSelectionsShared; },
+  get refreshUnsetModelSelectionsFrom() { return refreshUnsetModelSelectionsFrom; },
+  get moveOffComputerEngine() { return moveOffComputerEngine; },
+  get computerEngineMoveRunning() { return computerEngineMoveRunning; },
+  get checkedModelSelection() { return checkedModelSelection; },
+  get checkedTaskModelSwitch() { return checkedTaskModelSwitch; },
+  get threadEngine() { return threadEngine; },
+  get threadModelGivingWay() { return threadModelGivingWay; },
+  get healThreadModel() { return healThreadModel; },
+  get healOrgRefusedThreadModel() { return healOrgRefusedThreadModel; },
+  get checkedExportSkillNames() { return checkedExportSkillNames; },
+  get collectExportSkills() { return collectExportSkills; },
+  get collectTeamSkills() { return collectTeamSkills; },
+  get starterNotes() { return starterNotes; },
+  get packageImportDeps() { return packageImportDeps; },
+  get defaultsPresetFor() { return defaultsPresetFor; },
+  get _checkedGroupResponderImpl() { return _checkedGroupResponderImpl; },
+  get checkedMemberIds() { return checkedMemberIds; },
+  get enginesRead() { return enginesRead; },
+  get presetStore() { return presetStore; },
+  get semanticIndex() { return semanticIndex; },
+  get teamComputers() { return teamComputers; },
+  get sendSequencer() { return sendSequencer; },
+  get widgetPressesInFlight() { return widgetPressesInFlight; },
+  get startupCatalogs() { return startupCatalogs; },
+  get companyMemory() { return companyMemory; },
+  get memoryPromptFor() { return memoryPromptFor; },
+  get userSandbox() { return userSandbox; },
+  get sandboxBotFolders() { return sandboxBotFolders; },
+  get attributeSandboxEntries() { return attributeSandboxEntries; },
+  get updateRoutinePathsAfterTidy() { return updateRoutinePathsAfterTidy; },
+  get sandboxTidier() { return sandboxTidier; },
+  get botTailscaleService() { return botTailscaleService; },
+  get runLifecycleEvent() { return runLifecycleEvent; },
+  get execLifecycleHook() { return execLifecycleHook; },
+  get sandboxWakeNoted() { return sandboxWakeNoted; },
+  get _noteSandboxClusterWaitImpl() { return _noteSandboxClusterWaitImpl; },
+  get personConnections() { return personConnections; },
+  get personalSkills() { return personalSkills; },
+  get credentialVault() { return credentialVault; },
+  get outbound() { return outbound; },
+  get orderFollowUps() { return orderFollowUps; },
+  get onePassword() { return onePassword; },
+  get computerApps() { return computerApps; },
+  get hostScreenTurns() { return hostScreenTurns; },
+  get readOnePasswordField() { return readOnePasswordField; },
+  get onePasswordWaitNoted() { return onePasswordWaitNoted; },
+  get onePasswordReaderFor() { return onePasswordReaderFor; },
+  get piKitIdentityFor() { return piKitIdentityFor; },
+  get webSearchStore() { return webSearchStore; },
+  get openApiStore() { return openApiStore; },
+  get openApiToolsEnv() { return openApiToolsEnv; },
+  get workflowStore() { return workflowStore; },
+  get workflowDeliver() { return workflowDeliver; },
+  get workflowOwned() { return workflowOwned; },
+  get usageMeter() { return usageMeter; },
+  get personSettings() { return personSettings; },
+  get voiceFor() { return voiceFor; },
+  get webSearchAddressRefusal() { return webSearchAddressRefusal; },
+  get credentialVaultPrincipal() { return credentialVaultPrincipal; },
+  get _credentialVaultPersonRefusalImpl() { return _credentialVaultPersonRefusalImpl; },
+  get cloudAgentStore() { return cloudAgentStore; },
+  get cloudAgentCredentials() { return cloudAgentCredentials; },
+  get personOAuthManagers() { return personOAuthManagers; },
+  get personOAuth() { return personOAuth; },
+  get syncGithubToSandbox() { return syncGithubToSandbox; },
+  get githubSyncedGenerations() { return githubSyncedGenerations; },
+  get syncGithubForTurn() { return syncGithubForTurn; },
+  get pluginSyncedGenerations() { return pluginSyncedGenerations; },
+  get pluginSyncChains() { return pluginSyncChains; },
+  get syncPluginsForTurn() { return syncPluginsForTurn; },
+  get syncPluginFoldersForTurn() { return syncPluginFoldersForTurn; },
+  get githubReplaced() { return githubReplaced; },
+  get githubConnect() { return githubConnect; },
+  get legacyOrgGithubTokens() { return legacyOrgGithubTokens; },
+  get orgBotSecrets() { return orgBotSecrets; },
+  get legacyMarketplaceTokens() { return legacyMarketplaceTokens; },
+  get githubCredentials() { return githubCredentials; },
+  get usableCredential() { return usableCredential; },
+  get githubCredentialsFor() { return githubCredentialsFor; },
+  get marketplaceCredentials() { return marketplaceCredentials; },
+  get migrateCapabilitiesConfigStores() { return migrateCapabilitiesConfigStores; },
+  get SKILLS_LIBRARY_BOT_SWEEP() { return SKILLS_LIBRARY_BOT_SWEEP; },
+  get pluginMarketplaces() { return pluginMarketplaces; },
+  get botPlugins() { return botPlugins; },
+  get personalPlugins() { return personalPlugins; },
+  get installationPlugins() { return installationPlugins; },
+  get orgFlowPlugins() { return orgFlowPlugins; },
+  get orgCapabilityMarkets() { return orgCapabilityMarkets; },
+  get orgCapabilities() { return orgCapabilities; },
+  get syncOrgCapabilities() { return syncOrgCapabilities; },
+  get orgDeclarationInputs() { return orgDeclarationInputs; },
+  get stdioRelay() { return stdioRelay; },
+  get personalServerListing() { return personalServerListing; },
+  get personalHostChecks() { return personalHostChecks; },
+  get personalHostRefusalCached() { return personalHostRefusalCached; },
+  get personalStdioIntegration() { return personalStdioIntegration; },
+  get mountPersonalMcp() { return mountPersonalMcp; },
+  get mountPluginMcp() { return mountPluginMcp; },
+  get ownPageContext() { return ownPageContext; },
+  get publishedPageViewer() { return publishedPageViewer; },
+  get PAGES_ORIGIN() { return PAGES_ORIGIN; },
+  get pagesSeparation() { return pagesSeparation; },
+  get publishedPageOptions() { return publishedPageOptions; },
+  get addPersonalMcpServer() { return addPersonalMcpServer; },
+  get scopedPluginFolders() { return scopedPluginFolders; },
+  get scopedPluginMcp() { return scopedPluginMcp; },
+  get pluginFolderCapability() { return pluginFolderCapability; },
+  get scopedSkillInventory() { return scopedSkillInventory; },
+  get scopedSkillsPrompt() { return scopedSkillsPrompt; },
+  get botCapabilitiesFor() { return botCapabilitiesFor; },
+  get consoleBotCapabilities() { return consoleBotCapabilities; },
+  get botCapabilitiesAs() { return botCapabilitiesAs; },
+  get orgTeams() { return orgTeams; },
+  get engineLogins() { return engineLogins; },
+  get sectionChannels() { return sectionChannels; },
+  get threadsWithActiveCoordination() { return threadsWithActiveCoordination; },
+  get cacheKeepWarmStatus() { return cacheKeepWarmStatus; },
+  get continuationHolds() { return continuationHolds; },
+  get HELD_ACTIVITY() { return HELD_ACTIVITY; },
+  get wireTask() { return wireTask; },
+  get wireBot() { return wireBot; },
+  get wireTrustedApprovalBot() { return wireTrustedApprovalBot; },
+  get previewSystemPrompt() { return previewSystemPrompt; },
+  get botOverview() { return botOverview; },
+  get approvalModeForTurn() { return approvalModeForTurn; },
+  get approvalLevelOf() { return approvalLevelOf; },
+  get appliesDirectly() { return appliesDirectly; },
+  get teamSetupDirectSource() { return teamSetupDirectSource; },
+  get primaryAskedProposal() { return primaryAskedProposal; },
+  get delegatedLevel() { return delegatedLevel; },
+  get DELEGATED_LEVEL_NAMES() { return DELEGATED_LEVEL_NAMES; },
+  get handleDesktopTrustedApprovalMessage() { return handleDesktopTrustedApprovalMessage; },
+  get storedAvatarExists() { return storedAvatarExists; },
+  get publicBot() { return publicBot; },
+  get publicBotQueuedMessages() { return publicBotQueuedMessages; },
+  get goalWorkerTurns() { return goalWorkerTurns; },
+  get groupTurnOperations() { return groupTurnOperations; },
+  get groupSpeakers() { return groupSpeakers; },
+  get groupApprovalRequests() { return groupApprovalRequests; },
+  get groupThreadIsWorking() { return groupThreadIsWorking; },
+  get activeGroupSpeaker() { return activeGroupSpeaker; },
+  get groupGoalCoordinatorTurns() { return groupGoalCoordinatorTurns; },
+  get GROUP_GOAL_COORDINATOR_GUARD_MS() { return GROUP_GOAL_COORDINATOR_GUARD_MS; },
+  get groupGoalCoordinatorTurnForEvent() { return groupGoalCoordinatorTurnForEvent; },
+  get groupIsWorking() { return groupIsWorking; },
+  get createChannel() { return createChannel; },
+  get updateChannel() { return updateChannel; },
+  get channelTaskBlocked() { return channelTaskBlocked; },
+  get groupQueues() { return groupQueues; },
+  get registeredWorkers() { return registeredWorkers; },
+  get turnBell() { return turnBell; },
+  get MACHINE_OFFLINE_NOTE() { return MACHINE_OFFLINE_NOTE; },
+  get machineTurnDone() { return machineTurnDone; },
+  get machinePrompts() { return machinePrompts; },
+  get machineApprovals() { return machineApprovals; },
+  get machineProgressIds() { return machineProgressIds; },
+  get sessionDeviceIds() { return sessionDeviceIds; },
+  get loopbackDeviceIds() { return loopbackDeviceIds; },
+  get deviceOwnerSession() { return deviceOwnerSession; },
+  get queuedWorkerTurns() { return queuedWorkerTurns; },
+  get inflightWorkerTurns() { return inflightWorkerTurns; },
+  get inflightWorkerAuthors() { return inflightWorkerAuthors; },
+  get locateChannelMessage() { return locateChannelMessage; },
+  get turnsHeldOnGroup() { return turnsHeldOnGroup; },
+  get _partialAlreadyWrittenImpl() { return _partialAlreadyWrittenImpl; },
+  get _openTurnMessageImpl() { return _openTurnMessageImpl; },
+  get forgetInflight() { return forgetInflight; },
+  get commitFailedTurn() { return commitFailedTurn; },
+  get failQueuedMessage() { return failQueuedMessage; },
+  get failTurnIfMemberLeft() { return failTurnIfMemberLeft; },
+  get machineTurnBots() { return machineTurnBots; },
+  get replaceQueuedWorkerTurns() { return replaceQueuedWorkerTurns; },
+  get finishMachineTurn() { return finishMachineTurn; },
+  get readWorkerTurn() { return readWorkerTurn; },
+  get writeWorkerTurn() { return writeWorkerTurn; },
+  get maySetBotHost() { return maySetBotHost; },
+  get holdDirectMachineTurn() { return holdDirectMachineTurn; },
+  get failWorkerTurns() { return failWorkerTurns; },
+  get roomHandoffProblem() { return roomHandoffProblem; },
+  get outstandingAssignmentsPrompt() { return outstandingAssignmentsPrompt; },
+  get queuedBehindPerson() { return queuedBehindPerson; },
+  get queuedBehindPersonNoted() { return queuedBehindPersonNoted; },
+  get noteQueuedBehindPerson() { return noteQueuedBehindPerson; },
+  get relayStreams() { return relayStreams; },
+  get relayShown() { return relayShown; },
+  get RELAY_RESULT_MAX() { return RELAY_RESULT_MAX; },
+  get peerReviews() { return peerReviews; },
+  get THREAD_DELETED() { return THREAD_DELETED; },
+  get legacyHandoffsDropped() { return legacyHandoffsDropped; },
+  get reviewHolds() { return reviewHolds; },
+  get coordinatorValidate() { return coordinatorValidate; },
+  get coordinator() { return coordinator; },
+  get originApprovals() { return originApprovals; },
+  get botActSendIds() { return botActSendIds; },
+  get openInputRequests() { return openInputRequests; },
+  get postInputRequest() { return postInputRequest; },
+  get settleInputRequests() { return settleInputRequests; },
+  get groupUsageReader() { return groupUsageReader; },
+  get publicGroupState() { return publicGroupState; },
+  get announcedProfiles() { return announcedProfiles; },
+  get announceProfileChange() { return announceProfileChange; },
+  get beginGroupTurnOperation() { return beginGroupTurnOperation; },
+  get finishGroupTurnOperation() { return finishGroupTurnOperation; },
+  get finishGroupGoalRun() { return finishGroupGoalRun; },
+  get updateGroupGoalRunProgress() { return updateGroupGoalRunProgress; },
+  get waitForGroupMemberBot() { return waitForGroupMemberBot; },
+  get waitForChatRoomMember() { return waitForChatRoomMember; },
+  get newestPeerActivityAt() { return newestPeerActivityAt; },
+  get coordinationLiveRosterBlock() { return coordinationLiveRosterBlock; },
+  get stopGroupThreads() { return stopGroupThreads; },
+  get cancelGroupTurnOperations() { return cancelGroupTurnOperations; },
+  get activeGroupTurnForBot() { return activeGroupTurnForBot; },
+  get groupWithThread() { return groupWithThread; },
+  get withdrawnApprovalNotices() { return withdrawnApprovalNotices; },
+  get sentThreads() { return sentThreads; },
+  get MESSAGE_PAGE_MAX() { return MESSAGE_PAGE_MAX; },
+  get DEFAULT_PAGE() { return DEFAULT_PAGE; },
+  get latestPersonText() { return latestPersonText; },
+  get slimMessage() { return slimMessage; },
+  get transcriptPage() { return transcriptPage; },
+  get guardedRequestSnapshot() { return guardedRequestSnapshot; },
+  get settleTrackedRequest() { return settleTrackedRequest; },
+  get messageWindow() { return messageWindow; },
+  get sseClients() { return sseClients; },
+  get sandboxControlHolds() { return sandboxControlHolds; },
+  get desktopViewer() { return desktopViewer; },
+  get desktopTerminals() { return desktopTerminals; },
+  get terminalAccessFor() { return terminalAccessFor; },
+  get terminalWorkPlace() { return terminalWorkPlace; },
+  get terminalAnswerExtras() { return terminalAnswerExtras; },
+  get bridgeTerminal() { return bridgeTerminal; },
+  get openRemoteShell() { return openRemoteShell; },
+  get terminalFeature() { return terminalFeature; },
+  get REMOTE_SUPPORT_DIR() { return REMOTE_SUPPORT_DIR; },
+  get remoteSessionActionsAudit() { return remoteSessionActionsAudit; },
+  get remoteSessions() { return remoteSessions; },
+  get unattendedConsent() { return unattendedConsent; },
+  get remoteSessionsAdmin() { return remoteSessionsAdmin; },
+  get unattendedHosts() { return unattendedHosts; },
+  get remoteBotHosts() { return remoteBotHosts; },
+  get resourceUsage() { return resourceUsage; },
+  get remoteSupportSeats() { return remoteSupportSeats; },
+  get remoteSupportSeat() { return remoteSupportSeat; },
+  get remoteSupportWatcher() { return remoteSupportWatcher; },
+  get remoteSessionRegistrar() { return remoteSessionRegistrar; },
+  get closeSessionStreams() { return closeSessionStreams; },
+  get STREAM_ID() { return STREAM_ID; },
+  get configuredSseHeartbeatMs() { return configuredSseHeartbeatMs; },
+  get SSE_HEARTBEAT_MS() { return SSE_HEARTBEAT_MS; },
+  get replayBuffer() { return replayBuffer; },
+  get wants() { return wants; },
+  get cursorSeq() { return cursorSeq; },
+  get fanoutSsePayload() { return fanoutSsePayload; },
+  get runtimeDeltaCoalescer() { return runtimeDeltaCoalescer; },
+  get CONFIDENTIAL_GATED_MCP_PATHS() { return CONFIDENTIAL_GATED_MCP_PATHS; },
+  get confidentialMemoryPasses() { return confidentialMemoryPasses; },
+  get privateFolderThread() { return privateFolderThread; },
+  get makeThreadConfidential() { return makeThreadConfidential; },
+  get engineHomes() { return engineHomes; },
+  get purgeConfidentialEngineKeys() { return purgeConfidentialEngineKeys; },
+  get purgeDeletedThreadEngines() { return purgeDeletedThreadEngines; },
+  get forgetThreadEngineSessions() { return forgetThreadEngineSessions; },
+  get confidentialThreadAttachments() { return confidentialThreadAttachments; },
+  get wipeConfidentialThread() { return wipeConfidentialThread; },
+  get peerThreadFor() { return peerThreadFor; },
+  get registeredDeviceFor() { return registeredDeviceFor; },
+  get viewerForApproval() { return viewerForApproval; },
+  get _isApprovalCardMessageImpl() { return _isApprovalCardMessageImpl; },
+  get approvalAnswerRefusal() { return approvalAnswerRefusal; },
+  get adminApprovalCheck() { return adminApprovalCheck; },
+  get MEMBER_BOT_FULL_ACCESS() { return MEMBER_BOT_FULL_ACCESS; },
+  get ADMIN_APPROVAL_REQUIRED() { return ADMIN_APPROVAL_REQUIRED; },
+  get EXEC_USE_BOT_COMPUTER() { return EXEC_USE_BOT_COMPUTER; },
+  get pendingApprovalCards() { return pendingApprovalCards; },
+  get pendingAdminApprovals() { return pendingAdminApprovals; },
+  get orgAdminNames() { return orgAdminNames; },
+  get adminApprovalsAnnounce() { return adminApprovalsAnnounce; },
+  get announcedAdminApprovals() { return announcedAdminApprovals; },
+  get scheduleAdminApprovalsAnnounce() { return scheduleAdminApprovalsAnnounce; },
+  get pendingApprovalsFor() { return pendingApprovalsFor; },
+  get pendingInboxCards() { return pendingInboxCards; },
+  get inboxDestination() { return inboxDestination; },
+  get inboxPending() { return inboxPending; },
+  get inboxHistory() { return inboxHistory; },
+  get answerInboxCard() { return answerInboxCard; },
+  get answerCardFromConsole() { return answerCardFromConsole; },
+  get adminAnswersPendingApproval() { return adminAnswersPendingApproval; },
+  get botForApproval() { return botForApproval; },
+  get scopeApprovalMessage() { return scopeApprovalMessage; },
+  get notifyAccess() { return notifyAccess; },
+  get projectMessages() { return projectMessages; },
+  get approvalBot() { return approvalBot; },
+  get scopeChannelApproval() { return scopeChannelApproval; },
+  get peopleDmFrameAllowed() { return peopleDmFrameAllowed; },
+  get personSendsReadReceipts() { return personSendsReadReceipts; },
+  get threadReadsFor() { return threadReadsFor; },
+  get threadReadFrameAllowed() { return threadReadFrameAllowed; },
+  get viewerNotificationMuted() { return viewerNotificationMuted; },
+  get sseFrameFor() { return sseFrameFor; },
+  get memberFrame() { return memberFrame; },
+  get toolMessageByItem() { return toolMessageByItem; },
+  get closeCutToolRows() { return closeCutToolRows; },
+  get stopOwnSubagents() { return stopOwnSubagents; },
+  get safePoints() { return safePoints; },
+  get preemptAtSafePoint() { return preemptAtSafePoint; },
+  get stoppedRowSinceLastPerson() { return stoppedRowSinceLastPerson; },
+  get autoApprovals() { return autoApprovals; },
+  get roleJournal() { return roleJournal; },
+  get roleEvents() { return roleEvents; },
+  get noteAutoApproval() { return noteAutoApproval; },
+  get askMessageByRequest() { return askMessageByRequest; },
+  get unansweredApprovals() { return unansweredApprovals; },
+  get pendingCommandRules() { return pendingCommandRules; },
+  get commandRememberRefusal() { return commandRememberRefusal; },
+  get answerRequest() { return answerRequest; },
+  get respondToCard() { return respondToCard; },
+  get _capturedReplyImpl() { return _capturedReplyImpl; },
+  get resolveLiveProposal() { return resolveLiveProposal; },
+  get closeOpenApprovals() { return closeOpenApprovals; },
+  get lastReply() { return lastReply; },
+  get turnReplyRepeats() { return turnReplyRepeats; },
+  get appPiecesByThread() { return appPiecesByThread; },
+  get limitFailoverStore() { return limitFailoverStore; },
+  get limitFailoverRow() { return limitFailoverRow; },
+  get limitResumeText() { return limitResumeText; },
+  get notePlanLimits() { return notePlanLimits; },
+  get limitCandidatesNow() { return limitCandidatesNow; },
+  get limitFailover() { return limitFailover; },
+  get emptyResponseRetry() { return emptyResponseRetry; },
+  get resendUserMessage() { return resendUserMessage; },
+  get keepWarmTargets() { return keepWarmTargets; },
+  get keepWarmContext() { return keepWarmContext; },
+  get cacheKeepWarm() { return cacheKeepWarm; },
+  get limitPlanDriver() { return limitPlanDriver; },
+  get LIMIT_DRIVER() { return LIMIT_DRIVER; },
+  get limitReset() { return limitReset; },
+  get limitBackupRefusedInThread() { return limitBackupRefusedInThread; },
+  get stoppedTurns() { return stoppedTurns; },
+  get sessionModelByThread() { return sessionModelByThread; },
+  get turnRunByThread() { return turnRunByThread; },
+  get nativeReviewNoticed() { return nativeReviewNoticed; },
+  get quietTurnThreads() { return quietTurnThreads; },
+  get QUIET_TURN_NEWS() { return QUIET_TURN_NEWS; },
+  get notify() { return notify; },
+  get HIDDEN_APPROVAL_TTL_MS() { return HIDDEN_APPROVAL_TTL_MS; },
+  get ROUTINE_APPROVAL_WAIT_MS() { return ROUTINE_APPROVAL_WAIT_MS; },
+  get raiseHarnessQuestion() { return raiseHarnessQuestion; },
+  get scheduleApprovalExpiry() { return scheduleApprovalExpiry; },
+  get pendingExpireDaysForPerson() { return pendingExpireDaysForPerson; },
+  get expireDueApprovalsInThread() { return expireDueApprovalsInThread; },
+  get withdrawApprovalNotice() { return withdrawApprovalNotice; },
+  get notificationQuietOnPhones() { return notificationQuietOnPhones; },
+  get roomTurnLevels() { return roomTurnLevels; },
+  get routedRoomReplies() { return routedRoomReplies; },
+  get turnUsage() { return turnUsage; },
+  get turnContext() { return turnContext; },
+  get TURN_STALL_MS() { return TURN_STALL_MS; },
+  get TOOL_STALL_MS() { return TOOL_STALL_MS; },
+  get stallCause() { return stallCause; },
+  get LIMIT_RESUME_SETTLE_MS() { return LIMIT_RESUME_SETTLE_MS; },
+  get ASK_BOT_TIMEOUT_MS() { return ASK_BOT_TIMEOUT_MS; },
+  get GROUP_GOAL_WAIT_MAX_MS() { return GROUP_GOAL_WAIT_MAX_MS; },
+  get COMPUTER_WAIT_MAX_MS() { return COMPUTER_WAIT_MAX_MS; },
+  get GROUP_GOAL_MAX_WAIT_EXHAUSTIONS() { return GROUP_GOAL_MAX_WAIT_EXHAUSTIONS; },
+  get roomStallCompletions() { return roomStallCompletions; },
+  get turnStops() { return turnStops; },
+  get stoppedTurnText() { return stoppedTurnText; },
+  get watchdog() { return watchdog; },
+  get memoryRowsByThread() { return memoryRowsByThread; },
+  get bootEngineSlots() { return bootEngineSlots; },
+  get holdBootEngineSlot() { return holdBootEngineSlot; },
+  get releaseBootEngineSlot() { return releaseBootEngineSlot; },
+  get memoryUpkeep() { return memoryUpkeep; },
+  get captureTurnFor() { return captureTurnFor; },
+  get turnStartedAt() { return turnStartedAt; },
+  get turnCheckpoints() { return turnCheckpoints; },
+  get liveTurnByThread() { return liveTurnByThread; },
+  get liveVoiceUtteranceByThread() { return liveVoiceUtteranceByThread; },
+  get cancelledVoiceTurns() { return cancelledVoiceTurns; },
+  get TOOL_RESULTS_DIR() { return TOOL_RESULTS_DIR; },
+  get TOOL_RESULT_SPILL_MAX() { return TOOL_RESULT_SPILL_MAX; },
+  get DIGESTS_AFTER_COMPACTION() { return DIGESTS_AFTER_COMPACTION; },
+  get ingestEngineHook() { return ingestEngineHook; },
+  get scheduleTurnDigest() { return scheduleTurnDigest; },
+  get unattendedThreads() { return unattendedThreads; },
+  get UNATTENDED_TTL_MS() { return UNATTENDED_TTL_MS; },
+  get isUnattended() { return isUnattended; },
+  get internalTurnThreads() { return internalTurnThreads; },
+  get reviewAnswerThreads() { return reviewAnswerThreads; },
+  get personAskAt() { return personAskAt; },
+  get routines() { return routines; },
+  get savedSteps() { return savedSteps; },
+  get calendarCalls() { return calendarCalls; },
+  get localVmOwnerBusy() { return localVmOwnerBusy; },
+  get localVmLeases() { return localVmLeases; },
+  get localVmSeatPool() { return localVmSeatPool; },
+  get localVmLifecycleBusy() { return localVmLifecycleBusy; },
+  get localVmThreadTargets() { return localVmThreadTargets; },
+  get localVmActiveThreads() { return localVmActiveThreads; },
+  get autoVmClaims() { return autoVmClaims; },
+  get COMPUTER_CALL_WAIT_MS() { return COMPUTER_CALL_WAIT_MS; },
+  get COMPUTER_CALL_ACT_WITHIN_MS() { return COMPUTER_CALL_ACT_WITHIN_MS; },
+  get COMPUTER_CALL_POLL_MS() { return COMPUTER_CALL_POLL_MS; },
+  get localVmSeen() { return localVmSeen; },
+  get activeVpsThreads() { return activeVpsThreads; },
+  get boatLifecycleBusyBots() { return boatLifecycleBusyBots; },
+  get vpsPreviewRequests() { return vpsPreviewRequests; },
+  get vpsJoinRequests() { return vpsJoinRequests; },
+  get orphanBoatLifecycleBusyIds() { return orphanBoatLifecycleBusyIds; },
+  get boatInventoryRequestsBusyIds() { return boatInventoryRequestsBusyIds; },
+  get computerProviderConfigTransitions() { return computerProviderConfigTransitions; },
+  get localVmIdleMs() { return localVmIdleMs; },
+  get LOCAL_VM_DESKTOP_WAIT_MS() { return LOCAL_VM_DESKTOP_WAIT_MS; },
+  get localVmIdles() { return localVmIdles; },
+  get _settledWithinOrStopImpl() { return _settledWithinOrStopImpl; },
+  get computerCallGate() { return computerCallGate; },
+  get teamComputerInUse() { return teamComputerInUse; },
+  get claimTeamComputerLifecycle() { return claimTeamComputerLifecycle; },
+  get assertTeamComputerChangeIdle() { return assertTeamComputerChangeIdle; },
+  get teamComputersPayload() { return teamComputersPayload; },
+  get attachTeamBoat() { return attachTeamBoat; },
+  get cloudComputerTools() { return cloudComputerTools; },
+  get mountHostComputer() { return mountHostComputer; },
+  get mountBotVps() { return mountBotVps; },
+  get CLOUD_COMPUTER_START_BUDGET_MS() { return CLOUD_COMPUTER_START_BUDGET_MS; },
+  get CLOUD_COMPUTER_STARTING() { return CLOUD_COMPUTER_STARTING; },
+  get CLOUD_COMPUTER_DID_NOT_START() { return CLOUD_COMPUTER_DID_NOT_START; },
+  get mountBotBoat() { return mountBotBoat; },
+  get attachBotBoat() { return attachBotBoat; },
+  get startBotBoat() { return startBotBoat; },
+  get managedBoatOwners() { return managedBoatOwners; },
+  get providerOperationConflict() { return providerOperationConflict; },
+  get turnSurfacePlan() { return turnSurfacePlan; },
+  get turnProvider() { return turnProvider; },
+  get computerPreviewSurface() { return computerPreviewSurface; },
+  get selectableComputers() { return selectableComputers; },
+  get continueComputerSelection() { return continueComputerSelection; },
+  get runningTurnEngines() { return runningTurnEngines; },
+  get memoryGuard() { return memoryGuard; },
+  get ROUTINE_MEMORY_WAIT_MS() { return ROUTINE_MEMORY_WAIT_MS; },
+  get idleEngines() { return idleEngines; },
+  get memoryWatch() { return memoryWatch; },
+  get providerTransitionForTurn() { return providerTransitionForTurn; },
+  get claimManagedBoatMutation() { return claimManagedBoatMutation; },
+  get claimBotComputerLifecycle() { return claimBotComputerLifecycle; },
+  get claimManagedVpsMutation() { return claimManagedVpsMutation; },
+  get localVmTargetForStatus() { return localVmTargetForStatus; },
+  get localVmIdleFor() { return localVmIdleFor; },
+  get releaseLocalVmThread() { return releaseLocalVmThread; },
+  get localVmAuto() { return localVmAuto; },
+  get localVmAutoLifecycle() { return localVmAutoLifecycle; },
+  get localVmInventoryPayload() { return localVmInventoryPayload; },
+  get soloGoals() { return soloGoals; },
+  get finishUntilRuns() { return finishUntilRuns; },
+  get soloGoalReceipts() { return soloGoalReceipts; },
+  get relayParentThreads() { return relayParentThreads; },
+  get delegationWatch() { return delegationWatch; },
+  get openQuestionCard() { return openQuestionCard; },
+  get openPersonCard() { return openPersonCard; },
+  get delegatorOf() { return delegatorOf; },
+  get waitingOnPersonChips() { return waitingOnPersonChips; },
+  get showWaitingOnPersonChip() { return showWaitingOnPersonChip; },
+  get settleWaitingOnPersonChips() { return settleWaitingOnPersonChips; },
+  get routineOnWire() { return routineOnWire; },
+  get principalMayRunRoutine() { return principalMayRunRoutine; },
+  get routineAdmission() { return routineAdmission; },
+  get routineSuspended() { return routineSuspended; },
+  get routineAudit() { return routineAudit; },
+  get auditBotTarget() { return auditBotTarget; },
+  get runAsChooserFor() { return runAsChooserFor; },
+  get runAsPeople() { return runAsPeople; },
+  get routineRunAsChoice() { return routineRunAsChoice; },
+  get auditRoutineRunAs() { return auditRoutineRunAs; },
+  get mayRunRoutineNow() { return mayRunRoutineNow; },
+  get speakerMayRunRoutineNow() { return speakerMayRunRoutineNow; },
+  get mayCancelRoutineRun() { return mayCancelRoutineRun; },
+  get routineScopeCaller() { return routineScopeCaller; },
+  get routineScopeFacts() { return routineScopeFacts; },
+  get routineScopeDeps() { return routineScopeDeps; },
+  get CW_OPEN_RECORD() { return CW_OPEN_RECORD; },
+  get attentionTicketUrl() { return attentionTicketUrl; },
+  get personAttentionDeps() { return personAttentionDeps; },
+  get routineModelRefusal() { return routineModelRefusal; },
+  get routineModelNoticed() { return routineModelNoticed; },
+  get routineModelForTurn() { return routineModelForTurn; },
+  get routineSubagentModelNoticed() { return routineSubagentModelNoticed; },
+  get routineSubagentModelForTurn() { return routineSubagentModelForTurn; },
+  get routineEffortNoticed() { return routineEffortNoticed; },
+  get routineEffortForTurn() { return routineEffortForTurn; },
+  get dispatchDelegationWake() { return dispatchDelegationWake; },
+  get wakeDelegationSource() { return wakeDelegationSource; },
+  get incidentLedger() { return incidentLedger; },
+  get latestFailedTurnCause() { return latestFailedTurnCause; },
+  get turnAnswers() { return turnAnswers; },
+  get incidentRefused() { return incidentRefused; },
+  get reportIncident() { return reportIncident; },
+  get drainDelegationWakes() { return drainDelegationWakes; },
+  get EXTERNAL_CONTEXT_MARKER_PREFIX() { return EXTERNAL_CONTEXT_MARKER_PREFIX; },
+  get callLinesSince() { return callLinesSince; },
+  get noteCallBesideConversation() { return noteCallBesideConversation; },
+  get markTaskContextExternallyUpdated() { return markTaskContextExternallyUpdated; },
+  get _latestCompactionImpl() { return _latestCompactionImpl; },
+  get CONTEXT_SUMMARIES_KEPT() { return CONTEXT_SUMMARIES_KEPT; },
+  get directContext() { return directContext; },
+  get staleEngineSession() { return staleEngineSession; },
+  get smallTalkTurns() { return smallTalkTurns; },
+  get compactConversation() { return compactConversation; },
+  get voiceCalls() { return voiceCalls; },
+  get voiceWarmup() { return voiceWarmup; },
+  get voiceSessions() { return voiceSessions; },
+  get voiceFirstSentences() { return voiceFirstSentences; },
+  get releaseWarmEngine() { return releaseWarmEngine; },
+  get threadPrewarm() { return threadPrewarm; },
+  get prewarmRefusal() { return prewarmRefusal; },
+  get PREWARM_JOIN_MS() { return PREWARM_JOIN_MS; },
+  get joinPrewarm() { return joinPrewarm; },
+  get prewarmThread() { return prewarmThread; },
+  get reservedWorkThreads() { return reservedWorkThreads; },
+  get RESERVED_WORK_MS() { return RESERVED_WORK_MS; },
+  get releaseReservedWorkThread() { return releaseReservedWorkThread; },
+  get adoptReservedWorkThread() { return adoptReservedWorkThread; },
+  get prewarmNamedTeammates() { return prewarmNamedTeammates; },
+  get finishVoiceCallRequestedByBot() { return finishVoiceCallRequestedByBot; },
+  get voiceLatency() { return voiceLatency; },
+  get publishVoiceNotice() { return publishVoiceNotice; },
+  get handoffs() { return handoffs; },
+  get finalizeDelegationWatch() { return finalizeDelegationWatch; },
+  get loopUnownedLogged() { return loopUnownedLogged; },
+  get releasedBots() { return releasedBots; },
+  get retryDelegationsWaitingOn() { return retryDelegationsWaitingOn; },
+  get voiceCallRetried() { return voiceCallRetried; },
+  get scheduleSoloGoalRound() { return scheduleSoloGoalRound; },
+  get SOLO_GOAL_ROUND_DELAY_MS() { return SOLO_GOAL_ROUND_DELAY_MS; },
+  get scheduleFinishUntilRound() { return scheduleFinishUntilRound; },
+  get FINISH_UNTIL_RELAUNCH_DELAY_MS() { return FINISH_UNTIL_RELAUNCH_DELAY_MS; },
+  get unfinishedTurns() { return unfinishedTurns; },
+  get UNFINISHED_TURN_DELAY_MS() { return UNFINISHED_TURN_DELAY_MS; },
+  get scheduleUnfinishedTurn() { return scheduleUnfinishedTurn; },
+  get scheduleVoiceCallWatchdog() { return scheduleVoiceCallWatchdog; },
+  get drainQueuedSends() { return drainQueuedSends; },
+  get duplexEpochByThread() { return duplexEpochByThread; },
+  get duplexEpochFor() { return duplexEpochFor; },
+  get DUPLEX_JOIN_RUNNING_TURN() { return DUPLEX_JOIN_RUNNING_TURN; },
+  get startDuplexCallTurn() { return startDuplexCallTurn; },
+  get prewarmSends() { return prewarmSends; },
+  get startOrQueueDirectMessageNow() { return startOrQueueDirectMessageNow; },
+  get parallelStops() { return parallelStops; },
+  get callHandoffHistory() { return callHandoffHistory; },
+  get startParallelTask() { return startParallelTask; },
+  get routableSteers() { return routableSteers; },
+  get busyClassifyEngine() { return busyClassifyEngine; },
+  get routeSteeredMessage() { return routeSteeredMessage; },
+  get settleParallelTask() { return settleParallelTask; },
+  get settleParallelFallback() { return settleParallelFallback; },
+  get stopParallelTask() { return stopParallelTask; },
+  get settleOrphanedParallelTasks() { return settleOrphanedParallelTasks; },
+  get directSendRefusal() { return directSendRefusal; },
+  get misuseTextRefusal() { return misuseTextRefusal; },
+  get safetyReviewer() { return safetyReviewer; },
+  get customRulesModel() { return customRulesModel; },
+  get _serverPathViewImpl() { return _serverPathViewImpl; },
+  get confirmHeldCard() { return confirmHeldCard; },
+  get acceptDirectSend() { return acceptDirectSend; },
+  get deliverLateQuestionAnswer() { return deliverLateQuestionAnswer; },
+  get startOrQueueOpenedThread() { return startOrQueueOpenedThread; },
+  get screenPollers() { return screenPollers; },
+  get computerThumbnails() { return computerThumbnails; },
+  get thumbnailComputerForResource() { return thumbnailComputerForResource; },
+  get thumbnailMime() { return thumbnailMime; },
+  get SCREEN_POLL_MS() { return SCREEN_POLL_MS; },
+  get SCREEN_MIN_GAP_MS() { return SCREEN_MIN_GAP_MS; },
+  get SCREEN_SETTLE_TIMEOUT_MS() { return SCREEN_SETTLE_TIMEOUT_MS; },
+  get startScreenPoller() { return startScreenPoller; },
+  get pokeScreenPoller() { return pokeScreenPoller; },
+  get settledScreenHashes() { return settledScreenHashes; },
+  get finalScreenFrame() { return finalScreenFrame; },
+  get _generateThreadTitleImpl() { return _generateThreadTitleImpl; },
+  get threadTitleGate() { return threadTitleGate; },
+  get titleRegenerations() { return titleRegenerations; },
+  get assertTurnAdmission() { return assertTurnAdmission; },
+  get routineSourceOwner() { return routineSourceOwner; },
+  get markRoutineResultsThreads() { return markRoutineResultsThreads; },
+  get routineFullReport() { return routineFullReport; },
+  get syncRoutineRunToSource() { return syncRoutineRunToSource; },
+  get interruptRoutineGroupGoal() { return interruptRoutineGroupGoal; },
+  get stopBotForEmergencyApprovalDowngrade() { return stopBotForEmergencyApprovalDowngrade; },
+  get runningTurnLevels() { return runningTurnLevels; },
+  get applyStricterApprovalLive() { return applyStricterApprovalLive; },
+  get stopTurnForStricterApproval() { return stopTurnForStricterApproval; },
+  get STRICTER_APPROVAL_STOP_NOTE() { return STRICTER_APPROVAL_STOP_NOTE; },
+  get botRunning() { return botRunning; },
+  get forceStopBot() { return forceStopBot; },
+  get commsBus() { return commsBus; },
+  get localRoutineAway() { return localRoutineAway; },
+  get routineWatchStates() { return routineWatchStates; },
+  get routineWatchPlace() { return routineWatchPlace; },
+  get routineWatchCallTool() { return routineWatchCallTool; },
+  get routineWatchDeps() { return routineWatchDeps; },
+  get routineWatchEvaluator() { return routineWatchEvaluator; },
+  get proactiveProposals() { return proactiveProposals; },
+  get proactiveEngine() { return proactiveEngine; },
+  get proactivePending() { return proactivePending; },
+  get proactiveWaker() { return proactiveWaker; },
+  get directChatOf() { return directChatOf; },
+  get routineEngineForBot() { return routineEngineForBot; },
+  get routineReadinessDeps() { return routineReadinessDeps; },
+  get waitDrafted() { return waitDrafted; },
+  get readAndDraft() { return readAndDraft; },
+  get waitsBoot() { return waitsBoot; },
+  get botWaits() { return botWaits; },
+  get shellLoopGuard() { return shellLoopGuard; },
+  get publishRuntime() { return publishRuntime; },
+  get peerNoticeHops() { return peerNoticeHops; },
+  get noteWakeDryRun() { return noteWakeDryRun; },
+  get offerPeerNotice() { return offerPeerNotice; },
+  get surfacePeerNotice() { return surfacePeerNotice; },
+  get replayPendingProactive() { return replayPendingProactive; },
+  get offerProactive() { return offerProactive; },
+  get offerRoomPostToBots() { return offerRoomPostToBots; },
+  get PROACTIVE_RUN_NAMES() { return PROACTIVE_RUN_NAMES; },
+  get startProactiveWake() { return startProactiveWake; },
+  get answerRoleTransition() { return answerRoleTransition; },
+  get answerProactiveProposal() { return answerProactiveProposal; },
+  get routineCoverageRoute() { return routineCoverageRoute; },
+  get heldRolesRoute() { return heldRolesRoute; },
+  get roleJournalClient() { return roleJournalClient; },
+  get sendMissingRoleToAdmins() { return sendMissingRoleToAdmins; },
+  get recoveredRoutineGoalRuns() { return recoveredRoutineGoalRuns; },
+  get groupGoalRecoveryAt() { return groupGoalRecoveryAt; },
+  get recoveryOwners() { return recoveryOwners; },
+  get cloudRoutineReadiness() { return cloudRoutineReadiness; },
+  get routineRequests() { return routineRequests; },
+  get deleteBotWithLifecycle() { return deleteBotWithLifecycle; },
+  get driverCapabilitiesFor() { return driverCapabilitiesFor; },
+  get chiefPeerTargetRule() { return chiefPeerTargetRule; },
+  get validateModelProposal() { return validateModelProposal; },
+  get teamMemory() { return teamMemory; },
+  get outboundRequests() { return outboundRequests; },
+  get outboundCounts() { return outboundCounts; },
+  get settleTeamMemoryCards() { return settleTeamMemoryCards; },
+  get resolveAndSendTrust() { return resolveAndSendTrust; },
+  get profileRequests() { return profileRequests; },
+  get modelRequests() { return modelRequests; },
+  get ruleRequests() { return ruleRequests; },
+  get teamSetupTeams() { return teamSetupTeams; },
+  get teamSetupRequests() { return teamSetupRequests; },
+  get pendingTeamSetupResumes() { return pendingTeamSetupResumes; },
+  get teamSetupResumeGenerations() { return teamSetupResumeGenerations; },
+  get cancelTeamSetupResumesForThread() { return cancelTeamSetupResumesForThread; },
+  get dispatchTeamSetupResume() { return dispatchTeamSetupResume; },
+  get teamSetupApplyRefusal() { return teamSetupApplyRefusal; },
+  get resolveAndSendTeamSetup() { return resolveAndSendTeamSetup; },
+  get routineTimeZone() { return routineTimeZone; },
+  get sendRoutineResolution() { return sendRoutineResolution; },
+  get resolveAndSendRoutine() { return resolveAndSendRoutine; },
+  get resolveAndSendProfile() { return resolveAndSendProfile; },
+  get resolveAndSendModel() { return resolveAndSendModel; },
+  get resolveAndSendRule() { return resolveAndSendRule; },
+  get undoSkillCard() { return undoSkillCard; },
+  get undoAppliedChange() { return undoAppliedChange; },
+  get triggerPollerCredentials() { return triggerPollerCredentials; },
+  get graphSubscriptions() { return graphSubscriptions; },
+  get triggerPollers() { return triggerPollers; },
+  get graphTokens() { return graphTokens; },
+  get webhooks() { return webhooks; },
+  get bindOwnedTrigger() { return bindOwnedTrigger; },
+  get webhookIngress() { return webhookIngress; },
+  get webhookIngressError() { return webhookIngressError; },
+  get webhookIngressStatus() { return webhookIngressStatus; },
+  get savePollerCredentials() { return savePollerCredentials; },
+  get roomHandoffTimer() { return roomHandoffTimer; },
+  get GROUP_CONTEXT_MESSAGES() { return GROUP_CONTEXT_MESSAGES; },
+  get MAX_GROUP_HOPS() { return MAX_GROUP_HOPS; },
+  get teammateReportContext() { return teammateReportContext; },
+  get serializeRoomContext() { return serializeRoomContext; },
+  get roomRoutingInput() { return roomRoutingInput; },
+  get roomPostBudgets() { return roomPostBudgets; },
+  get approvalBus() { return approvalBus; },
+  get runGoalWorkerOnRuntime() { return runGoalWorkerOnRuntime; },
+  get runGroupGoalStep() { return runGroupGoalStep; },
+  get runGroupGoalOperation() { return runGroupGoalOperation; },
+  get groupEngineCommandRoute() { return groupEngineCommandRoute; },
+  get cachedGroupEngineCommandRoute() { return cachedGroupEngineCommandRoute; },
+  get startGroupTurn() { return startGroupTurn; },
+  get drainQueuedChannelSends() { return drainQueuedChannelSends; },
+  get ensureCalendarCallRoom() { return ensureCalendarCallRoom; },
+  get _deliverCalendarCallImpl() { return _deliverCalendarCallImpl; },
+  get resolveReplyTarget() { return resolveReplyTarget; },
+  get messageFileRootsForThread() { return messageFileRootsForThread; },
+  get threadFileRefForId() { return threadFileRefForId; },
+  get threadFileRefForPath() { return threadFileRefForPath; },
+  get attachmentVmForTurn() { return attachmentVmForTurn; },
+  get connectorThread() { return connectorThread; },
+  get lastHumanRoomMessageAt() { return lastHumanRoomMessageAt; },
+  get roomPostEligibility() { return roomPostEligibility; },
+  get _proposalPersistenceImpl() { return _proposalPersistenceImpl; },
+  get skillProposalPersistence() { return skillProposalPersistence; },
+  get stagedSkillCleanupsForThread() { return stagedSkillCleanupsForThread; },
+  get _skillCardCopyImpl() { return _skillCardCopyImpl; },
+  get appendSkillRequestCard() { return appendSkillRequestCard; },
+  get resolveSkillRequest() { return resolveSkillRequest; },
+  get _sendSkillResolutionImpl() { return _sendSkillResolutionImpl; },
+  get pendingComputerResumes() { return pendingComputerResumes; },
+  get markComputerResumeFailed() { return markComputerResumeFailed; },
+  get dispatchComputerResume() { return dispatchComputerResume; },
+  get drainComputerResumes() { return drainComputerResumes; },
+  get pendingSecretResumes() { return pendingSecretResumes; },
+  get phoneSecretSubmissions() { return phoneSecretSubmissions; },
+  get claimPhoneSecretBotDeletion() { return claimPhoneSecretBotDeletion; },
+  get secretMessage() { return secretMessage; },
+  get currentSecretState() { return currentSecretState; },
+  get dispatchSecretResume() { return dispatchSecretResume; },
+  get resumeSecretCard() { return resumeSecretCard; },
+  get provideSecretFromPhone() { return provideSecretFromPhone; },
+  get testCliBinary() { return testCliBinary; },
+  get localVmPayload() { return localVmPayload; },
+  get readyLocalVmForTurn() { return readyLocalVmForTurn; },
+  get perBotLocalVmCountForModeChange() { return perBotLocalVmCountForModeChange; },
+  get configForPerson() { return configForPerson; },
+  get personalMcpNamesForGuard() { return personalMcpNamesForGuard; },
+  get mcpServerResponse() { return mcpServerResponse; },
+  get mcpServerNamesResponse() { return mcpServerNamesResponse; },
+  get _mcpServerBodyImpl() { return _mcpServerBodyImpl; },
+  get engineMcpServers() { return engineMcpServers; },
+  get ORG_HOST_COMMAND_REFUSAL() { return ORG_HOST_COMMAND_REFUSAL; },
+  get remoteMcpServers() { return remoteMcpServers; },
+  get probeMcpOAuth() { return probeMcpOAuth; },
+  get mcpOAuthStartSchema() { return mcpOAuthStartSchema; },
+  get _phoneCallbackOriginImpl() { return _phoneCallbackOriginImpl; },
+  get startMcpSignIn() { return startMcpSignIn; },
+  get _persistMcpServersImpl() { return _persistMcpServersImpl; },
+  get engineProbes() { return engineProbes; },
+  get engineProbeFlight() { return engineProbeFlight; },
+  get ENGINE_PROBE_TTL_MS() { return ENGINE_PROBE_TTL_MS; },
+  get ENGINE_PROBE_TIMEOUT_MS() { return ENGINE_PROBE_TIMEOUT_MS; },
+  get CLI_MISSING() { return CLI_MISSING; },
+  get probeEngines() { return probeEngines; },
+  get engineInstalled() { return engineInstalled; },
+  get turnZoneFor() { return turnZoneFor; },
+  get peerSpeaker() { return peerSpeaker; },
+  get orgJoinsRunningTurn() { return orgJoinsRunningTurn; },
+  get orgEngineInput() { return orgEngineInput; },
+  get defaultTurnPayerFor() { return defaultTurnPayerFor; },
+  get ownerModelOfflineRefusal() { return ownerModelOfflineRefusal; },
+  get preSendRefusals() { return preSendRefusals; },
+  get sendStateFor() { return sendStateFor; },
+  get sendStateLimit() { return sendStateLimit; },
+  get warmPayerAccountModels() { return warmPayerAccountModels; },
+  get speakerTurnSelection() { return speakerTurnSelection; },
+  get serverEnginesUnknownLogged() { return serverEnginesUnknownLogged; },
+  get serverEngineAllowedFor() { return serverEngineAllowedFor; },
+  get autoModelCatalog() { return autoModelCatalog; },
+  get AUTO_CATALOG_PROVIDERS() { return AUTO_CATALOG_PROVIDERS; },
+  get autoCatalogMemo() { return autoCatalogMemo; },
+  get autoCatalogLookup() { return autoCatalogLookup; },
+  get AUTO_REFUSAL_TTL_MS() { return AUTO_REFUSAL_TTL_MS; },
+  get autoRefusals() { return autoRefusals; },
+  get announcePlanThresholds() { return announcePlanThresholds; },
+  get autoRefusalsFor() { return autoRefusalsFor; },
+  get autoEnginesFor() { return autoEnginesFor; },
+  get relayEnginesFor() { return relayEnginesFor; },
+  get autoPickForTurn() { return autoPickForTurn; },
+  get voicePickForTurn() { return voicePickForTurn; },
+  get _orgRefusalOfImpl() { return _orgRefusalOfImpl; },
+  get orgEngineRefusal() { return orgEngineRefusal; },
+  get orgTurnAccess() { return orgTurnAccess; },
+  get piTurnPerson() { return piTurnPerson; },
+  get withPiModelServers() { return withPiModelServers; },
+  get piLocalTurnAccess() { return piLocalTurnAccess; },
+  get turnReachPrompt() { return turnReachPrompt; },
+  get turnConnectorsFor() { return turnConnectorsFor; },
+  get accountConnectorInput() { return accountConnectorInput; },
+  get engineReachFor() { return engineReachFor; },
+  get connectorSwitchForTurn() { return connectorSwitchForTurn; },
+  get engineConnectorsPromptFor() { return engineConnectorsPromptFor; },
+  get connectorsElsewhereFor() { return connectorsElsewhereFor; },
+  get subscriptionExpiredCard() { return subscriptionExpiredCard; },
+  get signInRefusalHeld() { return signInRefusalHeld; },
+  get signInRefusalResent() { return signInRefusalResent; },
+  get holdSignInRefusal() { return holdSignInRefusal; },
+  get accessCardFor() { return accessCardFor; },
+  get describeInstances() { return describeInstances; },
+  get instancesForViewer() { return instancesForViewer; },
+  get modelAccessRefusals() { return modelAccessRefusals; },
+  get memberInstanceView() { return memberInstanceView; },
+  get _stopCompanyInstancesImpl() { return _stopCompanyInstancesImpl; },
+  get persistProviderInstance() { return persistProviderInstance; },
+  get revokeEngineCapabilities() { return revokeEngineCapabilities; },
+  get reloadProviders() { return reloadProviders; },
+  get providerInstancesChanging() { return providerInstancesChanging; },
+  get MAX_CONCURRENT_MCP_PROBES() { return MAX_CONCURRENT_MCP_PROBES; },
+  get claudeUpdatesInFlight() { return claudeUpdatesInFlight; },
+  get _streamOpenedHttpFileImpl() { return _streamOpenedHttpFileImpl; },
+  get workspaceBackupAccess() { return workspaceBackupAccess; },
+  get workspaceBackupRoutes() { return workspaceBackupRoutes; },
+  get perspicaxNativeReview() { return perspicaxNativeReview; },
+  get meetingBrowserRefusal() { return meetingBrowserRefusal; },
+  get openMeetingBrowser() { return openMeetingBrowser; },
+  get startMeetingSummary() { return startMeetingSummary; },
+  get meetingService() { return meetingService; },
+  get resolveAndSendMeeting() { return resolveAndSendMeeting; },
+  get resolveAndSendPhoneCallConsent() { return resolveAndSendPhoneCallConsent; },
+  get perspicaxReadAlone() { return perspicaxReadAlone; },
+  get perspicaxSessionAlone() { return perspicaxSessionAlone; },
+  get dispatchKpi() { return dispatchKpi; },
+  get dispatchKpiForced() { return dispatchKpiForced; },
+  get dispatchKpiRefreshedRuns() { return dispatchKpiRefreshedRuns; },
+  get runDispatchKpiSource() { return runDispatchKpiSource; },
+  get refreshDispatchKpiAfterRun() { return refreshDispatchKpiAfterRun; },
+  get artifactRefresher() { return artifactRefresher; },
+  get INTERNAL_ROUTES() { return INTERNAL_ROUTES; },
+  get botMailAddresses() { return botMailAddresses; },
+  get botMailOwner() { return botMailOwner; },
+  get botmailConfined() { return botmailConfined; },
+  get inboundMail() { return inboundMail; },
+  get smsReplyAfter() { return smsReplyAfter; },
+  get smsConversation() { return smsConversation; },
+  get inboundTelephony() { return inboundTelephony; },
+  get xaiMarketplace() { return xaiMarketplace; },
+  get orgInstallStatuses() { return orgInstallStatuses; },
+  get savePersonPreferences() { return savePersonPreferences; },
+  get soloClaudeLinkCache() { return soloClaudeLinkCache; },
+  get botMemoryReachable() { return botMemoryReachable; },
+  get botSkillsRefusal() { return botSkillsRefusal; },
+  get computerInputAudited() { return computerInputAudited; },
+  get botComputerShell() { return botComputerShell; },
+  get computerTeach() { return computerTeach; },
+  get _threadWarmRequestImpl() { return _threadWarmRequestImpl; },
+  get typingPrewake() { return typingPrewake; },
+  get prewakeComputerWhileTyping() { return prewakeComputerWhileTyping; },
+  get backgroundBriefs() { return backgroundBriefs; },
+  get backgroundBriefReads() { return backgroundBriefReads; },
+  get localComputerSummary() { return localComputerSummary; },
+  get localComputerLifecycle() { return localComputerLifecycle; },
+  get localComputerManagementRefusal() { return localComputerManagementRefusal; },
+  get computerCare() { return computerCare; },
+  get SANDBOX_RECENT_USE_MS() { return SANDBOX_RECENT_USE_MS; },
+  get maintainedComputer() { return maintainedComputer; },
+  get computerCareScheduler() { return computerCareScheduler; },
+  get diskSaverTarget() { return diskSaverTarget; },
+  get pluginRegistry() { return pluginRegistry; },
+  get addMarketplaceServers() { return addMarketplaceServers; },
+  get updatedMarketplaceServer() { return updatedMarketplaceServer; },
+  get updateInstallationPlugin() { return updateInstallationPlugin; },
+  get personErasures() { return personErasures; },
+  get deletePersonData() { return deletePersonData; },
+  get erasePersonDataNow() { return erasePersonDataNow; },
+  get wakeFromCloudAgentCompletion() { return wakeFromCloudAgentCompletion; },
+  get codeFixture() { return codeFixture; },
+  get perspicaxBase() { return perspicaxBase; },
+  get perspicaxAccessToken() { return perspicaxAccessToken; },
+  get perspicaxLinkSubjectToken() { return perspicaxLinkSubjectToken; },
+  get perspicaxAgentsClient() { return perspicaxAgentsClient; },
+  get perspicaxLinkBearer() { return perspicaxLinkBearer; },
+  get perspicaxAgentsAccess() { return perspicaxAgentsAccess; },
+  get subscriptionCli() { return subscriptionCli; },
+  get subscriptionDepositor() { return subscriptionDepositor; },
+  get signInRecheck() { return signInRecheck; },
+  get cloudAgentProviders() { return cloudAgentProviders; },
+  get CLOUD_AGENT_SYNC_MS() { return CLOUD_AGENT_SYNC_MS; },
+  get JOURNAL_CACHE_MS() { return JOURNAL_CACHE_MS; },
+  get JOURNAL_THREADS_MAX() { return JOURNAL_THREADS_MAX; },
+  get journalCache() { return journalCache; },
+  get journalRowsFor() { return journalRowsFor; },
+  get inboxTestRule() { return inboxTestRule; },
+  get codeBranchArchive() { return codeBranchArchive; },
+  get codeBranchCredentials() { return codeBranchCredentials; },
+  get routineRunAccessCard() { return routineRunAccessCard; },
+  get activityChildren() { return activityChildren; },
+  get moderationStore() { return moderationStore; },
+  get nudges() { return nudges; },
+  get labeledPerson() { return labeledPerson; },
+  get peopleDmSelections() { return peopleDmSelections; },
+  get peopleDmProjection() { return peopleDmProjection; },
+  get sendPeopleDmMessage() { return sendPeopleDmMessage; },
+  get notifyRoomMentions() { return notifyRoomMentions; },
+  get orgState() { return orgState; },
+  get botActService() { return botActService; },
+  get botActs() { return botActs; },
+  get settingsActionService() { return settingsActionService; },
+  get settingsActions() { return settingsActions; },
+  get _primaryTurnGateImpl() { return _primaryTurnGateImpl; },
+  get questionAnsweredBy() { return questionAnsweredBy; },
+  get primaryApprovalService() { return primaryApprovalService; },
+  get primaryApprovals() { return primaryApprovals; },
+  get actAnswerer() { return actAnswerer; },
+  get describeActForRule() { return describeActForRule; },
+  get settleBotActCard() { return settleBotActCard; },
+  get cwActionPasses() { return cwActionPasses; },
+  get dashFreeReply() { return dashFreeReply; },
+  get requestCwAction() { return requestCwAction; },
+  get resolveAndSendCwAction() { return resolveAndSendCwAction; },
+  get allowCwAction() { return allowCwAction; },
+  get CW_WIDGET_RULE_TOOL() { return CW_WIDGET_RULE_TOOL; },
+  get CW_WIDGET_RULE_TOOL_BEFORE() { return CW_WIDGET_RULE_TOOL_BEFORE; },
+  get pendingConfidentialMemory() { return pendingConfidentialMemory; },
+  get _confidentialPerspicaxRefusalImpl() { return _confidentialPerspicaxRefusalImpl; },
+  get settleConfidentialMemoryCard() { return settleConfidentialMemoryCard; },
+  get emailSendPasses() { return emailSendPasses; },
+  get emailDraftBot() { return emailDraftBot; },
+  get _requestEmailDraftSendImpl() { return _requestEmailDraftSendImpl; },
+  get _emailDraftStatusImpl() { return _emailDraftStatusImpl; },
+  get resolveImessageCard() { return resolveImessageCard; },
+  get resolveAndSendEmailDraft() { return resolveAndSendEmailDraft; },
+  get ACT_CONFIRMED_HEADER() { return ACT_CONFIRMED_HEADER; },
+  get actConfirmations() { return actConfirmations; },
+  get actConfirmedScope() { return actConfirmedScope; },
+  get ON_BEHALF_SECRET() { return ON_BEHALF_SECRET; },
+  get ON_BEHALF_HEADER() { return ON_BEHALF_HEADER; },
+  get CONTINUATION_HEADER() { return CONTINUATION_HEADER; },
+  get ownerContinuations() { return ownerContinuations; },
+  get takeOwnerContinuation() { return takeOwnerContinuation; },
+  get performBotActRoute() { return performBotActRoute; },
+  get _scrubConfidentialThreadsImpl() { return _scrubConfidentialThreadsImpl; },
+  get CONFIDENTIAL_CARD_DELEGATED() { return CONFIDENTIAL_CARD_DELEGATED; },
+  get delegatedRequestScope() { return delegatedRequestScope; },
+  get continuationThreadScope() { return continuationThreadScope; },
+  get performBotActRouteOutsideConfidential() { return performBotActRouteOutsideConfidential; },
+  get actorPrincipalId() { return actorPrincipalId; },
+  get COMPACT_USAGE_THREADS() { return COMPACT_USAGE_THREADS; },
+  get compactPinsByBot() { return compactPinsByBot; },
+  get recentToolUses() { return recentToolUses; },
+  get compactPromptFor() { return compactPromptFor; },
+  get ownerSettingsForbidden() { return ownerSettingsForbidden; },
+  get ownEnvironmentRequest() { return ownEnvironmentRequest; },
+  get ownDestinationRequest() { return ownDestinationRequest; },
+  get destinationOfCall() { return destinationOfCall; },
+  get ownComputerChoiceRequest() { return ownComputerChoiceRequest; },
+  get destinationTurnOrigin() { return destinationTurnOrigin; },
+  get ownAttachmentRoots() { return ownAttachmentRoots; },
+  get _turnStartForImpl() { return _turnStartForImpl; },
+  get speakerOwnWordsTurn() { return speakerOwnWordsTurn; },
+  get ownEnvironmentOrigin() { return ownEnvironmentOrigin; },
+  get memberHostToolPlace() { return memberHostToolPlace; },
+  get ownLineageFields() { return ownLineageFields; },
+  get aiClientThreadPerson() { return aiClientThreadPerson; },
+  get routineOwnerAuthorizationFor() { return routineOwnerAuthorizationFor; },
+  get ownerLineageFor() { return ownerLineageFor; },
+  get personDirectTurn() { return personDirectTurn; },
+  get botCreationTurnOrigin() { return botCreationTurnOrigin; },
+  get nonPrimaryCreationRefusal() { return nonPrimaryCreationRefusal; },
+  get autoAnswerStepUp() { return autoAnswerStepUp; },
+  get foreignMcpServerNames() { return foreignMcpServerNames; },
+  get ownerScopedMcpServerFor() { return ownerScopedMcpServerFor; },
+  get _ruleManagerImpl() { return _ruleManagerImpl; },
+  get stepUpGate() { return stepUpGate; },
+  get approvalModeStepUpGate() { return approvalModeStepUpGate; },
+  get refreshWidens() { return refreshWidens; },
+  get settingsStepUpGate() { return settingsStepUpGate; },
+  get strictRuleQualifies() { return strictRuleQualifies; },
+  get strictCardRule() { return strictCardRule; },
+  get proposalRuleCandidate() { return proposalRuleCandidate; },
+  get settleProposalByRule() { return settleProposalByRule; },
+  get saveOwnerRuleFromCard() { return saveOwnerRuleFromCard; },
+  get revokeLegacyKey() { return revokeLegacyKey; },
+  get memberFolderRoots() { return memberFolderRoots; },
+  get orgFullAccessRefusalFor() { return orgFullAccessRefusalFor; },
+  get auditApprovalModeChange() { return auditApprovalModeChange; },
+  get rulesHoldTurn() { return rulesHoldTurn; },
+  get auditFullAccessTurn() { return auditFullAccessTurn; },
+  get orgSettings() { return orgSettings; },
+  get roomSectionAccess() { return roomSectionAccess; },
+  get authzViewerFromId() { return authzViewerFromId; },
+  get groupVisible() { return groupVisible; },
+  get mayPlaceRoomIn() { return mayPlaceRoomIn; },
+  get roomSectionMoveRefusal() { return roomSectionMoveRefusal; },
+  get resolveManagedNameFor() { return resolveManagedNameFor; },
+  get listedBotVisible() { return listedBotVisible; },
+  get viewerSelections() { return viewerSelections; },
+  get selectionKey() { return selectionKey; },
+  get threadViewerScope() { return threadViewerScope; },
+  get viewerThreadOf() { return viewerThreadOf; },
+  get ensureViewerThread() { return ensureViewerThread; },
+  get routeThreadIdUnguarded() { return routeThreadIdUnguarded; },
+  get viewerBotActivity() { return viewerBotActivity; },
+  get botForViewer() { return botForViewer; },
+  get bodyForThreadViewer() { return bodyForThreadViewer; },
+  get hideEarlierAgentThreads() { return hideEarlierAgentThreads; },
+  get migrateBotRuntimeSettings() { return migrateBotRuntimeSettings; },
+  get BACKGROUND_SWEEP_EVERY_MS() { return BACKGROUND_SWEEP_EVERY_MS; },
+  get sweepBackgroundThreads() { return sweepBackgroundThreads; },
+  get hideBotThreadsOnce() { return hideBotThreadsOnce; },
+  get migrateThreadOwners() { return migrateThreadOwners; },
+  get openedThreadOwner() { return openedThreadOwner; },
+  get privateRecallFilter() { return privateRecallFilter; },
+  get recentWorkFor() { return recentWorkFor; },
+  get extractedSegmentDigests() { return extractedSegmentDigests; },
+  get segmentDigestDrafts() { return segmentDigestDrafts; },
+  get segmentDigestText() { return segmentDigestText; },
+  get streamDigestEngine() { return streamDigestEngine; },
+  get refreshStreamDigests() { return refreshStreamDigests; },
+  get streamDigestPrompt() { return streamDigestPrompt; },
+  get routineResultsRefusalFor() { return routineResultsRefusalFor; },
+  get patchRoutineAs() { return patchRoutineAs; },
+  get routineConversationOf() { return routineConversationOf; },
+  get routineSeenBy() { return routineSeenBy; },
+  get subjectSeesChannel() { return subjectSeesChannel; },
+  get attachmentSeenBy() { return attachmentSeenBy; },
+  get memberSeesFrame() { return memberSeesFrame; },
+  get viewerIsOperator() { return viewerIsOperator; },
+  get principalPermissions() { return principalPermissions; },
+  get BOTS_READ_ONLY() { return BOTS_READ_ONLY; },
+  get memberBotFieldRefusal() { return memberBotFieldRefusal; },
+  get computerOwner() { return computerOwner; },
+  get sessionPersonFields() { return sessionPersonFields; },
+  get viewerIdentity() { return viewerIdentity; },
+  get withCreatorListed() { return withCreatorListed; },
+  get refusePlacedBots() { return refusePlacedBots; },
+  get refuseHumanEdit() { return refuseHumanEdit; },
+  get resolveOrgGrantee() { return resolveOrgGrantee; },
+  get orgDirectoryTeams() { return orgDirectoryTeams; },
+  get describeGrantTarget() { return describeGrantTarget; },
+  get migrateSectionSharesToBotGrants() { return migrateSectionSharesToBotGrants; },
+  get teamStorageForBot() { return teamStorageForBot; },
+  get orgVisibleSections() { return orgVisibleSections; },
+  get perspicaxDirectory() { return perspicaxDirectory; },
+  get SOLO_PROVIDER_CONFIG() { return SOLO_PROVIDER_CONFIG; },
+  get providerAccounts() { return providerAccounts; },
+  get attachInterimPerson() { return attachInterimPerson; },
+  get orgPersonConnectionDeps() { return orgPersonConnectionDeps; },
+  get presenceViewer() { return presenceViewer; },
+  get broadcastPresence() { return broadcastPresence; },
+  get presence() { return presence; },
+  get deviceSettings() { return deviceSettings; },
+  get reachMeLanguage() { return reachMeLanguage; },
+  get reachMeCard() { return reachMeCard; },
+  get reachMeRespond() { return reachMeRespond; },
+  get reachMeVoice() { return reachMeVoice; },
+  get reachMeSettings() { return reachMeSettings; },
+  get reachMeCodes() { return reachMeCodes; },
+  get reachMeSecrets() { return reachMeSecrets; },
+  get reachMeTelegram() { return reachMeTelegram; },
+  get reachMeTeamsChannel() { return reachMeTeamsChannel; },
+  get reachMeAudit() { return reachMeAudit; },
+  get _shapeAvatarGeneratorImpl() { return _shapeAvatarGeneratorImpl; },
+  get openAiStt() { return openAiStt; },
+  get openAiVoiceMode() { return openAiVoiceMode; },
+  get elevenLabsVoiceMode() { return elevenLabsVoiceMode; },
+  get fishVoiceMode() { return fishVoiceMode; },
+  get installedVoices() { return installedVoices; },
+  get videoFixtureUrl() { return videoFixtureUrl; },
+  get videoInputMessage() { return videoInputMessage; },
+  get videoScopeValid() { return videoScopeValid; },
+  get videoJobsDir() { return videoJobsDir; },
+  get videoGenerations() { return videoGenerations; },
+  get voiceProviderKeys() { return voiceProviderKeys; },
+  get voiceModeDeps() { return voiceModeDeps; },
+  get claudeAiInventory() { return claudeAiInventory; },
+  get claudeAccountForPrincipal() { return claudeAccountForPrincipal; },
+  get personClaudeArtifactCall() { return personClaudeArtifactCall; },
+  get claudeArtifactSummaries() { return claudeArtifactSummaries; },
+  get claudeArtifactTrackedStore() { return claudeArtifactTrackedStore; },
+  get _claudeArtifactWorkspaceFileImpl() { return _claudeArtifactWorkspaceFileImpl; },
+  get ensureClaudeArtifactCommentsRoutine() { return ensureClaudeArtifactCommentsRoutine; },
+  get claudeArtifactCommentsCheck() { return claudeArtifactCommentsCheck; },
+  get _connectorSetupStoreImpl() { return _connectorSetupStoreImpl; },
+  get _connectorSetupContextImpl() { return _connectorSetupContextImpl; },
+  get harnessCommands() { return harnessCommands; },
+  get harnessCommandAccount() { return harnessCommandAccount; },
+  get harnessCommandSource() { return harnessCommandSource; },
+  get publicInvites() { return publicInvites; },
+  get oidcRp() { return oidcRp; },
+  get idpVaultKey() { return idpVaultKey; },
+  get idpVault() { return idpVault; },
+  get idpRevocations() { return idpRevocations; },
+  get accountReauth() { return accountReauth; },
+  get authRefusals() { return authRefusals; },
+  get headerText() { return headerText; },
+  get idpSessions() { return idpSessions; },
+  get oidcLogin() { return oidcLogin; },
+  get orgAdminBots() { return orgAdminBots; },
+  get orgOverviewDeps() { return orgOverviewDeps; },
+  get personEngineAccess() { return personEngineAccess; },
+  get orgPeopleDeps() { return orgPeopleDeps; },
+  get singleBotPackage() { return singleBotPackage; },
+  get importPackageFor() { return importPackageFor; },
+  get setBotApprovalModeFromConsole() { return setBotApprovalModeFromConsole; },
+  get orgBotsDeps() { return orgBotsDeps; },
+  get CATALOG_MEMORY_MAX() { return CATALOG_MEMORY_MAX; },
+  get mcpServerSummary() { return mcpServerSummary; },
+  get botZipHost() { return botZipHost; },
+  get orgRoutinesDeps() { return orgRoutinesDeps; },
+  get orgRoutineRunsDeps() { return orgRoutineRunsDeps; },
+  get orgComputersDeps() { return orgComputersDeps; },
+  get reachable() { return reachable; },
+  get orgOpsDeps() { return orgOpsDeps; },
+  get saveOrgPendingApprovalExpireDays() { return saveOrgPendingApprovalExpireDays; },
+  get saveOrgInterimAttachDays() { return saveOrgInterimAttachDays; },
+  get saveOrgAllowFullAccess() { return saveOrgAllowFullAccess; },
+  get saveOrgMemberEnvironmentAutonomy() { return saveOrgMemberEnvironmentAutonomy; },
+  get saveOrgConfidentialThreadsByDefault() { return saveOrgConfidentialThreadsByDefault; },
+  get resetMemberAutoLevelsOnce() { return resetMemberAutoLevelsOnce; },
+  get settleMemberAutoLevelsFor() { return settleMemberAutoLevelsFor; },
+  get saveOrgMemberAutoApproval() { return saveOrgMemberAutoApproval; },
+  get saveOrgAllowVaultExport() { return saveOrgAllowVaultExport; },
+  get saveOrgPluginMarketplaces() { return saveOrgPluginMarketplaces; },
+  get applyModelSwitches() { return applyModelSwitches; },
+  get orgEngineTurnRefusal() { return orgEngineTurnRefusal; },
+  get _personPaysEngineImpl() { return _personPaysEngineImpl; },
+  get orgAdminEngines() { return orgAdminEngines; },
+  get applyOrgEngineAllowList() { return applyOrgEngineAllowList; },
+  get orgBotReach() { return orgBotReach; },
+  get _insideDataDirImpl() { return _insideDataDirImpl; },
+  get orgBotFileRoots() { return orgBotFileRoots; },
+  get orgBotAttachments() { return orgBotAttachments; },
+  get orgAdmin() { return orgAdmin; },
+  get directoryRefresh() { return directoryRefresh; },
+  get orgLink() { return orgLink; },
+  get memberLiveText() { return memberLiveText; },
+  get performAsMember() { return performAsMember; },
+  get _agentApiSecretImpl() { return _agentApiSecretImpl; },
+  get AGENT_API_GRANTS_FILE() { return AGENT_API_GRANTS_FILE; },
+  get agentApiBotScopes() { return agentApiBotScopes; },
+  get agentTurnState() { return agentTurnState; },
+  get _agentModelSummaryImpl() { return _agentModelSummaryImpl; },
+  get agentSummary() { return agentSummary; },
+  get TEMP_AGENT_DEFAULT_IDLE_HOURS() { return TEMP_AGENT_DEFAULT_IDLE_HOURS; },
+  get temporaryCreateTokens() { return temporaryCreateTokens; },
+  get takeTemporaryCreateToken() { return takeTemporaryCreateToken; },
+  get temporaryAgentSetting() { return temporaryAgentSetting; },
+  get _temporaryAuditImpl() { return _temporaryAuditImpl; },
+  get sweepTemporaryAgents() { return sweepTemporaryAgents; },
+  get agentApiCallerBot() { return agentApiCallerBot; },
+  get agentApiSourceFile() { return agentApiSourceFile; },
+  get agentApiStageFiles() { return agentApiStageFiles; },
+  get startAgentPrompt() { return startAgentPrompt; },
+  get agentApiAudit() { return agentApiAudit; },
+  get toolGrants() { return toolGrants; },
+  get agentCardGuard() { return agentCardGuard; },
+  get agentApi() { return agentApi; },
+  get agentConversationFor() { return agentConversationFor; },
+  get _memberForAgentCallerImpl() { return _memberForAgentCallerImpl; },
+  get agentScopesFor() { return agentScopesFor; },
+  get orgMember() { return orgMember; },
+  get liveCalls() { return liveCalls; },
+  get applyConfigHttpPatch() { return applyConfigHttpPatch; },
+  get resolveSectionId() { return resolveSectionId; },
+  get toolResults() { return toolResults; },
+  get widgetRenderer() { return widgetRenderer; },
+  get widgetCheckAttempts() { return widgetCheckAttempts; },
+  get runPreAuth() { return runPreAuth; },
+  get enterRequestScopes() { return enterRequestScopes; },
+  get authenticate() { return authenticate; },
+  get _runRoutesImpl() { return _runRoutesImpl; },
+  get runInternal() { return runInternal; },
+  get runGroupMemberTurnRunner() { return runGroupMemberTurnRunner; },
+  get startTurnRunner() { return startTurnRunner; },
+  get originGates() { return originGates; },
+  get handleRequest() { return handleRequest; },
+  get earlyListener() { return earlyListener; },
+  get server() { return server; },
+  get desktopTunnelDeps() { return desktopTunnelDeps; },
+  get startupLicenseWarning() { return startupLicenseWarning; },
+  get pruneDecisionLog() { return pruneDecisionLog; },
+  get workspaceAccessTimer() { return workspaceAccessTimer; },
+  get THREAD_LOG_RETENTION_SWEEP_MS() { return THREAD_LOG_RETENTION_SWEEP_MS; },
+  get sweepThreadEventLogsDeferred() { return sweepThreadEventLogsDeferred; },
+  get scheduleThreadEventLogRetentionSweep() { return scheduleThreadEventLogRetentionSweep; },
+  get onListening() { return onListening; },
+  get TUNNEL_SOCKET() { return TUNNEL_SOCKET; },
+  get tunnelListener() { return tunnelListener; },
+  get importLegacyDelegations() { return importLegacyDelegations; },
+  get delegateOnRuntime() { return delegateOnRuntime; },
+  get runtimeDelegationStatus() { return runtimeDelegationStatus; },
+  get SHUTDOWN_DRAIN_MS() { return SHUTDOWN_DRAIN_MS; },
+  get drainTurnsBeforeShutdown() { return drainTurnsBeforeShutdown; },
+  get noteTurnsCutByShutdown() { return noteTurnsCutByShutdown; },
+  get resumeTurnsCutByRestart() { return resumeTurnsCutByRestart; },
+  get resumeHeldSteersAfterCrash() { return resumeHeldSteersAfterCrash; },
+  get gracefulShutdown() { return gracefulShutdown; },
+  get ENDED() { return ENDED; },
+  get cloudAgentManager() { return cloudAgentManager; },
+  get computerParks() { return computerParks; },
+  get customSecretVault() { return customSecretVault; },
+  get grokBridgeService() { return grokBridgeService; },
+  get listNativeBotSkills() { return listNativeBotSkills; },
+  get mcpServersHost() { return mcpServersHost; },
+  get sideJobs() { return sideJobs; },
+  get skillReview() { return skillReview; },
+  get stopParkedCards() { return stopParkedCards; },
+  get teamSetupDecisionText() { return teamSetupDecisionText; },
+  get threadContinuationSpeaker() { return threadContinuationSpeaker; },
+  get browserSessionSpec() { return browserSessionSpec; },
+  get grokBridgeAllowed() { return grokBridgeAllowed; },
+  get memeScopeForThread() { return memeScopeForThread; },
+  get roomRootProblem() { return roomRootProblem; },
+  get saveOrgAllowGrokBridge() { return saveOrgAllowGrokBridge; },
+  get setRoomHold() { return setRoomHold; },
+  get turnEvidence() { return turnEvidence; },
+  get wakeAfterAgentReply() { return wakeAfterAgentReply; },
+  get claimGroupMemberBot() { return claimGroupMemberBot; },
+  get directRootPending() { return directRootPending; },
+  get drainAgentReplyWakes() { return drainAgentReplyWakes; },
+  get drainQueuedChannelSendsNow() { return drainQueuedChannelSendsNow; },
+  get drainQueuedSendsNow() { return drainQueuedSendsNow; },
+  get noteHeldSkip() { return noteHeldSkip; },
+  get roomHeld() { return roomHeld; },
+  get runtimeHoldsRoot() { return runtimeHoldsRoot; },
+  get strictRuleOwnerName() { return strictRuleOwnerName; },
+});
+function bindLeafHost(table: object): void {
+  for (const [name, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(table))) {
+    Object.defineProperty(leafHostBindings, name, {
+      enumerable: true,
+      configurable: true,
+      get: descriptor.get,
+      set: descriptor.set ?? ((value: unknown) => {
+        Object.defineProperty(leafHostBindings, name, { value, writable: true, enumerable: true, configurable: true });
+      }),
+    });
+  }
+}
 // Lost in the #1388 split: leaves reach them through the host bag (hoisted).
 function modelName(selection: ModelSelection): string {
   const instance = registry.get(selection.instanceId);
@@ -2197,7 +7289,816 @@ function stderrOf(err: unknown): string {
   const s = (err as { stderr?: unknown }).stderr;
   return typeof s === "string" ? s : Buffer.isBuffer(s) ? s.toString("utf8") : "";
 }
-Object.assign(leafHostBindings, { modelName, stderrOf });
+/** Late bindings. Function declarations and imports are initialised before
+ * the module body runs, so a leaf that runs during boot can already read them. */
+/** The other late bindings are read when a leaf asks, so a leaf that runs
+ * during boot sees a value as soon as it is initialised (never a stale copy). A leaf may also write one. */
+/** Memo slots of the lazily created leaves: declared first so a leaf called
+ * while the server boots never meets them uninitialised. */
+let _configAddressFieldImpl: ReturnType<typeof createConfigAddressField> | undefined;
+let _configProviderKeyFieldImpl: ReturnType<typeof createConfigProviderKeyField> | undefined;
+let _decisionActorForImpl: ReturnType<typeof createDecisionActorFor> | undefined;
+let _requestedBotFieldsImpl: ReturnType<typeof createRequestedBotFields> | undefined;
+let _storedNamesInImpl: ReturnType<typeof createStoredNamesIn> | undefined;
+let _workplaceNoteTextImpl: ReturnType<typeof createWorkplaceNoteText> | undefined;
+let _parseArchiveOutcomeImpl: ReturnType<typeof createParseArchiveOutcome> | undefined;
+let _checkedGroupResponderImpl: ReturnType<typeof createCheckedGroupResponder> | undefined;
+let _noteSandboxClusterWaitImpl: ReturnType<typeof createNoteSandboxClusterWait> | undefined;
+let _credentialVaultPersonRefusalImpl: ReturnType<typeof createCredentialVaultPersonRefusal> | undefined;
+let _partialAlreadyWrittenImpl: ReturnType<typeof createPartialAlreadyWritten> | undefined;
+let _openTurnMessageImpl: ReturnType<typeof createOpenTurnMessage> | undefined;
+let _isApprovalCardMessageImpl: ReturnType<typeof createIsApprovalCardMessage> | undefined;
+let _capturedReplyImpl: ReturnType<typeof createCapturedReply> | undefined;
+let _settledWithinOrStopImpl: ReturnType<typeof createSettledWithinOrStop> | undefined;
+let _latestCompactionImpl: ReturnType<typeof createLatestCompaction> | undefined;
+let _serverPathViewImpl: ReturnType<typeof createServerPathView> | undefined;
+let _generateThreadTitleImpl: ReturnType<typeof createGenerateThreadTitle> | undefined;
+let _deliverCalendarCallImpl: ReturnType<typeof createDeliverCalendarCall> | undefined;
+let _proposalPersistenceImpl: ReturnType<typeof createProposalPersistence> | undefined;
+let _skillCardCopyImpl: ReturnType<typeof createSkillCardCopy> | undefined;
+let _sendSkillResolutionImpl: ReturnType<typeof createSendSkillResolution> | undefined;
+let _configForAccessImpl: ReturnType<typeof createConfigForAccess> | undefined;
+let _mcpServerBodyImpl: ReturnType<typeof createMcpServerBody> | undefined;
+let _phoneCallbackOriginImpl: ReturnType<typeof createPhoneCallbackOrigin> | undefined;
+let _persistMcpServersImpl: ReturnType<typeof createPersistMcpServers> | undefined;
+let _orgRefusalOfImpl: ReturnType<typeof createOrgRefusalOf> | undefined;
+let _stopCompanyInstancesImpl: ReturnType<typeof createStopCompanyInstances> | undefined;
+let _streamOpenedHttpFileImpl: ReturnType<typeof createStreamOpenedHttpFile> | undefined;
+let _connectorSetupStoreImpl: ReturnType<typeof createConnectorSetupStore> | undefined;
+let _connectorSetupContextImpl: ReturnType<typeof createConnectorSetupContext> | undefined;
+let _threadWarmRequestImpl: ReturnType<typeof createThreadWarmRequest> | undefined;
+let _primaryTurnGateImpl: ReturnType<typeof createPrimaryTurnGate> | undefined;
+let _confidentialPerspicaxRefusalImpl: ReturnType<typeof createConfidentialPerspicaxRefusal> | undefined;
+let _requestEmailDraftSendImpl: ReturnType<typeof createRequestEmailDraftSend> | undefined;
+let _emailDraftStatusImpl: ReturnType<typeof createEmailDraftStatus> | undefined;
+let _scrubConfidentialThreadsImpl: ReturnType<typeof createScrubConfidentialThreads> | undefined;
+let _turnStartForImpl: ReturnType<typeof createTurnStartFor> | undefined;
+let _ruleManagerImpl: ReturnType<typeof createRuleManager> | undefined;
+let _shapeAvatarGeneratorImpl: ReturnType<typeof createShapeAvatarGenerator> | undefined;
+let _claudeArtifactWorkspaceFileImpl: ReturnType<typeof createClaudeArtifactWorkspaceFile> | undefined;
+let _personPaysEngineImpl: ReturnType<typeof createPersonPaysEngine> | undefined;
+let _insideDataDirImpl: ReturnType<typeof createInsideDataDir> | undefined;
+let _agentApiSecretImpl: ReturnType<typeof createAgentApiSecret> | undefined;
+let _agentModelSummaryImpl: ReturnType<typeof createAgentModelSummary> | undefined;
+let _temporaryAuditImpl: ReturnType<typeof createTemporaryAudit> | undefined;
+let _memberForAgentCallerImpl: ReturnType<typeof createMemberForAgentCaller> | undefined;
+let _runRoutesImpl: ReturnType<typeof createRunRoutes> | undefined;
+/** Leaf factories only keep the host getter, so they are created before the rest
+ * of the module: a leaf that runs while the server boots finds its siblings. */
+const releaseDataDirLeaseAtExit = createReleaseDataDirLeaseAtExit(getLeafHost);
+const emailSignInAllowList = createEmailSignInAllowList(getLeafHost);
+const recordAchievements = createRecordAchievements(getLeafHost);
+const lockedLookRefusal = createLockedLookRefusal(getLeafHost);
+const masteryNightly = createMasteryNightly(getLeafHost);
+const observePushFrame = createObservePushFrame(getLeafHost);
+const observeLiveActivityFrame = createObserveLiveActivityFrame(getLeafHost);
+const observeAchievementFrame = createObserveAchievementFrame(getLeafHost);
+const workplacePreference = createWorkplacePreference(getLeafHost);
+const declaredToolProduct = createDeclaredToolProduct(getLeafHost);
+const ruleProductsOf = createRuleProductsOf(getLeafHost);
+const ruleProductsOfPerson = createRuleProductsOfPerson(getLeafHost);
+const userComputerSpeaking = createUserComputerSpeaking(getLeafHost);
+const messageSender = createMessageSender(getLeafHost);
+const reactionPersonFor = createReactionPersonFor(getLeafHost);
+const botReaction = createBotReaction(getLeafHost);
+const echoesOwnReaction = createEchoesOwnReaction(getLeafHost);
+const cardRequesterKey = createCardRequesterKey(getLeafHost);
+const actTurnFacts = createActTurnFacts(getLeafHost);
+const threadPersonKey = createThreadPersonKey(getLeafHost);
+const turnOrigin = createTurnOrigin(getLeafHost);
+const cloudGuestDrivenHandoff = createCloudGuestDrivenHandoff(getLeafHost);
+const parentThreadModel = createParentThreadModel(getLeafHost);
+const cardAnswerRefusal = createCardAnswerRefusal(getLeafHost);
+const teamMemoryMemberMayAnswer = createTeamMemoryMemberMayAnswer(getLeafHost);
+const viewerMayAnswerOnThread = createViewerMayAnswerOnThread(getLeafHost);
+const applyAutoReviewDefault = createApplyAutoReviewDefault(getLeafHost);
+const webhookDelegateRefusal = createWebhookDelegateRefusal(getLeafHost);
+const webhookSeenBy = createWebhookSeenBy(getLeafHost);
+const commandAllowlistResponse = createCommandAllowlistResponse(getLeafHost);
+const cardAnswererFor = createCardAnswererFor(getLeafHost);
+const answeringCardAs = createAnsweringCardAs(getLeafHost);
+const threadOwner = createThreadOwner(getLeafHost);
+const visibleTo = createVisibleTo(getLeafHost);
+const threadsUsingAttachment = createThreadsUsingAttachment(getLeafHost);
+const subjectVisible = createSubjectVisible(getLeafHost);
+const autoRecallPrompt = createAutoRecallPrompt(getLeafHost);
+const roomAudienceConflict = createRoomAudienceConflict(getLeafHost);
+const memberFrameContext = createMemberFrameContext(getLeafHost);
+const adminActivityRecording = createAdminActivityRecording(getLeafHost);
+const recordAdminConfigChange = createRecordAdminConfigChange(getLeafHost);
+const beginAdminAudit = createBeginAdminAudit(getLeafHost);
+const adminAuditRows = createAdminAuditRows(getLeafHost);
+const usageTriggerFor = createUsageTriggerFor(getLeafHost);
+const orgUsageFacts = createOrgUsageFacts(getLeafHost);
+const bookTurnUsage = createBookTurnUsage(getLeafHost);
+const resyncOpenCodeProviderKeys = createResyncOpenCodeProviderKeys(getLeafHost);
+const postDesktopPrivateMessage = createPostDesktopPrivateMessage(getLeafHost);
+const applyDesktopMutationTokenMessage = createApplyDesktopMutationTokenMessage(getLeafHost);
+const externalRuntimeCapability = createExternalRuntimeCapability(getLeafHost);
+const sessionBearer = createSessionBearer(getLeafHost);
+const mintInternalCapability = createMintInternalCapability(getLeafHost);
+const revokeInternalCapabilityGeneration = createRevokeInternalCapabilityGeneration(getLeafHost);
+const revokeEarlierTurnCapabilities = createRevokeEarlierTurnCapabilities(getLeafHost);
+const revokeAllInternalCapabilities = createRevokeAllInternalCapabilities(getLeafHost);
+const authorizedInternalCapability = createAuthorizedInternalCapability(getLeafHost);
+const internalCapabilityIsActive = createInternalCapabilityIsActive(getLeafHost);
+const mcpIdentityOf = createMcpIdentityOf(getLeafHost);
+const agentsIntegration = createAgentsIntegration(getLeafHost);
+const hooksIntegration = createHooksIntegration(getLeafHost);
+const asPlaceFailure = createAsPlaceFailure(getLeafHost);
+const cloudComputerHolders = createCloudComputerHolders(getLeafHost);
+const turnToolEvidence = createTurnToolEvidence(getLeafHost);
+const settleDirectFollowup = createSettleDirectFollowup(getLeafHost);
+const releaseTurnResources = createReleaseTurnResources(getLeafHost);
+const bindTurnComputer = createBindTurnComputer(getLeafHost);
+const botAtThreadCapacity = createBotAtThreadCapacity(getLeafHost);
+const canAdmitDirectTurn = createCanAdmitDirectTurn(getLeafHost);
+const coordinatorSlotUse = createCoordinatorSlotUse(getLeafHost);
+const unattendedDispatchState = createUnattendedDispatchState(getLeafHost);
+const requestedTaskBot = createRequestedTaskBot(getLeafHost);
+const markThreadStopping = createMarkThreadStopping(getLeafHost);
+const stopDirectThreadByPerson = createStopDirectThreadByPerson(getLeafHost);
+const interruptDirectThread = createInterruptDirectThread(getLeafHost);
+const noteTeammatesLeftRunning = createNoteTeammatesLeftRunning(getLeafHost);
+const interruptAllDirectThreads = createInterruptAllDirectThreads(getLeafHost);
+const purgeTurnAttachmentsForThread = createPurgeTurnAttachmentsForThread(getLeafHost);
+const retireProviderTurn = createRetireProviderTurn(getLeafHost);
+const shouldIgnoreProviderEvent = createShouldIgnoreProviderEvent(getLeafHost);
+const clearDirectTurnDispatch = createClearDirectTurnDispatch(getLeafHost);
+const cancelDirectTurnDispatch = createCancelDirectTurnDispatch(getLeafHost);
+const myChromeNavigationRefusal = createMyChromeNavigationRefusal(getLeafHost);
+const currentBrowserSession = createCurrentBrowserSession(getLeafHost);
+const forgetTemporaryBrowser = createForgetTemporaryBrowser(getLeafHost);
+const forgetConfidentialBrowser = createForgetConfidentialBrowser(getLeafHost);
+const browserIntegration = createBrowserIntegration(getLeafHost);
+const dataFrameAudience = createDataFrameAudience(getLeafHost);
+const dataScopeForViewer = createDataScopeForViewer(getLeafHost);
+const dataConfinedRoots = createDataConfinedRoots(getLeafHost);
+const dataThreadFolders = createDataThreadFolders(getLeafHost);
+const dataSelfAnswerRoots = createDataSelfAnswerRoots(getLeafHost);
+const dataExportRoots = createDataExportRoots(getLeafHost);
+const dataIntegration = createDataIntegration(getLeafHost);
+const userSandboxIntegration = createUserSandboxIntegration(getLeafHost);
+const userDesktopIntegration = createUserDesktopIntegration(getLeafHost);
+const workplaceIntegration = createWorkplaceIntegration(getLeafHost);
+const autoComputerStateFor = createAutoComputerStateFor(getLeafHost);
+const lastAutoPlace = createLastAutoPlace(getLeafHost);
+const decideWorkplace = createDecideWorkplace(getLeafHost);
+const storedFamily = createStoredFamily(getLeafHost);
+const holdTurnAttachments = createHoldTurnAttachments(getLeafHost);
+const soloArchiveText = createSoloArchiveText(getLeafHost);
+const workplaceTurnText = createWorkplaceTurnText(getLeafHost);
+const officeTurnText = createOfficeTurnText(getLeafHost);
+const withWorkplaceNote = createWithWorkplaceNote(getLeafHost);
+const attachmentReferences = createAttachmentReferences(getLeafHost);
+const turnNetworkProxy = createTurnNetworkProxy(getLeafHost);
+const mountUserSandbox = createMountUserSandbox(getLeafHost);
+const stagePendingAttachments = createStagePendingAttachments(getLeafHost);
+const phoneIntegration = createPhoneIntegration(getLeafHost);
+const messagesIntegration = createMessagesIntegration(getLeafHost);
+const recordPerspicaxWork = createRecordPerspicaxWork(getLeafHost);
+const routineMemoryHint = createRoutineMemoryHint(getLeafHost);
+const perspicaxTurnPrepare = createPerspicaxTurnPrepare(getLeafHost);
+const perspicaxTurnIntegration = createPerspicaxTurnIntegration(getLeafHost);
+const controlIntegration = createControlIntegration(getLeafHost);
+const askBotAndWait = createAskBotAndWait(getLeafHost);
+const syncHeadlessTeam = createSyncHeadlessTeam(getLeafHost);
+const defaultSelection = createDefaultSelection(getLeafHost);
+const memberDefaultSelection = createMemberDefaultSelection(getLeafHost);
+const personRunsEngine = createPersonRunsEngine(getLeafHost);
+const refreshUnsetModelSelectionsFrom = createRefreshUnsetModelSelectionsFrom(getLeafHost);
+const healBotEngine = createHealBotEngine(getLeafHost);
+const moveOffComputerEngine = createMoveOffComputerEngine(getLeafHost);
+const checkedModelSelection = createCheckedModelSelection(getLeafHost);
+const checkedTaskModelSwitch = createCheckedTaskModelSwitch(getLeafHost);
+const threadEngine = createThreadEngine(getLeafHost);
+const threadModelGivingWay = createThreadModelGivingWay(getLeafHost);
+const healThreadModel = createHealThreadModel(getLeafHost);
+const healOrgRefusedThreadModel = createHealOrgRefusedThreadModel(getLeafHost);
+const checkedExportSkillNames = createCheckedExportSkillNames(getLeafHost);
+const collectExportSkills = createCollectExportSkills(getLeafHost);
+const collectTeamSkills = createCollectTeamSkills(getLeafHost);
+const starterNotes = createStarterNotes(getLeafHost);
+const packageImportDeps = createPackageImportDeps(getLeafHost);
+const defaultsPresetFor = createDefaultsPresetFor(getLeafHost);
+const checkedMemberIds = createCheckedMemberIds(getLeafHost);
+const memoryPromptFor = createMemoryPromptFor(getLeafHost);
+const attributeSandboxEntries = createAttributeSandboxEntries(getLeafHost);
+const updateRoutinePathsAfterTidy = createUpdateRoutinePathsAfterTidy(getLeafHost);
+const runLifecycleEvent = createRunLifecycleEvent(getLeafHost);
+const execLifecycleHook = createExecLifecycleHook(getLeafHost);
+const onePasswordReaderFor = createOnePasswordReaderFor(getLeafHost);
+const piKitIdentityFor = createPiKitIdentityFor(getLeafHost);
+const openApiToolsEnv = createOpenApiToolsEnv(getLeafHost);
+const workflowDeliver = createWorkflowDeliver(getLeafHost);
+const workflowOwned = createWorkflowOwned(getLeafHost);
+const voiceFor = createVoiceFor(getLeafHost);
+const webSearchAddressRefusal = createWebSearchAddressRefusal(getLeafHost);
+const personOAuth = createPersonOAuth(getLeafHost);
+const syncGithubToSandbox = createSyncGithubToSandbox(getLeafHost);
+const syncGithubForTurn = createSyncGithubForTurn(getLeafHost);
+const syncPluginsForTurn = createSyncPluginsForTurn(getLeafHost);
+const syncPluginFoldersForTurn = createSyncPluginFoldersForTurn(getLeafHost);
+const migrateGithubCredentials = createMigrateGithubCredentials(getLeafHost);
+const usableCredential = createUsableCredential(getLeafHost);
+const githubCredentialsFor = createGithubCredentialsFor(getLeafHost);
+const migrateCapabilitiesConfigStores = createMigrateCapabilitiesConfigStores(getLeafHost);
+const syncOrgCapabilities = createSyncOrgCapabilities(getLeafHost);
+const orgDeclarationInputs = createOrgDeclarationInputs(getLeafHost);
+const personalServerListing = createPersonalServerListing(getLeafHost);
+const personalHostRefusalCached = createPersonalHostRefusalCached(getLeafHost);
+const personalStdioIntegration = createPersonalStdioIntegration(getLeafHost);
+const mountPersonalMcp = createMountPersonalMcp(getLeafHost);
+const mountPluginMcp = createMountPluginMcp(getLeafHost);
+const ownPageContext = createOwnPageContext(getLeafHost);
+const publishedPageViewer = createPublishedPageViewer(getLeafHost);
+const pagesSeparation = createPagesSeparation(getLeafHost);
+const publishedPageOptions = createPublishedPageOptions(getLeafHost);
+const addPersonalMcpServer = createAddPersonalMcpServer(getLeafHost);
+const scopedPluginFolders = createScopedPluginFolders(getLeafHost);
+const scopedPluginMcp = createScopedPluginMcp(getLeafHost);
+const pluginFolderCapability = createPluginFolderCapability(getLeafHost);
+const scopedSkillInventory = createScopedSkillInventory(getLeafHost);
+const scopedSkillsPrompt = createScopedSkillsPrompt(getLeafHost);
+const botCapabilitiesFor = createBotCapabilitiesFor(getLeafHost);
+const consoleBotCapabilities = createConsoleBotCapabilities(getLeafHost);
+const botCapabilitiesAs = createBotCapabilitiesAs(getLeafHost);
+const previewSystemPrompt = createPreviewSystemPrompt(getLeafHost);
+const botOverview = createBotOverview(getLeafHost);
+const approvalLevelOf = createApprovalLevelOf(getLeafHost);
+const appliesDirectly = createAppliesDirectly(getLeafHost);
+const teamSetupDirectSource = createTeamSetupDirectSource(getLeafHost);
+const primaryAskedProposal = createPrimaryAskedProposal(getLeafHost);
+const handleDesktopTrustedApprovalMessage = createHandleDesktopTrustedApprovalMessage(getLeafHost);
+const publicBot = createPublicBot(getLeafHost);
+const groupThreadIsWorking = createGroupThreadIsWorking(getLeafHost);
+const activeGroupSpeaker = createActiveGroupSpeaker(getLeafHost);
+const groupGoalCoordinatorTurnForEvent = createGroupGoalCoordinatorTurnForEvent(getLeafHost);
+const groupIsWorking = createGroupIsWorking(getLeafHost);
+const createChannel = createCreateChannel(getLeafHost);
+const updateChannel = createUpdateChannel(getLeafHost);
+const locateChannelMessage = createLocateChannelMessage(getLeafHost);
+const turnsHeldOnGroup = createTurnsHeldOnGroup(getLeafHost);
+const forgetInflight = createForgetInflight(getLeafHost);
+const commitFailedTurn = createCommitFailedTurn(getLeafHost);
+const failQueuedMessage = createFailQueuedMessage(getLeafHost);
+const failTurnIfMemberLeft = createFailTurnIfMemberLeft(getLeafHost);
+const replaceQueuedWorkerTurns = createReplaceQueuedWorkerTurns(getLeafHost);
+const finishMachineTurn = createFinishMachineTurn(getLeafHost);
+const readWorkerTurn = createReadWorkerTurn(getLeafHost);
+const writeWorkerTurn = createWriteWorkerTurn(getLeafHost);
+const maySetBotHost = createMaySetBotHost(getLeafHost);
+const holdDirectMachineTurn = createHoldDirectMachineTurn(getLeafHost);
+const failWorkerTurns = createFailWorkerTurns(getLeafHost);
+const roomHandoffProblem = createRoomHandoffProblem(getLeafHost);
+const outstandingAssignmentsPrompt = createOutstandingAssignmentsPrompt(getLeafHost);
+const queuedBehindPerson = createQueuedBehindPerson(getLeafHost);
+const noteQueuedBehindPerson = createNoteQueuedBehindPerson(getLeafHost);
+const reviewHolds = createReviewHolds(getLeafHost);
+const coordinatorValidate = createCoordinatorValidate(getLeafHost);
+const postInputRequest = createPostInputRequest(getLeafHost);
+const settleInputRequests = createSettleInputRequests(getLeafHost);
+const publicGroupState = createPublicGroupState(getLeafHost);
+const announceProfileChange = createAnnounceProfileChange(getLeafHost);
+const beginGroupTurnOperation = createBeginGroupTurnOperation(getLeafHost);
+const finishGroupTurnOperation = createFinishGroupTurnOperation(getLeafHost);
+const finishGroupGoalRun = createFinishGroupGoalRun(getLeafHost);
+const updateGroupGoalRunProgress = createUpdateGroupGoalRunProgress(getLeafHost);
+const waitForGroupMemberBot = createWaitForGroupMemberBot(getLeafHost);
+const waitForChatRoomMember = createWaitForChatRoomMember(getLeafHost);
+const newestPeerActivityAt = createNewestPeerActivityAt(getLeafHost);
+const coordinationLiveRosterBlock = createCoordinationLiveRosterBlock(getLeafHost);
+const stopGroupThreads = createStopGroupThreads(getLeafHost);
+const cancelGroupTurnOperations = createCancelGroupTurnOperations(getLeafHost);
+const activeGroupTurnForBot = createActiveGroupTurnForBot(getLeafHost);
+const latestPersonText = createLatestPersonText(getLeafHost);
+const slimMessage = createSlimMessage(getLeafHost);
+const transcriptPage = createTranscriptPage(getLeafHost);
+const guardedRequestSnapshot = createGuardedRequestSnapshot(getLeafHost);
+const settleTrackedRequest = createSettleTrackedRequest(getLeafHost);
+const messageWindow = createMessageWindow(getLeafHost);
+const terminalAccessFor = createTerminalAccessFor(getLeafHost);
+const terminalWorkPlace = createTerminalWorkPlace(getLeafHost);
+const terminalAnswerExtras = createTerminalAnswerExtras(getLeafHost);
+const bridgeTerminal = createBridgeTerminal(getLeafHost);
+const remoteSupportSeat = createRemoteSupportSeat(getLeafHost);
+const closeSessionStreams = createCloseSessionStreams(getLeafHost);
+const cursorSeq = createCursorSeq(getLeafHost);
+const fanoutSsePayload = createFanoutSsePayload(getLeafHost);
+const privateFolderThread = createPrivateFolderThread(getLeafHost);
+const makeThreadConfidential = createMakeThreadConfidential(getLeafHost);
+const engineHomes = createEngineHomes(getLeafHost);
+const purgeConfidentialEngineKeys = createPurgeConfidentialEngineKeys(getLeafHost);
+const purgeDeletedThreadEngines = createPurgeDeletedThreadEngines(getLeafHost);
+const forgetThreadEngineSessions = createForgetThreadEngineSessions(getLeafHost);
+const confidentialThreadAttachments = createConfidentialThreadAttachments(getLeafHost);
+const wipeConfidentialThread = createWipeConfidentialThread(getLeafHost);
+const peerThreadFor = createPeerThreadFor(getLeafHost);
+const registeredDeviceFor = createRegisteredDeviceFor(getLeafHost);
+const viewerForApproval = createViewerForApproval(getLeafHost);
+const approvalAnswerRefusal = createApprovalAnswerRefusal(getLeafHost);
+const adminApprovalCheck = createAdminApprovalCheck(getLeafHost);
+const pendingApprovalCards = createPendingApprovalCards(getLeafHost);
+const pendingAdminApprovals = createPendingAdminApprovals(getLeafHost);
+const orgAdminNames = createOrgAdminNames(getLeafHost);
+const scheduleAdminApprovalsAnnounce = createScheduleAdminApprovalsAnnounce(getLeafHost);
+const pendingApprovalsFor = createPendingApprovalsFor(getLeafHost);
+const pendingInboxCards = createPendingInboxCards(getLeafHost);
+const inboxDestination = createInboxDestination(getLeafHost);
+const inboxPending = createInboxPending(getLeafHost);
+const inboxHistory = createInboxHistory(getLeafHost);
+const answerInboxCard = createAnswerInboxCard(getLeafHost);
+const answerCardFromConsole = createAnswerCardFromConsole(getLeafHost);
+const adminAnswersPendingApproval = createAdminAnswersPendingApproval(getLeafHost);
+const botForApproval = createBotForApproval(getLeafHost);
+const scopeApprovalMessage = createScopeApprovalMessage(getLeafHost);
+const notifyAccess = createNotifyAccess(getLeafHost);
+const projectMessages = createProjectMessages(getLeafHost);
+const approvalBot = createApprovalBot(getLeafHost);
+const scopeChannelApproval = createScopeChannelApproval(getLeafHost);
+const peopleDmFrameAllowed = createPeopleDmFrameAllowed(getLeafHost);
+const personSendsReadReceipts = createPersonSendsReadReceipts(getLeafHost);
+const threadReadsFor = createThreadReadsFor(getLeafHost);
+const threadReadFrameAllowed = createThreadReadFrameAllowed(getLeafHost);
+const viewerNotificationMuted = createViewerNotificationMuted(getLeafHost);
+const sseFrameFor = createSseFrameFor(getLeafHost);
+const memberFrame = createMemberFrame(getLeafHost);
+const closeCutToolRows = createCloseCutToolRows(getLeafHost);
+const stopOwnSubagents = createStopOwnSubagents(getLeafHost);
+const preemptAtSafePoint = createPreemptAtSafePoint(getLeafHost);
+const stoppedRowSinceLastPerson = createStoppedRowSinceLastPerson(getLeafHost);
+const noteAutoApproval = createNoteAutoApproval(getLeafHost);
+const commandRememberRefusal = createCommandRememberRefusal(getLeafHost);
+const answerRequest = createAnswerRequest(getLeafHost);
+const respondToCard = createRespondToCard(getLeafHost);
+const resolveLiveProposal = createResolveLiveProposal(getLeafHost);
+const closeOpenApprovals = createCloseOpenApprovals(getLeafHost);
+const limitFailoverRow = createLimitFailoverRow(getLeafHost);
+const limitResumeText = createLimitResumeText(getLeafHost);
+const notePlanLimits = createNotePlanLimits(getLeafHost);
+const limitCandidatesNow = createLimitCandidatesNow(getLeafHost);
+const resendUserMessage = createResendUserMessage(getLeafHost);
+const limitBackupRefusedInThread = createLimitBackupRefusedInThread(getLeafHost);
+const notify = createNotify(getLeafHost);
+const raiseHarnessQuestion = createRaiseHarnessQuestion(getLeafHost);
+const scheduleApprovalExpiry = createScheduleApprovalExpiry(getLeafHost);
+const pendingExpireDaysForPerson = createPendingExpireDaysForPerson(getLeafHost);
+const pendingExpiryDeps = createPendingExpiryDeps(getLeafHost);
+const runPendingApprovalExpirySweep = createRunPendingApprovalExpirySweep(getLeafHost);
+const expireDueApprovalsInThread = createExpireDueApprovalsInThread(getLeafHost);
+const withdrawApprovalNotice = createWithdrawApprovalNotice(getLeafHost);
+const notificationQuietOnPhones = createNotificationQuietOnPhones(getLeafHost);
+const stoppedTurnText = createStoppedTurnText(getLeafHost);
+const holdBootEngineSlot = createHoldBootEngineSlot(getLeafHost);
+const releaseBootEngineSlot = createReleaseBootEngineSlot(getLeafHost);
+const captureTurnFor = createCaptureTurnFor(getLeafHost);
+const ingestEngineHook = createIngestEngineHook(getLeafHost);
+const scheduleTurnDigest = createScheduleTurnDigest(getLeafHost);
+const isUnattended = createIsUnattended(getLeafHost);
+const computerCallGate = createComputerCallGate(getLeafHost);
+const teamComputerInUse = createTeamComputerInUse(getLeafHost);
+const claimTeamComputerLifecycle = createClaimTeamComputerLifecycle(getLeafHost);
+const assertTeamComputerChangeIdle = createAssertTeamComputerChangeIdle(getLeafHost);
+const teamComputersPayload = createTeamComputersPayload(getLeafHost);
+const attachTeamBoat = createAttachTeamBoat(getLeafHost);
+const cloudComputerTools = createCloudComputerTools(getLeafHost);
+const mountHostComputer = createMountHostComputer(getLeafHost);
+const mountBotVps = createMountBotVps(getLeafHost);
+const mountBotBoat = createMountBotBoat(getLeafHost);
+const attachBotBoat = createAttachBotBoat(getLeafHost);
+const startBotBoat = createStartBotBoat(getLeafHost);
+const managedBoatOwners = createManagedBoatOwners(getLeafHost);
+const providerOperationConflict = createProviderOperationConflict(getLeafHost);
+const turnSurfacePlan = createTurnSurfacePlan(getLeafHost);
+const turnProvider = createTurnProvider(getLeafHost);
+const computerPreviewSurface = createComputerPreviewSurface(getLeafHost);
+const selectableComputers = createSelectableComputers(getLeafHost);
+const continueComputerSelection = createContinueComputerSelection(getLeafHost);
+const providerTransitionForTurn = createProviderTransitionForTurn(getLeafHost);
+const claimManagedBoatMutation = createClaimManagedBoatMutation(getLeafHost);
+const claimBotComputerLifecycle = createClaimBotComputerLifecycle(getLeafHost);
+const claimManagedVpsMutation = createClaimManagedVpsMutation(getLeafHost);
+const localVmTargetForStatus = createLocalVmTargetForStatus(getLeafHost);
+const localVmIdleFor = createLocalVmIdleFor(getLeafHost);
+const releaseLocalVmThread = createReleaseLocalVmThread(getLeafHost);
+const localVmAutoLifecycle = createLocalVmAutoLifecycle(getLeafHost);
+const localVmInventoryPayload = createLocalVmInventoryPayload(getLeafHost);
+const openQuestionCard = createOpenQuestionCard(getLeafHost);
+const openPersonCard = createOpenPersonCard(getLeafHost);
+const delegatorOf = createDelegatorOf(getLeafHost);
+const showWaitingOnPersonChip = createShowWaitingOnPersonChip(getLeafHost);
+const settleWaitingOnPersonChips = createSettleWaitingOnPersonChips(getLeafHost);
+const routineOnWire = createRoutineOnWire(getLeafHost);
+const principalMayRunRoutine = createPrincipalMayRunRoutine(getLeafHost);
+const routineAdmission = createRoutineAdmission(getLeafHost);
+const routineSuspended = createRoutineSuspended(getLeafHost);
+const routineAudit = createRoutineAudit(getLeafHost);
+const runAsChooserFor = createRunAsChooserFor(getLeafHost);
+const runAsPeople = createRunAsPeople(getLeafHost);
+const routineRunAsChoice = createRoutineRunAsChoice(getLeafHost);
+const auditRoutineRunAs = createAuditRoutineRunAs(getLeafHost);
+const mayRunRoutineNow = createMayRunRoutineNow(getLeafHost);
+const speakerMayRunRoutineNow = createSpeakerMayRunRoutineNow(getLeafHost);
+const mayCancelRoutineRun = createMayCancelRoutineRun(getLeafHost);
+const routineScopeCaller = createRoutineScopeCaller(getLeafHost);
+const routineScopeFacts = createRoutineScopeFacts(getLeafHost);
+const routineScopeDeps = createRoutineScopeDeps(getLeafHost);
+const attentionTicketUrl = createAttentionTicketUrl(getLeafHost);
+const routineModelRefusal = createRoutineModelRefusal(getLeafHost);
+const routineModelForTurn = createRoutineModelForTurn(getLeafHost);
+const routineSubagentModelForTurn = createRoutineSubagentModelForTurn(getLeafHost);
+const routineEffortForTurn = createRoutineEffortForTurn(getLeafHost);
+const dispatchDelegationWake = createDispatchDelegationWake(getLeafHost);
+const wakeDelegationSource = createWakeDelegationSource(getLeafHost);
+const latestFailedTurnCause = createLatestFailedTurnCause(getLeafHost);
+const turnAnswers = createTurnAnswers(getLeafHost);
+const incidentRefused = createIncidentRefused(getLeafHost);
+const reportIncident = createReportIncident(getLeafHost);
+const drainDelegationWakes = createDrainDelegationWakes(getLeafHost);
+const noteCallBesideConversation = createNoteCallBesideConversation(getLeafHost);
+const markTaskContextExternallyUpdated = createMarkTaskContextExternallyUpdated(getLeafHost);
+const directContext = createDirectContext(getLeafHost);
+const staleEngineSession = createStaleEngineSession(getLeafHost);
+const compactConversation = createCompactConversation(getLeafHost);
+const releaseWarmEngine = createReleaseWarmEngine(getLeafHost);
+const prewarmRefusal = createPrewarmRefusal(getLeafHost);
+const joinPrewarm = createJoinPrewarm(getLeafHost);
+const prewarmThread = createPrewarmThread(getLeafHost);
+const releaseReservedWorkThread = createReleaseReservedWorkThread(getLeafHost);
+const adoptReservedWorkThread = createAdoptReservedWorkThread(getLeafHost);
+const prewarmNamedTeammates = createPrewarmNamedTeammates(getLeafHost);
+const finishVoiceCallRequestedByBot = createFinishVoiceCallRequestedByBot(getLeafHost);
+const publishVoiceNotice = createPublishVoiceNotice(getLeafHost);
+const finalizeDelegationWatch = createFinalizeDelegationWatch(getLeafHost);
+const retryDelegationsWaitingOn = createRetryDelegationsWaitingOn(getLeafHost);
+const scheduleSoloGoalRound = createScheduleSoloGoalRound(getLeafHost);
+const scheduleFinishUntilRound = createScheduleFinishUntilRound(getLeafHost);
+const scheduleUnfinishedTurn = createScheduleUnfinishedTurn(getLeafHost);
+const scheduleVoiceCallWatchdog = createScheduleVoiceCallWatchdog(getLeafHost);
+const drainQueuedSends = createDrainQueuedSends(getLeafHost);
+const duplexEpochFor = createDuplexEpochFor(getLeafHost);
+const startDuplexCallTurn = createStartDuplexCallTurn(getLeafHost);
+const startOrQueueDirectMessageNow = createStartOrQueueDirectMessageNow(getLeafHost);
+const callHandoffHistory = createCallHandoffHistory(getLeafHost);
+const startParallelTask = createStartParallelTask(getLeafHost);
+const busyClassifyEngine = createBusyClassifyEngine(getLeafHost);
+const routeSteeredMessage = createRouteSteeredMessage(getLeafHost);
+const settleParallelTask = createSettleParallelTask(getLeafHost);
+const settleParallelFallback = createSettleParallelFallback(getLeafHost);
+const stopParallelTask = createStopParallelTask(getLeafHost);
+const settleOrphanedParallelTasks = createSettleOrphanedParallelTasks(getLeafHost);
+const directSendRefusal = createDirectSendRefusal(getLeafHost);
+const misuseTextRefusal = createMisuseTextRefusal(getLeafHost);
+const safetyReviewer = createSafetyReviewer(getLeafHost);
+const confirmHeldCard = createConfirmHeldCard(getLeafHost);
+const acceptDirectSend = createAcceptDirectSend(getLeafHost);
+const deliverLateQuestionAnswer = createDeliverLateQuestionAnswer(getLeafHost);
+const startOrQueueOpenedThread = createStartOrQueueOpenedThread(getLeafHost);
+const startScreenPoller = createStartScreenPoller(getLeafHost);
+const pokeScreenPoller = createPokeScreenPoller(getLeafHost);
+const finalScreenFrame = createFinalScreenFrame(getLeafHost);
+const threadTitleGate = createThreadTitleGate(getLeafHost);
+const assertTurnAdmission = createAssertTurnAdmission(getLeafHost);
+const routineSourceOwner = createRoutineSourceOwner(getLeafHost);
+const markRoutineResultsThreads = createMarkRoutineResultsThreads(getLeafHost);
+const routineFullReport = createRoutineFullReport(getLeafHost);
+const syncRoutineRunToSource = createSyncRoutineRunToSource(getLeafHost);
+const interruptRoutineGroupGoal = createInterruptRoutineGroupGoal(getLeafHost);
+const stopBotForEmergencyApprovalDowngrade = createStopBotForEmergencyApprovalDowngrade(getLeafHost);
+const runningTurnLevels = createRunningTurnLevels(getLeafHost);
+const applyStricterApprovalLive = createApplyStricterApprovalLive(getLeafHost);
+const stopTurnForStricterApproval = createStopTurnForStricterApproval(getLeafHost);
+const botRunning = createBotRunning(getLeafHost);
+const forceStopBot = createForceStopBot(getLeafHost);
+const routineWatchPlace = createRoutineWatchPlace(getLeafHost);
+const routineWatchCallTool = createRoutineWatchCallTool(getLeafHost);
+const routineEngineForBot = createRoutineEngineForBot(getLeafHost);
+const noteWakeDryRun = createNoteWakeDryRun(getLeafHost);
+const offerPeerNotice = createOfferPeerNotice(getLeafHost);
+const surfacePeerNotice = createSurfacePeerNotice(getLeafHost);
+const replayPendingProactive = createReplayPendingProactive(getLeafHost);
+const offerProactive = createOfferProactive(getLeafHost);
+const offerRoomPostToBots = createOfferRoomPostToBots(getLeafHost);
+const startProactiveWake = createStartProactiveWake(getLeafHost);
+const answerRoleTransition = createAnswerRoleTransition(getLeafHost);
+const answerProactiveProposal = createAnswerProactiveProposal(getLeafHost);
+const sendMissingRoleToAdmins = createSendMissingRoleToAdmins(getLeafHost);
+const cloudRoutineReadiness = createCloudRoutineReadiness(getLeafHost);
+const deleteBotWithLifecycle = createDeleteBotWithLifecycle(getLeafHost);
+const settleTeamMemoryCards = createSettleTeamMemoryCards(getLeafHost);
+const resolveAndSendTrust = createResolveAndSendTrust(getLeafHost);
+const cancelTeamSetupResumesForThread = createCancelTeamSetupResumesForThread(getLeafHost);
+const dispatchTeamSetupResume = createDispatchTeamSetupResume(getLeafHost);
+const teamSetupApplyRefusal = createTeamSetupApplyRefusal(getLeafHost);
+const resolveAndSendTeamSetup = createResolveAndSendTeamSetup(getLeafHost);
+const sendRoutineResolution = createSendRoutineResolution(getLeafHost);
+const resolveAndSendRoutine = createResolveAndSendRoutine(getLeafHost);
+const resolveAndSendProfile = createResolveAndSendProfile(getLeafHost);
+const resolveAndSendModel = createResolveAndSendModel(getLeafHost);
+const resolveAndSendRule = createResolveAndSendRule(getLeafHost);
+const undoSkillCard = createUndoSkillCard(getLeafHost);
+const undoAppliedChange = createUndoAppliedChange(getLeafHost);
+const bindOwnedTrigger = createBindOwnedTrigger(getLeafHost);
+const savePollerCredentials = createSavePollerCredentials(getLeafHost);
+const teammateReportContext = createTeammateReportContext(getLeafHost);
+const serializeRoomContext = createSerializeRoomContext(getLeafHost);
+const roomRoutingInput = createRoomRoutingInput(getLeafHost);
+const runGoalWorkerOnRuntime = createRunGoalWorkerOnRuntime(getLeafHost);
+const runGroupGoalStep = createRunGroupGoalStep(getLeafHost);
+const runGroupGoalOperation = createRunGroupGoalOperation(getLeafHost);
+const groupEngineCommandRoute = createGroupEngineCommandRoute(getLeafHost);
+const cachedGroupEngineCommandRoute = createCachedGroupEngineCommandRoute(getLeafHost);
+const startGroupTurn = createStartGroupTurn(getLeafHost);
+const drainQueuedChannelSends = createDrainQueuedChannelSends(getLeafHost);
+const ensureCalendarCallRoom = createEnsureCalendarCallRoom(getLeafHost);
+const resolveReplyTarget = createResolveReplyTarget(getLeafHost);
+const messageFileRootsForThread = createMessageFileRootsForThread(getLeafHost);
+const threadFileRefForId = createThreadFileRefForId(getLeafHost);
+const threadFileRefForPath = createThreadFileRefForPath(getLeafHost);
+const attachmentVmForTurn = createAttachmentVmForTurn(getLeafHost);
+const connectorThread = createConnectorThread(getLeafHost);
+const lastHumanRoomMessageAt = createLastHumanRoomMessageAt(getLeafHost);
+const roomPostEligibility = createRoomPostEligibility(getLeafHost);
+const skillProposalPersistence = createSkillProposalPersistence(getLeafHost);
+const stagedSkillCleanupsForThread = createStagedSkillCleanupsForThread(getLeafHost);
+const appendSkillRequestCard = createAppendSkillRequestCard(getLeafHost);
+const resolveSkillRequest = createResolveSkillRequest(getLeafHost);
+const markComputerResumeFailed = createMarkComputerResumeFailed(getLeafHost);
+const dispatchComputerResume = createDispatchComputerResume(getLeafHost);
+const drainComputerResumes = createDrainComputerResumes(getLeafHost);
+const claimPhoneSecretBotDeletion = createClaimPhoneSecretBotDeletion(getLeafHost);
+const secretMessage = createSecretMessage(getLeafHost);
+const currentSecretState = createCurrentSecretState(getLeafHost);
+const dispatchSecretResume = createDispatchSecretResume(getLeafHost);
+const resumeSecretCard = createResumeSecretCard(getLeafHost);
+const provideSecretFromPhone = createProvideSecretFromPhone(getLeafHost);
+const testCliBinary = createTestCliBinary(getLeafHost);
+const localVmPayload = createLocalVmPayload(getLeafHost);
+const readyLocalVmForTurn = createReadyLocalVmForTurn(getLeafHost);
+const perBotLocalVmCountForModeChange = createPerBotLocalVmCountForModeChange(getLeafHost);
+const configStatus = createConfigStatus(getLeafHost);
+const configForPerson = createConfigForPerson(getLeafHost);
+const personalMcpNamesForGuard = createPersonalMcpNamesForGuard(getLeafHost);
+const mcpServerResponse = createMcpServerResponse(getLeafHost);
+const mcpServerNamesResponse = createMcpServerNamesResponse(getLeafHost);
+const engineMcpServers = createEngineMcpServers(getLeafHost);
+const remoteMcpServers = createRemoteMcpServers(getLeafHost);
+const probeMcpOAuth = createProbeMcpOAuth(getLeafHost);
+const startMcpSignIn = createStartMcpSignIn(getLeafHost);
+const probeEngines = createProbeEngines(getLeafHost);
+const engineInstalled = createEngineInstalled(getLeafHost);
+const turnZoneFor = createTurnZoneFor(getLeafHost);
+const peerSpeaker = createPeerSpeaker(getLeafHost);
+const orgJoinsRunningTurn = createOrgJoinsRunningTurn(getLeafHost);
+const orgEngineInput = createOrgEngineInput(getLeafHost);
+const defaultTurnPayerFor = createDefaultTurnPayerFor(getLeafHost);
+const ownerModelOfflineRefusal = createOwnerModelOfflineRefusal(getLeafHost);
+const sendStateFor = createSendStateFor(getLeafHost);
+const sendStateLimit = createSendStateLimit(getLeafHost);
+const warmPayerAccountModels = createWarmPayerAccountModels(getLeafHost);
+const speakerTurnSelection = createSpeakerTurnSelection(getLeafHost);
+const serverEngineAllowedFor = createServerEngineAllowedFor(getLeafHost);
+const autoCatalogLookup = createAutoCatalogLookup(getLeafHost);
+const announcePlanThresholds = createAnnouncePlanThresholds(getLeafHost);
+const autoRefusalsFor = createAutoRefusalsFor(getLeafHost);
+const autoEnginesFor = createAutoEnginesFor(getLeafHost);
+const relayEnginesFor = createRelayEnginesFor(getLeafHost);
+const autoPickForTurn = createAutoPickForTurn(getLeafHost);
+const voicePickForTurn = createVoicePickForTurn(getLeafHost);
+const orgEngineRefusal = createOrgEngineRefusal(getLeafHost);
+const orgTurnAccess = createOrgTurnAccess(getLeafHost);
+const piTurnPerson = createPiTurnPerson(getLeafHost);
+const withPiModelServers = createWithPiModelServers(getLeafHost);
+const piLocalTurnAccess = createPiLocalTurnAccess(getLeafHost);
+const turnReachPrompt = createTurnReachPrompt(getLeafHost);
+const turnConnectorsFor = createTurnConnectorsFor(getLeafHost);
+const accountConnectorInput = createAccountConnectorInput(getLeafHost);
+const engineReachFor = createEngineReachFor(getLeafHost);
+const connectorSwitchForTurn = createConnectorSwitchForTurn(getLeafHost);
+const engineConnectorsPromptFor = createEngineConnectorsPromptFor(getLeafHost);
+const connectorsElsewhereFor = createConnectorsElsewhereFor(getLeafHost);
+const subscriptionExpiredCard = createSubscriptionExpiredCard(getLeafHost);
+const holdSignInRefusal = createHoldSignInRefusal(getLeafHost);
+const accessCardFor = createAccessCardFor(getLeafHost);
+const describeInstances = createDescribeInstances(getLeafHost);
+const instancesForViewer = createInstancesForViewer(getLeafHost);
+const memberInstanceView = createMemberInstanceView(getLeafHost);
+const persistProviderInstance = createPersistProviderInstance(getLeafHost);
+const revokeEngineCapabilities = createRevokeEngineCapabilities(getLeafHost);
+const reloadProviders = createReloadProviders(getLeafHost);
+const meetingBrowserRefusal = createMeetingBrowserRefusal(getLeafHost);
+const openMeetingBrowser = createOpenMeetingBrowser(getLeafHost);
+const startMeetingSummary = createStartMeetingSummary(getLeafHost);
+const resolveAndSendMeeting = createResolveAndSendMeeting(getLeafHost);
+const resolveAndSendPhoneCallConsent = createResolveAndSendPhoneCallConsent(getLeafHost);
+const perspicaxReadAlone = createPerspicaxReadAlone(getLeafHost);
+const perspicaxSessionAlone = createPerspicaxSessionAlone(getLeafHost);
+const runDispatchKpiSource = createRunDispatchKpiSource(getLeafHost);
+const refreshDispatchKpiAfterRun = createRefreshDispatchKpiAfterRun(getLeafHost);
+const botMailOwner = createBotMailOwner(getLeafHost);
+const botmailConfined = createBotmailConfined(getLeafHost);
+const smsReplyAfter = createSmsReplyAfter(getLeafHost);
+const savePersonPreferences = createSavePersonPreferences(getLeafHost);
+const botMemoryReachable = createBotMemoryReachable(getLeafHost);
+const botSkillsRefusal = createBotSkillsRefusal(getLeafHost);
+const botComputerShell = createBotComputerShell(getLeafHost);
+const prewakeComputerWhileTyping = createPrewakeComputerWhileTyping(getLeafHost);
+const backgroundBriefReads = createBackgroundBriefReads(getLeafHost);
+const localComputerSummary = createLocalComputerSummary(getLeafHost);
+const localComputerLifecycle = createLocalComputerLifecycle(getLeafHost);
+const maintainedComputer = createMaintainedComputer(getLeafHost);
+const diskSaverTarget = createDiskSaverTarget(getLeafHost);
+const addMarketplaceServers = createAddMarketplaceServers(getLeafHost);
+const updatedMarketplaceServer = createUpdatedMarketplaceServer(getLeafHost);
+const updateInstallationPlugin = createUpdateInstallationPlugin(getLeafHost);
+const deletePersonData = createDeletePersonData(getLeafHost);
+const erasePersonDataNow = createErasePersonDataNow(getLeafHost);
+const wakeFromCloudAgentCompletion = createWakeFromCloudAgentCompletion(getLeafHost);
+const perspicaxAccessToken = createPerspicaxAccessToken(getLeafHost);
+const perspicaxLinkSubjectToken = createPerspicaxLinkSubjectToken(getLeafHost);
+const subscriptionCli = createSubscriptionCli(getLeafHost);
+const journalRowsFor = createJournalRowsFor(getLeafHost);
+const inboxTestRule = createInboxTestRule(getLeafHost);
+const codeBranchCredentials = createCodeBranchCredentials(getLeafHost);
+const routineRunAccessCard = createRoutineRunAccessCard(getLeafHost);
+const activityChildren = createActivityChildren(getLeafHost);
+const peopleDmProjection = createPeopleDmProjection(getLeafHost);
+const sendPeopleDmMessage = createSendPeopleDmMessage(getLeafHost);
+const notifyRoomMentions = createNotifyRoomMentions(getLeafHost);
+const botActs = createBotActs(getLeafHost);
+const settingsActions = createIndexSettingsActions(getLeafHost);
+const questionAnsweredBy = createQuestionAnsweredBy(getLeafHost);
+const primaryApprovals = createIndexPrimaryApprovals(getLeafHost);
+const actAnswerer = createActAnswerer(getLeafHost);
+const describeActForRule = createDescribeActForRule(getLeafHost);
+const settleBotActCard = createSettleBotActCard(getLeafHost);
+const dashFreeReply = createDashFreeReply(getLeafHost);
+const requestCwAction = createRequestCwAction(getLeafHost);
+const resolveAndSendCwAction = createResolveAndSendCwAction(getLeafHost);
+const allowCwAction = createAllowCwAction(getLeafHost);
+const settleConfidentialMemoryCard = createSettleConfidentialMemoryCard(getLeafHost);
+const emailDraftBot = createEmailDraftBot(getLeafHost);
+const resolveImessageCard = createResolveImessageCard(getLeafHost);
+const resolveAndSendEmailDraft = createResolveAndSendEmailDraft(getLeafHost);
+const takeOwnerContinuation = createTakeOwnerContinuation(getLeafHost);
+const performBotActRoute = createPerformBotActRoute(getLeafHost);
+const performBotActRouteOutsideConfidential = createPerformBotActRouteOutsideConfidential(getLeafHost);
+const actorPrincipalId = createActorPrincipalId(getLeafHost);
+const recentToolUses = createRecentToolUses(getLeafHost);
+const compactPromptFor = createCompactPromptFor(getLeafHost);
+const ownerSettingsForbidden = createOwnerSettingsForbidden(getLeafHost);
+const ownEnvironmentRequest = createOwnEnvironmentRequest(getLeafHost);
+const ownDestinationRequest = createOwnDestinationRequest(getLeafHost);
+const destinationOfCall = createDestinationOfCall(getLeafHost);
+const ownComputerChoiceRequest = createOwnComputerChoiceRequest(getLeafHost);
+const destinationTurnOrigin = createDestinationTurnOrigin(getLeafHost);
+const ownAttachmentRoots = createOwnAttachmentRoots(getLeafHost);
+const speakerOwnWordsTurn = createSpeakerOwnWordsTurn(getLeafHost);
+const ownEnvironmentOrigin = createOwnEnvironmentOrigin(getLeafHost);
+const memberHostToolPlace = createMemberHostToolPlace(getLeafHost);
+const ownLineageFields = createOwnLineageFields(getLeafHost);
+const aiClientThreadPerson = createAiClientThreadPerson(getLeafHost);
+const routineOwnerAuthorizationFor = createRoutineOwnerAuthorizationFor(getLeafHost);
+const ownerLineageFor = createOwnerLineageFor(getLeafHost);
+const personDirectTurn = createPersonDirectTurn(getLeafHost);
+const botCreationTurnOrigin = createBotCreationTurnOrigin(getLeafHost);
+const nonPrimaryCreationRefusal = createNonPrimaryCreationRefusal(getLeafHost);
+const autoAnswerStepUp = createAutoAnswerStepUp(getLeafHost);
+const foreignMcpServerNames = createForeignMcpServerNames(getLeafHost);
+const ownerScopedMcpServerFor = createOwnerScopedMcpServerFor(getLeafHost);
+const stepUpGate = createStepUpGate(getLeafHost);
+const approvalModeStepUpGate = createApprovalModeStepUpGate(getLeafHost);
+const refreshWidens = createRefreshWidens(getLeafHost);
+const settingsStepUpGate = createSettingsStepUpGate(getLeafHost);
+const strictRuleQualifies = createStrictRuleQualifies(getLeafHost);
+const strictCardRule = createStrictCardRule(getLeafHost);
+const proposalRuleCandidate = createProposalRuleCandidate(getLeafHost);
+const settleProposalByRule = createSettleProposalByRule(getLeafHost);
+const saveOwnerRuleFromCard = createSaveOwnerRuleFromCard(getLeafHost);
+const revokeLegacyKey = createRevokeLegacyKey(getLeafHost);
+const memberFolderRoots = createMemberFolderRoots(getLeafHost);
+const orgFullAccessRefusalFor = createOrgFullAccessRefusalFor(getLeafHost);
+const auditApprovalModeChange = createAuditApprovalModeChange(getLeafHost);
+const rulesHoldTurn = createRulesHoldTurn(getLeafHost);
+const auditFullAccessTurn = createAuditFullAccessTurn(getLeafHost);
+const orgSettings = createOrgSettings(getLeafHost);
+const roomSectionAccess = createRoomSectionAccess(getLeafHost);
+const authzViewerFromId = createAuthzViewerFromId(getLeafHost);
+const groupVisible = createGroupVisible(getLeafHost);
+const mayPlaceRoomIn = createMayPlaceRoomIn(getLeafHost);
+const roomSectionMoveRefusal = createRoomSectionMoveRefusal(getLeafHost);
+const resolveManagedNameFor = createResolveManagedNameFor(getLeafHost);
+const listedBotVisible = createListedBotVisible(getLeafHost);
+const viewerThreadOf = createViewerThreadOf(getLeafHost);
+const ensureViewerThread = createEnsureViewerThread(getLeafHost);
+const routeThreadIdUnguarded = createRouteThreadIdUnguarded(getLeafHost);
+const viewerBotActivity = createViewerBotActivity(getLeafHost);
+const botForViewer = createBotForViewer(getLeafHost);
+const bodyForThreadViewer = createBodyForThreadViewer(getLeafHost);
+const hideEarlierAgentThreads = createHideEarlierAgentThreads(getLeafHost);
+const migrateBotRuntimeSettings = createMigrateBotRuntimeSettings(getLeafHost);
+const sweepBackgroundThreads = createSweepBackgroundThreads(getLeafHost);
+const hideBotThreadsOnce = createHideBotThreadsOnce(getLeafHost);
+const migrateThreadOwners = createMigrateThreadOwners(getLeafHost);
+const openedThreadOwner = createOpenedThreadOwner(getLeafHost);
+const privateRecallFilter = createPrivateRecallFilter(getLeafHost);
+const recentWorkFor = createRecentWorkFor(getLeafHost);
+const segmentDigestText = createSegmentDigestText(getLeafHost);
+const streamDigestEngine = createStreamDigestEngine(getLeafHost);
+const refreshStreamDigests = createRefreshStreamDigests(getLeafHost);
+const streamDigestPrompt = createStreamDigestPrompt(getLeafHost);
+const routineResultsRefusalFor = createRoutineResultsRefusalFor(getLeafHost);
+const patchRoutineAs = createPatchRoutineAs(getLeafHost);
+const routineConversationOf = createRoutineConversationOf(getLeafHost);
+const routineSeenBy = createRoutineSeenBy(getLeafHost);
+const subjectSeesChannel = createSubjectSeesChannel(getLeafHost);
+const attachmentSeenBy = createAttachmentSeenBy(getLeafHost);
+const memberSeesFrame = createMemberSeesFrame(getLeafHost);
+const viewerIsOperator = createViewerIsOperator(getLeafHost);
+const principalPermissions = createPrincipalPermissions(getLeafHost);
+const memberBotFieldRefusal = createMemberBotFieldRefusal(getLeafHost);
+const computerOwner = createComputerOwner(getLeafHost);
+const sessionPersonFields = createSessionPersonFields(getLeafHost);
+const viewerIdentity = createViewerIdentity(getLeafHost);
+const withCreatorListed = createWithCreatorListed(getLeafHost);
+const refusePlacedBots = createRefusePlacedBots(getLeafHost);
+const refuseHumanEdit = createRefuseHumanEdit(getLeafHost);
+const resolveOrgGrantee = createResolveOrgGrantee(getLeafHost);
+const orgDirectoryTeams = createOrgDirectoryTeams(getLeafHost);
+const describeGrantTarget = createDescribeGrantTarget(getLeafHost);
+const migrateSectionSharesToBotGrants = createMigrateSectionSharesToBotGrants(getLeafHost);
+const teamStorageForBot = createTeamStorageForBot(getLeafHost);
+const orgVisibleSections = createOrgVisibleSections(getLeafHost);
+const attachInterimPerson = createAttachInterimPerson(getLeafHost);
+const presenceViewer = createPresenceViewer(getLeafHost);
+const broadcastPresence = createBroadcastPresence(getLeafHost);
+const reachMeLanguage = createReachMeLanguage(getLeafHost);
+const reachMeCard = createReachMeCard(getLeafHost);
+const reachMeRespond = createReachMeRespond(getLeafHost);
+const reachMeVoice = createReachMeVoice(getLeafHost);
+const reachMeAudit = createReachMeAudit(getLeafHost);
+const videoInputMessage = createVideoInputMessage(getLeafHost);
+const videoScopeValid = createVideoScopeValid(getLeafHost);
+const voiceProviderKeys = createVoiceProviderKeys(getLeafHost);
+const claudeAccountForPrincipal = createClaudeAccountForPrincipal(getLeafHost);
+const personClaudeArtifactCall = createPersonClaudeArtifactCall(getLeafHost);
+const ensureClaudeArtifactCommentsRoutine = createEnsureClaudeArtifactCommentsRoutine(getLeafHost);
+const claudeArtifactCommentsCheck = createClaudeArtifactCommentsCheck(getLeafHost);
+const harnessCommandAccount = createHarnessCommandAccount(getLeafHost);
+const harnessCommandSource = createHarnessCommandSource(getLeafHost);
+const orgAdminBots = createOrgAdminBots(getLeafHost);
+const personEngineAccess = createPersonEngineAccess(getLeafHost);
+const singleBotPackage = createSingleBotPackage(getLeafHost);
+const importPackageFor = createImportPackageFor(getLeafHost);
+const setBotApprovalModeFromConsole = createSetBotApprovalModeFromConsole(getLeafHost);
+const mcpServerSummary = createMcpServerSummary(getLeafHost);
+const reachable = createReachable(getLeafHost);
+const saveOrgPendingApprovalExpireDays = createSaveOrgPendingApprovalExpireDays(getLeafHost);
+const saveOrgInterimAttachDays = createSaveOrgInterimAttachDays(getLeafHost);
+const saveOrgAllowFullAccess = createSaveOrgAllowFullAccess(getLeafHost);
+const saveOrgMemberEnvironmentAutonomy = createSaveOrgMemberEnvironmentAutonomy(getLeafHost);
+const saveOrgConfidentialThreadsByDefault = createSaveOrgConfidentialThreadsByDefault(getLeafHost);
+const resetMemberAutoLevelsOnce = createResetMemberAutoLevelsOnce(getLeafHost);
+const settleMemberAutoLevelsFor = createSettleMemberAutoLevelsFor(getLeafHost);
+const saveOrgMemberAutoApproval = createSaveOrgMemberAutoApproval(getLeafHost);
+const saveOrgAllowVaultExport = createSaveOrgAllowVaultExport(getLeafHost);
+const saveOrgPluginMarketplaces = createSaveOrgPluginMarketplaces(getLeafHost);
+const applyModelSwitches = createApplyModelSwitches(getLeafHost);
+const orgEngineTurnRefusal = createOrgEngineTurnRefusal(getLeafHost);
+const orgAdminEngines = createOrgAdminEngines(getLeafHost);
+const applyOrgEngineAllowList = createApplyOrgEngineAllowList(getLeafHost);
+const orgBotReach = createOrgBotReach(getLeafHost);
+const orgBotFileRoots = createOrgBotFileRoots(getLeafHost);
+const orgBotAttachments = createOrgBotAttachments(getLeafHost);
+const performAsMember = createPerformAsMember(getLeafHost);
+const agentApiBotScopes = createAgentApiBotScopes(getLeafHost);
+const agentTurnState = createAgentTurnState(getLeafHost);
+const agentSummary = createAgentSummary(getLeafHost);
+const takeTemporaryCreateToken = createTakeTemporaryCreateToken(getLeafHost);
+const temporaryAgentSetting = createTemporaryAgentSetting(getLeafHost);
+const sweepTemporaryAgents = createSweepTemporaryAgents(getLeafHost);
+const agentApiSourceFile = createAgentApiSourceFile(getLeafHost);
+const agentApiStageFiles = createAgentApiStageFiles(getLeafHost);
+const startAgentPrompt = createStartAgentPrompt(getLeafHost);
+const agentApiAudit = createAgentApiAudit(getLeafHost);
+const agentConversationFor = createAgentConversationFor(getLeafHost);
+const agentScopesFor = createAgentScopesFor(getLeafHost);
+const applyConfigHttpPatch = createApplyConfigHttpPatch(getLeafHost);
+const resolveSectionId = createResolveSectionId(getLeafHost);
+const runPreAuth = createRunPreAuth(getLeafHost);
+const enterRequestScopes = createEnterRequestScopes(getLeafHost);
+const authenticate = createAuthenticate(getLeafHost);
+const runInternal = createRunInternal(getLeafHost);
+const originGates = createOriginGates(getLeafHost);
+const sweepThreadEventLogsDeferred = createSweepThreadEventLogsDeferred(getLeafHost);
+const scheduleThreadEventLogRetentionSweep = createScheduleThreadEventLogRetentionSweep(getLeafHost);
+const importLegacyDelegations = createImportLegacyDelegations(getLeafHost);
+const delegateOnRuntime = createDelegateOnRuntime(getLeafHost);
+const runtimeDelegationStatus = createRuntimeDelegationStatus(getLeafHost);
+const drainTurnsBeforeShutdown = createDrainTurnsBeforeShutdown(getLeafHost);
+const noteTurnsCutByShutdown = createNoteTurnsCutByShutdown(getLeafHost);
+const resumeTurnsCutByRestart = createResumeTurnsCutByRestart(getLeafHost);
+const resumeHeldSteersAfterCrash = createResumeHeldSteersAfterCrash(getLeafHost);
 // #1388: functions the split dropped, restored verbatim from the pre-split server/index.ts.
 export const pendingAgentReplyWakes = new Map<string, { botId: string; agentName: string; speaker?: TurnSpeaker }>();
 function browserSessionSpec(binaryPath: string, session: string, profile: string | undefined) {
@@ -2424,39 +8325,7 @@ function strictRuleOwnerName(personId: string): string {
   return person?.name?.trim() || person?.email?.trim() || "an admin";
 }
 
-// #1388: bindings the leaves read through the host bag. Getters stay lazy
-// (no TDZ at boot); the drain flags and stand-in roots are leaf-owned state.
-for (const [name, read] of Object.entries({
-  ENDED: () => ENDED,
-  cloudAgentManager: () => cloudAgentManager,
-  computerParks: () => computerParks,
-  customSecretVault: () => customSecretVault,
-  grokBridgeService: () => grokBridgeService,
-  listNativeBotSkills: () => listNativeBotSkills,
-  mcpServersHost: () => mcpServersHost,
-  sideJobs: () => sideJobs,
-  skillReview: () => skillReview,
-  stopParkedCards: () => stopParkedCards,
-  teamSetupDecisionText: () => teamSetupDecisionText,
-  threadContinuationSpeaker: () => threadContinuationSpeaker,
-  browserSessionSpec: () => browserSessionSpec,
-  grokBridgeAllowed: () => grokBridgeAllowed,
-  memeScopeForThread: () => memeScopeForThread,
-  roomRootProblem: () => roomRootProblem,
-  saveOrgAllowGrokBridge: () => saveOrgAllowGrokBridge,
-  setRoomHold: () => setRoomHold,
-  turnEvidence: () => turnEvidence,
-  wakeAfterAgentReply: () => wakeAfterAgentReply,
-  claimGroupMemberBot: () => claimGroupMemberBot,
-  directRootPending: () => directRootPending,
-  drainAgentReplyWakes: () => drainAgentReplyWakes,
-  drainQueuedChannelSendsNow: () => drainQueuedChannelSendsNow,
-  drainQueuedSendsNow: () => drainQueuedSendsNow,
-  noteHeldSkip: () => noteHeldSkip,
-  roomHeld: () => roomHeld,
-  runtimeHoldsRoot: () => runtimeHoldsRoot,
-  strictRuleOwnerName: () => strictRuleOwnerName,
-})) Object.defineProperty(leafHostBindings, name, { get: read, enumerable: true, configurable: true });
+// #1388: the drain flags and stand-in roots are leaf-owned state.
 Object.assign(leafHostBindings, {
   drainingQueuedSends: false, queuedSendsDrainOwed: false,
   drainingQueuedChannelSends: false, queuedChannelSendsDrainOwed: false,
@@ -2491,14 +8360,6 @@ const pageLive = new PageLive();
 // before any durable identity, sessions, config, or Store state is loaded.
 const dataDirLease = acquireDataDirLeaseForProcess(DATA_DIR);
 let dataDirLeaseReleaseAttempted = false;
-const releaseDataDirLeaseAtExit = createReleaseDataDirLeaseAtExit(getLeafHost);
-Object.assign(leafHostBindings, { dataDirLease, releaseDataDirLeaseAtExit });
-Object.defineProperty(leafHostBindings, "dataDirLeaseReleaseAttempted", {
-  configurable: true,
-  enumerable: true,
-  get: () => dataDirLeaseReleaseAttempted,
-  set: (value) => { dataDirLeaseReleaseAttempted = value; },
-});
 process.once("exit", releaseDataDirLeaseAtExit);
 // Restore before constructing any long-lived config, Store, session or provider
 // objects. Replacing files underneath a live Store would overwrite restored data.
@@ -2532,7 +8393,6 @@ if (process.env.SAGAX_LOOP_LAG !== "0") {
 // in with Pulsatrix only (Perspicax owns accounts), so the list is empty
 // there and a legacy email session ends at its next request.
 const IDENTITY = identityConfigFromEnv();
-Object.assign(leafHostBindings, { IDENTITY });
 // #1098: an organization server keeps the shared host's ceilings (parallel
 // tasks, attachment sizes); a solo server lifts them (server/host-kind.ts).
 setSharedHost(IDENTITY.kind === "perspicax");
@@ -2554,7 +8414,6 @@ function signInAllowList() {
   if (IDENTITY.kind === "perspicax") return EMPTY_SIGN_IN;
   return cachedSignInAllowList();
 }
-const emailSignInAllowList = createEmailSignInAllowList(getLeafHost);
 const sessions = new SessionRegistry({
   file: join(DATA_DIR, "sessions.json"),
   ...(IDENTITY.kind === "perspicax" ? {} : {
@@ -2724,7 +8583,6 @@ const phoneTools = createPhoneToolBroker({
   })
 });
 /** Count server events for a person and tell their streams what unlocked. Never throws. */
-const recordAchievements = createRecordAchievements(getLeafHost);
 /** Mastery facts (server/achievements/achievements-mastery.ts) for their people. Never throws. */
 function recordMastery(facts: readonly PersonFact[]): void {
   for (const item of facts) recordAchievements(item.person, [{ type: "mastery", fact: item.fact, ...(item.id ? { id: item.id } : {}) }]);
@@ -2779,7 +8637,6 @@ function masteryCensus(person: string): ReturnType<typeof threadCensus> {
  * the bot already wears stays. A person without a record (a service) is
  * not checked, like the rest of achievements.
  */
-const lockedLookRefusal = createLockedLookRefusal(getLeafHost);
 /** A bot's standing instructions saved by a person (Red Pen). */
 function recordPersonaSave(auth: RequestAuth, botId: string, before: { soul: string } | undefined, after: { soul: string }): void {
   if (!before || before.soul === after.soul) return;
@@ -2789,7 +8646,6 @@ function recordPersonaSave(auth: RequestAuth, botId: string, before: { soul: str
 // per person per local day, the measures that span days and Ten Hands' look
 // at their conversations, so a window that closed overnight counts.
 const masteryReconciledDay = new Map<string, string>();
-const masteryNightly = createMasteryNightly(getLeafHost);
 setTimeout(masteryNightly, 60_000).unref?.();
 setInterval(masteryNightly, 3_600_000).unref?.();
 /** The person a thread's work counts for: its owner, else the bot's owner. */
@@ -2800,19 +8656,10 @@ function achievementThreadPerson(threadId: string): string | null {
 }
 /** Live frames a person may want on their phone (server/push/frames.ts),
  * handed to the push hub. Never throws: a push is a bonus. */
-const observePushFrame = createObservePushFrame(getLeafHost);
 /** Live Activity update/end pushes (ActivityKit) for registered tokens. */
-const observeLiveActivityFrame = createObserveLiveActivityFrame(getLeafHost);
 /** Server events read from live frames: a routine run that completed, a sub-agent, Auto picking a computer. */
-const observeAchievementFrame = createObserveAchievementFrame(getLeafHost);
 // Boot store listeners call fanoutSsePayload before the final bag assign.
-Object.assign(leafHostBindings, {
-  observePushFrame,
-  observeLiveActivityFrame,
-  observeAchievementFrame,
-});
 /** A person's "where bots work" preference (shared/bot-workplace.ts). */
-const workplacePreference = createWorkplacePreference(getLeafHost);
 /** What one turn decided about where its tools run, by thread, for the
  * internal tool routes, attachment copies and the egress proxy. Removed with
  * the turn's capabilities (revokeInternalCapabilityGeneration). */
@@ -2847,14 +8694,11 @@ function samePerson(a: string | null | undefined, b: string | null | undefined):
  * step row. The API id is a segment of the tool id before its verb
  * (`mcp__<server>__<api>_query`, or the `mcp` gateway's `tool`). Undefined
  * when nothing declared one: the row then reads a generic name. */
-const declaredToolProduct = createDeclaredToolProduct(getLeafHost);
 /** 2026-10-27 (#1220): the products a custom rule may name for this bot,
  * as its servers declare them: the APIs Perspicax declared for it
  * (api_list, with the names the console shows) and the ids of the MCP
  * servers it may use. No product is written in the code. */
-const ruleProductsOf = createRuleProductsOf(getLeafHost);
 /** The same for a rule of one bot, or of every bot of this person. */
-const ruleProductsOfPerson = createRuleProductsOfPerson(getLeafHost);
 function personSpeaker(principal: string | null): TurnSpeaker | undefined {
   return principal ? { origin: "person", principalId: principal } : undefined;
 }
@@ -2863,7 +8707,6 @@ function personSpeaker(principal: string | null): TurnSpeaker | undefined {
  * themselves; otherwise the turn's own speaker, with the bot's owner and
  * what started its routine, so the person's own routine (or a hop from it)
  * reaches the computer they shared (user-computers.ts speakingPerson). */
-const userComputerSpeaking = createUserComputerSpeaking(getLeafHost);
 /** Lending a computer to this server: the maintainer shared-computers flag. */
 const lendingEnabled = () => sharedComputersEnabled(cfg);
 holdIncludedServices(process.env);
@@ -3136,12 +8979,10 @@ let routineConsents: RoutineConsents | null = null;
  * the profile name; a paired or signed-in session names the person, by
  * account email where there is one and otherwise by the device label they
  * chose while pairing. */
-const messageSender = createMessageSender(getLeafHost);
 
 /** A person reacting to a message (shared/reactions.ts): their id as read
  * receipts key it and the name the room shows. Null for a caller who is
  * nobody in particular (a bot's own shell, an anonymous session). */
-const reactionPersonFor = createReactionPersonFor(getLeafHost);
 
 /** Who a stored `{ emoji, by: "user" }` reaction was: the operator of a
  * personal server. An organization server cannot tell, and keeps "user". */
@@ -3163,7 +9004,6 @@ const MAX_BOT_REACTIONS_PER_TURN = 3;
  * message is one of the turn's own thread: `messageId`, or when none is
  * given the newest chat message someone else wrote (what the bot is
  * answering). */
-const botReaction = createBotReaction(getLeafHost);
 
 /** The reaction a bot added last in a thread (react_to_message), so a reply
  * that only repeats it can be told from one that answers something. Keyed
@@ -3179,7 +9019,6 @@ const NOTHING_TO_ADD = /\b(?:no (?:further|more|other) (?:text|reply|response|wo
  * to end with no text. The reaction says it, so the text is not written
  * (2026-10-18: never a reaction and a message that say the same
  * thing). A real sentence, or a reaction from an earlier turn, keeps it. */
-const echoesOwnReaction = createEchoesOwnReaction(getLeafHost);
 
 /** More than one person uses this workspace: portal membership, or an email
  * sign-in list that names members. Only then does who-may-answer narrow. */
@@ -3196,15 +9035,12 @@ function linePersonKey(message: Message | undefined): string | undefined {
 /** The opaque key of whoever sent the request a card belongs to: the
  * message the harness proved started the turn, else the last user line
  * before the card. */
-const cardRequesterKey = createCardRequesterKey(getLeafHost);
 
 /** The signed-in person a thread's current work is for: whoever sent its
  * current (else latest) request from a session, else whoever the thread was
  * opened for. A bot opening a thread while working records this for the new
  * thread, so delegated work leads back to the person who asked. */
-const actTurnFacts = createActTurnFacts(getLeafHost);
 
-const threadPersonKey = createThreadPersonKey(getLeafHost);
 
 /** Where the work an agents call hands on started (peer-provenance.ts),
  * from the harness's own records, never from model text. A coordinated
@@ -3213,7 +9049,6 @@ const threadPersonKey = createThreadPersonKey(getLeafHost);
  * admitted (startTurn: a Cloud guest's is outside there), and only while
  * that record still owns this exact generation. An external runtime, a
  * room turn or a stopped request has none. */
-const turnOrigin = createTurnOrigin(getLeafHost);
 
 /** The person whose lent computers this bot turn may use, or null.
  * Fail closed: only the person whose own message the harness proved started
@@ -3281,7 +9116,6 @@ const guestDrivenTurns = new Map<string, string>();
 /** On a Cloud home: whether a handoff's chain started in (or passed
  * through) a guest-driven conversation: work a guest's turn hands a
  * teammate is the guest's too, however deep. */
-const cloudGuestDrivenHandoff = createCloudGuestDrivenHandoff(getLeafHost);
 
 /** Who a conversation a bot opens from another is for: on a Cloud home,
  * never the owner when a guest drives the source (it opens as the guest's,
@@ -3297,7 +9131,6 @@ function openerFrom(fromThreadId: string): string | undefined {
  * tasks, and another bot's model belongs to another engine. Approval stays
  * the bot's, except that a level the inherited engine would have to confirm
  * on a model switch starts the new thread in Ask. */
-const parentThreadModel = createParentThreadModel(getLeafHost);
 
 /** On a personal Cloud home the only turns confined like a guest's
  * (cloudGuestDriven) are in what came before it: a routine nobody is proven
@@ -3361,7 +9194,6 @@ function cloudOwnerDevice(person: string): boolean {
  *   back through threads bots opened for them): those people;
  * - otherwise (one person; or a routine, webhook, Slack, owner-sent or older
  *   thread that names nobody): anyone who may chat, as before. */
-const cardAnswerRefusal = createCardAnswerRefusal(getLeafHost);
 
 /** A signed-in person can use at least one bot that sits in this section
  * now. The proposing bot counts only while it is still in that section: a
@@ -3394,7 +9226,6 @@ function viewerUsesTeamSection(viewer: AuthzViewer | undefined, section: string)
  * card's thread or channel (memberSeesFrame, the live stream's rule).
  * Admins confirm by their scope without being delivered the card: proposed
  * entries wait for them on the section's team-memory page. */
-const teamMemoryMemberMayAnswer = createTeamMemoryMemberMayAnswer(getLeafHost);
 
 /** The answer side of a "private" bot's team-memory card: only a person who
  * sees the card's bot and thread or channel. "shared": no extra condition. */
@@ -3420,12 +9251,10 @@ function teamMemoryThreadReadable(bot: BotRecord, threadId: string, viewerId: st
  * .../respond's gates read it: a thread or channel they see, and on an
  * organization server their own bot thread or a channel they may post in
  * (a read-only member reads only). */
-const viewerMayAnswerOnThread = createViewerMayAnswerOnThread(getLeafHost);
 
 /** Settings > Bot > Auto-review (server/bots/bot-settings.ts): when the caller
  * (their own setting on an organization server, the server's elsewhere) has
  * it on, a conversation they just opened starts in the reviewed level. */
-const applyAutoReviewDefault = createApplyAutoReviewDefault(getLeafHost);
 
 /** Why a caller may not save a command that runs unasked (#1098): the
  * truth of canManageCommandAllowlist. The command runs on the server, the
@@ -3453,7 +9282,6 @@ function mayActOnPerson(auth: RequestAuth, owner: string): boolean {
  * manages webhooks of bots whose owner they may act on (never an admin's
  * bot: a webhook runs it as its owner), and never a typed Microsoft Graph
  * trigger (it names a mailbox sign-in that may be an admin's). Null: allowed. */
-const webhookDelegateRefusal = createWebhookDelegateRefusal(getLeafHost);
 /** A member may aim a webhook at this bot: theirs, or shared with them at
  * run or above. Loopback and admin sessions are not asked. */
 function webhookBotAimable(auth: RequestAuth, botId: unknown): boolean {
@@ -3466,17 +9294,14 @@ function webhookBotAimable(auth: RequestAuth, botId: unknown): boolean {
 /** Organization server: whether a person sees a webhook (its name, prompt
  * and deliveries) in a list or on their live stream: an organization
  * admin, its bot's owner, or someone with run on that bot. */
-const webhookSeenBy = createWebhookSeenBy(getLeafHost);
 /** Security review 2026-10-19, pass 3: the first address field (`url` or a
  * key ending in `Url`) anywhere in a config patch, as a dotted path. */
-let _configAddressFieldImpl: ReturnType<typeof createConfigAddressField> | undefined;
 function configAddressField(...args: any[]) {
   return (_configAddressFieldImpl ??= createConfigAddressField(getLeafHost) as any)(...args);
 }
 /** 2026-10-19 the first provider key or token (`key`, `apiKey`,
  * `fishKey`, `token`, `providerKeys`...) anywhere in a config patch, as a
  * dotted path. Provider keys of the server are an admin's. */
-let _configProviderKeyFieldImpl: ReturnType<typeof createConfigProviderKeyField> | undefined;
 function configProviderKeyField(...args: any[]) {
   return (_configProviderKeyFieldImpl ??= createConfigProviderKeyField(getLeafHost) as any)(...args);
 }
@@ -3493,20 +9318,16 @@ const COMMAND_ALLOWLIST_DRIVERS = new Set([
   "droidAgent", "cursorAgent", "qwenAgent", "geminiAgent", "hermesAgent", "customAcp",
 ]);
 
-const commandAllowlistResponse = createCommandAllowlistResponse(getLeafHost);
 
-let _decisionActorForImpl: ReturnType<typeof createDecisionActorFor> | undefined;
 function decisionActorFor(...args: any[]) {
   return (_decisionActorForImpl ??= createDecisionActorFor(getLeafHost) as any)(...args);
 }
 
-const cardAnswererFor = createCardAnswererFor(getLeafHost);
 
 /** Answer a card as `auth`: the decision rows written meanwhile name the
  * answerer, and a card this answer settled records who settled it (and
  * `via: "call"` when it was decided by voice on a Live call). A card that
  * was already settled keeps whatever it said. */
-const answeringCardAs = createAnsweringCardAs(getLeafHost);
 
 // ── bot visibility (server/bots/bot-visibility.ts) ──────────────────────────
 /** Who is looking. The owner and admin sessions see every bot; any other
@@ -3516,7 +9337,9 @@ const answeringCardAs = createAnsweringCardAs(getLeafHost);
 function viewerFor(auth: RequestAuth, path?: string): Viewer {
   if (serviceViewerClosed(auth, path, privateThreads())) return SEES_NOTHING;
   if (auth.kind === "loopback" || auth.scopes.includes("admin")) return SEES_EVERYTHING;
-  return { kind: "member", ...(auth.session.email ? { email: auth.session.email } : {}) };
+  // The person behind the session, so a room that lists them opens to them (#2418).
+  const personId = auth.session.principalId?.trim();
+  return { kind: "member", ...(auth.session.email ? { email: auth.session.email } : {}), ...(personId ? { personId } : {}) };
 }
 
 /** Thread → the bot or room that owns it, and one VisibleSet per viewer,
@@ -3524,8 +9347,6 @@ function viewerFor(auth: RequestAuth, path?: string): Viewer {
  * below), so a stream of live frames costs a map lookup each. */
 const threadOwners = new Map<string, ThreadOwner | null>();
 const visibleSets = new Map<string, VisibleSet>();
-const threadOwner = createThreadOwner(getLeafHost);
-const visibleTo = createVisibleTo(getLeafHost);
 function forgetVisibility(): void {
   threadOwners.clear();
   visibleSets.clear();
@@ -3534,12 +9355,10 @@ function forgetVisibility(): void {
 /** Which threads mention an attachment, for a member's file request while a
  * bot is restricted: a scan of the message store, so kept a minute. */
 const attachmentThreads = new Map<string, { at: number; threads: readonly string[] }>();
-const threadsUsingAttachment = createThreadsUsingAttachment(getLeafHost);
 
 /** The one check every request naming a bot, thread, room, routine, run or
  * attachment passes through for a member. An id nobody knows goes on to its
  * handler, which answers "not found" itself. */
-const subjectVisible = createSubjectVisible(getLeafHost);
 
 /** A member may schedule a routine only for a bot or room they can see. */
 /** Slice 4: a routine on a bot the caller does not own needs run on it. */
@@ -3607,7 +9426,6 @@ function recentWorkSources(bot: BotRecord) {
  * turn the person started — because a message from another bot, a webhook
  * or a room must not be able to pull a private chat into its reply. The
  * conversations are the ones session_search would search, minus this one. */
-const autoRecallPrompt = createAutoRecallPrompt(getLeafHost);
 
 /** The recalled block in front of a turn's message, or the message alone. */
 function withRecalled(recalled: string, text: string): string {
@@ -3618,17 +9436,14 @@ function withRecalled(recalled: string, text: string): string {
  * transcript, so otherwise a restricted bot's words would feed a teammate
  * everyone can see. Refuse a roster that adds such a bot (existing members
  * may stay while an admin sorts it out), naming the pair in plain words. */
-const roomAudienceConflict = createRoomAudienceConflict(getLeafHost);
 
 /** What a member's live stream needs to narrow a frame. */
-const memberFrameContext = createMemberFrameContext(getLeafHost);
 
 // ── admin activity (server/activity/admin-activity.ts) ──────────────────────────
 /** Recorded only where several people share the workspace: a hosted
  * workspace, an email sign-in list naming more than one person (or a whole
  * domain), or a device paired with chat-only access. The desktop app and a
  * one-person server keep no admin activity log, exactly as before. */
-const adminActivityRecording = createAdminActivityRecording(getLeafHost);
 
 /** Who made an admin change: as the decision log names who answered, plus
  * the command line (it marks its requests; on loopback that is the owner). */
@@ -3645,12 +9460,10 @@ function adminActorFor(auth: RequestAuth, req: IncomingMessage): AdminActor {
  * the blame (or the credit) for another admin's change made meanwhile. */
 type AdminActorScope = { actor: AdminActor; sharedAtStart: boolean } | null;
 const adminActorScope = new AsyncLocalStorage<AdminActorScope>();
-Object.assign(leafHostBindings, { adminActorScope });
 onConfigSaved((before, after) => recordAdminConfigChange(before, after));
 /** The rows of an admin-scope save, put down to the admin whose request runs.
  * Also called for settings kept outside config.json (MCP servers in the
  * installation capability store, audit S-1 follow-up). */
-const recordAdminConfigChange = createRecordAdminConfigChange(getLeafHost);
 
 const WEBHOOK_AUDIT_FIELDS = ["name", "prompt", "botId", "runOn", "enabled", "eventTypes", "source"] as const;
 const auditBot = (id: string | undefined) => (id ? botAuditSnapshot(store.bot(id) as unknown as Record<string, unknown> | null) : null);
@@ -3660,7 +9473,6 @@ const hookFields = (hook: WebhookTrigger, fields: readonly string[] = WEBHOOK_AU
 
 /** The bot fields a PATCH named: only those are compared, so a concurrent
  * change to another field is not put down to this request. */
-let _requestedBotFieldsImpl: ReturnType<typeof createRequestedBotFields> | undefined;
 function requestedBotFields(...args: any[]) {
   return (_requestedBotFieldsImpl ??= createRequestedBotFields(getLeafHost) as any)(...args);
 }
@@ -3673,9 +9485,7 @@ function requestedBotFields(...args: any[]) {
  * an enterWith here never reaches handleRequest's frame (audit S-1, the
  * defect 0.8.32 fixed for the request scopes): handleRequest enters it from
  * RequestScopes.adminActor, with the others (enterRequestScopes). */
-const beginAdminAudit = createBeginAdminAudit(getLeafHost);
 
-const adminAuditRows = createAdminAuditRows(getLeafHost);
 
 /** The guarded send contract external interfaces (the Slack worker) opt into.
  * `onBehalfOf` is additive and advertised by /api/health
@@ -3698,7 +9508,6 @@ const guardedSendSchema = z.object({
 
 /** Who a request is, for the usage ledger: a paired or signed-in person, or
  * this machine. Captured when the message is accepted and carried with it. */
-const usageTriggerFor = createUsageTriggerFor(getLeafHost);
 
 /** The operator's price list, when the `billing` feature is on (always, in
  * the open-source edition). */
@@ -3710,8 +9519,6 @@ function operatorPrices(): PriceList | null {
  * engine reported tokens but no price, and let the spend cap see it at once.
  * The first booking that takes the month past the warning threshold, or to
  * the cap, notifies admins (once per month each; server/usage/spend.ts). */
-const orgUsageFacts = createOrgUsageFacts(getLeafHost);
-const bookTurnUsage = createBookTurnUsage(getLeafHost);
 
 /** Slice 7: on an organization server a usage row names the bot owner and
  * the credentials the turn ran with, and a person's row its principal (the
@@ -3742,7 +9549,6 @@ let openCodeKeysLastAllowed = openCodeKeysAllowed();
 /** OpenCode lists a provider's models only while it may read that
  * provider's key. When enrollment or the sign-in list changes the answer,
  * list them again, so the picker never offers models its turns lack. */
-const resyncOpenCodeProviderKeys = createResyncOpenCodeProviderKeys(getLeafHost);
 await registry.load(providerConfigs(), decorateHostedProvider);
 const bundledSkills = loadBundledSkills();
 const availableSkills = () => mergeSkills(bundledSkills, loadUserSkills(join(DATA_DIR, "skills")));
@@ -3798,8 +9604,6 @@ type UtilityParentPort = {
 // supplies parentPort; plain Node intentionally leaves it absent.
 const utilityParentPort = (process as NodeJS.Process & { parentPort?: UtilityParentPort }).parentPort;
 
-const postDesktopPrivateMessage = createPostDesktopPrivateMessage(getLeafHost);
-const applyDesktopMutationTokenMessage = createApplyDesktopMutationTokenMessage(getLeafHost);
 // Browser data of a deleted bot or profile: the engine's saved session
 // state, cleared here on every host (the desktop no longer owns a browser).
 // The coordinator keeps its durable journal and replay; this is its outbox.
@@ -4127,7 +9931,6 @@ const EXTERNAL_RUNTIMES_FILE = join(DATA_DIR, "external-runtimes.json");
 function externalCompletion(capability: InternalCapability): { completionOwner?: "external" } {
   return capability.generation === EXTERNAL_RUNTIME_GENERATION ? { completionOwner: "external" } : {};
 }
-const externalRuntimeCapability = createExternalRuntimeCapability(getLeafHost);
 
 function beginInternalCapabilityGeneration(threadId: string, generation = randomUUID()): string {
   const previous = activeInternalGenerationByThread.get(threadId);
@@ -4156,20 +9959,16 @@ function sessionGrants({ generation: _turn, ...grants }: Omit<InternalCapability
 }
 
 /** The thread's bearer for this integration, new only when its grants changed. */
-const sessionBearer = createSessionBearer(getLeafHost);
 
-const mintInternalCapability = createMintInternalCapability(getLeafHost);
 
 /** Personal Cloud foreign-turn tracking is gone; kept as a no-op so call sites stay stable. */
 function endForeignTurns(threadId: string, generation?: string): void {
   void threadId; void generation;
 }
 
-const revokeInternalCapabilityGeneration = createRevokeInternalCapabilityGeneration(getLeafHost);
 
 /** Before a new turn on this thread mints: nothing an earlier turn here was
  * given stays honoured. The thread's bearers stay, so its engine stays warm. */
-const revokeEarlierTurnCapabilities = createRevokeEarlierTurnCapabilities(getLeafHost);
 
 /** Stop, a stall, a deleted bot or thread, a provider change: the thread's
  * bearers are retired too, so nothing that still holds one is honoured again. */
@@ -4178,7 +9977,6 @@ function revokeInternalCapabilitiesForThread(threadId: string): void {
   sessionCredentials.delete(threadId);
 }
 
-const revokeAllInternalCapabilities = createRevokeAllInternalCapabilities(getLeafHost);
 
 function bindInternalCapabilityToProviderTurn(threadId: string, generation: string, turnId?: string): void {
   if (turnId && !internalGenerationByProviderTurn.bind(threadId, generation, turnId)) {
@@ -4196,9 +9994,7 @@ function revokeInternalCapabilityForProviderEvent(event: RuntimeEvent): void {
 /** Resolve a high-entropy bearer to its immutable server-side claims.
  * Constant-time comparisons keep the check independent of matching prefix
  * length; only capabilities for currently active turns are retained. */
-const authorizedInternalCapability = createAuthorizedInternalCapability(getLeafHost);
 
-const internalCapabilityIsActive = createInternalCapabilityIsActive(getLeafHost);
 // Cap message chains: depth 0 = a user-initiated turn (may ask a peer);
 // a peer invoked via ask_bot runs at depth 1. Since 2026-10-28 it keeps its
 // Sagax tools (memory, files, pages, tasks) and loses only the ones that
@@ -4222,7 +10018,6 @@ const perspicaxBridgePath = SPAWNED_PROXIES.perspicax;
 const phoneProxyPath = SPAWNED_PROXIES.phone;
 const messagesProxyPath = SPAWNED_PROXIES.messages;
 const AGENTS_NODE_FLAG = { ELECTRON_RUN_AS_NODE: "1" };
-Object.assign(leafHostBindings, { AGENTS_NODE_FLAG, agentsProxyPath, perspicaxBridgePath, phoneProxyPath, messagesProxyPath });
 // in the packaged app process.execPath is Electron — run the proxy as node
 
 /** Whether this bot may write the shared memory of this group: the group's
@@ -4232,7 +10027,6 @@ function groupMemoryWritable(group: GroupRecord | undefined, botId: string): boo
   return Boolean(group) && groupMemoryEnabled(group) && group!.memberIds.includes(botId) && store.bot(botId)?.memoryEnabled !== false;
 }
 
-const mcpIdentityOf = createMcpIdentityOf(getLeafHost);
 /** 2026-10-28: the bots someone else owns that this person may run (a
  * share at `run` or above): ask_bot and delegate_bot reach them at the
  * person's own scope (mcp-permissions.ts ScopeOwners.runBot). */
@@ -4251,12 +10045,10 @@ function personOwnScope(principalId: string): { ownBotIds: string[]; ownRoomIds:
   return { ownBotIds, ownRoomIds };
 }
 
-const agentsIntegration = createAgentsIntegration(getLeafHost);
 
 /** Engine lifecycle hooks (item 0.2): a turn-scoped bearer the engine's hook
  * helper presents on /api/internal/hook. SAGAX_HOOKS=0 turns the channel off. */
 const hooksEnabled = () => process.env.SAGAX_HOOKS !== "0";
-const hooksIntegration = createHooksIntegration(getLeafHost);
 
 type DirectTurnDispatchClaim = {
   id: string;
@@ -4283,12 +10075,6 @@ class ComputerWaitParked extends Error {
     this.generation = generation;
   }
 }
-Object.assign(leafHostBindings, {
-  ComputerWaitParked,
-  DirectTurnSetupCancelled,
-  PlaceUnavailableError,
-  placeUnavailable
-});
 /** A failed place never sticks: a select_computer move to it, or an auto
  * pin an older build left, is the machine's, not a choice, so the next
  * message runs on Auto. A person's pin stays. */
@@ -4306,10 +10092,8 @@ function clearFailedAutoPin(botId: string, threadId: string, place: Surface): vo
  * cancelled setup, a parked computer wait and an already-read place failure
  * pass through as they are. The one wrapper for a bot thread and a room
  * turn, at dispatch and at a cloud computer's start on its first call. */
-const asPlaceFailure = createAsPlaceFailure(getLeafHost);
 /** The bots that hold this account's cloud computers, other than `botId`,
  * from this installation's own Boat list. Empty when it can't be read. */
-const cloudComputerHolders = createCloudComputerHolders(getLeafHost);
 /** Cloud chosen with no cloud computers here: on a Cloud home they are the
  * plan's, so they are only unavailable; anywhere else they need a Boat key. */
 function boatNotConfigured(bot: { name: string }, source: PlaceSource): PlaceUnavailableError {
@@ -4347,7 +10131,6 @@ type DirectTurnOutcome = {
 };
 
 /** Tools the harness saw on this thread since `sinceAt` (coordinated turn evidence for done_when). */
-const turnToolEvidence = createTurnToolEvidence(getLeafHost);
 const directFollowupTurns = new ProviderTurnGenerationRegistry<DirectTurnOutcome>();
 const directFollowupSettlers = new Map<string, { threadId: string; settle?: () => void }>();
 /** A turn the runtime dispatched (a teammate's, or a root's rerun, answered
@@ -4489,14 +10272,22 @@ function hostTurnResult(node: HandoffView | undefined, generation: string, outco
 
 function settleDirectCoordination(generation: string | undefined, outcome: DirectTurnOutcome) {
   if (!generation) return;
-  coordinator.sourceSettled(generation, outcome.ok, outcome.stalled === true);
   const settler = directCoordinationSettlers.get(generation);
   directCoordinationSettlers.delete(generation);
+  const own = settler ? undefined : coordinator.node(generation);
+  // A root this turn opened with beginTurn (OpenMausBot, #2204) ends through
+  // endTurn below, which parks it on its cards; the legacy sourceSettled
+  // would end it first and drop them. Every other generation keeps it.
+  const ownRoot = own && !own.parentId && (own.status === "source" || own.status === "running");
+  if (!ownRoot) coordinator.sourceSettled(generation, outcome.ok, outcome.stalled === true);
   const node = coordinator.node(settler?.nodeId ?? generation);
   const result = hostTurnResult(node, generation, outcome);
   // A turn the runtime dispatched settles through its run hook; the host's
   // own root turn (a person's, a routine's, a room member's) ends here.
-  if (settler) { settler.settle(result); return; }
+  if (settler) {
+    settler.settle(result);
+    if (settler.nodeId !== generation || !node?.goalRunId) return;
+  }
   if (node && !node.parentId && (node.status === "source" || node.status === "running")) coordinator.endTurn(generation, result);
 }
 
@@ -4513,7 +10304,6 @@ function answerCardNode(threadId: string, messageId: string, text: string): bool
   if (coordinator.answerNode(node.id, text)) return true;
   return node.status === "queued";
 }
-Object.assign(leafHostBindings, { answerCardNode, credentialUpdateText });
 
 /** Stop means stop (decision 4): the cards a node parked in this thread
  * waits on (or is queued on, its answer taken) offer no action any more.
@@ -4558,7 +10348,6 @@ function awaitingTeammates(threadId: string): boolean {
   return coordinator.all().some((n) => !n.parentId && !n.groupId && n.threadId === threadId &&
     (n.status === "resume" || (n.status === "waiting" && n.question === undefined && !n.cards?.length)));
 }
-const settleDirectFollowup = createSettleDirectFollowup(getLeafHost);
 // Keep the exact provider/profile settings that own a running conversation.
 // Selecting another thread or changing a default must not retarget its tools.
 const directTurnBots = new Map<string, BotRecord>();
@@ -4600,7 +10389,6 @@ function claimTurnResource(owner: TurnOwner, resource: string): boolean {
   return true;
 }
 
-const releaseTurnResources = createReleaseTurnResources(getLeafHost);
 
 /** Let go of the seats a turn's computer setup took when the turn goes on
  * without that computer (startTurn's skipComputer); settle releases the
@@ -4611,7 +10399,6 @@ function releaseTurnComputer(owner: TurnOwner): void {
   if (teamComputerTurns.get(owner.threadId)?.owner.generation === owner.generation) teamComputerTurns.delete(owner.threadId);
 }
 
-const bindTurnComputer = createBindTurnComputer(getLeafHost);
 
 function botForThread(botId: string, threadId: string): BotRecord | null {
   return directTurnBots.get(threadId) ?? store.projectBotForTask(botId, threadId) ?? store.bot(botId);
@@ -4642,7 +10429,6 @@ function parksBehindCoordination(botId: string, threadId: string): boolean {
 /** `personThreadId`: the thread a person's own message lands on. The bot's
  * main chat is never at capacity for it: the person always gets
  * an answer there, however many task threads and routines hold the slots. */
-const botAtThreadCapacity = createBotAtThreadCapacity(getLeafHost);
 
 function hasDirectDispatch(botId: string): boolean {
   return [...directTurnDispatchClaims.values()].some((claim) => claim.botId === botId && claim.warm !== true);
@@ -4654,7 +10440,6 @@ function hasDirectDispatch(botId: string): boolean {
  * waiting on a person, or has no signal. Delegations and the resume drains
  * share this test so peer and room work waits for a real slot, not total
  * bot idleness. */
-const canAdmitDirectTurn = createCanAdmitDirectTurn(getLeafHost);
 
 /** Busy thread count for a bot (same filter as botAtThreadCapacity). */
 function botBusyThreadCount(botId: string): number {
@@ -4667,7 +10452,6 @@ function botBusyThreadCount(botId: string): number {
  * landing thread; used/max are capacity alone so a person wake may take
  * one slot past max.
  */
-const coordinatorSlotUse = createCoordinatorSlotUse(getLeafHost);
 
 /** Routine and webhook dispatch shares startTurn's admission preconditions
  * instead of waiting for whole-bot idleness: a free thread slot and no
@@ -4675,9 +10459,7 @@ const coordinatorSlotUse = createCoordinatorSlotUse(getLeafHost);
  * blocks every other turn kind; it does not consume a capacity slot. The
  * bot's project folder is not a slot: a fresh run works there beside the
  * bot's other threads (see startTurn's cwd resolution). */
-const unattendedDispatchState = createUnattendedDispatchState(getLeafHost);
 
-const requestedTaskBot = createRequestedTaskBot(getLeafHost);
 
 /** Threads whose turn a person is stopping, until it settles: words sent
  * meanwhile wait for the next turn instead of joining the dying one, where
@@ -4690,7 +10472,6 @@ const threadStoppedAt = new Map<string, number>();
  * not stopped on purpose, so the call watchdog still answers them. */
 const threadStoppedUtterance = new Map<string, string>();
 
-const markThreadStopping = createMarkThreadStopping(getLeafHost);
 
 function clearThreadStopping(threadId: string): void {
   const timer = stoppingThreads.get(threadId);
@@ -4717,22 +10498,18 @@ async function stopDirectThread(botId: string, threadId: string, utteranceId?: s
 
 /** A person stops a thread's turn: what they sent into it is withdrawn,
  * and words sent while it stops wait for the next turn. */
-const stopDirectThreadByPerson = createStopDirectThreadByPerson(getLeafHost);
 
 /** `cause` (2026-11-01, server/team/teammate-replies.ts): a person's Stop by
  * default. Any other cut (a safe-point cut to read their waiting words, a
  * turn parked on a busy computer, an engine change) keeps the conversation
  * awaiting the teammates it handed work to, and their replies still resume
  * it. */
-const interruptDirectThread = createInterruptDirectThread(getLeafHost);
 
 /** Stop left teammates mid-turn: say so in the transcript, name them, and
  * give the person the second gesture. One pill each, like the "Sent to"
  * receipt, so it survives Tool calls being hidden and one click away is the
  * teammate's own conversation — where Stop really reaches that turn. */
-const noteTeammatesLeftRunning = createNoteTeammatesLeftRunning(getLeafHost);
 
-const interruptAllDirectThreads = createInterruptAllDirectThreads(getLeafHost);
 /** Conversations whose newest send came from a device with the coding view on. */
 const devPodsThreads = new DevPodsThreads();
 const retiredProviderTurns = new RetiredTurnRegistry();
@@ -4749,7 +10526,6 @@ function turnAttachmentKey(threadId: string, turnId?: string): string {
   return `${threadId}:${turnId ?? "active"}`;
 }
 
-const purgeTurnAttachmentsForThread = createPurgeTurnAttachmentsForThread(getLeafHost);
 
 function markCancelledProviderHandshake(threadId: string, ownerId: string): void {
   pendingCancelledProviderHandshakes.mark(threadId, ownerId);
@@ -4761,9 +10537,7 @@ function clearCancelledProviderHandshake(threadId: string, ownerId: string): voi
   pendingCancelledProviderHandshakes.clear(threadId, ownerId);
 }
 
-const retireProviderTurn = createRetireProviderTurn(getLeafHost);
 
-const shouldIgnoreProviderEvent = createShouldIgnoreProviderEvent(getLeafHost);
 
 function directTurnClaimIsCurrent(botId: string, claimId: string, threadId: string): boolean {
   const claim = directTurnDispatchClaims.get(threadId);
@@ -4784,11 +10558,9 @@ function markDirectTurnDispatching(botId: string, claimId: string, threadId: str
   return true;
 }
 
-const clearDirectTurnDispatch = createClearDirectTurnDispatch(getLeafHost);
 
 const compactionControllers = new Map<string, { generation: string; controller: AbortController }>();
 
-const cancelDirectTurnDispatch = createCancelDirectTurnDispatch(getLeafHost);
 
 /** The bot's browser for this turn: agent-browser, one isolated session per
  * browser profile or per bot (docs/plans/browser-engine.md). Null, with the
@@ -4915,7 +10687,6 @@ function myChromePromptFor(bot: { id: string; browserProfile?: string | null }, 
   return myChromeBotHasShell(bot.id) ? MY_CHROME_SHELL_PROMPT : MY_CHROME_SYSTEM_PROMPT;
 }
 /** A My Chrome call that would open an address outside the allowed sites. */
-const myChromeNavigationRefusal = createMyChromeNavigationRefusal(getLeafHost);
 // Temporary profiles last for this server run, but are never saved to disk.
 // The viewer and the agent must address the SAME temporary browser.
 const temporaryBrowserSessions = new Map<string, string>();
@@ -4923,12 +10694,8 @@ const temporaryBrowserSessions = new Map<string, string>();
 // throwaway guest session of that thread alone, never the bot's profile nor
 // a shared one, never saved to disk, discarded at the end of each turn.
 const confidentialBrowserSessions = new Map<string, string>();
-const currentBrowserSession = createCurrentBrowserSession(getLeafHost);
-const forgetTemporaryBrowser = createForgetTemporaryBrowser(getLeafHost);
 /** Close a confidential thread's browser and drop everything it kept
  * (cookies, storage): at the end of each of its turns, and when it is deleted. */
-const forgetConfidentialBrowser = createForgetConfidentialBrowser(getLeafHost);
-const browserIntegration = createBrowserIntegration(getLeafHost);
 let engineUnavailableLogged = false;
 
 // ── the Data tools (server/data) ──
@@ -4948,7 +10715,6 @@ const dataSheets = new DataSheetRegistry({
  * an organization server the bot scope goes to the bot's owner only, a
  * person's scope to that person, a confidential thread's to its owner. A
  * solo server's bot scope reaches every client, as before. */
-const dataFrameAudience = createDataFrameAudience(getLeafHost);
 // A confidential thread (#683, server/threads/confidential-threads.ts) has a Data
 // database and sheet of its own, reachable by its owner only: the resolver
 // tells data/scope.ts which threads are confidential and whose they are. A
@@ -4971,7 +10737,6 @@ function dataScopeForTurn(bot: BotRecord, threadId: string): string | null {
  * the operator at this computer on a solo server), the viewer's own for
  * anyone else on an organization server; `threadId` asks for a confidential
  * thread's, which only its owner reaches. Null: refused. */
-const dataScopeForViewer = createDataScopeForViewer(getLeafHost);
 /** Organization server (2026-10-16): Data runs inside the Sagax server,
  * so a bot's database reaches only its own folders (its scope folder, its
  * workspace and its task workspaces; a confidential thread's only that
@@ -4980,9 +10745,7 @@ const dataScopeForViewer = createDataScopeForViewer(getLeafHost);
  * the server's files, another person's attachments or the private network.
  * That makes the Data tools the person's own, like the agents tools: they
  * never ask. */
-const dataConfinedRoots = createDataConfinedRoots(getLeafHost);
 /** The task folders of a person's ordinary threads on a bot. */
-const dataThreadFolders = createDataThreadFolders(getLeafHost);
 if (IDENTITY.kind === "perspicax") dataEngine.setConfinement?.(dataConfinedRoots);
 /** Where a confined https load is downloaded before DuckDB reads it: the
  * scope's own folder, which only that scope's database reaches. */
@@ -4993,19 +10756,16 @@ function dataDownloadDir(scopeKey: string): string {
  * answer itself without a card: the bot's workspace and its task workspaces
  * (sagax-internal-tools.ts sagaxInternalSelfAnswers), solo included since
  * #1098 (2026-10-27). */
-const dataSelfAnswerRoots = createDataSelfAnswerRoots(getLeafHost);
 /** Where a bot's exports may land, most preferred first: the person's
  * Downloads when it exists, the bot's working folder, its workspace. On an
  * organization server the bot's workspace for its owner, a person's own
  * scope folder for anyone else (data/scope.ts dataExportRootsFor), and on
  * any server a confidential thread's own folder only. */
-const dataExportRoots = createDataExportRoots(getLeafHost);
 let dataUnavailableLogged = false;
 /** The Data tools for a turn: the harness proxy with a turn-scoped
  * capability, or null when DuckDB cannot run here (said once in the log).
  * No place, no plan, no per-bot switch: bots already have the computer
  * (PLAN D17), and the same mount serves desktop, server and Cloud. */
-const dataIntegration = createDataIntegration(getLeafHost);
 
 let browserEngineInstall: Promise<void> | null = null;
 let browserEngineInstallError: string | null = null;
@@ -5020,17 +10780,14 @@ export function browserEngineSummary(): { kind: "engine" | "unavailable"; reason
 /** One person's server environment tools for one turn (organization mode):
  * a stdio proxy holding only a turn-scoped capability bound to that person.
  * The environment is created lazily, on the first tool call. */
-const userSandboxIntegration = createUserSandboxIntegration(getLeafHost);
 
 /** The person's own computer for one turn (organization mode, desktop
  * bridge): the same stdio proxy, as the "sagax-desktop" tool server, holding
  * only a turn-scoped capability bound to that person. */
-const userDesktopIntegration = createUserDesktopIntegration(getLeafHost);
 
 /** computer_select for one turn ("sagax-computer", server/computer/auto-computer.ts):
  * the same stdio proxy, holding only a turn-scoped capability that can do
  * nothing but choose among the computers this turn already may reach. */
-const workplaceIntegration = createWorkplaceIntegration(getLeafHost);
 
 /** A turn's Works on as computer_select reads it: Auto, or the fixed place. */
 function turnWorksOn(plan: { computer: ReturnType<typeof resolveSurface>["computer"]; browser: boolean; pinned: ReturnType<typeof resolveSurface>["pinned"] }, forced: boolean): { auto: boolean; fixed?: FixedWorksOn } {
@@ -5047,7 +10804,6 @@ function turnWorksOn(plan: { computer: ReturnType<typeof resolveSurface>["comput
  * mounted beside it so the bot can switch (computer_select): the desktop
  * tools only when their app is connected now (and, for a routine, the owner
  * allowed routines on their computer). */
-const autoComputerStateFor = createAutoComputerStateFor(getLeafHost);
 
 /** Where an Auto turn of this thread wants to start: the workspace it was
  * opened with (start_thread), else its temporary agent's (create_agent). */
@@ -5057,7 +10813,6 @@ function autoWorkspaceWanted(bot: BotRecord, threadId: string): AutoComputerTarg
 
 /** The place this thread last showed: its last Workspace line, or the bot's
  * last computer_select switch. Null when it never showed one. */
-const lastAutoPlace = createLastAutoPlace(getLeafHost);
 
 /** One discreet line in the thread when an Auto turn starts somewhere else
  * than the thread last was, or could not start where it was sent. */
@@ -5070,10 +10825,8 @@ function noteAutoWorkspace(threadId: string, start: AutoStart, explicit: boolean
 /** Where this turn's tools run and for whom (server/desktop/desktop-bridge.ts
  * resolveBotWorkplace), from the person's preference and whether their
  * desktop app is connected right now. */
-const decideWorkplace = createDecideWorkplace(getLeafHost);
 
 /** Stored files (server/attachments/attachments.ts) a text names by their path here. */
-let _storedNamesInImpl: ReturnType<typeof createStoredNamesIn> | undefined;
 function storedNamesIn(...args: any[]) {
   return (_storedNamesInImpl ??= createStoredNamesIn(getLeafHost) as any)(...args);
 }
@@ -5081,7 +10834,6 @@ function storedNamesIn(...args: any[]) {
 /** A stored file and what was made from it that an engine reads by path:
  * its scaled picture, an Office document's pictures, an archive's unpacked
  * folder (solo). */
-const storedFamily = createStoredFamily(getLeafHost);
 
 /** Content encryption at rest (server/encryption/content-at-rest.ts): the stored
  * files this turn's engine may open by path go plain in place, off the
@@ -5097,7 +10849,6 @@ const storedFamily = createStoredFamily(getLeafHost);
 // to wait for never yields here, so the admission checks of startTurn stay
 // synchronous up to its slot claim (a drain starts several waiting turns
 // in one pass; a yield between check and claim lets them all through).
-const holdTurnAttachments = createHoldTurnAttachments(getLeafHost);
 
 /** As soon as the person types in (or opens) a conversation: its bot's
  * memory and the thread's attachments start opening for the turn to come,
@@ -5111,14 +10862,11 @@ function openForComingTurn(botId: string, threadId: string): void {
 /** The provider text for this turn with the speaker's own attachments
  * pointed where the tools run (server/attachments/attachment-staging.ts). Another
  * person's upload is left as is and never copied. */
-const soloArchiveText = createSoloArchiveText(getLeafHost);
-const workplaceTurnText = createWorkplaceTurnText(getLeafHost);
 
 /** Office documents (.docx, .pptx, .xlsx) attached to this message: the
  * document's text after its tag, and its pictures as image inputs of the
  * turn when the engine takes images (server/media/office-media.ts). On an
  * organization server only the speaker's own uploads are read. */
-const officeTurnText = createOfficeTurnText(getLeafHost);
 
 /** Solo: an attached archive was unpacked next to its upload on this
  * machine; the bot gets its manifest and that folder after the tag. */
@@ -5126,25 +10874,20 @@ const officeTurnText = createOfficeTurnText(getLeafHost);
 /** What the bot is told about where its tools run, when it matters: on the
  * person's own computer, or in their server environment because their
  * computer is not connected (the UI says so too). Provider text only. */
-const withWorkplaceNote = createWithWorkplaceNote(getLeafHost);
 
-let _workplaceNoteTextImpl: ReturnType<typeof createWorkplaceNoteText> | undefined;
 function workplaceNoteText(...args: any[]) {
   return (_workplaceNoteTextImpl ??= createWorkplaceNoteText(getLeafHost) as any)(...args);
 }
 
 /** Every stored message naming an upload, with its person and time: the
  * first one tells whose upload it is (attachmentIsTheirs). */
-const attachmentReferences = createAttachmentReferences(getLeafHost);
 
 /** The egress proxy for this turn, when its tools run on the person's
  * computer and that computer's tunnel is up: the engine's own network
  * traffic (remote MCP servers, tool HTTP calls) then leaves through it. */
-const turnNetworkProxy = createTurnNetworkProxy(getLeafHost);
 
 /** Mount the right person's tools when this turn's hands land there: their
  * own computer (desktop bridge) or their server environment. */
-const mountUserSandbox = createMountUserSandbox(getLeafHost);
 
 /** The Auto selection of the turn a capability belongs to, or null when the
  * turn is not Auto (a fixed Works on routes as before). */
@@ -5154,14 +10897,12 @@ function autoComputerSelectionFor(capability: { threadId: string; generation: st
 }
 
 /** The unpacker's one JSON line (sandboxArchiveArgv). */
-let _parseArchiveOutcomeImpl: ReturnType<typeof createParseArchiveOutcome> | undefined;
 function parseArchiveOutcome(...args: any[]) {
   return (_parseArchiveOutcomeImpl ??= createParseArchiveOutcome(getLeafHost) as any)(...args);
 }
 
 /** Copy the turn's pending attachments where its tools run, once, at its
  * first tool call (nothing is created for a turn that never uses a tool). */
-const stagePendingAttachments = createStagePendingAttachments(getLeafHost);
 
 /** Organization server: an engine never gets its own shell, file or fetch
  * tools on the Sagax server (server/drivers/host-tools.ts). An engine that
@@ -5179,7 +10920,6 @@ function withholdHostToolsFor(instance: { adapter: { capabilities: { withholdsHo
   return orgWithholdHostTools(instance, IDENTITY.kind === "perspicax", engineDisplayName(instance));
 }
 
-const phoneIntegration = createPhoneIntegration(getLeafHost);
 
 /** Messages tools, only on the solo Mac this process is. */
 function messagesWanted(): boolean {
@@ -5192,7 +10932,6 @@ function soloMacAppEnabled(app: string): boolean {
   return app === "messages" ? readMessagesSettings(DATA_DIR).useMessages : macAppSettingEnabled(DATA_DIR, app);
 }
 
-const messagesIntegration = createMessagesIntegration(getLeafHost);
 
 const imessageSender = createOsascriptSender();
 
@@ -5206,10 +10945,8 @@ function perspicaxSubOf(principalId: string): string | null {
 }
 /** 2026-10-11: a turn with Perspicax tools mounted starts vendor work: one
  * row of the organization's work log, metadata only (never the message). */
-const recordPerspicaxWork = createRecordPerspicaxWork(getLeafHost);
 /** 2026-10-11: before a routine run, whether the organization memory knows
  * of similar work (bounded, fail open). */
-const routineMemoryHint = createRoutineMemoryHint(getLeafHost);
 /** The engine servers, the system note and the activity rows of a turn's
  * main Perspicax connection, for whoever speaks (never the owner for someone
  * else). Nothing in solo mode or without a link. The bridge holds only a turn
@@ -5217,9 +10954,7 @@ const routineMemoryHint = createRoutineMemoryHint(getLeafHost);
 /** Token exchange, session open/verify and tools/list:
  * nothing here needs the custom MCP mount names, so setupStartTurn can start
  * it beside compaction and prompt build (#1955). */
-const perspicaxTurnPrepare = createPerspicaxTurnPrepare(getLeafHost);
 
-const perspicaxTurnIntegration = createPerspicaxTurnIntegration(getLeafHost);
 
 // ── computer control (who is driving) ──────────────────────────────────
 // The person can take the wheel of a bot's computer from the panel; while
@@ -5249,7 +10984,6 @@ const computerControl = new ComputerControl((key, snapshot) => {
  * computer runs as long as the app does, so its bridge keeps the thread's
  * bearer like every other integration; any other machine (a Local VM, the
  * VPS, a Boat) gets a new bearer each turn. */
-const controlIntegration = createControlIntegration(getLeafHost);
 
 /** Run a turn on `targetBotId` and resolve with its assistant text — the
  * synchronous half of ask_bot. Subscribes to the bus, folds assistant_text
@@ -5260,7 +10994,6 @@ const controlIntegration = createControlIntegration(getLeafHost);
  * turn's result is its asker's (reportsToRequester). */
 const awaitedAsks = new Set<{ threadId: string }>();
 
-const askBotAndWait = createAskBotAndWait(getLeafHost);
 
 /** `sagax task give` (server/cli/headless-cli.ts): this server takes the tasks
  * queued in its data folder and runs each on the named bot in a conversation
@@ -5270,7 +11003,6 @@ function headlessBotByName(name: string): BotRecord | undefined {
   const key = name.trim().toLowerCase();
   return store.bots.find((bot) => bot.name.trim().toLowerCase() === key && !bot.temporary);
 }
-const syncHeadlessTeam = createSyncHeadlessTeam(getLeafHost);
 const HEADLESS_TASK_WAIT_MS = Number(process.env.SAGAX_HEADLESS_TASK_WAIT_MS) || 60 * 60_000;
 const headlessTasks = createHeadlessTaskRunner({
   dir: DATA_DIR,
@@ -5303,16 +11035,13 @@ function selectableInstances<T extends SelectableInstance>(instances: readonly T
 // turn now (Claude first). While enrolled, a Company model that can run beats
 // a signed-out personal engine, and the organisation's policy is respected;
 // otherwise inert. `null` leaves the saved choice out (moveOffComputerEngine).
-const defaultSelection = createDefaultSelection(getLeafHost);
 /** The model an organization member's new bot starts on when they named
  * none (#1060, #1074): the person's own (a model they starred), else the
  * organization's default for new bots, else the server's, else an engine
  * that can run now (memberNewBotSelection). */
-const memberDefaultSelection = createMemberDefaultSelection(getLeafHost);
 /** #1445: whether something pays for this person's own turn on this engine
  * (engine-credentials.ts, the same order a turn uses). Solo: always. A pi
  * model on the server's local host needs no key (#1422). */
-const personRunsEngine = createPersonRunsEngine(getLeafHost);
 /** Engines that are not the person's own: a Company one. A working engine
  * of their own wins over it; the organization's engine policy applies. */
 const selectionContext = {
@@ -5342,7 +11071,6 @@ function refreshUnsetModelSelections(instances?: readonly SelectableInstance[]):
   return instances ? refreshUnsetModelSelectionsFrom(instances) : refreshUnsetModelSelectionsShared();
 }
 
-const refreshUnsetModelSelectionsFrom = createRefreshUnsetModelSelectionsFrom(getLeafHost);
 
 /** A bot with no engine gets the person's default one now (the same pick as
  * a new bot and Auto), or stays as it is when none is available. Returns the
@@ -5353,7 +11081,6 @@ function engineEligibility(bot: BotRecord): string | undefined {
   const problem = teammateEngineProblem(bot);
   return problem ? `${bot.name} ne peut pas travailler : ${problem}. Choisis un autre coéquipier (list_bots) ou fais le travail toi-même, sans attendre.` : undefined;
 }
-const healBotEngine = createHealBotEngine(getLeafHost);
 /** Why a teammate's engine cannot take work now (after trying to give it the
  * default), or undefined when it can. Orchestration asks before delegating. */
 function teammateEngineProblem(bot: BotRecord): string | undefined {
@@ -5374,7 +11101,6 @@ function teammateEngineProblem(bot: BotRecord): string | undefined {
  * later refuses an engine for a moved bot the way it does for any bot. A
  * hosted workspace's reconcile has already moved every bot onto its own
  * models. */
-const moveOffComputerEngine = createMoveOffComputerEngine(getLeafHost);
 let computerEngineMoveRunning: Promise<void> | null = null;
 /** The move, once at a time; it returns at once when nothing names the
  * removed engine any more. A failure is logged and never rejects, so it never
@@ -5389,7 +11115,6 @@ function retryComputerEngineMove(): Promise<void> {
   return computerEngineMoveRunning;
 }
 
-const checkedModelSelection = createCheckedModelSelection(getLeafHost);
 
 /** Whether moving onto `to` must first drop `mode` to Ask: the shared rule
  * (modelSwitchNeedsAsk), so every route agrees. Full carries to any engine
@@ -5398,17 +11123,14 @@ function engineSwitchNeedsAsk(mode: ApprovalMode, from: ModelSelection, to: Mode
   return modelSwitchNeedsAsk(mode, registry.cliTarget(from.instanceId)?.driverKind, registry.cliTarget(to.instanceId)?.driverKind);
 }
 
-const checkedTaskModelSwitch = createCheckedTaskModelSwitch(getLeafHost);
 
 /** An engine as a turn's start sees it, without waiting on its CLI: the live
  * instance and what its last read said (registry.lastSnapshot). Before the
  * first read it counts as available, so only what is known stops a pick. */
-const threadEngine = createThreadEngine(getLeafHost);
 
 /** This thread's own model, when it gives way to its bot's now
  * (threadModelFallback); null when the thread follows its bot or its own
  * model runs as picked. */
-const threadModelGivingWay = createThreadModelGivingWay(getLeafHost);
 
 /** The model a turn in this thread would run on now (healThreadModel). */
 function turnSelection(botId: string, threadId: string): ModelSelection | undefined {
@@ -5424,7 +11146,6 @@ function turnSelection(botId: string, threadId: string): ModelSelection | undefi
  * startTurn (a person's message, a routine, a delegation, a webhook, a
  * queued follow-up), so this is the one place it happens; a room turn
  * already runs on each member's own model. */
-const healThreadModel = createHealThreadModel(getLeafHost);
 
 /** Organization server: a thread's own model whose engine has no
  * credentials here for the person this turn runs for (no_access /
@@ -5432,11 +11153,8 @@ const healThreadModel = createHealThreadModel(getLeafHost);
  * way healThreadModel does for a model that is gone. Without it a thread
  * pinned to a model from someone's desktop (pi on a local model) refused
  * every turn, the incident reports of failed routines included. */
-const healOrgRefusedThreadModel = createHealOrgRefusedThreadModel(getLeafHost);
 
-const checkedExportSkillNames = createCheckedExportSkillNames(getLeafHost);
 
-const collectExportSkills = createCollectExportSkills(getLeafHost);
 
 /** Skills on one team's bots for a whole-team share. "all" skips a skill
  * whose stored SKILL.md changed (listed to the person); an explicit list
@@ -5444,22 +11162,17 @@ const collectExportSkills = createCollectExportSkills(getLeafHost);
 /** The team's skills for a whole-team export. `available` (every skill name
  * on the team's bots) comes back on refusals too: the Share dialog draws its
  * skill choices from it, so a refused choice can always be changed. */
-const collectTeamSkills = createCollectTeamSkills(getLeafHost);
 
 /** A bot's starter notes: MEMORY.md and its topic files. Daily logs never
  * travel (they are closer to chat history than to notes). */
-const starterNotes = createStarterNotes(getLeafHost);
 
 /** The importer's view of this installation. Pictures become ordinary local
  * avatars, connection slots ordinary (switched-off) MCP servers, starter
  * notes ordinary memory writes. */
-const packageImportDeps = createPackageImportDeps(getLeafHost);
 
 /** "Include my New bot defaults as a preset" from an export body: the saved
  * defaults through the allowlist, with the picture the dialog prepared. */
-const defaultsPresetFor = createDefaultsPresetFor(getLeafHost);
 
-let _checkedGroupResponderImpl: ReturnType<typeof createCheckedGroupResponder> | undefined;
 function checkedGroupResponder(...args: any[]) {
   return (_checkedGroupResponderImpl ??= createCheckedGroupResponder(getLeafHost) as any)(...args);
 }
@@ -5467,7 +11180,6 @@ function checkedGroupResponder(...args: any[]) {
 /** `people`: how many people the room lists. A room of two or more people may
  * hold no bot at all (a people-only group chat, #1150); without them it still
  * needs one. */
-const checkedMemberIds = createCheckedMemberIds(getLeafHost);
 let bootSelection = { instanceId: "", model: "" };
 /** The start-up read of every engine: routines and room handoffs wait for it; a turn waits only for its own engine's probe. */
 let enginesRead: Promise<void> | null = null;
@@ -5537,38 +11249,6 @@ const store = new Store(
 );
 // #1388: boot leaves (refreshUnsetModelSelectionsFrom, moveOffComputerEngine, …)
 // read these before the final bag assign. Function decls below are hoisted.
-Object.assign(leafHostBindings, {
-  registry,
-  store,
-  cfg,
-  hostedModels,
-  selectableInstances,
-  defaultSelection,
-  selectionContext,
-  healBotEngine,
-  namesEngine,
-  withNewBotEffort,
-  policyModelRefusal,
-  orgEngineAllowRefusal,
-  removedComputerInstanceIds,
-  writeComputerEngineMoveLines,
-  computerEngineMoveText,
-  canWorkOnCloud,
-  cloudEngine,
-  boat,
-  inheritedTeamComputer,
-  newBotDefaultsSchema,
-  saveConfig,
-  managedDesktop,
-  DATA_DIR,
-  migrateCapabilitiesStores,
-});
-Object.defineProperty(leafHostBindings, "bootSelection", {
-  configurable: true,
-  enumerable: true,
-  get: () => bootSelection,
-  set: (value) => { bootSelection = value; },
-});
 /** Bot-owned MCP claim + leave-out of servers that do not start (OMB #3751 / #2115).
  * Boxed on a hosted workspace (Cloud); on desktop every bot reaches every folder. */
 const mcpServersHost = createMcpServersHost({
@@ -5729,7 +11409,6 @@ if (browserCleanupReferencesReconciled) browserCleanup.startPending();
 // restored workspace or an imported team is mapped as well.
 // `identityMigratedAt` only records when that first happened.
 const principals = new PrincipalRegistry({ path: join(DATA_DIR, "principals.json") });
-Object.assign(leafHostBindings, { principals, isPrincipalId });
 // Slice 7: a person marked out or back in is an organization audit row.
 principals.onDisabledChanged((person, disabled) => orgAudit({
   category: "people", action: disabled ? "person.disabled" : "person.enabled",
@@ -5776,7 +11455,6 @@ const companyMemory = new CompanyMemoryCache({ read: (id) => readMemoryTopicAsyn
 onMemoryTopicWritten((botId, name) => companyMemory.written(botId, name));
 void companyMemory.warm(store.bots.filter((bot) => bot.memoryEnabled !== false).map((bot) => bot.id)).catch(reportBackgroundError);
 
-const memoryPromptFor = createMemoryPromptFor(getLeafHost);
 // Organization server: a bot reaches its owner's bots and the bots shared
 // with them, never the rest of the organization (server/peers/peer-scope.ts).
 if (IDENTITY.kind === "perspicax") {
@@ -5861,10 +11539,8 @@ function sandboxBotFolder(botId: string): string | null {
 /** Which bot made each loose root entry: the bots whose conversations
  * (messages and tool calls) name /workspace/<entry>, else the bare name
  * when it is distinctive. Exactly one bot, or nobody. */
-const attributeSandboxEntries = createAttributeSandboxEntries(getLeafHost);
 /** After a tidy: routines whose prompt or watched path named a moved file
  * now name its new place (the move breaks nothing they do). */
-const updateRoutinePathsAfterTidy = createUpdateRoutinePathsAfterTidy(getLeafHost);
 const sandboxTidier = userSandbox ? new WorkspaceTidier({
   exec: (principalId, input, botId) => userSandbox.exec(principalId, input, botId),
   attribute: attributeSandboxEntries,
@@ -5910,16 +11586,13 @@ const botTailscaleService = new BotTailscaleService(DATA_DIR, {
 });
 
 /** Plugin hooks for this turn. Refuses the organization server's own host. */
-const runLifecycleEvent = createRunLifecycleEvent(getLeafHost);
 
-const execLifecycleHook = createExecLifecycleHook(getLeafHost);
 /** Turns that already got a cluster-wake row, by thread: `${generation}:${phase}`. */
 const sandboxWakeNoted = new Map<string, Set<string>>();
 /** The Kubernetes cluster of the server environments is starting (or did not
  * start in time) for a call of this person: one status row in each of their
  * running turns that works there, this bot's first. The turn itself waits;
  * the tool call resumes on its own once the cluster answers. */
-let _noteSandboxClusterWaitImpl: ReturnType<typeof createNoteSandboxClusterWait> | undefined;
 function noteSandboxClusterWait(...args: any[]) {
   return (_noteSandboxClusterWaitImpl ??= createNoteSandboxClusterWait(getLeafHost) as any)(...args);
 }
@@ -6072,7 +11745,6 @@ const readOnePasswordField = (ref: Parameters<OnePassword["readField"]>[0], fiel
  * person to approve on their computer first. Once per fill (20 s), never
  * the item's name, never a value. */
 const onePasswordWaitNoted = new Map<string, number>();
-const onePasswordReaderFor = createOnePasswordReaderFor(getLeafHost);
 /** 2026-10-26: whether a turn's agents tools list vault_http_request. */
 function vaultHttpMounted(botId: string, threadId: string): boolean {
   const principalId = vaultPrincipalForThread(threadId);
@@ -6096,7 +11768,6 @@ function turnCommandEnvironment(instance: Parameters<typeof withholdHostToolsFor
  * (drivers/pi-kit.ts). A variable left out drops its line. CW_MEMBER and
  * MAX_PARALLEL come from the server's environment (SAGAX_PI_CW_MEMBER is a
  * single-person server's; SAGAX_PI_MAX_PARALLEL), USER_ORG from SAGAX_ORG_NAME. */
-const piKitIdentityFor = createPiKitIdentityFor(getLeafHost);
 /** Whose vault a turn on this conversation reads: the one local vault on a
  * desktop or a solo server; on an organization server the person the turn
  * speaks for, or a routine's owner. Null when there is nobody to ask. */
@@ -6112,12 +11783,9 @@ function vaultPrincipalForThread(threadId: string): string | null {
 const webSearchStore = createWebSearchStore(DATA_DIR);
 const memeStore = createMemeStore(DATA_DIR);
 const openApiStore = new OpenApiStore(DATA_DIR);
-const openApiToolsEnv = createOpenApiToolsEnv(getLeafHost);
 const workflowStore = new WorkflowStore(DATA_DIR);
 /** Posts text into the conversation as a bot message. It does not start a
  * model turn. */
-const workflowDeliver = createWorkflowDeliver(getLeafHost);
-const workflowOwned = createWorkflowOwned(getLeafHost);
 function workflowCallerScope(auth: RequestAuth) {
   if (IDENTITY.kind === "perspicax") return workflowScope(true, sessionPrincipal(auth));
   const shared = HOSTED_WORKSPACE || sharedMembership();
@@ -6157,12 +11825,10 @@ function personalProfileOf(principalId: string | null | undefined, profileId: un
 /** The voice settings and the xAI access for speech made for this person:
  * their own key where they saved one (their own xAI key needs no grant of
  * the organization's), else the installation's. */
-const voiceFor = createVoiceFor(getLeafHost);
 function webSearchScopeForThread(threadId: string) {
   const organization = IDENTITY.kind === "perspicax";
   return webSearchScope(organization, organization ? vaultPrincipalForThread(threadId) : null);
 }
-const webSearchAddressRefusal = createWebSearchAddressRefusal(getLeafHost);
 // A loopback caller is the owner only on the desktop (its mutations need
 // Electron's per-launch capability). On a headless server a bot's shell is
 // a loopback caller too, so the vault answers a paired session only,
@@ -6176,7 +11842,6 @@ const credentialVaultPrincipal = (auth: RequestAuth) => vaultPrincipalFor(auth, 
 /** Who may import into or export the vault: a person, never a bot acting
  * for them (an act or actAs session is ephemeral), a chat-only paired
  * device with no person, or a local service. Null to go on. */
-let _credentialVaultPersonRefusalImpl: ReturnType<typeof createCredentialVaultPersonRefusal> | undefined;
 function credentialVaultPersonRefusal(...args: any[]) {
   return (_credentialVaultPersonRefusalImpl ??= createCredentialVaultPersonRefusal(getLeafHost) as any)(...args);
 }
@@ -6298,7 +11963,6 @@ const cloudAgentStore = new CloudAgentStore(DATA_DIR);
 const cloudAgentCredentials = new CloudAgentCredentialStore(DATA_DIR, vaultKeySource);
 let cloudAgentManager!: CloudAgentManager;
 const personOAuthManagers = new Map<string, McpOAuthManager>();
-const personOAuth = createPersonOAuth(getLeafHost);
 /** A person's GitHub connection, or none (an unreadable store is none). */
 function personGithub(principalId: string | null | undefined) {
   if (!principalId) return undefined;
@@ -6316,19 +11980,15 @@ function githubClientId(): string | undefined {
 }
 /** Put a person's GitHub connection where gh and git read it in their
  * server environment (or take it out). Best effort: a turn re-applies it. */
-const syncGithubToSandbox = createSyncGithubToSandbox(getLeafHost);
 /** Once per turn: the turn's person's GitHub connection in their server
  * environment (it may have been reset since they connected). */
 const githubSyncedGenerations = new Set<string>();
-const syncGithubForTurn = createSyncGithubForTurn(getLeafHost);
 /** Once per turn: the bot's installed plugins in its owner's own cloud
  * computer (server/sandbox/sandbox-plugins.ts), so a plugin's scripts run there.
  * Never in another person's environment: a plugin may come from a private
  * marketplace only its owner reads. Best effort. */
 const pluginSyncedGenerations = new Map<string, Promise<void>>();
 const pluginSyncChains = new Map<string, Promise<void>>();
-const syncPluginsForTurn = createSyncPluginsForTurn(getLeafHost);
-const syncPluginFoldersForTurn = createSyncPluginFoldersForTurn(getLeafHost);
 const githubReplaced = new Map<string, { token: string; login: string }>();
 // #2109: the sign-in cards connect_github posts in a bot's chat.
 const githubConnectCards = new GithubConnectCards({
@@ -6395,15 +12055,11 @@ function credentialOwner(principalId: string | null | undefined): string | undef
 let githubCredentialsMigrated = false;
 /** Move the former files in (once; again at the next call if the vault key
  * was not there yet). Never logs a token. */
-const migrateGithubCredentials = createMigrateGithubCredentials(getLeafHost);
-Object.assign(leafHostBindings, { migrateGithubCredentials });
 /** A credential `actor` may pick: their own, or the organization's. */
-const usableCredential = createUsableCredential(getLeafHost);
 /** Automatic for `actor`: their own GitHub connection, their other
  * credentials, then the organization's (organization server). A credential
  * whose label or login names the repository's owner is tried first. A
  * credential kept for one marketplace only is never tried here. */
-const githubCredentialsFor = createGithubCredentialsFor(getLeafHost);
 /** The one GitHub account a turn's MCP servers read (a plugin's
  * `${GITHUB_PERSONAL_ACCESS_TOKEN}`, server/github/github-mcp-token.ts): the
  * person's GitHub connection on an organization server, the operator's own
@@ -6432,8 +12088,6 @@ const marketplaceCredentials = {
 // on disk beside these stores.
 const botCapabilityStore = new BotCapabilityStore(DATA_DIR);
 const installationCapabilityStore = new InstallationCapabilityStore(DATA_DIR, vaultKeySource);
-Object.assign(leafHostBindings, { botCapabilityStore, installationCapabilityStore });
-const migrateCapabilitiesConfigStores = createMigrateCapabilitiesConfigStores(getLeafHost);
 migrateCapabilitiesConfigStores();
 // Skills library boot sweep (features.skillsLibrary): migrate the per-bot
 // copies that predate the library into it and apply assignments, once per
@@ -6566,11 +12220,9 @@ function orgCapabilityMounts(principal: string | undefined): OrgCapabilityMount[
   if (IDENTITY.kind !== "perspicax" || !principal) return [];
   return orgCapabilities.mountsFor(principal.trim().toLowerCase());
 }
-const syncOrgCapabilities = createSyncOrgCapabilities(getLeafHost);
 /** The resolver's view of the organization's declarations for one person
  * (server/capabilities/capabilities.ts OrgDeclarationInput): public fields, never a
  * configuration. */
-const orgDeclarationInputs = createOrgDeclarationInputs(getLeafHost);
 /** An active member of the organization now: a principal the last Perspicax
  * directory lists as active (never on a solo server). */
 function orgMemberActive(principalId: string): boolean {
@@ -6608,21 +12260,16 @@ const stdioRelay = new SandboxStdioRelay({
 function personalRemoteSpec(server: Extract<PersonalMcpServer, { kind: "remote" }>): RemoteMcpSpec {
   return { type: server.type, url: server.url, headers: {} };
 }
-const personalServerListing = createPersonalServerListing(getLeafHost);
 const personalHostChecks = new Map<string, { at: number; refused: boolean }>();
-const personalHostRefusalCached = createPersonalHostRefusalCached(getLeafHost);
 /** A person's own command, relayed to their server environment for one turn. */
-const personalStdioIntegration = createPersonalStdioIntegration(getLeafHost);
 /** The turn's person's own MCP servers (organization mode): the speaker in
  * a conversation, the bot's owner for a routine (the workplace decision's
  * person). A server that still needs a sign-in, a token or GitHub is not
  * mounted; a name Sagax or the server already uses is skipped. */
-const mountPersonalMcp = createMountPersonalMcp(getLeafHost);
 
 /** A complete plugin's MCP servers use the same selected plugin folders
  * and namespace as the receipt. Commands on an organization server always
  * cross the per-turn relay into this person's environment. */
-const mountPluginMcp = createMountPluginMcp(getLeafHost);
 // Published pages (routes/published-pages.ts): a person's own pages, managed
 // only by that person on an organization server, or by this computer's owner
 // on a one-person server (never another paired session, never a bot's shell
@@ -6694,7 +12341,6 @@ function pageThreadName(id: string): string {
 /** A message sent from an open page (2026-10-28, shared/data-context.ts):
  * the page reference stays only when it is this person's own page of this
  * bot; anything else is dropped, never widened. */
-const ownPageContext = createOwnPageContext(getLeafHost);
 
 // The page's current source for the model, read when a turn's prompt is
 // composed (the message keeps the reference only).
@@ -6715,7 +12361,6 @@ setPageContextSource((ref) => {
  * organization server only a person of it, never a guest or a disabled one.
  * On a one-person server only the computer's owner reads a private page;
  * any other paired session counts as "my organization". */
-const publishedPageViewer = createPublishedPageViewer(getLeafHost);
 
 /** SAGAX_PAGES_ORIGIN: a separate origin for the page frames. Read once at
  * start. Used only when this app's own public origin is known and differs
@@ -6732,8 +12377,6 @@ const PAGES_ORIGIN = (() => {
   console.warn("published pages: SAGAX_PAGES_ORIGIN is ignored (an http(s) origin with no path, such as https://pages.example.com)");
   return null;
 })();
-const pagesSeparation = createPagesSeparation(getLeafHost);
-const publishedPageOptions = createPublishedPageOptions(getLeafHost);
 
 // Public share links for bot templates (routes/template-links.ts): the
 // person's New bot defaults frozen as a template, never their starter notes.
@@ -6801,7 +12444,6 @@ ROUTES.push(createMcpServerRenameRoutes({
 /** A person's own MCP server (Settings > Connections), the one way it is
  * added: their screen, and since 2026-10-28 their bot's add_mcp_server on
  * an organization server. */
-const addPersonalMcpServer = createAddPersonalMcpServer(getLeafHost);
 // Capabilities > Sources > GitHub: the one list of credentials. A person's
 // own with no admin; the organization's with an organization admin.
 ROUTES.push(createGithubCredentialRoutes({
@@ -6903,8 +12545,6 @@ function flowAliasFolders(bot: { id: string }, person: string): Set<string> {
     ...[...personalPlugins.listPlugins(person).map((plugin) => ({ plugin, scope: person, store: personalPlugins })), ...botPlugins.listPlugins(bot.id).map((plugin) => ({ plugin, scope: bot.id, store: botPlugins }))].filter(({ plugin }) => linkedFlowAlias(plugin.name, plugin.marketplace)).map(({ plugin, scope, store: source }) => source.installedFolder(scope, plugin).dir),
   ]);
 }
-const scopedPluginFolders = createScopedPluginFolders(getLeafHost);
-const scopedPluginMcp = createScopedPluginMcp(getLeafHost);
 /** Enabled plugin folders for a Claude turn (`--plugin-dir`). Empty for every other engine. */
 function pluginDirsFor(bot: { id: string; ownerUserId?: unknown }, instance: { driverKind: string }, principal?: string): { pluginDirs?: string[] } {
   const dirs = instance.driverKind === "claudeAgent" ? scopedPluginFolders(bot, principal).map((plugin) => plugin.dir) : [];
@@ -6920,31 +12560,25 @@ function personalSkillInputs(bot: { id: string; ownerUserId?: unknown }, princip
 /** The capability a selected plugin folder belongs to, by the same keys as
  * the resolved list: the organization's Flow is one capability whatever its
  * product and tenant folders; any other folder is its exact install. */
-const pluginFolderCapability = createPluginFolderCapability(getLeafHost);
 /** The same verified sources and scope winners feed the prompt, receipt and
  * read-only discovery. Internal callers pass the active speaker explicitly. */
-const scopedSkillInventory = createScopedSkillInventory(getLeafHost);
 /** The selected skill and plugin instructions of one turn, budgeted per
  * capability (server/capabilities/capability-prompt.ts): file engines get readable paths,
  * engines without retrieval get whole files, read through the same checks as
  * workspace_read. Managed reads use a short index on every engine. `syncNative`
  * refreshes the active engine's links on a real turn
  * only: the preview and the receipt never touch them. */
-const scopedSkillsPrompt = createScopedSkillsPrompt(getLeafHost);
 // ── a bot's capabilities: one resolved list (server/capabilities/capabilities.ts) ──
 /** Everything a bot receives on top of its engine, for the person looking
  * (their own servers, GitHub and Roles stand in for the speaker of a turn),
  * on its engine or on `engineId` (a preview). Reads only: nothing is
  * installed, refreshed or mounted. */
-const botCapabilitiesFor = createBotCapabilitiesFor(getLeafHost);
 /** The Perspicax console's `GET bots/{id}/capabilities` (lot 1d): what the
  * bot receives, resolved for its owner (#2029: their servers, Roles, "Me"
  * plugins and the organization's Flow as a routine of the bot runs them),
  * never for the console person looking. The console person's reach was
  * checked by the admin router; read only: the console never switches
  * anything, so `canToggle` says what that person could change in Sagax. */
-const consoleBotCapabilities = createConsoleBotCapabilities(getLeafHost);
-const botCapabilitiesAs = createBotCapabilitiesAs(getLeafHost);
 /** Who installed a plugin, as a capability shows it (#2029): a readable
  * name, with the id kept for a tooltip only; nothing when no name is known
  * (an id is never shown as text). */
@@ -7290,14 +12924,12 @@ const wireTrustedApprovalBot = (bot: NonNullable<ReturnType<typeof store.bot>>) 
 /** A settings-based preview, not a receipt of a dispatched turn. No
  * provisioning or credentials are needed to inspect it. The selected engine
  * bounds advertised tools; task-specific context is added only at dispatch. */
-const previewSystemPrompt = createPreviewSystemPrompt(getLeafHost);
 
 /** The plain-language "what does this bot do" facts, gathered once from
  * every server-only source (engine capabilities, connected-apps inventory,
  * routines/webhooks/skills, and recent history) and handed to the pure
  * sentence builder. The phones (step 5) and the web settings dialog both
  * read this same route, so they can never disagree about what a bot does. */
-const botOverview = createBotOverview(getLeafHost);
 
 /** Defense in depth for hand-edited/corrupt durable records: elevated
  * approval semantics require an implemented provider mapping. The trusted transition enforces
@@ -7346,7 +12978,6 @@ const approvalModeForTurn = (bot: BotRecord, peerInitiated = false, threadId = b
  * The same judgment as a turn (approvalModeForTurn on the conversation's
  * projection), so what the selector and sagax_settings show is what the
  * server applies. */
-const approvalLevelOf = createApprovalLevelOf(getLeafHost);
 
 /** A level belongs to the requesting conversation, not whichever sibling is
  * selected in the UI or the bot's default for future conversations. */
@@ -7376,12 +13007,10 @@ function selfApplyBlocked(threadId: string): boolean {
  * at any level a change to the bot itself applies, shown as a one-line
  * receipt with Undo (server/direct-apply.ts). Peer approvals stay Full
  * access only (fullAccessForSource); team setup follows teamSetupDirectSource. */
-const appliesDirectly = createAppliesDirectly(getLeafHost);
 
 /** 2026-10-26: team setup, create_bot and a bot deletion apply without a
  * card at Full access, and at Approve for me on the person's own turn when
  * every bot they touch is theirs (team-setup-requests.ts teamSetupDirectApply). */
-const teamSetupDirectSource = createTeamSetupDirectSource(getLeafHost);
 
 /** 2026-10-20 ("le bot principal fait tout"): a proposal the person's own
  * Primary Bot makes because the person asked for it in this turn's message
@@ -7391,7 +13020,6 @@ const teamSetupDirectSource = createTeamSetupDirectSource(getLeafHost);
  * the person's own Primary Bot, their own message in this turn, the quote in
  * it with a word of the change, the target bot (or routine) named and the
  * person's own. The proof, or why not. */
-const primaryAskedProposal = createPrimaryAskedProposal(getLeafHost);
 
 /** Runs one submit with the person's request as its grant, and journals it
  * as theirs, via the Primary Bot. */
@@ -7476,7 +13104,6 @@ function roomTurnApprovalMode(bot: BotRecord, threadId: string, orchestration?: 
  * surface itself. Only Electron's private utility-process channel can deliver
  * this message. */
 
-const handleDesktopTrustedApprovalMessage = createHandleDesktopTrustedApprovalMessage(getLeafHost);
 
 /** Profile URLs are app-owned references, not merely strings with a trusted
  * prefix. Resolve them before persistence so every accepted avatar can be
@@ -7489,7 +13116,6 @@ const storedAvatarExists = (avatarUrl: string): boolean =>
  * member stream's first frame of it. With a viewer the page is the one that
  * person may read; without one it is the whole page, and the caller projects
  * it (projectBotTranscript) or the frame layer does. */
-const publicBot = createPublicBot(getLeafHost);
 const publicBotQueuedMessages = () => queuedSteerSnapshot((botId, threadId) => Boolean(store.taskByThread(botId, threadId)));
 
 type GroupTurnOperation = {
@@ -7538,9 +13164,7 @@ const groupTurnOperations = new Map<string, Set<GroupTurnOperation>>();
 const groupSpeakers = new Map<string, { botId: string; name: string; color: string; since?: number }>();
 const groupApprovalRequests = new Map<string, { messageId: string }>();
 
-const groupThreadIsWorking = createGroupThreadIsWorking(getLeafHost);
 
-const activeGroupSpeaker = createActiveGroupSpeaker(getLeafHost);
 
 /** The central runtime fold uses this to hide a coordinator's private
  * decision envelope from both streaming UI and the durable transcript. */
@@ -7577,15 +13201,11 @@ function hasUnboundDiscardedGroupGoalTurn(threadId: string): boolean {
 /** Match private coordinator output to one provider turn, never merely to a
  * reusable room thread. Most adapters emit turn.started before sendTurn
  * resolves, so the first stable event may bind an otherwise pending guard. */
-const groupGoalCoordinatorTurnForEvent = createGroupGoalCoordinatorTurnForEvent(getLeafHost);
 
-const groupIsWorking = createGroupIsWorking(getLeafHost);
 
 // The public and Primary Bot room tools use the same synchronous validation and write.
 // Keep authorization at each ingress; no internal caller gains public admin scope.
-const createChannel = createCreateChannel(getLeafHost);
 
-const updateChannel = createUpdateChannel(getLeafHost);
 
 const channelTaskBlocked = (group: GroupRecord) =>
   groupIsWorking(group) ||
@@ -7638,7 +13258,6 @@ function groupThreadIds(group: GroupRecord): string[] {
   return [group.threadId, ...store.groupTasks(group.id).map((task) => task.threadId)];
 }
 
-const locateChannelMessage = createLocateChannelMessage(getLeafHost);
 
 function allInflightIds(): string[] {
   const ids: string[] = [];
@@ -7648,36 +13267,27 @@ function allInflightIds(): string[] {
   return ids;
 }
 
-const turnsHeldOnGroup = createTurnsHeldOnGroup(getLeafHost);
 
 function channelTurnOpen(group: GroupRecord): boolean {
   if (groupIsWorking(group)) return true;
   return turnsHeldOnGroup(group).length > 0;
 }
 
-let _partialAlreadyWrittenImpl: ReturnType<typeof createPartialAlreadyWritten> | undefined;
 function partialAlreadyWritten(...args: any[]) {
   return (_partialAlreadyWrittenImpl ??= createPartialAlreadyWritten(getLeafHost) as any)(...args);
 }
 
-let _openTurnMessageImpl: ReturnType<typeof createOpenTurnMessage> | undefined;
 function openTurnMessage(...args: any[]) {
   return (_openTurnMessageImpl ??= createOpenTurnMessage(getLeafHost) as any)(...args);
 }
 
-const forgetInflight = createForgetInflight(getLeafHost);
 
-const commitFailedTurn = createCommitFailedTurn(getLeafHost);
 
-const failQueuedMessage = createFailQueuedMessage(getLeafHost);
 
-const failTurnIfMemberLeft = createFailTurnIfMemberLeft(getLeafHost);
 
 const machineTurnBots = new Map<string, string>();
 
-const replaceQueuedWorkerTurns = createReplaceQueuedWorkerTurns(getLeafHost);
 
-const finishMachineTurn = createFinishMachineTurn(getLeafHost);
 
 function machineBotFrom(botId: string | undefined): BotRecord | null {
   if (!botId) return null;
@@ -7685,15 +13295,10 @@ function machineBotFrom(botId: string | undefined): BotRecord | null {
   return bot?.host?.kind === "machine" ? bot : null;
 }
 
-const readWorkerTurn = createReadWorkerTurn(getLeafHost);
 
-const writeWorkerTurn = createWriteWorkerTurn(getLeafHost);
 
-const maySetBotHost = createMaySetBotHost(getLeafHost);
 
-const holdDirectMachineTurn = createHoldDirectMachineTurn(getLeafHost);
 
-const failWorkerTurns = createFailWorkerTurns(getLeafHost);
 
 /** #1098 (2026-10-27): every bot of the room (and `also`, when given) is
  * the same person's (peer-roster.ts sameOwnerBots; on a solo server, always). */
@@ -7704,7 +13309,6 @@ function oneOwnerRoom(room: Pick<GroupRecord, "memberIds">, also?: BotRecord): b
   return !first || members.every((member) => sameOwnerBots(first, member));
 }
 
-const roomHandoffProblem = createRoomHandoffProblem(getLeafHost);
 
 /** A teammate's name as the conversation that handed it work may read it:
  * shown while the route still admits that work (roomHandoffProblem, the
@@ -7731,12 +13335,10 @@ function coordinationSystemInstructions(): string {
  * new turn starts now and the assignments stay attached. Tell that turn what
  * is still out — a model told nothing assumes its fan-out died and sends the
  * same work again, or reports it as lost. */
-const outstandingAssignmentsPrompt = createOutstandingAssignmentsPrompt(getLeafHost);
 
 /** The card that keeps queued work from starting: its teammate has no free
  * slot, and one of the threads holding one waits on the person. Only the
  * person frees that slot; every other wait frees itself. */
-const queuedBehindPerson = createQueuedBehindPerson(getLeafHost);
 
 function queuedStatus(node: HandoffView): string {
   const card = queuedBehindPerson(node);
@@ -7752,7 +13354,6 @@ const queuedBehindPersonNoted = new Set<string>();
 /** Tell the conversation that sent this work, once, that it waits on the
  * person's card in another of its teammate's threads: from there the wait
  * looks like a teammate that never starts. */
-const noteQueuedBehindPerson = createNoteQueuedBehindPerson(getLeafHost);
 
 /** One execution of a room node (a hand-off into the room, or a room root's
  * own turn run again), through the room queue: the member's turn runs once
@@ -7911,9 +13512,7 @@ const legacyHandoffsDropped = new Set<string>();
  * The card is asked once, where the work was sent from; allow approves the
  * row (it outlives a restart), any other answer refuses it at the next tick.
  * The call that sent it (an external runtime, a send_to_bot) is not held. */
-const reviewHolds = createReviewHolds(getLeafHost);
 /** The route check the coordinator runs before each dispatch and report. */
-const coordinatorValidate = createCoordinatorValidate(getLeafHost);
 const coordinator: Coordinator = createCoordinator({
   dataDir: DATA_DIR,
   // threads that turned confidential before their teammate work was
@@ -7936,6 +13535,10 @@ const coordinator: Coordinator = createCoordinator({
     // a card holds says so, once, where it was sent.
     busy: n => {
       if (reviewHolds(n)) return true;
+      // A root parked at the computer wait ceiling waits for its seat, not
+      // only for a free slot (#1651, #2204).
+      const seat = parkedSeats.get(n.id);
+      if (seat && !turnResources.free(seat)) return true;
       // A normal one-way send starts once its sender's turn ends (send_to_bot);
       // priority now starts at once when a slot is free.
       if (n.oneWay && n.priority !== "now" && n.parentId && ["source", "running"].includes(coordinator.node(n.parentId)?.status ?? "")) return true;
@@ -8387,7 +13990,6 @@ function isBotActSend(sendId: string | undefined): boolean {
  * marks them answered (in memory: a restart parks again and re-posts). */
 const openInputRequests = new Map<string, Array<{ threadId: string; messageId: string }>>();
 /** A parked teammate's question as a card (park, and its reminders). */
-const postInputRequest = createPostInputRequest(getLeafHost);
 /** The newest "needs your input" or reminder card in `threadId` about the
  * teammate thread `aboutThreadId`, if any (see postInputRequest). */
 function newestQuestionCard(threadId: string, aboutThreadId: string): Message | undefined {
@@ -8398,7 +14000,6 @@ function newestQuestionCard(threadId: string, aboutThreadId: string): Message | 
 /** The person answered in the waiting thread: its cards say so. Only the
  * person's own line answers (start-turn-prepare-admit.ts); a parked question
  * closed without them says "expired" or "default answer used" (0.8.46). */
-const settleInputRequests = createSettleInputRequests(getLeafHost);
 const groupUsageReader = new GroupUsageReader(DATA_DIR);
 try { groupUsageReader.refresh(); } catch { /* accounting must not block startup */ }
 /** Where the person stopped reading a conversation: its newest message now.
@@ -8408,7 +14009,6 @@ function readCursor(threadId: string): { lastReadMessageId?: string } {
   return newest ? { lastReadMessageId: newest } : {};
 }
 
-const publicGroupState = createPublicGroupState(getLeafHost);
 
 /** Every bot in a room, as each person in it sees it (shared/bot-public-profile.ts). */
 function groupMemberProfiles(group: { memberIds: readonly string[] }): BotPublicProfile[] {
@@ -8420,24 +14020,15 @@ function groupMemberProfiles(group: { memberIds: readonly string[] }): BotPublic
 /** The public identity last announced per bot: a change (a rename, a new
  * look) re-announces every room it is in, so each person there sees it. */
 const announcedProfiles = new Map<string, string>(store.bots.map((bot) => [bot.id, JSON.stringify(botPublicProfile(bot))]));
-const announceProfileChange = createAnnounceProfileChange(getLeafHost);
 
-const beginGroupTurnOperation = createBeginGroupTurnOperation(getLeafHost);
 
-const finishGroupTurnOperation = createFinishGroupTurnOperation(getLeafHost);
 
-const finishGroupGoalRun = createFinishGroupGoalRun(getLeafHost);
 
-const updateGroupGoalRunProgress = createUpdateGroupGoalRunProgress(getLeafHost);
 
-type GroupMemberBotAvailability = "ready" | "busy" | "unavailable" | "cancelled" | "timed_out";
-
+/** #2382: a conversation waiting on a person never keeps a room waiting
+ * (server/room-member-availability.ts). */
 function groupMemberBotAvailability(botId: string, operation: GroupTurnOperation): GroupMemberBotAvailability {
-  if (operation.cancelled || operation.cancellation.signal.aborted) return "cancelled";
-  const bot = store.bot(botId);
-  if (!bot || bot.hidden) return "unavailable";
-  if (bot.busy || roomMemberLock.heldElsewhere(botId, operation.threadId)) return "busy";
-  return "ready";
+  return roomMemberAvailability(store, roomMemberLock, botId, operation);
 }
 
 
@@ -8450,7 +14041,6 @@ function groupMemberBotAvailability(botId: string, operation: GroupTurnOperation
  * touching the unrelated turn that owns bot.busy. While it waits, the bot is
  * not part of this operation: its own Stop button must keep reaching the
  * conversation it is actually in. */
-const waitForGroupMemberBot = createWaitForGroupMemberBot(getLeafHost);
 
 /** Ordinary chat rounds share the goal wait, with the room's own notes: one
  * neutral chip when the wait begins (the transcript's promise that the member
@@ -8459,13 +14049,11 @@ const waitForGroupMemberBot = createWaitForGroupMemberBot(getLeafHost);
  * purpose — this is neither a failure nor a finished step, and the live label
  * reads `spoken` while the chip is the newest thing in the room. Stop leaves
  * nothing extra behind: the round simply ends. */
-const waitForChatRoomMember = createWaitForChatRoomMember(getLeafHost);
 
 /** The peer's newest stored message, across every task it owns: the recency
  * the live roster breaks ties with. A bot with no messages yet falls back
  * to its newest task's creation, which keeps a freshly created teammate
  * ahead of a silent veteran only when it really is the newer arrival. */
-const newestPeerActivityAt = createNewestPeerActivityAt(getLeafHost);
 
 /** The live-peer roster for a fresh coordination brief. Claude snapshots
  * system prompts, so dispatch-time data has to ride the user turn; and only
@@ -8473,19 +14061,16 @@ const newestPeerActivityAt = createNewestPeerActivityAt(getLeafHost);
  * any other recipient gets nothing — the same gate the system-prompt roster
  * applies. The roster names the RECIPIENT's own reachable peers, which is
  * exactly the set its coordinate_bots calls will be allowed to reach. */
-const coordinationLiveRosterBlock = createCoordinationLiveRosterBlock(getLeafHost);
 
 /** Stop the room threads the room's Stop button stops: cancel queued work
  * first, then interrupt each live engine turn. `outcome` defaults to the
  * person's Stop. A stuck-loop stop passes its own detail so a goal card
  * names the loop, and still uses this function. */
-const stopGroupThreads = createStopGroupThreads(getLeafHost);
 
 /** `outcome.byHarness`: the harness stopped the room (a provider save, a
  * Company change) and `detail` is its cause: the goal run's card says it and
  * the room's assignments fail with it, so no requester or person reads it as
  * the person's Stop. */
-const cancelGroupTurnOperations = createCancelGroupTurnOperations(getLeafHost);
 
 function groupProviderHandshakeStarted(operation: GroupTurnOperation): void {
   operation.providerHandshakePending = true;
@@ -8496,7 +14081,6 @@ function groupProviderHandshakeSettled(operation: GroupTurnOperation): void {
   clearCancelledProviderHandshake(operation.threadId, `group:${operation.id}`);
 }
 
-const activeGroupTurnForBot = createActiveGroupTurnForBot(getLeafHost);
 
 /** A room with its open thread's newest page, for HTTP replies and a
  * member stream's first frame of it. */
@@ -8644,9 +14228,7 @@ function pageSize(raw: string | null): number | null | undefined {
  * shared/requested-views.ts): the direct request this turn owns, so a line
  * sent while it works ("merci") never stands in for it; else the latest
  * person line of the active path (rooms, older turns). */
-const latestPersonText = createLatestPersonText(getLeafHost);
 
-const slimMessage = createSlimMessage(getLeafHost);
 
 /** `limit === undefined` is the original, unpaginated shape. A bounded,
  * cursor-less request (the common case: startup hydrate, a fresh
@@ -8656,24 +14238,20 @@ const slimMessage = createSlimMessage(getLeafHost);
  * seek to an arbitrary point in history. */
 /** Unscoped page. Broadcasts use this, then each SSE client is projected.
  * A response to one viewer must use messagePage, which requires that viewer. */
-const transcriptPage = createTranscriptPage(getLeafHost);
 
 function messagePage(threadId: string, limit: number | undefined, before: string | null | undefined, viewer: ApprovalViewer) {
   const page = transcriptPage(threadId, limit, before);
   return { ...page, messages: projectMessages(threadId, page.messages, viewer) };
 }
 
-const guardedRequestSnapshot = createGuardedRequestSnapshot(getLeafHost);
 
 /** A durable completion fence, not a replay queue. If the process dies while
  * a Primary Bot is awaiting results, its earlier handoff must not become a final.
  * `incoming`: the lines of the request about to replace this one, already on
  * the thread; the fence is judged as if they had not landed yet. */
-const settleTrackedRequest = createSettleTrackedRequest(getLeafHost);
 
 /** A bounded page centred on a known message, used when a search result is
  * opened on a client that only hydrated the newest part of the transcript. */
-const messageWindow = createMessageWindow(getLeafHost);
 
 // ── SSE fan-out to clients ─────────────────────────────────────────────
 /** One connected client, and what it asked to be sent. */
@@ -8794,11 +14372,9 @@ const desktopTerminals = new DesktopTerminals((person, operation) => desktopBrid
  * (2026-10-15; 2026-10-19): the server's hosts are an organization
  * admin's or a holder of host.commands'; a person's own environments are
  * always theirs (terminal-resources/registry.ts). */
-const terminalAccessFor = createTerminalAccessFor(getLeafHost);
 /** Where `botId` works in this conversation now, as a terminal destination:
  * the place Auto chose this turn, else its Workspace (or the conversation's
  * pin), else where Auto would start. */
-const terminalWorkPlace = createTerminalWorkPlace(getLeafHost);
 /** The person allowed bots on their own computer: their Where bots work is
  * their computer, or this bot works there (This computer, Local VM). */
 function terminalDesktopAllowed(principalId: string, botId: string, threadId: string | undefined): boolean {
@@ -8809,13 +14385,11 @@ function terminalDesktopAllowed(principalId: string, botId: string, threadId: st
 }
 /** The destination a person picked on a terminal card and the size of
  * their terminal, from the answer's body; anything malformed is dropped. */
-const terminalAnswerExtras = createTerminalAnswerExtras(getLeafHost);
 function terminalSize(ctx: { cols: number; rows: number }) {
   return { cols: ctx.cols, rows: ctx.rows };
 }
 /** A terminal on the person's computer is in their Computer tab's activity
  * too, like every other bridge action. */
-const bridgeTerminal = createBridgeTerminal(getLeafHost);
 let openRemoteShell: (args: { botId: string; threadId: string }) => Promise<{ hostLabel: string; messageId: string } | { error: string } | null> = async () => null;
 const terminalFeature = installTerminalFeature({
   dataDir: DATA_DIR,
@@ -9151,7 +14725,6 @@ registerReachProvider("tailcat-remote-session", remoteSessionReach((input) => re
 // registrar posts the card: nobody has to say "it is launched". One
 // Perspicax generation per watched code, made again when it is dropped.
 const remoteSupportSeats = new Map<string, { generation: string; ready: Promise<boolean> }>();
-const remoteSupportSeat = createRemoteSupportSeat(getLeafHost);
 function dropRemoteSupportSeat(target: SupportWatchTarget): void {
   const seat = remoteSupportSeats.get(target.code);
   if (!seat) return;
@@ -9203,7 +14776,6 @@ const remoteSessionRegistrar = createRemoteSessionRegistrar({
   recall: (code) => recallSupportSession(REMOTE_SUPPORT_DIR, code),
   idOwners: (id) => supportOwnersOfId(REMOTE_SUPPORT_DIR, id)
 });
-const closeSessionStreams = createCloseSessionStreams(getLeafHost);
 sessions.onSessionRevoked((sessionId) => {
   providerAuthSessions.revokeOwner(sessionId);
   engineLogins?.revokeOwner(sessionId);
@@ -9238,12 +14810,10 @@ const wants = (client: SseClient, kind: string) => kind !== "screen" || client.s
 
 /** `<streamId>:<seq>` — opaque to clients, and the only thing they need to
  * remember to resume. Returns null when it belongs to another run. */
-const cursorSeq = createCursorSeq(getLeafHost);
 
 /** Fan one already-sequenced payload out to every SSE client. Serialization
  * of the shared frame happens once here; per-client narrowing may build a
  * different string only when that client cannot reuse it. */
-const fanoutSsePayload = createFanoutSsePayload(getLeafHost);
 
 /** Coalesce consecutive content.delta runtime frames into one shared SSE
  * write per stream, then fan out through fanoutSsePayload. */
@@ -9295,10 +14865,8 @@ const CONFIDENTIAL_GATED_MCP_PATHS = new Map<string, "frame" | "message" | "resu
 const confidentialMemoryPasses = new ConfidentialMemoryPasses();
 /** Whether a thread works (or will work) in its own folder only: never
  * pinned yet, or pinned to task-workspaces/<bot>/<thread>. */
-const privateFolderThread = createPrivateFolderThread(getLeafHost);
 /** Make a thread confidential (one way): nothing of it waiting for capture
  * is captured, and its decision rows so far lose their summaries. */
-const makeThreadConfidential = createMakeThreadConfidential(getLeafHost);
 
 // ── engine transcripts of confidential threads (server/engines/engine-transcripts.ts)
 // The engines keep their own copy of a conversation (Claude Code's
@@ -9309,7 +14877,6 @@ const makeThreadConfidential = createMakeThreadConfidential(getLeafHost);
 
 /** Every engine home of this server: under the data folder, and the homes
  * the process and each engine's own environment point at. */
-const engineHomes = createEngineHomes(getLeafHost);
 /** The keys that find a thread's engine files: its id, its own folder's
  * hashes, and every session id it had (its cursors, the ids it kept, its
  * event log). Read before the thread's record and logs go. */
@@ -9333,15 +14900,12 @@ function releaseThreadEngines(threadId: string): void {
  * live under them. `recheck`: keep the keys for one more pass at the next
  * start even when this one finished (an engine process that outlived the
  * deletion may still write). */
-const purgeConfidentialEngineKeys = createPurgeConfidentialEngineKeys(getLeafHost);
 /** A deleted confidential thread (or several, a deleted bot's): its logs
  * are never written again, its idle engine processes close, and its engine
  * files are purged once the response is out, again a few seconds later
  * (a last write on exit) and once more at the next start. */
-const purgeDeletedThreadEngines = createPurgeDeletedThreadEngines(getLeafHost);
 /** A thread that stays (made confidential, or confidential from an older
  * release): its engine sessions are forgotten and their files purged. */
-const forgetThreadEngineSessions = createForgetThreadEngineSessions(getLeafHost);
 /** Teammate work a thread takes part in that has not settled: a thread
  * cannot turn confidential under it (its words would still travel). */
 function liveCoordination(threadId: string): boolean {
@@ -9356,17 +14920,14 @@ function forgetConfidentialCoordination(threadId: string): void {
 }
 /** The stored uploads and attach_file outputs a confidential thread's
  * messages point at, every branch included: names inside the attachment store. */
-const confidentialThreadAttachments = createConfidentialThreadAttachments(getLeafHost);
 /** After a confidential thread's record is gone (messages, event and native
  * logs: store.deleteTask): its folder, the attachments no other thread
  * points at, its pending capture, its browser and its decision summaries. */
-const wipeConfidentialThread = createWipeConfidentialThread(getLeafHost);
 /** The thread a bot's peers, delegations, asides and any turn started
  * without a named thread land in: its selected thread, unless that one is
  * confidential (server/threads/confidential-threads.ts), which never receives a
  * turn its owner did not start. Then its newest ordinary open conversation
  * of the bot owner's, else a new one, never selected. */
-const peerThreadFor = createPeerThreadFor(getLeafHost);
 /** The person a confidential thread belongs to, else null. */
 function confidentialThreadOwner(threadId: string): string | null {
   if (!store.isConfidentialThread(threadId)) return null;
@@ -9382,16 +14943,13 @@ function approvalOwnerName(ownerUserId: string): string {
 
 /** The device this session currently is, when it is the registered worker
  * for that device. A query string is not a device. */
-const registeredDeviceFor = createRegisteredDeviceFor(getLeafHost);
 
-const viewerForApproval = createViewerForApproval(getLeafHost);
 
 function approvalViewerOf(client: SseClient): ApprovalViewer {
   const userId = client.approvalUserId ?? "";
   return { userId, deviceId: registeredDeviceFor({ sessionId: client.sessionId, userId }) };
 }
 
-let _isApprovalCardMessageImpl: ReturnType<typeof createIsApprovalCardMessage> | undefined;
 function isApprovalCardMessage(...args: any[]) {
   return (_isApprovalCardMessageImpl ??= createIsApprovalCardMessage(getLeafHost) as any)(...args);
 }
@@ -9405,13 +14963,11 @@ function approvalCallerUserId(auth: RequestAuth): string {
 /** 403 only for an approval whose bot is still here and whose caller is not
  * the owner. A question stays on the ordinary answer path. A card with no
  * live bot does too, so the thread route can still close it. */
-const approvalAnswerRefusal = createApprovalAnswerRefusal(getLeafHost);
 
 /** Organization server (slice 3, D15): a card flagged adminApproval (a
  * server command asked by a member's bot) is answered by an organization
  * admin only. "admin" lets the caller through without the owner check;
  * "refused" is the owner or anyone else; null is any other card. */
-const adminApprovalCheck = createAdminApprovalCheck(getLeafHost);
 // 2026-10-26: not an admin's call. On an organization server the
 // owner turns Full on through its own confirmation (the approvalMode
 // "full" branch of PATCH /api/bots/:id, org-full-access.ts); this answers
@@ -9434,14 +14990,11 @@ const EXEC_USE_BOT_COMPUTER =
 /** The server-command approvals waiting for an organization admin. */
 /** Slice 7: every pending approval card (not answered, dismissed or
  * expired; never a question), with the bot it belongs to. */
-const pendingApprovalCards = createPendingApprovalCards(getLeafHost);
 
 /** The server-command approvals waiting for an organization admin (slice 3). */
-const pendingAdminApprovals = createPendingAdminApprovals(getLeafHost);
 
 /** The organization admins people can be told about (2026-10-08): signed in
  * with Perspicax, not disabled. Their names go on a member's waiting card. */
-const orgAdminNames = createOrgAdminNames(getLeafHost);
 
 /** Admin approvals reach the admins (2026-10-08). Before, a member's
  * waiting card was announced to the bot's audience only (its owner): no
@@ -9452,7 +15005,6 @@ const orgAdminNames = createOrgAdminNames(getLeafHost);
  * arrived, for a notification. Debounced: a burst of patches is one frame. */
 let adminApprovalsAnnounce: NodeJS.Timeout | null = null;
 let announcedAdminApprovals = new Set<string>();
-const scheduleAdminApprovalsAnnounce = createScheduleAdminApprovalsAnnounce(getLeafHost);
 
 /** Whether a stream belongs to an organization admin: the only streams an
  * `org.approvals` frame reaches. A loopback stream is the operator's. */
@@ -9475,7 +15027,6 @@ function adminPerson(principalId: string): AdminPerson {
 /** Slice 7: the pending cards a console person may see: owner cards of the
  * bots they own (approvalOwnerId), and for an organization admin every
  * admin card. Never an owner card to an admin who does not own the bot. */
-const pendingApprovalsFor = createPendingApprovalsFor(getLeafHost);
 
 // ── the Approvals screen (server/routes/approvals-inbox.ts, 2026-10-19) ──
 /** The person the screen is for: never a bot acting as them, an AI
@@ -9494,10 +15045,8 @@ function managedTeamIds(principalId: string): Set<string> {
 }
 
 /** Every open card of every conversation, questions included. */
-const pendingInboxCards = createPendingInboxCards(getLeafHost);
 
 /** Where an Allow would run, in the screen's plain words. */
-const inboxDestination = createInboxDestination(getLeafHost);
 
 /** Why a card cannot be in a bulk answer, or true. */
 function inboxBulkVerdict(threadId: string, card: NonNullable<Message["card"]>, kind: InboxKind, needsKey: boolean): true | InboxBulkRefusal {
@@ -9526,24 +15075,20 @@ function routineNameOfThread(botId: string, threadId: string): string | undefine
   return name || undefined;
 }
 
-const inboxPending = createInboxPending(getLeafHost);
 
 /** Answered cards, newest first: the person's own bots' and the ones they
  * answered; every one for an admin of this server. */
-const inboxHistory = createInboxHistory(getLeafHost);
 
 /** One plain tool card answered once from the Approvals screen's bulk
  * action: the same refusals as POST /api/threads/:id/respond, an Allow
  * that needs a security key refused (a bulk answer carries none), and
  * nothing remembered. */
-const answerInboxCard = createAnswerInboxCard(getLeafHost);
 
 /** Slice 7: answer a plain tool card from the Perspicax console, once,
  * allow or deny, with the same refusals as Sagax: the owner for an owner
  * card, an organization admin for an admin card, and only on the fleet
  * host. #2100: `rule: "allow"` keeps that card's own Always allow, like
  * bulk Approvals (never a session allow or a remembered command). */
-const answerCardFromConsole = createAnswerCardFromConsole(getLeafHost);
 
 /** A session-shaped auth for the console person so saveOwnerRuleFromCard
  * sees the same principal as the assertion (never persisted). */
@@ -9568,14 +15113,11 @@ function consoleRuleAuth(viewer: OrgAdminViewer): RequestAuth {
 
 /** An organization admin answering a pending admin approval by thread may
  * reach that thread even though the bot is not shared with them. */
-const adminAnswersPendingApproval = createAdminAnswersPendingApproval(getLeafHost);
 
-const botForApproval = createBotForApproval(getLeafHost);
 
 /** Approval cards on a channel, a direct thread, or a bot-to-bot dm stay on
  * the owner session. Other viewers get the wait, without the card. Questions
  * are unchanged. */
-const scopeApprovalMessage = createScopeApprovalMessage(getLeafHost);
 
 /** Organization server (2026-10-01): an access card is private to the person
  * it is about (accessCardAudience in ./engine-access.ts); every other member
@@ -9590,7 +15132,6 @@ function privateRowHidden(message: unknown, viewer: ApprovalViewer): boolean {
  * read (the bot's owner, the run being another person's) sends them a copy
  * that opens the run in the bot's Coding activity instead
  * (routineAccessNotifications). */
-const notifyAccess = createNotifyAccess(getLeafHost);
 
 /** Whether a thread exists for any bot or room, whoever the viewer is. */
 function threadStillExists(threadId: string): boolean {
@@ -9609,7 +15150,6 @@ function routineToggleForApprovalViewer<T>(message: T, viewer: ApprovalViewer): 
   });
 }
 
-const projectMessages = createProjectMessages(getLeafHost);
 
 function projectGroupTranscript<T extends { threadId?: string; messages?: unknown[] }>(group: T, viewer: ApprovalViewer): T {
   if (!group.threadId || !group.messages) return group;
@@ -9625,28 +15165,21 @@ function projectBotTranscript<T extends { threadId?: string; messages?: unknown[
   return { ...bot, messages };
 }
 
-const approvalBot = createApprovalBot(getLeafHost);
 
-const scopeChannelApproval = createScopeChannelApproval(getLeafHost);
 
 /** A frame about a conversation between two people reaches those two only,
  * whatever the stream (admin and loopback included). */
-const peopleDmFrameAllowed = createPeopleDmFrameAllowed(getLeafHost);
 
 /** Whether this person sends (and so sees) read receipts. Their choice is
  * kept with their preferences on an organization server; anywhere else, and
  * for anyone without a record, it is on. */
-const personSendsReadReceipts = createPersonSendsReadReceipts(getLeafHost);
 
 /** The read positions of a thread one viewer may see. */
-const threadReadsFor = createThreadReadsFor(getLeafHost);
 
-const threadReadFrameAllowed = createThreadReadFrameAllowed(getLeafHost);
 
 /** Drop a bot notification this person turned off. Runs before the admin
  * short-circuit so every stream, an admin's included, follows that person's
  * choice. Spend notices are the workspace's and are not filtered here. */
-const viewerNotificationMuted = createViewerNotificationMuted(getLeafHost);
 
 /** The frame a non-admin stream gets: the shared client frame, unless a bot
  * is restricted and this member may not see all of what the frame carries —
@@ -9660,9 +15193,7 @@ function temporaryAgentFrame(payload: Record<string, unknown>): boolean {
   const threadId = typeof payload.threadId === "string" ? payload.threadId : typeof message?.threadId === "string" ? message.threadId : undefined;
   return threadId !== undefined && Boolean(store.botByThread(threadId)?.temporary);
 }
-const sseFrameFor = createSseFrameFor(getLeafHost);
 
-const memberFrame = createMemberFrame(getLeafHost);
 onSteeredQueueChange(() => broadcast({ kind: "bot.queued", queues: publicBotQueuedMessages() }));
 
 // ── server-side event folding (upstream's ingestion worker, miniature) ──
@@ -9679,11 +15210,9 @@ const toolMessageByItem = new Map<string, string>(); // threadId:itemId -> messa
  * the engine never reported back) closes them too, with `output`
  * (server/threads/subagent-cleanup.ts). A late completion from the engine finds no
  * row to patch. */
-const closeCutToolRows = createCloseCutToolRows(getLeafHost);
 
 /** A person's Stop on a conversation: the bot's own sub-agent threads opened
  * from it stop too (server/threads/subagent-cleanup.ts ownSubagentThreads). */
-const stopOwnSubagents = createStopOwnSubagents(getLeafHost);
 
 /** Tool calls of this thread's turn still running. */
 function toolsRunning(threadId: string): number {
@@ -9701,7 +15230,6 @@ const safePoints = new SafePointPreempts();
  * that turn at the end of its running tool, so the queue starts a turn with
  * the words now instead of when the work is done. Not a person's Stop: what
  * the turn already took stays offered, and the queue drains as it settles. */
-const preemptAtSafePoint = createPreemptAtSafePoint(getLeafHost);
 
 /** One "Stopped" line after the person's stop, unless the turn already
  * wrote its own since their last message. */
@@ -9711,7 +15239,6 @@ function confirmStop(threadId: string, turnId: string | undefined): void {
 }
 
 /** A stopped row for `turnId` written after the person's latest message. */
-const stoppedRowSinceLastPerson = createStoppedRowSinceLastPerson(getLeafHost);
 /** 2026-10-28: what answered a call's ask with no card, kept until the
  * call's own row exists (server/approvals/tool-auto-approval.ts). */
 const autoApprovals = createAutoApprovalNotes();
@@ -9722,7 +15249,6 @@ const roleEvents = createRoleEvents({ journal: roleJournal });
 /** Put what answered an ask with no card on the call's own row: the newest
  * row of this tool in the conversation that has none yet (Claude writes the
  * row before it asks), else on the row the engine writes next. */
-const noteAutoApproval = createNoteAutoApproval(getLeafHost);
 const askMessageByRequest = new Map<string, string>(); // threadId:requestId -> messageId
 /** Approvals nobody answered, kept for the result of the turn that asked
  * them: the direct coordination outcome, a delegation's reply and a room
@@ -9732,14 +15258,12 @@ const unansweredApprovals = new UnansweredApprovals();
 // rebuild executable authority from an imported transcript or display summary.
 const pendingCommandRules = new Map<string, { botId: string; candidate: CommandAllowlistCandidate }>();
 
-const commandRememberRefusal = createCommandRememberRefusal(getLeafHost);
 
 /** Deliver a person's answer to the engine that asked, and tell the truth
  * about what happened. `unavailable` — the turn ended, the ask timed out,
  * the engine has no asks — is fail-closed: the action was never run. The
  * card is settled and a chip says so, instead of the answer vanishing into
  * a 500 while the card sits open forever. */
-const answerRequest = createAnswerRequest(getLeafHost);
 
 
 /** A decision or answer on a provider/peer card, made on behalf of `auth`
@@ -9747,24 +15271,20 @@ const answerRequest = createAnswerRequest(getLeafHost);
  * proposals (skill, routine, profile, default model, team setup)
  * are not handled here; they are reviewed on screen (liveDecisionRefusal).
  * Mirrors POST /api/threads/:id/respond. */
-const respondToCard = createRespondToCard(getLeafHost);
 
 /** A reply captured from a resolver that writes to a response, for a path
  * with no HTTP response of its own (a Live call). */
-let _capturedReplyImpl: ReturnType<typeof createCapturedReply> | undefined;
 function capturedReply(...args: any[]) {
   return (_capturedReplyImpl ??= createCapturedReply(getLeafHost) as any)(...args);
 }
 
 /** 2026-10-27 (#1098): settle a proposal card decided by voice through the
  * same resolvers as the screen's answer (POST /api/bots/:id/respond). */
-const resolveLiveProposal = createResolveLiveProposal(getLeafHost);
 
 /** Close every provider-owned approval still open on a thread. Interrupting a
  * turn kills the process that raised its questions, so those cards can never
  * be answered. Routine proposals are harness-owned and durable, so they stay
  * actionable even after the proposing turn has stopped. */
-const closeOpenApprovals = createCloseOpenApprovals(getLeafHost);
 
 function requestBehavior(value: unknown): "allow" | "deny" | "answer" | null {
   return value === "allow" || value === "deny" || value === "answer" ? value : null;
@@ -9805,10 +15325,8 @@ const limitFailoverStore = new LimitFailoverStore({ file: join(DATA_DIR, "limit-
  * reset are transparent (the maintainer, 2026-10-29): a hidden `notice:` row the server
  * still reads back, and a line in the Events lens. A wait the person must
  * know of stays a `recovery:` row in the chat. */
-const limitFailoverRow = createLimitFailoverRow(getLeafHost);
 /** The person's message again, with what the turn a usage limit stopped had
  * already done; the message alone when it had done nothing yet. */
-const limitResumeText = createLimitResumeText(getLeafHost);
 /** 2026-11-02: per payer and engine, until when a plan window is spent (no
  * extra usage or credit left), from the last plan usage report read for that
  * payer (GET /api/plan-usage: the person's own, every few minutes while their
@@ -9823,8 +15341,6 @@ const limitResumeText = createLimitResumeText(getLeafHost);
 const spentPlans = new Map<string, number>();
 /** #2192: fullest window used-percent per payer and engine, from the last report. */
 const planUsedPercents = new Map<string, number>();
-Object.assign(leafHostBindings, { spentPlans, planUsedPercents, spentPlanUntil, planUsedPercent });
-const notePlanLimits = createNotePlanLimits(getLeafHost);
 function planLimitUntil(payer: string, instanceId: string): number | null {
   const until = spentPlans.get(`${payer}\u0000${instanceId}`);
   return until !== undefined && until > Date.now() ? until : null;
@@ -9834,7 +15350,6 @@ function planUsedPercentOf(payer: string, instanceId: string): number | null {
 }
 /** The engines a turn of this speaker may run on, from what is known now
  * (the probe cache on a solo server is not read again). */
-const limitCandidatesNow = createLimitCandidatesNow(getLeafHost);
 const limitFailover = createLimitFailoverHost({
   store: limitFailoverStore,
   now: () => Date.now(),
@@ -10015,7 +15530,6 @@ const emptyResponseRetry = createEmptyResponseRetry();
  * released the thread: the empty-response retry and, #2057, a turn whose
  * sign-in refusal the renew cleared. Quiet when the message is no longer
  * the latest, the thread went away or another turn already runs. */
-const resendUserMessage = createResendUserMessage(getLeafHost);
 
 // Prompt-cache keep-warm (server/cache-keepwarm.ts; design from Cache Tax,
 // MIT, Karan Bansal): an idle Claude thread with a big context gets one
@@ -10185,7 +15699,6 @@ const limitReset = createLimitResetHost({
  * its own engine and the backup's "continuing on" line turns into one plain
  * error, with no sign-in card for an engine the person never picked. The
  * error's words, or null when the thread is not on such a backup. */
-const limitBackupRefusedInThread = createLimitBackupRefusedInThread(getLeafHost);
 /** A reset as the English line says it, in this server's zone. */
 function limitClockText(at: number): string {
   return resetClockText(at, "en-US", hostTimeZone());
@@ -10226,11 +15739,14 @@ const nativeReviewNoticed = new Set<string>();
 // own news on its thread; whatever needs the person — an approval, a
 // question, their hands — still reaches them.
 const quietTurnThreads = new Set<string>();
+/** Threads whose next settled reply the bot chose to post without alerting
+ * anyone (set_reply_notify, send_to_bot `notify` false): read and cleared
+ * when that turn completes (runtime-events/turn-completed.ts). */
+const silentReplyThreads = new Set<string>();
 const QUIET_TURN_NEWS: ReadonlySet<Notification["kind"]> = new Set(["done", "turn-failed", "incident"]);
 
 /** Put a notification on the wire. Clients decide what to do with it — a
  * desktop notification now, a push to a paired phone later. */
-const notify = createNotify(getLeafHost);
 
 /** How long an approval in an AI client's hidden conversation waits. */
 const HIDDEN_APPROVAL_TTL_MS = (() => {
@@ -10285,7 +15801,6 @@ function harnessQuestionThread(threadId: string): boolean {
  * notification and the run's "Waiting for your answer". No engine holds the
  * request (harnessAsk): the answer comes back as the person's next message
  * (deliverLateQuestionAnswer). The card's row, or null when none was drawn. */
-const raiseHarnessQuestion = createRaiseHarnessQuestion(getLeafHost);
 
 /** The approval wait a turn gets: a routine run's, else the driver's own. */
 function routineApprovalWaitMs(threadId: string): number | undefined {
@@ -10295,10 +15810,8 @@ function routineApprovalWaitMs(threadId: string): number | undefined {
 /** Decline an approval nobody answered by its expiresAt: the engine hears a
  * refusal (the action never runs), the card reads Expired, and the audit
  * log says why. Answered, dismissed or already expired cards are left alone. */
-const scheduleApprovalExpiry = createScheduleApprovalExpiry(getLeafHost);
 
 /** #1940: effective days before a pending approval expires for this person. */
-const pendingExpireDaysForPerson = createPendingExpireDaysForPerson(getLeafHost);
 
 /** #1940: days for a card's answerer (bot owner), used when creating expiresAt. */
 function pendingExpireDaysForThread(threadId: string): number {
@@ -10308,24 +15821,13 @@ function pendingExpireDaysForThread(threadId: string): number {
 }
 
 /** #1940: age-based expiry deps (periodic, startup, lazy on read). */
-const pendingExpiryDeps = createPendingExpiryDeps(getLeafHost);
-Object.assign(leafHostBindings, {
-  pendingExpiryDeps,
-  openPendingInboxCards,
-  openApprovalCardMessages,
-  appendDecision,
-});
 
 /** #1940: expire every due pending approval (startup, interval, lazy). */
-const runPendingApprovalExpirySweep = createRunPendingApprovalExpirySweep(getLeafHost);
-Object.assign(leafHostBindings, { runPendingApprovalExpirySweep });
 
 /** #1940: lazy expiry for one thread before list_pending_approvals / a read. */
-const expireDueApprovalsInThread = createExpireDueApprovalsInThread(getLeafHost);
 
 /** An approval was answered somewhere (or expired): every client takes its
  * banner down, and phones it buzzed hear it silently (server/push/hub.ts). */
-const withdrawApprovalNotice = createWithdrawApprovalNotice(getLeafHost);
 
 /** An ask was answered (or expired) by whichever path: a conversation no
  * longer waits on its person once it holds no open card, so every device's
@@ -10371,7 +15873,6 @@ function notificationIsInterBotChatter(notification: Notification): boolean {
 /** Whether a notification comes out of a conversation an AI client holds
  * with a bot over MCP, an outside agent's (shared/agent-conversation.ts) or a
  * hidden one (#291). Decisions reach phones and watches too (#1984). */
-const notificationQuietOnPhones = createNotificationQuietOnPhones(getLeafHost);
 
 /** Whether a notification belongs to an outside agent's conversation with a
  * bot and is not one the person must act on (shared/agent-conversation.ts). */
@@ -10443,7 +15944,6 @@ const turnStops = new TurnStops();
  * (turn-outcome.ts): `cause` when the harness stopped it (passed, or noted
  * before it interrupted), else the runtime's own error, else its bare stop
  * reason; with whatever the turn last said. */
-const stoppedTurnText = createStoppedTurnText(getLeafHost);
 const watchdog = new TurnWatchdog({
   stallMs: TURN_STALL_MS, toolStallMs: TOOL_STALL_MS,
   checkMs: 60_000,
@@ -10607,11 +16107,9 @@ const memoryRowsByThread = new Map<string, MemoryJournalEntry[]>();
 const bootEngineSlots = new Map<string, { slot: EngineSlot; instance: ProviderInstance }>();
 /** Wait for an engine start slot for this routine turn. While it waits the
  * watchdog treats the turn like one waiting for a computer, not a stall. */
-const holdBootEngineSlot = createHoldBootEngineSlot(getLeafHost);
 /** Give the slot back. After a completed turn its engine process is closed
  * too, not kept idle in the pool for ten minutes: the next routine waiting
  * starts in the memory this one frees. */
-const releaseBootEngineSlot = createReleaseBootEngineSlot(getLeafHost);
 bus.subscribe((event: RuntimeEvent) => {
   if (event.type === "turn.completed" || event.type === "session.exited") releaseBootEngineSlot(event.threadId, true);
 });
@@ -10736,7 +16234,6 @@ bus.subscribe((event: RuntimeEvent) => {
 /** One finished turn as capture reads it: the person's message and the bot's
  * reply, or null when the reply is not on the active path (rewound) or the
  * message was another bot's ask. */
-const captureTurnFor = createCaptureTurnFor(getLeafHost);
 
 
 /** How many room lines before a bot's reply capture reads: what it read
@@ -11027,11 +16524,9 @@ const TOOL_RESULT_SPILL_MAX = 512 * 1024;
  * ignored here; item 0.4 gives PreCompact/SessionStart their meaning (Stop is
  * no longer registered: nothing used it, perf round 4). */
 const DIGESTS_AFTER_COMPACTION = 2;
-const ingestEngineHook = createIngestEngineHook(getLeafHost);
 
 /** Persist observed tools and memory immediately, then enrich that same
  * row only if its task and active branch still exist. */
-const scheduleTurnDigest = createScheduleTurnDigest(getLeafHost);
 
 // Bots currently working with nobody at the keyboard — a webhook turn, or a
 // turn a webhook-driven bot handed to a teammate. Auto mode is a decision
@@ -11054,7 +16549,6 @@ function markUnattended(botId: string, threadId: string) {
 function clearUnattended(threadId: string) {
   unattendedThreads.delete(threadId);
 }
-const isUnattended = createIsUnattended(getLeafHost);
 
 // Threads whose turn in flight was started by another BOT — a hand-off,
 // a drained delegation. The person asked ONE bot; the fan-out behind that
@@ -11186,7 +16680,6 @@ function botComputerControlKey(bot: BotRecord): string {
 }
 
 /** Resolves once `work` settles, `ms` pass, or `signal` aborts. */
-let _settledWithinOrStopImpl: ReturnType<typeof createSettledWithinOrStop> | undefined;
 function settledWithinOrStop(...args: any[]) {
   return (_settledWithinOrStopImpl ??= createSettledWithinOrStop(getLeafHost) as any)(...args);
 }
@@ -11221,7 +16714,6 @@ function settledWithinOrStop(...args: any[]) {
  * (CONTROL_WAITED) and the next one acts. A stopped turn or a caller that
  * hung up ends the wait at once, and a call whose turn ended while it waited
  * is never let through. */
-const computerCallGate = createComputerCallGate(getLeafHost);
 
 function botComputerControlSnapshot(botId: string, pinnedComputerId?: string) {
   const own = computerControl.snapshot(botId);
@@ -11231,17 +16723,12 @@ function botComputerControlSnapshot(botId: string, pinnedComputerId?: string) {
   return own.held ? own : shared.held || shared.helpReason ? shared : own;
 }
 
-const teamComputerInUse = createTeamComputerInUse(getLeafHost);
 
-const claimTeamComputerLifecycle = createClaimTeamComputerLifecycle(getLeafHost);
 
-const assertTeamComputerChangeIdle = createAssertTeamComputerChangeIdle(getLeafHost);
 
-const teamComputersPayload = createTeamComputersPayload(getLeafHost);
 
 /** The same named Boat identity and whole-turn lease in chats and rooms.
  * Assignment authorizes waking, never replacing a missing paid machine. */
-const attachTeamBoat = createAttachTeamBoat(getLeafHost);
 
 /** The engine fact the cloud-computer rule reads (shared/cloud-computer.ts),
  * and the model's name for a refusal to say. */
@@ -11264,7 +16751,6 @@ function cloudComputerMount(botId: string, owner: TurnOwner, boxId: string): Pic
 
 /** The cloud computer's stdio tools for this turn. `boxId` null: the Boat is
  * the one the first computer call's claim creates or wakes (mountBotBoat). */
-const cloudComputerTools = createCloudComputerTools(getLeafHost);
 
 /** "Works on: This computer", strict. One mount for a bot thread and a group
  * chat, so the two cannot drift on what they check or how they fail. The
@@ -11272,7 +16758,6 @@ const cloudComputerTools = createCloudComputerTools(getLeafHost);
  * taken by the first screen call, through the gate, like every lazily
  * claimed desktop: queued behind a turn that has it with the waiting chip,
  * parked at the wait ceiling (`onRejected`). */
-const mountHostComputer = createMountHostComputer(getLeafHost);
 
 /** The bot's own VPS desktop, mounted into the local agent. The desktop lease
  * is claimed on the first computer call, through the computer-control gate
@@ -11287,7 +16772,6 @@ const mountHostComputer = createMountHostComputer(getLeafHost);
  * no plan hours. The caller has already recorded the thread with
  * vpsThreadStarted and ends it on a problem; `reachable` says whether SSH
  * and Docker answered at all. */
-const mountBotVps = createMountBotVps(getLeafHost);
 
 /** How long the start itself may take once this turn has the computer to
  * itself: above a slow first start (about a minute; Boat's own ready wait is
@@ -11305,7 +16789,6 @@ const CLOUD_COMPUTER_DID_NOT_START = "the cloud computer didn't start in time";
  * screen ("hi") makes no Boat call at all, so it costs no plan hours. The
  * claim is attachBotBoat itself, with its explicit-Cloud consent: the person
  * chose this place, and the bot is now using it. */
-const mountBotBoat = createMountBotBoat(getLeafHost);
 
 /** The Boat a lazily mounted cloud computer's claim landed on, for this
  * exact turn; none while the claim is still running or after it failed. */
@@ -11321,7 +16804,6 @@ function claimedBoatId(capability: InternalCapability): string | undefined {
  * Every engine reaches it through mountBotBoat, on its first computer call:
  * told once this turn has the Boat to itself, it has `budgetMs` to find,
  * create or wake it. */
-const attachBotBoat = createAttachBotBoat(getLeafHost);
 
 /** `work`, or a rejection with `message` once `ms` pass first. The work is
  * not cancelled: it ends on its own requests' deadlines, and the race has
@@ -11334,9 +16816,7 @@ function withinBudget<T>(work: Promise<T>, ms: number, message: string): Promise
 
 /** Find the bot's Boat, creating or waking it: the Boat once it can be
  * attached, or null. */
-const startBotBoat = createStartBotBoat(getLeafHost);
 
-const managedBoatOwners = createManagedBoatOwners(getLeafHost);
 
 function botHasActiveTurn(botId: string): boolean {
   const bot = store.bot(botId);
@@ -11354,11 +16834,8 @@ function providerTransitionMessage(provider: RemoteComputerProvider): string {
 /** Work which started first wins. This is intentionally conservative: a
  * control lease or detached routine can still refer to a durable computer
  * after the bot record's current destination changes. */
-const providerOperationConflict = createProviderOperationConflict(getLeafHost);
 
-const turnSurfacePlan = createTurnSurfacePlan(getLeafHost);
 
-const turnProvider = createTurnProvider(getLeafHost);
 
 /** Preview requests carry the selected conversation, not whichever thread
  * happens to be the bot's default. A query never grants lifecycle authority. */
@@ -11370,15 +16847,12 @@ function computerPreviewBot(botId: string, url: URL): BotRecord | null {
   return directTurnBots.get(threadId) ?? bot;
 }
 
-const computerPreviewSurface = createComputerPreviewSurface(getLeafHost);
 
 /** Discovery is read-only. Starting or creating a configured computer is
  * deferred until a chat tool selects it and the old turn releases its tools.
  * A Cloud home lists only the places it has (cloud-home.ts), so a bot never
  * tells the person to set up this computer or a Local VM there. */
-const selectableComputers = createSelectableComputers(getLeafHost);
 
-const continueComputerSelection = createContinueComputerSelection(getLeafHost);
 
 /** The engine that dispatched each live turn. A bot's settings may change
  * mid-turn; an interrupt or steer must reach the engine actually running. */
@@ -11437,7 +16911,6 @@ function engineSteersImages(instance: ReturnType<typeof registry.get> | undefine
   return Boolean(capabilities?.queueing && capabilities.steerImages && capabilities.nativeImageInput && instance?.adapter.steer);
 }
 
-const providerTransitionForTurn = createProviderTransitionForTurn(getLeafHost);
 
 function claimBoatInventoryRequest(boxId: string): () => void {
   if (boatInventoryRequestsBusyIds.has(boxId)) {
@@ -11450,15 +16923,12 @@ function claimBoatInventoryRequest(boxId: string): () => void {
 /** Claim the owning bot synchronously after Boat revalidation and before the
  * provider mutation. startTurn checks the same set before doing any work, so
  * a new turn and an irreversible lifecycle action cannot pass each other. */
-const claimManagedBoatMutation = createClaimManagedBoatMutation(getLeafHost);
 
 /** One synchronous lane for cloud lifecycle consumers. Both Settings and
  * bot-scoped actions use it, so whichever operation starts first excludes the
  * other instead of relying on a stale check made before a provider await.
  * Only opening an existing VPS viewer may coexist with its pending preview. */
-const claimBotComputerLifecycle = createClaimBotComputerLifecycle(getLeafHost);
 
-const claimManagedVpsMutation = createClaimManagedVpsMutation(getLeafHost);
 
 function localVmTargetForBot(botId: string): LocalVmTarget {
   return localVmMode(cfg) === "per-bot" ? perBotLocalVmTarget(botId) : SHARED_LOCAL_VM_TARGET;
@@ -11479,15 +16949,12 @@ function localVmTargetForThread(botId: string, threadId: string): LocalVmTarget 
 /** Best-effort seat for read-only surfaces (Computer panel previews,
  * screenshots, status payloads). Records no affinity: a status probe must
  * not steer a later turn onto a desktop its claim would not choose. */
-const localVmTargetForStatus = createLocalVmTargetForStatus(getLeafHost);
 
 function localVmLeaseFor(target: LocalVmTarget): LocalVmLease {
   return localVmLeases.forTarget(target.key);
 }
 
-const localVmIdleFor = createLocalVmIdleFor(getLeafHost);
 
-const releaseLocalVmThread = createReleaseLocalVmThread(getLeafHost);
 
 // A running VM may have survived an app/server restart. Start its idle
 // backstop even if nobody opens Settings or begins a turn this session. The
@@ -11571,12 +17038,10 @@ const localVmAuto = DESKTOP_MANAGED && IDENTITY.kind !== "perspicax" && !process
 
 /** One lifecycle step of the automatic start, with the same guards as the
  * Settings routes: never while a bot holds the desktop or a setup runs. */
-const localVmAutoLifecycle = createLocalVmAutoLifecycle(getLeafHost);
 
 // At launch: bring the Local VM up in the background.
 if (localVmAuto) setTimeout(() => { void localVmAuto.ensure("launch").catch(reportBackgroundError); }, 3_000).unref?.();
 
-const localVmInventoryPayload = createLocalVmInventoryPayload(getLeafHost);
 
 const soloGoals = new SoloGoals();
 /** #1372: a goal's status row, in English for any client, drawn in the
@@ -11768,6 +17233,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get proactiveWakeForThread() { return proactiveWakeForThread; },
   get publicGroupState() { return publicGroupState; },
   get quietTurnThreads() { return quietTurnThreads; },
+  get silentReplyThreads() { return silentReplyThreads; },
   get raiseHarnessQuestion() { return raiseHarnessQuestion; },
   get reachMeTeams() { return reachMeTeams; },
   get readAndDraft() { return readAndDraft; },
@@ -11917,13 +17383,10 @@ const delegationWatch = new Map<string, {
 /** The open question card of a conversation that outlives its turn (an
  * engine's question, an ask_choice raised as one): its answer comes back as
  * the person's next message. Never a permission card, which its turn closes. */
-const openQuestionCard = createOpenQuestionCard(getLeafHost);
 
-const openPersonCard = createOpenPersonCard(getLeafHost);
 
 /** The conversation waiting on work that runs in this thread: a Chief's
  * delegate_bot task or coordinate_bots assignment. */
-const delegatorOf = createDelegatorOf(getLeafHost);
 
 // an earlier note: a delegated teammate's card used to live only in its own thread,
 // so the person talking to the Chief never saw that work was waiting on them.
@@ -11933,15 +17396,12 @@ const waitingOnPersonChips = new Map<string, {
   parent: Pick<HandoffView, "threadId" | "botId" | "groupId">;
 }>();
 
-const showWaitingOnPersonChip = createShowWaitingOnPersonChip(getLeafHost);
 
 /** Settle the chip for one answered card, or every chip for this thread once
  * its turn ends (a card nobody answered can no longer be answered). */
-const settleWaitingOnPersonChips = createSettleWaitingOnPersonChips(getLeafHost);
 
 /** Slice 6: a routine on the wire: runAs as the person (name included) in
  * organization mode, nothing in solo mode. */
-const routineOnWire = createRoutineOnWire(getLeafHost);
 /** The principal of an organization request, when it is a signed-in person
  * (a routine they write runs as them); undefined otherwise (D5). */
 function routineActor(auth: RequestAuth): { actorPrincipalId: string } | undefined {
@@ -11951,18 +17411,14 @@ function routineActor(auth: RequestAuth): { actorPrincipalId: string } | undefin
 }
 /** Whether this person may still run the routine's work: `run` on its bot,
  * and for a room goal, the room too. */
-const principalMayRunRoutine = createPrincipalMayRunRoutine(getLeafHost);
 /** Slice 6 (D4): an organization routine run needs its person, their right
  * to run the bot, and a live routine delegation. Since 2026-10-08 the
  * delegation is issued automatically: one Perspicax cannot issue or renew
  * only skips the run, it never pauses the routine; only a person put out
  * (disabled, deleted, signed out by Perspicax) or without `run` pauses it. */
-const routineAdmission = createRoutineAdmission(getLeafHost);
 /** Slice 6: one neutral status line in the routine's results thread, and a
  * notification, when a routine is paused (its person is out or lost `run`). */
-const routineSuspended = createRoutineSuspended(getLeafHost);
 /** Slice 6: the audit rows of routine delegations and paused routines. */
-const routineAudit = createRoutineAudit(getLeafHost);
 /** Slice 7: who made an organization change: the person of a session by
  * principal id (Sagax), else as the decision log names callers. */
 function orgAuditActor(auth: RequestAuth): AdminActor {
@@ -11995,26 +17451,20 @@ function effectiveRunAs(run: { runAs?: string; botId: string }): string | undefi
 }
 /** The routine modal's run-as chooser (server/routines/routine-run-as.ts): the
  * signed-in person of an organization request, null otherwise. */
-const runAsChooserFor = createRunAsChooserFor(getLeafHost);
 /** The people a routine may run as: the directory's persons (never a
  * service account; interim and local principals are not in it). */
-const runAsPeople = createRunAsPeople(getLeafHost);
 /** The run-as person a routine create or update asks for (`runAs`, a
  * principal id): nothing when none was sent, or when the unchanged person
  * was sent by someone who could not choose them (D5 then applies), else the
  * person or a refusal. */
-const routineRunAsChoice = createRoutineRunAsChoice(getLeafHost);
 /** Every change of the person a routine runs as, in the admin activity log
  * with who made it. */
-const auditRoutineRunAs = createAuditRoutineRunAs(getLeafHost);
 /** Run now (2026-10-08): on an organization server, the bot's owner,
  * the person the routine runs as, or an admin. A solo server, the operator
  * and the loopback keep the bot-level rule (`run`). */
-const mayRunRoutineNow = createMayRunRoutineNow(getLeafHost);
 /** The same rule for the person a bot speaks for (run_routine): there is no
  * session, so their own admin role and permissions decide. Nobody speaking is
  * refused on an organization server. */
-const speakerMayRunRoutineNow = createSpeakerMayRunRoutineNow(getLeafHost);
 function routineRunNowParties(routine: Routine): { botOwner?: string; runAs?: string } {
   const bot = store.bot(routine.botId);
   const botOwner = bot ? effectiveBotOwner(bot) : undefined;
@@ -12023,7 +17473,6 @@ function routineRunNowParties(routine: Routine): { botOwner?: string; runAs?: st
 }
 /** Stop a run (#1711): the Run now rule on its routine; a run whose routine
  * is gone is judged by the run's own bot and run-as person. */
-const mayCancelRoutineRun = createMayCancelRoutineRun(getLeafHost);
 /** Whether a run of this routine is queued, running or waiting. */
 function routineRunInFlight(routineId: string): boolean {
   return routineInFlightRun(routineId) !== undefined;
@@ -12053,12 +17502,9 @@ function auditRoutineRunsCleared(auth: RequestAuth, count: number): void {
 }
 /** The Automations page scope (server/routines/routine-scope.ts, 2026-10-09): who
  * the caller is for the scope rules. */
-const routineScopeCaller = createRoutineScopeCaller(getLeafHost);
 /** A routine's or run's owner, run-as person, teams and bot, for the scope. */
-const routineScopeFacts = createRoutineScopeFacts(getLeafHost);
 /** The scope's view of one request: `mine` is the listing's own rule, and
  * Run now and Edit answer what their routes would. */
-const routineScopeDeps = createRoutineScopeDeps(getLeafHost);
 /** #1516: a team goal's line in the room names the person the routine runs
  * as (organization server), like a message they sent. */
 function routineGoalSender(run: { runAs?: string; botId: string }): { sender: ResolvedSender } | Record<string, never> {
@@ -12091,7 +17537,6 @@ function attentionPerson(bot: BotRecord, threadId: string): string | undefined {
 const CW_OPEN_RECORD = /https:\/\/([a-z0-9.-]+)\/v4_6_release\/services\/system_io\/router\/openrecord\.rails\?[^"\s]*?companyName=([A-Za-z0-9_.-]+)/i;
 /** A ConnectWise ticket's deep link: the site the server is told
  * (SAGAX_CW_SITE), else the one the thread's own ConnectWise cards link to. */
-const attentionTicketUrl = createAttentionTicketUrl(getLeafHost);
 const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   task: (botId, threadId) => store.taskByThread(botId, threadId) ?? undefined,
   messages: (threadId) => store.activePath(threadId),
@@ -12147,25 +17592,21 @@ function engineModelIds(instance: { models: { default?: string; options: Array<{
 }
 
 /** Why `model` cannot be a routine model of this bot, or null. */
-const routineModelRefusal = createRoutineModelRefusal(getLeafHost);
 
 const routineModelNoticed = new Set<string>();
 
 /** The routine model this turn runs on: the run's model on the bot's own
  * engine, unless a limit takeover moved the thread. A model that cannot
  * apply is ignored with one line in the run, once. */
-const routineModelForTurn = createRoutineModelForTurn(getLeafHost);
 
 const routineSubagentModelNoticed = new Set<string>();
 
 /** #2038: per-routine Claude sub-agent model override on the bot's own
  * engine. Same rules as routineModelForTurn; does not change the main model. */
-const routineSubagentModelForTurn = createRoutineSubagentModelForTurn(getLeafHost);
 
 const routineEffortNoticed = new Set<string>();
 
 /** Resolve against the model selected for this turn, without changing chat. */
-const routineEffortForTurn = createRoutineEffortForTurn(getLeafHost);
 
 function routineDelegationCanResume(threadId: string, routineRunId?: string): boolean {
   return !routineRunId || activeRoutineRunForThread(threadId)?.id === routineRunId;
@@ -12184,18 +17625,8 @@ const roomMemberLock = new RoomMemberLock();
 const roomMemberContexts = new RoomContextTracker();
 const CLOUD_HOME = false;
 function cloudOwnerOnlyThread(_threadId: string): boolean { return true; }
-Object.assign(leafHostBindings, {
-  pendingDelegationWakes,
-  delegationWakeBudget,
-  roomMemberLock,
-  roomMemberContexts,
-  CLOUD_HOME,
-  cloudOwnerOnlyThread,
-});
 
-const dispatchDelegationWake = createDispatchDelegationWake(getLeafHost);
 
-const wakeDelegationSource = createWakeDelegationSource(getLeafHost);
 
 /** A routine run's "waiting": the runtime still owes this conversation
  * something for the work its turns handed out. Either a teammate's turn is
@@ -12237,7 +17668,6 @@ function incidentContext(threadId: string): { lastRequest: string | null; lastRe
 /** The cause of the thread's last failed-turn row (the words the person
  * reads), when the turn left one: a provider error is more telling than the
  * stop reason. */
-const latestFailedTurnCause = createLatestFailedTurnCause(getLeafHost);
 
 /** What a turn answers, read from the lines it answers: the ones it delivers
  * (sent now, drained from the queue together, retried on a backup engine)
@@ -12249,17 +17679,13 @@ const latestFailedTurnCause = createLatestFailedTurnCause(getLeafHost);
  * person, is quiet: a report that found the Chief busy used to be dropped
  * without a push, so handling it now adds none ("finished", "couldn't
  * start", "resumed with results"). */
-const turnAnswers = createTurnAnswers(getLeafHost);
 
 /** A report the Chief's turn refused to start (the spend limit, settings
  * mid-reload, …), sent at once or after its wait in the queue alike: one
  * chip in the incidents thread, and the person hears of each failure its
  * own run did not already buzz them about. Refused is never silent. */
-const incidentRefused = createIncidentRefused(getLeafHost);
 
-const reportIncident = createReportIncident(getLeafHost);
 
-const drainDelegationWakes = createDrainDelegationWakes(getLeafHost);
 
 // Provider-native sessions only know about messages produced inside their
 // own turns. A delegated result is appended later by the harness, so mark the
@@ -12284,14 +17710,11 @@ const callLinesSince = new Map<string, string>();
  * records what its session was handed sends it the unseen lines by itself;
  * another gets them in front of that turn (callLinesSince). Never an
  * unread mark: the person was on the call. */
-const noteCallBesideConversation = createNoteCallBesideConversation(getLeafHost);
 
-const markTaskContextExternallyUpdated = createMarkTaskContextExternallyUpdated(getLeafHost);
 
 /** The newest fold that belongs to this branch: a person's (a chat row) or
  * Sagax's own (kept on the task, off the chat, anchored to the last context
  * message it saw). A private record sits just after its anchor. */
-let _latestCompactionImpl: ReturnType<typeof createLatestCompaction> | undefined;
 function latestCompaction(...args: any[]) {
   return (_latestCompactionImpl ??= createLatestCompaction(getLeafHost) as any)(...args);
 }
@@ -12307,7 +17730,6 @@ function sagaxCompactionOn(botId: string): boolean {
   return cfg.context?.autoCompact !== false && !cfg.context?.autoCompactOffBots?.includes(botId);
 }
 
-const directContext = createDirectContext(getLeafHost);
 
 /** Another bot's line in this 1:1 conversation as a replay shows it: a
  * request it addressed here under the note it was sent with (one whose
@@ -12324,7 +17746,6 @@ function peerReplayText(m: Message, name: string, text: string): string {
  * null. Only for an engine that resumes a session of its own here: one that
  * is handed the transcript every turn, a rewound thread or another engine
  * joining rebuild their context anyway. */
-const staleEngineSession = createStaleEngineSession(getLeafHost);
 /** thread -> the turn (dispatch generation) and the person's message that
  * was small talk alone: its cloud computer tools do not run
  * (SMALL_TALK_CLOUD_REFUSAL) while that message is still the latest one; a
@@ -12333,7 +17754,6 @@ const smallTalkTurns = new Map<string, { generation: string; messageId: string }
 
 /** The existing direct-turn claim owns summarization, including Stop and
  * thread deletion. A durable record is committed only to its original branch. */
-const compactConversation = createCompactConversation(getLeafHost);
 
 /** Threads on a live voice call (server/voice/voice-call-session.ts). */
 const voiceCalls = new VoiceCallSessions();
@@ -12342,7 +17762,6 @@ const voiceWarmup = new VoiceCallWarmup();
 const voiceSessions = new VoiceTurnSessions();
 const voiceFirstSentences = new VoiceFirstSentenceJobs();
 /** Close the idle engine a call warmed. A process a turn already owns stays. */
-const releaseWarmEngine = createReleaseWarmEngine(getLeafHost);
 
 /** Pre-warm (server/threads/thread-prewarm.ts): the engine of a thread starts when the
  * person opens its conversation or starts typing, or shortly before a
@@ -12354,18 +17773,14 @@ const threadPrewarm = new ThreadPrewarm({
 /** routineRunId of a task reserved for a scheduled run not started yet. */
 
 /** Why a thread is not warmed now, or null when it may be. */
-const prewarmRefusal = createPrewarmRefusal(getLeafHost);
 /** A real turn takes a warm over: wait for its setup, at most
  * PREWARM_JOIN_MS (a stalled warm must not hold the person's message),
  * then claim its process, or close the warm and start cold. */
 const PREWARM_JOIN_MS = 5_000;
-const joinPrewarm = createJoinPrewarm(getLeafHost);
-const prewarmThread = createPrewarmThread(getLeafHost);
 /** Work threads opened ahead for a named teammate (prewarmNamedTeammates):
  * hidden and empty until coordinate_bots takes one, removed otherwise. */
 const reservedWorkThreads = new Map<string, { botId: string; timer: NodeJS.Timeout }>();
 const RESERVED_WORK_MS = 120_000;
-const releaseReservedWorkThread = createReleaseReservedWorkThread(getLeafHost);
 /** Nothing but activity rows (a delegated level noted at opening). */
 function reservedThreadUnused(threadId: string): boolean {
   return store.messagesFor(threadId).every(message => message.kind === "activity");
@@ -12373,12 +17788,10 @@ function reservedThreadUnused(threadId: string): boolean {
 /** coordinate_bots took the thread opened ahead: it shows from now on. Also
  * one whose timer already ran or a restart forgot: hidden, opened as work,
  * never used. */
-const adoptReservedWorkThread = createAdoptReservedWorkThread(getLeafHost);
 /** Start the engine of each named teammate that has no work thread from
  * this conversation yet, in that thread opened ahead, hidden (adopted by
  * coordinate_bots, removed after RESERVED_WORK_MS). Same limits as any
  * pre-warm. */
-const prewarmNamedTeammates = createPrewarmNamedTeammates(getLeafHost);
 /** Who a hang-up frame is for: the person who hung up, else the thread's
  * person, else the operator at this computer. */
 function voiceCallEndedAudience(threadId: string, auth?: RequestAuth): string {
@@ -12394,14 +17807,12 @@ function broadcastVoiceCallEnded(threadId: string, callId: string, by: "person" 
 /** The bot asked to hang up. Run only when that turn has finished, so the
  * goodbye is still a call turn, and only if this call is still the live one.
  * A failed or interrupted goodbye drops the request and keeps the call. */
-const finishVoiceCallRequestedByBot = createFinishVoiceCallRequestedByBot(getLeafHost);
 /** Each call turn's server stages, logged under its utterance id
  * (server/voice/voice-latency.ts), and shown in the thread's Events lens. */
 const voiceLatency = new VoiceLatencyLog(undefined, undefined, (threadId, message) => publishVoiceNotice(threadId, message));
 
 /** A voice timing note (server/voice/voice-timing.ts) into the thread's Events
  * lens: a runtime.notice, never a chat row. Numbers only. */
-const publishVoiceNotice = createPublishVoiceNotice(getLeafHost);
 
 const handoffs = new Handoffs({
   order: (threadId) => store.activePath(threadId).filter(isContextMessage).map((m) => m.id),
@@ -12438,7 +17849,6 @@ function delegationReportsBack(watched: NonNullable<ReturnType<typeof delegation
 /** Consume one delegated-turn watch and mirror exactly one terminal state.
  * Some harness paths settle a busy bot without a provider turn.completed
  * event, so they call this same finalizer explicitly. */
-const finalizeDelegationWatch = createFinalizeDelegationWatch(getLeafHost);
 
 // 2026-11-02: the "Same call repeated" chip is the loop guard's alone
 // (server/host/loop-guard.ts). A second copy here wrote every chip twice and
@@ -12485,7 +17895,6 @@ bus.subscribe(makeLoopStopSubscriber({
 // for the teammate work queued on it. The microtask lets the releasing state
 // machine finish before another turn claims the bot.
 const releasedBots = new Set<string>();
-const retryDelegationsWaitingOn = createRetryDelegationsWaitingOn(getLeafHost);
 
 // ── steer-queue drain: messages sent while the bot was busy ────────────
 // Runs on ANY turn.completed rather than resolving the settling thread: a
@@ -12514,7 +17923,6 @@ const voiceCallRetried = new Set<string>();
  * stopped the turn (the goal stops with it), the turn failed, the person
  * already wrote again (their turn carries the goal), or after
  * SOLO_GOAL_MAX_ROUNDS turns on its own, where it says so. */
-const scheduleSoloGoalRound = createScheduleSoloGoalRound(getLeafHost);
 const SOLO_GOAL_ROUND_DELAY_MS = 500;
 
 /** #1329: a bot with a "do not finish until" condition is checked after each
@@ -12527,7 +17935,6 @@ const SOLO_GOAL_ROUND_DELAY_MS = 500;
  * bot's bound (finishUntilMaxRounds, default 5), where one row says the
  * condition is not met yet. A working 1:1 /goal drives its own turns, so the
  * check waits for it. */
-const scheduleFinishUntilRound = createScheduleFinishUntilRound(getLeafHost);
 const FINISH_UNTIL_RELAUNCH_DELAY_MS = 500;
 
 /** A person's turn that ended on an announcement with no tool call after it,
@@ -12536,17 +17943,13 @@ const FINISH_UNTIL_RELAUNCH_DELAY_MS = 500;
  * person's message; the continued turn is never continued again. */
 const unfinishedTurns = createUnfinishedTurnGuard();
 const UNFINISHED_TURN_DELAY_MS = 500;
-const scheduleUnfinishedTurn = createScheduleUnfinishedTurn(getLeafHost);
 
 /** A moment after a direct turn settles on a thread on a live call: words
  * said on the call with no answer after them run once more
  * (server/voice/voice-call-watchdog.ts). */
-const scheduleVoiceCallWatchdog = createScheduleVoiceCallWatchdog(getLeafHost);
 
-const drainQueuedSends = createDrainQueuedSends(getLeafHost);
 
 const duplexEpochByThread = new Map<string, ReturnType<typeof duplexEpoch>>();
-const duplexEpochFor = createDuplexEpochFor(getLeafHost);
 
 /** startDuplexCallTurn's answer when the words join the running turn. */
 const DUPLEX_JOIN_RUNNING_TURN = Symbol("duplex-join-running-turn");
@@ -12555,7 +17958,6 @@ const DUPLEX_JOIN_RUNNING_TURN = Symbol("duplex-join-running-turn");
  * steer queue, start only this utterance. While the call turn runs a tool,
  * hands the words back to the caller's steer path instead. Never forks a
  * parallel task. */
-const startDuplexCallTurn = createStartDuplexCallTurn(getLeafHost);
 
 /** Keep a person's words off the transcript until a direct-thread slot is
  * available. Reuse the existing cancellable, idempotent composer queue. */
@@ -12582,7 +17984,6 @@ async function startOrQueueDirectMessage(...args: Parameters<typeof startOrQueue
     if (prewarmSends.get(threadId) === run) prewarmSends.delete(threadId);
   }
 }
-const startOrQueueDirectMessageNow = createStartOrQueueDirectMessageNow(getLeafHost);
 
 // ── parallel tasks (shared/parallel-tasks.ts, server/parallel-tasks.ts) ──
 // A request sent while the conversation is busy can run as its own task: a
@@ -12615,10 +18016,8 @@ function patchParallelCard(parentThreadId: string, cardId: string | undefined, p
 
 /** The conversation a call hands work off from (server/voice/voice-turn.ts): its
  * summary and latest turns, as a written turn would rebuild them. */
-const callHandoffHistory = createCallHandoffHistory(getLeafHost);
 
 /** Start (or queue) a parallel task for `text`, asked in `threadId`. */
-const startParallelTask = createStartParallelTask(getLeafHost);
 
 // ── auto routing of a send while the bot works (server/busy-routing.ts) ──
 
@@ -12652,29 +18051,23 @@ function runningRequestText(threadId: string): string {
 
 /** The bot's tool-free one-shot for the fallback classification, under the
  * same gates as a segment digest (policy, budget, hosted models). */
-const busyClassifyEngine = createBusyClassifyEngine(getLeafHost);
 
 /** route_message: the bot moves a message steered into its running turn.
  * `parallel` makes the person's row the request of a new parallel task;
  * `after` keeps the row and starts a turn on it once this one is done (the
  * tool's answer asks the bot to say so in one line). Idempotent per handle. Only the turn the words were
  * steered into may route them. */
-const routeSteeredMessage = createRouteSteeredMessage(getLeafHost);
 
 /** A parallel task's first turn settled: post its result into the
  * conversation it answers, as a reply to the request, once. */
-const settleParallelTask = createSettleParallelTask(getLeafHost);
 
 /** A turn that settled without turn.completed (refused before it ran, for
  * one) leaves its parallel task owed a result: settle it as not finished. */
-const settleParallelFallback = createSettleParallelFallback(getLeafHost);
 
 /** Stop one parallel task: its running turn, or its place in line. */
-const stopParallelTask = createStopParallelTask(getLeafHost);
 
 /** After a restart: a parallel task whose turn was cut off and is not
  * waiting in line will never settle on its own. */
-const settleOrphanedParallelTasks = createSettleOrphanedParallelTasks(getLeafHost);
 
 /** What a person's direct message became: a line in the transcript (a new
  * turn, or words steered into the running one), or a place in the queue. */
@@ -12692,7 +18085,6 @@ class DirectSendRefused extends Error {
 }
 
 /** The refusals a direct send meets before it is sequenced, or null. */
-const directSendRefusal = createDirectSendRefusal(getLeafHost);
 
 /** `security.triage` for the person a turn acts for. The operator at this
  * computer holds it. A service, a guest and a member without the permission
@@ -12703,7 +18095,6 @@ function misuseActor(principalId: string | undefined | null, origin?: string): {
   return { triage, ...(id ? { principalId: id } : {}) };
 }
 
-const misuseTextRefusal = createMisuseTextRefusal(getLeafHost);
 
 /** The turn's person, including a solo operator, for the safety review. */
 function safetyPrincipal(threadId: string): { principalId?: string; triage: boolean } {
@@ -12715,7 +18106,6 @@ function safetyPrincipal(threadId: string): { principalId?: string; triage: bool
 
 /** Isolated reviewer for one bot. It may only tighten a verdict, and only
  * the tool path awaits it. Shadow never calls it. */
-const safetyReviewer = createSafetyReviewer(getLeafHost);
 
 /** 2026-10-21 (the reference design parity A1): the model reviewer of custom rules
  * (server/rules/custom-rules-model.ts). It answers a card like the person would,
@@ -12799,7 +18189,6 @@ setMisuseOwnPaths(({ principalId, botId }) => {
 /** 2026-11-02: the server's data folder and this bot's workspace, as
  * written and through a linked data folder, for a prompt that must name no
  * path of the server (server/server-path-prompt.ts). */
-let _serverPathViewImpl: ReturnType<typeof createServerPathView> | undefined;
 function serverPathView(...args: any[]) {
   return (_serverPathViewImpl ??= createServerPathView(getLeafHost) as any)(...args);
 }
@@ -12836,7 +18225,6 @@ setSafetyFullAccess(({ botId, threadId }) => {
  * a notification. Approve for me does not answer it; a turn at Full access
  * never reaches it (#1905: safety-review.ts reads the one Full access
  * decision before it holds anything). */
-const confirmHeldCard = createConfirmHeldCard(getLeafHost);
 
 /** The one path a person's direct message takes into a bot turn: spend cap,
  * idempotency, steer into a running turn, queue, or start. Used by
@@ -12844,11 +18232,9 @@ const confirmHeldCard = createConfirmHeldCard(getLeafHost);
  * `guardedStart` is POST /api/bots/:id/messages/guarded's own start, in
  * place of steer, queue or start: it checks its preconditions against the
  * task as it stands, then starts a turn or refuses. */
-const acceptDirectSend = createAcceptDirectSend(getLeafHost);
 
 /** A provider can finish its run before the owner answers. Persist that answer
  * as a normal reply and run/queue it against the original conversation. */
-const deliverLateQuestionAnswer = createDeliverLateQuestionAnswer(getLeafHost);
 
 // How many start_thread calls one turn may make: the bot's own limit
 // (#1098, shared/turn-limits.ts, 5 by default). Same spirit as the
@@ -12860,7 +18246,6 @@ const deliverLateQuestionAnswer = createDeliverLateQuestionAnswer(getLeafHost);
  * bot already has waiting. Its provenance survives the queue: this is the
  * bot's own request, not a new human request authorizing recursive fan-out,
  * and the work it hands on keeps where the opener's work started. */
-const startOrQueueOpenedThread = createStartOrQueueOpenedThread(getLeafHost);
 
 // ── live screen: poll the bot's computer while it works ───────────────
 // Frames stream to clients as SSE {kind:'screen'} (the "Bot's screen"
@@ -12896,13 +18281,11 @@ const SCREEN_SETTLE_TIMEOUT_MS = 10_000;
 /** `screenIsTheWork` starts the poller already counting as screen usage: a
  * poller restarted mid-turn (a lazy claim swapping in its capture) carries
  * over whether the turn had touched its screen. */
-const startScreenPoller = createStartScreenPoller(getLeafHost);
 
 /** Event-driven refresh: capture NOW (the bot just acted on its screen)
  * instead of waiting for the next interval tick. Rate-limited inside
  * capture() — a tool-heavy turn used to fire one full REST chain per
  * completed tool, competing with the agent for the same endpoint. */
-const pokeScreenPoller = createPokeScreenPoller(getLeafHost);
 
 function stopScreenPoller(botId: string, threadId?: string) {
   for (const [id, entry] of screenPollers) {
@@ -12935,7 +18318,6 @@ function shownScreenHash(threadId: string): string | undefined {
  * settles nothing either, so a turn never ends on the same idle desktop it
  * already showed. Either way the poller is torn down here, so no per-turn
  * state survives the turn. */
-const finalScreenFrame = createFinalScreenFrame(getLeafHost);
 
 /** A short title for a fresh thread, from the provider's cheap one-shot
  * (generateText — Haiku on Claude, the chat completion endpoint's text
@@ -12944,7 +18326,6 @@ const finalScreenFrame = createFinalScreenFrame(getLeafHost);
  * the caller keeps the snippet it already applied. "conversation" names an
  * existing thread from titleConversationExcerpt (Regenerate title); "call"
  * names a finished Live call from callTitleExcerpt. */
-let _generateThreadTitleImpl: ReturnType<typeof createGenerateThreadTitle> | undefined;
 function generateThreadTitle(...args: any[]) {
   return (_generateThreadTitleImpl ??= createGenerateThreadTitle(getLeafHost) as any)(...args);
 }
@@ -12956,7 +18337,6 @@ function generateThreadTitle(...args: any[]) {
  * title); and the spend cap is not reached. Regenerate title answers a
  * refusal with its reason, a finished Live call's title takes it as "no
  * title". */
-const threadTitleGate = createThreadTitleGate(getLeafHost);
 
 /** Threads whose Regenerate title one-shot is still running: one at a time. */
 const titleRegenerations = new Set<string>();
@@ -12965,7 +18345,6 @@ const titleRegenerations = new Set<string>();
 /** What a direct turn needs before it claims its slot: the thread free, no
  * live room turn, a capacity slot (the main chat never waits for one).
  * Synchronous; startTurn runs it before its first wait and again after one. */
-const assertTurnAdmission = createAssertTurnAdmission(getLeafHost);
 async function startTurn(
   botId: string,
   text: string,
@@ -13072,7 +18451,6 @@ async function startTurn(
 // ── routines: persisted definitions → detached bot tasks ───────────────
 // The scheduler owns timing and receipts; the existing harness remains the
 // only owner of provider sessions, approvals, tools, computers and messages.
-const routineSourceOwner = createRoutineSourceOwner(getLeafHost);
 
 /** 2026-11-01: what a start's receipt names (the run_routine answer): the
  * bot that runs it and the conversation its card and report go to. */
@@ -13138,7 +18516,6 @@ function personMainThread(bot: BotRecord, principalId: string): string | undefin
 /** Automatic "<name> · Results" threads made before 2026-10-22 get the
  * routineResults mark once: kept, listed with threads shown, but no longer a
  * row under the bot, a stream segment or a dot with threads hidden. */
-const markRoutineResultsThreads = createMarkRoutineResultsThreads(getLeafHost);
 
 function routineSourceThread(run: RoutineRun): string | null {
   return routineSourceOwner(run)?.threadId ?? null;
@@ -13149,7 +18526,6 @@ function routineSourceThread(run: RoutineRun): string | null {
  * only its first 2 000 characters; the report posted in the conversation is
  * whole, so the person never opens the run's task to read it. Undefined when
  * that message is not the record's report (nothing else is ever posted). */
-const routineFullReport = createRoutineFullReport(getLeafHost);
 
 /** An approval or question card in a run's own task waits on the person. */
 function routineRunNeedsPerson(run: RoutineRun): boolean {
@@ -13175,20 +18551,16 @@ function routineEffectivePostResults(run: Pick<RoutineRun, "routineId" | "proact
  * person (its report, a question or approval waiting on them, an error)
  * posts ONE message, upserted in place by run id, and that conversation
  * turns unread. Replaying a transition never adds another message. */
-const syncRoutineRunToSource = createSyncRoutineRunToSource(getLeafHost);
 
-const interruptRoutineGroupGoal = createInterruptRoutineGroupGoal(getLeafHost);
 
 /** Stop work that may have captured Full/Custom before a fail-closed Ask
  * compensation arrived over Electron's private channel. Cancellation flags
  * are flipped synchronously; the awaited work only drains capabilities and
  * interrupts the already-started provider process. */
-const stopBotForEmergencyApprovalDowngrade = createStopBotForEmergencyApprovalDowngrade(getLeafHost);
 
 /** #1373: the level each running turn of this bot answers its next tool
  * call at, by thread: its own threads, its routine run and the room turn it
  * speaks in (the level that turn was sent with, roomTurnLevels). */
-const runningTurnLevels = createRunningTurnLevels(getLeafHost);
 
 /** #1373: Ask, Edits or Auto changed while the bot works (`before` is
  * runningTurnLevels from just before the change). Sagax already answers
@@ -13200,11 +18572,9 @@ const runningTurnLevels = createRunningTurnLevels(getLeafHost);
  * stopped, never left running at the level the person just left. A wider
  * level needs nothing here: the engine still asks, and Sagax answers at
  * the new level. */
-const applyStricterApprovalLive = createApplyStricterApprovalLive(getLeafHost);
 
 /** The engine running this turn cannot change its level mid-turn: stop the
  * turn, and say why in the conversation. */
-const stopTurnForStricterApproval = createStopTurnForStricterApproval(getLeafHost);
 
 const STRICTER_APPROVAL_STOP_NOTE = "Stopped: this engine cannot change its approval level during a turn. Send your message again to continue at the new level.";
 
@@ -13216,12 +18586,10 @@ function stricterApprovalStopError(error: unknown): string {
 
 /** Whether the bot is working now: what forceStopBot would interrupt (a
  * turn in one of its threads, its routine run, a room turn). */
-const botRunning = createBotRunning(getLeafHost);
 
 /** An organization admin's "Forcer l'arrêt" (server/org/org-bot-force.ts):
  * every running turn of the bot stops, in its own threads, its routine run
  * and the room it is speaking in. Cancellation flags flip before any await. */
-const forceStopBot = createForceStopBot(getLeafHost);
 
 // Load queued handoffs before scheduler recovery can fail an interrupted
 // run. Its failure callback can then durably drop that work immediately;
@@ -13258,12 +18626,10 @@ const routineWatchStates = new RoutineWatchStates(join(DATA_DIR, "routine-watch"
  * plugin hooks' rule: the person's server environment or their computer,
  * never this server); solo server, its cloud computer, its Local VM, or its
  * own folder on this machine. */
-const routineWatchPlace = createRoutineWatchPlace(getLeafHost);
 /** A read tool for a watch: one of the bot's remote MCP servers (its own
  * sign-in, the tool not switched off), else a Perspicax tool in the name of
  * the person the routine runs as, through their routine delegation. The
  * read-only rule itself is server/routines/routine-watch-tools.ts. */
-const routineWatchCallTool = createRoutineWatchCallTool(getLeafHost);
 const routineWatchDeps: RoutineWatchDeps = {
   place: routineWatchPlace,
   callTool: routineWatchCallTool,
@@ -13336,7 +18702,6 @@ function routineReadinessBot(routine: ReadinessRoutine, run: ReadinessRun) {
     pick: (bot) => autoPickForTurn({ bot, threadId: run.threadId ?? "", speaker, role: "worker", text: run.prompt ?? routine.prompt })?.pick.selection,
   });
 }
-const routineEngineForBot = createRoutineEngineForBot(getLeafHost);
 function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
   const bot = routineReadinessBot(routine, run);
   return bot ? routineEngineForBot(bot, routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs })) : undefined;
@@ -13866,7 +19231,13 @@ routines = new RoutineManager({
       const bot = store.bot(botId);
       return bot ? effectiveBotOwner(bot) || null : null;
     },
-    expired: (principalId, driver) => engineLogins?.expired(principalId, driver) ?? false,
+    // #2384: a bot's own account; a person-level check: any of their accounts
+    expired: (principalId, driver, botId) => {
+      if (!engineLogins) return false;
+      const bot = botId ? store.bot(botId) : undefined;
+      if (bot && namesEngine(bot.modelSelection)) return engineLogins.expired(principalId, driver, "primary", bot.modelSelection.instanceId);
+      return engineLogins.expiredAny(principalId, driver);
+    },
     onAheadNotify: (principalId, detail, routineNames, engineName) => {
       const bot = store.bots.find((candidate) => effectiveBotOwner(candidate) === principalId)
         ?? store.bots.find((candidate) => {
@@ -14049,7 +19420,6 @@ function proactiveWakeForThread(threadId: string) {
 }
 
 /** Record a dry run on the wake, then let ordinary approval run the write. */
-const noteWakeDryRun = createNoteWakeDryRun(getLeafHost);
 
 /** 2026-11-02 (peer inbox): a teammate's one-way notice ran in its own
  * thread of the receiver, quietly (an internal turn: no unread, no
@@ -14058,26 +19428,21 @@ const noteWakeDryRun = createNoteWakeDryRun(getLeafHost);
  * conversation: notices settling close together make one wake (the
  * waker's gather window and cadence), and a chain stops at the hop limit.
  * Any receiver: Primary Bot, team bot or solo bot. */
-const offerPeerNotice = createOfferPeerNotice(getLeafHost);
 
 /** 2026-11-02 (peer inbox, second pass): a teammate's notice the receiver
  * will not be woken for, shown to its person: one line in the receiver's
  * own conversation, from the sender, linking the notice's thread (where the
  * receiver's turn and any question are), and the conversation turns unread. */
-const surfacePeerNotice = createSurfacePeerNotice(getLeafHost);
 
 /** 2026-11-02: the events gathered before a restart are offered again,
  * rebuilt from where their words live: a teammate's notice from the job
  * runtime (a settled one: its wake, or its line when no wake can run), a
  * room post from the room. One already gone is left out. */
-const replayPendingProactive = createReplayPendingProactive(getLeafHost);
 
 /** One event for one bot; never throws into the path that saw it. */
-const offerProactive = createOfferProactive(getLeafHost);
 
 /** A bot's post in a room, offered to the room's other bots: it concerns
  * one of them when it names it (@name or the name). */
-const offerRoomPostToBots = createOfferRoomPostToBots(getLeafHost);
 
 /** The Events line of a wake, in the bot's one conversation. */
 function proactiveEventsLine(botId: string, line: string): void {
@@ -14097,17 +19462,14 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
 
 /** A proactive wake: background run at the bot's level, under the right
  * person's identity (person isolation on shared org bots). */
-const startProactiveWake = createStartProactiveWake(getLeafHost);
 
 /** 2026-11-05 (visible roles): the person's answer to an "Agit comme" card.
  * continue keeps going; stay puts the thread back in the previous role with
  * no further fallback from it; always (the bot's owner only) saves a plain
  * rule on the bot's Permissions page and continues. */
-const answerRoleTransition = createAnswerRoleTransition(getLeafHost);
 
 /** Legacy proposal cards (propose mode, retired 2026-11-01) remain answerable:
  * accept runs the wake at the bot's level; decline closes the card. */
-const answerProactiveProposal = createAnswerProactiveProposal(getLeafHost);
 
 ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal }));
 /** 2026-11-05 (visible roles, batch 3): the composer's role picker. The
@@ -14188,7 +19550,6 @@ const roleJournalClient = new PerspicaxMemoryNotesClient({
 /** "Envoyer à l'admin": a Sagax message from the person to each of the
  * organization's admins, in the conversation between those two people
  * (created as a people DM when there is none). Never a ConnectWise write. */
-const sendMissingRoleToAdmins = createSendMissingRoleToAdmins(getLeafHost);
 
 // Whether an oldest thread is someone else's (frozenResultsThread) is known
 // only now: an earlier key of the owner's is theirs once settled.
@@ -14287,7 +19648,6 @@ if (recoveryOwners.length > 0) {
 // Chat tools can prepare routine changes, but the harness applies them only
 // after the user confirms a durable card. Keeping this beside the scheduler
 // makes the card resolvable after an app restart without involving the model.
-const cloudRoutineReadiness = createCloudRoutineReadiness(getLeafHost);
 const routineRequests = new RoutineRequestService({
   store,
   routines,
@@ -14314,7 +19674,6 @@ const routineRequests = new RoutineRequestService({
     routineAudit(action, effectiveRunAs(routine), { routine });
   }
 });
-const deleteBotWithLifecycle = createDeleteBotWithLifecycle(getLeafHost);
 
 /** Per-driver capability facts behind engine-switch warnings on proposal
  * cards. A live registry instance decides; a shadow or unknown instance
@@ -14365,9 +19724,7 @@ const outboundCounts = new OutboundCounts(join(DATA_DIR, "outbound-counts.json")
  * open card that proposed it closes with that outcome and its answerer, in
  * the conversation and so in every inbox, and the change goes out on the
  * live stream (message.patch, under each viewer's usual filter). */
-const settleTeamMemoryCards = createSettleTeamMemoryCards(getLeafHost);
 
-const resolveAndSendTrust = createResolveAndSendTrust(getLeafHost);
 
 const profileRequests = new ProfileRequestService({
   store,
@@ -14474,8 +19831,6 @@ const teamSetupRequests = new TeamSetupRequestService({
 type TeamSetupResumeEntry = { request: TeamSetupRequest; messageId: string; generation: number };
 const pendingTeamSetupResumes = new Map<string, TeamSetupResumeEntry>();
 const teamSetupResumeGenerations = new Map<string, number>();
-const cancelTeamSetupResumesForThread = createCancelTeamSetupResumesForThread(getLeafHost);
-const dispatchTeamSetupResume = createDispatchTeamSetupResume(getLeafHost);
 function drainTeamSetupResumes(): void {
   for (const [key, entry] of pendingTeamSetupResumes) {
     if (!canAdmitDirectTurn(entry.request.botId, entry.request.threadId)) continue;
@@ -14487,8 +19842,6 @@ function drainTeamSetupResumes(): void {
  * or an idle local browser on loopback, an organization admin, or on an
  * organization server the member a member-sized plan belongs to
  * (server/team/team-setup-review.ts). Null: allowed; else the 403 body. */
-const teamSetupApplyRefusal = createTeamSetupApplyRefusal(getLeafHost);
-const resolveAndSendTeamSetup = createResolveAndSendTeamSetup(getLeafHost);
 const routineTimeZone = () => botSettings.server().timeZone
   ?? (IDENTITY.kind === "perspicax" ? defaultOrgTimeZone(hostTimeZone(), process.env.SAGAX_DEFAULT_TIME_ZONE) : null)
   ?? hostTimeZone();
@@ -14499,23 +19852,16 @@ function routineKeyReveal(auth: RequestAuth): boolean {
   if (auth.kind === "loopback") return auth.trust !== "service";
   return auth.kind === "session" && !isBotActSession(auth.session);
 }
-const sendRoutineResolution = createSendRoutineResolution(getLeafHost);
-const resolveAndSendRoutine = createResolveAndSendRoutine(getLeafHost);
-const resolveAndSendProfile = createResolveAndSendProfile(getLeafHost);
 
-const resolveAndSendModel = createResolveAndSendModel(getLeafHost);
 
-const resolveAndSendRule = createResolveAndSendRule(getLeafHost);
 
 
 
 /** Undo for a learned skill a bot wrote without a person (undoSkillWrite). */
-const undoSkillCard = createUndoSkillCard(getLeafHost);
 
 /** Undo on the one-line receipt of a change that applied without a person
  * (a bot's change to itself, or Full access). The caller authorizes it
  * exactly like answering that card; the card remembers it was undone. */
-const undoAppliedChange = createUndoAppliedChange(getLeafHost);
 
 // Webhook definitions are independent from calendar schedules, but every
 // delivery joins the same RoutineManager queue. That keeps unattended work
@@ -14621,7 +19967,6 @@ const webhooks = new WebhookManager({
 });
 /** A routine that starts from a webhook or an email owns its trigger:
  * made once, idempotent, active when the routine is. */
-const bindOwnedTrigger = createBindOwnedTrigger(getLeafHost);
 
 let webhookIngress: WebhookIngress | null = null;
 let webhookIngressError: string | null = null;
@@ -14663,7 +20008,6 @@ triggerPollers.start();
   setInterval(renew, 60 * 60_000).unref();
 }
 
-const savePollerCredentials = createSavePollerCredentials(getLeafHost);
 
 // ── config hot-reload ─────────────────────────────────────────────────
 // ── group turn engine ──────────────────────────────────────────────────
@@ -14756,7 +20100,6 @@ type GroupTurnOrchestration = {
   goalRunId?: string;
 };
 
-const teammateReportContext = createTeammateReportContext(getLeafHost);
 
 /** The room lines a member's turn reads, oldest first. */
 function roomContextRows(messages: readonly Message[]): Message[] {
@@ -14784,12 +20127,10 @@ function noteBotRead(botId: string, threadId: string, consumed: Iterable<string>
   if (newest) store.markRead(threadId, botParticipant(botId), newest);
 }
 
-const serializeRoomContext = createSerializeRoomContext(getLeafHost);
 
 /** The decision model's view of a room message: the room, its people, the
  * last room lines before this one, and the message. Text is scrubbed of
  * secrets and attachment markup before it leaves this machine. */
-const roomRoutingInput = createRoomRoutingInput(getLeafHost);
 
 // What each room has already taken from its bots. Keyed by room because the
 // loop post_to_room can start is a property of the room, not of any one
@@ -14885,11 +20226,8 @@ async function runClaimedGroupMemberTurn(
  * teammate path. The lead's loop polls the child; nothing resumes it.
  * Same-bot "do it yourself" stays on the sequential step (enqueue refuses
  * lead===worker). Busy-wait and turn-count semantics match runGroupGoalStep. */
-const runGoalWorkerOnRuntime = createRunGoalWorkerOnRuntime(getLeafHost);
 
-const runGroupGoalStep = createRunGroupGoalStep(getLeafHost);
 
-const runGroupGoalOperation = createRunGroupGoalOperation(getLeafHost);
 
 
 
@@ -14897,17 +20235,13 @@ const runGroupGoalOperation = createRunGroupGoalOperation(getLeafHost);
  * (shared/harness-commands.ts groupCommandTarget): its leading mention, else
  * the group's lead, and only when that bot's engine lists commands. A goal,
  * a bot-to-bot channel or a burst of several queued lines is never one. */
-const groupEngineCommandRoute = createGroupEngineCommandRoute(getLeafHost);
 
 /** groupEngineCommandRoute, kept only when the target bot's engine lists the
  * name (its last list for this speaker, without reading it again): a
  * `/word` the engine does not know is an ordinary room message, routed by
  * its mentions like any other. */
-const cachedGroupEngineCommandRoute = createCachedGroupEngineCommandRoute(getLeafHost);
 
-const startGroupTurn = createStartGroupTurn(getLeafHost);
 
-const drainQueuedChannelSends = createDrainQueuedChannelSends(getLeafHost);
 
 function sameCalendarRoster(group: GroupRecord, botIds: readonly string[]): boolean {
   if (group.dm || group.memberIds.length !== botIds.length) return false;
@@ -14915,19 +20249,15 @@ function sameCalendarRoster(group: GroupRecord, botIds: readonly string[]): bool
   return group.memberIds.every((id) => wanted.has(id));
 }
 
-const ensureCalendarCallRoom = createEnsureCalendarCallRoom(getLeafHost);
 
-let _deliverCalendarCallImpl: ReturnType<typeof createDeliverCalendarCall> | undefined;
 function deliverCalendarCall(...args: any[]) {
   return (_deliverCalendarCallImpl ??= createDeliverCalendarCall(getLeafHost) as any)(...args);
 }
 
-const resolveReplyTarget = createResolveReplyTarget(getLeafHost);
 
 /** The host folders a bot's own files may be read from in one conversation:
  * the conversation's pinned or configured working folder, the bot's own
  * workspace, and the private attachment store. */
-const messageFileRootsForThread = createMessageFileRootsForThread(getLeafHost);
 
 /** The file references of a thread's visible branch (thread-files.ts). */
 function threadFileRefsFor(threadId: string): ThreadFileRef[] {
@@ -14938,12 +20268,10 @@ function threadFileRefsFor(threadId: string): ThreadFileRef[] {
 /** Resolve an opaque file outside the 500-row Files listing without making
  * the listing itself unbounded. This slow path keeps older visible messages
  * downloadable one message at a time. */
-const threadFileRefForId = createThreadFileRefForId(getLeafHost);
 
 /** Find the visible reference that can mint an opaque GET. An exact message
  * stays exact; a delivered attach_file copy may live earlier in the same
  * visible turn and is found by its private stored path. */
-const threadFileRefForPath = createThreadFileRefForPath(getLeafHost);
 
 /** The roots one listed file may be read from: the private attachment store
  * for uploads and attach_file output, the author's conversation roots for
@@ -14953,9 +20281,7 @@ function threadFileRoots(threadId: string, ref: ThreadFileRef): string[] {
   return ref.botId ? messageFileRootsForThread(ref.botId, threadId) : [];
 }
 
-const attachmentVmForTurn = createAttachmentVmForTurn(getLeafHost);
 
-const connectorThread = createConnectorThread(getLeafHost);
 
 /** When a person last wrote into the room's current conversation, if one
  * ever has. The posting budget's ceiling counts only the bot posts nobody
@@ -14970,7 +20296,6 @@ const connectorThread = createConnectorThread(getLeafHost);
  * with no session behind it, stamps what it lets in (Message.via), and a
  * line so stamped does not count here — so a bot cannot re-arm the ceiling
  * it just spent. */
-const lastHumanRoomMessageAt = createLastHumanRoomMessageAt(getLeafHost);
 
 /** Whether `bot` may write into `group` from outside a turn there, and the
  * exact refusal when it may not.
@@ -14989,16 +20314,13 @@ const lastHumanRoomMessageAt = createLastHumanRoomMessageAt(getLeafHost);
  *
  * Membership is read from the record here and never from a tool argument;
  * the argument only names which room to look up. */
-const roomPostEligibility = createRoomPostEligibility(getLeafHost);
 
 /** `opensCard` false for a change that applies directly: it adds no open
  * card, so the open-card budget does not hold it back. */
-let _proposalPersistenceImpl: ReturnType<typeof createProposalPersistence> | undefined;
 function proposalPersistence(...args: any[]) {
   return (_proposalPersistenceImpl ??= createProposalPersistence(getLeafHost) as any)(...args);
 }
 
-const skillProposalPersistence = createSkillProposalPersistence(getLeafHost);
 
 /** Listing endpoints expose lifecycle metadata, never the staged instructions
  * themselves. The exact review copy lives only on the durable approval card. */
@@ -15011,13 +20333,11 @@ function stagedSkillListing(staged: ReturnType<typeof listStagedSkillWrites>[num
  * are bot-scoped and live outside the thread, so deleting the only card
  * without this would reserve its name for up to 30 days with no decision UI.
  * Ownership comes from the server-authored sender, never the card payload. */
-const stagedSkillCleanupsForThread = createStagedSkillCleanupsForThread(getLeafHost);
 
 function rejectDeletedThreadSkillStages(cleanups: Array<{ botId: string; stagedId: string }>): void {
   for (const cleanup of cleanups) rejectStagedSkillWrite(cleanup.botId, cleanup.stagedId);
 }
 
-let _skillCardCopyImpl: ReturnType<typeof createSkillCardCopy> | undefined;
 function skillCardCopy(...args: any[]) {
   return (_skillCardCopyImpl ??= createSkillCardCopy(getLeafHost) as any)(...args);
 }
@@ -15045,11 +20365,8 @@ function applyOwnStagedSkill(
 }
 
 
-const appendSkillRequestCard = createAppendSkillRequestCard(getLeafHost);
 
-const resolveSkillRequest = createResolveSkillRequest(getLeafHost);
 
-let _sendSkillResolutionImpl: ReturnType<typeof createSendSkillResolution> | undefined;
 function sendSkillResolution(...args: any[]) {
   return (_sendSkillResolutionImpl ??= createSendSkillResolution(getLeafHost) as any)(...args);
 }
@@ -15081,11 +20398,8 @@ function registerComputerResume(entry: ComputerResumeEntry): void {
   queueMicrotask(drainComputerResumes);
 }
 
-const markComputerResumeFailed = createMarkComputerResumeFailed(getLeafHost);
 
-const dispatchComputerResume = createDispatchComputerResume(getLeafHost);
 
-const drainComputerResumes = createDrainComputerResumes(getLeafHost);
 
 const customSecretVault = createCustomSecretVault({
   dataDir: DATA_DIR,
@@ -15139,15 +20453,12 @@ function drainSecretResumes(): void {
 
 const phoneSecretSubmissions = new PhoneSecretSubmissionRegistry();
 
-const claimPhoneSecretBotDeletion = createClaimPhoneSecretBotDeletion(getLeafHost);
 
 function phoneSecretSubmissionKey(threadId: string, messageId: string, requestKey: string): string {
   return `${threadId}:${messageId}:${requestKey}`;
 }
 
-const secretMessage = createSecretMessage(getLeafHost);
 
-const currentSecretState = createCurrentSecretState(getLeafHost);
 
 function markSecretResumeFailed(threadId: string, messageId: string, error: string) {
   const message = store.messagesFor(threadId).find((candidate) => candidate.id === messageId);
@@ -15157,11 +20468,8 @@ function markSecretResumeFailed(threadId: string, messageId: string, error: stri
   });
 }
 
-const dispatchSecretResume = createDispatchSecretResume(getLeafHost);
 
-const resumeSecretCard = createResumeSecretCard(getLeafHost);
 
-const provideSecretFromPhone = createProvideSecretFromPhone(getLeafHost);
 
 // ── sign-in requests (request_sign_in) ─────────────────────────────────
 // Sagax has no way to receive a website password, by design: the bot
@@ -15227,7 +20535,6 @@ export function requestSignIn(from: BotRecord, threadId: string, rawSite: unknow
   }));
   return { messageId: message.id, site: target.site, place };
 }
-Object.assign(leafHostBindings, { requestSignIn });
 
 /** A sign-in card while it is visible on the conversation's chosen branch;
  * in a room, only the asking bot's own. */
@@ -15276,7 +20583,6 @@ function settleSignIn(botId: string, threadId: string, messageId: string, outcom
  * version line, or a fail the UI can act on — ENOENT on a GUI-launched app
  * usually means "not on the app's PATH", the exact mistake this catches
  * before the override is saved. */
-const testCliBinary = createTestCliBinary(getLeafHost);
 
 /** A pre-save probe only needs PATH. Never hand credentials inherited by the
  * desktop/server process to an arbitrary wrapper selected through Settings.
@@ -15292,17 +20598,14 @@ function cliProbeEnvironment(): NodeJS.ProcessEnv {
 
 /** execFile's error carries the child's stderr in .stderr. */
 
-const localVmPayload = createLocalVmPayload(getLeafHost);
 
 /** Wake an idle desktop, or recreate a missing one from an already prepared
  * image. Incompatible or unsafe containers still require an explicit decision. */
-const readyLocalVmForTurn = createReadyLocalVmForTurn(getLeafHost);
 
 async function existingPerBotLocalVmCount(runtime: Runtime) {
   return (await discoverExistingPerBotLocalVms(store.bots, runtime)).length;
 }
 
-const perBotLocalVmCountForModeChange = createPerBotLocalVmCountForModeChange(getLeafHost);
 
 /** What Settings needs about the edition: which features are on, nothing
  * else. An enterprise layer's key dates stay on /api/edition (admins) and in
@@ -15311,20 +20614,16 @@ function editionForSettings(status: EditionStatus) {
   return { edition: status.edition, features: status.features };
 }
 
-const configStatus = createConfigStatus(getLeafHost);
 
 /** configForViewer, then a person's own Experimental switches and browser
  * profiles on an organization server (#1098): `features` shows their value
  * where they set one, and their own profiles follow the installation's,
  * marked `personal`. `personalSettings` tells the app they may set them. */
-const configForPerson = createConfigForPerson(getLeafHost);
 
-let _configForAccessImpl: ReturnType<typeof createConfigForAccess> | undefined;
 function configForAccess(...args: any[]) {
   return (_configForAccessImpl ??= createConfigForAccess(getLeafHost) as any)(...args);
 }
 
-Object.assign(leafHostBindings, { _configForAccessImpl, configForAccess, configStatus, editionForSettings });
 
 /** Whose GitHub connection the MCP listing reads (a session's person). */
 function mcpViewer(auth: RequestAuth): string | null {
@@ -15334,7 +20633,6 @@ function mcpViewer(auth: RequestAuth): string | null {
 /** Lot B: every personal MCP name across people (and the local principal).
  * Shared writes and probes consult this so a personal key never lands in
  * installation config and shared probes never dial a person-only server. */
-const personalMcpNamesForGuard = createPersonalMcpNamesForGuard(getLeafHost);
 
 /** Refuse a shared MCP mutation that would store a personal key or take a
  * personal name. Returns the error sentence, or null when the write is fine. */
@@ -15344,10 +20642,8 @@ function sharedMcpPersonalRefusal(name: string, server: StoredMcpServer, persona
     ?? personalHeaderRefusal(name, server, personalNames);
 }
 
-const mcpServerResponse = createMcpServerResponse(getLeafHost);
 /** GET /api/mcp/servers for a person who does not manage the installation's
  * servers: the names a bot's MCP choice offers, and their state. */
-const mcpServerNamesResponse = createMcpServerNamesResponse(getLeafHost);
 /** Adding or editing a server the organisation has not approved is refused. */
 function mcpPolicyRefusal(name: string, server: object): string | undefined {
   return managedPolicy.mcpRefusal(name, "url" in server && typeof server.url === "string" ? server.url : undefined);
@@ -15356,14 +20652,12 @@ function mcpPolicyRefusal(name: string, server: object): string | undefined {
 /** The fields a new server may set, in whichever shape the form sent — a
  * command to run or a URL to reach. Absent keys stay absent, so the strict
  * schema of one shape never sees the other shape's `undefined`s. */
-let _mcpServerBodyImpl: ReturnType<typeof createMcpServerBody> | undefined;
 function mcpServerBody(...args: any[]) {
   return (_mcpServerBodyImpl ??= createMcpServerBody(getLeafHost) as any)(...args);
 }
 
 /** Configured MCP servers that may reach this bot's engine. While enrolled,
  * the organisation's allow-list filters them; config.json is never changed. */
-const engineMcpServers = createEngineMcpServers(getLeafHost);
 /** The bot's MCP servers as `person` (server/github/github-mcp-token.ts): on an
  * organization server each GitHub server carries that person's own GitHub
  * connection, never the sign-in or header it was saved with, and is left
@@ -15380,11 +20674,9 @@ async function refreshMcpOAuth(bot: BotRecord): Promise<void> {
 }
 
 /** Every configured remote server, parsed, keyed by name. */
-const remoteMcpServers = createRemoteMcpServers(getLeafHost);
 
 /** Ask newly seen remote servers whether they want a sign-in, bounded so a
  * slow server never holds the list for long. */
-const probeMcpOAuth = createProbeMcpOAuth(getLeafHost);
 
 /** A sign-in may carry a client the user registered with the provider,
  * for servers that offer no dynamic registration. */
@@ -15406,14 +20698,12 @@ const mcpOAuthStartSchema = z.object({
 /** The origin a companion-relayed sign-in may return through: https, or
  * http on a tailnet name (ts.net), with no path, query or credentials. The
  * code it carries is useless without the PKCE verifier this server keeps. */
-let _phoneCallbackOriginImpl: ReturnType<typeof createPhoneCallbackOrigin> | undefined;
 function phoneCallbackOrigin(...args: any[]) {
   return (_phoneCallbackOriginImpl ??= createPhoneCallbackOrigin(getLeafHost) as any)(...args);
 }
 
 /** Start an MCP server's sign-in for this request: the desktop's browser
  * flow, or a phone's sheet when the body names an app return address. */
-const startMcpSignIn = createStartMcpSignIn(getLeafHost);
 
 /** Where the authorization server sends the browser back: this server on
  * loopback, or its public address when the request came from elsewhere. */
@@ -15423,7 +20713,6 @@ function mcpOAuthRedirectUri(req: IncomingMessage): string {
   return `${base ?? `http://127.0.0.1:${PORT}`}/api/mcp-oauth/callback`;
 }
 
-let _persistMcpServersImpl: ReturnType<typeof createPersistMcpServers> | undefined;
 function persistMcpServers(...args: any[]) {
   return (_persistMcpServersImpl ??= createPersistMcpServers(getLeafHost) as any)(...args);
 }
@@ -15457,10 +20746,8 @@ function engineNotAvailableReason(instanceId: string): string | undefined {
   const driver = registry.cliTarget(instanceId)?.driverKind;
   return driver ? engineSelfCheck.notAvailableReason(driver) : undefined;
 }
-const probeEngines = createProbeEngines(getLeafHost);
 /** Whether an instance's CLI is installed, from the cache; an instance not
  * probed yet counts as installed (and is probed in the background). */
-const engineInstalled = createEngineInstalled(getLeafHost);
 function engineDisplayName(instance: { displayName?: string; driverKind: string }): string {
   return instance.displayName || BUILT_IN_DRIVERS.find((driver) => driver.driverKind === instance.driverKind)?.metadata.displayName || instance.driverKind;
 }
@@ -15484,17 +20771,14 @@ function personIsOrgAdmin(principalId: string): boolean {
 /** The zone a turn's clock is told in (server/turns/turn-clock.ts). */
 // The zone someone set for the speaker, the owner or the server; null when none
 // is set (the engine already sees the host clock, so no note is added then).
-const turnZoneFor = createTurnZoneFor(getLeafHost);
 function orgSpeakerPrincipal(bot: { ownerUserId?: unknown }, speaker: TurnSpeaker): string {
   return speakerPrincipal(speaker, effectiveBotOwner(bot), peerOwnerPrincipal(speaker)).trim().toLowerCase();
 }
 /** A bot hop from `fromBotId`: it speaks for whoever the source turn spoke
  * for, when that turn is known. */
-const peerSpeaker = createPeerSpeaker(getLeafHost);
 /** On an organization server, words may join a running turn only when they
  * speak for the same principal as that turn: anyone else's words wait for a
  * turn of their own, which the engine gate then judges. */
-const orgJoinsRunningTurn = createOrgJoinsRunningTurn(getLeafHost);
 /** #1533: an API-key engine (`access: "api"`: Claude (API key), xAI,
  * OpenAI, OpenRouter): it runs on a key only, never on a subscription. */
 function keyOnlyInstance(instanceId: string): boolean {
@@ -15513,7 +20797,6 @@ function engineNameForPerson(instanceId: string, name: string, driver: string, p
 /** Slice 4 (D8, revised 2026-10-01): the facts engine-credentials.ts
  * decides a turn's access from. The payer is the person who speaks, or the
  * bot's owner for its routines. */
-const orgEngineInput = createOrgEngineInput(getLeafHost);
 /** 2026-10-29: which of the payer's sign-ins on this engine a turn runs on
  * (ModelSelection.account, set by the server on a part handed to the other
  * Grok account or a request moved there): the second only when the turn's
@@ -15526,8 +20809,8 @@ function turnPayerPrincipal(bot: BotRecord, instance: { instanceId: string; driv
   return turnPayer(orgEngineInput(bot, instance, speaker)).principalId.trim().toLowerCase();
 }
 /** What a person's Grok sign-in is (personal or team), or undefined. */
-function grokAccountKindFor(principalId: string, slot: LoginSlot): "personal" | "team" | undefined {
-  const kind = engineLogins?.grokAccountIdentity(principalId, slot)?.kind;
+function grokAccountKindFor(principalId: string, slot: LoginSlot, instanceId?: string): "personal" | "team" | undefined {
+  const kind = engineLogins?.grokAccountIdentity(principalId, slot, instanceId)?.kind;
   return kind === "personal" || kind === "team" ? kind : undefined;
 }
 /** #1137 (shared/turn-payer.ts): the default "who pays" of a bot with no
@@ -15535,7 +20818,6 @@ function grokAccountKindFor(principalId: string, slot: LoginSlot): "personal" | 
  * owner's computer or on an engine the owner signed in to with their own
  * subscription; otherwise each person. Read on the stored bot, so a
  * viewer's own model or an Auto pick never moves it. */
-const defaultTurnPayerFor = createDefaultTurnPayerFor(getLeafHost);
 /** #1137: who pays for this bot's replies, in this group when there is one
  * (its override for the bot), else the bot's own choice, else the default. */
 function turnPayerModeFor(bot: BotRecord, groupId?: string): TurnPayerMode {
@@ -15564,7 +20846,6 @@ function desktopModelPersonFor(bot: BotRecord, instance: { instanceId: string; d
 /** #1137: the owner pays and the bot runs on the owner's computer's model,
  * which is not connected now: one clear line instead of the access card's
  * advice (nothing the person who writes can do about it). */
-const ownerModelOfflineRefusal = createOwnerModelOfflineRefusal(getLeafHost);
 /** #2013: each conversation's last pre-send refusal (server/engines/presend-refusals.ts). */
 const preSendRefusals = new PreSendRefusals();
 bus.subscribe((event: RuntimeEvent) => {
@@ -15593,14 +20874,12 @@ function fixSendState(bot: BotRecord, fix: string): { ok: boolean; disabled?: st
 }
 /** The composer's send state for this person (shared/send-state.ts). Any
  * doubt, or a failure to judge, is no block: the message sends as before. */
-const sendStateFor = createSendStateFor(getLeafHost);
 /** The maintainer, 2026-11-04: the engine account this person's message would run on is
  * at its usage limit or out of credit (the refusal the last turn left,
  * server/engines/engine-refusals.ts), and no backup engine would take the
  * message (limit failover): the composer locks until the reset, or until
  * the bot moves to another engine or account. A sign-out is not this: its
  * own card asks to sign in. */
-const sendStateLimit = createSendStateLimit(getLeafHost);
 /** #1154: the model ids the session that pays for this turn on this engine
  * offers, when they are known without starting the engine: the payer's own
  * Grok subscription. Null when unknown (a key, the organization's account,
@@ -15614,7 +20893,6 @@ function payerAccountModels(bot: BotRecord, instance: { instanceId: string; driv
 /** #1154: a turn never waits on the payer's session. When their model list
  * is not known yet, it is asked in the background (the turn runs on the
  * bot's model, as before; an engine fallback is kept per person). */
-const warmPayerAccountModels = createWarmPayerAccountModels(getLeafHost);
 /** #1422 (pi-local-model.ts) for one selection on a registered engine: the
  * selection being judged, never the bot's own when they differ. */
 function piLocalModel(selection: { instanceId: string; model?: string | null }): boolean {
@@ -15626,7 +20904,6 @@ function piLocalModel(selection: { instanceId: string; model?: string | null }):
  * (server/turns/turn-model-routing.ts has the order). Null when the bot's model
  * runs as it is, or nothing does (the access card then says what to do).
  * A routine never comes here: it runs on its owner's credentials. */
-const speakerTurnSelection = createSpeakerTurnSelection(getLeafHost);
 /** 2026-10-16 the people an organization's provided account serves.
  * This server's own operator runs every engine on it; anyone else, an
  * admin included since 2026-10-30 (the admin is held to their own lists),
@@ -15635,7 +20912,6 @@ const speakerTurnSelection = createSpeakerTurnSelection(getLeafHost);
  * gives none (the default for members), said once per person in the log.
  * Their own subscription and keys never ask this. */
 const serverEnginesUnknownLogged = new Set<string>();
-const serverEngineAllowedFor = createServerEngineAllowedFor(getLeafHost);
 /** 2026-10-16: the organization's xAI key pays for speech (Grok voice) and
  * avatar images only for the people Perspicax gives them to, by the same
  * list (`xaiVoice`, `xaiImage`): server/org/org-xai-media.ts. Solo: always. */
@@ -15686,7 +20962,6 @@ const AUTO_CATALOG_PROVIDERS: Readonly<Record<string, readonly string[]>> = {
 const autoCatalogMemo = new Map<string, CatalogFacts | null>();
 /** What models.dev knows of a model an engine lists: first under its
  * family's own provider, then anywhere (providers by id, so it is stable). */
-const autoCatalogLookup = createAutoCatalogLookup(getLeafHost);
 /** Models a refusal took out, per payer, for 30 minutes. */
 const AUTO_REFUSAL_TTL_MS = 30 * 60_000;
 const autoRefusals = new Map<string, number>();
@@ -15696,7 +20971,6 @@ function autoPayerKey(bot: BotRecord, speaker: TurnSpeaker): string {
 }
 /** J4: a plan window crossing the warning line (or spent) says so once, to
  * the person whose plan it is (everyone on the solo server). */
-const announcePlanThresholds = createAnnouncePlanThresholds(getLeafHost);
 /** J4: the bot owner's plan pays for a turn a member started (a peer hop
  * from the member's bot, never a routine), so a usage limit is the owner's. */
 function ownerPaysForMember(bot: BotRecord, speaker: TurnSpeaker, asked?: string): boolean {
@@ -15708,12 +20982,10 @@ function ownerPaysForMember(bot: BotRecord, speaker: TurnSpeaker, asked?: string
 function rememberAutoRefusal(payer: string, entry: AutoChainEntry, until = Date.now() + AUTO_REFUSAL_TTL_MS): void {
   autoRefusals.set(`${payer}\u0000${entry.instanceId}\u0000${entry.model}`, until);
 }
-const autoRefusalsFor = createAutoRefusalsFor(getLeafHost);
 /** The engines this turn's payer can use, as Auto sees them. The bot's own
  * engine counts while its availability is unknown; another engine only when
  * it is known to work, the payer can pay for it, and moving there keeps the
  * bot's approval level, tools and workspace. */
-const autoEnginesFor = createAutoEnginesFor(getLeafHost);
 /** run_with_engine (server/run-with-engine.ts): the engines a part of this
  * bot's work may run on for this turn's payer. Only what the organization
  * and the payer's own credentials allow: an engine enabled here, not refused
@@ -15723,7 +20995,6 @@ const autoEnginesFor = createAutoEnginesFor(getLeafHost);
  * access. Unlike Auto, a level the engine cannot run does not exclude it: the
  * part's thread runs at Ask instead (parentThreadModel's rule). On a solo
  * server an engine known not to be signed in is left out. */
-const relayEnginesFor = createRelayEnginesFor(getLeafHost);
 /** Whether a recorded pick can still run for this payer. */
 function autoRecordUsable(record: AutoModelRecord | undefined, engines: readonly AutoEngine[], skip: readonly AutoChainEntry[]): boolean {
   if (!record) return false;
@@ -15732,10 +21003,8 @@ function autoRecordUsable(record: AutoModelRecord | undefined, engines: readonly
 }
 /** The pick for one turn of a bot on Auto, or null when the bot is pinned.
  * A continuation keeps the thread's last pick while it can still run. */
-const autoPickForTurn = createAutoPickForTurn(getLeafHost);
 /** The fast model of a call turn (server/voice/voice-turn.ts), on the engines the
  * payer can use now; null when none has one (the turn keeps its model). */
-const voicePickForTurn = createVoicePickForTurn(getLeafHost);
 /** The words of a turn as Auto reads them to tell a quick one (#1209). */
 function parsedQuickTask(text: string): { text: string; attachments: Array<{ kind: "image" | "file"; name?: string }> } {
   const parsed = attachmentsInText(text);
@@ -15747,13 +21016,11 @@ type OrgAccessRefusal = {
   /** #1137: the owner pays; the person who wrote reads the card too. */
   ownerPays?: true; speakerPrincipalId?: string; ownerName?: string;
 };
-let _orgRefusalOfImpl: ReturnType<typeof createOrgRefusalOf> | undefined;
 function orgRefusalOf(...args: any[]) {
   return (_orgRefusalOfImpl ??= createOrgRefusalOf(getLeafHost) as any)(...args);
 }
 /** The organization refusal for a turn, or null (checked when the turn is
  * admitted; the payer's key itself is read at dispatch). */
-const orgEngineRefusal = createOrgEngineRefusal(getLeafHost);
 /** A turn admitted with a person's key that Perspicax no longer gives (and
  * nothing after it serves): the dispatch stops with the access card. */
 class EngineAccessLost extends Error {
@@ -15773,9 +21040,7 @@ function principalLoginDir(principalId: string, driver: SubscriptionDriver, slot
 }
 /** Slice 4: the credentials of one turn on an organization server, fetched
  * at dispatch; undefined in solo mode. Throws EngineAccessLost. */
-const orgTurnAccess = createOrgTurnAccess(getLeafHost);
 /** #2024: the person a pi turn serves, in piLocalTurnAccess's order. */
-const piTurnPerson = createPiTurnPerson(getLeafHost);
 /** #2024: every pi turn on a linked organization server carries the model
  * servers its person reaches through Perspicax (60 s cache in the link):
  * models.json names them, their keys ride this turn's environment only.
@@ -15783,7 +21048,6 @@ const piTurnPerson = createPiTurnPerson(getLeafHost);
  * person's pi home as the last turn wrote it. A turn on the organization's
  * key moves to the person's own pi home, so one person's servers never
  * reach the shared one. */
-const withPiModelServers = createWithPiModelServers(getLeafHost);
 /** #2024: the model servers a viewer reaches, for the picker (no keys). */
 async function piModelServersForViewer(principalId: string | null | undefined): Promise<PiModelServer[]> {
   const sub = perspicaxSubOf(principalId?.trim().toLowerCase() ?? "");
@@ -15796,24 +21060,21 @@ async function piModelServersForViewer(principalId: string | null | undefined): 
  * that home, so each person gets their own, as a turn on their key does
  * (#1257): the person who wrote, else the turn's payer, else the bot's
  * owner. No key rides it: the model runs on the server's own local host. */
-const piLocalTurnAccess = createPiLocalTurnAccess(getLeafHost);
 /** Whether a Claude turn keeps the claude.ai connectors of the account it
  * runs on: the speaker's own subscription only (server/harness-connectors.ts).
  * `via` is the turn's access; without it (the prompt is built before the
  * access is materialized) the planned access stands in. */
 /** The reach section of a direct turn (server/turns/turn-reach.ts): the servers,
  * built-in places and provider lines this turn mounted, names only. */
-const turnReachPrompt = createTurnReachPrompt(getLeafHost);
 
 /** The Connectors record of a direct turn (server/turns/turn-connectors.ts): the
  * servers this turn mounted by source, the person's own servers it could not
  * use, the bot's plugins and the speaker's own engine account connectors,
  * by the same payer-is-speaker rule as the reach section. Names only. */
-const turnConnectorsFor = createTurnConnectorsFor(getLeafHost);
 /** The claude.ai connectors of the turn's account, when its inventory was
  * read (a subscription); undefined when not yet. */
 function claudeAiConnectorRows(account: ClaudeAiTurnInput): Array<{ name: string; status: string }> | undefined {
-  const owner = claudeAccountForPrincipal(connectorPrincipalFor(account));
+  const owner = claudeAccountForPrincipal(connectorPrincipalFor(account), account.instanceId);
   const inventory = "unavailable" in owner ? undefined : claudeAiInventory.peek(owner.key, { cli: owner.cli, env: owner.env });
   return inventory && inventory.auth === "subscription" ? inventory.connectors : undefined;
 }
@@ -15829,12 +21090,10 @@ function claudeAiConnectorsFor(bot: BotRecord, instance: { instanceId: string; d
 }
 /** The turn's account and whose it is (review of #943, point 5): engine
  * connectors only on the sign-in of the person the turn is for. */
-const accountConnectorInput = createAccountConnectorInput(getLeafHost);
 /** The connectors an engine reaches for the person a turn is for: their
  * own sign-in only (accountConnectorsForTurn). Claude's from the cached
  * claude.ai inventory (connected ones; read again in the background, never
  * waited on), Grok's from the xAI catalog on an organization turn. */
-const engineReachFor = createEngineReachFor(getLeafHost);
 /** A model's catalogue price (input + output), when known. */
 function catalogPrice(driverKind: string, model: string): number | undefined {
   const facts = autoCatalogLookup(driverKind, model);
@@ -15845,17 +21104,14 @@ function catalogPrice(driverKind: string, model: string): number | undefined {
  * it (server/connector-switch.ts), or null. `personText` is only what the
  * person typed (never the prompt composed around it: page, mail or data
  * context, a quoted reply). SAGAX_CONNECTOR_SWITCH=0 turns it off. */
-const connectorSwitchForTurn = createConnectorSwitchForTurn(getLeafHost);
 /** What a turn is told about mail, calendar, Teams and SharePoint
  * (harness-connectors.ts engineConnectorsPrompt). */
-const engineConnectorsPromptFor = createEngineConnectorsPromptFor(getLeafHost);
 /** 2026-10-29: the person's other engines and sign-ins a turn may hand a
  * part to (run_with_engine), with the connectors known to be there: the
  * cached claude.ai inventory of their own Claude sign-in, the reach of each
  * of their Grok sign-ins (their catalog or the reach probe). Only their own
  * accounts (accountConnectorsForTurn "own"), never someone else's; a reach
  * not known yet is left out rather than guessed. */
-const connectorsElsewhereFor = createConnectorsElsewhereFor(getLeafHost);
 /** Where a person sets their model keys (Perspicax console, slice 4). */
 function perspicaxKeysUrl(): string | undefined {
   // #1137: the console's own address for a person's model keys (anthropic,
@@ -15867,7 +21123,6 @@ function perspicaxKeysUrl(): string | undefined {
  * payer's own subscription sign-in expired (Claude, Codex, Grok), and the
  * note on their engine card (PrincipalEngineLogins.markExpired). Null for
  * any other failure. */
-const subscriptionExpiredCard = createSubscriptionExpiredCard(getLeafHost);
 /** #2057: chat threads whose sign-in refusal waits on its renew; the
  * turn.completed that follows leaves the incident to the settle. */
 const signInRefusalHeld = new Set<string>();
@@ -15880,18 +21135,14 @@ const signInRefusalResent = new Set<string>();
  * message goes again once and no card; failed means the card. Anything else
  * shows the card at once while the renew still runs, as before. True when
  * the refusal is held. */
-const holdSignInRefusal = createHoldSignInRefusal(getLeafHost);
 /** The access card of a refused or lost turn: who has to act (the person
  * who speaks, or the owner for a routine) and where. */
-const accessCardFor = createAccessCardFor(getLeafHost);
 
-const describeInstances = createDescribeInstances(getLeafHost);
 
 /** Picker catalogs. On an organization server, desktop models are this
  * viewer's rows only, and an engine the organization does not allow is not
  * listed at all (2026-10-18, shared/offered-engines.ts): no menu, search,
  * favorite or Settings card of any app can offer it. */
-const instancesForViewer = createInstancesForViewer(getLeafHost);
 /** #1450: models refused as turned off on the account that pays for them. */
 const modelAccessRefusals = createModelAccessRefusals();
 /** The account a turn ran on, as a refusal binds it: this server's own
@@ -15933,18 +21184,15 @@ function personalEngine(instanceId: string, person: string): boolean {
  * client-scope session): what Model providers and the model picker draw,
  * never the server's own account, sign-in, CLI paths or install details.
  * A member's own access to it is GET /api/me/engines. */
-const memberInstanceView = createMemberInstanceView(getLeafHost);
 
 /** Set once graceful shutdown begins: quitting disposes Company instances
  * without writing "connection changed" cards or failing routine runs. */
 let companyShutdown = false;
 /** End only Company conversations before replacing their native instances. */
-let _stopCompanyInstancesImpl: ReturnType<typeof createStopCompanyInstances> | undefined;
 function stopCompanyInstances(...args: any[]) {
   return (_stopCompanyInstancesImpl ??= createStopCompanyInstances(getLeafHost) as any)(...args);
 }
 
-const persistProviderInstance = createPersistProviderInstance(getLeafHost);
 
 /** The engine a bot's process in a conversation runs on: the one that
  * started the turn in flight when that turn is the bot's, else the bot's own
@@ -15959,7 +21207,6 @@ function threadEngineId(botId: string, threadId: string): string | undefined {
  * honoured again. A turn in flight on one loses its capabilities; a bearer
  * kept between turns goes with its own bot's engine, so a room member's
  * survives another member's engine change and vice versa. */
-const revokeEngineCapabilities = createRevokeEngineCapabilities(getLeafHost);
 
 /** Apply a provider config write, so new keys and settings take effect
  * without a server restart. Only the engines launched differently since
@@ -15967,7 +21214,6 @@ const revokeEngineCapabilities = createRevokeEngineCapabilities(getLeafHost);
  * are interrupted, each requester told why. Every other engine keeps its
  * processes, sessions and turns; a write that changed no engine touches
  * nothing. */
-const reloadProviders = createReloadProviders(getLeafHost);
 
 // Config writes replace the engines they change. Keep the read-modify-write
 // and reload sequence single-flight so two settings requests cannot drop one
@@ -15990,7 +21236,6 @@ function serveStatic(res: ServerResponse, path: string): boolean {
 /** Stream one already-authorized file with standard single-range semantics.
  * The handle stays the capability: no path is reopened after authorization,
  * and a sealed file decrypts only the chunks intersecting this response. */
-let _streamOpenedHttpFileImpl: ReturnType<typeof createStreamOpenedHttpFile> | undefined;
 function streamOpenedHttpFile(...args: any[]) {
   return (_streamOpenedHttpFileImpl ??= createStreamOpenedHttpFile(getLeafHost) as any)(...args);
 }
@@ -16082,9 +21327,6 @@ const perspicaxNativeReview = async (text: string, capability: InternalCapabilit
 // Meetings (server/meetings): the bot joins a meeting as a notetaker in a
 // private browser of its own, after the person's tap on the consent card.
 // Transcription takes the voice mode's xAI key path and usage ledger.
-const meetingBrowserRefusal = createMeetingBrowserRefusal(getLeafHost);
-const openMeetingBrowser = createOpenMeetingBrowser(getLeafHost);
-const startMeetingSummary = createStartMeetingSummary(getLeafHost);
 const meetingService: MeetingService = createMeetingService({
   store,
   dataDir: DATA_DIR,
@@ -16123,9 +21365,7 @@ try { meetingService.recoverInterrupted(); } catch (error) {
   console.warn(`meetings: interrupted cards not closed: ${error instanceof Error ? error.message : String(error)}`);
 }
 /** The person's answer on a meeting consent card (join_meeting). */
-const resolveAndSendMeeting = createResolveAndSendMeeting(getLeafHost);
 /** One-time phone-call acceptable-use consent card (server/routes/phone-call-consent.ts). */
-const resolveAndSendPhoneCallConsent = createResolveAndSendPhoneCallConsent(getLeafHost);
 ROUTES.push(createMeetingRoutes({
   meetings: () => meetingService,
   enabled: () => meetingNotetakerEnabled(cfg),
@@ -16135,13 +21375,11 @@ ROUTES.push(createMeetingRoutes({
  * routine's watch): in the name of `principalId`, through the routine
  * delegation (speakerOrigin owner-routine). The relay applies the MCP
  * permission guard; the tokens end with the call. */
-const perspicaxReadAlone = createPerspicaxReadAlone(getLeafHost);
 /** Several Perspicax calls in one session with nobody there (2026-11-04:
  * the dispatch KPI snapshot, which switches identity first): same
  * delegation and guard as perspicaxReadAlone, one initialize, the tokens
  * end with `work`. The account's fixed connection exposes every role the
  * person holds; an explicit identity_switch remains part of `work`. */
-const perspicaxSessionAlone = createPerspicaxSessionAlone(getLeafHost);
 // The dispatch KPI snapshot (server/artifacts/dispatch-kpi.ts): computed by
 // code when its dashboard opens and after each dispatch routine's run, in
 // the artifact owner's name, through a short cache; written back to the
@@ -16159,10 +21397,8 @@ const dispatchKpi = createDispatchKpiService({
  * just changed the journal). */
 const dispatchKpiForced = new Set<string>();
 const dispatchKpiRefreshedRuns = new Set<string>();
-const runDispatchKpiSource = createRunDispatchKpiSource(getLeafHost);
 /** After a dispatch routine's run: refresh every dispatch_kpi artifact of
  * its bot whose refresh_after names that routine, past the cache. */
-const refreshDispatchKpiAfterRun = createRefreshDispatchKpiAfterRun(getLeafHost);
 // Artifacts in the Files tab and the palette (server/routes/artifacts.ts).
 // The artifact refresher (server/artifacts/artifact-refresh.ts): a source re-runs on
 // its interval while its artifact is open somewhere or a favorite, and only
@@ -16265,11 +21501,9 @@ ROUTES.push(createArtifactRoutes({
 // #2194: per-person allowlisted SMS contact personas (numbers on Perspicax).
 const phoneLineContacts = new PhoneLineContactsStore(DATA_DIR);
 /** The setup cards of a conversation and the calls that prove one (server/routes/connector-setup.ts). */
-let _connectorSetupStoreImpl: ReturnType<typeof createConnectorSetupStore> | undefined;
 function connectorSetupStore(...args: any[]) {
   return (_connectorSetupStoreImpl ??= createConnectorSetupStore(getLeafHost) as any)(...args);
 }
-let _connectorSetupContextImpl: ReturnType<typeof createConnectorSetupContext> | undefined;
 function connectorSetupContext(...args: any[]) {
   return (_connectorSetupContextImpl ??= createConnectorSetupContext(getLeafHost) as any)(...args);
 }
@@ -16507,7 +21741,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const owner = connectorThread(botId, threadId);
       if (!owner) return null;
       const claude = registry.instances().find((candidate) => candidate.enabled && candidate.driverKind === "claudeAgent" && !keyOnlyInstance(candidate.instanceId) && engineInstalled(candidate.instanceId));
-      if (!claude || engineLogins.signedIn(principalId, "claudeAgent")) return null;
+      // #2384: any of the person's Claude accounts is enough
+      if (!claude || engineLogins.signedInAny(principalId, "claudeAgent")) return null;
       const name = engineDisplayName(claude);
       store.appendMessage(threadId, {
         role: "bot",
@@ -16641,6 +21876,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     voiceCallActive: (threadId) => Boolean(voiceCalls.active(threadId)),
     botReaction,
     recordPlacedReaction: (threadId, botId, info) => { placedBotReactions.set(`${threadId}:${botId}`, info); },
+    setReplyNotify: (threadId, alert) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); },
     roomFeedsBot,
     turnSpeaker: (threadId) => turnSpeakerPrincipals.get(threadId),
     localPrincipalId,
@@ -16804,6 +22040,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     handleMessagesMcp,
     appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
     bindImessageMessage,
+    keptCardRule: (bot, threadId, candidate) => keptCardRule(bot as unknown as BotRecord, threadId, candidate),
     workspaceDir,
     taskWorkspacesDir: () => TASK_WORKSPACES_DIR,
     sharedComputerPrincipal: (capability) => sharedComputerPrincipal(capability as InternalCapability),
@@ -17032,6 +22269,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     offerRoomPostToBots: (room, poster, text, messageId, hops) =>
       offerRoomPostToBots(room as unknown as GroupRecord, poster as unknown as BotRecord, text, messageId, hops),
     notePeerNotice,
+    notifyRoomPost: (room, poster, text, alert) => notify(withBotNotify({
+      kind: "message", botId: poster.id, botName: poster.name, threadId: room.threadId, groupId: room.id,
+      title: `${poster.name} in ${room.name}`, body: summarize(text),
+      ...(typeof poster.avatarUrl === "string" && poster.avatarUrl ? { avatarUrl: poster.avatarUrl } : {}),
+    } satisfies Notification, alert)),
+    setReplyNotify: (threadId, alert) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); },
     proactiveHopsFromThread,
     pollOnlyCaller: (capability) => pollOnlyCaller(capability as InternalCapability),
     peerSpeaker: (fromBotId, fromThreadId) => peerSpeaker(fromBotId, fromThreadId),
@@ -17227,10 +22470,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     reachablePeople: (ownerId) => messageUserReachablePeople(ownerId),
     personName: (id) => personDisplayName(principals.byId(id)) || "",
     broadcastGroup: (group) => broadcast({ kind: "group", group: publicGroupState(group as unknown as GroupRecord) }),
-    notifyMessage: ({ bot, group, text, audience }) => notify({
+    notifyMessage: ({ bot, group, text, audience, notify: alert }) => notify(withBotNotify({
       kind: "message", botId: bot.id, botName: bot.name, threadId: group.threadId, groupId: group.id,
       title: group.name, body: summarize(text), audience,
-    } satisfies Notification)
+    } satisfies Notification, alert !== false))
   }),
 ];
 /** The people a bot owner can reach with message_user (#2118): on an
@@ -17260,7 +22503,6 @@ const botMailAddresses = new BotMailAddresses({
   link: () => (IDENTITY.kind === "perspicax" ? perspicaxDirectory : null),
   bots: () => store.bots.map((bot) => ({ id: bot.id, name: bot.name, ownerSub: botMailOwner(bot.id)?.sub ?? null }))
 });
-const botMailOwner = createBotMailOwner(getLeafHost);
 ROUTES.push(createBotInboundMailReadRoutes({
   bot: (id) => store.bot(id),
   organization: () => IDENTITY.kind === "perspicax" && Boolean(perspicaxDirectory),
@@ -17291,7 +22533,6 @@ function botMailResync(): void {
 /** Bot email keeps the trigger's tool confinement except when the current
  * owner explicitly runs their own configured routine at confirmed Full.
  * The inbound email remains untrusted in either case. */
-const botmailConfined = createBotmailConfined(getLeafHost);
 const inboundMail = createBotInboundMailRoute({
   identity: () => IDENTITY.kind,
   publicOrigin: () => (IDENTITY.kind === "perspicax" ? IDENTITY.publicOrigin.replace(/\/+$/, "") : null),
@@ -17366,7 +22607,6 @@ const inboundMail = createBotInboundMailRoute({
 // member API and bot email. Same owner rule as bot email.
 /** The bot's words after a line of the person's, as one text: its own text
  * replies only (no tool row, no other bot's line). */
-const smsReplyAfter = createSmsReplyAfter(getLeafHost);
 const smsConversation = new SmsConversation({
   send: async ({ person, sub, botId, text, label, via }) => {
     const bot = store.bot(botId);
@@ -17526,7 +22766,6 @@ ROUTES.push(createTtsProviderRoutes({
 // `preferences` frame, to that person's own streams only:
 // preferencesFrameAllowed), so a section deleted on the phone leaves the
 // desktop within seconds instead of at its next start.
-const savePersonPreferences = createSavePersonPreferences(getLeafHost);
 ROUTES.push(createUserPreferenceRoutes({
   store: {
     get: (principalId) => userPreferenceStore.get(principalId),
@@ -17562,7 +22801,7 @@ ROUTES.push(createAchievementRoutes({
   unlocked: (person, unlocked) => broadcast({ kind: "achievements", audience: person, unlocked }),
   linked: (person) => {
     if (IDENTITY.kind === "perspicax") {
-      const signedIn = engineLogins?.signedIn(person, "claudeAgent") === true;
+      const signedIn = engineLogins?.signedInAny(person, "claudeAgent") === true;
       const sub = principals.byId(person)?.subject?.iss === IDENTITY.issuer ? principals.byId(person)?.subject?.sub : undefined;
       const held = sub ? perspicaxDirectory?.providerKeys(sub) ?? [] : [];
       const myKey = providersOfDriver("claudeAgent").some((provider) => held.includes(provider));
@@ -17610,7 +22849,6 @@ function botMemoryMayEdit(auth: RequestAuth, botId: string): boolean {
  * routes' gate. The Memory page lists only these bots: an organization
  * admin used to see every bot there and got "no such bot" on opening one
  * whose Direct is someone else's (2026-11-02). */
-const botMemoryReachable = createBotMemoryReachable(getLeafHost);
 ROUTES.push(createMemoryManagerRoutes({
   bots: (auth) => store.bots.filter((bot) => !bot.hidden).filter((bot) => {
     if (IDENTITY.kind !== "perspicax") return true;
@@ -17700,7 +22938,6 @@ ROUTES.push(createBotRulesRoutes({
  * organization server, a person who may use the bot reads them and its
  * owner, a manager or an organization admin changes them (#65 rights),
  * with their existing bot ownership. */
-const botSkillsRefusal = createBotSkillsRefusal(getLeafHost);
 // Skills > Upload (server/routes/bot-skill-upload.ts): SKILL.md files and
 // zipped skill folders, previewed, then added disabled like an import.
 ROUTES.push(createBotSkillUploadRoutes({
@@ -17878,6 +23115,16 @@ ROUTES.push(createBotLibraryRoutes<BotRecord>({
 // the computer panel shows, driven through the same command path its own
 // backend already uses; the person must hold control.
 const computerInputAudited = new Map<string, number>();
+// The bot panel's Computer row thumbnail (server/routes/computer-thumbnail.ts):
+// the newest capture of each computer, from the screen poller and the
+// person's desktop app.
+const computerThumbnails = new ComputerThumbnails();
+ROUTES.push(createComputerThumbnailRoutes<BotRecord>({
+  thumbnails: computerThumbnails,
+  bot: (id) => store.bot(id) ?? undefined,
+  viewerId: (auth) => channelFilterViewerId(auth) ?? "",
+  mayViewShared: (auth, bot) => IDENTITY.kind !== "perspicax" || ownerOrAdminOf(auth, bot)
+}));
 // A Local VM bot's frame for the phone's viewer (cloud bots answer in the
 // computer route chain below).
 ROUTES.push(createVmScreenshotRoute<BotRecord>({
@@ -17925,7 +23172,6 @@ ROUTES.push(createLocalComputerAutoRoutes({
 }));
 // The desktop a person drives from the phone (computer input) and teaches a
 // task on (computer teach, parity R7): one backend per bot.
-const botComputerShell = createBotComputerShell(getLeafHost);
 const computerTeach = new ComputerTeachRecordings();
 ROUTES.push(createComputerTeachRoutes<BotRecord>({
   bot: (id) => store.bot(id) ?? undefined,
@@ -18093,7 +23339,6 @@ ROUTES.push(createThreadWarmRoutes({ warm: threadWarmRequest }));
 /** POST /api/bots/:id/warm (server/routes/thread-warm.ts): same access as a
  * send to the thread, a named thread only (an implicit one could open a
  * viewer's thread). No prewarm for a bot the person cannot use (#1975). */
-let _threadWarmRequestImpl: ReturnType<typeof createThreadWarmRequest> | undefined;
 function threadWarmRequest(...args: any[]) {
   return (_threadWarmRequestImpl ??= createThreadWarmRequest(getLeafHost) as any)(...args);
 }
@@ -18101,7 +23346,6 @@ const typingPrewake = new TypingPrewakeThrottle();
 /** Same places as a routine's prewake: the person's server environment, or a
  * bot that runs only in the cloud. UserSandboxManager.prewake does the rest
  * (Kubernetes with the cluster wake only, a bot that used it lately only). */
-const prewakeComputerWhileTyping = createPrewakeComputerWhileTyping(getLeafHost);
 // 2026-10-16: a person's custom auto-review rules (server/routes/custom-rules.ts).
 // 2026-10-29: on by default for a Primary Bot; the person turns it off or moves its time.
 const backgroundBriefs = new BriefStore(join(DATA_DIR, "background-brief.json"), Date.now, {
@@ -18109,7 +23353,6 @@ const backgroundBriefs = new BriefStore(join(DATA_DIR, "background-brief.json"),
 });
 /** The apps a bot reads for its brief: its own connected servers, a GitHub
  * one as the bot's owner. */
-const backgroundBriefReads = createBackgroundBriefReads(getLeafHost);
 function backgroundBriefConnected(botId: string): readonly string[] {
   const bot = store.bot(botId);
   if (!bot) return [];
@@ -18206,10 +23449,8 @@ ROUTES.push(createAutoReviewRuleRoutes({
 // The phone's Bot Computer screen (server/routes/computer-status.ts): the
 // person's server environment on an organization server, this computer's
 // Local VM container on a personal one, behind one set of routes.
-const localComputerSummary = createLocalComputerSummary(getLeafHost);
 /** Pull or rebuild the shared Local VM with the same guards as its own
  * routes (/api/local-computer/pull, remove, run). */
-const localComputerLifecycle = createLocalComputerLifecycle(getLeafHost);
 ROUTES.push(createComputerStatusRoutes({
   organization: () => IDENTITY.kind === "perspicax",
   sandbox: () => userSandbox,
@@ -18302,10 +23543,8 @@ async function scheduledLocalVmUpdate(): Promise<void> {
   if (status.container !== "missing" && !status.imageMatches) await localComputerLifecycle("reset");
 }
 const SANDBOX_RECENT_USE_MS = 10 * 60_000;
-const maintainedComputer = createMaintainedComputer(getLeafHost);
 const computerCareScheduler = new MaintenanceScheduler({ store: computerCare, computer: maintainedComputer, log: (line) => console.warn(line) });
 computerCareScheduler.start();
-const diskSaverTarget = createDiskSaverTarget(getLeafHost);
 ROUTES.push(createComputerCareRoutes({
   organization: () => IDENTITY.kind === "perspicax",
   sandboxConfigured: () => userSandbox !== null,
@@ -18348,12 +23587,9 @@ function mayShareMarketplaceOrgWide(auth: RequestAuth): boolean {
 }
 /** Add a plugin's servers to `current` (written by the caller) under free
  * names; returns the plugin's name of each to the name it got. */
-const addMarketplaceServers = createAddMarketplaceServers(getLeafHost);
 /** A server a plugin update keeps, rewritten from its new entry; null keeps
  * the stored one as it is (the new one was refused, and why is in `skipped`). */
-const updatedMarketplaceServer = createUpdatedMarketplaceServer(getLeafHost);
 /** Install again and Update use one operation, preserving switches and names. */
-const updateInstallationPlugin = createUpdateInstallationPlugin(getLeafHost);
 ROUTES.push(createInstallationCapabilityRoutes({
   mayRead: (auth) => mayManageMarketplaces(auth) || Boolean(sessionPrincipal(auth)),
   marketplaces: (auth) => pluginMarketplaces.list(marketplaceViewer(auth)),
@@ -18490,8 +23726,6 @@ ROUTES.push(createPluginRoutes({
 // and answers zeros. Serialized per person, so the two never run at once for
 // the same principal.
 const personErasures = new Map<string, Promise<{ bots: number; threads: number }>>();
-const deletePersonData = createDeletePersonData(getLeafHost);
-const erasePersonDataNow = createErasePersonDataNow(getLeafHost);
 ROUTES.push(createAccountRoutes({
   organization: () => IDENTITY.kind === "perspicax",
   // Perspicax erases the account first (POST /api/v1/pulsabot/people/me/erase
@@ -18522,7 +23756,6 @@ ROUTES.push(createAccountRoutes({
   },
   deletePersonData
 }));
-const wakeFromCloudAgentCompletion = createWakeFromCloudAgentCompletion(getLeafHost);
 
 // Perspicax runs (the desktop's Code section, lot P1.7). On an organization
 // server Sagax calls Perspicax with its link token, the person's sign-in token as the subject. The
@@ -18535,13 +23768,11 @@ const codeFixture = process.env.SAGAX_CODE_FIXTURE === "1" && process.env.SAGAX_
   : null;
 if (codeFixture) console.log(`[code] fake Perspicax agents API on ${codeFixture.url} (SAGAX_CODE_FIXTURE)`);
 const perspicaxBase = (): string | null => codeFixture?.url ?? (IDENTITY.kind === "perspicax" ? IDENTITY.issuer : null);
-const perspicaxAccessToken = createPerspicaxAccessToken(getLeafHost);
 /** 2026-10-28: the token of the person a link call acts for, by their
  * Perspicax user id: their live sign-in, else their routine delegation on
  * this server (a routine runs while they are away). Null when they have
  * neither, are unknown here or disabled: the call then goes with the link
  * token alone. Never logged. */
-const perspicaxLinkSubjectToken = createPerspicaxLinkSubjectToken(getLeafHost);
 /** The person a cloud agent request acts for: the signed-in person, or on a
  * solo server the operator's own loopback (never a reduced service caller or
  * the worker relay, and never a session without a person, such as a paired
@@ -18561,12 +23792,11 @@ const perspicaxAgentsAccess = (baseUrl: string, token: string) => ({ baseUrl, to
 // access token of the person's own engine sign-in and renews it while the
 // run is live (server/cloud-agents/subscription-depositor.ts). Organization
 // server only; never with the code fixture.
-const subscriptionCli = createSubscriptionCli(getLeafHost);
 const subscriptionDepositor = IDENTITY.kind === "perspicax" && engineLogins && !codeFixture
   ? new SubscriptionDepositor({
     people: () => principals.list()
       .filter((person) => person.subject && person.disabledAt === undefined
-        && (engineLogins!.signedIn(person.id, "claudeAgent") || engineLogins!.signedIn(person.id, "codex")))
+        && (engineLogins!.signedInAny(person.id, "claudeAgent") || engineLogins!.signedInAny(person.id, "codex")))
       .map((person) => person.id),
     subjectOf: (principalId) => {
       const person = principals.byId(principalId);
@@ -18577,16 +23807,18 @@ const subscriptionDepositor = IDENTITY.kind === "perspicax" && engineLogins && !
       const base = perspicaxBase();
       return base ? perspicaxAgentsClient.runs(perspicaxAgentsAccess(base, subjectToken), { mine: true }) : [];
     },
-    signedIn: (principalId, driver) => engineLogins!.signedIn(principalId, driver),
+    // #2384: a personal run takes the person's first working account
+    signedIn: (principalId, driver) => engineLogins!.signedInAny(principalId, driver),
     vaultKey: (principalId, provider) => {
       const person = principals.byId(principalId);
       return Boolean(person?.subject && perspicaxDirectory?.providerKeys(person.subject.sub).includes(provider));
     },
-    read: (principalId, engine) => readSubscriptionAccess(engine, engineLogins!.loginDir(principalId, ENGINE_DRIVER[engine])),
+    read: (principalId, engine) => readSubscriptionAccess(engine, engineLogins!.loginDir(principalId, ENGINE_DRIVER[engine], "primary", engineLogins!.preferredAccount(principalId, ENGINE_DRIVER[engine]))),
     renew: async (principalId, engine) => {
       const cli = subscriptionCli(engine);
       if (!cli) return;
-      const loginDir = engineLogins!.loginDir(principalId, ENGINE_DRIVER[engine]);
+      const account = engineLogins!.preferredAccount(principalId, ENGINE_DRIVER[engine]);
+      const loginDir = engineLogins!.loginDir(principalId, ENGINE_DRIVER[engine], "primary", account);
       // #1768: Claude shares one rotating refresh token across every process
       // of this person. Renew through the same single flight bot turns use.
       if (engine === "claude-code") {
@@ -18596,7 +23828,7 @@ const subscriptionDepositor = IDENTITY.kind === "perspicax" && engineLogins && !
           environment: cli.environment,
           force: true,
           onRenewed: () => {
-            engineLogins?.clearExpired(principalId, "claudeAgent");
+            engineLogins?.clearExpired(principalId, "claudeAgent", "primary", account);
             resumeEngineReconnectForPerson(principalId, "Claude");
           }
         });
@@ -18616,13 +23848,16 @@ subscriptionDepositor?.start();
 if (engineLogins) {
   onClaudeSubscriptionRenewed((loginHome) => {
     for (const person of principals.list()) {
-      try {
-        if (claudeSubscriptionHomeKey(engineLogins.loginDir(person.id, "claudeAgent")) === loginHome) {
-          engineLogins.clearExpired(person.id, "claudeAgent");
-          resumeEngineReconnectForPerson(person.id, "Claude");
+      // #2384: each of the person's Claude accounts has its own folder
+      for (const account of engineLogins.accountInstances(person.id, "claudeAgent")) {
+        try {
+          if (claudeSubscriptionHomeKey(engineLogins.loginDir(person.id, "claudeAgent", "primary", account)) === loginHome) {
+            engineLogins.clearExpired(person.id, "claudeAgent", "primary", account);
+            resumeEngineReconnectForPerson(person.id, "Claude");
+          }
+        } catch {
+          /* not a login directory for this person */
         }
-      } catch {
-        /* not a login directory for this person */
       }
     }
   });
@@ -18631,11 +23866,12 @@ if (engineLogins) {
 // start (a server update) heals everyone already marked.
 const signInRecheck = engineLogins
   ? createSignInRecheck({
-    renew: async (principalId, driver) => {
+    renew: async (principalId, driver, instanceId) => {
       const engine: RunEngine | null = driver === "claudeAgent" ? "claude-code" : driver === "codex" ? "codex" : null;
       const cli = engine ? subscriptionCli(engine) : null;
       if (!engine || !cli || !engineLogins) return false;
-      const loginDir = engineLogins.loginDir(principalId, ENGINE_DRIVER[engine]);
+      // #2384: the refused account's own folder
+      const loginDir = engineLogins.loginDir(principalId, ENGINE_DRIVER[engine], "primary", instanceId);
       if (engine === "claude-code") {
         return (await ensureClaudeSubscriptionFresh({ loginDir, cli: cli.cli, environment: cli.environment, force: true })).ok;
       }
@@ -18643,9 +23879,10 @@ const signInRecheck = engineLogins
       const access = await readSubscriptionAccess(engine, loginDir);
       return Boolean(access && (access.expiresAt === null || access.expiresAt > Date.now() + 60_000));
     },
-    markExpired: (principalId, driver, slot) => engineLogins.markExpired(principalId, driver, slot),
-    clearExpired: (principalId, driver, slot) => engineLogins.clearExpired(principalId, driver, slot),
-    expired: (principalId, driver, slot) => engineLogins.expired(principalId, driver, slot),
+    markExpired: (principalId, driver, slot, instanceId) => engineLogins.markExpired(principalId, driver, slot, instanceId),
+    clearExpired: (principalId, driver, slot, instanceId) => engineLogins.clearExpired(principalId, driver, slot, instanceId),
+    expired: (principalId, driver, slot, instanceId) => engineLogins.expired(principalId, driver, slot, instanceId),
+    accounts: (principalId, driver) => engineLogins.accountInstances(principalId, driver),
     onRestored: (principalId, driver) => resumeEngineReconnectForPerson(principalId, driver === "codex" ? "Codex" : "Claude")
   })
   : null;
@@ -18705,14 +23942,12 @@ const JOURNAL_CACHE_MS = 15_000;
 /** Threads whose tool runs are read, newest first: a bound on the work. */
 const JOURNAL_THREADS_MAX = 80;
 const journalCache = new Map<string, { at: number; rows: JournalRow[]; truncated: boolean }>();
-const journalRowsFor = createJournalRowsFor(getLeafHost);
 function inboxJournal(_auth: RequestAuth, viewer: InboxViewer, days: number): JournalPayload {
   const { rows, truncated } = journalRowsFor(viewer, days);
   return { entries: rows.map(journalWire), days, ...(truncated ? { truncated: true as const } : {}) };
 }
 /** "Tester cette règle": the draft among the person's rules (it replaces
  * the saved rule it edits), each past action read by the real matcher. */
-const inboxTestRule = createInboxTestRule(getLeafHost);
 
 ROUTES.push(createApprovalsInboxRoutes({
   viewer: inboxViewer,
@@ -18812,7 +24047,6 @@ ROUTES.push(createBotActivityRoutes({
 // their GitHub connection, never the server's (no global or system git
 // config, no credential helper, no ssh key, an empty gh config).
 const codeBranchArchive = new BranchArchive(join(DATA_DIR, "code-branch-archive.json"));
-const codeBranchCredentials = createCodeBranchCredentials(getLeafHost);
 ROUTES.push(createBotCodeBranchRoutes({
   bot: (id) => store.bot(id),
   tasks: (botId) => store.tasks(botId),
@@ -18905,12 +24139,10 @@ ROUTES.push(createDevPullRoutes({
  * threads, between the run's creation and its end; nothing else of those
  * threads leaves (the bot's owner reads the card of a run that ran as
  * another person, never that person's thread). */
-const routineRunAccessCard = createRoutineRunAccessCard(getLeafHost);
 /** The sub-agents a direct thread started: coordinate_bots work (room
  * handoffs whose parent is this thread) and legacy delegations in flight.
  * Reads only that parent's children through an indexed store join (never
  * coordinator.all() + zod over every assignment). */
-const activityChildren = createActivityChildren(getLeafHost);
 // A group's shared memory (server/routes/group-memory.ts): its people read
 // it, its owner edits it or switches it off.
 ROUTES.push(createGroupMemoryRoutes({
@@ -19161,7 +24393,6 @@ function peopleDmOpenThread(group: GroupRecord, personId: string | undefined, kn
  * their open thread and, with `page`, that thread's newest messages. A
  * client from before threads (`knows` false) gets the default thread alone,
  * the one conversation it always had. */
-const peopleDmProjection = createPeopleDmProjection(getLeafHost);
 /** The thread a request names in a person conversation (a message, a read,
  * a nudge), or its default thread when it names none. A thread that is not
  * one of its own is refused. */
@@ -19176,11 +24407,9 @@ function peopleDmThreadOf(group: GroupRecord, raw: unknown): string {
 /** A person's message in a conversation between two people: it starts no
  * turn, marks that thread (and so the conversation) unread and notifies the
  * other person only. No thread named: the default thread, as before threads. */
-const sendPeopleDmMessage = createSendPeopleDmMessage(getLeafHost);
 /** A person's room message that tags people with @ (or @all, when the room
  * allows it) notifies them like a direct message (server/rooms/room-mentions.ts),
  * and the room is unread for them until they read it, whoever else does. */
-const notifyRoomMentions = createNotifyRoomMentions(getLeafHost);
 /** The owner of a group, as server/groups/group-ownership.ts decides on an
  * organization server (its creator, else its first person, else its
  * admins); on a solo server the operator or an admin session. */
@@ -19224,7 +24453,6 @@ function localPrincipalId(): string {
 }
 
 let botActService: BotActService | null = null;
-const botActs = createBotActs(getLeafHost);
 
 function auditValue(value: unknown): unknown {
   const whole = JSON.stringify(value) ?? "null";
@@ -19233,7 +24461,6 @@ function auditValue(value: unknown): unknown {
 /** sagax_settings (server/settings-actions.ts, 2026-10-19): every setting
  * a person changes on screen, changed by their bot through the act engine. */
 let settingsActionService: ReturnType<typeof createSettingsActions> | null = null;
-const settingsActions = createIndexSettingsActions(getLeafHost);
 
 // ── sagax_approvals: a bot the person owns answers their cards (2026-10-27) ──
 /** The person's own bot, in a turn the person started with their own
@@ -19244,7 +24471,6 @@ const settingsActions = createIndexSettingsActions(getLeafHost);
  * bot's hop, a guest, a room without a known person, an unproven sender or
  * a bot shared by someone else is refused. Words from a tool result never
  * count: the quote is checked against this message alone. */
-let _primaryTurnGateImpl: ReturnType<typeof createPrimaryTurnGate> | undefined;
 function primaryTurnGate(...args: any[]) {
   return (_primaryTurnGateImpl ??= createPrimaryTurnGate(getLeafHost) as any)(...args);
 }
@@ -19253,7 +24479,6 @@ function primaryTurnGate(...args: any[]) {
  * (primary-bot), a rule (auto-review), a service, or another person. A card
  * of the person's own conversation answered before its answerer is written
  * is theirs (primaryTurnGate checked the conversation is). */
-const questionAnsweredBy = createQuestionAnsweredBy(getLeafHost);
 
 /** The request auth the person's own screen would carry, for the listing. */
 function primaryListAuth(actor: PerformActor): RequestAuth | null {
@@ -19267,9 +24492,7 @@ function primaryListAuth(actor: PerformActor): RequestAuth | null {
 type PrimaryAnswer = { botId: string; botName: string; messageId: string };
 
 let primaryApprovalService: ReturnType<typeof createPrimaryApprovals> | null = null;
-const primaryApprovals = createIndexPrimaryApprovals(getLeafHost);
 
-const actAnswerer = createActAnswerer(getLeafHost);
 
 function actSharedServer(): boolean {
   return LOOPBACK.trust === "service" || IDENTITY.kind === "perspicax" || HOSTED_WORKSPACE;
@@ -19281,7 +24504,6 @@ function isBotActCard(threadId: string, requestId: string): boolean {
 
 /** A route or screen command in plain words for an Always allow rule: a
  * bot's or a group's name in place of its id, never an id on screen. */
-const describeActForRule = createDescribeActForRule(getLeafHost);
 
 async function finishBotAct(threadId: string, requestId: string, behavior: string, auth: RequestAuth, rule?: "allow"): Promise<{ status: number; body: Record<string, unknown> } | null> {
   if (!isBotActCard(threadId, requestId)) return null;
@@ -19292,7 +24514,6 @@ async function finishBotAct(threadId: string, requestId: string, behavior: strin
 /** Settle a bot-act card before the owner and admin checks. Those checks
  * refuse a member on an ordinary approval card. This card is the person's
  * own action, answered as that person. */
-const settleBotActCard = createSettleBotActCard(getLeafHost);
 
 const cwActionPasses = createCwActionPasses();
 
@@ -19306,7 +24527,6 @@ function languageOfPerson(person: string | null | undefined): string {
  * person it answers wants that: their own setting, else on for French
  * (shared/voice-dashes.ts). Only this text; tool calls, reasoning and code
  * are never passed in or are kept as they are. */
-const dashFreeReply = createDashFreeReply(getLeafHost);
 
 function languageOfRequest(auth: RequestAuth): string {
   return languageOfPerson(actorPrincipalId(auth));
@@ -19321,16 +24541,13 @@ function cwActionActor(auth: RequestAuth): PerformActor | null {
 
 /** A ConnectWise widget asks for a change (server/widgets/cw-widget-actions.ts): an
  * approval card for the bot's owner, never a write. */
-const requestCwAction = createRequestCwAction(getLeafHost);
 
 /** Allow on a widget's card: the person asks the bot for that one write and
  * the write is let through once. Deny only closes the card. Null when the
  * card is not a widget's. */
-const resolveAndSendCwAction = createResolveAndSendCwAction(getLeafHost);
 
 /** The widget's change allowed (on its card, or by the person's saved
  * rule): a one-shot pass for that write, and the bot asked to make it. */
-const allowCwAction = createAllowCwAction(getLeafHost);
 
 /** 2026-10-19: a widget's change is its own rule tool, apart from the
  * bot's own ConnectWise calls: "Always allow" here never covers those. */
@@ -19352,7 +24569,6 @@ const pendingConfidentialMemory = new Map<string, { threadId: string; botId: str
 
 /** The answer to a Perspicax tool call from a confidential thread, or null
  * to let it through. */
-let _confidentialPerspicaxRefusalImpl: ReturnType<typeof createConfidentialPerspicaxRefusal> | undefined;
 function confidentialPerspicaxRefusal(...args: any[]) {
   return (_confidentialPerspicaxRefusalImpl ??= createConfidentialPerspicaxRefusal(getLeafHost) as any)(...args);
 }
@@ -19362,14 +24578,12 @@ function isConfidentialMemoryCard(threadId: string, requestId: string): boolean 
 }
 
 /** Allow or Deny on that card: its thread's owner only. */
-const settleConfidentialMemoryCard = createSettleConfidentialMemoryCard(getLeafHost);
 
 // ── email drafts sent from their card (server/mail/email-draft-send.ts) ──────
 const emailSendPasses = createEmailSendPasses();
 
 /** The bot a thread's email draft speaks for, and whether the caller may ask
  * to send it (the bot's owner, like a ConnectWise widget change). */
-const emailDraftBot = createEmailDraftBot(getLeafHost);
 
 /** Where a draft can be sent from: the bot's own mail connectors first (the
  * person's mailbox), then the server's mail when it is set up. */
@@ -19381,7 +24595,6 @@ function emailConnectorsFor(bot: BotRecord, language: string | undefined = cfg.l
 
 /** "Envoyer" on an email draft: an approval card in the conversation, never
  * a send. */
-let _requestEmailDraftSendImpl: ReturnType<typeof createRequestEmailDraftSend> | undefined;
 function requestEmailDraftSend(...args: any[]) {
   return (_requestEmailDraftSendImpl ??= createRequestEmailDraftSend(getLeafHost) as any)(...args);
 }
@@ -19408,7 +24621,6 @@ function takeEmailSendPass(threadId: string, botId: string, tool: string, input:
 
 /** The latest send of one draft in a thread, as the draft card shows it. A
  * hand-off whose pass lapsed unused reads as failed. */
-let _emailDraftStatusImpl: ReturnType<typeof createEmailDraftStatus> | undefined;
 function emailDraftStatus(...args: any[]) {
   return (_emailDraftStatusImpl ??= createEmailDraftStatus(getLeafHost) as any)(...args);
 }
@@ -19416,9 +24628,7 @@ function emailDraftStatus(...args: any[]) {
 /** Allow on an email draft's card: the one send the person approved. Deny
  * closes the card and nothing is sent. False when the card is not a draft's. */
 /** Allow on a Messages card sends once, on this Mac. Deny sends nothing. */
-const resolveImessageCard = createResolveImessageCard(getLeafHost);
 
-const resolveAndSendEmailDraft = createResolveAndSendEmailDraft(getLeafHost);
 
 /** How a request this server makes to itself is marked (server/threads/confidential-threads.ts):
  * `onBehalf` for a bot acting as its person (operator acts included), so it
@@ -19485,8 +24695,6 @@ function mintOwnerContinuation(threadId: string, route?: { method: string; path:
 }
 /** Use a continuation token once: a POST of a message into its thread, or
  * exactly the request it was minted for. */
-const takeOwnerContinuation = createTakeOwnerContinuation(getLeafHost);
-const performBotActRoute = createPerformBotActRoute(getLeafHost);
 /** The ids of every confidential thread (server/threads/confidential-threads.ts). */
 function confidentialThreadIds(): Set<string> {
   const ids = new Set<string>();
@@ -19500,7 +24708,6 @@ function namesConfidentialThread(text: string, ids = confidentialThreadIds()): b
 /** A response with every confidential thread cut out: a thread, a hit or a
  * task of one goes; a bot whose selected thread is confidential stays,
  * without that thread's id or transcript. */
-let _scrubConfidentialThreadsImpl: ReturnType<typeof createScrubConfidentialThreads> | undefined;
 function scrubConfidentialThreads(...args: any[]) {
   return (_scrubConfidentialThreadsImpl ??= createScrubConfidentialThreads(getLeafHost) as any)(...args);
 }
@@ -19524,10 +24731,8 @@ const continuationThreadScope = new AsyncLocalStorage<string | null>();
  * is refused, and a confidential thread is cut out of what comes back
  * (thread lists, search hits, a bot's selected transcript); an answer that
  * still names one is refused whole. */
-const performBotActRouteOutsideConfidential = createPerformBotActRouteOutsideConfidential(getLeafHost);
 /** Who acts, by principal: a session's principal (or its anonymous id),
  * the operator on loopback, nobody for a local service. */
-const actorPrincipalId = createActorPrincipalId(getLeafHost);
 /** Whose channels and bots a request may see (requests, live frames and
  * search all read this). Unfiltered, like loopback: the operator's own phone
  * (an admin code paired from this computer), and a session without a
@@ -19566,20 +24771,17 @@ const COMPACT_USAGE_THREADS = 40;
  * a local model's prefix cache serves every new one. */
 const compactPinsByBot = new Map<string, { day: string; value: Pick<CompactPromptInput, "agents" | "pinned"> }>();
 
-const recentToolUses = createRecentToolUses(getLeafHost);
 
 /** #1276: the compact prompt of one turn. The agents core follows the bot's
  * own use; an MCP server's tools listed whole follow the use of every bot of
  * the same owner, so a new bot lists what its owner's bots really call
  * instead of searching for it. */
-const compactPromptFor = createCompactPromptFor(getLeafHost);
 
 function effectiveBotOwner(bot: { ownerUserId?: unknown }): string {
   return resolveBotOwner(bot, localPrincipalId());
 }
 /** A shared bot's model and notification switch stay on the owner's record.
  * The viewer writes their own through /api/me/bot-overrides. */
-const ownerSettingsForbidden = createOwnerSettingsForbidden(getLeafHost);
 /** A bot owner's organization role on a server signed in with Perspicax.
  * The operator at this computer (the local principal) counts as an admin. */
 function botOwnerOrgRole(bot: { ownerUserId?: unknown }): "admin" | "member" | undefined {
@@ -19623,7 +24825,6 @@ function botHasOwnComputerForTurn(bot: BotRecord, threadId: string): boolean {
 /** 2026-10-16: whether a permission request of this bot acts in its
  * owner's own isolated environment, the one this turn mounted for this bot
  * (member-environment.ts). */
-const ownEnvironmentRequest = createOwnEnvironmentRequest(getLeafHost);
 /** 2026-10-27 (#1098): whether a permission card's call runs in its
  * person's own environment for the safety review: their own server
  * environment or Local VM mounted for this turn (ownEnvironmentRequest), or
@@ -19637,7 +24838,6 @@ function safetyOwnEnvironment(bot: BotRecord, threadId: string, tool: string | u
  * (their server environment, their own computer or its Local VM) that Sagax
  * mounted for this turn: the owner's card, never an admin's
  * (member-environment.ts ownDestinationCall). */
-const ownDestinationRequest = createOwnDestinationRequest(getLeafHost);
 /** 2026-10-19 (PR 3): whose own destination a call acts on. The bot's
  * owner (ownDestinationRequest), or, on a bot someone else owns, the person
  * who speaks in their own conversation with it: the destination Sagax
@@ -19645,13 +24845,11 @@ const ownDestinationRequest = createOwnDestinationRequest(getLeafHost);
  * bot owner's. Only when that person wrote this turn themselves (no other
  * bot's hop, routine, webhook, email or automation) and the conversation is
  * their own (its task owner). Null: not a person's own destination. */
-const destinationOfCall = createDestinationOfCall(getLeafHost);
 /** 2026-10-19 (prod 0.5.27, #810 follow-up): whether a call is the
  * computer_select Sagax mounted for this turn of this bot, choosing among the
  * places of the person this turn is for: who answers its cards, or the
  * speaker who wrote it in their own conversation with a bot someone else
  * owns (as destinationOfCall). member-environment.ts ownComputerChoiceCall. */
-const ownComputerChoiceRequest = createOwnComputerChoiceRequest(getLeafHost);
 /** The person whose environment (sagax-environment, sagax-desktop) Sagax
  * mounted this turn when this tool belongs to it, or null. */
 function mountedDestinationOf(bot: BotRecord, threadId: string, tool: string | undefined): string | null {
@@ -19663,7 +24861,6 @@ function mountedDestinationOf(bot: BotRecord, threadId: string, tool: string | u
 }
 /** Whether `person` wrote this turn themselves (member-environment.ts
  * ownEnvironmentTurnOrigin, for the person whose destination it is). */
-const destinationTurnOrigin = createDestinationTurnOrigin(getLeafHost);
 /** Who answers this card: the person whose own destination it acts on when
  * that is not the bot's owner (destinationOfCall), else approvalOwnerId. */
 function cardAnswererId(bot: BotRecord, threadId: string | undefined, card: { destinationAnswerer?: unknown } | null | undefined): string {
@@ -19678,7 +24875,6 @@ function noteCard(threadId: unknown, requestId: unknown): NonNullable<Message["c
 /** 2026-10-19: the attachments folders of the owner's own destinations,
  * where Sagax staged the files they sent: their desktop app's folder on
  * their computer, /workspace/attachments in their server environment. */
-const ownAttachmentRoots = createOwnAttachmentRoots(getLeafHost);
 /** 2026-10-19: whether this person holds a permission (an organization
  * admin holds every one); a disabled or unknown person holds none. */
 function principalCan(principalId: string | undefined | null, key: PermissionKey): boolean {
@@ -19689,7 +24885,6 @@ function principalCan(principalId: string | undefined | null, key: PermissionKey
   return can(principalPermissions(id), key);
 }
 /** Who started this turn, for a personal rule's "who started" condition. */
-let _turnStartForImpl: ReturnType<typeof createTurnStartFor> | undefined;
 function turnStartFor(...args: any[]) {
   return (_turnStartForImpl ??= createTurnStartFor(getLeafHost) as any)(...args);
 }
@@ -19701,21 +24896,16 @@ function turnStartFor(...args: any[]) {
  * words (not an internal turn, a routine lineage, an automation or an
  * unattended run), whoever owns the bot: what the phone tools of that
  * person need on a bot shared with them. */
-const speakerOwnWordsTurn = createSpeakerOwnWordsTurn(getLeafHost);
-const ownEnvironmentOrigin = createOwnEnvironmentOrigin(getLeafHost);
 /** 2026-10-26: what lets the person's own routine on their own bot,
  * or a hop between two of their own bots, count as their own turn
  * (member-environment.ts ownLineageTurn). A webhook never does. */
 /** 2026-10-28 (engine-access.ts memberOwnHostToolCall): where this turn's
  * host-level agents tools land. The person's own computers and server list
  * count only when the person speaking owns the bot: the card is theirs. */
-const memberHostToolPlace = createMemberHostToolPlace(getLeafHost);
-const ownLineageFields = createOwnLineageFields(getLeafHost);
 /** 2026-10-19 (owner setup): the line for a person's own AI client
  * conversation (the member API's hidden "AI client" thread, never one a bot
  * opened): what arrives there is that signed-in person's own request. Empty
  * for every other turn. */
-const aiClientThreadPerson = createAiClientThreadPerson(getLeafHost);
 /** 2026-10-19 (owner setup): a roster member whose description the bot's
  * own owner wrote (a bot of the same owner), for the ordinary-bot roster
  * (peer-roster.ts peerRosterSystemPrompt). */
@@ -19732,9 +24922,7 @@ function sameOwnerRosterMember(bot: BotRecord): (member: { id: string }) => bool
  * never supplies permission or changes another person's rights. */
 /** Permission lineage of an owner's webhook routine. References carried by
  * peers are rechecked against live records and current bot owners. */
-const routineOwnerAuthorizationFor = createRoutineOwnerAuthorizationFor(getLeafHost);
 
-const ownerLineageFor = createOwnerLineageFor(getLeafHost);
 /** The lineage the bot's one approval level is read under (ownerModeForTurn).
  * The owner's own words at this computer (the operator, whose loopback
  * request carries no signed-in person) are the owner's turn here: before the
@@ -19772,24 +24960,19 @@ function botProfilePrompt(bot: BotRecord): string {
  * another bot, a webhook, an email, any automation or another person. The
  * per-turn caps (bots created, files attached) are anti-loop limits for
  * those turns; when the person asks, the person's word is the limit. */
-const personDirectTurn = createPersonDirectTurn(getLeafHost);
-const botCreationTurnOrigin = createBotCreationTurnOrigin(getLeafHost);
 /** Why a bot that is not a Primary Bot may not create a bot in this turn,
  * or null (server/bots/bot-creation.ts). Checked before and again after the
  * model lookup awaits. */
-const nonPrimaryCreationRefusal = createNonPrimaryCreationRefusal(getLeafHost);
 /** The security key classes the people who may answer this call's card
  * chose that the call falls in: the bot's owner, and the person the turn
  * speaks for (shared/step-up.ts). Non-empty: Sagax never answers the call
  * itself, the card shows and its Allow needs the key. */
-const autoAnswerStepUp = createAutoAnswerStepUp(getLeafHost);
 /** 2026-10-17 (leftovers of #690): the names of the MCP servers a turn of
  * this bot may mount that are not Sagax's own: the configured ones and the
  * personal connections of the owner and of the person the turn speaks for.
  * A tool name one of them could have spelled is never taken for a built-in
  * (sagax-internal-tools.ts foreignToolSpelling). Unreadable sources name
  * nothing more; the registry refuses the reserved names anyway. */
-const foreignMcpServerNames = createForeignMcpServerNames(getLeafHost);
 /** Organization server (org-full-access.ts): the admin policy, on unless
  * an admin turned it off in Settings > Organization. */
 function orgFullAccessPolicy(): boolean {
@@ -19802,7 +24985,6 @@ function orgFullAccessPolicy(): boolean {
  * remote server mounted for the bot, or a personal connection of the owner
  * or of the person the turn speaks for (it runs in their own environment).
  * A host-level built-in is never one (engine-access.ts). */
-const ownerScopedMcpServerFor = createOwnerScopedMcpServerFor(getLeafHost);
 
 /** Whether the owner route may run as "bypass" at Full access: not once
  * the organization's Full access policy went off, or the owner's profile
@@ -19817,7 +24999,6 @@ function ownerBypassAllowed(bot: BotRecord, ownerId: string): boolean {
 /** The person who may manage approval rules and modes on this request:
  * a signed-in person or this computer's own operator, never a local
  * service or a turn's token. */
-let _ruleManagerImpl: ReturnType<typeof createRuleManager> | undefined;
 function ruleManager(...args: any[]) {
   return (_ruleManagerImpl ??= createRuleManager(getLeafHost) as any)(...args);
 }
@@ -19827,7 +25008,6 @@ function ruleManager(...args: any[]) {
  * (server/auth/step-up-gate.ts). A path that cannot carry a step-up (a Live
  * call, the console, an AI client) passes none and is refused for a card
  * that needs one: never let through silently. */
-const stepUpGate = createStepUpGate(getLeafHost);
 
 /** 2026-10-17: the thread's own folder, against which a file write is
  * judged (shared/step-up.ts actionToolClasses): a write there is
@@ -19870,7 +25050,6 @@ function alwaysAllowStepUpGate(person: string | null, botId: string, threadId: s
  * channel carries none). `op`: bot, thread, refresh, all-threads, new-task;
  * `thread`: a thread id or "*". `froms`: every level the change replaces
  * (all threads of a bot, for "all-threads"). */
-const approvalModeStepUpGate = createApprovalModeStepUpGate(getLeafHost);
 
 /** 2026-10-16: a change of a member's bot to Auto or Auto-accept edits
  * while the organization does not allow them (member-auto-approval.ts).
@@ -19891,7 +25070,6 @@ function everyThreadMode(bot: BotRecord): string[] {
 
 /** A refresh copies the bot's saved level and Always allow keys onto one
  * thread: what it would widen. */
-const refreshWidens = createRefreshWidens(getLeafHost);
 
 function stepUpAnswerOf(body: Record<string, unknown> | null | undefined): StepUpAnswer {
   return {
@@ -19903,13 +25081,11 @@ function stepUpAnswerOf(body: Record<string, unknown> | null | undefined): StepU
 
 /** A settings change that loosens a protection: the person's key when they
  * chose the class that protects it. */
-const settingsStepUpGate = createSettingsStepUpGate(getLeafHost);
 
 /** 2026-10-19 ("Toujours permettre" on every card): whether this person
  * still answers this kind of strict card: an admin's card of a member's bot
  * for an organization admin or a holder of host.shell; a holder's server
  * command for the bot's current owner who still holds host.commands. */
-const strictRuleQualifies = createStrictRuleQualifies(getLeafHost);
 
 /** Review of #938: an organization admin (or the local operator), signed
  * in and not disabled, by their principal id. */
@@ -19923,7 +25099,6 @@ function workspaceAdminPrincipal(personId: string): boolean {
 /** The allow rule saved on an admin's card of this bot that answers this
  * call now: its person still holds the right and protects none of the
  * call's classes with a security key. */
-const strictCardRule = createStrictCardRule(getLeafHost);
 
 /** 2026-10-19 ("Toujours permettre" on every card): the Always allow
  * the person who answers this bot's cards kept for a card that is not an
@@ -19941,18 +25116,15 @@ function keptCardRule(bot: BotRecord, threadId: string, candidate: { tool: strin
 /** What Always allow keeps on a proposal card (a routine, a profile, a
  * model): its kind and target, in plain words, and the security key
  * classes the proposal is in. */
-const proposalRuleCandidate = createProposalRuleCandidate(getLeafHost);
 
 /** A proposal card just shown: Always allow's scope goes on the card, and a
  * rule the person kept settles it at once (journaled). Returns the
  * resolution when a rule settled it. */
-const settleProposalByRule = createSettleProposalByRule(getLeafHost);
 
 
 /** "Always allow" or "Always deny" on a card: save the owner's rule before
  * the answer goes out, so the bot's next ask already meets it. Null when
  * the body asks for no rule; otherwise the refusal. */
-const saveOwnerRuleFromCard = createSaveOwnerRuleFromCard(getLeafHost);
 
 function botsOwnedBy(personId: string): BotRecord[] {
   const me = personId.toLowerCase();
@@ -19960,7 +25132,6 @@ function botsOwnedBy(personId: string): BotRecord[] {
 }
 
 /** Remove a legacy Allow key from the bot and every conversation of it. */
-const revokeLegacyKey = createRevokeLegacyKey(getLeafHost);
 
 /** 2026-10-11: the level a new bot starts on. A solo server keeps Approve
  * for me; an organization server follows its policy (`defaults.approvalMode`)
@@ -20001,7 +25172,6 @@ function memberFolderPrincipal(auth: RequestAuth): string | null {
 /** A member's own roots on the server's disk (server/people/member-folders.ts):
  * their person folder, the workspaces of their own bots, and the folders an
  * admin opened to them. */
-const memberFolderRoots = createMemberFolderRoots(getLeafHost);
 /** Null when `principal` may name `folder` as a working folder. */
 function memberFolderRefusal(principal: string | null, folder: string | null | undefined): typeof MEMBER_FOLDER_REFUSED | null {
   if (principal === null || !folder) return null;
@@ -20010,23 +25180,19 @@ function memberFolderRefusal(principal: string | null, folder: string | null | u
 }
 /** Organization server: why this request may not turn Full on for a bot,
  * or null. The caller must be the bot's owner, signed in. */
-const orgFullAccessRefusalFor = createOrgFullAccessRefusalFor(getLeafHost);
 /** Audit: a bot's or thread's approval level changed (visible to admins in
  * the activity log). */
-const auditApprovalModeChange = createAuditApprovalModeChange(getLeafHost);
 /** Audit: one turn ran with Full access. */
 /** 2026-10-26 (one approval level): whether an Ask or Deny rule could
  * decide a call of this bot's turn: the owner's (or the conversation's
  * person's) own rules for this bot, their rules in their own words, and the
  * organization's rules. */
-const rulesHoldTurn = createRulesHoldTurn(getLeafHost);
 /** The level the engine runs natively (shared/approval-mode.ts
  * engineApprovalMode): Full with a rule in force runs it at Ask so the rule
  * sees every call; Sagax answers the rest as Full. */
 function engineTurnLevel(bot: BotRecord, threadId: string, level: ApprovalMode): ApprovalMode {
   return engineApprovalMode(level, level === "full" && rulesHoldTurn(bot, threadId));
 }
-const auditFullAccessTurn = createAuditFullAccessTurn(getLeafHost);
 /** An organization admin: the operator at this computer, or a person
  * signed in with Perspicax whose role is admin (their session holds admin). */
 function orgAdminCaller(auth: RequestAuth): boolean {
@@ -20040,7 +25206,6 @@ function orgAdminCaller(auth: RequestAuth): boolean {
 function orgKeyConfigured(): boolean {
   return Object.entries(instanceConfigs(cfg)).some(([instanceId, entry]) => driverKeyBacked(cfg, entry.driver, instanceId));
 }
-const orgSettings = createOrgSettings(getLeafHost);
 
 function botDirectGrants(bot: { directGrants?: unknown }): string[] {
   return Array.isArray(bot.directGrants)
@@ -20055,7 +25220,6 @@ function botGrants(bot: { grants?: unknown; directGrants?: unknown; ownerUserId?
 }
 /** The shared section a room sits in (slice 4, section-channels.ts): only
  * its own conversation and rooms placed there with consent. */
-const roomSectionAccess = createRoomSectionAccess(getLeafHost);
 /** Owner and grants of a bot, for server/auth/authz.ts. Sections are personal:
  * a bot takes no access from one (the legacy shared sections became bot
  * grants at boot, section-channels.ts header). */
@@ -20067,7 +25231,6 @@ function principalTeams(principalId: string): TeamRef[] {
   return principals.byId(principalId)?.teams ?? [];
 }
 /** The authz viewer behind a channel viewer id (undefined: the operator). */
-const authzViewerFromId = createAuthzViewerFromId(getLeafHost);
 /** The authz viewer of a request (undefined: the operator at this computer). */
 function authzViewerFor(auth: RequestAuth): AuthzViewer | undefined {
   const viewerId = channelViewerId(auth);
@@ -20077,7 +25240,6 @@ function authzViewerFor(auth: RequestAuth): AuthzViewer | undefined {
 }
 /** channel.read on a room: listed people (by id or `team:`), and the members
  * of its shared section. */
-const groupVisible = createGroupVisible(getLeafHost);
 /** channel.post on a room (a read-only section member reads only). */
 function groupPostAllowed(group: { id?: unknown; humanIds?: string[]; section?: unknown; peopleDm?: boolean }, viewerId: string | undefined): boolean {
   if (group.peopleDm) return isPeopleDmParticipant(group, viewerId);
@@ -20093,13 +25255,11 @@ function roomOfSubject(subject: PathSubject | null): GroupRecord | null {
 /** Whether a room created in this section by this caller counts as placed
  * there with consent: a member who may post in the section (participant,
  * moderator, owner), an organization admin, or the operator. */
-const mayPlaceRoomIn = createMayPlaceRoomIn(getLeafHost);
 /** Moving a room between sections decides who reads it. On an organization
  * server a member moves a room only when they moderate the section it
  * leaves and the one it enters, and only into a section when they are the
  * room's only person (nobody else's conversation is opened). Admins and
  * the operator move any room. Null: allowed. */
-const roomSectionMoveRefusal = createRoomSectionMoveRefusal(getLeafHost);
 /** After an allowed move (roomSectionMoveRefusal): the consent follows the
  * room, out of the section it left and into the one it entered. */
 function recordRoomMove(groupId: string, from: string, to: string, fromId?: string | null, toId?: string | null): void {
@@ -20108,8 +25268,6 @@ function recordRoomMove(groupId: string, from: string, to: string, fromId?: stri
   if (to) sectionChannels.recordRoomPlacement(to, groupId, toId);
 }
 /** #2045: resolve a Primary Bot managed-section name against that bot's owner. */
-const resolveManagedNameFor = createResolveManagedNameFor(getLeafHost);
-const listedBotVisible = createListedBotVisible(getLeafHost);
 /** A viewer's level on a bot (undefined viewer: the operator, "owner"). */
 function viewerBotLevel(auth: RequestAuth, bot: Parameters<typeof botFacts>[0]): Level | "owner" | null {
   if (privateThreads() && auth.kind === "loopback" && auth.trust === "service") return null;
@@ -20124,7 +25282,6 @@ function viewerBotLevel(auth: RequestAuth, bot: Parameters<typeof botFacts>[0]):
 function privateThreads(): boolean {
   return IDENTITY.kind === "perspicax";
 }
-Object.assign(leafHostBindings, { privateThreads });
 /** Per viewer and bot: the thread they last opened (`botId\nprincipal`).
  * Kept in memory; after a restart they land on their newest thread. */
 const viewerSelections = new Map<string, string>();
@@ -20148,11 +25305,9 @@ function threadsShownTo<T extends { ownerPrincipalId?: unknown }>(bot: { ownerUs
   return ownThreads(tasks, viewerId, effectiveBotOwner(bot));
 }
 /** The viewer's thread on this bot (viewerThread), without starting one. */
-const viewerThreadOf = createViewerThreadOf(getLeafHost);
 /** The viewer's thread on this bot, started for them when they have none
  * yet ("opening the bot starts their own private thread"). Only for someone
  * who may use the bot. */
-const ensureViewerThread = createEnsureViewerThread(getLeafHost);
 /** Remember which of their threads a viewer opened. */
 function selectViewerThread(botId: string, viewerId: string, threadId: string): void {
   if (viewerSelections.size >= 50_000) viewerSelections.clear();
@@ -20171,17 +25326,13 @@ function routeThreadId(bot: BotRecord, rawThreadId: unknown, action: ThreadActio
   if (continuation && threadId !== continuation) throw Object.assign(new Error("no such task"), { status: 404 });
   return threadId;
 }
-const routeThreadIdUnguarded = createRouteThreadIdUnguarded(getLeafHost);
 /** The bot's activity as one organization viewer sees it: over their own
  * threads (and the bot's rooms), never over someone else's private thread. */
-const viewerBotActivity = createViewerBotActivity(getLeafHost);
 /** A bot (wire shape) as one viewer receives it: their threads only, their
  * thread selected, nobody else's transcript (thread-privacy.ts). */
-const botForViewer = createBotForViewer(getLeafHost);
 /** A JSON response as an organization viewer receives it: every bot it
  * carries (under `bot`, or in `bots`, at the top or one level down)
  * through botForViewer. */
-const bodyForThreadViewer = createBodyForThreadViewer(getLeafHost);
 /** Thread ids keyed in a map (queued sends) an organization viewer may see. */
 function threadKeyedForViewer<T>(entries: Record<string, T>, viewerId: string | undefined): Record<string, T> {
   if (!viewerId || !privateThreads()) return entries;
@@ -20193,7 +25344,6 @@ function threadKeyedForViewer<T>(entries: Record<string, T>, viewerId: string | 
 /** Once (marker file `agent-threads-hidden.v1`): the threads an AI client
  * opened with `newThread` before #291 become hidden conversations, and are
  * no longer unread (server/threads/agent-threads.ts). Counts only in the log. */
-const hideEarlierAgentThreads = createHideEarlierAgentThreads(getLeafHost);
 /** Once (marker `agent-threads-hidden.v2`): bot-to-bot threads still shown,
  * and the operator's `agent-threads-hide.list` (agent-threads.ts
  * planHiddenBotThreads). Counts only in the log. */
@@ -20201,7 +25351,6 @@ const hideEarlierAgentThreads = createHideEarlierAgentThreads(getLeafHost);
  * parallel conversations and automatic recovery values become each existing
  * bot's own (server/bots/bot-runtime-settings.ts). A bot with a value keeps it.
  * Counts only in the log. */
-const migrateBotRuntimeSettings = createMigrateBotRuntimeSettings(getLeafHost);
 /** A person wrote a line here from an app: never an AI client's line, a
  * teammate's, a routine's, a webhook's or a relayed one (background-sweep.ts
  * never archives such a thread). Read from the decrypted transcript. */
@@ -20212,26 +25361,20 @@ function personWroteIn(threadId: string): boolean {
 /** Archive the finished, idle background threads (server/threads/background-sweep.ts):
  * at start, then every BACKGROUND_SWEEP_EVERY_MS. Counts only in the log. */
 const BACKGROUND_SWEEP_EVERY_MS = 10 * 60_000;
-const sweepBackgroundThreads = createSweepBackgroundThreads(getLeafHost);
-const hideBotThreadsOnce = createHideBotThreadsOnce(getLeafHost);
 /** One-time (config.privateThreadsMigratedAt): every bot thread written
  * before private threads gets its owner (thread-privacy.ts planThreadOwners).
  * Counts go to the server log, never ids or names. */
-const migrateThreadOwners = createMigrateThreadOwners(getLeafHost);
 
 /** Private threads: who owns a thread a bot opens while working in
  * `fromThreadId`: the person that work is for (the owner of that thread, or
  * the person whose request it is in a group chat), when they may use the bot
  * the thread opens on; else undefined, the bot owner. */
-const openedThreadOwner = createOpenedThreadOwner(getLeafHost);
 /** Organization server: which conversations a bot's automatic recall,
  * recent-work brief, session_search and session_read may draw on during a
  * turn in `threadId`. A room turn: that room only (its people would read
  * whatever comes back). A 1:1 turn: the same person's threads with this bot
  * and the rooms that person reads. Null: no narrowing (solo server). */
-const privateRecallFilter = createPrivateRecallFilter(getLeafHost);
 /** The recent-work brief for a turn, narrowed by privateRecallFilter. */
-const recentWorkFor = createRecentWorkFor(getLeafHost);
 
 // ── single stream (thread mode off, server/streams/single-stream.ts) ──────────────
 /** The segments a stream turn in `threadId` may draw on: the bot's stream
@@ -20265,18 +25408,15 @@ function segmentStamp(task: TaskRecord): number {
 
 /** The digest of one segment for a stream turn: the stored one while no
  * newer message came, else a fresh extractive one (no model call). */
-const segmentDigestText = createSegmentDigestText(getLeafHost);
 
 /** Whether this bot's model may write a segment digest now: the same gates as
  * a generated title, less the titles switch (compaction uses the engine the
  * same way, unasked). */
-const streamDigestEngine = createStreamDigestEngine(getLeafHost);
 
 /** In the background, have the bot's model write the digest of the newest
  * segment whose stored digest is stale (at most one per call, so a stream
  * turn costs one small one-shot at most). Never blocks a turn; a failure
  * keeps the extractive digest. */
-const refreshStreamDigests = createRefreshStreamDigests(getLeafHost);
 
 /** Whether a turn in `threadId` is a person's single-stream turn: the thread
  * is a stream segment someone wrote in from a single-stream client, and the
@@ -20297,7 +25437,6 @@ function noteStreamSend(botId: string, threadId: string, singleStream: boolean):
 }
 
 /** The "Earlier topics" system-prompt block of a stream turn, or "". */
-const streamDigestPrompt = createStreamDigestPrompt(getLeafHost);
 
 function searchHitVisibleNow(threadId: string, viewerId: string | undefined): boolean {
   const bot = store.botByThread(threadId);
@@ -20314,12 +25453,10 @@ function searchHitVisibleNow(threadId: string, viewerId: string | undefined): bo
  * so that set opens everything to them (slice 8 fix). */
 /** On a Cloud home a routine reports only where its writer may write: a
  * guest's into a conversation the guest started, never the owner's. */
-const routineResultsRefusalFor = createRoutineResultsRefusalFor(getLeafHost);
 
 /** One routine's PATCH, also each row of a bulk change (2026-10-29,
  * server/routes/routine-bulk.ts): the same checks and writer either way. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a request body, as readBody gives it
-const patchRoutineAs = createPatchRoutineAs(getLeafHost);
 function deleteRoutineAs(auth: RequestAuth, id: string): { status: number; body: unknown } {
   if (routineNeedsRun(auth, routineBotId(id))) return { status: 403, body: NEEDS_RUN };
   const removed = routines!.remove(id);
@@ -20330,19 +25467,14 @@ function deleteRoutineAs(auth: RequestAuth, id: string): { status: number; body:
  * routine on or off (header ROUTINE_CONVERSATION_HEADER), where the line
  * "Disabled · 1 routine" goes. Only the routine's own bot's thread (or its
  * room's), and only one this person may read; anything else writes no line. */
-const routineConversationOf = createRoutineConversationOf(getLeafHost);
 
-const routineSeenBy = createRoutineSeenBy(getLeafHost);
 
-const subjectSeesChannel = createSubjectSeesChannel(getLeafHost);
 
 /** Organization server: a file in a conversation is served to whoever may
  * read one conversation that holds it (a bot thread's owner, a group chat's
  * people). A bot's avatar, and a file nothing references yet (a person's own
  * upload before sending; its name is random), stay served. */
-const attachmentSeenBy = createAttachmentSeenBy(getLeafHost);
 
-const memberSeesFrame = createMemberSeesFrame(getLeafHost);
 
 /** Loopback on this machine is the operator. Otherwise the Perspicax role,
  * or an admin session (solo has no organization). */
@@ -20357,7 +25489,6 @@ function channelActorRole(auth: RequestAuth): OrgRole | null {
 // ── the viewer's own identity and bots (server/people/viewer-identity.ts) ─────
 /** The operator at this computer, or a device they paired: the profile
  * describes them. Anyone else is described as themselves. */
-const viewerIsOperator = createViewerIsOperator(getLeafHost);
 /** Whether this request may create a bot: the operator and server admins,
  * as before, and an organization member or admin signed in with a
  * chat-scoped session, whose bot is then their own. Never a guest, a
@@ -20390,7 +25521,6 @@ function personSheetBotsUseOnly(principalId: string): boolean {
  * sent (the union over their profiles), else the member defaults, narrowed
  * by their person sheet. `sessionAdmin: false` keeps an admin's chat-only
  * device to the member defaults. */
-const principalPermissions = createPrincipalPermissions(getLeafHost);
 /** The permissions of a request's caller; undefined is the operator at
  * this computer (everything). A local service holds nothing. On a solo
  * server an admin session holds everything and anyone else the defaults. */
@@ -20447,7 +25577,6 @@ function ownerChosenVisibility(auth: RequestAuth, visibility: BotVisibility): Bo
   if (auth.kind !== "session" || auth.scopes.includes("admin")) return visibility;
   return ownerKeepsSight(visibility, auth.session.email);
 }
-const memberBotFieldRefusal = createMemberBotFieldRefusal(getLeafHost);
 /** A person's own plugins, skills, MCP servers and GitHub account: the
  * Sagax permission `apps.ownIntegrations` is the only rule (the Perspicax
  * field `sagax_integrations` is ignored since 2026-10-30). The 403 body for
@@ -20476,7 +25605,6 @@ function ownerOrAdminOf(auth: RequestAuth, bot: BotRecord): boolean {
 /** This computer's own person (request-auth.ts clientSessionIsComputerOwner):
  * the owner at this computer, an admin session, or on a personal server a
  * client session bound to the operator. */
-const computerOwner = createComputerOwner(getLeafHost);
 /** A request the paired phone's companion relayed (request-auth.ts checked
  * its capability before it became a loopback request). The header alone only
  * ever narrows what a request may do, so trusting it here is safe. */
@@ -20502,11 +25630,9 @@ function computerOwnerFields(): { name: string; computerName: string } {
 }
 /** The display name and avatar of a signed-in person, for
  * GET /api/auth/session (the id_token name alone may be missing). */
-const sessionPersonFields = createSessionPersonFields(getLeafHost);
 function profileManagedFor(auth: RequestAuth): boolean {
   return PROFILE_MANAGEMENT !== null && auth.kind === "session";
 }
-const viewerIdentity = createViewerIdentity(getLeafHost);
 /** The profile a bot's turns speak to: the operator's for the operator's
  * bots, as before. A bot someone else owns never carries the operator's
  * about-me, and calls its person by their own name. */
@@ -20522,9 +25648,7 @@ function botUserName(bot: { ownerUserId?: unknown }): string {
 /** Organization server: a room a signed-in person creates without naming
  * its people lists them, or its creator could not see it (channel.read
  * needs humanIds). An explicit humanIds list is kept as sent. */
-const withCreatorListed = createWithCreatorListed(getLeafHost);
 
-const refusePlacedBots = createRefusePlacedBots(getLeafHost);
 
 /** Organization server: a person's request falls under the group owner rule
  * (server/groups/group-ownership.ts). The server's own services do not. */
@@ -20535,17 +25659,13 @@ function groupActor(auth: RequestAuth): GroupActor {
   return { id: channelActorId(auth), email: actorEmail(auth), orgAdmin: channelActorRole(auth) === "admin" || channelActorRole(auth) === "owner" };
 }
 
-const refuseHumanEdit = createRefuseHumanEdit(getLeafHost);
 
 /** Organization server (slice 3): the person a grant may name, by
  * principal id only: someone the Perspicax directory lists as active, or,
  * before any directory answered, a known provider subject not signalled out. */
-const resolveOrgGrantee = createResolveOrgGrantee(getLeafHost);
 /** Slice 4: the organization's teams with their people, from what each
  * person carries (claims and directory) and the team names. */
-const orgDirectoryTeams = createOrgDirectoryTeams(getLeafHost);
 /** Slice 4: how a grant target reads in the editor (never an email). */
-const describeGrantTarget = createDescribeGrantTarget(getLeafHost);
 /** A bot's grants changed: the owner's list gets the bot's new grants and
  * every member stream reconnects to what that person may see now. */
 function botAccessChanged(botId: string): void {
@@ -20612,6 +25732,23 @@ ROUTES.push(createBotHistoryRoutes<BotRecord, ReturnType<typeof wireBot>>({
   wireBot: (bot) => wireBot(bot),
   broadcast: (event) => broadcast(event)
 }));
+
+// The bot's analytics (server/routes/bot-analytics.ts): the ledger rows of
+// the bot over 7, 30 or 90 days. Owner, edit holder or admin read every
+// row; another person who sees the bot reads their own turns only.
+ROUTES.push(createBotAnalyticsRoutes<BotRecord>({
+  dataDir: DATA_DIR,
+  bot: (id) => store.bot(id) ?? undefined,
+  sees: (auth, bot) => auth.kind === "loopback" || listedBotVisible(bot, auth.session.principalId),
+  seesAll: (auth, bot) => ownerOrAdminOf(auth, bot),
+  viewer: (auth) => usageViewerOf(auth),
+  prices: operatorPrices,
+  currency: () => cfg.billing?.currency ?? "USD",
+  runs: (botId) => (routines?.listRunsForBot(botId) ?? []).filter((run) => run.target !== "room-goal"),
+  personName: (principalId) => personDisplayName(principals.byId(principalId)) || "",
+  timeZone: () => routineTimeZone(),
+  localPrincipalId: () => localPrincipalId()
+}));
 ROUTES.push(createConnectorStatusRoutes({ perspicax: () => perspicaxReach?.status() ?? null }));
 ROUTES.push(createBotSendStateRoutes({
   requestedTaskBot: (botId, threadId) => requestedTaskBot(botId, threadId),
@@ -20642,14 +25779,15 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
    * record) and the grok.com connectors it brings (its reach, probed in the
    * background when not known yet). Their own page only. */
   const grokAccountsFor = (principalId: string, instanceId: string) => (["primary", "second"] as const).map((slot) => {
-    const signedIn = logins.signedIn(principalId, "grokAgent", slot);
+    // #2384: this card's account folder (an added account has its own)
+    const signedIn = logins.signedIn(principalId, "grokAgent", slot, instanceId);
     if (signedIn) logins.warmReach(principalId, instanceId, slot);
-    const identity = signedIn ? logins.grokAccountIdentity(principalId, slot) : null;
-    const reach = signedIn ? grokAccountReach(logins.loginDir(principalId, "grokAgent", slot)) : undefined;
+    const identity = signedIn ? logins.grokAccountIdentity(principalId, slot, instanceId) : null;
+    const reach = signedIn ? grokAccountReach(logins.loginDir(principalId, "grokAgent", slot, instanceId)) : undefined;
     return {
       slot,
       signedIn,
-      ...(signedIn && logins.expired(principalId, "grokAgent", slot) ? { expired: true } : {}),
+      ...(signedIn && logins.expired(principalId, "grokAgent", slot, instanceId) ? { expired: true } : {}),
       ...(identity ? { kind: identity.kind, ...(identity.email ? { email: identity.email } : {}) } : {}),
       ...(reach ? { connectors: reach.groups.map((group) => ({ label: GROK_CLOUD_CONNECTORS.find((entry) => entry.id === group.id)?.name ?? group.label, tools: group.tools })) } : {})
     };
@@ -20688,18 +25826,89 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
   }));
 }
 
-/** Slice 4: who owns a section at its first organization boot (the owner
- * of most of its bots; else the first organization admin). */
-function sectionMigrationOwner(name: string): string {
+/** #2045 isolation: what each person keeps in their own synced
+ * preferences, read for evidence of who owns a team. */
+function sectionPreferenceOwners(name: string, key: "sagax.sidebarSections.v1" | "openmausbot.sidebarSectionOrder.v1"): string[] {
+  const owners: string[] = [];
+  for (const person of principals.list()) {
+    let raw: string | undefined;
+    try { raw = userPreferenceStore.get(person.id).preferences[key]; } catch { continue; }
+    if (!raw) continue;
+    try {
+      const value: unknown = JSON.parse(raw);
+      const found = key === "sagax.sidebarSections.v1"
+        ? Array.isArray((value as { sections?: unknown })?.sections) && ((value as { sections: Array<{ name?: unknown; items?: unknown }> }).sections)
+          .some((section) => typeof section?.name === "string" && section.name.trim() === name
+            // a section the old seed copied from someone else's room holds only
+            // that room: it is no evidence (personal-sections.ts, #2045)
+            && (!Array.isArray(section.items) || section.items.length === 0 || section.items.some((item) => ownsSectionItem(person.id, item))))
+        : Array.isArray(value) && value.includes(`section:${name}`);
+      if (found) owners.push(person.id);
+    } catch { /* not JSON: no evidence */ }
+  }
+  return owners;
+}
+function ownsSectionItem(principalId: string, item: unknown): boolean {
+  if (typeof item !== "string") return false;
+  const me = principalId.trim().toLowerCase();
+  if (item.startsWith("bot:")) {
+    const bot = store.bot(item.slice(4));
+    return Boolean(bot) && effectiveBotOwner(bot!).trim().toLowerCase() === me;
+  }
+  if (item.startsWith("group:")) {
+    const group = store.groups.find((candidate) => candidate.id === item.slice(6));
+    return Boolean(group) && (groupOwnerId(group!) ?? "").trim().toLowerCase() === me;
+  }
+  return false;
+}
+/** The people the audit log shows creating a team, by record id and name. */
+function sectionCreators(): { byId: Map<string, string>; byName: Map<string, Set<string>> } {
+  const byId = new Map<string, string>();
+  const byName = new Map<string, Set<string>>();
+  let rows: AdminActionRow[] = [];
+  try { rows = readAdminActivityRange(DATA_DIR, { from: new Date(0), to: new Date() }); } catch { /* no audit: no evidence */ }
+  for (const row of rows) {
+    if (row.action !== "section.create" || row.target?.kind !== "section") continue;
+    const actor = (row.actor as { principalId?: unknown } | undefined)?.principalId;
+    if (typeof actor !== "string" || !actor.trim()) continue;
+    if (row.target.id && !byId.has(row.target.id)) byId.set(row.target.id, actor);
+    if (row.target.name) byName.set(row.target.name.trim(), (byName.get(row.target.name.trim()) ?? new Set()).add(actor));
+  }
+  return { byId, byName };
+}
+const single = (owners: Iterable<string>): string | null => {
+  const distinct = [...new Set([...owners].map((owner) => owner.trim()))];
+  return distinct.length === 1 ? distinct[0]! : null;
+};
+/** #2045 isolation: who owns a team name that has no record yet: the owner
+ * of most of its bots; else its creator in the audit log; else the one
+ * person who keeps it in their own sections, then in their own sidebar
+ * order. Nobody (null): the record is unclaimed and nobody lists it. Never
+ * the first admin, which listed every other person's empty team for them. */
+function sectionMigrationOwner(name: string): string | null {
   const bots = store.bots.filter((bot) => sectionKey(bot.section) === name).map((bot) => ({ ownerPrincipalId: effectiveBotOwner(bot), createdAt: typeof bot.createdAt === "number" ? bot.createdAt : 0 }));
-  const firstAdmin = principals.list().filter((person) => person.orgRole === "admin" && person.subject && person.disabledAt === undefined).sort((a, b) => a.createdAt - b.createdAt)[0]?.id ?? localPrincipalId();
-  return migrationOwner(bots, firstAdmin);
+  return migrationOwner(bots)
+    ?? single(sectionCreators().byName.get(name) ?? [])
+    ?? single(sectionPreferenceOwners(name, "sagax.sidebarSections.v1"))
+    ?? single(sectionPreferenceOwners(name, "openmausbot.sidebarSectionOrder.v1"));
+}
+/** #2045 isolation: the evidence verifyOwners weighs, once at boot. */
+function sectionOwnerEvidence(): SectionOwnerEvidence {
+  const creators = sectionCreators();
+  const lower = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
+  const holds = (record: SectionRecord, item: { section?: string; sectionId?: string }, owner: string | null | undefined) =>
+    item.sectionId ? item.sectionId === record.id : sectionKey(item.section) === record.name && lower(owner) === lower(record.ownerPrincipalId);
+  return {
+    inUse: (record) => store.bots.some((bot) => holds(record, bot, effectiveBotOwner(bot))) || store.groups.some((group) => holds(record, group, groupOwnerId(group))),
+    creatorOf: (record) => creators.byId.get(record.id) ?? null,
+    personalOwners: (name) => sectionPreferenceOwners(name, "sagax.sidebarSections.v1"),
+    orderOwners: (name) => sectionPreferenceOwners(name, "openmausbot.sidebarSectionOrder.v1"),
+  };
 }
 /** Sections are personal (section-channels.ts header): once, every legacy
  * shared section becomes the bot grants it stood for, so nobody loses a bot
  * they opened through it. A grant already as high is kept as it is; the
  * records stay on disk. */
-const migrateSectionSharesToBotGrants = createMigrateSectionSharesToBotGrants(getLeafHost);
 /** The store's section names, every one with its record. */
 function orgSectionNames(): string[] {
   const names = store.sections;
@@ -20720,14 +25929,12 @@ function teamStorageKeyForAuth(auth: RequestAuth, sectionName: string): string {
   return teamStorageKeyFor(sectionName, owner);
 }
 
-const teamStorageForBot = createTeamStorageForBot(getLeafHost);
 
 /** The section names an organization member may see (#2045): only the
  * ones they own, or a legacy one they were made a member of. A section is
  * never shown because it holds a bot or room someone shared: the bot is
  * shared, the other person's team stays theirs. Admins included. Two people
  * may share a display name; each still only sees their own. */
-const orgVisibleSections = createOrgVisibleSections(getLeafHost);
 if (sectionChannels) {
   // First organization boot of slice 4: every existing section becomes a
   // private record (no member): nothing is shared without someone's action.
@@ -20767,6 +25974,12 @@ if (sectionChannels) {
     const matches = sectionChannels.list().filter((record) => record.name === name);
     return matches.length === 1 ? matches[0]!.id : null;
   });
+  // #2045 isolation, once: an empty team the old first-admin fallback gave
+  // to someone goes back to the person the evidence names, else nobody
+  // lists it. Runs after the membership links, so "empty" means no bot and
+  // no room carries its id. Nothing is deleted.
+  const reowned = sectionChannels.verifyOwners(sectionOwnerEvidence());
+  if (reowned.length) console.log(`sections: ${reowned.length} empty team(s) checked against their real owner (${reowned.filter((row) => row.to === UNCLAIMED_OWNER).length} now unclaimed)`);
   if (movedBriefs || movedMemory || movedLinks || movedPublished) {
     console.log(`sections: migrated team data to owner/id (${movedBriefs} brief(s), ${movedMemory} memory section(s), ${movedLinks} membership link(s), ${movedPublished} published team key(s))`);
   }
@@ -20897,7 +26110,6 @@ if (IDENTITY.kind === "perspicax" && !cfg.organization?.interimAttach && princip
 /** Slice 8: fold an interim person into a Perspicax person: every bot,
  * grant, room, section and routine of theirs moves, their sessions end, and
  * one audit row names both by principal id only. */
-const attachInterimPerson = createAttachInterimPerson(getLeafHost);
 // Slice 8: "Bring bots from a solo Sagax" (a solo server answers 403).
 ROUTES.push(createOrgImportRoute({
   organization: IDENTITY.kind === "perspicax",
@@ -21010,7 +26222,6 @@ if (ownerIdentity) {
 // ── presence: online, away, offline (organization server) ────────────
 // shared/presence.ts, server/people/presence.ts, server/routes/presence.ts. In
 // memory only: never written to a chat, the journal or a backup.
-const presenceViewer = createPresenceViewer(getLeafHost);
 function presenceHiddenFor(principalId: string): boolean {
   try {
     return presenceHidden(userPreferenceStore.get(principalId).preferences[PRESENCE_VISIBLE_PREFERENCE]);
@@ -21018,7 +26229,6 @@ function presenceHiddenFor(principalId: string): boolean {
     return false;
   }
 }
-const broadcastPresence = createBroadcastPresence(getLeafHost);
 const presence = new PresenceTracker({ onChange: broadcastPresence });
 // The person's own iPhone answers phone tool requests (server/routes/phone-tools.ts):
 // a paired phone through the companion (its vouched device), or a signed-in
@@ -21121,9 +26331,7 @@ ROUTES.push(createPushActivityRoutes({
 function reachMePerson(person: string): string {
   return IDENTITY.kind === "perspicax" ? person.trim().toLowerCase() : localPrincipalId();
 }
-const reachMeLanguage = createReachMeLanguage(getLeafHost);
 /** An open question or approval card, as "Me joindre" names it. */
-const reachMeCard = createReachMeCard(getLeafHost);
 function reachMeAnswerer(threadId: string, requestId: string): string | null {
   const message = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
   const bot = message ? botForApproval(threadId, message) : undefined;
@@ -21131,10 +26339,8 @@ function reachMeAnswerer(threadId: string, requestId: string): string | null {
 }
 /** The click, replayed with the person's own session (the Primary Bot's
  * replay of sagax_approvals, server/approvals/primary-approvals.ts). */
-const reachMeRespond = createReachMeRespond(getLeafHost);
 /** One Perspicax Voice tool for the person, outside any turn: their own
  * main connection through the routine delegation. */
-const reachMeVoice = createReachMeVoice(getLeafHost);
 const reachMeSettings = createReachMeStore(DATA_DIR);
 // phone_call_owner (#2194): resolve the person's verified number from Reach me
 ownerCallLookup.smsNumber = (principalId, botId) => reachMeSettings.effective(principalId, botId).smsNumber;
@@ -21264,7 +26470,6 @@ reachMeWhatsApp = new ReachWhatsApp({
   // Meta reaches the webhook receiver only at its public URL (SAGAX_WEBHOOK_PUBLIC_URL)
   webhookBase: () => webhookIngress ? { url: webhookIngress.baseUrl, public: Boolean(WEBHOOK_PUBLIC_URL) } : null
 });
-const reachMeAudit = createReachMeAudit(getLeafHost);
 reachMeService = new ReachMe({
   settings: reachMeSettings,
   codes: reachMeCodes,
@@ -21613,7 +26818,6 @@ ROUTES.push(createMeAvatarRoutes({
 }));
 // Shape avatar generate (geometry JSON via the bot's text model; fallback presets).
 // The bot tool and the editor share one generator (the bot's own text model).
-let _shapeAvatarGeneratorImpl: ReturnType<typeof createShapeAvatarGenerator> | undefined;
 function shapeAvatarGenerator(...args: any[]) {
   return (_shapeAvatarGeneratorImpl ??= createShapeAvatarGenerator(getLeafHost) as any)(...args);
 }
@@ -21896,8 +27100,6 @@ const installedVoices = createInstalledVoices(() => cfg);
 // A tool can never select an upstream endpoint or supply a provider key.
 const videoFixtureUrl = (process.env.SAGAX_TEST_INTERNAL_CAPABILITY_KEY?.length ?? 0) >= 32 && /^http:\/\/127\.0\.0\.1:\d{1,5}\/v1$/.test(process.env.SAGAX_TEST_VIDEO_URL ?? "")
   ? process.env.SAGAX_TEST_VIDEO_URL : undefined;
-const videoInputMessage = createVideoInputMessage(getLeafHost);
-const videoScopeValid = createVideoScopeValid(getLeafHost);
 const videoJobsDir = join(DATA_DIR, "video-jobs");
 // Register the context before opening a journal sealed on an earlier run.
 registerAtRestRoot({ id: "video-jobs", dir: videoJobsDir, context: path => `video-jobs/${path}`, files: () => videoGenerations.files() });
@@ -21968,7 +27170,6 @@ const videoGenerations = new VideoGenerations({
  * organization's key when it was given to them (the same grant as its xAI
  * voice). A solo server: the server's key. Never sent anywhere but to the
  * provider. */
-const voiceProviderKeys = createVoiceProviderKeys(getLeafHost);
 
 // Voice mode (server/voice/voice-mode.ts): xAI speech to text and text to speech
 // for the floating voice bar, with the speaker's own xAI key (Perspicax),
@@ -22176,7 +27377,6 @@ ROUTES.push(createVoiceModeRoutes(voiceModeDeps));
 const claudeAiInventory = new ClaudeAiConnectorInventory({ run: runClaudeCli });
 /** The CLI and environment of a person's own Claude account (their
  * claude.ai connectors), or why there is none. */
-const claudeAccountForPrincipal = createClaudeAccountForPrincipal(getLeafHost);
 
 /** #2106: the managed MCP plugins (claude.ai connectors, connected) a
  * subscription account of this computer holds, from the cached inventory
@@ -22203,7 +27403,6 @@ function accountManagedPlugins(instanceId: string): string[] {
 
 // claude.ai artifacts (#2018): every call runs through the person's OWN
 // Claude account (claudeAccountForPrincipal), never another person's.
-const personClaudeArtifactCall = createPersonClaudeArtifactCall(getLeafHost);
 let claudeArtifactSummaries: ArtifactSummaryCache | undefined;
 function claudeArtifactSummaryCache(): ArtifactSummaryCache {
   return claudeArtifactSummaries ??= new ArtifactSummaryCache();
@@ -22213,14 +27412,11 @@ function claudeArtifactTracked(): TrackedArtifactStore {
   return claudeArtifactTrackedStore ??= new TrackedArtifactStore(join(DATA_DIR, "claude-artifacts.json"));
 }
 /** A file the bot names for claude_artifact: inside its workspace, or null. */
-let _claudeArtifactWorkspaceFileImpl: ReturnType<typeof createClaudeArtifactWorkspaceFile> | undefined;
 function claudeArtifactWorkspaceFile(...args: any[]) {
   return (_claudeArtifactWorkspaceFileImpl ??= createClaudeArtifactWorkspaceFile(getLeafHost) as any)(...args);
 }
 /** The person's "Commentaires des artefacts" routine, made once, turned on. */
-const ensureClaudeArtifactCommentsRoutine = createEnsureClaudeArtifactCommentsRoutine(getLeafHost);
 /** The routine's code check: wake only on threads sent to Claude. */
-const claudeArtifactCommentsCheck = createClaudeArtifactCommentsCheck(getLeafHost);
 onArtifactPublished((event) => {
   claudeArtifactSummaries?.invalidate(event.url);
   if (event.owned === false || !event.botId) return;
@@ -22302,7 +27498,7 @@ ROUTES.push(createHarnessConnectorRoutes({
   isAdmin: (auth) => (IDENTITY.kind === "perspicax" ? orgAdminCaller(auth) : true),
   claudeAccountFor: claudeAccountForPrincipal,
   inventory: claudeAiInventory,
-  onSignedOut: (principalId) => { void signInRecheck?.refused(principalId, "claudeAgent"); }
+  onSignedOut: (principalId, instanceId) => { void signInRecheck?.refused(principalId, "claudeAgent", "primary", instanceId); }
 }));
 
 // The engines' own slash commands in the chat (server/harness-commands.ts):
@@ -22313,7 +27509,6 @@ const harnessCommands = new HarnessCommandCatalog();
  * organization server their own subscription (from the turn's access, else
  * the planned one, never a key read), and whether the turn keeps the
  * claude.ai connectors of that account. */
-const harnessCommandAccount = createHarnessCommandAccount(getLeafHost);
 /** The folder a group's turn runs in for this member, without pinning it
  * (the pin happens at the first turn, see runGroupMemberTurn). */
 function groupCommandCwd(bot: BotRecord, instance: { driverKind: string }, group: GroupRecord, threadId: string): string | undefined {
@@ -22321,7 +27516,6 @@ function groupCommandCwd(bot: BotRecord, instance: { driverKind: string }, group
   const pinned = group.dm ? group.pinnedCwd : store.groupTaskByThread(group.id, threadId)?.pinnedCwd;
   return (pinned !== undefined ? pinned : group.cwd) ?? ensureWorkspace(bot.id);
 }
-const harnessCommandSource = createHarnessCommandSource(getLeafHost);
 /** Whose command list a request reads: the signed-in person, else the
  * operator at this computer. */
 function harnessCommandSpeaker(auth: RequestAuth): TurnSpeaker {
@@ -22767,7 +27961,6 @@ const oidcLogin = IDENTITY.kind === "perspicax" && oidcRp && idpSessions
 
 /** Slice 7: the bots as the console's Bots page reads them, with what a
  * manager's reach is checked against. Metadata only. */
-const orgAdminBots = createOrgAdminBots(getLeafHost);
 
 /** Every conversation of a bot: its main thread and each task. */
 function botThreadIds(bot: BotRecord): string[] {
@@ -22821,7 +28014,6 @@ const orgOverviewDeps = {
 
 /** What a person's own turns run with on each engine (the order of
  * engine-credentials.ts), as /api/me/engines words it. */
-const personEngineAccess = createPersonEngineAccess(getLeafHost);
 
 /** The console's People (server/org/org-admin-people.ts). */
 const orgPeopleDeps: PeopleDeps = {
@@ -22916,11 +28108,9 @@ function consoleOwner(principalId: string): AdminPerson | null {
 /** One bot as a package document v2 (the Share dialog's format): the bot
  * alone, every skill that fits, no memory; `routines` decides whether its
  * routines ride along (they arrive off on import). */
-const singleBotPackage = createSingleBotPackage(getLeafHost);
 
 /** Import a package document for `ownerPrincipalId` (the console's Import
  * and Clone): every bot it creates is theirs. */
-const importPackageFor = createImportPackageFor(getLeafHost);
 
 /** The console's Bots (server/org/org-admin-bots.ts). */
 /** 2026-10-16, the console's "Approve for me" bulk action (POST
@@ -22930,7 +28120,6 @@ const importPackageFor = createImportPackageFor(getLeafHost);
  * owner's own confirmation to leave, as everywhere). With `threads`, its
  * conversations stored on Ask follow to Auto; a conversation on any other
  * level keeps it (never lowered). The caller audits the change. */
-const setBotApprovalModeFromConsole = createSetBotApprovalModeFromConsole(getLeafHost);
 
 const orgBotsDeps: BotsDeps = {
   bots: () => orgAdminBots(),
@@ -23208,7 +28397,6 @@ ROUTES.push(createBotCatalogRoutes({
 /** A bot as one zip (server/bots/bot-zip.ts, server/routes/bot-zip.ts): the
  * persona editor's Export and Import, New bot, Browse Bots > Templates and
  * the admin console all read and write this one format. */
-const mcpServerSummary = createMcpServerSummary(getLeafHost);
 const botZipHost: BotZipHost = {
   store,
   dataDir: DATA_DIR,
@@ -23362,7 +28550,6 @@ const orgComputersDeps: ComputersDeps = {
 /** A reachability check of an address an admin configured (an MCP server,
  * a marketplace): any HTTP answer below 500 means it is up. No credential
  * is sent; redirects are not followed. */
-const reachable = createReachable(getLeafHost);
 
 /** The organization's MCP servers (config.json), as names and transports. */
 function orgMcpServers(): Array<{ name: string; transport: "remote" | "stdio"; url: string | null; enabled: boolean }> {
@@ -23572,12 +28759,7 @@ const orgOpsDeps: OpsDeps = {
 
 /** Slice 8: shorten, extend (at most 90 days from when it opened) or close
  * the window to attach people from before Perspicax. */
-const saveOrgPendingApprovalExpireDays = createSaveOrgPendingApprovalExpireDays(getLeafHost);
 
-const saveOrgInterimAttachDays = createSaveOrgInterimAttachDays(getLeafHost);
-const saveOrgAllowFullAccess = createSaveOrgAllowFullAccess(getLeafHost);
-const saveOrgMemberEnvironmentAutonomy = createSaveOrgMemberEnvironmentAutonomy(getLeafHost);
-const saveOrgConfidentialThreadsByDefault = createSaveOrgConfidentialThreadsByDefault(getLeafHost);
 /** Organization server, once (organization.memberAutoResetAt): the first
  * time an admin turns automatic levels for members' bots off (that save, or
  * a start that finds the setting off), every saved Auto or Auto-accept
@@ -23585,7 +28767,6 @@ const saveOrgConfidentialThreadsByDefault = createSaveOrgConfidentialThreadsByDe
  * Ask, so turning the setting on again brings none back by itself
  * (member-auto-approval.ts). Never by default. The log line has a count,
  * no names. */
-const resetMemberAutoLevelsOnce = createResetMemberAutoLevelsOnce(getLeafHost);
 /** 2026-10-17 (re-review of #688): bots that just became a member's (an
  * import, a copy, a transfer, a new bot on the organization's default, an
  * owner no longer an admin) keep no automatic level the organization
@@ -23604,15 +28785,11 @@ function settleMemberAutoLevels(botIds: readonly string[]): MemberAutoReset {
  * organization role changes, so a demoted admin's bots never keep a stored
  * Auto or Auto-accept edits the organization refuses for members' bots.
  * The log line has counts, no names. */
-const settleMemberAutoLevelsFor = createSettleMemberAutoLevelsFor(getLeafHost);
 principals.onRoleChanged((person, before) => {
   // only a demotion can make an admin's bot a member's
   if (before !== "admin" || person.orgRole === "admin") return;
   settleMemberAutoLevelsFor(store.bots.filter((bot) => effectiveBotOwner(bot) === person.id).map((bot) => bot.id), "an owner is no longer an organization admin");
 });
-const saveOrgMemberAutoApproval = createSaveOrgMemberAutoApproval(getLeafHost);
-const saveOrgAllowVaultExport = createSaveOrgAllowVaultExport(getLeafHost);
-const saveOrgPluginMarketplaces = createSaveOrgPluginMarketplaces(getLeafHost);
 
 /** The organization's engine policy (Settings, Policies): every engine
  * until a list is set. */
@@ -23645,7 +28822,6 @@ function modelSwitchRefusal(instanceId: string, model: string, principalId: stri
 /** A bot on a model now off (the organization's switch, or its owner's own)
  * moves to Auto on the same engine, from its first model still on; a
  * thread's own model follows its bot. `owner`: only that person's bots. */
-const applyModelSwitches = createApplyModelSwitches(getLeafHost);
 /** 2026-10-30: the organization lets a person run an engine outside its
  * list on their own subscription or key (Perspicax, Model providers:
  * `ownAccountsOutsideList`). Off by default: what the admin turns off is
@@ -23672,10 +28848,8 @@ function orgEngineAllowRefusal(instanceId: string, payer?: string | null): strin
 /** The organization's engine list for one turn: an engine outside it never
  * runs (2026-10-30), unless the organization lets own accounts through and
  * the turn's payer pays with their own subscription or key (#1098). */
-const orgEngineTurnRefusal = createOrgEngineTurnRefusal(getLeafHost);
 /** #1098: this person's own subscription or key would pay for their turn
  * on this engine (engine-credentials.ts steps 3 and 4). */
-let _personPaysEngineImpl: ReturnType<typeof createPersonPaysEngine> | undefined;
 function personPaysEngine(...args: any[]) {
   return (_personPaysEngineImpl ??= createPersonPaysEngine(getLeafHost) as any)(...args);
 }
@@ -23683,7 +28857,6 @@ function personPaysEngine(...args: any[]) {
  * capabilities, api 4): the same access groups as the model picker's
  * provider column (src/lib/engine-rail.ts splitEngineRail: a custom engine
  * is Local, an API key or a subscription engine is Cloud). */
-const orgAdminEngines = createOrgAdminEngines(getLeafHost);
 /** An engine's name for a person (its id when the registry no longer has it). */
 function orgEngineName(instanceId: string): string {
   const live = registry.get(instanceId);
@@ -23693,26 +28866,21 @@ function orgEngineName(instanceId: string): string {
  * allowed engine (the New bot default when allowed, else the first allowed
  * engine here), and a thread's own model on such an engine follows its bot
  * again. At start and whenever the list changes. */
-const applyOrgEngineAllowList = createApplyOrgEngineAllowList(getLeafHost);
 
 /** What a manager's reach is checked against for one bot (the bots route
  * and the files routes of the console's admin API). */
-const orgBotReach = createOrgBotReach(getLeafHost);
 
 /** A path inside this server's data folder (real paths), for the project
  * folder root of the console's file browser: a working folder elsewhere on
  * the host is never browsed from Perspicax. */
-let _insideDataDirImpl: ReturnType<typeof createInsideDataDir> | undefined;
 function insideDataDir(...args: any[]) {
   return (_insideDataDirImpl ??= createInsideDataDir(getLeafHost) as any)(...args);
 }
 
 /** The roots of a bot's files for the console's file browser
  * (server/org/org-admin-files.ts); never a path on the wire. */
-const orgBotFileRoots = createOrgBotFileRoots(getLeafHost);
 
 /** The uploads and attach_file outputs of every conversation of a bot. */
-const orgBotAttachments = createOrgBotAttachments(getLeafHost);
 
 /** Slice 7: the console's admin API (server/org/org-admin-routes.ts), answered
  * before the auth gate with a console assertion only. */
@@ -23803,7 +28971,6 @@ bus.subscribe((event: RuntimeEvent) => {
 /** 2026-10-09 (lot C.1): the member API (server/org/org-member-routes.ts), for
  * an AI client attached to Perspicax acting for one person. Each route is
  * performed as that person through a 60 s session of theirs. */
-const performAsMember = createPerformAsMember(getLeafHost);
 // ── agent-to-agent API (docs/agent-api.md) ────────────────────────────
 // Ten tools with the reference design's semantics, for a bot (its agents MCP server,
 // /api/internal/agent-api/<tool>) and for a person's AI client (the member
@@ -23813,8 +28980,6 @@ const AGENT_API_KEY_FILE = join(DATA_DIR, "agent-api.key");
 async function prepareMcpServers(bot: BotRecord): Promise<void> {
   await mcpServersHost.prepare(bot);
 }
-Object.assign(leafHostBindings, { DATA_DIR, AGENT_API_KEY_FILE });
-let _agentApiSecretImpl: ReturnType<typeof createAgentApiSecret> | undefined;
 function agentApiSecret(...args: any[]) {
   return (_agentApiSecretImpl ??= createAgentApiSecret(getLeafHost) as any)(...args);
 }
@@ -23823,19 +28988,15 @@ function agentApiSecret(...args: any[]) {
  * holds read and send; a Primary Bot also create. An empty list turns the
  * tools off for that bot. */
 const AGENT_API_GRANTS_FILE = join(DATA_DIR, "agent-api-grants.json");
-const agentApiBotScopes = createAgentApiBotScopes(getLeafHost);
 /** Whether the agents tools are mounted for this bot (presentation only;
  * every call is checked again). */
 function agentApiMounted(bot: BotRecord): boolean {
   return agentApiBotScopes(bot).size > 0;
 }
-const agentTurnState = createAgentTurnState(getLeafHost);
-let _agentModelSummaryImpl: ReturnType<typeof createAgentModelSummary> | undefined;
 function agentModelSummary(...args: any[]) {
   return (_agentModelSummaryImpl ??= createAgentModelSummary(getLeafHost) as any)(...args);
 }
 
-const agentSummary = createAgentSummary(getLeafHost);
 /** The bots a bot may reach: its team, the teams it was allowed, its allow-list.
  * An archived temporary agent is gone for everyone. */
 function agentPeersOf(from: BotRecord): BotRecord[] {
@@ -23855,7 +29016,6 @@ function issueTemporaryCreateToken(record: TemporaryAgent, principalId: string):
   return token;
 }
 /** The record a token carries, once, for the person it was issued to. */
-const takeTemporaryCreateToken = createTakeTemporaryCreateToken(getLeafHost);
 /** The newest sign of life of a bot: its own conversations. */
 function botLastActivity(bot: BotRecord): number {
   let last = bot.createdAt ?? 0;
@@ -23868,14 +29028,11 @@ function botLastActivity(bot: BotRecord): number {
  * 2026-10-20 (perf-test-061) read "This agent was archived." and "No such
  * bot". Its archive is the agent's own mark, read and set here: idempotent,
  * one clear sentence. Null: not a temporary agent, the screen's path runs. */
-const temporaryAgentSetting = createTemporaryAgentSetting(getLeafHost);
-let _temporaryAuditImpl: ReturnType<typeof createTemporaryAudit> | undefined;
 function temporaryAudit(...args: any[]) {
   return (_temporaryAuditImpl ??= createTemporaryAudit(getLeafHost) as any)(...args);
 }
 /** Archive what has been idle past its expiry; delete what has been archived
  * past its retention. Runs every few minutes and once at start. */
-const sweepTemporaryAgents = createSweepTemporaryAgents(getLeafHost);
 ROUTES.push(createTemporaryAgentRoutes({
   temporary: (botId) => store.bot(botId)?.temporary,
   personId: (auth) => actorPrincipalId(auth).trim().toLowerCase(),
@@ -23890,13 +29047,10 @@ setTimeout(() => { void sweepTemporaryAgents().catch(reportBackgroundError); }, 
 setInterval(() => { void sweepTemporaryAgents().catch(reportBackgroundError); }, TEMP_AGENT_SWEEP_MS).unref?.();
 const agentApiCallerBot = (caller: AgentCaller) => (caller.kind === "bot" ? store.bot(caller.id) ?? null : null);
 /** One workspace-relative file of a bot caller, resolved inside one of its roots. */
-const agentApiSourceFile = createAgentApiSourceFile(getLeafHost);
 /** Puts the files in the agent's workspace (inbox/<sender>/) and answers
  * the relative paths the prompt names. */
-const agentApiStageFiles = createAgentApiStageFiles(getLeafHost);
 /** A bot's prompt to a peer's hidden conversation: runs now when the peer
  * has a free slot, else waits in its queue; the line records the sender. */
-const startAgentPrompt = createStartAgentPrompt(getLeafHost);
 /** The conversations of an agent a person may read: their own (hidden ones
  * included), and every one when the bot is theirs. */
 function personAgentThreads(principalId: string, agent: BotRecord): TaskRecord[] {
@@ -23904,7 +29058,6 @@ function personAgentThreads(principalId: string, agent: BotRecord): TaskRecord[]
   // An AI client never reads a confidential thread (server/threads/confidential-threads.ts).
   return store.tasks(agent.id).filter((task) => task.confidential !== true && (task.ownerPrincipalId === principalId || (ownsBot && !task.ownerPrincipalId)));
 }
-const agentApiAudit = createAgentApiAudit(getLeafHost);
 // B2 securable tool layer (docs/tool-policy.md): grants per bot and person;
 // SAGAX_TOOL_GUARD=shadow (default) audits the decision, enforce applies it.
 const toolGrants = ToolGrantStore.inDataDir(DATA_DIR);
@@ -24525,7 +29678,6 @@ function agentUnifiedThread(target: BotRecord, principalId: string | undefined):
  * the person's thread (ownerPrincipalId), never selected, never
  * confidential, stamped `openedBy` kind "agent" so every bot-to-bot rule
  * holds: out of their stream, sidebar and unread counts, and silent. */
-const agentConversationFor = createAgentConversationFor(getLeafHost);
 /** The outside agents' conversations a person has with a bot. */
 function agentConversationsOf(target: BotRecord, principalId: string): string[] {
   const person = principalId.trim().toLowerCase();
@@ -24545,12 +29697,10 @@ function markAiClientLine(threadId: string, messageId: string): void {
   if (!line || line.role !== "user" || line.aiClient) return;
   store.patchMessage(threadId, messageId, { aiClient: true });
 }
-let _memberForAgentCallerImpl: ReturnType<typeof createMemberForAgentCaller> | undefined;
 function memberForAgentCaller(...args: any[]) {
   return (_memberForAgentCallerImpl ??= createMemberForAgentCaller(getLeafHost) as any)(...args);
 }
 /** A person's scopes from their permissions (shared/permissions.ts). */
-const agentScopesFor = createAgentScopesFor(getLeafHost);
 function agentApiForMember(person: MemberPerson, tool: string, args: unknown, signal?: AbortSignal) {
   return agentApi.call({
     kind: "person", id: person.principalId, name: person.name, sub: person.sub, admin: person.admin,
@@ -24892,7 +30042,6 @@ ROUTES.push(createLiveRoutes({
   }
 }));
 // #1388 P5: config write pipeline (early refusals live in config-http.ts).
-const applyConfigHttpPatch = createApplyConfigHttpPatch(getLeafHost);
 
 // #1388 wave 0b: empty ROUTES anchors in original handleRequest order (first
 // path of each public slice). Each worker replaces only its own line with
@@ -24963,7 +30112,12 @@ ROUTES.push(createSidebarSectionsRoutes({
   sectionsFor: (auth) => (sectionChannels ? orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId()) : store.sections),
   mayFile: (auth, bot) => !sectionChannels || auth.kind !== "session" || effectiveBotOwner(bot).trim().toLowerCase() === (auth.session.principalId ?? "").trim().toLowerCase(),
   onSectionCreated: (section, auth) => {
-    if (sectionChannels) sectionChannels.ensure(section, auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId());
+    if (!sectionChannels) return;
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    const existed = sectionChannels.byNameForOwner(section, owner);
+    const record = sectionChannels.ensure(section, owner);
+    // #2045 isolation: the creator stays on record, the evidence of ownership.
+    if (!existed) orgAudit({ category: "section", action: "section.create", target: { kind: "section", id: record.id, name: record.name }, actor: orgAuditActor(auth) });
   },
   sectionIdFor: (section, auth) => {
     if (!sectionChannels) return undefined;
@@ -25481,7 +30635,6 @@ ROUTES.push(createGroupsHttpRoutes({
   profileName: () => cfg.profile?.name?.trim() || "User"
 }));
 /** #2045: resolve (and ensure) the caller's team channel id for a display name. */
-const resolveSectionId = createResolveSectionId(getLeafHost);
 ROUTES.push(createBotsCoreRoutes({
   store,
   resolveSectionId,
@@ -26291,7 +31444,6 @@ ROUTES.push(createBotsMutateRoutes({
 }));
 
 /** #1388 wave 4 step 2: PRE_AUTH_ROUTES, static, media, template and published pages. */
-const runPreAuth = createRunPreAuth(getLeafHost);
 
 /** #1388 wave 4 step 2: resolveRequestAuth, session/idp gates, visibility and request scopes. */
 /** The request-scoped stores authenticate sets. enterWith after an await
@@ -26305,17 +31457,13 @@ type RequestScopes = {
   /** The admin whose config saves this request records (beginAdminAudit). */
   adminActor?: AdminActorScope;
 };
-const enterRequestScopes = createEnterRequestScopes(getLeafHost);
-const authenticate = createAuthenticate(getLeafHost);
 
 /** #1388 wave 4 step 2: authenticated ROUTES table dispatch. */
-let _runRoutesImpl: ReturnType<typeof createRunRoutes> | undefined;
 function runRoutes(...args: any[]) {
   return (_runRoutesImpl ??= createRunRoutes(getLeafHost) as any)(...args);
 }
 
 /** #1388 wave 4 step 2: test capability mint and /api/internal/* harness block. */
-const runInternal = createRunInternal(getLeafHost);
 
 /** #1388 wave 4 step 2: leftover inline bot routes after the tables, including the final 404. */
 async function fallback(_req: IncomingMessage, res: ServerResponse, _url: URL, path: string, method: string, _auth: RequestAuth, _state: { m?: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void }): Promise<boolean> {
@@ -26425,6 +31573,11 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   containerComputerMcp,
   controlIntegration,
   coordinator,
+  directCoordinationSettlers,
+  handoffOpener,
+  requestWorkOrigin,
+  roomTurnBrief,
+  settleDirectCoordination,
   customMcpPrompt,
   dataIntegration,
   decideWorkplace,
@@ -26626,6 +31779,8 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
 
 const startTurnRunner = createStartTurn({
   AUTO_COMPUTER_RULES,
+  handoffOpener,
+  personForJoin,
   BOTMAIL_ENGINE_REFUSAL,
   BUILT_IN_BROWSER_SYSTEM_PROMPT,
   BUILT_IN_DATA_SYSTEM_PROMPT,
@@ -27123,7 +32278,6 @@ const startTurnRunner = createStartTurn({
   workspaceMaintenance
 });
 
-const originGates = createOriginGates(getLeafHost);
 
 const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
   const parsed = parseRequest(req, res, PORT, json);
@@ -27283,9 +32437,7 @@ videoGenerations.recover();
 // activeDirectThreads once, and yield between batches.
 const THREAD_LOG_RETENTION_SWEEP_MS = 24 * 60 * 60 * 1000;
 
-const sweepThreadEventLogsDeferred = createSweepThreadEventLogsDeferred(getLeafHost);
 
-const scheduleThreadEventLogRetentionSweep = createScheduleThreadEventLogRetentionSweep(getLeafHost);
 scheduleThreadEventLogRetentionSweep();
 
 // A dispatch claim is deliberately committed before transcript/provider work.
@@ -27468,18 +32620,15 @@ let tunnelListener: ReturnType<typeof createServer> | null = null;
  * route are checked again at dispatch; a review the person had not given is
  * asked then (reviewHolds). A finished routine run's handoffs are dropped,
  * as the ledger did. */
-const importLegacyDelegations = createImportLegacyDelegations(getLeafHost);
 
 /** delegate_bot on the job runtime (lot 3): the request coordinate_bots
  * makes for one teammate outside a room, answered in delegate_bot's shape.
  * Its task id is the runtime's assignment id, which check_delegation and
  * wait_delegation read back (runtimeDelegationStatus). */
-const delegateOnRuntime = createDelegateOnRuntime(getLeafHost);
 
 /** check_delegation / wait_delegation for a task id delegateOnRuntime
  * returned: read from the runtime's record, in the legacy receipt's words.
  * The same ownership and access rule as a legacy receipt. */
-const runtimeDelegationStatus = createRuntimeDelegationStatus(getLeafHost);
 
 /** A quit, update or restart first lets the turns in progress finish, for
  * a bounded time (SAGAX_SHUTDOWN_DRAIN_MS, server/turns/interrupted-turns.ts):
@@ -27487,7 +32636,6 @@ const runtimeDelegationStatus = createRuntimeDelegationStatus(getLeafHost);
  * closed: a teammate turn that finishes keeps its result). A turn waiting
  * on a person's approval does not hold the stop. */
 const SHUTDOWN_DRAIN_MS = shutdownDrainMs(process.env, Boolean(process.versions.electron));
-const drainTurnsBeforeShutdown = createDrainTurnsBeforeShutdown(getLeafHost);
 
 /** The turns the drain did not see finish are cut, and no turn.completed
  * reaches those threads. Each says so now, instead of leaving a message
@@ -27496,16 +32644,13 @@ const drainTurnsBeforeShutdown = createDrainTurnsBeforeShutdown(getLeafHost);
  * (resumeTurnsCutByRestart); a routine run resumes through its own record
  * (RoutineManager.takeRestartResumes); a hand-off turn the next start goes
  * on with (the runtime's restart policy) is left to say so then. */
-const noteTurnsCutByShutdown = createNoteTurnsCutByShutdown(getLeafHost);
 
 /** At start: each routine run and direct turn the last stop cut goes on once
  * in its own conversation, told to check what was already done first. */
-const resumeTurnsCutByRestart = createResumeTurnsCutByRestart(getLeafHost);
 
 /** After a crash cut the turn with no resume record: run each thread's held
  * steered messages once as one follow-up (D1). Skips threads a graceful
  * resume already answered. */
-const resumeHeldSteersAfterCrash = createResumeHeldSteersAfterCrash(getLeafHost);
 
 
 const gracefulShutdown = createGracefulShutdown({
@@ -27607,5135 +32752,7 @@ const gracefulShutdown = createGracefulShutdown({
     }).catch(reportBackgroundError);
   }
 });
-Object.assign(leafHostBindings, {
-  isAutoOptimize,
-  reportBackgroundError,
-  scrubThreadDecisions,
-  appendProblem,
-  peerApprovalFailure,
-  CONFIDENTIAL_INCIDENT_TEXT,
-  PORT,
-  orgCapabilitiesRevision,
-  WEBHOOK_PORT,
-  WEBHOOK_PUBLIC_URL,
-  STATIC_DIR,
-  templateLinks,
-  publishedPages,
-  pageLive,
-  dataDirLease,
-  dataDirLeaseReleaseAttempted,
-  releaseDataDirLeaseAtExit,
-  workspaceRestore,
-  workspaceMaintenance,
-  ENVIRONMENT_ID,
-  IDENTITY,
-  ORG_ENGINE_NOT_ALLOWED,
-  ORG_ALWAYS_ALLOW_OFF,
-  MODEL_TURNED_OFF_BY_ORG,
-  MODEL_TURNED_OFF_BY_PERSON,
-  PROFILE_MANAGEMENT,
-  EMPTY_SIGN_IN,
-  cachedSignInAllowList,
-  signInAllowList,
-  emailSignInAllowList,
-  sessions,
-  sharedComputers,
-  userComputers,
-  liveSessionPerson,
-  desktopBridges,
-  modelFallbackByThread,
-  modelFallbackByPayer,
-  modelFallbackPayerKey,
-  turnModelSwitches,
-  roomTurnRuns,
-  turnModelRequested,
-  desktopLocalModels,
-  desktopTunnels,
-  bridgeAudit,
-  userPreferenceStore,
-  botWizardStore,
-  viewerBotOverrideStore,
-  achievementBots,
-  achievementStore,
-  achievementCallStarts,
-  apnsConfig,
-  pushDevices,
-  fcmConfig,
-  androidPushDevices,
-  pushActivities,
-  liveActivityHub,
-  pushHub,
-  reachMeService,
-  reachMeTeams,
-  reachMeWhatsApp,
-  phoneToolTaintedThreads,
-  phoneTools,
-  recordAchievements,
-  recordMastery,
-  masteryPrice,
-  autoTurnsByThread,
-  masteryThreadModel,
-  masteryFrameLookups,
-  masteryCensus,
-  lockedLookRefusal,
-  recordPersonaSave,
-  masteryReconciledDay,
-  masteryNightly,
-  achievementThreadPerson,
-  observePushFrame,
-  observeLiveActivityFrame,
-  observeAchievementFrame,
-  workplacePreference,
-  turnWorkplaces,
-  egressProxy,
-  samePerson,
-  declaredToolProduct,
-  ruleProductsOf,
-  ruleProductsOfPerson,
-  personSpeaker,
-  userComputerSpeaking,
-  lendingEnabled,
-  threadStarters,
-  commandAllowlist,
-  ownerApprovals,
-  securityKeys,
-  securityKeyCeremonies,
-  artifactStore,
-  preferenceStore,
-  botTaskStore,
-  threadFilePins,
-  customRules,
-  reviewCustomRules,
-  botSettings,
-  SESSION_COOKIE,
-  HOSTED_WORKSPACE,
-  workspaceAccess,
-  DESKTOP_MANAGED,
-  SHARED_WORKSPACE_FULL_ACCESS,
-  sharedWorkspaceFullAccessEnabled,
-  LOOPBACK,
-  WORKER_RELAY_TOKEN,
-  cliOwnerToken,
-  desktopMutationToken,
-  companionMutationToken,
-  FALLBACK_PUBLIC_URL,
-  cfg,
-  hostedModels,
-  claudeRetirement,
-  providerConfigs,
-  decorateHostedProvider,
-  deletedConfidentialThreads,
-  decider,
-  customDomainVerifier,
-  emailOtp,
-  mailResolved,
-  FIXED_WORKSPACE_SEAM,
-  requestedWorksOn,
-  MAIL_CAPTURE_FILE,
-  mailCaptureFile,
-  cachedMailerKey,
-  cachedMailer,
-  mailer,
-  emailSignIn,
-  customDomainRevision,
-  savedCustomDomain,
-  publicUrl,
-  customDomainStatus,
-  resumeEngineReconnectForPerson,
-  registry,
-  supportsApprovalMode,
-  engineSelfCheck,
-  engineSelfCheckAt,
-  SERVER_STARTED_AT,
-  turnTriggers,
-  turnSpeakers,
-  connectorSetupProofs,
-  turnSpeakerPrincipals,
-  turnAccessByThread,
-  turnRoutineLineage,
-  turnRoutinePayers,
-  turnRoutineTriggers,
-  routineTriggerOf,
-  routineConsents,
-  messageSender,
-  reactionPersonFor,
-  legacyReactionUser,
-  REACTION_ROUTE,
-  MAX_BOT_REACTIONS_PER_TURN,
-  botReaction,
-  placedBotReactions,
-  NOTHING_TO_ADD,
-  echoesOwnReaction,
-  sharedMembership,
-  linePersonKey,
-  cardRequesterKey,
-  actTurnFacts,
-  threadPersonKey,
-  turnOrigin,
-  sharedComputerPrincipal,
-  sessionLendingPrincipal,
-  CLOUD_OWNER_KEY,
-  CLOUD_NOBODY_KEY,
-  cloudEarlierOwners,
-  actorKey,
-  routineWriterInFlight,
-  withRoutineWriter,
-  cloudGuestOpened,
-  guestDrivenTurns,
-  cloudGuestDrivenHandoff,
-  openerFrom,
-  parentThreadModel,
-  ROUTINE_FROM_BEFORE,
-  CONVERSATION_FROM_BEFORE,
-  BOTMAIL_ENGINE_REFUSAL,
-  BOTMAIL_CONFINED_WHY,
-  confinedWhy,
-  guestEngineRefusal,
-  cloudGuestDriven,
-  cloudOwnerSession,
-  cloudOwnerPerson,
-  cloudOwnerDevice,
-  cardAnswerRefusal,
-  personMayUseTeamSection,
-  teamMemoryShared,
-  viewerUsesTeamSection,
-  teamMemoryMemberMayAnswer,
-  teamMemoryContextAllows,
-  teamMemoryThreadReadable,
-  viewerMayAnswerOnThread,
-  applyAutoReviewDefault,
-  COMMAND_ALLOWLIST_ADD_REFUSAL,
-  canManageCommandAllowlist,
-  mayActOnPerson,
-  webhookDelegateRefusal,
-  webhookBotAimable,
-  webhookSeenBy,
-  _configAddressFieldImpl,
-  configAddressField,
-  _configProviderKeyFieldImpl,
-  configProviderKeyField,
-  adminOrDelegate,
-  COMMAND_ALLOWLIST_DRIVERS,
-  commandAllowlistResponse,
-  _decisionActorForImpl,
-  decisionActorFor,
-  cardAnswererFor,
-  answeringCardAs,
-  viewerFor,
-  threadOwners,
-  visibleSets,
-  threadOwner,
-  visibleTo,
-  forgetVisibility,
-  attachmentThreads,
-  threadsUsingAttachment,
-  subjectVisible,
-  NEEDS_RUN,
-  routineBotId,
-  routineNeedsRun,
-  hiddenRoutineTarget,
-  roomFeedsBot,
-  roomMemberAudiences,
-  settleRoomFloor,
-  recentWorkFilter,
-  recentWorkSources,
-  autoRecallPrompt,
-  withRecalled,
-  roomAudienceConflict,
-  memberFrameContext,
-  adminActivityRecording,
-  adminActorFor,
-  adminActorScope,
-  recordAdminConfigChange,
-  WEBHOOK_AUDIT_FIELDS,
-  auditBot,
-  auditHook,
-  hookFields,
-  _requestedBotFieldsImpl,
-  requestedBotFields,
-  beginAdminAudit,
-  adminAuditRows,
-  guardedSendSchema,
-  usageTriggerFor,
-  operatorPrices,
-  orgUsageFacts,
-  bookTurnUsage,
-  queuedTurnTrigger,
-  providerAuthSessions,
-  openCodeOrganisationManaged,
-  openCodeKeysAllowed,
-  openCodeKeysLastAllowed,
-  resyncOpenCodeProviderKeys,
-  bundledSkills,
-  availableSkills,
-  listBotSkills,
-  readBotSkillFile,
-  utilityParentPort,
-  postDesktopPrivateMessage,
-  applyDesktopMutationTokenMessage,
-  browserCleanup,
-  phoneSecrets,
-  ownerIdentity,
-  bus,
-  personalProviderInstances,
-  machineRuns,
-  companyRuntimeStarted,
-  managedPolicy,
-  hostComputerRefusal,
-  orgAccountComputerRefusal,
-  computerPlaceRefusal,
-  mcpOAuthKey,
-  mcpOAuth,
-  policyModelRefusal,
-  managedDesktop,
-  orgLibrary,
-  pendingOrgLibraryRelay,
-  INTERNAL_CAPABILITY_ORPHAN_MS,
-  internalCapabilities,
-  perspicaxMcp,
-  perspicaxReach,
-  perspicaxMemory,
-  perspicaxEnding,
-  activeInternalGenerationByThread,
-  internalGenerationByProviderTurn,
-  computerSelectionTurns,
-  computerSelectionMoves,
-  EXTERNAL_RUNTIME_GENERATION,
-  EXTERNAL_RUNTIMES_FILE,
-  externalCompletion,
-  externalRuntimeCapability,
-  beginInternalCapabilityGeneration,
-  sessionCredentials,
-  sessionGrants,
-  sessionBearer,
-  mintInternalCapability,
-  endForeignTurns,
-  revokeInternalCapabilityGeneration,
-  revokeEarlierTurnCapabilities,
-  revokeInternalCapabilitiesForThread,
-  revokeAllInternalCapabilities,
-  bindInternalCapabilityToProviderTurn,
-  revokeInternalCapabilityForProviderEvent,
-  authorizedInternalCapability,
-  internalCapabilityIsActive,
-  MAX_COMMS_DEPTH,
-  peerHopTurn,
-  MAX_WORKSPACE_BOTS,
-  agentsProxyPath,
-  perspicaxBridgePath,
-  phoneProxyPath,
-  messagesProxyPath,
-  groupMemoryWritable,
-  mcpIdentityOf,
-  personRunBots,
-  personOwnScope,
-  agentsIntegration,
-  hooksEnabled,
-  hooksIntegration,
-  clearFailedAutoPin,
-  asPlaceFailure,
-  cloudComputerHolders,
-  boatNotConfigured,
-  directTurnDispatchClaims,
-  directTurnGenerationByThread,
-  directRequestOwners,
-  turnToolEvidence,
-  directFollowupTurns,
-  directFollowupSettlers,
-  directCoordinationSettlers,
-  settleDirectCoordination,
-  settleDirectFollowup,
-  directTurnBots,
-  turnPromptBytes,
-  turnContextBuckets,
-  providerFleetReloading,
-  turnResources,
-  sharedComputerControl,
-  turnResourceOwners,
-  turnComputerResources,
-  teamComputerTurns,
-  settlingResourceOwners,
-  claimTurnResource,
-  releaseTurnResources,
-  releaseTurnComputer,
-  bindTurnComputer,
-  botForThread,
-  directClaimOccupies,
-  threadBusy,
-  parksBehindCoordination,
-  botAtThreadCapacity,
-  hasDirectDispatch,
-  canAdmitDirectTurn,
-  botBusyThreadCount,
-  coordinatorSlotUse,
-  unattendedDispatchState,
-  requestedTaskBot,
-  stoppingThreads,
-  threadStoppedAt,
-  threadStoppedUtterance,
-  markThreadStopping,
-  clearThreadStopping,
-  stopDirectThread,
-  stopDirectThreadByPerson,
-  interruptDirectThread,
-  noteTeammatesLeftRunning,
-  interruptAllDirectThreads,
-  devPodsThreads,
-  retiredProviderTurns,
-  pendingCancelledProviderHandshakes,
-  turnAttachmentsByTurn,
-  turnAttachmentKey,
-  purgeTurnAttachmentsForThread,
-  markCancelledProviderHandshake,
-  clearCancelledProviderHandshake,
-  retireProviderTurn,
-  shouldIgnoreProviderEvent,
-  directTurnClaimIsCurrent,
-  directTurnClaimExists,
-  markDirectTurnDispatching,
-  clearDirectTurnDispatch,
-  compactionControllers,
-  cancelDirectTurnDispatch,
-  sharedEgressHost,
-  browserSessionBots,
-  webBotAuthStore,
-  signedVisits,
-  browserRuntime,
-  browserLive,
-  browserNetworkDebug,
-  usedBrowserSessions,
-  browserSweep,
-  myChrome,
-  MY_CHROME_SESSION_PREFIX,
-  isMyChromeSession,
-  myChromeBotHasShell,
-  effectiveBrowserProfile,
-  myChromePromptFor,
-  myChromeNavigationRefusal,
-  temporaryBrowserSessions,
-  confidentialBrowserSessions,
-  currentBrowserSession,
-  forgetTemporaryBrowser,
-  forgetConfidentialBrowser,
-  browserIntegration,
-  engineUnavailableLogged,
-  dataSheets,
-  dataFrameAudience,
-  dataScopeForTurn,
-  dataScopeForViewer,
-  dataConfinedRoots,
-  dataThreadFolders,
-  dataDownloadDir,
-  dataSelfAnswerRoots,
-  dataExportRoots,
-  dataUnavailableLogged,
-  dataIntegration,
-  browserEngineInstall,
-  browserEngineInstallError,
-  browserEngineSummary,
-  userSandboxIntegration,
-  userDesktopIntegration,
-  workplaceIntegration,
-  turnWorksOn,
-  autoComputerStateFor,
-  autoWorkspaceWanted,
-  lastAutoPlace,
-  noteAutoWorkspace,
-  decideWorkplace,
-  _storedNamesInImpl,
-  storedNamesIn,
-  storedFamily,
-  holdTurnAttachments,
-  openForComingTurn,
-  soloArchiveText,
-  workplaceTurnText,
-  officeTurnText,
-  withWorkplaceNote,
-  _workplaceNoteTextImpl,
-  workplaceNoteText,
-  attachmentReferences,
-  turnNetworkProxy,
-  mountUserSandbox,
-  autoComputerSelectionFor,
-  _parseArchiveOutcomeImpl,
-  parseArchiveOutcome,
-  stagePendingAttachments,
-  engineReference,
-  withholdHostToolsFor,
-  phoneIntegration,
-  messagesWanted,
-  messagesIntegration,
-  imessageSender,
-  perspicaxSubOf,
-  recordPerspicaxWork,
-  routineMemoryHint,
-  perspicaxTurnPrepare,
-  perspicaxTurnIntegration,
-  computerControlRevision,
-  computerControl,
-  controlIntegration,
-  awaitedAsks,
-  askBotAndWait,
-  headlessBotByName,
-  syncHeadlessTeam,
-  HEADLESS_TASK_WAIT_MS,
-  headlessTasks,
-  selectableInstances,
-  defaultSelection,
-  memberDefaultSelection,
-  personRunsEngine,
-  selectionContext,
-  selectionContextFor,
-  refreshUnsetModelSelectionsShared,
-  refreshUnsetModelSelections,
-  refreshUnsetModelSelectionsFrom,
-  engineEligibility,
-  healBotEngine,
-  teammateEngineProblem,
-  moveOffComputerEngine,
-  computerEngineMoveRunning,
-  retryComputerEngineMove,
-  checkedModelSelection,
-  engineSwitchNeedsAsk,
-  checkedTaskModelSwitch,
-  threadEngine,
-  threadModelGivingWay,
-  turnSelection,
-  healThreadModel,
-  healOrgRefusedThreadModel,
-  checkedExportSkillNames,
-  collectExportSkills,
-  collectTeamSkills,
-  starterNotes,
-  packageImportDeps,
-  defaultsPresetFor,
-  _checkedGroupResponderImpl,
-  checkedGroupResponder,
-  checkedMemberIds,
-  bootSelection,
-  enginesRead,
-  presetStore,
-  semanticIndex,
-  turnHolder,
-  contentBotOwnerOf,
-  contentOwnerOf,
-  store,
-  teamComputers,
-  followupsReady,
-  sendSequencer,
-  widgetPressesInFlight,
-  startupCatalogs,
-  browserCleanupReferencesReconciled,
-  principals,
-  companyMemory,
-  memoryPromptFor,
-  userSandbox,
-  sandboxBotFolders,
-  sandboxBotFolder,
-  attributeSandboxEntries,
-  updateRoutinePathsAfterTidy,
-  sandboxTidier,
-  botTailscaleService,
-  runLifecycleEvent,
-  execLifecycleHook,
-  sandboxWakeNoted,
-  _noteSandboxClusterWaitImpl,
-  noteSandboxClusterWait,
-  workplaceUsesSandbox,
-  userSandboxTurnRunning,
-  vaultKeySource,
-  personConnections,
-  personalSkills,
-  credentialVault,
-  outbound,
-  orderFollowUps,
-  onePassword,
-  computerApps,
-  hostScreenTurns,
-  hostScreenTurn,
-  readOnePasswordField,
-  onePasswordWaitNoted,
-  onePasswordReaderFor,
-  vaultHttpMounted,
-  commandVariablesFor,
-  turnCommandEnvironment,
-  piKitIdentityFor,
-  vaultPrincipalForThread,
-  webSearchStore,
-  openApiStore,
-  openApiToolsEnv,
-  workflowStore,
-  workflowDeliver,
-  workflowOwned,
-  workflowCallerScope,
-  usageMeter,
-  personSettings,
-  personSettingsOwner,
-  personalFeatureOn,
-  personalProfileTarget,
-  personalProfileOf,
-  voiceFor,
-  webSearchScopeForThread,
-  webSearchAddressRefusal,
-  credentialVaultPrincipal,
-  _credentialVaultPersonRefusalImpl,
-  credentialVaultPersonRefusal,
-  personBrowserSession,
-  cloudAgentStore,
-  cloudAgentCredentials,
-  personOAuthManagers,
-  personOAuth,
-  personGithub,
-  usablePersonGithub,
-  githubClientId,
-  syncGithubToSandbox,
-  githubSyncedGenerations,
-  syncGithubForTurn,
-  pluginSyncedGenerations,
-  pluginSyncChains,
-  syncPluginsForTurn,
-  syncPluginFoldersForTurn,
-  githubReplaced,
-  githubConnect,
-  historicalPluginMarketplacePolicy,
-  orgCapabilitiesOwner,
-  pluginMarketplacePolicy,
-  legacyOrgGithubTokens,
-  orgBotSecrets,
-  legacyMarketplaceTokens,
-  githubCredentials,
-  credentialOwner,
-  githubCredentialsMigrated,
-  migrateGithubCredentials,
-  usableCredential,
-  githubCredentialsFor,
-  githubAccountToken,
-  marketplaceCredentials,
-  botCapabilityStore,
-  installationCapabilityStore,
-  migrateCapabilitiesConfigStores,
-  SKILLS_LIBRARY_BOT_SWEEP,
-  pluginMarketplaces,
-  botPlugins,
-  personalPlugins,
-  installationPlugins,
-  orgFlowPlugins,
-  orgCapabilityMarkets,
-  orgCapabilities,
-  orgCapabilityMounts,
-  syncOrgCapabilities,
-  orgDeclarationInputs,
-  orgMemberActive,
-  stdioRelay,
-  personalRemoteSpec,
-  personalServerListing,
-  personalHostChecks,
-  personalHostRefusalCached,
-  personalStdioIntegration,
-  mountPersonalMcp,
-  mountPluginMcp,
-  pageReaderFor,
-  pageThreadName,
-  ownPageContext,
-  publishedPageViewer,
-  PAGES_ORIGIN,
-  pagesSeparation,
-  publishedPageOptions,
-  addPersonalMcpServer,
-  botLoadsPlugins,
-  linkedFlowAlias,
-  flowAliasFolders,
-  scopedPluginFolders,
-  scopedPluginMcp,
-  pluginDirsFor,
-  personalSkillInputs,
-  pluginFolderCapability,
-  scopedSkillInventory,
-  scopedSkillsPrompt,
-  botCapabilitiesFor,
-  consoleBotCapabilities,
-  botCapabilitiesAs,
-  readableInstaller,
-  orgTeams,
-  engineLogins,
-  sectionChannels,
-  threadsWithActiveCoordination,
-  cacheKeepWarmStatus,
-  continuationHolds,
-  HELD_ACTIVITY,
-  wireTask,
-  listedTasks,
-  shownBotActivity,
-  wireBot,
-  threadHasMessages,
-  toolScopeForTurn,
-  wireTrustedApprovalBot,
-  previewSystemPrompt,
-  botOverview,
-  approvalModeForTurn,
-  approvalLevelOf,
-  sourceApprovalMode,
-  fullAccessForSource,
-  selfApplyBlocked,
-  appliesDirectly,
-  teamSetupDirectSource,
-  primaryAskedProposal,
-  withPrimaryAsked,
-  journalRefusedQuote,
-  peerReviewRequired,
-  delegatedLevel,
-  ownThreadLevel,
-  DELEGATED_LEVEL_NAMES,
-  applyDelegatedLevel,
-  roomTurnApprovalMode,
-  handleDesktopTrustedApprovalMessage,
-  storedAvatarExists,
-  publicBot,
-  publicBotQueuedMessages,
-  goalWorkerTurns,
-  groupTurnOperations,
-  groupSpeakers,
-  groupApprovalRequests,
-  groupThreadIsWorking,
-  activeGroupSpeaker,
-  groupGoalCoordinatorTurns,
-  GROUP_GOAL_COORDINATOR_GUARD_MS,
-  addGroupGoalCoordinatorTurn,
-  removeGroupGoalCoordinatorTurn,
-  hasUnboundDiscardedGroupGoalTurn,
-  groupGoalCoordinatorTurnForEvent,
-  groupIsWorking,
-  createChannel,
-  updateChannel,
-  channelTaskBlocked,
-  groupQueues,
-  registeredWorkers,
-  turnBell,
-  MACHINE_OFFLINE_NOTE,
-  machineTurnDone,
-  machinePrompts,
-  machineApprovals,
-  machineProgressIds,
-  sessionDeviceIds,
-  loopbackDeviceIds,
-  deviceOwnerSession,
-  queuedWorkerTurns,
-  inflightWorkerTurns,
-  inflightWorkerAuthors,
-  groupThreadIds,
-  locateChannelMessage,
-  allInflightIds,
-  turnsHeldOnGroup,
-  channelTurnOpen,
-  _partialAlreadyWrittenImpl,
-  partialAlreadyWritten,
-  _openTurnMessageImpl,
-  openTurnMessage,
-  forgetInflight,
-  commitFailedTurn,
-  failQueuedMessage,
-  failTurnIfMemberLeft,
-  machineTurnBots,
-  replaceQueuedWorkerTurns,
-  finishMachineTurn,
-  machineBotFrom,
-  readWorkerTurn,
-  writeWorkerTurn,
-  maySetBotHost,
-  holdDirectMachineTurn,
-  failWorkerTurns,
-  oneOwnerRoom,
-  roomHandoffProblem,
-  teammateNameFor,
-  coordinationSystemInstructions,
-  outstandingAssignmentsPrompt,
-  queuedBehindPerson,
-  queuedStatus,
-  queuedBehindPersonNoted,
-  noteQueuedBehindPerson,
-  relayStreams,
-  relayShown,
-  clearRelayedStream,
-  RELAY_RESULT_MAX,
-  peerReviews,
-  THREAD_DELETED,
-  legacyHandoffsDropped,
-  reviewHolds,
-  coordinatorValidate,
-  coordinator,
-  originApprovals,
-  botActSendIds,
-  markBotActSend,
-  isBotActSend,
-  openInputRequests,
-  postInputRequest,
-  newestQuestionCard,
-  settleInputRequests,
-  groupUsageReader,
-  readCursor,
-  publicGroupState,
-  groupMemberProfiles,
-  announcedProfiles,
-  announceProfileChange,
-  beginGroupTurnOperation,
-  finishGroupTurnOperation,
-  finishGroupGoalRun,
-  updateGroupGoalRunProgress,
-  groupMemberBotAvailability,
-  waitForGroupMemberBot,
-  waitForChatRoomMember,
-  newestPeerActivityAt,
-  coordinationLiveRosterBlock,
-  stopGroupThreads,
-  cancelGroupTurnOperations,
-  groupProviderHandshakeStarted,
-  groupProviderHandshakeSettled,
-  activeGroupTurnForBot,
-  groupWithThread,
-  withdrawnApprovalNotices,
-  sentThreads,
-  pageIfThreadChanged,
-  MESSAGE_PAGE_MAX,
-  DEFAULT_PAGE,
-  pageSize,
-  latestPersonText,
-  slimMessage,
-  transcriptPage,
-  messagePage,
-  guardedRequestSnapshot,
-  settleTrackedRequest,
-  messageWindow,
-  sseClients,
-  audienceChangedAt,
-  audienceChanged,
-  sandboxControlHolds,
-  desktopViewer,
-  terminalPrincipalId,
-  desktopTerminals,
-  terminalAccessFor,
-  terminalWorkPlace,
-  terminalDesktopAllowed,
-  terminalAnswerExtras,
-  terminalSize,
-  bridgeTerminal,
-  openRemoteShell,
-  terminalFeature,
-  REMOTE_SUPPORT_DIR,
-  remoteSessionActionsAudit,
-  remoteSessions,
-  remoteSessionSpeaker,
-  unattendedConsent,
-  remoteSessionsAdmin,
-  unattendedHosts,
-  remoteBotHosts,
-  resourceUsage,
-  remoteSupportSeats,
-  remoteSupportSeat,
-  dropRemoteSupportSeat,
-  remoteSupportWatcher,
-  remoteSessionRegistrar,
-  closeSessionStreams,
-  STREAM_ID,
-  configuredSseHeartbeatMs,
-  SSE_HEARTBEAT_MS,
-  lastSeq,
-  replayBuffer,
-  wants,
-  cursorSeq,
-  fanoutSsePayload,
-  runtimeDeltaCoalescer,
-  broadcast,
-  approvalHostOf,
-  approvalOwnerId,
-  vaultExportAllowed,
-  confidentialThreadsByDefault,
-  CONFIDENTIAL_GATED_MCP_PATHS,
-  confidentialMemoryPasses,
-  privateFolderThread,
-  makeThreadConfidential,
-  engineHomes,
-  threadEngineKeys,
-  releaseThreadEngines,
-  purgeConfidentialEngineKeys,
-  purgeDeletedThreadEngines,
-  forgetThreadEngineSessions,
-  liveCoordination,
-  forgetConfidentialCoordination,
-  confidentialThreadAttachments,
-  wipeConfidentialThread,
-  peerThreadFor,
-  confidentialThreadOwner,
-  approvalOwnerName,
-  registeredDeviceFor,
-  viewerForApproval,
-  approvalViewerOf,
-  _isApprovalCardMessageImpl,
-  isApprovalCardMessage,
-  approvalCallerUserId,
-  approvalAnswerRefusal,
-  adminApprovalCheck,
-  MEMBER_BOT_FULL_ACCESS,
-  ADMIN_APPROVAL_REQUIRED,
-  EXEC_USE_BOT_COMPUTER,
-  pendingApprovalCards,
-  pendingAdminApprovals,
-  orgAdminNames,
-  adminApprovalsAnnounce,
-  announcedAdminApprovals,
-  scheduleAdminApprovalsAnnounce,
-  orgAdminStream,
-  adminPerson,
-  pendingApprovalsFor,
-  inboxViewer,
-  managedTeamIds,
-  pendingInboxCards,
-  inboxDestination,
-  inboxBulkVerdict,
-  plainPersonName,
-  inboxPersonName,
-  routineNameOfThread,
-  inboxPending,
-  inboxHistory,
-  answerInboxCard,
-  answerCardFromConsole,
-  consoleRuleAuth,
-  adminAnswersPendingApproval,
-  botForApproval,
-  scopeApprovalMessage,
-  privateRowHidden,
-  notifyAccess,
-  threadStillExists,
-  routineToggleForApprovalViewer,
-  projectMessages,
-  projectGroupTranscript,
-  projectBotTranscript,
-  approvalBot,
-  scopeChannelApproval,
-  peopleDmFrameAllowed,
-  personSendsReadReceipts,
-  threadReadsFor,
-  threadReadFrameAllowed,
-  viewerNotificationMuted,
-  temporaryAgentFrame,
-  sseFrameFor,
-  memberFrame,
-  toolMessageByItem,
-  closeCutToolRows,
-  stopOwnSubagents,
-  toolsRunning,
-  safePoints,
-  preemptAtSafePoint,
-  confirmStop,
-  stoppedRowSinceLastPerson,
-  autoApprovals,
-  roleJournal,
-  roleEvents,
-  noteAutoApproval,
-  askMessageByRequest,
-  unansweredApprovals,
-  pendingCommandRules,
-  commandRememberRefusal,
-  answerRequest,
-  respondToCard,
-  _capturedReplyImpl,
-  capturedReply,
-  resolveLiveProposal,
-  closeOpenApprovals,
-  requestBehavior,
-  lastReply,
-  turnReplyRepeats,
-  appPiecesByThread,
-  turnFailureCause,
-  limitAfterResetMs,
-  limitFailoverStore,
-  limitFailoverRow,
-  limitResumeText,
-  spentPlans,
-  notePlanLimits,
-  planLimitUntil,
-  limitCandidatesNow,
-  limitFailover,
-  emptyResponseRetry,
-  resendUserMessage,
-  keepWarmTargets,
-  keepWarmContext,
-  keepWarmBotFor,
-  cacheKeepWarm,
-  limitPlanDriver,
-  limitScopeFor,
-  limitScopeOfTurn,
-  LIMIT_DRIVER,
-  limitReset,
-  limitBackupRefusedInThread,
-  limitClockText,
-  stoppedTurns,
-  sessionModelByThread,
-  turnRunByThread,
-  nativeReviewNoticed,
-  quietTurnThreads,
-  QUIET_TURN_NEWS,
-  notify,
-  HIDDEN_APPROVAL_TTL_MS,
-  ROUTINE_APPROVAL_WAIT_MS,
-  routineRunThread,
-  harnessQuestionThread,
-  raiseHarnessQuestion,
-  routineApprovalWaitMs,
-  scheduleApprovalExpiry,
-  pendingExpireDaysForPerson,
-  pendingExpireDaysForThread,
-  pendingExpiryDeps,
-  runPendingApprovalExpirySweep,
-  expireDueApprovalsInThread,
-  withdrawApprovalNotice,
-  settleWaitingActivity,
-  settledCardRequest,
-  notificationInHiddenThread,
-  notificationIsInterBotChatter,
-  notificationQuietOnPhones,
-  notificationInAgentConversation,
-  lastPersonMessage,
-  roomTurnLevels,
-  routedRoomReplies,
-  turnUsage,
-  turnContext,
-  TURN_STALL_MS,
-  TOOL_STALL_MS,
-  stallCause,
-  LIMIT_RESUME_SETTLE_MS,
-  ASK_BOT_TIMEOUT_MS,
-  GROUP_GOAL_WAIT_MAX_MS,
-  COMPUTER_WAIT_MAX_MS,
-  GROUP_GOAL_MAX_WAIT_EXHAUSTIONS,
-  roomStallCompletions,
-  turnStops,
-  stoppedTurnText,
-  watchdog,
-  memoryRowsByThread,
-  bootEngineSlots,
-  holdBootEngineSlot,
-  releaseBootEngineSlot,
-  memoryUpkeep,
-  captureTurnFor,
-  turnStartedAt,
-  turnCheckpoints,
-  liveTurnByThread,
-  liveVoiceUtteranceByThread,
-  cancelledVoiceTurns,
-  forgetTurnCheckpoint,
-  turnDuration,
-  clearTurnDigestState,
-  TOOL_RESULTS_DIR,
-  TOOL_RESULT_SPILL_MAX,
-  DIGESTS_AFTER_COMPACTION,
-  ingestEngineHook,
-  scheduleTurnDigest,
-  unattendedThreads,
-  UNATTENDED_TTL_MS,
-  markUnattended,
-  clearUnattended,
-  isUnattended,
-  internalTurnThreads,
-  markInternalTurn,
-  clearInternalTurn,
-  isInternalTurn,
-  reviewAnswerThreads,
-  personAskAt,
-  routines,
-  savedSteps,
-  calendarCalls,
-  localVmOwnerBusy,
-  localVmLeases,
-  localVmSeatPool,
-  localVmLifecycleBusy,
-  localVmThreadTargets,
-  localVmActiveThreads,
-  autoVmClaims,
-  COMPUTER_CALL_WAIT_MS,
-  COMPUTER_CALL_ACT_WITHIN_MS,
-  COMPUTER_CALL_POLL_MS,
-  localVmSeen,
-  noteLocalVmSeen,
-  get localVmImageBusy() { return localVmImageBusy; },
-  set localVmImageBusy(value) { localVmImageBusy = value; },
-  get localVmProvisionBusy() { return localVmProvisionBusy; },
-  set localVmProvisionBusy(value) { localVmProvisionBusy = value; },
-  get localVmModeChangeBusy() { return localVmModeChangeBusy; },
-  set localVmModeChangeBusy(value) { localVmModeChangeBusy = value; },
-  activeVpsThreads,
-  vpsThreadStarted,
-  vpsThreadEnded,
-  boatLifecycleBusyBots,
-  vpsPreviewRequests,
-  vpsJoinRequests,
-  orphanBoatLifecycleBusyIds,
-  boatInventoryRequestsBusyIds,
-  computerProviderConfigTransitions,
-  localVmIdleMs,
-  LOCAL_VM_DESKTOP_WAIT_MS,
-  localVmIdles,
-  inheritedTeamComputer,
-  teamComputerPrompt,
-  botComputerControlKey,
-  _settledWithinOrStopImpl,
-  settledWithinOrStop,
-  computerCallGate,
-  botComputerControlSnapshot,
-  teamComputerInUse,
-  claimTeamComputerLifecycle,
-  assertTeamComputerChangeIdle,
-  teamComputersPayload,
-  attachTeamBoat,
-  cloudEngine,
-  cloudComputerMount,
-  cloudComputerTools,
-  mountHostComputer,
-  mountBotVps,
-  CLOUD_COMPUTER_START_BUDGET_MS,
-  CLOUD_COMPUTER_STARTING,
-  CLOUD_COMPUTER_DID_NOT_START,
-  mountBotBoat,
-  claimedBoatId,
-  attachBotBoat,
-  withinBudget,
-  startBotBoat,
-  managedBoatOwners,
-  botHasActiveTurn,
-  providerTransitionMessage,
-  providerOperationConflict,
-  turnSurfacePlan,
-  turnProvider,
-  computerPreviewBot,
-  computerPreviewSurface,
-  selectableComputers,
-  continueComputerSelection,
-  runningTurnEngines,
-  memoryGuard,
-  ROUTINE_MEMORY_WAIT_MS,
-  idleEngineTtl,
-  idleEngines,
-  memoryWatch,
-  runningTurnInstance,
-  engineSteersImages,
-  providerTransitionForTurn,
-  claimBoatInventoryRequest,
-  claimManagedBoatMutation,
-  claimBotComputerLifecycle,
-  claimManagedVpsMutation,
-  localVmTargetForBot,
-  localVmPoolSeatHolder,
-  localVmTargetForThread,
-  localVmTargetForStatus,
-  localVmLeaseFor,
-  localVmIdleFor,
-  releaseLocalVmThread,
-  localVmAuto,
-  localVmAutoLifecycle,
-  localVmInventoryPayload,
-  soloGoals,
-  appendSoloGoalRow,
-  finishUntilRuns,
-  appendFinishUntilRow,
-  soloGoalReceipts,
-  relayParentThreads,
-  noteRelayParent,
-  delegationWatch,
-  openQuestionCard,
-  openPersonCard,
-  delegatorOf,
-  waitingOnPersonChips,
-  showWaitingOnPersonChip,
-  settleWaitingOnPersonChips,
-  delegationWakeBudget,
-  pendingDelegationWakes,
-  roomMemberLock,
-  roomMemberContexts,
-  CLOUD_HOME,
-  cloudOwnerOnlyThread,
-  routineOnWire,
-  routineActor,
-  principalMayRunRoutine,
-  routineAdmission,
-  routineSuspended,
-  routineAudit,
-  orgAuditActor,
-  orgAudit,
-  auditBotTarget,
-  routineConsentEnded,
-  effectiveRunAs,
-  runAsChooserFor,
-  runAsPeople,
-  routineRunAsChoice,
-  auditRoutineRunAs,
-  mayRunRoutineNow,
-  speakerMayRunRoutineNow,
-  routineRunNowParties,
-  mayCancelRoutineRun,
-  routineRunInFlight,
-  routineInFlightRun,
-  auditRoutineRunNow,
-  auditRoutineRunNowBy,
-  auditRoutineRunsCleared,
-  routineScopeCaller,
-  routineScopeFacts,
-  routineScopeDeps,
-  routineGoalSender,
-  routineRunSpeaker,
-  roomRoutineSpeaker,
-  attentionPerson,
-  CW_OPEN_RECORD,
-  attentionTicketUrl,
-  personAttentionDeps,
-  perspicaxTurnRole,
-  activeRoutineRunForThread,
-  engineModelIds,
-  routineModelRefusal,
-  routineModelNoticed,
-  routineModelForTurn,
-  routineSubagentModelNoticed,
-  routineSubagentModelForTurn,
-  routineEffortNoticed,
-  routineEffortForTurn,
-  routineDelegationCanResume,
-  dispatchDelegationWake,
-  wakeDelegationSource,
-  incidentLedger,
-  incidentContext,
-  latestFailedTurnCause,
-  turnAnswers,
-  incidentRefused,
-  reportIncident,
-  drainDelegationWakes,
-  EXTERNAL_CONTEXT_MARKER_PREFIX,
-  isExternalContextMarker,
-  callLinesSince,
-  noteCallBesideConversation,
-  markTaskContextExternallyUpdated,
-  _latestCompactionImpl,
-  latestCompaction,
-  CONTEXT_SUMMARIES_KEPT,
-  sagaxCompactionOn,
-  directContext,
-  peerReplayText,
-  staleEngineSession,
-  smallTalkTurns,
-  compactConversation,
-  voiceCalls,
-  voiceWarmup,
-  voiceSessions,
-  voiceFirstSentences,
-  releaseWarmEngine,
-  threadPrewarm,
-  prewarmRefusal,
-  PREWARM_JOIN_MS,
-  joinPrewarm,
-  prewarmThread,
-  reservedWorkThreads,
-  RESERVED_WORK_MS,
-  releaseReservedWorkThread,
-  reservedThreadUnused,
-  adoptReservedWorkThread,
-  prewarmNamedTeammates,
-  voiceCallEndedAudience,
-  broadcastVoiceCallEnded,
-  finishVoiceCallRequestedByBot,
-  voiceLatency,
-  publishVoiceNotice,
-  handoffs,
-  reportsToRequester,
-  delegationReportsBack,
-  finalizeDelegationWatch,
-  loopUnownedLogged,
-  releasedBots,
-  retryDelegationsWaitingOn,
-  voiceCallRetried,
-  scheduleSoloGoalRound,
-  SOLO_GOAL_ROUND_DELAY_MS,
-  scheduleFinishUntilRound,
-  FINISH_UNTIL_RELAUNCH_DELAY_MS,
-  unfinishedTurns,
-  UNFINISHED_TURN_DELAY_MS,
-  scheduleUnfinishedTurn,
-  scheduleVoiceCallWatchdog,
-  drainQueuedSends,
-  duplexEpochByThread,
-  duplexEpochFor,
-  DUPLEX_JOIN_RUNNING_TURN,
-  startDuplexCallTurn,
-  prewarmSends,
-  startOrQueueDirectMessage,
-  startOrQueueDirectMessageNow,
-  parallelStops,
-  pendingParallelTask,
-  parallelTaskBlocked,
-  patchParallelCard,
-  callHandoffHistory,
-  startParallelTask,
-  routableSteers,
-  autoRoutableThread,
-  runningRequestText,
-  busyClassifyEngine,
-  routeSteeredMessage,
-  settleParallelTask,
-  settleParallelFallback,
-  stopParallelTask,
-  settleOrphanedParallelTasks,
-  directSendRefusal,
-  misuseActor,
-  misuseTextRefusal,
-  safetyPrincipal,
-  safetyReviewer,
-  customRulesModel,
-  _serverPathViewImpl,
-  serverPathView,
-  serverBotRoots,
-  confirmHeldCard,
-  acceptDirectSend,
-  deliverLateQuestionAnswer,
-  startOrQueueOpenedThread,
-  screenPollers,
-  SCREEN_POLL_MS,
-  SCREEN_MIN_GAP_MS,
-  SCREEN_SETTLE_TIMEOUT_MS,
-  startScreenPoller,
-  pokeScreenPoller,
-  stopScreenPoller,
-  settledScreenHashes,
-  shownScreenHash,
-  finalScreenFrame,
-  _generateThreadTitleImpl,
-  generateThreadTitle,
-  threadTitleGate,
-  titleRegenerations,
-  assertTurnAdmission,
-  startTurn,
-  routineSourceOwner,
-  routineRunReceiptFacts,
-  botMainThread,
-  conversationThreadFor,
-  startConversationFor,
-  conversationOrStart,
-  legacyResultsThread,
-  personMainThread,
-  markRoutineResultsThreads,
-  routineSourceThread,
-  routineFullReport,
-  routineRunNeedsPerson,
-  routineEffectivePostResults,
-  syncRoutineRunToSource,
-  interruptRoutineGroupGoal,
-  stopBotForEmergencyApprovalDowngrade,
-  runningTurnLevels,
-  applyStricterApprovalLive,
-  stopTurnForStricterApproval,
-  STRICTER_APPROVAL_STOP_NOTE,
-  stricterApprovalStopError,
-  botRunning,
-  forceStopBot,
-  commsBus,
-  localRoutineAway,
-  routineAwayVerdict,
-  routineWatchStates,
-  routineWatchPlace,
-  routineWatchCallTool,
-  routineWatchDeps,
-  routineWatchEvaluator,
-  proactiveProposals,
-  proactiveEngine,
-  proactivePending,
-  proactiveWaker,
-  directChatOf,
-  routineReadinessBot,
-  routineEngineForBot,
-  routineReadinessEngine,
-  refusalAccount,
-  routineReadinessConfigRevision,
-  routineReadinessDeps,
-  waitDrafted,
-  readAndDraft,
-  waitsBoot,
-  botWaits,
-  shellLoopGuard,
-  publishRuntime,
-  peerNoticeHops,
-  proactiveHopsFromThread,
-  notePeerNotice,
-  proactiveWakeForThread,
-  noteWakeDryRun,
-  offerPeerNotice,
-  surfacePeerNotice,
-  replayPendingProactive,
-  offerProactive,
-  offerRoomPostToBots,
-  proactiveEventsLine,
-  PROACTIVE_RUN_NAMES,
-  startProactiveWake,
-  answerRoleTransition,
-  answerProactiveProposal,
-  routineCoverageRoute,
-  heldRolesRoute,
-  roleJournalClient,
-  sendMissingRoleToAdmins,
-  recoveredRoutineGoalRuns,
-  groupGoalRecoveryAt,
-  recoveryOwners,
-  cloudRoutineReadiness,
-  routineRequests,
-  deleteBotWithLifecycle,
-  driverCapabilitiesFor,
-  primaryBotSameOwner,
-  chiefPeerTargetRule,
-  validateModelProposal,
-  teamMemory,
-  outboundRequests,
-  outboundCounts,
-  settleTeamMemoryCards,
-  resolveAndSendTrust,
-  profileRequests,
-  modelRequests,
-  ruleRequests,
-  teamSetupTeams,
-  teamSetupRequests,
-  pendingTeamSetupResumes,
-  teamSetupResumeGenerations,
-  cancelTeamSetupResumesForThread,
-  dispatchTeamSetupResume,
-  drainTeamSetupResumes,
-  teamSetupApplyRefusal,
-  resolveAndSendTeamSetup,
-  routineTimeZone,
-  routineKeyReveal,
-  sendRoutineResolution,
-  resolveAndSendRoutine,
-  resolveAndSendProfile,
-  resolveAndSendModel,
-  resolveAndSendRule,
-  undoSkillCard,
-  undoAppliedChange,
-  triggerPollerCredentials,
-  graphSubscriptions,
-  triggerPollers,
-  graphTokens,
-  webhooks,
-  bindOwnedTrigger,
-  webhookIngress,
-  webhookIngressError,
-  webhookIngressStatus,
-  savePollerCredentials,
-  roomHandoffTimer,
-  GROUP_CONTEXT_MESSAGES,
-  MAX_GROUP_HOPS,
-  teammateReportContext,
-  roomContextRows,
-  roomConsumedMessageId,
-  noteBotRead,
-  serializeRoomContext,
-  roomRoutingInput,
-  roomPostBudgets,
-  approvalBus,
-  runGroupMemberTurn,
-  runGoalWorkerOnRuntime,
-  runGroupGoalStep,
-  runGroupGoalOperation,
-  groupEngineCommandRoute,
-  cachedGroupEngineCommandRoute,
-  startGroupTurn,
-  drainQueuedChannelSends,
-  sameCalendarRoster,
-  ensureCalendarCallRoom,
-  _deliverCalendarCallImpl,
-  deliverCalendarCall,
-  resolveReplyTarget,
-  messageFileRootsForThread,
-  threadFileRefsFor,
-  threadFileRefForId,
-  threadFileRefForPath,
-  threadFileRoots,
-  attachmentVmForTurn,
-  connectorThread,
-  lastHumanRoomMessageAt,
-  roomPostEligibility,
-  _proposalPersistenceImpl,
-  proposalPersistence,
-  skillProposalPersistence,
-  stagedSkillListing,
-  stagedSkillCleanupsForThread,
-  rejectDeletedThreadSkillStages,
-  _skillCardCopyImpl,
-  skillCardCopy,
-  appendSkillRequestCard,
-  resolveSkillRequest,
-  _sendSkillResolutionImpl,
-  sendSkillResolution,
-  pendingComputerResumes,
-  registerComputerResume,
-  markComputerResumeFailed,
-  dispatchComputerResume,
-  drainComputerResumes,
-  pendingSecretResumes,
-  phoneSecretSubmissions,
-  claimPhoneSecretBotDeletion,
-  phoneSecretSubmissionKey,
-  secretMessage,
-  currentSecretState,
-  markSecretResumeFailed,
-  dispatchSecretResume,
-  resumeSecretCard,
-  provideSecretFromPhone,
-  drainSecretResumes,
-  testCliBinary,
-  cliProbeEnvironment,
-  localVmPayload,
-  readyLocalVmForTurn,
-  existingPerBotLocalVmCount,
-  perBotLocalVmCountForModeChange,
-  editionForSettings,
-  configStatus,
-  configForPerson,
-  _configForAccessImpl,
-  configForAccess,
-  mcpViewer,
-  personalMcpNamesForGuard,
-  sharedMcpPersonalRefusal,
-  mcpServerResponse,
-  mcpServerNamesResponse,
-  mcpPolicyRefusal,
-  _mcpServerBodyImpl,
-  mcpServerBody,
-  engineMcpServers,
-  mcpServersAsPerson,
-  ORG_HOST_COMMAND_REFUSAL,
-  refreshMcpOAuth,
-  remoteMcpServers,
-  probeMcpOAuth,
-  mcpOAuthStartSchema,
-  _phoneCallbackOriginImpl,
-  phoneCallbackOrigin,
-  startMcpSignIn,
-  mcpOAuthRedirectUri,
-  _persistMcpServersImpl,
-  persistMcpServers,
-  engineProbes,
-  engineProbeFlight,
-  ENGINE_PROBE_TTL_MS,
-  ENGINE_PROBE_TIMEOUT_MS,
-  CLI_MISSING,
-  selfCheckedEngine,
-  engineProbeOf,
-  engineNotAvailableReason,
-  probeEngines,
-  engineInstalled,
-  engineDisplayName,
-  peerOwnerPrincipal,
-  driverDisplayName,
-  personIsOrgAdmin,
-  turnZoneFor,
-  orgSpeakerPrincipal,
-  peerSpeaker,
-  orgJoinsRunningTurn,
-  keyOnlyInstance,
-  engineNameForPerson,
-  orgEngineInput,
-  turnSlotFor,
-  turnPayerPrincipal,
-  grokAccountKindFor,
-  defaultTurnPayerFor,
-  turnPayerModeFor,
-  speakerPayerMode,
-  ownerPaysTurn,
-  desktopModelPersonFor,
-  ownerModelOfflineRefusal,
-  preSendRefusals,
-  fixSendState,
-  sendStateFor,
-  sendStateLimit,
-  payerAccountModels,
-  warmPayerAccountModels,
-  piLocalModel,
-  speakerTurnSelection,
-  serverEnginesUnknownLogged,
-  serverEngineAllowedFor,
-  orgXaiMediaGiven,
-  requesterPrincipal,
-  turnMediaPrincipal,
-  orgAvatarImageConfig,
-  orgXaiMediaView,
-  orgPersonFacts,
-  autoModelCatalog,
-  AUTO_CATALOG_PROVIDERS,
-  autoCatalogMemo,
-  autoCatalogLookup,
-  AUTO_REFUSAL_TTL_MS,
-  autoRefusals,
-  autoPayerKey,
-  announcePlanThresholds,
-  ownerPaysForMember,
-  rememberAutoRefusal,
-  autoRefusalsFor,
-  autoEnginesFor,
-  relayEnginesFor,
-  autoRecordUsable,
-  autoPickForTurn,
-  voicePickForTurn,
-  parsedQuickTask,
-  _orgRefusalOfImpl,
-  orgRefusalOf,
-  orgEngineRefusal,
-  principalLoginDir,
-  orgTurnAccess,
-  piTurnPerson,
-  withPiModelServers,
-  piModelServersForViewer,
-  piLocalTurnAccess,
-  turnReachPrompt,
-  turnConnectorsFor,
-  claudeAiConnectorRows,
-  grokCloudOnTurn,
-  claudeAiConnectorsFor,
-  accountConnectorInput,
-  engineReachFor,
-  catalogPrice,
-  connectorSwitchForTurn,
-  engineConnectorsPromptFor,
-  connectorsElsewhereFor,
-  perspicaxKeysUrl,
-  subscriptionExpiredCard,
-  signInRefusalHeld,
-  signInRefusalResent,
-  holdSignInRefusal,
-  accessCardFor,
-  describeInstances,
-  instancesForViewer,
-  modelAccessRefusals,
-  refusalPayerOf,
-  refusedModelsFor,
-  orgOfferedEngines,
-  personalEngine,
-  memberInstanceView,
-  companyShutdown,
-  _stopCompanyInstancesImpl,
-  stopCompanyInstances,
-  persistProviderInstance,
-  threadEngineId,
-  revokeEngineCapabilities,
-  reloadProviders,
-  providerConfigBusy,
-  providerInstancesChanging,
-  mcpConfigBusy,
-  MAX_CONCURRENT_MCP_PROBES,
-  mcpProbesInFlight,
-  claudeUpdatesInFlight,
-  serveStatic,
-  _streamOpenedHttpFileImpl,
-  streamOpenedHttpFile,
-  workspaceBackupAccess,
-  workspaceBackupRoutes,
-  perspicaxNativeReview,
-  meetingBrowserRefusal,
-  openMeetingBrowser,
-  startMeetingSummary,
-  meetingService,
-  resolveAndSendMeeting,
-  resolveAndSendPhoneCallConsent,
-  perspicaxReadAlone,
-  perspicaxSessionAlone,
-  dispatchKpi,
-  dispatchKpiForced,
-  dispatchKpiRefreshedRuns,
-  runDispatchKpiSource,
-  refreshDispatchKpiAfterRun,
-  artifactRefresher,
-  INTERNAL_ROUTES,
-  botMailAddresses,
-  botMailOwner,
-  botMailResync,
-  botmailConfined,
-  inboundMail,
-  smsReplyAfter,
-  smsConversation,
-  inboundTelephony,
-  xaiMarketplace,
-  orgInstallStatuses,
-  savePersonPreferences,
-  soloClaudeCli,
-  soloClaudeLinkCache,
-  botMemoryMayEdit,
-  botMemoryReachable,
-  botSkillsRefusal,
-  computerInputAudited,
-  botComputerShell,
-  computerTeach,
-  _threadWarmRequestImpl,
-  threadWarmRequest,
-  typingPrewake,
-  prewakeComputerWhileTyping,
-  backgroundBriefs,
-  backgroundBriefReads,
-  backgroundBriefConnected,
-  backgroundBriefThread,
-  localComputerSummary,
-  localComputerLifecycle,
-  localComputerManagementRefusal,
-  computerManagementPrincipal,
-  computerCare,
-  sharedLocalVmInUse,
-  scheduledLocalVmUpdate,
-  SANDBOX_RECENT_USE_MS,
-  maintainedComputer,
-  computerCareScheduler,
-  diskSaverTarget,
-  pluginRegistry,
-  mayManageMarketplaces,
-  marketplaceViewer,
-  mayShareMarketplaceOrgWide,
-  addMarketplaceServers,
-  updatedMarketplaceServer,
-  updateInstallationPlugin,
-  personErasures,
-  deletePersonData,
-  erasePersonDataNow,
-  wakeFromCloudAgentCompletion,
-  codeFixture,
-  perspicaxBase,
-  perspicaxAccessToken,
-  perspicaxLinkSubjectToken,
-  cloudAgentPrincipal,
-  perspicaxAgentsClient,
-  perspicaxLinkBearer,
-  perspicaxAgentsAccess,
-  subscriptionCli,
-  subscriptionDepositor,
-  signInRecheck,
-  cloudAgentProviders,
-  CLOUD_AGENT_SYNC_MS,
-  cloudAgentRecordVisible,
-  JOURNAL_CACHE_MS,
-  JOURNAL_THREADS_MAX,
-  journalCache,
-  journalRowsFor,
-  inboxJournal,
-  inboxTestRule,
-  codeBranchArchive,
-  codeBranchCredentials,
-  routineRunAccessCard,
-  activityChildren,
-  moderationStore,
-  moderationViewer,
-  moderationAdminAudience,
-  nudges,
-  labeledPerson,
-  peopleDmSelections,
-  knowsPersonThreads,
-  peopleDmOpenThread,
-  peopleDmProjection,
-  peopleDmThreadOf,
-  sendPeopleDmMessage,
-  notifyRoomMentions,
-  groupOwnerCaller,
-  soloServerRecord,
-  orgState,
-  localPrincipalId,
-  botActService,
-  botActs,
-  auditValue,
-  settingsActionService,
-  settingsActions,
-  _primaryTurnGateImpl,
-  primaryTurnGate,
-  questionAnsweredBy,
-  primaryListAuth,
-  primaryApprovalService,
-  primaryApprovals,
-  actAnswerer,
-  actSharedServer,
-  isBotActCard,
-  describeActForRule,
-  finishBotAct,
-  settleBotActCard,
-  cwActionPasses,
-  languageOfPerson,
-  dashFreeReply,
-  languageOfRequest,
-  cwActionActor,
-  requestCwAction,
-  resolveAndSendCwAction,
-  allowCwAction,
-  CW_WIDGET_RULE_TOOL,
-  CW_WIDGET_RULE_TOOL_BEFORE,
-  cwWidgetRule,
-  pendingConfidentialMemory,
-  _confidentialPerspicaxRefusalImpl,
-  confidentialPerspicaxRefusal,
-  isConfidentialMemoryCard,
-  settleConfidentialMemoryCard,
-  emailSendPasses,
-  emailDraftBot,
-  emailConnectorsFor,
-  _requestEmailDraftSendImpl,
-  requestEmailDraftSend,
-  emailSendMessage,
-  patchEmailSend,
-  takeEmailSendPass,
-  _emailDraftStatusImpl,
-  emailDraftStatus,
-  resolveImessageCard,
-  resolveAndSendEmailDraft,
-  ACT_CONFIRMED_HEADER,
-  actConfirmations,
-  mintActConfirmation,
-  takeActConfirmation,
-  actConfirmedScope,
-  actConfirmed,
-  primaryAskedReplay,
-  actConfirmedCovers,
-  ON_BEHALF_SECRET,
-  ON_BEHALF_HEADER,
-  CONTINUATION_HEADER,
-  ownerContinuations,
-  mintOwnerContinuation,
-  takeOwnerContinuation,
-  performBotActRoute,
-  confidentialThreadIds,
-  namesConfidentialThread,
-  _scrubConfidentialThreadsImpl,
-  scrubConfidentialThreads,
-  CONFIDENTIAL_CARD_DELEGATED,
-  delegatedRequestScope,
-  delegatedRequest,
-  confidentialFileOf,
-  continuationThreadScope,
-  performBotActRouteOutsideConfidential,
-  actorPrincipalId,
-  groupReaderId,
-  channelFilterViewerId,
-  actorEmail,
-  channelActorId,
-  creatingBotOwnerId,
-  COMPACT_USAGE_THREADS,
-  compactPinsByBot,
-  recentToolUses,
-  compactPromptFor,
-  effectiveBotOwner,
-  ownerSettingsForbidden,
-  botOwnerOrgRole,
-  memberOwnedInOrg,
-  principalIsOrgAdmin,
-  turnDrivesOrgServer,
-  botHasOwnComputerForTurn,
-  ownEnvironmentRequest,
-  safetyOwnEnvironment,
-  ownDestinationRequest,
-  destinationOfCall,
-  ownComputerChoiceRequest,
-  mountedDestinationOf,
-  destinationTurnOrigin,
-  cardAnswererId,
-  noteCard,
-  ownAttachmentRoots,
-  principalCan,
-  _turnStartForImpl,
-  turnStartFor,
-  speakerOwnWordsTurn,
-  ownEnvironmentOrigin,
-  memberHostToolPlace,
-  ownLineageFields,
-  aiClientThreadPerson,
-  sameOwnerRosterMember,
-  routineOwnerAuthorizationFor,
-  ownerLineageFor,
-  ownerModeLineageFor,
-  ownWorkOrigin,
-  botProfilePrompt,
-  personDirectTurn,
-  botCreationTurnOrigin,
-  nonPrimaryCreationRefusal,
-  autoAnswerStepUp,
-  foreignMcpServerNames,
-  orgFullAccessPolicy,
-  ownerScopedMcpServerFor,
-  ownerBypassAllowed,
-  _ruleManagerImpl,
-  ruleManager,
-  stepUpGate,
-  threadActionClassContext,
-  stepUpPolicyPerson,
-  botActStepUpContent,
-  alwaysAllowStepUpGate,
-  approvalModeStepUpGate,
-  memberAutoRefused,
-  approvalModeAllowanceKey,
-  everyThreadMode,
-  refreshWidens,
-  stepUpAnswerOf,
-  settingsStepUpGate,
-  strictRuleQualifies,
-  workspaceAdminPrincipal,
-  strictCardRule,
-  keptCardRule,
-  proposalRuleCandidate,
-  settleProposalByRule,
-  saveOwnerRuleFromCard,
-  botsOwnedBy,
-  revokeLegacyKey,
-  newBotGreetingLanguage,
-  newBotApprovalMode,
-  orgDeniesFull,
-  memberFolderPrincipal,
-  memberFolderRoots,
-  memberFolderRefusal,
-  orgFullAccessRefusalFor,
-  auditApprovalModeChange,
-  rulesHoldTurn,
-  engineTurnLevel,
-  auditFullAccessTurn,
-  orgAdminCaller,
-  orgKeyConfigured,
-  orgSettings,
-  botDirectGrants,
-  botGrants,
-  roomSectionAccess,
-  botFacts,
-  principalTeams,
-  authzViewerFromId,
-  authzViewerFor,
-  groupVisible,
-  groupPostAllowed,
-  roomOfSubject,
-  mayPlaceRoomIn,
-  roomSectionMoveRefusal,
-  recordRoomMove,
-  resolveManagedNameFor,
-  listedBotVisible,
-  viewerBotLevel,
-  privateThreads,
-  viewerSelections,
-  selectionKey,
-  threadViewerScope,
-  scopedThreadViewer,
-  botThreadReadable,
-  threadsShownTo,
-  viewerThreadOf,
-  ensureViewerThread,
-  selectViewerThread,
-  routeThreadId,
-  routeThreadIdUnguarded,
-  viewerBotActivity,
-  botForViewer,
-  bodyForThreadViewer,
-  threadKeyedForViewer,
-  hideEarlierAgentThreads,
-  migrateBotRuntimeSettings,
-  personWroteIn,
-  BACKGROUND_SWEEP_EVERY_MS,
-  sweepBackgroundThreads,
-  hideBotThreadsOnce,
-  migrateThreadOwners,
-  openedThreadOwner,
-  privateRecallFilter,
-  recentWorkFor,
-  streamCandidates,
-  segmentHistory,
-  extractedSegmentDigests,
-  segmentDigestDrafts,
-  segmentStamp,
-  segmentDigestText,
-  streamDigestEngine,
-  refreshStreamDigests,
-  streamTurn,
-  noteStreamSend,
-  streamDigestPrompt,
-  searchHitVisibleNow,
-  routineResultsRefusalFor,
-  patchRoutineAs,
-  deleteRoutineAs,
-  routineConversationOf,
-  routineSeenBy,
-  subjectSeesChannel,
-  attachmentSeenBy,
-  memberSeesFrame,
-  channelActorRole,
-  viewerIsOperator,
-  botCreationAllowed,
-  personBotsReadOnly,
-  personSheetBotsUseOnly,
-  principalPermissions,
-  callerPermissions,
-  sessionPermits,
-  callerCan,
-  callerBotsReadOnly,
-  ownerBotsReadOnly,
-  BOTS_READ_ONLY,
-  botsReadOnlyRefusal,
-  sharedBrowserProfileValue,
-  ownerChosenVisibility,
-  memberBotFieldRefusal,
-  ownIntegrationsRefusal,
-  memberOwnsBot,
-  ownerOrAdminOf,
-  computerOwner,
-  companionRequest,
-  botEditsNeedOwner,
-  computerOwnerFields,
-  sessionPersonFields,
-  profileManagedFor,
-  viewerIdentity,
-  botUserProfile,
-  botUserName,
-  withCreatorListed,
-  refusePlacedBots,
-  groupOwnerRuleApplies,
-  groupActor,
-  refuseHumanEdit,
-  resolveOrgGrantee,
-  orgDirectoryTeams,
-  describeGrantTarget,
-  botAccessChanged,
-  engineOfBot,
-  sectionMigrationOwner,
-  migrateSectionSharesToBotGrants,
-  orgSectionNames,
-  teamStorageKeyFor,
-  teamStorageKeyForAuth,
-  teamStorageForBot,
-  orgVisibleSections,
-  perspicaxDirectory,
-  SOLO_PROVIDER_CONFIG,
-  providerAccounts,
-  providerAccountOwner,
-  syncPersonalProviders,
-  syncPersonalProviderDirectory,
-  attachInterimPerson,
-  orgPersonConnectionDeps,
-  presenceViewer,
-  presenceHiddenFor,
-  broadcastPresence,
-  presence,
-  deviceSettings,
-  reachMePerson,
-  reachMeLanguage,
-  reachMeCard,
-  reachMeAnswerer,
-  reachMeRespond,
-  reachMeVoice,
-  reachMeSettings,
-  reachMeCodes,
-  reachMeSecrets,
-  reachMeTelegram,
-  reachMeTeamsChannel,
-  reachMeAudit,
-  _shapeAvatarGeneratorImpl,
-  shapeAvatarGenerator,
-  principalEmail,
-  persistOrgState,
-  openAiStt,
-  openAiVoiceMode,
-  elevenLabsVoiceMode,
-  fishVoiceMode,
-  installedVoices,
-  videoFixtureUrl,
-  videoInputMessage,
-  videoScopeValid,
-  videoJobsDir,
-  videoGenerations,
-  voiceProviderKeys,
-  voiceModeDeps,
-  claudeAiInventory,
-  claudeAccountForPrincipal,
-  personClaudeArtifactCall,
-  claudeArtifactSummaries,
-  claudeArtifactSummaryCache,
-  claudeArtifactTrackedStore,
-  claudeArtifactTracked,
-  _claudeArtifactWorkspaceFileImpl,
-  claudeArtifactWorkspaceFile,
-  ensureClaudeArtifactCommentsRoutine,
-  claudeArtifactCommentsCheck,
-  claudeArtifactPrincipal,
-  _connectorSetupStoreImpl,
-  connectorSetupStore,
-  connectorSetupSpeaker,
-  _connectorSetupContextImpl,
-  connectorSetupContext,
-  harnessCommands,
-  harnessCommandAccount,
-  groupCommandCwd,
-  harnessCommandSource,
-  harnessCommandSpeaker,
-  publicInvites,
-  oidcRp,
-  idpVaultKey,
-  idpVault,
-  idpRevocations,
-  accountReauth,
-  authRefusals,
-  headerText,
-  idpSessions,
-  oidcLogin,
-  orgAdminBots,
-  botThreadIds,
-  orgConsolePeople,
-  orgOverviewDeps,
-  personEngineAccess,
-  orgPeopleDeps,
-  consoleOwner,
-  singleBotPackage,
-  importPackageFor,
-  setBotApprovalModeFromConsole,
-  orgBotsDeps,
-  CATALOG_MEMORY_MAX,
-  mcpServerSummary,
-  botZipHost,
-  orgRoutinesDeps,
-  orgRoutineRunsDeps,
-  orgComputersDeps,
-  reachable,
-  orgMcpServers,
-  orgOpsDeps,
-  saveOrgPendingApprovalExpireDays,
-  saveOrgInterimAttachDays,
-  saveOrgAllowFullAccess,
-  saveOrgMemberEnvironmentAutonomy,
-  saveOrgConfidentialThreadsByDefault,
-  resetMemberAutoLevelsOnce,
-  settleMemberAutoLevels,
-  settleMemberAutoLevelsFor,
-  saveOrgMemberAutoApproval,
-  saveOrgAllowVaultExport,
-  saveOrgPluginMarketplaces,
-  consoleEngineAllowed,
-  orgDisabledModels,
-  personDisabledModels,
-  modelSwitchesFor,
-  modelSwitchRefusal,
-  applyModelSwitches,
-  orgOwnAccountsOutsideList,
-  orgAllowedEngines,
-  orgEngineAllowRefusal,
-  orgEngineTurnRefusal,
-  _personPaysEngineImpl,
-  personPaysEngine,
-  orgAdminEngines,
-  orgEngineName,
-  applyOrgEngineAllowList,
-  orgBotReach,
-  _insideDataDirImpl,
-  insideDataDir,
-  orgBotFileRoots,
-  orgBotAttachments,
-  orgAdmin,
-  directoryRefresh,
-  orgLink,
-  memberLiveText,
-  performAsMember,
-  AGENT_API_KEY_FILE,
-  _agentApiSecretImpl,
-  agentApiSecret,
-  AGENT_API_GRANTS_FILE,
-  agentApiBotScopes,
-  agentApiMounted,
-  agentTurnState,
-  _agentModelSummaryImpl,
-  agentModelSummary,
-  agentSummary,
-  agentPeersOf,
-  TEMP_AGENT_DEFAULT_IDLE_HOURS,
-  temporaryCreateTokens,
-  issueTemporaryCreateToken,
-  takeTemporaryCreateToken,
-  botLastActivity,
-  temporaryAgentSetting,
-  _temporaryAuditImpl,
-  temporaryAudit,
-  sweepTemporaryAgents,
-  agentApiCallerBot,
-  agentApiSourceFile,
-  agentApiStageFiles,
-  startAgentPrompt,
-  personAgentThreads,
-  agentApiAudit,
-  toolGrants,
-  agentOwnerPrincipal,
-  agentCardGuard,
-  agentApi,
-  agentUnifiedThread,
-  agentConversationFor,
-  agentConversationsOf,
-  agentUnifiedThreadForBot,
-  markAiClientLine,
-  _memberForAgentCallerImpl,
-  memberForAgentCaller,
-  agentScopesFor,
-  agentApiForMember,
-  orgMember,
-  liveBotFor,
-  liveHistoryFor,
-  liveSignedIn,
-  liveCallTitle,
-  liveCalls,
-  applyConfigHttpPatch,
-  resolveSectionId,
-  toolResults,
-  widgetRenderer,
-  widgetCheckAttempts,
-  runPreAuth,
-  enterRequestScopes,
-  authenticate,
-  _runRoutesImpl,
-  runRoutes,
-  runInternal,
-  fallback,
-  runGroupMemberTurnRunner,
-  startTurnRunner,
-  originGates,
-  handleRequest,
-  earlyListener,
-  server,
-  desktopTunnelDeps,
-  startupLicenseWarning,
-  pruneDecisionLog,
-  workspaceAccessTimer,
-  THREAD_LOG_RETENTION_SWEEP_MS,
-  sweepThreadEventLogsDeferred,
-  scheduleThreadEventLogRetentionSweep,
-  onListening,
-  TUNNEL_SOCKET,
-  tunnelListener,
-  joinPerson,
-  coordinationRequestId,
-  idempotencyKeyOf,
-  importLegacyDelegations,
-  pollOnlyCaller,
-  delegateOnRuntime,
-  runtimeDelegationStatus,
-  SHUTDOWN_DRAIN_MS,
-  busyDirectThreads,
-  threadWaitsOnPerson,
-  drainTurnsBeforeShutdown,
-  noteTurnsCutByShutdown,
-  resumeTurnsCutByRestart,
-  resumeHeldSteersAfterCrash,
-  gracefulShutdown,
-  ACCOUNT_REAUTH_PATH,
-  ADMIN_ACTIVITY_CATEGORIES,
-  ATTACHMENTS_DIR,
-  AUTO_COMPUTER_RULES,
-  AccountReauth,
-  ArtifactSummaryCache,
-  AsyncLocalStorage,
-  BOT_ACT_ROUTE_HEADER,
-  BOT_MAIL_ASSERTION_ACTORS,
-  BOT_PACKAGE_MAX_SKILLS,
-  BOT_WORKPLACE_PREFERENCE,
-  BUILT_IN_BROWSER_SYSTEM_PROMPT,
-  BUILT_IN_DATA_SYSTEM_PROMPT,
-  BUILT_IN_DRIVERS,
-  BotCapabilityStore,
-  BotFolderRegistry,
-  BotMailAddresses,
-  BotPluginError,
-  BotPlugins,
-  BotTailscaleService,
-  BotZipError,
-  BranchArchive,
-  BriefStore,
-  BrowserCleanupCoordinator,
-  BrowserLive,
-  BrowserNetworkDebug,
-  BrowserRuntime,
-  BrowserSweep,
-  CALL_RECALL_BUDGET,
-  CLAUDE_ARTIFACT_COMMENTS_ROUTINE,
-  CLAUDE_REUSE_VOLATILE_SECTIONS,
-  CLOUD_COMPUTER_BUSY_ERROR,
-  COMPACT_VOLATILE_SECTIONS,
-  COMPANY_TOPIC,
-  CONFIDENTIAL_PEER_REFUSED,
-  CONSENT_RULE,
-  CONTROL_ACT_WITHIN_MS,
-  CONTROL_WAIT_MS,
-  CREDENTIAL_PROMPT,
-  CalendarCallManager,
-  ClaudeAiConnectorInventory,
-  CloudAgentCredentialStore,
-  CloudAgentManager,
-  CloudAgentStore,
-  CommandAllowlistStore,
-  CompanyMemoryCache,
-  ComputerAppReader,
-  ComputerControl,
-  ComputerTeachRecordings,
-  ConfidentialMemoryPasses,
-  ConsoleRefusal,
-  CredentialVault,
-  CustomRuleStore,
-  DATA_DIR,
-  DATA_DOWNLOADS_DIR,
-  DATA_INTERNAL_MCP_PATH,
-  DEFAULT_REBUILD_BYTES,
-  DESKTOP_BRIDGE_MCP_NAME,
-  DEVICE_REQUEST_KEYS,
-  DEVICE_SETTINGS_FRAME,
-  DISPATCH_KPI_TOOL,
-  DRAIN_COALESCE_MAX_ITEMS,
-  DataFailure,
-  DataSheetRegistry,
-  DelegationWakeBudget,
-  DesktopBridges,
-  DesktopLocalModels,
-  DesktopTerminals,
-  DesktopTunnels,
-  DevPodsThreads,
-  DirectoryRefreshScheduler,
-  ENGINE_DRIVER,
-  ENGINE_PURGE_DONE,
-  ENVIRONMENT_PATHS,
-  EVENTS_DIR,
-  EmailOtpStore,
-  EngineSelfCheck,
-  EventBus,
-  FcmSender,
-  FinishUntilRuns,
-  GROK_CLOUD_CONNECTORS,
-  GithubConnect,
-  GithubCredentials,
-  GraphSubscriptions,
-  GroupUsageReader,
-  HEALTH_IDENTITY,
-  HOSTED_PROVIDER_SETTINGS_ERROR,
-  HOST_COMPUTER_REFUSAL,
-  HOST_COMPUTER_RESOURCE,
-  HOST_CONTROL_NOTICE,
-  HOST_CONTROL_PATH,
-  Handoffs,
-  HarnessCommandCatalog,
-  IDP_SWEEP_INTERVAL_MS,
-  IMAGE_SERVER_ENGINE,
-  INTERIM_WINDOW_DAYS,
-  IdleEnginePool,
-  IdpGrantVault,
-  IdpSessionManager,
-  IncidentLedger,
-  InstallationCapabilityStore,
-  InstallationPlugins,
-  LEARN_PROMPT,
-  LOCAL_OWNER,
-  LOCAL_RECALL_BUDGET,
-  LOCAL_RECENT_WORK_LINES,
-  LOCAL_VAULT_PRINCIPAL,
-  LOGIN_ENGINE_LABEL,
-  LOGIN_MARKER,
-  LimitFailoverStore,
-  LiveActivityHub,
-  LiveCallController,
-  LiveCallSignedOutError,
-  LiveSessionError,
-  LocalAwayTracker,
-  LocalSemanticIndex,
-  LocalVmAutoStarter,
-  LocalVmIdleTimer,
-  LocalVmLease,
-  LocalVmLeasePool,
-  LocalVmSeatPool,
-  MANAGED_PROFILE_REFUSAL,
-  MAX_MCP_SERVERS,
-  MEMBER_AUTO_NOT_ALLOWED,
-  MEMBER_FOLDER_REFUSED,
-  MEMORY_INDEX,
-  MODEL_ACCESS_DISABLED_MESSAGE,
-  MY_CHROME_PROFILE,
-  MY_CHROME_SHELL_PROMPT,
-  MY_CHROME_SYSTEM_PROMPT,
-  MaintenanceScheduler,
-  MaintenanceStore,
-  ManagedDesktopPolicy,
-  ManagedDesktopProviders,
-  MarketplaceTokens,
-  McpOAuthManager,
-  McpOAuthVault,
-  MemberLiveText,
-  MemoryWatch,
-  ModelCatalogStore,
-  ModelRequestService,
-  MyChromeService,
-  NATIVE_DIR,
-  NudgeCooldown,
-  OFFICE_IMAGES_MAX_TOTAL_BYTES,
-  OFFICE_IMAGE_MAX_COUNT,
-  ONE_PASSWORD_WAITING,
-  ORG_CAPABILITIES_CALL,
-  ORG_FULL_ACCESS_DEFAULT_MARKER,
-  ORG_FULL_ACCESS_DISABLED,
-  ORG_MEMBER_ASSERTION_ACTORS,
-  ORG_OWNER,
-  OUTSIDE,
-  OidcRelyingParty,
-  OnePassword,
-  OpenApiStore,
-  OrderFollowUps,
-  OrgBotSecrets,
-  OrgCapabilities,
-  OrgFlowPlugins,
-  OrgGithubTokens,
-  OrgLibrary,
-  OrgSettingOwnedElsewhere,
-  OrgTeams,
-  OutboundCounts,
-  OutboundRequestService,
-  OwnerApprovalStore,
-  OwnerIdentityStore,
-  PASS,
-  PEER_ACCESS_HELP,
-  PEOPLE_DM_THREADS_HEADER,
-  PERSONAL_STDIO_TOOL_SERVER,
-  PERSPICAX_CONVENTIONS_PROMPT,
-  PERSPICAX_TOOL_NAMES,
-  PHONE_TOOLS_FRAME,
-  PLUGIN_CATALOG,
-  PRESENCE_SWEEP_MS,
-  PRESENCE_VISIBLE_PREFERENCE,
-  PREWARM_ENGINE_LEAD_MS,
-  PRE_AUTH_AFTER_RESOLVE,
-  PRE_AUTH_ROUTES,
-  PROFILE_CREATOR_PROMPT,
-  PROFILE_PROMPT,
-  PROVIDER_CREDENTIAL_ENV,
-  PROVIDER_KEY_KINDS,
-  PageLive,
-  PeerNoticeHops,
-  PendingTurnCancellations,
-  PeopleDmSelections,
-  PersonConnections,
-  PersonConnectionsError,
-  PersonSettingsStore,
-  PersonalProviderInstances,
-  PersonalSkills,
-  PerspicaxAgentsClient,
-  PerspicaxDirectory,
-  PerspicaxMcp,
-  PerspicaxMemory,
-  PerspicaxMemoryNotesClient,
-  PerspicaxReachability,
-  PhoneSecretBridge,
-  PhoneSecretSubmissionRegistry,
-  PlaceUnavailableError,
-  PluginMarketplaces,
-  PreSendRefusals,
-  PresenceTracker,
-  PrincipalEngineLogins,
-  PrincipalRegistry,
-  ProactiveEngine,
-  ProactivePendingFile,
-  ProactiveProposals,
-  ProactiveWaker,
-  ProfileRequestService,
-  ProviderAccounts,
-  ProviderAuthSessions,
-  ProviderRegistry,
-  ProviderTurnGenerationRegistry,
-  PublishedPages,
-  PushHub,
-  REACH_TEAMS_RUN_NAME,
-  REACH_TEAMS_WEBHOOK,
-  REACTION_PROMPT,
-  REALTIME_WORK_TIMEOUT_MS,
-  RESERVED_RUN_PREFIX,
-  ROUTES,
-  ROUTINE_EXECUTION_PROMPT,
-  ROUTINE_PROMPT,
-  ROUTINE_RESTARTED,
-  ReachMe,
-  ReachMeSecrets,
-  ReachTeams,
-  ReachTelegram,
-  ReachWhatsApp,
-  RemoteMcpClient,
-  ReplayBuffer,
-  RetiredTurnRegistry,
-  RevocationQueue,
-  RoleJournal,
-  RoomTurnDeadline,
-  RoomTurnStallRegistry,
-  RoutableSteers,
-  RoutineConsents,
-  RoutineManager,
-  RoutineRequestService,
-  RoutineWatchStates,
-  RuleRequestService,
-  SANDBOX_ATTACHMENTS_DIR,
-  SANDBOX_PLUGINS_DIR,
-  SANDBOX_VIEWER_TARGET,
-  SANDBOX_WAKE_NOTICE,
-  SANDBOX_WAKE_TIMEOUT_NOTICE,
-  SEES_EVERYTHING,
-  SEES_NOTHING,
-  SERVER_LIMIT_SCOPE,
-  SESSION_SEARCH_SYSTEM_PROMPT,
-  SETTINGS_ACTION_CLASS,
-  SHARED_LOCAL_VM_TARGET,
-  SMALL_TALK_TURN_NOTE,
-  SPAWNED_PROXIES,
-  STEP_UP_CLASSES,
-  STOPPED_TURN_NAME,
-  SUBAGENT_SWEEP_WINDOW_MS,
-  SafePointPreempts,
-  SandboxClusterWaker,
-  SandboxControlHolds,
-  SandboxStdioRelay,
-  SectionChannels,
-  SecurityKeyStore,
-  SecurityKeys,
-  SendSequencer,
-  SessionRegistry,
-  SharedComputerControl,
-  SharedComputers,
-  SmsConversation,
-  SoloGoals,
-  SseRuntimeDeltaCoalescer,
-  StdioRelayError,
-  Store,
-  SubscriptionDepositor,
-  TASK_WORKSPACES_DIR,
-  TEAM_MEMORY_PROMPT,
-  TEAM_SETUP_DESKTOP_MESSAGE,
-  TEAM_SETUP_DESKTOP_ONLY,
-  TELEPHONY_ASSERTION_ACTORS,
-  TEMP_AGENT_QUOTA,
-  TEMP_AGENT_SWEEP_MS,
-  THREADS_PROMPT,
-  TeamComputers,
-  TeamExportError,
-  TeamMemory,
-  TeamSetupError,
-  TeamSetupRequestService,
-  TemplateLinks,
-  ThreadPrewarm,
-  ThreadStarters,
-  ToolGrantStore,
-  ToolResults,
-  TrackedArtifactStore,
-  TriggerPollerCredentials,
-  TriggerPollers,
-  TurnAuthenticationRefusedError,
-  TurnNotStartedError,
-  TurnReplyRepeats,
-  TurnResources,
-  TurnStops,
-  TurnWatchdog,
-  TypingPrewakeThrottle,
-  UNDO_STALE,
-  USAGE_LIMIT,
-  UnansweredApprovals,
-  UsageMeter,
-  UserSandboxManager,
-  VAULT_LOGIN_TARGET,
-  VM_WORKSPACE_GUEST,
-  VOICE_CALL_WATCHDOG_MS,
-  VOICE_DASHES_PREFERENCE,
-  VOICE_FIRST_SENTENCE_SYSTEM,
-  VOICE_KEYTERM_RECENT_MESSAGES,
-  VOICE_MODE_STORAGE_KEY,
-  VOICE_SERVER_ENGINE,
-  VideoGenerations,
-  VideoJobError,
-  VisibleSet,
-  VoiceCallSessions,
-  VoiceCallWarmup,
-  VoiceFirstSentenceJobs,
-  VoiceLatencyLog,
-  VoiceTurnSessions,
-  WEBHOOK_PROMPT,
-  WIDGET_APPROVAL_PROMPT,
-  WIDGET_PROMPT,
-  WITHHELD_HOST_TOOLS_PROMPT,
-  WORKSPACE_OWNER,
-  WebBotAuthStore,
-  WebhookManager,
-  WidgetCheckAttempts,
-  WidgetRenderer,
-  WorkflowStore,
-  WorkspaceBackupMaintenance,
-  WorkspaceTidier,
-  XaiMarketplaceSource,
-  acceptOpenInvitesForEmail,
-  acceptedSendMatch,
-  accessCardAudience,
-  accessCardForViewer,
-  accessCardVisibleTo,
-  achievementById,
-  acquireDataDirLeaseForProcess,
-  actionClassContext,
-  activeEngineRefusal,
-  activePath,
-  addDisabledMcpServer,
-  adminApprovalDecision,
-  adminAuditPlan,
-  adminBotEngine,
-  admit,
-  agentBrowserFrame,
-  agentConversationNotifies,
-  agentPromptWithFiles,
-  agentRefuse,
-  allowedFallbackSelection,
-  allowedScopes,
-  alwaysAllowStepUp,
-  alwaysDenyOffered,
-  ambientRefusalFor,
-  ambiguousPersonalHeaderRefusal,
-  appRuleOffered,
-  appendAboutMe,
-  appendAdminAction,
-  appendDecision,
-  appendMemoryLog,
-  appendStep,
-  appendUsage,
-  applyIdentityMigration,
-  applyPendingWorkspaceRestore,
-  applySignedBrowserHeaders,
-  applyViewerModelOverride,
-  approvalGrantsFor,
-  approvalLevelPrompt,
-  approvalModeFor,
-  approvalModeForOrigin,
-  approvalModeLoosens,
-  approvalTypeOf,
-  archiveInlineTexts,
-  archiveMark,
-  archiveNote,
-  archivedAgent,
-  askedBotChange,
-  askedChange,
-  askedForView,
-  assertModelVariantSupported,
-  assertRequestTarget,
-  assertWithinBudget,
-  assignBotHost,
-  assistantTranscript,
-  atLeast,
-  atThreadCapacity,
-  attachCustomMcp,
-  attachDesktopTerminal,
-  attachDesktopTunnel,
-  attachedFilesInText,
-  attachmentChunks,
-  attachmentExists,
-  attachmentIsTheirs,
-  attachmentsInText,
-  attentionCard,
-  attributeEntries,
-  attributionFragments,
-  audienceEquals,
-  auditSampleFromEnv,
-  augmentedPath,
-  authorizeExternalRuntime,
-  autoComputerToolRefusal,
-  autoLocalVmAttachable,
-  autoModelRecord,
-  autoOnlyDestination,
-  autoRecallEnabled,
-  autoRecallLogLine,
-  autoStartLine,
-  autoStartTarget,
-  avatarImageStatus,
-  awaySkipsDetail,
-  backgroundIdleMs,
-  basename,
-  beginMemoryTurn,
-  bindConfidentialDecisions,
-  bindDecisionRetention,
-  bindImessageMessage,
-  bindThreadLogCapProvider,
-  blockedAddressReason,
-  blockedTarget,
-  boat,
-  boatCreateRecoverySnapshot,
-  boatDeletionSnapshot,
-  botActClasses,
-  botAuditSnapshot,
-  botAvatarUrlFromStoredPath,
-  botCreationOffered,
-  botFolderPath,
-  botLevel,
-  botLook,
-  botMaxParallelPerPerson,
-  botParticipant,
-  botPersona,
-  botPublicProfile,
-  botRecoveryBackups,
-  botReplyQuoteId,
-  botTailscaleScopeFor,
-  botTasksFrameAllowed,
-  botmailEvent,
-  botmailTaggedPrompt,
-  botsRoutes,
-  branchRemoteDeps,
-  briefCrossingLabel,
-  briefMessageText,
-  briefNoticeLines,
-  browserEgress,
-  browserEngineAttachCdpUrl,
-  browserEngineEncryptionKey,
-  browserEngineStatus,
-  browserIdleMs,
-  browserIsThePlace,
-  browserNavigationRefusal,
-  browserOwner,
-  browserProfileChangeRefusal,
-  browserProfileDirectory,
-  browserRuntimeEnv,
-  browserSessionId,
-  buildBotOverview,
-  buildRecoveryText,
-  buildSpendNotification,
-  buildSystemPrompt,
-  buildTurnContext,
-  builtInBrowserEnabled,
-  builtinAgentToolName,
-  bundledKnowledgeIndex,
-  cacheKeepWarmSettings,
-  cacheUntilConfigChanges,
-  callHasParkableWork,
-  callLinesBlock,
-  callTitleExcerpt,
-  callTurnEffort,
-  callbackPage,
-  can,
-  canAccessBot,
-  canAccessTeam,
-  canInChannel,
-  canOnBot,
-  canOnThread,
-  canReachPeer,
-  canUseMcpServer,
-  canWorkOnCloud,
-  cancelWaitFromCard,
-  cancelledChatFollowup,
-  capInstructions,
-  capabilityPrompt,
-  capabilityPromptGroups,
-  captureQuietMs,
-  cardRiskClasses,
-  cardScanRequester,
-  chainRoleRoutes,
-  channelViewerId,
-  chartRenderer,
-  chatFollowups,
-  checkPersonQuote,
-  checkRoutineReadiness,
-  checkSoulDrift,
-  checkWidgetForTurn,
-  checkpoints,
-  chiefOfStaffSystemPrompt,
-  citeAppFigures,
-  claimRecallCrossings,
-  classifyVoiceIntent,
-  claudeAccountInfo,
-  claudeAccountLinked,
-  claudeActivityEvents,
-  claudeAiConnectorsForTurn,
-  claudeAiOwnerScopedServer,
-  claudeArtifactCommentsNote,
-  claudeSignedIn,
-  claudeSubscriptionHomeKey,
-  claudeUserMcpEnabled,
-  cleanBotGrants,
-  cleanDisabledModels,
-  cleanFavoriteModels,
-  cleanupResumableUploads,
-  cleanupStaleAttachmentPartials,
-  clearAmbientRefusal,
-  clearBrowserSessionState,
-  clearEngineRefusal,
-  clearHeldSteersForThread,
-  clearSectionContext,
-  clearSessionCookie,
-  cliWalletIssuer,
-  clientBotPatchViolation,
-  clientInstanceView,
-  closeBrowserSession,
-  closeInspected,
-  closeMessageDb,
-  closeMessageSearch,
-  closeRowsLeftByRestart,
-  cloudAgentInternalAction,
-  cloudAgentWakePrompt,
-  cloudAgentWireItem,
-  cloudBackendChangeError,
-  cloudComputerRpc,
-  cloudGuestSendRefusal,
-  cloudOnlyBot,
-  cloudPlaceRefusal,
-  cloudRefusal,
-  cloudThreadRefusal,
-  coalescedRun,
-  commandAllowlistCandidate,
-  commandReceipt,
-  commentsForModel,
-  commitLearned,
-  compactVolatileOrder,
-  companionBotFieldViolation,
-  companyTextForBots,
-  compatServerOwner,
-  compatServerVisible,
-  compatServers,
-  compileChart,
-  computerEngineMoveText,
-  computerPrompt,
-  computerSelectTarget,
-  computerSkippedNote,
-  computerToolsRefusal,
-  computersRoutes,
-  confidentialBrowserSession,
-  configForViewer,
-  configureContentEncryption,
-  configuredKeyterms,
-  connectorNeed,
-  connectorPrincipalFor,
-  connectorSwitchText,
-  containerComputerAction,
-  containerComputerExists,
-  containerComputerFrame,
-  containerComputerMcp,
-  containerComputerScreenshot,
-  containerComputerStatus,
-  containerExec,
-  containerRuntimeStatus,
-  contentEncryptionFromEnv,
-  contentOwnerChanged,
-  conversationThreadId,
-  cookieMaxAgeSeconds,
-  correctiveRounds,
-  createAcceptDirectSend,
-  createAccessCardFor,
-  createAccountConnectorInput,
-  createAccountRoutes,
-  createAchievementRoutes,
-  createAchievementStore,
-  createActAnswerer,
-  createActTurnFacts,
-  createActiveGroupSpeaker,
-  createActiveGroupTurnForBot,
-  createActivityChildren,
-  createActorPrincipalId,
-  createAddMarketplaceServers,
-  createAddPersonalMcpServer,
-  createAdminActivityRecording,
-  createAdminActivityRoutes,
-  createAdminAnswersPendingApproval,
-  createAdminApprovalCheck,
-  createAdminAuditRows,
-  createAdoptReservedWorkThread,
-  createAgentApi,
-  createAgentApiAudit,
-  createAgentApiBotScopes,
-  createAgentApiSecret,
-  createAgentApiSourceFile,
-  createAgentApiStageFiles,
-  createAgentCard,
-  createAgentCardGuard,
-  createAgentConversationFor,
-  createAgentModelSummary,
-  createAgentScopesFor,
-  createAgentSummary,
-  createAgentTurnState,
-  createAgentsIntegration,
-  createAiClientThreadPerson,
-  createAllowCwAction,
-  createAndroidPushDeviceStore,
-  createAnnouncePlanThresholds,
-  createAnnounceProfileChange,
-  createAnswerCardFromConsole,
-  createAnswerInboxCard,
-  createAnswerProactiveProposal,
-  createAnswerRequest,
-  createAnswerRoleTransition,
-  createAnsweringCardAs,
-  createAntigravityAccountRoutes,
-  createAntigravityLeftoverRoutes,
-  createAppendSkillRequestCard,
-  createAppliesDirectly,
-  createApplyAutoReviewDefault,
-  createApplyConfigHttpPatch,
-  createApplyDesktopMutationTokenMessage,
-  createApplyModelSwitches,
-  createApplyOrgEngineAllowList,
-  createApplyStricterApprovalLive,
-  createApprovalAnswerRefusal,
-  createApprovalBot,
-  createApprovalLevelOf,
-  createApprovalModeStepUpGate,
-  createApprovalModeSupport,
-  createApprovalsInboxRoutes,
-  createArtifactInternalRoutes,
-  createArtifactRefresher,
-  createArtifactRoutes,
-  createArtifactSourceRunner,
-  createArtifactStore,
-  createAsPlaceFailure,
-  createAskBotAndWait,
-  createAssertTeamComputerChangeIdle,
-  createAssertTurnAdmission,
-  createAttachBotBoat,
-  createAttachInterimPerson,
-  createAttachTeamBoat,
-  createAttachmentReferences,
-  createAttachmentSeenBy,
-  createAttachmentVmForTurn,
-  createAttentionTicketUrl,
-  createAttributeSandboxEntries,
-  createAuditApprovalModeChange,
-  createAuditFullAccessTurn,
-  createAuditRoutineRunAs,
-  createAuthPublicRoutes,
-  createAuthRefusalLogger,
-  createAuthSessionRoutes,
-  createAuthenticate,
-  createAuthorizedInternalCapability,
-  createAuthzViewerFromId,
-  createAutoAnswerStepUp,
-  createAutoApprovalNotes,
-  createAutoCatalogLookup,
-  createAutoComputerStateFor,
-  createAutoEnginesFor,
-  createAutoPickForTurn,
-  createAutoRecallPrompt,
-  createAutoRefusalsFor,
-  createAutoReviewRuleRoutes,
-  createBackgroundBriefReads,
-  createBackgroundBriefRoutes,
-  createBeginAdminAudit,
-  createBeginGroupTurnOperation,
-  createBindOwnedTrigger,
-  createBindTurnComputer,
-  createBodyForThreadViewer,
-  createBookTurnUsage,
-  createBotActivityRoutes,
-  createBotActs,
-  createBotAtThreadCapacity,
-  createBotAvatarGenerateRoutes,
-  createBotCapabilitiesAs,
-  createBotCapabilitiesFor,
-  createBotCapabilitiesRoutes,
-  createBotCatalogRoutes,
-  createBotCodeBranchRoutes,
-  createBotComputerShell,
-  createBotCreationTurnOrigin,
-  createBotForApproval,
-  createBotForViewer,
-  createBotGrantRoutes,
-  createBotHistoryRoutes,
-  createBotInboundMailReadRoutes,
-  createBotInboundMailRoute,
-  createBotInboundTelephonyRoute,
-  createBotLibraryRoutes,
-  createBotMailOwner,
-  createBotMemoryReachable,
-  createBotMemoryRoutes,
-  createBotObservabilityRoutes,
-  createBotOverview,
-  createBotPluginRoutes,
-  createBotPresetRoutes,
-  createBotReaction,
-  createBotRulesRoutes,
-  createBotRunning,
-  createBotRuntimeSettingsRoutes,
-  createBotSecretCardRoutes,
-  createBotSendStateRoutes,
-  createBotSettingsRoutes,
-  createBotSettingsStore,
-  createBotSkillUploadRoutes,
-  createBotSkillsRefusal,
-  createBotTailscaleRoutes,
-  createBotTaskInternalRoutes,
-  createBotTaskRoutes,
-  createBotTaskStore,
-  createBotVersionRoutes,
-  createBotWizardRoutes,
-  createBotWizardStore,
-  createBotWorkspaceRoutes,
-  createBotZipRoutes,
-  createBotmailConfined,
-  createBotsContentRoutes,
-  createBotsCoreRoutes,
-  createBotsMessagesRoutes,
-  createBotsMutateRoutes,
-  createBridgeAudit,
-  createBridgeTerminal,
-  createBroadcastPresence,
-  createBrowserEngineRoutes,
-  createBrowserIntegration,
-  createBrowserNetworkRoutes,
-  createBusyClassifyEngine,
-  createCacheKeepWarm,
-  createCachedGroupEngineCommandRoute,
-  createCalendarCallsRoutes,
-  createCallHandoffHistory,
-  createCanAdmitDirectTurn,
-  createCancelDirectTurnDispatch,
-  createCancelGroupTurnOperations,
-  createCancelTeamSetupResumesForThread,
-  createCaptureMailer,
-  createCaptureTurnFor,
-  createCapturedReply,
-  createCardAnswerRefusal,
-  createCardAnswererFor,
-  createCardRequesterKey,
-  createCheckedExportSkillNames,
-  createCheckedGroupResponder,
-  createCheckedMemberIds,
-  createCheckedModelSelection,
-  createCheckedTaskModelSwitch,
-  createClaimBotComputerLifecycle,
-  createClaimManagedBoatMutation,
-  createClaimManagedVpsMutation,
-  createClaimPhoneSecretBotDeletion,
-  createClaimTeamComputerLifecycle,
-  createClaudeAccountForPrincipal,
-  createClaudeArtifactCommentsCheck,
-  createClaudeArtifactInternalRoutes,
-  createClaudeArtifactRoutes,
-  createClaudeArtifactWorkspaceFile,
-  createClearDirectTurnDispatch,
-  createCliTestRoutes,
-  createCloseCutToolRows,
-  createCloseOpenApprovals,
-  createCloseSessionStreams,
-  createCloudAgentRoutes,
-  createCloudComputerHolders,
-  createCloudComputerTools,
-  createCloudGuestDrivenHandoff,
-  createCloudRoutineReadiness,
-  createCodeBranchCredentials,
-  createCodeRoutes,
-  createCollectExportSkills,
-  createCollectTeamSkills,
-  createCommandAllowlistResponse,
-  createCommandRememberRefusal,
-  createCommitFailedTurn,
-  createCompactConversation,
-  createCompactPromptFor,
-  createCompanionPairRoutes,
-  createComputerCallGate,
-  createComputerCareRoutes,
-  createComputerInputRoutes,
-  createComputerOwner,
-  createComputerPreviewSurface,
-  createComputerStatusRoutes,
-  createComputerTeachRoutes,
-  createComputerWorkingBotsRoutes,
-  createComputersRoutes,
-  createConfidentialPerspicaxRefusal,
-  createConfidentialThreadAttachments,
-  createConfigAddressField,
-  createConfigForAccess,
-  createConfigForPerson,
-  createConfigHttpRoutes,
-  createConfigProviderKeyField,
-  createConfigStatus,
-  createConfirmHeldCard,
-  createConnectorSetupContext,
-  createConnectorSetupInternalRoutes,
-  createConnectorSetupProofs,
-  createConnectorSetupRoutes,
-  createConnectorSetupStore,
-  createConnectorStatusRoutes,
-  createConnectorSwitchForTurn,
-  createConnectorThread,
-  createConnectorsElsewhereFor,
-  createConsoleBotCapabilities,
-  createContinueComputerSelection,
-  createControlIntegration,
-  createCoordinationLiveRosterBlock,
-  createCoordinator,
-  createCoordinatorSlotUse,
-  createCoordinatorValidate,
-  createCreateChannel,
-  createCredentialVaultInternalRoutes,
-  createCredentialVaultPersonRefusal,
-  createCredentialVaultRoutes,
-  createCurrentBrowserSession,
-  createCurrentSecretState,
-  createCursorSeq,
-  createCustomDomainPublicRoutes,
-  createCustomDomainSettingsRoutes,
-  createCustomDomainVerifier,
-  createCustomRuleRoutes,
-  createCustomRulesModelReviewer,
-  createCwActionPasses,
-  createDashFreeReply,
-  createDataConfinedRoots,
-  createDataExportRoots,
-  createDataFrameAudience,
-  createDataIntegration,
-  createDataRoutes,
-  createDataScopeForViewer,
-  createDataSelfAnswerRoots,
-  createDataThreadFolders,
-  createDecideWorkplace,
-  createDecider,
-  createDeciderRoutes,
-  createDecisionActorFor,
-  createDecisionsRoutes,
-  createDeclaredToolProduct,
-  createDefaultSelection,
-  createDefaultTurnPayerFor,
-  createDefaultsPresetFor,
-  createDelegateOnRuntime,
-  createDelegatedLevel,
-  createDelegatorOf,
-  createDeleteBotWithLifecycle,
-  createDeletePersonData,
-  createDeliverCalendarCall,
-  createDeliverLateQuestionAnswer,
-  createDescribeActForRule,
-  createDescribeGrantTarget,
-  createDescribeInstances,
-  createDesktopAppearanceRoutes,
-  createDesktopAppearanceStore,
-  createDesktopBridgeRoutes,
-  createDesktopViewer,
-  createDestinationOfCall,
-  createDestinationTurnOrigin,
-  createDevPullRoutes,
-  createDeviceSettingRoutes,
-  createDeviceSettingsBroker,
-  createDirectContext,
-  createDirectGrantRoutes,
-  createDirectSendRefusal,
-  createDiskSaverTarget,
-  createDispatchComputerResume,
-  createDispatchDelegationWake,
-  createDispatchKpiService,
-  createDispatchSecretResume,
-  createDispatchTeamSetupResume,
-  createDrainComputerResumes,
-  createDrainDelegationWakes,
-  createDrainQueuedChannelSends,
-  createDrainQueuedSends,
-  createDrainTurnsBeforeShutdown,
-  createDuplexEpochFor,
-  createEchoesOwnReaction,
-  createElevenLabsVoice,
-  createEmailDraftBot,
-  createEmailDraftRoutes,
-  createEmailDraftStatus,
-  createEmailSendPasses,
-  createEmailSignInAllowList,
-  createEmptyResponseRetry,
-  createEngineConnectorsPromptFor,
-  createEngineHomes,
-  createEngineInstalled,
-  createEngineMcpServers,
-  createEngineReachFor,
-  createEnsureCalendarCallRoom,
-  createEnsureClaudeArtifactCommentsRoutine,
-  createEnsureViewerThread,
-  createEnterRequestScopes,
-  createErasePersonDataNow,
-  createExecLifecycleHook,
-  createExpireDueApprovalsInThread,
-  createExternalRuntimeCapability,
-  createFailQueuedMessage,
-  createFailTurnIfMemberLeft,
-  createFailWorkerTurns,
-  createFanoutSsePayload,
-  createFinalScreenFrame,
-  createFinalizeDelegationWatch,
-  createFinishGroupGoalRun,
-  createFinishGroupTurnOperation,
-  createFinishMachineTurn,
-  createFinishVoiceCallRequestedByBot,
-  createFishVoice,
-  createFleetRoutes,
-  createForceStopBot,
-  createForeignMcpServerNames,
-  createForgetConfidentialBrowser,
-  createForgetInflight,
-  createForgetTemporaryBrowser,
-  createForgetThreadEngineSessions,
-  createGenerateThreadTitle,
-  createGithubCredentialRoutes,
-  createGithubCredentialsFor,
-  createGracefulShutdown,
-  createGroupBotPayerRoutes,
-  createGroupEngineCommandRoute,
-  createGroupFolderRoutes,
-  createGroupGoalCoordinatorTurnForEvent,
-  createGroupIsWorking,
-  createGroupMemoryRoutes,
-  createGroupThreadIsWorking,
-  createGroupVisible,
-  createGroupsHttpRoutes,
-  createGuardedRequestSnapshot,
-  createHandleDesktopTrustedApprovalMessage,
-  createHarnessCommandAccount,
-  createHarnessCommandRoutes,
-  createHarnessCommandSource,
-  createHarnessConnectorRoutes,
-  createHash,
-  createHeadlessTaskRunner,
-  createHealBotEngine,
-  createHealOrgRefusedThreadModel,
-  createHealThreadModel,
-  createHealthPublicRoutes,
-  createHealthReportRoutes,
-  createHeldRolesRoute,
-  createHideBotThreadsOnce,
-  createHideEarlierAgentThreads,
-  createHoldBootEngineSlot,
-  createHoldDirectMachineTurn,
-  createHoldSignInRefusal,
-  createHoldTurnAttachments,
-  createHooksIntegration,
-  createHostedSlackRoutes,
-  createImportLegacyDelegations,
-  createImportPackageFor,
-  createInboxDestination,
-  createInboxHistory,
-  createInboxPending,
-  createInboxTestRule,
-  createIncidentRefused,
-  createIndexPrimaryApprovals,
-  createIndexSettingsActions,
-  createIngestEngineHook,
-  createInsideDataDir,
-  createInstallationCapabilityRoutes,
-  createInstalledVoices,
-  createInstancesForViewer,
-  createInstancesRoutes,
-  createInterimAttachRoutes,
-  createInternalBotChatRoutes,
-  createInternalCapabilityIsActive,
-  createInternalEnvironmentsRoutes,
-  createInternalIntegrationsRoutes,
-  createInternalMemoryRoutes,
-  createInternalRequestsRoutes,
-  createInternalRoomsRoutes,
-  createInternalSessionsRoutes,
-  createInterruptAllDirectThreads,
-  createInterruptDirectThread,
-  createInterruptRoutineGroupGoal,
-  createIsApprovalCardMessage,
-  createIsUnattended,
-  createJoinPrewarm,
-  createJournalRowsFor,
-  createKeysTestRoutes,
-  createLastAutoPlace,
-  createLastHumanRoomMessageAt,
-  createLatestCompaction,
-  createLatestFailedTurnCause,
-  createLatestPersonText,
-  createLibraryPackageExport,
-  createLifecycleHookRoutes,
-  createLimitBackupRefusedInThread,
-  createLimitCandidatesNow,
-  createLimitFailoverHost,
-  createLimitFailoverRow,
-  createLimitResetHost,
-  createLimitResetRoutes,
-  createLimitResumeText,
-  createLinkedSubjectsRoute,
-  createListedBotVisible,
-  createLiveActivityTokenStore,
-  createLiveRoutes,
-  createLiveSession,
-  createLocalComputerAutoRoutes,
-  createLocalComputerLifecycle,
-  createLocalComputerRoutes,
-  createLocalComputerSummary,
-  createLocalVmAutoLifecycle,
-  createLocalVmIdleFor,
-  createLocalVmInventoryPayload,
-  createLocalVmPayload,
-  createLocalVmTargetForStatus,
-  createLocateChannelMessage,
-  createLockedLookRefusal,
-  createMachineRunRoutes,
-  createMachineRuns,
-  createMailSettingsRoutes,
-  createMailer,
-  createMaintainedComputer,
-  createMakeThreadConfidential,
-  createManagedBoatOwners,
-  createMarkComputerResumeFailed,
-  createMarkRoutineResultsThreads,
-  createMarkTaskContextExternallyUpdated,
-  createMarkThreadStopping,
-  createMarketplaceRoutes,
-  createMasteryNightly,
-  createMayCancelRoutineRun,
-  createMayPlaceRoomIn,
-  createMayRunRoutineNow,
-  createMaySetBotHost,
-  createMcpAuditInternalRoutes,
-  createMcpIdentityOf,
-  createMcpOAuthCallbackRoutes,
-  createMcpServerBody,
-  createMcpServerNamesResponse,
-  createMcpServerRenameRoutes,
-  createMcpServerResponse,
-  createMcpServerSummary,
-  createMcpServersHttpRoutes,
-  createMcpToolNameRoutes,
-  createMeAvatarRoutes,
-  createMeEngineModelsRoutes,
-  createMeEnginesRoutes,
-  createMeMemoryNotesRoutes,
-  createMediaWidgetRoutes,
-  createMeetingBrowserRefusal,
-  createMeetingInternalRoutes,
-  createMeetingRoutes,
-  createMeetingService,
-  createMemberBotFieldRefusal,
-  createMemberDefaultSelection,
-  createMemberFolderRoots,
-  createMemberForAgentCaller,
-  createMemberFrame,
-  createMemberFrameContext,
-  createMemberHostToolPlace,
-  createMemberInstanceView,
-  createMemberSeesFrame,
-  createMemoryManagerRoutes,
-  createMemoryPromptFor,
-  createMemorySyncTokenRoute,
-  createMemoryUpkeep,
-  createMessageFileRootsForThread,
-  createMessageSender,
-  createMessageWindow,
-  createMessagesIntegration,
-  createMessagesRoutes,
-  createMigrateBotRuntimeSettings,
-  createMigrateCapabilitiesConfigStores,
-  createMigrateGithubCredentials,
-  createMigrateSectionSharesToBotGrants,
-  createMigrateThreadOwners,
-  createMintInternalCapability,
-  createMisuseTextRefusal,
-  createModelAccessRefusals,
-  createModelSwitchRoutes,
-  createModerationRoutes,
-  createModerationStore,
-  createMountBotBoat,
-  createMountBotVps,
-  createMountHostComputer,
-  createMountPersonalMcp,
-  createMountPluginMcp,
-  createMountUserSandbox,
-  createMoveOffComputerEngine,
-  createMyChromeNavigationRefusal,
-  createMyChromeRoutes,
-  createMyToolGrantRoutes,
-  createNewestPeerActivityAt,
-  createNonPrimaryCreationRefusal,
-  createNoteAutoApproval,
-  createNoteCallBesideConversation,
-  createNotePlanLimits,
-  createNoteQueuedBehindPerson,
-  createNoteSandboxClusterWait,
-  createNoteTeammatesLeftRunning,
-  createNoteTurnsCutByShutdown,
-  createNoteWakeDryRun,
-  createNotificationQuietOnPhones,
-  createNotify,
-  createNotifyAccess,
-  createNotifyRoomMentions,
-  createNudgeRoutes,
-  createObserveAchievementFrame,
-  createObserveLiveActivityFrame,
-  createObservePushFrame,
-  createOfferPeerNotice,
-  createOfferProactive,
-  createOfferRoomPostToBots,
-  createOfficeTurnText,
-  createOidcLoginRoutes,
-  createOnePasswordReaderFor,
-  createOpenAiCompatServerRoutes,
-  createOpenAiStt,
-  createOpenAiVoice,
-  createOpenApiInternalRoutes,
-  createOpenApiRoutes,
-  createOpenApiToolsEnv,
-  createOpenMeetingBrowser,
-  createOpenPersonCard,
-  createOpenQuestionCard,
-  createOpenTurnMessage,
-  createOpenedThreadOwner,
-  createOrgAdminBots,
-  createOrgAdminEngines,
-  createOrgAdminNames,
-  createOrgAdminRoutes,
-  createOrgBotAttachments,
-  createOrgBotFileRoots,
-  createOrgBotForceRoutes,
-  createOrgBotReach,
-  createOrgBotsRoutes,
-  createOrgCapabilityRoutes,
-  createOrgDeclarationInputs,
-  createOrgDirectoryTeams,
-  createOrgEngineInput,
-  createOrgEngineRefusal,
-  createOrgEngineTurnRefusal,
-  createOrgExportRoute,
-  createOrgFullAccessRefusalFor,
-  createOrgImportRoute,
-  createOrgJoinsRunningTurn,
-  createOrgLibraryRoutes,
-  createOrgLinkRoutes,
-  createOrgMemberRoutes,
-  createOrgPersonConnectionRoutes,
-  createOrgRefusalOf,
-  createOrgSettings,
-  createOrgTurnAccess,
-  createOrgUsageFacts,
-  createOrgVisibleSections,
-  createOriginApprovals,
-  createOriginGates,
-  createOsascriptSender,
-  createOutstandingAssignmentsPrompt,
-  createOwnAttachmentRoots,
-  createOwnComputerChoiceRequest,
-  createOwnDestinationRequest,
-  createOwnEnvironmentOrigin,
-  createOwnEnvironmentRequest,
-  createOwnLineageFields,
-  createOwnPageContext,
-  createOwnerApprovalRoutes,
-  createOwnerAvatarRoute,
-  createOwnerLineageFor,
-  createOwnerModelOfflineRefusal,
-  createOwnerScopedMcpServerFor,
-  createOwnerSettingsForbidden,
-  createPackageImportDeps,
-  createPagesSeparation,
-  createPairingAdminRoutes,
-  createParentThreadModel,
-  createParseArchiveOutcome,
-  createPartialAlreadyWritten,
-  createPatchRoutineAs,
-  createPeerSpeaker,
-  createPeerThreadFor,
-  createPendingAdminApprovals,
-  createPendingApprovalCards,
-  createPendingApprovalsFor,
-  createPendingExpireDaysForPerson,
-  createPendingExpiryDeps,
-  createPendingInboxCards,
-  createPeopleAvatarRoutes,
-  createPeopleDmFrameAllowed,
-  createPeopleDmProjection,
-  createPeopleDmRoutes,
-  createPerBotLocalVmCountForModeChange,
-  createPerformAsMember,
-  createPerformBotActRoute,
-  createPerformBotActRouteOutsideConfidential,
-  createPersistMcpServers,
-  createPersistProviderInstance,
-  createPersonClaudeArtifactCall,
-  createPersonConnectionRoutes,
-  createPersonDirectTurn,
-  createPersonEngineAccess,
-  createPersonLabelRoutes,
-  createPersonOAuth,
-  createPersonPaysEngine,
-  createPersonRunsEngine,
-  createPersonSendsReadReceipts,
-  createPersonSettingsRoutes,
-  createPersonalHostRefusalCached,
-  createPersonalMcpNamesForGuard,
-  createPersonalPluginRoutes,
-  createPersonalServerListing,
-  createPersonalSkillRoutes,
-  createPersonalStdioIntegration,
-  createPerspicaxAccessToken,
-  createPerspicaxClaimsInternalRoutes,
-  createPerspicaxLinkSubjectToken,
-  createPerspicaxOrgRoutes,
-  createPerspicaxReadAlone,
-  createPerspicaxRoleRoutes,
-  createPerspicaxSessionAlone,
-  createPerspicaxToolInternalRoutes,
-  createPerspicaxTurnIntegration,
-  createPerspicaxTurnPrepare,
-  createPhoneCallbackOrigin,
-  createPhoneCardScanRoutes,
-  createPhoneIntegration,
-  createPhoneToolBroker,
-  createPhoneToolInternalRoutes,
-  createPhoneToolRoutes,
-  createPiKitIdentityFor,
-  createPiLocalTurnAccess,
-  createPiTurnPerson,
-  createPlanUsageRoutes,
-  createPluginFolderCapability,
-  createPluginRoutes,
-  createPokeScreenPoller,
-  createPostDesktopPrivateMessage,
-  createPostInputRequest,
-  createPreemptAtSafePoint,
-  createPreferenceImportRoutes,
-  createPreferenceStore,
-  createPresenceRoutes,
-  createPresenceViewer,
-  createPresetStore,
-  createPreviewSystemPrompt,
-  createPrewakeComputerWhileTyping,
-  createPrewarmNamedTeammates,
-  createPrewarmRefusal,
-  createPrewarmThread,
-  createPrimaryApprovals,
-  createPrimaryApprovalsInternalRoutes,
-  createPrimaryAskedProposal,
-  createPrimaryTurnGate,
-  createPrincipalMayRunRoutine,
-  createPrincipalPermissions,
-  createPrivateFolderThread,
-  createPrivateRecallFilter,
-  createProactiveProposalRoutes,
-  createProbeEngines,
-  createProbeMcpOAuth,
-  createProjectMessages,
-  createProposalPersistence,
-  createProposalRuleCandidate,
-  createProvideSecretFromPhone,
-  createProviderAccountsRoutes,
-  createProviderOperationConflict,
-  createProviderRegistry,
-  createProviderTransitionForTurn,
-  createPublicBot,
-  createPublicGroupState,
-  createPublicInviteRoutes,
-  createPublishVoiceNotice,
-  createPublishedPageOptions,
-  createPublishedPageRoutes,
-  createPublishedPageViewer,
-  createPurgeConfidentialEngineKeys,
-  createPurgeDeletedThreadEngines,
-  createPurgeTurnAttachmentsForThread,
-  createPushActivityRoutes,
-  createPushDeviceRoutes,
-  createPushDeviceStore,
-  createQuestionAnsweredBy,
-  createQueuedBehindPerson,
-  createRaiseHarnessQuestion,
-  createReachCodeStore,
-  createReachMeAudit,
-  createReachMeCard,
-  createReachMeLanguage,
-  createReachMeRespond,
-  createReachMeRoutes,
-  createReachMeStore,
-  createReachMeVoice,
-  createReachable,
-  createReactionPersonFor,
-  createReadAndDraft,
-  createReadWorkerTurn,
-  createReadyLocalVmForTurn,
-  createRecallTopicInternalRoutes,
-  createRecentToolUses,
-  createRecentWorkFor,
-  createRecordAchievements,
-  createRecordAdminConfigChange,
-  createRecordPerspicaxWork,
-  createRefreshDispatchKpiAfterRun,
-  createRefreshStreamDigests,
-  createRefreshUnsetModelSelectionsFrom,
-  createRefreshWidens,
-  createRefuseHumanEdit,
-  createRefusePlacedBots,
-  createRegisteredDeviceFor,
-  createRegistrySearch,
-  createRelayEnginesFor,
-  createReleaseBootEngineSlot,
-  createReleaseDataDirLeaseAtExit,
-  createReleaseLocalVmThread,
-  createReleaseReservedWorkThread,
-  createReleaseTurnResources,
-  createReleaseWarmEngine,
-  createReloadProviders,
-  createRemoteBotHosts,
-  createRemoteBotHostsRoutes,
-  createRemoteControlRoutes,
-  createRemoteMcpServers,
-  createRemoteSessionActionsAudit,
-  createRemoteSessionFileRoutes,
-  createRemoteSessionInternalRoutes,
-  createRemoteSessionRegistrar,
-  createRemoteSessionRoutes,
-  createRemoteSessionService,
-  createRemoteSessionsAdmin,
-  createRemoteSessionsAdminRoutes,
-  createRemoteSupportSeat,
-  createRemoteSupportWatcher,
-  createReplaceQueuedWorkerTurns,
-  createReplayPendingProactive,
-  createReportIncident,
-  createRequestCwAction,
-  createRequestEmailDraftSend,
-  createRequestedBotFields,
-  createRequestedTaskBot,
-  createResendUserMessage,
-  createResetMemberAutoLevelsOnce,
-  createResolveAndSendCwAction,
-  createResolveAndSendEmailDraft,
-  createResolveAndSendMeeting,
-  createResolveAndSendModel,
-  createResolveAndSendPhoneCallConsent,
-  createResolveAndSendProfile,
-  createResolveAndSendRoutine,
-  createResolveAndSendRule,
-  createResolveAndSendTeamSetup,
-  createResolveAndSendTrust,
-  createResolveImessageCard,
-  createResolveLiveProposal,
-  createResolveManagedNameFor,
-  createResolveOrgGrantee,
-  createResolveReplyTarget,
-  createResolveSectionId,
-  createResolveSkillRequest,
-  createRespondToCard,
-  createResumeHeldSteersAfterCrash,
-  createResumeSecretCard,
-  createResumeTurnsCutByRestart,
-  createResyncOpenCodeProviderKeys,
-  createRetireProviderTurn,
-  createRetryDelegationsWaitingOn,
-  createReviewHolds,
-  createRevokeAllInternalCapabilities,
-  createRevokeEarlierTurnCapabilities,
-  createRevokeEngineCapabilities,
-  createRevokeInternalCapabilityGeneration,
-  createRevokeLegacyKey,
-  createRoleEvents,
-  createRoleTabRoutes,
-  createRoomAudienceConflict,
-  createRoomHandoffProblem,
-  createRoomPostEligibility,
-  createRoomRoutingInput,
-  createRoomSectionAccess,
-  createRoomSectionMoveRefusal,
-  createRoomTurnLevels,
-  createRouteMessageInternalRoutes,
-  createRouteSteeredMessage,
-  createRouteThreadIdUnguarded,
-  createRoutineAdmission,
-  createRoutineAudit,
-  createRoutineAwayRoutes,
-  createRoutineBulkRoutes,
-  createRoutineConversationOf,
-  createRoutineDelegationStubRoutes,
-  createRoutineEffortForTurn,
-  createRoutineEngineForBot,
-  createRoutineFolderRoutes,
-  createRoutineFullReport,
-  createRoutineMemoryHint,
-  createRoutineModelForTurn,
-  createRoutineModelRefusal,
-  createRoutineOnWire,
-  createRoutineOwnerAuthorizationFor,
-  createRoutineResultsRefusalFor,
-  createRoutineRunAccessCard,
-  createRoutineRunAsChoice,
-  createRoutineRunInternalRoutes,
-  createRoutineScopeCaller,
-  createRoutineScopeDeps,
-  createRoutineScopeFacts,
-  createRoutineSeenBy,
-  createRoutineSourceOwner,
-  createRoutineSubagentModelForTurn,
-  createRoutineSuspended,
-  createRoutineWatchCallTool,
-  createRoutineWatchCheckRoutes,
-  createRoutineWatchEvaluator,
-  createRoutineWatchPlace,
-  createRoutinesHttpRoutes,
-  createRuleManager,
-  createRuleProductsOf,
-  createRuleProductsOfPerson,
-  createRulesHoldTurn,
-  createRunAsChooserFor,
-  createRunAsPeople,
-  createRunDispatchKpiSource,
-  createRunGoalWorkerOnRuntime,
-  createRunGroupGoalOperation,
-  createRunGroupGoalStep,
-  createRunGroupMemberTurn,
-  createRunInternal,
-  createRunLifecycleEvent,
-  createRunPendingApprovalExpirySweep,
-  createRunPreAuth,
-  createRunRoutes,
-  createRunningTurnLevels,
-  createRuntimeDelegationStatus,
-  createSafetyReviewer,
-  createSaveOrgAllowFullAccess,
-  createSaveOrgAllowVaultExport,
-  createSaveOrgConfidentialThreadsByDefault,
-  createSaveOrgInterimAttachDays,
-  createSaveOrgMemberAutoApproval,
-  createSaveOrgMemberEnvironmentAutonomy,
-  createSaveOrgPendingApprovalExpireDays,
-  createSaveOrgPluginMarketplaces,
-  createSaveOwnerRuleFromCard,
-  createSavePersonPreferences,
-  createSavePollerCredentials,
-  createSavedSteps,
-  createScheduleAdminApprovalsAnnounce,
-  createScheduleApprovalExpiry,
-  createScheduleFinishUntilRound,
-  createScheduleSoloGoalRound,
-  createScheduleThreadEventLogRetentionSweep,
-  createScheduleTurnDigest,
-  createScheduleUnfinishedTurn,
-  createScheduleVoiceCallWatchdog,
-  createScopeApprovalMessage,
-  createScopeChannelApproval,
-  createScopedPluginFolders,
-  createScopedPluginMcp,
-  createScopedSkillInventory,
-  createScopedSkillsPrompt,
-  createScreenFrameSource,
-  createScrubConfidentialThreads,
-  createSearchRoutes,
-  createSecretMessage,
-  createSectionChannelRoutes,
-  createSectionContextRoutes,
-  createSecurityKeyRoutes,
-  createSegmentDigestText,
-  createSelectableComputers,
-  createSelfKnowledgeInternalRoutes,
-  createSendMissingRoleToAdmins,
-  createSendPeopleDmMessage,
-  createSendRoutineResolution,
-  createSendSkillResolution,
-  createSendStateFor,
-  createSendStateLimit,
-  createSerializeRoomContext,
-  createServer,
-  createServerEmailSignIn,
-  createServerEngineAllowedFor,
-  createServerPathView,
-  createSessionBearer,
-  createSessionPersonFields,
-  createSetBotApprovalModeFromConsole,
-  createSettingsActions,
-  createSettingsActionsInternalRoutes,
-  createSettingsStepUpGate,
-  createSettleBotActCard,
-  createSettleConfidentialMemoryCard,
-  createSettleDirectFollowup,
-  createSettleInputRequests,
-  createSettleMemberAutoLevelsFor,
-  createSettleOrphanedParallelTasks,
-  createSettleParallelFallback,
-  createSettleParallelTask,
-  createSettleProposalByRule,
-  createSettleTeamMemoryCards,
-  createSettleTrackedRequest,
-  createSettleWaitingOnPersonChips,
-  createSettledWithinOrStop,
-  createShapeAvatarGenerateInternalRoutes,
-  createShapeAvatarGenerateRoutes,
-  createShapeAvatarGenerator,
-  createSharedComputersRoutes,
-  createShouldIgnoreProviderEvent,
-  createShowWaitingOnPersonChip,
-  createShownPathRoutes,
-  createSidebarSectionsRoutes,
-  createSignInRecheck,
-  createSingleBotPackage,
-  createSkillCardCopy,
-  createSkillProposalPersistence,
-  createSkillShareRoutes,
-  createSlimMessage,
-  createSmsChannel,
-  createSmsReplyAfter,
-  createSoloArchiveText,
-  createSoloOrgRoutes,
-  createSpeakerMayRunRoutineNow,
-  createSpeakerOwnWordsTurn,
-  createSpeakerTurnSelection,
-  createSseFrameFor,
-  createStagePendingAttachments,
-  createStagedSkillCleanupsForThread,
-  createStaleEngineSession,
-  createStartAgentPrompt,
-  createStartBotBoat,
-  createStartDuplexCallTurn,
-  createStartGroupTurn,
-  createStartMcpSignIn,
-  createStartMeetingSummary,
-  createStartOrQueueDirectMessageNow,
-  createStartOrQueueOpenedThread,
-  createStartParallelTask,
-  createStartProactiveWake,
-  createStartScreenPoller,
-  createStartTurn,
-  createStarterNotes,
-  createStepUpGate,
-  createStopBotForEmergencyApprovalDowngrade,
-  createStopCompanyInstances,
-  createStopDirectThreadByPerson,
-  createStopGroupThreads,
-  createStopOwnSubagents,
-  createStopParallelTask,
-  createStopTurnForStricterApproval,
-  createStoppedRowSinceLastPerson,
-  createStoppedTurnText,
-  createStoredFamily,
-  createStoredNamesIn,
-  createStreamDigestEngine,
-  createStreamDigestPrompt,
-  createStreamOpenedHttpFile,
-  createStrictCardRule,
-  createStrictRuleQualifies,
-  createSubjectSeesChannel,
-  createSubjectVisible,
-  createSubscriptionCli,
-  createSubscriptionExpiredCard,
-  createSurfacePeerNotice,
-  createSweepBackgroundThreads,
-  createSweepTemporaryAgents,
-  createSweepThreadEventLogsDeferred,
-  createSyncGithubForTurn,
-  createSyncGithubToSandbox,
-  createSyncHeadlessTeam,
-  createSyncOrgCapabilities,
-  createSyncPluginFoldersForTurn,
-  createSyncPluginsForTurn,
-  createSyncRoutineRunToSource,
-  createTakeOwnerContinuation,
-  createTakeTemporaryCreateToken,
-  createTeamBackup,
-  createTeamBotFromThreadRoutes,
-  createTeamBotVaultRoutes,
-  createTeamComputerInUse,
-  createTeamComputersPayload,
-  createTeamComputersRoutes,
-  createTeamExportImportRoutes,
-  createTeamLibraryGrokRoutes,
-  createTeamLibraryRoutes,
-  createTeamMapRoutes,
-  createTeamMemoryHttpRoutes,
-  createTeamMemoryMemberMayAnswer,
-  createTeamPackageExport,
-  createTeamSetupApplyRefusal,
-  createTeamSetupDirectSource,
-  createTeamStorageForBot,
-  createTeammateReportContext,
-  createTemplateLinkRoutes,
-  createTemporaryAgentRoutes,
-  createTemporaryAgentSetting,
-  createTemporaryAudit,
-  createTerminalAccessFor,
-  createTerminalAnswerExtras,
-  createTerminalWorkPlace,
-  createTestCliBinary,
-  createThreadEngine,
-  createThreadFilePinRoutes,
-  createThreadFilePins,
-  createThreadFileRefForId,
-  createThreadFileRefForPath,
-  createThreadModelGivingWay,
-  createThreadModelRoutes,
-  createThreadOwner,
-  createThreadPersonKey,
-  createThreadReadFrameAllowed,
-  createThreadReadsFor,
-  createThreadTitleGate,
-  createThreadWarmRequest,
-  createThreadWarmRoutes,
-  createThreadsHttpRoutes,
-  createThreadsUsingAttachment,
-  createToolGrantRoutes,
-  createTranscriptPage,
-  createTtsProviderRoutes,
-  createTurnAnswers,
-  createTurnBell,
-  createTurnConnectorsFor,
-  createTurnNetworkProxy,
-  createTurnOrigin,
-  createTurnProvider,
-  createTurnReachPrompt,
-  createTurnStartFor,
-  createTurnSurfacePlan,
-  createTurnToolEvidence,
-  createTurnZoneFor,
-  createTurnsHeldOnGroup,
-  createUnattendedConsentStore,
-  createUnattendedDispatchState,
-  createUnattendedHosts,
-  createUnauthHealthBrandRoutes,
-  createUndoAppliedChange,
-  createUndoRoutes,
-  createUndoSkillCard,
-  createUnfinishedTurnGuard,
-  createUpdateChannel,
-  createUpdateGroupGoalRunProgress,
-  createUpdateInstallationPlugin,
-  createUpdateRoutinePathsAfterTidy,
-  createUpdatedMarketplaceServer,
-  createUploadsRoutes,
-  createUsableCredential,
-  createUsageMeterRoutes,
-  createUsageRoutes,
-  createUsageTriggerFor,
-  createUserComputerRouter,
-  createUserComputerSpeaking,
-  createUserDesktopIntegration,
-  createUserPreferenceRoutes,
-  createUserPreferenceStore,
-  createUserSandboxIntegration,
-  createUserSandboxRoutes,
-  createVideoInputMessage,
-  createVideoInternalRoutes,
-  createVideoScopeValid,
-  createViewerBotActivity,
-  createViewerBotOverrideRoutes,
-  createViewerBotOverrideStore,
-  createViewerForApproval,
-  createViewerIdentity,
-  createViewerIsOperator,
-  createViewerMayAnswerOnThread,
-  createViewerNotificationMuted,
-  createViewerThreadOf,
-  createVisibleTo,
-  createVmScreenshotRoute,
-  createVoiceFor,
-  createVoiceModeRoutes,
-  createVoicePickForTurn,
-  createVoiceProviderKeys,
-  createWaitForChatRoomMember,
-  createWaitForGroupMemberBot,
-  createWaitsBootstrap,
-  createWakeDelegationSource,
-  createWakeFromCloudAgentCompletion,
-  createWarmPayerAccountModels,
-  createWebBotAuthRoutes,
-  createWebSearchAddressRefusal,
-  createWebSearchInternalRoutes,
-  createWebSearchRoutes,
-  createWebSearchStore,
-  createWebhookDelegateRefusal,
-  createWebhookSeenBy,
-  createWebhooksRoutes,
-  createWipeConfidentialThread,
-  createWithCreatorListed,
-  createWithPiModelServers,
-  createWithWorkplaceNote,
-  createWithdrawApprovalNotice,
-  createWorkerRoutes,
-  createWorkflowDeliver,
-  createWorkflowOwned,
-  createWorkflowRoutes,
-  createWorkplaceIntegration,
-  createWorkplaceNoteText,
-  createWorkplacePreference,
-  createWorkplaceTurnText,
-  createWorkspaceAccess,
-  createWorkspaceBackupRoutes,
-  createWriteWorkerTurn,
-  createXaiMarketplaceRoutes,
-  createXaiVideoProvider,
-  credentialIsConfigured,
-  customDomainIpv4,
-  customMcpPrompt,
-  customMcpServers,
-  cwActionInstruction,
-  cwRecordLink,
-  cwSite,
-  dataEngine,
-  dataRpc,
-  dataScopeFolder,
-  dataScopeKey,
-  decideRoomResponder,
-  decideUnfinishedTurn,
-  deciderReady,
-  decisionRetentionDays,
-  decodeGeneratedImage,
-  defaultIdleHours,
-  defaultMediaProxyResolver,
-  defaultOrgTimeZone,
-  defaultTurnPayerMode,
-  deleteAttachment,
-  deliverableNotification,
-  deniedResourcesFromEnv,
-  deployFacts,
-  describeAllowRule,
-  describeBrand,
-  describeEdition,
-  describeSpawnFailure,
-  desktopViewerUrl,
-  destinationForBot,
-  deterministicSummary,
-  devPodsPrompt,
-  deviceSettingsFrameAllowed,
-  directApply,
-  directMachinePlan,
-  directoryIntervalMs,
-  dirname,
-  discoverExistingPerBotLocalVms,
-  discoverExistingPoolLocalVms,
-  discoverPersonIds,
-  diskSpace,
-  diskStateForFree,
-  dismissStalePeerCards,
-  dispatchInternalRoutes,
-  dispatchLoopStop,
-  dispatchRoutineMatches,
-  docsIndexPrompt,
-  draftSummary,
-  drainHttpServers,
-  driverKeyBacked,
-  dropRetiredOrganizationKeys,
-  duplexEpoch,
-  duplicateNote,
-  editionStatus,
-  effectiveMarketplacePolicy,
-  effectivePermissions,
-  effectiveRoomTurnTimeoutMinutes,
-  effectiveTurnPayerMode,
-  effortAcceptedByEngine,
-  effortAcceptedByModel,
-  effortForModel,
-  encryptionOwnerForUpload,
-  endMemoryTurn,
-  endedToolOutput,
-  engineAccessNotice,
-  engineAccountConnectorCall,
-  engineAllowed,
-  engineApprovalMode,
-  engineBrowsers,
-  engineHasNativeWebSearch,
-  engineIsFresh,
-  engineLabel,
-  engineLaunches,
-  engineNameForViewer,
-  enginePluginCommandRefusal,
-  engineProblem,
-  engineStartGate,
-  engineWorksInFiles,
-  enqueueOfflineTurn,
-  ensureClaudeSubscriptionFresh,
-  ensureDirs,
-  ensureTaskWorkspace,
-  ensureWorkspace,
-  entitled,
-  environmentDescriptor,
-  environmentLabel,
-  eraseContentOwner,
-  erasePersonData,
-  erasePersonThreadFiles,
-  errorTranscript,
-  escapeNotes,
-  eventLogSessionIds,
-  execCli,
-  existsSync,
-  expandLearnTurnText,
-  expandSetupTurnText,
-  expandSkillCommandTurnText,
-  experimentalOnlyConfigViolation,
-  expireApprovalsAfterRestart,
-  expireWorkers,
-  explainPick,
-  externalRuntimeIsActive,
-  externalRuntimeMayCall,
-  extractTurnImages,
-  videoFramesWithin,
-  extractedFolderName,
-  failPulledOnAuthorCancel,
-  failedTurnCause,
-  failedTurnTool,
-  fileInsideRoots,
-  fileKeyConfigured,
-  fileViewToolPaths,
-  fillResolverFor,
-  finalConfirmation,
-  finalConfirmationOptions,
-  findAntigravityLeftovers,
-  findPeopleDm,
-  findWaitPeer,
-  finishUntilLineText,
-  finishUntilPrompt,
-  finishUntilRounds,
-  fitTurnImagesForModel,
-  fixAmbientMcp,
-  fleetAvailable,
-  fleetRequest,
-  fleetSocketPath,
-  flowSkillsNote,
-  flushAdminActivity,
-  flushAllMemoryJournals,
-  flushAllProfileHistory,
-  flushDecisionLog,
-  flushProfileHistory,
-  flushUsageLedger,
-  foldPoint,
-  folderBytes,
-  followUpNote,
-  foreignToolSpelling,
-  forgetKey,
-  forgetThreadLogs,
-  forgetTurnReach,
-  formatEngineCandidates,
-  fullAccessActs,
-  fullAccessChoiceAnswer,
-  fullAccessChoiceLine,
-  fullAccessDecision,
-  gatedLocalComputer,
-  gatewayProbe,
-  generatedMp4Chunks,
-  getOrCreateChannel,
-  githubGitEnvironment,
-  githubServersAsPerson,
-  githubTokenKind,
-  githubWithheldPrompt,
-  grandfatheredFromBots,
-  grantRemoteExecApproval,
-  grantsFromDirect,
-  graphConnectorOptions,
-  greetingLanguage,
-  grokAccountReach,
-  grokCloudConnectorsForTurn,
-  grokReachConnectorNames,
-  grokVoice,
-  groupLeftFrameAllowed,
-  groupMemoryEnabled,
-  groupMemorySystemPrompt,
-  groupOwnerId,
-  groupTurnCwd,
-  guardDecision,
-  guardRemoteSupportOpen,
-  guardTurnDispatch,
-  gzipTunnelReplies,
-  handedStateUsable,
-  handleCloudAgentInternal,
-  handleDesktopBridgeMcp,
-  handleMediaProxy,
-  handleMessagesMcp,
-  handlePagesOriginRequest,
-  handleRemoteSupportCall,
-  handleTemplateLinkPublic,
-  handleUserSandboxMcp,
-  harnessMcpHttpKind,
-  hasQueuedSteeredMessages,
-  hasShellOnThisComputer,
-  healthzBody,
-  healthzUnreadyBody,
-  hideServerPathsInSections,
-  holdBotMemoryPlain,
-  holdIncludedServices,
-  holdPlain,
-  homedir,
-  honouredPin,
-  hostFacts,
-  hostTimeZone,
-  hostWaitRefusal,
-  hostedAccessEntitled,
-  hostedModelPolicy,
-  hostedWorkspaceConfiguration,
-  hostedWorkspaceConfigured,
-  hostname,
-  humanApprovalRoot,
-  identityConfigFromEnv,
-  identityDescriptor,
-  identityWarning,
-  importBotZip,
-  importTeamBackup,
-  inBotFolder,
-  inGitRepository,
-  inboxSpecialCard,
-  incidentRequest,
-  initMediaProxy,
-  insideFolderRoots,
-  inspectBotZip,
-  installLibrarySkill,
-  installMainRuntimeEventSubscriber,
-  installOrgSkill,
-  installResourceUsage,
-  installSkill,
-  installTerminalFeature,
-  installationCapabilityBridge,
-  installedPlaybookInstructions,
-  instanceConfigs,
-  instructionsLead,
-  interBotConversations,
-  interBotWaiting,
-  internalAgentApiTool,
-  interruptKeepsTeammates,
-  inviteMailMessage,
-  ipcPeer,
-  isAccountEmail,
-  isAgentConversation,
-  isApprovalMode,
-  isArchiveAttachment,
-  isBotActSession,
-  isBotPackage,
-  isClaudeComputerTool,
-  isCodexAmbientMcpRefusal,
-  isContextMessage,
-  isCwViewTool,
-  isDesktopInjectModel,
-  isDispatchKpi,
-  isEmergencyApprovalDowngrade,
-  isIP,
-  isInterBotThread,
-  isInterimSignInRoute,
-  isInternalVoiceCallEnd,
-  isLocalModelId,
-  isLoginDriver,
-  isLoopbackHost,
-  isMcpAccountId,
-  isMemberBotField,
-  isModelRefusal,
-  isOpaqueId,
-  isOutboundTool,
-  isPeopleDmParticipant,
-  isPersistentQuestionCard,
-  isPersonalBrowserProfileId,
-  isPiServedModel,
-  isPrincipalId,
-  isProactiveMode,
-  isProxied,
-  isReadOnlyCommand,
-  isRemoteControlPath,
-  isRemoteMcpServer,
-  isReportPath,
-  isSameOrigin,
-  isShuttingDown,
-  isSmallTalk,
-  isSteeredMessageQueued,
-  isStreamSegment,
-  isSyncedPreference,
-  isTeamMemorySharing,
-  isTechnicalNoticeName,
-  isTemporaryBrowserSession,
-  isTerminalSessionWsPath,
-  isTriggerSchedule,
-  isVoiceSocketPath,
-  isWorkspaceBackupRoute,
-  isWorkspaceBackupSessionControl,
-  join,
-  journalMemoryWrite,
-  journalWire,
-  json,
-  keyEngineProvider,
-  keyLast4,
-  keyRefusedCard,
-  knownAgentToolName,
-  launchedAgentsForBot,
-  launchedByDesktopApp,
-  ledgerCost,
-  legacyPendingAsides,
-  legacyPersonKey,
-  libraryThreadsOfSharedBot,
-  licenseWarning,
-  lightenColdPrompt,
-  limitBackupRefusedText,
-  limitFailoverText,
-  limitKindOf,
-  lineageEnvironmentCall,
-  listBriefApps,
-  listClaudeArtifactComments,
-  listLibrarySkills,
-  listMcpServers,
-  listMemoryTopics,
-  listPriceFor,
-  listSkills,
-  listStagedSkillWrites,
-  listThreadFiles,
-  listenForDesktopComputer,
-  listenWebhookIngress,
-  liveActivityUpdatesForFrame,
-  liveApprovalChange,
-  liveAttachUrl,
-  liveCallKey,
-  liveCallsEnabled,
-  liveCardKind,
-  liveDecisionRefusal,
-  liveHistoryFrom,
-  liveProposal,
-  liveSettingsFor,
-  llmThreadTitlesEnabled,
-  loadBrand,
-  loadBundledSkills,
-  loadConfig,
-  loadDelegationReceipts,
-  loadEnterpriseLayer,
-  loadEnvironmentId,
-  loadUserSkills,
-  localDesktopTarget,
-  localExtractedPath,
-  localVmIdleTimeoutMinutes,
-  localVmMaxInstances,
-  localVmMode,
-  localVmStopReason,
-  localVmViewerStatus,
-  localVmWorkspaceExists,
-  lockedLookChange,
-  loginCliFor,
-  loginShellArgv,
-  loginSlotOf,
-  longCommandsPrompt,
-  loopGuardSettings,
-  loopGuardSettingsFrom,
-  mailConnectorsOf,
-  makeCapContinuationSubscriber,
-  makeInstallationCapabilityBridge,
-  makeLoopStopSubscriber,
-  markDeadThreadChip,
-  markOomVictim,
-  markShuttingDown,
-  markWorkspaceUse,
-  marketplaceAllowed,
-  marketplacePolicySchema,
-  masteryFrameFacts,
-  matchOwnerRule,
-  mayDeleteTemporary,
-  mcpAuditRow,
-  mcpCallTimeoutMinutes,
-  mcpDisabledTools,
-  mcpIdentityEnv,
-  mcpServerNameError,
-  meWriteSummary,
-  measureContextBuckets,
-  mediaProxyPolicyFromEnv,
-  meetingNotetakerEnabled,
-  memberAutoApprovalAllowed,
-  memberAutoChangeRefused,
-  memberAutoSettle,
-  memberBotAdminApproval,
-  memberBotFieldViolation,
-  memberImportReset,
-  memberOwnScopeTool,
-  memberOwnedBot,
-  memberTeamSetupRefusal,
-  memberTurnLevel,
-  memberTurnSelection,
-  memoryDate,
-  memoryEntryExpired,
-  memoryGuardSettings,
-  memoryOverview,
-  memorySourceLabel,
-  mentionPrompt,
-  mentionedBots,
-  mergeSkills,
-  messageAttachmentTags,
-  messagesOnBotMac,
-  migrateBotMarketplaces,
-  migrateCapabilitiesStores,
-  migrateSectionContextKeys,
-  migratedCrabFromBots,
-  migrationOwner,
-  mirrorActivity,
-  mirrorLateRunReply,
-  mirrorReply,
-  missingCitedPaths,
-  missingRoleMessage,
-  misusePathRefusal,
-  misuseRefusal,
-  misuseToolFrameText,
-  modelContextWindow,
-  modelImageCopyPath,
-  modelOffer,
-  modelPrompt,
-  modelServerAccess,
-  modelSwitchNeedsAsk,
-  myChromeToolRefusal,
-  namedTeammates,
-  namesEngine,
-  narrateTool,
-  narrowBotForViewer,
-  narrowestAudience,
-  newBotDefaultsSchema,
-  newId,
-  newPlanUsageAlerts,
-  newRoutinesPaused,
-  newestOf,
-  nextInChain,
-  nextOccurrence,
-  noEngineError,
-  normalizeAllowedRecipients,
-  normalizeCustomDomain,
-  normalizeOutboundPolicy,
-  normalizeProactiveMode,
-  noteAppRead,
-  noteAtRestWrite,
-  noteEngineRefusal,
-  noteRemoteExecRequest,
-  noteSpend,
-  noteTurnQueued,
-  nudgeFrameAllowed,
-  observedFetch,
-  offeredEngines,
-  officeKind,
-  officeMediaFolder,
-  officeNote,
-  oidcSessionFields,
-  onArtifactPublished,
-  onClaudeSubscriptionRenewed,
-  onConfigSaved,
-  onDemandPromptParts,
-  onKeyRejectionChange,
-  onMemoryTopicWritten,
-  onSteeredQueueChange,
-  openApiScope,
-  openApprovalCardMessages,
-  openCodeProviderKeysAllowed,
-  openGeneratedVideo,
-  openPendingInboxCards,
-  openTriggerSeenStore,
-  opsRoutes,
-  orderedSkillDiscovery,
-  orgConnectionListing,
-  orgDirectoryEntries,
-  orgFlowGuarded,
-  orgFullAccessAllowed,
-  orgFullAccessGrandfathered,
-  orgFullAccessHolds,
-  orgKeyEngineName,
-  orgNewBotApprovalMode,
-  orgPeerInScope,
-  orgPlanAccounts,
-  orgWithholdHostTools,
-  orgXaiKeyAllowed,
-  orgXaiMediaStatusFor,
-  orgXaiRefusal,
-  otherPerson,
-  outboundWiring,
-  overlayModelServers,
-  overviewRoutes,
-  ownEnvironmentSensitiveRead,
-  ownEnvironmentTurnOrigin,
-  ownThreads,
-  ownerKeepsSight,
-  ownsGroup,
-  packageSummary,
-  pageOwnerFor,
-  parallelBlocked,
-  parallelPending,
-  parseAllowList,
-  parseAutoComputerTarget,
-  parseBotProfilePatch,
-  parseBotWorkplace,
-  parseConfigPatch,
-  parseCookies,
-  parseCwAction,
-  parseDispatchKpiArgs,
-  parseEvalJson,
-  parseGitSource,
-  parseHideList,
-  parseLocalPromptMode,
-  parseMcpAccountChoices,
-  parseMcpServerMutation,
-  parseMemoryEntries,
-  parseOrgFullAccessBody,
-  parseOwnerIdentityMessage,
-  parsePackageDocument,
-  parsePageTargetDefault,
-  parseRequest,
-  parseStoredMcpServer,
-  parseSupportCheck,
-  parseTerminalDestinationPick,
-  parseToolScope,
-  parseVisibility,
-  parseWorkspaceLine,
-  partitionAgentSettings,
-  pauseBrowserStream,
-  peerAllowed,
-  peerContactCardRequired,
-  peerContactPrompt,
-  peerDeliveryReceipt,
-  peerInScope,
-  peerLineText,
-  peerName,
-  peerProvenanceNote,
-  peerRosterSystemPrompt,
-  pendingApprovalExpiresAt,
-  peopleDmForViewer,
-  peopleDmRouteRefusal,
-  peopleDmThreadUnreadPatch,
-  peopleRoutes,
-  perBotLocalVmTarget,
-  permissionList,
-  permissionModeFromEnv,
-  permissionRefusal,
-  persistableInstanceConfigs,
-  personAttention,
-  personAvatarUrl,
-  personDisplayName,
-  personKey,
-  personLanguageOf,
-  personParticipant,
-  personPayer,
-  personSettingsPrincipal,
-  personWordsForTurn,
-  personalCapNotice,
-  personalHeaderRefusal,
-  personalPluginStorage,
-  personalProfilePartition,
-  personalSharedNameRefusal,
-  perspicaxDeletion,
-  perspicaxOwnerScopedServer,
-  perspicaxUnavailableWhy,
-  phoneConnectionTransport,
-  phoneReturnLocation,
-  phoneToolTurn,
-  piKitDir,
-  piLocalKeyRefusalLifted,
-  pickFastSentenceModel,
-  placeUnavailable,
-  plainFieldRefusalReason,
-  planAccountsFromInstances,
-  planBackgroundSweep,
-  planBotZip,
-  planHiddenAgentThreads,
-  planHiddenBotThreads,
-  planLearned,
-  planPersonThreadErasure,
-  planUsageAlertText,
-  pluginMetadataCacheRoot,
-  pluginServerName,
-  pluginTurnInventory,
-  poolLocalVmTarget,
-  preSendRefusalKind,
-  preferencesFrameAllowed,
-  prepareEveryClaudeRetirement,
-  prepareSemanticRecall,
-  prepareTurnSkillLinks,
-  presenceFrameAllowed,
-  presenceHidden,
-  previewBotZip,
-  prewarmPerPersonPerMinute,
-  prewarmWindowMs,
-  primaryAnswerable,
-  primaryCovers,
-  primaryOutboundDecision,
-  primaryPurchaseCard,
-  principalDir,
-  principalFromEnv,
-  principalIdFor,
-  privateThreadOwner,
-  proactiveDryRunSummary,
-  proactiveModeFor,
-  proactivePrompt,
-  procedureSignal,
-  profileManagement,
-  profileRevision,
-  profileSections,
-  profileSnapshot,
-  promptReferencesAvailable,
-  promptSectionPaths,
-  promptWithDataContext,
-  promptWithReply,
-  proposalReplacements,
-  provenRequestPerson,
-  providersOfDriver,
-  providersOfInstance,
-  pruneAdminActivity,
-  pruneDecisions,
-  pruneProblemLog,
-  publicPresence,
-  publishPersonalCopy,
-  pushSenderLook,
-  pushesForFrame,
-  queueSteeredMessage,
-  queuedBehindPersonText,
-  queuedSteerSnapshot,
-  queuedThreadPosition,
-  quotedIdOr,
-  randomBytes,
-  randomUUID,
-  reachablePeers,
-  readApnsConfig,
-  readAtRestSync,
-  readAttachment,
-  readBackupStatus,
-  readBody,
-  readBotAvatar,
-  readBriefTool,
-  readCuaConnection,
-  readCuaUnavailableReason,
-  readDecisionRange,
-  readEngineManifest,
-  readFcmConfig,
-  readFileSync,
-  readHistory,
-  readLastWorkspaceRestore,
-  readLibrarySkillFile,
-  readMemoryDoc,
-  readMemoryFile,
-  readMemoryTopic,
-  readMemoryTopicAsync,
-  readMessagesSettings,
-  readOfficeMedia,
-  readOrgAuditPage,
-  readPendingPurges,
-  readPersonalCopy,
-  readProblems,
-  readPublishedLibrary,
-  readPublishedTeam,
-  readRemoteSessionLog,
-  readSealedChain,
-  readSectionContext,
-  readSections,
-  readSkillFile,
-  readSkillLibraryIndex,
-  readSubscriptionAccess,
-  readToolRuns,
-  readUsage,
-  readWorkerRelayToken,
-  readWorkspaceText,
-  readinessFailureClass,
-  readsGithubToken,
-  realpathSync,
-  realtimeUrl,
-  realtimeWork,
-  reapOrphanEngineGroups,
-  recallQuery,
-  recallSupportSession,
-  recallTopicPage,
-  receiptName,
-  recentPersonSignIn,
-  recentWorkPrompt,
-  recordHanded,
-  recordHeldSteer,
-  recordLiveCall,
-  recordLocalVmIdleStop,
-  recordNudgeLine,
-  recordProcedure,
-  recordProfileChange,
-  recordRoutineChange,
-  recordRoutineToggle,
-  recordedBotOwner,
-  recoverArchiveUpload,
-  recoveryCapabilityError,
-  redactSecretsInText,
-  refreshAfterMs,
-  registerAtRestRoot,
-  registerEnginesBinDir,
-  registerReachProvider,
-  rejectStagedSkillWrite,
-  relayAccountLabel,
-  relayPersonAttention,
-  releasePlain,
-  releaseVersion,
-  remoteCallerIsAgent,
-  remoteComputerForTurn,
-  remoteSessionReach,
-  remoteSessionToolCall,
-  removeAntigravityLeftovers,
-  removeDirectory,
-  removeLibrarySkillFrom,
-  removeSkill,
-  removedComputerInstanceIds,
-  renamePublishedTeam,
-  renderSkillInstructions,
-  renderUnseen,
-  renewWithCli,
-  renewalPrompt,
-  repeatsShownFailure,
-  replaceDashes,
-  replaysNatively,
-  repositoryInfo,
-  requestConflict,
-  requestOrigin,
-  requestPeerApproval,
-  requestSource,
-  requestWorkOrigin,
-  reservedMcpName,
-  resetClockText,
-  resetPathCache,
-  resolveBotOwner,
-  resolveBotSkills,
-  resolveBotWorkplace,
-  resolveClaudeConfigDir,
-  resolveComputerPromptKind,
-  resolveConsoleBotCapabilities,
-  resolveEngineAccess,
-  resolveEngineInstance,
-  resolveEngineTurnEffort,
-  resolveIdpVaultKey,
-  resolveLoopbackTrust,
-  resolveMailSettings,
-  resolvePhoneCallConsentCard,
-  resolveRequestAuth,
-  resolveSurface,
-  resolveTurnSpeaker,
-  resolveVaultKey,
-  resolveVoiceKey,
-  resolveWebhookPublicUrl,
-  resolvedSkillFiles,
-  restoreChannelMessages,
-  restoreSteeredMessages,
-  resumeDueWorkflows,
-  retireDeletedBoatCreate,
-  retireEveryClaudeBot,
-  reviewedSkillSha256,
-  revokeOrgConnections,
-  rewriteMovedPaths,
-  rewritePeopleForAttach,
-  richOutputPrompt,
-  rmSync,
-  roomFeeds,
-  roomMentionNotification,
-  roomPeerRosterSystemPrompt,
-  roomResponders,
-  roomRosterLine,
-  roomTurnEnd,
-  roomTurnTimeoutMessage,
-  roomTurnTimeoutMinutes,
-  routeTurnModel,
-  routineAccessNotifications,
-  routineEngineGate,
-  routineEngineRefusal,
-  routineFlowInput,
-  routineFlowSkills,
-  routineIncidentTitle,
-  routineLineage,
-  routineOwnerAuthorization,
-  routineReadinessTarget,
-  routineRenewMs,
-  routineReportOutcome,
-  routineRoleCoverageRoute,
-  routineRunCard,
-  routineRunFallbackText,
-  routineRunNowAllowed,
-  routineRunReportable,
-  routineRunTitle,
-  routineRunsRoutes,
-  routineScheduleLabel,
-  routineToggleForViewer,
-  routineTurnEffort,
-  routineTurnModel,
-  routineVisible,
-  routinesInConversationEnabled,
-  routinesRoutes,
-  ruleCoversCard,
-  ruleCoversExactScope,
-  rulesSystemPrompt,
-  runAsBotEngine,
-  runAsRefusal,
-  runClaudeArtifact,
-  runClaudeCli,
-  runCommandOf,
-  runEngineSelfCheck,
-  runFailureWakesBot,
-  runMyChromeTool,
-  runPermissionModeMigration,
-  runSkillsLibraryBootSweep,
-  safetyArm,
-  safetyHttpRefusal,
-  safetyPermissionEffect,
-  safetyToolHold,
-  sagaxInternalSelfAnswers,
-  sagaxInternalTool,
-  sameBotTaskOwner,
-  sameModelSelection,
-  sameOwnerBots,
-  sameOwnerBrowserBots,
-  sandboxArchiveArgv,
-  sandboxBackendFor,
-  sandboxCommandCandidate,
-  sandboxDesktopTarget,
-  sandboxPrincipalForTurn,
-  sandboxRouteFromEnv,
-  sandboxdClient,
-  sandboxdHealth,
-  sandboxdKeySource,
-  saveAudio,
-  saveConfig,
-  saveFile,
-  savedStepsEnabled,
-  scanSkillText,
-  scopeOwnersFromEnv,
-  screenFrameHash,
-  searchDocFiles,
-  searchHitVisible,
-  searchMessagesAsync,
-  secondLoginSupported,
-  sectionContextKey,
-  sectionContextLabel,
-  sectionContextSystemPrompt,
-  sectionKey,
-  secureTokenMatch,
-  securityKeyCeremonyRoutes,
-  selectBundledSkills,
-  selectReplay,
-  selectionOnMachine,
-  selfCheckEngines,
-  semanticEmbeddingEndpoint,
-  semanticIndexFile,
-  semanticRecallEnabled,
-  sendBlockFor,
-  sendFingerprint,
-  sendRecipientsAllowed,
-  sendWithMailer,
-  senderDomain,
-  serializeSessionCookie,
-  serveHarnessMcpHttp,
-  serveStaticUi,
-  serverApprovalWords,
-  serverHome,
-  serverLog,
-  serverMcpAsPerson,
-  serverVersion,
-  serviceThreadViewer,
-  serviceViewerClosed,
-  sessionCookieName,
-  sessionIdlePolicy,
-  sessionPrincipal,
-  sessionStart,
-  setAtRestHolderCheck,
-  setAtRestThreadFiles,
-  setAttachmentStillShown,
-  setBrowserViewport,
-  setConfidentialThreadResolver,
-  setDesktopInjectModels,
-  setInstallationCapabilityBridge,
-  setMisuseAlert,
-  setMisuseOwnPaths,
-  setOpenCodeProviderKeyPolicy,
-  setPageContextSource,
-  setPeerScope,
-  setPersonalCapOrganization,
-  setPrimaryCover,
-  setReachMeSmsHandler,
-  setRoutineTimeZone,
-  setSafetyConfirm,
-  setSafetyFullAccess,
-  setSameOwner,
-  setSemanticIndex,
-  setSharedHost,
-  setSkillEnabled,
-  setSoloClaudeLinkedHandler,
-  setTurnTimingWriter,
-  settingsStepUp,
-  settleChatFollowups,
-  settleSignInRefusal,
-  settledChipLabel,
-  settledWithin,
-  setupCommands,
-  setupModeActive,
-  setupSystemPrompt,
-  sharedBotForViewer,
-  sharedComputerOperation,
-  sharedComputersEnabled,
-  sharedLibraryGetAllowed,
-  sharedSignIn,
-  sharedWorkspaceFullAccessConfigured,
-  shellTimeoutHookResult,
-  shouldArmLocalVmIdle,
-  shouldEmptyResponseRetry,
-  shouldMountLocalComputer,
-  shouldSettleRequestCard,
-  shutdownDrainMs,
-  signBrowserVisit,
-  signInExpiredCard,
-  signInListWithOpenInvites,
-  signatureStillCovers,
-  skillAuthoringEnabled,
-  skillCommandInline,
-  skillDiscoveryAvailable,
-  skillPackageStamps,
-  skillsLibraryEnabled,
-  soloClaudeAccountLinked,
-  soloGoalLineText,
-  soloGoalSystemPrompt,
-  soloMayManage,
-  spawnPcHook,
-  spawnScriptPty,
-  speakerFor,
-  speakerPrincipal,
-  spendAlertText,
-  spendState,
-  spentPlanUntil,
-  planUsedPercent,
-  spokenLineFields,
-  stageBotZipUpload,
-  stageTurnAttachments,
-  stagedName,
-  staleSessionReason,
-  staleThreadException,
-  stallLimitMs,
-  standingGrantsAllowed,
-  startAutoVmClaim,
-  startBriefTimer,
-  startContainerRuntime,
-  startEgressProxy,
-  startEventLoopLagMonitor,
-  startLowDiskWatch,
-  statMessageFile,
-  stepFromToolEvent,
-  stoppedTurnOutcome,
-  storedArchiveManifest,
-  storedTeamMemorySharing,
-  streamCandidate,
-  streamTerminalAttachment,
-  stripWorkspaceCredentialEnv,
-  subscribeLoopGuard,
-  subscriptionDriver,
-  summarize,
-  supportFolderOwner,
-  supportOwnersOfId,
-  supportsWorkspaceFiles,
-  surfaceLabel,
-  surfaceOfComputerKind,
-  surfacePrompt,
-  sweepThreadEventLogsPaced,
-  syncPluginsToSandbox,
-  systemVoicesAvailable,
-  takeImessageSend,
-  takeSpendAlert,
-  taskEngineKeys,
-  teamAvailabilityPart,
-  teamComputerOwner,
-  teamDataKey,
-  teamMemoryCardSettled,
-  teamMemoryLateAnswer,
-  teamMemoryReviewRefusal,
-  teamMemorySharingOf,
-  teamSetupDirectApply,
-  temporaryActiveCount,
-  temporaryOwner,
-  temporaryQuotaKey,
-  testStdioMcpCommand,
-  testStdioMcpStream,
-  threadCensus,
-  threadEventLogMaxBytes,
-  threadFileId,
-  threadFileRefs,
-  threadFollowsFullGrant,
-  threadKeys,
-  threadModelFallback,
-  threadRefUrl,
-  threadTitleFrom,
-  threadWantsClaude,
-  threadsReferencing,
-  threadsReferencingAsync,
-  tidyHour,
-  titleLiveCall,
-  toUtterances,
-  toWireTask,
-  tokensOfConnectedDevices,
-  toolDefinitionBytes,
-  toolErrorCorrectiveRoundsFor,
-  toolGuardMode,
-  toolResultValue,
-  toolScopeWidens,
-  toolWorkingStep,
-  transcriptText,
-  trustedChannelFullRefusal,
-  tts,
-  turnClockEnabled,
-  turnConnectorsRecord,
-  turnOutcomeLine,
-  turnPayer,
-  turnRunFor,
-  turnStartLogLine,
-  turnTimeZone,
-  turnTrace,
-  typedCommandForTurn,
-  unansweredCallMessage,
-  unavailableCommandError,
-  unfinishedTurnPrompt,
-  uniquePeerName,
-  unknownAgentToolRefusal,
-  unlockContentKeys,
-  unseenMessages,
-  unwrapAgentsBridge,
-  updateDoc,
-  updateGroupMemory,
-  updateMemory,
-  updateRules,
-  upkeepEnabled,
-  usageMeterScope,
-  userInfo,
-  userProfileSystemPrompt,
-  userSandboxSettingsFromEnv,
-  usesCompactPrompt,
-  usesStablePrompt,
-  vacuumAfterSealing,
-  validateBotCwd,
-  validateBotCwdFor,
-  validateVegaLite,
-  vaultPrincipalFor,
-  verdictFromPresence,
-  videoCredential,
-  videoMessagesFromTool,
-  videoSourceMessage,
-  videoStatusRow,
-  viewerTargetId,
-  visibleGrants,
-  visitTarget,
-  voiceBriefText,
-  voiceCallRecoveryPrompt,
-  voiceCallSection,
-  voiceCallTurnPrompt,
-  voiceCallTurnSettle,
-  voiceCostUsd,
-  voiceCredential,
-  voiceDashesEnabled,
-  voiceKeyterms,
-  voiceTranscript,
-  voiceUnseenBlock,
-  vps,
-  waitPlain,
-  waitRunChat,
-  waitSourceRefusal,
-  warmBotAccessRefusal,
-  warnReservedMcpServers,
-  wasOldestThread,
-  webBotAuthScope,
-  webSearchScope,
-  webhookExecTargetAdminOnly,
-  wireAuditRow,
-  wireCodexSessionLifecycle,
-  wireGrants,
-  wireLoopGuard,
-  withClaimsFlag,
-  withCommandVariables,
-  withDecisionActor,
-  withDesktopModelPerson,
-  withDisabledTools,
-  withNewBotEffort,
-  withPersonalVoiceKeys,
-  withRequiredComputer,
-  withTurnClock,
-  withUnseenMessages,
-  withoutPrivateFields,
-  withoutWiderAudience,
-  workOrigin,
-  workflowScope,
-  workingBots,
-  workplaceIsBotComputer,
-  workspaceCwdPrompt,
-  workspaceDir,
-  workspaceDiskWarning,
-  workspaceLineName,
-  workspaceLocationsPrompt,
-  writeBotZip,
-  writeComputerEngineMoveLines,
-  writeFileAtomic,
-  writeFileSync,
-  writeMemoryFile,
-  writeMemoryTopic,
-  writePublishedLibrary,
-  writePublishedTeam,
-  writeSectionContext,
-  writesManagedProfile,
-  z
-});
 
-Object.assign(leafHostBindings, { DirectSendRefused, EngineAccessLost, AGENTS_NODE_FLAG });
-
-// #1388: primitives must stay live on the leaf host (Object.assign copies values).
-Object.defineProperty(leafHostBindings, "lastSeq", {
-  configurable: true,
-  enumerable: true,
-  get: () => lastSeq,
-  set: (value) => { lastSeq = value; },
-});
-Object.defineProperty(leafHostBindings, "providerConfigBusy", {
-  configurable: true,
-  enumerable: true,
-  get: () => providerConfigBusy,
-  set: (value) => { providerConfigBusy = value; },
-});
-Object.defineProperty(leafHostBindings, "mcpConfigBusy", {
-  configurable: true,
-  enumerable: true,
-  get: () => mcpConfigBusy,
-  set: (value) => { mcpConfigBusy = value; },
-});
-Object.defineProperty(leafHostBindings, "localVmModeChangeBusy", {
-  configurable: true,
-  enumerable: true,
-  get: () => localVmModeChangeBusy,
-  set: (value) => { localVmModeChangeBusy = value; },
-});
-Object.defineProperty(leafHostBindings, "localVmImageBusy", {
-  configurable: true,
-  enumerable: true,
-  get: () => localVmImageBusy,
-  set: (value) => { localVmImageBusy = value; },
-});
-Object.defineProperty(leafHostBindings, "localVmProvisionBusy", {
-  configurable: true,
-  enumerable: true,
-  get: () => localVmProvisionBusy,
-  set: (value) => { localVmProvisionBusy = value; },
-});
-Object.defineProperty(leafHostBindings, "companyShutdown", {
-  configurable: true,
-  enumerable: true,
-  get: () => companyShutdown,
-  set: (value) => { companyShutdown = value; },
-});
-Object.defineProperty(leafHostBindings, "audienceChangedAt", {
-  configurable: true,
-  enumerable: true,
-  get: () => audienceChangedAt,
-  set: (value) => { audienceChangedAt = value; },
-});
-Object.defineProperty(leafHostBindings, "mcpProbesInFlight", {
-  configurable: true,
-  enumerable: true,
-  get: () => mcpProbesInFlight,
-  set: (value) => { mcpProbesInFlight = value; },
-});
-Object.defineProperty(leafHostBindings, "followupsReady", {
-  configurable: true,
-  enumerable: true,
-  get: () => followupsReady,
-  set: (value) => { followupsReady = value; },
-});
-Object.defineProperty(leafHostBindings, "customDomainRevision", {
-  configurable: true,
-  enumerable: true,
-  get: () => customDomainRevision,
-  set: (value) => { customDomainRevision = value; },
-});
-Object.defineProperty(leafHostBindings, "routineReadinessConfigRevision", {
-  configurable: true,
-  enumerable: true,
-  get: () => routineReadinessConfigRevision,
-  set: (value) => { routineReadinessConfigRevision = value; },
-});
-Object.defineProperty(leafHostBindings, "providerFleetReloading", {
-  configurable: true,
-  enumerable: true,
-  get: () => providerFleetReloading,
-  set: (value) => { providerFleetReloading = value; },
-});
-Object.defineProperty(leafHostBindings, "dataDirLeaseReleaseAttempted", {
-  configurable: true,
-  enumerable: true,
-  get: () => dataDirLeaseReleaseAttempted,
-  set: (value) => { dataDirLeaseReleaseAttempted = value; },
-});
-Object.defineProperty(leafHostBindings, "browserCleanupReferencesReconciled", {
-  configurable: true,
-  enumerable: true,
-  get: () => browserCleanupReferencesReconciled,
-  set: (value) => { browserCleanupReferencesReconciled = value; },
-});
-Object.defineProperty(leafHostBindings, "githubCredentialsMigrated", {
-  configurable: true,
-  enumerable: true,
-  get: () => githubCredentialsMigrated,
-  set: (value) => { githubCredentialsMigrated = value; },
-});
-Object.defineProperty(leafHostBindings, "engineUnavailableLogged", {
-  configurable: true,
-  enumerable: true,
-  get: () => engineUnavailableLogged,
-  set: (value) => { engineUnavailableLogged = value; },
-});
-Object.defineProperty(leafHostBindings, "dataUnavailableLogged", {
-  configurable: true,
-  enumerable: true,
-  get: () => dataUnavailableLogged,
-  set: (value) => { dataUnavailableLogged = value; },
-});
 // Organization server, once: every bot thread from before private threads
 // gets its owner (server/threads/thread-privacy.ts), before anyone can read one.
 // Runs after the leaf host bag is filled so migrate/hide leaves see host.* bindings.
@@ -32774,6 +32791,50 @@ function joinPerson(threadId: string): string | undefined {
   const principalId = safetyPrincipal(threadId).principalId;
   if (principalId) return principalId;
   return IDENTITY.kind === "perspicax" ? undefined : "solo-owner";
+}
+
+/** joinPerson as a root's beginTurn field (the runtime joins per tree person). */
+function personForJoin(threadId: string): { person?: string } {
+  const person = joinPerson(threadId);
+  return person ? { person } : {};
+}
+
+/** The id of the external runtime's run, for its requester. */
+function externalRunId(grant: InternalCapability["externalRuntime"]): string {
+  if (grant && typeof grant === "object" && "threadId" in grant) return grant.threadId;
+  return "external";
+}
+
+/** Who hands work on from this turn, for the root the first hand-off of the
+ * turn opens (docs/runtime-contract.md §9): a standing external runtime
+ * (its results wait in its inbox, `reply: poll`), a routine run (a webhook's
+ * is outside lineage), a Cloud guest's conversation. Undefined for a
+ * person's chat, whose origin the request's own record settles (turnOrigin).
+ * Lost in the #1388 split with the test capability's beginTurn (#2204). */
+function handoffOpener(capability: Pick<InternalCapability, "botId" | "threadId" | "externalRuntime">, threadId: string): HandoffOpener | undefined {
+  if (capability.externalRuntime) {
+    return {
+      requester: { kind: "external_runtime", runId: externalRunId(capability.externalRuntime), botId: capability.botId, threadId },
+      origin: { kind: "outside", source: "external_runtime", ref: threadId },
+    };
+  }
+  const run = activeRoutineRunForThread(threadId);
+  if (run) {
+    return {
+      requester: { kind: "routine_run", runId: run.id, botId: run.botId, threadId },
+      origin: run.triggerSource === "webhook"
+        ? { kind: "outside", source: "webhook", ref: run.routineId }
+        : { kind: "routine", source: "routine", ref: run.routineId },
+    };
+  }
+  if (cloudGuestDriven(threadId)) {
+    const guest = threadPersonKey(threadId);
+    return {
+      requester: { kind: "person", botId: capability.botId, threadId },
+      origin: { kind: "outside", source: "guest", ref: threadId, ...(guest ? { onBehalfOf: guest } : {}) },
+    };
+  }
+  return undefined;
 }
 
 /** The admitted request, not a later room line. This changes only the

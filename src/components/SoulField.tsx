@@ -12,7 +12,7 @@ import { firstSentence, soulPatchFor, utf8Bytes } from "@/lib/soul";
 import { useStore, type Bot } from "@/state/store";
 import { useBotEditor } from "./bot-settings/BotEditorContext";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
-import { HelpTip } from "./SettingsPrimitives";
+import { HelpTip, PILL, useSettingsSurface } from "./SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 type SoulRead = { soul: string; revision: string; bytes: number; limit: number; file: string; drift: boolean; fileText?: string };
@@ -35,6 +35,9 @@ export function SoulField({
   const [draft, setDraft] = useState(bot.soul ?? "");
   const [info, setInfo] = useState<SoulRead | null>(null);
   const [resolving, setResolving] = useState(false);
+  // The bot's profile page (#2313): the label a 14px row title in the card,
+  // the buttons pills, the drift notice a filled box with no outline.
+  const plain = useSettingsSurface() === "plain";
 
   // A new bot, or a server-side change (drift resolved, another client),
   // replaces the draft. While the user types, the draft leads.
@@ -84,7 +87,7 @@ export function SoulField({
   return (
     <div className="block">
       <div className="mb-1.5 flex items-center justify-between gap-3">
-        <label id={`bot-soul-label-${bot.id}`} htmlFor={`bot-soul-${bot.id}`} className={simple ? "text-[12px] text-ink-secondary" : "text-[13px] text-ink-secondary"}>
+        <label id={`bot-soul-label-${bot.id}`} htmlFor={`bot-soul-${bot.id}`} className={simple ? "text-[12px] text-ink-secondary" : plain ? "text-[14px] leading-5 text-ink" : "text-[13px] text-ink-secondary"}>
           {simple ? simple.label : t("botPanel.soul.label")}
         </label>
         {!simple && (
@@ -100,24 +103,24 @@ export function SoulField({
             type="button"
             disabled={resolving}
             onClick={() => onPatch({ soul: bot.description, description: firstSentence(bot.description) })}
-            className="rounded-md px-1.5 py-1 text-[11.5px] font-medium text-accent-text hover:bg-accent/10"
+            className={plain ? PILL : "rounded-md px-1.5 py-1 text-[11.5px] font-medium text-accent-text hover:bg-accent/10"}
           >
             {t("botPanel.soul.move")}
           </button>
         )}
       </div>
       {info?.drift && (
-        <div className="mb-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-[12px] text-ink">
-          <div className="font-medium">{t("botPanel.soul.drift")}</div>
+        <div className={plain ? "mb-2 rounded-lg bg-warning/10 p-3 text-[12px] text-ink" : "mb-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-[12px] text-ink"}>
+          <div className={plain ? "text-[14px] leading-5" : "font-medium"}>{t("botPanel.soul.drift")}</div>
           <div className="mt-1 text-ink-secondary">
             {t("botPanel.soul.driftHelp")} <span className="break-all">{info.file}</span>
           </div>
           <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-control p-2 text-[11.5px]">{info.fileText}</pre>
           <div className="mt-2 flex gap-2">
-            <button type="button" disabled={resolving} onClick={() => void resolve("apply-file")} className="rounded-lg bg-accent px-3 py-1.5 text-[12px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-50">
+            <button type="button" disabled={resolving} onClick={() => void resolve("apply-file")} className={plain ? PILL : "rounded-lg bg-accent px-3 py-1.5 text-[12px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-50"}>
               {t("botPanel.soul.useFile")}
             </button>
-            <button type="button" disabled={resolving} onClick={() => void resolve("discard-file")} className="rounded-lg bg-control px-3 py-1.5 text-[12px] text-ink hover:bg-raised-hover disabled:opacity-50">
+            <button type="button" disabled={resolving} onClick={() => void resolve("discard-file")} className={plain ? PILL : "rounded-lg bg-control px-3 py-1.5 text-[12px] text-ink hover:bg-raised-hover disabled:opacity-50"}>
               {t("botPanel.soul.keepSaved")}
             </button>
           </div>
@@ -135,7 +138,7 @@ export function SoulField({
         onChange={change}
         footer={(!simple || over) && (
           <span className="flex flex-wrap items-baseline gap-x-2">
-            <span className={cn("tabular-nums", over && "font-medium text-red-500")}>
+            <span className={cn("tabular-nums", over && (plain ? "text-danger" : "font-medium text-red-500"))}>
               {t("botPanel.prompt.bytes", { count: `${bytes.toLocaleString(activeLocale())} / ${limit.toLocaleString(activeLocale())}` })}
               {over ? t("botPanel.soul.notSaved") : ""}
             </span>

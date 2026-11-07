@@ -73,6 +73,37 @@ const clampSize = (value, fallback, min) =>
 const screenCoordinate = (value) =>
   Number.isFinite(value) && Math.abs(value) <= SCREEN_LIMIT ? Math.round(value) : null;
 
+/** BrowserWindow options of a page's own window with no permanent chrome
+ * (#2336). macOS: frameless with the traffic lights shown on hover only;
+ * elsewhere: frameless, resizable by its edges, moved by the page's header. */
+export function pageWindowChromeOptions(platform) {
+  return platform === "darwin" ? { titleBarStyle: "customButtonsOnHover" } : { frame: false };
+}
+
+export const POINTER_WATCH_MS = 120;
+/** Tell a window's page when the cursor enters or leaves the window (#2336),
+ * over the "artifact-window:pointer" channel; null when there is no screen. */
+export function watchWindowPointer(win, screen, every = POINTER_WATCH_MS) {
+  if (typeof screen?.getCursorScreenPoint !== "function") return null;
+  let inside = null;
+  const tick = () => {
+    if (win.isDestroyed()) return;
+    try {
+      const at = screen.getCursorScreenPoint();
+      const box = win.getBounds();
+      const now = at.x >= box.x && at.x < box.x + box.width && at.y >= box.y && at.y < box.y + box.height;
+      if (now === inside) return;
+      inside = now;
+      win.webContents.send("artifact-window:pointer", now);
+    } catch {
+      // the window went away between two ticks
+    }
+  };
+  const timer = setInterval(tick, every);
+  timer.unref?.();
+  return { stop: () => clearInterval(timer), tick };
+}
+
 /** The request as the renderer sent it, or null: the bot and artifact ids, a
  * short plain title, an optional size, an optional screen point to open at
  * (`x`, `y`), `focus` (false: open or keep it without taking the focus, as when
@@ -288,7 +319,7 @@ function pageOrigin(event) {
  * @param {(url: string) => void} [deps.openExternal] a link out of the window (validated by the caller)
  * @param {() => unknown} [deps.icon]
  * @param {(line: string) => void} [deps.log]
- * @param {Pick<import("electron").Screen, "getPrimaryDisplay" | "getAllDisplays" | "getDisplayMatching">} [deps.screen]
+ * @param {Pick<import("electron").Screen, "getPrimaryDisplay" | "getAllDisplays" | "getDisplayMatching"> & { getCursorScreenPoint?: () => { x: number, y: number } }} [deps.screen]
  * @param {{ read(): unknown, write(value: unknown): void }} [deps.boundsStore] where each artifact's place is kept
  * @param {() => void} [deps.onChange] the open windows or their titles changed (the Window menu)
  * @param {Pick<typeof import("electron").session, "fromPartition">} [deps.session] the claude.ai window's persistent session
@@ -461,6 +492,10 @@ export function createArtifactWindows(deps) {
       show: false,
       title: request.title,
       alwaysOnTop: onTop,
+      // A page in its own window shows only its content until hover (#2336):
+      // no native title bar. The page draws its own header on hover (a drag
+      // region, close, full screen); macOS keeps its buttons on hover too.
+      ...(pageWindow ? pageWindowChromeOptions(process.platform) : {}),
       ...(deps.icon ? { icon: deps.icon() } : {}),
       backgroundColor: "#070707",
       autoHideMenuBar: true,
@@ -549,7 +584,12 @@ export function createArtifactWindows(deps) {
       }
       remember(request.artifactId, win, { onTop: entry.onTop, personSized: entry.personSized === true });
     });
+    // A page's own window draws its chrome only on hover (#2336). The page
+    // content is a frame that swallows the pointer events, so the page cannot
+    // tell "over the window" from "left it": main watches the cursor and tells it.
+    const pointerWatch = pageWindow ? watchWindowPointer(win, deps.screen) : null;
     win.on("closed", () => {
+      pointerWatch?.stop();
       if (saveTimer) clearTimeout(saveTimer);
       if (entry.showTimer) {
         clearTimeout(entry.showTimer);

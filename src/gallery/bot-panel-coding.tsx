@@ -13,7 +13,6 @@ import { PANEL_LABEL } from "../lib/grouped-card";
 import { CodeWorkList, SectionHeader } from "../components/bot-settings/ActivitySection";
 import { AgentRows } from "../components/bot-settings/AgentRows";
 import type { BotActivityItem, BotLaunchedAgentItem } from "../lib/bot-activity";
-import type { TaskUsage } from "../state/store";
 import { RoutineList } from "../components/routines/RoutineList";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -63,7 +62,6 @@ const agents: BotActivityItem[] = [
 const launched: BotLaunchedAgentItem[] = [
   { id: "l1", targetBotId: "marc", targetBotName: "Marc", title: "work", status: "running", startedAt: NOW - 4 * M, updatedAt: NOW, threadId: "l1" },
 ];
-const usage: Record<string, TaskUsage> = { a1: { input: 95_300, output: 6_500, costUsd: null, turns: 12 }, a3: { input: 11_200, output: 1_200, costUsd: null, turns: 3 } };
 const routine = (id: string, name: string, everyMinutes: number): Routine => ({
   id, name, prompt: "", target: "bot", botId: "pepper", runOn: "maus", enabled: true,
   schedule: { type: "interval", everyMinutes, anchorAt: 1 }, durationMinutes: 30, nextRunAt: NOW + H, createdAt: 1, updatedAt: 1,
@@ -71,11 +69,11 @@ const routine = (id: string, name: string, everyMinutes: number): Routine => ({
 
 function Panel() {
   return (
-    <aside data-gallery-panel="" className="min-h-screen w-[380px] border-r border-hairline/40 bg-panel text-ink">
+    <aside data-gallery-panel="" data-panel-bot="" className="min-h-screen w-[380px] border-r border-hairline/40 bg-panel text-ink">
       <div className="flex flex-col gap-6 px-4 pb-6 pt-4">
         <section data-bot-settings-section="coding" className="flex flex-col gap-2">
           <SectionHeader title={t("botPanel.coding.title")} name="coding" onOpenHistory={() => {}} />
-          <AgentRows items={agents} launched={launched} onOpen={() => {}} onOpenLaunched={() => {}} onStop={() => {}} now={NOW} usageOf={(threadId) => usage[threadId]} onIgnore={() => {}} />
+          <AgentRows items={agents} launched={launched} onOpen={() => {}} onOpenLaunched={() => {}} onStop={() => {}} onIgnore={() => {}} />
           <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", botName: "Pepper", onArchive: async () => {}, onIgnore: () => {} }} />
         </section>
         {/* The real panel's Upcoming (PANEL_LABEL + PANEL_CARD), so the two compare side by side. */}

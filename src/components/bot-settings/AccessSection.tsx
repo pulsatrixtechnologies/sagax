@@ -7,7 +7,7 @@
 // always-allowed list (the first read-only view of standing grants) are new.
 import { useState } from "react";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
-import { ArrowUpRight, FolderOpen } from "lucide-react";
+import { ArrowUpRight, FolderOpen, Globe, Power } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
 import { AdvancedFold } from "./AdvancedFold";
@@ -24,11 +24,11 @@ import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { BrowserUnavailableNote, SettingsText } from "../SettingsLink";
 import { CloudBackendPicker } from "../CloudBackendPicker";
 import { RemoteFolderField } from "../remote-session/RemoteFolderField";
-import { PILL, PillSelect, Switch } from "../SettingsPrimitives";
+import { PILL, PLAIN_FIELD, PillSelect, Switch, useSettingsSurface } from "../SettingsPrimitives";
 import { ProposalStatus } from "./ProposalStatus";
 import { ToolSelectionCard, toolLabel } from "./ToolSelectionCard";
 import { inputCls } from "./field";
-import { PaneEmpty, PaneSection } from "./PaneSection";
+import { PaneEmpty, PaneSection, usePaneRows } from "./PaneSection";
 import { BotWebhooks } from "./BotWebhooks";
 import { BackgroundBriefCard } from "./BackgroundBriefCard";
 import type { useBotSettingsDerived } from "./useBotSettingsDerived";
@@ -48,6 +48,7 @@ function WorkingFolder({ bot }: { bot: Bot }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const canPick = Boolean(window.ogb?.pickFolder);
+  const plain = useSettingsSurface() === "plain";
   // #2092: the field shows the folder in use, the server's default when
   // the bot has none of its own (/workspace/bots/<slug>)
   const shown = bot.cwd ?? bot.workFolder ?? "";
@@ -99,7 +100,7 @@ function WorkingFolder({ bot }: { bot: Bot }) {
             botId={bot.id}
             solo={solo}
             plainWithoutComputer
-            inputClassName={cn(inputCls, "font-mono text-[12.5px]")}
+            inputClassName={cn(plain ? PLAIN_FIELD : inputCls, "font-mono text-[12.5px]")}
             placeholder={t("botPanel.access.placeholder")}
             value={draft ?? shown}
             onChange={setDraft}
@@ -127,6 +128,7 @@ function WorkingFolder({ bot }: { bot: Bot }) {
  * here a bot only picks among them. This link opens the panel there. */
 function ManageInConnectApps({ surface }: { surface: "apps" | "mcp" }) {
   const { dispatch } = useStore();
+  const plain = useSettingsSurface() === "plain";
   return (
     <button
       type="button"
@@ -135,7 +137,7 @@ function ManageInConnectApps({ surface }: { surface: "apps" | "mcp" }) {
         dispatch({ type: "toggleSettings", open: false });
         dispatch({ type: "togglePlugins", open: true, surface });
       }}
-      className="flex items-center gap-1 rounded-lg px-1 py-1.5 text-[12.5px] font-medium text-accent-text hover:underline"
+      className={plain ? cn(PILL, "shrink-0 gap-1") : "flex items-center gap-1 rounded-lg px-1 py-1.5 text-[12.5px] font-medium text-accent-text hover:underline"}
     >
       {t("botAccess.manageInConnectApps")} <ArrowUpRight size={13} aria-hidden="true" />
     </button>
@@ -158,6 +160,8 @@ function McpServersCard({ bot, patch }: {
   const { servers, error, refresh } = useMcpServers();
   const mounted = new Set((servers ? mcpServersForBot(servers, bot.mcpServers) : []).map((server) => server.name));
   const usesAll = bot.mcpServers == null;
+  const rows = usePaneRows();
+  const { plain } = rows;
 
   const toggle = (name: string) => {
     if (!servers || bot.busy || error) return;
@@ -166,10 +170,15 @@ function McpServersCard({ bot, patch }: {
     patch({ mcpServers: next });
   };
   return (
-    <PaneSection title={<>{t("connectors.tab.mcp")}<ProposalStatus bot={bot} /></>} help={t("botAccess.mcpDescription")}>
+    <PaneSection
+      title={<>{t("connectors.tab.mcp")}<ProposalStatus bot={bot} /></>}
+      help={t("botAccess.mcpDescription")}
+      // the profile page: the one way to Plugins is the card's action pill
+      action={plain ? <ManageInConnectApps surface="mcp" /> : undefined}
+    >
       {error && (
-        <div role="alert" className="mt-3 text-[12px] text-danger">
-          {t("botAccess.mcpRefreshError")} <button type="button" onClick={() => void refresh()} className="underline">{t("connectors.action.retry")}</button>
+        <div role="alert" className={plain ? "flex flex-wrap items-center gap-2 pb-2 text-[12px] leading-4 text-danger" : "mt-3 text-[12px] text-danger"}>
+          {t("botAccess.mcpRefreshError")} <button type="button" onClick={() => void refresh()} className={plain ? PILL : "underline"}>{t("connectors.action.retry")}</button>
         </div>
       )}
       {servers === null ? !error && (
@@ -177,12 +186,12 @@ function McpServersCard({ bot, patch }: {
       ) : servers.length === 0 ? (
         <PaneEmpty>{t("botAccess.mcpEmpty")}</PaneEmpty>
       ) : (
-        <div className="-mx-3.5 -mt-1 divide-y divide-hairline/40">
+        <div className={cn(rows.bleed, "-mt-1", rows.list)}>
           {servers.map((server) => (
-            <div key={server.name} className="flex min-h-[44px] items-center justify-between gap-3 px-3.5 py-2">
+            <div key={server.name} className={cn("flex min-h-[44px] items-center justify-between gap-3 py-2", rows.row)}>
               <div className="min-w-0 flex-1">
-                <div title={server.name} className="truncate text-[13px] text-ink">{readableName(server.name)}</div>
-                {!server.enabled && <div className="text-[11.5px] text-ink-secondary">{t("botAccess.mcpDisabled")}</div>}
+                <div title={server.name} className={cn("truncate text-ink", rows.title)}>{readableName(server.name)}</div>
+                {!server.enabled && <div className={cn("text-ink-secondary", rows.note)}>{t("botAccess.mcpDisabled")}</div>}
               </div>
               {server.accounts && mounted.has(server.name) && (
                 <span data-mcp-account={server.name} className="inline-flex min-w-0 max-w-[45%]">
@@ -210,15 +219,17 @@ function McpServersCard({ bot, patch }: {
           ))}
         </div>
       )}
-      <div className="mt-3 flex items-center gap-2">
-        <ManageInConnectApps surface="mcp" />
-        {!usesAll && servers && servers.length > 0 && (
-          <button type="button" disabled={!!bot.busy || error} onClick={() => { if (!bot.busy && !error) patch({ mcpServers: null }); }} className={cn(PILL, "ml-auto")}>
-            {t("botAccess.mcpUseAll")}
-          </button>
-        )}
-      </div>
-      {bot.busy && <p className="mt-2 text-[12px] text-ink-secondary">{t("botAccess.mcpBusy")}</p>}
+      {(!plain || (!usesAll && servers && servers.length > 0)) && (
+        <div className="mt-3 flex items-center gap-2">
+          {!plain && <ManageInConnectApps surface="mcp" />}
+          {!usesAll && servers && servers.length > 0 && (
+            <button type="button" disabled={!!bot.busy || error} onClick={() => { if (!bot.busy && !error) patch({ mcpServers: null }); }} className={cn(PILL, "ml-auto")}>
+              {t("botAccess.mcpUseAll")}
+            </button>
+          )}
+        </div>
+      )}
+      {bot.busy && <p className="mt-2 text-[12px] leading-4 text-ink-secondary">{t("botAccess.mcpBusy")}</p>}
     </PaneSection>
   );
 }
@@ -249,6 +260,8 @@ export function AccessSection({
   } = derived;
   const browserInstallable = state.config?.browserEngine?.installable === true;
   const browserMixed = Boolean(bulk && mixedFields?.has("browser"));
+  const rows = usePaneRows();
+  const { plain } = rows;
 
   const alwaysAllow = bot.alwaysAllow ?? [];
 
@@ -262,13 +275,20 @@ export function AccessSection({
       {/* Boat or VPS is which cloud computer Auto and Cloud use. It is not
           a second Works on: that control is More > Computer. */}
       {part === "all" && !organization && (!bot.computer || bot.computer === "cloud") && cloudComputersOffered(state.config) && (
-        <PaneSection data-cloud-backend="">
-          {!bot.computer && (
+        // the profile page: the card carries its own grey label, the note is
+        // text and the start switch is a row, nothing boxed inside the card
+        <PaneSection data-cloud-backend="" title={plain ? t("botPanel.cloud.backend") : undefined}>
+          {!bot.computer && (plain ? (
+            <p className="pb-3 text-[12px] leading-4 text-ink-secondary">
+              <span className="text-ink">{t("worksOn.autoCloudTitle")}</span>{" "}
+              {t("worksOn.autoCloudBody")}
+            </p>
+          ) : (
             <div className="rounded-lg bg-inset px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-secondary">
               <span className="font-medium text-ink">{t("worksOn.autoCloudTitle")}</span>{" "}
               {t("worksOn.autoCloudBody")}
             </div>
-          )}
+          ))}
           <CloudBackendPicker
             value={bot.cloudBackend ?? "box"}
             vpsSupported={canUseVps}
@@ -278,11 +298,14 @@ export function AccessSection({
             onChange={(backend) => patch({ cloudBackend: backend })}
           />
           {!bot.computer && bot.cloudBackend === "vps" && (
-            <div className="mt-3 flex items-center justify-between gap-4 rounded-lg bg-inset px-3 py-2.5">
-              <div className="min-w-0">
-                <div className="text-[13px] text-ink">{t("botPanel.access.startVps")}</div>
-                <div className="mt-0.5 text-[11.5px] text-ink-secondary">
-                  {t("botPanel.access.startVpsHelp")}
+            <div className={plain ? "mt-3 flex min-h-[44px] items-center justify-between gap-4" : "mt-3 flex items-center justify-between gap-4 rounded-lg bg-inset px-3 py-2.5"}>
+              <div className="flex min-w-0 items-start gap-3">
+                {plain && <Power aria-hidden="true" className="mt-px size-5 shrink-0 text-ink-secondary" />}
+                <div className="min-w-0">
+                  <div className={cn("text-ink", plain ? "text-[14px] leading-5" : "text-[13px]")}>{t("botPanel.access.startVps")}</div>
+                  <div className={cn("mt-0.5 text-ink-secondary", plain ? "text-[12px] leading-4" : "text-[11.5px]")}>
+                    {t("botPanel.access.startVpsHelp")}
+                  </div>
                 </div>
               </div>
               <Switch
@@ -300,8 +323,9 @@ export function AccessSection({
 
       {(part === "all" || part === "browser") && browserFeature && <PaneSection title={<>{t("botPanel.access.browser")}<ProposalStatus bot={bot} /></>}>
         <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-[13px] text-ink-secondary">
+        <div className="flex min-w-0 items-start gap-3">
+          {plain && <Globe aria-hidden="true" className="mt-px size-5 shrink-0 text-ink-secondary" />}
+          <div className={plain ? "text-[13px] leading-5 text-ink-secondary" : "text-[13px] text-ink-secondary"}>
             {!desktopBrowser
               ? browserBlockedOnWindows && !browserInstallable
                 ? t("settings.experimental.browserWindows")
@@ -342,10 +366,10 @@ export function AccessSection({
           {alwaysAllow.length === 0 ? (
             <PaneEmpty>{t("botPanel.access.nothing")}</PaneEmpty>
           ) : (
-            <div className="-mx-3.5 -my-1 divide-y divide-hairline/40">
+            <div className={cn(rows.bleed, "-my-1", rows.list)}>
               {alwaysAllow.map((entry) => (
-                <div key={entry} className="flex min-h-[44px] items-center justify-between gap-3 px-3.5 py-2">
-                  <span title={entry} className={cn("min-w-0 flex-1 truncate text-ink", alwaysLabel(entry) ? "text-[13px]" : "font-mono text-[12.5px]")}>{alwaysLabel(entry) ?? entry}</span>
+                <div key={entry} className={cn("flex min-h-[44px] items-center justify-between gap-3 py-2", rows.row)}>
+                  <span title={entry} className={cn("min-w-0 flex-1 truncate text-ink", alwaysLabel(entry) ? rows.title : "font-mono text-[12.5px]")}>{alwaysLabel(entry) ?? entry}</span>
                   <button
                     type="button"
                     aria-label={t("botPanel.access.removeAlways", { entry })}

@@ -70,7 +70,14 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.status === "completed" && run.problems) card.problems = readableRoutineProblems(redactSecretsInText(run.problems)).slice(0, 1_000);
   if (run.status === "queued" && run.attention) card.attention = redactSecretsInText(run.attention).slice(0, 500);
   if (run.startedAt) card.startedAt = run.startedAt;
-  if (run.handedTo?.length) card.handedTo = run.handedTo.map((entry) => ({ botId: entry.botId, threadId: entry.threadId, status: entry.status, ...(entry.name ? { name: redactSecretsInText(entry.name) } : {}) }));
+  if (run.handedTo?.length) card.handedTo = run.handedTo.map((entry) => ({
+    botId: entry.botId, threadId: entry.threadId, status: entry.status,
+    ...(entry.name ? { name: redactSecretsInText(entry.name) } : {}),
+    ...(entry.task ? { task: redactSecretsInText(entry.task).slice(0, 80) } : {}),
+    ...(entry.startedAt ? { startedAt: entry.startedAt } : {}),
+    ...(entry.finishedAt ? { finishedAt: entry.finishedAt } : {}),
+    ...(entry.note ? { note: redactSecretsInText(entry.note).slice(0, 160) } : {}),
+  }));
   return card;
 }
 

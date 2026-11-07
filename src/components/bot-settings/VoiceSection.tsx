@@ -31,7 +31,8 @@ export function VoiceSection({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* The page is titled Voice: its card needs no heading of its own. */}
+      {/* Each card carries its own grey label: on the bot's profile page
+          the voice card takes the rail's label, "Voice" (#2313). */}
       {/* 2026-10-29: this bot's voice provider, voice and ears, for this person */}
       {showVoice && <VoiceSettings bot={bot} onPatch={patch} providers={!draft} />}
       {!showVoice && !draft && <VoiceProviderSettings bot={bot} />}

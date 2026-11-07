@@ -97,7 +97,6 @@ botPanel.memory.title
 botPanel.model.recoveryOff
 botPanel.permissions.contactSection
 botPanel.rules.action
-botPanel.usage.tokens
 botPanel.voice.hostUnsetTitle
 botSettings.nav.computer
 botSettings.nav.overview

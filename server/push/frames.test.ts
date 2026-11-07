@@ -101,4 +101,10 @@ describe("frames to pushes", () => {
       expect(pushesForFrame({ kind: "notify", notification: { kind, botId: "b1", threadId: "t", title: "x", body: "y", requestId: "r1", quietOnPhones: true } }, deps())).toEqual([]);
     }
   });
+  it("a message the bot wrote with notify false reaches no phone; true or absent still does", () => {
+    const note = { kind: "done", botId: "b1", botName: "Max", threadId: "t2", title: "Max", body: "Progress" };
+    expect(pushesForFrame({ kind: "notify", notification: { ...note, notify: false } }, deps())).toEqual([]);
+    expect(pushesForFrame({ kind: "notify", notification: { ...note, notify: true } }, deps())).toHaveLength(1);
+    expect(pushesForFrame({ kind: "notify", notification: note }, deps())).toHaveLength(1);
+  });
 });

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { botLevel, canInChannel, type TeamRef, type Viewer } from "../auth/authz.ts";
-import { createSectionChannelRoutes, type SectionAuditRow, migrationOwner, SectionChannels, sectionShareGrants, validSectionName } from "./section-channels.ts";
+import { createSectionChannelRoutes, type SectionAuditRow, migrationOwner, SectionChannels, sectionShareGrants, UNCLAIMED_OWNER, validSectionName } from "./section-channels.ts";
 
 const pid = (n: number) => `pr_00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const ALICE = pid(1);
@@ -18,11 +18,53 @@ const teams: Record<string, TeamRef[]> = { [CAROL]: [{ id: "T", manager: false }
 const viewerOf = (id: string): Viewer => ({ principalId: id, orgAdmin: id === ADMIN, teams: teams[id] ?? [], disabled: false });
 
 describe("SectionChannels store", () => {
+  it("#2045 isolation: a name nobody owns becomes an unclaimed record, never the admin's", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "sections-")), "section-channels.json");
+    const channels = new SectionChannels({ path });
+    expect(channels.migrate(["Finance"], () => null)).toBe(1);
+    expect(channels.byName("Finance")).toMatchObject({ ownerPrincipalId: UNCLAIMED_OWNER, members: [] });
+    // a later evidence never forks a second copy of the same legacy name
+    expect(channels.migrate(["Finance"], () => ADMIN)).toBe(0);
+    expect(channels.list()).toHaveLength(1);
+  });
+
+  it("#2045 isolation: verifyOwners returns each empty team to its real owner once, deletes nothing", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "sections-")), "section-channels.json");
+    const channels = new SectionChannels({ path });
+    const finance = channels.ensure("Finance", ADMIN); // created by bob, given to the admin
+    const ops = channels.ensure("Ops", ADMIN); // the admin's own, by the audit
+    const perso = channels.ensure("Agents personels", ADMIN); // nobody's
+    const notes = channels.ensure("Notes", ADMIN); // carol keeps it in her own sections
+    const busy = channels.ensure("Busy", ADMIN); // still holds a bot: left alone
+    const shared = channels.ensure("Shared", ADMIN);
+    channels.setMembers(shared.id, [{ target: `user:${BOB}`, role: "participant" }], "use");
+    const changed = channels.verifyOwners({
+      inUse: (record) => record.id === busy.id,
+      creatorOf: (record) => (record.id === finance.id ? BOB : record.id === ops.id ? ADMIN : null),
+      personalOwners: (name) => (name === "Notes" ? [CAROL] : []),
+      // the admin's order was polluted by the old listing: no evidence for the admin
+      orderOwners: (name) => (name === "Agents personels" ? [ADMIN] : []),
+    });
+    expect(changed.map((row) => [row.name, row.to])).toEqual([["Finance", BOB], ["Agents personels", UNCLAIMED_OWNER], ["Notes", CAROL]]);
+    expect(channels.byId(perso.id)).toMatchObject({ ownerPrincipalId: UNCLAIMED_OWNER, formerOwnerPrincipalId: ADMIN });
+    expect(channels.byId(ops.id)?.ownerPrincipalId).toBe(ADMIN);
+    expect(channels.byId(busy.id)?.ownerPrincipalId).toBe(ADMIN);
+    expect(channels.byId(shared.id)?.ownerPrincipalId).toBe(ADMIN);
+    expect(channels.byId(notes.id)?.ownerPrincipalId).toBe(CAROL);
+    expect(channels.list()).toHaveLength(6);
+    // once per data dir, kept across a reload
+    const again = new SectionChannels({ path });
+    expect(again.ownersVerified()).toBe(true);
+    expect(again.verifyOwners({ inUse: () => false, creatorOf: () => null, personalOwners: () => [], orderOwners: () => [] })).toEqual([]);
+    expect(again.byId(perso.id)?.formerOwnerPrincipalId).toBe(ADMIN);
+  });
+
   it("migrates each section to a private record owned by the owner of most of its bots", () => {
-    expect(migrationOwner([{ ownerPrincipalId: ALICE, createdAt: 3 }, { ownerPrincipalId: ALICE, createdAt: 4 }, { ownerPrincipalId: BOB, createdAt: 1 }], ADMIN)).toBe(ALICE);
+    expect(migrationOwner([{ ownerPrincipalId: ALICE, createdAt: 3 }, { ownerPrincipalId: ALICE, createdAt: 4 }, { ownerPrincipalId: BOB, createdAt: 1 }])).toBe(ALICE);
     // a tie: the owner of the oldest bot among the tied owners
-    expect(migrationOwner([{ ownerPrincipalId: ALICE, createdAt: 5 }, { ownerPrincipalId: BOB, createdAt: 2 }], ADMIN)).toBe(BOB);
-    expect(migrationOwner([], ADMIN)).toBe(ADMIN);
+    expect(migrationOwner([{ ownerPrincipalId: ALICE, createdAt: 5 }, { ownerPrincipalId: BOB, createdAt: 2 }])).toBe(BOB);
+    // #2045 isolation: no bot is no owner, never the first admin
+    expect(migrationOwner([])).toBeNull();
     const path = join(mkdtempSync(join(tmpdir(), "sections-")), "section-channels.json");
     let n = 0;
     const channels = new SectionChannels({ path, newId: () => `sec_00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`, now: () => 7 });

@@ -31,12 +31,21 @@ extension Chat {
 
 /// `GROUP_PANEL_TABS`.
 private enum GroupPanelTab: String, CaseIterable, Identifiable {
-    case details, instructions, memory, advanced
+    case details, members, library, instructions, memory, advanced
     var id: String { rawValue }
+
+    /// `GROUP_PANEL_HIDDEN_TABS` (desktop 46d28805db): Instructions and
+    /// Memory are hidden for now, their code kept; empty this set to bring
+    /// them back. The instructions stay editable from the (i) beside the
+    /// group's name, and the group memory stays on unless switched off.
+    static let hidden: Set<GroupPanelTab> = [.instructions, .memory]
 
     var title: LocalizedStringKey {
         switch self {
-        case .details: "Details"
+        // desktop #2333: Details reads Activity, the roster sits under Members
+        case .details: "Activity"
+        case .members: "Members"
+        case .library: "Library"
         case .instructions: "Instructions"
         case .memory: "Memory"
         case .advanced: "Advanced"
@@ -73,6 +82,8 @@ private struct DesktopGroupPanelContent: View {
     @State private var jevOn = false
     /// The server's profile (`config.profile`): the viewer's name and email.
     @State private var profile: Profile?
+    /// A team goal written inline over the panel (New team goal, Add to meeting, Duplicate).
+    @State private var goalDraft: GroupPanelGoalDraft?
     @StateObject private var actions = RoomActions()
 
     private var room: Room { session.state.rooms.first { $0.id == roomId } ?? fallback }
@@ -119,6 +130,29 @@ private struct DesktopGroupPanelContent: View {
                 .environmentObject(session)
         }
         .roomActionsPresenter(actions)
+        // A routine of Upcoming opens its page over the whole panel, as on a bot
+        .overlay {
+            if let routineId = model.panelRoutineId {
+                BotPanelRoutinePage(routineId: routineId)
+                    .transition(.move(edge: .trailing))
+            }
+        }
+        // desktop GroupDetailsTab: the routine editor stays inside the group panel
+        .overlay {
+            if let draft = goalDraft {
+                GroupPanelRoutineEditor(room: room, draft: draft, bots: session.state.bots) {
+                    withAnimation(.easeOut(duration: 0.2)) { goalDraft = nil }
+                }
+                .id(draft.id)
+                .transition(.move(edge: .trailing))
+            }
+        }
+        .onValueChange(of: model.panelOpen) { open in
+            if !open {
+                model.panelRoutineId = nil
+                goalDraft = nil
+            }
+        }
         .task(id: session.connection?.id) {
             let config = await session.configStatus()
             jevOn = config?.jevRoomRoutingOn ?? false
@@ -132,8 +166,20 @@ private struct DesktopGroupPanelContent: View {
 
     /// Memory for a pairing that reaches it, Advanced off the remote client
     /// (`RoomInfoTab.available`).
+    /// Desktop #2333: Activity, then Members; Advanced is no tab, it folds
+    /// at the bottom of Members (`AdvancedDisclosure`).
     private static func tabs(access: RoomInfoAccess, gate: SurfaceGate) -> [GroupPanelTab] {
-        RoomInfoTab.available(access: access, gate: gate).compactMap { GroupPanelTab(rawValue: $0.rawValue) }
+        var out = RoomInfoTab.available(access: access, gate: gate)
+            .compactMap { GroupPanelTab(rawValue: $0.rawValue) }
+            .filter { !GroupPanelTab.hidden.contains($0) && $0 != .advanced }
+        out.insert(.members, at: min(1, out.count))
+        // desktop GroupPanel: the group's files and pages after Members
+        out.insert(.library, at: min(2, out.count))
+        return out
+    }
+
+    private static func showsAdvanced(access: RoomInfoAccess, gate: SurfaceGate) -> Bool {
+        RoomInfoTab.available(access: access, gate: gate).contains(.advanced)
     }
 
     // MARK: Top bar
@@ -301,7 +347,20 @@ private struct DesktopGroupPanelContent: View {
     private func tabBody(_ tab: GroupPanelTab, access: RoomInfoAccess) -> some View {
         switch tab {
         case .details:
-            GroupPanelDetails(room: room, access: access, directory: directory, profile: profile, roster: $roster, leave: { actions.leaving = room })
+            GroupPanelDetails(part: .activity, room: room, access: access, directory: directory, profile: profile, roster: $roster, leave: { actions.leaving = room },
+                              docked: docked, openMembers: { self.tab = .members }, newGoal: { source in withAnimation(.easeOut(duration: 0.2)) { goalDraft = GroupPanelGoalDraft(copyOf: source) } })
+        case .members:
+            VStack(alignment: .leading, spacing: 0) {
+                GroupPanelDetails(part: .members, room: room, access: access, directory: directory, profile: profile, roster: $roster, leave: { actions.leaving = room },
+                                  docked: docked, openMembers: { self.tab = .members }, newGoal: { source in withAnimation(.easeOut(duration: 0.2)) { goalDraft = GroupPanelGoalDraft(copyOf: source) } })
+                if Self.showsAdvanced(access: access, gate: session.surfaceGate) {
+                    GroupAdvancedDisclosure {
+                        GroupPanelAdvanced(room: room, members: members, access: access, jevOn: jevOn)
+                    }
+                }
+            }
+        case .library:
+            GroupPanelLibrary(room: room, docked: docked)
         case .instructions:
             GroupPanelInstructions(room: room, editable: access.editable)
         case .memory:
@@ -503,12 +562,20 @@ private struct GroupAddRow: View {
 private struct GroupPanelDetails: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
+    /// Activity (Upcoming, Computer) or Members (People, Bots, Leave).
+    enum Part { case activity, members }
+    let part: Part
     let room: Room
     let access: RoomInfoAccess
     let directory: OrgDirectory?
     let profile: Profile?
     @Binding var roster: RoomRosterFocus?
     let leave: () -> Void
+    let docked: Bool
+    /// Members tab (the Add a second bot suggestion).
+    let openMembers: () -> Void
+    /// The inline team goal editor: a new one (nil) or a copy (Duplicate).
+    let newGoal: (Routine?) -> Void
 
     private struct Person: Identifiable {
         let id: String
@@ -534,8 +601,34 @@ private struct GroupPanelDetails: View {
         return out
     }
 
+    /// The viewer's own bots in the group: the computer the panel may show.
+    private var ownBots: [Bot] {
+        let own = Set(session.state.bots.map(\.id))
+        return room.memberIds.compactMap { id in own.contains(id) ? session.state.bot(id) : nil }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
+            // Desktop GroupDetailsTab: the bot's Upcoming, then its Computer
+            if part == .activity {
+                // desktop GroupDetailsTab: Upcoming, Suggested, Computer, Tasks
+                GroupPanelUpcoming(room: room, docked: docked, newGoal: newGoal)
+                GroupPanelSuggestions(room: room, access: access, ownBots: ownBots, openMembers: openMembers, newGoal: { newGoal(nil) })
+                GroupPanelComputer(bots: ownBots.filter { $0.computer != "off" }, leadBotId: room.defaultResponder.botId)
+                if !ownBots.isEmpty {
+                    GroupPanelTasks(room: room, ownBots: ownBots, docked: docked)
+                }
+            } else {
+                memberSections
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 24)
+    }
+
+    @ViewBuilder
+    private var memberSections: some View {
             GroupPanelSection(title: Text("People")) {
                 GroupMembersCard {
                     let rows = people
@@ -599,10 +692,6 @@ private struct GroupPanelDetails: View {
                     .padding(.top, -12)
                     .accessibilityIdentifier("group-panel-leave")
             }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 24)
     }
 
     private func removePerson(_ id: String) -> () -> Void {
@@ -867,6 +956,35 @@ private struct GroupPillButtonStyle: ButtonStyle {
 
 /// Default responder, Mentions (with people in the room), the turn limit and
 /// the working folder, each a `PanelSection` over its own `bg-card` box.
+/// Desktop `AdvancedDisclosure`: Members > Advanced, every setting that is
+/// not the roster, folded by default under a quiet 13 pt toggle.
+private struct GroupAdvancedDisclosure<Content: View>: View {
+    @Environment(\.desktopTheme) private var theme
+    @ViewBuilder let content: () -> Content
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Button { open.toggle() } label: {
+                HStack(spacing: 4) {
+                    Text("Advanced")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
+                .font(theme.font(13))
+                .foregroundStyle(theme.inkSecondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .accessibilityAddTraits(open ? [.isSelected, .isButton] : .isButton)
+            .accessibilityIdentifier("group-panel-advanced-toggle")
+            if open { content() }
+        }
+    }
+}
+
 private struct GroupPanelAdvanced: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
@@ -1095,6 +1213,342 @@ private struct GroupPanelAdvanced: View {
             // an emptied field is each bot's own folder (null)
             if await session.setRoomFolder(target, cwd: value) { folderDraft = nil }
             folderSaving = false
+        }
+    }
+}
+
+// MARK: - Details > Upcoming (desktop GroupRoutinesSection)
+
+/// The group's routines as the bot panel's Upcoming: the plain grey label,
+/// a ... menu (New team goal), one card, Show more after 5; each row wears
+/// its bot's face. A row opens the routine's page over the whole panel.
+private struct GroupPanelUpcoming: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    @EnvironmentObject private var model: DesktopShellModel
+    let room: Room
+    let docked: Bool
+    /// The inline team goal editor: a new one (nil) or a copy (Duplicate).
+    let newGoal: (Routine?) -> Void
+
+    @State private var routines: [Routine] = []
+    @State private var runs: [RoutineRun] = []
+    @State private var loaded = false
+    @State private var toggling: Set<String> = []
+    @State private var working: Set<String> = []
+    @State private var expanded = false
+    @State private var renaming: Routine?
+    @State private var renameText = ""
+    @State private var deleting: Routine?
+
+    /// `groupRoutines`: its team goals and the routines posting in one of
+    /// its conversations.
+    static func of(_ routines: [Routine], room: Room) -> [Routine] {
+        var threads: Set<String> = [room.threadId]
+        for task in room.tasks ?? [] where !task.threadId.isEmpty { threads.insert(task.threadId) }
+        return routines.filter { routine in
+            routine.groupId == room.id || (routine.resultsThreadId.map { threads.contains($0) } ?? false)
+        }
+    }
+
+    private var mine: [Routine] { Self.of(routines, room: room) }
+    private var shown: [Routine] {
+        expanded || mine.count <= PanelRoutinePreview.limit ? mine : Array(mine.prefix(PanelRoutinePreview.limit))
+    }
+    /// A new team goal runs on the lead when it is the viewer's, else their first bot.
+    private var newGoalBot: String? {
+        let own = Set(session.state.bots.map(\.id))
+        let mineIds = room.memberIds.filter { own.contains($0) }
+        if let lead = room.defaultResponder.botId, mineIds.contains(lead) { return lead }
+        return mineIds.first
+    }
+
+    /// The routine's run still going (queued, running or waiting), if any.
+    private func activeRun(_ routine: Routine) -> RoutineRun? {
+        runs.first { $0.routineId == routine.id && ["queued", "running", "waiting"].contains($0.status) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Upcoming")
+                    .font(theme.font(13))
+                    .foregroundStyle(theme.inkTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 2)
+                if newGoalBot != nil, room.dm != true {
+                    Menu {
+                        Button(String(localized: "New team goal"), systemImage: "plus") { newGoal(nil) }
+                    } label: {
+                        DesktopIconView(icon: .ellipsis, size: 15)
+                            .foregroundStyle(theme.inkSecondary)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel(Text("More options"))
+                    .accessibilityIdentifier("group-panel-routines-more")
+                }
+            }
+            .frame(height: 28)
+            if loaded && mine.isEmpty {
+                Text("No routine for this group yet. Team goals and routines that post here show up in this list.")
+                    .font(theme.font(12))
+                    .foregroundStyle(theme.inkTertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 8)
+                    .accessibilityIdentifier("group-panel-routines-hint")
+            } else if !loaded {
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(8)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, routine in
+                        row(routine)
+                        if index < shown.count - 1 {
+                            Rectangle().fill(theme.hairlineWeak).frame(height: 1)
+                        }
+                    }
+                }
+                .padding(1)
+                .background(theme.card, in: RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
+                if !expanded && mine.count > PanelRoutinePreview.limit {
+                    Button { expanded = true } label: {
+                        Text("Show more")
+                            .font(theme.font(13, .medium))
+                            .foregroundStyle(theme.inkSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("group-panel-upcoming-show-more")
+                }
+            }
+        }
+        .task { await load() }
+        .onReceive(NotificationCenter.default.publisher(for: .groupPanelRoutinesChanged)) { _ in
+            Task { await load() }
+        }
+        .onValueChange(of: model.panelRoutineId) { id in
+            // back from a routine's page: what it changed shows here
+            if id == nil { Task { await load() } }
+        }
+        .alert(Text("Rename"), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField(String(localized: "Name"), text: $renameText)
+                .accessibilityIdentifier("group-panel.routine-rename-field")
+            Button(String(localized: "Rename")) {
+                if let routine = renaming { Task { await rename(routine) } }
+            }
+            .accessibilityIdentifier("group-panel.routine-rename-save")
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        }
+        .confirmationDialog(Text("Delete this routine?"), isPresented: Binding(
+            get: { deleting != nil }, set: { if !$0 { deleting = nil } }
+        ), titleVisibility: .visible, presenting: deleting) { routine in
+            Button(String(localized: "Delete"), role: .destructive) {
+                Task { await delete(routine) }
+            }
+            .accessibilityIdentifier("group-panel.routine-delete-confirm")
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: { routine in
+            Text(verbatim: routine.name)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("group-panel-routines")
+    }
+
+    private func row(_ routine: Routine) -> some View {
+        let bot = session.state.bot(routine.botId)
+        let busy = working.contains(routine.id)
+        return HStack(spacing: 10) {
+            Button { model.panelRoutineId = routine.id } label: {
+                HStack(spacing: 10) {
+                    if let bot {
+                        BotMascotView(bot: bot, size: 24, state: .idle, animated: false)
+                            .frame(width: 24, height: 24)
+                    }
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(verbatim: routine.name)
+                            .font(theme.font(13))
+                            .foregroundStyle(theme.ink)
+                            .lineLimit(1)
+                            .frame(height: 18)
+                        Text(verbatim: BotPanelRoutines.scheduleLine(routine))
+                            .font(theme.font(12))
+                            .foregroundStyle(theme.inkSecondary)
+                            .lineLimit(1)
+                            .frame(height: 17)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("group-panel-routine.\(routine.name)")
+            if busy {
+                ProgressView().controlSize(.mini).frame(width: 28, height: 28)
+            } else {
+                Menu { menuItems(routine) } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(theme.inkTertiary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("More actions for \(routine.name)"))
+                .accessibilityIdentifier("group-panel.routine-menu.\(routine.name)")
+            }
+            PanelSwitch(label: routine.enabled ? "Pause" : "Resume", isOn: routine.enabled,
+                        disabled: toggling.contains(routine.id) || routine.schedule.type == .unknown,
+                        onColor: bot.flatMap { BubbleColors.user(botColor: $0.color)?.fill.color }) { on in
+                Task { await toggle(routine, on: on) }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .hoverEffect(.highlight)
+        .contextMenu { menuItems(routine) }
+    }
+
+    /// The desktop routine row menu: run or stop, pause or resume, rename,
+    /// open, duplicate, delete.
+    @ViewBuilder
+    private func menuItems(_ routine: Routine) -> some View {
+        if let run = activeRun(routine) {
+            Button(String(localized: "Stop"), systemImage: "stop.circle") { Task { await stop(routine, run: run) } }
+                .accessibilityIdentifier("group-panel.routine-action.stop")
+        } else {
+            Button(String(localized: "Run now"), systemImage: "play") { Task { await runNow(routine) } }
+                .accessibilityIdentifier("group-panel.routine-action.run")
+        }
+        if routine.schedule.type != .unknown {
+            if routine.enabled {
+                Button(String(localized: "Pause"), systemImage: "pause") { Task { await toggle(routine, on: false) } }
+                    .accessibilityIdentifier("group-panel.routine-action.pause")
+            } else {
+                Button(String(localized: "Resume"), systemImage: "play.circle") { Task { await toggle(routine, on: true) } }
+                    .accessibilityIdentifier("group-panel.routine-action.resume")
+            }
+        }
+        Button(String(localized: "Rename"), systemImage: "pencil") {
+            renameText = routine.name
+            renaming = routine
+        }
+        .accessibilityIdentifier("group-panel.routine-action.rename")
+        Button(String(localized: "Open"), systemImage: "arrow.up.right") { model.panelRoutineId = routine.id }
+            .accessibilityIdentifier("group-panel.routine-action.open")
+        Button(String(localized: "Duplicate"), systemImage: "plus.square.on.square") { newGoal(routine) }
+            .accessibilityIdentifier("group-panel.routine-action.duplicate")
+        Divider()
+        Button(String(localized: "Delete"), systemImage: "trash", role: .destructive) { deleting = routine }
+            .accessibilityIdentifier("group-panel.routine-action.delete")
+    }
+
+    private func toggle(_ routine: Routine, on: Bool) async {
+        toggling.insert(routine.id)
+        defer { toggling.remove(routine.id) }
+        if let saved = await session.setRoutineEnabled(routine, enabled: on),
+           let index = routines.firstIndex(where: { $0.id == saved.id }) {
+            routines[index] = saved
+        }
+    }
+
+    private func runNow(_ routine: Routine) async {
+        working.insert(routine.id)
+        defer { working.remove(routine.id) }
+        if let run = await session.runRoutine(routine) {
+            Haptics.success()
+            runs.removeAll { $0.id == run.id }
+            runs.insert(run, at: 0)
+        }
+    }
+
+    private func stop(_ routine: Routine, run: RoutineRun) async {
+        working.insert(routine.id)
+        defer { working.remove(routine.id) }
+        if let stopped = await session.cancelRoutineRun(run),
+           let index = runs.firstIndex(where: { $0.id == stopped.id }) {
+            runs[index] = stopped
+        }
+    }
+
+    private func rename(_ routine: Routine) async {
+        let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        renaming = nil
+        guard !name.isEmpty, name != routine.name else { return }
+        working.insert(routine.id)
+        defer { working.remove(routine.id) }
+        if let saved = await session.renameRoutine(routine, name: String(name.prefix(80))),
+           let index = routines.firstIndex(where: { $0.id == saved.id }) {
+            routines[index] = saved
+        }
+    }
+
+    private func delete(_ routine: Routine) async {
+        working.insert(routine.id)
+        defer { working.remove(routine.id) }
+        if await session.deleteRoutine(routine) {
+            Haptics.success()
+            routines.removeAll { $0.id == routine.id }
+            if model.panelRoutineId == routine.id { model.panelRoutineId = nil }
+        }
+    }
+
+    private func load() async {
+        let loaded = await session.loadRoutines()
+        routines = loaded.routines
+        runs = loaded.runs
+        self.loaded = true
+    }
+}
+
+// MARK: - Details > Computer (desktop GroupComputerSection)
+
+/// The bot panel's Computer card for one of the viewer's bots in the group
+/// (the lead's by default); with several, a picker on the label row.
+private struct GroupPanelComputer: View {
+    @Environment(\.desktopTheme) private var theme
+    @Environment(\.openWindow) private var openWindow
+    @EnvironmentObject private var model: DesktopShellModel
+    let bots: [Bot]
+    let leadBotId: String?
+
+    @State private var picked: String?
+
+    private var bot: Bot? {
+        bots.first { $0.id == picked } ?? bots.first { $0.id == leadBotId } ?? bots.first
+    }
+
+    var body: some View {
+        if let bot {
+            BotPanelComputerCard(bot: bot) {
+                DesktopComputerWindow.open(botId: bot.id, openWindow: openWindow, model: model)
+            }
+            .id(bot.id)
+            .overlay(alignment: .topTrailing) {
+                if bots.count > 1 {
+                    Menu {
+                        Picker(String(localized: "Computer of"), selection: Binding(get: { bot.id }, set: { picked = $0 })) {
+                            ForEach(bots) { candidate in Text(verbatim: candidate.name).tag(candidate.id) }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(verbatim: bot.name).lineLimit(1)
+                            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                        }
+                        .font(theme.font(12))
+                        .foregroundStyle(theme.inkSecondary)
+                        .frame(height: 18)
+                    }
+                    .accessibilityLabel(Text("Computer of"))
+                    .accessibilityIdentifier("group-panel-computer-of")
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("group-panel-computer")
         }
     }
 }

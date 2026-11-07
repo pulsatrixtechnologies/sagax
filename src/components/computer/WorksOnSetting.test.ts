@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Bot, ConfigStatus } from "@/state/store";
 import { WorksOnControl, worksOnMode, WorksOnSetting, worksOnTip, type WorksOnMode } from "./WorksOnSetting";
+import { SettingsSurfaceProvider } from "../SettingsPrimitives";
 
 const fixture = vi.hoisted(() => ({ config: null as unknown, organization: false }));
 vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
@@ -74,5 +75,24 @@ describe("Works on: Auto, this computer, the cloud computer, or Off", () => {
     expect(renderToStaticMarkup(createElement(WorksOnSetting, { bot }))).toBe("");
     fixture.config = null;
     expect(renderToStaticMarkup(createElement(WorksOnSetting, { bot }))).toContain('data-works-on-setting="auto"');
+  });
+});
+
+// The bot's profile page (#2313): the card's grey label names the place, the
+// explanation is its first line and the four places are the page's segmented
+// control, with no outline, underline or primary pill.
+describe("Works on, on the profile page (plain surface)", () => {
+  const plain = (value: WorksOnMode) => renderToStaticMarkup(createElement(SettingsSurfaceProvider, { surface: "plain", children: createElement(WorksOnControl, { value, organization: false, onChange: () => {} }) }));
+
+  it("labels its card and keeps every place, the hint and the selection", () => {
+    const markup = plain("local");
+    expect(markup).toContain(">Workspace<");
+    expect(labels(markup)).toEqual(["Auto", "This computer", "Cloud computer", "Off"]);
+    expect(markup).toMatch(/<p id="works-on-setting-hint"[^>]*>The bot picks where each task runs/);
+    expect(markup).toMatch(/role="radiogroup"[^>]*class="[^"]*bg-control/);
+    expect(markup).toMatch(/aria-checked="true"[^>]*data-works-on-choice="local"/);
+    expect(markup).not.toMatch(/\bborder(-\[|-border|-hairline|-accent)/);
+    expect(markup).not.toContain("underline");
+    expect(markup).not.toContain("ui-button-primary");
   });
 });

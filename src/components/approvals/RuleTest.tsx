@@ -14,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { readableErrorMessage } from "@/lib/readable-error";
 import type { LocaleKey } from "@/locales";
+import { PILL } from "../SettingsPrimitives";
 
 // the rule editor's own words (CustomRulesCard CUSTOM_BEHAVIOR_LABEL), kept
 // here so the editor can import this file without a cycle
@@ -23,7 +24,9 @@ const CUSTOM_BEHAVIOR_LABEL: Record<CustomRuleBehavior, LocaleKey> = {
   deny: "customRules.behavior.deny",
 };
 
-export function RuleTestResults({ result }: { result: RuleTestResult }) {
+/** `plain`: inside a bot profile card (#2313), the hits on the card's own
+ * fill, no outline and no bold. */
+export function RuleTestResults({ result, plain = false }: { result: RuleTestResult; plain?: boolean }) {
   if (result.unreadable) return <p role="note" className="text-[12px] text-ink-secondary" data-rule-test-unreadable="">{t("approvals.journal.test.unreadable")}</p>;
   return (
     <div className="flex flex-col gap-2" data-rule-test-result="">
@@ -41,7 +44,7 @@ export function RuleTestResults({ result }: { result: RuleTestResult }) {
         </div>
       )}
       {result.hits.length > 0 && (
-        <ol className="divide-y divide-hairline/30 overflow-hidden rounded-xl border border-hairline/40 bg-card">
+        <ol className={plain ? "flex flex-col overflow-hidden rounded-lg bg-inset" : "divide-y divide-hairline/30 overflow-hidden rounded-xl border border-hairline/40 bg-card"}>
           {result.hits.map((hit) => {
             const at = new Date(hit.at);
             return (
@@ -49,7 +52,7 @@ export function RuleTestResults({ result }: { result: RuleTestResult }) {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] text-ink">{journalTitle(hit)}</div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ink-secondary">
-                    <span className="font-medium">{withoutIds(hit.botName)}</span>
+                    <span className={plain ? "text-ink" : "font-medium"}>{withoutIds(hit.botName)}</span>
                     <span aria-hidden="true">·</span>
                     <span>{t("approvals.journal.test.actual", { outcome: t(OUTCOME_LABEL[hit.actual]) })}</span>
                     {hit.approximate && <span className="text-ink-tertiary" title={t("approvals.journal.test.approximateHint")}>{t("approvals.journal.test.approximate")}</span>}
@@ -57,11 +60,11 @@ export function RuleTestResults({ result }: { result: RuleTestResult }) {
                   {hit.summary && <div className="mt-0.5 truncate font-mono text-[11px] text-ink-tertiary">{withoutIds(hit.summary)}</div>}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-0.5">
-                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  <span className={cn("rounded-full px-2 py-0.5 text-[11px]", !plain && "font-medium",
                     hit.would === "allowed" ? "bg-success/12 text-success" : hit.would === "denied" ? "bg-danger/12 text-danger" : hit.would === "asked" ? "bg-warning/12 text-warning" : "bg-control text-ink-secondary")}>
                     {t(EFFECT_LABEL[hit.would])}
                   </span>
-                  {hit.changed && <span className="text-[11px] font-medium text-accent">{t("approvals.journal.test.changed")}</span>}
+                  {hit.changed && <span className={cn("text-[11px] text-accent", !plain && "font-medium")}>{t("approvals.journal.test.changed")}</span>}
                   <time dateTime={at.toISOString()} className="text-[11px] tabular-nums text-ink-tertiary">
                     {at.toLocaleDateString(activeLocale(), { day: "numeric", month: "short" })} {at.toLocaleTimeString(activeLocale(), { hour: "2-digit", minute: "2-digit" })}
                   </time>
@@ -76,7 +79,7 @@ export function RuleTestResults({ result }: { result: RuleTestResult }) {
 }
 
 /** The button and its result, for a draft the caller builds. */
-export function RuleTestButton({ draft, disabled = false }: { draft: () => RuleTestDraft | null; disabled?: boolean }) {
+export function RuleTestButton({ draft, disabled = false, plain = false }: { draft: () => RuleTestDraft | null; disabled?: boolean; /** A bot profile card: a pill, no outline. */ plain?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<RuleTestResult | null>(null);
   const [error, setError] = useState("");
@@ -97,13 +100,13 @@ export function RuleTestButton({ draft, disabled = false }: { draft: () => RuleT
   return (
     <div className="flex flex-col gap-2" data-rule-test="">
       <div>
-        <button type="button" onClick={() => void run()} disabled={disabled || busy} className="inline-flex items-center gap-1.5 rounded-full border border-hairline/50 px-3 py-1 text-[12.5px] text-ink hover:bg-control disabled:opacity-40" data-rule-test-run="">
+        <button type="button" onClick={() => void run()} disabled={disabled || busy} className={plain ? PILL : "inline-flex items-center gap-1.5 rounded-full border border-hairline/50 px-3 py-1 text-[12.5px] text-ink hover:bg-control disabled:opacity-40"} data-rule-test-run="">
           {busy ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <FlaskConical size={13} aria-hidden="true" />}
           {t("approvals.journal.test.run", { days: RULE_TEST_DAYS })}
         </button>
       </div>
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
-      {result && <RuleTestResults result={result} />}
+      {result && <RuleTestResults result={result} plain={plain} />}
     </div>
   );
 }

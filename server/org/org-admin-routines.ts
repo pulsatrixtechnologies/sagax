@@ -61,6 +61,10 @@ export interface RoutinesDeps {
   inFlight(routineId: string): boolean;
   runNow(routineId: string, adminPrincipalId: string): RoutineRun | null;
   setEnabled(routineId: string, enabled: boolean, adminPrincipalId: string): Routine | null;
+  /** 2026-11-06 (Perspicax #973): a routine made the way the app makes it
+   * (POST /api/routines as the bot's owner, `asPrincipalId`). Answers the
+   * routine; throws a ConsoleRefusal with the app's refusal. */
+  create?(input: { asPrincipalId: string; botId: string; name: string; prompt: string; schedule: Record<string, unknown> }): Promise<Routine>;
   /** Approvals: every pending card of the organization, as `viewer` may decide them. */
   orgApprovals(viewer: { principalId: string; orgAdmin: boolean }): AdminApproval[];
   decisions(range: { from: Date; to: Date }): DecisionRow[];
@@ -105,8 +109,51 @@ function findRoutine(ctx: ConsoleContext, deps: RoutinesDeps, id: string): Routi
   return routine && visible(ctx, deps, routine) ? routine : null;
 }
 
+const ROUTINE_NAME_MAX = 120;
+const PROMPT_MAX = 20_000;
+
+/** 2026-11-06 (Perspicax #973): `POST routines`, on a bot the caller sees
+ * (under the `own-routine` grant, their own bot). `schedule` is a 5-field
+ * cron (with `timeZone`) or the app's schedule object. */
+function createRoute(deps: RoutinesDeps, create: NonNullable<RoutinesDeps["create"]>): ConsoleRoute {
+  return {
+    method: "POST",
+    path: "routines",
+    min: "manager",
+    ownerGrant: "own-routine",
+    async handle(ctx) {
+      const body = objectBody(ctx.body);
+      const extra = body ? onlyKeys(body, ["botId", "name", "prompt", "schedule", "timeZone"]) : "Send a JSON object.";
+      if (!body || extra) return badRequest(extra ?? "Send a JSON object.");
+      const { botId, name, prompt, schedule, timeZone } = body;
+      if (typeof botId !== "string" || !/^[\w-]{1,128}$/.test(botId)) return badRequest("botId names a bot.");
+      if (typeof name !== "string" || !name.trim() || name.trim().length > ROUTINE_NAME_MAX) return badRequest(`name is 1 to ${ROUTINE_NAME_MAX} characters.`);
+      if (typeof prompt !== "string" || !prompt.trim() || prompt.length > PROMPT_MAX) return badRequest(`prompt is 1 to ${PROMPT_MAX} characters.`);
+      if (timeZone !== undefined && (typeof timeZone !== "string" || !timeZone || timeZone.length > 64)) return badRequest("timeZone is an IANA time zone.");
+      let when: Record<string, unknown>;
+      if (typeof schedule === "string") {
+        const expression = schedule.trim();
+        if (expression.split(/\s+/).length !== 5) return badRequest("schedule is a 5-field cron expression.");
+        when = { type: "cron", expression, ...(typeof timeZone === "string" ? { timeZone } : {}) };
+      } else {
+        const object = objectBody(schedule);
+        if (!object || typeof object.type !== "string") return badRequest("schedule is a 5-field cron expression or a schedule object.");
+        if (timeZone !== undefined) return badRequest("timeZone goes inside the schedule object.");
+        when = object;
+      }
+      const bot = deps.bot(botId);
+      const seen = !!bot && (ctx.ownOnly ? bot.ownerPrincipalId === ctx.viewer.principalId : ctx.inReach(bot.ownerPrincipalId));
+      if (!bot || !seen) return notFound("No such bot.");
+      const routine = await create({ asPrincipalId: bot.ownerPrincipalId, botId: bot.id, name: name.trim(), prompt: prompt.trim(), schedule: when });
+      ctx.record({ category: "bot", action: "routine.create", target: { kind: "routine", id: routine.id, name: routine.name }, after: { botId: bot.id, schedule: deps.scheduleLabel(routine), enabled: routine.enabled } });
+      return ok({ routine: row(ctx, deps, routine, []) }, 201);
+    },
+  };
+}
+
 export function routinesRoutes(deps: RoutinesDeps): ConsoleRoute[] {
   return [
+    ...(deps.create ? [createRoute(deps, deps.create)] : []),
     {
       method: "GET",
       path: "routines",

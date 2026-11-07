@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { DecisionRow } from "../decision-log.ts";
 import { routinesRoutes, runReason, runStatus, type RoutinesDeps } from "./org-admin-routines.ts";
 import type { Routine, RoutineRun } from "../routines/routines.ts";
+import { ConsoleRefusal } from "./org-admin-console.ts";
 import { fakeConsole } from "../testing/console-context.ts";
 
 const NOW = Date.UTC(2026, 9, 8, 12);
@@ -25,6 +26,7 @@ function setup() {
     run("x3", "r2", "missed", NOW - 2000),
   ];
   let inFlight = false;
+  const created: Array<Parameters<NonNullable<RoutinesDeps["create"]>>[0]> = [];
   const decisions: DecisionRow[] = [
     { at: new Date(NOW - 1000).toISOString(), threadId: "t9", requestId: "q1", botId: "b2", botName: "B2", tool: "Bash", summary: "uptime", decision: "user-approved", source: "user", actor: { kind: "session", sessionId: "console", label: "Alice (console)", userId: "pr_alice" } },
     { at: new Date(NOW - 2000).toISOString(), threadId: "t9", requestId: "q2", decision: "user-denied", source: "user", actor: { kind: "loopback" } },
@@ -46,14 +48,48 @@ function setup() {
     inFlight: () => inFlight,
     runNow: (id) => { inFlight = true; return run("new", id, "queued", NOW); },
     setEnabled: (id, enabled) => { const found = routines.find((r) => r.id === id)!; found.enabled = enabled; return found; },
+    create: async (input) => {
+      created.push(input);
+      if (input.name === "refused") throw new ConsoleRefusal(403, "forbidden", "The organization does not let this bot run routines.");
+      const made = routine(`r${routines.length + 1}`, input.botId, { name: input.name, prompt: input.prompt });
+      routines.push(made);
+      return made;
+    },
     orgApprovals: () => [],
     decisions: () => decisions,
     decisionPerson: (actor) => (actor?.kind === "session" ? { principalId: actor.userId ?? "", sub: null, name: "Alice" } : actor ? { principalId: "", sub: null, name: "This computer" } : null),
   };
-  return { console: fakeConsole(routinesRoutes(deps), () => NOW), routines };
+  return { console: fakeConsole(routinesRoutes(deps), () => NOW), routines, created };
 }
 
 describe("routines", () => {
+  it("create: as the bot's owner, a cron with its time zone, never the prompt back; audited", async () => {
+    const { console, created } = setup();
+    const made = await console.call("POST", "routines", { body: { botId: "b1", name: " Morning ", prompt: "Summarize.", schedule: "0 8 * * 1-5", timeZone: "America/Toronto" } });
+    expect(made).toMatchObject({ status: 201, body: { routine: { id: "r4", name: "Morning", botId: "b1", owner: { principalId: "pr_alice" }, enabled: true } } });
+    expect(JSON.stringify(made.body)).not.toContain("Summarize");
+    expect(created.at(-1)).toEqual({ asPrincipalId: "pr_alice", botId: "b1", name: "Morning", prompt: "Summarize.", schedule: { type: "cron", expression: "0 8 * * 1-5", timeZone: "America/Toronto" } });
+    expect(console.records.at(-1)).toMatchObject({ category: "bot", action: "routine.create", target: { kind: "routine", id: "r4" }, after: { botId: "b1" } });
+    await console.call("POST", "routines", { body: { botId: "b2", name: "Obj", prompt: "p", schedule: { type: "interval", everyMinutes: 30 } } });
+    expect(created.at(-1)).toMatchObject({ asPrincipalId: "pr_bob", schedule: { type: "interval", everyMinutes: 30 } });
+    for (const body of [{}, { botId: "b1", name: "", prompt: "p", schedule: "* * * * *" }, { botId: "b1", name: "n", prompt: "", schedule: "* * * * *" },
+      { botId: "b1", name: "n", prompt: "p", schedule: "* * *" }, { botId: "b1", name: "n", prompt: "p", schedule: "* * * * *", enabled: true },
+      { botId: "../x", name: "n", prompt: "p", schedule: "* * * * *" }]) {
+      expect((await console.call("POST", "routines", { body })).status).toBe(400);
+    }
+    expect(await console.call("POST", "routines", { body: { botId: "b1", name: "refused", prompt: "p", schedule: "* * * * *" } })).toMatchObject({ status: 403, body: { code: "forbidden" } });
+  });
+
+  it("create: a manager on bots in reach; under the own-routine grant, the caller's own bot only", async () => {
+    const { console } = setup();
+    const body = { botId: "b1", name: "n", prompt: "p", schedule: "0 9 * * *" };
+    expect((await console.call("POST", "routines", { role: "manager", principalId: "pr_mona", reach: ["pr_mona"], body })).status).toBe(404);
+    expect((await console.call("POST", "routines", { role: "manager", principalId: "pr_mona", reach: ["pr_mona", "pr_alice"], body })).status).toBe(201);
+    const own = { role: "employee" as const, principalId: "pr_alice", reach: ["pr_alice"], ownOnly: true };
+    expect((await console.call("POST", "routines", { ...own, body })).status).toBe(201);
+    expect((await console.call("POST", "routines", { ...own, body: { ...body, botId: "b2" } })).status).toBe(404);
+  });
+
   it("rows: last run with its reason, failures over 7 days, filters, never the prompt", async () => {
     const { console } = setup();
     const all = await console.call("GET", "routines");

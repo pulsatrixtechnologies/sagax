@@ -44,6 +44,11 @@ export interface BotsDeps {
   /** A copy for `ownerPrincipalId`: soul, skills, model and settings; no
    * threads, memory, grants or routines. Answers the new bot's id. */
   clone(botId: string, input: { ownerPrincipalId: string; name?: string }): Promise<string>;
+  /** 2026-11-06 (Perspicax #973): a blank bot of `owner`, made the way the
+   * app's New bot makes it (POST /api/bots as that person), then on the
+   * model asked for (the same rules as `setModel`). Answers its id; throws a
+   * ConsoleRefusal with the app's refusal. */
+  create?(input: { owner: AdminPerson; name: string; model?: { engineInstanceId?: string; model: string | null } }): Promise<string>;
   setArchived(botId: string, archived: boolean): void;
   /** The new owner owns it; grants kept, the old owner keeps `manage`. */
   transfer(botId: string, ownerPrincipalId: string): void;
@@ -198,6 +203,45 @@ function capabilitiesRoute(deps: BotsDeps, resolve: NonNullable<BotsDeps["capabi
   };
 }
 
+/** 2026-11-06 (Perspicax #973): `POST bots`, a blank bot. Under the
+ * `own-bot` grant the new bot is the caller's own; a manager may name
+ * someone in their reach. */
+function createRoute(deps: BotsDeps, create: NonNullable<BotsDeps["create"]>): ConsoleRoute {
+  return {
+    method: "POST",
+    path: "bots",
+    min: "manager",
+    ownerGrant: "own-bot",
+    async handle(ctx) {
+      const body = objectBody(ctx.body);
+      const extra = body ? onlyKeys(body, ["name", "ownerPrincipalId", "ownerSub", "engineInstanceId", "model"]) : "Send a JSON object.";
+      if (!body || extra) return badRequest(extra ?? "Send a JSON object.");
+      if (ctx.ownOnly && ((body.ownerPrincipalId != null && body.ownerPrincipalId !== ctx.viewer.principalId) || (body.ownerSub != null && body.ownerSub !== ctx.viewer.sub))) {
+        return fail(403, "forbidden_role", "A bot you create is yours; an admin gives a bot to someone else.");
+      }
+      const name = nameField(body.name);
+      if (name instanceof ConsoleRefusal) return fail(name.status, name.code, name.message);
+      if (!name) return badRequest(`name is 1 to ${NAME_MAX} characters.`);
+      const engine = body.engineInstanceId;
+      const model = body.model;
+      if ((engine !== undefined && engine !== null && (typeof engine !== "string" || !engine.trim() || engine.length > 80))
+        || (model !== undefined && model !== null && (typeof model !== "string" || !model.trim() || model.length > 200))) {
+        return badRequest("engineInstanceId is an engine instance and model a model id or null.");
+      }
+      const owner = targetOwner(ctx, deps, body, ctx.viewer.principalId);
+      if (owner instanceof ConsoleRefusal) return fail(owner.status, owner.code, owner.message);
+      const asked = typeof engine === "string" || typeof model === "string"
+        ? { model: { ...(typeof engine === "string" ? { engineInstanceId: engine.trim() } : {}), model: typeof model === "string" ? model.trim() : null } }
+        : {};
+      const id = await create({ owner, name, ...asked });
+      const bot = botOf(deps, id);
+      if (!bot) return fail(500, "create_failed", "The bot could not be made.");
+      ctx.record({ category: "bot", action: "bot.create", target: { kind: "bot", id: bot.id, name: bot.name }, after: { ownerPrincipalId: owner.principalId, engine: bot.engine.instanceId, model: bot.model } });
+      return ok({ bot }, 201);
+    },
+  };
+}
+
 export function botsRoutes(deps: BotsDeps): ConsoleRoute[] {
   const actionRoutes = [
     single(deps, "bots/{id}/archive", "archive", [], () => null, "manager", true),
@@ -238,6 +282,7 @@ export function botsRoutes(deps: BotsDeps): ConsoleRoute[] {
         return { status: 200, body: null, raw: picture.bytes, headers: { ...headers, "content-type": picture.type, "content-length": String(picture.bytes.length) } };
       },
     },
+    ...(deps.create ? [createRoute(deps, deps.create)] : []),
     {
       method: "POST",
       path: "bots/{id}/clone",

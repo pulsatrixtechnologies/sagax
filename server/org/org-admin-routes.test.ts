@@ -137,6 +137,7 @@ beforeAll(async () => {
         ctx.record({ category: "bot", action: "echo.post", target: { kind: "bot", id: ctx.params.id } });
         return ok({ body: ctx.body });
       } },
+      { method: "POST", path: "bots", min: "manager", ownerGrant: "own-bot", handle: (ctx) => ok({ created: true, ownOnly: ctx.ownOnly === true }, 201) },
       { method: "GET", path: "boom", min: "employee", handle: () => { throw new Error("secret detail /data/x"); } },
       { method: "GET", path: "refused", min: "employee", handle: () => fail(409, "self", "Not on yourself.") },
       { method: "GET", path: "approvals?scope=org", min: "admin", handle: () => ok({ approvals: ["org"] }) },
@@ -201,7 +202,10 @@ describe("org admin API: the assertion gate", () => {
     expect(await call("/api/org/admin/nope", assertion("alice", "admin"))).toMatchObject({ status: 404, body: { code: "not_found" } });
     expect(await call("/api/org/admin/approvals/a/b/c", assertion("alice", "admin"))).toMatchObject({ status: 404 });
     expect(await call("/api/org/admin/approvals/a%2Fb/c", assertion("alice", "admin"), { method: "POST", body: "{}" })).toMatchObject({ status: 404 });
-    expect(await call("/api/org/admin/bots", assertion("alice", "admin"), { method: "POST", body: "{}" })).toMatchObject({ status: 405, body: { code: "method_not_allowed" } });
+    expect(await call("/api/org/admin/usage", assertion("alice", "admin"), { method: "POST", body: "{}" })).toMatchObject({ status: 405, body: { code: "method_not_allowed" } });
+    // 2026-11-06: POST bots (a blank bot) is a console route; GET bots stays the list
+    expect(await call("/api/org/admin/bots", assertion("alice", "admin"), { method: "POST", body: "{}" })).toMatchObject({ status: 201, body: { created: true, ownOnly: false } });
+    expect(await call("/api/org/admin/bots", assertion("bob", "employee"), { method: "POST", body: "{}" })).toMatchObject({ status: 403, body: { code: "forbidden_role" } });
     expect(await call("/api/org/admin/approvals/t/r", assertion("alice", "admin"))).toMatchObject({ status: 405 });
     for (const path of ["bots", "usage", "audit"]) {
       expect(await call(`/api/org/admin/${path}`, assertion("bob", "employee"))).toMatchObject({ status: 403, body: { code: "forbidden_role" } });

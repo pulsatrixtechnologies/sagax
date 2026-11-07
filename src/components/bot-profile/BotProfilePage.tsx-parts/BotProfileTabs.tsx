@@ -14,13 +14,15 @@ import { sectionLabel, TAB_LABEL } from "./cards";
  * tab opens and hides its rows that do not match; the tabs of the others
  * stay plain, the rest dim. Command-F or a slash opens it from anywhere on
  * the page. */
-export function useBotProfileSearch({ rootRef, pages, tabOf, tab, appearanceOpen, onOpenTab, onOpenAppearance }: {
+export function useBotProfileSearch({ rootRef, pages, tabOf, view, appearanceOpen, onOpenCategory, onOpenAppearance }: {
   rootRef: RefObject<HTMLElement | null>;
   pages: readonly PersonaCategory[];
   tabOf: (id: PersonaCategory) => BotProfileTab;
-  tab: BotProfileTab;
+  /** What is on screen (the tab and its open sub-page): the hit is marked again when it changes. */
+  view: string;
   appearanceOpen: boolean;
-  onOpenTab: (tab: BotProfileTab) => void;
+  /** Opens the tab and the sub-page that hold a section (V6, #2612). */
+  onOpenCategory: (id: PersonaCategory) => void;
   onOpenAppearance: () => void;
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
@@ -38,7 +40,7 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, tab, appearanceOpen
     const first = personaPagesMatching(pages, next, sectionLabel)[0];
     if (!first) return;
     if (first === "appearance") onOpenAppearance();
-    else onOpenTab(tabOf(first));
+    else onOpenCategory(first);
   };
   useLayoutEffect(() => {
     const root = searchHit ? rootRef.current?.querySelector<HTMLElement>(`[data-bot-profile-section="${searchHit}"]`) : null;
@@ -56,7 +58,7 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, tab, appearanceOpen
       observer.disconnect();
       clearSettingsSearch(root);
     };
-  }, [q, searchHit, tab, appearanceOpen]);
+  }, [q, searchHit, view, appearanceOpen]);
 
   const focusSearch = () =>
     requestAnimationFrame(() => {

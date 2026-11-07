@@ -31,13 +31,11 @@ export function sectionLabel(id: BotSettingsSection): string {
   return entry.labelKey ? t(entry.labelKey) : entry.label;
 }
 
-/** The five tabs' names (#2271). */
+/** The three tabs' names (V6, #2612). */
 export const TAB_LABEL: Record<BotProfileTab, LocaleKey> = {
   general: "botProfile.tab.general",
   knowledge: "botProfile.tab.knowledge",
-  tools: "botProfile.tab.tools",
-  activity: "botProfile.tab.activity",
-  analytics: "botProfile.tab.analytics",
+  stats: "botProfile.tab.stats",
 };
 
 const REACH_LABEL: Record<string, LocaleKey> = {
@@ -46,16 +44,6 @@ const REACH_LABEL: Record<string, LocaleKey> = {
   teams: "botPanel.reachMe.teams.label",
   telegram: "botPanel.reachMe.telegram.label",
   whatsapp: "botPanel.reachMe.whatsapp.label",
-};
-
-/** The sections each tab's single column holds, in order. The channels and
- * the accounts cards head General; Slack is a row of the channels card. */
-export const SECTIONS: Record<BotProfileTab, readonly PersonaCategory[]> = {
-  general: ["summary", "sharing", "visibility"],
-  knowledge: ["skills", "soul", "rules", "files"],
-  tools: ["model", "worksOn", "access", "permissions", "voice"],
-  activity: ["history"],
-  analytics: ["usage"],
 };
 
 export type Channel = "slack" | "email" | "reachMe" | "messages";

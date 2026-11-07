@@ -241,8 +241,11 @@ export function AccessSection({
 }: {
   bot: Bot;
   derived: ReturnType<typeof useBotSettingsDerived>;
-  /** One card alone (the bot creation wizard's Tools step, 2026-10-26). */
-  part?: "all" | "mcp" | "browser";
+  /** One card alone (the bot creation wizard's Tools step, 2026-10-26).
+   * The bot page's V6 sub-pages (#2612): "brief" (the background brief,
+   * When it acts alone) and "advanced" (the worksite, the browser and the
+   * folded working folder, tools, webhooks and always-allowed list). */
+  part?: "all" | "mcp" | "browser" | "brief" | "advanced";
 }) {
   const { draft, bulk, mixedFields } = useBotEditor();
   const { state } = useStore();
@@ -274,7 +277,7 @@ export function AccessSection({
     <div className="flex flex-col gap-5">
       {/* Boat or VPS is which cloud computer Auto and Cloud use. It is not
           a second Works on: that control is More > Computer. */}
-      {part === "all" && !organization && (!bot.computer || bot.computer === "cloud") && cloudComputersOffered(state.config) && (
+      {(part === "all" || part === "advanced") && !organization && (!bot.computer || bot.computer === "cloud") && cloudComputersOffered(state.config) && (
         // the profile page: the card carries its own grey label, the note is
         // text and the start switch is a row, nothing boxed inside the card
         <PaneSection data-cloud-backend="" title={plain ? t("botPanel.cloud.backend") : undefined}>
@@ -319,9 +322,9 @@ export function AccessSection({
       )}
 
       {(part === "all" || part === "mcp") && <McpServersCard bot={bot} patch={patch} />}
-      {part === "all" && !draft && <BackgroundBriefCard botId={bot.id} />}
+      {(part === "all" || part === "brief") && !draft && <BackgroundBriefCard botId={bot.id} />}
 
-      {(part === "all" || part === "browser") && browserFeature && <PaneSection title={<>{t("botPanel.access.browser")}<ProposalStatus bot={bot} /></>}>
+      {(part === "all" || part === "browser" || part === "advanced") && browserFeature && <PaneSection title={<>{t("botPanel.access.browser")}<ProposalStatus bot={bot} /></>}>
         <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
           {plain && <Globe aria-hidden="true" className="mt-px size-5 shrink-0 text-ink-secondary" />}
@@ -358,7 +361,7 @@ export function AccessSection({
 
       {/* The working folder, the tool list, webhooks and the commands
           always allowed: folded, one click away. */}
-      {part === "all" && <AdvancedFold id="access">
+      {(part === "all" || part === "advanced") && <AdvancedFold id="access">
         <WorkingFolder bot={bot} />
         <ToolSelectionCard key={bot.id} bot={bot} engineKind={derived.engine?.driverKind} />
         {!draft && <BotWebhooks bot={bot} />}

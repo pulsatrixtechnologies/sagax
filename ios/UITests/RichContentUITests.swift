@@ -70,7 +70,19 @@ final class RichContentUITests: XCTestCase {
         if let environment = fixture.environmentId { arguments += ["-parityEnvironment", environment] }
         app.launchArguments = arguments
         app.launch()
-        XCTAssertTrue(app.buttons["chat-name"].waitForExistence(timeout: 30))
+        // the iPad draws the conversation in the desktop shell, without the phone's title button
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCTAssertTrue(element(app, "desktop-chat-pill").waitForExistence(timeout: 45), "the iPad's desktop chat")
+            // the fixture's workspace never finished the desktop's guided first run: skip it as a
+            // person would (it saves the completion, so the next launch opens straight on the chat)
+            let skip = element(app, "first-run-skip")
+            if skip.waitForExistence(timeout: 5) {
+                skip.tap()
+                XCTAssertFalse(element(app, "desktop-first-run").waitForExistence(timeout: 2), "the first run closed")
+            }
+        } else {
+            XCTAssertTrue(app.buttons["chat-name"].waitForExistence(timeout: 30))
+        }
         return app
     }
 
@@ -105,13 +117,22 @@ final class RichContentUITests: XCTestCase {
         // the visible transcript band: under the top bar, over the composer
         let top = window.minY + 110
         let bottom = window.maxY - 160
-        for _ in 0..<40 {
+        // the transcript opens at its end, so a missing row is usually above; once a swipe
+        // moves nothing the top is reached and the row lies below, not built yet by the lazy
+        // stack (the iPad's charts sit under the CSV the test reveals first)
+        var older = true
+        for _ in 0..<60 {
             guard target.exists else {
-                app.swipeDown(velocity: .slow)
+                let before = older ? app.windows.firstMatch.screenshot().pngRepresentation : Data()
+                if older { app.swipeDown(velocity: .slow) } else { app.swipeUp(velocity: .slow) }
+                if older, app.windows.firstMatch.screenshot().pngRepresentation == before { older = false }
                 continue
             }
             let frame = target.frame
-            if target.isHittable && frame.minY >= top - 10 && (frame.maxY <= bottom || frame.height > bottom - top) {
+            // the band first: the iPad's desktop transcript keeps far-off rows in the tree, and
+            // asking one of those whether it is hittable fails the test ("Activation point invalid")
+            let inBand = frame.minY >= top - 10 && (frame.maxY <= bottom || frame.height > bottom - top)
+            if inBand && target.isHittable {
                 // the transcript may still jump to its end right after the
                 // launch: only a frame that holds still is on screen
                 Thread.sleep(forTimeInterval: 0.6)
@@ -139,9 +160,18 @@ final class RichContentUITests: XCTestCase {
 
     @MainActor
     private func menu(_ app: XCUIApplication, on target: XCUIElement, choose title: String) {
+        // the block may hold a button of the same name (the phone's code block "Copy code", the
+        // iPad's desktop table "Copy as CSV" / "Copy as Markdown"): the menu's item is the one
+        // that is not inside the block, measured after the press since the menu's preview moves it
         target.press(forDuration: 1.2)
-        let item = app.buttons[title]
-        XCTAssertTrue(item.waitForExistence(timeout: 5), "\(title) in the long-press menu")
+        let all = app.buttons.matching(identifier: title)
+        XCTAssertTrue(all.firstMatch.waitForExistence(timeout: 5), "\(title) in the long-press menu")
+        let inBlock = Set(target.buttons.matching(identifier: title).allElementsBoundByIndex.map { "\($0.frame)" })
+        // outside the block, and the menu's row itself (its label is the title; the row's
+        // symbol may answer to the same name with its image's label)
+        let outside = all.allElementsBoundByIndex.filter { !inBlock.contains("\($0.frame)") }
+        let item = outside.first { $0.label == title } ?? outside.first ?? all.firstMatch
+        XCTAssertTrue(item.exists, "\(title) in the long-press menu")
         item.tap()
     }
 
@@ -149,6 +179,9 @@ final class RichContentUITests: XCTestCase {
 
     @MainActor
     func testCodeBlockFoldsCopiesWrapsAndSaves() throws {
+        // the phone's block (fold + long-press menu); the iPad draws the desktop's block, a
+        // toolbar with Wrap, Save and Copy and no fold button (CodeBlockView.desktopBody)
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the phone's code block; the iPad draws the desktop's toolbar block")
         let app = try launch()
         let id = "message-rich-code-rich-1"
         let fold = reveal(app, "\(id)-fold")
@@ -284,7 +317,8 @@ final class RichContentUITests: XCTestCase {
         XCTAssertTrue(mask.waitForExistence(timeout: 5), "the hidden spoiler is a tappable chip")
         mask.tap()
         XCTAssertTrue(app.staticTexts.matching(spoiler).firstMatch.waitForExistence(timeout: 5), "revealed")
-        let note = element(app, "message-rich-extras-rich-2").links["1"]
+        // the mark's link holds the digit between a hair and an en space (MarkdownText.styleFootnotes)
+        let note = element(app, "message-rich-extras-rich-2").links.matching(NSPredicate(format: "label MATCHES %@", "\\s*1\\s*")).firstMatch
         XCTAssertTrue(note.waitForExistence(timeout: 5), "the footnote mark")
         note.tap()
         let alert = app.alerts["Footnote 1"]

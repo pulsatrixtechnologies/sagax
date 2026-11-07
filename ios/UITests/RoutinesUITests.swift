@@ -25,6 +25,8 @@ final class RoutinesUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // phone shell only: the iPad runs the desktop shell, which ignores the phone's parity screens
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the phone's Automations, opened from home-apps; the iPad's desktop shell opens them from its sidebar")
         let env = ProcessInfo.processInfo.environment
         if let endpoint = env["PARITY_ENDPOINT"], let token = env["PARITY_TOKEN"] {
             fixture = FixtureSession(endpoint: endpoint, token: token, environmentId: env["PARITY_ENVIRONMENT"].flatMap { $0.isEmpty ? nil : $0 })

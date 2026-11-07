@@ -573,11 +573,18 @@ struct MarkdownText: View {
     }
 
     /// Footnote references (`[^id]`, rewritten by the splitter as links)
-    /// read as small raised numbers.
+    /// read as small raised numbers. The bare digit is a 5 pt wide link that
+    /// a finger misses (the iPad's selectable desktop text never took the
+    /// tap): a hair space before and an en space after, inside the link,
+    /// widen what a touch can hit without moving the number off its word.
     private func styleFootnotes(_ attributed: inout AttributedString) {
-        for run in attributed.runs where run.link?.scheme == Markdown.footnoteScheme {
-            attributed[run.range].font = .system(size: 10, weight: .medium)
-            attributed[run.range].baselineOffset = 5
+        let marks = attributed.runs.filter { $0.link?.scheme == Markdown.footnoteScheme }.map { ($0.range, $0.link) }
+        for (range, link) in marks.reversed() {
+            var mark = AttributedString("\u{200A}" + String(attributed[range].characters) + "\u{2002}")
+            mark.link = link
+            mark.font = .system(size: 10, weight: .medium)
+            mark.baselineOffset = 5
+            attributed.replaceSubrange(range, with: mark)
         }
     }
 

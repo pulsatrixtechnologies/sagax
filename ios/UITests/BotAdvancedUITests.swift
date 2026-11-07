@@ -22,6 +22,9 @@ final class BotAdvancedUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // the phone's panel (profile-name, panel-gear) and its profile page; the iPad's gear opens the
+        // persona window instead, covered by the DesktopPersona* suites
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the phone's bot panel and profile page; the iPad opens the persona window (DesktopPersona* suites)")
         let env = ProcessInfo.processInfo.environment
         if let endpoint = env["PARITY_ENDPOINT"], let token = env["PARITY_TOKEN"] {
             fixture = FixtureSession(endpoint: endpoint, token: token, environmentId: env["PARITY_ENVIRONMENT"].flatMap { $0.isEmpty ? nil : $0 })

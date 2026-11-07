@@ -101,13 +101,16 @@ final class OnboardingUITests: XCTestCase {
         let termsGone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: accept)
         XCTAssertEqual(XCTWaiter.wait(for: [termsGone], timeout: 10), .completed, "the terms sheet closed")
         let banner = app.descendants(matching: .any)["demo-banner"].firstMatch
-        XCTAssertTrue(banner.waitForExistence(timeout: 10))
+        XCTAssertTrue(banner.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(app.staticTexts["Scout"].firstMatch.waitForExistence(timeout: 5))
         snapshot("onboarding-07-demo-home", app)
 
         // Approve Scout's request: the card settles and Scout answers.
         // The first tap may only put away the "needs you" island.
-        let row = app.buttons["chat-row.demo-scout"]
+        // the iPad's desktop sidebar names its rows desktop-row / desktop-pinned
+        let row = UIDevice.current.userInterfaceIdiom == .pad
+            ? app.buttons.matching(NSPredicate(format: "identifier IN %@", ["desktop-row.demo-scout", "desktop-pinned.demo-scout"])).firstMatch
+            : app.buttons["chat-row.demo-scout"]
         row.tap()
         // the approval dock: Allow once, Always allow, Deny
         let allow = app.buttons["approval-allow-once"].firstMatch

@@ -21,6 +21,8 @@ final class SidebarPrefsUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // phone shell only: the iPad runs the desktop shell, which ignores the phone's parity screens
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the phone's sidebar (home-plus); the iPad's is covered by DesktopSidebarUITests")
         let env = ProcessInfo.processInfo.environment
         guard let endpoint = env["PARITY_ENDPOINT"], let token = env["PARITY_TOKEN"], !token.isEmpty else {
             throw XCTSkip("no parity fixture: set TEST_RUNNER_PARITY_ENDPOINT and TEST_RUNNER_PARITY_TOKEN")

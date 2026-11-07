@@ -27,6 +27,10 @@ final class ProfileUITests: XCTestCase {
         self.endpoint = endpoint
         self.token = token
         environment = env["PARITY_ENVIRONMENT"].flatMap { $0.isEmpty ? nil : $0 }
+        // the phone's bot panel (profile-name, panel-gear, mascot) and its profile page; the iPad shows
+        // the desktop panel and the persona window, covered by testIPad* and the Desktop* suites
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad && !name.contains("testIPad"),
+                      "the phone's bot panel; the iPad's desktop panel is covered by testIPad* and Desktop* suites")
     }
 
     // MARK: Launch

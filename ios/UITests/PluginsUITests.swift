@@ -21,6 +21,9 @@ final class PluginsUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // the phone's Settings > Connect apps (-parityScreen 15-plugins); the iPad's desktop shell opens
+        // plugins in its Capabilities window, covered by the Desktop* and YourConnections suites
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the phone's Settings > Connect apps; the iPad's Capabilities window is the desktop's")
         let env = ProcessInfo.processInfo.environment
         guard let endpoint = env["PARITY_ENDPOINT"], let token = env["PARITY_TOKEN"] else {
             throw XCTSkip("no parity fixture: set TEST_RUNNER_PARITY_ENDPOINT and TEST_RUNNER_PARITY_TOKEN")

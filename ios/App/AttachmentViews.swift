@@ -350,6 +350,8 @@ struct TranscriptAttachmentView: View {
         .buttonStyle(.plain)
         .disabled(previewLoading || thumbnailLoading)
         .accessibilityLabel("Image: \(attachment.name)")
+        // the same state the phone's card reports, so VoiceOver (and the UI tests) know the picture came
+        .accessibilityValue(thumbnail != nil ? "Loaded" : (thumbnailLoading ? "Loading" : "Unavailable"))
         .accessibilityHint("Opens the image full screen")
     }
 

@@ -185,6 +185,11 @@
             "maxLength": 4000,
             "description": "Question or task for these teammates; later requests in the same conversation can build on earlier ones. Send separate requests when responsibilities differ."
           },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Optional one line for the person about why this goes to them (shown as a chip)."
+          },
           "rework": {
             "type": "boolean",
             "description": "True only to send concrete work again to someone whose request already finished or failed: a correction, a re-check or a retry."

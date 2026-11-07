@@ -665,6 +665,8 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       groupId: z.string().min(1).max(128).optional(),
       botIds: z.array(z.string().min(1).max(128)).min(1).max(4).refine(ids => new Set(ids).size === ids.length),
       message: z.string().trim().min(1).max(4000),
+      // One line for the person, shown on the "Sent to" chip.
+      reason: z.string().trim().max(200).optional(),
       rework: z.boolean().default(false),
       mode: z.enum(["work", "consult"]).optional(),
       relay: z.boolean().default(false),
@@ -878,7 +880,8 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
           const recipient = store.bot(target.botId)!;
           store.appendMessage(address.threadId, { role: "bot", kind: "activity",
             from: { botId: internalSender.id, name: internalSender.name, color: internalSender.color },
-            tool: { name: "Sent to " + recipient.name + (destination && destination.id !== source?.id ? " · " + destination.name : ""), ok: true },
+            tool: { name: "Sent to " + recipient.name + (destination && destination.id !== source?.id ? " · " + destination.name : ""), ok: true,
+              ...(parsed.data.reason ? { output: parsed.data.reason } : {}) },
             ...(destination ? { comm: { groupId: destination.id, threadId: node.threadId, withBotId: recipient.id, withName: recipient.name, withColor: recipient.color } }
               : { threadRef: { botId: recipient.id, threadId: node.threadId, title: store.taskByThread(recipient.id, node.threadId)!.title } }),
           });

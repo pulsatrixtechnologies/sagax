@@ -65,7 +65,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { ToolResults } from "./tools/tool-results.ts";
 import { basename, dirname, join } from "node:path";
 import type { InternalCapability, GroupTurnOperation, GroupMemberTurnOutcome } from "./index-types.ts";
-import { authorizeExternalRuntime, externalRuntimeIsActive } from "./external-runtime.ts";
+import { authorizeExternalRuntime, externalRuntimeIsActive, externalRuntimeRunId } from "./external-runtime.ts";
 
 import { z } from "zod";
 import { selectReplay, DEFAULT_REBUILD_BYTES, type ReplayEntry } from "./context/context-rebuild.ts";
@@ -32770,7 +32770,9 @@ function personForJoin(threadId: string): { person?: string } {
 
 /** The id of the external runtime's run, for its requester. */
 function externalRunId(grant: InternalCapability["externalRuntime"]): string {
-  if (grant && typeof grant === "object" && "threadId" in grant) return grant.threadId;
+  // Upstream's run id: the runtime (bot) and its thread, so two runtimes
+  // never share a run even on one thread id.
+  if (grant && typeof grant === "object" && "threadId" in grant) return externalRuntimeRunId(grant.botId, grant.threadId);
   return "external";
 }
 

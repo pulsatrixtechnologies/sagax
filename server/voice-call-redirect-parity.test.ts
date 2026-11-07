@@ -266,12 +266,14 @@ describe("voice_sms is a text like a Twilio Messages create", () => {
     expect(destructiveKindOf({ tool, input: JSON.stringify({ to: NUMBER, body: "Bonjour" }) })).toBe(destructiveKindOf(twilio));
   });
 
-  it.each(["approval", "auto", "bypass"] as const)("%s: the same card as a Twilio text", (mode) => {
+  it.each(["approval", "auto", "bypass"] as const)("%s: the same decision as a Twilio text (a card, except at Full access)", (mode) => {
     const call = (tool: string, input: string) => ({ ownerId: PERSON, botId: "bot-rocket", tool, input });
     const viaTwilio = ownerDecision({ mode, rules: [], call: call(twilio.tool, twilio.input) });
     const viaVoice = ownerDecision({ mode, rules: [], call: call("mcp__perspicax_gox__voice_sms", JSON.stringify({ to: NUMBER, body: "Bonjour" })) });
     expect(viaVoice).toEqual(viaTwilio);
-    expect(viaVoice).toMatchObject({ kind: "card" });
+    // 2026-11-06 (#2468): Full access (bypass) shows no card, a text sent on the
+    // person's behalf is the work they authorized; Approval and Auto keep it.
+    expect(viaVoice).toMatchObject(mode === "bypass" ? { kind: "allow", source: "owner-bypass" } : { kind: "card" });
   });
 
   it("allowed recipients: a listed number goes without a card, any other keeps it", () => {

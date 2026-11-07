@@ -74,6 +74,8 @@ describe("/api/bot-presets through the route table", () => {
     // A member may create a plain bot of their own, never from a preset:
     // the handler refuses `preset` below admin (member-identity.e2e.test.ts).
     expect(requiredScope("POST", "/api/bots")).toBe("client");
-    expect(requiredScope("POST", "/api/teams/export")).toBe("admin");
+    // #2045: a person exports their own team; the handler packs only their
+    // bots and keeps the organization library publish admin.
+    expect(requiredScope("POST", "/api/teams/export")).toBe("client");
   });
 });

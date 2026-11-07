@@ -57,6 +57,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   remove_reaction: "conversation",
   start_thread: "conversation",
   route_message: "conversation",
+  // #2389: whether this turn's reply alerts the bot's own person
+  set_reply_notify: "conversation",
   close_thread: "conversation",
   retry_thread: "conversation",
   create_options_card: "conversation",

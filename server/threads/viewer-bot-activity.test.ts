@@ -8,6 +8,7 @@ import { effectiveBotOwner as resolveBotOwner } from "../bots/bot-owner.ts";
 import { DATA_DIR } from "../config.ts";
 import { Store, toWireTask, type BotRecord, type TaskRecord } from "../store.ts";
 import { transpileTs } from "../testing/transpile.ts";
+import { createViewerBotActivity } from "../index-leaves/viewerBotActivity.ts";
 import { narrowBotForViewer, ownsThread, viewerThread } from "./thread-privacy.ts";
 
 const ALICE = "pr_00000000-0000-4000-8000-000000000001";
@@ -32,7 +33,8 @@ const line = (signature: string) => {
 };
 const code = transpileTs([
   line("const HELD_ACTIVITY ="), line("const selectionKey ="),
-  extract("function effectiveBotOwner("), extract("function viewerBotActivity("),
+  // viewerBotActivity moved to index-leaves/ (#1388): built below on the same host.
+  extract("function effectiveBotOwner("),
   extract("const wireTask =", "\n};\n"), extract("function listedTasks<"),
 ].join("\n"));
 
@@ -51,11 +53,15 @@ function fixture() {
   const bob = store.createTask(bot.id, "Bob private conversation", false, undefined, undefined, undefined, BOB)!;
   const selections = new Map<string, string>();
   const holds = new Set<string>();
-  const selectors = new Function(
+  const hostSelectors = new Function(
     "store", "resolveBotOwner", "localPrincipalId", "viewerSelections", "ownsThread", "continuationHolds",
     "threadsWithActiveCoordination", "cacheKeepWarmStatus", "toWireTask",
-    `${code}\nreturn { viewerBotActivity, selectionKey, wireTask, listedTasks };`,
-  )(store, resolveBotOwner, () => ALICE, selections, ownsThread, holds, () => new Set(), () => undefined, toWireTask) as Selectors;
+    `${code}\nreturn { HELD_ACTIVITY, effectiveBotOwner, selectionKey, wireTask, listedTasks };`,
+  )(store, resolveBotOwner, () => ALICE, selections, ownsThread, holds, () => new Set(), () => undefined, toWireTask) as Omit<Selectors, "viewerBotActivity"> & {
+    HELD_ACTIVITY: unknown; effectiveBotOwner(bot: BotRecord): string;
+  };
+  const host = { store, viewerSelections: selections, continuationHolds: holds, ...hostSelectors };
+  const selectors: Selectors = { ...hostSelectors, viewerBotActivity: createViewerBotActivity(() => host) };
   const activity = (person: string) => selectors.viewerBotActivity(bot, person);
   const select = (person: string, threadId: string) => selections.set(selectors.selectionKey(bot.id, person), threadId);
   const project = (person: string, fromFrame = false) => {

@@ -209,7 +209,10 @@ describe("the stall handler", () => {
     const from = source.indexOf("\nconst TURN_STALL_MS"), to = source.indexOf("\nwatchdog.start();");
     if (from < 0 || to <= from) throw new Error("Stall handler section moved");
     // the section reads the stopped-turn text through the leaf host (#1388): bind it to the section's own turnStops
-    const code = transpileTs(`globalThis.leafHost = {};\n${source.slice(from, to)}\nObject.assign(leafHost, { turnStops, store, stoppedTurnOutcome });\nglobalThis.watchdog = watchdog;\nglobalThis.stoppedTurnText = stoppedTurnText;`);
+    // the leaf binding itself sits with the other leaves, above the section, so bind it here when the section lacks it
+    const section = source.slice(from, to);
+    const bindLeaf = section.includes("const stoppedTurnText = createStoppedTurnText(") ? "" : "const stoppedTurnText = createStoppedTurnText(getLeafHost);\n";
+    const code = transpileTs(`globalThis.leafHost = {};\n${bindLeaf}${section}\nObject.assign(leafHost, { turnStops, store, stoppedTurnOutcome });\nglobalThis.watchdog = watchdog;\nglobalThis.stoppedTurnText = stoppedTurnText;`);
     const messages: Message[] = [
       { id: "a", role: "bot", kind: "activity", at: 1, turnId: "turn-1", tool: { name: "Bash", ok: true, itemId: "i1" } } as Message,
       { id: "b", role: "bot", kind: "text", at: 2, turnId: "turn-1", text: "Exporting the second half now." } as Message,

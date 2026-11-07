@@ -132,18 +132,21 @@ describe("organisation desktop policy overlay", () => {
   });
 });
 
-// Every computer claim in index.ts goes through bindTurnComputer. Run its
-// actual guard (not a copy), and the refusal it asks, against a synthetic policy.
+// Every computer claim goes through bindTurnComputer (index-leaves/ since
+// #1388). Run its actual guard (not a copy), and the refusal it asks from
+// index.ts, against a synthetic policy.
 describe("claim-time computer refusal in bindTurnComputer", () => {
   const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const start = source.indexOf("\nasync function bindTurnComputer(");
-  const guardEnd = source.indexOf("  const active = () =>", start);
-  const guard = source.slice(start + 1, guardEnd) + "  return \"claimed\";\n}";
+  const leaf = readFileSync(new URL("./index-leaves/bindTurnComputer.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const start = leaf.indexOf("\nasync function bindTurnComputer(");
+  const guardEnd = leaf.indexOf("  const active = () =>", start);
+  const guard = leaf.slice(start + 1, guardEnd) + "  return \"claimed\";\n}";
   const refusalStart = source.indexOf("\nfunction computerPlaceRefusal(");
   const refusal = source.slice(refusalStart + 1, source.indexOf("\n}\n", refusalStart) + 3);
   const code = transpileTs(refusal + guard);
   const bind = (managedPolicy: ManagedDesktopPolicy) =>
-    new Function("managedPolicy", "computerKindForResource", `${code}; return bindTurnComputer;`)(
+    new Function("managedPolicy", "computerKindForResource",
+      `${code}; const getHost = () => ({ computerPlaceRefusal }); return bindTurnComputer;`)(
       managedPolicy, computerKindForResource,
     ) as (owner: unknown, resource: string) => Promise<string>;
 

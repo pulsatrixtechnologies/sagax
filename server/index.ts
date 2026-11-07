@@ -581,7 +581,7 @@ import { toolWorkingStep } from "./working-step.ts";
 import { autoRecallLogLine, turnStartLogLine } from "./turns/turn-log.ts";
 import { CONFIDENTIAL_INCIDENT_TEXT, CONFIDENTIAL_PEER_REFUSED, ConfidentialMemoryPasses, confidentialBrowserSession } from "./threads/confidential-threads.ts";
 import { makeCapContinuationSubscriber } from "./turns/turn-continuation.ts";
-import { TurnStops, stoppedTurnOutcome } from "./turns/turn-outcome.ts";
+import { TurnStops, outwardActions, stoppedTurnOutcome } from "./turns/turn-outcome.ts";
 import { buildRecoveryText, buildTurnContext, engineIsFresh, replaysNatively } from "./turns/turn-context.ts";
 import { ReplayBuffer } from "./streams/sse-replay.ts";
 import { Handoffs, handedStateUsable, isContextMessage, recordHanded, renderUnseen, sessionStart, unseenMessages, withUnseenMessages } from "./context/delta-context.ts";
@@ -13943,7 +13943,19 @@ const coordinator: Coordinator = createCoordinator({
     // level (omb #3470). `source` is the requester's node whose parents lead
     // up the chain.
     levelOf: (target, source) => delegatedLevel.levelOf(target, source),
-    chiefOf: address => Boolean(store.bot(address.botId)?.chiefOfStaff)
+    chiefOf: address => Boolean(store.bot(address.botId)?.chiefOfStaff),
+    // A person's cut root never reruns after a follow-up in its thread: that
+    // would hand the person's words to a model again, or redo an older
+    // request (port of OpenMausBot #2735). Otherwise a cut turn that already
+    // sent, posted, pushed or paid ends with what it did (contract §5).
+    outward: node => {
+      const followup = node.parentId || node.groupId ? undefined : followupAtBoot(node.threadId);
+      if (followup) {
+        followupEndedRoots.set(node.id, followup === "pending" ? "turn interrupted — Sagax restarted" : undefined);
+        return [followup === "pending" ? "queued follow-up waiting" : "queued follow-up dispatched"];
+      }
+      return outwardActions(turnRows(node));
+    }
   }
 });
 threadsWithActiveCoordination = () => coordinator.activeDirectThreads();

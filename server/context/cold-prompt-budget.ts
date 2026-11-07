@@ -7,7 +7,7 @@
 // 4 KB each); this module applies a tighter per-section budget on
 // automation turns, replaces oversized blocks with a short summary that
 // points at on-demand tools, and bounds email-watch event payloads.
-import type { PromptPart } from "../system-prompt.ts";
+import { SIGN_IN_PROMPT, type PromptPart } from "../system-prompt.ts";
 
 /** Soft ceiling for the whole system prompt of one cold / automation turn. */
 export const COLD_PROMPT_TOTAL_BUDGET = 40_000;
@@ -214,7 +214,19 @@ export function enforceColdPromptTotal(parts: readonly PromptPart[], totalBudget
 
 /** Cap sections then the total. Used for automation / cold turns. */
 export function lightenColdPrompt(parts: readonly PromptPart[]): PromptPart[] {
-  return enforceColdPromptTotal(applyColdPromptBudgets(parts));
+  // The sign-in policy (about 1.3 KB since OMB 0.1.107) is longer than the
+  // computer and browser caps: a cap would cut it midway. Hold it out of the
+  // budgets and put it back whole where it was said
+  // (onDemandPromptParts says it once, at the end of one section).
+  const heldAt = parts.findIndex((part) => part.text.endsWith(SIGN_IN_PROMPT));
+  const held = heldAt < 0 ? parts : parts.map((part, index) => index === heldAt
+    ? { ...part, text: part.text.slice(0, -SIGN_IN_PROMPT.length) } : part);
+  const light = enforceColdPromptTotal(applyColdPromptBudgets(held));
+  if (heldAt < 0) return light;
+  const id = parts[heldAt]!.id;
+  const back = light.findIndex((part) => part.id === id);
+  if (back < 0) return [...light, { ...parts[heldAt]!, text: SIGN_IN_PROMPT }];
+  return light.map((part, index) => index === back ? { ...part, text: part.text + SIGN_IN_PROMPT } : part);
 }
 
 /** Allowed size after cold budgets: the section budget, or the lazy summary

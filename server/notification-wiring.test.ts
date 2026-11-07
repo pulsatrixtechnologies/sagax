@@ -57,6 +57,11 @@ posixOnly("routine failure notification wiring", () => {
     chmodSync(FAKE_CLI, 0o755);
     home = mkdtempSync(join(tmpdir(), "omb-notifications-e2e-"));
     mkdirSync(join(home, ".sagax"), { recursive: true });
+    // A routine run checks the engine's sign-in first (routine-readiness.ts);
+    // this fake CLI stands for a signed-in account, without real credentials,
+    // so the run reaches the engine and fails there, not as "signed out".
+    mkdirSync(join(home, ".grok"), { recursive: true });
+    writeFileSync(join(home, ".grok", "auth.json"), '{"fixture":"offline"}\n', { mode: 0o600 });
     writeFileSync(
       join(home, ".sagax", "config.json"),
       JSON.stringify({

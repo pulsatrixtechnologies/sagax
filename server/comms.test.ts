@@ -111,6 +111,10 @@ describe("native MCP compatibility refusals", () => {
     writeFileSync(join(home, ".sagax", "config.json"), JSON.stringify({ instances: {
       grok: { driver: "grokAgent", environment: { FAKE_ACP_MODE: "ask-peer" }, config: { cli: FAKE_CLI, fullAuto: true } },
       askerDelegate: { driver: "grokAgent", environment: { FAKE_ACP_MODE: "delegate-peer" }, config: { cli: FAKE_CLI, fullAuto: true } },
+      // The shared fixture moved its hand-offs to coordinate_bots (#2204), so
+      // these two call the removed tools by name, the way an outdated agent would.
+      legacyAsk: { driver: "grokAgent", environment: { FAKE_ACP_MODE: "mcp-call", FAKE_ACP_MCP_CALLS: "agents:ask_bot" }, config: { cli: FAKE_CLI, fullAuto: true } },
+      legacyDelegate: { driver: "grokAgent", environment: { FAKE_ACP_MODE: "mcp-call", FAKE_ACP_MCP_CALLS: "agents:delegate_bot" }, config: { cli: FAKE_CLI, fullAuto: true } },
     } }));
     child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], { cwd: join(SERVER_DIR, ".."),
       env: { ...(process.env.PATH ? { PATH: process.env.PATH } : {}), ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
@@ -135,8 +139,8 @@ describe("native MCP compatibility refusals", () => {
   });
 
   it.each([
-    { instanceId: "grok", tool: "ask_bot", prefix: "peer error:" },
-    { instanceId: "askerDelegate", tool: "delegate_bot", prefix: "delegate error:" },
+    { instanceId: "legacyAsk", tool: "ask_bot", prefix: "agents:ask_bot -> error" },
+    { instanceId: "legacyDelegate", tool: "delegate_bot", prefix: "agents:delegate_bot -> error" },
   ])("reports the removed $tool fixture call in ordinary chat instead of an empty reply", async ({ instanceId, tool, prefix }) => {
     const caller = (await api("POST", "/api/bots")).body.bot;
     await api("PATCH", `/api/bots/${caller.id}`, {
@@ -153,7 +157,7 @@ describe("native MCP compatibility refusals", () => {
     const answer = current.messages.findLast((message: any) => message.role === "bot" && message.kind === "text");
     expect(answer.text).toContain(`Unknown tool: ${tool}`);
     expect(answer.text).toContain("Fixture MCP request failed");
-    expect(current.messages.some((message: any) => /^(peer says:|delegated:)\s*$/.test(message.text ?? ""))).toBe(false);
+    expect(current.messages.some((message: any) => /^(peer says:|delegated:|agents:\w+ ->)\s*$/.test(message.text ?? ""))).toBe(false);
     await api("PATCH", `/api/bots/${caller.id}`, { hidden: true });
   }, 30_000);
 
@@ -236,7 +240,8 @@ async function openCard(f: CommsRuntimeFixture, threadId: string, text?: string)
 
 async function reviewPair(f: CommsRuntimeFixture, deny = false) {
   const peer = await f.bot("Helper");
-  const owner = await f.bot("Asker", { approvePeerComms: true });
+  // The peer card stands below Full access only (#1819); Full is the default (#2111).
+  const owner = await f.bot("Asker", { approvePeerComms: true, approvalMode: "ask" });
   f.plan[owner.id] = { steps: [{ ...coordinate(peer, "Guarded work"), ...(deny ? { expectError: true } : {}) }], reply: deny ? "Denied by user; no work sent" : "Requested work", resumeReply: "Guarded result received" };
   f.plan[peer.id] = { reply: "Guarded result" };
   f.save();
@@ -302,7 +307,7 @@ describe("routine comms on the job runtime", () => {
       return Boolean(operator);
     }, { timeout: 20_000, interval: 100 }).toBe(true);
     expect(operator!).toMatchObject({ title: "Product designer", description: "Design and review the user experience.", section: "Launch",
-      approvalMode: "auto", approvePeerComms: false, modelSelection: defaults });
+      approvalMode: "full", approvePeerComms: false, modelSelection: defaults });
     expect((operator! as any).chiefOfStaff).toBeFalsy();
     expect((await f.messages(run.threadId)).some((message: any) => message.card?.title?.includes("Apply setup"))).toBe(false);
     await finishRun(f, run);
@@ -346,11 +351,10 @@ describe("routine comms on the job runtime", () => {
     expect(turns(f, peer)).toHaveLength(2);
     expect(turns(f, owner).filter(turn => turn.resumed)).toHaveLength(2);
     for (const child of children(f, peer)) {
-      // The legacy turn adapter maps WorkOrigin.OUTSIDE to outside/chat
-      // with this run thread as ref (runtime-coordinator.ts runtimeOrigin).
-      // A routine is intentionally OUTSIDE in requestWorkOrigin: neither
-      // the first handoff nor a later rework gains the person's authority.
-      expect(child.origin).toMatchObject({ kind: "outside", source: "chat", ref: run.threadId });
+      // A routine run opens its hand-offs with a routine origin, its routine
+      // as ref (index.ts handoffOpener, #2204): neither the first handoff
+      // nor a later rework gains the person's authority.
+      expect(child.origin).toMatchObject({ kind: "routine", source: "routine", ref: run.routineId });
       expect(child.origin.quote).toBeUndefined();
       const requests = (await f.messages(child.assignee.destination.threadId)).filter((message: any) => message.roomRequest?.id === child.id && message.roomRequest.phase === "request");
       expect(requests).toHaveLength(1);
@@ -419,7 +423,9 @@ describe("routine comms on the job runtime", () => {
 
   it("reports a teammate's approval immediately to the Chief and settles the linked waiting chip", () => withCommsRuntime(async f => {
     const peer = await f.bot("Gatekeeper", { approvalMode: "ask" });
-    const owner = await f.bot("Warden", { chiefOfStaff: true });
+    // The Chief's level flows down to the teammate it hands work to (#2111):
+    // below Full, so the teammate's own Bash call still raises its card.
+    const owner = await f.bot("Warden", { chiefOfStaff: true, approvalMode: "ask" });
     f.plan[owner.id] = { steps: [coordinate(peer, "Guarded task")], reply: "Assigned", resumeReply: "Guarded task finished" };
     f.plan[peer.id] = { approve: { tool_name: "Bash", input: { command: "rm -rf build" } }, reply: "Guarded work complete" };
     f.save();
@@ -478,7 +484,8 @@ describe("routine comms on the job runtime", () => {
 
   it("keeps an allowed native consultation through busy provider reload and resumes once without asking twice", () => withCommsRuntime(async f => {
     const peer = await f.bot("ReloadHelper", { modelSelection: { instanceId: "compat", model: "fake-model" } });
-    const owner = await f.bot("ReloadAsker", { approvePeerComms: true });
+    // The peer card stands below Full access only (#1819); Full is the default (#2111).
+    const owner = await f.bot("ReloadAsker", { approvePeerComms: true, approvalMode: "ask" });
     f.plan[owner.id] = { steps: [coordinate(peer, "Approved consultation", "consult")], reply: "Consultation queued", resumeReply: "Approved result received" };
     f.save();
     await f.api("PATCH", "/api/config", { threads: { maxConcurrentPerBot: 1 } });

@@ -8,7 +8,11 @@ vi.mock("node:child_process", async (importOriginal) => ({
   execFile: mocks.execFile,
 }));
 
-import { killCliTree } from "./procs.ts";
+// The vitest setup file (server/testing/setup.ts) already loads procs.ts
+// through the message database's imports, bound to the real child_process.
+// A fresh copy is loaded here so it picks up the mock above.
+vi.resetModules();
+const { killCliTree } = await import("./procs.ts");
 
 function child(): ChildProcess {
   return Object.assign(new EventEmitter(), {

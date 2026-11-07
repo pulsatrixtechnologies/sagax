@@ -81,8 +81,8 @@ describe("importing a whole team", () => {
         requiredApps: [expect.objectContaining({ slug: "hubspot" })] },
     });
     expect(lead.avatarUrl).toMatch(/^\/api\/attachments\/[\w-]+\.png$/);
-    // Approval is never taken from the file: the bot starts at the new-bot default, Approve for me (51647a630).
-    expect(lead).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    // Approval is never taken from the file (it suggests "auto"): the bot starts at the new-bot default, Full access (bdeb45dadb, omb #2808).
+    expect(lead).toMatchObject({ approvalMode: "full", autoApprove: false });
     expect(lead.installedPackage?.installId).toMatch(/^[0-9a-f-]{36}$/);
     expect(new Set(result.bots.map((bot) => bot.installedPackage?.installId)).size).toBe(1);
     expect(app.sections.readSectionContext("Sales desk")?.text).toContain("49 per seat");

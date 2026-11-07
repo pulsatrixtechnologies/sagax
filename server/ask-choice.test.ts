@@ -67,7 +67,9 @@ describe("ask_choice, the clickable question every engine can use", () => {
   it("puts the rule in the prompt of every engine, and every engine has a question tool", () => {
     const natives = JSON.parse(readFileSync(new URL("./drivers/engine-native-tools.json", import.meta.url), "utf8")) as { engines: Record<string, { solo: string[]; org: string[] }> };
     const prompt = buildSystemPrompt("You are Kiwi.", "", []).stable;
-    expect(prompt).toContain("Always ask through the interactive question tool, never in your reply text");
+    // 1fccfa2eb4: a blocking decision is an actionable card, the engine's own question tool first, else ask_choice
+    expect(prompt).toContain("Every decision that blocks your work MUST be an actionable card");
+    expect(prompt).toContain("use your native question tool (AskUserQuestion, ask_user_question, request_user_input or ask_user), else the Sagax tool ask_choice");
     expect(prompt).toContain("ask_choice");
     // an engine with a native question tool uses it; the others (and an organization turn that withholds it) get ask_choice from the agents server
     const withNative = Object.entries(natives.engines).filter(([, tools]) => tools.org.some((name) => /ask_?user|request_user_input/i.test(name))).map(([engine]) => engine);

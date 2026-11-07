@@ -189,7 +189,9 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   if (
     (orchestration?.followMentions ?? true) &&
     !orchestration?.roomHandoffId &&
-    !coordinator.has(internalGeneration) &&
+    // Since #2390 every room turn opens its own runtime root under this id:
+    // only a node the runtime dispatched skips the mention hop, not that root.
+    (!coordinator.has(internalGeneration) || (ctx.roomRootOpened && !orchestration?.coordination)) &&
     !isCancelled?.() &&
     hop < MAX_GROUP_HOPS &&
     replyText.trim()
@@ -211,7 +213,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
         role: "bot",
         kind: "activity",
         tool: {
-          name: `${peer.name} isn't in this room, so that mention didn't reach them  -  add them to the room to bring them in.`,
+          name: `${peer.name} isn't in this room, so that mention didn't reach them. Add them to the room to bring them in.`,
           ok: false
         }
       });

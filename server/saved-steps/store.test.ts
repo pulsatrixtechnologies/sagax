@@ -23,11 +23,14 @@ describe("RecipeStore", () => {
   const onDisk = () => JSON.parse(readFileSync(file(), "utf8")) as { version: number; recipes: Recipe[] };
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "saved-steps-store-"));
+    // The store's folder sits in its own temp parent, so the escape check
+    // below never sees a stray "x" another process left in the shared tmpdir.
+    dir = join(mkdtempSync(join(tmpdir(), "saved-steps-store-")), "bots");
+    mkdirSync(dir);
     clock = 5_000;
     store = new RecipeStore({ folder: (botId) => join(dir, botId), now: () => clock });
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dirname(dir), { recursive: true, force: true }));
 
   it("saves and finds by key, in a 0600 file", () => {
     store.save("b1", recipe("r1", "open notes"));

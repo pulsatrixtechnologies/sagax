@@ -7,9 +7,12 @@ import { RuntimeCoordinator } from "../runtime-coordinator.ts";
 import { ownsThread, threadOwner } from "../threads/thread-privacy.ts";
 import { transpileTs } from "../testing/transpile.ts";
 import { queuedBehindPersonText } from "./waiting-on-person.ts";
+import { createCoordinatorSlotUse } from "../index-leaves/coordinatorSlotUse.ts";
+import { createNoteQueuedBehindPerson } from "../index-leaves/noteQueuedBehindPerson.ts";
+import { createQueuedBehindPerson } from "../index-leaves/queuedBehindPerson.ts";
 
-// Compose the actual host admission/receipt functions with the actual
-// runtime coordinator. DEL-08 must keep the waiting receipt while it uses
+// Compose the actual host admission/receipt functions (index-leaves/ since
+// #1388, queuedStatus still in index.ts) with the actual runtime coordinator. DEL-08 must keep the waiting receipt while it uses
 // slotUse instead of busy, including the source person's private audience.
 const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
 const section = (from: string, to: string) => {
@@ -19,9 +22,8 @@ const section = (from: string, to: string) => {
   return source.slice(start, end);
 };
 const hostCode = transpileTs([
-  section("function coordinatorSlotUse(", "/** Routine and webhook dispatch"),
-  section("function queuedBehindPerson(", "// The coordinator runs every hand-off"),
-  "globalThis.slotUse = coordinatorSlotUse; globalThis.status = queuedStatus;",
+  section("function queuedStatus(", "/** Queued work already told why it waits"),
+  "globalThis.status = queuedStatus;",
 ].join("\n"));
 
 function fixture(options: { organization?: boolean; room?: boolean; cardOwner?: string; readable?: boolean; confidential?: boolean; revoked?: boolean } = {}) {
@@ -37,7 +39,8 @@ function fixture(options: { organization?: boolean; room?: boolean; cardOwner?: 
   const messages: Array<{ threadId: string; row: any }> = [];
   const runs: HandoffView[] = [];
   const context = vm.createContext({
-    cfg: {}, privateThreadOwner: threadOwner, ownsThread, queuedBehindPersonText,
+    // one thread per bot: the leaf reads botMaxConcurrentThreads(bot, cfg)
+    cfg: { threads: { maxConcurrentPerBot: 1 } }, queuedBehindPersonNoted: new Set<string>(), privateThreadOwner: threadOwner, ownsThread, queuedBehindPersonText,
     privateThreads: () => options.organization === true,
     effectiveBotOwner: (bot: { ownerUserId: string }) => bot.ownerUserId,
     botThreadReadable: (_bot: unknown, threadId: string, viewer: string) => options.readable !== false &&
@@ -55,9 +58,12 @@ function fixture(options: { organization?: boolean; room?: boolean; cardOwner?: 
     activeGroupTurnForBot: () => undefined,
     botAtThreadCapacity: () => state.occupied,
     botBusyThreadCount: () => state.occupied ? 1 : 0,
-    botMaxConcurrentThreads: () => 1,
     openPersonCard: (threadId: string) => state.occupied && threadId === cardTask.threadId ? { kind: "approval" } : undefined,
   });
+  const leafHost = () => context as Record<string, any>;
+  context.queuedBehindPerson = createQueuedBehindPerson(leafHost);
+  context.noteQueuedBehindPerson = createNoteQueuedBehindPerson(leafHost);
+  context.slotUse = createCoordinatorSlotUse(leafHost);
   vm.runInContext(hostCode, context, { filename: "index.ts (queued-card host fixture)" });
   const host: CoordinatorHost = {
     validate: () => undefined,

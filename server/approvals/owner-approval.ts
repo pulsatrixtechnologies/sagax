@@ -573,13 +573,20 @@ export function ownerDecision(input: {
   // An ask rule shows its card even in Full access (bypass), where it used
   // to be skipped; the level only decides what no rule covers.
   if (rule?.behavior === "ask") return { kind: "card", reason: "ask-rule", rule };
+  // 2026-11-06 (the owner: "my bot is even in bypass mode"): Full access (bypass)
+  // asks nothing the person did not keep with a rule. A send on their
+  // behalf, a delete or a bulk change is the work they authorized; the
+  // organization's rules and their own Ask/Deny rules (read above and in
+  // autoVerdict), isolation and sensitive paths are what still stands
+  // (full-access-gate.ts).
+  if (input.mode === "bypass") return { kind: "allow", source: "owner-bypass" };
   const destructive = destructiveKindOf(input.call);
   // 2026-10-26: a delete or a bulk change in the person's own isolated
-  // environment is theirs at auto and bypass; Approval, a message to a
-  // third party and anything outside that environment keep the card.
+  // environment is theirs at auto; Approval, a message to a third party
+  // and anything outside that environment keep the card (answered by an
+  // Always allow rule saved on it).
   const ownEnvironmentChange = input.ownEnvironment === true && input.mode !== "approval" && (destructive === "delete" || destructive === "bulk");
   if (destructive && !ownEnvironmentChange) return { kind: "card", reason: "destructive", destructive };
-  if (input.mode === "bypass") return { kind: "allow", source: "owner-bypass" };
   if (input.mode === "auto") return { kind: "allow", source: "owner-auto" };
   return { kind: "card", reason: "no-rule" };
 }
@@ -675,11 +682,13 @@ export function ruleCandidateFor(call: Pick<RuleCall, "tool" | "input" | "hints"
   }
   const scope: RuleScope = { ...full };
   delete scope[PROGRAM_KEY];
-  // 2026-10-20 (security review): a call with arguments but no target the
-  // scope reads (a query, a body, recipients under another key) keeps the
-  // whole request, never the whole tool
-  const args = parseArgs(call.input);
-  if (options.wholeCall || (Object.keys(scope).length === 0 && args && Object.keys(args).length > 0)) scope[WHOLE_CALL_KEY] = wholeCallDigest(call.input);
+  // 2026-11-06 (the owner: "I have chosen always allow it does not respect it"):
+  // a call with arguments but no target the scope reads (a post's text, a
+  // query, a body) keeps the tool on this server for this bot. Keeping the
+  // digest of the whole request (2026-10-20) made a rule that never matched
+  // the next call, so the card came back on every post. Only `wholeCall`
+  // (an admin's card) keeps the exact request.
+  if (options.wholeCall) scope[WHOLE_CALL_KEY] = wholeCallDigest(call.input);
   const destructive = destructiveKindOf(call);
   return {
     tool: normalizeRuleTool(call.tool),
@@ -744,7 +753,11 @@ export function cardRuleCandidate(
   const held = situation.held === true || situation.from === "hold";
   const nativeShell = situation.from === "admin" && !held && typeof call.command === "string" && call.command.trim().length > 0;
   const candidate = ruleCandidateFor({ tool: call.tool, input, ...(call.cwd ? { cwd: call.cwd } : {}) }, words, {
-    wholeCall: situation.from !== undefined && !nativeShell,
+    // 2026-11-06: a held card and a turn that is not the person's own keep
+    // the scope an ordinary card keeps (the target, else this tool), so
+    // the rule the person saved answers the next one; an admin's card on a
+    // member's bot (the shared server) keeps the exact request.
+    wholeCall: situation.from === "admin" && !nativeShell,
     programScope: !held && (situation.from !== "admin" || nativeShell),
   });
   if (!scopeKeepable(candidate.scope)) {

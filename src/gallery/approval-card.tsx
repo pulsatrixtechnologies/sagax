@@ -73,7 +73,7 @@ const cards: Record<string, { card: NonNullable<Message["card"]>; tool: string }
       subtitle: "",
       toolInput: JSON.stringify({ to: ["client@example.com"], subject: "Suivi du billet", body: "Bonjour, voici le suivi." }),
       options: ["Allow", "Deny"],
-      held: "This sends something on your behalf, so it always asks first.",
+      held: "This sends something on your behalf. Allow it once, or always for this tool.",
       heldCode: "approval.held.outbound",
       ownerRule: { tool: "mcp__perspicax__outlook_send_mail", scope: { to: "client@example.com" }, description: "Send an email (client@example.com)", destructive: "external-message" },
     } as unknown as NonNullable<Message["card"]>,

@@ -2479,7 +2479,7 @@
   "commandAllowlist.removing": "正在移除…",
   "commandAllowlist.retry": "重試",
   "commandAllowlist.close": "關閉指令允許清單",
-  "approval.held.outbound": "這會代表你傳送內容，因此一律會先詢問。",
+  "approval.held.outbound": "這會代表你傳送內容。可允許這一次，或一律允許此工具。",
   "lending.activity.title": "這台電腦上的活動",
   "lending.activity.empty": "尚無活動。伺服器上機器人的每項要求都會列在這裡，包括被拒絕的要求。",
   "lending.activity.refused": "已拒絕",

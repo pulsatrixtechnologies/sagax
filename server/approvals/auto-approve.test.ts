@@ -101,9 +101,14 @@ describe("autoVerdict", () => {
     expect(autoVerdict("full", "Read", { ownFilesRead: true }).source).toBe("own-files");
     expect(autoVerdict("ask", "Bash", { ownFilesRead: false })).toEqual({ approve: null, source: "no-grant" });
   });
-  it("never uses a saved command grant to silently send on the person's behalf", () => {
+  it("a send the person saved with Always allow runs; without it the outbound card stays (2026-11-06)", () => {
     for (const mode of ["ask", "edits", "auto", "custom"] as const) {
-      expect(autoVerdict(mode, "mcp__composio__GMAIL_SEND_DRAFT", { commandAllowed: true })).toEqual({ approve: null, source: "outbound-guard" });
+      expect(autoVerdict(mode, "mcp__composio__GMAIL_SEND_DRAFT", { commandAllowed: true }).source).toBe("command-allowlist");
+      expect(autoVerdict(mode, "mcp__X__create_posts", { toolAllowed: true }).source).toBe("tool-allowlist");
+      expect(autoVerdict(mode, "mcp__composio__GMAIL_SEND_DRAFT")).toEqual({ approve: null, source: "outbound-guard" });
+      // an organization rule Demander d'abord / Refuser still wins
+      expect(autoVerdict(mode, "mcp__X__create_posts", { toolAllowed: true, customRule: { behavior: "ask", id: "orule_1" } }).approve).toBeNull();
+      expect(autoVerdict(mode, "mcp__X__create_posts", { toolAllowed: true, customRule: { behavior: "deny", id: "orule_1" } }).approve).toBeNull();
     }
     // Native Full still belongs to the provider; Composio's relay enforces its independent gate.
     expect(autoVerdict("full", "GMAIL_SEND_EMAIL").source).toBe("full-access");
@@ -117,14 +122,14 @@ describe("autoVerdict", () => {
     }
     expect(autoVerdict("full", "Bash", { commandAllowed: true, requiresExplicitApproval: true }).source).toBe("full-access");
   });
-  it("applies an exact saved MCP read grant without bypassing outbound or sandbox guards", () => {
+  it("applies an exact saved MCP grant, a send included, never past an explicit hold", () => {
     for (const mode of ["ask", "edits", "auto", "custom"] as const) {
       expect(autoVerdict(mode, "mcp__linear__list_issues", { toolAllowed: true })).toEqual({
         approve: "approved mcp__linear__list_issues (always allowed)",
         source: "tool-allowlist",
       });
       expect(autoVerdict(mode, "mcp__linear__list_issues", { toolAllowed: true, requiresExplicitApproval: true }).approve).toBeNull();
-      expect(autoVerdict(mode, "mcp__linear__create_comment", { toolAllowed: true }).approve).toBeNull();
+      expect(autoVerdict(mode, "mcp__linear__create_comment", { toolAllowed: true }).source).toBe("tool-allowlist");
       expect(autoVerdict(mode, "AskUserQuestion", { toolAllowed: true }).approve).toBeNull();
     }
   });

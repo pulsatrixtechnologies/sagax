@@ -26,7 +26,7 @@ function outbound(calls: OutboundCall[] | undefined, subtitle = linearSubtitle):
     options: ["Allow", "Deny"],
     requestId: "req",
     tool: "LINEAR_CREATE_LINEAR_COMMENT",
-    held: "This sends something on your behalf, so it always asks first.",
+    held: "This sends something on your behalf. Allow it once, or always for this tool.",
     heldCode: "approval.held.outbound",
     outboundRequest: { tool: "LINEAR_CREATE_LINEAR_COMMENT", app: "Linear", ...(calls ? { calls } : {}) },
   };

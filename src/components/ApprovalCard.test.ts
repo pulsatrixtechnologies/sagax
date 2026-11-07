@@ -526,7 +526,7 @@ describe("ApprovalCard outbound holds", () => {
       requestId: "req-outbound",
       tool: "LINEAR_CREATE_LINEAR_COMMENT",
       heldCode: "approval.held.outbound",
-      held: "This sends something on your behalf, so it always asks first.",
+      held: "This sends something on your behalf. Allow it once, or always for this tool.",
       answered,
       outboundRequest: {
         tool: "LINEAR_CREATE_LINEAR_COMMENT",

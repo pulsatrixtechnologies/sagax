@@ -40,6 +40,12 @@ export interface WireVideoWidget {
   kind: VideoWidgetKind;
   /** Client playback URL (often `/api/media/proxy/<token>`: a signed, thread-bound, 4 h capability for this one media URL, never a session credential). */
   playbackUrl: string;
+  /**
+   * Original media URL when `playbackUrl` is a proxy path: the player falls
+   * back to it when the proxy cannot serve the stream (a host the server
+   * refuses or cannot reach, while the browser can).
+   */
+  directUrl?: string;
   /** Stream container, decided server side from the original URL. Absent on older messages. */
   format?: VideoWidgetFormat;
   title?: string;

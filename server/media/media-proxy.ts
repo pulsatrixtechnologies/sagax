@@ -80,6 +80,25 @@ export function needsMediaProxy(url: string, source?: string): boolean {
   return false;
 }
 
+function isHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** An http(s) URL without credentials the browser can try by itself. */
+function browserFetchable(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:") && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
 export function mintMediaProxyToken(url: string, threadId?: string, now = Date.now()): string {
   const body: MediaProxyBody = { u: url, e: now + TOKEN_TTL_MS, ...(threadId ? { t: threadId } : {}) };
   const payload = b64url(JSON.stringify(body));
@@ -112,15 +131,20 @@ export function wireVideoFromEmit(
   threadId: string,
   now = Date.now(),
 ): WireVideoWidget {
-  const proxied = needsMediaProxy(emit.url, emit.source);
+  const format = emit.format ?? videoFormatFromUrl(emit.url);
+  // HLS always goes through the proxy: it rewrites child playlists and
+  // segments, so playback no longer depends on the upstream's CORS headers.
+  const proxied = needsMediaProxy(emit.url, emit.source) || (format === "hls" && isHttpUrl(emit.url));
   const playbackUrl = proxied ? mediaProxyPath(mintMediaProxyToken(emit.url, threadId, now)) : emit.url;
+  // The browser may reach a host the proxy refuses (split DNS answering a
+  // private address): the player falls back to the original URL.
+  const directUrl = proxied && browserFetchable(emit.url) ? emit.url : undefined;
   const posterUrl = emit.posterUrl && needsMediaProxy(emit.posterUrl, emit.source)
     ? mediaProxyPath(mintMediaProxyToken(emit.posterUrl, threadId, now))
     : emit.posterUrl;
   const avatarUrl = emit.avatarUrl && needsMediaProxy(emit.avatarUrl, emit.source)
     ? mediaProxyPath(mintMediaProxyToken(emit.avatarUrl, threadId, now))
     : emit.avatarUrl;
-  const format = emit.format ?? videoFormatFromUrl(emit.url);
   // The card stops working at the first of the share link's own expiry and
   // the proxy token's; the player then offers to ask the bot for a new link.
   const expiries = [emit.expiresAt, shareLinkExpiresAt(emit.url), proxied ? now + MEDIA_PROXY_TOKEN_TTL_MS : undefined]
@@ -129,6 +153,7 @@ export function wireVideoFromEmit(
   return {
     kind: emit.kind ?? "vod",
     playbackUrl,
+    ...(directUrl ? { directUrl } : {}),
     ...(format ? { format } : {}),
     title: emit.title,
     streamer: emit.streamer,
@@ -154,18 +179,16 @@ function isPlaylistContentType(contentType: string | undefined): boolean {
 
 /**
  * Rewrite the URIs of an HLS playlist (media or multivariant) so a player
- * that loaded it from `/api/media/proxy/<token>` can still reach segments,
- * keys, init maps and variant playlists:
- * - relative URIs resolve against the upstream playlist URL and go back
- *   through the proxy with their own signed token (same origin only, which
- *   is the origin the server already chose to proxy);
- * - absolute URIs on that same origin are proxied only when the browser
- *   could not reach them (private host, credentials);
- * - absolute URIs on any other origin are left untouched: the proxy never
- *   follows a playlist to a host it was not asked for;
- * - a URI whose host is a non-public IP literal or `localhost` is never
- *   turned into a proxy path unless SAGAX_MEDIA_PROXY_ALLOW_HOSTS allows it
- *   (a host name is checked after DNS resolution when the proxy fetches it).
+ * that loaded it from `/api/media/proxy/<token>` reaches every variant
+ * playlist, segment, key and init map through the proxy too, each with its
+ * own signed token bound to the same thread:
+ * - relative URIs resolve against the upstream playlist URL (after redirects);
+ * - absolute URIs, on the playlist origin or another one (CDN segments,
+ *   signed share segments), are proxied the same way, so playback never
+ *   depends on the upstream sending CORS headers to the browser;
+ * - a URI whose host is a non-public IP literal or `localhost` is left as
+ *   is unless SAGAX_MEDIA_PROXY_ALLOW_HOSTS allows it, and every proxied
+ *   fetch is checked again by the destination guard after DNS resolution.
  */
 export function rewriteHlsPlaylist(
   text: string,
@@ -189,10 +212,8 @@ export function rewriteHlsPlaylist(
       return raw;
     }
     if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return raw;
-    if (resolved.origin !== base.origin) return raw;
+    if (resolved.username || resolved.password) return raw;
     if (!mediaUrlMayBeProxied(resolved, policy)) return raw;
-    const relative = !/^[a-z][a-z\d+.-]*:/i.test(value);
-    if (!relative && !needsMediaProxy(resolved.href)) return raw;
     return mint(resolved.href);
   };
   return text
@@ -279,6 +300,42 @@ async function requestCheckedUpstream(
   });
 }
 
+/** Playlist warm-up retries: at most this many, each wait capped. */
+const PLAYLIST_WARMUP_RETRIES = 6;
+const PLAYLIST_WARMUP_MAX_WAIT_MS = 3_000;
+
+/** Wait before asking a warming-up playlist again, or null to pass the answer on. */
+export function playlistWarmupDelayMs(
+  upstream: Pick<IncomingMessage, "statusCode" | "headers">,
+  playlistByPath: boolean,
+  attempt: number,
+): number | null {
+  if (upstream.statusCode !== 503 || attempt >= PLAYLIST_WARMUP_RETRIES) return null;
+  const ct = upstream.headers["content-type"];
+  const raw = upstream.headers["retry-after"];
+  if (!playlistByPath && !(typeof ct === "string" && isPlaylistContentType(ct)) && raw === undefined) return null;
+  const seconds = typeof raw === "string" && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : 1;
+  return Math.min(Math.max(seconds, 0.25) * 1000, PLAYLIST_WARMUP_MAX_WAIT_MS);
+}
+
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new Error("aborted"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new Error("aborted"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export async function streamProxiedMedia(
   targetUrl: string,
   res: ServerResponse,
@@ -293,18 +350,28 @@ export async function streamProxiedMedia(
   // A playlist is rewritten whole: never ask the upstream for a byte range of it.
   const forwardRange = rangeHeader && !playlistByPath ? rangeHeader : undefined;
   const headers = forwardRange ? { Range: forwardRange } : undefined;
-  let current = new URL(targetUrl);
-  let upstream = await requestCheckedUpstream(current, headers, options, clientAbort.signal);
-  for (let hop = 0; ; hop += 1) {
-    const status = upstream.statusCode ?? 502;
-    const location = upstream.headers.location;
-    if (status < 300 || status >= 400 || status === 304 || typeof location !== "string") break;
-    // A redirect body is irrelevant and may be unbounded. Close this hop
-    // before validating and opening the next destination.
-    upstream.destroy();
-    if (hop >= MAX_REDIRECTS) throw new MediaProxyBlockedError("too-many-redirects", current.hostname);
-    current = new URL(location, current);
+  let current: URL;
+  let upstream: IncomingMessage;
+  for (let attempt = 0; ; attempt += 1) {
+    current = new URL(targetUrl);
     upstream = await requestCheckedUpstream(current, headers, options, clientAbort.signal);
+    for (let hop = 0; ; hop += 1) {
+      const status = upstream.statusCode ?? 502;
+      const location = upstream.headers.location;
+      if (status < 300 || status >= 400 || status === 304 || typeof location !== "string") break;
+      // A redirect body is irrelevant and may be unbounded. Close this hop
+      // before validating and opening the next destination.
+      upstream.destroy();
+      if (hop >= MAX_REDIRECTS) throw new MediaProxyBlockedError("too-many-redirects", current.hostname);
+      current = new URL(location, current);
+      upstream = await requestCheckedUpstream(current, headers, options, clientAbort.signal);
+    }
+    // A live playlist answers 503 + Retry-After while its ingest starts
+    // (Glitcho share links do): wait here instead of failing the player.
+    const retryAfter = playlistWarmupDelayMs(upstream, playlistByPath, attempt);
+    if (retryAfter === null) break;
+    upstream.destroy();
+    await delay(retryAfter, clientAbort.signal);
   }
   const finalUrl = current.href;
   const response = upstream;

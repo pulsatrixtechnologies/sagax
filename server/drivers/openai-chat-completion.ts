@@ -136,20 +136,22 @@ function completionError(json: CompletionJson, label: string): ChatProtocolError
   const refusal = toolCallRefusal(json.error);
   return refusal ? new RejectedToolCallError(text, refusal) : new ChatProtocolError(text);
 }
+/** An abort signal that fires once `timeoutMs` passes without a reset. */
+function streamIdleTimer(timeoutMs: number) {
+  const controller = new AbortController();
+  let timer: NodeJS.Timeout | null = null;
+  return {
+    signal: controller.signal,
+    reset() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => controller.abort(new DOMException("Streaming idle timeout elapsed", "AbortError")), timeoutMs);
+    },
+    clear() { if (timer) clearTimeout(timer); },
+  };
+}
 export function createChatCompletions<Config>(options: RuntimeOptions<Config>, auth: (apiKey: string) => Record<string, string>) {
   const responsesRefused = { include: new Set<string>(), reasoning: new Set<string>(), endpoint: new Set<string>() };
-  const idleTimer = () => {
-    const controller = new AbortController();
-    let timer: NodeJS.Timeout | null = null;
-    return {
-      signal: controller.signal,
-      reset() {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => controller.abort(new DOMException("Streaming idle timeout elapsed", "AbortError")), options.timeoutMs);
-      },
-      clear() { if (timer) clearTimeout(timer); },
-    };
-  };
+  const idleTimer = () => streamIdleTimer(options.timeoutMs);
 
   /** One reply through /responses, read into the chat runtime's shape. */
   const completeResponses = async (

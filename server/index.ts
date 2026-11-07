@@ -28122,6 +28122,22 @@ function consoleOwner(principalId: string): AdminPerson | null {
  * conversations stored on Ask follow to Auto; a conversation on any other
  * level keeps it (never lowered). The caller audits the change. */
 
+/** 2026-11-06 (Perspicax #973): the console's New bot and New routine replay
+ * the app's own route as the person (performAsMember), never as an admin:
+ * a blank bot starts from nothing the admin saved. */
+async function consoleCreateAs(principalId: string, path: "/api/bots" | "/api/routines", body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const person = principals.byId(principalId);
+  if (!person) throw new ConsoleRefusal(404, "owner_not_found", "No such person to own the bot, or they are disabled.");
+  const member: MemberPerson = { principalId, sub: person.subject?.sub ?? "", name: personDisplayName(person) || "", admin: false, actor: "console" };
+  const created = await performAsMember(member, { method: "POST", path, body });
+  const answer = (created.body ?? {}) as Record<string, unknown>;
+  if (created.status >= 300) {
+    const message = typeof answer.error === "string" ? answer.error.slice(0, 300) : "The server could not do this.";
+    throw new ConsoleRefusal(created.status, typeof answer.code === "string" ? answer.code : created.status === 404 ? "not_found" : created.status === 403 ? "forbidden" : "refused", message);
+  }
+  return answer;
+}
+
 const orgBotsDeps: BotsDeps = {
   bots: () => orgAdminBots(),
   capabilities: (botId, viewer) => consoleBotCapabilities(botId, viewer),
@@ -28189,6 +28205,22 @@ const orgBotsDeps: BotsDeps = {
     const current = store.bot(copy.id);
     if (current) broadcast({ kind: "bot", bot: publicBot(current) });
     return copy.id;
+  },
+  create: async (input) => {
+    const answer = await consoleCreateAs(input.owner.principalId, "/api/bots", { name: input.name });
+    const made = answer.bot as { id?: unknown } | undefined;
+    const id = String(made?.id ?? answer.id ?? "");
+    if (!store.bot(id)) throw new ConsoleRefusal(500, "create_failed", "The bot could not be made.");
+    if (input.model) {
+      // the model asked for, by the console's own rules; a refusal leaves no bot behind
+      try {
+        orgBotsDeps.setModel(id, input.model);
+      } catch (error) {
+        await deleteBotWithLifecycle(id);
+        throw error;
+      }
+    }
+    return id;
   },
   setArchived: (botId, archived) => {
     const bot = store.bot(botId);
@@ -28490,6 +28522,13 @@ const orgRoutinesDeps: RoutinesDeps = {
   runNow: (routineId) => routines?.runNow(routineId) ?? null,
   // No writer meta: an admin pausing a routine does not make it run as them.
   setEnabled: (routineId, enabled) => routines?.update(routineId, { enabled }) ?? null,
+  create: async (input) => {
+    const answer = await consoleCreateAs(input.asPrincipalId, "/api/routines", { botId: input.botId, name: input.name, prompt: input.prompt, schedule: input.schedule });
+    const id = String((answer.routine as { id?: unknown } | undefined)?.id ?? "");
+    const routine = (routines?.listRoutines() ?? []).find((candidate) => candidate.id === id);
+    if (!routine) throw new ConsoleRefusal(500, "create_failed", "The routine could not be made.");
+    return routine;
+  },
   orgApprovals: (viewer) => pendingApprovalsFor(viewer, "org"),
   decisions: (range) => readDecisionRange(DATA_DIR, range),
   decisionPerson: (actor) => {

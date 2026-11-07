@@ -501,7 +501,8 @@ export function createOrgAdminRoutes(deps: OrgAdminRouteDeps): (req: IncomingMes
     const consoleApprovals = sub === "approvals" && url.searchParams.get("scope") === "org";
     const route: { name: string; method: string; min: ConsoleRole; ownerGrant?: ConsoleGrantKind } | null = sub === "capabilities"
       ? { name: sub, method: "GET", min: "employee" as const }
-      : (sub === "bots" || sub === "usage" || sub === "audit" || sub === "approvals") && !consoleApprovals
+      // `POST bots` (a blank bot, 2026-11-06) is a console route.
+      : ((sub === "bots" && method === "GET") || sub === "usage" || sub === "audit" || sub === "approvals") && !consoleApprovals
         ? { name: sub, method: "GET", min: sub === "audit" ? "admin" as const : sub === "approvals" ? "employee" as const : "manager" as const, ...(sub === "approvals" ? {} : { ownerGrant: "own-bot" as const }) }
         : answerMatch && answerMatch[1] !== "history" && CARD_ID.test(answerMatch[1]!) && CARD_ID.test(answerMatch[2]!)
           ? { name: "answer", method: "POST", min: "employee" as const }

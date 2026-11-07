@@ -865,8 +865,10 @@ export const SETTINGS_WINDOW = {
  * the pills at the bottom right. The widths are the reference design's dialog steps
  * (400, 480) plus Settings' own column (`xl`, the release notes). */
 export const DIALOG = {
-  backdrop: "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6",
-  frame: "relative flex max-h-[calc(100dvh-48px)] w-full flex-col overflow-hidden rounded-[14px] border border-border bg-app text-ink outline-none",
+  // The entrance (#2595), as Settings opens: the scrim fades in, the window
+  // fades in from 98 %. Token durations, so reduced motion lands at once.
+  backdrop: "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 transition-opacity duration-base ease-out-quint starting:opacity-0 sm:p-6",
+  frame: "relative flex max-h-[calc(100dvh-48px)] w-full flex-col overflow-hidden rounded-[14px] border border-border bg-app text-ink outline-none transition-[opacity,scale] duration-base ease-out-quint starting:scale-98 starting:opacity-0",
   width: {
     sm: "max-w-[400px]",
     md: "max-w-[440px]",

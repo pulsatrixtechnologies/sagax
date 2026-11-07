@@ -394,7 +394,7 @@ export function GroupListItem({
         onMenu({ groupId: group.id, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
       }}
       className={cn(
-        "relative flex w-full items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/60",
+        "relative flex w-full items-center text-left outline-none transition-colors duration-fast ease-out-quint focus-visible:ring-1 focus-visible:ring-accent/60",
         density === "icons" ? "justify-center rounded-lg px-1 py-1.5" : density === "compact" ? "gap-2 rounded-lg py-1.5 pr-9" : "h-[54px] gap-2 rounded-[10px] py-2 pr-2",
         // The same box and inset as BotListItem (Grok Bot's 54px row), so
         // every row's avatar and name line up: a room or a person moves like
@@ -1600,7 +1600,7 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
               if (from) saveOrder(placeFolder(projectIds, from, project.id, event.clientY < rect.top + rect.height / 2 ? "before" : "after"));
               resetFolderDrag();
             }}
-            className={cn("group/folder flex items-center gap-0.5 rounded-md pl-0.5 text-sidebar-ink-secondary hover:bg-sidebar-hover",
+            className={cn("group/folder flex items-center gap-0.5 rounded-md pl-0.5 text-sidebar-ink-secondary transition-colors duration-fast ease-out-quint hover:bg-sidebar-hover",
               threadDrop === project.id && "bg-sidebar-hover ring-1 ring-inset ring-accent/50",
               folderDrop?.id === project.id && draggingFolder.current !== project.id && (folderDrop.place === "before" ? "shadow-[0_-2px_var(--color-accent)]" : "shadow-[0_2px_var(--color-accent)]"))}>
             <button type="button" aria-expanded={open} onClick={() => setCollapsed((previous) => {
@@ -1892,7 +1892,7 @@ export function BotListItem({
   const [threadsOpen, setThreadsOpen] = useSearchDisclosure(`bot:${bot.id}`, inSidebar ? query : "", searchMatchesThreads(query, bot.tasks, bot.projects), true);
   const threadsListed = inSidebar && threadsOpen;
   const rowClass = cn(
-    "flex items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/60",
+    "flex items-center text-left outline-none transition-colors duration-fast ease-out-quint focus-visible:ring-1 focus-visible:ring-accent/60",
     iconOnly
       // Grok Bot's rail: a 54px square, 9px around the 36px portrait
       ? "mx-auto h-[54px] w-[54px] shrink-0 justify-center rounded-[10px] p-[9px]"

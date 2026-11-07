@@ -3950,6 +3950,21 @@ select optgroup {
    Restore them for enabled interactive controls across the app.
    Keep specificity low so component cursor styles can override this. */
 
+/* Every modal window fades in on its first paint (#2595), the ones not
+   drawn from DIALOG included: opacity only, on the base token, so reduced
+   motion lands at once. In the base layer, so a component's own transition
+   (Settings: opacity and scale) wins. */
+@layer base {
+  :where([role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]) {
+    transition: opacity var(--transition-duration-base) var(--ease-out-quint);
+  }
+  @starting-style {
+    :where([role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]) {
+      opacity: 0;
+    }
+  }
+}
+
 @layer base {
   :where(
     button:not(:disabled, [aria-disabled="true"], [aria-busy="true"]),

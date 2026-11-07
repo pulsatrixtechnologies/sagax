@@ -754,6 +754,9 @@ export interface Bot {
   /** Memory upkeep (Bot settings → Memory): background capture and the
    * nightly tidy-up. On unless explicitly false. */
   memoryUpkeep?: boolean;
+  /** Built-in plugins this bot switched (shared/builtin-plugins.ts): absent
+   * or true on, false off. */
+  builtinPlugins?: Record<string, boolean>;
   /** Prompt-cache keep-warm for this bot's Claude threads: true/false
    * overrides the workspace setting, absent follows it (null clears over PATCH). */
   cacheKeepWarm?: boolean | null;

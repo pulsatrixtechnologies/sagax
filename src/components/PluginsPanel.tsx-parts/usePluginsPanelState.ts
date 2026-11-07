@@ -34,7 +34,7 @@ import type { FeaturedListing, MarketplaceListing, Page } from "./types";
 
 /** Navigation, scope, catalog loads and derived item lists for PluginsPanel. */
 export function usePluginsPanelState() {
-  const { state, dispatch } = useStore();
+  const { state, dispatch, flushBotPatches } = useStore();
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const dialogRef = useRef<HTMLDivElement>(null);
   const mcp = useMcpServers();
@@ -327,7 +327,7 @@ export function usePluginsPanelState() {
   };
 
   return {
-    state, dispatch, dialogRef, mcp, stack, setStack, page, push, popTo, showDetail, botsBack,
+    state, dispatch, flushBotPatches, dialogRef, mcp, stack, setStack, page, push, popTo, showDetail, botsBack,
     botSources, botFocus, setBotFocus, search, setSearch, openedGroups, setOpenedGroups,
     activeResult, setActiveResult, filter, setFilter, type, setType, tab, setTab,
     harness, claudeConnectors, ownerOrAdmin, libraryEditor,

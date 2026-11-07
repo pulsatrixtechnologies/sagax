@@ -53,7 +53,7 @@ import type { PluginsPanelActions } from "./usePluginsPanelActions";
 /** Plugins shell: title, scope, search, tabs and dialog frame for PluginsPanel. */
 export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPanelActions }) {
   const {
-    state, dispatch, dialogRef, mcp, stack, page, push, popTo, botsBack, botSources, botFocus, setBotFocus,
+    state, dispatch, flushBotPatches, dialogRef, mcp, stack, page, push, popTo, botsBack, botSources, botFocus, setBotFocus,
     search, setSearch, openedGroups, setOpenedGroups, activeResult, setActiveResult, filter, setFilter,
     type, setType, tab, setTab, harness,
     ownerOrAdmin, libraryEditor, perspicaxOrg, organization, dataCenterFor, setDataCenterFor,
@@ -386,6 +386,12 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
                 if (!item.orgDeclaration) return;
                 void setMine(item.orgDeclaration, next).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));
               }}
+              onToggleBuiltin={scope === "bot" && scopeBot ? (item, next) => {
+                if (!item.builtin) return;
+                dispatch({ type: "updateBot", botId: scopeBot.id, patch: { builtinPlugins: { ...scopeBot.builtinPlugins, [item.builtin]: next } } });
+                // the resolver reads the saved bot: refresh once the patch landed
+                void flushBotPatches(scopeBot.id).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));
+              } : undefined}
               botName={scopeBot?.name}
               organization={scope === "bot" && botCapabilities.data ? organizationRows(botCapabilities.data.items) : []}
               skills={scope === "bot" ? [] : privateSkills(items)}

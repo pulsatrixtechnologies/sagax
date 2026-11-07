@@ -7,6 +7,7 @@ import { listedMounts, resolveBotCapabilities, type CapabilityInputs } from "./c
 import { engineServerMcp, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "../turns/turn-mounts.ts";
 import { selectPluginScopes } from "./capability-plugin-mounts.ts";
 import { servedCapabilities } from "../../shared/capabilities.ts";
+import { REA_PLUGIN } from "../../shared/builtin-plugins.ts";
 import { PERSPICAX_MCP_PREFIX, reservedMcpName } from "../../shared/mcp-reserved-names.ts";
 
 const remote = (url: string): McpServerSpec => ({ type: "http", url, headers: {} });
@@ -253,6 +254,21 @@ describe("personal and complete plugin capabilities", () => {
     input.pluginEnvironment = false;
     const noEnvironment = resolveBotCapabilities(input, { principalId: "p1", mayChange: true });
     expect(byKey(noEnvironment, "plugin:bot:alpha@market")?.mounts).toBeUndefined();
+  });
+
+  it("lists REA as a built-in plugin, on and mounted by default, off when switched off", () => {
+    const input = inputs(ENGINES[0]!);
+    input.pluginEnvironment = true;
+    input.builtinPlugins = [{ plugin: REA_PLUGIN, enabled: true }];
+    input.pluginMcp = [{ scope: "bot", key: REA_PLUGIN.key, name: "rea", spec: { command: "npx", args: [...REA_PLUGIN.spec.args], env: { ...REA_PLUGIN.spec.env } } }];
+    const on = byKey(resolveBotCapabilities(input, { principalId: "p1", mayChange: true }), "plugin:bot:builtin:rea");
+    expect(on).toMatchObject({ form: "plugin", builtin: "rea", state: "on", enabled: true, canToggle: true, mounts: ["rea"], scope: "bot" });
+    expect(on?.reason).toBeUndefined();
+    input.builtinPlugins = [{ plugin: REA_PLUGIN, enabled: false }];
+    input.pluginMcp = [];
+    expect(byKey(resolveBotCapabilities(input, { principalId: "p1", mayChange: true }), "plugin:bot:builtin:rea")).toMatchObject({ state: "off", enabled: false, reason: "disabled" });
+    input.builtinPlugins = [{ plugin: REA_PLUGIN, enabled: true, runtimeMissing: true }];
+    expect(byKey(resolveBotCapabilities(input, { principalId: "p1", mayChange: false }), "plugin:bot:builtin:rea")).toMatchObject({ enabled: true, canToggle: false, reason: "needs_runtime" });
   });
 });
 

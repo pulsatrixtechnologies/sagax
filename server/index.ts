@@ -1893,6 +1893,7 @@ import { createGroupThreadIsWorking } from "./index-leaves/groupThreadIsWorking.
 import { createForgetThreadEngineSessions } from "./index-leaves/forgetThreadEngineSessions.ts";
 import { createEngineInstalled } from "./index-leaves/engineInstalled.ts";
 import { createBindOwnedTrigger } from "./index-leaves/bindOwnedTrigger.ts";
+import { ownedTriggerOf } from "../shared/routine-github.ts";
 import { createAuthorizedInternalCapability } from "./index-leaves/authorizedInternalCapability.ts";
 import { createAuditFullAccessTurn } from "./index-leaves/auditFullAccessTurn.ts";
 import { createAuditApprovalModeChange } from "./index-leaves/auditApprovalModeChange.ts";
@@ -18921,7 +18922,8 @@ routines = new RoutineManager({
       prompt: routine.prompt,
       botId: routine.botId,
       runOn: routine.runOn,
-      enabled: routine.enabled
+      enabled: routine.enabled,
+      ...(ownedTriggerOf(routine.schedule).github ? { github: ownedTriggerOf(routine.schedule).github } : {})
     });
   },
   goalState: (groupId, coordinatorBotId) => {

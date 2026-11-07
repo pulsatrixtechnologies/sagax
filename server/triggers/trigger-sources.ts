@@ -330,7 +330,7 @@ function githubEvents(request: SourceRequest, payload: JsonValue | undefined): N
     }));
   }
   if (name === "issues") {
-    const kind = action === "opened" ? "issue.opened" : action === "assigned" ? "issue.assigned" : undefined;
+    const kind = action === "opened" ? "issue.opened" : action === "labeled" ? "issue.labeled" : action === "assigned" ? "issue.assigned" : undefined;
     if (!kind) return { ignored: `Issue action “${action ?? "none"}” is not handled` };
     const issue = get(payload, "issue");
     return one(event("github", kind, str(get(issue, "title")) ?? "Issue", {

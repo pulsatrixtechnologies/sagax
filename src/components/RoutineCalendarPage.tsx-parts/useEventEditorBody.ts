@@ -358,7 +358,7 @@ export function useEventEditorBody({
   // 2026-11-02: "When to run" reads as one sentence; the picker opens on
   // click (open from the start for a new routine).
   const whenSentence = eventEditorWhenSentence({
-    recurrence, pattern, limitReset, bots, lockedBotId, botIds, intervalMinutes, at,
+    recurrence, pattern, limitReset, bots, lockedBotId, botIds, intervalMinutes, at, eventSchedule: existingRoutine?.schedule,
   });
   const [whenOpen, setWhenOpen] = useState(() => !existingRoutine);
   const advancedSummary = eventEditorAdvancedSummary({

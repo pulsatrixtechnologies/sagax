@@ -8,6 +8,7 @@ import type { Routine } from "../routines/routines.ts";
 import type { RoutineRequestSchedule } from "../../shared/routine-request.ts";
 import { approvalModeFor } from "../../shared/approval-mode.ts";
 import { cronScheduleLabel } from "../../shared/cron-label.ts";
+import { githubEventScheduleLabel } from "../../shared/routine-github.ts";
 
 export interface BotOverview {
   who: { name: string; title: string; blurb: string; soulLead: string };
@@ -119,7 +120,7 @@ function schedulePhrase(schedule: OverviewFacts["routines"][number]["schedule"],
     return `Every ${Math.floor(minutes / 60)} hour${Math.floor(minutes / 60) === 1 ? "" : "s"} ${minutes % 60} minutes`;
   }
   if (schedule.type === "webhook") return "When a webhook delivery arrives";
-  if (schedule.type === "event") return "When email arrives";
+  if (schedule.type === "event") return schedule.source === "github" ? `On ${githubEventScheduleLabel(schedule)}` : "When email arrives";
   if (schedule.type === "limit_reset") {
     const at = "at" in schedule ? schedule.at : null;
     return at === null

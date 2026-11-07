@@ -13,6 +13,7 @@ import type { LimitResetRepeat } from "./limit-reset.ts";
 import type { RoutineWatchPrecheck } from "./routine-watch.ts";
 import type { RoutineCronSchedule } from "./routine-schedule.ts";
 import type { RoutineWindowTiming } from "./routine-timing.ts";
+import type { RoutineGithubEventSchedule } from "./routine-github.ts";
 
 export type RoutineRequestRunOn = "maus" | "cloud";
 
@@ -39,7 +40,8 @@ export type RoutineRequestSchedule =
     endsAt?: number;
   } & RoutineWindowTiming)
   | { type: "webhook" }
-  | { type: "event"; source: "email" };
+  | { type: "event"; source: "email" }
+  | RoutineGithubEventSchedule;
 
 export type RoutineRequestScheduleChanges =
   | Exclude<RoutineRequestSchedule, { type: "interval" }>

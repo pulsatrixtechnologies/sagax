@@ -43,6 +43,9 @@ const routines = [
   { ...base, id: "r5", botId: "boreas", name: "Backup check", enabled: true, schedule: daily("07:00", [0, 1, 2, 3, 4, 5, 6]), nextRunAt: NOW + 20 * H },
   { ...base, id: "r6", botId: "boreas", name: "Patch report", folder: "Reports", enabled: false, schedule: daily("17:00", [5]) },
   { ...base, id: "r7", botId: "cirrus", name: "Invoice review", enabled: true, schedule: daily("10:00", [1, 3]), nextRunAt: NOW + 26 * H },
+  // I3: a routine started by GitHub events, beside one started by email.
+  { ...base, id: "r8", botId: "cirrus", name: "Triage new issues", folder: "Dev", enabled: true, schedule: { type: "event", source: "github", events: ["issue.opened", "issue.labeled", "pr.opened", "pr.review_requested"], filters: { repo: ["acme/api"] } }, nextRunAt: null },
+  { ...base, id: "r9", botId: "cirrus", name: "Support inbox", folder: "Dev", enabled: true, schedule: { type: "event", source: "email" }, nextRunAt: null },
 ] as unknown as Routine[];
 const run = (id: string, routineId: string, status: RoutineRun["status"], at: number): RoutineRun => ({
   id, routineId, routineName: routines.find((routine) => routine.id === routineId)!.name, target: "bot",

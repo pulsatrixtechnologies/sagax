@@ -304,7 +304,9 @@ function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequ
           : routine.schedule.type === "webhook"
             ? { type: "webhook" as const }
             : routine.schedule.type === "event"
-              ? { type: "event" as const, source: "email" as const }
+              ? routine.schedule.source === "github"
+                ? { type: "event" as const, source: "github" as const, events: [...(routine.schedule.events as string[])], ...(routine.schedule.filters ? { filters: { ...(routine.schedule.filters as Record<string, string[]>) } } : {}) }
+                : { type: "event" as const, source: "email" as const }
               : routine.schedule.type === "limit_reset"
                 ? {
                     type: "limit_reset" as const,

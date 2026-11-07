@@ -5,7 +5,6 @@
 // never comes back: the row shows only that one is saved and its last four
 // characters (server/routes/web-search.ts).
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Search } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -83,7 +82,6 @@ export function WebSearchSettings({ bare = false }: { bare?: boolean } = {}) {
           label={bare ? t("webSearch.title") : t("webSearch.provider")}
           description={summary}
           help={t("webSearch.help")}
-          icon={<Search size={14} />}
           rowId="webSearch.provider"
         >
           <PillSelect<Choice>

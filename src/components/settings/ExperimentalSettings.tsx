@@ -10,7 +10,6 @@ import { dataWindowEnabled, llmThreadTitlesEnabled, meetingNotetakerEnabled, ski
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import type { LocaleKey } from "@/locales";
-import { Container } from "lucide-react";
 import { DescribedRow, HelpTip, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
 import { canManageExperimental } from "@/lib/viewer";
@@ -265,7 +264,6 @@ export function ExperimentalSettings() {
         <SettingsGroup groupId="experimental.developer" title={t("settings.experimental.developer")}>
           <div data-experimental-feature="devPods">
             <DescribedRow
-              icon={<Container size={14} />}
               label={t("settings.experimental.devPods")}
               description={t("settings.experimental.devPodsDescription")}
               rowId="devPods"

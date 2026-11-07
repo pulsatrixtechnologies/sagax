@@ -95,5 +95,24 @@ export function rowsOffReference(root: Element): string[] {
     const owner = control.closest(`${SHARED_ROW}, [data-settings-below]`);
     if (!owner || owner.hasAttribute("data-settings-below")) out.push(`switch outside a shared row: ${describeSurface(control.parentElement ?? control)}`);
   }
+  out.push(...mixedIconRows(root));
   return out;
+}
+
+/** One page, one row style (JC 2026-11-07, Context pods in Experimental): on a
+ * page either every shared row carries an icon tile (Providers) or none does
+ * (General). A lone tile among plain rows is drawn off the reference. */
+export function mixedIconRows(root: Element): string[] {
+  const withIcon: Element[] = [];
+  const without: Element[] = [];
+  for (const row of root.querySelectorAll(SHARED_ROW)) {
+    if (row.closest("[hidden]")) continue;
+    // a row nested in another row's below slot belongs to that row's body
+    if (row.parentElement?.closest("[data-settings-below]")) continue;
+    (row.querySelector(":scope [data-settings-icon]") && row.querySelector("[data-settings-icon]")?.closest(SHARED_ROW) === row ? withIcon : without).push(row);
+  }
+  if (!withIcon.length || !without.length) return [];
+  const minority = withIcon.length <= without.length ? withIcon : without;
+  const kind = minority === withIcon ? "an icon tile among rows without" : "no icon tile among rows with";
+  return minority.map((row) => `mixed row style, ${kind}: ${describeSurface(row)}`);
 }

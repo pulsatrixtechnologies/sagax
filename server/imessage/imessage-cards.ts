@@ -19,7 +19,8 @@ export type PendingImessage = {
   file?: string;
   /** An Apple app write (mac_mail_send, mac_calendar_create...) waiting on
    * the card instead of a Messages send: the tool and its bounded arguments. */
-  macApp?: { tool: string; args: Record<string, unknown> };
+  /** `person`: organization server, the person whose Mac runs it (relay). */
+  macApp?: { tool: string; args: Record<string, unknown>; person?: string };
 };
 
 const pending = new Map<string, PendingImessage>();

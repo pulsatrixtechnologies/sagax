@@ -25,6 +25,7 @@ import { dirname } from "node:path";
 import { z } from "zod";
 
 import type { BotWorkplace } from "../../shared/bot-workplace.ts";
+import { MAC_APP_SETUP_IDS, isMacAppSetupId, type MacAppSetupId } from "../../shared/mac-apps-setup.ts";
 
 const ABSOLUTE_PATH = /^(?:\/|[a-zA-Z]:[\\/]|\\\\)/;
 // oxlint-disable-next-line no-control-regex
@@ -168,15 +169,63 @@ export class DesktopBridges {
   /** `sessionPerson`: the person a live session is signed in as right now,
    * null when the session ended. */
   private labelsFile: string | undefined;
-  constructor(sessionPerson: (sessionId: string) => string | null, now: () => number = Date.now, labelsFile?: string) {
+  /** The Apple apps a person turned on in Plugins > This Mac, by person and
+   * computer name, as their desktop last reported them. Kept while the Mac is
+   * offline (and across a server restart with a file), so the bot keeps its
+   * mac_* tools and a call says the Mac is offline instead of the tool
+   * vanishing (2026-11-06). */
+  private macApps = new Map<string, MacAppSetupId[]>();
+  private macAppsFile: string | undefined;
+  constructor(sessionPerson: (sessionId: string) => string | null, now: () => number = Date.now, labelsFile?: string, macAppsFile?: string) {
     this.sessionPerson = sessionPerson;
     this.now = now;
     this.labelsFile = labelsFile;
+    this.macAppsFile = macAppsFile;
+    if (macAppsFile) {
+      try {
+        const stored = JSON.parse(readFileSync(macAppsFile, "utf8")) as Record<string, unknown>;
+        for (const [key, value] of Object.entries(stored)) {
+          if (Array.isArray(value)) this.macApps.set(key, MAC_APP_SETUP_IDS.filter(app => value.includes(app)));
+        }
+      } catch { /* none yet, or unreadable: no apps remembered */ }
+    }
     if (!labelsFile) return;
     try {
       const stored = JSON.parse(readFileSync(labelsFile, "utf8")) as Record<string, unknown>;
       for (const [key, value] of Object.entries(stored)) if (typeof value === "string" && value.length <= 120) this.labels.set(key, value);
     } catch { /* none yet, or unreadable: no names */ }
+  }
+
+  private saveMacApps(): void {
+    if (!this.macAppsFile) return;
+    const temporary = `${this.macAppsFile}.${process.pid}.tmp`;
+    try {
+      mkdirSync(dirname(this.macAppsFile), { recursive: true });
+      writeFileSync(temporary, `${JSON.stringify(Object.fromEntries(this.macApps))}\n`, { mode: 0o600 });
+      renameSync(temporary, this.macAppsFile);
+    } catch { /* the list still holds in memory */ }
+  }
+
+  /** The desktop reports which Apple apps are On in its Plugins > This Mac. */
+  setMacApps(id: string, session: string, secret: string, apps: readonly unknown[]): MacAppSetupId[] {
+    const entry = this.authorize(id, session, secret);
+    const on = MAC_APP_SETUP_IDS.filter(app => apps.some(value => isMacAppSetupId(value) && value === app));
+    // By computer name, not by registration id: the desktop takes a new id on
+    // every reconnect, and the list must outlive the connection.
+    const key = `${entry.person}\n${entry.registration.name}`;
+    const before = this.macApps.get(key);
+    if (on.length) this.macApps.set(key, on); else this.macApps.delete(key);
+    if (JSON.stringify(before ?? []) !== JSON.stringify(on)) this.saveMacApps();
+    return on;
+  }
+
+  /** The Apple apps On on any of the person's Macs, online or not. */
+  macAppsOn(person: string | null): MacAppSetupId[] {
+    const key = normalize(person);
+    if (!key) return [];
+    const on = new Set<MacAppSetupId>();
+    for (const [stored, apps] of this.macApps) if (stored.slice(0, stored.indexOf("\n")) === key) for (const app of apps) on.add(app);
+    return MAC_APP_SETUP_IDS.filter(app => on.has(app));
   }
 
   /** Temp-and-rename, so a crash never leaves a truncated file. A failed
@@ -322,6 +371,7 @@ export class DesktopBridges {
     const id = found[0]!.registration.id;
     for (const [bridgeKey, entry] of this.bridges) if (entry.person === key && entry.registration.id === id) this.drop(bridgeKey, entry, DESKTOP_BRIDGE_MESSAGES.offline);
     if (this.labels.delete(`${key}\n${id}`)) this.saveLabels();
+    if (this.macApps.delete(`${key}\n${found[0]!.registration.name}`)) this.saveMacApps();
     return { id };
   }
 

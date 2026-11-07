@@ -106,7 +106,7 @@ import localOriginModule from "./local-origin.cjs";
 import { buildApplicationMenu } from "./menu.mjs";
 import { createComputerSharing, validateSharedFolders } from "./computer-sharing.mjs";
 import { createDesktopBridge } from "./desktop-bridge.mjs";
-import { macAppEnabled, macAppOfTool, macAppsStatus, macAppsStatusLive, requestMacAppAutomation, runMacAppCall, testMacApp, writeMacAppSettings } from "./mac-apps.mjs";
+import { MAC_APP_IDS, macAppEnabled, macAppOfTool, macAppsStatus, macAppsStatusLive, requestMacAppAutomation, runMacAppCall, testMacApp, writeMacAppSettings } from "./mac-apps.mjs";
 import { applyAppIcon, createAppIconStore, parseAppIconRequest, windowIconImage } from "./app-icon.mjs";
 import { WINDOWS_APP_USER_MODEL_ID, shortcutFolders, updateShortcutIcons } from "./windows-shortcuts.mjs";
 import { createProxyCredentialStore, createProxyCredentials, proxyPasswordAnswerScript, proxyPasswordPage } from "./proxy-credentials.mjs";
@@ -2789,6 +2789,7 @@ function desktopBridge() {
       }
       return runMacAppCall(toolName, args, { signal });
     },
+    macAppsOn: () => MAC_APP_IDS.filter((id) => macAppEnabled(app.getPath("userData"), id)),
     browse: bridgeBrowse,
     cuaConnection: async () => {
       const connection = await cuaReady.catch(() => null);
@@ -4232,6 +4233,7 @@ ipcMain.handle("mac-apps:ask-automation", desktopUiOnly("mac-apps:ask-automation
 ipcMain.handle("mac-apps:set", desktopUiOnly("mac-apps:set", (_event, appId, enabled) => {
   if (typeof enabled !== "boolean") throw new Error("enabled must be true or false");
   writeMacAppSettings(app.getPath("userData"), appId, { enabled });
+  void desktopBridgeConnector?.reportMacApps?.().catch(() => {});
   return macAppsStatus(app.getPath("userData"), { platform: process.platform });
 }));
 ipcMain.handle("mac-apps:test", desktopUiOnly("mac-apps:test", (_event, appId) => testMacApp(app.getPath("userData"), appId)));

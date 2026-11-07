@@ -412,6 +412,10 @@ export function createDesktopBridge({
   // The Apple apps of this Mac (electron/mac-apps.mjs): (tool, args, signal)
   // => MCP result. Only given on darwin; the switch per app is checked there.
   macApp = null,
+  // The ids of the Apple apps On in Plugins > This Mac, reported to the server
+  // so the person's bots list those tools on any engine or computer (the calls
+  // are relayed here). Only given on darwin.
+  macAppsOn = null,
 }) {
   const roots = [...protectedPaths, ...personalSecretPaths(home)];
   const activity = createLendingActivity(activityFile);
@@ -445,6 +449,8 @@ export function createDesktopBridge({
     let registered = null;
     // The current registration's on-demand probe (the model picker opening).
     let refreshNow = null;
+    // The current registration's report of the Apple apps On (a switch changed).
+    let pushMacApps = null;
     const loop = async () => {
       while (!signal.aborted) {
         const id = randomUUID();
@@ -496,8 +502,19 @@ export function createDesktopBridge({
               await request(env, `/api/desktop-bridge/${id}/system`, info, live, secret);
             } catch { /* optional */ }
           };
+          // The Apple apps On here (Plugins > This Mac). An older server answers 404.
+          const reportMacApps = async () => {
+            if (!macAppsOn || platform !== "darwin") return;
+            try {
+              const on = macAppsOn();
+              await request(env, `/api/desktop-bridge/${id}/mac-apps`, { on: Array.isArray(on) ? on : [] }, live, secret);
+            } catch { /* optional */ }
+          };
+          pushMacApps = reportMacApps;
+          live.addEventListener("abort", () => { if (pushMacApps === reportMacApps) pushMacApps = null; }, { once: true });
+          void reportMacApps();
           void system();
-          const systemTimer = setInterval(() => void system(), SYSTEM_REFRESH_MS);
+          const systemTimer = setInterval(() => { void system(); void reportMacApps(); }, SYSTEM_REFRESH_MS);
           live.addEventListener("abort", () => clearInterval(systemTimer), { once: true });
           // Loopback models this desktop has published. The server never receives the URL.
           // A failed probe is not remembered: the next tick, or the picker
@@ -687,6 +704,7 @@ export function createDesktopBridge({
         set({ connected: false, tunnel: false });
       },
       refreshLocalModels: (options) => (refreshNow ? refreshNow(options) : Promise.resolve()),
+      reportMacApps: () => (pushMacApps ? pushMacApps() : Promise.resolve()),
     };
   };
 
@@ -703,6 +721,8 @@ export function createDesktopBridge({
     /** Probe this computer's loopback model servers now (the model picker
      * opened) unless a probe finished in the last LOCAL_MODEL_FRESH_MS. */
     refreshLocalModels: (options) => running?.refreshLocalModels(options) ?? Promise.resolve(),
+    /** Tell the server which Apple apps are On here now (a switch changed). */
+    reportMacApps: () => running?.reportMacApps() ?? Promise.resolve(),
     activity: limit => activity.list(limit),
     close() { running?.stop(); running = null; },
   };

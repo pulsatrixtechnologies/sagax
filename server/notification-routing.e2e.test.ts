@@ -521,7 +521,9 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
     const peer = await createBot("Dot", "quick");
     // the one gate a person switches on for a bot's peer comms — the card it
     // raises is the one bot-to-bot event that genuinely blocks on them
-    expect((await api("PATCH", `/api/bots/${asker.id}`, { approvePeerComms: true })).status).toBe(200);
+    // New bots start at Full access (newBotApprovalMode), which answers this
+    // card itself (peerContactCardRequired); the gate needs a level that asks.
+    expect((await api("PATCH", `/api/bots/${asker.id}`, { approvePeerComms: true, approvalMode: "auto", autoApprove: true })).status).toBe(200);
     const stream = await openSse(`${base}/api/events`);
     const asking = api(
       "POST",

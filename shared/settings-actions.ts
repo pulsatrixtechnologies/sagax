@@ -18,6 +18,8 @@ import { pageRoutines } from "./routine-listing.ts";
 import { DEVICE_ONLY_SETTINGS } from "./device-settings.ts";
 import { DESKTOP_APPEARANCE_KEYS } from "./desktop-appearance.ts";
 import type { SettingClass } from "./settings-actions-policy.ts";
+import { PROVIDER_KEY_FIELDS, PROVIDER_KEYS, savedKeys } from "./settings-provider-keys.ts";
+import { engineRow, type EngineRow } from "./settings-engine-row.ts";
 import { USER_PREFERENCE_KEYS } from "./user-preferences.ts";
 
 /** `self`: the change targets the bot that is speaking. `shared` (#1545,
@@ -904,29 +906,6 @@ add({
   classes: always("rule-change"),
 });
 
-/** Each provider key row of Settings > Models > Keys and the config field
- * the screen writes it to (src/components/ApiKeys.tsx). #1545: ElevenLabs
- * and Fish Audio are kept under tts, the image keys under imageGen. */
-const PROVIDER_KEY_FIELDS: Readonly<Record<string, readonly [string, string]>> = {
-  anthropic: ["anthropic", "key"], openai: ["openai", "key"], openrouter: ["openrouter", "key"], xai: ["xai", "key"],
-  mistral: ["mistral", "key"], cerebras: ["cerebras", "key"], groq: ["groq", "key"], openaiCompat: ["openaiCompat", "key"],
-  elevenlabs: ["tts", "key"], fishAudio: ["tts", "fishKey"], openaiImage: ["imageGen", "key"], customImage: ["imageGen", "customApiKey"],
-};
-const PROVIDER_KEYS: ReadonlySet<string> = new Set(Object.keys(PROVIDER_KEY_FIELDS));
-type ConfigKeys = { tts?: { keys?: Record<string, unknown> }; imageGen?: { openaiConfigured?: unknown; customKeyConfigured?: unknown }; opencodeGo?: { configured?: unknown; providerKeys?: unknown[] } } & Record<string, { configured?: unknown } | undefined>;
-/** Which keys are saved, as the Keys rows say it; never a key. */
-function savedKeys(config: unknown): Record<string, boolean> {
-  const c = (config ?? {}) as ConfigKeys;
-  const flag = (name: string) => c[name]?.configured === true;
-  return {
-    anthropic: flag("anthropic"), openai: flag("openai"), openrouter: flag("openrouter"), xai: flag("xai"), mistral: flag("mistral"),
-    cerebras: flag("cerebras"), groq: flag("groq"), openaiCompat: flag("openaiCompat"),
-    opencodeGo: flag("opencodeGo") || (Array.isArray(c.opencodeGo?.providerKeys) && c.opencodeGo.providerKeys.length > 0),
-    elevenlabs: c.tts?.keys?.elevenlabs === true, fishAudio: c.tts?.keys?.fish === true,
-    openaiImage: c.imageGen?.openaiConfigured === true, customImage: c.imageGen?.customKeyConfigured === true,
-  };
-}
-
 // ── server configuration (PATCH /api/config) ──────────────────────────
 function config(key: string, family: SettingFamily, path: string, value: SettingValue, label: string, where: string, classes: SettingSpec["classes"] = serverWide): void {
   add({
@@ -980,18 +959,6 @@ add({
 // The engines of this server and their accounts, as Settings > Models lists
 // them: GET /api/instances answers each person what they may see (an admin
 // or a person who manages engines, every detail; a member, their copy).
-type EngineRow = { instanceId?: unknown; displayName?: unknown; driverKind?: unknown; readOnly?: unknown; access?: unknown; snapshot?: { state?: unknown; authenticated?: unknown; account?: { email?: unknown; method?: unknown }; version?: unknown }; authentication?: { method?: unknown; signOut?: unknown }; claudeAccount?: { isDefault?: unknown }; models?: { default?: unknown } };
-const engineRow = (row: EngineRow) => ({
-  instanceId: row.instanceId, name: row.displayName, driver: row.driverKind,
-  ...(row.access ? { access: row.access } : {}),
-  state: row.snapshot?.state, signedIn: row.snapshot?.authenticated ?? null,
-  ...(row.snapshot?.account?.email ? { account: row.snapshot.account.email } : {}),
-  ...(row.snapshot?.version ? { version: row.snapshot.version } : {}),
-  ...(row.authentication?.method ? { signIn: row.authentication.method } : {}),
-  ...(row.claudeAccount ? { claudeAccount: true } : {}),
-  ...(row.models?.default ? { defaultModel: row.models.default } : {}),
-  ...(row.readOnly ? { readOnly: true } : {}),
-});
 add({
   key: "models.engines", family: "models", target: "none", value: "object",
   label: "Engines and their accounts (read only: instanceId, name, driver, signedIn, account)", where: "Settings > Models > Engines",

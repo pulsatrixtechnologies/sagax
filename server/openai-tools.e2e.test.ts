@@ -181,10 +181,14 @@ it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls
       const messages = await control(["messages", "--bot", bot.id, "--task", bot.activeTaskId, "--limit", "20"]);
       const first = delivered(requests[before]!);
       const managedSkills = !["selected", "skill-read-off", "skill-list-off", "scope-empty", "tools-off"].includes(mode);
-      // Q8 C (say then fill): the whole file reaches the prompt with tools on
-      // or off; only its alias (for workspace_read) depends on the tools.
-      expect(first.all.includes("capability-skills/me/skills/managed-review/SKILL.md"), mode).toBe(managedSkills);
-      expect(first.all, mode).toContain("Use the fixture checklist.");
+      // Skills load on demand (#1997): with skills_list and workspace_read the
+      // prompt carries an index line and the body is read when needed; without
+      // them the whole file reaches the prompt.
+      if (managedSkills) {
+        expect(first.all, mode).toContain("- skill managed-review: Review the synthetic artifact.");
+        expect(first.all, mode).not.toContain("Use the fixture checklist.");
+      } else expect(first.all, mode).toContain("Use the fixture checklist.");
+      expect(first.all.includes("capability-skills/me/skills/managed-review/SKILL.md"), mode).toBe(false);
       const receipt = await api("GET", `/api/bots/${bot.id}/capabilities`);
       expect(receipt.items.find((item: any) => item.key === "skill:me:managed-review")?.engine.skills, mode).toBe("prompt");
       expect(Boolean(receipt.promptIndex), mode).toBe(true);
@@ -195,7 +199,7 @@ it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls
         expect(first.turn).toContain(AVAILABILITY);
       }
       expect(first.all).not.toContain("update it with your file tools");
-      expect(first.all).not.toContain("File locations for this bot");
+      expect(first.all, mode).not.toContain("File locations for this bot");
       expect(first.all).not.toContain("read its exact SKILL.md path above with your file tools");
       if (mode === "allow" || mode === "deny" || mode === "selected") {
         expect(requests).toHaveLength(before + 2);
@@ -231,7 +235,9 @@ it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls
       }
       if (mode === "tools-off" || mode === "scope-empty") {
         expect(requests[before]).not.toHaveProperty("tools");
-        expect(existsSync(startupMarker)).toBe(false);
+        // The start check (server/mcp/mcp-health.ts) starts every enabled
+        // command server once on its own, so the startup marker no longer says
+        // whether a turn mounted it: the request without tools does.
         if (mode === "tools-off") {
           expect(first.all).not.toContain("Use memory_update");
           expect(first.all).not.toContain("session_search tool");
@@ -254,14 +260,13 @@ it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls
         await control(["send-channel", "--channel", group.id, "--text", "Greet this room."]);
         expect((await control(["wait", "--channel", group.id, "--timeout", "20"])).status).toBe("settled");
         const room = delivered(requests.at(-1)!);
-        expect(room.all.includes("managed-review/SKILL.md")).toBe(managedSkills);
+        expect(room.all.includes("- skill managed-review: Review the synthetic artifact."), mode).toBe(managedSkills);
         expectMemoryInTurn(requests.at(-1)!, `Greet this room.\n\n(Reply to the conversation above as API tool ${mode}.)`);
         expect(room.all).not.toContain("File locations for this bot");
         expect(room.all).not.toContain("update it with your file tools");
         await control(["messages", "--channel", group.id, "--limit", "10"]);
         if (mode === "tools-off") {
           expect(requests.at(-1)).not.toHaveProperty("tools");
-          expect(existsSync(startupMarker)).toBe(false);
           expect(room.all).not.toContain("Use memory_update");
           expect(previewText).not.toContain("Use memory_update");
         }

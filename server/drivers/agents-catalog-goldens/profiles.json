@@ -1,7 +1,7 @@
 {
   "direct": {
-    "bytes": 100030,
-    "sha256": "0f9a4983f40a3af77b89a7d669021a2b0f6b2fb1a86564af2994b70bb7dc49f1",
+    "bytes": 100911,
+    "sha256": "2835c1ef27ef480a5e0663912cfdd6adab72c7b3aec6aefd8e2f7078426b59d6",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -54,6 +54,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -95,8 +96,8 @@
     ]
   },
   "direct+voice": {
-    "bytes": 100997,
-    "sha256": "fdc607ef22485f77095cb552336b652685b9651a67c26efe5f336bf8836669cf",
+    "bytes": 101878,
+    "sha256": "49eb07c4c7528b60c2104fdfa6163873f4cd76fd6a9fcb2b164106edbc6d60d6",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -149,6 +150,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -191,8 +193,8 @@
     ]
   },
   "direct+shared": {
-    "bytes": 102031,
-    "sha256": "7d3fd391e69173bc54aeddc8973cd9b45fece06ac257338888ba5d7be06aeb9e",
+    "bytes": 102912,
+    "sha256": "3134aeee1141ccd44ceddf2037ebb4f04af93cd812ed59d353ca62436eef6002",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -247,6 +249,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -288,8 +291,8 @@
     ]
   },
   "direct+shared+voice": {
-    "bytes": 102998,
-    "sha256": "6366b581efe18b4faa509764588c0a17424c00f7360788deaf225552bc7fe0c3",
+    "bytes": 103879,
+    "sha256": "d11952ab287e8d8560fd73f6cb706ce52bbdd3b7a8ab537b698078a659614212",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -344,6 +347,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -386,8 +390,8 @@
     ]
   },
   "direct+skills": {
-    "bytes": 101652,
-    "sha256": "452a11fd6bc9adc904219e87ca72469748ef7a65b62d841073b405876979de72",
+    "bytes": 102533,
+    "sha256": "a901582ea9662c487ef776e1584cee10fe18f519b7df012ebfde044e767aedf5",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -440,6 +444,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -482,8 +487,8 @@
     ]
   },
   "direct+skills+voice": {
-    "bytes": 102619,
-    "sha256": "1a3e803231687c8da1c20accdcdf1dcf83b8e54dc7224a8be7d139adc5b68700",
+    "bytes": 103500,
+    "sha256": "3a702a291671c3c4de1c5f8594dea3d8cc23fbcc2776c5fb7984bdbbd0fab034",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -536,6 +541,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -579,8 +585,8 @@
     ]
   },
   "direct+skills+shared": {
-    "bytes": 103653,
-    "sha256": "d01459905c355b9f2608405275ae01d47ae8939ef64341bdd503ebaac5888686",
+    "bytes": 104534,
+    "sha256": "14b96d9bf4f6ffde116f3cc3c9918deafb63c7a5eb2ccbe094cdd0f824ee083b",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -635,6 +641,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -677,8 +684,8 @@
     ]
   },
   "direct+skills+shared+voice": {
-    "bytes": 104620,
-    "sha256": "c22e06f06a9af9a0e5432173a2174c05065380574538c7d8de8ea1a27d7e52ae",
+    "bytes": 105501,
+    "sha256": "57b285fd36a5b3023b93849ed95227b9fdf2175e96ab3e0df5fb4877935f1f81",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -733,6 +740,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -776,8 +784,8 @@
     ]
   },
   "room": {
-    "bytes": 88065,
-    "sha256": "889afa4d160e041fe9818f77ac78c8097ca4425cdbf1c52604266ec16aea1cc3",
+    "bytes": 89540,
+    "sha256": "f20d1f4a0559153f6a949404d52718766c0d3bbb779120d2e7655e061fc88bd7",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -817,6 +825,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -858,8 +867,8 @@
     ]
   },
   "room+voice": {
-    "bytes": 89032,
-    "sha256": "ba2ecb3e74504ac5666dba5a203662256868038f2aa016b7fbcc1a112f9b72a0",
+    "bytes": 90507,
+    "sha256": "94ec064d134bb8778a40aa513fc9830e5df3f35056646f396e53c70d3c8eeb1d",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -899,6 +908,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -941,8 +951,8 @@
     ]
   },
   "room+shared": {
-    "bytes": 90066,
-    "sha256": "6acd83293d64f4e84966cc3e3ec0da5ebbdf29bfe86260457cca9c8540f291f5",
+    "bytes": 91541,
+    "sha256": "ed5b7c860c0eb564e394b3c66f254ca3d7965488583c0d9955525736fc54906a",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -984,6 +994,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -1025,8 +1036,8 @@
     ]
   },
   "room+shared+voice": {
-    "bytes": 91033,
-    "sha256": "c1dd059be545f8d01e54757fbdaffa1d464abdd65c84b63a604789fec271f0e8",
+    "bytes": 92508,
+    "sha256": "684cb2b03c153f587dbbf0783367393f2979439c8cbb8392519597dc54b25d96",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1068,6 +1079,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -1110,8 +1122,8 @@
     ]
   },
   "room+skills": {
-    "bytes": 89687,
-    "sha256": "6742fc998b0e6ee01c1ad4be322456d8d19f89db3667a597f04ece28dfab61ec",
+    "bytes": 91162,
+    "sha256": "8f90de897a1cdddd9d0a8a410435728bf6fcf30e602664e572559c1d88c37864",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1151,6 +1163,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -1193,8 +1206,8 @@
     ]
   },
   "room+skills+voice": {
-    "bytes": 90654,
-    "sha256": "22e4b0b889c932c1abb09efb3d947896f65a2d8912c615782a40b09467b01172",
+    "bytes": 92129,
+    "sha256": "bee58b7c53e8f6d82aad286583f116d4f991b9a05a967156030318c396cdf1b7",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1234,6 +1247,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -1277,8 +1291,8 @@
     ]
   },
   "room+skills+shared": {
-    "bytes": 91688,
-    "sha256": "1702f5f8e57c04c18965d2a3147b8137fa0e27acfd34b21bb1a0d0f193f30f42",
+    "bytes": 93163,
+    "sha256": "a4a8099a19dcf0fc8c36cb63b3a61fcddc1318d8585ef9925af3ebcc1c87eeca",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1320,6 +1334,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -1362,8 +1377,8 @@
     ]
   },
   "room+skills+shared+voice": {
-    "bytes": 92655,
-    "sha256": "e70a3e74c5deb80b4b52dc2c848c515d5902d18164cf2c6b7d5a6a05ce096040",
+    "bytes": 94130,
+    "sha256": "227a28774d548cd75105885ff0b8b6abae686540bffa9b600152593f44e74300",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1405,6 +1420,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -1448,8 +1464,8 @@
     ]
   },
   "room+own-thread": {
-    "bytes": 90118,
-    "sha256": "b174d3845037cecb8baa155e7ea9ebf8e439cb855f14ceb653c9f63df7a8a5ae",
+    "bytes": 91593,
+    "sha256": "867c8448f1bfca0e7861b7141c2359e63da221320661a4d300d93b14e62324ea",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1490,6 +1506,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -1531,8 +1548,8 @@
     ]
   },
   "room+own-thread+voice": {
-    "bytes": 91085,
-    "sha256": "22763e8317f5f976eb8bd2157ec94ceaf05e394bd6b15df9a0c25fe3101740ad",
+    "bytes": 92560,
+    "sha256": "10e7b59a4623d843445084bdda45183e5353b4cfb0a47e6b979c686530eef2fd",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1573,6 +1590,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -1615,8 +1633,8 @@
     ]
   },
   "room+own-thread+shared": {
-    "bytes": 92119,
-    "sha256": "78866a48afda3059038ae6f557afe423c6fc304395123ee97616e894e7e8f079",
+    "bytes": 93594,
+    "sha256": "c7ec058d50d78957918f043a38ffda1514bb6ca3f4d83b3021f738074ca50a36",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1659,6 +1677,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -1700,8 +1719,8 @@
     ]
   },
   "room+own-thread+shared+voice": {
-    "bytes": 93086,
-    "sha256": "05505050406c88688d03caf1d7038699a0865826203ca36414b77e7d8ad29dab",
+    "bytes": 94561,
+    "sha256": "2d214c0d39937ea03b4e8a8a0fb83ad34a765f85a72c321f6d03e89cb930c8d3",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1744,6 +1763,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -1786,8 +1806,8 @@
     ]
   },
   "room+own-thread+skills": {
-    "bytes": 91740,
-    "sha256": "c0f6445366cfd8f0725b6eb556b1aa07505f0d91ba0a37a2be383bb4ee0bc1e0",
+    "bytes": 93215,
+    "sha256": "6b401d162bc8c4add62df4fbbbad72cb562a76a9f8d2a8c8013b22a4cc38e830",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1828,6 +1848,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -1870,8 +1891,8 @@
     ]
   },
   "room+own-thread+skills+voice": {
-    "bytes": 92707,
-    "sha256": "2ce92b0c2c9297856389eaa1ea97cec78463611bcefeb1dca8883a277c84687f",
+    "bytes": 94182,
+    "sha256": "5bcaefe7ad02e329feabd8e4cc39abba9f3a5edef943058f71e510173fb2dd87",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1912,6 +1933,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -1955,8 +1977,8 @@
     ]
   },
   "room+own-thread+skills+shared": {
-    "bytes": 93741,
-    "sha256": "9bd490800865d729356bc4dc4f71c8471321188ec8053153f413360aa1113b11",
+    "bytes": 95216,
+    "sha256": "e28e8d1c157fb1bae95fd6d2675ac01e393bfa2e8413d77c43fc340e3a2c68f2",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1999,6 +2021,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -2041,8 +2064,8 @@
     ]
   },
   "room+own-thread+skills+shared+voice": {
-    "bytes": 94708,
-    "sha256": "42fcd591b6f04d063126f4d6e591d4ffe6e6e2d1cbfd1ea515f8fe78e58285ba",
+    "bytes": 96183,
+    "sha256": "f04d14a4adcc8298f1a70a180925d0244cab0be8f6cc1732ac8e5ec9e6285cc4",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2085,6 +2108,7 @@
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -2128,8 +2152,8 @@
     ]
   },
   "direct+non-chief": {
-    "bytes": 89534,
-    "sha256": "6ce7df02c9daa50ee4e8f39ffed89fb7f8ccccdb56ae73e9d82fc6e6f9768c63",
+    "bytes": 90415,
+    "sha256": "ea4c8b575b25aa4bb8c2651a481ddd2eb05c31bb37f8d582b4e9f936130bbfad",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2175,6 +2199,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -2215,8 +2240,8 @@
     ]
   },
   "direct+voice+non-chief": {
-    "bytes": 90501,
-    "sha256": "f615ff682adc8c1e995ced35eb9615bb583ef44551eafa05fc0467eb69a9e90a",
+    "bytes": 91382,
+    "sha256": "2c30c074abbb679e8ba5af87b9613545b52bb45af2872ffd64cdcbdebac79a4a",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2262,6 +2287,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -2303,8 +2329,8 @@
     ]
   },
   "direct+shared+non-chief": {
-    "bytes": 91535,
-    "sha256": "f91edee7d728893dd729c91f50c9f30117f7e90e05dcdef1e2d271b27b956fd1",
+    "bytes": 92416,
+    "sha256": "bf75c23470d9d85ed3e601e47200e89367ed247681b7502f762e1d4d13d347b4",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2352,6 +2378,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -2392,8 +2419,8 @@
     ]
   },
   "direct+shared+voice+non-chief": {
-    "bytes": 92502,
-    "sha256": "05ac209fe1a20cf115608be7e58ae1cc858baa0fbfae7c42a0b056a87b2edb9e",
+    "bytes": 93383,
+    "sha256": "87fe8282656e9f1d6c71a89740baa96c0937988e5d3b40207fd848c70b2e7bf2",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2441,6 +2468,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -2482,8 +2510,8 @@
     ]
   },
   "direct+skills+non-chief": {
-    "bytes": 91156,
-    "sha256": "1a058d51315a42fe8bc9bdadd7b219206df082cdbdcdfedbbcceba363a5203e7",
+    "bytes": 92037,
+    "sha256": "8deb559093266c3517b606432af6d20ce58272cd67480035f7e30a32fdbf476e",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2529,6 +2557,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -2570,8 +2599,8 @@
     ]
   },
   "direct+skills+voice+non-chief": {
-    "bytes": 92123,
-    "sha256": "fc8a63a09690f9e35f5c954bf7fc38a557fea465c8915fa5a8adc073bb570a3a",
+    "bytes": 93004,
+    "sha256": "df1ab05d08277c229ef4fce9c6b49c001bc61b519b8a74f2015e07ce31f6fc6a",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2617,6 +2646,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -2659,8 +2689,8 @@
     ]
   },
   "direct+skills+shared+non-chief": {
-    "bytes": 93157,
-    "sha256": "9d3bf3624170d3d3819fc5a7bc830c1b85a20762ac29d043bfcedf08f38bc542",
+    "bytes": 94038,
+    "sha256": "3edb7b19e0690e2e75b4bbe88b02f63b6e518c0bbccc33a1c8037cec3d24ba88",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2708,6 +2738,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -2749,8 +2780,8 @@
     ]
   },
   "direct+skills+shared+voice+non-chief": {
-    "bytes": 94124,
-    "sha256": "c80b72fc8ea7068681ee85edf2b3619b9fe29b4883747213c0284638d520ae4d",
+    "bytes": 95005,
+    "sha256": "b89e27bdaab0df050abd954e8df3c2eb6695020c251e7edaa3f4219ebe05f6a8",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2798,6 +2829,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -2840,8 +2872,8 @@
     ]
   },
   "room+non-chief": {
-    "bytes": 77563,
-    "sha256": "f767e96cac53797e034b884b00e30ca0276677e18387cc095df855a65e397b98",
+    "bytes": 79038,
+    "sha256": "d9d3f96d5af72ecc0cb94c1b2e47ef6a92f3c10f1e943a1a22a155012c5c67db",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2874,6 +2906,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -2914,8 +2947,8 @@
     ]
   },
   "room+voice+non-chief": {
-    "bytes": 78530,
-    "sha256": "6cec28b82a0b661bd653df93b5381c6e8063c845e76ac44fe9015f287e1a1341",
+    "bytes": 80005,
+    "sha256": "0cd3a982ba6785b44ca812089b026b31c06c22f00171a098695c4531af1eb01d",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2948,6 +2981,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -2989,8 +3023,8 @@
     ]
   },
   "room+shared+non-chief": {
-    "bytes": 79564,
-    "sha256": "56fc60a3f4a842f7c23367dff4223e4a7728d41fb6ee06b11f157337a8faaaa9",
+    "bytes": 81039,
+    "sha256": "7e36dddfd15a9984e944dfdbdd015a977f34618e0536f775e425bf8ee1837e1d",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3025,6 +3059,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -3065,8 +3100,8 @@
     ]
   },
   "room+shared+voice+non-chief": {
-    "bytes": 80531,
-    "sha256": "9cabe25399fc46602d895ed8d514632885b6c4a1063c2b777033372a763508f1",
+    "bytes": 82006,
+    "sha256": "9279d18affc302a827a750a2cd2bc83b5c640010b3ed9fa8b4179210fdfabd95",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3101,6 +3136,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -3142,8 +3178,8 @@
     ]
   },
   "room+skills+non-chief": {
-    "bytes": 79185,
-    "sha256": "81d41c6024eecf413af87a32bab1c2c24d20cbdfeb884db57845db9788db64ae",
+    "bytes": 80660,
+    "sha256": "36869210b48bf2091d7e0319cf3e403408d4e468ea9d316e3e938d03c6c6872e",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3176,6 +3212,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -3217,8 +3254,8 @@
     ]
   },
   "room+skills+voice+non-chief": {
-    "bytes": 80152,
-    "sha256": "20c0087135a9827cb4f577b782e881bb96045d02e1e55a7a7e9abcba9459351a",
+    "bytes": 81627,
+    "sha256": "08a80f380015cfac132a990e914759780b1eb7af877c68f47fb33ec9eb6b50b7",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3251,6 +3288,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -3293,8 +3331,8 @@
     ]
   },
   "room+skills+shared+non-chief": {
-    "bytes": 81186,
-    "sha256": "7572030739662a03c43cfda2f380e1b155137ee85ef7258e125d628f5ca6291e",
+    "bytes": 82661,
+    "sha256": "a2ef12132e98cd3111923fc9506556a520849667844f47623eaae421b5d76f31",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3329,6 +3367,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -3370,8 +3409,8 @@
     ]
   },
   "room+skills+shared+voice+non-chief": {
-    "bytes": 82153,
-    "sha256": "5e4adb695decd944a110471808eae2a7c7b3b8740d64c7a690a3dbd8418c9599",
+    "bytes": 83628,
+    "sha256": "5625e14f552eb8482d68f6bc9318c88cd7dfbc98a6c9701850695871bdd7e823",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3406,6 +3445,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -3448,8 +3488,8 @@
     ]
   },
   "room+own-thread+non-chief": {
-    "bytes": 79616,
-    "sha256": "7640592db9aad674efba09b05f4f1280ef360a2f46c6faba5686393a9406e186",
+    "bytes": 81091,
+    "sha256": "c89b7fbc3cfb9481d387b8da5e5b62acabef0737e6776f142f09110fe9c98ecf",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3483,6 +3523,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -3523,8 +3564,8 @@
     ]
   },
   "room+own-thread+voice+non-chief": {
-    "bytes": 80583,
-    "sha256": "351b099fee3cd13aa720d423a0a2629c767e80fae413c2a8e93c5f0e0eda2d36",
+    "bytes": 82058,
+    "sha256": "ea77d47abf575b6fee3843cbf81eaa7ee3b6d6dda7d1d20a9b919e22387301f6",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3558,6 +3599,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -3599,8 +3641,8 @@
     ]
   },
   "room+own-thread+shared+non-chief": {
-    "bytes": 81617,
-    "sha256": "1482dec93c8cafe33e3230c58c778a0a8ba932cb9a96ede090618f68d1a1da29",
+    "bytes": 83092,
+    "sha256": "67ae55c355e218ceb2c2abbc4ceeebf9d8a268f4d5fb5fda53f5c7b2307b4062",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3636,6 +3678,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -3676,8 +3719,8 @@
     ]
   },
   "room+own-thread+shared+voice+non-chief": {
-    "bytes": 82584,
-    "sha256": "721806bdacf735be563dc98e3e0298d0834183c90a47dd7d0f385ddaf4f3009f",
+    "bytes": 84059,
+    "sha256": "a2cd81f284a5ca3d172d046387faeb4c938510fd60ef8ff1f1cbd126bd491f9e",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3713,6 +3756,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -3754,8 +3798,8 @@
     ]
   },
   "room+own-thread+skills+non-chief": {
-    "bytes": 81238,
-    "sha256": "1fb79948438160013012ae7157c12aefe997706828fc1c1e2bdca6cdee6c7d62",
+    "bytes": 82713,
+    "sha256": "df4df4191ec3c33b958d6d4551703738c7c642e1bdcbc29d9aeb6f0b6c39aa19",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3789,6 +3833,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -3830,8 +3875,8 @@
     ]
   },
   "room+own-thread+skills+voice+non-chief": {
-    "bytes": 82205,
-    "sha256": "b12ec3e729b8d5a12e1d4578101d6c9e4041b467c17a663eda4ebfd98e64aa33",
+    "bytes": 83680,
+    "sha256": "aeac044ef751c6e4768dcd74a2659b8333eb59df5cd6a3ed3985b796ed20d291",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3865,6 +3910,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -3907,8 +3953,8 @@
     ]
   },
   "room+own-thread+skills+shared+non-chief": {
-    "bytes": 83239,
-    "sha256": "7d0d9ff2667d7aef5f3d006714b52223bb009e019c3cf691c0869585e995aba6",
+    "bytes": 84714,
+    "sha256": "8f262c3370111744fb7633c2fad51eda15f649936574455ed83aa37d6f24c3fc",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3944,6 +3990,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -3985,8 +4032,8 @@
     ]
   },
   "room+own-thread+skills+shared+voice+non-chief": {
-    "bytes": 84206,
-    "sha256": "74e416b9e0677533309df8421af4343f836eefd6e3896d6ebbfe13667e3e0390",
+    "bytes": 85681,
+    "sha256": "c10999d2e64848e3a1ba813f658b601337eedff7d71989e9cdc8bc8f8a480e88",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -4022,6 +4069,7 @@
       "remove_reaction",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "send_voice_note",
       "list_terminal_resources",
@@ -4064,9 +4112,11 @@
     ]
   },
   "external": {
-    "bytes": 5083,
-    "sha256": "630932ab54077e00466eab74c3feb237fb6271fc2349c37dfb5bec63734052fe",
+    "bytes": 7293,
+    "sha256": "ce527f42dbf37b77e34a84706c6b05320e91d91d0b5e01a902b2d0e18195a6c9",
     "tools": [
+      "coordinate_bots",
+      "assignment_status",
       "list_bots",
       "ask_bot",
       "delegate_bot",
@@ -4076,9 +4126,11 @@
     ]
   },
   "external+everything": {
-    "bytes": 5083,
-    "sha256": "630932ab54077e00466eab74c3feb237fb6271fc2349c37dfb5bec63734052fe",
+    "bytes": 7293,
+    "sha256": "ce527f42dbf37b77e34a84706c6b05320e91d91d0b5e01a902b2d0e18195a6c9",
     "tools": [
+      "coordinate_bots",
+      "assignment_status",
       "list_bots",
       "ask_bot",
       "delegate_bot",

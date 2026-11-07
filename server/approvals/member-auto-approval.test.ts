@@ -46,9 +46,11 @@ describe("memberRoomTurnLevel (a Primary Bot's handoff in a room)", () => {
     expect(source).toMatch(/delegatedLevel\.roomTurn\(/);
   });
 
-  it("the owner route of a member's bot runs as Approval while the setting is off (index.ts ownerModeForTurn autoAllowed)", () => {
-    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
-    expect(source).toMatch(/autoAllowed: !\(memberOwnedInOrg\(asker\) && !memberAutoApprovalAllowed\(cfg\.organization\)\),/);
+  it("the owner route of a member's bot runs as Approval while the setting is off (request.opened ownerModeForTurn autoAllowed)", () => {
+    // #1388: the request.opened handler left index.ts for runtime-events/,
+    // reading the server through its leaf host
+    const source = readFileSync(new URL("../runtime-events/request-opened.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/autoAllowed: !\(host\.memberOwnedInOrg\(asker\) && !memberAutoApprovalAllowed\(host\.cfg\.organization\)\),/);
   });
 
   it("keeps Custom at Ask and leaves Ask and Full to their own rules", () => {

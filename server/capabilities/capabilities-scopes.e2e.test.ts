@@ -34,7 +34,8 @@ it("serves the three scopes through the real routes and keeps personal reference
     for (const bot of [first, second]) {
       const receipt = await api("GET", `/api/bots/${bot.id}/capabilities`);
       expect(receipt.items).toContainEqual(expect.objectContaining({ key: "skill:me:packing-list", state: "on" }));
-      expect(JSON.stringify(await api("GET", `/api/bots/${bot.id}/system-prompt`))).toContain("packing-list/SKILL.md");
+      // #1997: the prompt indexes the skill (name: description); its body loads on demand
+      expect(JSON.stringify(await api("GET", `/api/bots/${bot.id}/system-prompt`))).toContain("packing-list: Verify packages");
     }
     const plugin = { marketplace: "catalog", plugin: "packing" };
     await api("POST", `/api/bots/${first.id}/plugins/install`, plugin);
@@ -48,6 +49,6 @@ it("serves the three scopes through the real routes and keeps personal reference
     expect(receipt.items).toContainEqual(expect.objectContaining({ key: "plugin:installation:packing@catalog", state: "on", brings: { skills: ["ship"], commands: ["track"], agents: ["clerk"], mcpServers: [] } }));
     expect(receipt.items).toContainEqual(expect.objectContaining({ key: "plugin:me:packing@catalog", state: "off", reason: "name_taken" }));
     await api("PATCH", "/api/me/skills-library/packing-list", { enabled: false });
-    expect(JSON.stringify(await api("GET", `/api/bots/${second.id}/system-prompt`))).not.toContain("packing-list/SKILL.md");
+    expect(JSON.stringify(await api("GET", `/api/bots/${second.id}/system-prompt`))).not.toContain("packing-list: Verify packages");
   } finally { await fixture.close(); }
 }, 90_000);

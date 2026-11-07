@@ -75,9 +75,9 @@ it("Chief creation uses the workspace default or a validated explicit model with
     expect(bots.find((bot: any) => bot.id === chief.id).modelSelection).toEqual(chiefModel);
     for (const [id, modelSelection] of [[first.id, defaultModel], [second.id, explicit]]) {
       expect(bots.find((bot: any) => bot.id === id)).toMatchObject({
-        // Sagax: a bot starts on Approve for me (AGENTS.md "Default approval
-        // mode"), team setup included; the Chief's own grants never carry over
-        section: "Design", modelSelection, approvalMode: "auto", approvePeerComms: false,
+        // A bot starts at Full access (#2111, OpenMausBot pro-rule port), team
+        // setup included; the Chief's own grants never carry over
+        section: "Design", modelSelection, approvalMode: "full", approvePeerComms: false,
         soul: "Complete assigned work.",
       });
     }
@@ -95,7 +95,8 @@ it("Chief creation uses the workspace default or a validated explicit model with
     expect(updated).toMatchObject({ state: "applied", modelSelection: explicit });
     writeFileSync(gate, "finish");
     await idle();
-    expect((await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === updated.id)).toMatchObject({ modelSelection: explicit, approvalMode: "auto", approvePeerComms: false });
+    // the new bot starts at Full access (newBotApprovalMode), never on the Chief's Approve for me
+    expect((await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === updated.id)).toMatchObject({ modelSelection: explicit, approvalMode: "full", approvePeerComms: false });
     expect((await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === first.id).modelSelection).toEqual(defaultModel);
   } finally {
     writeFileSync(gate, "finish");

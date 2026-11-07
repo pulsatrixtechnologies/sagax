@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { drainSteeredMessages } from "./turns/steer-queue.ts";
 import { drainChannelMessages } from "./rooms/channel-queue.ts";
-import { applyHoldDirective, heldMemberLine, rememberHeldMessage } from "./room-holds.ts";
+import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeldMessage } from "./room-holds.ts";
 import { agentBrowserIntegration } from "./browser/browser-engine.ts";
 import { browserProfilePartitionTarget } from "./config.ts";
 import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
@@ -64,7 +64,8 @@ import { rm as removeDirectory } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ToolResults } from "./tools/tool-results.ts";
 import { basename, dirname, join } from "node:path";
-import { authorizeExternalRuntime, externalRuntimeIsActive, type ExternalRuntimeGrant } from "./external-runtime.ts";
+import type { InternalCapability, GroupTurnOperation, GroupMemberTurnOutcome } from "./index-types.ts";
+import { authorizeExternalRuntime, externalRuntimeIsActive, externalRuntimeRunId } from "./external-runtime.ts";
 
 import { z } from "zod";
 import { selectReplay, DEFAULT_REBUILD_BYTES, type ReplayEntry } from "./context/context-rebuild.ts";
@@ -5732,7 +5733,7 @@ bindLeafHost({
   get engineUnavailableLogged() { return engineUnavailableLogged; }, set engineUnavailableLogged(value) { engineUnavailableLogged = value; },
   get dataUnavailableLogged() { return dataUnavailableLogged; }, set dataUnavailableLogged(value) { dataUnavailableLogged = value; },
   get PORT() { return PORT; },
-  get orgCapabilitiesRevision() { return orgCapabilitiesRevision; },
+  get orgCapabilitiesRevision() { return orgCapabilitiesRevision; }, set orgCapabilitiesRevision(value) { orgCapabilitiesRevision = value; },
   get WEBHOOK_PORT() { return WEBHOOK_PORT; },
   get WEBHOOK_PUBLIC_URL() { return WEBHOOK_PUBLIC_URL; },
   get STATIC_DIR() { return STATIC_DIR; },
@@ -5814,8 +5815,8 @@ bindLeafHost({
   get LOOPBACK() { return LOOPBACK; },
   get WORKER_RELAY_TOKEN() { return WORKER_RELAY_TOKEN; },
   get cliOwnerToken() { return cliOwnerToken; },
-  get desktopMutationToken() { return desktopMutationToken; },
-  get companionMutationToken() { return companionMutationToken; },
+  get desktopMutationToken() { return desktopMutationToken; }, set desktopMutationToken(value) { desktopMutationToken = value; },
+  get companionMutationToken() { return companionMutationToken; }, set companionMutationToken(value) { companionMutationToken = value; },
   get FALLBACK_PUBLIC_URL() { return FALLBACK_PUBLIC_URL; },
   get claudeRetirement() { return claudeRetirement; },
   get providerConfigs() { return providerConfigs; },
@@ -5911,7 +5912,7 @@ bindLeafHost({
   get providerAuthSessions() { return providerAuthSessions; },
   get openCodeOrganisationManaged() { return openCodeOrganisationManaged; },
   get openCodeKeysAllowed() { return openCodeKeysAllowed; },
-  get openCodeKeysLastAllowed() { return openCodeKeysLastAllowed; },
+  get openCodeKeysLastAllowed() { return openCodeKeysLastAllowed; }, set openCodeKeysLastAllowed(value) { openCodeKeysLastAllowed = value; },
   get resyncOpenCodeProviderKeys() { return resyncOpenCodeProviderKeys; },
   get bundledSkills() { return bundledSkills; },
   get availableSkills() { return availableSkills; },
@@ -5937,7 +5938,7 @@ bindLeafHost({
   get perspicaxMcp() { return perspicaxMcp; },
   get perspicaxReach() { return perspicaxReach; },
   get perspicaxMemory() { return perspicaxMemory; },
-  get perspicaxEnding() { return perspicaxEnding; },
+  get perspicaxEnding() { return perspicaxEnding; }, set perspicaxEnding(value) { perspicaxEnding = value; },
   get activeInternalGenerationByThread() { return activeInternalGenerationByThread; },
   get internalGenerationByProviderTurn() { return internalGenerationByProviderTurn; },
   get computerSelectionTurns() { return computerSelectionTurns; },
@@ -6227,7 +6228,7 @@ bindLeafHost({
   get sessionDeviceIds() { return sessionDeviceIds; },
   get loopbackDeviceIds() { return loopbackDeviceIds; },
   get deviceOwnerSession() { return deviceOwnerSession; },
-  get queuedWorkerTurns() { return queuedWorkerTurns; },
+  get queuedWorkerTurns() { return queuedWorkerTurns; }, set queuedWorkerTurns(value) { queuedWorkerTurns = value; },
   get inflightWorkerTurns() { return inflightWorkerTurns; },
   get inflightWorkerAuthors() { return inflightWorkerAuthors; },
   get locateChannelMessage() { return locateChannelMessage; },
@@ -6344,8 +6345,8 @@ bindLeafHost({
   get pendingApprovalCards() { return pendingApprovalCards; },
   get pendingAdminApprovals() { return pendingAdminApprovals; },
   get orgAdminNames() { return orgAdminNames; },
-  get adminApprovalsAnnounce() { return adminApprovalsAnnounce; },
-  get announcedAdminApprovals() { return announcedAdminApprovals; },
+  get adminApprovalsAnnounce() { return adminApprovalsAnnounce; }, set adminApprovalsAnnounce(value) { adminApprovalsAnnounce = value; },
+  get announcedAdminApprovals() { return announcedAdminApprovals; }, set announcedAdminApprovals(value) { announcedAdminApprovals = value; },
   get scheduleAdminApprovalsAnnounce() { return scheduleAdminApprovalsAnnounce; },
   get pendingApprovalsFor() { return pendingApprovalsFor; },
   get pendingInboxCards() { return pendingInboxCards; },
@@ -6799,8 +6800,8 @@ bindLeafHost({
   get _phoneCallbackOriginImpl() { return _phoneCallbackOriginImpl; },
   get startMcpSignIn() { return startMcpSignIn; },
   get _persistMcpServersImpl() { return _persistMcpServersImpl; },
-  get engineProbes() { return engineProbes; },
-  get engineProbeFlight() { return engineProbeFlight; },
+  get engineProbes() { return engineProbes; }, set engineProbes(value) { engineProbes = value; },
+  get engineProbeFlight() { return engineProbeFlight; }, set engineProbeFlight(value) { engineProbeFlight = value; },
   get ENGINE_PROBE_TTL_MS() { return ENGINE_PROBE_TTL_MS; },
   get ENGINE_PROBE_TIMEOUT_MS() { return ENGINE_PROBE_TIMEOUT_MS; },
   get CLI_MISSING() { return CLI_MISSING; },
@@ -6945,13 +6946,13 @@ bindLeafHost({
   get sendPeopleDmMessage() { return sendPeopleDmMessage; },
   get notifyRoomMentions() { return notifyRoomMentions; },
   get orgState() { return orgState; },
-  get botActService() { return botActService; },
+  get botActService() { return botActService; }, set botActService(value) { botActService = value; },
   get botActs() { return botActs; },
-  get settingsActionService() { return settingsActionService; },
+  get settingsActionService() { return settingsActionService; }, set settingsActionService(value) { settingsActionService = value; },
   get settingsActions() { return settingsActions; },
   get _primaryTurnGateImpl() { return _primaryTurnGateImpl; },
   get questionAnsweredBy() { return questionAnsweredBy; },
-  get primaryApprovalService() { return primaryApprovalService; },
+  get primaryApprovalService() { return primaryApprovalService; }, set primaryApprovalService(value) { primaryApprovalService = value; },
   get primaryApprovals() { return primaryApprovals; },
   get actAnswerer() { return actAnswerer; },
   get describeActForRule() { return describeActForRule; },
@@ -7241,6 +7242,7 @@ bindLeafHost({
   get ENDED() { return ENDED; },
   get cloudAgentManager() { return cloudAgentManager; },
   get computerParks() { return computerParks; },
+  get parkedSeats() { return parkedSeats; },
   get customSecretVault() { return customSecretVault; },
   get grokBridgeService() { return grokBridgeService; },
   get listNativeBotSkills() { return listNativeBotSkills; },
@@ -8147,6 +8149,52 @@ function setRoomHold(groupId: string, botId: string, held: boolean): GroupRecord
   if (change.held.length || change.released.length) store.patchGroup(groupId, { holds: change.holds });
   if (held) void interruptHeldMember(groupId, botId);
   return store.group(groupId) ?? null;
+}
+
+/** Applied at accept, before the message queues behind a busy room, so a stop reaches a member working now. */
+function applyRoomHoldsFromMessage(groupId: string, text: string): void {
+  const group = store.group(groupId);
+  if (!group || group.dm) return;
+  const members = group.memberIds.map((id) => store.bot(id)).filter((bot): bot is BotRecord => Boolean(bot) && !bot!.hidden);
+  const mentioned = mentionedBots(text, members).map((bot) => bot.id);
+  const change = applyHoldDirective(group.holds, classifyHoldDirective(text, mentioned), members.map((bot) => bot.id), Date.now());
+  if (!change.held.length && !change.released.length) return;
+  store.patchGroup(groupId, { holds: change.holds });
+  for (const botId of change.held) void interruptHeldMember(groupId, botId);
+}
+
+/** What was addressed to a held member while it was held, for the turn that brings it back. */
+function heldReplayFor(groupId: string, threadId: string, botId: string, userName: string, roomContext: string): { block: string; messageIds: string[] } {
+  const entries = (store.group(groupId)?.heldMessages?.[botId] ?? []).filter((entry) => entry.threadId === threadId);
+  if (!entries.length) return { block: "", messageIds: [] };
+  const messages = store.messagesFor(threadId);
+  const byId = new Map(messages.map((message) => [message.id, message]));
+  const lines = entries.flatMap((entry) => {
+    const message = byId.get(entry.messageId);
+    if (!message?.text) return [];
+    const speaker = message.role === "user" ? message.sender?.name ?? userName : message.from ? peerName(message.from.name) : "Bot";
+    const line = `${speaker}: ${escapeNotes(transcriptText(message, byId, userName)).slice(0, 1_000)}`;
+    return roomContext.includes(line) ? [`${speaker}: (in the conversation above) ${escapeNotes(message.text).slice(0, 120)}`] : [line];
+  });
+  return {
+    block: lines.length
+      ? `\n\nYou were stopped (held) in this room and have just been brought back. While you were held, these messages were addressed to you:\n${lines.join("\n")}`
+      : "",
+    messageIds: entries.map((entry) => entry.messageId),
+  };
+}
+
+/** Once the returning turn dispatches, the replayed messages are delivered. */
+function clearHeldReplay(groupId: string, botId: string, messageIds: readonly string[]): void {
+  if (!messageIds.length) return;
+  const group = store.group(groupId);
+  const current = group?.heldMessages?.[botId];
+  if (!group || !current) return;
+  const remaining = current.filter((entry) => !messageIds.includes(entry.messageId));
+  const heldMessages = { ...group.heldMessages };
+  if (remaining.length) heldMessages[botId] = remaining;
+  else delete heldMessages[botId];
+  store.patchGroup(groupId, { heldMessages });
 }
 
 function turnEvidence(nodeRows: { tool?: { name?: string; ok?: boolean } | null }[]): { toolCalls?: number; tools?: string[]; okToolCalls?: number } {
@@ -9815,69 +9863,6 @@ utilityParentPort?.on("message", event => {
   }).catch(reportBackgroundError);
 });
 
-// ── peer-agent comms wiring ────────────────────────────────────────────
-// Every mounted proxy receives a turn-scoped capability for localhost
-// /api/internal calls. Identity, source thread, recursion depth and route
-// family all come from this server-side record; caller fields are assertions,
-// never authority. Full mode can inspect its own MCP environment, so a
-// credential is never shared between bots or threads (see
-// sessionCredentials), and each turn's record is revoked when the turn ends.
-type InternalCapability = {
-  botId: string;
-  threadId: string;
-  generation: string;
-  depth: number;
-  kind: "agents" | "connectors" | "computer" | "browser" | "hooks" | "phone" | "messages" | "perspicax" | "sandbox" | "desktop" | "workplace" | "personal-mcp" | "data";
-  /** A "sandbox" capability: whose server environment it runs in. */
-  sandboxPrincipalId?: string;
-  /** A "personal-mcp" capability: which of that person's own MCP servers
-   * (a command in their server environment) it relays to. */
-  personalMcpServer?: string;
-  /** A complete plugin's command, resolved against its current selected
-   * install on every request. No execution spec rides the bearer. */
-  pluginMcp?: { scope: "organization" | "person" | "bot"; key: string; name: string };
-  /** A "desktop" capability: whose own computer it reaches (desktop bridge). */
-  desktopPrincipalId?: string;
-  skillAuthoring: boolean;
-  createdBots: number;
-  createdRooms?: number;
-  /** start_thread calls this turn has made — capped like createdBots, so a
-   * turn cannot fan out into more real turns than a person could follow. */
-  openedThreads: number;
-  orphanExpiresAt: number;
-  localVmTarget?: LocalVmTarget;
-  teamComputerId?: string;
-  /** The Boat this turn's cloud computer tools act on
-   * (/api/internal/computer/mcp); only ever set by the harness at attach.
-   * null: the tools are mounted and the Boat is the one their first call
-   * creates or wakes (mountBotBoat), read from the turn's claim. */
-  boxId?: string | null;
-  browserSession?: string;
-  roomHandoffId?: string;
-  /** attach_file calls this turn has made, capped so one turn cannot flood the chat. */
-  attachedFiles?: number;
-  /** This turn's engine works with host files, so attach_file may also
-   * deliver a file the turn saved outside the conversation's folders
-   * (openFileSavedSince). Never on a Cloud home or a hosted workspace. */
-  deliversSavedFiles?: boolean;
-  /** When this turn's record was minted: a file saved outside the folders
-   * must be newer than this to be delivered. Set by mintInternalCapability. */
-  turnStartedAt?: number;
-  /** post_to_room calls this turn has made. */
-  roomPosts?: number;
-  /** react_to_message calls this turn has made (MAX_BOT_REACTIONS_PER_TURN). */
-  reactions?: number;
-  /** Group memory updates refused this turn (bot memory archives at the cap instead). */
-  memoryRefusals?: number;
-  /** Delegations this turn handed out: their ids may not be checked or
-   * waited on until a later turn, so the teammate gets to work first. */
-  delegatedThisTurn?: Set<string>;
-  externalRuntime?: ExternalRuntimeGrant;
-  /** Room-coordination / bounded peer tools for this turn. */
-  roomCoordination?: boolean;
-  /** start_thread (and peers) allowed for this turn. */
-  ownThreadCreation?: boolean;
-};
 // Room posts, threads opened and rooms created per turn: the bot's own
 // limits, set by its owner (#1098, shared/turn-limits.ts botTurnLimit).
 // A refused group memory update gets one re-read and one corrected retry,
@@ -13120,36 +13105,6 @@ const storedAvatarExists = (avatarUrl: string): boolean =>
  * it (projectBotTranscript) or the frame layer does. */
 const publicBotQueuedMessages = () => queuedSteerSnapshot((botId, threadId) => Boolean(store.taskByThread(botId, threadId)));
 
-type GroupTurnOperation = {
-  id: string;
-  threadId: string;
-  botIds: Set<string>;
-  cancelled: boolean;
-  cancellation: AbortController;
-  providerHandshakePending: boolean;
-  /** Exact client message whose room round this is, only for approval routing. */
-  humanRequestMessageId?: string;
-  /** The coalesced burst that started this turn (M2): member turns recover
-   * every burst line from the transcript by these stable queueIds, so each
-   * line's context text and attachments survive the fold into one turn. */
-  queuedQueueIds?: string[];
-  /** Lot 3: the goal lead is polling a runtime worker in this same thread.
-   * That wait alone must not look like the room is busy to host.busy, or
-   * the worker never starts; the worker's own short-lived operation owns
-   * the working flag while it runs. */
-  awaitingRuntimeWorker?: boolean;
-  goalRun?: {
-    runId: string;
-    cardMessageId: string;
-    goal: string;
-    coordinatorBotId: string;
-    coordinatorName: string;
-    turnCount: number;
-    maxTurns: number;
-    startedAt: number;
-    finished: boolean;
-  };
-};
 
 /** Goal-orchestrator worker turns driven by enqueueGoalAssignment: system
  * instructions (not a visible room request), and host.run must not chain
@@ -13520,6 +13475,9 @@ const coordinator: Coordinator = createCoordinator({
   // threads that turned confidential before their teammate work was
   // forgotten (an older release): forgotten once the runtime opens
   confidentialThreads: () => store.bots.flatMap(bot => store.tasks(bot.id).filter(task => task.confidential === true).map(task => task.threadId)),
+  // a confidential thread's turns are recorded without words, and forgotten
+  // once settled (docs/confidential-threads.md)
+  isConfidential: threadId => store.isConfidentialThread(threadId),
   now: Date.now,
   log: line => console.error("coordinator:", line),
   // The one-time import of the delegation ledger names threads the ledger
@@ -16093,20 +16051,11 @@ bus.subscribe((event: RuntimeEvent) => {
   }
 });
 
-// Automatic continuity: a turn that died on its step budget gets a
-// `Continue:` task on the same bot, seeded with the persisted handoff — the
-// work moves forward without a person noticing and re-dispatching. Assigned
-// work is its requester's to continue: the stop and the handoff return in its
-// outcome (stoppedTurnText), and the requester sends what is left.
-// A step cap's Continue: thread runs on the job runtime (lot 3): the bot's
-// one-way notice to itself, under the origin of the work that stopped, at
-// the level of the new thread. A restart reruns a cut continuation once.
-bus.subscribe(makeCapContinuationSubscriber({ store, reportsToRequester,
-  dispatch: (botId, fromThreadId, threadId, text) => {
-    const owner = directRequestOwners.get(fromThreadId);
-    coordinator.enqueueContinuation({ botId, threadId: fromThreadId }, { botId, threadId }, text, owner && !owner.stopped ? owner.origin : undefined);
-    coordinator.tick();
-  } }));
+// A step cap continues the same turn in place (decision 11, upstream
+// a5b2e437fd): the handoff rides the turn's outcome (turn.completed above)
+// and the runtime runs the node again with it, root or teammate alike. No
+// `Continue:` thread, no second owner of the work, so the older
+// makeCapContinuationSubscriber is no longer subscribed.
 
 // Memory journal turn boundary (server/memory/memory-journal.ts). A bot's own
 // file-tool writes to MEMORY.md and memory/ have no hook to tap, so the
@@ -17320,6 +17269,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get stoppedTurnText() { return stoppedTurnText; },
   get stoppedTurns() { return stoppedTurns; },
   get store() { return store; },
+  get strictRuleOwnerName() { return strictRuleOwnerName; },
   get strictCardRule() { return strictCardRule; },
   get subscriptionExpiredCard() { return subscriptionExpiredCard; },
   get syncRoutineRunToSource() { return syncRoutineRunToSource; },
@@ -18809,7 +18759,9 @@ const routineReadinessDeps: RoutineReadinessDeps = {
         const option = (await selectableComputers(bot)).find(option => option.surface === surface);
         // A managed computer that can wake or be provisioned is available to
         // dispatch. The pre-flight must not require an already warm desktop.
-        if (option) rows.push({ name: option.label, online: option.available, ...(option.reason ? { detail: option.reason } : {}) });
+        // A status check that failed (a temporary Boat error) is unknown, not
+        // offline: dispatch rechecks it and the run retries later (#841).
+        if (option) rows.push({ name: option.label, online: option.checkFailed ? undefined : option.available, ...(option.reason ? { detail: option.reason } : {}) });
       }
       return rows.map(row => ({ ...row, needed: required && (row.name === "Cloud computer" || row.name === surfaceLabel(surface)) }));
     }
@@ -20071,18 +20023,6 @@ function reconcileParkedRoots(): void {
 const GROUP_CONTEXT_MESSAGES = DRAIN_COALESCE_MAX_ITEMS;
 const MAX_GROUP_HOPS = 1;
 
-type GroupMemberTurnOutcome =
-  | "settled"
-  | "provider_failed"
-  | "dispatch_failed"
-  | "spend_capped"
-  | "stalled"
-  | "timed_out"
-  | "cancelled"
-  | "busy"
-  | "parked"
-  | "unavailable"
-  | "held";
 type GroupTurnOrchestration = {
   roomHandoffId?: string;
   resumed?: boolean;
@@ -20405,6 +20345,10 @@ type ComputerResumeEntry = {
 const pendingComputerResumes = new Map<string, ComputerResumeEntry>();
 
 function registerComputerResume(entry: ComputerResumeEntry): void {
+  // A turn the runtime owns parks on the seat there and continues in place
+  // once it frees (#2204, hostTurnResult): a host resume as well ran the
+  // member a third time. Every park site (the lazy claims too) defers to it.
+  if (coordinator.node(entry.generation) || directCoordinationSettlers.has(entry.generation)) return;
   // One per thread: the newest park replaces an older one.
   pendingComputerResumes.set(entry.threadId, entry);
   // The seat may already be free (it freed before this park registered):
@@ -21521,6 +21465,9 @@ function connectorSetupStore(...args: any[]) {
 function connectorSetupContext(...args: any[]) {
   return (_connectorSetupContextImpl ??= createConnectorSetupContext(getLeafHost) as any)(...args);
 }
+// The coordinate_bots route, also reached by start_thread on a teammate
+// (internal-rooms-threads.ts), which the rooms routes answer through it.
+let internalBotChatRoute: InternalRouteHandler | undefined;
 const INTERNAL_ROUTES: InternalRouteHandler[] = [
   // recall_topic (server/routes/recall-topic-internal.ts, server/streams/single-stream.ts)
   createRecallTopicInternalRoutes({
@@ -22213,7 +22160,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     fullAccessForSource,
     broadcastBot: (bot) => broadcast({ kind: "bot", bot: wireBot(bot as unknown as BotRecord) })
   }),
-  createInternalBotChatRoutes({
+  internalBotChatRoute = createInternalBotChatRoutes({
     store: store as unknown as Parameters<typeof createInternalBotChatRoutes>[0]["store"],
     startTurn: (botId, text, opts) => startTurn(botId, text, opts as Parameters<typeof startTurn>[2]),
     coordinator: coordinator as unknown as Parameters<typeof createInternalBotChatRoutes>[0]["coordinator"],
@@ -22257,9 +22204,18 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       if (!internalCapabilityIsActive(capability as InternalCapability)) {
         throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
       }
-    }
+    },
+    beginExternalRoot: (capability, id, address, brief) => {
+      const opener = handoffOpener(capability as InternalCapability, address.threadId);
+      const sender = store.bot(address.botId);
+      const running = sender ? store.projectBotForTask(sender.id, address.threadId) ?? sender : undefined;
+      coordinator.beginTurn({ id, address, brief,
+        level: running ? approvalModeForTurn(running, true, address.threadId) : "ask",
+        ...(opener ? { opener } : {}) });
+    },
   }),
   createInternalRoomsRoutes({
+    coordinateTeammateThread: (ctx, body) => internalBotChatRoute!({ ...ctx, method: "POST", path: "/api/internal/coordinate-bots", readBody: async () => body }),
     store: store as unknown as Parameters<typeof createInternalRoomsRoutes>[0]["store"],
     coordinator: coordinator as unknown as Parameters<typeof createInternalRoomsRoutes>[0]["coordinator"],
     approvalBus,
@@ -30606,6 +30562,7 @@ ROUTES.push(createSearchRoutes({
 }));
 ROUTES.push(createGroupsHttpRoutes({
   store,
+  roomMemberContexts,
   visibleFor: (auth, path) => visibleTo(viewerFor(auth, path)),
   viewerId: (auth) => channelFilterViewerId(auth),
   groupVisible,
@@ -30637,6 +30594,7 @@ ROUTES.push(createGroupsHttpRoutes({
   pageSize,
   messagePage,
   groupThreadIsWorking,
+  applyRoomHoldsFromMessage,
   groupOwnerRuleApplies,
   groupActor,
   effectiveBotOwner,
@@ -31532,6 +31490,9 @@ async function fallback(_req: IncomingMessage, res: ServerResponse, _url: URL, p
 
 const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   RoomTurnDeadline,
+  roomMemberContexts,
+  broadcast,
+  publicGroupState,
   briefCrossingLabel,
   claimRecallCrossings,
   roomTurnEnd,
@@ -31587,6 +31548,8 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   autoRecallPrompt,
   mergeSkills,
   escapeNotes,
+  heldReplayFor,
+  clearHeldReplay,
   placeUnavailable,
   resolveSurface,
   roomResponders,
@@ -31789,6 +31752,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   store,
   supportsWorkspaceFiles,
   surfaceOfComputerKind,
+  recordTurnPlace,
   surfacePrompt,
   teamAvailabilityPart,
   teamComputerPrompt,
@@ -32246,6 +32210,7 @@ const startTurnRunner = createStartTurn({
   subscriptionExpiredCard,
   supportsWorkspaceFiles,
   surfaceOfComputerKind,
+  recordTurnPlace,
   surfacePrompt,
   teamAvailabilityPart,
   teamComputerPrompt,
@@ -32856,7 +32821,9 @@ function personForJoin(threadId: string): { person?: string } {
 
 /** The id of the external runtime's run, for its requester. */
 function externalRunId(grant: InternalCapability["externalRuntime"]): string {
-  if (grant && typeof grant === "object" && "threadId" in grant) return grant.threadId;
+  // Upstream's run id: the runtime (bot) and its thread, so two runtimes
+  // never share a run even on one thread id.
+  if (grant && typeof grant === "object" && "threadId" in grant) return externalRuntimeRunId(grant.botId, grant.threadId);
   return "external";
 }
 

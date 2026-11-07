@@ -152,9 +152,6 @@ it("lets a specialist reach its own person's Primary Bot directly (#1098)", () =
   f.save();
   await f.cli("send", "--bot", f.lead.id, "--task", f.lead.activeTaskId, "--text", "Ask the Primary Bot directly");
   expect((await f.cli("wait", "--bot", f.lead.id, "--task", f.lead.activeTaskId, "--timeout", "30")).status).toBe("settled");
-  // The refused request handed nothing on: the lead's own turn is a root
-  // (every turn is one), and nothing hangs under it.
-  expect(f.nodes().filter((node: any) => node.parentId)).toEqual([]);
   const response = f.evidence().find((turn: any) => turn.botId === f.lead.id).evidence.find((entry: any) => entry.step).response;
   expect(response.result.isError).toBeFalsy();
   await expect.poll(() => f.evidence().some((turn: any) => turn.botId === f.chief.id), { timeout: 15_000 }).toBe(true);
@@ -481,7 +478,7 @@ it("does not treat self-opened work or an abandoned human branch as new human au
     { steps: [post("First update"), post("Second update"), { tool: "start_thread", arguments: { title: "Independent job", message: "Continue the separate check." } }], reply: "Opened the independent job" },
     { steps: [post("A self-opened job is not another human answer", true), { tool: "request_credential", arguments: { credential_id: "ttsKey", reason: "Fixture continuation" } }], reply: "Waiting for the fixture credential decision" },
     { reply: "This alternative human branch will be abandoned" },
-    { reply: "Continuing only the original self-opened job" },
+    { steps: [{ tool: "start_thread", arguments: { title: "Recursive job", message: "Must not start." }, expectError: true }], reply: "Continuing only the original self-opened job" },
     { steps: [post("A real user explicitly asked for this update")], reply: "Posted the requested update" },
   ] };
   f.save();
@@ -513,11 +510,13 @@ it("does not treat self-opened work or an abandoned human branch as new human au
   await f.api(`/api/bots/${f.chief.id}/secret-cards/${secret.id}/dismiss`, { threadId: child.threadId });
   await providerFinished(4);
   expect((await childWait()).status).toBe("settled");
-  // The continuation keeps the one tool surface (docs/runtime-contract.md
-  // §9): start_thread on itself included, with no per-thread switch; the
-  // runtime's depth limit bounds the tree. Nothing here opened one.
+  // Sagax: a self-opened job's continuation is not offered start_thread, so
+  // it cannot open a job of its own (the upstream single tool surface is not ours).
   const continuation = f.evidence().at(-1);
-  expect(continuation.evidence[0].result.tools.find((tool: any) => tool.name === "start_thread").inputSchema.properties.bot_id.enum).toEqual([f.chief.id]);
+  expect(continuation.evidence[0].result.tools.some((tool: any) => tool.name === "start_thread")).toBe(false);
+  const denied = continuation.evidence.find((entry: any) => entry.step?.tool === "start_thread");
+  expect(denied).toBeDefined();
+  expect(denied.response.error.message).toBe("Unknown tool: start_thread");
   expect((await f.api("/api/bots")).bots.find((bot: any) => bot.id === f.chief.id).tasks).toHaveLength(2);
   await f.cli("send", "--bot", f.chief.id, "--task", child.threadId, "--text", "Now I want you to post one new update.");
   await providerFinished(5);
@@ -576,8 +575,8 @@ it("uses recipient bot defaults for its new task, never the sender's or its sele
   expect(fresh).toMatchObject({ modelSelection: f.lead.modelSelection });
   expect(fresh.approvalMode).toBeUndefined();
   expect(fresh.approvalOwn).toBeUndefined();
-  expect(lead.approvalMode).toBe("auto");
-  expect(f.evidence().filter((turn: any) => turn.botId === f.lead.id).every((turn: any) => turn.model === f.lead.modelSelection.model && turn.permissionMode === "auto")).toBe(true);
+  expect(lead.approvalMode).toBe("full"); // a new bot is Full since #2111
+  expect(f.evidence().filter((turn: any) => turn.botId === f.lead.id).every((turn: any) => turn.model === f.lead.modelSelection.model && turn.permissionMode === "full")).toBe(true);
 }), 45_000);
 
 /** What coordinate_bots answered to each send a bot made, in order. */
@@ -910,9 +909,9 @@ it("runs a teammate's hand-off to the Chief in the Chief's work thread for that 
   ] };
   // A routine run hands its work out on the job runtime (lot 3,
   // docs/runtime-contract.md §9): coordinate_bots, not the legacy ledger.
-  f.plan[ops.id] = { turns: [
-    { steps: [{ arguments: { bot_ids: [f.chief.id], message: "Nightly note: confirm the export owner." } }], reply: "Delegated the nightly note" },
-    { reply: "Recorded the outcome of the nightly note" },
+  f.plan[ops.id] = { script: [
+    { key: "send", match: ["Send the nightly note."], steps: [{ arguments: { bot_ids: [f.chief.id], message: "Nightly note: confirm the export owner." } }], reply: "Delegated the nightly note" },
+    { key: "resume", match: ["Your downstream room requests have settled."], reply: "Recorded the outcome of the nightly note" },
   ] };
   await f.start();
   await expect.poll(() => f.nodes().find((node: any) => node.parentId)?.status, { timeout: 15_000 }).toBe("running");

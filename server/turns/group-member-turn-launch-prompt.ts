@@ -82,6 +82,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     store,
     supportsWorkspaceFiles,
     surfaceOfComputerKind,
+    recordTurnPlace,
     surfacePrompt,
     syncPluginsForTurn,
     teamAvailabilityPart,
@@ -172,7 +173,10 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
   // so it rides every fresh hand-off turn even when the request text above
   // was deduplicated away. Resumed turns bring their own summary instead.
   const liveRosterBlock = !orchestration?.liveRoster || orchestration.resumed ? "" : `\n\n${orchestration.liveRoster}`;
-  const text = `${roomContext}\n\n(Reply to the conversation above as ${bot.name}.)${learnBlock}${cardContinuation ? `\n\n${cardContinuation}` : ""}${coordinationReminder}${liveRosterBlock}`;
+  // A member brought back from a hold is shown what addressed it meanwhile.
+  const heldReplay = host.heldReplayFor(readyGroup.id, threadId, bot.id, userName, roomContext);
+  ctx.heldReplayIds = heldReplay.messageIds;
+  const text = `${roomContext}\n\n(Reply to the conversation above as ${bot.name}.)${learnBlock}${heldReplay.block}${cardContinuation ? `\n\n${cardContinuation}` : ""}${coordinationReminder}${liveRosterBlock}`;
 
   // same workspace + memory as a 1:1 turn  -  the room is a different
   // conversation, not a different bot
@@ -206,6 +210,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
   // (#754) the room is told, once per source thread, rather than the
   // crossing being blocked.
   const recentLines = recentWorkFor(bot, threadId, { userName });
+  recordTurnPlace(bot.id, threadId, (roomTeamComputer ? "cloud" : roomVmTarget ? "vm" : surfaceOfComputerKind(roomComputerKind)) ?? (integrations.browser ? "browser" : null));
   const roomComputerPromptKind = resolveComputerPromptKind({
     kind: roomTeamComputer || roomComputerKind === "box" ? "box" : roomVmTarget ? "vm" : roomComputerKind,
     vmPrivate: localVmMode(cfg) === "per-bot"

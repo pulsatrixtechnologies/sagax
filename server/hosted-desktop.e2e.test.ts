@@ -144,7 +144,9 @@ it("keeps the bot's own engine on the cloud computer, and a failed place never b
     expect(prompts, "the turn was handed to Boat's own runner").toBe(0);
     const sent = await dump();
     expect(sent.argv[sent.argv.indexOf("--model") + 1]).toBe(model);
-    expect(sent.systemPrompt).toContain("You control the assigned cloud computer");
+    // #1997: the computer section is a brief; its full text loads on demand
+    expect(sent.systemPrompt).toContain("Use your assigned cloud computer's advertised tools.");
+    expect(sent.systemPrompt).toContain('"prompt:computer-box"');
     // 2. The cloud computer is one more HTTP computer server, and the agent
     // process holds only a turn-scoped capability, never a Boat credential.
     const computer = sent.mcpConfig.mcpServers.computer;

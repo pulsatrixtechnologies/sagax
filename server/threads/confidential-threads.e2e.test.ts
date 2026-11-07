@@ -254,6 +254,11 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
       driver: "claudeAgent",
       environment: {
         FAKE_CLAUDE_MCP_DUMP: mcpDump,
+        // A tool-only reply is followed by the server's nudge turn in the
+        // same thread; that turn makes no call and must not wipe the calls a
+        // test is about to read (CT-2 read Carl's search after Ana's nudge
+        // had overwritten it with none).
+        FAKE_CLAUDE_MCP_DUMP_CALLS_ONLY: "1",
         FAKE_CLAUDE_MCP_TEXT_LIMIT: "200000",
         FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
           { server: "agents", tool: "memory_update", arguments: { action: "append", text: `${SECRET} fact` }, when: "MEM-WRITE" },
@@ -475,6 +480,15 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
   }, 240_000);
 
   it("CT-2: nothing is remembered, logged, scheduled or found elsewhere", async () => {
+    // run on its own (-t "CT-2"), CT-1 has not made Ana's two threads
+    if (!secretThread) {
+      const created = await api("POST", `/api/bots/${botId}/tasks`, ana, { title: `Projet ${SECRET}`, confidential: true });
+      expect(created.status, created.text).toBe(201);
+      secretThread = created.body.task.threadId;
+      const ordinary = await api("POST", `/api/bots/${botId}/tasks`, ana, { title: "Ordinaire" });
+      expect(ordinary.status, ordinary.text).toBe(201);
+      anaOrdinary = ordinary.body.task.threadId;
+    }
     const before = (await messagesOf(ana, secretThread)).length;
     const sent = await api("POST", `/api/bots/${botId}/messages`, ana, { text: `${SECRET}-ALPHA MEM-WRITE MEM-LOG MAKE-ROUTINE`, threadId: secretThread });
     expect(sent.status, sent.text).toBe(202);

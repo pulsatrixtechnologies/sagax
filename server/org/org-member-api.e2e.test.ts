@@ -430,7 +430,7 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
     expect(String(blocking.body.handle)).toMatch(/^turn_/);
     const threadId = blocking.body.thread_id as string;
 
-    const sent = await member("POST", "agents/send_prompt", BOB, { agent_id: bots.orion!.id, prompt: "[gate:a2a] and the credits", mode: "async" });
+    const sent = await member("POST", "agents/send_prompt", BOB, { agent_id: bots.orion!.id, prompt: "[gate:a2a] and the credits", mode: "async", thread_id: threadId });
     expect(sent.status, sent.text).toBe(200);
     expect(sent.body).toMatchObject({ accepted: true, thread_id: threadId });
     const early = await member("POST", "agents/await_turn", BOB, { agent_id: bots.orion!.id, handle: sent.body.handle, timeout_ms: 1_000 });

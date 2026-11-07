@@ -3,7 +3,8 @@
 Desktop installers include the pinned `agent-browser` engine and Chromium
 Headless Shell. A fresh installation needs no separate browser download.
 This is an automation browser, not a headed Google Chrome application.
-Browser access is on by default, both for the workspace (Settings) and for
+Browser access is off in a fresh home until the desktop's first-run welcome
+turns it on, for the workspace (Settings) and for
 each bot (its computer panel); switching either off withholds the browser,
 and bundling executables never overrides that switch.
 

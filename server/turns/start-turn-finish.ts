@@ -178,6 +178,8 @@ let e: any = cause;
               autoRetried: true, autoSkip: [...(state.opts?.autoSkip ?? []), refused] });
             directFollowupSettlers.delete(state.dispatchClaimId);
             directCoordinationSettlers.delete(state.dispatchClaimId);
+            // The retry opened its own root (#2204): this attempt's is dropped.
+            coordinator.dropTurn(state.dispatchClaimId, "Retried on another engine");
             return;
           } catch (failure) {
             message += ` Auto could not start the next model: ${failure instanceof Error ? failure.message : String(failure)}`;
@@ -225,6 +227,8 @@ let e: any = cause;
             // routine/peer result or release a queued receipt in between.
             directFollowupSettlers.delete(state.dispatchClaimId);
             directCoordinationSettlers.delete(state.dispatchClaimId);
+            // The retry opened its own root (#2204): this attempt's is dropped.
+            coordinator.dropTurn(state.dispatchClaimId, "Retried on another engine");
             return;
           } catch (failure) {
             message += ` Backup could not start: ${failure instanceof Error ? failure.message : String(failure)}`;

@@ -260,6 +260,13 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
    * Auto, a backup and a run's takeover read (2026-11-02, a usage report at
    * 100 % can be wrong: extra usage left, an early reset). */
   const heldUntil = (payer: string, instanceId: string): number | null => store.blockedUntil(payer, instanceId);
+  /** A recorded usage limit or out-of-credit refusal. A signed-out engine is
+   * no limit: its turn stays put and asks for a sign-in (#2013), never a
+   * "Limit reached" move to a backup. */
+  const limitRefusal = (botId: string, threadId: string, speaker: unknown, instanceId: string): EngineRefusal | undefined => {
+    const refusal = deps.refusal?.(botId, threadId, speaker, instanceId);
+    return refusal?.cause === "signed_out" ? undefined : refusal;
+  };
   /** The same, or a plan window the payer's usage report showed spent: only
    * Sagax's quick pick (a wake's or a call's fast model) reads it. */
   const quickHeldUntil = (payer: string, instanceId: string): number | null =>
@@ -950,7 +957,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         if (row) {
           const current = deps.threadSelection(botId, threadId);
           if (!same(current, row.to)) store.forget(threadId);
-          else if (store.due(row) && store.blockedUntil(payer, row.from.instanceId) === null && !deps.refusal?.(botId, threadId, speaker, row.from.instanceId)) {
+          else if (store.due(row) && store.blockedUntil(payer, row.from.instanceId) === null && !limitRefusal(botId, threadId, speaker, row.from.instanceId)) {
             const refused = deps.switchThread(botId, threadId, row.from);
             if (!refused) {
               store.forget(threadId);
@@ -967,7 +974,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         const selection = deps.threadSelection(botId, threadId);
         if (!selection || (selection.auto === true && !resolvedSelection)) return null;
         const instanceId = resolvedSelection?.instanceId ?? selection.instanceId;
-        const refusal = deps.refusal?.(botId, threadId, speaker, instanceId);
+        const refusal = limitRefusal(botId, threadId, speaker, instanceId);
         // Credits have no reset time. Their recorded refusal expires after its existing TTL.
         const until = refusal ? refusal.cause === "usage_limit" && refusal.resetsAt !== undefined
           ? refusal.resetsAt : refusal.at + ENGINE_REFUSAL_TTL_MS : store.blockedUntil(payer, instanceId);

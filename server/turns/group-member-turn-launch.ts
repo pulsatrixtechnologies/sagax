@@ -9,8 +9,13 @@ import { createMountRoomMemberTurn } from "./group-member-turn-launch-mount.ts";
 import { createBuildRoomMemberPrompt } from "./group-member-turn-launch-prompt.ts";
 import { createGuardRoomMemberDispatch, createBeginRoomMemberOutcome } from "./group-member-turn-launch-dispatch.ts";
 import { createSettleRoomMemberTurn } from "./group-member-turn-launch-after.ts";
+import { finishedWithoutSummaryLine, ROOM_SUMMARY_REASK, roomTurnReply } from "../room-reply.ts";
 
 export { roomSubagentModel } from "./group-member-turn-room-model.ts";
+
+/** `${threadId}:${botId}` of a member being re-asked for the result its
+ * turn did not post (one re-ask per turn). */
+const summaryReasks = new Set<string>();
 
 export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   const tools = createPrepareRoomMemberTools(host);
@@ -181,13 +186,63 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
       if (settled !== undefined) return settled;
       {
         const {
-          orchestration, internalGeneration, isCancelled, hop, replyText, group, bot, threadId, spoken, operation,
-          groupId, onProviderHandshakeStarted, onProviderHandshakeSettled, skillAuthoringClaim, runGroupMemberTurn,
+          orchestration, internalGeneration, isCancelled, hop, group, bot, threadId, spoken, operation,
+          groupId, onProviderHandshakeStarted, onProviderHandshakeSettled, skillAuthoringClaim, runGroupMemberTurn, onDispatchError,
         } = ctx;
+        // The room hears the turn's final message, never its working notes:
+        // chained mentions are read from it alone. An orchestrated turn keeps
+        // its whole text in orchestration.result (a decision envelope may
+        // span several messages).
+        const replyText = roomTurnReply(ctx.turnTexts ?? []);
         const { coordinator, MAX_GROUP_HOPS, store, mentionedBots, reachablePeers, roomResponders, waitForChatRoomMember } = host;
-  // chained mentions: a member's reply can summon teammates  -  one hop only
+  // A chat turn that settled without a final message leaves the room with
+  // nothing to read. Say so, and ask once for a short result: the re-ask is
+  // the member's own next turn, so it answers with what it just did.
+  if (!orchestration && outcome === "settled" && ctx.turnCompletedOk && !replyText && !isCancelled?.()) {
+    const current = store.group(group.id);
+    if (!(current && !current.dm && current.holds?.[bot.id])) {
+      const reaskKey = `${threadId}:${bot.id}`;
+      const reasking = !summaryReasks.has(reaskKey);
+      store.appendMessage(threadId, {
+        role: "bot",
+        kind: "activity",
+        from: { botId: bot.id, name: bot.name, color: bot.color },
+        tool: { name: finishedWithoutSummaryLine(bot.name, reasking), ok: false },
+      });
+      if (!reasking) return true;
+      summaryReasks.add(reaskKey);
+      try {
+        return await runGroupMemberTurn(
+          groupId,
+          threadId,
+          bot.id,
+          hop,
+          spoken,
+          ROOM_SUMMARY_REASK,
+          onDispatchError,
+          isCancelled,
+          onProviderHandshakeStarted,
+          onProviderHandshakeSettled,
+          skillAuthoringClaim,
+          undefined,
+          operation,
+        );
+      } finally {
+        summaryReasks.delete(reaskKey);
+      }
+    }
+  }
+  // chained mentions: a member's reply can summon teammates  -  one hop only.
+  // A turn that handed work out this execution is waiting on its teammates'
+  // results, which resume it: a name in its reply is context, not a new
+  // participant (upstream c418456019, room-coordination "incidental mentions").
+  const roomRootId = orchestration?.coordination?.id ?? internalGeneration;
+  const roomRoot = coordinator.node(roomRootId);
+  const handedOut = roomRoot !== undefined
+    && coordinator.children(roomRootId).some((child: { createdAt: number }) => child.createdAt >= (roomRoot.startedAt ?? 0));
   if (
     (orchestration?.followMentions ?? true) &&
+    !handedOut &&
     !orchestration?.roomHandoffId &&
     // Since #2390 every room turn opens its own runtime root under this id:
     // only a node the runtime dispatched skips the mention hop, not that root.

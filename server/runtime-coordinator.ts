@@ -19,6 +19,7 @@ import { importLegacyDelegations, importLegacyHandoffs, type LegacyThreadResolve
 import { openRuntimeStore, type RuntimeStore } from "./runtime/store.ts";
 import { childrenSince, clip, isTerminal, path } from "./runtime/tree.ts";
 import { reservedSlotAdmission, wakeKind } from "./runtime/hold.ts";
+import { externalRuntimeRunId } from "./external-runtime.ts";
 import type { Assignment, EndResult, Mode, Origin, Owner, Reply, Requester, RunInput, RunResult, StatusView, TurnRunner } from "./runtime/types.ts";
 
 /** A teammate's work as one short title: the brief's first line, without
@@ -150,6 +151,7 @@ export class RuntimeCoordinator implements Coordinator {
   private readonly now: () => number;
   private readonly log: (line: string) => void;
   private readonly confidentialThreads: (() => Iterable<string>) | undefined;
+  private readonly isConfidential: (threadId: string) => boolean;
   private opened = false;
   private imported = false;
   /** A host turn that continues an earlier turn's root (continueRoot): its
@@ -167,6 +169,7 @@ export class RuntimeCoordinator implements Coordinator {
     this.now = options.now ?? Date.now;
     this.log = options.log ?? ((line) => console.error("coordinator:", line));
     this.confidentialThreads = options.confidentialThreads;
+    this.isConfidential = options.isConfidential ?? (() => false);
     this.store = openRuntimeStore(options.dataDir === ":memory:" ? ":memory:" : join(options.dataDir, "runtime.db"));
     this.runtime = new Runtime(this.store, this.runner(), {
       clock: { now: () => this.now(), monotonic: () => performance.now() },
@@ -374,19 +377,25 @@ export class RuntimeCoordinator implements Coordinator {
     const existing = this.store.get(req.id);
     if (existing) return this.project(existing);
     const { address, opener } = req;
+    // A confidential thread's turn is recorded without words: no brief, no
+    // quoted request (docs/confidential-threads.md, teammate work record).
+    const confidential = this.isConfidential(address.threadId);
+    const origin: Origin = { ...(opener?.origin ?? runtimeOrigin(req.origin, address)) };
+    if (confidential) delete origin.quote;
     const row = this.runtime.begin({
       id: req.id,
-      origin: opener?.origin ?? runtimeOrigin(req.origin, address),
+      origin,
       requester: opener
         ? { ...opener.requester, botId: opener.requester.botId ?? address.botId, threadId: opener.requester.threadId ?? address.threadId, chief: this.host.chiefOf(address) }
         : { kind: "person", threadId: address.threadId, botId: address.botId, chief: this.host.chiefOf(address) },
       assignee: { botId: address.botId, destination: { kind: address.groupId ? "room_thread" : "standing_thread", threadId: address.threadId,
         ...(address.groupId ? { groupId: address.groupId } : {}) } },
-      brief: req.brief.slice(0, BRIEF_MAX),
+      brief: confidential ? "" : req.brief.slice(0, BRIEF_MAX),
       level: req.level,
       ...(opener?.requester.kind === "external_runtime" ? { reply: "poll" as const } : {}),
       ...(req.goalRunId ? { goalRunId: req.goalRunId } : {}),
       ...(req.person ? { person: req.person } : {}),
+      ...(req.request ? { request: req.request } : {}),
     });
     return this.project(row);
   }
@@ -402,6 +411,17 @@ export class RuntimeCoordinator implements Coordinator {
       ...(cards ? { needsInput: { question: cards.question, cards: cards.ids } } : {}),
       ...(result.cap ? { continue: { note: result.cap.note, ...(result.cap.handoffPath ? { handoffPath: result.cap.handoffPath } : {}) } } : {}) };
     this.runtime.end(id, end);
+  }
+
+  /** A root whose turn never started: automatic recovery handed the same
+   * request to a backup engine, whose turn opens its own root. The failed
+   * attempt's root is dropped without a result, or the thread would read as
+   * still waiting on teammates after the backup answered. */
+  dropTurn(id: string, reason: string): void {
+    this.ready();
+    const a = this.store.get(id);
+    if (!a || a.parentId !== undefined || a.status !== "running") return;
+    this.runtime.cancel(id, reason, "stopped");
   }
 
   /** The person acted on a parked node's cards: a root or a child, by id. */
@@ -478,7 +498,7 @@ export class RuntimeCoordinator implements Coordinator {
     // results with check/wait_delegation; nothing resumes a turn here.
     const root = this.runtime.begin({
       origin: { kind: "outside", source: "external_runtime", ref: source.threadId },
-      requester: { kind: "external_runtime", runId: source.threadId, botId: source.botId },
+      requester: { kind: "external_runtime", runId: externalRuntimeRunId(source.botId, source.threadId), botId: source.botId },
       // A room turn's poll root sits in its room, so the room's rules check it.
       assignee: { botId: source.botId, destination: source.groupId ? { kind: "room_thread", threadId: source.threadId, groupId: source.groupId }
         : { kind: "standing_thread", threadId: source.threadId } },
@@ -761,6 +781,26 @@ export class RuntimeCoordinator implements Coordinator {
     return this.store.forgetThread(threadId);
   }
 
+  /** A settled root of a confidential thread goes whole, with its result
+   * (docs/confidential-threads.md): the runtime database keeps no words of
+   * a confidential thread at rest. A live one keeps its question and result
+   * until it settles; it was recorded without a brief (beginTurn). */
+  private forgetSettledConfidential(rows: readonly Assignment[]): void {
+    const threads = new Set<string>();
+    for (const row of rows) {
+      if (row.parentId !== undefined || !isTerminal(row)) continue;
+      const threadId = row.assignee.destination.threadId;
+      if (threadId && this.isConfidential(threadId)) threads.add(threadId);
+    }
+    for (const threadId of threads) {
+      try {
+        this.store.forgetThread(threadId);
+      } catch (error) {
+        this.log(`confidential thread's settled work not forgotten: ${String(error)}`);
+      }
+    }
+  }
+
   // ── the TurnRunner the Runtime drives ────────────────────────────────
 
   private runner(): TurnRunner {
@@ -790,6 +830,7 @@ export class RuntimeCoordinator implements Coordinator {
       unparked: (a, reason, defaulted) => host.unparked?.(this.project(a), reason, defaulted),
       report: (a, parent) => host.report(view(a, parent), parent && this.project(parent)),
       changed: rows => {
+        this.forgetSettledConfidential(rows);
         const groups = new Set<string>();
         const threads = new Set<string>();
         for (const row of rows) {

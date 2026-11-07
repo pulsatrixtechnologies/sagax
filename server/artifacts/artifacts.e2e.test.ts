@@ -9,6 +9,7 @@ import { expect, it } from "vitest";
 
 import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
+import { SIGN_IN_CHECK_TOOL } from "../mcp/mcp-probe.ts";
 import { startFakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 
 it("a bot saves an artifact in its turn; the person sees it, stars it and deletes it", async () => {
@@ -113,7 +114,9 @@ it("a fake engine's bot saves an artifact with a source; Sagax refreshes it with
     // A tool that asks each time is never called alone: blocked, no failure.
     await expect.poll(async () => (await one(asking.id)).refresh.state, { timeout: 15_000, interval: 500 }).toBe("blocked");
     expect((await one(asking.id)).refresh).toMatchObject({ failures: 0, error: expect.stringContaining("approval") });
-    expect(stats.calls).toEqual([]);
+    // Adding the server probes it once for a sign-in (SIGN_IN_CHECK_TOOL, a
+    // name no server defines); the tool itself is never called.
+    expect(stats.calls.filter((call) => (call as { name?: string }).name !== SIGN_IN_CHECK_TOOL)).toEqual([]);
 
     // Refresh now picks up the new value at once, still with no turn.
     writeFileSync(join(workspace, "stats.json"), JSON.stringify({ open: 7 }));

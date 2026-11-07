@@ -187,7 +187,9 @@ posixOnly("per-bot visibility on a shared workspace", () => {
     const board = await makeBot("Board Heron", "People");
     Object.assign(ids, { pub: pub.id, pubThread: pub.threadId, hr: hr.id, hrThread: hr.threadId, board: board.id });
     const roomPub = await api("POST", "/api/groups", { memberIds: [pub.id], name: "Front desk", humanIds: EVERYONE }, BOSS);
-    const roomMixed = await api("POST", "/api/groups", { memberIds: [pub.id, hr.id], name: "Pay questions", humanIds: EVERYONE,
+    // Bob is not among this room's people: a room opens to the people it lists
+    // whatever its bots' audience (#2418), so only its bots may decide for him.
+    const roomMixed = await api("POST", "/api/groups", { memberIds: [pub.id, hr.id], name: "Pay questions", humanIds: [BOSS, ADA],
       setup: { bulletin: "", defaultResponder: { kind: "everyone" } } }, BOSS);
     expect(roomPub.status).toBe(201);
     expect(roomMixed.status).toBe(201);
@@ -360,7 +362,12 @@ posixOnly("per-bot visibility on a shared workspace", () => {
       rmSync(hold);
       const result = await pending;
       expect(result.status).toBe(200);
-      expect(result.body.hits).toEqual([]);
+      // Payroll's own conversation is withdrawn. Only "Pay questions" may stay:
+      // Ada is among that room's people, and a room opens to the people it
+      // lists whatever its bots' audience (#2418, fixture since #2507).
+      const kept = result.body.hits.map((hit: { threadId: string }) => hit.threadId);
+      expect(kept).not.toContain(ids.hrThread);
+      expect(kept.filter((threadId: string) => threadId !== ids.roomMixedThread)).toEqual([]);
     } finally {
       rmSync(hold, { force: true });
       rmSync(`${hold}.ready`, { force: true });
@@ -674,7 +681,18 @@ posixOnly("per-bot visibility on a shared workspace", () => {
     // A member cannot widen it; an admin can, explicitly.
     expect((await api("PATCH", `/api/groups/${ids.roomMixed}`, { resetAudience: true }, ADA)).status).toBe(403);
     expect((await api("PATCH", `/api/groups/${ids.roomMixed}`, { resetAudience: true }, BOSS)).status).toBe(200);
-    expect(await status("GET", `/api/threads/${ids.roomMixedThread}/messages`, BOB)).toBe(200);
+    // The reset widens what the floor held back: the helpdesk recalls the room
+    // again. Bob still gets 404: he is not among the room's people, and since
+    // #2418 the room's people list, not its bots, opens it to a person (#2507).
+    const remint = await fetch(`${BASE}/api/testing/internal-capability`, {
+      method: "POST", headers: { "content-type": "application/json", "x-openmausbot-test-capability": CAPABILITY_KEY },
+      body: JSON.stringify({ botId: ids.pub, threadId: ids.pubThread }),
+    });
+    const widened = await fetch(`${BASE}/api/internal/session-search?fromBotId=${ids.pub}&q=SECRET-ROOM-42`, {
+      headers: { authorization: `Bearer ${(await remint.json() as { token: string }).token}` },
+    });
+    expect(((await widened.json()) as { hits: Array<{ threadId: string }> }).hits.map((hit) => hit.threadId)).toContain(ids.roomMixedThread);
+    expect(await status("GET", `/api/threads/${ids.roomMixedThread}/messages`, BOB)).toBe(404);
     // Audit writes run after the response: the earlier admins → Ada reset may
     // be the newest row until this reset reaches disk. Wait for this receipt.
     const reset = await waitFor(async () => (await api("GET", "/api/admin-activity?what=visibility", undefined, BOSS)).body.entries.find((entry: any) =>

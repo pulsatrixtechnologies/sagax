@@ -189,7 +189,8 @@ describe("bot packages", () => {
     };
     const parsed = parseBotPackage(document);
     const markdown = renderBotPackageMarkdown(parsed);
-    expect(markdown).toContain("Monthly on day 1 at 09:00 · Asia/Kolkata");
+    // the zone reads as a person says it (shared/plain-time-zone.ts), never the IANA id
+    expect(markdown).toContain("Monthly on day 1 at 09:00 India time");
     expect(parseBotPackage(markdown).package.routines?.[0]).toMatchObject({ schedule, enabledAfterInstall: false });
     for (const invalid of [{ ...schedule, expression: "0 9 31 2 *" }, { ...schedule, timeZone: "Invalid/Zone" }]) {
       expect(() => parseBotPackage({ ...document, package: { ...document.package,

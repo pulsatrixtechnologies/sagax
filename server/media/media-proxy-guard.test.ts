@@ -205,11 +205,14 @@ describe("playlist rewrite and the allow list", () => {
     expect(out).toContain(mint("http://10.0.0.5/live/seg1.ts"));
   });
 
-  it("keeps segments of other origins, private or not, untouched", () => {
+  // #2505: absolute URIs on another public origin go through the proxy too;
+  // a private host stays untouched unless the allow list names it.
+  it("proxies public segments of other origins and leaves private ones untouched", () => {
     const text = "#EXTM3U\n#EXTINF:4,\nhttp://192.168.1.9/seg.ts\n#EXTINF:4,\nhttps://cdn.example/seg.ts\n#EXTINF:4,\nseg2.ts\n";
     const out = rewriteHlsPlaylist(text, "https://qc1.glitcho-server.devjc.net/v1/share/live/x/index.m3u8", mint, NONE);
     expect(out).toContain("\nhttp://192.168.1.9/seg.ts\n");
-    expect(out).toContain("\nhttps://cdn.example/seg.ts\n");
+    expect(out).not.toContain("\nhttps://cdn.example/seg.ts\n");
+    expect(out).toContain(mint("https://cdn.example/seg.ts"));
     expect(out).toContain(mint("https://qc1.glitcho-server.devjc.net/v1/share/live/x/seg2.ts"));
   });
 

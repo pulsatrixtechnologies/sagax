@@ -4,7 +4,7 @@
 // logs, the reversible migration and its check before every replacement, a
 // Key Vault that stops answering in the middle of it, erasure and the
 // backup's plaintext copy.
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -393,6 +393,18 @@ describe("migration", () => {
     await migrateAll();
     expect(readMemoryFile("b1").text).toBe("two, written meanwhile\n");
     expect(sealedOnDisk(index)).toBe(true);
+  });
+
+  it("seals a file whose mtime is ahead of the clock when there is no grace", async () => {
+    // mtimeMs has sub-millisecond precision; Date.now() does not. The idle
+    // time is never negative, so a grace of 0 seals on the first pass.
+    writeMemoryFile("b1", "the amber note\n");
+    const index = join(workspaceDir("b1"), "MEMORY.md");
+    const ahead = (Date.now() + 5_000) / 1000;
+    utimesSync(index, ahead, ahead);
+    await runAtRestMigration({ sliceMs: Infinity });
+    expect(sealedOnDisk(index)).toBe(true);
+    expect(readMemoryFile("b1").text).toBe("the amber note\n");
   });
 
   it("drops lastUse and scopeHints once a file is sealed or gone", async () => {

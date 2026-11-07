@@ -150,6 +150,12 @@ describe("composer while the bot cannot answer", () => {
   // The maintainer, 2026-11-04: an engine at its limit or out of credit takes nothing:
   // no typing, no send, one line with the reset in local time and a switch.
   it("locks the whole composer while the engine is at its limit, and says when it is back", async () => {
+    // A reset later today reads as a bare clock time; one past midnight gets its
+    // weekday (shared/limit-failover.ts resetClockText). Pin the clock to 10:00
+    // local so "in two hours" is always today, whatever hour the suite runs.
+    const morning = new Date();
+    morning.setHours(10, 0, 0, 0);
+    vi.useFakeTimers({ toFake: ["Date"], now: morning });
     const resetsAt = Date.now() + 2 * 3_600_000;
     fixture.sendState = { block: { reason: "engine_limit", name: "Claude", message: "Claude limit reached.", action: { kind: "switch_engine" }, limit: { cause: "usage_limit", resetsAt } } };
     render(createElement(Composer, { bot }));

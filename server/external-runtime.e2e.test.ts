@@ -289,7 +289,7 @@ describe("a bot's external runtime", () => {
       await client.rpc("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "fixture", version: "1" } });
       const tools = await client.rpc("tools/list");
       expect(tools.tools.map((tool: { name: string }) => tool.name).sort()).toEqual([
-        "ask_bot", "check_delegation", "delegate_bot", "list_bots", "make_video", "wait_delegation",
+        "ask_bot", "assignment_status", "check_delegation", "coordinate_bots", "delegate_bot", "list_bots", "make_video", "wait_delegation",
       ]);
       const roster = await client.rpc("tools/call", { name: "list_bots", arguments: {} });
       expect(roster.content[0].text).toContain("MCP teammate");
@@ -305,7 +305,7 @@ describe("a bot's external runtime", () => {
       expect(byRoute.body.assignment).toMatchObject({ id: taskId, botId: peer.id, botName: "MCP teammate", outcome: "done", mode: "work", reply: "poll" });
       expect(byRoute.body.deprecation).toBeUndefined();
       const status = await client.rpc("tools/call", { name: "assignment_status", arguments: { id: taskId } });
-      expect(status.isError).not.toBe(true);
+      expect(status.isError, status.content?.[0]?.text).not.toBe(true);
       expect(status.content[0].text).toContain(`Assignment ${taskId} → @MCP teammate: completed`);
       expect(status.content[0].text).not.toContain("Deprecated");
       // The runtime reads its own result; the bot's engine is not woken on

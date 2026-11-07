@@ -108,6 +108,9 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
     supportsWorkspaceFiles,
     messageFileRootsForThread,
     runAsBotEngine,
+    roomMemberContexts,
+    broadcast,
+    publicGroupState,
   } = host;
 
   return function beginRoomMemberOutcome(ctx: GroupMemberTurnCtx) {
@@ -120,6 +123,10 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
     } = ctx;
   const worksInWorkspace = supportsWorkspaceFiles(instance.driverKind);
   ctx.replyText = "";
+  // Every assistant message of this turn, in order: the room hears the last
+  // one (room-reply.ts), the rest are working notes.
+  ctx.turnTexts = [];
+  ctx.turnCompletedOk = false;
   ctx.providerTurnId = undefined;
   let abandoned = false;
   const retirementOwner = `room-abandoned:${randomUUID()}`;
@@ -167,8 +174,11 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
       if (shouldIgnoreProviderEvent(e)) return;
       if (e.threadId !== threadId) return;
       if (ctx.providerTurnId && e.turnId && e.turnId !== ctx.providerTurnId) return;
-      if (e.type === "item.completed" && e.itemType === "assistant_text") ctx.replyText += `\n${e.text}`;
-      else if (e.type === "turn.completed") {
+      if (e.type === "item.completed" && e.itemType === "assistant_text") {
+        ctx.replyText += `\n${e.text}`;
+        ctx.turnTexts.push(e.text);
+      } else if (e.type === "turn.completed") {
+        ctx.turnCompletedOk = e.ok;
         const end = roomTurnEnd(e, Boolean(orchestration), ctx.roomClaimFailure);
         // An assignment's requester hears the runtime's cause, not "error".
         if (orchestration && end.stopReason !== undefined) {
@@ -205,6 +215,7 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
     });
     onProviderHandshakeStarted?.();
     ctx.providerDispatched = true;
+    host.clearHeldReplay(group.id, bot.id, ctx.heldReplayIds ?? []);
     if (roomConsumedId) noteBotRead(readyBot.id, threadId, [roomConsumedId]);
     turnPromptBytes.set(threadId, { stable: Buffer.byteLength(roomSystem.stable), volatile: Buffer.byteLength(roomSystem.volatile) });
     markWorkspaceUse(bot.id, promptSectionPaths(roomSystem.sections));
@@ -239,6 +250,19 @@ export function createBeginRoomMemberOutcome(host: GroupMemberTurnHost) {
     // was sent with, a Primary Bot's delegated level included (request.opened).
     const turnApprovalMode = roomTurnApprovalMode(readyBot, threadId, orchestration);
     if (!done) releaseTurnLevel = roomTurnLevels.dispatched(threadId, readyBot.id, turnApprovalMode);
+    // A bot whose context in this room is nearly full (or that the person
+    // asked to compact) starts this turn on a fresh provider session; the
+    // room's recent transcript is what every room turn carries anyway.
+    const roomReset = roomMemberContexts.takeReset(threadId, readyBot.id, cfg.context);
+    if (roomReset) {
+      store.appendMessage(threadId, {
+        role: "bot", kind: "activity", from: { botId: readyBot.id, name: readyBot.name, color: readyBot.color },
+        tool: { name: roomReset.reason === "requested"
+          ? `compacted ${readyBot.name}'s context (${roomReset.percent}% full): fresh session with the room's recent messages`
+          : `${readyBot.name}'s context was ${roomReset.percent}% full: compacted to a fresh session with the room's recent messages`, ok: true },
+      });
+      broadcast({ kind: "group", group: publicGroupState(store.group(groupId) ?? group) });
+    }
     
       // --- launch + stream (sendTurn / guardTurnDispatch / .then) ---
 const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
@@ -249,6 +273,7 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
         : messageFileRootsForThread(readyBot.id, threadId);
       const toolResultFolder = Array.isArray(resultRoots) ? resultRoots.find((root: string) => root !== ATTACHMENTS_DIR) : undefined;
       return instance.adapter.sendTurn({
+        ...(roomReset ? { sessionReset: true } : {}),
         threadId,
         botId: readyBot.id,
         principalId: orgSpeakerPrincipal(readyBot, roomSpeaker),

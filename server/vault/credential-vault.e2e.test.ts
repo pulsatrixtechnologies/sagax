@@ -99,7 +99,11 @@ it("asks for a login with a card, grants it once, resumes the bot with a handle 
     const resumedDump = readFileSync(fixture.fixtureDumpPath, "utf8");
     expect(resumedDump).toContain(`cred_${granted.item.id}`);
     expect(resumedDump).not.toContain(FAKE_PASSWORD);
-    token = JSON.parse(resumedDump).mcpConfig.mcpServers.agents.env.SAGAX_COMMS_TOKEN;
+    // The warm process keeps its launch env; the resumed turn's token is the
+    // one in SAGAX_COMMS_TOKEN_FILE, read as the agents proxy reads it
+    // (spawn-contract.ts warmCommsEnv, agents-client.ts commsToken).
+    const agentsEnv = JSON.parse(resumedDump).mcpConfig.mcpServers.agents.env;
+    token = agentsEnv.SAGAX_COMMS_TOKEN_FILE ? readFileSync(agentsEnv.SAGAX_COMMS_TOKEN_FILE, "utf8").trim() : agentsEnv.SAGAX_COMMS_TOKEN;
     const again = await api("POST", "/api/internal/credentials/request", { fromBotId: bot.id, fromThreadId: bot.threadId, domain: "billing.example.test" }, 200, token);
     expect(again.granted[0]).toMatchObject({ handle: `cred_${granted.item.id}`, fields: ["username", "password"] });
     // A sign-in page met while working, on another address of the site: a

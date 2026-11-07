@@ -97,6 +97,10 @@ export interface BeginTurnRequest {
    * never shown. Two trees join one request only for the same known person
    * (runtime Assignment.person). */
   person?: string;
+  /** The person's admitted request (its message id) this turn answers: the
+   * root keeps it, so requestRoot finds the tree again after a restart and
+   * a nested approval returns to that exact request. */
+  request?: string;
 }
 
 /** How a host-run turn ended. `cap` continues the same node in place (a
@@ -268,6 +272,8 @@ export interface Coordinator {
   beginTurn(req: BeginTurnRequest): HandoffView;
   /** That turn ended (completed, failed, parked on cards, or continuing in place). */
   endTurn(id: string, result: HostTurnResult): void;
+  /** A root whose turn never started (its request went to a backup engine): dropped without a result. */
+  dropTurn(id: string, reason: string): void;
   /** The person acted on a parked node's cards (a root or a child): the
    * node runs its next execution with the harness text. False when the
    * node is not parked. */
@@ -362,6 +368,10 @@ export interface CoordinatorOptions {
   /** The confidential threads, read once when the runtime opens: their
    * teammate work is forgotten (docs/confidential-threads.md). */
   confidentialThreads?: () => Iterable<string>;
+  /** Whether a thread is confidential now (docs/confidential-threads.md): a
+   * turn of it is recorded without words, and its tree is forgotten once it
+   * settles, so the runtime database keeps none of its words at rest. */
+  isConfidential?: (threadId: string) => boolean;
   /** Names the threads the one-time delegation-ledger import cannot (a
    * target's standing thread, a source thread's bot); without it those
    * rows carry an empty thread id the host's validate refuses. */

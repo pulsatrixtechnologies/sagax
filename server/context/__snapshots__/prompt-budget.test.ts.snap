@@ -3,8 +3,8 @@
 exports[`prompt size by engine and turn kind (#1997) > measures each section and both cache halves using the production builders 1`] = `
 [
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "claudeAgent",
     "kind": "chat",
     "sections": [
@@ -41,7 +41,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -102,12 +102,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "claudeAgent",
     "kind": "routine",
     "sections": [
@@ -144,7 +144,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -205,12 +205,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "claudeAgent",
     "kind": "room",
     "sections": [
@@ -247,7 +247,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -304,12 +304,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "claudeAgent",
     "kind": "sub-agent",
     "sections": [
@@ -346,7 +346,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -411,12 +411,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "codex",
     "kind": "chat",
     "sections": [
@@ -453,7 +453,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -514,12 +514,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "codex",
     "kind": "routine",
     "sections": [
@@ -556,7 +556,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -617,12 +617,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "codex",
     "kind": "room",
     "sections": [
@@ -659,7 +659,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -716,12 +716,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "codex",
     "kind": "sub-agent",
     "sections": [
@@ -758,7 +758,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -823,12 +823,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "piAgent",
     "kind": "chat",
     "sections": [
@@ -865,7 +865,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -926,12 +926,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "piAgent",
     "kind": "routine",
     "sections": [
@@ -968,7 +968,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1029,12 +1029,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "piAgent",
     "kind": "room",
     "sections": [
@@ -1071,7 +1071,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1128,12 +1128,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "piAgent",
     "kind": "sub-agent",
     "sections": [
@@ -1170,7 +1170,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1235,12 +1235,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "grokAgent",
     "kind": "chat",
     "sections": [
@@ -1277,7 +1277,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1338,12 +1338,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "grokAgent",
     "kind": "routine",
     "sections": [
@@ -1380,7 +1380,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1441,12 +1441,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "grokAgent",
     "kind": "room",
     "sections": [
@@ -1483,7 +1483,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1540,12 +1540,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "grokAgent",
     "kind": "sub-agent",
     "sections": [
@@ -1582,7 +1582,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1647,12 +1647,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "geminiAgent",
     "kind": "chat",
     "sections": [
@@ -1689,7 +1689,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1750,12 +1750,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "geminiAgent",
     "kind": "routine",
     "sections": [
@@ -1792,7 +1792,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1853,12 +1853,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "geminiAgent",
     "kind": "room",
     "sections": [
@@ -1895,7 +1895,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -1952,12 +1952,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "geminiAgent",
     "kind": "sub-agent",
     "sections": [
@@ -1994,7 +1994,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2059,12 +2059,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "kimiAgent",
     "kind": "chat",
     "sections": [
@@ -2101,7 +2101,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2162,12 +2162,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "kimiAgent",
     "kind": "routine",
     "sections": [
@@ -2204,7 +2204,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2265,12 +2265,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "kimiAgent",
     "kind": "room",
     "sections": [
@@ -2307,7 +2307,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2364,12 +2364,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "kimiAgent",
     "kind": "sub-agent",
     "sections": [
@@ -2406,7 +2406,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2471,12 +2471,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "opencodeGo",
     "kind": "chat",
     "sections": [
@@ -2513,7 +2513,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2574,12 +2574,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "opencodeGo",
     "kind": "routine",
     "sections": [
@@ -2616,7 +2616,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2677,12 +2677,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "opencodeGo",
     "kind": "room",
     "sections": [
@@ -2719,7 +2719,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2776,12 +2776,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "opencodeGo",
     "kind": "sub-agent",
     "sections": [
@@ -2818,7 +2818,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2883,12 +2883,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "antigravityAgent",
     "kind": "chat",
     "sections": [
@@ -2925,7 +2925,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -2986,12 +2986,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "antigravityAgent",
     "kind": "routine",
     "sections": [
@@ -3028,7 +3028,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -3089,12 +3089,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "antigravityAgent",
     "kind": "room",
     "sections": [
@@ -3131,7 +3131,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -3188,12 +3188,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "antigravityAgent",
     "kind": "sub-agent",
     "sections": [
@@ -3230,7 +3230,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -3295,12 +3295,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "droidAgent",
     "kind": "chat",
     "sections": [
@@ -3337,7 +3337,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -3398,12 +3398,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "droidAgent",
     "kind": "routine",
     "sections": [
@@ -3440,7 +3440,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -3501,12 +3501,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "droidAgent",
     "kind": "room",
     "sections": [
@@ -3543,7 +3543,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -3600,12 +3600,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "droidAgent",
     "kind": "sub-agent",
     "sections": [
@@ -3642,7 +3642,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -3707,12 +3707,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "cursorAgent",
     "kind": "chat",
     "sections": [
@@ -3749,7 +3749,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -3810,12 +3810,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "cursorAgent",
     "kind": "routine",
     "sections": [
@@ -3852,7 +3852,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -3913,12 +3913,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "cursorAgent",
     "kind": "room",
     "sections": [
@@ -3955,7 +3955,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4012,12 +4012,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "cursorAgent",
     "kind": "sub-agent",
     "sections": [
@@ -4054,7 +4054,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4119,12 +4119,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "qwenAgent",
     "kind": "chat",
     "sections": [
@@ -4161,7 +4161,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4222,12 +4222,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "qwenAgent",
     "kind": "routine",
     "sections": [
@@ -4264,7 +4264,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4325,12 +4325,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "qwenAgent",
     "kind": "room",
     "sections": [
@@ -4367,7 +4367,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4424,12 +4424,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "qwenAgent",
     "kind": "sub-agent",
     "sections": [
@@ -4466,7 +4466,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4531,12 +4531,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "hermesAgent",
     "kind": "chat",
     "sections": [
@@ -4573,7 +4573,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4634,12 +4634,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "hermesAgent",
     "kind": "routine",
     "sections": [
@@ -4676,7 +4676,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4737,12 +4737,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "hermesAgent",
     "kind": "room",
     "sections": [
@@ -4779,7 +4779,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4836,12 +4836,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "hermesAgent",
     "kind": "sub-agent",
     "sections": [
@@ -4878,7 +4878,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -4943,12 +4943,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "clineAgent",
     "kind": "chat",
     "sections": [
@@ -4985,7 +4985,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5046,12 +5046,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "clineAgent",
     "kind": "routine",
     "sections": [
@@ -5088,7 +5088,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5149,12 +5149,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "clineAgent",
     "kind": "room",
     "sections": [
@@ -5191,7 +5191,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5248,12 +5248,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "clineAgent",
     "kind": "sub-agent",
     "sections": [
@@ -5290,7 +5290,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5355,12 +5355,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5889,
-    "bytes": 23554,
+    "approxTokens": 5759,
+    "bytes": 23034,
     "engine": "customAcp",
     "kind": "chat",
     "sections": [
@@ -5397,7 +5397,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5458,12 +5458,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23467,
+    "stableBytes": 22947,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2944,
-    "bytes": 11776,
+    "approxTokens": 2814,
+    "bytes": 11256,
     "engine": "customAcp",
     "kind": "routine",
     "sections": [
@@ -5500,7 +5500,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5561,12 +5561,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 11200,
+    "stableBytes": 10680,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5607,
-    "bytes": 22427,
+    "approxTokens": 5477,
+    "bytes": 21907,
     "engine": "customAcp",
     "kind": "room",
     "sections": [
@@ -5603,7 +5603,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5660,12 +5660,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22340,
+    "stableBytes": 21820,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5795,
-    "bytes": 23177,
+    "approxTokens": 5665,
+    "bytes": 22657,
     "engine": "customAcp",
     "kind": "sub-agent",
     "sections": [
@@ -5702,7 +5702,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "shell",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5767,12 +5767,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23090,
+    "stableBytes": 22570,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5833,
-    "bytes": 23329,
+    "approxTokens": 5703,
+    "bytes": 22809,
     "engine": "grok",
     "kind": "chat",
     "sections": [
@@ -5805,7 +5805,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5866,12 +5866,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23242,
+    "stableBytes": 22722,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2888,
-    "bytes": 11551,
+    "approxTokens": 2758,
+    "bytes": 11031,
     "engine": "grok",
     "kind": "routine",
     "sections": [
@@ -5904,7 +5904,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -5965,12 +5965,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10975,
+    "stableBytes": 10455,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5551,
-    "bytes": 22202,
+    "approxTokens": 5421,
+    "bytes": 21682,
     "engine": "grok",
     "kind": "room",
     "sections": [
@@ -6003,7 +6003,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6060,12 +6060,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22115,
+    "stableBytes": 21595,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5738,
-    "bytes": 22952,
+    "approxTokens": 5608,
+    "bytes": 22432,
     "engine": "grok",
     "kind": "sub-agent",
     "sections": [
@@ -6098,7 +6098,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6163,12 +6163,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22865,
+    "stableBytes": 22345,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5833,
-    "bytes": 23329,
+    "approxTokens": 5703,
+    "bytes": 22809,
     "engine": "openai-compat",
     "kind": "chat",
     "sections": [
@@ -6201,7 +6201,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6262,12 +6262,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23242,
+    "stableBytes": 22722,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2888,
-    "bytes": 11551,
+    "approxTokens": 2758,
+    "bytes": 11031,
     "engine": "openai-compat",
     "kind": "routine",
     "sections": [
@@ -6300,7 +6300,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6361,12 +6361,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10975,
+    "stableBytes": 10455,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5551,
-    "bytes": 22202,
+    "approxTokens": 5421,
+    "bytes": 21682,
     "engine": "openai-compat",
     "kind": "room",
     "sections": [
@@ -6399,7 +6399,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6456,12 +6456,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22115,
+    "stableBytes": 21595,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5738,
-    "bytes": 22952,
+    "approxTokens": 5608,
+    "bytes": 22432,
     "engine": "openai-compat",
     "kind": "sub-agent",
     "sections": [
@@ -6494,7 +6494,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6559,12 +6559,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22865,
+    "stableBytes": 22345,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5833,
-    "bytes": 23329,
+    "approxTokens": 5703,
+    "bytes": 22809,
     "engine": "minimax",
     "kind": "chat",
     "sections": [
@@ -6597,7 +6597,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6658,12 +6658,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23242,
+    "stableBytes": 22722,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2888,
-    "bytes": 11551,
+    "approxTokens": 2758,
+    "bytes": 11031,
     "engine": "minimax",
     "kind": "routine",
     "sections": [
@@ -6696,7 +6696,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6757,12 +6757,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10975,
+    "stableBytes": 10455,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5551,
-    "bytes": 22202,
+    "approxTokens": 5421,
+    "bytes": 21682,
     "engine": "minimax",
     "kind": "room",
     "sections": [
@@ -6795,7 +6795,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6852,12 +6852,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22115,
+    "stableBytes": 21595,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5738,
-    "bytes": 22952,
+    "approxTokens": 5608,
+    "bytes": 22432,
     "engine": "minimax",
     "kind": "sub-agent",
     "sections": [
@@ -6890,7 +6890,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -6955,12 +6955,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22865,
+    "stableBytes": 22345,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5833,
-    "bytes": 23329,
+    "approxTokens": 5703,
+    "bytes": 22809,
     "engine": "mistral",
     "kind": "chat",
     "sections": [
@@ -6993,7 +6993,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7054,12 +7054,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23242,
+    "stableBytes": 22722,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2888,
-    "bytes": 11551,
+    "approxTokens": 2758,
+    "bytes": 11031,
     "engine": "mistral",
     "kind": "routine",
     "sections": [
@@ -7092,7 +7092,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7153,12 +7153,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10975,
+    "stableBytes": 10455,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5551,
-    "bytes": 22202,
+    "approxTokens": 5421,
+    "bytes": 21682,
     "engine": "mistral",
     "kind": "room",
     "sections": [
@@ -7191,7 +7191,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7248,12 +7248,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22115,
+    "stableBytes": 21595,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5738,
-    "bytes": 22952,
+    "approxTokens": 5608,
+    "bytes": 22432,
     "engine": "mistral",
     "kind": "sub-agent",
     "sections": [
@@ -7286,7 +7286,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7351,12 +7351,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22865,
+    "stableBytes": 22345,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5833,
-    "bytes": 23329,
+    "approxTokens": 5703,
+    "bytes": 22809,
     "engine": "cerebras",
     "kind": "chat",
     "sections": [
@@ -7389,7 +7389,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7450,12 +7450,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23242,
+    "stableBytes": 22722,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2888,
-    "bytes": 11551,
+    "approxTokens": 2758,
+    "bytes": 11031,
     "engine": "cerebras",
     "kind": "routine",
     "sections": [
@@ -7488,7 +7488,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7549,12 +7549,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10975,
+    "stableBytes": 10455,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5551,
-    "bytes": 22202,
+    "approxTokens": 5421,
+    "bytes": 21682,
     "engine": "cerebras",
     "kind": "room",
     "sections": [
@@ -7587,7 +7587,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7644,12 +7644,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22115,
+    "stableBytes": 21595,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5738,
-    "bytes": 22952,
+    "approxTokens": 5608,
+    "bytes": 22432,
     "engine": "cerebras",
     "kind": "sub-agent",
     "sections": [
@@ -7682,7 +7682,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7747,12 +7747,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22865,
+    "stableBytes": 22345,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5833,
-    "bytes": 23329,
+    "approxTokens": 5703,
+    "bytes": 22809,
     "engine": "groq",
     "kind": "chat",
     "sections": [
@@ -7785,7 +7785,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7846,12 +7846,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 23242,
+    "stableBytes": 22722,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2888,
-    "bytes": 11551,
+    "approxTokens": 2758,
+    "bytes": 11031,
     "engine": "groq",
     "kind": "routine",
     "sections": [
@@ -7884,7 +7884,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -7945,12 +7945,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10975,
+    "stableBytes": 10455,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5551,
-    "bytes": 22202,
+    "approxTokens": 5421,
+    "bytes": 21682,
     "engine": "groq",
     "kind": "room",
     "sections": [
@@ -7983,7 +7983,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -8040,12 +8040,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22115,
+    "stableBytes": 21595,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5738,
-    "bytes": 22952,
+    "approxTokens": 5608,
+    "bytes": 22432,
     "engine": "groq",
     "kind": "sub-agent",
     "sections": [
@@ -8078,7 +8078,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1677,
+        "bytes": 1157,
         "id": "computer",
       },
       {
@@ -8143,7 +8143,403 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22865,
+    "stableBytes": 22345,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5703,
+    "bytes": 22809,
+    "engine": "meta",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1157,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 817,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1117,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22722,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2758,
+    "bytes": 11031,
+    "engine": "meta",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1157,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 817,
+        "id": "coordination",
+      },
+      {
+        "bytes": 600,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10455,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5421,
+    "bytes": 21682,
+    "engine": "meta",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1157,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 817,
+        "id": "coordination",
+      },
+      {
+        "bytes": 614,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21595,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5608,
+    "bytes": 22432,
+    "engine": "meta",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1157,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 817,
+        "id": "coordination",
+      },
+      {
+        "bytes": 614,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22345,
     "volatileBytes": 87,
   },
 ]

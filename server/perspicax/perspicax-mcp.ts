@@ -20,7 +20,7 @@
 //     a fresh subject; when that fails the call answers "Perspicax access
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
-import { toolFailureText } from "../../shared/tool-failure-text.ts";
+import { servedSpelling, twilioToolsOf, apiNamesOf, reviewedReadsOf, parseMcpBody, withFailureWords, withElicitation, isGoForm } from "./perspicax-mcp-helpers.ts";
 import { randomUUID } from "node:crypto";
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
 import { MiB, warmResources, type WarmResourceBudget, type WarmResourceLease } from "../resources/warm-resources.ts";
@@ -35,6 +35,8 @@ import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { PERSPICAX_ROUTINE_RETRY_MS, perspicaxUnsent, REMOTE_SUPPORT_OPEN_UNAVAILABLE, VOICE_CALL_REDIRECTED, VOICE_CALL_UNAVAILABLE, PERSPICAX_TOKEN_MIN_LIFE_MS, PERSPICAX_RELAY_TIMEOUT_MS, PERSPICAX_RELAY_MAX_BYTES, PERSPICAX_KEEPALIVE_MS, PERSPICAX_KEEPALIVE_JITTER_MS, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ACCESS_ENDED, PERSPICAX_SESSION_RESET, PERSPICAX_WRITE_REPLAYED, perspicaxWriteOnceTool } from "./perspicax-mcp-rules.ts";
+export { PERSPICAX_ROUTINE_RETRY_MS, perspicaxUnsent, REMOTE_SUPPORT_OPEN_UNAVAILABLE, VOICE_CALL_REDIRECTED, VOICE_CALL_UNAVAILABLE, PERSPICAX_TOKEN_MIN_LIFE_MS, PERSPICAX_RELAY_TIMEOUT_MS, PERSPICAX_RELAY_MAX_BYTES, PERSPICAX_KEEPALIVE_MS, PERSPICAX_KEEPALIVE_JITTER_MS, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ACCESS_ENDED, PERSPICAX_SESSION_RESET, PERSPICAX_WRITE_REPLAYED, perspicaxWriteOnceTool } from "./perspicax-mcp-rules.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker";
 
@@ -173,74 +175,8 @@ export interface PerspicaxMcpOptions {
   /** Waits that long (tests replace it). */
   sleep?: (ms: number) => Promise<void>;
 }
-
-/** 2026-11-02: a routine (nobody at the keyboard) waits out a short Perspicax
- * outage, such as a connector roll of about two minutes, instead of running
- * without its tools or failing a call: these waits, about 2 min 17 s in all,
- * between tries of a transient failure (unreachable, rate limited, HTTP 502
- * or 503, connection refused). A person's own turn keeps the single quick
- * retry: they are there to try again. */
-export const PERSPICAX_ROUTINE_RETRY_MS: readonly number[] = [2_000, 5_000, 10_000, 20_000, 40_000, 60_000];
 /** HTTP answers of an edge whose upstream is down for a moment. */
 const TRANSIENT_HTTP = new Set([502, 503]);
-/** Network errors that mean the request never left (nothing was sent). */
-const UNSENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH"]);
-
-/** A failed fetch that never reached Perspicax (connection refused, name
- * not resolved): safe to send again, even a write. */
-export function perspicaxUnsent(error: unknown): boolean {
-  for (let at: unknown = error, depth = 0; at && depth < 4; depth += 1) {
-    const code = (at as { code?: unknown }).code;
-    if (typeof code === "string" && UNSENT_CODES.has(code)) return true;
-    at = (at as { cause?: unknown }).cause;
-  }
-  return false;
-}
-
-export const REMOTE_SUPPORT_OPEN_UNAVAILABLE =
-  "Refused by Sagax: remote_support_open goes through Sagax (it fills the host and the session key). That path is not available here. Nothing was sent.";
-
-/** What a bot reads in front of the answer when its voice_call became a
- * place_phone_call. */
-export const VOICE_CALL_REDIRECTED = "Sagax placed this voice_call through place_phone_call (every call does: its card, the AI disclosure, the organization's rules). Use place_phone_call next time.";
-export const VOICE_CALL_UNAVAILABLE = "Refused by Sagax: a call goes through place_phone_call, which is not available here. Nothing was sent.";
-
-/** A token with less than this left is exchanged again before a call. */
-export const PERSPICAX_TOKEN_MIN_LIFE_MS = 60_000;
-export const PERSPICAX_RELAY_TIMEOUT_MS = 10 * 60_000;
-export const PERSPICAX_RELAY_MAX_BYTES = 20 * 1024 * 1024;
-/** Idle keep-alive ping cadence: under Perspicax KEEP_ALIVE (120 s). */
-export const PERSPICAX_KEEPALIVE_MS = 90_000;
-/** Jitter added on top of PERSPICAX_KEEPALIVE_MS so many entries do not fire together. */
-export const PERSPICAX_KEEPALIVE_JITTER_MS = 15_000;
-/** At most this many entries of one person are pinged (newest kept). */
-export const PERSPICAX_KEEPALIVE_PER_PERSON = 8;
-export const PERSPICAX_ACCESS_ENDED = "Perspicax access for this turn ended";
-/** A call Sagax did not replay after Perspicax dropped the MCP session: it can
- * change data, so the bot decides (the call never reached Perspicax's tool). */
-export const PERSPICAX_SESSION_RESET = "Perspicax had dropped this MCP session (idle or restarted). Sagax opened a new one, but did not replay this call because it can change data: it did not run. Call it again if it is still wanted.";
-
-/** The answer a write that was not sent again carries in front of the first one's. */
-export const PERSPICAX_WRITE_REPLAYED = "Not sent again: another run made this same write with the same arguments moments ago (one write per execution key). Its answer follows; the record already exists.";
-/** The tools whose name says they change data: a connector's `<api>_write`,
- * `_action` or `_<x>_write` (`__` before Perspicax 1.9.19), its named writes (`log_time`, `book_*`,
- * `update_*`, `create_*`, `delete_*`), and the host's own. Reads, polls
- * (await_turn) and leases (claim*, per holder, renewals must reach
- * Perspicax) are never answered from a previous call. */
-const WRITE_SUFFIX = /^(write|action|log_time|(book|update|create|delete)_[a-z0-9_]+|[A-Za-z0-9_]+_write)$/;
-const HOST_WRITES = new Set(["memory_write", "memory_propose", "memory_promote", "memory_forget", "create_agent", "delete_agent",
-  "sagax_send", "sagax_routine_run", "sagax_nudge", "remote_support_open", "remote_support_close"]);
-/** A connector's write with one `_` (Perspicax 1.9.19: `cw_psa_write`,
- * `cw_psa_time_entries_write`, `cw_psa_log_time`, `cw_psa_update_ticket`);
- * its read_action is a read. */
-const PROFILE_WRITE = /_(?:write|action|log_time)$|_(?:book|update|create|delete)_[a-z0-9_]+$/;
-export function perspicaxWriteOnceTool(name: string): boolean {
-  const at = name.lastIndexOf("__");
-  if (at > 0) return WRITE_SUFFIX.test(name.slice(at + 2));
-  if (HOST_WRITES.has(name)) return true;
-  return !name.endsWith("_read_action") && PROFILE_WRITE.test(name);
-}
-
 /** Requests that only read, safe to send again on a new session. */
 const READ_ONLY_METHODS = new Set(["tools/list", "resources/list", "resources/templates/list", "resources/read", "prompts/list", "prompts/get", "ping", "completion/complete"]);
 
@@ -440,6 +376,9 @@ const warmKey = (threadId: string, principalId: string, source: Entry["source"])
 /** A refusal worth one more try a moment later. */
 const TRANSIENT = new Set(["unreachable", "rate_limited"]);
 const RETRY_EXCHANGE_MS = 400;
+/** How long a call's next turn waits for the last turn's retire (its MCP
+ * session DELETE is bounded at 5 s) before it exchanges a token of its own. */
+const RETIRE_WAIT_MS = 6_000;
 
 type Json = Record<string, unknown>;
 
@@ -451,124 +390,13 @@ function telephonyBlock(frame: Json, twilioTools: ReadonlySet<string> | undefine
   return telephonyRefusal(String(params.name ?? ""), params.arguments, twilioTools ? { twilioTools } : {});
 }
 
-/** The spelling the live Perspicax role surface serves for a tool Sagax names with one
- * `_` (`twilio_api_write`): itself when served or when nothing is known,
- * else the served name that is the same tool with `__` (an earlier
- * Perspicax: `twilio_api__write`). */
-export function servedSpelling(name: string, served: ReadonlySet<string> | undefined): string {
-  if (!served || served.has(name)) return name;
-  const folded = name.replace(/_{2,}/g, "_");
-  for (const candidate of served) if (candidate.replace(/_{2,}/g, "_") === folded) return candidate;
-  return name;
-}
-
-/** The tools of a tools/list answer that target Twilio under another name:
- * their description names Twilio or its API host. */
-export function twilioToolsOf(body: unknown): string[] {
-  const result = isObject(body) && isObject(body.result) ? body.result : null;
-  const tools = result && Array.isArray(result.tools) ? result.tools : [];
-  return tools
-    .filter((tool): tool is Json => isObject(tool) && typeof tool.name === "string")
-    .filter((tool) => /twilio/i.test(`${String(tool.description ?? "")} ${JSON.stringify(tool._meta ?? {})}`))
-    .map((tool) => String(tool.name));
-}
-
 /** 2026-10-27: how long the product names of an api_list answer are kept. */
 const API_NAMES_TTL_MS = 30 * 60_000;
 /** Bounds the bots whose product names are kept. */
 const API_NAMES_MAX = 500;
 
-/** The product names an api_list answer declares, by API id: the
- * operator's display name, else the catalog's title. */
-export function apiNamesOf(value: unknown): Map<string, string> {
-  const names = new Map<string, string>();
-  const apis = isObject(value) && Array.isArray(value.apis) ? value.apis : [];
-  for (const api of apis) {
-    if (!isObject(api) || typeof api.id !== "string" || !api.id.trim()) continue;
-    const declared = [api.display_name, api.title].find((name): name is string => typeof name === "string" && name.trim().length > 0);
-    if (declared) names.set(api.id.trim().toLowerCase(), declared.trim().slice(0, 80));
-  }
-  return names;
-}
-
-/** The connectors whose reads an api_list answer marks as reviewed
- * (`reviewed_reads: true`: they return no credential), by the prefix of
- * their tools: each marked API id, and a served group (`group`) when every
- * listed member of it is marked. An API with no mark, as from a Perspicax
- * that declares none, is left out: its reads keep their card. */
-export function reviewedReadsOf(value: unknown): Set<string> {
-  const reviewed = new Set<string>();
-  const groups = new Map<string, boolean>();
-  const apis = isObject(value) && Array.isArray(value.apis) ? value.apis : [];
-  for (const api of apis) {
-    if (!isObject(api) || typeof api.id !== "string" || !api.id.trim()) continue;
-    const marked = api.reviewed_reads === true;
-    if (marked) reviewed.add(api.id.trim().toLowerCase());
-    if (typeof api.group === "string" && api.group.trim()) {
-      const group = api.group.trim().toLowerCase();
-      groups.set(group, (groups.get(group) ?? true) && marked);
-    }
-  }
-  for (const [group, marked] of groups) if (marked) reviewed.add(group);
-  return reviewed;
-}
-
 function isObject(value: unknown): value is Json {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-/** One JSON-RPC answer out of a JSON or an SSE body (connector-proxy.ts). */
-export function parseMcpBody(text: string, id: unknown): unknown {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return JSON.parse(trimmed) as unknown;
-  const frames = trimmed
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).trim())
-    .filter((line) => line && line !== "[DONE]")
-    .flatMap((line) => {
-      try {
-        return [JSON.parse(line) as Json];
-      } catch {
-        return [];
-      }
-    });
-  return frames.findLast((frame) => frame.id === id) ?? frames.at(-1) ?? null;
-}
-
-/** 2026-11-05: a tools/call result flagged isError whose content has no
- * words (the engine then shows "returned no error message"): the words
- * Perspicax gave elsewhere (structuredContent, _meta) become its text, else
- * a plain sentence naming the tool. A result with words is left as it is. */
-export function withFailureWords(body: unknown, tool: string): unknown {
-  if (!isObject(body) || !isObject(body.result) || body.result.isError !== true) return body;
-  const result = body.result;
-  const content = Array.isArray(result.content) ? result.content : [];
-  if (toolFailureText(content)) return body;
-  const found = toolFailureText(result.structuredContent) ?? toolFailureText(result._meta);
-  const text = found ?? `${tool || "The tool"} failed on Perspicax and its answer carried no error message${result.structuredContent !== undefined ? `: ${JSON.stringify(result.structuredContent).slice(0, 600)}` : ""}.`;
-  return { ...body, result: { ...result, content: [...content.filter((block) => !(isObject(block) && block.type === "text")), { type: "text", text }] } };
-}
-
-/** The `elicitation` capability added to a client's own (2026-10-26). */
-export function withElicitation(capabilities: unknown): Json {
-  const caps = isObject(capabilities) ? { ...capabilities } : {};
-  const current = isObject(caps.elicitation) ? caps.elicitation : {};
-  caps.elicitation = { ...current, form: isObject(current.form) ? current.form : {} };
-  return caps;
-}
-
-/** The approval form of a Perspicax GO: a `decision` of allow or deny. */
-export function isGoForm(schema: unknown): boolean {
-  if (!isObject(schema) || !isObject(schema.properties)) return false;
-  const decision = schema.properties.decision;
-  if (!isObject(decision)) return false;
-  const values = [
-    ...(Array.isArray(decision.oneOf) ? decision.oneOf.map((o) => (isObject(o) ? o.const : undefined)) : []),
-    ...(Array.isArray(decision.enum) ? decision.enum : []),
-  ];
-  return values.includes("allow") && values.includes("deny");
 }
 
 /** The body of an answer, bounded. On an SSE stream, each request the server
@@ -642,6 +470,11 @@ export class PerspicaxMcp {
   private readonly entries = new Map<string, Entry>();
   /** tokens a call keeps between turns (keepWarm), by thread and speaker */
   private readonly warm = new Map<string, Entry>();
+  /** A thread's retire still clearing roles and closing sessions: the next
+   * turn of a live call or warm engine waits for it, so the token it parks
+   * is taken over instead of a second exchange (a call's first sentence
+   * landed while the warm turn's session was still closing). */
+  private readonly retiring = new Map<string, Promise<void>>();
   /** The engine's last initialize params per thread (reopen). */
   private readonly initParams = new Map<string, Json>();
   private reopens = 0;
@@ -1134,6 +967,12 @@ export class PerspicaxMcp {
     // good. Its MCP session is closed at the generation boundary, so role
     // state never crosses into this turn; only the account token is reused.
     const stay = this.sessionShouldStay(input.threadId);
+    const retiring = stay ? this.retiring.get(input.threadId) : undefined;
+    if (retiring) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([retiring, new Promise<void>((resolve) => { timer = setTimeout(resolve, RETIRE_WAIT_MS); timer.unref?.(); })]);
+      if (timer) clearTimeout(timer);
+    }
     // the call or warm engine ended without saying so: its kept tokens go
     if (!stay) void this.endWarm(input.threadId).catch(reportBackgroundError);
     if (stay) {
@@ -2124,7 +1963,17 @@ export class PerspicaxMcp {
    * Every kept entry closes its MCP session first. Perspicax stores an
    * identity_switch choice on that session, so a new generation must never
    * inherit the old session even when clearing the role itself fails. */
-  private async retire(prefix: string, threadId: string): Promise<void> {
+  private retire(prefix: string, threadId: string): Promise<void> {
+    const run = this.retireNow(prefix, threadId);
+    const previous = this.retiring.get(threadId);
+    const settled: Promise<void> = Promise.allSettled([previous, run]).then(() => {
+      if (this.retiring.get(threadId) === settled) this.retiring.delete(threadId);
+    });
+    this.retiring.set(threadId, settled);
+    return run;
+  }
+
+  private async retireNow(prefix: string, threadId: string): Promise<void> {
     const done: Promise<unknown>[] = [];
     const voiceKeep = this.options.keepWarm?.(threadId) === true;
     const engineKeep = this.options.engineWarm?.(threadId) === true;
@@ -2305,3 +2154,5 @@ export class PerspicaxMcp {
     }
   }
 }
+
+export { servedSpelling, twilioToolsOf, apiNamesOf, reviewedReadsOf, parseMcpBody, withFailureWords, withElicitation, isGoForm } from "./perspicax-mcp-helpers.ts";

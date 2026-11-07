@@ -26,7 +26,9 @@ const SETTLED = "Your downstream room requests have settled.";
 /** The report envelope's opening (composeReport). */
 const REPORT_FROM_PEER = "[Sagax report from @Peer";
 /** A routine turn's system prompt, present on the run's own turn and on its resume. */
-const ROUTINE_TURN = "Execute this routine now";
+// The routine-execution section is a brief since #1997; the full text is
+// behind sagax_help "prompt:routine-execution".
+const ROUTINE_TURN = "Execute now; required handoffs use peer tools";
 /** What a requester hears about teammates a restart cut (restartNote). */
 const TEAMMATES_CUT = "A restart cut these teammates' turns";
 /** The standing bearer an external runtime presents (external-runtimes.json). */

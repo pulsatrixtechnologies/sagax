@@ -22,6 +22,7 @@ import { launchVerificationServer, runControlOmb, verificationServerArgs, verifi
 import { createControlClient } from "./control-client.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import { DESKTOP_PARENT_IMPORT, DESKTOP_PARENT_STDIO, handDesktopComputer } from "./testing/desktop-computer.ts";
 import { hostTimeout } from "./testing/host-timeout.ts";
 import { ownTurnText } from "./testing/room-handoff-agent.ts";
 
@@ -249,8 +250,8 @@ it("R2 a member's coordinate_bots reuses its turn's root, and a Chief's Full rea
     requester: { kind: "bot_turn", botId: f.clive.id, threadId: room.threadId, chief: true } });
   expect(f.db().events.find((event: any) => event.assignmentId === child.id && event.kind === "started")?.detail).toContain("level full");
   // The engine ran both turns at Full (the fake records its permission mode).
-  expect(f.turn("C0").permissionMode).toBe("bypassPermissions");
-  expect(f.turn("M0").permissionMode).toBe("bypassPermissions");
+  expect(f.turn("C0").permissionMode).toBe("full");
+  expect(f.turn("M0").permissionMode).toBe("full");
   expect(f.turns().map((record: any) => record.planKey)).toEqual(["C0", "M0", "C1"]);
   expect(nothingLive(f)).toEqual([]);
 }), hostTimeout(120_000));
@@ -399,21 +400,18 @@ itHost("R5 queues a member's root on the computer seat at the wait ceiling, FIFO
     writeFileSync(join(ui, "index.html"), "<title>Room roots</title>");
     writeFileSync(join(ui, "assets", "test.css"), "body{}");
     mkdirSync(join(home, "user-data"), { recursive: true });
-    writeFileSync(join(home, "user-data", "cua-connection.json"), JSON.stringify({
-      mode: "embedded", status: "ready", socketPath: join(home, "cua.sock"), mcpCommand: "/fixture/cua-driver", mcpArgs: ["mcp"], mcpEnv: {},
-    }), { mode: 0o600 });
     writeFileSync(join(data, "config.json"), JSON.stringify({ instances: { claude: {
       driver: "claudeAgent", config: { cli: join(ROOT, "server/testing/fake-claude-cli.ts") },
       environment: { FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_DUMP: dumpFile, FAKE_CLAUDE_SLOW_FINISH_GATE: finishFile },
     } } }));
-    const proc = spawn(process.execPath, ["--import", pathToFileURL(join(ROOT, "server/testing/group-local-vm-hooks.mjs")).href, join(ROOT, "server/index.ts")], {
+    const proc = spawn(process.execPath, ["--import", pathToFileURL(join(ROOT, "server/testing/group-local-vm-hooks.mjs")).href, ...DESKTOP_PARENT_IMPORT, join(ROOT, "server/index.ts")], {
       cwd: ROOT, env: {
         PATH: dirname(process.execPath), ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
         HOME: home, USERPROFILE: home, SAGAX_DATA_DIR: data, APPDATA: join(home, "appdata"), LOCALAPPDATA: join(home, "localappdata"),
         TEMP: home, TMP: home, TMPDIR: home, SAGAX_PORT: String(port), SAGAX_WEBHOOK_PORT: String(port + 1), SAGAX_STATIC_DIR: ui, SAGAX_TEST_VM_STATE: stateFile,
         SAGAX_USER_DATA: join(home, "user-data"), SAGAX_COMPUTER_CALL_WAIT_MS: "4000", SAGAX_COMPUTER_CALL_ACT_WITHIN_MS: "1000",
         SAGAX_COMPUTER_WAIT_MAX_MS: String(CEILING_MS),
-      }, stdio: ["ignore", "pipe", "pipe"],
+      }, stdio: [...DESKTOP_PARENT_STDIO],
     });
     child = proc;
     proc.stdout!.on("data", (chunk) => { output += chunk; });
@@ -422,6 +420,11 @@ itHost("R5 queues a member's root on the computer seat at the wait ceiling, FIFO
       if (proc.exitCode !== null) throw new Error(`server exited during boot:\n${output}`);
       try { return (await fetch(base + "/api/health")).ok; } catch { return false; }
     }, Boolean);
+    // Sagax: only the desktop app hands this computer to the server it
+    // launched (server/computer/desktop-computer.ts); no cua-connection.json.
+    await handDesktopComputer(proc, {
+      mode: "embedded", status: "ready", socketPath: join(home, "cua.sock"), mcpCommand: "/fixture/cua-driver", mcpArgs: ["mcp"], mcpEnv: {},
+    });
 
     // The holder's first screen call claims the host desktop and keeps it.
     const { bot: holder } = await apiOk("POST", "/api/bots", { name: "Seat Holder" });

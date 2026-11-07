@@ -36,9 +36,9 @@ it("a bot that only reacts settles its turn without a reply bubble", async () =>
   expect((await f.cli("wait", "--bot", bot.id, "--task", bot.activeTaskId, "--timeout", "30")).status).toBe("settled");
 
   const turn = f.evidence().find((entry: any) => entry.botId === bot.id);
-  // react_to_message is listed whole; remove_reaction is one of the rare
-  // tools found with search_tools (#1604), still callable (see below).
-  expect(turn.evidence[0].result.tools.map((tool: any) => tool.name)).toEqual(expect.arrayContaining(["react_to_message", "search_tools"]));
+  // react_to_message is listed whole; remove_reaction is listed by its own
+  // name and deferred to the engine's tool search (#2037), still callable.
+  expect(turn.evidence[0].result.tools.map((tool: any) => tool.name)).toEqual(expect.arrayContaining(["react_to_message", "remove_reaction"]));
   const step = turn.evidence.find((entry: any) => entry.step?.tool === "react_to_message");
   expect(step.response.result.isError).toBeFalsy();
   expect(step.response.result.content[0].text).toContain("Reacted 👍");
@@ -78,8 +78,10 @@ it("a bot's reaction is idempotent, one per message, from the short list, and ca
   expect((await f.cli("wait", "--bot", bot.id, "--task", bot.activeTaskId, "--timeout", "30")).status).toBe("settled");
 
   const turn = f.evidence().find((entry: any) => entry.botId === bot.id);
-  // the guidance rides the turn's instructions
-  expect(turn.system).toContain("A reaction never replaces an answer");
+  // the guidance rides the turn's instructions: the short brief, the full
+  // text loads on demand through sagax_help "prompt:reactions" (#1997)
+  expect(turn.system).toContain("never replace an awaited answer");
+  expect(turn.system).toContain("prompt:reactions");
   const texts = turn.evidence.filter((entry: any) => entry.step).map((entry: any) => entry.response.result.content[0].text);
   expect(texts[0]).toContain("Reacted ❤️");
   expect(texts[1]).toContain("already reacted ❤️");

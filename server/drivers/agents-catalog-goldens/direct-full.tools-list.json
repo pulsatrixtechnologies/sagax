@@ -1677,6 +1677,30 @@
       }
     },
     {
+      "name": "request_sign_in",
+      "description": "Ask the person to sign in to a website themselves, in the browser or on the computer you are using now. Use it when a page needs a login you do not have in the vault (request_login), or a one-time code, CAPTCHA or other step only they can do. They get a card and a notification, sign in where you work, and press Done. Never ask for a password or code in chat. After calling it, end your turn; Sagax resumes you when they finish or decline, and then check you are signed in.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "site": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The page to sign in on: its address, or the domain, such as example.com."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 240,
+            "description": "One short sentence, in your words, on what the sign-in is for."
+          }
+        },
+        "required": [
+          "site"
+        ]
+      }
+    },
+    {
       "name": "open_connector_setup",
       "description": "When the person asks to connect a connector (Microsoft Teams, Outlook, Gmail, Google Drive, OneDrive, SharePoint, Salesforce, X, ...): one call posts a card whose button opens the right sign-in page in their browser (grok.com or claude.ai for this engine's own connectors, else Sagax's Capabilities). Sagax detects the connection. Then answer in one short sentence in their language; no steps, no settings tour.",
       "inputSchema": {

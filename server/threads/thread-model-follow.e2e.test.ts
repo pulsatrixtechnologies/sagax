@@ -144,9 +144,12 @@ it("keeps the sign-in failure when the bot's model is on the same signed-out eng
     await fixture.restart({ claude: "signed-out" });
     const messages = await sendAndSettle(fixture, bot.id, threadId, "SAME_ENGINE_SIGN_IN_7N", "failed");
     expect(messages.filter(notice)).toHaveLength(0);
-    // The engine's own failure, flagged as the sign-in it is (src/lib/failed-turn.ts).
-    expect(messages.findLast((message) => message.kind === "activity" && message.tool?.name?.startsWith("error:"))?.tool)
-      .toMatchObject({ ok: false, setup: true });
+    // The engine's own failure, read as the sign-in it is. #2013: a refusal
+    // before any prompt went out is no red card in the chat; the composer
+    // says it with its action (shared/send-state.ts engine_signed_out).
+    expect(messages.filter((message) => message.kind === "activity" && message.tool?.name?.startsWith("error:"))).toHaveLength(0);
+    const { block } = await fixture.api("GET", `/api/bots/${bot.id}/send-state?threadId=${threadId}`);
+    expect(block).toMatchObject({ reason: "engine_signed_out", advisory: true, refusal: { kind: "signed_out" } });
     expect(fixture.prompts("claude")).toHaveLength(1);
     expect(await thread()).toMatchObject({ modelSelection: { instanceId: "claude", model: "claude-opus-5" }, followsBotModel: false });
   });

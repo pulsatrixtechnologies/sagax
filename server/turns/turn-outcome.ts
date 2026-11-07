@@ -103,7 +103,6 @@ export function stoppedTurnOutcome(input: {
   activities: readonly Message[];
   turnId?: string;
   said?: string;
-  handoffPath?: string;
 }): string {
   const parts = [sentence(clip(input.reason, REASON_CHARS))];
   if (input.turnId) {
@@ -115,7 +114,6 @@ export function stoppedTurnOutcome(input: {
       ? `Before it stopped it made ${digest.toolCalls} tool call${digest.toolCalls === 1 ? "" : "s"}: ${digestTools(digest)}.`
       : "No tool calls were seen before it stopped.");
   }
-  if (input.handoffPath) parts.push(`Every step it took is listed in ${input.handoffPath}; to finish, assign what is left and point to that file.`);
   const said = input.said?.trim();
   return said ? `${parts.join(" ")}
 Its last message, quoted: ${JSON.stringify(said)}` : parts.join(" ");

@@ -158,8 +158,22 @@ if (browserBundle && listening) {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/config`, { signal: AbortSignal.timeout(5_000) });
     assert.equal(response.status, 200, "Packaged browser config did not respond successfully");
-    const config = await response.json();
-    browserReport = { browserEngine: config.browserEngine, browserEnabled: config.features?.browser };
+    const before = await response.json();
+    // A fresh home keeps the built-in browser off until the desktop's first-run
+    // welcome turns it on, so pin that default, then enable it the same way
+    // the desktop does (PATCH features.browser) before the bundle assertions.
+    assert.notEqual(before.features?.browser, true, "The built-in browser must be off by default on a fresh home");
+    const patched = await fetch(`http://127.0.0.1:${port}/api/config`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ features: { browser: true } }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    assert.equal(patched.status, 200, "Enabling the built-in browser did not succeed");
+    const reread = await fetch(`http://127.0.0.1:${port}/api/config`, { signal: AbortSignal.timeout(5_000) });
+    assert.equal(reread.status, 200, "Packaged browser config did not respond after enabling");
+    const config = await reread.json();
+    browserReport = { defaultBeforeEnable: before.features?.browser ?? false, browserEngine: config.browserEngine, browserEnabled: config.features?.browser };
   } catch (error) { browserReport = { error: String(error) }; }
 }
 
@@ -418,7 +432,7 @@ if (!proxyReport || proxyReport.error || proxyReport.missing.length > 0) {
 
 if (browserBundle && (browserReport?.error || browserReport?.browserEngine?.kind !== "engine" ||
   browserReport.browserEngine.version !== browserSpec.engine.version || browserReport.browserEnabled !== true)) {
-  console.error("The fresh-home packaged server did not discover its browser bundle with browser access on by default:");
+  console.error("The fresh-home packaged server did not discover its browser bundle once the browser was enabled:");
   console.error(JSON.stringify(browserReport, null, 2));
   process.exit(1);
 }
@@ -449,4 +463,4 @@ console.log("packaged backup worker exported an encrypted archive ✓");
 if (launcherReport) console.log("packaged container launcher ran the server as its child and stopped it cleanly ✓");
 if (desktopEntryReport) console.log(`packaged desktop entry started the server twice on its compile cache (${desktopEntryReport.starts[0].cached.length} entries) ✓`);
 if (layerShipped) console.log("packaged server found its enterprise layer inside the server dir ✓");
-if (browserBundle) console.log(`packaged browser discovered without installation; access on by default ✓ ${JSON.stringify(browserReport)}`);
+if (browserBundle) console.log(`packaged browser discovered without installation; off by default, enabled explicitly ✓ ${JSON.stringify(browserReport)}`);

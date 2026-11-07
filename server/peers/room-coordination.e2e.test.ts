@@ -133,7 +133,7 @@ it("refuses a disallowed peer without starting the recipient", () => withRooms(a
   await f.api(`/api/bots/${f.sender.id}`, { peers: [] }, "PATCH");
   f.plan[f.sender.id].steps[0].expectError = true;
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  expect(f.nodes()).toEqual([]);
+  expect(f.nodes().filter((n: any) => n.parentId)).toEqual([]);
   expect(await f.messages(f.destination.activeTaskId)).toEqual([]);
 }), 45_000);
 
@@ -317,7 +317,7 @@ it.each([4000, 4001])("enforces the %i-character request boundary on the real se
   f.plan[f.sender.id].steps[0].arguments.message = "x".repeat(length);
   f.plan[f.sender.id].steps[0].expectError = length > 4000;
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  if (length > 4000) expect(f.nodes()).toEqual([]);
+  if (length > 4000) expect(f.nodes().filter((n: any) => n.parentId)).toEqual([]);
   else expect(f.nodes().find((n: any) => n.parentId).status).toBe("completed");
 }), 45_000);
 
@@ -380,7 +380,7 @@ it("keeps a busy recipient queued and rejects revoked peer access before dispatc
   await f.cli("wait", "--bot", f.target.id, "--timeout", "15");
 }), 45_000);
 
-it("stops an active downstream turn when the source group is interrupted", () => withRooms(async f => {
+it("stops the source group on interrupt while a mid-turn teammate finishes", () => withRooms(async f => {
   f.plan[f.target.id].delayMs = 10_000;
   await f.start();
   await expect.poll(() => f.nodes().find((n: any) => n.parentId)?.status, { timeout: 10_000 }).toBe("running");
@@ -395,12 +395,17 @@ it("stops an active downstream turn when the source group is interrupted", () =>
   await expect.poll(async () => {
     const { bots } = await f.api("/api/bots"); return bots.find((b: any) => b.id === f.target.id)?.busy;
   }, { timeout: 15_000 }).toBeFalsy();
-  expect(f.nodes().every((n: any) => n.status === "cancelled")).toBe(true);
+  // Conversation-scoped Stop (docs/verification/room-coordination.md): the
+  // source root is stopped and never resumed; a teammate already mid-turn
+  // keeps its process, finishes and is recorded.
+  expect(f.nodes().map((n: any) => [Boolean(n.parentId), n.status, n.outcome])).toEqual([[false, "cancelled", "stopped"], [true, "completed", "done"]]);
   expect((await f.messages(f.source.activeTaskId)).some((m: any) => m.text === "Reviewed downstream outcome")).toBe(false);
 }), 45_000);
 
 it.each(["allow", "deny"])("honors %s on the sender's peer-approval card", behavior => withRooms(async f => {
-  await f.api(`/api/bots/${f.sender.id}`, { approvePeerComms: true }, "PATCH");
+  // A new bot starts at Full access (#2218), which contacts peers without a
+  // card (#2469); Ask is the level whose peer contact waits for a card.
+  await f.api(`/api/bots/${f.sender.id}`, { approvePeerComms: true, approvalMode: "ask" }, "PATCH");
   f.plan[f.sender.id].steps[0].expectError = behavior === "deny";
   await f.start();
   let card: any;
@@ -412,14 +417,16 @@ it.each(["allow", "deny"])("honors %s on the sender's peer-approval card", behav
   expect((await f.cli("wait", "--channel", f.source.id, "--timeout", "3")).status).toBe("needs-user");
   await f.api(`/api/threads/${f.source.activeTaskId}/respond`, { requestId: card.card.requestId, behavior });
   expect((await f.wait()).status).toBe("settled");
-  if (behavior === "deny") expect(f.nodes()).toEqual([]);
+  if (behavior === "deny") expect(f.nodes().filter((n: any) => n.parentId)).toEqual([]);
   else expect(f.nodes().find((n: any) => n.parentId)).toMatchObject({ status: "completed", approvalGranted: true });
 }), 45_000);
 
 it.each(["allow", "deny"])("presents all peer approvals together and dispatches only if every recipient is allowed (%s)", behavior => withRooms(async f => {
   const reviewer = (await f.cli("new-bot", "--name", "Reviewer", "--section", "A")).bot;
   await f.tool("update_channel", { channel_id: f.destination.id, member_ids: [f.target.id, reviewer.id] });
-  await f.api(`/api/bots/${f.sender.id}`, { approvePeerComms: true }, "PATCH");
+  // A new bot starts at Full access (#2218), which contacts peers without a
+  // card (#2469); Ask is the level whose peer contact waits for a card.
+  await f.api(`/api/bots/${f.sender.id}`, { approvePeerComms: true, approvalMode: "ask" }, "PATCH");
   f.plan[reviewer.id] = { reply: "Reviewed CSV" };
   f.plan[f.sender.id].steps[0].arguments.bot_ids.push(reviewer.id);
   f.plan[f.sender.id].steps[0].expectError = behavior === "deny";
@@ -429,15 +436,15 @@ it.each(["allow", "deny"])("presents all peer approvals together and dispatches 
     cards = (await f.messages(f.source.activeTaskId)).filter((m: any) => m.card?.tool === "delegate_bot");
     return cards.length;
   }, { timeout: 10_000 }).toBe(2);
-  expect(f.nodes()).toEqual([]);
+  expect(f.nodes().filter((n: any) => n.parentId)).toEqual([]);
   expect(await f.messages(f.destination.activeTaskId)).toEqual([]);
   // Answer the second one first: approving one recipient cannot start
   // partial work or wait for another card to be created.
   await f.api(`/api/threads/${f.source.activeTaskId}/respond`, { requestId: cards[1].card.requestId, behavior });
-  expect(f.nodes()).toEqual([]);
+  expect(f.nodes().filter((n: any) => n.parentId)).toEqual([]);
   await f.api(`/api/threads/${f.source.activeTaskId}/respond`, { requestId: cards[0].card.requestId, behavior: "allow" });
   expect((await f.wait()).status).toBe("settled");
-  if (behavior === "deny") expect(f.nodes()).toEqual([]);
+  if (behavior === "deny") expect(f.nodes().filter((n: any) => n.parentId)).toEqual([]);
   else expect(f.nodes().filter((n: any) => n.parentId)).toMatchObject([
     { status: "completed", approvalGranted: true }, { status: "completed", approvalGranted: true },
   ]);
@@ -503,7 +510,10 @@ it.each([false, true])("retains reports behind compact receipts for later turns,
   const followup = f.provider().filter((turn: any) => turn.botId === f.sender.id).at(-1);
   expect(followup.turnIndex).toBe(2);
   expect(JSON.stringify(followup.prompt).includes(report)).toBe(!revoked);
-  expect(f.nodes()).toHaveLength(2);
+  // The runtime records each root turn too (upstream 0.1.107): two room
+  // turns, one hand-off, and the follow-up started no new work.
+  expect(f.nodes().filter((n: any) => !n.parentId)).toHaveLength(2);
+  expect(f.nodes().filter((n: any) => n.parentId)).toHaveLength(1);
 }), 45_000);
 
 it("waits for busy peers and then completes without the user relaying messages", () => withRooms(async f => {
@@ -528,7 +538,7 @@ it.each([
   const botId = hidden ? f.target.id : "Nobody";
   f.plan[f.sender.id].steps = [{ expectError: true, arguments: { group_id: f.destination.id, bot_ids: [botId], message: "Review CSV" } }];
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  expect(f.nodes()).toEqual([]);
+  expect(f.nodes().filter((n: any) => n.parentId)).toEqual([]);
   expect(await f.messages(f.destination.activeTaskId)).toEqual([]);
   const refused = f.provider().find((turn: any) => turn.botId === f.sender.id)
     .evidence.find((entry: any) => entry.step).response.result.content[0].text;

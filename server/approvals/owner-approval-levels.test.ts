@@ -74,8 +74,9 @@ describe("4 levels x a rule Deny / Ask / Allow / none", () => {
     }
   });
 
-  it("request.opened reads the owner's rules even when the level answered (index.ts ownerLayer)", () => {
-    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
+  it("request.opened reads the owner's rules even when the level answered (request.opened ownerLayer)", () => {
+    // #1388: the request.opened handler left index.ts for runtime-events/
+    const source = readFileSync(new URL("../runtime-events/request-opened.ts", import.meta.url), "utf8");
     const start = source.indexOf("const ownerLayer = Boolean(");
     const line = source.slice(start, source.indexOf("\n", start));
     expect(start).toBeGreaterThan(-1);

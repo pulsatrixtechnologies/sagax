@@ -46,12 +46,39 @@ export const DEF_COORDINATE_BOTS = {
       group_id: { type: "string", description: "Optional destination room; omit for this room or, outside a room, your thread with each teammate." },
       bot_ids: { type: "array", items: { type: "string", description: "A teammate's name as your roster prints it, or its id ([id: …]) when the roster or list_bots shows one. A name shared by two reachable teammates is refused: use the id." }, minItems: 1, maxItems: 4, uniqueItems: true },
       message: { type: "string", minLength: 1, maxLength: 4000, description: "Question or task for these teammates; later requests in the same conversation can build on earlier ones. Send separate requests when responsibilities differ." },
+      reason: { type: "string", maxLength: 200, description: "Optional one line for the person about why this goes to them (shown as a chip)." },
       rework: { type: "boolean", description: "True only to send concrete work again to someone whose request already finished or failed: a correction, a re-check or a retry." },
       mode: { type: "string", enum: ["work", "consult"], description: "consult: a question only, allowed to the bot that sent you this work. Default: consult for that bot, else work." },
       relay: { type: "boolean", description: "True when the person only wants this one teammate's own answer passed back (ask it something, give its reply): the reply goes to the person directly, right after the line naming the teammate, and you are not resumed. Leave out when you must combine replies, check the work, decide or continue after it." },
+      thread: { type: "string", enum: ["standing", "new"], description: "standing (default): the one work thread this conversation has with each teammate. new: open a new thread on the teammate for this, its own history and run; its result still returns here." },
+      reply: { type: "string", enum: ["resume", "none"], description: "resume (default): the result resumes you. none: a one-way notice that is never awaited; nothing comes back and nothing resumes you." },
       done_when: { type: "string", minLength: 1, maxLength: 500, description: "Harness-checked criterion: tool:ask_choice and/or first_line:PASS|FAIL (join with \"; \"). Free text is advisory. Unmet or a work-mode ack-only reply ends failed(incomplete)." },
       default_answer: { type: "string", minLength: 1, maxLength: 1000, description: "Optional answer the harness applies if the person never replies to a question this work parks on them (R6). When used, the run resumes with a note that it was the requester's default. Leave out to expire the wait as status expired after the delay (and a mid-delay push reminder)." },
     }, required: ["bot_ids", "message"] },
+  };
+
+/** An external runtime's coordinate_bots description: it is never resumed,
+ * so it reads each result back with assignment_status. */
+export const DEF_COORDINATE_BOTS_EXTERNAL = {
+    ...DEF_COORDINATE_BOTS,
+    description: "Ask reachable Sagax teammates for advice (consult true) or assign concrete work. Give 1-4 bot_ids from list_bots and one message with exact file paths, constraints and what must be verified. Each call is its own assignment root: the answer carries a receipt (requestId) per teammate and a rootId. This external runtime is never resumed: read each result with assignment_status (a receipt's requestId, or rootId for the whole call), long-polling with wait_ms.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      bot_ids: DEF_COORDINATE_BOTS.inputSchema.properties.bot_ids,
+      message: DEF_COORDINATE_BOTS.inputSchema.properties.message,
+      consult: { type: "boolean", description: "True for a question the teammate answers from what it knows, acting on nothing. Default: work." },
+      done_when: DEF_COORDINATE_BOTS.inputSchema.properties.done_when,
+    }, required: ["bot_ids", "message"] },
+  };
+
+/** Read-only status of a coordinate_bots assignment, for a standing external
+ * runtime that long-polls instead of being resumed. */
+export const DEF_ASSIGNMENT_STATUS = {
+    name: "assignment_status",
+    description: "Read-only: one assignment's status, outcome and result (give a coordinate_bots receipt's requestId, or the call's rootId), or, with no id, everything this runtime still waits on. Long-poll with wait_ms instead of being resumed. It starts nothing and changes nothing.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      id: { type: "string", description: "A coordinate_bots receipt's requestId, or its rootId. Omit to list every outstanding assignment." },
+      wait_ms: { type: "integer", minimum: 0, maximum: 240_000, description: "Hold the answer up to this many milliseconds (at most 240000) for the assignment to settle." },
+    } },
   };
 
 export const DEF_SEND_TO_BOT = {
@@ -364,7 +391,7 @@ export const DEF_ACT = {
     },
   };
 
-export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'send_meme', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act', 'set_reply_notify'] as const);
+export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'assignment_status', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'send_meme', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act', 'set_reply_notify'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callCoreTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -419,6 +446,7 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
     const r = await api("/api/internal/room-targets");
     return { text: JSON.stringify(r), ...(r.error ? { isError: true } : {}) };
   }
+  if (name === "assignment_status") return assignmentStatus(args, context);
   if (name === "coordinate_bots") {
     // The tool's arguments are snake_case, but the harness wire they land on
     // is camelCase, and a caller can reach for that spelling. Map the aliases
@@ -435,7 +463,7 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
       && typeof canonical.message === "string" && canonical.message.trim().length > 0;
     if (!usable) {
       return {
-        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id and rework are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
+        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, rework, thread ("standing" or "new") and reply ("resume" or "none") are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
         isError: true,
       };
     }
@@ -445,9 +473,13 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
       : typeof canonical.defaultAnswer === "string" ? String(canonical.defaultAnswer).trim() : "";
     const r = await api("/api/internal/coordinate-bots", { method: "POST", body: JSON.stringify({
       groupId: canonical.group_id, botIds: ids, message: canonical.message,
+      ...(typeof canonical.reason === "string" && canonical.reason.trim() ? { reason: canonical.reason.trim().slice(0, 200) } : {}),
       rework: canonical.rework,
       ...(canonical.mode === "work" || canonical.mode === "consult" ? { mode: canonical.mode } : {}),
+      ...(canonical.consult === true ? { consult: true } : {}),
       ...(canonical.relay === true ? { relay: true } : {}),
+      ...(canonical.thread === "standing" || canonical.thread === "new" ? { thread: canonical.thread } : {}),
+      ...(canonical.reply === "resume" || canonical.reply === "none" ? { reply: canonical.reply } : {}),
       ...(doneWhen ? { doneWhen } : {}),
       ...(defaultAnswer ? { defaultAnswer } : {}),
     }) });
@@ -517,7 +549,7 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
       return `- ${b.name}${role}${about} [id: ${b.id}, model: ${b.model}${team}${state ? `, ${state}` : ""}]`;
     });
     return {
-      text: `Reachable teammates:\n${lines.join("\n")}\n\n${COORDINATING ? "Use coordinate_bots for advice or concrete work, then end your turn. Busy teammates queue and results resume you automatically." : "Assign work with delegate_bot. Use ask_bot only for a short answer you need inline."}`,
+      text: `Reachable teammates:\n${lines.join("\n")}\n\n${EXTERNAL_RUNTIME ? "Assign work or ask with coordinate_bots (consult true for a question), then read each result with assignment_status, long-polling with wait_ms." : COORDINATING ? "Use coordinate_bots for advice or concrete work, then end your turn. Busy teammates queue and results resume you automatically." : "Assign work with delegate_bot. Use ask_bot only for a short answer you need inline."}`,
     };
   }
   if (name === "react_to_message" || name === "remove_reaction") {
@@ -839,3 +871,73 @@ async function requestCustomSecret(args: Json, context: ToolCallContext): Promis
   };
 }
 
+
+// ── assignment_status rendering ────────────────────────────────────────────
+/** The runtime's status words as a person would say them (runtime/types.ts). */
+const STATUS_WORDS: Record<string, string> = {
+  queued: "queued, not started yet",
+  running: "running",
+  needs_input: "waiting on the person",
+  waiting: "waiting on its own hand-offs",
+  resume: "wrapping up (its hand-offs settled)",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+};
+/** How much of a result the status answer shows. */
+const RESULT_HEAD = 2_000;
+
+/** One assignment as one line: id, assignee, status, outcome. */
+function assignmentLine(a: Json): string {
+  const id = typeof a.id === "string" && a.id ? a.id : "?";
+  const who = typeof a.botName === "string" && a.botName ? `@${peerName(a.botName)}`
+    : typeof a.botId === "string" && a.botId ? a.botId : "a teammate";
+  const status = String(a.status ?? "unknown");
+  const outcome = typeof a.outcome === "string" && a.outcome && a.outcome !== "done" && a.outcome !== status ? ` (${a.outcome})` : "";
+  const detail = typeof a.outcomeDetail === "string" && a.outcomeDetail.trim() ? `: ${a.outcomeDetail.trim()}` : "";
+  return `${id} → ${who}: ${STATUS_WORDS[status] ?? status}${outcome}${detail}`;
+}
+
+/** One assignment's line, its parked question, the head of its result and
+ * one line per hand-off of its own ({ assignment, children, inbox }). */
+function renderAssignmentStatus(r: Json, id: string): string {
+  const raw = jsonRecord(r.assignment) ? r.assignment as Json : r;
+  const a: Json = { id, ...raw };
+  const lines = [`Assignment ${assignmentLine(a)}`];
+  const question = typeof a.question === "string" ? a.question.trim() : "";
+  if (question && (a.status === "needs_input" || a.outcome === "needs_input")) {
+    lines.push(`It is parked on a question for the person: ${JSON.stringify(question)}. Nothing moves until the person answers it in that thread.`);
+  }
+  const result = typeof a.result === "string" ? a.result.trim() : "";
+  if (result) lines.push(`Result${result.length > RESULT_HEAD ? " (first part)" : ""}: ${result.slice(0, RESULT_HEAD)}`);
+  const children = Array.isArray(r.children) ? (r.children as unknown[]).filter(jsonRecord) as Json[] : [];
+  if (children.length) lines.push("Its own hand-offs:", ...children.map((child) => `- ${assignmentLine(child)}`));
+  const settled = a.status === "completed" || a.status === "failed" || a.status === "cancelled";
+  if (!settled) lines.push("It is not settled yet: poll again with wait_ms.");
+  return lines.join("\n");
+}
+
+async function assignmentStatus(args: Json, context: ToolCallContext): Promise<ToolCallResult> {
+  const id = args.id === undefined || args.id === null || args.id === "" ? "" : String(args.id).trim();
+  if (id && !/^[\w-]{4,64}$/.test(id)) {
+    return { text: 'assignment_status takes an optional "id" (a coordinate_bots receipt\'s requestId or rootId) and an optional "wait_ms" (0-240000). Omit id to list every outstanding assignment.', isError: true };
+  }
+  if (args.wait_ms !== undefined && (typeof args.wait_ms !== "number" || !Number.isFinite(args.wait_ms) || args.wait_ms < 0)) {
+    return { text: "assignment_status wait_ms must be a whole number of milliseconds from 0 to 240000.", isError: true };
+  }
+  const waitMs = Math.min(Math.trunc(Number(args.wait_ms) || 0), 240_000);
+  const query = new URLSearchParams();
+  if (id) query.set("id", id);
+  if (waitMs > 0) query.set("wait_ms", String(waitMs));
+  const { ok, status, body: r } = await context.client.apiResponse(`/api/internal/assignment-status${query.size ? `?${query.toString()}` : ""}`);
+  if (!ok) {
+    const why = status === 404 ? `No assignment ${id || "(none given)"} is known here: check the id against your coordinate_bots receipt.`
+      : status === 403 ? `Assignment ${id} is not this conversation's; only its requester can read it.`
+      : String(r.error ?? `HTTP ${status}`);
+    return { text: why, isError: true };
+  }
+  if (id) return { text: renderAssignmentStatus(r, id) };
+  const outstanding = Array.isArray(r.outstanding) ? (r.outstanding as unknown[]).filter(jsonRecord) as Json[] : [];
+  if (!outstanding.length) return { text: "Nothing outstanding: no assignment of this conversation is still open." };
+  return { text: `Outstanding assignments (${outstanding.length}):\n${outstanding.map((a) => `- ${assignmentLine(a)}`).join("\n")}` };
+}

@@ -269,6 +269,10 @@ interface Entry {
   routineRole?: string;
   /** A write was refused (403): no switch to get around it in this turn. */
   writeRefused?: boolean;
+  /** A read was refused (403) for good (#2577/#2581): no switch around it. */
+  readRefused?: boolean;
+  /** Role switches the bot made in this turn: one is allowed (#2577). */
+  switches?: number;
   /** Tools the person allowed to write as "Moi" in this routine turn. */
   meWritesAllowed?: Set<string>;
   /** The role lapsed during the last call and could not be renewed. */
@@ -335,6 +339,15 @@ function withNote(answer: PerspicaxRelayAnswer, note: string): PerspicaxRelayAns
   const result = answer.body.result;
   const content = Array.isArray(result.content) ? result.content : [];
   return { ...answer, body: { ...answer.body, result: { ...result, content: [{ type: "text", text: note }, ...content] } } };
+}
+
+/** A refusal the model must read as a block (#2577): the note in front of a
+ * tool result, or a JSON-RPC error turned into a tool error with it. */
+function blockWith(answer: PerspicaxRelayAnswer, id: unknown, note: string): PerspicaxRelayAnswer {
+  if (isObject(answer.body) && isObject(answer.body.result)) return withNote(answer, note);
+  const error = isObject(answer.body) && isObject(answer.body.error) ? answer.body.error : null;
+  const message = error && typeof error.message === "string" ? error.message.slice(0, 300) : "";
+  return toolError(id, message ? `${note}\nVendor answer: ${message}` : note);
 }
 
 function toolError(id: unknown, text: string): PerspicaxRelayAnswer {
@@ -1069,6 +1082,8 @@ export class PerspicaxMcp {
    * pick: the default surface ("Moi"), never a stored choice. */
   private applyTurnRole(entry: Entry, routine: boolean): void {
     entry.writeRefused = false;
+    entry.readRefused = false;
+    entry.switches = 0;
     entry.meWritesAllowed = undefined;
     entry.lapsedNow = false;
     entry.roleLocked = false;
@@ -1224,19 +1239,23 @@ export class PerspicaxMcp {
     const before = this.currentRole(entry);
     if (name === "identity_switch" || name === "profile_use") {
       const target = typeof args.profile === "string" && args.profile.trim() ? args.profile.trim() : args.clear === true ? ME_ROLE : undefined;
-      if (target !== undefined && target !== before && (entry.roleLocked || entry.writeRefused)) {
+      if (target !== undefined && target !== before && (entry.roleLocked || entry.writeRefused || entry.readRefused || (entry.switches ?? 0) >= 1)) {
         await this.ensureHeldRoles(entry);
         const now = this.roleView(entry, before);
         const why = entry.roleLocked
           ? `Refused by Sagax: the person fixed the role for this turn (${now.name || "their own account"}). Keep working under it; do not switch roles.`
-          : "Refused by Sagax: a write was refused (403) in this turn. Stop and report the missing permission; switching roles to get around it is not allowed.";
+          : entry.writeRefused
+            ? "Refused by Sagax: a write was refused (403) in this turn. Stop and report the missing permission; switching roles to get around it is not allowed."
+            : entry.readRefused
+              ? "Refused by Sagax: a read was refused (403) in this turn. Stop and report the missing permission; switching roles to get around it is not allowed."
+              : `Refused by Sagax: one role switch per turn, and this turn already switched (now ${now.name || "the person's own account"}). Keep working under it, or report what is blocked.`;
         this.emitRole(entry, "step", name, { ...now, reason: entry.roleReason ?? "default" });
         return toolError(id, why);
       }
       const answer = await this.relayFrameCore(input);
       this.noteListing(entry, identityValue(answer.body));
       const after = this.currentRole(entry);
-      if (after !== before) entry.roleReason = "switch";
+      if (after !== before) { entry.roleReason = "switch"; entry.switches = (entry.switches ?? 0) + 1; }
       if (after) await this.ensureHeldRoles(entry);
       this.emitRole(entry, "step", name, { ...this.roleView(entry, after), reason: entry.roleReason ?? "default", ...(after !== before ? { previous: this.roleView(entry, before) } : {}) });
       return answer;
@@ -1282,14 +1301,18 @@ export class PerspicaxMcp {
       return withNote(answer, `STOP: this write was refused (403) under ${label}. Missing permission: ${needs}. Do not retry it under another role; report the missing permission to the person.`);
     }
     const decision = before ? this.options.roleFallback?.({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, from: before, path: permission.path }) ?? "fallback" : "stay";
+    // #2577/#2581: a read refused for good is a clean block, never a detour
+    const readStop = (why: string) => `STOP: this read was refused (403) under ${label}${why}. Missing permission: ${needs}. This is a permission block, not missing data: do not switch roles, do not retry the same records with other tools or another connection, and do not answer as if the records were empty. Tell the person the read is blocked and which permission the account needs.`;
     if (decision === "stay") {
+      entry.readRefused = true;
       this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
-      return before ? withNote(answer, `This read was refused (403) under ${label}, and the person asked to stay in that role: no fallback. Missing permission: ${needs}.`) : answer;
+      return blockWith(answer, id, readStop(before ? ", and the person asked to stay in that role: no fallback" : ""));
     }
     const again = await this.readAsMe(entry, frame, before);
     if (!again || again.status !== 200 || roleRefusalOf(again.body) || (isObject(again.body) && isObject(again.body.error))) {
+      entry.readRefused = true;
       this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
-      return answer;
+      return blockWith(answer, id, readStop(" and again in the person's own name"));
     }
     this.emitRole(entry, "step", name, { slug: ME_ROLE, name: "", reason: decision === "rule" ? "rule" : "fallback", refusedTool: name, previous: refusedRole }, { permission, refusedRole });
     return withNote(again, `Sagax read this once in the person's own name: ${label} was refused (403) for it (missing ${needs}). The next call runs under ${label} again.`);

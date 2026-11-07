@@ -72,6 +72,8 @@ describe("the same instructions for every engine, budgeted per capability", () =
     expect(prompt.text).toContain('Capability "Wren"');
     expect(prompt.text.split("Before matching work,")).toHaveLength(2);
     expect(prompt.text).toContain("exact scoped path");
+    // #2577: a single read never starts with a skill lookup
+    expect(prompt.text).toContain("A single read or lookup is not matching work: call the tool directly");
     expect(prompt.index.skills).toBe(2);
   });
   it("counts only the kinds that reached the prompt when another part is omitted", () => {

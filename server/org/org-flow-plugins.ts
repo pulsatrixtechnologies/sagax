@@ -391,6 +391,7 @@ export function flowSkillsNote(input: {
     "",
     `Pulsatrix Flow skills (${FLOW_ENTRY_SKILLS.join(", ")} and the other ${product} skills) are not loaded on this turn: ${why}.`,
     "They are not in skills_list, the workspace or a marketplace, so do not look for them there. The active Flow pack serves them through your main Perspicax connection:",
+    "Only for a routine or a multi-step procedure: a single read or lookup needs no Flow skill, so call the vendor tool directly (#2577). Then,",
     `after flow_run run.init, read one with flow_run ${read(FLOW_ENTRY_SKILLS[0])}`,
     "(one part per call: follow the answer's next, adding \"--part\", \"<n>\" to argv, until next is null).",
     "A routine that says to load a Flow skill is done this way, and a missing local copy alone never stops the pass.",

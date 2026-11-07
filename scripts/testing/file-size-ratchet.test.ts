@@ -71,7 +71,6 @@ const LINES: Record<string, number> = {
   "src/components/ogre-moves.ts": 1086,
   "src/components/SidebarProfileMenu.tsx": 1084,
   "server/auth/idp-session.ts": 1075,
-  "src/components/bot-profile/BotProfilePage.tsx": 1068,
   "server/auth/sessions.ts": 1043,
   "server/drivers/claude.ts": 1031,
   "server/drivers/pi-mcp-extension.ts": 1029,

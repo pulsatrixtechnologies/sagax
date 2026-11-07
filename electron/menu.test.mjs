@@ -79,6 +79,16 @@ describe("buildApplicationMenu", () => {
     expect(onOpenAbout).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["darwin", "linux", "win32"])("Help > Send Feedback… opens the Feedback bot with Cmd/Ctrl+Shift+F on %s (#2618)", (platform) => {
+    const onSendFeedback = vi.fn();
+    const template = build(platform, { onSendFeedback });
+    const help = template.find((entry) => entry.role === "help");
+    const item = help.submenu.find((entry) => entry.label === "Send Feedback…");
+    expect(item.accelerator).toBe("CmdOrCtrl+Shift+F");
+    item.click();
+    expect(onSendFeedback).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["darwin", "linux", "win32"])("does not offer hosted organisation sign-in on %s", platform => {
     const template = build(platform);
     const server = template.find(entry => entry.label === "Server").submenu;
@@ -126,6 +136,6 @@ describe("buildApplicationMenu", () => {
     const empty = build("win32").find((entry) => entry.label === "Window");
     expect(empty.submenu.map((entry) => entry.role)).toEqual(["minimize", "close"]);
     // macOS lists every window in its own Window menu
-    expect(build("darwin", { artifactWindows }).at(-1)).toEqual({ role: "windowMenu" });
+    expect(build("darwin", { artifactWindows }).find((entry) => entry.role === "windowMenu")).toEqual({ role: "windowMenu" });
   });
 });

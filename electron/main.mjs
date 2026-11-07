@@ -2849,6 +2849,9 @@ function refreshApplicationMenu() {
       onOpenAbout: () => {
         mainPage()?.send("app:open-about");
       },
+      onSendFeedback: () => {
+        mainPage()?.send("app:send-feedback");
+      },
       serverModeId: serverModeEnvironment(environmentsState)?.id ?? null,
       onLeaveServerMode: () => void workspaceMenuAction(leaveServerMode),
     }),
@@ -4821,6 +4824,20 @@ ipcMain.handle("window:state", (event) => {
 ipcMain.handle("window:set-fullscreen", (event, on) => {
   const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
   return setWindowFullScreen(win, on === true);
+});
+// #2618: the Feedback bot's picture of the sender's own window (never the
+// screen, so no Screen Recording prompt); a PNG data URL, null when it fails.
+ipcMain.handle("window:capture", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  if (!win || win.isDestroyed()) return null;
+  try {
+    const image = await win.webContents.capturePage();
+    const size = image.getSize();
+    const scaled = size.width > 1600 ? image.resize({ width: 1600 }) : image;
+    return `data:image/png;base64,${scaled.toPNG().toString("base64")}`;
+  } catch {
+    return null;
+  }
 });
 ipcMain.handle("window:fullscreen-state", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;

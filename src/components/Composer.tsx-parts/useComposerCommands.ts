@@ -189,6 +189,13 @@ export function useComposerCommands({
       label: "/setup",
       description: t("composer.command.setupDesc"),
     });
+    // #2618: a report to the team, asked for in this chat (the server runs it).
+    if (builtIns && !group && bot) available.push({
+      id: "feedback",
+      label: "/feedback",
+      description: t("composer.command.feedbackDesc"),
+      argumentHint: t("composer.command.feedbackHint"),
+    });
     if (builtIns && (bot || (group && !group.dm))) {
       available.push({
         id: "loop",
@@ -386,7 +393,7 @@ export function useComposerCommands({
     const replacement = item.kind === "engine"
       ? engineCommandInsertion(item)
       : item.kind === "skill" ? skillCommandInsertion(item, text.slice(slash.end))
-      : command?.id === "learn" ? "/learn " : command?.id === "setup" ? "/setup " : command?.id === "loop" ? "/loop " : "";
+      : command?.id === "learn" ? "/learn " : command?.id === "setup" ? "/setup " : command?.id === "feedback" ? "/feedback " : command?.id === "loop" ? "/loop " : "";
     const next = replaceComposerSlashTrigger(text, slash, replacement);
     editText(next.text);
     setCaret(next.caret);

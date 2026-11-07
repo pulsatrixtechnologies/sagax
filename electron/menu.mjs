@@ -17,6 +17,7 @@ import { DISPLAY_NAME } from "./app-name.mjs";
  * @param {(id: string) => void} input.onForget
  * @param {() => void} input.onOpenSettings
  * @param {() => void} [input.onOpenAbout]  in-app About modal (Sagax > About / Help > About)
+ * @param {() => void} [input.onSendFeedback]  Help > Send Feedback… (CmdOrCtrl+Shift+F, #2618): the Feedback bot
  * @param {string | null} [input.serverModeId]  server mode: the one server this app shows
  * @param {() => void} [input.onLeaveServerMode]
  * @param {{ artifactId: string, title: string }[]} [input.artifactWindows]  artifacts open in a window of their own
@@ -47,7 +48,7 @@ export function windowMenuTemplate({ artifactWindows = [], onShowArtifactWindow,
   };
 }
 
-export function applicationMenuTemplate({ environments, activeId, onSwitch, onAddFromClipboard, onConnect, onForget, onOpenSettings, onOpenAbout, serverModeId = null, onLeaveServerMode, artifactWindows = [], onShowArtifactWindow, platform = process.platform }) {
+export function applicationMenuTemplate({ environments, activeId, onSwitch, onAddFromClipboard, onConnect, onForget, onOpenSettings, onOpenAbout, onSendFeedback, serverModeId = null, onLeaveServerMode, artifactWindows = [], onShowArtifactWindow, platform = process.platform }) {
   const isMac = platform === "darwin";
   const active = environments.find((e) => e.id === activeId) ?? null;
   const locked = serverModeId ? environments.find((e) => e.id === serverModeId) ?? null : null;
@@ -86,6 +87,8 @@ export function applicationMenuTemplate({ environments, activeId, onSwitch, onAd
     label: isMac ? `About ${DISPLAY_NAME}` : "About",
     click: () => onOpenAbout?.(),
   };
+  // #2618: the Feedback bot, on every platform (macOS keeps its Help search).
+  const feedbackItem = { label: "Send Feedback…", accelerator: "CmdOrCtrl+Shift+F", click: () => onSendFeedback?.() };
   const template = [
     // app.name is the runtime name (openmausbot), which the roles would print
     ...(isMac ? [{ label: DISPLAY_NAME, submenu: [aboutItem, { label: "Preferences…", accelerator: "CmdOrCtrl+,", click: () => onOpenSettings() }, { type: "separator" }, { role: "hide", label: `Hide ${DISPLAY_NAME}` }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit", label: `Quit ${DISPLAY_NAME}` }] }] : []),
@@ -95,7 +98,7 @@ export function applicationMenuTemplate({ environments, activeId, onSwitch, onAd
     { role: "viewMenu" },
     windowMenuTemplate({ artifactWindows, onShowArtifactWindow, platform }),
     // Windows/Linux: Help > About opens the in-app About modal (macOS uses the app menu).
-    ...(!isMac ? [{ role: "help", submenu: [aboutItem] }] : []),
+    { role: "help", submenu: isMac ? [feedbackItem] : [feedbackItem, { type: "separator" }, aboutItem] },
   ];
   return template;
 }

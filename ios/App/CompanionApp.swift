@@ -122,6 +122,8 @@ struct CompanionApp: App {
                 .themeRoot()
                 // Settings > Achievements: reads, reports and unlock banners (ST9).
                 .achievementsHost(session)
+                // a shake: a report with the Feedback bot (#2618, FeedbackShake.swift)
+                .feedbackShakeHost(session)
                 // a bot asks this phone for a tool: the card (Features/PhoneTools)
                 .phoneToolsHost(session)
                 .onAppear {

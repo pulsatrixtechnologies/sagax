@@ -417,7 +417,7 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     resolveReplyTarget, routeThreadId, routableSteers, routines, runningRequestText, runningTurnInstance,
     sendSequencer, soloGoalReceipts, soloGoals, startDuplexCallTurn, startOrQueueDirectMessage, startParallelTask,
     startTurn, stoppingThreads, stopDirectThreadByPerson, store, threadBusy, usageTriggerFor, voiceCalls,
-    voiceLatency, widgetPressesInFlight,
+    voiceLatency, widgetPressesInFlight, feedback,
   } = deps;
   let m: RegExpMatchArray | null = null;
   m = path.match(/^\/api\/bots\/([\w-]+)\/messages(?:\/(guarded))?$/);
@@ -474,6 +474,19 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     // marked or not (typed words, a retry, an old page): server state,
     // not only the page's mark (server/voice/voice-call-session.ts).
     const voiceCall = guarded ? sentVoiceCall : voiceCalls.markFor(threadId, sentVoiceCall);
+    // #2618: the Feedback bot's conversation, a /feedback typed in any chat
+    // and the answers to its questions are the server's own short flow: no
+    // turn runs (server/feedback/service.ts). Ahead of the engine command
+    // check, which would refuse /feedback as an unknown command.
+    if (feedback && !guarded && !pressed && !voiceCall) {
+      const feedbackSendId = parseSendId(body.sendId);
+      const earlier = feedbackSendId ? store.messagesFor(threadId).find((m: any) => m.role === "user" && m.sendId === feedbackSendId) : undefined;
+      const handled = earlier ?? feedback.handleMessage({
+        botId: bot.id, threadId, text: typed, principalId: actorPrincipalId(auth) || null,
+        ...(feedbackSendId ? { sendId: feedbackSendId } : {}), sender: messageSender(auth),
+      });
+      if (handled) return json(res, 202, { ok: true, threadId, message: handled });
+    }
     // A goal for this one bot. A team channel keeps its own /goal.
     const solo = !guarded && !voiceCall && !pressed
       ? soloGoalCommand(typed, body.mode === "goal" ? "goal" : undefined)
@@ -661,6 +674,8 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     }
     // a correction into the running turn (steer, queued into it) counts for Prompter
     recordMastery(masterySendFacts({ threadId, text, steered: busyMode === "steer" && (receipt as { queued?: unknown }).queued === true }, person));
+    // #2618: one ready-made report offered when the person sounds frustrated
+    if (feedback && !guarded && !pressed && !voiceCall) feedback.maybeOffer({ botId: bot.id, threadId, text, principalId: person || null });
     return json(res, 202, receipt);
   }
   return PASS;

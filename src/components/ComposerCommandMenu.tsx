@@ -4,7 +4,7 @@
 // its argument hint. What the chat cannot run stays listed, dimmed, with the
 // reason. Esc closes it, said in the footer (the reference design's prompt editor).
 import type { RefObject } from "react";
-import { Activity, BookOpen, Pause, Play, Plug, Puzzle, RefreshCw, Repeat, Sparkles, Square, Target, Terminal, Wand2 } from "lucide-react";
+import { Activity, BookOpen, MessageSquareWarning, Pause, Play, Plug, Puzzle, RefreshCw, Repeat, Sparkles, Square, Target, Terminal, Wand2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { composerMenuSection, type ComposerMenuItem } from "@/lib/composer-commands";
@@ -32,6 +32,7 @@ function ItemIcon({ item }: { item: ComposerMenuItem }) {
       case "goal-resume": return <Play size={15} aria-hidden="true" />;
       case "goal-stop": return <Square size={13} aria-hidden="true" />;
       case "setup": return <Wand2 size={15} aria-hidden="true" />;
+      case "feedback": return <MessageSquareWarning size={15} aria-hidden="true" />;
       case "loop":
       case "loop-status":
       case "loop-stop": return <Repeat size={15} aria-hidden="true" />;

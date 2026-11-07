@@ -13,6 +13,11 @@ export type ClientFeatures = Partial<Record<ClientFeature, boolean>>;
 export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: RegExp; feature?: ClientFeature }> = [
   // own session
   { methods: ["GET"], path: /^\/api\/auth\/session$/ },
+  // in-app feedback (#2618, server/routes/feedback.ts): open the Feedback
+  // bot's conversation and list the session person's own reports. The token
+  // config stays admin.
+  { methods: ["POST"], path: /^\/api\/feedback\/start$/ },
+  { methods: ["GET"], path: /^\/api\/feedback$/ },
   // own preferences (organization server; the handler answers the session's person only)
   { methods: ["GET", "PUT", "PATCH"], path: /^\/api\/me\/preferences$/ },
   // Content between people (server/routes/moderation.ts, App Store 1.2): the

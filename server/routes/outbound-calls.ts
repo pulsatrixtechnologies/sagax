@@ -7,13 +7,17 @@
 //
 // Only the person, or their Primary Bot when they asked in this turn
 // (ownerGate). Call, Always call (#2091: the next calls to this confirmed
-// number are approved as they open) or deny; the number is confirmed by
-// the person on the card. A person who protects "money" with a security
-// key steps up as for a purchase.
+// number are approved as they open) or deny; the number is confirmed on
+// the card, by the person or by their Primary Bot on their behalf (the maintainer
+// 2026-11-06: the Primary Bot does everything, no human click exception).
+// Always is refused while the organization turned "Toujours permettre"
+// off. A person who protects "money" with a security key steps up as for
+// a purchase.
 import { formatPhone } from "../../shared/outbound-call.ts";
 import { OutboundCallError, type OutboundCallRecord, type OutboundCalls } from "../outbound/outbound-calls.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import { ORG_ALWAYS_ALLOW_OFF, standingGrantsAllowed } from "../rules/custom-rules-org.ts";
 
 export interface OutboundCallRouteDeps {
   calls: OutboundCalls;
@@ -112,12 +116,8 @@ export function createOutboundCallRoutes(deps: OutboundCallRouteDeps): RouteHand
     if (!/^application\/json\b/i.test(String(req.headers["content-type"] ?? ""))) return json(res, 415, { error: "content-type must be application/json" });
     const parsed = await readBody(req);
     const input = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-    // the number is confirmed on the card by the person: a Primary Bot may
-    // decline a call, never confirm one (ÉFVP pilot, re-review of #956)
     const places = input.decision === "call" || input.decision === "always";
-    if (places && deps.viaPrimary?.()) {
-      return json(res, 403, { error: "A phone call is confirmed by the person on its card, not by a bot.", code: "person_only" });
-    }
+    if (input.decision === "always" && !standingGrantsAllowed()) return json(res, 403, ORG_ALWAYS_ALLOW_OFF);
     if (places) {
       const stepped = deps.stepUp?.(auth, { callId: match[1], decision: input.decision }, input.stepUp);
       if (stepped) return json(res, stepped.status, stepped.body);

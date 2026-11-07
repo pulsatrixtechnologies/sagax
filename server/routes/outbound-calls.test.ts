@@ -11,6 +11,7 @@ import { OutboundCalls, type OutboundCallRecord } from "../outbound/outbound-cal
 import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { policyFor } from "../tools/tool-policy.ts";
 import { createOutboundCallRoutes } from "./outbound-calls.ts";
+import { setOrgApprovalPolicySource } from "../rules/custom-rules-org.ts";
 import { dispatchRoutes } from "./table.ts";
 
 const cleanups: Array<() => unknown> = [];
@@ -79,11 +80,27 @@ describe("phone call routes", () => {
     expect(await other.call(`/api/me/phone-calls/${other.id}/answer`, { decision: "call", confirmed: true, confirmedTo: "+1 514 555 0142" })).toMatchObject({ status: 404 });
   });
 
-  it("a Primary Bot may decline a call, never confirm it (re-review)", async () => {
+  it("a Primary Bot allows a call once or always on the person's behalf, or declines it (the maintainer 2026-11-06)", async () => {
+    const once = await serve({ via: "Chef" });
+    expect(await once.call(`/api/me/phone-calls/${once.id}/answer`, { decision: "call", confirmed: true, confirmedTo: "+1 514 555 0142" })).toEqual({ status: 200, body: { status: "approved" } });
+    expect(once.calls.get(once.id)?.via).toBe("Chef");
+    const always = await serve({ via: "Chef" });
+    expect(await always.call(`/api/me/phone-calls/${always.id}/answer`, { decision: "always", confirmed: true, confirmedTo: "+1 514 555 0142" })).toEqual({ status: 200, body: { status: "approved" } });
+    expect(always.calls.standingFor("jean", "+15145550142")).toBe(true);
+    const no = await serve({ via: "Chef" });
+    expect(await no.call(`/api/me/phone-calls/${no.id}/answer`, { decision: "deny" })).toMatchObject({ status: 200 });
+    // the security key still steps up a Primary Bot's Call
+    const keyed = await serve({ via: "Chef", stepUp: { status: 401, body: { code: "step_up_required" } } });
+    expect(await keyed.call(`/api/me/phone-calls/${keyed.id}/answer`, { decision: "call", confirmed: true, confirmedTo: "+1 514 555 0142" })).toMatchObject({ status: 401 });
+  });
+
+  it("refuses Always while the organization turned Toujours permettre off", async () => {
+    setOrgApprovalPolicySource(() => ({ alwaysAllow: false }));
+    cleanups.push(() => setOrgApprovalPolicySource(null));
     const { call, calls, id } = await serve({ via: "Chef" });
-    expect(await call(`/api/me/phone-calls/${id}/answer`, { decision: "call", confirmed: true, confirmedTo: "+1 514 555 0142" })).toMatchObject({ status: 403 });
-    expect(await call(`/api/me/phone-calls/${id}/answer`, { decision: "deny" })).toMatchObject({ status: 200 });
-    expect(calls.get(id)?.via).toBe("Chef");
+    expect(await call(`/api/me/phone-calls/${id}/answer`, { decision: "always", confirmed: true, confirmedTo: "+1 514 555 0142" })).toMatchObject({ status: 403, body: { code: "org_always_allow_off" } });
+    expect(calls.standingFor("jean", "+15145550142")).toBe(false);
+    expect(await call(`/api/me/phone-calls/${id}/answer`, { decision: "call", confirmed: true, confirmedTo: "+1 514 555 0142" })).toMatchObject({ status: 200 });
   });
 
   it("keeps call creation and confirmation personal and unavailable as agent tools", () => {

@@ -245,6 +245,8 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
       pluginMarketplacesOwner: "local",
       // Pulsatrix Flow for members (#1091)
       flowPlugins: expect.anything(),
+      // The per-person Grok bridge is on by default (#2193)
+      allowGrokBridge: true,
     });
     shared = await createBot(alice, "Xavier", "claude");
     const refusals = [

@@ -65,6 +65,9 @@ it("an Allow in a chosen class needs the person's key, bound to that card, once"
 
     const bot = (await api("POST", "/api/bots", { name: "Step-up fixture", modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } }, 201)).bot;
     threadId = bot.threadId;
+    // a new bot runs at the default Full access (#2218); the refresh below
+    // copies a looser bot level onto a thread, so the bot sits at Auto
+    await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto", acknowledgeLocalAuto: true });
     await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.threadId}`, { approvalMode: "ask" });
     const dump = join(dataDir, "fake-claude-dump.json");
     rmSync(dump, { force: true });

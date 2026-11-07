@@ -250,8 +250,11 @@ describe("shared skills: discovery on API and file engines", () => {
       managedTools: true,
       read: () => readFileSync(filePath, "utf8"),
     });
+    // Managed reads publish a one-line index; skills_list gives the exact
+    // scoped path and workspace_read loads the body on demand (#1997).
     const filePrompt = capabilityPrompt("codex", groups, { managedTools: true });
-    expect(filePrompt.text).toContain(path);
+    expect(filePrompt.text).toContain("- skill packing-list: Shared packing checklist.");
+    expect(filePrompt.text).toContain("skills_list");
     expect(filePrompt.text).not.toContain("DISCOVER_ME");
 
     const apiGroups = capabilityPromptGroups("grok", rows, {
@@ -259,8 +262,14 @@ describe("shared skills: discovery on API and file engines", () => {
       read: () => readFileSync(filePath, "utf8"),
     });
     const apiPrompt = capabilityPrompt("grok", apiGroups, { managedTools: true });
-    expect(apiPrompt.text).toContain("DISCOVER_ME");
-    expect(apiPrompt.text).toContain(path);
+    expect(apiPrompt.text).toContain("- skill packing-list: Shared packing checklist.");
+    expect(apiPrompt.text).toContain("skills_list");
+    expect(apiPrompt.text).not.toContain("DISCOVER_ME");
+    // A chat engine without managed reads still receives the whole file.
+    const inlinePrompt = capabilityPrompt("grok", capabilityPromptGroups("grok", rows, {
+      read: () => readFileSync(filePath, "utf8"),
+    }), {});
+    expect(inlinePrompt.text).toContain("DISCOVER_ME");
   });
 
   it("exposes an organization shared skill the same way after assignment", () => {
@@ -295,11 +304,11 @@ describe("shared skills: discovery on API and file engines", () => {
       managedTools: true,
       read: () => readLibrarySkillFile("order-audit", orgRoot),
     }), { managedTools: true });
-    expect(filePrompt.text).toContain(path);
+    expect(filePrompt.text).toContain("- skill order-audit: Shared packing checklist.");
+    expect(filePrompt.text).toContain("skills_list");
     const apiPrompt = capabilityPrompt("grok", capabilityPromptGroups("grok", rows, {
-      managedTools: true,
       read: () => readLibrarySkillFile("order-audit", orgRoot),
-    }), { managedTools: true });
+    }), {});
     expect(apiPrompt.text).toContain("DISCOVER_ORG");
   });
 });

@@ -95,8 +95,11 @@ describe("GET and PUT /api/me/bot-overrides", () => {
     expect(list?.methods).toEqual(["GET"]);
     expect(list?.feature).toBeUndefined();
     expect(one?.methods).toEqual(["PUT"]);
-    const source = readSource(new URL("../index.ts", import.meta.url), "utf8");
-    expect(source).toContain("crossOwnerSettingsRefusal");
-    expect(source).toContain("owner_bot_settings");
+    // #1388: the refusal left index.ts for its leaf; the bot PATCH route reads it
+    const leaf = readSource(new URL("../index-leaves/ownerSettingsForbidden.ts", import.meta.url), "utf8");
+    expect(leaf).toContain("crossOwnerSettingsRefusal");
+    expect(leaf).toContain("owner_bot_settings");
+    const route = readSource(new URL("../routes/bots-core-profile.ts", import.meta.url), "utf8");
+    expect(route).toMatch(/ownerSettingsForbidden\(/);
   });
 });

@@ -12,7 +12,8 @@
 //   incident     the failed run's incident report goes to her Primary Bot's
 //                "Team incidents" thread; a thread there pinned to a model
 //                with no credentials on the server (pi on a desktop local
-//                model in production; Codex with no login or key here) gives
+//                model in production; Claude on a subscription nobody signed
+//                in to here) gives
 //                way to the bot's own model with a notice, instead of being
 //                refused no_access/no_credentials
 import { spawn, type ChildProcess } from "node:child_process";
@@ -30,7 +31,6 @@ import { waitForServerReady } from "../testing/server-ready.ts";
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
-const FAKE_PI = join(SERVER_DIR, "testing", "fake-pi-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ALICE: FakeOidcUser = { sub: "01J9S6ALICE00000000000000A", email: "alice@example.test", name: "Alice", preferred_username: "alice", role: "admin" };
 /** What grok 1.0.50 answered on production (server data, native thread log). */
@@ -141,10 +141,11 @@ posixOnly("Perspicax organization: a routine whose engine fails says why", () =>
   beforeAll(async () => {
     chmodSync(FAKE_CLAUDE, 0o755);
     chmodSync(FAKE_ACP, 0o755);
-    chmodSync(FAKE_PI, 0o755);
     idp = await startFakeOidcProvider({ user: ALICE });
     // alice keeps no key in Perspicax: Claude and Grok run on the
-    // organization's keys, pi has none to run on (as on production)
+    // organization's keys; Claude on a subscription has none to run on: the
+    // organization's key serves only the API instance (#1812), and pi now
+    // runs on the organization's keys (#2024)
     idp.directoryPeople = [idp.personOf(ALICE)];
     PORT = await freePortBlock([0, 1]);
     BASE = `http://127.0.0.1:${PORT}`;
@@ -169,7 +170,7 @@ posixOnly("Perspicax organization: a routine whose engine fails says why", () =>
           config: { cli: FAKE_ACP, fullAuto: true },
         },
         // an engine that runs here, with no key for alice and no organization key
-        pi: { driver: "piAgent", config: { cli: FAKE_PI, fullAuto: true } },
+        claudeSub: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
       },
     }));
     await start();
@@ -236,17 +237,17 @@ posixOnly("Perspicax organization: a routine whose engine fails says why", () =>
     // the first failure opened "Team incidents" on Quasar
     const incidents = await waitFor(async () => (await tasksOf(alice, quasar.id)).find((task) => task.title === "Team incidents"));
     // pin it to an engine alice has no credentials for on this server
-    // (production: pi on a desktop local model; here pi, no key)
+    // (production: pi on a desktop local model; here Claude on a subscription, no sign-in)
     await waitFor(async () => {
       const busy = (await api("GET", `/api/threads/${incidents.threadId}/messages`, alice)).body.messages as Message[] | undefined;
       return busy !== undefined;
     });
     const pinned = await waitFor(async () => {
-      const got = await api("PATCH", `/api/bots/${quasar.id}/tasks/${incidents.threadId}`, alice, { modelSelection: { instanceId: "pi", model: "fake-model" } });
+      const got = await api("PATCH", `/api/bots/${quasar.id}/tasks/${incidents.threadId}`, alice, { modelSelection: { instanceId: "claudeSub", model: "fake-model" } });
       return got.status === 200 ? got : null;
     }, 30_000);
     expect(pinned.status, pinned.text).toBe(200);
-    expect((await tasksOf(alice, quasar.id)).find((task) => task.threadId === incidents.threadId)?.modelSelection?.instanceId).toBe("pi");
+    expect((await tasksOf(alice, quasar.id)).find((task) => task.threadId === incidents.threadId)?.modelSelection?.instanceId).toBe("claudeSub");
     const before = (await messagesOf(alice, incidents.threadId)).length;
     writeFileSync(failureFile, JSON.stringify(GROK_402));
     const run = await runNow(alice, routineId);

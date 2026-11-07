@@ -440,6 +440,9 @@ const warmKey = (threadId: string, principalId: string, source: Entry["source"])
 /** A refusal worth one more try a moment later. */
 const TRANSIENT = new Set(["unreachable", "rate_limited"]);
 const RETRY_EXCHANGE_MS = 400;
+/** How long a call's next turn waits for the last turn's retire (its MCP
+ * session DELETE is bounded at 5 s) before it exchanges a token of its own. */
+const RETIRE_WAIT_MS = 6_000;
 
 type Json = Record<string, unknown>;
 
@@ -642,6 +645,11 @@ export class PerspicaxMcp {
   private readonly entries = new Map<string, Entry>();
   /** tokens a call keeps between turns (keepWarm), by thread and speaker */
   private readonly warm = new Map<string, Entry>();
+  /** A thread's retire still clearing roles and closing sessions: the next
+   * turn of a live call or warm engine waits for it, so the token it parks
+   * is taken over instead of a second exchange (a call's first sentence
+   * landed while the warm turn's session was still closing). */
+  private readonly retiring = new Map<string, Promise<void>>();
   /** The engine's last initialize params per thread (reopen). */
   private readonly initParams = new Map<string, Json>();
   private reopens = 0;
@@ -1134,6 +1142,12 @@ export class PerspicaxMcp {
     // good. Its MCP session is closed at the generation boundary, so role
     // state never crosses into this turn; only the account token is reused.
     const stay = this.sessionShouldStay(input.threadId);
+    const retiring = stay ? this.retiring.get(input.threadId) : undefined;
+    if (retiring) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([retiring, new Promise<void>((resolve) => { timer = setTimeout(resolve, RETIRE_WAIT_MS); timer.unref?.(); })]);
+      if (timer) clearTimeout(timer);
+    }
     // the call or warm engine ended without saying so: its kept tokens go
     if (!stay) void this.endWarm(input.threadId).catch(reportBackgroundError);
     if (stay) {
@@ -2124,7 +2138,17 @@ export class PerspicaxMcp {
    * Every kept entry closes its MCP session first. Perspicax stores an
    * identity_switch choice on that session, so a new generation must never
    * inherit the old session even when clearing the role itself fails. */
-  private async retire(prefix: string, threadId: string): Promise<void> {
+  private retire(prefix: string, threadId: string): Promise<void> {
+    const run = this.retireNow(prefix, threadId);
+    const previous = this.retiring.get(threadId);
+    const settled: Promise<void> = Promise.allSettled([previous, run]).then(() => {
+      if (this.retiring.get(threadId) === settled) this.retiring.delete(threadId);
+    });
+    this.retiring.set(threadId, settled);
+    return run;
+  }
+
+  private async retireNow(prefix: string, threadId: string): Promise<void> {
     const done: Promise<unknown>[] = [];
     const voiceKeep = this.options.keepWarm?.(threadId) === true;
     const engineKeep = this.options.engineWarm?.(threadId) === true;

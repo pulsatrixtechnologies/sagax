@@ -96,7 +96,10 @@ async function installation(from?: string) {
   const parts = await import("../packages/package-parts.ts");
   // Preset bots (presets.ts), wired as server/index.ts wires them.
   const presetStore = (await import("../presets.ts")).createPresetStore(join(DATA_DIR, "org-library", "presets.json"));
-  const store = new Store(() => ({ instanceId: "claude", model: "default-model" }));
+  // An organization server: new bots start at the org's New-bot level
+  // (orgNewBotApprovalMode, wired as server/index.ts newBotApprovalMode wires it).
+  const { orgNewBotApprovalMode } = await import("./org-full-access.ts");
+  const store = new Store(() => ({ instanceId: "claude", model: "default-model" }), undefined, () => orgNewBotApprovalMode(undefined));
   const routines = new RoutineManager({
     file: join(DATA_DIR, "routines.json"),
     botState: (id) => (store.bot(id) && !store.bot(id)!.hidden ? "ready" : "missing"),

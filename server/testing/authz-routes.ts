@@ -94,6 +94,9 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "secret-cards/": "card",
   "connector-cards/": "card",
   "vault-cards/": "card",
+  "sign-in-cards/": "card",
+  // a group member is one of its bots (POST /api/groups/:id/members/:botId/compact)
+  "members/": "bot",
   "resource-usage/ru_": "resourceUsage",
   "connector-setup/cs_": "connectorSetup",
   "requests/": "phoneRequest",

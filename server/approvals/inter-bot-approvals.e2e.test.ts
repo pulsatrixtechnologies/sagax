@@ -155,7 +155,9 @@ it("returns a nested room delegation's approval to its exact human room request"
     expect(view.from.botId).toBe(worker.id);
     expect(view.card.approvalOrigin.threadId).toBe(workRoom.threadId);
     expect(readHandoffs(dataDir).find(row => !row.parentId && row.threadId === group.threadId))
-      .toMatchObject({ request: sent.body.message.id, origin: { kind: "outside" } });
+      // #2390: every turn is a runtime root, so the room's root carries the
+      // person's typed request (a browser send, not the local API) as its origin
+      .toMatchObject({ request: sent.body.message.id, origin: { kind: "user", request: "ROOM: list through Middle" } });
     const answer = await api("POST", `/api/threads/${group.threadId}/respond`, { requestId: view.card.requestId, behavior: "allow" });
     expect(answer.status, JSON.stringify(answer.body)).toBe(200);
     await expect.poll(async () => (await messages(group.threadId)).find(row => row.id === view.id)?.card?.answered).toBe("allow");

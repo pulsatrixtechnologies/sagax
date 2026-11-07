@@ -223,7 +223,8 @@ describe("BotListItem", () => {
       expect(pill.split(/[\s"]/)).toContain(token);
     }
     expect(markup.indexOf("data-bot-role-tag")).toBeGreaterThan(markup.indexOf(">Atlas<"));
-    expect(markup).toContain('title="Atlas · ConnectWise Ops &amp; MS 365"');
+    // #2470: the title sits under the name, never "Name · Title".
+    expect(markup).toContain('title="Atlas\nConnectWise Ops &amp; MS 365"');
     expect(renderRow(bot())).not.toContain("data-bot-role-tag");
     expect(renderRow(bot({ title: "  " }))).not.toContain("data-bot-role-tag");
   });

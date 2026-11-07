@@ -27,7 +27,9 @@ const { ThreadRefsContext } = await import("./ThreadRefs");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const LIVE_URL = "https://glitcho.test/v1/share/live/ninja/index.m3u8?u=7&exp=1760000000&t=sig";
+// A link still valid: since #2488 the card reads `exp` and an expired share link
+// shows the expired state instead of loading (shared/video-widget.ts shareLinkExpiresAt).
+const LIVE_URL = "https://glitcho.test/v1/share/live/ninja/index.m3u8?u=7&exp=1900000000&t=sig";
 const ENVELOPE = `{"sagaxVideos":[{"kind":"live","url":"${LIVE_URL}","title":"Ranked grind","streamer":"ninja"}]}`;
 
 let host: HTMLDivElement;

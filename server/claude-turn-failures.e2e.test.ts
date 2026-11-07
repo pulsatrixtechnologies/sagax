@@ -118,7 +118,7 @@ async function launch() {
   return { api, control, messages, play, told, handOff, close };
 }
 
-it("reports an account's weekly limit with its reset to the person and the Chief, never as setup or an update", async () => {
+it("reports an account's weekly limit with its reset to the Chief, never as setup or an update, with no error card in the thread", async () => {
   const { api, control, messages, play, told, close } = await launch();
   try {
     const chief = (await control(["new-bot", "--name", "Tango", "--section", "Ops"])).bot;
@@ -127,16 +127,6 @@ it("reports an account's weekly limit with its reset to the person and the Chief
     play(pesto.id, "usage-limit", weekly(Math.floor(Date.now() / 1000) + 3 * 86_400));
 
     await control(["send", "--bot", pesto.id, "--text", "Hey talk to @Tango"]);
-    await expect.poll(async () => (await messages(pesto.activeTaskId)).some((m) => m.kind === "activity" && m.tool?.ok === false), { timeout: 20_000 }).toBe(true);
-    const thread = await messages(pesto.activeTaskId);
-    const failed = thread.filter((m) => m.kind === "activity" && m.tool?.ok === false);
-    // one plain line: which limit and when it resets; no sign-in or update card
-    expect(failed).toHaveLength(1);
-    expect(failed[0].tool.name).toMatch(/^error: This Claude account has reached its weekly limit, which resets .+\. Until then, switch this bot to another engine or Claude account\.$/);
-    expect(failed[0].tool).not.toHaveProperty("setup");
-    expect(failed[0].tool).not.toHaveProperty("claudeUpdate");
-    // the CLI's words are not passed off as Pesto's reply
-    expect(thread.some((m) => m.role === "bot" && m.kind === "text" && /hit your weekly limit/.test(m.text ?? ""))).toBe(false);
 
     // The Chief hears the same cause, not a stop token, and not "setup".
     await expect.poll(async () => (await api("GET", "/api/bots")).bots.find((b: any) => b.id === chief.id)?.tasks?.some((t: any) => t.title === "Team incidents"), { timeout: 20_000 }).toBe(true);
@@ -145,6 +135,17 @@ it("reports an account's weekly limit with its reset to the person and the Chief
       .toMatch(/^Incident: Pesto's run .+ failed: "This Claude account has reached its weekly limit, which resets /);
     await expect.poll(() => told(incidents.threadId, chief.id), { timeout: 20_000 }).toMatch(LIMIT_WITH_RESET);
     expect(told(incidents.threadId, chief.id)).not.toMatch(/stop_sequence|update_required|"quota"/);
+
+    // Sagax decision (#2009, 2026-11-04, server/runtime-events/runtime-lifecycle.ts):
+    // an account at its usage limit writes no error card in Pesto's thread;
+    // the composer locks instead (sendStateLimit, engine_limit, unit-tested in
+    // shared/send-state.test.ts). Here the Chief's turn on the same account
+    // completes and releases that lock, so only the thread is checked.
+    const thread = await messages(pesto.activeTaskId);
+    expect(thread.filter((m) => m.kind === "activity" && m.tool?.ok === false)).toEqual([]);
+    expect(thread.some((m) => m.tool?.setup || m.tool?.claudeUpdate)).toBe(false);
+    // the CLI's words are not passed off as Pesto's reply
+    expect(thread.some((m) => m.role === "bot" && m.kind === "text" && /hit your weekly limit/.test(m.text ?? ""))).toBe(false);
   } finally {
     await close();
   }

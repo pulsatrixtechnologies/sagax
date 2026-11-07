@@ -103,9 +103,12 @@ async function fixture(test: (f: any) => Promise<void>, options: { env?: NodeJS.
     };
     await api("/api/instances/claude", { cli: wrap("claude", "fake-claude-cli.ts", {}) }, "PATCH");
     const codexDumpPath = join(dataDir, "codex-dump.json");
+    // Every app-server initialize and turn/start: Sagax keeps one Codex
+    // process warm across a thread's turns, so a turn is not a launch.
+    const codexStartupPath = join(dataDir, "codex-startup.jsonl");
     if (options.codex) {
       await api("/api/instances/codex", { cli: wrap("codex", "fake-codex-app-server.ts",
-        { FAKE_CODEX_MODE: "resume", FAKE_CODEX_ROOM_PLAN: planPath, FAKE_CODEX_DUMP: codexDumpPath, ...options.codex }) }, "PATCH");
+        { FAKE_CODEX_MODE: "resume", FAKE_CODEX_ROOM_PLAN: planPath, FAKE_CODEX_DUMP: codexDumpPath, FAKE_CODEX_STARTUP_LOG: codexStartupPath, ...options.codex }) }, "PATCH");
     }
     const bot = async (name: string, section: string) => (await cli("new-bot", "--name", name, "--section", section)).bot;
     const chief = await bot("Clive", "Leadership");
@@ -153,6 +156,7 @@ async function fixture(test: (f: any) => Promise<void>, options: { env?: NodeJS.
     const codexLaunches = (botId = chief.id) => jsonl(codexLaunchesPath).filter((launch: any) => launch.botId === botId);
     // The app-server calls of the last Codex launch: thread/resume keeps the
     // native thread's model and effort, thread/start is where they are set.
+    const codexTurnStarts = () => jsonl(codexStartupPath).filter((entry: any) => entry.event === "turn/start");
     const codexCalls = () => JSON.parse(readFileSync(codexDumpPath, "utf8")).calls as Array<{ method: string; params: any }>;
     const codexModels = async () => (await cli("models")).instances.find((item: any) => item.instanceId === "codex").models.options.map((m: any) => m.id);
     const selectModel = (model: string, extra: Record<string, unknown> = {}) =>
@@ -199,7 +203,7 @@ async function fixture(test: (f: any) => Promise<void>, options: { env?: NodeJS.
       }, { timeout: 20_000 }).toBe(true);
     };
     await test({ session, dataDir, cli, api, chief, lead, qa, ops, plan, save, send, wait, idle, turns, prompt, messages, nodes, root, task, handed,
-      launches, nativeSession, consumed, codexLaunches, codexCalls, codexModels, selectModel, setMode, delegate, gate, holdDelegation, open, thread, useModel, restart });
+      launches, nativeSession, consumed, codexLaunches, codexTurnStarts, codexCalls, codexModels, selectModel, setMode, delegate, gate, holdDelegation, open, thread, useModel, restart });
   } finally {
     if (restarted) await waitForExit(restarted, { signal: "SIGTERM" });
     await session.close();
@@ -869,15 +873,17 @@ it.each(["SIGTERM", "SIGKILL"] as const)("runs each teammate turn a restart cut 
       expect(rows.filter((name: string) => name === "Resuming after a restart"), `${botId}: ${JSON.stringify(rows)}`).toHaveLength(1);
       expect(rows.filter((name: string) => name.startsWith("error:")), botId).toEqual([]);
     }
-    // A person's own turn (#794): a quit or update writes it down and it runs
+    // A person's own turn (#794) is a root the runtime holds since the
+    // OpenMausBot 0.1.107 sync (#2204): a quit, an update or a crash, it runs
     // once more at the next start, in its own conversation, which says so.
-    // A crash or Windows' kill writes nothing: that turn is not run again.
-    // The lines are all it adds: no unread mark, no notification.
+    // Only a quit or update can say first why it stopped (a crash or
+    // Windows' kill writes nothing). The lines are all it adds: no unread
+    // mark, no notification.
     const said = signal === "SIGTERM" && process.platform !== "win32";
-    await expect.poll(() => f.launches(f.qa.id).length, { timeout: 20_000 }).toBe(said ? 2 : 1);
+    await expect.poll(() => f.launches(f.qa.id).length, { timeout: 20_000 }).toBe(2);
     const qaRows = (await f.messages(f.qa.activeTaskId)).map((m: any) => m.tool?.name).filter(Boolean);
     expect(qaRows.filter((name: string) => name === "Sagax restarted during this turn; it resumes when Sagax is back")).toHaveLength(said ? 1 : 0);
-    expect(qaRows.filter((name: string) => name === "Resuming after a restart")).toHaveLength(said ? 1 : 0);
+    expect(qaRows.filter((name: string) => name === "Resuming after a restart")).toHaveLength(1);
     expect(qaRows.filter((name: string) => name.startsWith("error:"))).toEqual([]);
     expect((await f.api("/api/bots")).bots.find((b: any) => b.id === f.qa.id).tasks
       .find((task: any) => task.threadId === f.qa.activeTaskId).unread).toBe(false);
@@ -1193,7 +1199,7 @@ it("does not offer a message the person stopped before any reply again on Codex"
   await f.send("Warm up.");
   await f.wait();
   await f.send("CODEX_STOPPED_ASK please drop the staging database");
-  await expect.poll(() => f.codexLaunches().length, { timeout: 15_000 }).toBe(2);
+  await expect.poll(() => f.codexTurnStarts().length, { timeout: 15_000 }).toBe(2);
   await f.api(`/api/bots/${f.chief.id}/interrupt`, { threadId: f.thread });
   await f.idle();
   f.open(f.gate("slow"));

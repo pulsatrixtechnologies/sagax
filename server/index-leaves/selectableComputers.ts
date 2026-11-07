@@ -17,6 +17,9 @@ async function selectableComputers(bot: BotRecord) {
     let ready = false;
     let canStart = false;
     let canCreate = false;
+    // A status check that threw (a Boat 503, a network error) says nothing
+    // about the computer itself: callers read it as unknown, not offline.
+    let checkFailed = false;
     // On a Cloud home "this computer" reads as the person's own; name the
     // place the reason is about.
     let reason = "This computer is not configured or running. Open the Computer panel to set it up.";
@@ -59,7 +62,7 @@ async function selectableComputers(bot: BotRecord) {
         ready = caps?.browserMcp === true && builtInBrowserEnabled(host.cfg) && bot.browser !== false && browserEngineStatus().kind === "ready";
         reason = "The built-in browser is disabled, not installed, or unsupported by this model.";
       }
-    } catch (error) { reason = error instanceof Error ? error.message : String(error); }
+    } catch (error) { checkFailed = true; reason = error instanceof Error ? error.message : String(error); }
     // Not offered at all when the organisation disallows it.
     const kind = surface === "local" ? "thisComputer" : surface === "vm" ? "localVm"
       : surface === "cloud" && host.IDENTITY.kind !== "perspicax" ? (bot.cloudBackend === "vps" ? "vps" : "box")
@@ -67,7 +70,7 @@ async function selectableComputers(bot: BotRecord) {
     const managed = kind && host.managedPolicy.computerRefusal(kind);
     if (managed) return { surface, label: surfaceLabel(surface), available: false, ready: false, canStart: false, canCreate: false, reason: managed };
     const available = ready || canStart || canCreate;
-    return { surface, label: surfaceLabel(surface), available, ready, canStart, canCreate, ...(!available ? { reason } : {}) };
+    return { surface, label: surfaceLabel(surface), available, ready, canStart, canCreate, ...(!available ? { reason } : {}), ...(checkFailed ? { checkFailed } : {}) };
   }));
 
 }

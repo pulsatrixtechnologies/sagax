@@ -108,16 +108,18 @@ it("keeps the selected API model for direct, group and scheduled Boat turns and 
       // An unperformed call ends the turn without an error row in the thread
       // (#1108), so the turn reads settled in every scenario.
       expect(settled.status).toBe("settled");
-      // 1c1ddb0023 gives a failed/unperformed call one corrective round.
+      // 1c1ddb0023 gives a failed/unperformed call a corrective round; a
+      // model on this network (the fixture is on 127.0.0.1) gets at least
+      // LOCAL_CORRECTIVE_ROUNDS (2, server/drivers/openai-chat-turn.ts).
       // The person's hold still executes nothing, and every round keeps
       // this bot's selected API model.
       expect(requests.slice(before), JSON.stringify({ scenario, models: requests.slice(before).map(request => request.model) }))
-        .toHaveLength(scenario === "held" ? 3 : 2);
+        .toHaveLength(scenario === "held" ? 4 : 2);
       expect(requests.slice(before).every(request => request.model === "chosen-vision-model")).toBe(true);
       const followup = requests[before + 1].messages;
       if (scenario === "held") {
         expect(followup.at(-1).content).toContain("The person has handed this computer back. This call was NOT performed");
-        expect(requests[before + 2].messages.at(-1)).toMatchObject({ role: "user",
+        for (const round of [2, 3]) expect(requests[before + round].messages.at(-1)).toMatchObject({ role: "user",
           content: expect.stringContaining("[Sagax: a tool call in this turn failed") });
         // The panel may refresh after release; the held model screenshot
         // remains unperformed (boat.ts separates its .model.jpg frame).
@@ -182,18 +184,20 @@ it("keeps the selected API model for direct, group and scheduled Boat turns and 
     expect(cancelledMessages.messages.some((message: any) => message.card?.requestId)).toBe(false);
     // Readiness is checked again at dispatch, after the routine was created.
     // An available native Boat runner must not mask the selected engine's missing key.
+    // The routine readiness check holds such a run as blocked, with the
+    // engine's own line (server/routines/routine-readiness.ts engine_signed_out).
     const expectBlockedRun = async (reason: RegExp) => {
       const before = requests.length;
       const { run: blocked } = await api("POST", `/api/routines/${routine.id}/run`, {});
       await expect.poll(async () => {
         const latest = (await api("GET", "/api/routines")).runs.find((entry: any) => entry.id === blocked.id);
-        return latest?.status === "failed" ? latest.error : "";
+        return latest?.status === "blocked" ? latest.error : "";
       }, { timeout: 15_000 }).toMatch(reason);
       expect(requests).toHaveLength(before);
       expect(nativePrompts).toBe(0);
     };
     await api("PATCH", "/api/config", { openaiCompat: { key: "", url: origin + "/v1", model: "other-default" } });
-    await expectBlockedRun(/target bot's model is not ready/i);
+    await expectBlockedRun(/Other \(OpenAI-compatible\) is signed out for this bot/i);
     await api("PATCH", "/api/config", { openaiCompat: { key: "synthetic-model-key", url: origin + "/v1", model: "other-default" } });
     boatOffline = true;
     // A readiness probe that hits a temporary Boat error (503) no longer fails

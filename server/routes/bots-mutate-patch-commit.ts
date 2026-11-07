@@ -184,6 +184,7 @@ export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): 
     return;
   }
   if (body.memoryUpkeep === false || body.memoryEnabled === false) env.memoryUpkeep.dropBot(bot.id);
+  if (body.skillLearning === false) env.skillReview?.dropBot(bot.id);
   if (body.cacheKeepWarm !== undefined) env.cacheKeepWarm.refresh();
   // A defined Works on is the newest explicit choice: this bot's
   // auto-recorded pins that now point elsewhere give way immediately, so

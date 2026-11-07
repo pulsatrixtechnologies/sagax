@@ -601,6 +601,9 @@ export interface Bot {
   /** Memory upkeep (Bot settings → Memory): background capture and the
    * nightly tidy-up. On unless explicitly false. */
   memoryUpkeep?: boolean;
+  /** Skill learning (Bot settings > Skills): revise skills after a failure
+   * or correction, propose one after a long task. On unless false. */
+  skillLearning?: boolean;
   /** Built-in plugins this bot switched (shared/builtin-plugins.ts): absent
    * or true on, false off. */
   builtinPlugins?: Record<string, boolean>;

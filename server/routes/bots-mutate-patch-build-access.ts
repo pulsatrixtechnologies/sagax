@@ -61,6 +61,13 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
     }
     patch.memoryUpkeep = body.memoryUpkeep;
   }
+  if (body.skillLearning !== undefined) {
+    if (typeof body.skillLearning !== "boolean") {
+      env.json(env.res, 400, { error: "skillLearning must be true or false" });
+      return true;
+    }
+    patch.skillLearning = body.skillLearning;
+  }
   // false: the helper model never writes for this bot (server/side-jobs.ts)
   if (body.helperModel !== undefined) {
     if (typeof body.helperModel !== "boolean") {

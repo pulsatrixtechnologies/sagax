@@ -56,6 +56,7 @@ import {
   type GitHubSkillOrigin, type SkillFolderFile,
 } from "./skill-folder.ts";
 import { LEARN_SOURCE_PREFIX } from "./skill-learn.ts";
+import { readSkillHistory, recordSkillVersion, type SkillChangeAuthor, type SkillVersion } from "./skill-history.ts";
 import { librarySkillFilePath, listLibrarySkills, readLibrarySkillFile, skillsLibraryRoot, type LibrarySkillListing } from "./skill-library.ts";
 import { dirFingerprint, mtimeCached, pathsFingerprint } from "../workspace/mtime-prompt-cache.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
@@ -242,6 +243,15 @@ function nativeLinkDirectory(root: string, relative: string, create: boolean): s
  * file the agent is expected to edit as part of ordinary work. */
 function skillStateDir(botId: string): string {
   return join(DATA_DIR, "skill-state", botId);
+}
+
+function skillHistoryDir(botId: string): string {
+  return join(skillStateDir(botId), "history");
+}
+
+/** Versions of one skill, newest first (#2610). */
+export function listSkillHistory(botId: string, name: string): SkillVersion[] {
+  return readSkillHistory(skillHistoryDir(botId), name);
 }
 
 function manifestPath(botId: string): string {
@@ -720,7 +730,7 @@ export function resignBotSkill(
 export function updateBotSkillByPerson(
   botId: string,
   name: string,
-  input: { text: string },
+  input: { text: string; by?: SkillChangeAuthor; gist?: string },
 ): { skill: SkillListing; renamedFrom?: string } | { error: string; status: number } {
   if (!isSkillName(name)) return { error: "invalid skill name", status: 400 };
   if (Buffer.byteLength(input.text, "utf8") > SKILL_FILE_MAX_BYTES) {
@@ -740,6 +750,13 @@ export function updateBotSkillByPerson(
   }
   const directory = skillDirectory(botId, name, entry) ?? existingSkillDirectory(botId, name);
   if (!directory) return { error: "the skill folder is missing", status: 404 };
+  const previousText = readSkillFile(botId, name);
+  const remember = (skillName: string) => recordSkillVersion(skillHistoryDir(botId), skillName, {
+    by: input.by ?? "person",
+    gist: input.gist ?? (renamed ? `Renamed from ${name}` : "Edited by the person"),
+    before: previousText,
+    after: input.text,
+  });
   const sha256 = createHash("sha256").update(input.text).digest("hex");
   const next: SkillManifestEntry = {
     ...entry,
@@ -785,12 +802,14 @@ export function updateBotSkillByPerson(
       // Orphan old folder is recoverable; the manifest already points at the new name.
     }
     syncSkillLinks(botId);
+    remember(parsed.name);
     return { skill: skillListing(botId, parsed.name, next), renamedFrom: name };
   }
   writeFileAtomic(join(directory, "SKILL.md"), input.text, { mode: 0o600 });
   manifest[name] = next;
   writeManifest(botId, manifest);
   syncSkillLinks(botId);
+  remember(name);
   return { skill: skillListing(botId, name, next) };
 }
 
@@ -1409,7 +1428,7 @@ export function rejectStagedSkillWrite(
 export function applyStagedSkillWrite(
   botId: string,
   id: string,
-  options: { expectedSha256?: string; onApplied?: (skill: SkillListing) => void } = {},
+  options: { expectedSha256?: string; onApplied?: (skill: SkillListing) => void; historyBy?: SkillChangeAuthor } = {},
 ): SkillListing | { error: string } {
   const store = readStaged(botId);
   const staged = store.writes[id];
@@ -1434,6 +1453,7 @@ export function applyStagedSkillWrite(
   if (sha256 !== staged.sha256 || (options.expectedSha256 && sha256 !== options.expectedSha256)) {
     return { error: "the staged skill changed after review — create a new proposal" };
   }
+  const previousText = staged.action === "update" ? readSkillFile(botId, staged.name) : null;
   const installed = staged.action === "create"
     ? installPreparedSkill(botId, staged.source, prepared, {
         enabled: true,
@@ -1445,6 +1465,12 @@ export function applyStagedSkillWrite(
         baseAppliedStageId: staged.baseAppliedStageId!,
       });
   if ("error" in installed) return installed;
+  recordSkillVersion(skillHistoryDir(botId), installed.name, {
+    by: options.historyBy ?? "bot",
+    gist: staged.gist,
+    before: previousText,
+    after: prepared.files[0]!.content,
+  });
   options.onApplied?.(installed);
   delete store.writes[id];
   writeStaged(botId, store);
@@ -1496,6 +1522,7 @@ export function undoSkillWrite(
     action: "update",
     targetName: write.name,
     files: [{ path: "SKILL.md", content: write.previous.skillMd }],
+    gist: "Undid the last change",
     source: write.previous.source,
   });
   if ("error" in staged) return staged;
@@ -1505,6 +1532,47 @@ export function undoSkillWrite(
     return applied;
   }
   return { undone: true };
+}
+
+/** Put back one version of a skill from its history (#2610): the text the
+ * skill had right after that change (`side: "after"`) or right before it
+ * (`side: "before"`). A learned skill goes through the same stage and apply
+ * path as the bot's own writes; another private skill is saved as the person
+ * would. Either way the restore is itself a new version, so it can be undone. */
+export function restoreSkillVersion(
+  botId: string,
+  name: string,
+  versionId: string,
+  side: "before" | "after" = "after",
+): { skill: SkillListing } | { error: string; status: number } {
+  const version = listSkillHistory(botId, name).find((item) => item.id === versionId);
+  if (!version) return { error: "no such version of this skill", status: 404 };
+  const text = side === "before" ? version.before : version.after;
+  if (text === null) return { error: "this version created the skill: there is no earlier text to put back", status: 409 };
+  const entry = readManifest(botId)[name];
+  if (!entry) return { error: `no imported skill named "${name}"`, status: 404 };
+  if (readSkillFile(botId, name) === text) return { skill: skillListing(botId, name, entry) };
+  const gist = `Restored the version of ${new Date(version.at).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  if (entry.source.startsWith(LEARN_SOURCE_PREFIX) && entry.appliedStageId) {
+    const staged = stageSkillWrite(botId, {
+      action: "update",
+      targetName: name,
+      files: [{ path: "SKILL.md", content: text }],
+      gist,
+      source: entry.source,
+    });
+    if ("error" in staged) return { error: staged.error, status: 409 };
+    const applied = applyStagedSkillWrite(botId, staged.id, { expectedSha256: staged.sha256, historyBy: "restore" });
+    if ("error" in applied) {
+      rejectStagedSkillWrite(botId, staged.id);
+      return { error: applied.error, status: 409 };
+    }
+    return { skill: applied };
+  }
+  const saved = updateBotSkillByPerson(botId, name, { text, by: "restore", gist });
+  if ("error" in saved) return saved;
+  if (saved.renamedFrom) return { error: "that version has a different name: rename the skill back first", status: 409 };
+  return { skill: saved.skill };
 }
 
 /** The skills block appended to a bot's system prompt: enabled skills only,

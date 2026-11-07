@@ -23,6 +23,7 @@ import { InlineFold, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { inputCls } from "./field";
 import { PanelPage } from "./PanelPage";
 import { useBotEditor } from "./BotEditorContext";
+import { SkillHistory } from "./SkillHistory";
 
 export type SkillEditorTarget = {
   name: string;
@@ -251,6 +252,14 @@ export function SkillEditorPage({
           <InlineFold label={t("botPanel.skills.sourceLabel", { label: skillSourceLabel(payload.source) })}>
             <p className="break-all font-mono text-[10.5px] text-ink-secondary" title={payload.source}>{payload.source}</p>
           </InlineFold>
+          {basePath.startsWith("/api/bots/") && (
+            <SkillHistory
+              basePath={basePath}
+              stamp={payload.text}
+              disabled={!payload.editable || busy}
+              onRestored={() => { onSaved(); void reload(); }}
+            />
+          )}
         </div>
       )}
 

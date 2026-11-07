@@ -1,6 +1,14 @@
 // Automatic skill learning: a background review after a bot has worked for a
-// while. Off unless switched on in Settings ("Learn skills automatically",
-// under "Bots may write their own skills").
+// while. On per bot unless switched off in its Skills page (BotRecord.skillLearning,
+// #2610), and only where bots may write their own skills.
+//
+// Two triggers (#2610):
+// - a failure or a correction from the person while a skill was in play
+//   (noteSignal): the review is due at once, focused on fixing that skill;
+//   the fix applies as a versioned, reversible change (skill-history.ts);
+// - a long task that went well (the step threshold): a new skill the review
+//   writes is PROPOSED in the chat (Enable / Deny), the person keeps it in
+//   one click; an update to a skill that exists applies with Undo.
 //
 // Every finished turn adds the tool steps it ran to a counter kept per bot
 // and conversation, saved to disk so restarts and many short turns still add
@@ -60,6 +68,89 @@ export interface ReviewSkill {
   sha256: string;
   /** The current SKILL.md, for an editable skill; null when unreadable. */
   body?: string | null;
+}
+
+/** Why a review came due before the step threshold (#2610). */
+export interface ReviewSignal {
+  kind: "failure" | "correction";
+  /** The skills in play when it happened. */
+  skills: string[];
+  at: number;
+}
+
+const SKILL_PATH = /(?:^|[\s"'`(/\\])skills[/\\]([a-z0-9][a-z0-9-]{0,63})(?=[/\\]|\.md|["'`\s)]|$)/gi;
+const SKILL_TOOL = /skill/i;
+
+/** The skills a bot used in one turn: an activity row that read a
+ * skills/<name>/ path, or a skill tool whose input names one. Only names
+ * from `known` count. */
+export function skillsInPlay(messages: readonly ReviewMessage[], turnId: string, botId: string, room: boolean, known: readonly string[]): string[] {
+  const names = new Set(known);
+  const found = new Set<string>();
+  for (const message of messages) {
+    if (message.kind !== "activity" || message.turnId !== turnId || !message.tool?.name || message.tool.setup) continue;
+    if (room && message.from?.botId !== botId) continue;
+    const tool = message.tool as { name: string; input?: unknown; summary?: unknown };
+    const text = [tool.name, typeof tool.input === "string" ? tool.input : JSON.stringify(tool.input ?? ""), typeof tool.summary === "string" ? tool.summary : ""].join(" ");
+    for (const match of text.matchAll(SKILL_PATH)) {
+      const name = match[1]!.toLowerCase();
+      if (names.has(name)) found.add(name);
+    }
+    if (SKILL_TOOL.test(tool.name)) {
+      for (const name of names) if (new RegExp(`(^|[^a-z0-9-])${name}([^a-z0-9-]|$)`, "i").test(text)) found.add(name);
+    }
+  }
+  return [...found];
+}
+
+/** One of the bot's tool steps in this turn failed. */
+export function turnHadFailure(messages: readonly ReviewMessage[], turnId: string, botId: string, room: boolean): boolean {
+  return messages.some((message) => message.kind === "activity" && message.turnId === turnId && !message.tool?.setup
+    && (!room || message.from?.botId === botId) && message.tool?.ok === false);
+}
+
+const CORRECTION = new RegExp([
+  "^\\s*(no|nope|wrong|not (?:that|like that|quite)|that'?s (?:wrong|not)|stop|don'?t)(?![a-z\\u00e0-\\u00ff])",
+  "\\b(instead|you forgot|you missed|should have|shouldn'?t have|not what i (?:asked|wanted)|i told you|that'?s incorrect|try again|redo)(?![a-z\\u00e0-\\u00ff])",
+  "^\\s*(non|pas (?:[çc]a|comme [çc]a)|c'?est (?:faux|pas [çc]a)|arr[êe]te)(?![a-z\\u00e0-\\u00ff])",
+  "\\b(au lieu|plut[ôo]t|tu as oubli[ée]|t'as oubli[ée]|ne fais pas|pas ce que j'ai demand[ée]|je t'ai dit|recommence|refais)(?![a-z\\u00e0-\\u00ff])",
+].join("|"), "i");
+
+/** The person's message reads as a correction of the bot's last answer. */
+export function looksLikeCorrection(text: string | undefined): boolean {
+  return Boolean(text && CORRECTION.test(text.trim().slice(0, 400)));
+}
+
+/** The signal one finished turn raises (#2610), or null: a failed tool step
+ * while a skill was in play, or a person's message that corrects the bot's
+ * previous answer while that answer used a skill. */
+export function turnSignal(
+  messages: readonly ReviewMessage[],
+  turnId: string,
+  botId: string,
+  room: boolean,
+  known: readonly string[],
+): Omit<ReviewSignal, "at"> | null {
+  if (!known.length) return null;
+  const inPlay = skillsInPlay(messages, turnId, botId, room, known);
+  if (inPlay.length && turnHadFailure(messages, turnId, botId, room)) return { kind: "failure", skills: inPlay };
+  const start = messages.findIndex((message) => message.turnId === turnId);
+  if (start < 0) return null;
+  let asked = -1;
+  for (let index = start; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.role === "user" && message.kind === "text") { asked = index; break; }
+  }
+  if (asked < 0 || !looksLikeCorrection(messages[asked]!.text)) return null;
+  for (let index = asked - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.role === "user" && message.kind === "text") return null;
+    if (message.turnId && message.turnId !== turnId && (!room || message.from?.botId === botId)) {
+      const earlier = skillsInPlay(messages, message.turnId, botId, room, known);
+      return earlier.length ? { kind: "correction", skills: earlier } : null;
+    }
+  }
+  return null;
 }
 
 export interface ReviewChange {
@@ -214,6 +305,7 @@ export function skillReviewPrompt(input: {
   botName: string;
   transcript: string;
   skills: readonly ReviewSkill[];
+  signal?: Pick<ReviewSignal, "kind" | "skills">;
 }): string {
   const { shown, loaded } = shownSkills(input.skills, input.transcript);
   const index = input.skills.length
@@ -239,6 +331,7 @@ export function skillReviewPrompt(input: {
     "",
     LESSON_LAYER,
     "",
+    ...(input.signal ? [focusLine(input.botName, input.signal), ""] : []),
     "Signals that call for a change (any one is enough):",
     `- The person corrected ${input.botName}'s style, tone, format or length: "stop doing X", "too long", "don't format it like that", "just give me the answer", or an explicit "remember this". These are FIRST-CLASS skill signals. Put the preference into the skill for that kind of task so the next conversation starts already knowing it.`,
     "- The person corrected the approach or the order of steps. Write the correction in as a step or a pitfall of the skill for that kind of task.",
@@ -273,6 +366,14 @@ export function skillReviewPrompt(input: {
     `Answer with one JSON object and nothing else, at most ${MAX_REVIEW_CHANGES} changes:`,
     '{"changes": [{"action": "create" | "update", "skill_name": "existing name, for update only", "skill_md": "the COMPLETE SKILL.md with YAML frontmatter", "gist": "one line: what changed and why"}], "note": "one line for the log, e.g. Nothing to save."}',
   ].join("\n");
+}
+
+function focusLine(botName: string, signal: Pick<ReviewSignal, "kind" | "skills">): string {
+  const named = signal.skills.length ? signal.skills.map((name) => `"${name}"`).join(", ") : "the skill in play";
+  const what = signal.kind === "failure"
+    ? `a step failed while ${botName} was following ${named}`
+    : `the person corrected ${botName} while ${botName} was following ${named}`;
+  return `FOCUS: this review runs because ${what}. First decide whether the skill caused it (a wrong, missing or outdated step, a missing pitfall). If it did, UPDATE that skill so the next run does not repeat it, and say in the gist what was wrong. If the cause was outside the skill (the network, a permission, a service down), change nothing for it.`;
 }
 
 /** The JSON inside a model's answer, fenced or bare. */
@@ -347,10 +448,10 @@ export interface ReviewEngine {
 }
 
 export interface SkillReviewDeps {
-  /** The feature switch (and skill authoring itself) is on. */
-  enabled: () => boolean;
+  /** Skill learning is on for this bot (and skill authoring itself). */
+  enabled: (botId: string) => boolean;
   /** Tool steps between reviews. */
-  threshold: () => number;
+  threshold: (botId: string) => number;
   bot: (botId: string) => { id: string; name: string } | undefined;
   /** The bot's engine when it can make the one-shot call and may receive
    * this text (capability, policy); null otherwise. Spend-cap checks and
@@ -390,6 +491,8 @@ interface Counter {
   at: number;
   /** When the last attempt could not run; the next waits RETRY_AFTER_MS. */
   failedAt?: number;
+  /** A failure or correction with a skill in play: due at once. */
+  signal?: ReviewSignal;
 }
 
 interface PendingApply {
@@ -403,6 +506,9 @@ export interface SkillReview {
   /** A finished, eligible turn of a bot in a conversation, with its tool
    * steps. Counting only: botSettled starts a review that came due. */
   noteTurn(botId: string, threadId: string, steps: number): void;
+  /** A failure or a correction while a skill was in play: the review is due
+   * without waiting for the step threshold (#2610). */
+  noteSignal(botId: string, threadId: string, signal: Omit<ReviewSignal, "at">): void;
   /** The bot changed one of its skills in this conversation: start counting again. */
   noteSkillChange(botId: string, threadId: string): void;
   /** One of the bot's turns settled: apply a review that waited for it, or
@@ -410,7 +516,7 @@ export interface SkillReview {
   botSettled(botId: string): void;
   dropBot(botId: string): void;
   dropThread(threadId: string): void;
-  status(botId: string, threadId: string): { steps: number; reviewing: boolean; waiting: boolean };
+  status(botId: string, threadId: string): { steps: number; reviewing: boolean; waiting: boolean; signal?: ReviewSignal["kind"] };
   /** Run the review of one conversation now (tests; the scheduler uses it). */
   run(botId: string, threadId: string): Promise<ReviewReport>;
   /** Shutdown: cancel reviews in flight; their counters stay, so they run again later. */
@@ -440,6 +546,9 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
           steps: Math.max(0, Math.floor(raw.steps)),
           at: typeof raw.at === "number" ? raw.at : 0,
           ...(typeof raw.failedAt === "number" ? { failedAt: raw.failedAt } : {}),
+          ...(raw.signal && (raw.signal.kind === "failure" || raw.signal.kind === "correction") && Array.isArray(raw.signal.skills)
+            ? { signal: { kind: raw.signal.kind, skills: raw.signal.skills.filter((name): name is string => typeof name === "string"), at: Number(raw.signal.at) || 0 } }
+            : {}),
         });
       }
     }
@@ -462,9 +571,9 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
   };
 
   const due = (botId: string): Counter | undefined => {
-    const threshold = deps.threshold();
+    const threshold = deps.threshold(botId);
     return [...counters.values()]
-      .filter((counter) => counter.botId === botId && counter.steps >= threshold
+      .filter((counter) => counter.botId === botId && (counter.steps >= threshold || counter.signal !== undefined)
         && (counter.failedAt === undefined || now() - counter.failedAt >= RETRY_AFTER_MS))
       .sort((a, b) => b.at - a.at)[0];
   };
@@ -475,6 +584,7 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
     // steps run while the review was out keep counting toward the next one
     counter.steps = Math.max(0, counter.steps - steps);
     delete counter.failedAt;
+    delete counter.signal;
     save();
   };
 
@@ -490,7 +600,7 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
 
   const applyPending = (botId: string, pending: PendingApply): ReviewReport => {
     waiting.delete(botId);
-    if (!deps.enabled() || !deps.bot(botId)) return { state: "skipped", applied: [], note: "switched off" };
+    if (!deps.enabled(botId) || !deps.bot(botId)) return { state: "skipped", applied: [], note: "switched off" };
     if (!deps.transcript(botId, pending.threadId)) {
       counters.delete(key(botId, pending.threadId));
       save();
@@ -513,7 +623,7 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
 
   async function review(botId: string, threadId: string, controller: AbortController): Promise<ReviewReport> {
     const bot = deps.bot(botId);
-    if (!bot || !deps.enabled()) return { state: "skipped", applied: [], note: "switched off" };
+    if (!bot || !deps.enabled(botId)) return { state: "skipped", applied: [], note: "switched off" };
     const counter = counters.get(key(botId, threadId));
     const steps = counter?.steps ?? 0;
     const conversation = deps.transcript(botId, threadId);
@@ -527,7 +637,7 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
     const transcript = reviewTranscript(conversation.messages, bot, conversation.room);
     const skills = deps.skills(botId);
     const { shown } = shownSkills(skills, transcript);
-    const prompt = skillReviewPrompt({ botName: bot.name, transcript, skills });
+    const prompt = skillReviewPrompt({ botName: bot.name, transcript, skills, ...(counter?.signal ? { signal: counter.signal } : {}) });
     let answer: string;
     try {
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(REVIEW_TIMEOUT_MS)]);
@@ -569,14 +679,25 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
   };
 
   const kick = (botId: string) => {
-    if (stopped || !deps.enabled() || running.has(botId) || waiting.has(botId) || deps.busy(botId)) return;
+    if (stopped || !deps.enabled(botId) || running.has(botId) || waiting.has(botId) || deps.busy(botId)) return;
     const counter = due(botId);
     if (counter) void run(botId, counter.threadId);
   };
 
   return {
+    noteSignal(botId, threadId, signal) {
+      if (stopped || !deps.enabled(botId)) return;
+      const id = key(botId, threadId);
+      const counter = counters.get(id) ?? { botId, threadId, steps: 0, at: 0 };
+      counter.signal = { kind: signal.kind, skills: [...new Set(signal.skills)].slice(0, 10), at: now() };
+      counter.at = now();
+      // a fresh signal is not held back by an earlier failed attempt
+      delete counter.failedAt;
+      counters.set(id, counter);
+      save();
+    },
     noteTurn(botId, threadId, steps) {
-      if (stopped || !deps.enabled()) return;
+      if (stopped || !deps.enabled(botId)) return;
       if (steps > 0) {
         const id = key(botId, threadId);
         const counter = counters.get(id) ?? { botId, threadId, steps: 0, at: 0 };
@@ -644,6 +765,7 @@ export function createSkillReview(deps: SkillReviewDeps): SkillReview {
         steps: counters.get(key(botId, threadId))?.steps ?? 0,
         reviewing: running.get(botId)?.threadId === threadId,
         waiting: waiting.get(botId)?.threadId === threadId,
+        ...(counters.get(key(botId, threadId))?.signal ? { signal: counters.get(key(botId, threadId))!.signal!.kind } : {}),
       };
     },
     run,

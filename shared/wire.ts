@@ -607,6 +607,11 @@ export interface WireBot {
    * tidies nightly. On unless explicitly false; every change is journaled
    * and can be undone. */
   memoryUpkeep?: boolean;
+  /** Skill learning (Bot settings > Skills): after a failure or a
+   * correction while a skill is in play, the bot revises that skill; after a
+   * long task that went well, it proposes a new one (server/skills/skill-review.ts).
+   * On unless explicitly false. */
+  skillLearning?: boolean;
   /** false: the workspace's helper model never writes this bot's background
    * texts (server/side-jobs.ts). Absent or true: allowed. */
   helperModel?: boolean;

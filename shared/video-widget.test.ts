@@ -7,6 +7,7 @@ import {
   isHlsVideo,
   normalizeVideoFormat,
   sagaxVideosFromJson,
+  shareLinkExpiresAt,
   videoFormatFromUrl,
   videosFromToolOutput,
   youtubeIdsInText,
@@ -160,5 +161,44 @@ describe("bot-written sagaxVideos cards", () => {
     expect(extractSagaxVideoBlocks("no video here")).toEqual({ text: "no video here", videos: [] });
     const broken = "```json\n{\"sagaxVideos\":[\n```";
     expect(extractSagaxVideoBlocks(broken)).toEqual({ text: broken, videos: [] });
+  });
+});
+
+describe("optional player details (parity fields)", () => {
+  it("keeps the new fields, with their aliases, and leaves old rows unchanged", () => {
+    const [row] = sagaxVideosFromJson({
+      sagaxVideos: [{
+        url: "https://x.test/live/index.m3u8?exp=1900000000&sig=a",
+        kind: "live",
+        id: 42,
+        avatar_url: "https://x.test/a.png",
+        game: "Strategy",
+        started_at: "2026-11-06T12:00:00Z",
+        tags: ["English", " ", "Finals"],
+        recording: true,
+        chapters: [{ start: 60, title: "Draft" }, { startMs: 0, title: "Intro" }, { title: "no start" }],
+        expires_at: 1_900_000_000,
+      }],
+    });
+    expect(row).toMatchObject({
+      id: "42",
+      avatarUrl: "https://x.test/a.png",
+      category: "Strategy",
+      startedAt: "2026-11-06T12:00:00Z",
+      tags: ["English", "Finals"],
+      recording: true,
+      chapters: [{ startMs: 0, title: "Intro" }, { startMs: 60_000, title: "Draft" }],
+      expiresAt: 1_900_000_000_000,
+    });
+    const [plain] = sagaxVideosFromJson({ sagaxVideos: [{ url: "https://x.test/v.mp4" }] });
+    for (const key of ["id", "avatarUrl", "category", "startedAt", "tags", "chapters", "recording", "expiresAt"]) {
+      expect(plain).not.toHaveProperty(key);
+    }
+  });
+
+  it("reads a share link's exp parameter", () => {
+    expect(shareLinkExpiresAt("https://x.test/v1/share/live/a/index?exp=1900000000&sig=b")).toBe(1_900_000_000_000);
+    expect(shareLinkExpiresAt("https://x.test/v.mp4")).toBeUndefined();
+    expect(shareLinkExpiresAt("https://x.test/v.mp4?exp=soon")).toBeUndefined();
   });
 });

@@ -394,7 +394,10 @@ export function MessagesListItem({
       case "video":
         return m.video && m.requested ? (
           <div className="flex justify-start">
-            <VideoPlayerWidget video={m.video} />
+            <VideoPlayerWidget
+              video={m.video}
+              onRequestRefresh={(text) => dispatch({ type: "send", botId, threadId, text })}
+            />
           </div>
         ) : null;
       default: {

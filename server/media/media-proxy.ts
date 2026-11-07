@@ -8,7 +8,7 @@ import type { LookupFunction } from "node:net";
 import { URL } from "node:url";
 
 import type { SagaxVideoEmit, WireVideoWidget } from "../../shared/video-widget.ts";
-import { normalizeVideoFormat, videoFormatFromUrl } from "../../shared/video-widget.ts";
+import { normalizeVideoFormat, shareLinkExpiresAt, videoFormatFromUrl } from "../../shared/video-widget.ts";
 import {
   checkMediaDestination,
   isNonPublicLiteralHost,
@@ -20,6 +20,8 @@ import {
 } from "./media-proxy-guard.ts";
 
 const TOKEN_TTL_MS = 4 * 60 * 60_000;
+/** How long a minted proxy path keeps working (the card's latest expiry). */
+export const MEDIA_PROXY_TOKEN_TTL_MS = TOKEN_TTL_MS;
 /** One provider response may carry the same largest durable media object as
  * an uploaded video. Range responses normally stay much smaller. */
 export const MAX_MEDIA_PROXY_BYTES = 1024 * 1024 * 1024;
@@ -115,7 +117,15 @@ export function wireVideoFromEmit(
   const posterUrl = emit.posterUrl && needsMediaProxy(emit.posterUrl, emit.source)
     ? mediaProxyPath(mintMediaProxyToken(emit.posterUrl, threadId, now))
     : emit.posterUrl;
+  const avatarUrl = emit.avatarUrl && needsMediaProxy(emit.avatarUrl, emit.source)
+    ? mediaProxyPath(mintMediaProxyToken(emit.avatarUrl, threadId, now))
+    : emit.avatarUrl;
   const format = emit.format ?? videoFormatFromUrl(emit.url);
+  // The card stops working at the first of the share link's own expiry and
+  // the proxy token's; the player then offers to ask the bot for a new link.
+  const expiries = [emit.expiresAt, shareLinkExpiresAt(emit.url), proxied ? now + MEDIA_PROXY_TOKEN_TTL_MS : undefined]
+    .filter((at): at is number => typeof at === "number" && Number.isFinite(at));
+  const expiresAt = expiries.length ? Math.min(...expiries) : undefined;
   return {
     kind: emit.kind ?? "vod",
     playbackUrl,
@@ -125,6 +135,16 @@ export function wireVideoFromEmit(
     source: emit.source,
     posterUrl,
     durationMs: emit.durationMs,
+    ...(emit.viewerCount != null ? { viewerCount: emit.viewerCount } : {}),
+    ...(emit.id ? { id: emit.id } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
+    ...(emit.category ? { category: emit.category } : {}),
+    ...(emit.startedAt ? { startedAt: emit.startedAt } : {}),
+    ...(emit.tags?.length ? { tags: emit.tags } : {}),
+    ...(emit.chapters?.length ? { chapters: emit.chapters } : {}),
+    ...(emit.recording ? { recording: true } : {}),
+    ...(emit.channelUrl && /^https:\/\//i.test(emit.channelUrl) ? { channelUrl: emit.channelUrl } : {}),
+    ...(expiresAt ? { expiresAt } : {}),
   };
 }
 

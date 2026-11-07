@@ -582,3 +582,273 @@
     transition: none;
   }
 }
+
+/* ---- Player parity (live DVR, chapters, menu, zoom, expanded view) ---- */
+
+.vpc-stage:focus-visible {
+  outline: 2px solid var(--color-accent, #fff);
+  outline-offset: -2px;
+}
+
+.vpc-zoom {
+  transform-origin: center center;
+  transition: transform 120ms ease;
+}
+
+.vpc-zoom[data-zoomed="true"] {
+  cursor: grab;
+  transition: none;
+}
+
+.vpc-zoom > video,
+.vpc-zoom > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vpc-badges {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+button.vpc-live {
+  border: 0;
+  font-family: inherit;
+  cursor: default;
+}
+
+.vpc-live[data-behind="true"] {
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+}
+
+.vpc-live[data-behind="true"] .vpc-live-dot {
+  animation: none;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.vpc-meta-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.vpc-uptime,
+.vpc-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(10px);
+}
+
+.vpc-rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #e11d2e;
+}
+
+.vpc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 0;
+}
+
+.vpc-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.vpc-top .vpc-live {
+  pointer-events: auto;
+}
+
+.vpc-scrub {
+  touch-action: none;
+  transition: height 120ms ease;
+}
+
+.vpc-scrub:hover {
+  height: 6px;
+}
+
+.vpc-scrub[data-live="true"] .vpc-scrub-fill {
+  background: #e11d2e;
+}
+
+.vpc-scrub-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  background: rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+.vpc-step {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.vpc-golive {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 4px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #e11d2e;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vpc-golive svg {
+  width: 14px;
+  height: 14px;
+}
+
+.vpc-menu-wrap {
+  position: relative;
+  margin-left: auto;
+}
+
+.vpc-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 6;
+  min-width: 11rem;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(18, 18, 22, 0.94);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(16px);
+}
+
+.vpc-menu-label {
+  margin: 4px 8px 2px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.vpc-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vpc-menu-item:hover,
+.vpc-menu-item[aria-checked="true"] {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.vpc-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 2px 4px;
+}
+
+.vpc-menu-zoom {
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.vpc-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.vpc-error[data-expired="true"] svg {
+  opacity: 0.85;
+}
+
+.vpc-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.vpc-chip[data-primary="true"] {
+  border-color: transparent;
+  background: var(--color-accent, #fff);
+  color: var(--color-accent-ink, #000);
+}
+
+.vpc-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Expanded view: the same card in the top layer (or fixed without popovers). */
+.vpc-card[data-expanded="true"] {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  margin: auto;
+  width: min(96vw, calc(88vh * 16 / 9));
+  max-width: none;
+  height: fit-content;
+  max-height: 96vh;
+  padding: 0;
+  overflow: hidden;
+  color: #fff;
+}
+
+.vpc-card[data-expanded="true"]::backdrop {
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(6px);
+}
+
+.vpc-card[data-expanded="true"] .vpc-zoom > video {
+  object-fit: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vpc-zoom,
+  .vpc-scrub {
+    transition: none;
+  }
+}

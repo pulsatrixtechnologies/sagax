@@ -13804,6 +13804,7 @@
   "botProfile.tab.knowledge": "Connaissances",
   "botProfile.tab.stats": "Statistiques",
   "botProfile.v6.back": "Retour",
+  "botProfile.usage.toolErrorOne": "1 erreur",
   "botProfile.usage.title": "Statistiques d'usage",
   "botProfile.usage.intro": "Qui tire quoi : chaque compte, modèle, source et personne, en $ et en jetons. Touchez une ligne pour le détail.",
   "botProfile.usage.periodAria": "Période",

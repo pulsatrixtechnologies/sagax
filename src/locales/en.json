@@ -13803,6 +13803,7 @@
   "botProfile.tab.knowledge": "Knowledge",
   "botProfile.tab.stats": "Stats",
   "botProfile.v6.back": "Back",
+  "botProfile.usage.toolErrorOne": "1 error",
   "botProfile.usage.title": "Usage statistics",
   "botProfile.usage.intro": "Who uses what: each account, model, source and person, in $ and in tokens. Tap a row for the detail.",
   "botProfile.usage.periodAria": "Period",

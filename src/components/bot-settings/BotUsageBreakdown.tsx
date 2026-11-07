@@ -78,6 +78,8 @@ export interface BotUsageBreakdownViewProps {
   onUnit: (unit: BotUsageUnit) => void;
   /** An account's name from its engine id, never the id itself. */
   accountName?: (instanceId: string) => string;
+  /** A model's label from its id, when an engine lists it. */
+  modelName?: (modelId: string) => string | undefined;
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
@@ -85,7 +87,7 @@ export interface BotUsageBreakdownViewProps {
   initialOpen?: readonly string[];
 }
 
-export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, accountName, loading = false, error = null, onRetry, initialOpen = [] }: BotUsageBreakdownViewProps) {
+export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, accountName, modelName, loading = false, error = null, onRetry, initialOpen = [] }: BotUsageBreakdownViewProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const colors = CHART_PALETTE[useSkinScheme(frameRef)];
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(initialOpen));
@@ -103,17 +105,19 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
     if (dimension === "account") return engineLabel(accountName?.(group.label) ?? null, group.label);
     if (dimension === "source") return SOURCE_LABEL[group.key] ? t(SOURCE_LABEL[group.key]!) : group.label;
     if (dimension === "person") return group.key === "owner" ? t("botProfile.usage.source.owner") : personLabel(group.label);
+    if (dimension === "model") return modelName?.(group.key) ?? group.label;
     return group.label;
   };
   const subLabel = (dimension: Dimension, group: UsageStatsGroup): string | null => {
     if (dimension !== "account") return null;
-    const access = group.access ? (ACCESS_LABEL[group.access] ? t(ACCESS_LABEL[group.access]!) : group.access) : null;
-    return [group.engine, access].filter(Boolean).join(" · ") || null;
+    if (!group.access) return null;
+    return ACCESS_LABEL[group.access] ? t(ACCESS_LABEL[group.access]!) : group.access;
   };
   const figure = (value: number, group: UsageStatsGroup) => (unit === "usd" ? usd(group.costUsd) : formatTokens(value));
 
   const section = (dimension: Dimension, groups: readonly UsageStatsGroup[]) => {
     const rows = shares(groups, unit);
+    const top = Math.max(0, ...rows.map((row) => row.value));
     return (
       <section key={dimension} data-bot-usage-dimension={dimension} className="flex min-w-0 flex-col gap-2">
         <h3 className="px-1 text-[13px] leading-[18px] text-ink-secondary">{t(DIMENSION_LABEL[dimension])}</h3>
@@ -156,7 +160,7 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
                           {sub ? <span className="truncate text-[12px] leading-4 text-ink-secondary">{sub}</span> : null}
                         </span>
                         <span aria-hidden="true" className="hidden h-1.5 w-[34%] shrink-0 overflow-hidden rounded-full bg-control sm:block">
-                          <span className="block h-full rounded-full" style={{ width: `${percent}%`, background: colors[index % colors.length] }} />
+                          <span className="block h-full rounded-full" style={{ width: `${top > 0 ? (value / top) * 100 : 0}%`, background: colors[index % colors.length] }} />
                         </span>
                         <span className="flex w-20 shrink-0 flex-col items-end">
                           <span data-bot-usage-value="" className="tabular-nums text-[14px] leading-5 text-ink">{figure(value, group)}</span>
@@ -271,7 +275,7 @@ function ToolList({ tools }: { tools: readonly UsageToolStat[] }) {
         {tools.slice(0, TOOLS_SHOWN).map((tool) => (
           <div key={`${tool.kind}:${tool.mcpServer ?? ""}:${tool.tool}`} data-bot-usage-tool="" className="flex min-h-[40px] min-w-0 items-center gap-3 py-1.5">
             <span className="min-w-0 flex-1 truncate text-[14px] leading-5 text-ink">{tool.mcpServer ? `${tool.mcpServer} · ${tool.tool}` : tool.tool}</span>
-            {tool.errors > 0 && <span className="shrink-0 tabular-nums text-[12px] leading-4 text-ink-secondary">{t("botProfile.usage.toolErrors", { count: String(tool.errors) })}</span>}
+            {tool.errors > 0 && <span className="shrink-0 tabular-nums text-[12px] leading-4 text-ink-secondary">{tool.errors === 1 ? t("botProfile.usage.toolErrorOne") : t("botProfile.usage.toolErrors", { count: String(tool.errors) })}</span>}
             <span className="w-24 shrink-0 text-right tabular-nums text-[13px] leading-5 text-ink-secondary">{t("botProfile.usage.toolCallCount", { count: String(tool.calls) })}</span>
           </div>
         ))}
@@ -318,6 +322,7 @@ export function BotUsageBreakdownSection({ bot }: { bot: Bot }) {
       unit={unit}
       onUnit={setUnit}
       accountName={(id) => state.instances.find((entry) => entry.instanceId === id)?.displayName ?? ""}
+      modelName={(id) => state.instances.flatMap((entry) => entry.models?.options ?? []).find((option) => option.id === id)?.label}
       loading={!answer || retrying}
       error={retrying ? null : answer?.error ?? null}
       onRetry={() => setAttempt((value) => value + 1)}

@@ -87,6 +87,13 @@ describe("bot usage breakdown (#2612)", () => {
     expect(html).toContain("Input tokens");
   });
 
+  it("names models by their label and counts one tool error in the singular", () => {
+    const html = render({ modelName: (id: string) => (id === "opus" ? "Opus" : undefined) });
+    expect(html).toContain(">Opus<");
+    expect(html).toContain("1 error<");
+    expect(render()).toContain(">opus<");
+  });
+
   it("speaks French", () => {
     setLocale("fr");
     const html = render({ period: "month" });

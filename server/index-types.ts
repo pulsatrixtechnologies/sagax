@@ -96,3 +96,16 @@ export type GroupTurnOperation = {
     finished: boolean;
   };
 };
+
+export type GroupMemberTurnOutcome =
+  | "settled"
+  | "provider_failed"
+  | "dispatch_failed"
+  | "spend_capped"
+  | "stalled"
+  | "timed_out"
+  | "cancelled"
+  | "busy"
+  | "parked"
+  | "unavailable"
+  | "held";

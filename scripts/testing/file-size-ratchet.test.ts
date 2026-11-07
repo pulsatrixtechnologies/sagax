@@ -15,14 +15,14 @@ const HARD_CAP = 2000;
 const LISTED_FROM = 1000;
 
 const LINES: Record<string, number> = {
-  "server/index.ts": 32837,
+  "server/index.ts": 32827,
   "electron/main.mjs": 5956,
   "server/routines/routines.ts": 4915,
   "server/store.ts": 4073,
   "src/components/Sidebar.tsx": 2775,
   "src/state/store/model.ts": 2568,
   "server/config.ts": 2650,
-  "server/perspicax/perspicax-mcp.ts": 2243,
+  "server/perspicax/perspicax-mcp.ts": 2158,
   "server/routines/routine-requests.ts": 2233,
   "server/messages/message-db.ts": 2088,
   "server/encryption/content-at-rest.ts": 1973,

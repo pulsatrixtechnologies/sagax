@@ -64,7 +64,7 @@ import { rm as removeDirectory } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ToolResults } from "./tools/tool-results.ts";
 import { basename, dirname, join } from "node:path";
-import type { InternalCapability, GroupTurnOperation } from "./index-types.ts";
+import type { InternalCapability, GroupTurnOperation, GroupMemberTurnOutcome } from "./index-types.ts";
 import { authorizeExternalRuntime, externalRuntimeIsActive } from "./external-runtime.ts";
 
 import { z } from "zod";
@@ -19979,18 +19979,6 @@ function reconcileParkedRoots(): void {
 const GROUP_CONTEXT_MESSAGES = DRAIN_COALESCE_MAX_ITEMS;
 const MAX_GROUP_HOPS = 1;
 
-type GroupMemberTurnOutcome =
-  | "settled"
-  | "provider_failed"
-  | "dispatch_failed"
-  | "spend_capped"
-  | "stalled"
-  | "timed_out"
-  | "cancelled"
-  | "busy"
-  | "parked"
-  | "unavailable"
-  | "held";
 type GroupTurnOrchestration = {
   roomHandoffId?: string;
   resumed?: boolean;

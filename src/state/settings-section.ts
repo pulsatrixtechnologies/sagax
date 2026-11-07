@@ -18,6 +18,8 @@ export type AppSettingsSection =
   | "organization"
   | "appearance"
   | "experimental"
+  /** Settings > Developer (#2636): every technical option, for every member. */
+  | "developer"
   /** Merged into "engines" (Models and voice) on 2026-10-14; still accepted
    * from old links and redirected (src/lib/settings-link.ts). */
   | "connections"

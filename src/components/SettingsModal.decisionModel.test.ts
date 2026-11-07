@@ -82,7 +82,8 @@ describe("Settings → Decision model", () => {
     expect(html).not.toContain("Templates");
     expect(html).not.toContain("VPS Computer");
     expect(html).not.toContain("Boat Computer");
-    expect(html).toContain('data-settings-card="experimental.developer"');
+    // #2636: Context pods moved to Settings > Developer
+    expect(html).not.toContain('data-settings-card="experimental.developer"');
   });
 
   // #575 retired the Sidebar shortcuts setting: the Grok-style footer (avatar

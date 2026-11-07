@@ -55,7 +55,7 @@ describe("Settings nav groups", () => {
       "account", "appearance", "notifications", "security", "credentials",
       "providers", "engines", "voice", "usage",
       "organization", "computer", "permissions", "backups",
-      "general", "updates", "experimental", "about",
+      "general", "updates", "experimental", "developer", "about",
     ]);
   });
 
@@ -134,9 +134,10 @@ describe("Settings nav groups", () => {
       expect(sectionMatches(account, query), query).toBe(true);
     }
     const app = SECTIONS.find((entry) => entry.id === "about")!;
-    for (const query of ["tour", "diagnostic"]) {
-      expect(sectionMatches(app, query), query).toBe(true);
-    }
+    expect(sectionMatches(app, "tour")).toBe(true);
+    // #2636: diagnostics on Developer
+    expect(sectionMatches(app, "diagnostic")).toBe(false);
+    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "developer")!, "diagnostic")).toBe(true);
     // the server choice is Organization's (its launch screen on a desktop with no server)
     for (const query of ["server", "serveur"]) {
       expect(sectionMatches(SECTIONS.find((entry) => entry.id === "organization")!, query), query).toBe(true);
@@ -155,7 +156,7 @@ describe("Settings nav groups", () => {
     const html = render();
     expect(html).toContain('<optgroup label="Personal"><option value="account" selected="">Account</option>');
     expect(html).toContain('<optgroup label="App"><option value="general">General</option><option value="updates">Updates</option>');
-    expect(html).toContain('<option value="experimental">Experimental</option><option value="about">About</option>');
+    expect(html).toContain('<option value="experimental">Experimental</option><option value="developer">Developer</option><option value="about">About</option>');
     expect(html).not.toContain(">App</option>");
   });
 

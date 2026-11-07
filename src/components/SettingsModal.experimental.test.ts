@@ -67,8 +67,8 @@ beforeEach(async () => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
-  const { ExperimentalSettings, OrganizationSettings } = await import("./lazy-settings-sections");
-  await Promise.all([ExperimentalSettings.preload(), OrganizationSettings.preload()]);
+  const { DeveloperSettings, ExperimentalSettings, OrganizationSettings } = await import("./lazy-settings-sections");
+  await Promise.all([DeveloperSettings.preload(), ExperimentalSettings.preload(), OrganizationSettings.preload()]);
   return renderToStaticMarkup(createElement(SettingsModal));
 };
 const switchNamed = (label: string) => fixture.switches.filter((props) => props["aria-label"] === label).at(-1);
@@ -106,13 +106,16 @@ describe("Settings > Experimental", () => {
     expect(html).not.toContain(">Experimental features</h3>");
     // skill authoring on; browser on Computer (#2080 L3); three served switches off; no Decision model (#2093)
     expect(html).toContain("· 1 of 4 on");
-    for (const feature of ["skillAuthoring", "dataWindow", "meetingNotetaker", "llmThreadTitles", "devPods"]) {
+    for (const feature of ["skillAuthoring", "dataWindow", "meetingNotetaker", "llmThreadTitles"]) {
       expect(html, feature).toContain(`data-experimental-feature="${feature}"`);
     }
+    // #2636: Context pods are on Settings > Developer; Experimental keeps one link there
+    expect(html).not.toContain('data-experimental-feature="devPods"');
+    expect(html).toContain('data-developer-link=""');
     expect(html).not.toContain('data-experimental-feature="browser"');
     expect(html).not.toContain('data-experimental-feature="decisionModel"');
     expect(html).not.toContain('data-experimental-feature="browser"');
-    expect(html).toContain('data-settings-card="experimental.developer"');
+    expect(html).not.toContain('data-settings-card="experimental.developer"');
     expect(html).not.toContain("Early features may change");
     expect(html).not.toContain("Save a bot's verification run as a skill");
     expect(html).not.toContain("Adds the Decision model card");
@@ -165,7 +168,7 @@ describe("Settings > Account and App Advanced (#2080 L2)", () => {
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it("mounts system rows on General, cleanup on Backups and diagnostics on Help; routines, group turns and MCP stay on Organization when it shows", async () => {
+  it("mounts system rows on General, cleanup and diagnostics on Developer (#2636); routines stay on Organization when it shows", async () => {
     fixture.features = { routinesInConversation: true };
     fixture.section = "general";
     const general = await render();
@@ -173,6 +176,8 @@ describe("Settings > Account and App Advanced (#2080 L2)", () => {
     expect(general).not.toContain('data-settings-card="general.threadCleanup"');
     expect(general).not.toContain('data-settings-card="about.help"');
     fixture.section = "backups";
+    expect(await render()).not.toContain('data-settings-card="general.threadCleanup"');
+    fixture.section = "developer";
     expect(await render()).toContain('data-settings-card="general.threadCleanup"');
     fixture.section = "about";
     const html = await render();
@@ -186,52 +191,68 @@ describe("Settings > Account and App Advanced (#2080 L2)", () => {
   });
 });
 
-describe("Settings > Organization (cards from General > Advanced, 2026-10-15)", () => {
-  it("shows routines, group turns and MCP calls with their current values", async () => {
+describe("Settings > Organization (cards from General > Advanced, 2026-10-15; timeouts on Developer since #2636)", () => {
+  it("shows routines; group turns and MCP calls are on Developer with their current values", async () => {
     fixture.features = { routinesInConversation: true };
     fixture.section = "organization";
     const html = await render();
     expect(html).toContain('data-settings-card="organization.routinesInConversation"');
     expect(html).toContain("Routines in the conversation");
     expect(switchNamed("Run routines in the conversation")?.checked).toBe(true);
-    expect(html).toContain('data-settings-card="organization.roomTurns"');
+    expect(html).not.toContain('data-settings-card="organization.roomTurns"');
+    expect(html).not.toContain('data-settings-card="organization.mcpCalls"');
+    fixture.section = "developer";
+    const developer = await render();
+    expect(developer).toContain('data-settings-card="organization.roomTurns"');
     // 0.5.6: a row with its minutes field, no folded card
-    expect(html).toMatch(/id="room-turn-timeout"[^>]*value="12"/);
-    expect(html).toContain('data-settings-card="organization.mcpCalls"');
-    expect(html.indexOf("Routines in the conversation")).toBeLessThan(html.indexOf("Group turns"));
+    expect(developer).toMatch(/id="room-turn-timeout"[^>]*value="12"/);
+    expect(developer).toContain('data-settings-card="organization.mcpCalls"');
+    expect(developer).not.toContain("Routines in the conversation");
     // the cards another branch moves to each bot are not here
     expect(html).not.toContain('data-settings-card="general.toolAccess"');
     expect(html).not.toContain('data-settings-card="general.threadCleanup"');
     expect(fixture.api).not.toHaveBeenCalled();
   });
 
-  it("keeps them on App on a desktop with no server, where Organization is hidden", async () => {
+  it("keeps routines on App on a desktop with no server, where Organization is hidden; the timeouts stay on Developer", async () => {
     vi.stubGlobal("window", { ogb: { remoteClient: { active: false }, environments: {}, orgJoin: {} } });
     const { isSoloDesktop } = await import("./SettingsModal");
     expect(isSoloDesktop({} as never)).toBe(true);
     fixture.section = "general";
     const html = await render();
-    expect(html).toContain('data-settings-card="organization.roomTurns"');
-    expect(html).toContain('data-settings-card="organization.mcpCalls"');
+    expect(html).toContain('data-settings-card="general.bots"');
+    expect(html).not.toContain('data-settings-card="organization.roomTurns"');
+    expect(html).not.toContain('data-settings-card="organization.mcpCalls"');
+    fixture.section = "developer";
+    const developer = await render();
+    expect(developer).toContain('data-settings-card="organization.roomTurns"');
+    expect(developer).toContain('data-settings-card="organization.mcpCalls"');
+    expect(developer).toContain('data-settings-card="general.threadCleanup"');
     fixture.section = "backups";
-    expect(await render()).toContain('data-settings-card="general.threadCleanup"');
+    expect(await render()).not.toContain('data-settings-card="general.threadCleanup"');
   });
 
   it("finds them by search and opens them from old and new links", async () => {
     const { cardsMatching, SECTIONS, sectionMatches } = await import("./SettingsModal");
     expect(cardsMatching("mcp")).toContain("organization.mcpCalls");
     const org = SECTIONS.find((entry) => entry.id === "organization")!;
+    const developer = SECTIONS.find((entry) => entry.id === "developer")!;
     const general = SECTIONS.find((entry) => entry.id === "account")!;
-    for (const word of ["mcp", "group turns", "routines"]) {
-      expect(sectionMatches(org, word), word).toBe(true);
+    expect(sectionMatches(org, "routines")).toBe(true);
+    expect(sectionMatches(developer, "routines")).toBe(false);
+    for (const word of ["mcp", "group turns"]) {
+      expect(sectionMatches(developer, word), word).toBe(true);
+      expect(sectionMatches(org, word), word).toBe(false);
       expect(sectionMatches(general, word), word).toBe(false);
     }
     expect(sectionMatches(general, "mcp", ["mcp"])).toBe(true);
     const { currentSettingsSection, currentSettingsCard, isMovedOrganizationCard } = await import("@/lib/settings-sections");
-    expect(currentSettingsSection("general", "general.mcpCalls")).toBe("organization");
-    expect(currentSettingsSection("general", "organization.roomTurns")).toBe("organization");
+    expect(currentSettingsSection("general", "general.routinesInConversation")).toBe("organization");
+    // #2636: the timeouts' old and new ids open Developer
+    expect(currentSettingsSection("general", "general.mcpCalls")).toBe("developer");
+    expect(currentSettingsSection("general", "organization.roomTurns")).toBe("developer");
     expect(currentSettingsCard("general.roomTurns")).toBe("organization.roomTurns");
     expect(isMovedOrganizationCard("general.threadCleanup")).toBe(false);
-    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("backups");
+    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("developer");
   });
 });

@@ -111,8 +111,8 @@ describe("Settings search keywords", () => {
 
   it("draws the pages of the final rail (General, Updates, Experimental, About), no Grok Import card", async () => {
     const { SECTIONS, CARD_KEYWORDS } = await import("./settings-nav");
-    expect(SECTIONS).toHaveLength(17);
-    // #2090 Updates; 2026-11-06 General (system) and About (id about, JC 2026-11-07); #2614 Permissions; every page has its intro line
+    expect(SECTIONS).toHaveLength(18); // #2614 Permissions, #2636 Developer
+    // #2090 Updates; 2026-11-06 General (system) and About (id about, JC 2026-11-07); every page has its intro line
     expect(SECTIONS.every((entry) => entry.introKey === `settings.intro.${entry.id}`)).toBe(true);
     expect(SECTIONS.find((entry) => entry.id === "about")?.introKey).toBe("settings.intro.about");
     expect(Object.keys(CARD_KEYWORDS)).toEqual(expect.arrayContaining(["about.help", "about.about", "general.system", "general.input", "general.interface"]));
@@ -128,11 +128,12 @@ describe("Settings search keywords", () => {
     const { SECTIONS, sectionMatches } = await import("./settings-nav");
     const { CARD_HOME } = await import("@/lib/settings-sections");
     const home: Record<string, string[]> = {
-      general: ["open at login", "app icon", "hotkey", "hardware acceleration", "send key", "spellcheck", "advanced mode", "loop guard"],
-      about: ["licence", "release notes", "tours", "diagnostics", "download logs", "send feedback"],
-      backups: ["cleanup", "retention", "event log", "stockage"],
+      general: ["open at login", "app icon", "hotkey", "hardware acceleration", "send key", "spellcheck", "advanced mode"],
+      about: ["licence", "release notes", "tours", "send feedback"],
+      backups: ["stockage"],
       security: ["people's tool access"],
-      usage: ["usage meter"],
+      // #2636: every technical option is on Developer
+      developer: ["loop guard", "diagnostics", "download logs", "cleanup", "retention", "event log", "usage meter"],
     };
     for (const [page, queries] of Object.entries(home)) {
       for (const query of queries) {
@@ -141,9 +142,12 @@ describe("Settings search keywords", () => {
       }
     }
     const cards: Record<string, string> = {
-      "general.system": "general", "general.input": "general", "general.interface": "general", "general.loopGuard": "general", "general.bots": "general",
-      "about.about": "about", "about.help": "about", "general.diagnostics": "about", "general.logs": "about", "general.feedback": "about",
-      "general.threadCleanup": "backups", "general.peopleToolAccess": "security", "general.usage": "usage",
+      "general.system": "general", "general.input": "general", "general.interface": "general", "general.bots": "general",
+      "about.about": "about", "about.help": "about", "general.feedback": "about",
+      "general.peopleToolAccess": "security",
+      // #2636: the technical cards are on Developer
+      "general.loopGuard": "developer", "general.diagnostics": "developer", "general.logs": "developer",
+      "general.threadCleanup": "developer", "general.usage": "developer",
       // old links of the App page land on the page that holds the card now
       "about.startup": "general", "about.input": "general", "about.holding": "general",
     };

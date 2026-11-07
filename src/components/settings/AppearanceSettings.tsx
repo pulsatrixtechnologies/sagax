@@ -23,15 +23,12 @@ import { setShowAllHistory, setShowPermissions, setShowSuggestions, useShowAllHi
 import { chooseThreadsView, useShowThreadsChoice, useThreadsLocationChoice, type ThreadsView } from "@/lib/thread-preferences";
 import { FRESH_TOPIC_AFTER_CHOICES, useFreshTopicAfter, writeFreshTopicAfter, type FreshTopicAfterHours } from "@/lib/fresh-topic";
 import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDensity, type SidebarDensity } from "@/lib/sidebar-preferences";
-import { setShowRunCard, useShowRunCard } from "@/lib/run-card-preferences";
 import { setStreamReplies, useStreamReplies } from "@/lib/stream-replies-preference";
 import { CHAT_WIDTHS, parseChatWidth, setChatWidth, useChatWidth, type ChatWidth } from "@/lib/chat-width-preference";
 import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@/lib/send-key";
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { setSidebarPeopleApart, useSidebarPeopleApart } from "@/lib/sidebar-people-apart-preference";
 import { setShowRoutinesBadge, useShowRoutinesBadge } from "@/lib/routines-badge-preferences";
-import { setShowInspectorButton, useShowInspectorButton } from "@/lib/inspector-preferences";
-import { setShowTurnTiming, useShowTurnTiming } from "@/lib/turn-timing-preferences";
 import { contrastChoice, CONTRAST_CHOICES, MOTION_CHOICES, motionChoice, TEXT_SIZE_CHOICES, textSizeChoice } from "@/lib/accessibility-preferences";
 import { BOT_HOTKEY_MODIFIERS, botHotkeyModifierChoice, botHotkeysChoice, hardwareAccelerationChoice, hasDesktopShellPreferences, spellcheckChoice } from "@/lib/desktop-shell-preferences";
 import { CompactRow, DescribedRow, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
@@ -488,9 +485,6 @@ export function AppearanceSettings() {
   const editConfig = canEditConfig(state.config);
   // #1098: on an organization server Show tool calls is each person's own.
   const personalSettings = state.config?.personalSettings === true;
-  const runCard = useShowRunCard();
-  const inspector = useShowInspectorButton();
-  const turnTiming = useShowTurnTiming();
   const logo = useShowSidebarLogo();
   const peopleApart = useSidebarPeopleApart();
   const routinesBadge = useShowRoutinesBadge();
@@ -514,11 +508,6 @@ export function AppearanceSettings() {
         <FreshTopicRow />
         <SwitchLine label={t("settings.streamReplies.title")} ariaLabel={t("settings.streamReplies.show")} checked={streamReplies} onChange={setStreamReplies} rowId="streamReplies" />
         {(personalSettings || (!remoteActive && editConfig)) && <ToolCallsRow />}
-      </SettingsGroup>
-      <SettingsGroup title={[t("settings.runCard.title"), t("settings.inspectorButton.title"), t("settings.turnTiming.title")].join(", ")} groupId="conversationAdvanced" advanced>
-        <SwitchLine label={t("settings.runCard.title")} ariaLabel={t("settings.runCard.show")} checked={runCard} onChange={setShowRunCard} rowId="runCard" />
-        <SwitchLine label={t("settings.inspectorButton.title")} ariaLabel={t("settings.inspectorButton.show")} checked={inspector} onChange={setShowInspectorButton} rowId="inspectorButton" />
-        <SwitchLine label={t("settings.turnTiming.title")} ariaLabel={t("settings.turnTiming.show")} checked={turnTiming} onChange={setShowTurnTiming} rowId="turnTiming" />
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.sidebar")} groupId="sidebar">
         <SidebarDensityRow />

@@ -45,6 +45,8 @@ private struct PhoneBotPanelContent: View {
     @State private var mailRow: BotInboundMailRow?
     @State private var viewerId = "local-owner"
     @State private var menuOpen = false
+    /// A long press on the gear opened the menu: its release is not a tap.
+    @State private var gearHeld = false
     @State private var toast: String?
     @State private var editingAvatar = false
     @State private var confirmingArchive = false
@@ -265,14 +267,20 @@ private struct PhoneBotPanelContent: View {
     private var topBar: some View {
         HStack(spacing: Theme.Metric.controlGap) {
             GlassCircleButton(systemImage: "gearshape", accessibilityLabel: "Bot settings", glyphSize: 16) {
+                // the release of the long press that opened the menu would
+                // also push Settings over it
+                if gearHeld { gearHeld = false; return }
                 openProfile(tab: .settings)
             }
             .chatGlassRim(Circle())
             .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                gearHeld = true
                 Haptics.selection()
                 withAnimation(.snappy(duration: 0.22)) { menuOpen = true }
             })
             .accessibilityIdentifier("panel-gear")
+            // where the release fires no tap, closing the menu clears the hold
+            .onChange(of: menuOpen) { open in if !open { gearHeld = false } }
             Spacer()
             GlassCircleButton(systemImage: "xmark", accessibilityLabel: "Close", glyphSize: 14, weight: .semibold) {
                 dismiss()

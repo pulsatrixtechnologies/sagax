@@ -261,6 +261,13 @@ struct ChatView: View {
         session.state.visibleTranscript(forThread: threadId)
     }
 
+    /// The focused message once this chat holds it (nil before): the jump's
+    /// task id, so it runs again when the page carrying it arrives.
+    var focusTarget: String? {
+        guard let id = session.focusedMessageId, messages.contains(where: { $0.id == id }) else { return nil }
+        return id
+    }
+
     /// The transcript as the reader has asked to see it: every chip, folded
     /// runs, or none at all.
     var rows: [TranscriptRow] {
@@ -1078,7 +1085,10 @@ struct ChatView: View {
                     guard desktopRoom != nil else { return }
                     roomJevOn = await session.configStatus()?.jevRoomRoutingOn ?? false
                 }
-                .task(id: session.focusedMessageId) {
+                // keyed on the message being here too: a chat opened for a
+                // focus (a routine run's card) gets its page after the focus
+                // is set, and the jump must still land then
+                .task(id: focusTarget) {
                     guard let messageId = session.focusedMessageId,
                           messages.contains(where: { $0.id == messageId })
                     else { return }

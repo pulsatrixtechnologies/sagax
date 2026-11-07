@@ -101,10 +101,19 @@ final class BotAdvancedUITests: XCTestCase {
         if let environment = fixture.environmentId { arguments += ["-parityEnvironment", environment] }
         app.launchArguments = arguments
         app.launch()
-        XCTAssertTrue(element("profile-name", in: app).waitForExistence(timeout: 30))
-        // the bot panel's Edit bot (the Grok Bot layout: main sections, then pages)
-        element("panel-edit-persona", in: app).tap()
-        XCTAssertTrue(element("panel-persona", in: app).waitForExistence(timeout: 10))
+        // the first launch of a run installs and starts cold, and can come up
+        // without its arguments (Welcome, unpaired): launch it once more
+        let name = element("profile-name", in: app)
+        if !name.waitForExistence(timeout: 60), element("welcome-settings", in: app).exists {
+            app.terminate()
+            app.launch()
+        }
+        XCTAssertTrue(name.waitForExistence(timeout: 60))
+        // the panel's gear opens the bot profile on its Settings (#2157)
+        let gear = element("panel-gear", in: app)
+        XCTAssertTrue(gear.waitForExistence(timeout: 15))
+        gear.tap()
+        XCTAssertTrue(element("bot-profile-page", in: app).waitForExistence(timeout: 15))
         return app
     }
 
@@ -123,29 +132,35 @@ final class BotAdvancedUITests: XCTestCase {
         return target.exists
     }
 
-    /// The Edit bot page a section's row sits on (`BotEditTree`); nil is
-    /// the first page.
-    private func page(of row: String) -> String? {
+    /// The bot profile's row for a section (#2157): Skills, Instructions
+    /// and Memory sit on Knowledge, the rest under General > Settings.
+    /// Any other id is a row of the page already open.
+    private func profileRow(_ row: String) -> (tab: String, id: String)? {
+        guard row.hasPrefix("panel-row.") else { return nil }
         switch row.replacingOccurrences(of: "panel-row.", with: "") {
-        case "soul", "skills", "memory": "panel-edit-page.personality"
-        case "worksOn", "access", "perspicax", "slack": "panel-edit-page.toolsApps"
-        case "sharing", "visibility": "panel-edit-page.sharing"
-        case "overview", "usage", "history": "panel-edit-page.advanced"
-        case "voice": "panel-edit-page.identity"
-        default: nil
+        case "soul": return ("knowledge", "bot-profile-knowledge.instructions")
+        case "skills": return ("knowledge", "bot-profile-knowledge.skills")
+        case "memory": return ("knowledge", "bot-profile-knowledge.memory")
+        case let section: return ("general", "bot-profile-settings.\(section)")
         }
     }
 
     @MainActor
     private func open(_ row: String, in app: XCUIApplication) {
-        if let page = page(of: row), !element(row, in: app).exists {
-            let pageRow = element(page, in: app)
-            reveal(pageRow, in: app)
-            pageRow.tap()
+        var target = row
+        if let place = profileRow(row) {
+            target = place.id
+            let tab = element("bot-profile-tab.\(place.tab)", in: app)
+            if !element(target, in: app).exists, tab.waitForExistence(timeout: 10) { tab.tap() }
+            if place.tab == "general", !element(target, in: app).waitForExistence(timeout: 2) {
+                let toggle = element("bot-profile-settings-toggle", in: app)
+                reveal(toggle, in: app)
+                toggle.tap()
+            }
         }
-        let link = element(row, in: app)
+        let link = element(target, in: app)
         reveal(link, in: app)
-        XCTAssertTrue(link.waitForExistence(timeout: 10), "\(row) shows on this pairing")
+        XCTAssertTrue(link.waitForExistence(timeout: 10), "\(target) shows on this pairing")
         link.tap()
     }
 
@@ -328,7 +343,7 @@ final class BotAdvancedUITests: XCTestCase {
         XCTAssertTrue(element("access-folder", in: app).waitForExistence(timeout: 10))
         // Lot 1: the owner's sidecar edits Access (browser switch), no read-only note
         XCTAssertFalse(element("access-read-only", in: app).exists, "the owner edits Access on the phone")
-        XCTAssertTrue(app.switches["access-browser"].waitForExistence(timeout: 5), "browser switch for the owner")
+        XCTAssertTrue(reveal(app.switches["access-browser"], in: app), "browser switch for the owner")
         attach("Access", app)
     }
 
@@ -376,13 +391,15 @@ final class BotAdvancedUITests: XCTestCase {
         open("panel-row.history", in: app)
         XCTAssertTrue(element("history-page", in: app).waitForExistence(timeout: 15)
                       || app.navigationBars["Changes"].waitForExistence(timeout: 5))
-        // Open-surface labels only: skip identifiers that name a folded row.
+        // Open-surface labels only: an identifier ("history-line.<id>") is
+        // not shown, and the folded rows stay out.
         let historyTree = app.debugDescription
         let historyOpen = historyTree
             .components(separatedBy: .newlines)
             .filter { line in
                 line.contains("StaticText") && !line.contains("history-details") && !line.contains("history-undo")
             }
+            .compactMap { line in line.range(of: "label: ").map { String(line[$0.upperBound...]) } }
             .joined(separator: "\n")
         XCTAssertFalse(hasUuid(historyOpen), "Changes open surface shows UUID:\n\(historyOpen)")
         attach("Changes hygiene", app)
@@ -410,27 +427,32 @@ final class BotAdvancedUITests: XCTestCase {
 
     // MARK: The bot's one "..." menu (#518)
 
-    /// The menu holds Edit bot, Rename, the export and Archive (Duplicate
-    /// left it with the desktop's); Rename saves through the server.
+    /// The gear's long press opens the bot's menu (#2157): the export and
+    /// Archive, no Duplicate (left with the desktop's) and no Rename, which
+    /// the name itself covers: a tap on it edits, Done saves on the server.
     @MainActor
     func testTheBotMenuRenamesTheBot() throws {
         try requirePanel()
         let id = try araId()
+        defer { _ = try? api("PATCH", "/api/bots/\(id)/profile", ["name": "Ara"]) }
         let app = launchAdvanced()
         app.navigationBars.buttons.firstMatch.tap()
-        element("profile-more", in: app).tap()
-        XCTAssertTrue(element("profile-menu.edit-bot", in: app).waitForExistence(timeout: 10))
-        XCTAssertTrue(element("profile-menu.copy-markdown", in: app).exists)
+        let gear = element("panel-gear", in: app)
+        XCTAssertTrue(gear.waitForExistence(timeout: 10))
+        gear.press(forDuration: 1.0)
+        XCTAssertTrue(element("profile-menu.copy-markdown", in: app).waitForExistence(timeout: 10))
         XCTAssertFalse(element("profile-menu.duplicate", in: app).exists)
-        element("profile-menu.rename", in: app).tap()
-        let field = element("panel-rename-field", in: app)
+        attach("Bot menu", app)
+        // close the menu, then rename through the name
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
+        let name = element("profile-name", in: app)
+        XCTAssertTrue(name.waitForExistence(timeout: 10))
+        name.tap()
+        let field = element("profile-name-field", in: app)
         XCTAssertTrue(field.waitForExistence(timeout: 10))
-        field.tap()
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12) + "Ara renamed")
-        app.alerts.buttons["Save"].tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12) + "Ara renamed\n")
         try eventually("the server has the new name") {
             (try bots().first { $0["id"] as? String == id }?["name"] as? String) == "Ara renamed"
         }
-        try api("PATCH", "/api/bots/\(id)/profile", ["name": "Ara"])
     }
 }

@@ -1,8 +1,8 @@
 // "Provided by Claude (your account)" (iOS parity matrix PL7): the
 // connectors of the person's own claude.ai account, read-only, as the
 // desktop's HarnessConnectorsSection.tsx draws them. People add, sign in to
-// and remove them on claude.ai; an admin may turn them off for the whole
-// server (`SurfaceFeature.harnessConnectorsSetting`). Gate:
+// and remove them on claude.ai; they are always allowed on a server (the
+// admin switch is retired, as on the desktop since #168). Gate:
 // `SurfaceFeature.harnessConnectors`.
 import CompanionCore
 import SwiftUI
@@ -11,7 +11,6 @@ import SwiftUI
 final class HarnessConnectorsModel: ObservableObject {
     @Published private(set) var answer: HarnessConnectorsAnswer?
     @Published private(set) var loading = true
-    @Published private(set) var saving = false
     @Published var error: String?
 
     func load(_ client: CompanionClient?, refresh: Bool = false) async {
@@ -21,19 +20,6 @@ final class HarnessConnectorsModel: ObservableObject {
         defer { loading = false }
         do { answer = try await client.harnessConnectors(refresh: refresh) }
         catch { self.error = error.localizedDescription }
-    }
-
-    func setEnabled(_ enabled: Bool, client: CompanionClient?) async {
-        guard let client else { return }
-        saving = true
-        error = nil
-        defer { saving = false }
-        do {
-            try await client.setHarnessConnectorsEnabled(enabled)
-            await load(client)
-        } catch {
-            self.error = error.localizedDescription
-        }
     }
 }
 
@@ -84,19 +70,6 @@ struct HarnessConnectorsSection: View {
 
             if let answer = model.answer, !answer.codex.available {
                 PluginsNote(text: Text("Codex: ChatGPT connectors do not reach bots in Sagax."), color: Theme.textTertiary)
-            }
-            if let answer = model.answer, answer.canManage, session.surfaceGate.allows(.harnessConnectorsSetting) {
-                SettingsCard {
-                    SettingsRow(
-                        title: "Allow Claude connectors on this server",
-                        accessory: model.saving ? .progress : .toggle(Binding(
-                            get: { answer.enabled },
-                            set: { value in Task { await model.setEnabled(value, client: session.settingsClient) } }
-                        )),
-                        identifier: "harness-connectors-allow"
-                    )
-                }
-                .padding(.top, 8)
             }
             if let error = model.error {
                 PluginsCallout(tone: .danger) { Text(verbatim: error) }

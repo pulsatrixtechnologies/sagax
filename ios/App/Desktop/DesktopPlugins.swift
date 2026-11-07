@@ -123,17 +123,6 @@ struct DesktopHarnessConnectorsBox: View {
             }
             content
                 .padding(.top, 8)
-            if let answer = harness.answer, answer.canManage, session.surfaceGate.allows(.harnessConnectorsSetting) {
-                HStack {
-                    DesktopText("Allow Claude connectors on this server", size: 12.5)
-                    Spacer(minLength: 0)
-                    DesktopSwitch(isOn: answer.enabled, label: Text("Allow Claude connectors on this server"),
-                                  identifier: "desktop-plugins.harness-enabled", disabled: harness.saving) {
-                        Task { await harness.setEnabled(!answer.enabled, client: session.settingsClient) }
-                    }
-                }
-                .padding(.top, 10)
-            }
             if let error = harness.error {
                 DesktopText(verbatim: error, size: 12, color: \.danger).padding(.top, 6)
             }

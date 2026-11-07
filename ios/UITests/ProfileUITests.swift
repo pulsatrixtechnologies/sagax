@@ -35,7 +35,12 @@ final class ProfileUITests: XCTestCase {
     private func launch(screen: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.terminate()
-        var arguments = ["-parityEndpoint", endpoint, "-parityToken", token, "-parityScreen", screen]
+        var arguments = [
+            "-parityEndpoint", endpoint, "-parityToken", token, "-parityScreen", screen,
+            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+            "-companion.onboarding.welcomeSeen", "YES",
+            "-companion.onboarding.notificationsSeen", "YES",
+        ]
         if let environment { arguments += ["-parityEnvironment", environment] }
         // PARITY_SKIN=system follows the simulator's light or dark appearance
         if let skin = ProcessInfo.processInfo.environment["PARITY_SKIN"], !skin.isEmpty { arguments += ["-paritySkin", skin] }
@@ -48,28 +53,54 @@ final class ProfileUITests: XCTestCase {
     @MainActor
     private func launchProfile() -> XCUIApplication {
         let app = launch(screen: "03-profile-info")
-        XCTAssertTrue(element("profile-name", in: app).waitForExistence(timeout: 30))
+        // the first launch of a run installs and starts cold, and can come up
+        // without its arguments (Welcome, unpaired): launch it once more
+        let name = element("profile-name", in: app)
+        if !name.waitForExistence(timeout: 60), element("welcome-settings", in: app).exists {
+            app.terminate()
+            app.launch()
+        }
+        XCTAssertTrue(name.waitForExistence(timeout: 60))
         return app
     }
 
-    /// The mascot opens the avatar editor, as the desktop's does.
+    /// Edit avatar from the mascot's long press (#2157): a tap opens the
+    /// bot profile instead.
+    @MainActor
+    private func openAvatarEditor(in app: XCUIApplication) {
+        let mascot = element("profile-mascot", in: app)
+        XCTAssertTrue(mascot.waitForExistence(timeout: 10))
+        mascot.press(forDuration: 1.2)
+        let edit = app.buttons["Edit avatar"].firstMatch
+        XCTAssertTrue(edit.waitForExistence(timeout: 10), "the mascot's menu offers Edit avatar")
+        edit.tap()
+        XCTAssertTrue(element("character-reset", in: app).waitForExistence(timeout: 15))
+    }
+
     @MainActor
     private func launchAvatarEditor() -> XCUIApplication {
         let app = launchProfile()
-        element("profile-mascot", in: app).tap()
-        XCTAssertTrue(element("character-reset", in: app).waitForExistence(timeout: 10))
+        openAvatarEditor(in: app)
         return app
+    }
+
+    /// The gear's long press opens the bot's menu (#2157).
+    private func openBotMenu(in app: XCUIApplication) {
+        let gear = element("panel-gear", in: app)
+        XCTAssertTrue(gear.waitForExistence(timeout: 10))
+        gear.press(forDuration: 1.0)
     }
 
     private func element(_ id: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)[id].firstMatch
     }
 
-    /// The panel's Routines row opens the routines page.
+    /// Upcoming's All routines opens the bot's routines page (#2157).
     private func openRoutines(in app: XCUIApplication) {
-        let row = element("panel-overview.routines", in: app)
-        XCTAssertTrue(row.waitForExistence(timeout: 15), "the Routines row is listed")
-        row.tap()
+        let all = element("panel-upcoming-all", in: app)
+        XCTAssertTrue(all.waitForExistence(timeout: 15), "Upcoming offers All routines")
+        all.tap()
+        XCTAssertTrue(element("profile-add-routine", in: app).waitForExistence(timeout: 15))
     }
 
     private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
@@ -153,23 +184,20 @@ final class ProfileUITests: XCTestCase {
         XCTAssertEqual(try bot(named: "Ara")?["color"] as? String, "purple")
 
         // Re-open, change, Done saves.
-        element("profile-mascot", in: app).tap()
-        XCTAssertTrue(element("character-reset", in: app).waitForExistence(timeout: 10))
+        openAvatarEditor(in: app)
         XCTAssertTrue(app.buttons["teal"].waitForExistence(timeout: 10))
         app.buttons["teal"].tap()
         element("avatar-done", in: app).tap()
         try eventually("Ara is teal on the server after Done") { try bot(named: "Ara")?["color"] as? String == "teal" }
 
-        element("profile-mascot", in: app).tap()
-        XCTAssertTrue(element("character-reset", in: app).waitForExistence(timeout: 10))
+        openAvatarEditor(in: app)
         app.buttons["Shape"].tap()
         element("avatar-done", in: app).tap()
         try eventually("Ara is a shape on the server after Done") {
             ((try bot(named: "Ara")?["mascotLook"] as? [String: Any])?["character"] as? String) == "shape"
         }
 
-        element("profile-mascot", in: app).tap()
-        XCTAssertTrue(element("character-reset", in: app).waitForExistence(timeout: 10))
+        openAvatarEditor(in: app)
         let reset = app.buttons["character-reset"]
         XCTAssertTrue(reset.exists)
         reset.tap()
@@ -205,9 +233,7 @@ final class ProfileUITests: XCTestCase {
         // the menu folds away before the mascot takes a tap again
         let gone = Date().addingTimeInterval(5)
         while menu.exists, Date() < gone { RunLoop.current.run(until: Date().addingTimeInterval(0.2)) }
-        XCTAssertTrue(mascot.waitForExistence(timeout: 5))
-        mascot.tap()
-        XCTAssertTrue(element("character-reset", in: app).waitForExistence(timeout: 10))
+        openAvatarEditor(in: app)
         let palettes = app.segmentedControls["character-color-palette"]
         XCTAssertTrue(palettes.waitForExistence(timeout: 5), "a shape offers the Clay palette")
         palettes.buttons["Clay"].tap()
@@ -321,12 +347,12 @@ final class ProfileUITests: XCTestCase {
         defer { _ = try? api("PATCH", "/api/bots/\(id)", ["soul": before]) }
         let app = launchProfile()
 
-        // Edit persona > Soul (the standing instructions), where the pairing has it
-        element("panel-edit-persona", in: app).tap()
-        // Edit bot > Personality > Soul
-        let personality = element("panel-edit-page.personality", in: app)
-        if personality.waitForExistence(timeout: 10) { personality.tap() }
-        let soul = element("panel-row.soul", in: app)
+        // the gear's bot profile > Knowledge > Instructions (#2157)
+        element("panel-gear", in: app).tap()
+        let knowledge = element("bot-profile-tab.knowledge", in: app)
+        XCTAssertTrue(knowledge.waitForExistence(timeout: 15))
+        knowledge.tap()
+        let soul = element("bot-profile-knowledge.instructions", in: app)
         guard soul.waitForExistence(timeout: 10) else { throw XCTSkip("this pairing has no Soul section: start the fixture with PARITY_OWNER=1") }
         soul.tap()
         let body = app.staticTexts["text-card-body"]
@@ -353,13 +379,21 @@ final class ProfileUITests: XCTestCase {
         openRoutines(in: app)
         let row = element("profile-routine.Scan skills populaires mensuel", in: app)
         scrollTo(row, in: app)
-        XCTAssertTrue(row.label.contains("CRON_TZ=America/Toronto 2 7 1-7 * 1"), row.label)
+        // a cron a sentence cannot say reads "Custom schedule", never the raw expression (#1667)
+        XCTAssertTrue(row.label.contains("Custom schedule"), row.label)
+        XCTAssertFalse(row.label.contains("CRON_TZ"), row.label)
         let paused = element("profile-routine.Planif CW approbation temps lundi", in: app)
         XCTAssertTrue(paused.label.contains("Every Monday at 7:00 AM · Paused"), paused.label)
         row.tap()
 
         XCTAssertTrue(app.staticTexts["routine-title"].waitForExistence(timeout: 10))
-        XCTAssertTrue(element("routine-no-runs", in: app).exists)
+        // the run history is its own page (#2098): its row opens it, Back returns
+        let history = element("routine-run-history", in: app)
+        XCTAssertTrue(history.exists)
+        history.tap()
+        XCTAssertTrue(element("routine-no-runs", in: app).waitForExistence(timeout: 10))
+        app.buttons.matching(identifier: "profile-back").allElementsBoundByIndex.last { $0.isHittable }?.tap()
+        XCTAssertTrue(element("routine-active", in: app).waitForExistence(timeout: 10))
         let active = element("routine-active", in: app)
         XCTAssertTrue(active.exists)
         func enabled() throws -> Bool? {
@@ -371,11 +405,16 @@ final class ProfileUITests: XCTestCase {
         active.tap()
         try eventually("the routine is active again") { try enabled() == true }
 
-        // 2026-10-29: the one-line summary opens the editor, where the
-        // instruction (and the whole configuration) is
-        element("routine-summary", in: app).tap()
+        // the instruction reads on the detail itself (Lot 5), and Edit opens
+        // the editor with the whole configuration
+        let instruction = element("routine-instruction", in: app)
+        XCTAssertTrue(instruction.label.contains("Texte de remplacement")
+            || (instruction.value as? String ?? "").contains("Texte de remplacement"), instruction.label)
+        element("routine-edit", in: app).tap()
+        XCTAssertTrue(element("routine-editor-name", in: app).waitForExistence(timeout: 10), app.debugDescription)
         let text = app.textViews["routine-editor-prompt"]
-        XCTAssertTrue(text.waitForExistence(timeout: 5))
+        for _ in 0..<4 where !text.exists { app.swipeUp() }
+        XCTAssertTrue(text.waitForExistence(timeout: 5), app.debugDescription)
         XCTAssertTrue((text.value as? String ?? "").contains("Texte de remplacement"))
     }
 
@@ -394,7 +433,8 @@ final class ProfileUITests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 10))
         nameField.tap()
         nameField.typeText(name)
-        let prompt = app.textFields["What should the agent do?"]
+        let prompt = app.textViews["routine-editor-prompt"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: 10))
         prompt.tap()
         prompt.typeText("Placeholder routine made by the UI test.")
         // a new routine's button says "Schedule routine", as on the desktop
@@ -420,7 +460,7 @@ final class ProfileUITests: XCTestCase {
     func testLinksOpenInTheAppAndComputerLinksCopy() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad's panel: testIPadLibraryShowsTheLinks")
         let app = launchProfile()
-        element("panel-overview.library", in: app).tap()
+        element("panel-tab.library", in: app).tap()
         let chip = element("thread-files-chip.links", in: app)
         XCTAssertTrue(chip.waitForExistence(timeout: 15))
         chip.tap()
@@ -481,7 +521,7 @@ final class ProfileUITests: XCTestCase {
         XCTAssertTrue(name.waitForExistence(timeout: 30))
         name.tap()
         XCTAssertTrue(element("profile-name", in: app).waitForExistence(timeout: 10))
-        element("panel-overview.library", in: app).tap()
+        element("panel-tab.library", in: app).tap()
         let chip = element("thread-files-chip.links", in: app)
         XCTAssertTrue(chip.waitForExistence(timeout: 15))
         chip.tap()
@@ -522,12 +562,12 @@ final class ProfileUITests: XCTestCase {
         XCTAssertFalse(element("desktop-panel-library.open-plugins", in: app).exists, "no Plugins row")
     }
 
-    /// Library: the conversation's files by kind (Images was Media), and the
-    /// bot's links behind their own chip (was Links), each paging as before.
+    /// Library: the conversation's files (pictures and documents together),
+    /// and the bot's links behind their own chip, each paging as before.
     @MainActor
     func testLibraryChipsShowFilesByKindAndTheLinks() throws {
         let app = launchProfile()
-        element("panel-overview.library", in: app).tap()
+        element("panel-tab.library", in: app).tap()
         XCTAssertTrue(element("thread-files", in: app).waitForExistence(timeout: 10))
 
         let links = element("thread-files-chip.links", in: app)
@@ -539,14 +579,12 @@ final class ProfileUITests: XCTestCase {
         element("profile-show-more", in: app).tap()
         XCTAssertTrue(element("profile-link.2", in: app).waitForExistence(timeout: 10))
 
-        let images = element("thread-files-chip.image", in: app)
-        XCTAssertTrue(images.waitForExistence(timeout: 10))
-        images.tap()
-        XCTAssertTrue(element("thread-file.parity-media-1.png", in: app).waitForExistence(timeout: 10))
-        XCTAssertFalse(element("thread-file.report.md", in: app).exists, "Images keeps the pictures only")
-
-        element("thread-files-chip.all", in: app).tap()
+        // Files holds the pictures and the documents together (#1112: the Images chip was folded in)
+        let files = element("thread-files-chip.files", in: app)
+        XCTAssertTrue(files.waitForExistence(timeout: 10))
+        files.tap()
         XCTAssertTrue(element("thread-file.report.md", in: app).waitForExistence(timeout: 10))
+        XCTAssertFalse(element("profile-link.0", in: app).exists, "Files hides the links")
         // a file opens in Quick Look
         element("thread-file.EXEC_BRIEF.md", in: app).tap()
         XCTAssertTrue(app.navigationBars.matching(NSPredicate(format: "identifier CONTAINS 'QL' OR identifier == 'EXEC_BRIEF.md'")).firstMatch.waitForExistence(timeout: 10)
@@ -559,12 +597,15 @@ final class ProfileUITests: XCTestCase {
     @MainActor
     func testShareExportsThePackageIntoTheShareSheet() throws {
         let app = launchProfile()
-        element("profile-more", in: app).tap()
-        element("profile-menu.share-template", in: app).tap()
-        // the system share sheet, with the package named after the bot
-        let sheet = app.otherElements["ActivityListView"].firstMatch
-        let named = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Ara'")).firstMatch
-        XCTAssertTrue(sheet.waitForExistence(timeout: 20) || named.waitForExistence(timeout: 5))
+        openBotMenu(in: app)
+        let share = element("profile-menu.share-template", in: app)
+        XCTAssertTrue(share.waitForExistence(timeout: 10))
+        share.tap()
+        // Share as Template: the bot's name, ready for a public link
+        let name = app.textFields["share-template.name"].firstMatch
+        XCTAssertTrue(name.waitForExistence(timeout: 20))
+        XCTAssertEqual(name.value as? String, "Ara")
+        XCTAssertTrue(element("share-template.create", in: app).exists)
     }
 
     @MainActor
@@ -580,11 +621,11 @@ final class ProfileUITests: XCTestCase {
         capsule.tap()
         XCTAssertTrue(element("profile-name", in: app).waitForExistence(timeout: 10))
 
-        element("profile-more", in: app).tap()
-        let delete = element("profile-menu.delete", in: app)
-        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        openBotMenu(in: app)
+        let delete = element("profile-menu.delete-bot", in: app)
+        XCTAssertTrue(delete.waitForExistence(timeout: 10))
         delete.tap()
-        let confirm = app.buttons["Delete Bot"].firstMatch
+        let confirm = app.buttons["Delete"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
 

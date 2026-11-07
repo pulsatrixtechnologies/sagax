@@ -673,7 +673,7 @@ struct BotProfilePage: View {
         let items = DesktopPanelSection.allCases.filter { section in
             guard context.sections.contains(section) else { return false }
             switch section {
-            case .soul, .skills, .memory, .slack, .overview: return false
+            case .soul, .skills, .memory, .slack: return false
             default: return true
             }
         }
@@ -735,6 +735,7 @@ struct BotProfilePage: View {
         case .visibility, .sharing: "person.2"
         case .history: "clock.arrow.circlepath"
         case .usage: "chart.bar"
+        case .overview: "square.grid.2x2"
         default: "gearshape"
         }
     }

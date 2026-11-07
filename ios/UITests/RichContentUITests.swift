@@ -78,6 +78,23 @@ final class RichContentUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
 
+    /// The desktop's Settings > Appearance > Tool calls, on the server.
+    private func setShowToolCalls(_ fixture: FixtureSession, _ on: Bool) throws {
+        var request = URLRequest(url: try XCTUnwrap(URL(string: fixture.endpoint + "/api/config")))
+        request.httpMethod = "PATCH"
+        request.setValue("Bearer \(fixture.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["features": ["showToolCalls": on]])
+        let done = expectation(description: "PATCH /api/config")
+        var status = 0
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            done.fulfill()
+        }.resume()
+        wait(for: [done], timeout: 30)
+        XCTAssertTrue((200...299).contains(status), "PATCH /api/config showToolCalls -> \(status)")
+    }
+
     /// Scroll the transcript back until the element is on screen.
     @MainActor
     @discardableResult
@@ -95,7 +112,11 @@ final class RichContentUITests: XCTestCase {
             }
             let frame = target.frame
             if target.isHittable && frame.minY >= top - 10 && (frame.maxY <= bottom || frame.height > bottom - top) {
-                return target
+                // the transcript may still jump to its end right after the
+                // launch: only a frame that holds still is on screen
+                Thread.sleep(forTimeInterval: 0.6)
+                if target.exists && target.frame == frame { return target }
+                continue
             }
             // drag the element toward the band's middle, a bounded step at a
             // time and held at the end so nothing flings past it
@@ -294,7 +315,12 @@ final class RichContentUITests: XCTestCase {
 
     @MainActor
     func testTheDigestNamesNoPayer() throws {
-        let app = try launch()
+        // the turn's receipt shows under the server's Tool calls switch, as
+        // on the desktop (MessagesListItem.tsx), off by default
+        let fixture = try fixtureSession()
+        try setShowToolCalls(fixture, true)
+        addTeardownBlock { [weak self] in try? self?.setShowToolCalls(fixture, false) }
+        let app = try launch(["-companion.prefs.showToolCalls", "YES"])
         let chip = reveal(app, "digest-chip-rich-digest")
         XCTAssertFalse(chip.label.contains("Paid with"), chip.label)
         chip.tap()

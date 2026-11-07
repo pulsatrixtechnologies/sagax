@@ -206,6 +206,7 @@ export function useComposerSend({
       // using the command unlocks Trombi for good (shared/achievements-catalog.ts)
       reportAchievement("trombi.summoned");
       setText("");
+      refocusInput();
       return;
     }
     if (locked || attachmentPending) return;
@@ -232,6 +233,7 @@ export function useComposerSend({
     if (busy && group && attachments.length === 0 && isStopIntent(text)) {
       interruptTurn();
       setText("");
+      refocusInput();
       return;
     }
     if (
@@ -307,6 +309,11 @@ export function useComposerSend({
     setText("");
     setAttachments([]);
     onConsumeReply?.();
+    // The send control unmounts once the draft is empty (the voice button
+    // takes its place). A click had moved focus there, and a disabled or
+    // removed control drops it on the page, so the next message needed
+    // another click. Enter never left the field; the click sometimes did.
+    refocusInput();
     if (group) setChannelMode("chat");
   };
 

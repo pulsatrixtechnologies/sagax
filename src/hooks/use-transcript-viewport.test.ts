@@ -353,6 +353,18 @@ describe("transcript viewport", () => {
     view.act(() => view.current.scrollHandlers.onWheel({ deltaY: -1, deltaX: 0 } as never));
     view.act(() => view.current.scrollHandlers.onWheel({ deltaY: -20, deltaX: 60 } as never));
     expect(view.current.following).toBe(true);
+    // trackpad bounce while resting at the bottom is not a scroll up
+    view.act(() => view.current.scrollHandlers.onWheel({ deltaY: -8, deltaX: 0 } as never));
+    expect(view.current.following).toBe(true);
+    // once the pane has actually moved up, follow lets go
+    scroller.scrollTop = scroller.bottom - 40;
+    view.act(() => view.current.scrollHandlers.onScroll());
+    expect(view.current.following).toBe(false);
+    view.act(() => {
+      scroller.scrollTop = scroller.bottom;
+      view.current.scrollHandlers.onScroll();
+    });
+    expect(view.current.following).toBe(true);
     // a code block that can still scroll up takes the wheel itself
     const pane = new FakeElement("pre");
     Object.assign(pane, { scrollHeight: 600, clientHeight: 200, scrollTop: 100 });

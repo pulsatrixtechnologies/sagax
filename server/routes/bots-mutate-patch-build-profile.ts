@@ -272,6 +272,7 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
   state.beforeBrowserEnabled = beforeBrowserEnabled;
   state.normalizedSelection = normalizedSelection;
   state.profile = profile;
+  if (state.teamOverrides) patch.teamOverrides = state.teamOverrides.length ? state.teamOverrides : undefined;
   state.patch = patch;
   state.section = section;
   state.computerSpecified = computerSpecified;

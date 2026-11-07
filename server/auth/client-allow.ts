@@ -655,6 +655,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // #2045: a member creates, renames, fills and deletes their own teams. The
   // route answers only with the caller's teams and files only their own bots.
   { methods: ["GET", "POST", "PATCH", "PUT", "DELETE"], path: /^\/api\/sidebar-sections$/, feature: "orgDirectory" },
+  // I2: a team's model and computer. The handler answers only on the
+  // caller's own teams; each bot then follows through its own PATCH.
+  { methods: ["GET", "PUT"], path: /^\/api\/team-defaults$/ },
   // A person's own engines: what their own turns run on, and their own
   // subscription sign-in (server/engines/principal-engine-logins.ts).
   { methods: ["GET"], path: /^\/api\/me\/engines$/, feature: "orgDirectory" },

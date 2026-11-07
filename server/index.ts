@@ -632,11 +632,13 @@ import {
   migrateSectionContextKeys,
   readSectionContext,
   readSections,
+  readTeamDefaults,
   sectionContextKey,
   sectionContextLabel,
   sectionContextSystemPrompt,
   teamDataKey,
-  writeSectionContext
+  writeSectionContext,
+  writeTeamDefaults
 } from "./rooms/section-context.ts";
 import {
   installOrgSkill,
@@ -1368,6 +1370,7 @@ import { createTeamLibraryRoutes } from "./routes/team-library.ts";
 import { createTeamExportImportRoutes } from "./routes/team-export-import.ts";
 import { createTeamMemoryHttpRoutes } from "./routes/team-memory-http.ts";
 import { createSectionContextRoutes } from "./routes/section-context.ts";
+import { createTeamDefaultsRoutes } from "./routes/team-defaults.ts";
 import { createSidebarSectionsRoutes } from "./routes/sidebar-sections.ts";
 import { createTeamComputersRoutes } from "./routes/team-computers.ts";
 // IMPORT-ANCHOR:routines-http
@@ -25968,6 +25971,11 @@ function teamStorageKeyForAuth(auth: RequestAuth, sectionName: string): string {
   return teamStorageKeyFor(sectionName, owner);
 }
 
+/** I2: the caller's team model and computer. */
+function teamDefaultsForAuth(auth: RequestAuth, sectionName: string) {
+  return sectionName ? readTeamDefaults(teamStorageKeyForAuth(auth, sectionName)) : null;
+}
+
 
 /** The section names an organization member may see (#2045): only the
  * ones they own, or a legacy one they were made a member of. A section is
@@ -30292,6 +30300,18 @@ ROUTES.push(createSectionContextRoutes({
   read: readSectionContext,
   write: writeSectionContext
 }));
+ROUTES.push(createTeamDefaultsRoutes({
+  sections: () => store.sections,
+  bots: () => store.bots,
+  groups: () => store.groups,
+  sectionKey,
+  storageKey: (auth, section) => teamStorageKeyForAuth(auth, section),
+  sectionsFor: sectionChannels
+    ? (auth) => orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId())
+    : undefined,
+  read: readTeamDefaults,
+  write: writeTeamDefaults
+}));
 ROUTES.push(createTeamComputersRoutes({
   listPayload: teamComputersPayload,
   get: (id) => teamComputers.get(id),
@@ -30768,6 +30788,7 @@ ROUTES.push(createGroupsHttpRoutes({
 ROUTES.push(createBotsCoreRoutes({
   store,
   resolveSectionId,
+  teamDefaultsFor: teamDefaultsForAuth,
   cfg,
   identity: IDENTITY,
   desktopManaged: DESKTOP_MANAGED,
@@ -31419,6 +31440,7 @@ ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleet
 ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState, saveCustomSecret }));
 ROUTES.push(createBotsMutateRoutes({
   resolveSectionId,
+  teamDefaultsFor: teamDefaultsForAuth,
   originApprovals,
   ADMIN_APPROVAL_REQUIRED,
   BOTS_READ_ONLY,

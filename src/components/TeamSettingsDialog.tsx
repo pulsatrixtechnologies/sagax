@@ -3,23 +3,28 @@
 // what each bot will get (and which ones are skipped, and why), apply, then
 // read the result. Each bot is saved through its own settings panel's request
 // (lib/team-bulk-settings.ts explains why there is no bulk route).
+// I2: a model or a computer is also saved as the team's own, so new bots in
+// the team start on it; bots with their own setting keep it unless included.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { placeLabelKey } from "@/lib/place";
 import {
   applyTeamPlan,
   planNeedsLocalAutoConsent,
   planTeamChange,
   TEAM_APPROVAL_MODES,
+  TEAM_COMPUTERS,
   teamBots,
   teamEffortChoices,
   teamModelChoices,
   teamResultCounts,
   type TeamApprovalMode,
   type TeamChange,
+  type TeamComputer,
   type TeamPlanRow,
   type TeamResultRow,
 } from "@/lib/team-bulk-settings";
@@ -29,7 +34,10 @@ import { approvalModeOptions } from "./ApprovalModeSelector";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import { ModelPicker, effortLabel } from "./ModelPicker";
 
-type Tab = "approval" | "model";
+type Tab = "approval" | "model" | "computer";
+
+/** I2: the team's own model and computer (GET/PUT /api/team-defaults). */
+interface TeamDefaults { model: { instanceId: string; model: string; effort?: EffortLevel } | null; computer: TeamComputer | null }
 const KEEP = "";
 const ENGINE_DEFAULT = "default";
 
@@ -64,7 +72,21 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<TeamResultRow[] | null>(null);
   const [consent, setConsent] = useState(false);
+  const [computer, setComputer] = useState<TeamComputer | null>(null);
+  const [includeOwn, setIncludeOwn] = useState(false);
+  const [saved, setSaved] = useState<TeamDefaults | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
+  const named = team.trim() !== "";
+
+  useEffect(() => {
+    if (!named) return;
+    let cancelled = false;
+    void api(`/api/team-defaults?section=${encodeURIComponent(team)}`)
+      .then((result: TeamDefaults) => { if (!cancelled) setSaved(result); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [named, team]);
 
   const bots = useMemo(() => teamBots(state.bots, team), [state.bots, team]);
   const models = useMemo(() => teamModelChoices(bots, state.instances), [bots, state.instances]);
@@ -72,6 +94,7 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
   const efforts = useMemo(() => teamEffortChoices(bots, state.instances, EFFORT_LEVELS), [bots, state.instances]);
   const change: TeamChange | null = tab === "approval"
     ? mode ? { kind: "approval", mode } : null
+    : tab === "computer" ? computer ? { kind: "computer", computer } : null
     : model === KEEP && effort === KEEP ? null
       : {
         kind: "model",
@@ -80,7 +103,14 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
       };
   // Re-planned on every render: a bot that starts or finishes a turn while
   // the dialog is open moves between "will change" and "skipped: busy".
-  const plan = change ? planTeamChange(bots, state.instances, change) : [];
+  const plan = change ? planTeamChange(bots, state.instances, change, { includeOwn }) : [];
+  const ownCount = tab === "approval" ? 0 : bots.filter((bot) => bot.teamOverrides?.includes(tab === "computer" ? "computer" : "model")).length;
+  // What the team keeps for its new bots: a model picked here (with its
+  // effort), or a place.
+  const teamSave = !named || !change || change.kind === "approval" ? null
+    : change.kind === "computer" ? { computer: change.computer }
+      : model === KEEP || !modelInstance ? null
+        : { model: { instanceId: modelInstance, model, ...(effort !== KEEP && effort !== ENGINE_DEFAULT ? { effort } : {}) } };
   const applying = plan.filter((row) => row.status === "apply").length;
 
   useEffect(() => {
@@ -90,9 +120,17 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
   }, []);
 
   const run = async (acknowledgeLocalAuto: boolean) => {
-    if (running || !applying) return;
+    if (running || !(applying || teamSave)) return;
     setRunning(true);
     setProgress(0);
+    setSaveError(null);
+    if (teamSave) {
+      try {
+        setSaved(await api(`/api/team-defaults?section=${encodeURIComponent(team)}`, { method: "PUT", body: JSON.stringify(teamSave) }));
+      } catch (cause) {
+        setSaveError(t("teamSettings.teamSaveFailed", { reason: cause instanceof Error ? cause.message : String(cause) }));
+      }
+    }
     const outcome = await applyTeamPlan(plan, async (bot, patch) => {
       const saved = await persistBotUpdate(bot.id, patch, new AbortController().signal, api, desktopApprovalBridge(), bot);
       dispatch({ type: "botPatched", bot: saved });
@@ -126,6 +164,8 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
             <p role="status" className="mb-3 text-[13px] text-ink-secondary">
               {t("teamSettings.summary", { applied: counts.applied, unchanged: counts.unchanged, skipped: counts.skipped })}
             </p>
+            {teamSave && !saveError && <p className="mb-3 text-[12px] text-ink-secondary">{t("teamSettings.teamSaved")}</p>}
+            {saveError && <p role="alert" className="mb-3 text-[12px] text-warning">{saveError}</p>}
             <TeamSettingsRows rows={results} />
             <div className="mt-4 flex justify-end">
               <button type="button" onClick={onClose} className="rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-white">{t("teamSettings.done")}</button>
@@ -137,6 +177,7 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
             <div className="mb-3 flex gap-1 rounded-lg bg-inset p-0.5" role="tablist">
               <button type="button" role="tab" aria-selected={tab === "approval"} disabled={running} className={tabClass(tab === "approval")} onClick={() => setTab("approval")}>{t("teamSettings.tab.approval")}</button>
               <button type="button" role="tab" aria-selected={tab === "model"} disabled={running} className={tabClass(tab === "model")} onClick={() => setTab("model")}>{t("teamSettings.tab.model")}</button>
+              <button type="button" role="tab" aria-selected={tab === "computer"} disabled={running} className={tabClass(tab === "computer")} onClick={() => setTab("computer")}>{t("teamSettings.tab.computer")}</button>
             </div>
             {tab === "approval" ? (
               <fieldset disabled={running} className="flex flex-col gap-1">
@@ -152,6 +193,20 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
                   </label>
                 ))}
                 <p className="mt-1 text-[12px] text-ink-secondary">{t("teamSettings.allThreads")} {t("teamSettings.customPerBot")}</p>
+              </fieldset>
+            ) : tab === "computer" ? (
+              <fieldset disabled={running} className="flex flex-col gap-1">
+                <legend className="sr-only">{t("teamSettings.tab.computer")}</legend>
+                {TEAM_COMPUTERS.map((place) => (
+                  <label key={place} className={cn("flex cursor-pointer items-start gap-2 rounded-lg px-3 py-2", computer === place ? "bg-raised" : "hover:bg-raised/60")}>
+                    <input type="radio" name="team-computer" className="mt-1" checked={computer === place} onChange={() => setComputer(place)} />
+                    <span>
+                      <span className="block text-[13.5px] text-ink">{t(placeLabelKey(place))}</span>
+                      <span className="block text-[12px] text-ink-secondary">{t(`teamSettings.computer.${place}`)}</span>
+                    </span>
+                  </label>
+                ))}
+                {named && <p className="mt-1 text-[12px] text-ink-secondary">{t("teamSettings.savedComputer", { place: saved?.computer ? t(placeLabelKey(saved.computer)) : t("teamSettings.notSet") })}</p>}
               </fieldset>
             ) : (
               <fieldset disabled={running} className="flex flex-col gap-3">
@@ -174,7 +229,14 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
                   </select>
                 </label>
                 <p className="text-[12px] text-ink-secondary">{t("teamSettings.threadModels")}</p>
+                {named && <p className="text-[12px] text-ink-secondary">{t("teamSettings.savedModel", { model: saved?.model ? models.find((choice) => choice.id === saved.model?.model)?.label ?? saved.model.model : t("teamSettings.notSet") })}</p>}
               </fieldset>
+            )}
+            {named && tab !== "approval" && ownCount > 0 && (
+              <label className="mt-3 flex cursor-pointer items-start gap-2 px-3 text-[13px] text-ink">
+                <input type="checkbox" className="mt-0.5" checked={includeOwn} disabled={running} onChange={(event) => setIncludeOwn(event.target.checked)} />
+                <span>{t(ownCount === 1 ? "teamSettings.includeOwnOne" : "teamSettings.includeOwnMany", { count: ownCount })}</span>
+              </label>
             )}
             {change && (
               <div className="mt-4">
@@ -185,9 +247,9 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
             <div className="mt-4 flex items-center justify-end gap-2">
               {running && <span role="status" className="mr-auto text-[12px] text-ink-secondary">{t("teamSettings.progress", { done: progress, count: plan.length })}</span>}
               <button type="button" disabled={running} onClick={close} className="rounded-lg px-3 py-2 text-[13px] text-ink-secondary hover:bg-raised">{t("common.cancel")}</button>
-              <button type="button" disabled={running || !applying} onClick={apply}
+              <button type="button" disabled={running || !(applying || teamSave)} onClick={apply}
                 className="rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40">
-                {t(applying === 1 ? "teamSettings.applyOne" : "teamSettings.applyMany", { count: applying })}
+                {applying === 0 && teamSave ? t("teamSettings.saveForTeam") : t(applying === 1 ? "teamSettings.applyOne" : "teamSettings.applyMany", { count: applying })}
               </button>
             </div>
           </>

@@ -17946,7 +17946,21 @@
       "settings.developer.diagnostics": "268f14bbfe119c1e92150583af960a086d7db9619a097f8aa72ff6779842f610",
       "settings.developer.devPods": "9bc322c350a6c1f80e701f14a653117c4c3bfb444aabdf54d8ce2f486e330bb3",
       "settings.intro.about": "901437a3a87226e174cab9f4a5e4c7fc6540f4d46f1de427d24fb2c4014e6fdf",
-      "settings.turnTiming.title": "f09e6f75f97923b8b7f4c6096bea3f598565dfb853b0aef595659cf0b3d9bd3b"
+      "settings.turnTiming.title": "f09e6f75f97923b8b7f4c6096bea3f598565dfb853b0aef595659cf0b3d9bd3b",
+      "teamSettings.tab.computer": "76ed42d22129dc354362704eb4b54208041b68736f976932aada43bc0035f7c0",
+      "teamSettings.computer.auto": "eca0a08991f602636f14aa4bab74725f3ba9897cddaf88cc6373484a5c9ce56b",
+      "teamSettings.computer.cloud": "5a4cf0bd57f8d7c2279b6b1fa6fb44c90e251ccf12e5cd675bfbc9de73e25448",
+      "teamSettings.computer.local": "d99ceffca78971cf2bc5a22bc29dbae797f9c875c1af349a72039b335a0bfd6d",
+      "teamSettings.computer.off": "777a9fc81a3aacdf4037ef621456caed4c2ce89071d85e392f956edb942431c8",
+      "teamSettings.skip.ownSetting": "cba8ad0981c319d6b6ed985dc18b3cd284a1a3449a01bb4c0602d40f1d63c9e8",
+      "teamSettings.includeOwnOne": "0a66dc375f19e656419cf230652ea232418dd1c92152a3f8886d60b00a8b0479",
+      "teamSettings.includeOwnMany": "e31db25720ec4a213db8761e518b1328f80f1ed5594c5004530463cf935f4132",
+      "teamSettings.savedComputer": "89c15ff889470aafc535ee652796d67d995ca7ec4bfcc97bb55e08607ec322e7",
+      "teamSettings.savedModel": "07b28eb5c3af536b473030d027f448a12c340f29bcaae54139176bbea078b7b6",
+      "teamSettings.notSet": "140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
+      "teamSettings.teamSaved": "2e2c060c2905e0a6730f4ac68faf497035501d8494094533213e329062054f50",
+      "teamSettings.teamSaveFailed": "ab185ca1a477bb2674bd93ac499499933379f15da706481ffebc6714795d2bc7",
+      "teamSettings.saveForTeam": "60a43387f364e91b8715f8bbbe3f61f55245f5c2d1da4ddd9266c6ed6f6702c8"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

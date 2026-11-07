@@ -1,6 +1,7 @@
 // PATCH /api/bots/:id admission: host, org Full access, member field gates (#1383).
 // Never imports server/index.ts.
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
+import { teamPatchPlan } from "../team/team-defaults.ts";
 
 export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): Promise<boolean> {
   const { m } = state;
@@ -13,6 +14,19 @@ export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): P
   // never a bot field.
   const patchStepUp = body.stepUp;
   delete body.stepUp;
+  // I2: the team's model and computer join the body here, before every
+  // field gate below checks them as if the request had sent them.
+  const team = teamPatchPlan({
+    bot: env.store.bot(m[1]),
+    body,
+    defaultsFor: (section) => env.teamDefaultsFor?.(env.auth, section) ?? null,
+    sectionKey: env.sectionKey,
+  });
+  if (!team.ok) {
+    env.json(env.res, 400, { error: team.error });
+    return true;
+  }
+  state.teamOverrides = team.teamOverrides;
   const sharedSettings = env.ownerSettingsForbidden(env.auth, env.store.bot(m[1]), {
     model: Object.prototype.hasOwnProperty.call(body, "modelSelection"),
     notifications: Object.prototype.hasOwnProperty.call(body, "notifications")

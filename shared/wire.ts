@@ -567,6 +567,9 @@ export interface WireBot {
   chiefOfStaff?: boolean;
   /** Owner-selected additional teams this Primary Bot may coordinate. */
   managedSections?: string[];
+  /** I2: settings this bot keeps as its own instead of following its team's
+   * model or computer. Absent: the bot follows the team for both. */
+  teamOverrides?: Array<"model" | "computer">;
   /** Pause for human approval before this bot talks to a peer. */
   approvePeerComms?: boolean;
   /** #1276: on a local model, "full" sends the whole prompt as before;

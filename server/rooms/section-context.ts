@@ -11,6 +11,7 @@ import { z } from "zod";
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
 import { renamePublishedTeam } from "../pages/published-teams.ts";
+import { EFFORT_LEVELS, type ModelSelection } from "../../shared/model-selection.ts";
 
 export const SECTION_CONTEXT_MAX_BYTES = 24_000;
 export const SECTION_CONTEXTS_FILE = join(DATA_DIR, "section-contexts.json");
@@ -20,11 +21,22 @@ export interface SectionContextRecord {
   updatedAt: number;
 }
 
+/** I2: the team's model and computer. Bots in the team follow them unless
+ * the bot overrides that setting (BotRecord.teamOverrides). */
+export type TeamComputer = "auto" | "cloud" | "local" | "off";
+export interface TeamDefaultsRecord {
+  model?: ModelSelection;
+  computer?: TeamComputer;
+  updatedAt: number;
+}
+
 interface SectionContextFile {
   version: 1;
   /** Named teams exist independently of their current bots or group chats. */
   sections: string[];
   contexts: Record<string, SectionContextRecord>;
+  /** I2: team model and computer, under the same keys as `contexts`. */
+  defaults?: Record<string, TeamDefaultsRecord>;
 }
 
 const sectionContextRecordSchema = z.object({ text: z.string(), updatedAt: z.number().finite() });
@@ -36,6 +48,29 @@ const sectionContextFileSchema = z.object({
     sectionContextRecordSchema,
   ),
 });
+
+const teamDefaultsRecordSchema = z.object({
+  model: z.object({
+    instanceId: z.string().min(1).max(200),
+    model: z.string().min(1).max(200),
+    effort: z.enum(EFFORT_LEVELS).optional(),
+    variant: z.string().max(200).optional(),
+  }).passthrough().optional(),
+  computer: z.enum(["auto", "cloud", "local", "off"]).optional(),
+  updatedAt: z.number().finite(),
+});
+
+/** Validates one team defaults record (the route and the file share it). */
+export function parseTeamDefaultsRecord(value: unknown): TeamDefaultsRecord | null {
+  const parsed = teamDefaultsRecordSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const { model, computer, updatedAt } = parsed.data;
+  return {
+    ...(model ? { model: { ...model } as ModelSelection } : {}),
+    ...(computer ? { computer } : {}),
+    updatedAt,
+  };
+}
 
 const emptyFile = (): SectionContextFile => ({ version: 1, sections: [], contexts: Object.create(null) });
 
@@ -115,9 +150,17 @@ function loadFile(forWrite = false): SectionContextFile {
       if (Buffer.byteLength(record.text, "utf8") > SECTION_CONTEXT_MAX_BYTES) continue;
       contexts[sectionContextKey(key)] = { text: record.text, updatedAt: record.updatedAt };
     }
+    const defaults: Record<string, TeamDefaultsRecord> = Object.create(null);
+    const rawDefaults = (input as { defaults?: unknown }).defaults;
+    if (rawDefaults && typeof rawDefaults === "object" && !Array.isArray(rawDefaults)) {
+      for (const [key, value] of Object.entries(rawDefaults as Record<string, unknown>)) {
+        const record = parseTeamDefaultsRecord(value);
+        if (record) defaults[sectionContextKey(key)] = record;
+      }
+    }
     return { version: 1, sections: [...new Set([
       ...(candidate.data.sections ?? []), ...Object.keys(contexts),
-    ].map(sectionContextKey).filter(Boolean))], contexts };
+    ].map(sectionContextKey).filter(Boolean))], contexts, defaults };
   } catch {
     if (forWrite) throw new Error("Saved teams and shared instructions could not be read; the existing file was left unchanged");
     return emptyFile();
@@ -153,6 +196,8 @@ export function changeEmptySection(name: string, nextName: string | null): void 
   if (nextName === name) return;
   const context = data.contexts[name];
   delete data.contexts[name];
+  const defaults = data.defaults?.[name];
+  if (data.defaults) delete data.defaults[name];
   if (nextName === null) {
     data.sections.splice(index, 1);
   } else if (data.sections.includes(nextName)) {
@@ -161,6 +206,7 @@ export function changeEmptySection(name: string, nextName: string | null): void 
   } else {
     data.sections[index] = nextName;
     if (context) data.contexts[nextName] = context;
+    if (defaults) (data.defaults ??= Object.create(null) as Record<string, TeamDefaultsRecord>)[nextName] = defaults;
   }
   saveFile(data);
   // Legacy name-keyed published packages follow the empty-name path. Org
@@ -201,8 +247,9 @@ export function clearSectionContext(section?: string | null): void {
   const key = sectionContextKey(section);
   if (!key) return;
   const data = loadFile(true);
-  if (!(key in data.contexts)) return;
+  if (!(key in data.contexts) && !(data.defaults && key in data.defaults)) return;
   delete data.contexts[key];
+  if (data.defaults) delete data.defaults[key];
   saveFile(data);
 }
 
@@ -212,9 +259,33 @@ export function migrateSectionContextKeys(
 ): number {
   const data = loadFile(true);
   const { next, moved } = migrateNamedKeys(data.contexts, resolve);
-  if (!moved) return 0;
-  saveFile({ ...data, contexts: next });
-  return moved;
+  const nextDefaults = migrateNamedKeys<TeamDefaultsRecord>(data.defaults ?? Object.create(null), resolve);
+  if (!moved && !nextDefaults.moved) return 0;
+  saveFile({ ...data, contexts: next, defaults: nextDefaults.next });
+  return moved + nextDefaults.moved;
+}
+
+/** I2: the team's model and computer, or null when the team has none. */
+export function readTeamDefaults(section?: string | null): TeamDefaultsRecord | null {
+  const record = loadFile().defaults?.[sectionContextKey(section)];
+  return record ? { ...record, ...(record.model ? { model: { ...record.model } } : {}) } : null;
+}
+
+/** I2: replace the team's model and computer. Neither set clears them. */
+export function writeTeamDefaults(
+  section: string | null | undefined,
+  value: { model?: ModelSelection; computer?: TeamComputer },
+  now = Date.now(),
+): TeamDefaultsRecord | null {
+  const data = loadFile(true);
+  const key = sectionContextKey(section);
+  if (key && !isTeamDataKey(key) && !data.sections.includes(key)) data.sections.push(key);
+  const defaults = data.defaults ?? (Object.create(null) as Record<string, TeamDefaultsRecord>);
+  const record = parseTeamDefaultsRecord({ ...value, updatedAt: now });
+  if (!record || (!record.model && !record.computer)) delete defaults[key];
+  else defaults[key] = record;
+  saveFile({ ...data, defaults });
+  return readTeamDefaults(key);
 }
 
 /** A bounded, explicitly lower-priority reference block. It contains no file

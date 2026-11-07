@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const outArg = process.argv.indexOf("--out");
-const outDir = outArg >= 0 ? resolve(process.argv[outArg + 1]) : join(root, "docs", "screenshots", "video-widgets");
+const VIDEO_WIDGET_SHOTS = "docs/screenshots/video-widgets";
+const outDir = outArg >= 0 ? resolve(process.argv[outArg + 1]) : join(root, VIDEO_WIDGET_SHOTS);
 // Agents share the machine: the port comes from SAGAX_CAPTURE_PORT (5176-5206
 // range by convention) and a real Chrome runs headless when
 // SAGAX_VERIFY_BROWSER_CHROME names it. Never a visible window.

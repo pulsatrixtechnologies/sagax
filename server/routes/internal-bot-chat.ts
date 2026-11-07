@@ -38,7 +38,8 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
     if (method === "POST" && path === "/api/internal/retry-thread") return handleRetryThread(opened);
     if (method === "POST" && path === "/api/internal/delegate-bot") return handleDelegateBot(opened);
     if (method === "GET" && path === "/api/internal/assignment-status") return handleAssignmentStatus(opened);
-    if (path === "/api/internal/room-targets" || path === "/api/internal/coordinate-bots") return handleRoomCoordination(opened);
+    if (method === "GET" && path === "/api/internal/room-targets") return handleRoomCoordination(opened);
+    if (method === "POST" && path === "/api/internal/coordinate-bots") return handleRoomCoordination(opened);
     return PASS;
   };
 }

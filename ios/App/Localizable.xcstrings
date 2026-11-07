@@ -16008,6 +16008,22 @@
         }
       }
     },
+    "Calendars": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calendars"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calendriers"
+          }
+        }
+      }
+    },
     "Call": {
       "localizations": {
         "en": {
@@ -16298,6 +16314,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les appels ont besoin d'une voix en temps réel"
+          }
+        }
+      }
+    },
+    "Camera": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appareil photo"
           }
         }
       }
@@ -45221,6 +45253,12 @@
             "state": "translated",
             "value": "Micro"
           }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone"
+          }
         }
       }
     },
@@ -51652,6 +51690,22 @@
         }
       }
     },
+    "Not allowed: open Settings to allow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not allowed: open Settings to allow"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non autorisé : ouvrez Réglages pour l’accorder"
+          }
+        }
+      }
+    },
     "Not approved by %@; bots do not get this server.": {
       "localizations": {
         "en": {
@@ -55662,6 +55716,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abrir Ajustes"
+          }
+        }
+      }
+    },
+    "Open Settings to check": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings to check"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrez Réglages pour vérifier"
           }
         }
       }
@@ -59974,6 +60044,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notificações do telefone"
+          }
+        }
+      }
+    },
+    "Phone permissions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phone permissions"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisations du téléphone"
           }
         }
       }
@@ -67002,6 +67088,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Restaurar substitui esta instalação e a reinicia. Restaure pelo Sagax no computador, onde está o arquivo."
+          }
+        }
+      }
+    },
+    "Restricted on this phone: open Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restricted on this phone: open Settings"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restreint sur ce téléphone : ouvrez Réglages"
           }
         }
       }
@@ -76776,6 +76878,22 @@
         }
       }
     },
+    "Speech recognition": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech recognition"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnaissance vocale"
+          }
+        }
+      }
+    },
     "Speech recognition isn't available for this language. Allow Speech Recognition in Settings, then try again.": {
       "localizations": {
         "fr": {
@@ -79613,6 +79731,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Toque em um chip para editá-lo. Arraste para reordenar, deslize para excluir."
+          }
+        }
+      }
+    },
+    "Tap a permission to allow it. Once refused, iOS only lets you turn it back on in the Settings app: the button opens Sagax's page there.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap a permission to allow it. Once refused, iOS only lets you turn it back on in the Settings app: the button opens Sagax's page there."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchez une autorisation pour l’accorder. Une fois refusée, iOS permet de la réactiver seulement dans l’app Réglages : le bouton y ouvre la page de Sagax."
           }
         }
       }

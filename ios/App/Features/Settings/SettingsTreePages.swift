@@ -229,6 +229,7 @@ struct PrivacySecuritySettingsView: View {
     var body: some View {
         SettingsPage(title: "Privacy and security") {
             SettingsTreeCards(page: .privacySecurity)
+            PhonePermissionsCard()
             BlockedPeopleCard()
         }
     }

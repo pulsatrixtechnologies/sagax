@@ -12,15 +12,13 @@
 // category. A set whose file does not exist yet opens on the starter
 // template (three example rules in a comment, which never loads); nothing
 // is written until the person saves.
-import { ConfirmDialog } from "../ConfirmDialog";
-import { ArrowDown, ArrowUp, Pencil, Plus, ScrollText, Trash2 } from "lucide-react";
+import { Plus, ScrollText } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { formatMemoryBytes } from "@/lib/memory";
 import {
-  DEFAULT_RULE_SET_ID,
   RULE_SET_MAX_BYTES,
   RULE_SET_MAX_LINES,
   RULE_SET_NAME_MAX,
@@ -40,10 +38,12 @@ import {
 } from "@/lib/rule-sets";
 import { rulesCount } from "@/lib/workspace-files";
 import type { Bot } from "@/state/store";
-import { MarkdownEditor } from "../markdown/MarkdownEditor";
-import { HelpTip, PILL, PLAIN_CARD, PLAIN_FIELD, Switch, useSettingsSurface } from "../SettingsPrimitives";
+import { HelpTip, PLAIN_CARD, useSettingsSurface } from "../SettingsPrimitives";
 import { PaneSection } from "./PaneSection";
-import { inputCls } from "./field";
+import { AddForm, ConfirmDeleteDialog } from "./RulesSection.tsx-parts/SetForms";
+import { RuleSetEditor } from "./RulesSection.tsx-parts/RuleSetEditor";
+import { RenameForm, SetBadges, SetControls, TotalBlock } from "./RulesSection.tsx-parts/SetRowParts";
+import { Gauge, buttonCls, ruleSetLabel } from "./RulesSection.tsx-parts/shared";
 import { readableError } from "@/lib/plain-error";
 
 /** The starter template. Mirrors server/rules/rule-sets.ts RULES_TEMPLATE (a test
@@ -61,19 +61,12 @@ Examples (copy a line below the comment to use it):
 -->
 `;
 
-// Settings' grey pill (2026-10-16).
-const buttonCls = PILL;
-const iconButtonCls = "flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-30";
-
 const FALLBACK_BUDGETS: RulesListing["budgets"] = {
   set: { maxLines: RULE_SET_MAX_LINES, maxBytes: RULE_SET_MAX_BYTES },
   total: { maxLines: RULES_TOTAL_MAX_LINES, maxBytes: RULES_TOTAL_MAX_BYTES },
 };
 
-/** A set's name as shown: the default set is "Rules" in the person's language. */
-export function ruleSetLabel(set: Pick<RuleSetWire, "id" | "name">): string {
-  return set.name ?? (set.id === DEFAULT_RULE_SET_ID ? t("persona.rules.sets.defaultName") : set.id);
-}
+export { ruleSetLabel };
 
 /** What the editor starts from for a set: its text, or the template for a
  * set with no file yet. */
@@ -92,28 +85,6 @@ export function RulesCounter({ text, maxLines = RULE_SET_MAX_LINES, maxBytes = R
         maxBytes: formatMemoryBytes(count.maxBytes),
       })}
     </span>
-  );
-}
-
-/** A thin bar: how full a budget is (the fuller of lines and bytes), red
- * past it. */
-function Gauge({ lines, bytes, maxLines, maxBytes, label }: { lines: number; bytes: number; maxLines: number; maxBytes: number; label: string }) {
-  const ratio = Math.max(maxLines > 0 ? lines / maxLines : 0, maxBytes > 0 ? bytes / maxBytes : 0);
-  const percent = Math.round(ratio * 100);
-  return (
-    <div
-      role="meter"
-      aria-label={label}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={percent}
-      className="h-1.5 w-full overflow-hidden rounded-full bg-control"
-    >
-      <div
-        className={cn("h-full rounded-full", ratio > 1 ? "bg-danger" : ratio > 0.85 ? "bg-warning" : "bg-accent")}
-        style={{ width: `${Math.min(100, percent)}%` }}
-      />
-    </div>
   );
 }
 
@@ -260,69 +231,27 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
   );
 
   const totalBlock = (
-    <div data-rules-total="" className={cn("flex flex-col gap-1", plain && "px-4 py-2.5")}>
-      <div className={cn("text-[12px] text-ink-secondary", totalOver && "text-danger")}>{totalLabel}</div>
-      <Gauge lines={total.lines} bytes={total.bytes} maxLines={budgets.total.maxLines} maxBytes={budgets.total.maxBytes} label={totalLabel} />
-      {totalOver && <p role="alert" className="text-[12.5px] text-danger">{t("persona.rules.sets.totalOver")}</p>}
-    </div>
+    <TotalBlock plain={plain} totalLabel={totalLabel} totalOver={totalOver} lines={total.lines} bytes={total.bytes} maxLines={budgets.total.maxLines} maxBytes={budgets.total.maxBytes} />
   );
 
   const renameForm = (set: RuleSetWire, label: string, name: string) => (
-    <form
-      className="flex min-w-0 flex-1 items-center gap-1.5"
-      onSubmit={(event) => {
-        event.preventDefault();
-        rename();
-      }}
-    >
-      <input
-        autoFocus
-        className={plain ? PLAIN_FIELD : inputCls + " h-8 py-1"}
-        aria-label={t("persona.rules.sets.renameLabel", { name: label })}
-        maxLength={nameMax}
-        value={name}
-        onChange={(event) => setRenaming({ id: set.id, name: event.target.value })}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") setRenaming(null);
-        }}
-      />
-      <button type="submit" className={buttonCls} disabled={busy}>{t("persona.rules.sets.saveName")}</button>
-      <button type="button" className={buttonCls} disabled={busy} onClick={() => setRenaming(null)}>{t("common.cancel")}</button>
-    </form>
+    <RenameForm set={set} label={label} name={name} plain={plain} busy={busy} nameMax={nameMax} onSubmit={rename} onChange={setRenaming} onCancel={() => setRenaming(null)} />
   );
 
-  const setBadges = (set: RuleSetWire) => (
-    <>
-      {!set.enabled && (
-        <span className="ml-1.5 rounded bg-control px-1 py-px text-[10px] uppercase tracking-wide text-ink-secondary">{t("persona.rules.sets.off")}</span>
-      )}
-      {dirtyOf(set) && (
-        <span className="ml-1.5 rounded bg-warning/15 px-1 py-px text-[10px] text-warning">{t("persona.rules.sets.unsaved")}</span>
-      )}
-    </>
-  );
+  const setBadges = (set: RuleSetWire) => <SetBadges set={set} dirty={dirtyOf(set)} />;
 
   const setControls = (set: RuleSetWire, index: number, label: string) => (
-    <>
-      <Switch
-        checked={set.enabled}
-        aria-label={t("persona.rules.sets.toggle", { name: label })}
-        disabled={busy}
-        onClick={() => void run(() => updateRuleSet(bot.id, set.id, { enabled: !set.enabled }))}
-      />
-      <button type="button" className={iconButtonCls} aria-label={t("persona.rules.sets.moveUp", { name: label })} title={t("persona.rules.sets.moveUp", { name: label })} disabled={busy || index === 0} onClick={() => move(index, -1)}>
-        <ArrowUp size={14} aria-hidden="true" />
-      </button>
-      <button type="button" className={iconButtonCls} aria-label={t("persona.rules.sets.moveDown", { name: label })} title={t("persona.rules.sets.moveDown", { name: label })} disabled={busy || index === sets.length - 1} onClick={() => move(index, 1)}>
-        <ArrowDown size={14} aria-hidden="true" />
-      </button>
-      <button type="button" className={iconButtonCls} aria-label={t("persona.rules.sets.rename", { name: label })} title={t("persona.rules.sets.rename", { name: label })} disabled={busy} onClick={() => setRenaming({ id: set.id, name: label })}>
-        <Pencil size={13} aria-hidden="true" />
-      </button>
-      <button type="button" className={cn(iconButtonCls, "hover:bg-danger/10 hover:text-danger")} aria-label={t("persona.rules.sets.delete", { name: label })} title={t("persona.rules.sets.delete", { name: label })} disabled={busy} onClick={() => remove(set)}>
-        <Trash2 size={14} aria-hidden="true" />
-      </button>
-    </>
+    <SetControls
+      set={set}
+      index={index}
+      label={label}
+      count={sets.length}
+      busy={busy}
+      onToggle={() => void run(() => updateRuleSet(bot.id, set.id, { enabled: !set.enabled }))}
+      onMove={move}
+      onRename={() => setRenaming({ id: set.id, name: label })}
+      onRemove={() => remove(set)}
+    />
   );
 
   const selectSet = (set: RuleSetWire) => {
@@ -331,107 +260,40 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
   };
 
   const addForm = (
-    <form
-      className={cn("flex items-center gap-2", plain && "px-4 py-2")}
-      onSubmit={(event) => {
-        event.preventDefault();
-        addSet();
-      }}
-    >
-      <input
-        autoFocus
-        className={plain ? PLAIN_FIELD : inputCls}
-        aria-label={t("persona.rules.sets.newName")}
-        placeholder={t("persona.rules.sets.newPlaceholder")}
-        maxLength={nameMax}
-        value={newName}
-        onChange={(event) => setNewName(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") setAdding(false);
-        }}
-      />
-      <button type="submit" className={buttonCls} disabled={busy || !newName.trim()}>{t("common.add")}</button>
-      <button type="button" className={buttonCls} disabled={busy} onClick={() => setAdding(false)}>{t("common.cancel")}</button>
-    </form>
+    <AddForm plain={plain} busy={busy} nameMax={nameMax} newName={newName} onNameChange={setNewName} onSubmit={addSet} onCancel={() => setAdding(false)} />
   );
   const atLimit = listing !== null && sets.length >= maxSets;
   const limitNote = atLimit && <span className={cn("text-[12px] text-ink-secondary", plain && "px-4 py-2.5")}>{t("persona.rules.sets.limit", { count: maxSets })}</span>;
 
   const editor = current && (
-    <div className={cn("flex flex-col gap-3", plain && "px-4 pb-3 pt-1")} data-rule-set-editor={current.id}>
-      {!current.enabled && <p className="text-[12.5px] text-ink-secondary">{t("persona.rules.sets.offNote")}</p>}
-      <MarkdownEditor
-        ariaLabel={t("persona.rules.sets.editorLabel", { name: ruleSetLabel(current), file: current.file })}
-        value={draft}
-        onChange={(next) => {
-          setDrafts((all) => ({ ...all, [current.id]: next }));
-          setSaved(null);
-        }}
-        minHeight={220}
-        dataField="rules"
-        placeholder={t("persona.rules.placeholder")}
-        invalid={count.over}
-        footer={<RulesCounter text={draft} maxLines={budgets.set.maxLines} maxBytes={budgets.set.maxBytes} />}
-      />
-      {count.over && (
-        <p role="alert" className="text-[12.5px] text-danger">
-          {t("persona.rules.sets.setOver", { maxLines: count.maxLines, maxBytes: formatMemoryBytes(count.maxBytes) })}
-        </p>
-      )}
-      {conflict && conflict.id === current.id && (
-        <div role="alert" className={plain ? "rounded-lg bg-warning/10 p-3 text-[12.5px] leading-relaxed text-ink" : "rounded-lg border border-warning/25 bg-warning/10 p-3 text-[12.5px] leading-relaxed text-ink"}>
-          <div className={plain ? undefined : "font-medium"}>{t("persona.rules.conflict")}</div>
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              className={buttonCls}
-              disabled={busy}
-              onClick={() => {
-                dropDraft(current.id);
-                setConflict(null);
-                void load();
-              }}
-            >
-              {t("persona.rules.reload")}
-            </button>
-            <button type="button" className={buttonCls} disabled={busy} onClick={() => void save(current, conflict.currentHash)}>
-              {t("persona.rules.overwrite")}
-            </button>
-          </div>
-        </div>
-      )}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          data-rules-save=""
-          className={buttonCls}
-          disabled={busy || (!dirty && !starter)}
-          onClick={() => void save(current, current.hash)}
-        >
-          {busy ? t("persona.rules.saving") : t("persona.rules.save")}
-        </button>
-        {dirty && (
-          <button
-            type="button"
-            className={plain ? buttonCls : "rounded-md px-2 py-1 text-[12.5px] text-ink-secondary hover:bg-control hover:text-ink"}
-            disabled={busy}
-            onClick={() => dropDraft(current.id)}
-          >
-            {t("persona.rules.discard")}
-          </button>
-        )}
-        {saved === current.id && !dirty && <span className="text-[12.5px] text-ink-secondary">{t("persona.rules.saved")}</span>}
-      </div>
-    </div>
+    <RuleSetEditor
+      current={current}
+      plain={plain}
+      draft={draft}
+      count={count}
+      conflict={conflict}
+      busy={busy}
+      dirty={dirty}
+      starter={starter}
+      saved={saved}
+      footer={<RulesCounter text={draft} maxLines={budgets.set.maxLines} maxBytes={budgets.set.maxBytes} />}
+      onChange={(next) => {
+        setDrafts((all) => ({ ...all, [current.id]: next }));
+        setSaved(null);
+      }}
+      onDrop={() => dropDraft(current.id)}
+      onReload={() => {
+        dropDraft(current.id);
+        setConflict(null);
+        void load();
+      }}
+      onSave={(expectedHash) => void save(current, expectedHash)}
+    />
   );
 
   const confirmDelete = (
-    <ConfirmDialog
-      open={removing !== null}
-      title={t("persona.rules.sets.delete", { name: removing ? ruleSetLabel(removing) : "" })}
-      body={removing ? t("persona.rules.sets.deleteConfirm", { name: ruleSetLabel(removing) }) : ""}
-      confirmLabel={t("common.delete")}
-      tone="danger"
+    <ConfirmDeleteDialog
+      removing={removing}
       onCancel={() => setRemoving(null)}
       onConfirm={() => {
         const set = removing;

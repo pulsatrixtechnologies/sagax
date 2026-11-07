@@ -5,7 +5,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStore, type Bot, type ModelSelection } from "@/state/store";
-import { isDesktopModelId, localRowUnavailable } from "@/lib/local-models";
 import { engineOffer } from "../../shared/offered-engines";
 import { engineOfferContext, modelSwitches } from "@/lib/offered-instances";
 import { configuredModelInstances, isClaudeAccount } from "@/lib/engine-rail";
@@ -21,12 +20,10 @@ import { useAutoModelStatus } from "@/lib/auto-model-preview";
 import { ModelNoEngineNotice } from "./ModelNoEngineNotice";
 import { effortLabel } from "@/lib/effort-label";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
-import { batchModelActions } from "@/lib/batch-bot-model";
 import { useModelFavorites } from "@/lib/model-favorites";
 import { useModelFavoritesServerSync } from "@/lib/model-favorites-sync";
 import { requestSettingsCard, useSettingsSurface } from "./SettingsPrimitives";
 import { modelOffer, type ModelSwitches } from "../../shared/offered-models";
-import type { EffortLevel } from "../../shared/wire";
 
 import {
   COMPOSER_MODEL_EVENT,
@@ -38,7 +35,6 @@ import {
   modelSelectionForPick,
   providerRailUnready,
   removableKeySection,
-  saveViewerChoice,
   type ComposerModelChip,
   type ComposerModelMenuControl,
   type RailRowAction,
@@ -50,6 +46,7 @@ import { ModelPickerTrigger } from "./ModelPicker.tsx-parts/ModelPickerTrigger";
 import { BusyModelMenu } from "./ModelPicker.tsx-parts/ModelPickerBusyMenu";
 import { lockedWhileBusy } from "./ModelPicker.tsx-parts/model-picker-reasoning";
 import { ModelPickerMenu, windowOnlyMenuPlace } from "./ModelPicker.tsx-parts/ModelPickerMenu";
+import { makeModelPickerActions, makeToggleMenu } from "./ModelPicker.tsx-parts/modelPickerActions";
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
 
@@ -168,15 +165,6 @@ export function ModelPicker({
   const bot = botProp ?? CHOOSE_BOT;
   // #2050: the stars follow the person through /api/me/models
   useModelFavoritesServerSync();
-  const applyToOthers = (next: ModelSelection) => {
-    if (!alsoApplyTo?.length) return;
-    const others = alsoApplyTo.flatMap((id) => {
-      if (id === bot.id) return [];
-      const candidate = state.bots.find((item) => item.id === id);
-      return candidate ? [{ id: candidate.id, threadId: candidate.threadId, busy: candidate.busy }] : [];
-    });
-    for (const action of batchModelActions(others, next)) dispatch(action);
-  };
   const [menu, setMenu] = useState(windowOnly);
   /** #2106: Auto Edit panel (Intelligence / Balance / Cost); owned here so
    * ModelPickerMenu stays hook-free for the function-call interaction harness. */
@@ -295,84 +283,9 @@ export function ModelPicker({
     dispatch({ type: "setModel", botId: bot.id, threadId: threadId ?? bot.threadId, updateBotDefault: true, selection: profile.modelSelection });
   };
 
-  const pick = (instance: typeof state.instances[number], model: string, keepOpen = false) => {
-    if (choose) {
-      if (instance.policy || notAllowed(instance)) return;
-      choose.onPick({ instanceId: instance.instanceId, model });
-      closeAll();
-      return;
-    }
-    if ((bot.busy && !alsoApplyTo?.length) || instance.policy || notAllowed(instance)) return;
-    const localRow = instance.models.options.find((option) => option.id === model && (option.local || isDesktopModelId(option.id)));
-    if (localRow && localRowUnavailable(instance.driverKind, model, localRow.anthropic)) return;
-    if (viewerLocal && !alsoApplyTo?.length) {
-      saveViewerChoice(dispatch, bot.id, { model: { instanceId: instance.instanceId, model } });
-      closeAll();
-      return;
-    }
-    const next = modelSelectionForPick(selection, instance, model);
-    if (!bot.busy && !viewerLocal) {
-      dispatch({
-        type: "setModel",
-        botId: bot.id,
-        threadId: threadId ?? bot.threadId,
-        updateBotDefault: true,
-        selection: next,
-      });
-    }
-    applyToOthers(next);
-    if (!keepOpen) closeAll();
-  };
-
-  const setEffort = (effort: EffortLevel | undefined) => {
-    if (viewerLocal && !alsoApplyTo?.length) {
-      saveViewerChoice(dispatch, bot.id, { effort: effort ?? null });
-      return;
-    }
-    const { variant: _variant, ...rest } = selection;
-    const next = { ...rest, ...(effort ? { effort } : { effort: undefined }) };
-    if (!viewerLocal) {
-      const updateBotDefault = bot.busy ? busyUpdatesBotDefault : Boolean(threadId);
-      dispatch({ type: "setModel", botId: bot.id, threadId, ...(updateBotDefault ? { updateBotDefault: true } : {}), selection: next });
-    }
-    applyToOthers(next);
-  };
-
-  const chooseAuto = () => {
-    if ((bot.busy && !alsoApplyTo?.length) || (viewerLocal && !alsoApplyTo?.length)) return;
-    closeAll();
-    if (autoOn && !alsoApplyTo?.length) return;
-    const next = {
-      ...selection,
-      auto: true as const,
-      autoOptimize: selection.autoOptimize ?? "balance",
-    };
-    if (!bot.busy && !viewerLocal && !autoOn) {
-      dispatch({
-        type: "setModel",
-        botId: bot.id,
-        threadId: threadId ?? bot.threadId,
-        updateBotDefault: true,
-        selection: next,
-      });
-    }
-    applyToOthers(next);
-  };
-
-  const setAutoOptimize = (autoOptimize: "intelligence" | "balance" | "cost") => {
-    if ((bot.busy && !alsoApplyTo?.length) || (viewerLocal && !alsoApplyTo?.length)) return;
-    const next = { ...selection, auto: true as const, autoOptimize };
-    if (!bot.busy && !viewerLocal) {
-      dispatch({
-        type: "setModel",
-        botId: bot.id,
-        threadId: threadId ?? bot.threadId,
-        updateBotDefault: true,
-        selection: next,
-      });
-    }
-    applyToOthers(next);
-  };
+  const { pick, setEffort, chooseAuto, setAutoOptimize } = makeModelPickerActions({
+    state, dispatch, bot, choose, threadId, alsoApplyTo, viewerLocal, selection, autoOn, busyUpdatesBotDefault, notAllowed, closeAll,
+  });
 
   const { menuSections } = buildModelPickerSections({
     orgMode,
@@ -412,34 +325,9 @@ export function ModelPicker({
   const followLine = modelPickerFollowLine({ follows, profileName: profile.name, fallbackLine });
   const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel });
 
-  const toggleMenu = (anchor: HTMLElement | null = null, onDone?: () => void) => {
-    if (locked) return;
-    if (menu) {
-      closeMenu();
-      return;
-    }
-    const MENU_WIDTH = BASE_MENU_WIDTH;
-    anchorRef.current = anchor;
-    setMenuDoneCall(onDone ? { call: onDone } : null);
-    const box = anchor ? (anchor.closest<HTMLElement>('[role="menu"]') ?? anchor) : null;
-    const rect = (anchor ?? (headless ? fallbackAnchor?.() : triggerRef.current))?.getBoundingClientRect();
-    if (rect && typeof window.innerWidth === "number") {
-      if (anchor && box) {
-        const left = Math.max(8, Math.min(box.getBoundingClientRect().right + 6, window.innerWidth - MENU_WIDTH - 8));
-        setMenuAt({ left, bottom: Math.max(8, window.innerHeight - rect.bottom - 6) });
-      } else if (windowOnly) {
-        setMenuAt(windowOnlyMenuPlace());
-      } else if (headless) {
-        setMenuAt({ left: Math.max(8, Math.min(rect?.left ?? 24, window.innerWidth - MENU_WIDTH - 8)), bottom: Math.max(8, window.innerHeight - (rect?.top ?? 80) + 6) });
-      } else {
-        const right = Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - MENU_WIDTH - 8));
-        setMenuAt({ right, bottom: window.innerHeight - rect.top + 6 });
-      }
-    } else if (windowOnly) {
-      setMenuAt(windowOnlyMenuPlace());
-    } else setMenuAt(null);
-    setMenu(true);
-  };
+  const toggleMenu = makeToggleMenu({
+    locked, menu, closeMenu, anchorRef, triggerRef, setMenuDoneCall, setMenuAt, setMenu, headless, windowOnly, fallbackAnchor,
+  });
   if (menuControl) menuControl.current = { toggle: (anchor, onDone) => toggleMenu(anchor, onDone), close: () => closeMenu() };
 
   const composerTitle = bot.busy ? `${composerLabel}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${composerLabel}${followLine}`;

@@ -49,11 +49,12 @@ describe("Settings nav groups", () => {
     expect(SECTIONS.map((entry) => entry.id)).toEqual([
       // #2080 (L0): the final rail; Import lives in Backups (its old id stays
       // an alias). #2090: Updates is its own page. 2026-11-06: the old App
-      // page splits into General (system, keyboard, mode) and Help and about.
+      // page splits into General (system, keyboard, mode) and About.
+      // JC 2026-11-07: App in the Apple order, General first, About last.
       "account", "appearance", "notifications", "security", "credentials",
       "providers", "engines", "voice", "usage",
       "organization", "computer", "backups",
-      "updates", "experimental", "general", "about",
+      "general", "updates", "experimental", "about",
     ]);
   });
 
@@ -69,12 +70,12 @@ describe("Settings nav groups", () => {
     for (const page of ["Account", "Security", "Vault", "Appearance", "Notifications"]) expect(you, page).toContain(`>${page}</button>`);
     expect(rail).not.toContain("data-settings-automations");
     const app = rail.slice(rail.indexOf('data-settings-nav-group="app"'));
-    // #2090: Updates (desktop) then Experimental, General, Help and about
-    const order = [">Updates</button>", ">Experimental</button>", ">General</button>", ">Help and about</button>"].map((label) => app.indexOf(label));
+    // JC 2026-11-07: the Apple order, General, Updates (desktop), Experimental, About last
+    const order = [">General</button>", ">Updates</button>", ">Experimental</button>", ">About</button>"].map((label) => app.indexOf(label));
     expect(order.every((value) => value >= 0)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
     expect(app).not.toContain(">App</button>");
-    expect(app).not.toContain(">About</button>");
+    expect(app).not.toContain("Help and about");
     // each group is labelled by its heading for assistive tech
     expect(rail).toMatch(/role="group" aria-labelledby="app-settings-nav-you"/);
   });
@@ -127,7 +128,7 @@ describe("Settings nav groups", () => {
       expect(sectionMatches(account, query), query).toBe(false);
     }
     // what General held: identity and region on Account, tours and
-    // diagnostics on Help and about; the microphone on Voice
+    // diagnostics on About; the microphone on Voice
     for (const query of ["language", "langue", "time zone", "fuseau", "avatar"]) {
       expect(sectionMatches(account, query), query).toBe(true);
     }
@@ -152,27 +153,26 @@ describe("Settings nav groups", () => {
   it("groups the small-screen menu the same way", () => {
     const html = render();
     expect(html).toContain('<optgroup label="Personal"><option value="account" selected="">Account</option>');
-    expect(html).toContain('<optgroup label="App"><option value="updates">Updates</option>');
-    expect(html).toContain('<option value="general">General</option><option value="about">Help and about</option>');
+    expect(html).toContain('<optgroup label="App"><option value="general">General</option><option value="updates">Updates</option>');
+    expect(html).toContain('<option value="experimental">Experimental</option><option value="about">About</option>');
     expect(html).not.toContain(">App</option>");
   });
 
-  it("keeps General and Help and about without an updater; Updates hides; About is never a row label", () => {
+  it("keeps General and About without an updater; Updates hides; Help and about is gone", () => {
     vi.stubGlobal("window", {});
     const rail = nav(render());
     expect(rail).toContain('data-settings-nav-group="app"');
     expect(rail).toContain(">General</button>");
-    expect(rail).toContain(">Help and about</button>");
+    expect(rail).toContain(">About</button>");
     expect(rail).not.toContain(">Updates</button>");
-    expect(rail).not.toContain(">About</button>");
+    expect(rail).not.toContain("Help and about");
     // a member who cannot edit the installation has no Experimental
     fixture.config = { rooms: { turnTimeoutMinutes: 5 }, viewer: { operator: false, role: "member" } };
     vi.stubGlobal("window", {});
     const member = nav(render());
-    expect(member).not.toContain(">About</button>");
     expect(member).not.toContain(">Experimental</button>");
     expect(member).toContain(">General</button>");
-    expect(member).toContain(">Help and about</button>");
+    expect(member).toContain(">About</button>");
   });
 
   it("draws Updates without a This app heading; App keeps the About link", () => {
@@ -196,5 +196,26 @@ describe("Settings nav groups", () => {
     for (const label of ["Personnel", "IA", "Espace de travail", "Application"]) expect(rail, label).toContain(`>${label}</div>`);
     expect(html).toContain('<optgroup label="Personnel">');
     expect(html).not.toMatch(/[\u2013\u2014]/);
+  });
+
+  // JC 2026-11-07: General selected and Updates highlighted looked like two
+  // active rows. One row carries the selection; the hover of the others is a
+  // lighter fill than bg-selected, never the same token.
+  it("marks exactly one row active, and the hover of the others stays lighter", () => {
+    for (const section of ["general", "updates", "about"] as AppSettingsSection[]) {
+      fixture.section = section;
+      const buttons = [...nav(render()).matchAll(/<button[^>]*>/g)].map((match) => match[0]);
+      const rows = buttons.filter((tag) => /data-settings-nav-row="/.test(tag));
+      expect(rows.length).toBeGreaterThan(10);
+      const active = rows.filter((tag) => tag.includes('aria-current="page"'));
+      expect(active, section).toHaveLength(1);
+      expect(active[0]).toContain(`data-settings-nav-row="${section}"`);
+      expect(rows.filter((tag) => /\bbg-selected\b/.test(tag)), section).toHaveLength(1);
+      for (const tag of rows.filter((row) => !row.includes('aria-current="page"'))) {
+        expect(tag).not.toContain("hover:bg-selected");
+        expect(tag).not.toContain("hover:bg-hover");
+        expect(tag).toContain("hover:bg-ink/[0.05]");
+      }
+    }
   });
 });

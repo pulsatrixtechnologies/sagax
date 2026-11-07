@@ -79,7 +79,7 @@ describe("Settings > Organization (Perspicax)", () => {
   });
 });
 
-describe("Help and about", () => {
+describe("About", () => {
   it("draws diagnostics as rows under the Help heading", async () => {
     vi.stubGlobal("window", { ogb: { exportDiagnostics: async () => null } });
     const { AboutPage } = await import("./settings/AppPage");
@@ -114,7 +114,7 @@ describe("Settings search", () => {
     // #2080 (L0): one word, one page; a password is found on the Vault
     expect(sectionMatches(section("credentials"), "mot de passe")).toBe(true);
     for (const query of ["journaux", "diagnostic"]) expect(sectionMatches(section("about"), query), query).toBe(true);
-    // JC 2026-11-06: cleanup is found on Backups and storage, not on Help and about
+    // JC 2026-11-06: cleanup is found on Backups and storage, not on About
     expect(sectionMatches(section("backups"), "nettoyage")).toBe(true);
     expect(sectionMatches(section("about"), "nettoyage")).toBe(false);
     // 2026-10-26: no Full access card any more

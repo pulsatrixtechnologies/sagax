@@ -72,7 +72,7 @@ describe("Settings > General, the reference design's layout", () => {
     expect(html).not.toContain("Only part of the interface is translated");
   });
 
-  it("Guided tours live on Help and about, with two buttons and no tour paragraphs", () => {
+  it("Guided tours live on About, with two buttons and no tour paragraphs", () => {
     expect(render()).not.toContain('data-settings-row="tours"');
     fixture.section = "about";
     const html = render();
@@ -107,7 +107,7 @@ describe("Settings > General, the reference design's layout", () => {
     expect(page).toContain("Update channel");
   });
 
-  it("keeps Account identity-only; system rows live on General, help on Help and about", () => {
+  it("keeps Account identity-only; system rows live on General, help on About", () => {
     const html = render();
     expect(html).toContain('data-settings-group="languageRegion"');
     expect(html).not.toContain('data-settings-card="general.advanced"');
@@ -136,9 +136,10 @@ describe("Settings > General, the reference design's layout", () => {
     expect(html).not.toContain(">Thème</div>");
     // #2080 L2: tours live on App, not Account. #2090: Updates is its own page.
     expect(html).not.toContain(">Visites guidées</div>");
-    expect(html).toContain('<option value="updates">Mises à jour</option>');
-    expect(html).toContain('<option value="general">Général</option>');
-    expect(html).toContain('<option value="about">Aide et à propos</option>');
+    // JC 2026-11-07: Général first, À propos last
+    expect(html).toContain('<option value="general">Général</option><option value="updates">Mises à jour</option>');
+    expect(html).toContain('<option value="about">À propos</option>');
+    expect(html).not.toContain("Aide et à propos");
     expect(html).not.toContain(">Application</option>");
     expect(html).not.toMatch(/[–—]/);
   });

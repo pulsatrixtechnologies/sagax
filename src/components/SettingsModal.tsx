@@ -268,9 +268,13 @@ export function SettingsModal() {
                     <button
                       onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: id })}
                       aria-current={section === id ? "page" : undefined}
+                      data-settings-nav-row={id}
                       className={cn(
                         "flex items-center gap-[9px] rounded-lg px-[9px] py-[7px] text-left text-[13px] leading-[18px] text-ink transition-colors motion-reduce:transition-none",
-                        section === id ? "bg-selected" : "hover:bg-hover",
+                        // JC 2026-11-07: the hover fill (hover, 17% grey) read as a
+                        // second selected row next to bg-selected (32% grey). The
+                        // hover is a barely visible ink wash, as the reference asks.
+                        section === id ? "bg-selected" : "hover:bg-ink/[0.05]",
                       )}
                     >
                       {/* The reference design's nav item (198px rail, 7/9px padding, 9px gap,
@@ -456,7 +460,7 @@ export function SettingsModal() {
             {/* General (JC 2026-11-06): System, Keyboard and typing, Advanced mode. */}
             {section === "general" && <GeneralPage remoteActive={remoteActive} />}
 
-            {/* Help and about (JC 2026-11-06): the About window, tours, help rows. */}
+            {/* About (JC 2026-11-07, was Help and about): the About window, tours, help rows. */}
             {section === "about" && <AboutPage remoteActive={remoteActive} openAbout={openAbout} />}
 
             {section === "appearance" && <AppearanceSettings />}

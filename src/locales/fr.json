@@ -13975,7 +13975,7 @@
   "settings.notifications.native.open": "Réglages des notifications",
   "settings.intro.general": "Le démarrage et le comportement de l'app sur ton ordinateur, ton clavier et le mode avancé.",
   "settings.section.backupsAndStorage": "Sauvegardes et stockage",
-  "settings.section.helpAbout": "Aide et à propos",
+  "settings.section.about": "À propos",
   "settings.general.system": "Système",
   "settings.general.keyboard": "Clavier et saisie",
   "settings.general.interface": "Interface",

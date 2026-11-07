@@ -724,6 +724,30 @@ describe("OpenAICompatDriver", () => {
     await inst.dispose();
   });
 
+  it("asks a local server to stop on chat-template end markers, and only a local one (2026-11-06)", async () => {
+    const bodies: any[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input).endsWith("/models")) return new Response(JSON.stringify({ data: [] }), { status: 200 });
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response('data: {"choices":[{"delta":{"content":"hi<|e"}}]}\ndata: {"choices":[{"delta":{"content":"os|>"}}]}\ndata: [DONE]\n', { status: 200, headers: { "content-type": "text/event-stream" } });
+      }),
+    );
+    for (const [instanceId, url] of [["test-stop-local", "http://localhost:9/v1"], ["test-stop-remote", "https://api.example.com/v1"]] as const) {
+      const inst = await OpenAICompatDriver.create({ instanceId, displayName: instanceId, enabled: true, config: { url, apiKeyEnv: "TEST_KEY" }, environment: { TEST_KEY: "secret" } });
+      const recorder = recordEvents(inst.adapter);
+      await inst.adapter.sendTurn({ threadId: `thread-${instanceId}`, text: "hello" });
+      await recorder.until((e) => e.type === "turn.completed");
+      const done = recorder.events.find((e: any) => e.type === "item.completed" && e.itemType === "assistant_text") as any;
+      expect(done?.text).toBe("hi");
+      recorder.stop();
+      await inst.dispose();
+    }
+    expect(bodies[0].stop).toEqual(expect.arrayContaining(["<|eos|>", "<|im_end|>", "<|eot_id|>", "<|endoftext|>"]));
+    expect(bodies.at(-1).stop).toBeUndefined();
+  });
+
   it("puts the phone-call instruction in the newest user message of call turns only", async () => {
     let sentBody: any = null;
     vi.stubGlobal(

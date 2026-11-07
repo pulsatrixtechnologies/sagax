@@ -15,6 +15,7 @@ import {
   type ModelListIssue,
 } from "../../shared/azure-openai.ts";
 import { stripOpenAiEndpointSuffix } from "../../shared/openai-compat-url.ts";
+import { CHAT_STOP_SEQUENCES } from "../../shared/chat-special-tokens.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
 const DRIVER_KIND = "openai-compat";
@@ -385,6 +386,10 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
         messages,
         stream,
         stream_options: stream ? { include_usage: true } : undefined,
+        // 2026-11-06: a local server (oMLX, llama.cpp, LM Studio) whose chat
+        // template does not match the model writes its end marker ("<|eos|>")
+        // as text; asked to stop on it, the reply ends there.
+        ...(onThisNetwork(config.url) ? { stop: [...CHAT_STOP_SEQUENCES] } : {}),
         ...(!azure && config.provider && isOpenRouterUrl(config.url)
           ? { provider: { order: [config.provider], allow_fallbacks: false } }
           : {}),

@@ -262,7 +262,12 @@ export function RoutineRunCard({
         : (run.summary ?? run.attention ?? routineRunError(run.error))).text,
   );
   const handedTo = run.handedTo ?? [];
-  const at = run.scheduledFor ?? message.at;
+  // 2026-11-06 (JC, Katarina's chat read 7:24, 7:27, 7:30, 7:34, 7:28,
+  // 7:30): the bubble sits where the run posted it, so its time is when it
+  // posted. The trigger's time (a webhook queued behind another run, a late
+  // schedule) stays in the tooltip. Showing scheduledFor put times out of order.
+  const at = message.at;
+  const triggeredAt = run.scheduledFor && Math.abs(run.scheduledFor - at) >= 60_000 ? run.scheduledFor : undefined;
   const pausedAfter = run.autoPausedAfter && run.autoPausedAfter > 0 ? run.autoPausedAfter : null;
   const elapsed = running && run.startedAt ? routineRunDuration({ startedAt: run.startedAt, status: "running" }, now) : undefined;
   // #2081 + JC 2026-11-06 (2 h): a routine run in the chat is never a card.
@@ -323,7 +328,7 @@ export function RoutineRunCard({
               className={cn(running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}
             >{lead}</span>
           ),
-          <time key="at" dateTime={new Date(at).toISOString()}>{routineDateTime(at)}</time>,
+          <time key="at" dateTime={new Date(at).toISOString()} title={triggeredAt ? routineDateTime(triggeredAt) : undefined}>{routineDateTime(at)}</time>,
           elapsed && <span key="elapsed" data-routine-run-elapsed className="tabular-nums">{elapsed}</span>,
           onOpen && (
             <button

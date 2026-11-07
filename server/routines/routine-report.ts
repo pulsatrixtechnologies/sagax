@@ -20,6 +20,7 @@
 import type { RoutineGoalStatus, RoutineRunStatus } from "../../shared/routines.ts";
 import { findStructure, meaningfulLine } from "../../shared/routine-result.ts";
 import { personAttention } from "../../shared/person-attention.ts";
+import { stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
 
 export const ROUTINE_QUIET_MARKER = "NOTHING_TO_REPORT";
 /** 2026-11-01: the bot's own word that the run failed or did only part of
@@ -118,7 +119,10 @@ function declaredStatus(text: string): { declared?: RoutineReportOutcome["declar
 }
 
 export function routineReportOutcome(output: string | undefined): RoutineReportOutcome {
-  const raw = (output ?? "").trim();
+  // 2026-11-06: a final message that was only a control token the model
+  // wrote as text ("<|eos|>", six webhook runs in one evening) is no report:
+  // the run is quiet, so no bubble, no unread and no notification.
+  const raw = stripChatSpecialTokens((output ?? "").trim()).trim();
   if (!raw) return { quiet: true, report: "" };
   // A run that says it failed or did part of its work is never quiet.
   const { declared, rest: text } = declaredStatus(raw);

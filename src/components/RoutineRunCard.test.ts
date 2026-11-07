@@ -28,12 +28,15 @@ function message(
 }
 
 describe("RoutineRunCard", () => {
-  it("dates the receipt by its scheduled occurrence, with a legacy message-time fallback", () => {
-    const at = Date.UTC(2026, 8, 9, 9);
-    const dated = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed", { scheduledFor: at }) }));
-    expect(dated).toContain(`dateTime="${new Date(at).toISOString()}"`);
-    const legacy = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed") }));
-    expect(legacy).toContain('dateTime="1970-01-01T00:00:00.001Z"');
+  it("dates the bubble by when it posted, so the chat reads in order; the trigger time is in the tooltip (2026-11-06)", () => {
+    const triggered = Date.UTC(2026, 10, 7, 0, 28);
+    const posted = Date.UTC(2026, 10, 7, 0, 35);
+    const html = renderToStaticMarkup(createElement(RoutineRunCard, { message: { ...message("completed", { scheduledFor: triggered }), at: posted } }));
+    expect(html).toContain(`dateTime="${new Date(posted).toISOString()}"`);
+    expect(html).not.toContain(`dateTime="${new Date(triggered).toISOString()}"`);
+    expect(html).toMatch(/<time[^>]*title="[^"]+"/);
+    const same = renderToStaticMarkup(createElement(RoutineRunCard, { message: { ...message("completed", { scheduledFor: posted - 5_000 }), at: posted } }));
+    expect(same).not.toMatch(/<time[^>]*title=/);
   });
   // 2026-10-22 (owner): one concise message, the bot's report only.
   // 2026-11-04 (JC): a card again: the routine's name as its title, a

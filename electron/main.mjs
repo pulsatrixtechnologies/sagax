@@ -3,7 +3,8 @@ import "./legacy-env-boot.mjs";
 import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Notification, Tray, WebContentsView, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, powerMonitor, powerSaveBlocker, safeStorage, screen, session, shell, systemPreferences, utilityProcess } from "electron";
 import { createRequire } from "node:module";
 import { randomBytes, randomUUID } from "node:crypto";
-import { execFile as execFileCallback } from "node:child_process";
+import { createCompanionKeepAwake } from "./companion-keep-awake.mjs";
+import { runQuiet } from "./run-quiet.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -27,6 +28,9 @@ import {
   installDesktopCrashListeners,
   readSafeLogTail,
 } from "./diagnostics.mjs";
+import { createScreenCaptureToBot } from "./capture-screen-to-bot.mjs";
+import { CREDENTIAL_PATCH } from "./credential-patch.mjs";
+import { createDesktopCrashRecorder } from "./desktop-crash-log.mjs";
 import { buildLogBundle, logBundleFileName, sanitizeRendererLines } from "./log-bundle.mjs";
 import { installOpenAtLogin } from "./open-at-login.mjs";
 import { foldGrokVoiceCredential, grokVoiceFoldLog, migrateWorkspaceCredentials, workspaceCredentialEnv } from "./workspace-credentials.mjs";
@@ -90,7 +94,7 @@ import { createFloatingBotWindows, FLOATING_QUERY, waitForPage as waitForFloatin
 import { createDataWindows } from "./data-window.mjs";
 import { createArtifactWindows } from "./artifact-window.mjs";
 import { createBotHotkeys, createMascotHotkey, createModifierProbe } from "./mascot-hotkey.mjs";
-import { captureAccelerator, capturePermission, captureThumbnailSize, createCaptureHotkey, pickCaptureSource } from "./screen-capture-hotkey.mjs";
+import { captureAccelerator, createCaptureHotkey } from "./screen-capture-hotkey.mjs";
 import { readSecureCredentials } from "./secure-credentials.mjs";
 import { createControlPlaneClient } from "./control-plane-client.mjs";
 import {
@@ -1072,17 +1076,7 @@ const { desktopUiOnly, isDesktopUiSender, isLocalSender: senderIsLocal, localOnl
 // the local page or the bundle drawn on an organization server (bundled-ui.cjs).
 const updaterPageAllowed = (event) => isDesktopUiSender(event);
 
-let companionPowerBlocker = null;
-
-function syncCompanionKeepAwake(companionEnabled, keepAwake) {
-  const shouldBlock = companionEnabled && keepAwake;
-  if (shouldBlock && companionPowerBlocker === null) {
-    companionPowerBlocker = powerSaveBlocker.start("prevent-app-suspension");
-  } else if (!shouldBlock && companionPowerBlocker !== null) {
-    if (powerSaveBlocker.isStarted(companionPowerBlocker)) powerSaveBlocker.stop(companionPowerBlocker);
-    companionPowerBlocker = null;
-  }
-}
+const syncCompanionKeepAwake = createCompanionKeepAwake(powerSaveBlocker);
 
 // Keep this computer awake for scheduled routines (electron/routine-wake.mjs):
 // the scheduler lives in the local server, which cannot run while the Mac
@@ -1122,62 +1116,14 @@ function slog(line) {
   }
 }
 
-// The server stream is intentionally asynchronous, but a fatal main-process
-// exception may terminate Electron before such a write is flushed. Crash
-// metadata gets its own tiny synchronous file. The formatter admits only a
-// fixed set of fields, so renderer URLs, page titles, exception messages and
-// absolute paths never land on disk or in a public bug report.
-function recordDesktopCrash(event) {
-  let handle = null;
-  try {
-    const record = formatDesktopCrashRecord(event);
-    if (!record) return;
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-
-    const flags =
-      fs.constants.O_WRONLY |
-      fs.constants.O_APPEND |
-      (process.platform === "win32" ? 0 : fs.constants.O_NOFOLLOW);
-    let before = null;
-    try {
-      before = fs.lstatSync(DESKTOP_CRASH_LOG);
-      if (!before.isFile() || before.nlink !== 1) return;
-      handle = fs.openSync(DESKTOP_CRASH_LOG, flags);
-    } catch (error) {
-      if (error?.code !== "ENOENT") return;
-      // O_EXCL makes first creation race-safe on Windows, where O_NOFOLLOW is
-      // unavailable, as well as on POSIX.
-      try {
-        handle = fs.openSync(
-          DESKTOP_CRASH_LOG,
-          flags | fs.constants.O_CREAT | fs.constants.O_EXCL,
-          0o600,
-        );
-      } catch {
-        return;
-      }
-    }
-
-    const stats = fs.fstatSync(handle);
-    // A hard-linked or non-regular target is not an app-owned crash log.
-    if (!stats.isFile() || stats.nlink !== 1) return;
-    if (before && (before.dev !== stats.dev || before.ino !== stats.ino)) return;
-    // A renderer crash loop must not grow a persistent log without bound.
-    // The diagnostics export reads only a bounded tail, so dropping older
-    // crash metadata here preserves the useful part of the record.
-    if (stats.size >= DESKTOP_CRASH_LOG_MAX_BYTES) fs.ftruncateSync(handle, 0);
-    if (process.platform !== "win32") fs.fchmodSync(handle, 0o600);
-    fs.writeFileSync(handle, `[${new Date().toISOString()}] ${record}\n`, "utf8");
-  } catch {
-    /* crash diagnostics must never change app lifecycle */
-  } finally {
-    if (handle !== null) {
-      try {
-        fs.closeSync(handle);
-      } catch {}
-    }
-  }
-}
+const recordDesktopCrash = createDesktopCrashRecorder({
+  fs,
+  platform: process.platform,
+  logDir: LOG_DIR,
+  logFile: DESKTOP_CRASH_LOG,
+  maxBytes: DESKTOP_CRASH_LOG_MAX_BYTES,
+  formatRecord: formatDesktopCrashRecord,
+});
 
 // uncaughtExceptionMonitor observes Node's fatal path without converting it
 // into a handled exception. In particular, an unhandled rejection still
@@ -4415,13 +4361,6 @@ async function orgMemoryServerCall(method) {
   try { body = JSON.parse(await response.text()); } catch { body = null; }
   return { status: response.status, body };
 }
-function runQuiet(cmd, args, { cwd, env } = {}) {
-  return new Promise((resolve) => {
-    execFileCallback(cmd, args, { cwd, env: { ...process.env, ...env }, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve({ code: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
-    });
-  });
-}
 const orgMemoryCache = () => (orgMemoryCacheInstance ??= createOrgMemoryCache({
   userData: app.getPath("userData"),
   run: runQuiet,
@@ -4791,30 +4730,15 @@ function applyCaptureHotkey() {
   const config = botHotkeyConfig();
   captureHotkey.sync(captureAccelerator(process.platform, config.modifier), config.enabled);
 }
-async function captureScreenToBot() {
-  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-  if (!win) return;
-  let png = null;
-  // macOS hands back the wallpaper alone when Screen Recording is refused: say so instead
-  const refused = capturePermission(process.platform, () => systemPreferences.getMediaAccessStatus("screen")) === "denied";
-  if (!refused) {
-    try {
-      const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-      const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: captureThumbnailSize(display) });
-      const image = pickCaptureSource(sources, display.id)?.thumbnail;
-      if (image && !image.isEmpty()) png = image.toPNG();
-    } catch (error) {
-      slog(`capture hotkey: the screen could not be captured (${error?.name ?? "error"})`);
-    }
-  }
-  if (win.isDestroyed()) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
-  (mainPage() ?? win.webContents).send("desktop:screen-capture", png
-    ? { png: png.toString("base64") }
-    : { error: refused ? "permission" : "unavailable", platform: process.platform });
-}
+const captureScreenToBot = createScreenCaptureToBot({
+  getWindow: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null),
+  getPage: () => mainPage(),
+  screen,
+  desktopCapturer,
+  systemPreferences,
+  platform: process.platform,
+  slog: (line) => slog(line),
+});
 const botHotkeys = createBotHotkeys({
   globalShortcut,
   slotFor: (slot) => slotAccelerator(slot, process.platform, botHotkeyConfig().modifier),
@@ -5459,18 +5383,6 @@ ipcMain.handle("desktop:capabilities", async (event) =>
 );
 
 installOpenAtLogin({ ipcMain, app, guard: localWorkspaceOnly });
-
-const CREDENTIAL_PATCH = {
-  xaiApiKey: (value) => ({ xai: { key: value } }),
-  boxToken: (value) => ({ box: { token: value } }),
-  opencodeGoApiKey: (value) => ({ opencodeGo: { apiKey: value } }),
-  ttsKey: (value) => ({ tts: { key: value } }),
-  fishAudioKey: (value) => ({ tts: { fishKey: value } }),
-  jevApiKey: (value) => ({ decider: { key: value } }),
-  openaiImageApiKey: (value) => ({ imageGen: { key: value } }),
-  customImageApiKey: (value) => ({ imageGen: { customApiKey: value } }),
-  openaiApiKey: (value) => ({ openai: { key: value } }),
-};
 
 async function saveWorkspaceCredential(name, value) {
   const patchFor = CREDENTIAL_PATCH[name];

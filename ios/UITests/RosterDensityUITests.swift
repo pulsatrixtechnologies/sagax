@@ -205,7 +205,7 @@ final class RosterDensityUITests: XCTestCase {
             let app = launchRoster(density: density)
             let list = app.scrollViews["roster-list"]
             let settings = app.buttons["home-account"]
-            let title = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Inbox")).firstMatch
+            let title = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Pinned")).firstMatch
             XCTAssertTrue(title.waitForExistence(timeout: 10), density)
             XCTAssertTrue(list.exists, density)
             XCTAssertGreaterThanOrEqual(list.frame.minY, settings.frame.maxY, density)

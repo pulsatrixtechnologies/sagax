@@ -71,6 +71,13 @@ final class Session: ObservableObject {
     private let stateSubject = PassthroughSubject<CompanionState, Never>()
     private var foldingQuietly = false
     private var streamPending = false
+    /// Bumped on every settled state write, not on a streaming token.
+    /// `rosterFacts` walks the transcripts once per bump.
+    private var rosterFactsGeneration = 0
+    private var rosterFactsCachedGeneration = -1
+    private var rosterFactsActivity: ActivityDetail?
+    private var rosterFactsSummaries: [ChatSummary] = []
+    private var rosterFactsWaiting = Set<String>()
     private lazy var streamFlush = FrameCoalescer { [weak self] in self?.flushStream() }
     @Published private(set) var connection: Connection?
     @Published private(set) var connections: [Connection] = []
@@ -947,6 +954,7 @@ final class Session: ObservableObject {
             }
             return
         }
+        rosterFactsGeneration &+= 1
         objectWillChange.send()
         // Anything else that lands also carries the latest tokens: a settled
         // reply clears the live bubble in the same render that draws it.
@@ -977,6 +985,23 @@ final class Session: ObservableObject {
     private func publishStream() {
         streamingStore.sync(text: state.streaming, reasoning: state.reasoning)
         stateSubject.send(state)
+    }
+
+    /// One walk of the transcripts per settled change, shared by every
+    /// section of the home. A streaming token does not bump the generation:
+    /// the previews come from settled messages, and rebuilding them once
+    /// per frame is what made the list hitch.
+    func rosterFacts(activity: ActivityDetail) -> (summaries: [ChatSummary], waiting: Set<String>) {
+        if rosterFactsCachedGeneration == rosterFactsGeneration, rosterFactsActivity == activity {
+            return (rosterFactsSummaries, rosterFactsWaiting)
+        }
+        let summaries = state.chatSummaries(activity: activity)
+        let waiting = Set(state.pendingApprovals.compactMap { state.chat(forThread: $0.threadId)?.id })
+        rosterFactsCachedGeneration = rosterFactsGeneration
+        rosterFactsActivity = activity
+        rosterFactsSummaries = summaries
+        rosterFactsWaiting = waiting
+        return (summaries, waiting)
     }
 
     /// Leave the demo for the welcome screen (or the saved pairing, if one
@@ -3631,6 +3656,9 @@ struct ThreadSwitch: Equatable {
 struct ChatSummary: Identifiable, Hashable {
     let chat: Chat
     let preview: String
+    /// The row's line, icon included. Search keeps `preview`: a file upload
+    /// stays the message text there, and the row shows the file's name.
+    let line: RosterPreviewLine
     let lastActivity: Double
     let pinned: Bool
 
@@ -3658,9 +3686,11 @@ extension CompanionState {
         return (bots + rooms)
             .map { chat in
                 let messages = visibleTranscript(forThread: chat.threadId)
+                let line = rosterPreviewLine(messages, detail: activity)
                 return ChatSummary(
                     chat: chat,
                     preview: rosterPreview(messages, detail: activity),
+                    line: line,
                     lastActivity: messages.last?.at ?? 0,
                     pinned: Self.pinned(chat)
                 )

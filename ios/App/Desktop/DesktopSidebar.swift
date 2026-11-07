@@ -282,7 +282,7 @@ struct DesktopSidebarList: View {
     private func previewMap() -> [String: String] {
         let activity = toolCalls.detail
         var map: [String: String] = [:]
-        for summary in session.state.chatSummaries(activity: activity) { map[summary.chat.id] = summary.preview }
+        for summary in session.rosterFacts(activity: activity).summaries { map[summary.chat.id] = summary.preview }
         return map
     }
 }

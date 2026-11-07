@@ -85,8 +85,10 @@ struct ChatListView: View {
     /// Bulk selection of bot rows and the "more unread" pills (Features/Sidebar).
     @StateObject private var selection = HomeSelectionModel()
     @State private var offscreenUnread = OffscreenUnread(above: 0, below: 0, nearestAbove: nil, nearestBelow: nil)
-    @State private var rowFrames: [String: CGRect] = [:]
-    @State private var rosterViewport: (top: CGFloat, bottom: CGFloat) = (0, 0)
+    /// Row frames for the unread pills. A class so a scroll does not publish
+    /// and rebuild every conversation preview. The pills publish only when
+    /// their counts change.
+    @State private var scrollProbe = RosterScrollProbe()
     @FocusState private var searchFocused: Bool
 
     /// Space between the header's glass buttons and whatever the list
@@ -417,39 +419,13 @@ struct ChatListView: View {
 
     // MARK: - Sidebar sections
 
-    /// Every thread across every bot that needs the person right now — the
-    /// same rule and order as the thread tree, so the inbox can never
-    /// disagree with it.
-    private var attention: [AttentionThread] {
-        rosterAttentionThreads(session.state.bots, showThreads: sidebarPrefs.showThreads)
-    }
-
     @ViewBuilder
     private var rosterSections: some View {
         let layout = self.layout
-        if !attention.isEmpty {
-            sectionLabel(Text("Inbox"))
-                .padding(.top, 2)
-                .padding(.bottom, 4)
-            ForEach(attention) { entry in
-                Button {
-                    Haptics.selection()
-                    openAttention(entry)
-                } label: {
-                    AttentionRow(entry: entry, followsDynamicType: density == .compact)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-            }
-        }
-
         if let chief = layout.unsectionedChief {
             VStack(alignment: .leading, spacing: 0) {
                 botRows(summaries(for: [chief]))
             }
-            // In compact, a one-line row right under the attention rows
-            // would read as one more of them: set it apart like a section.
-            .padding(.top, density == .compact && !attention.isEmpty ? sectionSpacing : 0)
         }
 
         let pinned = summaries(for: layout.pinnedBots)
@@ -561,11 +537,12 @@ struct ChatListView: View {
     /// last message the way `chatSummaries` stamps a row.
     private func compactRoomRows(_ rooms: [Room]) -> some View {
         let waiting = waitingChats
+        let lastActivity = Dictionary(rosterSummaries.map { ($0.id, $0.lastActivity) }, uniquingKeysWith: { first, _ in first })
         return ForEach(rooms) { room in
             NavigationLink(value: Chat.room(room)) {
                 CompactRoomRow(
                     room: room,
-                    lastActivity: session.state.visibleTranscript(forThread: room.threadId).last?.at ?? 0,
+                    lastActivity: lastActivity[room.id] ?? 0,
                     waiting: waiting.contains(room.id)
                 )
             }
@@ -853,8 +830,12 @@ struct ChatListView: View {
     /// How much each row says, from Settings.
     private var density: RosterDensity { RosterDensity.shown(stored: rosterDensity) }
 
+    private var rosterSummaries: [ChatSummary] {
+        session.rosterFacts(activity: activity).summaries
+    }
+
     private var chats: [ChatSummary] {
-        let all = session.state.chatSummaries(activity: activity)
+        let all = rosterSummaries
         guard !query.isEmpty else {
             // rooms live in the strip; the list is bots
             return all.filter { if case .bot = $0.chat { return true } else { return false } }
@@ -872,21 +853,16 @@ struct ChatListView: View {
         return !bot.threadGroups(matching: query, queuedThreadIds: session.state.queuedThreadIds).isEmpty
     }
 
-    private func openAttention(_ entry: AttentionThread) {
-        guard let bot = entry.destinationBot(in: session.state) else { return }
-        path.append(Chat.bot(bot))
-    }
-
     private func summaries(for bots: [Bot]) -> [ChatSummary] {
         let ids = Set(bots.map(\.id))
-        return session.state.chatSummaries(activity: activity).filter { summary in
+        return rosterSummaries.filter { summary in
             if case let .bot(bot) = summary.chat { return ids.contains(bot.id) }
             return false
         }
     }
 
     private var waitingChats: Set<String> {
-        Set(session.state.pendingApprovals.compactMap { session.state.chat(forThread: $0.threadId)?.id })
+        session.rosterFacts(activity: activity).waiting
     }
 
     private var rosterIsEmpty: Bool {
@@ -955,75 +931,6 @@ struct GroupTile: View {
 
     private func memberBots(_ room: Room) -> [Bot] {
         room.memberIds.compactMap { session.state.bot($0) }
-    }
-}
-
-/// One thread that needs the person, from any bot: title, status, and the
-/// bot it belongs to, ready to jump straight there. Waiting outranks
-/// working, which outranks queued and unread — the same order as the tree.
-struct AttentionRow: View {
-    @Environment(\.themePalette) var themePalette
-    let entry: AttentionThread
-    /// Compact's rows follow Dynamic Type, and these grow with them, in the
-    /// proportions they have at the default size. Comfortable's rows keep
-    /// fixed sizes, and so do these beside them.
-    var followsDynamicType = false
-
-    @Environment(\.dynamicTypeSize) private var typeSize
-    @ScaledMetric(relativeTo: .subheadline) private var scaledTitle: CGFloat = 15
-    @ScaledMetric(relativeTo: .subheadline) private var scaledDetail: CGFloat = 12
-    @ScaledMetric(relativeTo: .subheadline) private var scaledMarkWidth: CGFloat = 24
-
-    /// The title's size, and the mark's beside it.
-    private var titleSize: CGFloat { followsDynamicType ? scaledTitle : 15 }
-    private var detailSize: CGFloat { followsDynamicType ? scaledDetail : 12 }
-    private var markWidth: CGFloat { followsDynamicType ? scaledMarkWidth : 24 }
-    /// A scaled title wraps at the accessibility sizes instead of being cut
-    /// short, as compact's names and thread titles do there.
-    private var titleWraps: Bool { followsDynamicType && typeSize.isAccessibilitySize }
-
-    private var waiting: Bool { entry.task.activity == "waiting-on-you" }
-    private var working: Bool { !waiting && (entry.task.busy == true || entry.task.activity == "working") }
-    private var queued: Bool { !waiting && !working && entry.task.activity == "queued" }
-
-    private var statusText: String {
-        if waiting { return "Waiting on you" }
-        if working { return "Working" }
-        if queued { return "Queued" }
-        return "Unread"
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Group {
-                if working {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: waiting ? "exclamationmark.circle.fill" : queued ? "clock" : "bell.badge.fill")
-                        .font(.system(size: titleSize, weight: .medium))
-                }
-            }
-            .foregroundStyle(waiting ? Theme.parity(Color.orange, Theme.warning) : queued ? Theme.parity(Color.secondary, Theme.textSecondary) : Theme.parity(Color.accentColor, Theme.accent))
-            .frame(width: markWidth)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: entry.task.displayTitle)
-                    .font(.system(size: titleSize, weight: .medium))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(titleWraps ? 3 : 1)
-                    .fixedSize(horizontal: false, vertical: titleWraps)
-                Text("\(entry.botName) · \(statusText)")
-                    .font(.system(size: detailSize))
-                    .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 8)
-        .frame(minHeight: 44)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.task.displayTitle), \(entry.botName), \(statusText)")
     }
 }
 
@@ -1360,8 +1267,8 @@ extension ChatListView {
 #endif
     }
 
-    /// The phone's own sections (Needs attention) fold on this phone; the
-    /// others under the desktop's section ids, which follow the person.
+    /// A section without a desktop id folds on this phone; the others use
+    /// the desktop's section ids, which follow the person.
     private var collapsedSections: Set<String> { CollapsedSections.decode(collapsedRaw) }
 
     private func isCollapsed(_ key: String) -> Bool {
@@ -1453,9 +1360,10 @@ extension ChatListView {
             .background {
                 GeometryReader { box in
                     Color.clear.onPreferenceChange(HomeRowFramesKey.self) { frames in
-                        rowFrames = frames
-                        rosterViewport = (headerClearance, box.size.height)
-                        updateOffscreenUnread()
+                        scrollProbe.frames = frames
+                        scrollProbe.top = headerClearance
+                        scrollProbe.bottom = box.size.height
+                        publishOffscreenUnread()
                     }
                 }
             }
@@ -1477,7 +1385,10 @@ extension ChatListView {
                     .transition(.opacity)
                 }
             }
-            .onValueChange(of: unreadRowIds) { _ in updateOffscreenUnread() }
+            .onValueChange(of: unreadRowIds) { ids in
+                scrollProbe.unread = ids
+                publishOffscreenUnread()
+            }
             .topScrollEdgeFade(height: headerClearance)
             .overlay {
                 if rosterIsEmpty {
@@ -1636,24 +1547,8 @@ extension ChatListView {
     @ViewBuilder
     private var standardSections: some View {
         let layout = self.layout
-        // Unread already shows as dots on the rows; this lists only what
-        // waits on the person.
-        let waitingOnYou = attention.filter { $0.task.activity == "waiting-on-you" }
-        if !waitingOnYou.isEmpty {
-            section(key: "__attention", title: String(localized: "Inbox")) {
-                ForEach(waitingOnYou) { entry in
-                    Button {
-                        Haptics.selection()
-                        openAttention(entry)
-                    } label: {
-                        AttentionRow(entry: entry)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, HomeMetrics.rowLeading)
-                }
-            }
-        }
-
+        // What waits on the person stays on the row (the dot, the waiting
+        // mark). There is no separate Inbox list.
         ForEach(layout.sections) { sidebar in
             section(key: sidebar.name, title: HomeSectionTitle.display(sidebar.name), named: sidebar.name, layout: layout) {
                 homeRows(chats: sidebar.chiefs.map(Chat.bot)
@@ -1686,7 +1581,7 @@ extension ChatListView {
     }
 
     /// One collapsible home section. `named` is a section of the person's or
-    /// the server's; `layout` (nil for Needs attention and Bot threads)
+    /// the server's; `layout` (nil for Bot threads)
     /// adds the section menu (Features/Sidebar/SidebarSectionActions).
     private func section<Rows: View>(
         key: String, title: String, named: String? = nil, layout: SidebarLayout? = nil,
@@ -1719,11 +1614,11 @@ extension ChatListView {
     /// Rows in the roster's order: unread first, then the most recent.
     private func homeRows(chats: [Chat]) -> some View {
         let ids = Set(chats.map(\.id))
-        let ordered = session.state.chatSummaries(activity: activity).filter { ids.contains($0.chat.id) }.map(\.chat)
+        let ordered = rosterSummaries.filter { ids.contains($0.chat.id) }
         let waiting = waitingChats
         let queued = session.state.queuedThreadIds
-        return ForEach(ordered, id: \.id) { chat in
-            let messages = session.state.visibleTranscript(forThread: chat.threadId)
+        return ForEach(ordered, id: \.id) { summary in
+            let chat = summary.chat
             let status = rowStatus(chat, waiting: waiting.contains(chat.id), queued: queued)
             let botId: String? = { if case let .bot(bot) = chat { return bot.id }; return nil }()
             Button {
@@ -1731,8 +1626,8 @@ extension ChatListView {
             } label: {
                 HomeChatRow(
                     chat: chat,
-                    preview: rosterPreviewLine(messages, detail: activity),
-                    stamp: RelativeStamp.list(messages.last?.at ?? 0),
+                    preview: summary.line,
+                    stamp: RelativeStamp.list(summary.lastActivity),
                     status: status,
                     state: MausState.forChat(chat, in: session.state),
                     selection: selection.active && botId != nil ? .init(selected: botId.map(selection.contains) ?? false) : nil
@@ -1771,16 +1666,15 @@ extension ChatListView {
     private var unreadRowIds: Set<String> {
         let waiting = waitingChats
         let queued = session.state.queuedThreadIds
-        let chats = session.state.chatSummaries(activity: activity).map(\.chat)
-        return Set(chats.filter { rowStatus($0, waiting: waiting.contains($0.id), queued: queued).unread }.map(\.id))
+        scrollProbe.unread = Set(rosterSummaries.filter { rowStatus($0.chat, waiting: waiting.contains($0.id), queued: queued).unread }.map(\.id))
+        return scrollProbe.unread
     }
 
     /// Rows scrolled out of the visible window that still wait on a read.
-    private func updateOffscreenUnread() {
-        let unread = unreadRowIds
-        let (top, bottom) = rosterViewport
-        let boxes = rowFrames.map { UnreadRowBox(id: $0.key, top: $0.value.minY, bottom: $0.value.maxY, unread: unread.contains($0.key)) }
-        let next = OffscreenUnread.compute(rows: boxes, viewportTop: top, viewportBottom: bottom)
+    /// Reads the probe, so a scroll can call it without rebuilding previews.
+    private func publishOffscreenUnread() {
+        let boxes = scrollProbe.frames.map { UnreadRowBox(id: $0.key, top: $0.value.minY, bottom: $0.value.maxY, unread: scrollProbe.unread.contains($0.key)) }
+        let next = OffscreenUnread.compute(rows: boxes, viewportTop: scrollProbe.top, viewportBottom: scrollProbe.bottom)
         if next != offscreenUnread { offscreenUnread = next }
     }
 
@@ -1910,4 +1804,13 @@ extension ChatListView {
 /// The home buttons VoiceOver returns to when a sheet they opened closes.
 enum HomeChromeFocus: Hashable {
     case search, plus
+}
+
+/// Frames of the roster rows. Not observed: a scroll updates it without
+/// rebuilding the list. The unread pills publish on their own.
+private final class RosterScrollProbe {
+    var frames: [String: CGRect] = [:]
+    var top: CGFloat = 0
+    var bottom: CGFloat = 0
+    var unread: Set<String> = []
 }

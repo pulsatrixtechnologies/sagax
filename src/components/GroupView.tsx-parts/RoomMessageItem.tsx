@@ -207,7 +207,10 @@ export function RoomMessageItem({
     ) : m.kind === "video" && m.video ? (
       m.requested ? (
         <div className="flex justify-start">
-          <VideoPlayerWidget video={m.video} />
+          <VideoPlayerWidget
+            video={m.video}
+            onRequestRefresh={(text) => dispatch({ type: "sendGroup", groupId: group.id, threadId: group.threadId, text })}
+          />
         </div>
       ) : null
     ) : m.kind === "compaction" ? (

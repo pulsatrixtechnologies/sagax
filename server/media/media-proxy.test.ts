@@ -13,6 +13,7 @@ import {
   rewriteHlsPlaylist,
   streamProxiedMedia,
   verifyMediaProxyToken,
+  MEDIA_PROXY_TOKEN_TTL_MS,
   wireVideoFromEmit,
 } from "./media-proxy.ts";
 import { parseMediaProxyAllowList } from "./media-proxy-guard.ts";
@@ -62,6 +63,40 @@ describe("media proxy", () => {
     expect(mp4).toMatchObject({ playbackUrl: "https://cdn.example/v.mp4", format: "mp4" });
     const unknown = wireVideoFromEmit({ url: "https://cdn.example/play?id=1" }, "t1", 5_000);
     expect(unknown.format).toBeUndefined();
+  });
+
+  it("passes the optional details through and computes when the card expires", () => {
+    const wire = wireVideoFromEmit(
+      {
+        url: "https://media.example/v1/share/live/a/index.m3u8?exp=1900000000&t=sig",
+        kind: "live",
+        source: "Glitcho",
+        viewerCount: 12,
+        avatarUrl: "https://media.example/a.png",
+        category: "Strategy",
+        tags: ["English"],
+        startedAt: "2026-11-06T12:00:00Z",
+        recording: true,
+        chapters: [{ startMs: 0, title: "Intro" }],
+      },
+      "t1",
+      5_000,
+    );
+    expect(wire).toMatchObject({ viewerCount: 12, category: "Strategy", tags: ["English"], recording: true, startedAt: "2026-11-06T12:00:00Z" });
+    expect(wire.chapters).toEqual([{ startMs: 0, title: "Intro" }]);
+    // the avatar of a private source goes through the proxy like the poster
+    expect(wire.avatarUrl).toMatch(/^\/api\/media\/proxy\//);
+    // the proxy token (4 h) runs out before the share link's exp here
+    expect(wire.expiresAt).toBe(5_000 + MEDIA_PROXY_TOKEN_TTL_MS);
+    const late = wireVideoFromEmit(
+      { url: "https://media.example/v1/share/live/a/index.m3u8?exp=1900000000&t=sig", kind: "live", source: "Glitcho" },
+      "t1",
+      1_899_990_000_000,
+    );
+    expect(late.expiresAt).toBe(1_900_000_000_000);
+    const plain = wireVideoFromEmit({ url: "https://cdn.example/v.mp4" }, "t1", 5_000);
+    expect(plain.expiresAt).toBeUndefined();
+    expect(plain).not.toHaveProperty("viewerCount");
   });
 });
 

@@ -10264,6 +10264,18 @@ the person asked for are not views.
   fence still in the text as the player (`SagaxVideoFenceView`); invalid JSON
   or no URL shows a note with the link, never raw JSON; a stream that fails to
   play keeps an "Open in new tab" link.
+- Video player parity (2026-11-06): optional, backward-compatible fields
+  `id`, `avatarUrl`, `category` (alias `game`), `tags`, `startedAt` (alias
+  `started_at`, uptime), `recording` (REC badge), `chapters`
+  `[{startMs,title}]`, `channelUrl`, `expiresAt` (ms; `wireVideoFromEmit`
+  also reads a share link's `exp` param). `VideoPlayerWidget`: live DVR
+  scrubber with "Back to live", VOD drag scrub with chapter marks, ±10 s,
+  quality menu (hls.js levels) and zoom/pan, expand (top-layer popover),
+  PiP, keyboard map and resume position (`video-player-state.ts`), stall
+  recovery with backoff. An expired link (401/403/410 or `expiresAt`) shows
+  "Request a new link", which sends the bot a message asking for a fresh
+  link (`onRequestRefresh`). Gallery `?expanded=1`; captures
+  `scripts/capture/video-widgets.mjs`.
 - Settled screenshot at the end of a computer turn: needs an ask ("screen");
   the live screen panel is unchanged.
 - Video and screen rows the server lets through carry `requested: true`;

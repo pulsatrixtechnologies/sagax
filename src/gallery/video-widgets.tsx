@@ -16,23 +16,72 @@ applySkin(skin);
 const live = params.get("youtube")?.match(/^[\w-]{11}$/)?.[0];
 
 const poster = "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800&q=80";
+const avatar = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=96&q=80";
+const startedAt = new Date(Date.now() - 5_025_000).toISOString();
+const liveVideo = {
+  kind: "live" as const,
+  playbackUrl: "/gallery-sample.mp4",
+  title: "Championship finals, map 3",
+  streamer: "NorthStar",
+  source: "Video player",
+  posterUrl: poster,
+  avatarUrl: avatar,
+  viewerCount: 12840,
+  category: "Strategy",
+  tags: ["English", "Finals"],
+  startedAt,
+  recording: true,
+};
+const vodVideo = {
+  kind: "vod" as const,
+  playbackUrl: "/gallery-sample.mp4",
+  title: "Recording: season review",
+  streamer: "NorthStar",
+  source: "Video player",
+  posterUrl: poster,
+  avatarUrl: avatar,
+  category: "Strategy",
+  durationMs: 5_400_000,
+  chapters: [
+    { startMs: 0, title: "Intro" },
+    { startMs: 900_000, title: "Draft" },
+    { startMs: 2_700_000, title: "Map 1" },
+    { startMs: 4_200_000, title: "Recap" },
+  ],
+};
+// ?expanded=1: only the expanded view (its own screenshot).
+const expandedOnly = params.get("expanded") === "1";
+
 function Gallery() {
+  if (expandedOnly) {
+    return (
+      <div className="min-h-screen bg-app p-8 text-ink">
+        <VideoPlayerWidget showcase showcaseState={{ expanded: true }} video={liveVideo} />
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="mx-auto flex max-w-3xl flex-col gap-10">
         <section>
           <h1 className="mb-4 text-lg font-semibold">Live stream</h1>
+          <VideoPlayerWidget showcase video={liveVideo} />
+        </section>
+        <section>
+          <h1 className="mb-4 text-lg font-semibold">Live, behind the edge (DVR)</h1>
+          <VideoPlayerWidget showcase showcaseState={{ behindLive: true }} video={liveVideo} />
+        </section>
+        <section>
+          <h1 className="mb-4 text-lg font-semibold">Recording with chapters, options open</h1>
+          <VideoPlayerWidget showcase showcaseState={{ menuOpen: true, current: 3100 }} video={vodVideo} />
+        </section>
+        <section>
+          <h1 className="mb-4 text-lg font-semibold">Expired share link</h1>
           <VideoPlayerWidget
             showcase
-            video={{
-              kind: "live",
-              playbackUrl: "/gallery-sample.mp4",
-              title: "Championship finals — map 3",
-              streamer: "NorthStar",
-              source: "Glitcho",
-              posterUrl: poster,
-              viewerCount: 12840,
-            }}
+            showcaseState={{ expired: true }}
+            video={{ ...vodVideo, expiresAt: Date.now() - 60_000 }}
+            onRequestRefresh={() => {}}
           />
         </section>
         <section>

@@ -1423,7 +1423,7 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         }
         // a video card the bot wrote: ```video, or the envelope as ```json
         const videoFence = pending || inert ? null : parseSagaxVideoFence(code, lang);
-        if (videoFence) return <SagaxVideoFenceView fence={videoFence} />;
+        if (videoFence) return <SagaxVideoFenceView fence={videoFence} onRequestRefresh={youtubeSendToBot} />;
         const kind = inert && (richFenceKind(lang) === "widget" || richFenceKind(lang) === "cw") ? null : richFenceKind(lang);
         if (kind === "cw" && !pending) {
           const widget = parseCwWidgetText(code);

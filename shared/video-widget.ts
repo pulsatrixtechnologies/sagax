@@ -48,6 +48,29 @@ export interface WireVideoWidget {
   posterUrl?: string;
   durationMs?: number;
   viewerCount?: number;
+  /**
+   * Optional details (2026-11-06, all additive: older clients ignore them).
+   * `id` keys the resume position; `avatarUrl` is the channel picture;
+   * `category` the game or topic; `startedAt` (ISO) drives the live uptime;
+   * `tags` are short labels; `chapters` mark a recording's parts;
+   * `recording` shows a REC badge; `channelUrl` opens the channel page;
+   * `expiresAt` (epoch ms) is when the share link stops working.
+   */
+  id?: string;
+  avatarUrl?: string;
+  category?: string;
+  startedAt?: string;
+  tags?: string[];
+  chapters?: VideoChapter[];
+  recording?: boolean;
+  channelUrl?: string;
+  expiresAt?: number;
+}
+
+/** One part of a recording: where it starts and what it is called. */
+export interface VideoChapter {
+  startMs: number;
+  title: string;
 }
 
 export interface SagaxVideoEmit {
@@ -63,6 +86,23 @@ export interface SagaxVideoEmit {
   durationMs?: number;
   duration?: number;
   viewerCount?: number;
+  /**
+   * Optional details (2026-11-06, all additive: older clients ignore them).
+   * `id` keys the resume position; `avatarUrl` is the channel picture;
+   * `category` the game or topic; `startedAt` (ISO) drives the live uptime;
+   * `tags` are short labels; `chapters` mark a recording's parts;
+   * `recording` shows a REC badge; `channelUrl` opens the channel page;
+   * `expiresAt` (epoch ms) is when the share link stops working.
+   */
+  id?: string;
+  avatarUrl?: string;
+  category?: string;
+  startedAt?: string;
+  tags?: string[];
+  chapters?: VideoChapter[];
+  recording?: boolean;
+  channelUrl?: string;
+  expiresAt?: number;
 }
 
 /**
@@ -145,6 +185,93 @@ function poster(row: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+function pickString(row: Record<string, unknown>, keys: readonly string[]): string | undefined {
+  for (const key of keys) {
+    const v = row[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return undefined;
+}
+
+function pickTags(row: Record<string, unknown>): string[] | undefined {
+  const raw = row.tags;
+  if (!Array.isArray(raw)) return undefined;
+  const tags = raw.filter((tag): tag is string => typeof tag === "string" && tag.trim() !== "").map((tag) => tag.trim()).slice(0, 12);
+  return tags.length ? tags : undefined;
+}
+
+function pickChapters(row: Record<string, unknown>): VideoChapter[] | undefined {
+  const raw = row.chapters;
+  if (!Array.isArray(raw)) return undefined;
+  const chapters: VideoChapter[] = [];
+  for (const entry of raw) {
+    const c = asRecord(entry);
+    if (!c) continue;
+    const title = pickString(c, ["title", "name", "label"]);
+    const startMs = typeof c.startMs === "number" ? c.startMs
+      : typeof c.start === "number" ? c.start * 1000
+      : typeof c.startSeconds === "number" ? c.startSeconds * 1000
+      : NaN;
+    if (title && Number.isFinite(startMs) && startMs >= 0) chapters.push({ startMs: Math.round(startMs), title });
+  }
+  chapters.sort((a, b) => a.startMs - b.startMs);
+  return chapters.length ? chapters.slice(0, 100) : undefined;
+}
+
+function pickStartedAt(row: Record<string, unknown>): string | undefined {
+  const raw = pickString(row, ["startedAt", "started_at", "liveSince", "live_since"]);
+  return raw && Number.isFinite(Date.parse(raw)) ? raw : undefined;
+}
+
+function pickExpiresAt(row: Record<string, unknown>): number | undefined {
+  const raw = row.expiresAt ?? row.expires_at;
+  if (typeof raw === "number" && raw > 0) return raw < 1e12 ? Math.round(raw * 1000) : Math.round(raw);
+  if (typeof raw === "string") {
+    const at = Date.parse(raw);
+    if (Number.isFinite(at)) return at;
+  }
+  return undefined;
+}
+
+/**
+ * When a share link stops working, from its `exp` query parameter (epoch
+ * seconds, as the video player server signs it); undefined when absent.
+ */
+export function shareLinkExpiresAt(url: string): number | undefined {
+  let exp: string | null;
+  try {
+    exp = new URL(url, "http://local.invalid").searchParams.get("exp");
+  } catch {
+    return undefined;
+  }
+  if (!exp || !/^\d{9,11}$/.test(exp)) return undefined;
+  return Number(exp) * 1000;
+}
+
+/** The optional details of a row, only the ones present (keeps old rows unchanged). */
+function rowDetails(row: Record<string, unknown>): Partial<SagaxVideoEmit> {
+  const id = pickString(row, ["id", "videoId", "video_id", "recordingId", "recording_id"]) ?? (typeof row.id === "number" ? String(row.id) : undefined);
+  const avatarUrl = pickString(row, ["avatarUrl", "avatar_url", "avatar", "profileImageUrl", "profile_image_url"]);
+  const category = pickString(row, ["category", "game", "gameName", "game_name"]);
+  const startedAt = pickStartedAt(row);
+  const tags = pickTags(row);
+  const chapters = pickChapters(row);
+  const recording = row.recording === true || row.isRecording === true ? true : undefined;
+  const channelUrl = pickString(row, ["channelUrl", "channel_url"]);
+  const expiresAt = pickExpiresAt(row);
+  return {
+    ...(id ? { id } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
+    ...(category ? { category } : {}),
+    ...(startedAt ? { startedAt } : {}),
+    ...(tags ? { tags } : {}),
+    ...(chapters ? { chapters } : {}),
+    ...(recording ? { recording } : {}),
+    ...(channelUrl ? { channelUrl } : {}),
+    ...(expiresAt ? { expiresAt } : {}),
+  };
+}
+
 function rowToWidget(row: Record<string, unknown>, defaults?: { source?: string; live?: boolean }): SagaxVideoEmit | null {
   const picked = pickUrl(row);
   if (!picked) return null;
@@ -160,6 +287,7 @@ function rowToWidget(row: Record<string, unknown>, defaults?: { source?: string;
     posterUrl: poster(row),
     durationMs: durationMs(row),
     viewerCount: viewerCount(row),
+    ...rowDetails(row),
   };
 }
 

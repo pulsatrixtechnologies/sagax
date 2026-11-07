@@ -37,7 +37,7 @@ export const SECTIONS: Array<{
   // Personal: Account, Appearance, Notifications, Security, Vault. AI:
   // Providers, Models, Voice, Usage. Installation: Organization, Computer,
   // Backups and storage. App: General, Updates (desktop only), Experimental
-  // (Advanced mode only), Help and about. Import is a card now (settings-sections.ts MERGED). Each keyword names the one page where its
+  // (Advanced mode only), About (JC 2026-11-07: General first, About last). Import is a card now (settings-sections.ts MERGED). Each keyword names the one page where its
   // option lives (settings-nav.test.ts checks no page shares one).
   { id: "account", group: "you", labelKey: "settings.section.account", introKey: "settings.intro.account", icon: User, keywords: ["account", "compte", "profile", "profil", "name", "nom", "email", "courriel", "copy email", "sign out", "se déconnecter", "déconnexion", "label", "avatar", "photo", "about me", "à propos de moi", "language", "langue", "time zone", "timezone", "fuseau horaire", "fuseau", "region", "région"] },
   { id: "appearance", group: "you", labelKey: "settings.section.appearance", introKey: "settings.intro.appearance", icon: Palette, keywords: ["skin", "theme", "thème", "variant", "variante", "light", "clair", "dark", "sombre", "auto", "appearance", "apparence", "tools", "tool calls", "threads", "show threads", "hide threads", "sidebar", "hidden", "hide", "show", "density", "compact", "comfortable", "avatars", "display", "run", "this run", "run card", "commands", "mascot", "owl", "fly", "floating", "font", "police", "accessibility", "accessibilité", "reduce motion", "motion", "animations", "contrast", "contraste", "text size", "taille du texte", "zoom", "inspector", "inspecteur", "logo", "masqués", "mascottes", "barre latérale", "conversations", "background", "arrière-plan", "customize", "personnaliser"] },
@@ -57,14 +57,16 @@ export const SECTIONS: Array<{
   // #2080: restore is the backups.import card. Grok Bot / preference import left this page (JC 2026-11-06). Updates stays its own page (#2090).
   // JC 2026-11-06: event log cleanup and retention live here too (Backups and storage).
   { id: "backups", group: "workspace", labelKey: "settings.section.backupsAndStorage", introKey: "settings.intro.backups", icon: Archive, keywords: ["backups", "export", "exporter", "import", "importer", "restore", "restaurer", "full backup", "recovery", "backup", "sauvegarde", "sauvegardes", "replace", "remplacer", "storage", "stockage", "cleanup", "retention", "rétention", "nettoyage", "event log", "journal des événements", "log size"] },
+  // JC 2026-11-07: App in the Apple order, General first, About last.
+  // General: how this app behaves on the computer, the composer keys and
+  // Advanced mode (JC 2026-11-06).
+  { id: "general", group: "app", labelKey: "settings.section.general", introKey: "settings.intro.general", icon: Settings2, keywords: ["general", "général", "system", "système", "open at login", "ouvrir à la connexion", "startup", "démarrage", "app icon", "icon", "taskbar", "barre des tâches", "hotkey", "raccourci", "shortcut", "hardware acceleration", "accélération matérielle", "gpu", "send", "send key", "touche d'envoi", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "clavier", "typing", "saisie", "ime", "japanese", "spell check", "spellcheck", "orthographe", "correcteur", "advanced mode", "mode avancé", "simple", "mode", "interface", "loop guard", "garde-fou"] },
   // #2090: Updates is its own page again (desktop only).
   { id: "updates", group: "app", labelKey: "settings.updates.title", introKey: "settings.intro.updates", icon: Download, keywords: ["updates", "update", "version", "mise à jour", "mises à jour", "prerelease", "pre-release", "beta", "bêta", "restart"] },
   { id: "experimental", group: "app", labelKey: "settings.section.experimental", introKey: "settings.intro.experimental", icon: FlaskConical, keywords: ["early", "preview", "learn", "skill", "authoring", "experimental", "expérimental", "data window", "fenêtre data", "compétences", "unavailable", "indisponible"] },
-  // JC 2026-11-06: the App catch-all split in two. General: how this app
-  // behaves on the computer, the composer keys and Advanced mode. Help and
-  // about: the About window, the tours, diagnostics, logs and feedback.
-  { id: "general", group: "app", labelKey: "settings.section.general", introKey: "settings.intro.general", icon: Settings2, keywords: ["general", "général", "system", "système", "open at login", "ouvrir à la connexion", "startup", "démarrage", "app icon", "icon", "taskbar", "barre des tâches", "hotkey", "raccourci", "shortcut", "hardware acceleration", "accélération matérielle", "gpu", "send", "send key", "touche d'envoi", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "clavier", "typing", "saisie", "ime", "japanese", "spell check", "spellcheck", "orthographe", "correcteur", "advanced mode", "mode avancé", "simple", "mode", "interface", "loop guard", "garde-fou"] },
-  { id: "about", group: "app", labelKey: "settings.section.helpAbout", introKey: "settings.intro.about", icon: Info, keywords: ["app", "application", "about", "à propos", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot", "tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"] },
+  // About (was "Help and about", JC 2026-11-07): the About window, the tours,
+  // and the help rows (diagnostics, logs, feedback) as a card of the page.
+  { id: "about", group: "app", labelKey: "settings.section.about", introKey: "settings.intro.about", icon: Info, keywords: ["app", "application", "about", "à propos", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot", "tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"] },
 ];
 
 /** Former sections that are a card of another page now (2026-10-14), by the
@@ -95,7 +97,7 @@ export const CARD_KEYWORDS: Record<string, string[]> = {
   "connections.webSearch": ["web search", "recherche web", "brave", "exa", "parallel", "firecrawl", "searxng"],
   "usage.breakdown": ["by bot", "by model", "par bot", "par modèle"],
   "organization.memory": ["obsidian", "vault"],
-  // JC 2026-11-06: General and Help and about cards
+  // JC 2026-11-06: General and About cards
   "general.system": ["open at login", "ouvrir à la connexion", "startup", "démarrage", "app icon", "hotkey", "raccourci", "hardware acceleration", "gpu"],
   "general.input": ["send", "enter", "spell check", "spellcheck", "orthographe", "correcteur", "keyboard", "clavier"],
   "general.interface": ["advanced mode", "mode avancé"],

@@ -44,8 +44,8 @@ const SECTION_LABEL = {
   notifications: "settings.section.notifications",
   memory: "settings.section.organization",
   updates: "settings.updates.title",
-  // Help and about (JC 2026-11-06); a bare link opens the About window (requestAbout).
-  about: "settings.section.helpAbout",
+  // About (was Help and about, JC 2026-11-07); a bare link opens the About window (requestAbout).
+  about: "settings.section.about",
   security: "settings.section.security",
   // Published pages are a section of Connect apps > Manage (2026-10-26).
   pages: "connectApps.title",

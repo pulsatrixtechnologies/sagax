@@ -24,10 +24,12 @@ extension DesktopPanelSection {
         case .skills: "Skills"
         case .memory: "Memory"
         case .access: "Access"
-        case .worksOn: "Computer"
+        // Desktop tab / computer.worksOn: Workspace (#1939 parity).
+        case .worksOn: "Workspace"
         case .model: "Model"
         case .permissions: "Permissions"
-        case .voice: "Voice options"
+        // Desktop botSettings.nav.voice: Voice (#1939 parity).
+        case .voice: "Voice"
         case .visibility: "Who can see it"
         case .sharing: "Shared with"
         case .history: "Changes"
@@ -44,10 +46,10 @@ extension DesktopPanelSection {
         case .skills: String(localized: "Skills")
         case .memory: String(localized: "Memory")
         case .access: String(localized: "Access")
-        case .worksOn: String(localized: "Computer")
+        case .worksOn: String(localized: "Workspace")
         case .model: String(localized: "Model")
         case .permissions: String(localized: "Permissions")
-        case .voice: String(localized: "Voice options")
+        case .voice: String(localized: "Voice")
         case .visibility: String(localized: "Who can see it")
         case .sharing: String(localized: "Shared with")
         case .history: String(localized: "Changes")

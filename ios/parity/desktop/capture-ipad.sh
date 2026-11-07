@@ -119,6 +119,35 @@ rotate() { # udid orientation
   TEST_RUNNER_PARITY_ORIENTATION="$2" xcodebuild test-without-building -xctestrun "$XCTESTRUN" \
     -destination "id=$1" -only-testing:SagaxUITests/ParityOrientationUITests/testParityOrientation \
     > "$OUT/rotate.log" 2>&1 || { tail -30 "$OUT/rotate.log"; log "rotation to $2 failed (see $OUT/rotate.log)"; exit 1; }
+  # Xcode's test runner can leave the sim Shutting Down after the orientation
+  # UITest; boot it back so simctl launch/screenshot still work.
+  for _ in $(seq 1 30); do
+    state="$(xcrun simctl list devices -j | python3 -c "
+import json, sys
+want = sys.argv[1]
+for devices in json.load(sys.stdin)['devices'].values():
+    for d in devices:
+        if d.get('udid') == want:
+            print(d.get('state') or ''); raise SystemExit
+" "$1" 2>/dev/null || true)"
+    case "$state" in
+      Booted) break ;;
+      Shutting\ Down|Shutdown|"")
+        xcrun simctl boot "$1" 2>/dev/null || true
+        xcrun simctl bootstatus "$1" -b >/dev/null 2>&1 || true
+        ;;
+    esac
+    sleep 0.5
+  done
+  state="$(xcrun simctl list devices -j | python3 -c "
+import json, sys
+want = sys.argv[1]
+for devices in json.load(sys.stdin)['devices'].values():
+    for d in devices:
+        if d.get('udid') == want:
+            print(d.get('state') or ''); raise SystemExit
+" "$1" 2>/dev/null || true)"
+  [ "$state" = Booted ] || { log "simulator $1 not Booted after rotate (state=$state)"; exit 1; }
 }
 
 RUNTIME="$(xcrun simctl list runtimes -j | python3 -c "

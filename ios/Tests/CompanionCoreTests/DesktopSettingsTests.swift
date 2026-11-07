@@ -56,9 +56,9 @@ final class DesktopSettingsTests: XCTestCase {
         XCTAssertTrue(DesktopSettingsSection.connections.matches("OpenRouter", label: "API keys"))
         XCTAssertTrue(DesktopSettingsSection.engines.matches("model prov", label: "Model providers"))
         XCTAssertTrue(DesktopSettingsSection.general.matches("  ", label: "General"))
-        XCTAssertFalse(DesktopSettingsSection.backups.matches("skin", label: "Backups and import"))
+        XCTAssertFalse(DesktopSettingsSection.backups.matches("skin", label: "Backups and storage"))
         XCTAssertTrue(DesktopSettingsSection.about.matches("updates", label: "App"))
-        XCTAssertTrue(DesktopSettingsSection.backups.matches("importer", label: "Backups and import"))
+        XCTAssertTrue(DesktopSettingsSection.backups.matches("importer", label: "Backups and storage"))
     }
 
     func testResolveKeepsTheRequestOrFallsToTheFirstMatch() {

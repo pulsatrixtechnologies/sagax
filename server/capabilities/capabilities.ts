@@ -10,6 +10,7 @@
 // the turn calls (server/turns/turn-mounts.ts), so the list says what a turn gets
 // (server/capabilities/capabilities.test.ts, "a turn mounts exactly what the list says").
 // Ids never reach a name: names are readable, keys are never shown.
+import type { BuiltinPlugin } from "../../shared/builtin-plugins.ts";
 import { basename } from "node:path";
 import type { McpServerSpec } from "../contracts.ts";
 import type { GithubConnection, PersonalMcpServer } from "../people/person-connections.ts";
@@ -143,6 +144,10 @@ export interface CapabilityInputs<S extends Record<string, McpServerSpec> = Reco
    * whose MCP declarations the turn considers after the personal servers. */
   pluginMcp?: Array<{ scope: "organization" | "person" | "bot"; key: string; name: string; spec: McpServerSpec }>;
   pluginEnvironment?: boolean;
+  /** Sagax's built-in plugins (shared/builtin-plugins.ts): the bot's switch,
+   * and on the desktop whether the runtime to start one is missing. Their
+   * servers reach `pluginMcp` with scope bot and key `builtin:<id>`. */
+  builtinPlugins?: Array<{ plugin: BuiltinPlugin; enabled: boolean; runtimeMissing?: boolean }>;
   pluginHostRefused?: (url: string) => boolean | undefined;
   /** the bot's enabled plugin folders as a turn reads them (BotPlugins.pluginDirs) */
   botPluginDirs: string[];
@@ -508,6 +513,26 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
         ...(state === "on" ? { mounts: [name] } : {}),
       });
     }
+  }
+
+  // Built-in plugins: on for every bot unless switched off; the loop below
+  // attaches the mount when the turn would carry it.
+  for (const { plugin, enabled, runtimeMissing } of inputs.builtinPlugins ?? []) {
+    push({
+      key: `plugin:bot:${plugin.key}`,
+      form: "plugin",
+      name: plugin.name,
+      description: plugin.description,
+      source: { kind: "installation", label: "Sagax", version: plugin.version },
+      scope: "bot",
+      state: enabled && !engine.customMcp ? "not_served" : "off",
+      enabled,
+      canToggle: viewer.mayChange,
+      brings: { skills: [], commands: [], agents: [], mcpServers: [plugin.mcpName] },
+      engine: { mcp: "none", nothing: !enabled || !engine.customMcp },
+      builtin: plugin.id,
+      ...(!enabled ? { reason: "disabled" as const } : runtimeMissing ? { reason: "needs_runtime" as const } : {}),
+    });
   }
 
   // Complete-plugin MCP servers, in the runtime's exact order. The

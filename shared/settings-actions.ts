@@ -231,6 +231,7 @@ botField("bot.pinned", "pinned", "boolean", "Pinned in the sidebar", "Sidebar > 
 botField("bot.hidden", "hidden", "boolean", "Archived (hidden)", "Bot editor > ... > Archive");
 botField("bot.memoryEnabled", "memoryEnabled", "boolean", "Memory on", "Bot editor > Memory");
 botField("bot.memoryUpkeep", "memoryUpkeep", "any", "Memory upkeep", "Bot editor > Memory");
+botField("bot.builtinPlugins", "builtinPlugins", "any", "Built-in plugins by id, false switches one off (rea: REA reverse engineering)", "Plugins > Installed");
 // widening who gets this bot's team-memory cards (back to "shared") reaches
 // other people: a card at every level; narrowing to "private" runs as simple
 botField("bot.teamMemorySharing", "teamMemorySharing", "enum:shared|private", "Team memory sharing (shared, private)", "Bot editor > Memory > Team memory",

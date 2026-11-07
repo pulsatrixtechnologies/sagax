@@ -73,11 +73,13 @@ export interface EngineReceipt {
  * - unknown_profile: a Role Perspicax no longer lists
  * - disabled: switched off where it is kept
  * - offered: offered by the organization (lot 4), off until the person
- *   turns it on for all their bots */
+ *   turns it on for all their bots
+ * - needs_runtime: a built-in plugin whose runtime (Node.js, npx) is not
+ *   installed on this computer */
 export type CapabilityReason =
   | "name_taken" | "not_selected" | "host_command" | "policy"
   | "needs_github" | "needs_token" | "needs_sign_in" | "no_environment" | "private_address"
-  | "library_off" | "not_assigned" | "guard_off" | "not_member" | "not_installed" | "unknown_profile" | "disabled" | "offered";
+  | "library_off" | "not_assigned" | "guard_off" | "not_member" | "not_installed" | "unknown_profile" | "disabled" | "offered" | "needs_runtime";
 
 export interface CapabilityPromptIndex {
   bytes: number;
@@ -126,6 +128,9 @@ export interface Capability {
   /** added (lot 4): the Perspicax declaration an organization capability
    * comes from, for the person's own switch of an offered one. Never shown. */
   orgDeclaration?: string;
+  /** added: the Sagax built-in plugin id (shared/builtin-plugins.ts), for
+   * its own icon, translated description and switch. */
+  builtin?: string;
 }
 
 export interface BotCapabilities {

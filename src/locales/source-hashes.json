@@ -15768,6 +15768,8 @@
       "routines.status.completedWithProblems": "ca42200361915f6f82bc1022c9108be7ef7f665d568052d75a8b38736d69028e",
       "routineRun.queuePosition": "f983ca72641fc552b9ed47215ae695af1fc5185edeaed0166d3db0fb580154c0",
       "capabilities.reason.offered": "bc305913cf6376736e633c8043114b56ab5f420c8761c8f0201a44e7937d6107",
+      "capabilities.reason.needsRuntime": "2654994196d333057887c4d3e3085932cca54e7d2b77aa4272a9b1b5d9e80ff6",
+      "capabilities.builtin.rea.description": "57278869e9fc2228eef4be2bb488a0464d7ea466477a9525d9968aff601f64f1",
       "capabilities.detail.promptBudget": "5d5ef4dad8bf6f3fa92539da11c9c47124793ef21639f314765b93010d44810a",
       "capabilities.detail.promptBudgetValue": "08497f983cc435b1045e5555ffc03be43a9373810e11abd0d5d783f1624f7263",
       "capabilities.detail.pack": "c913366482b1480ef7483671692eefb883dbd4486558d1ac551bc91eec578477",

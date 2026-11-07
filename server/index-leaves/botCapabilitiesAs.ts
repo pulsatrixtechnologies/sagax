@@ -2,6 +2,8 @@
 /** botCapabilitiesAs (#1388). Pure move from server/index.ts. */
 import { readPluginContents } from "../bots/bot-plugins.ts";
 import { resolveBotCapabilities } from "../capabilities/capabilities.ts";
+import { builtinRuntimeMissing } from "../capabilities/builtin-plugin-mounts.ts";
+import { BUILTIN_PLUGINS, builtinPluginEnabled } from "../../shared/builtin-plugins.ts";
 import { skillsLibraryEnabled, customMcpServers } from "../config.ts";
 import { claudeAiConnectorsForTurn } from "../harness-connectors.ts";
 import { parseStoredMcpServer, reservedMcpServerName, isRemoteMcpServer } from "../mcp/mcp-registry.ts";
@@ -97,6 +99,11 @@ function botCapabilitiesAs(
     }),
     pluginMcp: principal || !organization ? host.scopedPluginMcp(bot, principal ?? host.localPrincipalId()) : [],
     pluginEnvironment: Boolean(host.userSandbox),
+    builtinPlugins: BUILTIN_PLUGINS.map((plugin) => ({
+      plugin, enabled: builtinPluginEnabled(bot, plugin.id),
+      // an organization runs it in the person's sandbox: no desktop check
+      runtimeMissing: !organization && builtinRuntimeMissing(plugin),
+    })),
     pluginHostRefused: (url) => host.personalHostChecks.get(url)?.refused,
     workspacePlugins: host.pluginMarketplaces.installed().map((plugin) => ({
       key: plugin.key, name: plugin.name, marketplace: plugin.marketplace, servers: plugin.servers, skills: plugin.skills,

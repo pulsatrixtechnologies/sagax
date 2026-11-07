@@ -28192,6 +28192,7 @@ const orgBotsDeps: BotsDeps = {
       ...(source.loopGuard !== undefined ? { loopGuard: source.loopGuard } : {}),
       ...(storedTeamMemorySharing(source) ? { teamMemorySharing: "private" as const } : {}),
       ...(source.memoryUpkeep !== undefined ? { memoryUpkeep: source.memoryUpkeep } : {}),
+      ...(source.builtinPlugins !== undefined ? { builtinPlugins: { ...source.builtinPlugins } } : {}),
       ...(source.helperModel !== undefined ? { helperModel: source.helperModel } : {}),
       ...(source.browser !== undefined ? { browser: source.browser } : {}),
       ...(source.computer !== undefined ? { computer: source.computer } : {}),

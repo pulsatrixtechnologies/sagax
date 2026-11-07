@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** scopedPluginMcp (#1388). Pure move from server/index.ts. */
 import { ORG_CAPABILITY_KEY_PREFIX } from "../org/org-capabilities.ts";
+import { builtinPluginMcp, builtinRuntimeMissing as runtimeMissing } from "../capabilities/builtin-plugin-mounts.ts";
 export type Host = Record<string, any>;
 
 export function createScopedPluginMcp(getHost: () => Host): any {
@@ -22,6 +23,10 @@ function scopedPluginMcp(bot: { id: string; ownerUserId?: unknown }, principal: 
   // mounted for the person while the declaration is on for them.
   const declared = orgMounts.filter((mount) => mount.view.form === "mcp").flatMap((mount) => Object.entries(mount.mcpServers)
     .map(([name, spec]) => ({ key: `${ORG_CAPABILITY_KEY_PREFIX}${mount.view.id}`, plugin: mount.view.mount, name, spec, dir: "", scope: "organization" as const })));
+  // Built-in plugins (REA) come last: an installed server keeps its name.
+  // On the desktop a missing runtime (npx) keeps it off the turn; its row
+  // says so. An organization runs it in the person's sandbox.
+  const builtin = builtinPluginMcp(bot, host.IDENTITY.kind === "perspicax" ? {} : { runtimeMissing });
   return [...declared, ...candidates.flatMap<ScopedPluginMcp>((server) => {
     const folder = selected.find((plugin) => plugin.scope === server.scope && plugin.name === server.plugin);
     if (!folder) return [];
@@ -32,7 +37,7 @@ function scopedPluginMcp(bot: { id: string; ownerUserId?: unknown }, principal: 
     const install = source.listPlugins(server.scope === "person" ? principal : bot.id).find((plugin) => plugin.key === server.key);
     if (!install || source.installedFolder(server.scope === "person" ? principal : bot.id, install).dir !== folder.dir) return [];
     return [{ ...server, dir: folder.dir }];
-  })];
+  }), ...builtin];
 
 }
   return scopedPluginMcp;

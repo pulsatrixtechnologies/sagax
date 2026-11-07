@@ -13156,6 +13156,8 @@
   "routines.status.completedWithProblems": "Completed with problems",
   "routineRun.queuePosition": "Number {position} of {count} waiting for this bot",
   "capabilities.reason.offered": "Offered by the organization: off until the person turns it on for all their bots.",
+  "capabilities.reason.needsRuntime": "Needs Node.js 22.23 or later (npx) on this computer. Install Node.js, then reopen Plugins.",
+  "capabilities.builtin.rea.description": "Reverse engineering built into Sagax: the bot inspects binaries, .NET assemblies, APKs and JS/Electron apps, and observes them at runtime. On for every bot.",
   "capabilities.detail.promptBudget": "Prompt budget",
   "capabilities.detail.promptBudgetValue": "{count}/{max} files, {kb}/{maxKb} KB; {omitted} omitted",
   "capabilities.detail.pack": "Signed Flow pack",

@@ -613,6 +613,9 @@ export interface WireBot {
   cacheKeepWarm?: boolean;
   /** Which of the app-wide MCP servers this bot mounts, by name. */
   mcpServers?: string[];
+  /** The built-in plugins this bot switched (shared/builtin-plugins.ts), by
+   * id. Absent or true: on; false: off for this bot. */
+  builtinPlugins?: Record<string, boolean>;
   /** The saved account each MCP server signs in with for this bot, by
    * server name; a server it does not name uses its default account. */
   mcpAccounts?: Record<string, string>;

@@ -1016,6 +1016,48 @@ old connections. Keep the existing file/AAD compatibility tests.
   for two bots and all three plugin scopes; personal-skills, plugin scope,
   install, receipt, integrity and native-link tests cover isolation.
 
+## Built-in plugins: REA (2026-11-06)
+
+Sagax ships plugins of its own, on for every bot. The first is REA
+(https://github.com/morluto/rea, MIT, npm `rea-agents`): reverse
+engineering of binaries, .NET assemblies, APKs and JS/Electron bundles,
+plus runtime observation.
+
+- One constant: `shared/builtin-plugins.ts` (`REA_VERSION`, `REA_PLUGIN`).
+  The launch is `npx -y rea-agents@<REA_VERSION> mcp` with
+  `REA_MCP_INPUT_SCHEMA_PROFILE=compact` and
+  `REA_MCP_OUTPUT_SCHEMA_PROFILE=compact`. Bumping REA = that constant,
+  its NOTICE line, a smoke run of `npx -y rea-agents@<ver> --help`.
+- Never interactive: `npx -y` and `npm_config_yes` answer npm, the update
+  notifier is off, and the Hopper first-run demo/license dialog is a macOS
+  window REA waits for a bounded time (`REA_HOPPER_DEMO_DIALOG_TIMEOUT_MS`,
+  10 s) before the tool call answers an error. Sagax never runs
+  `rea-agents setup`: the mount is Sagax's own, no harness config changes.
+- On by default: `WireBot.builtinPlugins[id] === false` is the only off.
+  A bot saved before a built-in existed has no entry and has it on (no data
+  migration). PATCH `builtinPlugins` takes known ids with booleans
+  (`parseBuiltinPluginsPatch`), merged into the bot's map; permission
+  `bots.behaviour`; settings action `bot.builtinPlugins`; zip `settings`.
+- Mounts: `scopedPluginMcp` appends `builtinPluginMcp(bot)` last (an
+  installed server keeps its name), as scope `bot`, key `builtin:<id>`, so
+  `mountPluginMcp` mounts it like any plugin server: on the desktop as is,
+  on an organization through `personalStdioIntegration` in the person's
+  sandbox (whose relay re-resolves the same entry).
+- Missing runtime: on the desktop `builtinRuntimeMissing` looks `npx` up
+  on PATH (cached 60 s). Missing: no mount, and the row keeps its place
+  with reason `needs_runtime` ("Needs Node.js 22.23 or later"). An
+  organization does not check: the sandbox relay answers the error.
+- The list: `resolveBotCapabilities` adds one `plugin:bot:builtin:<id>` row
+  (`builtin: <id>`, source Sagax with the version); the pluginMcp loop turns
+  it on with its mounts. Plugins > Installed draws the icon chip, the
+  translated description (`capabilities.builtin.<id>.description`) and a
+  switch (`onToggleBuiltin`: updateBot, flush, reload).
+- Tests: `shared/builtin-plugins.test.ts`,
+  `server/capabilities/builtin-plugin-mounts.test.ts` (spawn mocked),
+  `server/capabilities/capabilities.test.ts`,
+  `src/components/bot-settings/CapabilitiesTab.test.ts`. Gallery:
+  `bot-capabilities.html?rea=on|off|missing`.
+
 ## Capabilities: one resolved list per bot (lot 1a, 2026-10-30)
 
 One server function says, for ONE bot and ITS engine, everything the bot

@@ -13110,6 +13110,8 @@
   "routines.status.completedWithProblems": "Terminée avec des problèmes",
   "routineRun.queuePosition": "N° {position} sur {count} en attente pour ce bot",
   "capabilities.reason.offered": "Offerte par l'organisation : désactivée tant que la personne ne l'active pas pour tous ses bots.",
+  "capabilities.reason.needsRuntime": "Requiert Node.js 22.23 ou plus récent (npx) sur cet ordinateur. Installez Node.js, puis rouvrez Plugins.",
+  "capabilities.builtin.rea.description": "Rétro-ingénierie intégrée à Sagax : le bot inspecte binaires, assemblages .NET, APK et apps JS/Electron, et observe leur comportement à l'exécution. Activée pour chaque bot.",
   "capabilities.detail.promptBudget": "Plafond du prompt",
   "capabilities.detail.promptBudgetValue": "{count}/{max} fichiers, {kb}/{maxKb} Ko; {omitted} omis",
   "capabilities.detail.pack": "Pack Flow signé",

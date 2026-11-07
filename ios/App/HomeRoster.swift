@@ -70,6 +70,11 @@ enum HomeMetrics {
     /// Name line bottom to preview line top (preview baseline 55.7).
     static let previewGap: CGFloat = 5.43
     static let previewLine: CGFloat = 14.9
+    /// A bot row with a role (JC 2026-11-06): the role sits on its own line
+    /// under the name, 12 pt grey, and the text block rises to stay centred.
+    static let roleLine: CGFloat = 14
+    static let roleGap: CGFloat = 1
+    static var nameTopWithRole: CGFloat { nameTop - (roleLine + roleGap) / 2 }
     static let previewIconBox: CGFloat = 12
     static let previewIconGap: CGFloat = 8
 
@@ -78,7 +83,7 @@ enum HomeMetrics {
     static let bottomControl: CGFloat = 48
     static let bottomInset: CGFloat = 28
     static let bottomGap: CGFloat = 12
-    /// The lead's label under the large mascot: name · role, primary ink.
+    /// The lead's label under the large mascot: the name, its role below.
     static let leadLabelMax: CGFloat = 220
 
     static var font12: Font { Theme.font(12) }
@@ -238,15 +243,25 @@ struct HomePinnedCell: View {
             // keeps its measured place
             .frame(width: HomeMetrics.pinnedMascot, height: HomeMetrics.pinnedMascot)
 
-            HStack(spacing: HomeMetrics.unreadGap) {
-                // the lead reads "Name · Role" in the primary ink, as Grok
-                // Bot's primary bot does; the grid keeps the quiet name
-                Text(verbatim: isLead ? HomeChatRow.nameAndRole(chat, name: people.name(chat, session: session)) : people.name(chat, session: session))
-                    .font(.system(size: isLead ? 13 : 11.65))
-                    .foregroundStyle(isLead ? Theme.textPrimary : Theme.textSecondaryHome)
-                    .lineLimit(1)
-                    .frame(maxWidth: isLead ? HomeMetrics.leadLabelMax : nil)
-                    .fixedSize(horizontal: !isLead, vertical: false)
+            HStack(alignment: .top, spacing: HomeMetrics.unreadGap) {
+                // the lead reads its name in the primary ink with its role
+                // BELOW (JC 2026-11-06, never "Name · Role"); the grid keeps
+                // the quiet name
+                let lines = isLead ? HomeChatRow.nameAndRole(chat, name: people.name(chat, session: session)) : (name: people.name(chat, session: session), role: nil)
+                VStack(spacing: 1) {
+                    Text(verbatim: lines.name)
+                        .font(.system(size: isLead ? 13 : 11.65))
+                        .foregroundStyle(isLead ? Theme.textPrimary : Theme.textSecondaryHome)
+                        .lineLimit(1)
+                    if let role = lines.role {
+                        Text(verbatim: role)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.textSecondaryHome)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: isLead ? HomeMetrics.leadLabelMax : nil)
+                .fixedSize(horizontal: !isLead, vertical: false)
                 if chat.unread && !chat.busy {
                     Circle()
                         .fill(Theme.unreadDot)
@@ -408,11 +423,21 @@ struct HomeChatRow: View {
             .padding(.top, (HomeMetrics.rowHeight - HomeMetrics.rowMascot) / 2)
             .padding(.leading, HomeMetrics.rowLeading)
 
-            VStack(alignment: .leading, spacing: HomeMetrics.previewGap) {
+            VStack(alignment: .leading, spacing: 0) {
                 nameLine.frame(height: HomeMetrics.nameLine)
+                if let roleText {
+                    // the role on its own line under the name (JC 2026-11-06)
+                    Text(verbatim: roleText)
+                        .font(HomeMetrics.font12)
+                        .foregroundStyle(Theme.textSecondaryHome)
+                        .lineLimit(1)
+                        .frame(height: HomeMetrics.roleLine)
+                        .padding(.top, HomeMetrics.roleGap)
+                }
                 previewLine.frame(height: HomeMetrics.previewLine)
+                    .padding(.top, HomeMetrics.previewGap)
             }
-            .padding(.top, HomeMetrics.nameTop)
+            .padding(.top, roleText == nil ? HomeMetrics.nameTop : HomeMetrics.nameTopWithRole)
             .padding(.leading, HomeMetrics.textColumn - HomeMetrics.rowLeading - HomeMetrics.rowMascot)
             .padding(.trailing, HomeMetrics.rowTrailing)
         }
@@ -428,17 +453,21 @@ struct HomeChatRow: View {
         return ""
     }
 
-    /// "Name · Role" for a bot with a role (never twice when the name
-    /// already ends with it), the name alone otherwise.
-    static func nameAndRole(_ chat: Chat, name: String) -> String {
-        guard case let .bot(bot) = chat else { return name }
-        return HomeNameLine.text(name: name, role: bot.displayRole)
+    /// The name, and the role to stack under it for a bot with a role
+    /// (never twice when the name already carries it).
+    static func nameAndRole(_ chat: Chat, name: String) -> (name: String, role: String?) {
+        guard case let .bot(bot) = chat else { return (name, nil) }
+        return HomeNameLine.lines(name: name, role: bot.displayRole)
+    }
+
+    private var roleText: String? {
+        Self.nameAndRole(chat, name: people.name(chat, session: session)).role
     }
 
     private var nameLine: some View {
         HStack(spacing: 7.5) {
-            // "Name · Role" on one line, as Grok Bot writes it (2026-11-01)
-            Text(verbatim: Self.nameAndRole(chat, name: people.name(chat, session: session)))
+            // the name alone: the role sits on its own line below
+            Text(verbatim: people.name(chat, session: session))
                 .font(HomeMetrics.name)
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)

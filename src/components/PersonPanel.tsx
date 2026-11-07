@@ -242,8 +242,11 @@ export function PersonPanel({ personId, directory: given, initialTab = "profile"
                       <li key={bot.id}>
                         <button type="button" onClick={() => dispatch({ type: "select", id: bot.id })} className="flex min-h-[44px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover md:min-h-0">
                           <BotAvatar bot={bot} state="idle" size={24} animated={false} />
-                          <span className="min-w-0 flex-1 truncate">{bot.name}</span>
-                          {bot.title && <span className="shrink-0 truncate text-[12px] text-ink-secondary">{bot.title}</span>}
+                          {/* name, then the title under it (JC: never side by side) */}
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span data-person-bot-name="" className="truncate">{bot.name}</span>
+                            {bot.title && <span data-person-bot-title="" className="truncate text-[12px] leading-4 text-ink-secondary">{bot.title}</span>}
+                          </span>
                         </button>
                       </li>
                     ))}

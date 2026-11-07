@@ -265,17 +265,20 @@ struct PersonSheetContent: View {
                                 HStack(spacing: 10) {
                                     BotMascotView(bot: bot, size: 24)
                                         .frame(width: 24, height: 24)
-                                    Text(verbatim: bot.name)
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(Theme.textPrimary)
-                                        .lineLimit(1)
-                                    Spacer(minLength: 8)
-                                    if !bot.title.isEmpty {
-                                        Text(verbatim: bot.title)
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(Theme.textSecondary)
+                                    // the title UNDER the name (JC 2026-11-06)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(verbatim: bot.name)
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(Theme.textPrimary)
                                             .lineLimit(1)
+                                        if !bot.title.isEmpty {
+                                            Text(verbatim: bot.title)
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(Theme.textSecondary)
+                                                .lineLimit(1)
+                                        }
                                     }
+                                    Spacer(minLength: 8)
                                 }
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 8)

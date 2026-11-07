@@ -144,19 +144,20 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     expect(html).not.toContain("data-bot-header-gear");
     expect(html).not.toContain("Shared with");
     expect(html).toContain("Pepper");
-    expect(html).toContain(" · Research");
-    expect(html).toContain("text-[15px] font-normal");
+    expect(html).toContain(">Research<");
+    expect(html).not.toContain(" · Research");
+    expect(html).toContain("font-normal");
     expect(html).not.toContain("data-bot-header-chevron");
   });
 
-  it("shows \"Name · Title\" on ONE line, like Grok Bot: name in ink, \" · Title\" in secondary grey (JC 2026-11-06)", () => {
+  it("stacks the title UNDER the name, smaller and grey, never \"Name · Title\" (JC 2026-11-06)", () => {
     const html = header();
-    expect(html).toMatch(/<span data-bot-header-text="" title="Pepper · Research" class="[^"]*truncate[^"]*whitespace-nowrap[^"]*"><span data-bot-header-name="" class="text-ink">Pepper<\/span><span data-bot-header-label="" class="text-ink-secondary"> · Research<\/span><\/span>/);
-    expect(html).not.toContain("flex-col");
+    expect(html).toMatch(/<span data-bot-header-text="" title="Pepper\nResearch" class="[^"]*flex-col[^"]*"><span data-bot-header-name="" class="[^"]*text-\[15px\][^"]*text-ink[^"]*">Pepper<\/span><span data-bot-header-label="" class="[^"]*text-\[12px\][^"]*text-ink-secondary[^"]*">Research<\/span><\/span>/);
+    expect(html).not.toContain("·");
     expect(html).toContain("h-10");
   });
 
-  it("the window pill (Coding, split view) carries the title on the same line too", () => {
+  it("the window pill (Coding, split view) stacks the title under the name too", () => {
     const html = renderToStaticMarkup(createElement(BotHeaderPill, {
       name: "Pepper",
       label: "Research",
@@ -164,8 +165,9 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
       onToggle: () => {},
       avatar: createElement("span", { "data-test-avatar": "" }),
     }));
-    expect(html).toMatch(/>Pepper<\/span><span data-bot-header-label="" class="text-ink-secondary"> · Research<\/span>/);
-    expect(html).not.toContain("flex-col");
+    expect(html).toMatch(/>Pepper<\/span><span data-bot-header-label="" class="[^"]*text-ink-secondary[^"]*">Research<\/span>/);
+    expect(html).toContain("flex-col");
+    expect(html).not.toContain("·");
   });
 
   it("a long group name ends in an ellipsis on one line, the chevron stays, the full name on hover (JC 2026-11-06)", () => {
@@ -176,7 +178,8 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
       onToggle: () => {},
       avatar: createElement("span", { "data-test-avatar": "" }),
     }));
-    expect(html).toMatch(new RegExp(`<span data-bot-header-text="" title="${name}" class="[^"]*min-w-0[^"]*truncate[^"]*whitespace-nowrap`));
+    expect(html).toMatch(new RegExp(`<span data-bot-header-text="" title="${name}" class="[^"]*min-w-0`));
+    expect(html).toMatch(/<span data-bot-header-name="" class="[^"]*truncate[^"]*whitespace-nowrap/);
     expect(html).toMatch(/data-bot-header-pill="" class="[^"]*min-w-0/);
     expect(/<svg[^>]*data-bot-header-chevron[^>]*>/.exec(html)?.[0]).toContain("shrink-0");
   });

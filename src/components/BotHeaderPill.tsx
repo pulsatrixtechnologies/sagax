@@ -40,7 +40,7 @@ export function useChatWindow(): ChatWindowContextValue | null {
 }
 
 /** The one chat pill (JC 2026-11-06, hotfix 0.8.57): 40px, hairline border,
- * mascot then "Name · Title" on one line. The bot chat, a group, a split
+ * mascot then the name with the title stacked under it. The bot chat, a group, a split
  * pane, a coding chat, a bot-to-bot conversation and a routine run all draw
  * it with this class, centered in ChatHeaderBar. */
 export const CHAT_PILL_CLASS = "flex h-10 min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5";
@@ -70,26 +70,23 @@ export function WindowHeaderPill({ children, label }: { children: ReactNode; lab
 }
 
 /**
- * The pill's text, like Grok Bot ("Cryptic · Chief of Staff"): the name in
- * the ink color and " · Title" in secondary grey on the SAME line, one
- * ellipsis for the whole line when it is too long (JC 2026-11-06: one line,
- * never the title stacked under the name).
+ * The pill's text (JC rule, 2026-11-06): the name on its own line in the ink
+ * color, the title UNDER it, smaller and in secondary grey. Never
+ * "Name · Title" on one line. Each line ends in its own ellipsis when too
+ * long; the whole name and title show on hover, one per line.
  */
 export function PillName({ name, label, weight }: { name: string; label?: string; weight: string }) {
   const tag = label?.trim();
   return (
-    // One line, ellipsis when it does not fit (a group named after its
-    // members runs long); the chevron beside it never shrinks, and the
-    // whole name shows on hover.
-    <span data-bot-header-text="" title={tag ? `${name} · ${tag}` : name} className={cn("min-w-0 truncate whitespace-nowrap text-[15px]", weight, "leading-5")}>
-      <span data-bot-header-name="" className="text-ink">{name}</span>
-      {tag && <span data-bot-header-label="" className="text-ink-secondary"> · {tag}</span>}
+    <span data-bot-header-text="" title={tag ? `${name}\n${tag}` : name} className="flex min-w-0 flex-col items-start text-left">
+      <span data-bot-header-name="" className={cn("block max-w-full truncate whitespace-nowrap text-[15px] text-ink", tag ? "leading-[18px]" : "leading-5", weight)}>{name}</span>
+      {tag && <span data-bot-header-label="" className="block max-w-full truncate whitespace-nowrap text-[12px] font-normal leading-[15px] text-ink-secondary">{tag}</span>}
     </span>
   );
 }
 
 /**
- * The chat header's bot pill: mascot, "Name · Title" on one line, then a
+ * The chat header's bot pill: mascot, the name with the title under it, then a
  * small chevron that says it opens something. A native button, so Enter and
  * Space toggle it and focus stays on it; aria-expanded follows the panel.
  */
@@ -129,8 +126,8 @@ export function BotHeaderPill({ name, label, panelOpen, onToggle, avatar }: {
 
 /**
  * The bot chat's header, like Grok Bot (#2141): the name pill alone, 40px
- * high (#2298: mascot about 22px, then "Name · Title" on one line, the name
- * in 15px regular and " · Title" in secondary grey), which opens and closes
+ * high (mascot about 22px, then the name with the title stacked under it in
+ * smaller secondary grey, JC 2026-11-06), which opens and closes
  * the bot panel. No sharing pill and no gear above the chat (JC 2026-11-06):
  * sharing lives in the bot panel, the pill already toggles it.
  */

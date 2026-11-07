@@ -363,7 +363,7 @@ struct DesktopFindClip: ViewModifier {
 // MARK: - Header
 
 /// The chat header like Grok Bot (#2141 / BotChatHeader.tsx): for a bot, one
-/// centred name pill (mascot 22, "Name · Title" on one line, 15 regular,
+/// centred name pill (mascot 22, the name with the title stacked below it,
 /// 40 high) that toggles the panel. Groups keep a single pill. Trailing chrome: More options, threads,
 /// Dev pods, New topic. While the docked panel is open its top bar holds the
 /// conversation menu.
@@ -446,7 +446,7 @@ struct DesktopChatHeader: View {
     }
 
     /// Bot chat header: the name pill alone (`BotChatHeader`, #2141, #2298,
-    /// #2304): 40 high, mascot 22, "Name · Title" on one line in 15 regular,
+    /// #2304): 40 high, mascot 22, the name (15) with the title below (12),
     /// 8 leading and 14 trailing. No sharing pill and no gear above the chat:
     /// sharing lives in the bot panel, the pill already toggles it.
     private func botChatHeader(bot: Bot) -> some View {
@@ -474,17 +474,27 @@ struct DesktopChatHeader: View {
         .accessibilityIdentifier("desktop-chat-pill")
     }
 
-    /// "Name · Title" as ONE line with one ellipsis for the whole line
-    /// (`PillName`): the name in ink, " · Title" in secondary grey.
+    /// The name, then the title BELOW it (JC 2026-11-06: never "Name · Title"
+    /// on one line, `PillName`): the name in 15 regular ink, the title in 12
+    /// secondary grey, each truncated on its own line.
     private func nameAndLabel(bot: Bot) -> some View {
         let tag = bot.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = Text(verbatim: bot.name).foregroundColor(theme.ink)
-        let line = tag.isEmpty ? name : name + Text(verbatim: " · \(tag)").foregroundColor(theme.inkSecondary)
-        return line
-            .font(theme.font(15, .regular))
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .accessibilityIdentifier("desktop-bot-header-text")
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(verbatim: bot.name)
+                .font(theme.font(15, .regular))
+                .foregroundColor(theme.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if !tag.isEmpty {
+                Text(verbatim: tag)
+                    .font(theme.font(12, .regular))
+                    .foregroundColor(theme.inkSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("desktop-bot-header-text")
     }
 
     /// Group / person pill: mascot stack, name, chevron (pre-#2141 layout).

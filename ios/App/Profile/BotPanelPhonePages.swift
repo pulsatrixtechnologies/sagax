@@ -404,11 +404,11 @@ struct BotWorksOnSection: View {
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var canEdit: Bool { session.surfaceGate.allows(.botAccessEdit, bot: current) && session.canEditBotField(current, "computer") }
     private var organization: Bool { session.surfaceGate.organization }
-    /// Auto and Off only (owner 2026-10-18): the bot picks where each task runs.
+    /// Auto, this computer and the cloud computer; never Off.
     private var choices: [DesktopWorksOn] { DesktopWorksOnRules.choices(config: config, organization: organization) }
     /// A place an older build saved reads as Auto (the server moves it back
     /// to Auto at start).
-    private var selected: DesktopWorksOn { DesktopWorksOn.of(current) == .off ? .off : .auto }
+    private var selected: DesktopWorksOn { DesktopWorksOnRules.selected(DesktopWorksOn.of(current)) }
 
     var body: some View {
         Section {

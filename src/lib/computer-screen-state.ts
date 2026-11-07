@@ -1,5 +1,5 @@
 // What the bot panel's Computer card and its live window say about the
-// screen (JC 2026-11-07: "the thumbnail should adapt to the state"; opening
+// screen ("the thumbnail should adapt to the state"; opening
 // his Mac showed "The screen is temporarily unavailable."). Three looks for
 // the thumbnail: the real picture, asleep (the computer is off or offline),
 // and unavailable (awake, but no picture, with the reason). The row's
@@ -38,17 +38,23 @@ export interface ComputerCardView {
 /** Why this computer's own screen shows no picture, from what the desktop
  * app says. `screenPermission`: perm:status "screen" (granted, denied,
  * not-determined, unknown; undefined on an older app). */
-export function localScreenProblem({ inApp, mac, screenPermission, failed = false }: {
+export function localScreenProblem({ inApp, mac, screenPermission, failed = false, failure }: {
   inApp: boolean;
   mac: boolean;
   screenPermission?: string | undefined;
   failed?: boolean;
+  /** The capture's own error, when it failed. */
+  failure?: string | null;
 }): ScreenProblem {
   if (!inApp) return "desktop-app-only";
+  // on a Mac, Electron's "Failed to get sources" is macOS
+  // refusing Screen Recording. Say how to allow it, not the raw IPC error.
+  if (mac && (screenPermission !== "granted" || MAC_SCREEN_REFUSED.test(failure ?? ""))) return "permission";
   if (failed) return "capture-failed";
-  if (mac && screenPermission !== "granted") return "permission";
   return "empty";
 }
+
+const MAC_SCREEN_REFUSED = /Failed to get sources/i;
 
 /** The card's look for the computer the bot works on now.
  * `source`: "local" (the person's computer), "cloud" (the bot's own cloud

@@ -1,6 +1,7 @@
 // This computer and the cloud computer stay (the dev panel writes them).
 // A Local VM, the browser, and every conversation pin still go back to Auto.
-// Off is a restriction, not a place, and stays.
+// Off is gone from every menu: the start sweep puts a saved
+// Off back on Auto.
 // Levels are never touched (#1098): the one-time move to Ask is not replayed.
 import { rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -10,7 +11,7 @@ import { Store } from "../store.ts";
 import { autoOnlyDestination } from "../surface.ts";
 
 describe("a Works on from a request", () => {
-  it("keeps this computer, the cloud computer and Off, and reads the rest as Auto", () => {
+  it("keeps this computer, the cloud computer and an API caller's Off, and reads the rest as Auto", () => {
     expect(autoOnlyDestination("local")).toBe("local");
     expect(autoOnlyDestination("cloud")).toBe("cloud");
     expect(autoOnlyDestination("off")).toBe("off");
@@ -22,7 +23,7 @@ describe("the start sweep", () => {
   beforeEach(() => { rmSync(DATA_DIR, { recursive: true, force: true }); });
   const newBotDefault = () => ({ instanceId: "claude", model: "claude-model" });
 
-  it("keeps this computer and the cloud computer, moves every conversation pin back to Auto, keeps Off, and is idempotent", () => {
+  it("keeps this computer and the cloud computer, moves every conversation pin and a saved Off back to Auto, and is idempotent", () => {
     const store = new Store(newBotDefault);
     const cloud = store.createBot({}, { seedMessages: false });
     const local = store.createBot({}, { seedMessages: false });
@@ -37,14 +38,14 @@ describe("the start sweep", () => {
     store.patchTask(auto.id, auto.threadId, { surface: "browser" });
     store.patchTask(off.id, off.threadId, { surface: "local", surfaceSource: "auto" });
 
-    expect(store.retireFixedWorkspaces()).toEqual({ bots: 0, pins: 3 });
+    expect(store.retireFixedWorkspaces()).toEqual({ bots: 1, pins: 3 });
 
     const reloaded = new Store(newBotDefault);
     expect(reloaded.bot(cloud.id)?.computer).toBe("cloud");
     expect(reloaded.bot(local.id)?.computer).toBe("local");
     expect(reloaded.bot(cloud.id)?.approvalMode).toBe("ask");
-    // Off withholds every screen; lifting it would widen what the bot may reach.
-    expect(reloaded.bot(off.id)?.computer).toBe("off");
+    // Off is no longer a choice: the bot is back on Auto, its card shows again.
+    expect(reloaded.bot(off.id)?.computer).toBeUndefined();
     for (const [botId, threadId] of [[auto.id, auto.threadId], [auto.id, second.threadId], [off.id, off.threadId]] as const) {
       const task = reloaded.taskByThread(botId, threadId)!;
       expect(task.surface).toBeUndefined();

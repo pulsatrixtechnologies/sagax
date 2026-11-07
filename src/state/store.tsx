@@ -25,6 +25,7 @@ import { PERSON_THREADS_HEADER, currentTaskBot, threadApprovalModes, visibleMess
 import { reducer } from "./store/reducer";
 import { createStoreDispatch } from "./store/create-store-dispatch";
 import { useStoreLive } from "./store/use-store-live";
+import { botsToLeaveComputerOff } from "@/lib/computer-off-migration";
 import { MESSAGE_PAGE_SIZE, api, createBotWithRole, desktopApprovalBridge, persistTaskApproval, persistBotUpdate, requestConfirmedBotDeletion, loadSnapshotBoundary, runtimeFrameAction, type PeripheralSnapshotLoad } from "./store/api";
 
 export type { PeripheralSnapshotLoad };
@@ -356,6 +357,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }),
     [botPatchQueue],
   );
+
+  // Off left the Computer menu. A bot still saved on Off goes
+  // back to Auto once loaded, so its Computer card shows again.
+  const computerOffDone = useRef(new Set<string>()).current;
+  useEffect(() => {
+    // Wait for the viewer too: an organization member moves only their own bots.
+    if (!state.hydrated || !state.config) return;
+    for (const botId of botsToLeaveComputerOff(state.bots, state.config, computerOffDone)) {
+      dispatch({ type: "updateBot", botId, patch: { computer: null } });
+    }
+  }, [state.hydrated, state.bots, state.config, dispatch, computerOffDone]);
 
   // The app opens the bot it remembers as that bot's row would (openBot):
   // with threads hidden at its main thread, not at a thread an activity row

@@ -7999,7 +7999,7 @@
   "worksOn.helpOrg": "Where this bot works. Cloud is your server environment; Local VM and This computer use your own computer through the Sagax app.",
   "worksOn.offBody": "This bot gets no computer and no built-in browser, so it cannot open a web page, click, or type anywhere. Its capabilities (plugins, skills, MCP servers), files and chat all still work.",
   "worksOn.offTitle": "Off means no screen.",
-  "worksOn.autoOnlyHelp": "The bot picks where each task runs: the cloud, a Local VM, this computer or the browser, among the places available to it and allowed. Off gives it no computer and no browser.",
+  "worksOn.autoOnlyHelp": "The bot picks where each task runs: the cloud, a Local VM, this computer or the browser, among the places available to it and allowed.",
   "worksOn.tip.autoOnly": "Picks the place for each task among the available ones. Never a place you or your organization did not allow",
   "worksOn.tip.local": "This computer, the one running Sagax.",
   "worksOn.tip.cloud": "The cloud computer.",

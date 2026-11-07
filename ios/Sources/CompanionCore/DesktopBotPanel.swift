@@ -305,8 +305,10 @@ public struct BotPanelPatch: Encodable, Hashable, Sendable {
 public enum DesktopWorksOn: String, CaseIterable, Hashable, Sendable {
     case auto, cloud, vm, local, browser, off
 
+    /// A saved Off reads as Auto: Off is gone from every menu.
     public static func of(_ bot: Bot) -> DesktopWorksOn {
-        bot.computer.flatMap(DesktopWorksOn.init(rawValue:)) ?? .auto
+        let place = bot.computer.flatMap(DesktopWorksOn.init(rawValue:)) ?? .auto
+        return place == .off ? .auto : place
     }
 
     /// The value written: "auto" (the server reads it as Auto and clears
@@ -644,7 +646,8 @@ public enum DesktopWorksOnRules {
     /// switched on.
     public static func offered(_ place: DesktopWorksOn, config: ConfigStatus?, organization: Bool) -> Bool {
         switch place {
-        case .auto, .off: return true
+        case .auto: return true
+        case .off: return false
         default: break
         }
         if organization { return true }
@@ -658,12 +661,17 @@ public enum DesktopWorksOnRules {
         config?.features?.boatComputer == true || config?.features?.vpsComputer == true
     }
 
-    /// The choices, in the desktop's order: Auto and Off only. Workspace is
-    /// always Auto (owner 2026-10-18): the bot picks where each task runs among
-    /// the places it may use, so none is offered. Off stays: it gives the
-    /// bot no computer and no browser at all.
+    /// The choices, in the desktop's order (`WORKS_ON_MODES`): Auto, this
+    /// computer and the cloud computer, each where the server offers it.
+    /// Never Off: it hid the Computer card.
     public static func choices(config: ConfigStatus?, organization: Bool) -> [DesktopWorksOn] {
-        [.auto, .off]
+        [.auto, .local, .cloud].filter { offered($0, config: config, organization: organization) }
+    }
+
+    /// The choice that shows selected: this computer or the cloud computer
+    /// when saved, Auto for anything else.
+    public static func selected(_ place: DesktopWorksOn) -> DesktopWorksOn {
+        place == .local || place == .cloud ? place : .auto
     }
 
     /// The server has a browser engine (`browserAvailable`).

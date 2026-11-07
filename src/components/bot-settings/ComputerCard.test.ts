@@ -85,12 +85,14 @@ describe("computerSelectValue / options / title", () => {
     expect(computerSelectValue(null)).toBe("auto");
     expect(computerSelectValue("cloud")).toBe("cloud");
     expect(computerSelectValue("local")).toBe("local");
-    expect(computerSelectValue("off")).toBe("off");
+    // Off is gone; a saved Off reads as Auto.
+    expect(computerSelectValue("off")).toBe("auto");
   });
 
-  it("lists Auto, This computer, Cloud and Off when the bridge has no named PCs", () => {
+  it("lists Auto, This computer and Cloud, never Off, when the bridge has no named PCs", () => {
     const options = computerSelectOptions(null, false);
-    expect(options.map((option) => option.value)).toEqual(["auto", "local", "cloud", "off"]);
+    expect(options.map((option) => option.value)).toEqual(["auto", "local", "cloud"]);
+    expect(computerSelectOptions(null, true).map((option) => option.value)).not.toContain("off");
   });
 
   it("names a connected local PC when the bridge lists one", () => {
@@ -110,6 +112,7 @@ describe("computerSelectValue / options / title", () => {
       }],
     } as DesktopBridgeStatus;
     const options = computerSelectOptions(bridge, true);
+    expect(options.map((option) => option.value)).not.toContain("off");
     expect(options.find((option) => option.value === "local")?.label).toContain("MacBook");
     expect(computerCardTitle("local", bridge, true)).toContain("MacBook");
     expect(computerCardTitle("cloud", bridge, true).length).toBeGreaterThan(0);
@@ -271,10 +274,9 @@ describe("ComputerCard", () => {
     expect(document.querySelector("[data-sandbox-takeover]")).toBeNull();
   });
 
-  it("asks for no picture when the bot has no computer", async () => {
-    await act(async () => { root!.render(createElement(ComputerCard, { bot: { ...bot, computer: "off" } as Bot, onPatch: vi.fn() })); });
+  it("asks for no picture when the bot works in the browser", async () => {
+    await act(async () => { root!.render(createElement(ComputerCard, { bot: { ...bot, computer: "browser" } as Bot, onPatch: vi.fn() })); });
     expect(captures.calls).toEqual([]);
-    expect(host!.querySelector<HTMLElement>("[data-computer-thumb]")!.dataset.computerThumb).toBe("asleep");
-    expect(host!.querySelector<HTMLElement>("[data-computer-status]")!.dataset.computerStatus).toBe("asleep");
+    expect(host!.querySelector<HTMLElement>("[data-computer-thumb]")!.dataset.computerThumb).toBe("unavailable");
   });
 });

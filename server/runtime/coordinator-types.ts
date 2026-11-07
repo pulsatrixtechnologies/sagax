@@ -97,6 +97,10 @@ export interface BeginTurnRequest {
    * never shown. Two trees join one request only for the same known person
    * (runtime Assignment.person). */
   person?: string;
+  /** The person's admitted request (its message id) this turn answers: the
+   * root keeps it, so requestRoot finds the tree again after a restart and
+   * a nested approval returns to that exact request. */
+  request?: string;
 }
 
 /** How a host-run turn ended. `cap` continues the same node in place (a

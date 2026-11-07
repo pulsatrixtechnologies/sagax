@@ -182,7 +182,8 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
     const opener = handoffOpener({ botId: state.bot.id, threadId: state.threadId }, state.threadId);
     coordinator.beginTurn({ id: state.dispatchClaimId, address: { botId: state.bot.id, threadId: state.threadId }, brief: state.resolvedImages?.text ?? state.text,
       level: approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId), ...(opener ? { opener } : {}), origin: requestOrigin,
-      ...(state.opts?.goalRunId ? { goalRunId: state.opts.goalRunId } : {}), ...personForJoin(state.threadId) });
+      ...(state.opts?.goalRunId ? { goalRunId: state.opts.goalRunId } : {}), ...personForJoin(state.threadId),
+      ...(state.requestMessageId ? { request: state.requestMessageId } : {}) });
   }
   // The surface paragraph is part of the stable prompt. A call warm has no
   // saved user row, so it cannot register a selection, but the first spoken

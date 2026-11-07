@@ -456,6 +456,13 @@ export function autoVerdict(
   if (full.acts && !(context?.sagaxGate && context.stepUpRequired?.length)) return { approve: `approved ${tool} (full access)`, source: "full-access" };
   if (context?.sagaxGate) return { approve: null, source: mode === "auto" || mode === "custom" ? "native-approval" : "no-grant" };
   if (context?.requiresExplicitApproval) return { approve: null, source: "explicit-approval-block" };
+  // 2026-11-06 (the owner: "I have chosen always allow it does
+  // not respect it"): what the person saved with "Always allow" (a command,
+  // a tool) answers a send too. No category asks every time whatever the
+  // person chose; only an organization rule or their own Ask/Deny rule,
+  // read above, keeps the card.
+  if (context?.commandAllowed) return { approve: `approved ${tool} (saved command)`, source: "command-allowlist" };
+  if (context?.toolAllowed) return { approve: `approved ${tool} (always allowed)`, source: "tool-allowlist" };
   // Unrequested outbound mail (routine / proactive / other bot): refuse the
   // direct send so the bot writes a draft card. Person-asked mail in the
   // owner's turn follows the usual approval level below.
@@ -472,8 +479,6 @@ export function autoVerdict(
       return { approve: null, source: "outbound-guard" };
     }
   }
-  if (context?.commandAllowed) return { approve: `approved ${tool} (saved command)`, source: "command-allowlist" };
-  if (context?.toolAllowed) return { approve: `approved ${tool} (always allowed)`, source: "tool-allowlist" };
   // The one action the app itself grants. A fetch of an arbitrary URL is not
   // a search and stays a prompt, in this mode and every other.
   if (mode === "auto" && WEB_SEARCH.has(bareToolName(tool))) {
@@ -505,7 +510,7 @@ function isMailSendName(tool: string, alias?: string): boolean {
 }
 
 export const HELD_NOTE = {
-  "approval.held.outbound": "This sends something on your behalf, so it always asks first.",
+  "approval.held.outbound": "This sends something on your behalf. Allow it once, or always for this tool.",
   "approval.held.emailDraft": "Write this email as a draft card for the person to approve. Do not send it directly.",
   "approval.held.native": "The provider requires your approval for this action.",
   "approval.held.sandbox":

@@ -1054,18 +1054,13 @@ export type CustomRuleDecision =
 
 const BEHAVIOR_WEIGHT: Record<CustomRuleBehavior, number> = { deny: 3, ask: 2, allow: 1 };
 
-function outboundSend(facts: Pick<CallFacts, "actions" | "risks"> | undefined): boolean {
-  return Boolean(facts && (facts.actions.includes("send") || facts.risks.includes("external-send")));
-}
-
 /** Whether a rule applies to this start. An organization rule always does
  * (it is not this condition). A rule that names a start applies only then.
- * A rule that names none applies to every start, except an allow of a send
- * on a routine: that stays a draft unless the person named "routine". */
-export function ruleMatchesStart(rule: Pick<CustomRule, "behavior" | "startedBy" | "org">, startedBy: TurnStart, facts?: Pick<CallFacts, "actions" | "risks">): boolean {
+ * A rule that names none applies to every start: 2026-11-06, an allow
+ * of a send is respected on a routine too, no forced "always asks" class. */
+export function ruleMatchesStart(rule: Pick<CustomRule, "behavior" | "startedBy" | "org">, startedBy: TurnStart, _facts?: Pick<CallFacts, "actions" | "risks">): boolean {
   if (rule.org) return true;
   if (rule.startedBy) return rule.startedBy === startedBy;
-  if (rule.behavior === "allow" && startedBy === "routine" && outboundSend(facts)) return false;
   return true;
 }
 

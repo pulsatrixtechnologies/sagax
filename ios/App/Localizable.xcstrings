@@ -85870,18 +85870,18 @@
         }
       }
     },
-    "This sends something on your behalf, so it always asks first.": {
+    "This sends something on your behalf. Allow it once, or always for this tool.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This sends something on your behalf, so it always asks first."
+            "value": "This sends something on your behalf. Allow it once, or always for this tool."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ceci envoie quelque chose en votre nom, alors le bot demande toujours d'abord."
+            "value": "Ceci envoie quelque chose en votre nom. Permettez-le une fois, ou toujours pour cet outil."
           }
         }
       }

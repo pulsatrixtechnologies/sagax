@@ -279,7 +279,7 @@
   "approval.details.show": "See technical details",
   "approval.details.tool": "Tool",
   "approval.held.native": "The provider requires your approval for this action.",
-  "approval.held.outbound": "This sends something on your behalf, so it always asks first.",
+  "approval.held.outbound": "This sends something on your behalf. Allow it once, or always for this tool.",
   "approval.held.emailDraft": "Write this email as a draft card for the person to approve. Do not send it directly.",
   "approval.held.sandbox": "This changes the provider sandbox, so only Full access can approve it automatically.",
   "approval.held.undelivered": "Approve for me couldn't answer this one.",

@@ -7733,7 +7733,7 @@
   "approval.applied.undoing": "Annulation…",
   "approval.applied.undone": "Annulé",
   "approval.aria.appliedDetails": "Ce qui a changé",
-  "approval.held.outbound": "Ceci envoie quelque chose en votre nom, alors le bot demande toujours d'abord.",
+  "approval.held.outbound": "Ceci envoie quelque chose en votre nom. Permettez-le une fois, ou toujours pour cet outil.",
   "approval.held.emailDraft": "Écrivez ce courriel en carte de brouillon pour que la personne l'approuve. Ne l'envoyez pas directement.",
   "approval.outbound.more": "+{count} autres",
   "approval.outbound.sendOnBehalf": "Envoyer en votre nom ?",

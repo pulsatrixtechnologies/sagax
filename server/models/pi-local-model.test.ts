@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -41,7 +42,10 @@ describe("piLocalKeyRefusalLifted (#1422): the selection judged, never the bot's
   });
 
   it("is never fed the bot's own model by the server (source guard)", () => {
-    const source = readFileSync(fileURLToPath(new URL("../index.ts", import.meta.url)), "utf8");
+    // index.ts and the leaves it was split into (#1388, #2331)
+    const leaves = fileURLToPath(new URL("../index-leaves/", import.meta.url));
+    const source = [fileURLToPath(new URL("../index.ts", import.meta.url)), ...readdirSync(leaves).filter((name) => name.endsWith(".ts")).map((name) => join(leaves, name))]
+      .map((file) => readFileSync(file, "utf8")).join("\n");
     expect(source).not.toMatch(/piLocalModel\(\{[^}]*bot\.modelSelection/);
     expect(source).not.toMatch(/piLocalKeyRefusalLifted\([^)]*bot\.modelSelection/);
     // each exemption takes the judged model as a parameter

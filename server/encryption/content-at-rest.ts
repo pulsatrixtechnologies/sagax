@@ -1696,7 +1696,10 @@ export function runAtRestMigration(options: { sliceMs?: number; pauseMs?: number
             continue;
           }
           if (!want) { pass.locked++; continue; }
-          if (held(path) || Date.now() - Math.max(lastUse.get(path) ?? 0, info.sealed ? 0 : stat.mtimeMs) < graceMs) { pass.waiting++; continue; }
+          // idle time never below zero: mtimeMs carries sub-millisecond
+          // precision and can sit a fraction ahead of Date.now()
+          const idleMs = Math.max(0, Date.now() - Math.max(lastUse.get(path) ?? 0, info.sealed ? 0 : stat.mtimeMs));
+          if (held(path) || idleMs < graceMs) { pass.waiting++; continue; }
           await whilePaused();
           const outcome = await (current = replaceInPlace(path, want));
           await breathe(1 + stat.size / (1024 * 1024));

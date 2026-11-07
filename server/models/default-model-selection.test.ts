@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { EngineAccess, ModelCatalog, ModelSelection, ProviderSnapshot } from "../contracts.ts";
 import { autoNewBotSelection, instancesForPerson, memberNewBotSelection, readyToRun, selectDefaultModelSelection, starredModelSelections, withInstanceConfig, withNewBotEffort, type SelectableInstance } from "./default-model-selection.ts";
 import { ManagedDesktopPolicy } from "../managed-policy.ts";
+import { createDefaultSelection } from "../index-leaves/defaultSelection.ts";
 
 const codex = {
   instanceId: "codex",
@@ -205,7 +206,9 @@ describe("new bot default model selection wiring in index.ts", () => {
     expect(start).toBeGreaterThan(0); expect(end).toBeGreaterThan(start);
     return source.slice(start + 1, end + 2);
   };
-  const code = transpileTs(`${extract("function policyModelRefusal(")}\n${extract("function selectableInstances<")}\n${extract("async function defaultSelection(")}`);
+  // defaultSelection itself moved to index-leaves/ in the index.ts split
+  // (#1388, #2331); its host bindings come from index.ts below.
+  const code = transpileTs(`${extract("function policyModelRefusal(")}\n${extract("function selectableInstances<")}`);
   const companyRouter = {
     instanceId: "company.fixture.openrouter", driverKind: "openai-compat",
     snapshot: { state: "available", authenticated: true } satisfies ProviderSnapshot,
@@ -220,11 +223,13 @@ describe("new bot default model selection wiring in index.ts", () => {
       computers: { thisComputer: true, localVm: true, box: true, vps: true }, remoteAccess: true });
     const managedDesktop = { owns: (instanceId: string) => enrolled && instanceId.startsWith("company.") };
     const describe = vi.fn(async () => instances);
-    const defaultSelection = new Function("hostedModels", "cfg", "registry", "managedDesktop", "managedPolicy", "BUILT_IN_DRIVERS", "selectDefaultModelSelection", "orgEngineAllowRefusal", "providerConfigs", "withInstanceConfig",
-      `${code}; return defaultSelection;`)(undefined, { defaultModelSelection: saved }, { describe }, managedDesktop, managedPolicy,
-      [{ driverKind: "claudeAgent", metadata: { displayName: "Claude" } }], selectDefaultModelSelection,
+    const { policyModelRefusal, selectableInstances } = new Function("managedDesktop", "managedPolicy", "BUILT_IN_DRIVERS", "providerConfigs", "withInstanceConfig",
+      `${code}; return { policyModelRefusal, selectableInstances };`)(managedDesktop, managedPolicy,
+      [{ driverKind: "claudeAgent", metadata: { displayName: "Claude" } }], () => configs, withInstanceConfig);
+    const host = { hostedModels: undefined, cfg: { defaultModelSelection: saved }, registry: { describe }, managedDesktop, policyModelRefusal, selectableInstances,
       // the organization's engine allow-list (orgEngineAllowRefusal, org policy) has its own tests; here every engine is allowed
-      () => undefined, () => configs, withInstanceConfig) as (saved?: ModelSelection | null, instances?: readonly SelectableInstance[]) => Promise<ModelSelection>;
+      orgEngineAllowRefusal: () => undefined };
+    const defaultSelection = createDefaultSelection(() => host) as (saved?: ModelSelection | null, instances?: readonly SelectableInstance[]) => Promise<ModelSelection>;
     return { defaultSelection, describe, close: () => managedPolicy.close() };
   }
 
@@ -343,12 +348,13 @@ describe("POST /api/bots for an organization member (#1060)", () => {
   it("resolves the member's model through the organization's default, not the bare server default", () => {
     const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
     // 062d7c42e extracted the route; #1383 moved POST /api/bots into bots-core-create.ts.
-    // The policy helper remains in index.ts.
     const routes = readFileSync(new URL("../routes/bots-core-create.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
     expect(source).toMatch(/createBotsCoreRoutes\(\{[\s\S]*?\n  memberDefaultSelection,/);
     const route = routes.slice(routes.indexOf('if (method === "POST" && path === "/api/bots") {'));
     expect(route.slice(0, route.indexOf("store.createBot("))).toContain("memberCreate ? await memberDefaultSelection(sessionPrincipal(auth)) : await defaultSelection()");
-    const helper = source.slice(source.indexOf("async function memberDefaultSelection("));
+    // the helper moved to index-leaves/ in the index.ts split (#1388, #2331)
+    const leaf = readFileSync(new URL("../index-leaves/memberDefaultSelection.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    const helper = leaf.slice(leaf.indexOf("async function memberDefaultSelection("));
     expect(helper.slice(0, helper.indexOf("\n}\n"))).toContain("cfg.newBotDefaults?.profile.modelSelection");
   });
 });
@@ -369,8 +375,10 @@ describe("a member's own model first (#1074)", () => {
     expect(starredModelSelections(JSON.stringify([["codex"], ["", "m"], [1, 2], ["codex", "m"]]))).toEqual([{ instanceId: "codex", model: "m" }]);
   });
   it("reads the person's starred models for a member's new bot", () => {
-    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-    const helper = source.slice(source.indexOf("async function memberDefaultSelection("));
+    // index-leaves/ since the index.ts split (#1388, #2331)
+    const leaf = readFileSync(new URL("../index-leaves/memberDefaultSelection.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    const helper = leaf.slice(leaf.indexOf("async function memberDefaultSelection("));
+    expect(helper.indexOf("async function memberDefaultSelection(")).toBe(0);
     expect(helper.slice(0, helper.indexOf("\n}\n"))).toContain('preferences["sagax.modelFavorites.v1"]');
   });
 });

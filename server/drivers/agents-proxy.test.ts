@@ -760,6 +760,7 @@ describe("agents-proxy MCP surface", () => {
       "manage_room",
       "request_credential",
       "request_login",
+      "request_sign_in",
       "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
@@ -2428,15 +2429,18 @@ describe("standing external runtime", () => {
   it("advertises only peer communication and receipt tools even when unrelated feature flags are set", async () => {
     const list = await externalRpc("tools/list");
     expect(list.result.tools.map((tool: any) => tool.name)).toEqual([
+      // #2519: a standing external runtime coordinates, then reads the receipt
+      "coordinate_bots", "assignment_status",
       "list_bots", "ask_bot", "delegate_bot", "check_delegation", "wait_delegation", "make_video",
     ]);
     expect(JSON.stringify(list.result.tools)).not.toMatch(/after your current turn finishes|earlier turn|same turn as delegate_bot/);
-    for (const name of ["coordinate_bots", "start_thread", "create_bot", "request_credential", "memory_update", "skill_manage", "shared_computer", "tool_result_read", "act"]) {
+    for (const name of ["start_thread", "create_bot", "request_credential", "memory_update", "skill_manage", "shared_computer", "tool_result_read", "act"]) {
       expect((await externalCall(name, {})).error).toMatchObject({ code: -32602, message: `Unknown tool: ${name}` });
     }
     const roster = (await externalCall("list_bots", {})).result.content[0].text;
-    expect(roster).toContain("Assign work with delegate_bot");
-    expect(roster).not.toContain("coordinate_bots");
+    expect(roster).toContain("Assign work or ask with coordinate_bots");
+    expect(roster).toContain("assignment_status");
+    expect(roster).not.toContain("Assign work with delegate_bot");
   });
 
   it("checks and waits for a newly delegated task in the same standing process", async () => {

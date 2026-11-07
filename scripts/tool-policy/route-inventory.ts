@@ -4,7 +4,7 @@
 // request against, each with the method guard written beside it. Sagax routes
 // are code, not a registry, so this is the list of what the running server can
 // answer. scripts/tool-policy/tool-policy-coverage.test.ts holds every one to a
-// policy entry in server/tools/tool-policy.ts. server/auth/request-auth.ts is left out:
+// policy entry in server/tools/tool-policy.ts. server/auth/request-auth.ts and server/auth/client-allow.ts are left out:
 // its path rules are the auth gate, not routes.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -21,7 +21,7 @@ function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) return name === "testing" || name === "node_modules" ? [] : sources(full);
-    return /\.(ts|mts)$/.test(name) && name !== "request-auth.ts" && !/\.test\.|\.e2e\./.test(name) && !name.endsWith(".d.ts") ? [full] : [];
+    return /\.(ts|mts)$/.test(name) && name !== "request-auth.ts" && name !== "client-allow.ts" && !/\.test\.|\.e2e\./.test(name) && !name.endsWith(".d.ts") ? [full] : [];
   });
 }
 

@@ -240,5 +240,172 @@
         "secondary": "settings"
       }
     }
+  ],
+  "ios": [
+    {
+      "id": "notifications",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "notifications",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "notifications",
+      "status": "denied",
+      "expect": "notification-settings"
+    },
+    {
+      "id": "notifications",
+      "status": "restricted",
+      "expect": "notification-settings"
+    },
+    {
+      "id": "microphone",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "microphone",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "microphone",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "microphone",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "speech",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "speech",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "speech",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "speech",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "camera",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "camera",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "camera",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "camera",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "contacts",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "contacts",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "contacts",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "contacts",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "calendars",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "calendars",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "calendars",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "calendars",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "reminders",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "reminders",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "reminders",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "reminders",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "location",
+      "status": "not-determined",
+      "expect": "prompt"
+    },
+    {
+      "id": "location",
+      "status": "granted",
+      "expect": "none"
+    },
+    {
+      "id": "location",
+      "status": "denied",
+      "expect": "settings"
+    },
+    {
+      "id": "location",
+      "status": "restricted",
+      "expect": "settings"
+    },
+    {
+      "id": "location",
+      "status": "limited",
+      "expect": "none"
+    }
   ]
 }

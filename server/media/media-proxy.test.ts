@@ -10,6 +10,7 @@ import {
   mediaProxyPath,
   mintMediaProxyToken,
   needsMediaProxy,
+  playlistWarmupDelayMs,
   rewriteHlsPlaylist,
   streamProxiedMedia,
   verifyMediaProxyToken,
@@ -47,6 +48,19 @@ describe("media proxy", () => {
     expect(wire.playbackUrl).toMatch(/^\/api\/media\/proxy\//);
     expect(wire.kind).toBe("live");
     expect(wire.format).toBe("hls");
+  });
+
+  it("always proxies HTTP(S) HLS and keeps the original URL as the browser fallback", () => {
+    const hls = wireVideoFromEmit({ url: "https://media.example.test/live/index.m3u8", kind: "live" }, "t1", 5_000);
+    expect(hls.playbackUrl.startsWith("/api/media/proxy/")).toBe(true);
+    expect(hls.directUrl).toBe("https://media.example.test/live/index.m3u8");
+    expect(hls.format).toBe("hls");
+    const mp4 = wireVideoFromEmit({ url: "https://media.example.test/v.mp4" }, "t1", 5_000);
+    expect(mp4.playbackUrl).toBe("https://media.example.test/v.mp4");
+    expect(mp4.directUrl).toBeUndefined();
+    const withCreds = wireVideoFromEmit({ url: "https://u:p@media.example.test/live/index.m3u8" }, "t1", 5_000);
+    expect(withCreds.playbackUrl.startsWith("/api/media/proxy/")).toBe(true);
+    expect(withCreds.directUrl).toBeUndefined();
   });
 
   it("keeps the source format on the wire although the proxied path hides it", () => {
@@ -126,19 +140,58 @@ describe("rewriteHlsPlaylist", () => {
     expect(out[5]).toBe(mint("http://127.0.0.1:8080/v1/share/recordings/4/seg0.ts?sig=a"));
     expect(out[7]).toBe(mint("http://127.0.0.1:8080/abs/seg1.ts"));
     expect(out[9]).toBe(mint("http://127.0.0.1:8080/abs/seg2.ts"));
-    // Another origin is never followed by the proxy.
-    expect(out[11]).toBe("https://cdn.public.example/seg3.ts");
+    // A segment on another origin (a CDN) goes through the proxy too, so
+    // playback never depends on that host sending CORS headers.
+    expect(out[11]).toBe(mint("https://cdn.public.example/seg3.ts"));
   });
 
-  it("leaves public absolute same-origin URIs direct (Glitcho share links)", () => {
+  it("proxies public absolute URIs on the playlist origin (Glitcho share links)", () => {
     const playlist = "#EXTM3U\n#EXTINF:2,\nhttps://glitcho.example/v1/live/ninja/seg/9.ts?t=s\n";
-    expect(rewriteHlsPlaylist(playlist, "https://glitcho.example/v1/share/live/ninja/index.m3u8", mint)).toBe(playlist);
+    expect(rewriteHlsPlaylist(playlist, "https://glitcho.example/v1/share/live/ninja/index.m3u8", mint)).toBe(
+      `#EXTM3U\n#EXTINF:2,\n${mint("https://glitcho.example/v1/live/ninja/seg/9.ts?t=s")}\n`,
+    );
+  });
+
+  it("never proxies URIs with credentials or private hosts that were not allowed", () => {
+    const playlist = [
+      "#EXTM3U",
+      "#EXTINF:2,",
+      "https://user:pw@cdn.example.test/seg1.ts",
+      "#EXTINF:2,",
+      "http://192.168.1.20/seg2.ts",
+      "#EXTINF:2,",
+      "http://localhost:8080/seg3.ts",
+      "#EXTINF:2,",
+      "ftp://files.example.test/seg4.ts",
+      "",
+    ].join("\n");
+    expect(rewriteHlsPlaylist(playlist, "https://media.example.test/live/index.m3u8", mint)).toBe(playlist);
   });
 
   it("rewrites variant playlists of a multivariant playlist", () => {
     const playlist = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nlow/index.m3u8\n";
     const out = rewriteHlsPlaylist(playlist, "http://10.0.0.5/live/master.m3u8", mint, LAB);
     expect(out).toContain(mint("http://10.0.0.5/live/low/index.m3u8"));
+  });
+});
+
+describe("playlistWarmupDelayMs", () => {
+  const answer = (statusCode: number, headers: Record<string, string> = {}) => ({ statusCode, headers });
+
+  it("retries a playlist's 503, honoring a capped Retry-After", () => {
+    expect(playlistWarmupDelayMs(answer(503), true, 0)).toBe(1000);
+    expect(playlistWarmupDelayMs(answer(503, { "retry-after": "2" }), true, 0)).toBe(2000);
+    expect(playlistWarmupDelayMs(answer(503, { "retry-after": "60" }), true, 0)).toBe(3000);
+    expect(playlistWarmupDelayMs(answer(503, { "retry-after": "0" }), true, 0)).toBe(250);
+    expect(playlistWarmupDelayMs(answer(503, { "content-type": "application/x-mpegURL" }), false, 0)).toBe(1000);
+  });
+
+  it("passes the answer on otherwise", () => {
+    expect(playlistWarmupDelayMs(answer(200), true, 0)).toBeNull();
+    expect(playlistWarmupDelayMs(answer(502), true, 0)).toBeNull();
+    expect(playlistWarmupDelayMs(answer(503), true, 6)).toBeNull();
+    // Not a playlist and no Retry-After: a plain 503 of a file.
+    expect(playlistWarmupDelayMs(answer(503, { "content-type": "video/mp4" }), false, 0)).toBeNull();
   });
 });
 
@@ -150,13 +203,27 @@ describe("streamProxiedMedia over HLS", () => {
   const seen: Array<{ path: string; range?: string }> = [];
   let endlessClosed = false;
   let slowClosed = false;
+  let warmupLeft = 0;
 
   beforeEach(async () => {
     seen.length = 0;
     endlessClosed = false;
     slowClosed = false;
+    warmupLeft = 0;
     upstream = createServer((req, res) => {
       seen.push({ path: req.url ?? "", range: req.headers.range });
+      if (req.url === "/warm/index.m3u8") {
+        // A live share link starting its ingest: 503 + Retry-After first.
+        if (warmupLeft > 0) {
+          warmupLeft -= 1;
+          res.writeHead(503, { "retry-after": "0", "content-type": "text/plain" });
+          res.end("warming up");
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/vnd.apple.mpegurl" });
+        res.end("#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.0,\nseg0.ts\n");
+        return;
+      }
       if (req.url?.startsWith("/hls/index.m3u8")) {
         res.writeHead(200, { "content-type": "application/x-mpegURL" });
         res.end("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4.0,\nseg0.ts\n#EXT-X-ENDLIST\n");
@@ -261,6 +328,26 @@ describe("streamProxiedMedia over HLS", () => {
     expect(segment.headers.get("content-type")).toBe("video/mp2t");
     expect(Buffer.from(await segment.arrayBuffer())).toEqual(Buffer.from([0x47, 1, 2, 3]));
   });
+
+  it("waits out a live playlist's 503 warm-up instead of failing the player", async () => {
+    warmupLeft = 2;
+    const wire = wireVideoFromEmit({ url: `${upstreamBase}/warm/index.m3u8`, kind: "live" }, "thread-9");
+    const playlist = await fetch(proxyBase + wire.playbackUrl);
+    expect(playlist.status).toBe(200);
+    const text = await playlist.text();
+    expect(text).toContain("#EXT-X-TARGETDURATION:2");
+    expect(text.split("\n").some((line) => line.startsWith("/api/media/proxy/"))).toBe(true);
+    expect(seen.filter((entry) => entry.path === "/warm/index.m3u8")).toHaveLength(3);
+  });
+
+  it("passes a playlist's 503 on once the warm-up retries run out", async () => {
+    warmupLeft = 100;
+    const wire = wireVideoFromEmit({ url: `${upstreamBase}/warm/index.m3u8`, kind: "live" }, "thread-9");
+    const playlist = await fetch(proxyBase + wire.playbackUrl);
+    expect(playlist.status).toBe(503);
+    await playlist.arrayBuffer();
+    expect(seen.filter((entry) => entry.path === "/warm/index.m3u8")).toHaveLength(7);
+  }, 15_000);
 
   it("detects a playlist by Content-Type when the URL has no extension", async () => {
     const res = await fetch(`${proxyBase}/api/media/proxy/${mintMediaProxyToken(`${upstreamBase}/hls/play`, "t")}`);

@@ -29547,6 +29547,7 @@ const agentApi = createAgentApi({
       kind: message.kind,
       text: message.text,
       at: message.at,
+      ...(message.queueId ? { queueId: message.queueId } : {}),
       sender: message.from?.name ?? message.peerAsk?.name ?? message.sender?.name ?? null,
       tool: message.tool ? { name: message.tool.name, ok: message.tool.ok } : null,
       attachments: (message.attachments ?? []).map((file) => ({ name: file.kind === "file" ? file.name : undefined, path: file.path }))
@@ -29566,8 +29567,10 @@ const agentApi = createAgentApi({
     if (!target) return agentRefuse(404, "unknown_agent", "No such agent.");
     if (caller.kind === "person") {
       // 2026-10-29: a person's AI client is another agent: its own
-      // conversation with the bot, never the person's chat with it
-      const threadId = agentConversationFor(target, caller.id, caller.client, false);
+      // conversation with the bot, never the person's chat with it.
+      // #2575: a fresh one on every send, as the guide promises; a send
+      // never grafts onto a conversation that is still working.
+      const threadId = agentConversationFor(target, caller.id, caller.client, true);
       if (!threadId) return agentRefuse(502, "not_started", "A conversation with this agent could not be opened.");
       return { threadId };
     }
@@ -29616,13 +29619,21 @@ const agentApi = createAgentApi({
     if (caller.kind === "person") {
       const staged = agentApiStageFiles(caller, target, files);
       if ("code" in staged) return staged;
-      const sent = await performAsMember(memberForAgentCaller(caller), { method: "POST", path: `/api/bots/${encodeURIComponent(agentId)}/messages`, body: { text: agentPromptWithFiles(prompt, staged, workspaceDir(target.id)), threadId } });
-      const body = (sent.body ?? {}) as { message?: { id?: unknown }; error?: unknown; message_?: unknown };
+      const sent = await performAsMember(memberForAgentCaller(caller), { method: "POST", path: `/api/bots/${encodeURIComponent(agentId)}/messages`, body: {
+        text: agentPromptWithFiles(prompt, staged, workspaceDir(target.id)), threadId,
+        // #2575: a busy conversation queues the prompt for its own turn
+        // (never steered into the running one, never merged with another
+        // queued prompt), so every handle gets its own reply
+        busyMode: "after", aiClient: true,
+      } });
+      const body = (sent.body ?? {}) as { message?: { id?: unknown }; queueId?: unknown; error?: unknown; message_?: unknown };
       if (sent.status >= 300) return agentRefuse(sent.status >= 400 ? sent.status : 502, "not_sent", String((sent.body as { error?: unknown })?.error ?? "The prompt could not be sent."));
-      const messageId = typeof body.message?.id === "string" ? body.message.id : null;
+      const lineId = typeof body.message?.id === "string" ? body.message.id : null;
       // #291: not the person typing: the chat folds it with the bot's answer
-      if (messageId) markAiClientLine(threadId, messageId);
-      return { messageId };
+      // (a queued prompt gets the mark when its turn stores it)
+      if (lineId) markAiClientLine(threadId, lineId);
+      // a queued prompt is anchored by its queueId until its line is stored
+      return { messageId: lineId ?? (typeof body.queueId === "string" ? body.queueId : null) };
     }
     const from = agentApiCallerBot(caller);
     const capability = caller.depth;

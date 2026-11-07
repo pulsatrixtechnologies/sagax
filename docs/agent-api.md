@@ -151,9 +151,11 @@ reply text is never a substitute for a card.
   version are shown again on the next start, nothing deleted.
 - **An AI client is another agent** (2026-10-29): a person's AI client
   attached to Perspicax (`send_prompt`, `sagax_send`) is not the person
-  typing. Its sends go to its own conversation with the agent, one per
-  agent, person and client, reused until `thread_id` names another or
-  `newThread` asks for a fresh one (`shared/agent-conversation.ts`). The
+  typing. Each send without `thread_id` opens a fresh conversation
+  with the agent (#2575), never the one still working; `thread_id` names one
+  of the person's to continue it (`shared/agent-conversation.ts`). A prompt
+  sent while that conversation is busy waits in the queue and gets its own
+  turn and reply, never merged into the running one. The
   thread is the person's (`ownerPrincipalId`) and stamped
   `openedBy: { kind: "agent", botId: "agent:<slug>", name }` from the
   `client_name` Perspicax signs into the assertion ("AI client" when it

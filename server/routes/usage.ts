@@ -27,6 +27,7 @@ import {
   USAGE_GROUPINGS,
   type UsageGroupBy,
 } from "../usage/usage-ledger.ts";
+import { buildUsageStats, readToolSpans } from "../telemetry/usage-stats.ts";
 import { buildUsageTraces, parseTracePaging, USAGE_TRACE_MAX_JOBS } from "../usage/usage-trace.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -125,6 +126,28 @@ export function createUsageRoutes(deps: UsageRouteDeps): RouteHandler {
         to: range.to.toISOString(),
         ...buildUsageTraces(usageRowsFor(readUsage(deps.dataDir, range), viewer), { ...(Number.isFinite(max) && max > 0 ? { max: Math.min(Math.trunc(max), USAGE_TRACE_MAX_JOBS) } : {}), ...(parseTracePaging(url.searchParams.get("limit"), url.searchParams.get("offset")) ) }),
       });
+    }
+    // GET /api/usage/stats and /api/me/usage/stats (#2609): the usage
+    // statistics, split by account, model, source and person, with the tool,
+    // MCP and sub-agent calls the local span exporter counted
+    // (server/telemetry/usage-stats.ts). /api/usage/stats: the whole ledger,
+    // admin or usage.view; /api/me/usage/stats: the caller's own turns and
+    // the calls of their own threads only.
+    if (method === "GET" && (path === "/api/usage/stats" || path === "/api/me/usage/stats")) {
+      const own = path === "/api/me/usage/stats";
+      const viewer = own ? ownUsageViewer(auth, deps.organization()) : null;
+      if (own && !viewer) return json(res, 403, { error: "sign in as a person first" });
+      const range = parseUsageRange(url.searchParams.get("from"), url.searchParams.get("to"));
+      if (!range) return json(res, 400, { error: "from and to must be YYYY-MM-DD, from no later than to, at most a year apart" });
+      const all = readUsage(deps.dataDir, range);
+      const rows = viewer ? usageRowsFor(all, viewer) : all;
+      let spans = readToolSpans(deps.dataDir, range);
+      if (viewer) {
+        const threads = new Set(rows.map((row) => row.threadId));
+        spans = spans.filter((span) => span.threadId !== undefined && threads.has(span.threadId));
+      }
+      res.setHeader("cache-control", "no-store");
+      return json(res, 200, { from: range.from.toISOString(), to: range.to.toISOString(), ...buildUsageStats(rows, spans) });
     }
     // GET /api/usage/traces (2026-10-22, port of OpenMausBot #3316 rebuilt on
     // our ledger): per-job traces, where each job spent its time and money.

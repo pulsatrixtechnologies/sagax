@@ -100,6 +100,7 @@ function baseDeps(over: Partial<GroupsHttpDeps> = {}): GroupsHttpDeps {
     pageSize: () => 50,
     messagePage: () => ({ messages: [] }),
     groupThreadIsWorking: () => false,
+    applyRoomHoldsFromMessage: () => {},
     groupOwnerRuleApplies: () => false,
     groupActor: () => ({ id: "pr_member", email: "a@example.test" } as never),
     effectiveBotOwner: () => "pr_owner",

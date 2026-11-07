@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { drainSteeredMessages } from "./turns/steer-queue.ts";
 import { drainChannelMessages } from "./rooms/channel-queue.ts";
-import { applyHoldDirective, heldMemberLine, rememberHeldMessage } from "./room-holds.ts";
+import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeldMessage } from "./room-holds.ts";
 import { agentBrowserIntegration } from "./browser/browser-engine.ts";
 import { browserProfilePartitionTarget } from "./config.ts";
 import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
@@ -8149,6 +8149,52 @@ function setRoomHold(groupId: string, botId: string, held: boolean): GroupRecord
   if (change.held.length || change.released.length) store.patchGroup(groupId, { holds: change.holds });
   if (held) void interruptHeldMember(groupId, botId);
   return store.group(groupId) ?? null;
+}
+
+/** Applied at accept, before the message queues behind a busy room, so a stop reaches a member working now. */
+function applyRoomHoldsFromMessage(groupId: string, text: string): void {
+  const group = store.group(groupId);
+  if (!group || group.dm) return;
+  const members = group.memberIds.map((id) => store.bot(id)).filter((bot): bot is BotRecord => Boolean(bot) && !bot!.hidden);
+  const mentioned = mentionedBots(text, members).map((bot) => bot.id);
+  const change = applyHoldDirective(group.holds, classifyHoldDirective(text, mentioned), members.map((bot) => bot.id), Date.now());
+  if (!change.held.length && !change.released.length) return;
+  store.patchGroup(groupId, { holds: change.holds });
+  for (const botId of change.held) void interruptHeldMember(groupId, botId);
+}
+
+/** What was addressed to a held member while it was held, for the turn that brings it back. */
+function heldReplayFor(groupId: string, threadId: string, botId: string, userName: string, roomContext: string): { block: string; messageIds: string[] } {
+  const entries = (store.group(groupId)?.heldMessages?.[botId] ?? []).filter((entry) => entry.threadId === threadId);
+  if (!entries.length) return { block: "", messageIds: [] };
+  const messages = store.messagesFor(threadId);
+  const byId = new Map(messages.map((message) => [message.id, message]));
+  const lines = entries.flatMap((entry) => {
+    const message = byId.get(entry.messageId);
+    if (!message?.text) return [];
+    const speaker = message.role === "user" ? message.sender?.name ?? userName : message.from ? peerName(message.from.name) : "Bot";
+    const line = `${speaker}: ${escapeNotes(transcriptText(message, byId, userName)).slice(0, 1_000)}`;
+    return roomContext.includes(line) ? [`${speaker}: (in the conversation above) ${escapeNotes(message.text).slice(0, 120)}`] : [line];
+  });
+  return {
+    block: lines.length
+      ? `\n\nYou were stopped (held) in this room and have just been brought back. While you were held, these messages were addressed to you:\n${lines.join("\n")}`
+      : "",
+    messageIds: entries.map((entry) => entry.messageId),
+  };
+}
+
+/** Once the returning turn dispatches, the replayed messages are delivered. */
+function clearHeldReplay(groupId: string, botId: string, messageIds: readonly string[]): void {
+  if (!messageIds.length) return;
+  const group = store.group(groupId);
+  const current = group?.heldMessages?.[botId];
+  if (!group || !current) return;
+  const remaining = current.filter((entry) => !messageIds.includes(entry.messageId));
+  const heldMessages = { ...group.heldMessages };
+  if (remaining.length) heldMessages[botId] = remaining;
+  else delete heldMessages[botId];
+  store.patchGroup(groupId, { heldMessages });
 }
 
 function turnEvidence(nodeRows: { tool?: { name?: string; ok?: boolean } | null }[]): { toolCalls?: number; tools?: string[]; okToolCalls?: number } {
@@ -30546,6 +30592,7 @@ ROUTES.push(createGroupsHttpRoutes({
   pageSize,
   messagePage,
   groupThreadIsWorking,
+  applyRoomHoldsFromMessage,
   groupOwnerRuleApplies,
   groupActor,
   effectiveBotOwner,
@@ -31499,6 +31546,8 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   autoRecallPrompt,
   mergeSkills,
   escapeNotes,
+  heldReplayFor,
+  clearHeldReplay,
   placeUnavailable,
   resolveSurface,
   roomResponders,

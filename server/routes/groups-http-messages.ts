@@ -30,6 +30,7 @@ export async function postGroupMessages(deps: GroupsHttpDeps, ctx: RouteContext,
     store,
     isPerspicax,
     groupThreadIsWorking,
+    applyRoomHoldsFromMessage,
     groupPostAllowed,
     misuseActor,
     usageTriggerFor,
@@ -160,6 +161,7 @@ export async function postGroupMessages(deps: GroupsHttpDeps, ctx: RouteContext,
           status: 404,
         });
       }
+      if (channelMode === "chat") applyRoomHoldsFromMessage(current.id, text);
       const threadWorking = groupThreadIsWorking(current.id, threadId);
       const decision = admit("room", {}, { roomWorking: threadWorking, threadWorking });
       if (decision.action === "queue") {

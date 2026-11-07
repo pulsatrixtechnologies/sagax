@@ -41,6 +41,8 @@ export type GroupMemberTurnHost = {
   autoRecallPrompt: any,
   mergeSkills: (...args: any[]) => any;
   escapeNotes: (...args: any[]) => any;
+  heldReplayFor: (groupId: string, threadId: string, botId: string, userName: string, roomContext: string) => { block: string; messageIds: string[] };
+  clearHeldReplay: (groupId: string, botId: string, messageIds: readonly string[]) => void;
   placeUnavailable: (...args: any[]) => any;
   resolveSurface: (...args: any[]) => any;
   roomResponders: (...args: any[]) => any;

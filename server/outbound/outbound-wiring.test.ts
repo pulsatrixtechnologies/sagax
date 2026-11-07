@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PurchaseListing } from "../vault/credential-vault.ts";
 import { outboundWiring, primaryOutboundDecision, primaryPurchaseCard, purchaseCardFallback, purchaseOutboundCard } from "./outbound-wiring.ts";
 import type { Message } from "../store.ts";
+import { autoVerdict } from "../approvals/auto-approve.ts";
+import { setOrgApprovalPolicySource } from "../rules/custom-rules-org.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -46,9 +48,8 @@ describe("outbound wiring", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.outbound).toMatchObject({ kind: "call", status: "pending", destination: "+1 514 555 0142", botName: "Rocket", callback: "+1 438 555 0199" });
     const pending = wiring.primaryPending("jean", false);
-    // ÉFVP pilot: the person confirms the number on the card; the Primary Bot may only decline
-    expect(pending).toEqual([expect.objectContaining({ title: "Call +1 514 555 0142?", options: ["deny"] })]);
-    expect(pending[0]).not.toHaveProperty("always");
+    // 2026-11-06 (the maintainer): the Primary Bot allows once, always or declines, like the person
+    expect(pending).toEqual([expect.objectContaining({ title: "Call +1 514 555 0142?", options: ["allow", "always_allow", "deny"], always: "rule", alwaysScope: "calls to +1 514 555 0142" })]);
     const id = pending[0]!.requestId;
     wiring.calls.answer("jean", id, "call", undefined, "+1 514 555 0142", true);
     // the route's answered hook
@@ -125,18 +126,47 @@ describe("outbound wiring", () => {
     expect(words).not.toMatch(/\d{12,}/);
   });
 
-  it("the Primary Bot answers a purchase once, always (a rule for the site) or no; a call only on its card (#2091)", () => {
+  it("the Primary Bot answers a purchase once, always (a rule for the site) or no; a call too (the maintainer 2026-11-06)", () => {
     expect(primaryOutboundDecision("purchase", { behavior: "allow" })).toEqual({ decision: "once" });
     expect(primaryOutboundDecision("purchase", { behavior: "allow", always: true })).toEqual({ decision: "always" });
     expect(primaryOutboundDecision("purchase", { behavior: "allow", rule: "allow" })).toEqual({ decision: "always" });
     expect(primaryOutboundDecision("purchase", { behavior: "deny" })).toEqual({ decision: "deny" });
-    // ÉFVP 2026-10-22: the person confirms the number on the card
+    // the Primary Bot confirms the card's own number on the person's behalf
+    expect(primaryOutboundDecision("call", { behavior: "allow" }, "+15145550142")).toEqual({ decision: "call", confirmedTo: "+15145550142", confirmed: true });
+    expect(primaryOutboundDecision("call", { behavior: "allow", always: true }, "+15145550142")).toEqual({ decision: "always", confirmedTo: "+15145550142", confirmed: true });
+    expect(primaryOutboundDecision("call", { behavior: "allow", rule: "allow" }, "+15145550142")).toEqual({ decision: "always", confirmedTo: "+15145550142", confirmed: true });
     expect(primaryOutboundDecision("call", { behavior: "allow" })).toHaveProperty("refused");
-    expect(primaryOutboundDecision("call", { behavior: "allow", always: true })).toHaveProperty("refused");
     expect(primaryOutboundDecision("call", { behavior: "deny" })).toEqual({ decision: "deny" });
     const card = primaryPurchaseCard(listing, "Rocket", false);
     expect(card.options).toEqual(["allow", "always_allow", "deny"]);
     expect(card.always).toBe("rule");
     expect(card.alwaysScope).toContain(listing.domain);
+  });
+});
+
+describe("the Primary Bot's call answers keep the organization's rules (the maintainer 2026-11-06)", () => {
+  afterEach(() => setOrgApprovalPolicySource(null));
+
+  it("an organization rule Demander d'abord or Refuser still gates place_phone_call before any card", () => {
+    const tool = "mcp__sagax__place_phone_call";
+    for (const mode of ["ask", "auto", "full"] as const) {
+      expect(autoVerdict(mode, tool, { outbound: true, customRule: { behavior: "ask", id: "orule_ask" }, toolAllowed: true })).toEqual({ approve: null, source: "custom-rule-ask" });
+      expect(autoVerdict(mode, tool, { outbound: true, customRule: { behavior: "deny", id: "orule_deny" }, toolAllowed: true }).approve).not.toBe(true);
+    }
+  });
+
+  it("Toujours permettre off: no Always for the Primary Bot, and a saved Always call no longer answers", async () => {
+    const { wiring } = setup();
+    await wiring.placeCall({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g1", room: false }, ARGS);
+    const id = wiring.primaryPending("jean", false)[0]!.requestId;
+    wiring.calls.answer("jean", id, "always", "Chef", "+1 514 555 0142", true);
+    expect(wiring.calls.standingFor("jean", "+15145550142")).toBe(true);
+    setOrgApprovalPolicySource(() => ({ alwaysAllow: false }));
+    expect(primaryOutboundDecision("call", { behavior: "allow", always: true }, "+15145550142")).toHaveProperty("refused");
+    expect(primaryOutboundDecision("call", { behavior: "allow" }, "+15145550142")).toEqual({ decision: "call", confirmedTo: "+15145550142", confirmed: true });
+    await wiring.placeCall({ principalId: "jean", botId: "bot-a", threadId: "t-2", generation: "g2", room: false }, ARGS);
+    const pending = wiring.primaryPending("jean", false);
+    expect(pending).toEqual([expect.objectContaining({ threadId: "t-2", options: ["allow", "deny"] })]);
+    expect(pending[0]).not.toHaveProperty("always");
   });
 });

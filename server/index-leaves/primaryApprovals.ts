@@ -60,8 +60,8 @@ function primaryApprovals() {
         });
       }
       const vaultPerson = host.IDENTITY.kind === "perspicax" ? turn.person.toLowerCase() : host.LOCAL_VAULT_PRINCIPAL;
-      // a phone call: Do not call here; Call and Always are confirmed on
-      // the card with the number (ÉFVP 2026-10-22)
+      // a phone call: Call this once, Always call this number, or Do not
+      // call, like the person on the card (the maintainer 2026-11-06)
       out.push(...outbound.primaryPending(vaultPerson, host.securityKeys.required(vaultPerson, ["money"]).length > 0));
       // a purchase: allow this once, always on this site (#2091), or deny
       for (const purchase of host.credentialVault.pendingPurchases(vaultPerson)) {
@@ -72,10 +72,12 @@ function primaryApprovals() {
     respond: (turn, card, body) => {
       if (card.requestId.startsWith("call_") || card.requestId.startsWith("pay_")) {
         const call = card.requestId.startsWith("call_");
-        const answer = host.primaryOutboundDecision(call ? "call" : "purchase", body);
+        // a call: the number the Primary Bot confirms is the card's own
+        const number = call ? outbound.calls.get(card.requestId)?.request.to : undefined;
+        const answer = host.primaryOutboundDecision(call ? "call" : "purchase", body, number);
         if ("refused" in answer) return Promise.resolve({ status: 400, body: { error: answer.refused, code: "card_only" } });
         const route = call ? `/api/me/phone-calls/${card.requestId}/answer` : `/api/me/credentials/purchases/${card.requestId}/answer`;
-        return replay(turn, "POST", route, { decision: answer.decision }, card.threadId);
+        return replay(turn, "POST", route, answer, card.threadId);
       }
       const message = host.store.messagesFor(card.threadId).find((row) => row.card?.requestId === card.requestId);
       const skill = message?.card?.skillRequest && body.behavior === "allow" ? host.reviewedSkillSha256(message.card.skillRequest) : undefined;

@@ -33,6 +33,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
+import { standingGrantsAllowed } from "../rules/custom-rules-org.ts";
 import { normalizePhone } from "../../shared/allowed-recipients.ts";
 import {
   callDigestSource, callTwiml, canadianNumber, conversationDisclosure, createCallArgs, formatPhone, maskPhone, parseOutboundCall, voiceCallArgs,
@@ -279,8 +280,9 @@ export class OutboundCalls {
       ...(input.request.mode === "conversation" && input.names?.personName ? { personName: input.names.personName } : {}),
     };
     // #2091: the person's Always call for this number approves the call as
-    // it opens; the card says by what (the caller places it at once)
-    if (this.standingFor(input.principalId, input.request.to)) {
+    // it opens; the card says by what (the caller places it at once). Not
+    // while the organization turned "Toujours permettre" off.
+    if (standingGrantsAllowed() && this.standingFor(input.principalId, input.request.to)) {
       record.status = "approved";
       record.answeredAt = record.createdAt;
       record.expiresAt = record.createdAt + CALL_APPROVAL_MS;

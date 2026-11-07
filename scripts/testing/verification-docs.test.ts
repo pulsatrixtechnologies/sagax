@@ -54,6 +54,8 @@ const featureRouteModules = [
   join(ROOT, "server", "workspace-backup-http.ts"),
   join(ROOT, "server", "backup", "workspace-backup-http.ts"),
   join(ROOT, "server", "request-pipeline", "origin-gates.ts"),
+  // #1388: the internal and testing routes left server/index.ts for the request pipeline
+  join(ROOT, "server", "request-pipeline", "run-internal.ts"),
 ].filter((file, index, all) => existsSync(file) && all.indexOf(file) === index).sort();
 const serverSource = [join(ROOT, "server", "index.ts"), ...routeModules, ...featureRouteModules]
   .map((file) => readFileSync(file, "utf8")).join("\n");

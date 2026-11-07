@@ -17,7 +17,7 @@ const bot = (id: string, name: string, tasks: Bot["tasks"] = []): Bot => ({
 
 const entries: DelegationEntry[] = [
   { botId: "harrie", threadId: "harrie-work", name: "Harrie", status: "completed", task: "Reconcile the bank sheet", finishedAt: Date.UTC(2026, 10, 6, 14), note: "Sheet balanced" },
-  { botId: "melonie", threadId: "melonie-work", name: "Melonie", status: "running", task: "Draft the client summary", startedAt: Date.UTC(2026, 10, 6, 13) },
+  { botId: "orla", threadId: "orla-work", name: "Orla", status: "running", task: "Draft the client summary", startedAt: Date.UTC(2026, 10, 6, 13) },
 ];
 
 let host: HTMLDivElement;
@@ -40,7 +40,7 @@ describe("DelegationList", () => {
   it("groups every hand-off under one intro line, task in ink, name and model in grey, no label lost", () => {
     render({ entries, modelOf: (id) => (id === "harrie" ? "Opus High" : "Sonnet") });
     const intro = host.querySelector("[data-delegation-intro]");
-    expect(intro?.textContent).toBe("Sent work to Harrie, Melonie");
+    expect(intro?.textContent).toBe("Sent work to Harrie, Orla");
     const rows = host.querySelectorAll("[data-run-handed-to] > li");
     expect(rows).toHaveLength(2);
     expect(rows[0]!.getAttribute("data-run-handoff")).toBe("harrie");
@@ -64,7 +64,7 @@ describe("DelegationList", () => {
     expect(host.querySelector('[data-delegation-state="completed"] .thinking-shimmer')).toBeNull();
     expect(host.querySelector("[data-delegation-waiting] .thinking-shimmer")).not.toBeNull();
     expect(host.querySelector('[data-delegation-state="completed"]')).not.toBeNull();
-    expect(host.querySelector("[data-delegation-waiting]")?.textContent).toBe("Waiting for Melonie");
+    expect(host.querySelector("[data-delegation-waiting]")?.textContent).toBe("Waiting for Orla");
   });
 
   it("counts teammates still running, and drops the waiting line once all are done", () => {
@@ -77,11 +77,11 @@ describe("DelegationList", () => {
   it("a click opens the same thing as before: onOpen with the teammate and its conversation", () => {
     const onOpen = vi.fn();
     render({ entries, onOpen });
-    const button = host.querySelector<HTMLButtonElement>('[data-run-teammate-thread="melonie-work"]')!;
+    const button = host.querySelector<HTMLButtonElement>('[data-run-teammate-thread="orla-work"]')!;
     expect(button.tagName).toBe("BUTTON");
-    expect(button.getAttribute("aria-label")).toBe("See Melonie's work, Planning next moves");
+    expect(button.getAttribute("aria-label")).toBe("See Orla's work, Planning next moves");
     button.click();
-    expect(onOpen).toHaveBeenCalledWith("melonie", "melonie-work");
+    expect(onOpen).toHaveBeenCalledWith("orla", "orla-work");
     expect(host.textContent).not.toMatch(/Open thread/i);
   });
 
@@ -94,9 +94,9 @@ describe("DelegationList", () => {
   it("the teammate's live conversation corrects a stale Running", () => {
     const entry = entries[1]!;
     expect(delegationState(entry)).toBe("running");
-    expect(delegationState(entry, bot("melonie", "Melonie", [{ threadId: "melonie-work", title: "", createdAt: 1, busy: true }]))).toBe("running");
-    expect(delegationState(entry, bot("melonie", "Melonie", [{ threadId: "melonie-work", title: "", createdAt: 1, busy: false }]))).toBe("ended");
-    expect(delegationState(entry, bot("melonie", "Melonie", [{ threadId: "melonie-work", title: "", createdAt: 1, activity: "waiting-on-you" }]))).toBe("waiting");
+    expect(delegationState(entry, bot("orla", "Orla", [{ threadId: "orla-work", title: "", createdAt: 1, busy: true }]))).toBe("running");
+    expect(delegationState(entry, bot("orla", "Orla", [{ threadId: "orla-work", title: "", createdAt: 1, busy: false }]))).toBe("ended");
+    expect(delegationState(entry, bot("orla", "Orla", [{ threadId: "orla-work", title: "", createdAt: 1, activity: "waiting-on-you" }]))).toBe("waiting");
     expect(delegationState({ ...entry, status: "needs_input" })).toBe("waiting");
     expect(delegationState({ ...entry, status: "cancelled" })).toBe("failed");
   });

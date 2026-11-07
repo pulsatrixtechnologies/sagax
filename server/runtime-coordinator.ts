@@ -11,7 +11,7 @@
 // as "not now" by the Runtime, so nothing here wraps it again.
 import { join } from "node:path";
 
-import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./coordinator.ts";
+import type { BeginTurnRequest, Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffView, HostTurnResult, LiveHandoffEdge, RoomAddress } from "./runtime/coordinator-types.ts";
 import type { WorkOrigin } from "./peers/peer-provenance.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, composeRootTurn, continuationLine, envelopeNote } from "./runtime/envelope.ts";
 import { Runtime } from "./runtime/runtime.ts";

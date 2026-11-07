@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 // Guard (JC 2026-11-06): in the unified chat, the default, nothing in the bot's
 // chat sends the person elsewhere. No "Go to conversation", no "Open thread",
-// no thread sheet: a "Sent work to Katarina · Done" card had a "Go to
-// conversation Katarina" line under it. Everything stays in the bot's chat.
+// no thread sheet: a "Sent work to Wren · Done" card had a "Go to
+// conversation Wren" line under it. Everything stays in the bot's chat.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -25,7 +25,7 @@ describe("unified chat guard", () => {
 
   it("draws no Go to conversation line under a delegation", () => {
     const html = renderToStaticMarkup(createElement(ConversationLink, {
-      bot: { name: "Katarina", color: "pink" }, name: "Katarina", color: "pink", onClick: () => {},
+      bot: { name: "Wren", color: "pink" }, name: "Wren", color: "pink", onClick: () => {},
     }));
     expect(html).toBe("");
     expect(html).not.toMatch(/Go to conversation|Open thread/);

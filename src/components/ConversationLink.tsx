@@ -3,7 +3,7 @@
 // exchange and by the opened-thread receipt, so they cannot drift apart.
 // Threads off (the unified chat, the default) draws none of it: no "Go to
 // conversation", no "Open thread", no thread sheet (JC 2026-11-06, the
-// "Sent work to Katarina · Done" card had one under it).
+// "Sent work to Wren · Done" card had one under it).
 import type { ReactNode } from "react";
 import { t } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";

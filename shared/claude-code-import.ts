@@ -234,7 +234,7 @@ function connectionsFrom(raw: string | undefined, leftOut: GrokLeftOut[]): Packa
       const envNames = isRecord(value.env) ? Object.keys(value.env).filter((key) => HEADER_NAME.test(key)) : [];
       leftOut.push({
         kind: "app", name: label,
-        reason: "it runs a program on your computer; add it yourself in Capabilities",
+        reason: "it runs a program on your computer; add it yourself in Plugins",
         ...named, reasonKey: "leftOut.reason.runsProgram",
         original: [`Program: ${oneLine(value.command).split(" ")[0]}`, envNames.length ? `Values it needs: ${envNames.join(", ")}` : ""].filter(Boolean).join("\n"),
       });
@@ -251,7 +251,7 @@ function connectionsFrom(raw: string | undefined, leftOut: GrokLeftOut[]): Packa
       usable = false;
     }
     if (!usable) {
-      leftOut.push({ kind: "app", name: label, reason: "its address is not a plain https:// address; add it yourself in Capabilities", ...named, reasonKey: "leftOut.reason.notHttps" });
+      leftOut.push({ kind: "app", name: label, reason: "its address is not a plain https:// address; add it yourself in Plugins", ...named, reasonKey: "leftOut.reason.notHttps" });
       continue;
     }
     if (connections.length >= PACKAGE_MAX_CONNECTIONS) {
@@ -287,7 +287,7 @@ export function claudeCodeToPackage(
       leftOut.push({
         kind: "skill",
         name: file.path,
-        reason: "it may hold a key or a password, so it was not opened. Add what the bot needs in Capabilities or the vault",
+        reason: "it may hold a key or a password, so it was not opened. Add what the bot needs in Plugins or the vault",
         reasonKey: "leftOut.reason.secretFile",
       });
       return false;
@@ -324,7 +324,7 @@ export function claudeCodeToPackage(
   const subagents = subagentsFrom(files, skillNames, main.key, leftOut);
   const connections = connectionsFrom(byPath.get(".mcp.json"), leftOut);
   for (const secret of options.skippedSecrets ?? []) {
-    leftOut.push({ kind: "secrets", name: secret, reason: "it may hold a key or a password, so it was not opened. Add what the bot needs in Capabilities or the vault", reasonKey: "leftOut.reason.secretFile" });
+    leftOut.push({ kind: "secrets", name: secret, reason: "it may hold a key or a password, so it was not opened. Add what the bot needs in Plugins or the vault", reasonKey: "leftOut.reason.secretFile" });
   }
   const draft: PackageDocument = {
     ...base.document,

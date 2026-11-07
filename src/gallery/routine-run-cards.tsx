@@ -46,9 +46,9 @@ const teammate = (id: string, name: string, color: string, model: string, thread
   return bot as unknown as Bot;
 };
 const harrie = teammate("harrie", "Harrie", "green", "Opus 4.7", "harrie-work", false);
-const melonie = teammate("melonie", "Melonie", "orange", "Sonnet 4.6", "melonie-work", true);
+const orla = teammate("orla", "Orla", "orange", "Sonnet 4.6", "orla-work", true);
 const quill = teammate("quill", "Quill", "purple", "Haiku 4.5", "quill-work", true);
-const team = [atlas, nova, harrie, melonie, quill];
+const team = [atlas, nova, harrie, orla, quill];
 
 const card = (id: string, run: Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, at: number): Message => ({
   id, role: "bot", kind: "routine.run", at, from: { botId: "atlas" },
@@ -99,7 +99,7 @@ const delegatedRun = card("delegated", {
   routineName: "dispatch-gox-pass", status: "running", startedAt: NOW - 4 * M,
   handedTo: [
     { botId: "harrie", threadId: "harrie-work", name: "Harrie", status: "completed", task: "Reconcile the bank overage for Northwind", startedAt: NOW - 4 * M, finishedAt: NOW - 1 * M, note: "Moved 2.5 h to the right agreement." },
-    { botId: "melonie", threadId: "melonie-work", name: "Melonie", status: "running", task: "Draft the weekly client summary", startedAt: NOW - 3 * M },
+    { botId: "orla", threadId: "orla-work", name: "Orla", status: "running", task: "Draft the weekly client summary", startedAt: NOW - 3 * M },
     { botId: "quill", threadId: "quill-work", name: "Quill", status: "running", startedAt: NOW - 2 * M },
   ],
 } as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 4 * M);

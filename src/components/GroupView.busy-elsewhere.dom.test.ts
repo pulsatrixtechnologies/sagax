@@ -27,15 +27,15 @@ vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 
 const { GroupView } = await import("./GroupView");
 
-const melonie = { id: "mel", name: "Melonie", color: "blue", threadId: "mel-thread", messages: [] } as unknown as Bot;
-fixture.bots = [melonie];
+const orla = { id: "mel", name: "Orla", color: "blue", threadId: "mel-thread", messages: [] } as unknown as Bot;
+fixture.bots = [orla];
 const ask: Message = { id: "ask", role: "user", kind: "text", at: 1_000, text: "Can you check the board?" };
 const wait = (ok?: boolean): Message => ({
   id: "wait", role: "bot", kind: "activity", at: 2_000,
-  from: { botId: "mel", name: "Melonie", color: "blue" },
+  from: { botId: "mel", name: "Orla", color: "blue" },
   tool: {
-    name: "Melonie is finishing another conversation — will reply here when free",
-    spoken: "Melonie is finishing another conversation",
+    name: "Orla is finishing another conversation — will reply here when free",
+    spoken: "Orla is finishing another conversation",
     ...(ok === undefined ? {} : { ok }),
   },
 });
@@ -72,12 +72,12 @@ describe("a member busy in another conversation", () => {
     expect(log.contains(presence[0])).toBe(false);
     const slot = presence[0].closest("[data-turn-presence-slot]")!;
     expect(slot.closest("[data-composer-dock]")).not.toBeNull();
-    expect(slot.textContent).toContain("Melonie is finishing another conversation");
+    expect(slot.textContent).toContain("Orla is finishing another conversation");
     expect(slot.textContent).not.toContain("will reply here when free");
   });
 
   it("goes away once the turn starts, with no row left behind", () => {
-    render(room([ask, wait(true), { id: "r", role: "bot", kind: "text", at: 3_000, text: "Board looks clear.", from: { botId: "mel", name: "Melonie", color: "blue" } }], false));
+    render(room([ask, wait(true), { id: "r", role: "bot", kind: "text", at: 3_000, text: "Board looks clear.", from: { botId: "mel", name: "Orla", color: "blue" } }], false));
     expect(host.textContent).toContain("Board looks clear.");
     expect(host.textContent).not.toContain("finishing another conversation");
   });

@@ -71,7 +71,7 @@ export function toolFailurePreview(value: unknown): string | undefined {
 /**
  * The failure payload whose own words win. Later candidates stand in when an
  * earlier one is null, empty, or only a code with no sentence (2026-11-05,
- * #1988: Codex mcpToolCall with `error: ""` / `{}` hid `result.content` /
+ * #1988: Codex mcpToolCall with an empty `error` ("" or {}) hid `result.content` /
  * `structuredContent`, so the step card read "returned no error message").
  */
 export function toolFailureSource(...candidates: unknown[]): unknown {

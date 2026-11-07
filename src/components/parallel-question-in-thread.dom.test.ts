@@ -34,7 +34,7 @@ const question = {
 } as unknown as Message;
 
 const bot = {
-  id: "melonie", name: "Melonie", threadId: "main", messages: [],
+  id: "orla", name: "Orla", threadId: "main", messages: [],
   tasks: [
     { threadId: "main", title: "Main", createdAt: 0 },
     { threadId: "par", title: "Proactive teammate message", createdAt: 1, updatedAt: 2, activity: "waiting-on-you", parallelOf: { threadId: "main", messageId: "m", at: 1 } },
@@ -76,7 +76,7 @@ describe("a parallel task's question (#2082)", () => {
     document.body.append(host);
     root = createRoot(host);
     await act(async () => root!.render(createElement(Fragment, null,
-      optionsCardRow({ message: question, transcript: [question], botId: "melonie", botName: "Melonie", threadId: "par" }))));
+      optionsCardRow({ message: question, transcript: [question], botId: "orla", botName: "Orla", threadId: "par" }))));
     expect(host.textContent).toContain("Projects to decide");
     // the whole ask is there (clamped on screen, "Show full question" opens it)
     expect(host.textContent).toContain(LONG);
@@ -100,7 +100,7 @@ describe("a parallel task's card in the one conversation (#2082)", () => {
     const host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
-    await act(async () => root!.render(createElement(ParallelTaskCard, { message: card, botId: "melonie" })));
+    await act(async () => root!.render(createElement(ParallelTaskCard, { message: card, botId: "orla" })));
     await act(async () => { await new Promise((done) => setTimeout(done, 0)); });
     return host;
   }

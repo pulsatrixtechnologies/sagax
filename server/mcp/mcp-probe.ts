@@ -9,6 +9,11 @@ import { discoverMcpAuth } from "./mcp-oauth-discovery.ts";
 import { isRemoteMcpServer, type StoredMcpServer, type StoredRemoteMcpServer, type StoredStdioMcpServer } from "./mcp-registry.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { planToolNames, type ToolNameProblem } from "./mcp-tool-names.ts";
+import { sendsCredentials, SIGN_IN_CHECK_TOOL } from "./mcp-sign-in-check.ts";
+
+// Leaf module (no config.ts import) so mcp-oauth stays out of the
+// config > engine-api-keys > provider-keys > mcp-oauth > mcp-probe cycle.
+export { sendsCredentials, SIGN_IN_CHECK_TOOL };
 
 export interface McpProbeTool {
   name: string;
@@ -44,12 +49,6 @@ export function engineToolNames(serverName: string | undefined, names: readonly 
 }
 
 export const SIGN_IN_REQUIRED = "This server needs you to sign in.";
-/** A tool name no server defines, so calling it runs nothing and the answer
- * says only whether tool calls need a sign-in. Observed 2026-10-31:
- * mcp.agentcard.sh answers it HTTP 401 with `resource_metadata`;
- * huggingface.co/mcp, whose sign-in is optional and which also serves an
- * RFC 9728 document, answers JSON-RPC -32602 "not found". */
-export const SIGN_IN_CHECK_TOOL = "sagax.sign-in-check";
 const SIGN_IN_CHECK_MS = 5_000;
 const DISCOVERY_MS = 5_000;
 
@@ -107,11 +106,6 @@ function publicTools(raw: unknown[], secrets: Record<string, string>, serverName
   return { tools, ...(named.length > tools.length ? { total: named.length } : {}), ...(engineNames ? { engineNames } : {}) };
 }
 
-/** True when the probe carries any header value. Personal entries store ""
- * placeholders, so an empty value is no credential. */
-export function sendsCredentials(server: Pick<StoredRemoteMcpServer, "headers">): boolean {
-  return Object.values(server.headers).some((value) => value !== "");
-}
 
 /** Which request the server refused with HTTP 401. */
 type RefusedAt = "connect" | "call";

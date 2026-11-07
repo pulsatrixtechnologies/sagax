@@ -3,7 +3,7 @@ import { stripChatSpecialTokens } from "../../shared/chat-special-tokens";
 type ShownRun = { status: string; summary?: string; error?: string; problems?: string; attention?: string; goalStatus?: string; handedTo?: readonly unknown[] };
 type ShownMessage = { role: string; kind: string; text?: string; attachments?: readonly unknown[]; routineRun?: ShownRun };
 
-/** A routine run's message as shown (2026-11-06, Katarina's "New Outlook
+/** A routine run's message as shown (2026-11-06, Wren's "New Outlook
  * email" webhook runs: six bubbles that read "<|eos|>"). A completed run
  * whose report was nothing but control tokens had nothing for the person:
  * it does not show. Null hides it; the same message when nothing changes. */

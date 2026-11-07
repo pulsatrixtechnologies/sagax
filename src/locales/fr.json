@@ -7890,6 +7890,7 @@
   "triggers.filter.branch": "Branche",
   "triggers.filter.label": "Étiquette",
   "triggers.filter.sender": "Expéditeur",
+  "triggers.filter.senderKind": "Type d’expéditeur",
   "triggers.filter.reviewer": "Réviseur",
   "triggers.filter.assignee": "Responsable",
   "triggers.filter.status": "Statut",

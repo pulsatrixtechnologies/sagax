@@ -7471,6 +7471,7 @@
   "triggers.filter.branch": "Branch",
   "triggers.filter.label": "Label",
   "triggers.filter.sender": "Sender",
+  "triggers.filter.senderKind": "Sender type",
   "triggers.filter.reviewer": "Reviewer",
   "triggers.filter.assignee": "Assignee",
   "triggers.filter.status": "Status",

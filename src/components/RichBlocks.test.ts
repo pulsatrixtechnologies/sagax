@@ -129,7 +129,8 @@ describe("tables", () => {
   it("right-aligns numeric columns, sticks the header and offers copy", () => {
     const html = render("| Item | Cost |\n| --- | --- |\n| Disk | $1,200 |\n| RAM | $300 |");
     expect(html).toMatch(/<th scope="col" class="sticky top-0[^"]*text-end/);
-    expect(html).toMatch(/<td class="[^"]*tabular-nums[^"]*text-end">\$1,200<\/td>/);
+    // the cell's text sits in a dir="auto" box (mixed-script cells, 2318f17368)
+    expect(html).toMatch(/<td class="[^"]*tabular-nums[^"]*text-end"><div dir="auto"[^>]*>\$1,200<\/div><\/td>/);
     expect(html).toContain("overflow-auto");
     expect(html).toContain('aria-label="Copy as CSV"');
     expect(html).toContain('aria-label="Copy as Markdown"');

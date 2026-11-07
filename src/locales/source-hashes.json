@@ -11060,6 +11060,7 @@
       "triggers.filter.branch": "52656e8104eef3fddd3d4546903fa0de93c0625abf47b3dd8130f7705d6a513e",
       "triggers.filter.label": "0e66373f45dcf3dd656151e519f7ee5e3d558d9c22cb87df339bbdd2b6c6a3c1",
       "triggers.filter.sender": "c299f9b85cb236ab70e13f7d42b7a57a3dd033420193de237e05fa216d47d332",
+      "triggers.filter.senderKind": "fb99ee9f7b34e212fc1e9f39cfd6d30d93b2a5fc3d82717719dbd4053074a9ea",
       "triggers.filter.reviewer": "d29f46772c4aaacbbc35c3da380dcc9dfa2df19fa3992bdf6e725a2e09abd53b",
       "triggers.filter.assignee": "5e20d20e3978dcf8550bd758d863b782ac0d139d51be8034836ed21e35104567",
       "triggers.filter.status": "920e413c7d411b61ef3e8c63b1cb6ad058d5f95f8b481dbafe60248387d8c355",

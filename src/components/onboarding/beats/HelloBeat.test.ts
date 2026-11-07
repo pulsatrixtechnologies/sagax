@@ -92,7 +92,7 @@ describe("the managed identity block", () => {
     expect(html).not.toContain("<input");
     expect(html).toContain("Alex");
     expect(html).toContain("owner@example.test");
-    expect(html).toContain("Géré par votre organisation (Pulsatrix Perspicax)");
+    expect(html).toContain("Géré par ton organisation (Pulsatrix Perspicax)");
     expect(html).toContain("Modifier dans Perspicax");
   });
 

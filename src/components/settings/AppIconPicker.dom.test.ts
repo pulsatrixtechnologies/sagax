@@ -44,15 +44,21 @@ describe("AppIconPicker character pictures", () => {
   it("lists the nine after Primary Bot, then Upload image, and applies a chosen one", async () => {
     await act(async () => {
       root.render(createElement(AppIconPicker));
-      await new Promise((done) => setTimeout(done, 50));
     });
+    // the tiles draw after a frame, one character at a time (nine more since
+    // #2380): wait until the chosen tile is drawn rather than a fixed delay
+    const sprout = () => host.querySelector<HTMLButtonElement>('[data-app-icon="character:sprout"]');
+    for (let tries = 0; tries < 200 && (!sprout() || sprout()!.disabled); tries++) {
+      await act(async () => { await new Promise((done) => setTimeout(done, 10)); });
+    }
+    expect(sprout()?.disabled).toBe(false);
     const ids = [...host.querySelectorAll("[data-app-icon]")].map((node) => node.getAttribute("data-app-icon"));
     const at = ids.indexOf("primary");
     expect(at).toBeGreaterThan(0);
     expect(ids.slice(at + 1)).toEqual(CHARACTER_APP_ICON_IDS.map((name) => `character:${name}`));
     expect(host.querySelector("[data-app-icon-upload]")).not.toBeNull();
     await act(async () => {
-      host.querySelector<HTMLButtonElement>('[data-app-icon="character:sprout"]')!.click();
+      sprout()!.click();
       await new Promise((done) => setTimeout(done, 20));
     });
     expect(set).toHaveBeenCalledTimes(1);

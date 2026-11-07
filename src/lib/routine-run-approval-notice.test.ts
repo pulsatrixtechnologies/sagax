@@ -46,7 +46,8 @@ describe("a routine run's approval on the desktop", () => {
     const opened: unknown[] = [];
     showNotification(frame, (target) => openNotificationTarget((action) => opened.push(action), target, state, true), null, visibleNotificationThread(state));
     expect(shown).toHaveLength(1);
-    expect(shown[0]).toMatchObject({ title: "Allow Scout to fetch a web page?", body: "https://example.com/report" });
+    // native notifications (#2120): the title is the bot's name, the body the preview
+    expect(shown[0]).toMatchObject({ title: "Scout", body: "https://example.com/report" });
     shown[0]!.onclick?.();
     expect(opened).toContainEqual(expect.objectContaining({ type: "openRoutineRunWindow", runId: "run-1" }));
   });

@@ -17696,7 +17696,16 @@
       "botProfile.share.owner": "4b1b8aa3608a26da451ae0630d75b60ab1bc2dd229c41a80838fc7993e835c46",
       "botProfile.share.remove": "bb349bfe675073ccbb8f283aac9e834bb1abe09b15f51ec9525db718467fa3b1",
       "botProfile.share.organization": "8fd3f0c72de92ece0ab9ba8b3358ea6b33915584f9996de3eafe65541a796560",
-      "botProfile.sharing.people": "002e3c0b2586211abf32e8ead4ca739028f828fbfbf4967f491ac1af199a6004"
+      "botProfile.sharing.people": "002e3c0b2586211abf32e8ead4ca739028f828fbfbf4967f491ac1af199a6004",
+      "settings.appIcon.character.block": "211d0bb8cf4f5b5202c2a9b7996e483898644aa24714b1e10edd80a54ba4b560",
+      "settings.appIcon.character.droplet": "deee083fb6a37f3f1503fa62a72f9011a5d69e622699bb07dd13db50f44bfeee",
+      "settings.appIcon.character.teardrop": "50a80fc29b8f2ae62e5d9eb92f1c5e415352bc4c6daaf0ae2d0dfde5b44f72d0",
+      "settings.appIcon.character.spiky": "94a91384ac49a31a1a1a1894f65d26d7f2549954b44a56afb9d2a48bf2de480e",
+      "settings.appIcon.character.triangle": "a0252691b5dc54b1d67f9d35a120e8c49187f20f0735574a61713c6317df6f72",
+      "settings.appIcon.character.sprout": "badd2252b629e326bf47991a3573829cc1f0ccb783ca7b554de803fc38a0e7eb",
+      "settings.appIcon.character.oblong": "5fd39eec3ac80931ad0ddb570e8d86a033e37f1ba17e8780b83a78932e40362b",
+      "settings.appIcon.character.ghost": "df1bc4984a055e10b2863eb03abf11701cb63a1e2371dc398889e8291812fb80",
+      "settings.appIcon.character.blob": "24bafb0b2477f80fafd003f8104d90cb0a4ccf72dd30290872be59d153168476"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

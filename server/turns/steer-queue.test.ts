@@ -289,6 +289,22 @@ describe("steer-queue module", () => {
     expect(run.mock.calls[0][3].sender).toBeUndefined();
   });
 
+  it("never coalesces two AI-client prompts: each drains as its own turn (#2575)", () => {
+    const bot = fakeBot("bot-ai-client", "thread-ai-client", true);
+    const store = fakeStore([bot]);
+    const run = vi.fn();
+    queueSteeredMessage(bot.id, bot.threadId, "first prompt", { aiClient: true });
+    queueSteeredMessage(bot.id, bot.threadId, "second prompt", { aiClient: true });
+    bot.busy = false;
+    drainSteeredMessages(store, run);
+    drainSteeredMessages(store, run);
+    expect(run.mock.calls.map((call) => call[2])).toEqual(["first prompt", "second prompt"]);
+    expect(store.messages.map((message) => [message.text, message.aiClient])).toEqual([
+      ["first prompt", true],
+      ["second prompt", true],
+    ]);
+  });
+
   it("keeps a call's via on the message it drains", () => {
     const bot = fakeBot("bot-via-drain", "thread-via-drain", true);
     const store = fakeStore([bot]);

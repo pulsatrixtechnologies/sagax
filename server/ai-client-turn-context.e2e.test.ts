@@ -192,7 +192,7 @@ posixOnly("AI client ping: what the engine is handed (sagax_send vs send_prompt)
     return { door, threadId, resumed, system, message, history, mcpServers, tokens: Math.ceil((system + message + history) / 4) };
   }
 
-  it("a ping through send_prompt lands in the bot's single chat, as sagax_send does; an explicit thread_id names it too (#1170)", async () => {
+  it("a ping through send_prompt opens a fresh conversation; an explicit thread_id continues the long one (#1170, #2575)", async () => {
     // The AI client's earlier work in the person's chat with the bot.
     let threadId = "";
     for (let i = 0; i < EARLIER; i += 1) {
@@ -208,15 +208,14 @@ posixOnly("AI client ping: what the engine is handed (sagax_send vs send_prompt)
     expect(viaSend.body.threadId).toBe(threadId);
     const send = await measure("sagax_send", threadId, viaSend.body.messageId);
 
-    // send_prompt by default: the same single chat (#1170), its history resumed
+    // send_prompt by default: a fresh conversation (#2575), nothing resumed
     const viaPrompt = await member("POST", "agents/send_prompt", BOB, { agent_id: botId, prompt: "ping", mode: "blocking", timeout_ms: 30_000 });
     expect(viaPrompt.status, viaPrompt.text).toBe(200);
     expect(viaPrompt.body.finished).toBe(true);
-    expect(viaPrompt.body.thread_id).toBe(threadId);
-    const promptRows = await api("GET", `/api/threads/${threadId}/messages?limit=500`, bob);
-    const promptPing = (promptRows.body.messages as Array<{ id: string; role: string; text?: string }>).filter((row) => row.role === "user" && row.text === "ping").at(-1);
-    expect(promptPing?.id).not.toBe(viaSend.body.messageId);
-    const prompt = await measure("send_prompt", threadId, promptPing!.id);
+    expect(viaPrompt.body.thread_id).not.toBe(threadId);
+    const freshRows = await api("GET", `/api/threads/${viaPrompt.body.thread_id}/messages?limit=500`, bob);
+    const freshPing = (freshRows.body.messages as Array<{ id: string; role: string; text?: string }>).find((row) => row.role === "user" && row.text === "ping");
+    const prompt = await measure("send_prompt", viaPrompt.body.thread_id, freshPing!.id);
 
     // send_prompt with thread_id: the long conversation, on purpose
     const viaContinue = await member("POST", "agents/send_prompt", BOB, { agent_id: botId, prompt: "ping", mode: "blocking", timeout_ms: 30_000, thread_id: threadId });
@@ -231,13 +230,11 @@ posixOnly("AI client ping: what the engine is handed (sagax_send vs send_prompt)
     }
 
     expect(send.resumed).toBe(true);
-    // the default send_prompt continues the same conversation: every earlier
-    // exchange, the sagax_send ping included, and the same servers
-    expect(prompt.resumed).toBe(true);
-    expect(prompt.history).toBeGreaterThan(send.history);
+    // the default send_prompt starts clean: nothing before its own ping
+    expect(prompt.history).toBe(0);
     expect(prompt.mcpServers).toEqual(send.mcpServers);
     expect(continued.resumed).toBe(true);
-    expect(continued.history).toBeGreaterThan(prompt.history);
+    expect(continued.history).toBeGreaterThan(send.history);
     expect(continued.mcpServers).toEqual(send.mcpServers);
   }, 240_000);
 });

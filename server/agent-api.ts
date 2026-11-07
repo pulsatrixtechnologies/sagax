@@ -316,6 +316,9 @@ export interface StoredMessage {
   sender?: string | null;
   tool?: { name?: string; ok?: boolean } | null;
   attachments?: Array<{ name?: string; path?: string }> | null;
+  /** A send that waited in the server queue: the id its 202 answered
+   * (the handle's anchor), stored on the line when its own turn starts. */
+  queueId?: string;
 }
 
 export interface TranscriptEntry {
@@ -400,8 +403,8 @@ export interface AgentApiDeps {
   turnState(agentId: string, threadId: string): TurnState;
   /** Where a send that names no thread goes. A bot caller: the agent's
    * single chat with the person it works for (#1170). A person's AI client:
-   * its own conversation with the agent (2026-10-29,
-   * shared/agent-conversation.ts), reused across sends. */
+   * a fresh conversation of its own with the agent on every send (#2575,
+   * shared/agent-conversation.ts); thread_id continues one. */
   conversation(caller: AgentCaller, agentId: string): Promise<{ threadId: string } | Refusal>;
   /**
    * Grok bridge (#2193): when send_prompt carries bridge_thread_id, resolve
@@ -752,11 +755,13 @@ function pageBefore(entries: readonly TranscriptEntry[], before: CursorKey | nul
 /** Index of the prompt that anchors a handle, or -1 when it is not in the transcript yet. */
 function turnAnchorIndex(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): number {
   if (anchor.id) {
-    const byId = messages.findIndex((message) => message.id === anchor.id);
-    if (byId >= 0) return byId;
+    // #2575: a queued send is stored when its own turn starts, under a new
+    // id that carries the queueId the handle names. Until then the anchor
+    // is not in the transcript: never borrow another prompt's line.
+    return messages.findIndex((message) => message.id === anchor.id || message.queueId === anchor.id);
   }
-  // A queued prompt is stored when its turn starts: the newest user line
-  // at or after the handle's time is the prompt.
+  // A send that answered no id (a front send): the newest user line at or
+  // after the handle's time is the prompt.
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]!;
     if (message.at < anchor.at - 1_000) break;
@@ -765,16 +770,27 @@ function turnAnchorIndex(messages: readonly StoredMessage[], anchor: { id: strin
   return -1;
 }
 
-/** The agent's words after the anchor, and whether its turn has ended. */
+/** The agent's final answer after the anchor, and whether its turn has
+ * ended. #2579: the lines the agent says before a tool call ("Je cherche
+ * d'abord…") are progress, kept in the steps: the reply is the last run of
+ * text, the words after the turn's last tool call. */
 function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean } {
   const start = turnAnchorIndex(messages, anchor);
   if (start < 0) return { reply: "", sawAnchor: false };
-  const texts: string[] = [];
+  let run: string[] = [];
+  let lastRun: string[] = [];
   for (const message of messages.slice(start + 1)) {
     if (message.role === "user" && (message.kind ?? "text") === "text") break;
-    if (message.role === "bot" && (message.kind ?? "text") === "text" && typeof message.text === "string" && message.text.trim()) texts.push(message.text.trim());
+    if (message.role !== "bot") continue;
+    const kind = message.kind ?? "text";
+    if (kind === "activity") {
+      if (run.length) lastRun = run;
+      run = [];
+      continue;
+    }
+    if (kind === "text" && typeof message.text === "string" && message.text.trim()) run.push(message.text.trim());
   }
-  const joined = texts.join("\n\n");
+  const joined = (run.length ? run : lastRun).join("\n\n");
   return { reply: joined.length > REPLY_MAX_CHARS ? `${joined.slice(0, REPLY_MAX_CHARS)}\n[...]` : joined, sawAnchor: true };
 }
 
@@ -984,7 +1000,7 @@ function createAgentApiHandlers(env: {
         return refuse(400, "bad_request", "thread_id is a conversation id, as send_prompt or await_turn returned it.", {
           retryable: false,
           details: { reason: "invalid_thread_id" },
-          hint: "Omit thread_id to use the default conversation, or pass the thread_id a previous send_prompt or await_turn returned.",
+          hint: "Omit thread_id to open a fresh conversation, or pass the thread_id a previous send_prompt or await_turn returned.",
         });
       }
       const bridgeThreadId = args.bridge_thread_id === undefined || args.bridge_thread_id === null || args.bridge_thread_id === ""
@@ -1090,7 +1106,7 @@ function createAgentApiHandlers(env: {
           return refuse(404, "unknown_thread", "No conversation of yours with this agent has that id. Use the thread_id send_prompt or await_turn returned, or leave it out to start a new one.", {
             retryable: false,
             details: { reason: "unknown_thread" },
-            hint: "Omit thread_id for the default conversation, or use a thread_id this caller already received.",
+            hint: "Omit thread_id to open a fresh conversation, or use a thread_id this caller already received.",
           });
         }
         conversation = { threadId: continued };

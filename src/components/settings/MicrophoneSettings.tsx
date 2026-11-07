@@ -7,7 +7,9 @@ import { Check } from "lucide-react";
 
 import { useAudioInputs } from "@/lib/audio-input";
 import { t } from "@/lib/i18n";
+import { osPermissionsAvailable, useOsPermissions } from "@/lib/os-permissions";
 import { CompactRow, DescribedRow, PILL, PillSelect } from "../SettingsPrimitives";
+import { OsPermissionButtons } from "./OsPermissions";
 
 const DEFAULT = "default";
 
@@ -51,6 +53,33 @@ type MicStatus = "granted" | "denied" | "restricted" | "not-determined" | string
 /** Models and voice > Audio > Microphone (was General > System): the desktop app's own permission, as the
  * welcome flow asks it (PermissionsBeat). Desktop only. */
 export function MicrophonePermissionRow() {
+  // the desktop app that computes the action (#2614): the same buttons as
+  // Settings > Permissions, read again on focus
+  if (osPermissionsAvailable()) return <MicrophonePermissionActionRow />;
+  return <LegacyMicrophonePermissionRow />;
+}
+
+function MicrophonePermissionActionRow() {
+  const { answer, view, act, busy } = useOsPermissions();
+  const mic = view("microphone");
+  if (!answer || !mic) return null;
+  return (
+    <CompactRow label={t("settings.microphone.title")} rowId="microphoneAccess">
+      {mic.action.kind === "none" ? (
+        <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-secondary" data-mic-status="granted">
+          <Check size={14} aria-hidden="true" className="text-success" />
+          {t("settings.microphone.allowed")}
+        </span>
+      ) : (
+        <div className="flex flex-wrap justify-end gap-2" data-mic-status={mic.status === "not-determined" ? "ask" : "denied"}>
+          <OsPermissionButtons view={mic} platform={answer.platform} busy={busy === "microphone"} onAct={(secondary) => void act("microphone", secondary)} />
+        </div>
+      )}
+    </CompactRow>
+  );
+}
+
+function LegacyMicrophonePermissionRow() {
   const status = typeof window === "undefined" ? undefined : window.ogb?.permStatus;
   const [mic, setMic] = useState<MicStatus | null>(null);
   useEffect(() => {

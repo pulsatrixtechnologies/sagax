@@ -111,8 +111,8 @@ describe("Settings search keywords", () => {
 
   it("draws the pages of the final rail (General, Updates, Experimental, About), no Grok Import card", async () => {
     const { SECTIONS, CARD_KEYWORDS } = await import("./settings-nav");
-    expect(SECTIONS).toHaveLength(16);
-    // #2090 Updates; 2026-11-06 General (system) and About (id about, JC 2026-11-07); every page has its intro line
+    expect(SECTIONS).toHaveLength(17);
+    // #2090 Updates; 2026-11-06 General (system) and About (id about, JC 2026-11-07); #2614 Permissions; every page has its intro line
     expect(SECTIONS.every((entry) => entry.introKey === `settings.intro.${entry.id}`)).toBe(true);
     expect(SECTIONS.find((entry) => entry.id === "about")?.introKey).toBe("settings.intro.about");
     expect(Object.keys(CARD_KEYWORDS)).toEqual(expect.arrayContaining(["about.help", "about.about", "general.system", "general.input", "general.interface"]));

@@ -352,6 +352,10 @@ const __BASE_VERSION__: string;
       permRequestMic(): Promise<boolean>;
       /** Opens System Settings on a privacy pane: mic|screen|speech|accessibility. */
       permOpenSettings(pane: "mic" | "screen" | "speech" | "accessibility" | "fullDisk" | "automation"): Promise<void>;
+      /** #2614: this platform's OS permissions, each with the action behind its button. */
+      permAll?(context?: { captureFailed?: boolean }): Promise<import("../../electron/os-permissions.mjs").OsPermissionsAnswer>;
+      /** #2614: runs that action (secondary: the second button). */
+      permAct?(id: string, options?: { secondary?: boolean; captureFailed?: boolean; notification?: { title: string; body: string } }): Promise<(import("../../electron/os-permissions.mjs").OsPermissionView & { done: string }) | null>;
       /** Relaunch the local desktop app through its normal shutdown cleanup. */
       relaunch?(): Promise<boolean>;
       /** Copies an engine install command and opens a blank terminal. False

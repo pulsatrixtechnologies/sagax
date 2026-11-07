@@ -1,4 +1,5 @@
 import type { MutableRefObject, ReactNode } from "react";
+import { ScreenPermissionActions } from "../settings/OsPermissions";
 import { Hand, Loader2, Maximize2, Monitor, Power } from "lucide-react";
 import type { Action, Bot } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
@@ -191,12 +192,16 @@ export function ComputerDeviceBody(props: {
             {currentTeamComputer && placeActionButton(autoView, runPlaceAction, panelOffers)}
             {bot.computer === "cloud" && (phase === "unconfigured" || phase === "error") && cloudView.action?.id !== "add-boat-key" && placeActionButton(cloudView, runPlaceAction, panelOffers)}
             {phase === "local" && !isLinux && localMisses >= 3 && (
-              <button
-                onClick={() => window.ogb?.permOpenSettings?.("screen")}
-                className="mt-1 rounded-lg bg-control px-3 py-1.5 text-[12px] text-ink hover:bg-raised-hover"
-              >
-                {t("computer.openSettings")}
-              </button>
+              <ScreenPermissionActions
+                fallback={(
+                  <button
+                    onClick={() => window.ogb?.permOpenSettings?.("screen")}
+                    className="mt-1 rounded-lg bg-control px-3 py-1.5 text-[12px] text-ink hover:bg-raised-hover"
+                  >
+                    {t("computer.openSettings")}
+                  </button>
+                )}
+              />
             )}
 
             {editComputer && (phase === "show-ready-boat" || phase === "show-sleeping-boat" || phase === "show-pending-boat") && (

@@ -34,6 +34,9 @@ export type AppSettingsSection =
   | "voice"
   | "companion"
   | "computer"
+  /** Permissions (#2614): every OS permission Sagax needs on this
+   * computer, each with the one button that grants it. */
+  | "permissions"
   | "usage"
   /** Vault (2026-10-28, page of its own again): the person's credential
    * vault (logins, API keys and notes bots use without seeing them) and the

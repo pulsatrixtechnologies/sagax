@@ -51,9 +51,10 @@ describe("Settings nav groups", () => {
       // an alias). #2090: Updates is its own page. 2026-11-06: the old App
       // page splits into General (system, keyboard, mode) and About.
       // JC 2026-11-07: App in the Apple order, General first, About last.
+      // #2614: Permissions (OS permissions of this computer) after Computer.
       "account", "appearance", "notifications", "security", "credentials",
       "providers", "engines", "voice", "usage",
-      "organization", "computer", "backups",
+      "organization", "computer", "permissions", "backups",
       "general", "updates", "experimental", "about",
     ]);
   });

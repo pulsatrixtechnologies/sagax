@@ -46,6 +46,7 @@ import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/l
 import { focusSettingsSearchLabel } from "@/lib/settings-search";
 import { useSettingsModal } from "./settings/useSettingsModal";
 import { NAV_GROUPS } from "./settings/settings-nav";
+import { OsPermissionsSection } from "./settings/OsPermissions";
 
 // The threads choice moved with Appearance (0.5.6); old imports still work.
 // Re-exported from the thin preference module so this shell chunk does not
@@ -495,6 +496,9 @@ export function SettingsModal() {
             )}
 
             {section === "computer" && <LocalComputerSection />}
+
+            {/* every OS permission with its button (#2614) */}
+            {section === "permissions" && <OsPermissionsSection />}
 
             {section === "usage" && (
               <>

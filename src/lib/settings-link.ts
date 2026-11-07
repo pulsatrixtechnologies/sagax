@@ -31,6 +31,7 @@ const SECTION_LABEL = {
   // Installations too (2026-10-15): a pointer names the page an old link opens.
   companion: "settings.section.account",
   computer: "settings.section.computer",
+  permissions: "settings.section.permissions",
   usage: "settings.section.usage",
   // 2026-10-28: Security and Vault are pages again.
   credentials: "settings.section.vault",

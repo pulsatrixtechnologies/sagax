@@ -30,6 +30,7 @@ import { CompactRow, DescribedRow, PillSelect, SettingsGroup, Switch } from "./S
 import { PrivacySettings } from "./PrivacySettings";
 import { NotificationInvite } from "./NotificationInvite";
 import { NativeNotificationStatusRow } from "./NativeNotificationStatusRow";
+import { OsPermissionBanner } from "./settings/OsPermissions";
 import { BlockedPeopleRow, ReportsRow } from "./settings/ModerationSettings";
 import { DisclosurePill } from "./settings/AppearanceSettings";
 
@@ -103,6 +104,7 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
   const routines = useLocalSwitch(notifyRoutines);
   return (
     <>
+      <OsPermissionBanner id="notifications" />
       <SettingsGroup title={t("settings.group.notificationTypes")} groupId="notificationTypes">
         <CompactRow label={t("settings.notifications.types.bots")} rowId="notifyBots">
           <Switch checked={bots} aria-label={t("settings.notifications.types.bots")} onClick={() => notifyBots.set(!bots)} />

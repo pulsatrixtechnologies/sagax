@@ -13,14 +13,23 @@ describe("localScreenProblem", () => {
     expect(localScreenProblem({ inApp: true, mac: false })).toBe("empty");
   });
 
+  const raw = "Error invoking remote method 'screen:frame': Error: Failed to get sources.";
+
   // "Error invoking remote method 'screen:frame': Failed to get
   // sources." is macOS refusing Screen Recording, not a broken capture: the
   // card says what to do instead of the raw IPC error.
   it("reads a failed capture without Screen Recording as the permission", () => {
     expect(localScreenProblem({ inApp: true, mac: true, screenPermission: "denied", failed: true })).toBe("permission");
-    const raw = "Error invoking remote method 'screen:frame': Error: Failed to get sources.";
-    expect(localScreenProblem({ inApp: true, mac: true, screenPermission: "granted", failed: true, failure: raw })).toBe("permission");
+    expect(localScreenProblem({ inApp: true, mac: true, screenPermission: "denied", failed: true, failure: raw })).toBe("permission");
     expect(localScreenProblem({ inApp: true, mac: false, failed: true, failure: raw })).toBe("capture-failed");
+  });
+
+  // JC 2026-11-07 (capture 16:02): Sagax checked in Screen & System Audio
+  // Recording, the live window still said "not allowed ... Allow Screen
+  // Recording". Allowed + refused capture is a relaunch, not the pane again.
+  it("reads an allowed but refused capture as Relaunch Sagax, not the permission", () => {
+    expect(localScreenProblem({ inApp: true, mac: true, screenPermission: "granted", failed: true, failure: raw })).toBe("relaunch");
+    expect(computerCardView({ busy: false, source: "local", hasCapture: false, localProblem: "relaunch" }).problem).toBe("relaunch");
   });
 });
 

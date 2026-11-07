@@ -171,6 +171,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Archived (hidden) | Bot editor > ... > Archive | `sagax_settings` get, set `bot.hidden` | simple |
 | Memory on | Bot editor > Memory | `sagax_settings` get, set `bot.memoryEnabled` | simple |
 | Memory upkeep | Bot editor > Memory | `sagax_settings` get, set `bot.memoryUpkeep` | simple |
+| Built-in plugins by id, false switches one off (rea: REA reverse engineering) | Plugins > Installed | `sagax_settings` get, set `bot.builtinPlugins` | simple |
 | Team memory sharing (shared, private) | Bot editor > Memory > Team memory | `sagax_settings` get, set `bot.teamMemorySharing` | simple (autrui pour élargir à shared) |
 | Browser | Bot editor > Access > Browser | `sagax_settings` get, set `bot.browser` | simple |
 | Browser profile | Bot editor > Access > Browser | `sagax_settings` get, set `bot.browserProfile` | simple |
@@ -323,6 +324,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Show threads | Settings > Appearance | `sagax_settings` get, set `appearance.showThreads` | simple |
 | Show the Suggestions card in the bot panel | Settings > Appearance | `sagax_settings` get, set `appearance.showSuggestions` | simple |
 | Show the All history row in the bot panel | Settings > Appearance | `sagax_settings` get, set `appearance.showAllHistory` | simple |
+| Show the Permissions section in the bot panel | Settings > Appearance | `sagax_settings` get, set `appearance.showPermissions` | simple |
 | Threads location | Settings > Appearance | `sagax_settings` get, set `appearance.threadsLocation` | simple |
 | Background effect | Settings > Appearance > Background | `sagax_settings` get, set `appearance.backgroundEffect` | simple |
 | Glyph ripple | Settings > Appearance > Background | `sagax_settings` get, set `appearance.glyphRipple` | simple |

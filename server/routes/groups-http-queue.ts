@@ -1,5 +1,6 @@
 // DELETE /api/groups/:id/queue/:queueId, POST /api/groups/:id/queue/:queueId/steer, POST /api/groups/:id/interrupt (#1383). Each handler matches its own path and returns PASS otherwise.
 import { admit } from "../admission.ts";
+import { cloudThreadRefusal } from "../cloud-thread-refusal.ts";
 import type { SteerOutcome } from "../contracts.ts";
 import { promptWithReply } from "../messages/replies.ts";
 import { cancelChannelMessage, headChannelGroup, holdChannelQueue, resolveHeldReplyTarget, restoreHeldChannelQueue, settleHeldChannelQueueHead } from "../rooms/channel-queue.ts";
@@ -248,4 +249,23 @@ export async function postGroupInterrupt(deps: GroupsHttpDeps, ctx: RouteContext
       : [group.threadId];
   await stopGroupThreads(group, targetThreadIds);
   return json(res, 200, { ok: true });
+}
+
+/** POST /api/groups/:id/members/:botId/compact: "Compact now" for one bot in a room (#2204 port). */
+export async function postGroupMemberCompact(deps: GroupsHttpDeps, ctx: RouteContext, _scratch: GroupsHttpScratch): Promise<typeof PASS | void> {
+  const { res, path, method, json, auth } = ctx;
+  const m = path.match(/^\/api\/groups\/([\w-]+)\/members\/([\w-]+)\/compact$/);
+  if (!(m && method === "POST")) return PASS;
+  const { store, roomMemberContexts, publicGroupState, broadcast } = deps;
+  const group = store.group(m[1]);
+  if (!group) return json(res, 404, { error: "no such room" });
+  if (!group.memberIds.includes(m[2])) return json(res, 404, { error: "that bot is not in this room" });
+  const notYours = cloudThreadRefusal(auth, group.threadId);
+  if (notYours) return json(res, 403, { error: notYours });
+  if (!roomMemberContexts.request(group.threadId, m[2])) {
+    return json(res, 409, { error: "this bot has no measured context in this room yet" });
+  }
+  const visible = publicGroupState(store.group(group.id) ?? group);
+  broadcast({ kind: "group", group: visible });
+  return json(res, 202, { ok: true, threadId: group.threadId, group: visible });
 }

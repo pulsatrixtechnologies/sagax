@@ -1,6 +1,66 @@
 {
   "tools": [
     {
+      "name": "coordinate_bots",
+      "description": "Ask reachable Sagax teammates for advice (consult true) or assign concrete work. Give 1-4 bot_ids from list_bots and one message with exact file paths, constraints and what must be verified. Each call is its own assignment root: the answer carries a receipt (requestId) per teammate and a rootId. This external runtime is never resumed: read each result with assignment_status (a receipt's requestId, or rootId for the whole call), long-polling with wait_ms.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bot_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "A teammate's name as your roster prints it, or its id ([id: …]) when the roster or list_bots shows one. A name shared by two reachable teammates is refused: use the id."
+            },
+            "minItems": 1,
+            "maxItems": 4,
+            "uniqueItems": true
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "Question or task for these teammates; later requests in the same conversation can build on earlier ones. Send separate requests when responsibilities differ."
+          },
+          "consult": {
+            "type": "boolean",
+            "description": "True for a question the teammate answers from what it knows, acting on nothing. Default: work."
+          },
+          "done_when": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Harness-checked criterion: tool:ask_choice and/or first_line:PASS|FAIL (join with \"; \"). Free text is advisory. Unmet or a work-mode ack-only reply ends failed(incomplete)."
+          }
+        },
+        "required": [
+          "bot_ids",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "assignment_status",
+      "description": "Read-only: one assignment's status, outcome and result (give a coordinate_bots receipt's requestId, or the call's rootId), or, with no id, everything this runtime still waits on. Long-poll with wait_ms instead of being resumed. It starts nothing and changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "A coordinate_bots receipt's requestId, or its rootId. Omit to list every outstanding assignment."
+          },
+          "wait_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 240000,
+            "description": "Hold the answer up to this many milliseconds (at most 240000) for the assignment to settle."
+          }
+        }
+      }
+    },
+    {
       "name": "list_bots",
       "description": "List the other bots (agents) you may contact in your own team and any additional teams the owner has explicitly allowed you to coordinate, with their team, model and current status. Call this to discover exact teammate IDs before assigning work or requesting advice through your available coordination tools.",
       "inputSchema": {

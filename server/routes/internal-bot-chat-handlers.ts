@@ -26,6 +26,7 @@ import {
   type RosterMember,
 } from "../peers/peer-roster.ts";
 import { requiresDecisionCard } from "../runtime/done-when.ts";
+import { botTurnLimit } from "../../shared/turn-limits.ts";
 import { queuedThreadPosition } from "../turns/steer-queue.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
 import { PASS } from "./table.ts";
@@ -92,7 +93,38 @@ export interface InternalBotChatCoordinator {
   has(taskId: string): boolean;
   enqueue(...args: unknown[]): { node: { id: string; botId: string; threadId: string; status: string; [key: string]: unknown }; duplicate?: boolean; joined?: boolean };
   tick(): void;
+  endTurn(id: string, result: { ok: boolean; text: string }): void;
+  status(id: string): AssignmentStatusView | undefined;
+  poll(owner: { botId?: string; threadId?: string; runId?: string }): unknown;
+  outstandingFor(threadId: string): Array<{ id: string }>;
 }
+
+/** One row of the runtime's status read (runtime/coordinator-types StatusView). */
+export interface AssignmentRow {
+  id: string;
+  rootId: string;
+  parentId?: string;
+  assignee: { botId: string };
+  status: string;
+  outcome?: string;
+  outcomeDetail?: string;
+  result: string;
+  question?: string;
+  mode: string;
+  reply: string;
+  createdAt: number;
+  startedAt?: number;
+  finishedAt?: number;
+}
+
+export interface AssignmentStatusView {
+  assignment: AssignmentRow;
+  children: AssignmentRow[];
+  inbox: Array<{ deliveredAt?: number; ownerBotId?: string; ownerThreadId?: string; ownerRunId?: string; [key: string]: unknown }>;
+}
+
+/** The generation of a standing external runtime's capability: it has no turn here. */
+export const EXTERNAL_RUNTIME_GENERATION = "external-runtime";
 
 export interface InternalBotChatDeps {
   store: InternalBotChatStore;
@@ -161,6 +193,8 @@ export interface InternalBotChatDeps {
   openerFrom(fromThreadId: string): string | undefined;
   latestFailedTurnCause(threadId: string): string | null;
   requireActive(capability: InternalCapabilityView): void;
+  /** Begins the root of one external runtime call (its own turn), under the runtime's opener. */
+  beginExternalRoot(capability: InternalCapabilityView, id: string, address: { groupId?: string; threadId: string; botId: string }, brief: string): void;
 }
 
 export function openInternalBotChat(deps: InternalBotChatDeps, ctx: InternalRouteContext) {
@@ -201,6 +235,7 @@ export function openInternalBotChat(deps: InternalBotChatDeps, ctx: InternalRout
     adoptReservedWorkThread,
     openerFrom,
     latestFailedTurnCause,
+    beginExternalRoot,
   } = deps;
   const internalSender = store.bot(internalCapability.botId);
   if (!internalSender) return null;
@@ -222,7 +257,7 @@ export function openInternalBotChat(deps: InternalBotChatDeps, ctx: InternalRout
     peerReviewRequired, cloudGuestDriven, idempotencyKeyOf, runtimeDelegationStatus,
     openPersonCard, roomHandoffProblem, turnOrigin, joinPerson, applyDelegatedLevel,
     adoptReservedWorkThread, openerFrom, latestFailedTurnCause, internalSender, url,
-    requireActiveInternalCapability, delegatedThisTurn,
+    requireActiveInternalCapability, delegatedThisTurn, beginExternalRoot,
   };
 }
 
@@ -599,10 +634,13 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
     peerReviewRequired,
     roomHandoffProblem, turnOrigin, joinPerson, applyDelegatedLevel,
     adoptReservedWorkThread, openerFrom, internalSender,
-    requireActiveInternalCapability,
+    requireActiveInternalCapability, beginExternalRoot,
   } = opened;
   const source = store.groupByThread(internalCapability.threadId);
-  if (!internalCapability.roomCoordination || (source && (source.dm || !source.memberIds.includes(internalSender.id)))) {
+  // A standing external runtime has no chat turn: each coordinate_bots
+  // call is its own root, read back with assignment_status.
+  const EXTERNAL = internalCapability.generation === EXTERNAL_RUNTIME_GENERATION;
+  if ((!internalCapability.roomCoordination && !EXTERNAL) || (source && (source.dm || !source.memberIds.includes(internalSender.id)))) {
     return json(res, 403, { error: "Coordination requires an active chat turn. Finish together already manages its own teammate turns." });
   }
   const address = { groupId: source?.id, threadId: internalCapability.threadId, botId: internalSender.id };
@@ -632,11 +670,31 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       relay: z.boolean().default(false),
       doneWhen: z.string().trim().min(1).max(500).optional(),
       defaultAnswer: z.string().trim().min(1).max(1000).optional(),
+      // A question, answered from what the teammate knows, acting on nothing.
+      consult: z.boolean().optional(),
+      // standing: the one work thread this conversation has with each
+      // teammate; new: a fresh thread on the teammate (contract §9).
+      thread: z.enum(["standing", "new"]).default("standing"),
+      // resume: the result resumes the requester; none: a one-way notice.
+      reply: z.enum(["resume", "none"]).default("resume"),
     }).safeParse(await readInternalBody());
     if (!parsed.success) return json(res, 400, { error: "Provide 1-4 distinct botIds and a message of 1-4000 characters." });
+    const oneWay = parsed.data.reply === "none";
+    if (oneWay && (parsed.data.consult || parsed.data.mode === "consult")) {
+      return json(res, 400, { error: "consult asks a question whose answer comes back to you; leave reply out" });
+    }
+    const mode = parsed.data.consult ? "consult" : oneWay ? "notify" : parsed.data.mode;
     const groupId = parsed.data.groupId ?? source?.id;
     const destination = groupId ? store.group(groupId) : undefined;
     if (groupId && !destination) return json(res, 404, { error: "No such room; use list_room_targets." });
+    // A room has its own thread; "new" opens a thread only on a teammate
+    // addressed directly. A standing external runtime has no turn whose
+    // fan-out the opened-threads cap bounds; the runtime's budgets do.
+    const fresh = !destination && parsed.data.thread === "new";
+    const threadLimit = botTurnLimit(internalSender as never, "threadsOpened");
+    if (fresh && !EXTERNAL && (internalCapability.openedThreads ?? 0) >= threadLimit) {
+      return json(res, 429, { error: `You have already opened ${threadLimit} threads this turn, which is the limit. Do not retry — finish your turn and tell the person which threads you still wanted to open, so they can open them or ask you again.` });
+    }
     // A slot may carry a teammate's name instead of its id — the
     // roster shows both, list_bots shows both, and a Primary Bot reading its
     // prompt reaches for the name. A unique reachable name resolves;
@@ -687,7 +745,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
     if (peerReviewRequired(internalSender, address.threadId)) {
       // full-access: peer-contact
       const verdicts = await Promise.all(targets.map(target =>
-        requestPeerApproval(approvalBus, internalSender as never, store.bot(target.botId)! as never, parsed.data.message, "delegate_bot", address.threadId)));
+        requestPeerApproval(approvalBus, internalSender as never, store.bot(target.botId)! as never, parsed.data.message, mode === "consult" ? "ask_bot" : "delegate_bot", address.threadId)));
       requireActiveInternalCapability();
       const blocked = verdicts.flatMap((verdict, index) => verdict === "allow" ? []
         : [{ botId: targets[index]!.botId, ...peerApprovalFailure(verdict) }]);
@@ -704,6 +762,12 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
     // A fresh tree keeps where this turn's work started; a running one
     // already has it.
     const origin = turnOrigin(internalCapability);
+    // A standing external runtime has no turn here: each call is its own
+    // root (begun now, under the runtime's opener, ended when the call
+    // returns), and its results wait in its inbox (reply: poll) for
+    // assignment_status.
+    const generation = EXTERNAL ? randomUUID() : internalCapability.generation;
+    if (EXTERNAL) beginExternalRoot(internalCapability, generation, address, parsed.data.message);
     // One receipt per recipient, in the order the caller addressed
     // them. Dispatch is asynchronous (coordinator.tick), so a fresh
     // enqueue is honestly "queued"; a repeat reports the request it
@@ -734,10 +798,13 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
         // Outside a room this conversation has one thread with each
         // teammate: the first request opens it, everything after
         // continues it and runs once the work already there is done.
-        const continued = destination ? undefined : store.workThread(target.botId, internalSender.id, address.threadId);
+        // thread "new" opens one more, named by the call.
+        const continued = destination || fresh ? undefined : store.workThread(target.botId, internalSender.id, address.threadId);
         if (!destination) {
-          const task = continued ?? store.createTask(target.botId, `@${internalSender.name} · work`, false, undefined,
-            { botId: internalSender.id, name: internalSender.name, kind: "work", threadId: address.threadId, at: Date.now() });
+          const opened = { botId: internalSender.id, name: internalSender.name, threadId: address.threadId, at: Date.now() };
+          const task = continued ?? (fresh
+            ? store.createTask(target.botId, parsed.data.message.replace(/\s+/g, " ").trim().slice(0, 60) || `From ${internalSender.name}`, false, undefined, opened)
+            : store.createTask(target.botId, `@${internalSender.name} · work`, false, undefined, { ...opened, kind: "work" }));
           if (!task) throw new Error("The recipient no longer exists");
           target.threadId = task.threadId;
           if (!continued) createdThread = task.threadId;
@@ -752,9 +819,9 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
         }
         // No mode: a question to the bot that sent this work (an
         // ancestor) is a consultation, anything else is work.
-        const { node, duplicate, joined } = coordinator.enqueue(address, internalCapability.generation, internalCapability.roomHandoffId,
+        const { node, duplicate, joined } = coordinator.enqueue(address, generation, EXTERNAL ? undefined : internalCapability.roomHandoffId,
           target, target.botId, parsed.data.message, approvalGranted, parsed.data.rework, [...store.messagesFor(address.threadId)].reverse().find(m => m.role === "user" && m.kind === "text")?.text ?? "",
-          requestBatchKey, origin, parsed.data.mode ?? "auto", joinPerson(address.threadId),
+          requestBatchKey, origin, mode ?? "auto", joinPerson(address.threadId),
           // One teammate, outside a room: several replies need combining.
           parsed.data.relay && !destination && targets.length === 1,
           parsed.data.doneWhen,
@@ -765,7 +832,10 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
         // thread the person archived meanwhile; a thread opened for it
         // is never used.
         if (duplicate && createdThread) store.deleteTask(target.botId, createdThread);
-        else if (createdThread) threadStarters.set(createdThread, openerFrom(address.threadId));
+        else if (createdThread) {
+          threadStarters.set(createdThread, openerFrom(address.threadId));
+          if (fresh && !EXTERNAL) internalCapability.openedThreads = (internalCapability.openedThreads ?? 0) + 1;
+        }
         createdThread = undefined; // The durable coordinator now owns this task.
         // Only a live request can still report: a finished one already
         // fired its report and tick() skips it, so a repeat of it sends
@@ -795,7 +865,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
           detail: notSent ?? (joined
             ? "the same request from another conversation is already with this teammate: joined it, its result will resume you"
             : duplicate
-            ? `already sent: it is ${node.status === "queued" ? "queued" : "under way"} and its result will resume you`
+            ? `already sent: it is ${node.status === "queued" ? "queued" : "under way"} and ${oneWay ? "nothing comes back from it" : "its result will resume you"}`
             : queuedDetail),
           requestId: node.id,
           ...(destination ? {} : { threadId: node.threadId }),
@@ -833,14 +903,93 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
     // V4: when every receipt is an intended non-result (already completed),
     // answer 200 with the text and no error field so the tool is not red.
     const ok = sent || (receipts.length > 0 && refused.length === 0);
+    // The call was the external runtime's whole turn: its root now waits
+    // on the work and completes, without a turn, once the work settles
+    // (or ends now, with nothing sent).
+    if (EXTERNAL) coordinator.endTurn(generation, { ok: sent, text: sent ? "" : refused.join("; ") });
+    const sentMessage = oneWay
+      ? "Sent one way. Nothing comes back and nothing resumes you; continue your turn."
+      : EXTERNAL
+      ? "Handed to the coordinator. Read each result with assignment_status (id: a receipt's requestId, or rootId for the whole call), long-polling with wait_ms."
+      : "End your turn after sending all work. These actual teammates will reply and resume you automatically. Do not poll or wait.";
     return json(res, ok ? 200 : 409, { receipts,
       ...(ok
         ? { message: sent
-          ? ["End your turn after sending all work. These actual teammates will reply and resume you automatically. Do not poll or wait.", ...notSentNotes].join(" ")
+          ? [sentMessage, ...notSentNotes].join(" ")
           : notSentNotes.join("; ") || "Already completed." }
         : { error: refused.join("; ") }),
+      ...(EXTERNAL && sent ? { rootId: generation } : {}),
     });
   }
   return PASS;
 }
 
+/**
+ * assignment_status: read-only. One assignment with its children and
+ * inbox, long-polled while it is not settled and wait_ms remains (a
+ * standing external runtime parks ONE cheap request here instead of a
+ * model inference per check), or everything this conversation still
+ * waits on.
+ */
+export async function handleAssignmentStatus(opened: OpenedBotChat): Promise<typeof PASS | void> {
+  const { res, json, internalCapability, store, coordinator, connectorThread, internalSender, url, requireActiveInternalCapability } = opened;
+  const EXTERNAL = internalCapability.generation === EXTERNAL_RUNTIME_GENERATION;
+  const id = url.searchParams.get("id")?.trim() ?? "";
+  const fromThreadId = internalCapability.threadId;
+  if (!connectorThread(internalSender.id, fromThreadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
+  const shape = (a: AssignmentRow) => ({
+    id: a.id, botId: a.assignee.botId, botName: store.bot(a.assignee.botId)?.name ?? a.assignee.botId, status: a.status,
+    ...(a.outcome !== undefined ? { outcome: a.outcome } : {}), ...(a.outcomeDetail !== undefined ? { outcomeDetail: a.outcomeDetail } : {}),
+    result: a.result, ...(a.question !== undefined ? { question: a.question } : {}), mode: a.mode, reply: a.reply,
+    createdAt: a.createdAt, ...(a.startedAt !== undefined ? { startedAt: a.startedAt } : {}), ...(a.finishedAt !== undefined ? { finishedAt: a.finishedAt } : {}),
+  });
+  // Only this conversation's own tree: the root of every row it may read
+  // runs here. A row of another conversation is refused, not hidden.
+  const owned = (a: AssignmentRow) => coordinator.node(a.rootId)?.threadId === fromThreadId;
+  const reachable = (a: AssignmentRow) => {
+    const sender = store.bot(internalSender.id);
+    const target = store.bot(a.assignee.botId);
+    if (!sender) return false;
+    return !target || target.id === sender.id || canReachPeer(sender, target);
+  };
+  if (!id) {
+    const outstanding = coordinator.outstandingFor(fromThreadId).flatMap(n => {
+      const row = coordinator.status(n.id)?.assignment;
+      return row && reachable(row) ? [shape(row)] : [];
+    });
+    return json(res, 200, { outstanding });
+  }
+  if (internalCapability.delegatedThisTurn?.has(id)) {
+    return json(res, 409, { error: `Assignment ${id} was handed out during this turn. Finish your response now so the teammate can work; its result returns to this conversation and resumes you. Do not check or wait for it until a later turn.` });
+  }
+  const waitMs = Math.min(Math.max(Number(url.searchParams.get("wait_ms")) || 0, 0), 240_000);
+  const deadline = Date.now() + waitMs;
+  const settled = new Set(["completed", "failed", "cancelled"]);
+  for (;;) {
+    requireActiveInternalCapability();
+    const status = coordinator.status(id);
+    if (!status) return json(res, 404, { error: "unknown assignment id" });
+    if (!owned(status.assignment)) return json(res, 403, { error: "that assignment belongs to a different conversation" });
+    if (!reachable(status.assignment)) return json(res, 403, { error: "Result withheld: team access changed while the teammate was working" });
+    if (settled.has(status.assignment.status) || Date.now() >= deadline) {
+      // A standing external runtime that read its root has read its
+      // inbox: those lanes are marked delivered, as a resumed requester's
+      // are when its resume is dispatched.
+      if (EXTERNAL && !status.assignment.parentId) {
+        const lanes = new Map<string, { botId?: string; threadId?: string; runId?: string }>();
+        for (const item of status.inbox) {
+          if (item.deliveredAt !== undefined) continue;
+          lanes.set(`${item.ownerBotId}\u0000${item.ownerThreadId}\u0000${item.ownerRunId}`, {
+            ...(item.ownerBotId !== undefined ? { botId: item.ownerBotId } : {}),
+            ...(item.ownerThreadId !== undefined ? { threadId: item.ownerThreadId } : {}),
+            ...(item.ownerRunId !== undefined ? { runId: item.ownerRunId } : {}),
+          });
+        }
+        for (const lane of lanes.values()) coordinator.poll(lane);
+      }
+      const current = coordinator.status(id) ?? status;
+      return json(res, 200, { assignment: shape(current.assignment), children: current.children.map(shape), inbox: current.inbox });
+    }
+    await new Promise((wake) => setTimeout(wake, 500));
+  }
+}

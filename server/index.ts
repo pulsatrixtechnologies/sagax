@@ -17228,6 +17228,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get stoppedTurnText() { return stoppedTurnText; },
   get stoppedTurns() { return stoppedTurns; },
   get store() { return store; },
+  get strictRuleOwnerName() { return strictRuleOwnerName; },
   get strictCardRule() { return strictCardRule; },
   get subscriptionExpiredCard() { return subscriptionExpiredCard; },
   get syncRoutineRunToSource() { return syncRoutineRunToSource; },
@@ -22153,7 +22154,15 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       if (!internalCapabilityIsActive(capability as InternalCapability)) {
         throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
       }
-    }
+    },
+    beginExternalRoot: (capability, id, address, brief) => {
+      const opener = handoffOpener(capability as InternalCapability, address.threadId);
+      const sender = store.bot(address.botId);
+      const running = sender ? store.projectBotForTask(sender.id, address.threadId) ?? sender : undefined;
+      coordinator.beginTurn({ id, address, brief,
+        level: running ? approvalModeForTurn(running, true, address.threadId) : "ask",
+        ...(opener ? { opener } : {}) });
+    },
   }),
   createInternalRoomsRoutes({
     store: store as unknown as Parameters<typeof createInternalRoomsRoutes>[0]["store"],
@@ -30502,6 +30511,7 @@ ROUTES.push(createSearchRoutes({
 }));
 ROUTES.push(createGroupsHttpRoutes({
   store,
+  roomMemberContexts,
   visibleFor: (auth, path) => visibleTo(viewerFor(auth, path)),
   viewerId: (auth) => channelFilterViewerId(auth),
   groupVisible,
@@ -31428,6 +31438,9 @@ async function fallback(_req: IncomingMessage, res: ServerResponse, _url: URL, p
 
 const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   RoomTurnDeadline,
+  roomMemberContexts,
+  broadcast,
+  publicGroupState,
   briefCrossingLabel,
   claimRecallCrossings,
   roomTurnEnd,

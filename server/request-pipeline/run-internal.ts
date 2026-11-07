@@ -151,7 +151,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       }
     }
     if (internalCapability.generation === host.EXTERNAL_RUNTIME_GENERATION && !host.externalRuntimeMayCall(method, path)) {
-      json(res, 403, { error: "an external runtime can only list, ask and delegate to its peers and read its delegations" });
+      json(res, 403, { error: "an external runtime can only list, ask, delegate to and coordinate its peers and read its delegations and assignments" });
       return true;
     }
     const requiredCapabilityKind = path === "/api/internal/hook"

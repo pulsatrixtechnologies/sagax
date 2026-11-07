@@ -300,4 +300,7 @@ export type GroupMemberTurnHost = {
   claimRecallCrossings: any,
   briefCrossingLabel: any,
   RoomTurnDeadline: any,
+  roomMemberContexts: { takeReset(threadId: string, botId: string, settings: { autoCompact?: boolean; roomCompactAt?: number } | undefined): { reason: "requested" | "threshold"; percent: number } | null },
+  broadcast: (payload: Record<string, unknown>) => void,
+  publicGroupState: (group: any) => object,
 };

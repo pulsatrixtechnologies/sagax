@@ -49,8 +49,10 @@ it("applies the owner's own settings at once, holds the sensitive ones on a card
   try {
     const scout = (await api("POST", "/api/bots", { name: "Scout" }, 201)).bot;
     const helper = (await api("POST", "/api/bots", { name: "Helper" }, 201)).bot;
-    // the person set Helper to Ask by hand; Scout (Approve for me) works for them
+    // the person set Helper to Ask by hand and Scout to Approve for me (a new
+    // bot starts at Full access since #2111); Scout works for them
     await api("PATCH", `/api/bots/${helper.id}`, { approvalMode: "ask" });
+    await api("PATCH", `/api/bots/${scout.id}`, { approvalMode: "auto" });
     expect((await botOf(scout.id)).approvalMode).toBe("auto");
     const comms = await turn(scout.id, scout.threadId, "Set my bots up.");
 

@@ -14,6 +14,8 @@ export function claudeLaunchLevel(argv: readonly string[]): string | undefined {
   const mode = argv[at + 1];
   const allowedAt = argv.indexOf("--allowedTools");
   const allowed = allowedAt >= 0 ? String(argv[allowedAt + 1] ?? "").split(",") : [];
-  if (mode === "acceptEdits" && AUTO_ALLOWLIST_COPY.every((tool) => allowed.includes(tool))) return "auto";
+  // #1982: Full keeps the broker too (never bypassPermissions); it is Auto's
+  // list plus the host tools pre-allowed, a bare Bash among them.
+  if (mode === "acceptEdits" && AUTO_ALLOWLIST_COPY.every((tool) => allowed.includes(tool))) return allowed.includes("Bash") ? "full" : "auto";
   return mode;
 }

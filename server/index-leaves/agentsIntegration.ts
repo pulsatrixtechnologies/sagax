@@ -17,11 +17,13 @@ function agentsIntegration(
   skillAuthoring: boolean,
   generation: string,
   roomHandoffId?: string,
+  // Order of both callers (start-turn-computer-mount.ts, group-member-turn-launch-tools.ts):
+  // the 0.8.28 order, which a later move had swapped, so a direct turn never got start_thread.
+  roomCoordination = false,
+  ownThreadCreation = false,
   hostFiles = false,
   /** The turn's engine has no web search of its own (server/web-search/native.ts). */
   noNativeWebSearch = false,
-  roomCoordination = false,
-  ownThreadCreation = false,
 ) {
   const host = getHost();
   const token = host.mintInternalCapability({

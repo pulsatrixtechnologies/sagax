@@ -405,6 +405,17 @@ export class RuntimeCoordinator implements Coordinator {
     this.runtime.end(id, end);
   }
 
+  /** A root whose turn never started: automatic recovery handed the same
+   * request to a backup engine, whose turn opens its own root. The failed
+   * attempt's root is dropped without a result, or the thread would read as
+   * still waiting on teammates after the backup answered. */
+  dropTurn(id: string, reason: string): void {
+    this.ready();
+    const a = this.store.get(id);
+    if (!a || a.parentId !== undefined || a.status !== "running") return;
+    this.runtime.cancel(id, reason, "stopped");
+  }
+
   /** The person acted on a parked node's cards: a root or a child, by id. */
   answerNode(id: string, text: string): boolean {
     this.ready();

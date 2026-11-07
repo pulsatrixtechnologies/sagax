@@ -249,8 +249,8 @@ it("R2 a member's coordinate_bots reuses its turn's root, and a Chief's Full rea
     requester: { kind: "bot_turn", botId: f.clive.id, threadId: room.threadId, chief: true } });
   expect(f.db().events.find((event: any) => event.assignmentId === child.id && event.kind === "started")?.detail).toContain("level full");
   // The engine ran both turns at Full (the fake records its permission mode).
-  expect(f.turn("C0").permissionMode).toBe("bypassPermissions");
-  expect(f.turn("M0").permissionMode).toBe("bypassPermissions");
+  expect(f.turn("C0").permissionMode).toBe("full");
+  expect(f.turn("M0").permissionMode).toBe("full");
   expect(f.turns().map((record: any) => record.planKey)).toEqual(["C0", "M0", "C1"]);
   expect(nothingLive(f)).toEqual([]);
 }), hostTimeout(120_000));

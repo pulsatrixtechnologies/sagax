@@ -201,6 +201,22 @@
             "type": "boolean",
             "description": "True when the person only wants this one teammate's own answer passed back (ask it something, give its reply): the reply goes to the person directly, right after the line naming the teammate, and you are not resumed. Leave out when you must combine replies, check the work, decide or continue after it."
           },
+          "thread": {
+            "type": "string",
+            "enum": [
+              "standing",
+              "new"
+            ],
+            "description": "standing (default): the one work thread this conversation has with each teammate. new: open a new thread on the teammate for this, its own history and run; its result still returns here."
+          },
+          "reply": {
+            "type": "string",
+            "enum": [
+              "resume",
+              "none"
+            ],
+            "description": "resume (default): the result resumes you. none: a one-way notice that is never awaited; nothing comes back and nothing resumes you."
+          },
           "done_when": {
             "type": "string",
             "minLength": 1,
@@ -1380,6 +1396,30 @@
             "description": "Optional short, non-sensitive reason."
           }
         }
+      }
+    },
+    {
+      "name": "request_sign_in",
+      "description": "Ask the person to sign in to a website themselves, in the browser or on the computer you are using now. Use it when a page needs a login you do not have in the vault (request_login), or a one-time code, CAPTCHA or other step only they can do. They get a card and a notification, sign in where you work, and press Done. Never ask for a password or code in chat. After calling it, end your turn; Sagax resumes you when they finish or decline, and then check you are signed in.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "site": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The page to sign in on: its address, or the domain, such as example.com."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 240,
+            "description": "One short sentence, in your words, on what the sign-in is for."
+          }
+        },
+        "required": [
+          "site"
+        ]
       }
     },
     {

@@ -230,8 +230,8 @@ it("recovers a coordinated specialist and returns its result to the Chief exactl
     expect(turns.filter((turn) => turn.botId === chief.id)).toHaveLength(2);
     expect(turns.filter((turn) => turn.botId === specialist.id)).toHaveLength(1);
     expect(turns.find((turn) => turn.botId === specialist.id)).toMatchObject({
-      // the delegated thread starts at the specialist's own default: Approve for me (51647a630)
-      threadId: child.threadId, model: backup.model, permissionMode: "auto",
+      // the delegated thread starts at the specialist's own default: Full access since #2111
+      threadId: child.threadId, model: backup.model, permissionMode: "full",
     });
     expect(calls().filter((call) => call.method === "initialize.error")).toHaveLength(1);
     expect(calls().some((call) => call.method === "session/prompt")).toBe(false);
@@ -253,7 +253,8 @@ it("recovers a coordinated specialist and returns its result to the Chief exactl
     // #1207: the recovered thread keeps no copy of the level; it runs at its bot's
     expect(childTask).not.toHaveProperty("approvalOwn");
     expect(childTask.approvalMode).toBeUndefined();
-    expect(after).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    // A new bot starts at Full access (OpenMausBot pro-rule port, #2111)
+    expect(after).toMatchObject({ approvalMode: "full", autoApprove: false });
     expect(after.tasks.find((task: any) => task.threadId === specialist.activeTaskId).modelSelection).toEqual(primary);
     expect(fleet.bots.find((bot: any) => bot.id === chief.id)).toMatchObject({ busy: false, waitingForTeammates: false });
     await control("messages", "--bot", chief.id, "--task", chief.activeTaskId, "--limit", "20");

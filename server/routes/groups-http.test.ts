@@ -115,6 +115,7 @@ function baseDeps(over: Partial<GroupsHttpDeps> = {}): GroupsHttpDeps {
     channelTurnOpen: () => false,
     failTurnIfMemberLeft: () => undefined,
     broadcast: () => undefined,
+    roomMemberContexts: { request: () => false },
     disableRoutinesForGroup: () => undefined,
     notePushRead: () => undefined,
     actorPrincipalId: () => "pr_member",

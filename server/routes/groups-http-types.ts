@@ -84,6 +84,7 @@ export interface GroupsHttpDeps {
   channelTurnOpen(group: GroupRecord): boolean;
   failTurnIfMemberLeft(group: GroupRecord, beforeHumanIds: string[], beforeMemberIds: string[]): void;
   broadcast(payload: Record<string, unknown>): void;
+  roomMemberContexts: { request(threadId: string, botId: string): boolean };
   disableRoutinesForGroup(groupId: string): void;
   notePushRead(personId: string | undefined, threadId: string): void;
   actorPrincipalId(auth: RequestAuth): string;

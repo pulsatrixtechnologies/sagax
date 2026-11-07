@@ -550,7 +550,9 @@ posixOnly("Sign in with Pulsatrix, slice 2: the session lives on the provider's 
     // the same person as Bob's web sign-in, never an admin
     const web = await signIn(BOB);
     expect((await api("GET", "/api/auth/session", web)).body.principalId).toBe(session.body.principalId);
-    expect((await api("GET", "/api/sidebar-sections", { bearer })).status).toBe(403);
+    // An admin page stays closed to it. Since #2045 a member manages their own
+    // teams, so /api/sidebar-sections is no longer an admin probe.
+    expect((await api("GET", "/api/auth/pairing", { bearer })).status).toBe(403);
     // single use
     expect((await api("POST", "/api/pair", undefined, { credential: token, deviceName: "again" })).status).not.toBe(200);
     expect(log).not.toContain(token);

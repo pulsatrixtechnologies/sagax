@@ -11,7 +11,7 @@ import { getGroups, postGroups } from "./groups-http-list.ts";
 import { postGroupTasks, postGroupTask, patchGroupTask, deleteGroupTask } from "./groups-http-tasks.ts";
 import { patchGroup, postGroupLeave, postGroupRead, deleteGroup } from "./groups-http-group.ts";
 import { postGroupMessages } from "./groups-http-messages.ts";
-import { deleteGroupQueueItem, postGroupQueueSteer, postGroupInterrupt } from "./groups-http-queue.ts";
+import { deleteGroupQueueItem, postGroupQueueSteer, postGroupInterrupt, postGroupMemberCompact } from "./groups-http-queue.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export type { GroupsHttpDeps, GroupsHttpStore, GroupsHttpVisible } from "./groups-http-types.ts";
@@ -31,6 +31,7 @@ const HANDLERS = [
   deleteGroupQueueItem,
   postGroupQueueSteer,
   postGroupInterrupt,
+  postGroupMemberCompact,
 ] as const;
 
 export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {

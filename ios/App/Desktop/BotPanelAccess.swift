@@ -120,7 +120,7 @@ struct BotPanelAccess: View {
         }
         // A place an older build saved reads as Auto here (the server moves
         // it back to Auto at start).
-        let selected: DesktopWorksOn = worksOn == .off ? .off : .auto
+        let selected = DesktopWorksOnRules.selected(worksOn)
         return PanelSegmentGrid(options: options, selected: selected, columns: 2) { choice in
             guard choice != selected else { return }
             Task { _ = await sendPanelPatch(BotPanelPatch(computer: choice.stored), bot: bot, session: session) }

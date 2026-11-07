@@ -181,7 +181,7 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
       const engine = engineLabel(instance?.displayName, selection.instanceId ?? "");
       return [engine, selection.model, selection.effort].filter(Boolean).join(" · ");
     }
-    if (field === "computer") return t(placeLabelKey((["local", "cloud", "off"].includes(String(value)) ? value : "auto") as EffectivePlace, perspicaxOrg !== null));
+    if (field === "computer") return t(placeLabelKey((["local", "cloud"].includes(String(value)) ? value : "auto") as EffectivePlace, perspicaxOrg !== null));
     if (field === "approvalMode") return APPROVAL_KEY[String(value)] ? t(APPROVAL_KEY[String(value)]!) : String(value);
     if (typeof value === "boolean") return value ? t("bulkEdit.value.on") : t("bulkEdit.value.off");
     if (Array.isArray(value)) return value.length ? value.map(String).join(", ") : t("bulkEdit.value.none");

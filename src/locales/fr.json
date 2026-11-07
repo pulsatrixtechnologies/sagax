@@ -5585,7 +5585,7 @@
   "worksOn.helpOrg": "Où ce bot travaille. Infonuagique, c'est votre environnement serveur; VM locale et Cet ordinateur utilisent votre propre ordinateur par l'application Sagax.",
   "worksOn.offBody": "Ce bot n'a ni ordinateur ni navigateur intégré : il ne peut pas ouvrir de page web, cliquer ni taper nulle part. Ses capacités (plugins, compétences, serveurs MCP), ses fichiers et la conversation fonctionnent toujours.",
   "worksOn.offTitle": "Désactivé veut dire aucun écran.",
-  "worksOn.autoOnlyHelp": "Le bot choisit où chaque tâche s'exécute : l'infonuagique, une VM locale, cet ordinateur ou le navigateur, parmi les endroits disponibles et autorisés. Désactivé ne lui donne ni ordinateur ni navigateur.",
+  "worksOn.autoOnlyHelp": "Le bot choisit où chaque tâche s'exécute : l'infonuagique, une VM locale, cet ordinateur ou le navigateur, parmi les endroits disponibles et autorisés.",
   "worksOn.tip.autoOnly": "Choisit l'endroit pour chaque tâche parmi ceux qui sont disponibles. Jamais un endroit que toi ou ton organisation n'avez pas autorisé",
   "worksOn.tip.local": "Cet ordinateur, celui qui fait tourner Sagax.",
   "worksOn.tip.cloud": "L'ordinateur infonuagique.",

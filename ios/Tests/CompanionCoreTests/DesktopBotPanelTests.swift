@@ -106,15 +106,20 @@ final class DesktopBotPanelTests: XCTestCase {
         try JSONDecoder().decode(ConfigStatus.self, from: Data(json.utf8))
     }
 
-    func testWorksOnOffersAutoAndOffOnly() throws {
-        // Workspace is always Auto (owner 2026-10-18): the bot picks the place
-        // per task, so no place is offered; Off stays a restriction.
+    func testWorksOnNeverOffersOff() throws {
+        // Off is gone from every menu: Auto and the places the
+        // server offers, and a saved Off reads as Auto.
         let plain = try config("{}")
         let boat = try config(#"{"features":{"boatComputer":true}}"#)
         let home = try config(#"{"cloudHome":true}"#)
+        XCTAssertEqual(DesktopWorksOnRules.choices(config: plain, organization: false), [.auto, .local])
+        XCTAssertEqual(DesktopWorksOnRules.choices(config: boat, organization: false), [.auto, .local, .cloud])
+        XCTAssertEqual(DesktopWorksOnRules.choices(config: home, organization: false), [.auto, .cloud])
+        XCTAssertEqual(DesktopWorksOnRules.choices(config: plain, organization: true), [.auto, .local, .cloud])
         for (cfg, organization) in [(plain, false), (boat, false), (home, false), (plain, true)] {
-            XCTAssertEqual(DesktopWorksOnRules.choices(config: cfg, organization: organization), [.auto, .off])
+            XCTAssertFalse(DesktopWorksOnRules.choices(config: cfg, organization: organization).contains(.off))
         }
+        XCTAssertEqual(DesktopWorksOnRules.selected(.off), .auto)
         XCTAssertTrue(DesktopWorksOnRules.showsCloudBackend(worksOn: .auto, config: boat, organization: false))
         XCTAssertFalse(DesktopWorksOnRules.showsCloudBackend(worksOn: .auto, config: plain, organization: false))
     }
@@ -234,6 +239,7 @@ final class DesktopBotPanelTests: XCTestCase {
         XCTAssertEqual(DesktopWorksOn.of(try bot(nil)), .auto)
         XCTAssertEqual(DesktopWorksOn.of(try bot("vm")), .vm)
         XCTAssertEqual(DesktopWorksOn.of(try bot("mystery")), .auto)
+        XCTAssertEqual(DesktopWorksOn.of(try bot("off")), .auto)
         XCTAssertNil(try bot(nil).approvePeerComms)
     }
 

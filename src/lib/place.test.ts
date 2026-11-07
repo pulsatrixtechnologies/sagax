@@ -3,11 +3,12 @@ import { effectivePlace, isComputerPlace, orgComputerFor, PLACES, placeLabelKey,
 import { toolSurfaceKind } from "../../shared/tool-surface";
 
 describe("where a conversation works", () => {
-  it("lets the conversation's pin win over the bot's Works on, except Off", () => {
+  it("lets the conversation's pin win over the bot's Works on, and reads a saved Off as Auto", () => {
     expect(effectivePlace({ computer: "cloud" }, { surface: "browser" })).toBe("browser");
     expect(effectivePlace({ computer: undefined }, { surface: "vm" })).toBe("vm");
     expect(effectivePlace({ computer: "browser" }, { surface: "local" })).toBe("local");
-    expect(effectivePlace({ computer: "off" }, { surface: "browser" })).toBe("off");
+    expect(effectivePlace({ computer: "off" }, { surface: "browser" })).toBe("browser");
+    expect(effectivePlace({ computer: "off" }, null)).toBe("auto");
     expect(effectivePlace({ computer: "cloud" }, null)).toBe("cloud");
     expect(effectivePlace({ computer: undefined }, undefined)).toBe("auto");
   });

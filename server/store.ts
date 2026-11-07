@@ -3650,7 +3650,9 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
         delete task.surfaceSource;
         touched.add(bot.id);
       }
-      if (bot.computer !== undefined && autoOnlyDestination(bot.computer) === undefined) {
+      // Off left every menu: a saved Off goes back to Auto
+      // too, so the Computer card shows again.
+      if (bot.computer !== undefined && (bot.computer === "off" || autoOnlyDestination(bot.computer) === undefined)) {
         delete bot.computer;
         bots++;
         touched.add(bot.id);

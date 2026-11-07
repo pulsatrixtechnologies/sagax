@@ -2,7 +2,7 @@
 // #2342: the Computer card's live window showed "Capturing this computer's
 // screen…" forever. It asked the desktop bridge for the Local VM's screenshot
 // instead of this computer's screen, and swallowed every failure.
-// JC 2026-11-07: "The screen is temporarily unavailable." now says the real
+// "The screen is temporarily unavailable." now says the real
 // reason in every known case.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -99,6 +99,21 @@ describe("LocalLiveScreen", () => {
     await tick();
     expect(host.querySelector("[data-local-live-error]")?.getAttribute("data-local-live-error")).toBe("capture-failed");
     expect(host.querySelector("[data-local-live-failure]")?.textContent).toBe("screen:frame refused for this page");
+  });
+
+  it("on a Mac, a capture macOS refuses says how to allow Screen Recording, never the raw IPC error", async () => {
+    (window as { ogb?: unknown }).ogb = {
+      screenFrame: vi.fn().mockRejectedValue(new Error("Error invoking remote method 'screen:frame': Error: Failed to get sources.")),
+      permStatus: vi.fn().mockResolvedValue({ mic: "granted", screen: "denied" }),
+      permOpenSettings: vi.fn(),
+    };
+    await mount();
+    await tick();
+    expect(host.querySelector("[data-local-live-error]")?.getAttribute("data-local-live-error")).toBe("permission");
+    expect(host.querySelector("[data-local-live-failure]")).toBeNull();
+    expect(host.textContent).not.toContain("Failed to get sources");
+    expect(host.textContent).toContain("Screen Recording");
+    expect(host.querySelector("[data-local-live-settings]")).not.toBeNull();
   });
 
   it("outside the desktop app, says so at once and never asks the Local VM", async () => {

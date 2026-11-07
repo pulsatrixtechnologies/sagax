@@ -28,11 +28,11 @@ export function cloudComputersOffered(config: FeatureFlagConfig | null | undefin
   return boatComputerEnabled(config) || vpsComputerEnabled(config);
 }
 
-/** The conversation's pin wins over the bot's Works on, except Off, exactly
- * as the server resolves it. */
+/** The conversation's pin wins over the bot's Works on. A saved Off reads
+ * as Auto: Off is gone from every menu. */
 export function effectivePlace(bot: Pick<Bot, "computer">, task?: Pick<Task, "surface"> | null): EffectivePlace {
-  if (bot.computer === "off") return "off";
-  return task?.surface ?? bot.computer ?? "auto";
+  const computer = bot.computer === "off" ? undefined : bot.computer;
+  return task?.surface ?? computer ?? "auto";
 }
 
 export function isComputerPlace(place: EffectivePlace): place is "cloud" | "vm" | "local" {

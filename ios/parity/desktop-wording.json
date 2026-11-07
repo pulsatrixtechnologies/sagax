@@ -1684,5 +1684,16 @@
   "Manage in Plugins": "botAccess.manageInConnectApps",
   "These plugins serve all of your bots. You manage them here.": "connectApps.scope.meNote",
   "Switched off in Plugins > Installed. Test it and turn it on there first.": "botAccess.mcpDisabled",
-  "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look.": "onboarding.tour.apps"
+  "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look.": "onboarding.tour.apps",
+  "Untitled video": "video.untitled",
+  "Could not play this video.": "video.playbackError",
+  "Live": "video.live",
+  "%@ watching": "video.viewers",
+  "Back to live": "video.backToLive",
+  "This video link has expired.": "video.linkExpired",
+  "Get a new link": "video.requestNewLink",
+  "New link requested": "video.refreshRequested",
+  "The video link for “%@” expired. Send me a new one.": "video.refreshRequest",
+  "Live for": "video.uptime",
+  "Recording": "video.recording"
 }

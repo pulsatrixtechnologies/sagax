@@ -23,6 +23,30 @@ public struct WireVideoWidget: Codable, Hashable, Sendable {
     public var posterUrl: String?
     public var durationMs: Double?
     public var viewerCount: Int?
+    // Optional player details (shared/video-widget.ts), all backward compatible.
+    public var format: String?
+    public var id: String?
+    public var avatarUrl: String?
+    public var category: String?
+    /// ISO 8601 start of a live stream (uptime).
+    public var startedAt: String?
+    public var tags: [String]?
+    public var chapters: [VideoChapter]?
+    /// The stream is being recorded (REC badge).
+    public var recording: Bool?
+    public var channelUrl: String?
+    /// Epoch milliseconds after which the share link no longer plays.
+    public var expiresAt: Double?
+}
+
+/// A chapter of a recording (`chapters` of a video widget).
+public struct VideoChapter: Codable, Hashable, Sendable {
+    public var startMs: Double
+    public var title: String
+    public init(startMs: Double, title: String) {
+        self.startMs = startMs
+        self.title = title
+    }
 }
 
 public struct SkillRequestCardData: Codable, Hashable, Sendable {

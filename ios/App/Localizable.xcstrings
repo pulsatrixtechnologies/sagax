@@ -113508,6 +113508,106 @@
           }
         }
       }
+    },
+    "%@ watching": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ en direct"
+          }
+        }
+      }
+    },
+    "Back to live": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retour au direct"
+          }
+        }
+      }
+    },
+    "Could not play this video.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de lire cette vidéo."
+          }
+        }
+      }
+    },
+    "Get a new link": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obtenir un nouveau lien"
+          }
+        }
+      }
+    },
+    "Live": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En direct"
+          }
+        }
+      }
+    },
+    "Live for": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En direct depuis"
+          }
+        }
+      }
+    },
+    "New link requested": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau lien demandé"
+          }
+        }
+      }
+    },
+    "The video link for “%@” expired. Send me a new one.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le lien vidéo de « %@ » est expiré. Envoie-moi un nouveau lien."
+          }
+        }
+      }
+    },
+    "This video link has expired.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le lien de cette vidéo est expiré."
+          }
+        }
+      }
+    },
+    "Untitled video": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo sans titre"
+          }
+        }
+      }
     }
   }
 }

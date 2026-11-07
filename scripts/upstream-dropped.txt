@@ -384,6 +384,9 @@ server/skill-fetch.test.ts -> server/skills/skill-fetch.test.ts
 server/skill-fetch.ts -> server/skills/skill-fetch.ts
 server/skill-learn.test.ts -> server/skills/skill-learn.test.ts
 server/skill-learn.ts -> server/skills/skill-learn.ts
+server/skill-review.e2e.test.ts -> server/skills/skill-review.e2e.test.ts
+server/skill-review.test.ts -> server/skills/skill-review.test.ts
+server/skill-review.ts -> server/skills/skill-review.ts
 server/skill-library.test.ts -> server/skills/skill-library.test.ts
 server/skill-library.ts -> server/skills/skill-library.ts
 server/skill-share.test.ts -> server/skills/skill-share.test.ts

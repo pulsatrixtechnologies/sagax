@@ -65,6 +65,13 @@ describe("upstream-drop", () => {
     expect(parseMoved("a/x.ts -> a/b/x.ts\nplain.ts\n")).toEqual(new Map([["a/x.ts", "a/b/x.ts"]]));
   });
 
+  it("keeps one skill review module: the upstream root copy maps to server/skills (#I9)", () => {
+    const moved = parseMoved(readFileSync(LIST, "utf8"));
+    for (const name of ["skill-review.ts", "skill-review.test.ts", "skill-review.e2e.test.ts"]) {
+      expect(moved.get(`server/${name}`), name).toBe(`server/skills/${name}`);
+    }
+  });
+
   it("never removes a moved file's old path that came back: it says where to port it", () => {
     const repo = mkdtempSync(join(tmpdir(), "sagax-upstream-moved-"));
     directories.push(repo);

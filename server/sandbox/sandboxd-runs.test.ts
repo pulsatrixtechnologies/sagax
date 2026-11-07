@@ -276,6 +276,68 @@ function makePki(dir: string): Pki {
   return { ca: read("ca.pem"), serverCert: read("server.pem"), serverKey: read("server.key"), clientCert: read("client.pem"), clientKey: read("client.key"), rogueCert: read("rogue.pem"), rogueKey: read("rogue.key") };
 }
 
+const cachePath = (owner: string, slot: number) => `/api/v1/namespaces/${NS}/persistentvolumeclaims/run-cache-${owner}-${slot}`;
+const CACHE_ENV = { SAGAX_RUNS_CACHE_ENABLED: "1", SAGAX_RUNS_MAX_PER_OWNER: "2", SAGAX_RUNS_CACHE_STORAGE_CLASS: "fast-cache" };
+
+function cacheCluster(encrypted = true) {
+  const cluster = memoryCluster();
+  cluster.objects.set("/apis/storage.k8s.io/v1/storageclasses/fast-cache", { metadata: { name: "fast-cache", annotations: encrypted ? { "sagax.pulsatrix.com/encrypted": "true" } : {} } });
+  return cluster;
+}
+
+describe("RunService build cache", () => {
+  it("gives a run a cache disk, reuses it on the next run and opens a second slot only for a concurrent one", async () => {
+    const cluster = cacheCluster();
+    let now = Date.parse("2026-11-07T12:00:00Z");
+    const audit = memoryAudit();
+    const service = new RunService(runsConfig(CACHE_ENV), cluster.client, audit, { now: () => now });
+    await service.create(body("runc0001"));
+    expect(cluster.objects.has(cachePath(OWNER_A, 0))).toBe(true);
+    const pod = cluster.objects.get(podPath("runc0001"))!;
+    expect(JSON.stringify(pod)).toContain(`run-cache-${OWNER_A}-0`);
+    // the cache disk is never listed as a run
+    expect((await service.listRuns()).runs.map((run) => run.id)).toEqual(["runc0001"]);
+    // a second run while the first holds slot 0
+    now += 1000;
+    await service.create(body("runc0002"));
+    expect(JSON.stringify(cluster.objects.get(podPath("runc0002")))).toContain(`run-cache-${OWNER_A}-1`);
+    // both end; the next run takes the warmest free disk, no new disk
+    for (const id of ["runc0001", "runc0002"]) (cluster.objects.get(podPath(id))!.status as Obj).phase = "Succeeded";
+    now += 60_000;
+    await service.create(body("runc0003"));
+    expect(JSON.stringify(cluster.objects.get(podPath("runc0003")))).toContain(`run-cache-${OWNER_A}-1`);
+    expect(cluster.objects.has(cachePath(OWNER_A, 2))).toBe(false);
+    expect(((cluster.objects.get(cachePath(OWNER_A, 1))!.metadata as Obj).annotations as Obj)["sagax.pulsatrix.com/cache-used-at"]).toBe(new Date(now).toISOString());
+    // another person gets their own disk
+    await service.create(body("runc0004", OWNER_B));
+    expect(cluster.objects.has(cachePath(OWNER_B, 0))).toBe(true);
+    expect(audit.events.find((event) => event.action === "run.create" && (event.detail as Obj).run === "runc0003")?.detail).toMatchObject({ cache: "reused" });
+  });
+
+  it("refuses an unencrypted cache StorageClass before any disk exists", async () => {
+    const cluster = cacheCluster(false);
+    const service = new RunService(runsConfig(CACHE_ENV), cluster.client, memoryAudit());
+    await expect(service.create(body("runc0005"))).rejects.toMatchObject({ code: "storage" });
+    expect(cluster.objects.has(cachePath(OWNER_A, 0))).toBe(false);
+    expect(cluster.objects.has(podPath("runc0005"))).toBe(false);
+  });
+
+  it("sweeps a cache disk idle past its retention", async () => {
+    const cluster = cacheCluster();
+    let now = Date.parse("2026-11-07T12:00:00Z");
+    const service = new RunService(runsConfig(CACHE_ENV), cluster.client, memoryAudit(), { now: () => now });
+    await service.create(body("runc0006"));
+    await service.remove("runc0006", { keepWorkspace: false });
+    now += 13 * 86_400_000;
+    await service.sweep();
+    expect(cluster.objects.has(cachePath(OWNER_A, 0))).toBe(true);
+    now += 2 * 86_400_000;
+    const actions = await service.sweep();
+    expect(actions).toContainEqual({ kind: "delete-cache", claim: `run-cache-${OWNER_A}-0` });
+    expect(cluster.objects.has(cachePath(OWNER_A, 0))).toBe(false);
+  });
+});
+
 describe("run listener (mutual TLS and the run key)", () => {
   let pki: Pki;
   let server: Server;

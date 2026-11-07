@@ -1,0 +1,21 @@
+# Build cache of coding runs (gap I5). Premium SSD v2: 3000 IOPS and
+# 125 MB/s at any size, about 5 USD a month for 64 GiB, paid per GiB.
+# Delete: an idle cache is rebuilt, never restored. Not in kustomization.yaml:
+# applied on its own when the build cache is turned on. Premium SSD v2 is zonal:
+# the runs node pool must be pinned to zones (az aks nodepool --zones).
+# Encrypted with the platform's customer-managed key, no public access.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: px-run-cache
+provisioner: disk.csi.azure.com
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  skuName: PremiumV2_LRS
+  cachingMode: None
+  DiskIOPSReadWrite: "3000"
+  DiskMBpsReadWrite: "125"
+  diskEncryptionSetID: REPLACE_WITH_DISK_ENCRYPTION_SET_ID
+  networkAccessPolicy: DenyAll

@@ -1,0 +1,29 @@
+# Overlay that turns on the build cache of coding runs on AKS (gap I5).
+# Apply on top of values-azure.yaml, after the operator's go-ahead:
+#   helm upgrade ... -f values-azure.yaml -f values-azure-run-cache.yaml
+# Then set on the provisioner: SAGAX_RUNS_CACHE_ENABLED=1,
+# SAGAX_RUNS_CACHE_STORAGE_CLASS=px-run-cache, SAGAX_RUNS_CACHE_GIB=64
+# (docs/sandbox-kubernetes.md, "Build cache").
+# Premium SSD v2 is zonal: the runs node pool must be pinned to zones.
+runs:
+  cache:
+    enabled: true
+    className: px-run-cache
+    sizeGi: 64
+    provisioner: disk.csi.azure.com
+    parameters:
+      # Clear the Longhorn keys inherited from values.yaml.
+      encrypted: ""
+      numberOfReplicas: ""
+      skuName: PremiumV2_LRS
+      cachingMode: None
+      DiskIOPSReadWrite: "3000"
+      DiskMBpsReadWrite: "125"
+      diskEncryptionSetID: REPLACE_WITH_DISK_ENCRYPTION_SET_ID
+      networkAccessPolicy: DenyAll
+  # 12 runs: 12 workspaces of 20 Gi at most, plus one cache disk per person
+  # and slot (24 cache disks of 64 Gi at most before the 14-day retention
+  # sweeps the idle ones).
+  quota:
+    persistentVolumeClaims: "48"
+    requestsStorage: 1776Gi

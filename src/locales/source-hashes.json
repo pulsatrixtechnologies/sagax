@@ -17735,7 +17735,20 @@
       "video.zoom": "509c517ede79fef060a5f3a109fd1f45951eef2c7970b25c20992011e36a4070",
       "video.zoomIn": "0e47f09a748fa1321dbaee5c8983f8e8f2880b1212956fb4f21ae9d60b88a8b2",
       "video.zoomOut": "bc7b631a689b45ca5c51923515d31eb3597b2d9b129d88d0dbee066ee5c35453",
-      "video.zoomReset": "91a661b24f1bc2bf723557e11c049600681ce2c73fd5a1962281ba44e293a5fe"
+      "video.zoomReset": "91a661b24f1bc2bf723557e11c049600681ce2c73fd5a1962281ba44e293a5fe",
+      "computerThumb.short.permission": "e48611a34f2dfa083ca0611c9606910672f7c738f2514f2a88ddacbb449af921",
+      "computerThumb.short.empty": "6e9a17ba4d70d3b48828f1d56d879d5b9cdc862edcc4bf8f6a219aa0dd0237ef",
+      "computerThumb.short.failed": "2a0b4d576cca5dfb60e5320a930f6d5e9696f26ea492d49877a1fc196e8fb590",
+      "computerThumb.short.desktopApp": "640412ad43192f0123724828ad3aa6df65f8f30c4826fc1e29a54832eea4883c",
+      "computerThumb.short.noCapture": "e83dfa18ddbba942a6ec36393657a86f51f9e3b733140b05f5b88f4e5a77ef71",
+      "computerThumb.short.noComputer": "8ff8b1ba23f1fa987dd1b6c424973dde9d5605c44624f0fb30706e94dca03248",
+      "computerThumb.line.permission": "350184e2587b0767129ab764e268ae324dd228ef70b1cea205b4cc885929e36d",
+      "computerThumb.line.empty": "0ee3690f3a0238ddb40526ca84d6d85b2c49c5db079999061d50952aafec2284",
+      "computerThumb.line.failed": "5081acea0fb80363eef45456e88d219847fc32d30f00c60ac18bae80f4afa7c3",
+      "computerThumb.line.desktopApp": "7828acea73c8e950d741eec687ecd39b3df55d979715a1a5c717877203cb5b57",
+      "computerThumb.line.noCapture": "20a426fab9e614d7eebf66a70146865891ad4830595b78a4dd3afb5830e0d90b",
+      "computerThumb.line.noComputer": "d51a7c131648460248908dbb1e1293d46394468a72a5ae9345addb0a94b47a39",
+      "computerThumb.allowScreen": "cadbaf51196d5202a7d7a637cd374a7da637aab315a675937c346ecbbc4ac4e5"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

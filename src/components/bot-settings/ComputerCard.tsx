@@ -10,7 +10,7 @@
 // changes the bot's Works on and refreshes the card.
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check, MoreHorizontal } from "lucide-react";
+import { Check, MonitorOff, MoreHorizontal } from "lucide-react";
 
 import type { Bot } from "@/state/store";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
@@ -19,6 +19,15 @@ import { cn } from "@/lib/cn";
 import { effectivePlace, placeLabelKey } from "@/lib/place";
 import { placeLabel } from "@/lib/place-labels";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
+import { isMacPlatform } from "@/lib/is-mac-platform";
+import {
+  SCREEN_PROBLEM_LINE,
+  SCREEN_PROBLEM_SHORT,
+  computerCardView,
+  localScreenProblem,
+  useCloudAsleep,
+  useScreenPermission,
+} from "@/lib/computer-screen-state";
 import {
   computerChoices,
   currentDesktop,
@@ -31,12 +40,14 @@ import type { PillOption } from "../SettingsPrimitives";
 import { navigateThreadMenu } from "../BotProjects";
 import { SandboxDesktopModal } from "../computer/SandboxDesktopModal";
 import { LocalLiveScreen } from "../computer/LocalLiveScreen";
+import { ComputerIdleBot } from "../computer/ComputerScreen";
 import { worksOnMode } from "../computer/WorksOnSetting";
 import { activeComputer } from "../computer/OrgComputerTab";
 import { ViewerDialog } from "../ViewerDialog";
 import {
   COMPUTER_THUMBNAIL_STALE_MS,
   thumbnailComputerFor,
+  sameHost,
   thumbnailDesktop,
   useComputerThumbnail,
 } from "@/lib/computer-thumbnail";
@@ -141,7 +152,6 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
   const capturedLabel = capturedAt !== null
     ? t("botPanel.computerCard.capturedAt", { time: new Date(capturedAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) })
     : undefined;
-  const status = bot.busy ? t("botPanel.computerCard.working") : t("botPanel.computerCard.awake");
   const selectValue = computerSelectValue(bot.computer);
   const options = useMemo(() => computerSelectOptions(bridge, organization), [bridge, organization]);
   const title = computerCardTitle(bot.computer, bridge, organization);
@@ -151,6 +161,33 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
   const desktopId = liveIsLocal ? currentDesktop(bridge)?.id : undefined;
   const caption = t("computer.screenOf", { name: bot.name });
   const canOpenLive = place !== "off" && place !== "browser";
+  // JC 2026-11-07: the thumbnail and the Awake / Asleep line follow the real
+  // state: the screen, asleep (computer offline, cloud computer stopped), or
+  // unavailable with its reason, never a wallpaper that looks fine.
+  const cardSource = place === "off" || place === "browser" ? "none"
+    : place === "vm" ? "other"
+    : place === "local" || (place === "auto" && liveIsLocal) ? "local"
+    : "cloud";
+  const permission = useScreenPermission();
+  const appCapture = typeof window !== "undefined" && typeof window.ogb?.screenFrame === "function";
+  // The app's own reason (Screen Recording) applies to the row only when the
+  // row stands for this computer.
+  const thisComputer = !organization || sameHost(permission.host, ownDesktop?.desktop.name);
+  const cloudAsleep = useCloudAsleep(bot.id, cardSource === "cloud", `${bot.busy ? 1 : 0}:${liveOpen ? 1 : 0}`);
+  const view = computerCardView({
+    busy: bot.busy === true,
+    off: place === "off",
+    source: cardSource,
+    online: !organization || ownDesktop?.online === true,
+    cloudAsleep,
+    hasCapture: src !== null,
+    localProblem: thisComputer ? localScreenProblem({ inApp: appCapture, mac: isMacPlatform(), screenPermission: permission.screen }) : null,
+  });
+  const statusWord = view.status === "asleep" ? t("place.view.ccAsleep.short")
+    : view.status === "working" ? t("botPanel.computerCard.working")
+    : t("botPanel.computerCard.awake");
+  const status = view.problem ? `${statusWord} \u00b7 ${t(SCREEN_PROBLEM_SHORT[view.problem])}` : statusWord;
+  const reason = view.problem ? t(SCREEN_PROBLEM_LINE[view.problem]) : undefined;
   const menuEnabled = !readOnly && !!onPatch;
   const [menu, setMenu] = useState<{ trigger: HTMLElement; x: number; y: number } | null>(null);
   const openMenu = (trigger: HTMLElement, at?: { x: number; y: number }) => {
@@ -192,27 +229,36 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
         >
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-[14px] font-normal leading-5 text-ink">{title}</span>
-            <span data-computer-status={bot.busy ? "working" : "awake"} className="truncate text-[13px] leading-[18px] text-ink-tertiary">
+            <span data-computer-status={view.status} data-computer-problem={view.problem ?? undefined} title={reason} className="truncate text-[13px] leading-[18px] text-ink-tertiary">
               {status}
             </span>
           </span>
         </button>
         {/* The thumbnail is its own button: a capture opens larger in the
-            viewer, the wallpaper (no capture yet) opens the live window. */}
+            viewer, the other looks open the live window. */}
         <button
           ref={thumbButton}
           type="button"
-          data-computer-thumb={src ? "screen" : "wallpaper"}
-          data-computer-thumb-stale={src && stale ? "" : undefined}
-          aria-label={src ? t("botPanel.computerCard.preview") : caption}
-          title={src ? capturedLabel : undefined}
-          aria-disabled={!src && !canOpenLive ? true : undefined}
-          onClick={() => { if (src) setPreviewOpen(true); else if (canOpenLive) setLiveOpen(true); }}
-          className="h-[29px] w-[46px] shrink-0 overflow-hidden rounded-[5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 aria-disabled:cursor-default"
-          style={src ? undefined : { background: WALLPAPER }}
+          data-computer-thumb={view.thumb}
+          data-computer-thumb-stale={view.thumb === "screen" && stale ? "" : undefined}
+          aria-label={view.thumb === "screen" ? t("botPanel.computerCard.preview") : reason ? `${caption} \u00b7 ${reason}` : caption}
+          title={view.thumb === "screen" ? capturedLabel : reason ?? (view.thumb === "asleep" ? t("place.view.ccAsleep.short") : undefined)}
+          aria-disabled={view.thumb !== "screen" && !canOpenLive ? true : undefined}
+          onClick={() => { if (view.thumb === "screen") setPreviewOpen(true); else if (canOpenLive) setLiveOpen(true); }}
+          className={cn(
+            "relative flex h-[29px] w-[46px] shrink-0 items-center justify-center overflow-hidden rounded-[5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 aria-disabled:cursor-default",
+            view.thumb !== "screen" && "border-[0.5px] border-border bg-control",
+          )}
         >
-          {src && <img src={src} alt="" loading="lazy" onError={() => setBroken(src)}
+          {view.thumb === "screen" && src && <img src={src} alt="" loading="lazy" onError={() => setBroken(src)}
             className={cn("size-full object-cover", stale && "opacity-60 grayscale")} />}
+          {view.thumb === "asleep" && (
+            <>
+              <ComputerIdleBot size={17} />
+              <span aria-hidden="true" data-sleep-glyphs="" className="absolute right-[5px] top-[2px] text-[8px] font-bold leading-none text-ink-tertiary">z</span>
+            </>
+          )}
+          {view.thumb === "unavailable" && <MonitorOff size={14} aria-hidden="true" className="text-ink-tertiary" />}
         </button>
         </div>
       </div>
@@ -259,8 +305,5 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
 
 /** Same item as the bot panel's other row menus (BotTaskSection). */
 const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
-
-/** The desktop wallpaper shown while no capture of the computer exists. */
-const WALLPAPER = "radial-gradient(120% 90% at 20% 15%, #6d8cff 0%, transparent 55%), radial-gradient(110% 100% at 85% 90%, #c86bd6 0%, transparent 60%), linear-gradient(135deg, #24305e 0%, #3b2a63 55%, #1c1f3a 100%)";
 
 export type { ComputerSelectValue, ComputerPatch };

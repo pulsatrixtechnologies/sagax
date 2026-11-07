@@ -340,13 +340,14 @@ const __BASE_VERSION__: string;
       /** Absolute path of a dropped File ("" when the drag carried no
        * file on disk). Absent in older builds of the shell. */
       getPathForFile?(file: File): string;
-      /** {mic} TCC status: granted|denied|not-determined|unknown. Screen
-       * status is deliberately absent — macOS 15+ caches it per-process,
-       * so it lies for the whole session after a grant. `pageMic`: whether
-       * this app lets the asking page use the microphone (this computer's
-       * page always; a server's page only on the person's own Cloud).
-       * Absent in older builds of the shell. */
-      permStatus(): Promise<{ mic: string; pageMic?: "allowed" | "refused" }>;
+      /** {mic} TCC status: granted|denied|not-determined|unknown. `screen`:
+       * the same for Screen Recording ("unsupported" off macOS). macOS 15+
+       * caches it per process (still "denied" until a relaunch after a
+       * grant), so it never gates a capture: it only names why a capture
+       * came back empty. `pageMic`: whether this app lets the asking page
+       * use the microphone (this computer's page always; a server's page
+       * only on the person's own Cloud). Absent in older builds of the shell. */
+      permStatus(): Promise<{ mic: string; pageMic?: "allowed" | "refused"; screen?: string; host?: string }>;
       /** Triggers the macOS microphone prompt; resolves true when granted. */
       permRequestMic(): Promise<boolean>;
       /** Opens System Settings on a privacy pane: mic|screen|speech|accessibility. */

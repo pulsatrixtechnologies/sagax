@@ -5,6 +5,12 @@
 // tokens are never words a person reads, so they leave the start and the end
 // of a reply. One quoted in the middle of a sentence stays as written.
 
+/** End of turn markers a local server is asked to stop on (`stop`), so the
+ * model's own end marker ends the reply instead of being written as text
+ * when the server's chat template does not know it. Only pipe tokens: a bare
+ * `</s>` can be real text (HTML strikethrough). */
+export const CHAT_STOP_SEQUENCES: readonly string[] = ["<|eos|>", "<|im_end|>", "<|eot_id|>", "<|endoftext|>", "<|end|>", "<|im_start|>"];
+
 /** `<|eos|>`, `<|im_end|>`, `<|eot_id|>`, `<|END_OF_TURN_TOKEN|>`... */
 const PIPE_TOKEN = String.raw`<\|[A-Za-z0-9_]{1,40}\|>`;
 /** Tokens without pipes (Llama 2, Gemma, T5 families). */

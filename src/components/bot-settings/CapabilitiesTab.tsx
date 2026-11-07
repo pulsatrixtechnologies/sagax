@@ -6,7 +6,7 @@
 // "What <bot> receives (engine: X)" with the prompt index's cap when it cuts
 // (#1748). Never an id on screen.
 import { useState, type ReactNode } from "react";
-import { Binary, Check, ChevronDown, ChevronRight, Copy, LoaderCircle, Plus, RotateCcw, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, LoaderCircle, Plus, RotateCcw, TriangleAlert } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -200,7 +200,7 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
   const source = [formWord(item.form), item.source.label, item.source.version ? `v${item.source.version}` : null].filter(Boolean).join(" · ");
   const reason = item.supersededBy ? t("capabilities.installed.supersededByFlow", item.supersededBy) : reasonText(item.reason);
   const brings = item.brings;
-  // a Sagax built-in (REA): its own icon and translated description
+  // a Sagax built-in (REA): translated description, shown in the detail like every row
   const about = builtinDescription(item) ?? item.description;
   return (
     <li data-capability={item.form} {...(item.builtin ? { "data-capability-builtin": item.builtin } : {})} data-capability-scope={item.scope} data-capability-state={item.state} className="border-b border-hairline-weak last:border-b-0">
@@ -209,13 +209,9 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
           aria-label={t("capabilities.row.openAria", { name })}
           className={cn("flex min-w-0 flex-1 items-center gap-1.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", item.supersededBy && "basis-full sm:basis-0")}>
           {expanded ? <ChevronDown size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" /> : <ChevronRight size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" />}
-          {item.builtin && <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent" data-capability-builtin-icon="">
-            <Binary size={14} aria-hidden="true" />
-          </span>}
           <span className="min-w-0 flex-1">
             <span className="block break-words text-[13px] text-ink" title={name}>{name}</span>
             <span className="block truncate text-[11.5px] text-ink-secondary" title={source}>{source}</span>
-            {item.builtin && about && <span className="block text-[11.5px] leading-[16px] text-ink-secondary" data-capability-builtin-about="">{about}</span>}
           </span>
         </button>
         <span className={cn("flex max-w-[50%] shrink-0 flex-wrap justify-end gap-1", item.supersededBy && "ml-auto")}>

@@ -80,8 +80,18 @@ const editorPayload = {
   origin: "private" as const,
 };
 
+/** Skill history (#2610): a bot revision after a correction, the person's
+ * own edit, and the bot's first draft. */
+const HOUR = 3_600_000;
+const HISTORY = [
+  { id: "v3", at: Date.now() - 2 * HOUR, by: "bot", gist: "Flag mismatches plainly, after the person corrected the wording.", before: REVIEWED_MD, after: SKILL_MD },
+  { id: "v2", at: Date.now() - 26 * HOUR, by: "person", gist: "", before: REVIEWED_MD.replace("Check every line item.", "Check the totals."), after: REVIEWED_MD },
+  { id: "v1", at: Date.now() - 50 * HOUR, by: "bot", gist: "", before: null, after: REVIEWED_MD.replace("Check every line item.", "Check the totals.") },
+];
+
 async function request(path: string, init?: RequestInit): Promise<unknown> {
   const method = (init?.method ?? "GET").toUpperCase();
+  if (method === "GET" && path.endsWith("/history")) return { versions: HISTORY };
   if (method === "GET" && path.includes("/skills/order-audit") && !path.includes("/files")) {
     return editorPayload;
   }

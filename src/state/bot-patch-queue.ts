@@ -47,6 +47,7 @@ type BotPatchBody = {
   browser: boolean;
   browserProfile: string | null;
   memoryUpkeep: boolean;
+  skillLearning: boolean;
   builtinPlugins: Record<string, boolean>;
   teamMemorySharing: "shared" | "private";
   mcpServers: string[] | null;

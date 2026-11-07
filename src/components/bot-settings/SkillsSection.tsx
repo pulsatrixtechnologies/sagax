@@ -15,7 +15,7 @@ import { useStore, type Bot } from "@/state/store";
 import { useBotEditor } from "./BotEditorContext";
 import { skillAuthoringEnabled, skillsLibraryEnabled } from "@/lib/feature-flags";
 import { viewerBotsReadOnly } from "@/lib/viewer";
-import { PILL, PLAIN_CARD, PLAIN_FIELD, PRIMARY_PILL, useSettingsSurface } from "../SettingsPrimitives";
+import { PILL, PLAIN_CARD, PLAIN_FIELD, PRIMARY_PILL, SwitchRow, useSettingsSurface } from "../SettingsPrimitives";
 import { cn } from "@/lib/cn";
 import { PaneEmpty, PaneSection } from "./PaneSection";
 import { OrgSkillsCard } from "./OrgSkillsCard";
@@ -317,6 +317,19 @@ export function SkillsSection({ bot }: { bot: Bot }) {
     setEditing(null);
   }, [bot.id]);
 
+  // Learn from use (#2610): the bot revises a skill after a failure or a
+  // correction and proposes a new one after a long task. The bot's own switch,
+  // on unless turned off; shown only while bots may write skills at all.
+  const learning = featureEnabled ? (
+    <SwitchRow
+      label={t("botPanel.skills.learning")}
+      help={t("botPanel.skills.learningHelp")}
+      checked={bot.skillLearning !== false}
+      disabled={!skillWrites}
+      onChange={(skillLearning) => dispatch({ type: "updateBot", botId: bot.id, patch: { skillLearning } })}
+    />
+  ) : null;
+
   const remove = (skill: ManagedSkill) => removeSkill(
     { botId: bot.id, confirm, api, assignmentBusy, setWorking, setError, putAssignments, unshare, refresh },
     skill,
@@ -392,6 +405,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
       <>
         <PaneSection title={t("botSettings.nav.skills")} help={help} action={addAction} plain data-skills-section="">
           <div className={PLAIN_CARD} data-settings-surface="">
+            {learning && <div className="px-4 py-2.5" data-skill-learning="">{learning}</div>}
             {skillWrites && libraryOn && libraryPool.length === 0 && (
               <p className="px-4 py-2.5 text-[12.5px] text-ink-secondary">{t("botPanel.skills.allAssigned")}</p>
             )}
@@ -451,6 +465,8 @@ export function SkillsSection({ bot }: { bot: Bot }) {
           skillWrites, libraryOn, libraryPool, addFromLibrary, setAddFromLibrary, working, addToBot,
           dispatch, source, setSource, importing, importMessage, importSkill,
         })}
+
+        {learning && <div className="mt-3" data-skill-learning="">{learning}</div>}
 
         {skillWrites && (
           <div className="mt-3">

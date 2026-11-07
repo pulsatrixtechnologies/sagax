@@ -201,7 +201,8 @@ import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
-import { createSkillReview, turnToolSteps } from "./skills/skill-review.ts";
+import { createSkillReview, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
+import { summarizeSessions } from "./recall/session-summary.ts";
 import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
@@ -278,7 +279,6 @@ import {
   liveSettingsFor,
   liveCallKey,
   newRoutinesPaused,
-  skillReviewEnabled,
   skillReviewSteps
 } from "./config.ts";
 import { claudeUserSkillsEnabled } from "./turn-settings.ts";
@@ -16315,6 +16315,37 @@ bus.subscribe((event: RuntimeEvent) => {
   });
 });
 
+// A bot's own model for a short background text call (skill review, the
+// session_search summary): its spend is booked to the bot, and a workspace
+// at its spend limit makes none. Null when the engine cannot run it.
+function botTextEngine(botId: string, purpose: string): { generateText: (prompt: string, options?: { noThinking?: boolean }) => Promise<string> } | null {
+  const bot = store.bot(botId);
+  const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
+  if (!bot || !instance || policyModelRefusal(instance) || instance.adapter.capabilities.agentsMcp !== true) return null;
+  const generate = (instance.generateText ?? instance.generateMemoryText)?.bind(instance);
+  if (!generate) return null;
+  return {
+    generateText: async (prompt, options) => {
+      // a workspace at its spend limit runs no review
+      assertWithinBudget(cfg, DATA_DIR);
+      const threadId = `${purpose}-${randomUUID()}`;
+      return generate(prompt, { ...options, onUsage: (usage) => bookTurnUsage({
+        botId: bot.id,
+        botName: bot.name,
+        threadId,
+        instanceId: instance.instanceId,
+        driverKind: instance.driverKind,
+        model: usage.model,
+        input: usage.input ?? 0,
+        output: usage.output ?? 0,
+        ...(usage.cachedInput !== undefined ? { cachedInput: usage.cachedInput } : {}),
+        costUsd: usage.costUsd ?? null,
+        trigger: { kind: "bot", botId: bot.id },
+      }, usage.input !== undefined && usage.output !== undefined, bot.threadId) });
+    },
+  };
+}
+
 // Learn skills automatically (server/skills/skill-review.ts): tool steps are counted
 // per bot and conversation, and past the threshold the bot's own engine
 // reviews the conversation in the background. Its changes go through the
@@ -16323,36 +16354,11 @@ bus.subscribe((event: RuntimeEvent) => {
 // agents tools, a turn the person started (not a peer hop, routine or
 // unattended run), and a conversation that is the bot's own.
 const skillReview = createSkillReview({
-  enabled: () => skillReviewEnabled(cfg),
+  // One switch per bot, in its Skills page (#2610): on unless turned off.
+  enabled: (botId) => skillAuthoringEnabled(cfg) && store.bot(botId)?.skillLearning !== false,
   threshold: () => skillReviewSteps(cfg),
   bot: (botId) => store.bot(botId) ?? undefined,
-  engine: (botId) => {
-    const bot = store.bot(botId);
-    const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
-    if (!bot || !instance || policyModelRefusal(instance) || instance.adapter.capabilities.agentsMcp !== true) return null;
-    const generate = (instance.generateText ?? instance.generateMemoryText)?.bind(instance);
-    if (!generate) return null;
-    return {
-      generateText: async (prompt, options) => {
-        // a workspace at its spend limit runs no review
-        assertWithinBudget(cfg, DATA_DIR);
-        const threadId = `skill-review-${randomUUID()}`;
-        return generate(prompt, { ...options, onUsage: (usage) => bookTurnUsage({
-          botId: bot.id,
-          botName: bot.name,
-          threadId,
-          instanceId: instance.instanceId,
-          driverKind: instance.driverKind,
-          model: usage.model,
-          input: usage.input ?? 0,
-          output: usage.output ?? 0,
-          ...(usage.cachedInput !== undefined ? { cachedInput: usage.cachedInput } : {}),
-          costUsd: usage.costUsd ?? null,
-          trigger: { kind: "bot", botId: bot.id },
-        }, usage.input !== undefined && usage.output !== undefined, bot.threadId) });
-      },
-    };
-  },
+  engine: (botId) => botTextEngine(botId, "skill-review"),
   busy: (botId) => workspaceMaintenance.active || botHasActiveTurn(botId),
   transcript: (botId, threadId) => {
     const owned = connectorThread(botId, threadId);
@@ -16383,6 +16389,13 @@ const skillReview = createSkillReview({
       source: learnSource("automatic review of this conversation"),
     });
     if ("error" in staged) return { ok: false, error: staged.error };
+    // A new skill drawn from a finished task is a proposal (#2610): the
+    // person keeps it in one click on the card, or turns it down. A fix to
+    // a skill in use applies at once, with its receipt, Undo and history.
+    if (change.action === "create") {
+      appendSkillRequestCard({ botId, threadId, staged });
+      return { ok: true };
+    }
     const applied = applyOwnStagedSkill(bot, threadId, staged, direct);
     return "error" in applied ? { ok: false, error: applied.error } : { ok: true };
   },
@@ -16406,7 +16419,16 @@ bus.subscribe((event: RuntimeEvent) => {
       && !(CLOUD_HOME && !cloudOwnerOnlyThread(event.threadId))
       // a confidential conversation is never read back (confidential-threads.ts)
       && !store.isConfidentialThread(event.threadId);
+    const attended = !isInternalTurn(event.threadId) && !isUnattended(bot.id, event.threadId)
+      && !routines?.runForThread(event.threadId) && !(CLOUD_HOME && !cloudOwnerOnlyThread(event.threadId))
+      && !store.isConfidentialThread(event.threadId);
     if (counts) skillReview.noteTurn(bot.id, event.threadId, turnToolSteps(messages, event.turnId, bot.id, Boolean(room)));
+    // A failure or a correction while a skill was in play brings the review
+    // forward, focused on that skill (#2610).
+    if (attended && skillAuthoringEnabled(cfg) && bot.skillLearning !== false) {
+      const signal = turnSignal(messages, event.turnId, bot.id, Boolean(room), listSkills(bot.id).map((skill) => skill.name));
+      if (signal) skillReview.noteSignal(bot.id, event.threadId, signal);
+    }
     skillReview.botSettled(bot.id);
   } catch (error) {
     console.warn(`skill review: could not count a turn: ${(error as Error).message}`);
@@ -22055,6 +22077,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   }),
 
   createInternalSessionsRoutes({
+    summarizeRecall: async (bot, query, sessions) => {
+      const engine = botTextEngine(bot.id, "session-summary");
+      return engine ? summarizeSessions((prompt, options) => engine.generateText(prompt, options), bot.name, query, sessions) : null;
+    },
     bot: (id) => (store.bot(id) ?? undefined) as ReturnType<Parameters<typeof createInternalSessionsRoutes>[0]["bot"]>,
     bots: () => store.bots as unknown as ReturnType<Parameters<typeof createInternalSessionsRoutes>[0]["bots"]>,
     tasks: (botId) => store.tasks(botId) as unknown as ReturnType<Parameters<typeof createInternalSessionsRoutes>[0]["tasks"]>,
@@ -28211,6 +28237,7 @@ const orgBotsDeps: BotsDeps = {
       ...(source.loopGuard !== undefined ? { loopGuard: source.loopGuard } : {}),
       ...(storedTeamMemorySharing(source) ? { teamMemorySharing: "private" as const } : {}),
       ...(source.memoryUpkeep !== undefined ? { memoryUpkeep: source.memoryUpkeep } : {}),
+      ...(source.skillLearning !== undefined ? { skillLearning: source.skillLearning } : {}),
       ...(source.builtinPlugins !== undefined ? { builtinPlugins: { ...source.builtinPlugins } } : {}),
       ...(source.helperModel !== undefined ? { helperModel: source.helperModel } : {}),
       ...(source.browser !== undefined ? { browser: source.browser } : {}),
@@ -31449,6 +31476,7 @@ ROUTES.push(createBotsMutateRoutes({
   memberOwnedInOrg,
   memberOwnsBot,
   memoryUpkeep,
+  skillReview,
   myChrome,
   normalizeAllowedRecipients,
   normalizeOutboundPolicy,

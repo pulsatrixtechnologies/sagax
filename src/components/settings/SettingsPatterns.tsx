@@ -2,7 +2,7 @@
 // (ia.md sections 3 to 8). Every page draws these instead of its own links,
 // filters, bulk bars and empty states. SettingsPrimitives re-exports them.
 import { useEffect } from "react";
-import { Building2, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { DescribedRow, GROUP_CARD, PILL, PRIMARY_PILL } from "@/components/SettingsPrimitives";
@@ -43,7 +43,7 @@ export function RowValue({ children }: { children: React.ReactNode }) {
 export function OrgBand({ name, role, action }: { name: string; role?: React.ReactNode; action?: React.ReactNode }) {
   return (
     <section data-settings-group="orgBand" data-org-band="" className={GROUP_CARD}>
-      <DescribedRow label={name} icon={<Building2 size={14} />} description={role} rowId="orgBand">
+      <DescribedRow label={name} description={role} rowId="orgBand">
         {action}
       </DescribedRow>
     </section>

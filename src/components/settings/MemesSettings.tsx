@@ -3,7 +3,6 @@
 // and never comes back: the row shows only that one is saved and its last four
 // characters.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ImagePlay } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -81,7 +80,6 @@ export function MemesSettings({ bare = false }: { bare?: boolean } = {}) {
           label={bare ? t("memes.settings.title") : t("memes.settings.provider")}
           description={summary}
           help={t("memes.settings.help")}
-          icon={<ImagePlay size={14} />}
           rowId="memes.provider"
           below={info && formOpen && (
             <div className="mt-2 flex min-w-0 flex-col gap-2 sm:pl-[22px]" data-memes-form={info.id}>

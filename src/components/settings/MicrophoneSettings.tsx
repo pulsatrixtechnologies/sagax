@@ -3,7 +3,7 @@
 // list comes from the window's own enumerateDevices; the choice stays on this
 // computer. The macOS dictation helper keeps the system's input.
 import { useEffect, useState } from "react";
-import { Check, Mic } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { useAudioInputs } from "@/lib/audio-input";
 import { t } from "@/lib/i18n";
@@ -28,7 +28,6 @@ export function MicrophoneSettings() {
       <DescribedRow
         label={t("settings.microphone.title")}
         rowId="microphone"
-        icon={<Mic size={14} />}
         description={mic.selected && !listed && mic.loaded ? t("settings.microphone.missingHint") : t("settings.microphone.hint")}
       >
         {mic.namesHidden && (

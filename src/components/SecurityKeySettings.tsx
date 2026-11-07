@@ -3,7 +3,7 @@
 // names inline; the seven classes fold under one "Ask for a key for" row
 // with HelpTip hints.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { KeyRound, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
 import { activeLocale, t } from "@/lib/i18n";
 import { rememberSettingsReturn } from "@/lib/settings-return";
@@ -187,7 +187,6 @@ export function SecurityKeySettings() {
             <DescribedRow
               key={key.id}
               rowId={`security-key-${key.id.slice(0, 12)}`}
-              icon={<KeyRound size={14} />}
               label={t("security.keys.name")}
               description={t("security.keys.nameAfterAdd")}
             >
@@ -209,7 +208,6 @@ export function SecurityKeySettings() {
             <DescribedRow
               key={key.id}
               rowId={`security-key-${key.id.slice(0, 12)}`}
-              icon={<KeyRound size={14} />}
               label={key.name}
               description={[
                 key.deviceType === "multiDevice" ? t("security.keys.passkey") : t("security.keys.hardware"),

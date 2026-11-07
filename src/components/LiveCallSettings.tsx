@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { Phone } from "lucide-react";
 
 import { LIVE_VOICE_OPTIONS } from "../../shared/live-call";
 import { t } from "@/lib/i18n";
@@ -89,7 +88,6 @@ export function LiveCallInstallationSettings() {
     <FoldRow
       cardId="voice.advanced"
       label={t("voice.live.title")}
-      icon={<Phone size={14} />}
       description={<span data-live-key={live.configured ? "openai" : "none"}>{t(live.configured ? "call.live.usesOpenAiKey" : "call.live.needsOpenAiKey")}</span>}
       help={`${liveDisclosure()} ${t("call.live.cost")}`}
     >

@@ -454,7 +454,8 @@ private struct PhoneBotPanelContent: View {
                         await loadRoutines()
                     }
                 },
-                onAdd: { addingRoutine = true }
+                onAdd: { addingRoutine = true },
+                onAll: { path.append(PanelOverviewPage.routines) }
             )
             .padding(.horizontal, Theme.Profile.cardMargin)
 

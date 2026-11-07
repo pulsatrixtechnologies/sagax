@@ -880,13 +880,18 @@ const SIDECAR_TOKEN = "parity_owner_device_token_0001";
 async function startSidecar(harnessPort) {
   const { createProxyHandler } = await import("../../companion/src/proxy.ts");
   const { createConnectedDeviceTracker } = await import("../../companion/src/connected-devices.ts");
-  const server = createHttpServer(createProxyHandler({
+  const proxy = createProxyHandler({
     harnessPort,
     authenticate: (token) => (token === SIDECAR_TOKEN ? { id: "parity-phone", cloudDesktopAccess: true } : null),
     redeem: () => ({ error: "already paired" }),
     serverName: () => "Parity computer",
     connected: createConnectedDeviceTracker().open,
-  }));
+  });
+  // the plugins lab answers in front of the sidecar too (PARITY_OWNER=1 with PARITY_PLUGINS=1)
+  const server = createHttpServer(async (req, res) => {
+    if (await pluginLabHook(req, res, new URL(req.url ?? "/", "http://fixture"))) return;
+    proxy(req, res);
+  });
   const port = await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
   console.error(`[parity] companion sidecar http://127.0.0.1:${port} -> ${harnessPort}`);
   return { endpoint: `http://127.0.0.1:${port}`, token: SIDECAR_TOKEN, environmentId: null, scopes: ["admin", "client"] };

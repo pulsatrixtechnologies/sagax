@@ -52,6 +52,8 @@ struct LinksTab: View {
                     .frame(height: 40)
                     .themeGlass(Capsule(), interactive: false)
                     .transition(.opacity)
+                    // the toast sits over the first link: touches go through to it
+                    .allowsHitTesting(false)
                     .accessibilityIdentifier("profile-links-status")
             }
         }

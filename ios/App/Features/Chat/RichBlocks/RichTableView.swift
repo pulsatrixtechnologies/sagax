@@ -84,9 +84,32 @@ struct RichTableView: View {
             HStack(spacing: 6) {
                 DesktopLucideGlyph(paths: DesktopLucide.table2, size: 12)
                     .foregroundStyle(theme.inkSecondary)
-                Text(query.isEmpty ? "\(table.rows.count) rows" : "\(order.count) of \(table.rows.count) rows")
-                    .font(theme.font(11).monospacedDigit())
-                    .foregroundStyle(theme.ink)
+                if query.isEmpty {
+                    Text("\(table.rows.count) rows")
+                        .font(theme.font(11).monospacedDigit())
+                        .foregroundStyle(theme.ink)
+                } else {
+                    // its own view, so the filtered count leaves the tree with the filter
+                    Text("\(order.count) of \(table.rows.count) rows")
+                        .font(theme.font(11).monospacedDigit())
+                        .foregroundStyle(theme.ink)
+                        .accessibilityIdentifier(identifier.map { "\($0)-filtered" } ?? "table-filtered")
+                }
+                if !query.isEmpty {
+                    // the long-press menu's Filter rows: the filter shows and clears here
+                    Text(verbatim: "“\(query)”").lineLimit(1)
+                        .font(theme.font(11))
+                        .foregroundStyle(theme.inkSecondary)
+                    Button { query = "" } label: {
+                        Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(theme.inkSecondary)
+                    .accessibilityLabel(Text("Clear filter"))
+                    .accessibilityIdentifier(identifier.map { "\($0)-clear-filter" } ?? "table-clear-filter")
+                }
                 Spacer(minLength: 6)
                 DesktopBlockTool(icon: "doc.on.doc", title: "CSV", lucide: DesktopLucide.copy) {
                     feedback.copy("csv", RichBlocks.tableToCSV(header: headerTexts, rows: order.map { texts[$0] }))
@@ -106,15 +129,26 @@ struct RichTableView: View {
             .frame(height: 32.5)
             .background(theme.inset)
             .overlay(alignment: .bottom) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
-            desktopGrid(theme, order: order)
+            desktopGrid(theme, order: order, cells: scrollIdentifier)
         }
         // inside the 1 pt border, as the desktop's box
         .padding(1)
         .background(theme.panel)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+        // the long-press menu's copies say Copied, as the phone's
+        .overlay(alignment: .bottomTrailing) {
+            RichCopiedBadge(feedback: feedback, identifier: identifier.map { "\($0)-copied" } ?? "table-copied")
+        }
         .contentShape(.contextMenuPreview, Rectangle())
         .contextMenu { menu(order) }
+        // the menu's Filter rows asks for the words here too
+        .alert("Filter rows", isPresented: $filtering) {
+            TextField("Filter rows", text: $draftQuery)
+                .accessibilityIdentifier("table-filter-field")
+            Button("Cancel", role: .cancel) {}
+            Button("Filter") { query = draftQuery }
+        }
         .accessibilityElement(children: .contain)
         .modifier(RichIdentifier(identifier: identifier))
         // `TableDialog`: the same table, large, over the app
@@ -136,14 +170,15 @@ struct RichTableView: View {
         }
     }
 
-    private func desktopGrid(_ theme: DesktopTheme, order: [Int]) -> some View {
+    private func desktopGrid(_ theme: DesktopTheme, order: [Int], cells: String? = nil) -> some View {
         DesktopTableGrid(
             headers: table.headers.map { render($0, tail: false) },
             rows: order.map { table.rows[$0].map { render($0, tail: false) } },
             weights: desktopWeights(theme),
             alignments: table.headers.indices.map(alignment),
             sort: sort,
-            theme: theme
+            theme: theme,
+            identifier: cells
         ) { column in sort = RichBlocks.nextSort(sort, column: column) }
     }
 
@@ -391,6 +426,8 @@ struct DesktopTableGrid: View {
     let alignments: [MarkdownTableAlignment]
     let sort: RichSort?
     let theme: DesktopTheme
+    /// The phone grid's cell ids (`<id>-cell-<row>-<column>`, row 0 the header), for the UI tests.
+    var identifier: String? = nil
     let sortBy: (Int) -> Void
 
     var body: some View {
@@ -414,6 +451,7 @@ struct DesktopTableGrid: View {
                             .frame(width: widths[index], height: Self.rowHeight, alignment: Self.align(alignments, index))
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier(identifier.map { "\($0)-cell-0-\(index)" } ?? "")
                     }
                 }
                 // `bg-raised` and `border-b border-hairline` on the th
@@ -428,6 +466,7 @@ struct DesktopTableGrid: View {
                                 .padding(.horizontal, 10)
                                 .frame(width: index < widths.count ? widths[index] : 0, height: Self.rowHeight,
                                        alignment: Self.align(alignments, index))
+                                .accessibilityIdentifier(identifier.map { "\($0)-cell-\(position + 1)-\(index)" } ?? "")
                         }
                     }
                     .overlay(alignment: .bottom) {

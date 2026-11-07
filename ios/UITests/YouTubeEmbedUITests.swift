@@ -75,6 +75,13 @@ final class YouTubeEmbedUITests: XCTestCase {
         // iPad draws the conversation in its split layout, without the phone's title button.
         if UIDevice.current.userInterfaceIdiom == .pad {
             XCTAssertTrue(element(app, suffix: "-yt-embed").waitForExistence(timeout: 45), "the player in the iPad layout")
+            // the fixture's workspace never finished the desktop's guided first run: skip it as a
+            // person would, or its card takes every tap meant for the transcript
+            let skip = app.descendants(matching: .any).matching(identifier: "first-run-skip").firstMatch
+            if skip.waitForExistence(timeout: 5) {
+                skip.tap()
+                XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "desktop-first-run").firstMatch.waitForExistence(timeout: 2), "the first run closed")
+            }
         } else {
             XCTAssertTrue(app.buttons["chat-name"].waitForExistence(timeout: 30))
         }

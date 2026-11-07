@@ -260,13 +260,9 @@ struct BlockedPeopleCard: View {
     }
 }
 
-/// Settings > About: the version and the legal pages.
+/// Settings > About: the same page as the account menu's About (the
+/// version, release notes, links and the legal pages), so the search and
+/// the tree open one About.
 struct AboutSettingsView: View {
-    @Environment(\.themePalette) var themePalette
-
-    var body: some View {
-        SettingsPage(title: "About") {
-            SettingsTreeCards(page: .about)
-        }
-    }
+    var body: some View { AboutPage() }
 }

@@ -109,6 +109,10 @@ export interface PackageImportOptions {
   /** Who may see the new bots: the admin's choice, never the file's. */
   visibility?: BotVisibility;
   org?: OrgImportContext;
+  /** I1 (2026-11-07): the model each agent asked for (by package agent key),
+   * already resolved against the server's providers by the caller. A bot that
+   * gets one keeps it when its team's default model changes. */
+  models?: Readonly<Record<string, ModelSelection>>;
 }
 
 /** What an organization install created, for DATA_DIR/org-library/state.json
@@ -346,7 +350,7 @@ function runImport(source: ImportSource, options: PackageImportOptions, deps: Pa
       const created = store.createBot(
         {
           ...importedMemberProfile(member, takenNames),
-          modelSelection: selection,
+          modelSelection: options.models?.[member.key] ?? selection,
           section,
           ...(options.visibility ? { visibility: options.visibility } : {}),
         },
@@ -385,6 +389,7 @@ function runImport(source: ImportSource, options: PackageImportOptions, deps: Pa
         ...(playbooks.length ? { playbooks } : {}),
         ...(installed ? { installedPackage: installed } : {}),
         ...(agent?.connections ? { mcpServers: agent.connections.flatMap((key) => serverForKey.has(key) ? [serverForKey.get(key)!] : []) } : {}),
+        ...(options.models?.[member.key] ? { teamOverrides: ["model" as const] } : {}),
         ...avatar,
       });
       for (const skillName of agent?.skills ?? []) {

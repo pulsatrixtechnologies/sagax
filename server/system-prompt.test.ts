@@ -511,3 +511,16 @@ describe("longCommandsPrompt", () => {
     }
   });
 });
+
+// QA c1: D4 (#2578) and D7 (#2581) blocks, D6 (#2580) style
+describe("work style blocks and house style", () => {
+  it("treats a 403 or an unserved product as a blocker and states the style rules", () => {
+    expect(WORK_STYLE_PROMPT).toMatch(/permission refusal \(403\) or a product that is not served here is a blocker/);
+    expect(WORK_STYLE_PROMPT).toContain("never present it as \"nothing found\"");
+    expect(WORK_STYLE_PROMPT).toMatch(/without anglicisms/);
+    expect(WORK_STYLE_PROMPT).toMatch(/No signature or decorative emoji/);
+    expect(WORK_STYLE_PROMPT).toMatch(/never a raw vendor link/);
+    expect(WORK_STYLE_PROMPT).toMatch(/Never show an id, a UUID or an id prefix: name a card, approval, thread or run by its bot and subject/);
+    expect(WORK_STYLE_PROMPT).not.toMatch(/[–—]/);
+  });
+});

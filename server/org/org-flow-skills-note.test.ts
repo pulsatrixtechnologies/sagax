@@ -31,6 +31,14 @@ describe("flowSkillsNote", () => {
     expect(note).not.toContain("__");
   });
 
+  // #2577: a simple ConnectWise read is not a reason to load Flow
+  it("keeps Flow for routines and procedures, never a simple read", () => {
+    const note = flowSkillsNote(base);
+    expect(note).toContain("Only for a routine or a multi-step procedure");
+    expect(note).toContain("call the vendor tool directly");
+    expect(note.indexOf("Only for a routine")).toBeLessThan(note.indexOf("after flow_run run.init"));
+  });
+
   it("names a guard that is not enforced and an install not ready yet", () => {
     expect(flowSkillsNote({ ...base, declaration: { ...held, enabled: true, guard: "shadow", reason: undefined } })).toContain("does not declare its Flow guard as enforced");
     expect(flowSkillsNote({ ...base, declaration: { ...held, enabled: true, reason: undefined } })).toContain("not ready on this server yet");

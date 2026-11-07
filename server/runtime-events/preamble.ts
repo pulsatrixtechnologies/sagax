@@ -7,6 +7,7 @@ import { clearHeldSteersForThread } from "../turns/held-steers.ts";
 import { noteFirstResponse } from "../turns/turn-trace.ts";
 import { dropCancelledVoiceEvent, isStaleAssistantOutput } from "../voice/voice-call-duplex.ts";
 import { stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
+import { cleanReplyStyle } from "../../shared/reply-style.ts";
 import { videoMessagesFromText } from "../video/video-widget-turn.ts";
 export function runRuntimeEventPreamble(event: any, host: any): any | null {
   if (host.shouldIgnoreProviderEvent(event)) return;
@@ -200,7 +201,7 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
       for (const videoMsg of written.messages) pushMessage({ ...videoMsg, turnId });
       return;
     }
-    spoken.text = host.citeAppFigures(host.dashFreeReply(spoken.text, event.threadId, bot), host.appPiecesByThread.get(event.threadId) ?? []);
+    spoken.text = host.citeAppFigures(host.dashFreeReply(cleanReplyStyle(spoken.text), event.threadId, bot), host.appPiecesByThread.get(event.threadId) ?? []);
     // "👍" written after reacting 👍 says the same thing twice: the
     // reaction stands alone and no bubble is written.
     const reactor = bot?.id ?? speaker?.botId;

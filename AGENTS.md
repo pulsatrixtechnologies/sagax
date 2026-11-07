@@ -10953,6 +10953,37 @@ A turn with Perspicax tools mounted also gets
 local times without an offset, one projection for a big result, totals by
 aggregate. The server's own instructions win if they differ.
 
+## Direct reads, clean blocks and reply style (2026-11-07, QA c1 #2577/#2578/#2580/#2581)
+
+QA c1 measured 35 to 55 steps and 2 to 3 min for one ConnectWise read: the
+bot loaded skills, `sagax_help` and Flow first, switched roles in a loop
+around a 403, and said "no Datto alerts" for a product that is not served.
+
+- Prompt: `PERSPICAX_CONVENTIONS_PROMPT` says a simple read calls the vendor
+  tool directly (no skills_list, workspace_read, sagax_help, flow_run or
+  identity_switch before it), Flow is for routines and multi-step
+  procedures, and an unserved product gets "X n'est pas servi ici" after at
+  most one `api_list`, never "no X". The capability footer and
+  `flowSkillsNote` say a single read is not matching work. `WORK_STYLE_PROMPT`
+  says a 403 or an unserved product is a blocker, not a failure to route
+  around, and carries the style rules (no anglicisms, no signature emoji,
+  ticket by number, no id or UUID: cards by bot and subject).
+- Relay (`relayFrame`, `server/perspicax/perspicax-mcp.ts`): one role switch
+  per turn (`switches`); a read refused for good (no role, the person said
+  stay, or still refused as "Moi") sets `readRefused`, carries a `STOP:` note
+  with the missing permission (`blockWith`, which also turns a JSON-RPC 403
+  error into a tool error the model reads) and refuses any later switch.
+- Rendering: `cleanReplyStyle` (`shared/reply-style.ts`), before
+  `dashFreeReply` in `runtime-events/preamble.ts`, drops a trailing signature
+  emoji and hearts in a multi-line report, turns a bare ConnectWise ticket
+  link into `billet #N`, and removes UUIDs and "Carte c16f208c" id prefixes.
+  Code, inline code and markdown links stay as they are.
+- #2581: the 403 on `service.tickets` for the bot profile
+  (`profil-jean-christophe-limited`) is a ConnectWise security role gap on
+  its API member (Service Desk > Service Tickets, Inquire), not Sagax; that
+  profile also does not serve `cw_psa_get_ticket`. Changing the role is a
+  ConnectWise write: JC's GO.
+
 ## Content encryption at rest (2026-10-26)
 
 Transcripts in `messages.db` are sealed (AES-256-GCM, additional data =

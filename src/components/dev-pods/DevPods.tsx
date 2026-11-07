@@ -354,12 +354,9 @@ export function DevPodsToggle({ bot }: { bot: Pick<Bot, "id" | "threadId"> }) {
  * place of the </> popover over the transcript. Same pods, same order, same
  * collapse and menu; each one a grey label above a panel card. Nothing while
  * the Experimental switch is off. */
-/** The pods of a coding chat that are not coding work of their own: they stay
- * in the bot panel's Activity tab, the rest go to its Coding tab. */
-export const ACTIVITY_DEV_PODS: readonly string[] = ["connectors"];
-
 export function DevPodsPanel({ bot, messages, computerStart, dispatch, only }: Omit<DevPodsProps, "composerHeight" | "forced" | "headerHeight"> & {
-  /** Keep only the pods this accepts (the Coding tab, or Activity). */
+  /** Keep only the pods this accepts (all of them by default: since #2599,
+   * Connectors included, every pod is in the bot panel's Coding tab). */
   only?: (id: string) => boolean;
 }) {
   const prefs = useDevPodPrefs();

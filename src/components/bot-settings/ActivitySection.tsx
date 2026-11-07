@@ -1,3 +1,9 @@
+// #2599 (JC 2026-11-07, "ça devrait être dans la tab coding"): in the bot
+// panel the pull requests, branches and commits are in the Coding tab
+// (CodingWorkSection), never under Activity; Activity keeps the Coding agent
+// rows, whose click opens the coding chat and brings that tab forward. The
+// group panel, which has no Coding tab, keeps them under its Coding section.
+//
 // Details > Coding and Details > Activity, from one list (GET
 // /api/bots/:id/activity, narrowed by the server to what this person may
 // read: on an organization server their own threads only).
@@ -246,7 +252,7 @@ export function SectionHeader({ icon, title, name, onOpenHistory }: { icon?: Rea
  * keeps the history one click away. A first load that failed
  * is one quiet line; a later failed refresh keeps the last list. Split out so
  * it renders without the fetching. */
-export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, onIgnore }: {
+export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, onIgnore, codeWork = true }: {
   list: BotActivityList | null;
   live?: LiveView;
   actions: CardActions;
@@ -264,8 +270,13 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
   showAllHistory?: boolean;
   /** #2148: Ignore on a finished coding job (by its ignoredJobKey). */
   onIgnore?: (key: string) => void;
+  /** #2599: false where the pull requests, branches and commits live in
+   * the panel's Coding tab (the bot panel): only the agent rows show here. */
+  codeWork?: boolean;
 }) {
-  const { coding, work, launched, showCoding } = panelSections(list, live, advanced, archived, actions.now);
+  const sections = panelSections(list, live, advanced, archived, actions.now);
+  const { coding, work, launched } = sections;
+  const showCoding = codeWork ? sections.showCoding : coding.length > 0 || launched.length > 0;
   if (list === null) {
     return error ? <p role="status" data-activity-error className="px-0.5 text-[12.5px] text-ink-tertiary">{t("botPanel.coding.error")}</p> : null;
   }
@@ -283,7 +294,7 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
           {/* #2099 (JC, 2026-11-05): Claude Code's agent list, one row each; a
               click opens the task in the chat column, never a side panel. */}
           <AgentRows items={coding} launched={onOpenLaunched ? launched : []} onOpen={actions.onOpen} onOpenLaunched={onOpenLaunched} onStop={actions.onStop} stopping={actions.stopping} onIgnore={onIgnore ? (id) => onIgnore(ignoredJobKey(id)) : undefined} />
-          <CodeWorkList work={work} now={actions.now ?? Date.now()} branchActions={branchActions} />
+          {codeWork && <CodeWorkList work={work} now={actions.now ?? Date.now()} branchActions={branchActions} />}
         </section>
       )}
       {/* Only when no section title opens the history: same header as
@@ -301,29 +312,12 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
   );
 }
 
-export function ActivitySection({ bot }: { bot: Bot }) {
+/** The activity list of one bot, with the branches this person archived
+ * and the branch menus: one fetch shared by the panel's Activity and Coding
+ * tabs (#2599). */
+export function useBotCodingPanel(bot: Bot) {
   const advanced = useAdvancedMode();
-  const showAllHistory = useShowAllHistory();
   const feed = useBotActivityFeed(bot);
-  const [open, setOpen] = useState<BotActivityItem | null>(null);
-  const [all, setAll] = useState<BotActivityFilter | null>(null);
-  const list = feed.list;
-  const error = feed.error;
-  const stop = feed.stop;
-  const dispatch = useStoreDispatch();
-  const getState = useStoreGetter();
-  // 2026-10-29: a routine run opens its run detail (the Routines page), as
-  // View run does; a run this client does not hold keeps the task sheet.
-  const openItem = (item: BotActivityItem) => {
-    const runId = item.kind === "routine" && item.id.startsWith("run:") ? item.id.slice(4) : undefined;
-    const run = runId ? getState().routineRuns.find((candidate) => candidate.id === runId) : undefined;
-    if (run) openRoutineRun(dispatch, { runId: run.id, routineId: run.routineId });
-    // 2026-11-03: a coding task opens as a chat where the chat is, never
-    // in this panel (src/components/coding/CodingChat.tsx).
-    else if (opensAsCodingChat(item)) openCodingChat(dispatch, item);
-    else setOpen(item);
-  };
-  const actions: CardActions = { onOpen: openItem, onStop: stop, stopping: feed.stopping, now: feed.now, fading: feed.live.fading };
   // The branches this person archived from their Coding list (kept on the
   // server per person and bot; the branches themselves stay).
   const [archived, setArchived] = useState<ReadonlySet<string>>(() => new Set());
@@ -345,6 +339,56 @@ export function ActivitySection({ bot }: { bot: Bot }) {
     onIgnore: ignore,
     onChanged: () => { void feed.refresh(); },
   };
+  const work: CodingWork = feed.list && advanced ? codingWork(feed.list.items, archived) : { pullRequests: [], branches: [], commits: [] };
+  const hasCodeWork = !codingWorkEmpty(work);
+  return { advanced, feed, archived, ignore, branchActions, work, hasCodeWork };
+}
+
+export type BotCodingPanel = ReturnType<typeof useBotCodingPanel>;
+
+/** #2599: the bot panel's Coding tab, below the open coding chat's session:
+ * the pull requests, branches (with their menus) and commits of this bot's
+ * coding jobs, as Activity drew them before. */
+export function CodingWorkSection({ panel }: { panel: BotCodingPanel }) {
+  if (!panel.hasCodeWork) return null;
+  return (
+    <section data-bot-settings-section="code-work" className="flex flex-col gap-2">
+      <CodeWorkList work={panel.work} now={panel.feed.now} branchActions={panel.branchActions} />
+    </section>
+  );
+}
+
+/** Activity's Coding section on its own fetch (the group panel, galleries):
+ * the agent rows and, with no Coding tab beside it, the code work too. */
+export function ActivitySection({ bot }: { bot: Bot }) {
+  const panel = useBotCodingPanel(bot);
+  return <ActivitySectionBody bot={bot} panel={panel} />;
+}
+
+/** Activity's Coding section from a shared panel state; `codeWork` false
+ * where the Coding tab holds the pull requests and branches (#2599). */
+export function ActivitySectionBody({ bot, panel, codeWork = true }: { bot: Bot; panel: BotCodingPanel; codeWork?: boolean }) {
+  const { advanced, feed, archived, ignore, branchActions } = panel;
+  const showAllHistory = useShowAllHistory();
+  const [open, setOpen] = useState<BotActivityItem | null>(null);
+  const [all, setAll] = useState<BotActivityFilter | null>(null);
+  const list = feed.list;
+  const error = feed.error;
+  const stop = feed.stop;
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  // 2026-10-29: a routine run opens its run detail (the Routines page), as
+  // View run does; a run this client does not hold keeps the task sheet.
+  const openItem = (item: BotActivityItem) => {
+    const runId = item.kind === "routine" && item.id.startsWith("run:") ? item.id.slice(4) : undefined;
+    const run = runId ? getState().routineRuns.find((candidate) => candidate.id === runId) : undefined;
+    if (run) openRoutineRun(dispatch, { runId: run.id, routineId: run.routineId });
+    // 2026-11-03: a coding task opens as a chat where the chat is, never
+    // in this panel (src/components/coding/CodingChat.tsx).
+    else if (opensAsCodingChat(item)) openCodingChat(dispatch, item);
+    else setOpen(item);
+  };
+  const actions: CardActions = { onOpen: openItem, onStop: stop, stopping: feed.stopping, now: feed.now, fading: feed.live.fading };
 
   // The command palette's "<bot> history" opens it with the row hidden.
   useEffect(() => watchBotHistoryRequests(bot.id, () => setAll("coding")), [bot.id]);
@@ -368,7 +412,7 @@ export function ActivitySection({ bot }: { bot: Bot }) {
 
   return (
     <>
-      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} onIgnore={ignore} />
+      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} onIgnore={ignore} codeWork={codeWork} />
       {all && (
         <ActivityListModal
           botId={bot.id}

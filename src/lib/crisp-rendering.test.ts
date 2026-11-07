@@ -8,12 +8,11 @@ const css = readFileSync(join(here, "../styles.css"), "utf8");
 const body = css.match(/(?:^|\n)body\s*\{([^}]*)\}/)?.[1] ?? "";
 
 describe("crisp rendering", () => {
-  it("does not force greyscale font smoothing", () => {
-    // `antialiased` is greyscale smoothing. On a Retina Mac it draws stems
-    // lighter than the system UI, which reads as washed out.
-    expect(body).not.toMatch(/-webkit-font-smoothing:\s*antialiased/);
-    expect(body).toMatch(/-webkit-font-smoothing:\s*auto/);
-    expect(body).toMatch(/-moz-osx-font-smoothing:\s*auto/);
+  it("smooths text like Grok Bot", () => {
+    // Grok Bot's root uses greyscale smoothing; the default subpixel
+    // smoothing drew the same ink heavier and whiter beside it.
+    expect(body).toMatch(/-webkit-font-smoothing:\s*antialiased/);
+    expect(body).toMatch(/-moz-osx-font-smoothing:\s*grayscale/);
   });
 
   it("does not pin Chromium to an sRGB color profile", () => {

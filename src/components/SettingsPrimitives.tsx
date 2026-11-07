@@ -25,15 +25,15 @@ export function Switch({
       role="switch"
       aria-checked={mixed ? "mixed" : checked}
       className={cn(
-        "relative h-5 w-11 shrink-0 cursor-pointer rounded-full transition-colors enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55 disabled:saturate-50 motion-reduce:transition-none",
+        "relative h-5 w-8 shrink-0 cursor-pointer rounded-full transition-colors enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55 disabled:saturate-50 motion-reduce:transition-none",
         mixed ? "bg-control ring-1 ring-inset ring-hairline" : checked ? SWITCH_ON : SWITCH_OFF,
         className,
       )}
     >
       <span
         className={cn(
-          "absolute left-0.5 top-1/2 h-4 w-[26px] -translate-y-1/2 rounded-full transition-transform motion-reduce:transition-none",
-          mixed ? `translate-x-[7px] ${SWITCH_THUMB_OFF}` : checked ? `translate-x-[14px] ${SWITCH_THUMB_ON}` : `translate-x-0 ${SWITCH_THUMB_OFF}`,
+          "absolute left-0.5 top-1/2 size-4 -translate-y-1/2 rounded-full transition-transform motion-reduce:transition-none",
+          mixed ? `translate-x-1.5 ${SWITCH_THUMB_OFF}` : checked ? `translate-x-3 ${SWITCH_THUMB_ON}` : `translate-x-0 ${SWITCH_THUMB_OFF}`,
         )}
       />
     </button>

@@ -807,9 +807,9 @@ struct DesktopSettingRow<Control: View>: View {
 /// scripts/gen-switch-tokens.mjs); ios-desktop-tokens.test.ts pins them.
 enum DesktopSwitchColors {
     static let table: [String: (on: String, off: String)] = [
-        "pulsatrix": ("#3c76f4", "#6b6b78"), "pulsatrix-light": ("#2f62dd", "#778194"),
-        "midnight": ("#929292", "#6c6c6c"), "atelier": ("#a05f25", "#898980"),
-        "foundry": ("#c58527", "#746d5b"), "lagoon": ("#11736d", "#688582"),
+        "pulsatrix": ("#3c76f4", "#6c6c6c"), "pulsatrix-light": ("#2f62dd", "#818181"),
+        "midnight": ("#929292", "#6c6c6c"), "atelier": ("#a05f25", "#898989"),
+        "foundry": ("#c58527", "#6d6d6d"), "lagoon": ("#11736d", "#688582"),
         "graphite": ("#8993a2", "#6d798b"), "linen": ("#2a2a2a", "#788495"),
         "dusk": ("#9474a3", "#816c89"), "daylight": ("#2a2a2a", "#7e7e7e"),
         "retro98": ("#000080", "#676767"),

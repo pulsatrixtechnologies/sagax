@@ -884,6 +884,27 @@ ne jamais coder une couleur, un rayon ou une ombre en dur dans un composant.
 - Contraste : 4,5:1 pour tout texte (aide et indices compris), 3:1 pour icônes, coches,
   anneau de focus et bordures de champ (`pnpm check:contrast`).
 
+#### Encre et interrupteur mesurés sur Grok Bot (2026-11-07)
+
+Valeurs lues dans le bundle de Grok Bot (thème Sand) et vérifiées par échantillonnage
+de pixels sur une capture côte à côte du panneau Upcoming. Sagax les reprend telles
+quelles dans les habillages Pulsatrix, Studio et Atelier.
+
+| Jeton Sagax | Sombre (Grok Sand Dark) | Clair (Grok Sand Light) |
+|---|---|---|
+| `--color-ink` (text/primary) | `#f5f5f5` | `#1c1c1c` |
+| `--color-ink-secondary` (66 % / 68 %) | `#f5f5f5a8` | `#1c1c1cad` |
+| `--color-ink-tertiary` (54 % / 56 %) | `#f5f5f58a` | `#1c1c1cad` (Grok `#1c1c1c8f` tombe sous 4,5:1 sur fond clair) |
+
+- Pixels mesurés sur fond de carte `#1d1d1d` : titre `#f3f3f3`, sous-titre `#aaaaaa`,
+  identiques des deux côtés une fois l'encre alignée.
+- Lissage du texte : Grok Bot dessine en `-webkit-font-smoothing: antialiased`. Le
+  lissage par défaut (sous-pixel) épaissit les fûts sur macOS et rend la même encre plus
+  blanche et plus grasse : `body` reprend `antialiased`.
+- Interrupteur (taille `md` par défaut de Grok Bot) : piste 32 × 20 px, rayon plein,
+  pouce rond de 16 px à 2 px du bord, course de 12 px, ombre `0 1px 2px`. Sagax avait
+  44 × 20 avec un pouce en pilule de 26 × 16.
+
 ### Mouvement
 
 - Courbes par jeton (`--ease-standard`, `--ease-emphasized`, `--ease-exit`), 150 à
@@ -907,8 +928,8 @@ ne jamais coder une couleur, un rayon ou une ombre en dur dans un composant.
 - La référence est d'abord sombre : fond presque noir et neutre, surfaces en deux ou
   trois paliers plus clairs, encre presque blanche, encre secondaire grise. Pas de bleu
   marine ni de teinte forte dans le fond par défaut.
-- Encre de l'habillage par défaut : blanc cassé doux `#e4e4e7`, jamais le blanc pur ;
-  encre secondaire grise `#9e9ea3`. Le nom du bot dans son panneau est en poids moyen,
+- Encre de l'habillage par défaut : celle de Grok Bot, `#f5f5f5`, jamais le blanc pur ;
+  encre secondaire `#f5f5f5a8` (voir « Encre et interrupteur mesurés »). Le nom du bot dans son panneau est en poids moyen,
   pas en gras.
 - Pastille d'en-tête du bot (chat, session Coding) : 40 px de haut, pilule pleine au
   fond `elevated`, mascotte d'environ 22 px, nom en 15 px, 8 px de marge à gauche et

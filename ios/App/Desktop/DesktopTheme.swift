@@ -161,15 +161,15 @@ struct DesktopTheme: Equatable {
     }
 
     private static let extras: [SkinID: Extra] = [
-        .pulsatrix: Extra(sidebar: "#0e0e0e", sidebarInk: "#e4e4e7", sidebarInkSecondary: "#9e9ea3", sidebarHover: "#f5f5f50f",
+        .pulsatrix: Extra(sidebar: "#0e0e0e", sidebarInk: "#f5f5f5", sidebarInkSecondary: "#f5f5f5a8", sidebarHover: "#f5f5f50f",
                           sidebarSelected: "#4f86f729", sidebarHairline: "#333333", radii: (8, 12), face: .geist),
         .pulsatrixLight: Extra(sidebar: "#24324d", sidebarInk: "#eef2fb", sidebarInkSecondary: "#c3cce0", sidebarHover: "#eef2fb12",
                                sidebarSelected: "#6b9bff38", sidebarHairline: "#41526f", glow: (0.08, 0.05), radii: (8, 12), face: .geist),
         .midnight: Extra(sidebar: "#0e0e0e", sidebarInk: "#f5f5f5", sidebarInkSecondary: "#f5f5f5a8", sidebarHover: "#f5f5f50f",
                          sidebarSelected: "#f5f5f514", sidebarHairline: "#333333", radii: (8, 12), face: .geist),
-        .atelier: Extra(sidebar: "#fbf8f2", sidebarInk: "#1a1a18", sidebarInkSecondary: "#5c564d", sidebarHover: "#7777772c",
+        .atelier: Extra(sidebar: "#fbf8f2", sidebarInk: "#1c1c1c", sidebarInkSecondary: "#1c1c1cad", sidebarHover: "#7777772c",
                         sidebarSelected: "#77777752", sidebarHairline: "#c8bda8", radii: (6, 10), face: .geist),
-        .foundry: Extra(sidebar: "#171410", sidebarInk: "#f4efe4", sidebarInkSecondary: "#b0a696", sidebarHover: "#7777772c",
+        .foundry: Extra(sidebar: "#171410", sidebarInk: "#f5f5f5", sidebarInkSecondary: "#f5f5f5a8", sidebarHover: "#7777772c",
                         sidebarSelected: "#77777752", sidebarHairline: "#3d3529", radii: (4, 8), face: .geist),
         .lagoon: Extra(sidebar: "#ecf4f3", sidebarInk: "#14201f", sidebarInkSecondary: "#495655", sidebarHover: "#7777772c",
                        sidebarSelected: "#77777752", sidebarHairline: "#aebfbd", radii: (8, 14), face: .geist),
@@ -179,7 +179,7 @@ struct DesktopTheme: Equatable {
                       sidebarSelected: "#77777752", sidebarHairline: "#b4bbc5", radii: (8, 12), face: .geist),
         .dusk: Extra(sidebar: "#19161c", sidebarInk: "#f4eff6", sidebarInkSecondary: "#b9afbd", sidebarHover: "#7777772c",
                      sidebarSelected: "#77777752", sidebarHairline: "#403847", radii: (8, 12), face: .geist),
-        .daylight: Extra(sidebar: "#f7f7f7", sidebarInk: "#0d0d0d", sidebarInkSecondary: "#575757", sidebarHover: "#7777772c",
+        .daylight: Extra(sidebar: "#f7f7f7", sidebarInk: "#1c1c1c", sidebarInkSecondary: "#1c1c1cad", sidebarHover: "#7777772c",
                          sidebarSelected: "#77777752", sidebarHairline: "#c8c8c8", composerRing: "#e4e4e4", radii: (8, 14), face: .geist),
         .retro98: Extra(sidebar: "#c0c0c0", sidebarInk: "#000000", sidebarInkSecondary: "#2b2b2b", sidebarHover: "#00008014",
                         sidebarSelected: "#00008033", sidebarHairline: "#808080", composerRing: "#808080", radii: (0, 0), face: .retro),

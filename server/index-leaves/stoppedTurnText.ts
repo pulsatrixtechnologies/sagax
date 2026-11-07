@@ -14,7 +14,6 @@ function stoppedTurnText(threadId: string, turnId: string | undefined, cause?: s
     reason, activities: host.store.activePath(threadId), turnId,
     // a provider's error sent as a reply is the cause, said once
     ...(said && said.trim() !== reason.trim() ? { said } : {}),
-    ...(stop?.handoffPath ? { handoffPath: stop.handoffPath } : {})
   });
 
 }

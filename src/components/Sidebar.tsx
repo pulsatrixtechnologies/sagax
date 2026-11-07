@@ -91,6 +91,8 @@ import { hideFromSidebar } from "@/lib/sidebar-hidden";
 import { PersonAvatar } from "./MessageAuthor";
 import { SidebarSharerBadge } from "./SidebarSharerBadge";
 import { botSharer } from "@/lib/bot-sharer";
+import { botShareState, sameBotShareState } from "@/lib/bot-share-state";
+import { BotShareIcon, botShareLabel } from "@/components/BotShareIcon";
 import { presenceLabel, usePresence } from "@/lib/presence";
 import { itemKey, personalSectionNames, personalSectionOf, type SectionItemKind } from "@/lib/personal-sections";
 import { useConfirm } from "@/components/ConfirmProvider";
@@ -1935,6 +1937,9 @@ export function BotListItem({
   // A bot shared with the viewer wears its sharer's face at the bottom-right
   // (as in Browse Bots), so the status dot moves up, like beside the star.
   const sharer = botSharer(bot, orgViewerId({ config }), useOrgPeople());
+  // #2615: the viewer's own bot that reaches someone else, marked after its
+  // name ("Shared with others", or "Partially shared" through a group).
+  const share = useStoreSelector((current) => botShareState(bot, current.groups, orgViewerId({ config })), sameBotShareState);
   const dotCorner = primary || sharer ? "-top-0.5" : "-bottom-0.5";
   // Grok Bot marks an unread bot with a blue dot at the row's end, the name
   // keeps its weight.
@@ -1990,6 +1995,7 @@ export function BotListItem({
               inputClassName="w-full rounded bg-inset px-1 py-0.5 text-[14px] font-medium"
             />
           </span>
+          {share && !renaming && <BotShareIcon state={share} />}
           {title && !renaming && <BotRoleTag text={title} />}
           {unread && <span className="sr-only">{t("task.unreadMany")}</span>}
         </div>
@@ -2041,7 +2047,7 @@ export function BotListItem({
   };
 
   const row = (
-    <div className="group relative" title={iconOnly ? [bot.name, bot.title?.trim()].filter(Boolean).join("\n") : undefined}>
+    <div className="group relative" title={iconOnly ? [bot.name, bot.title?.trim(), share && botShareLabel(share)].filter(Boolean).join("\n") : undefined}>
       {/* Keep this wrapper mounted while RenameTitle swaps its label for an
           input. Replacing the wrapper tree remounts RenameTitle, loses its
           editing state, and leaves the row stuck in rename mode. Omitting
@@ -2053,7 +2059,7 @@ export function BotListItem({
           !renaming && iconOnly
             ? deleting
               ? t("sidebar.bot.deletingAria", { name: bot.name })
-              : `${bot.name}${waiting ? ` · ${t("sidebar.preview.waiting")}` : working ? ` · ${t("chat.activity.working")}` : teammateWait ? ` · ${t("sidebar.preview.waitingOnTeammate")}` : queued ? ` · ${t("task.queued")}` : ""}${unread ? ` · ${t("task.unread")}` : ""}`
+              : `${bot.name}${share ? ` · ${botShareLabel(share).replace("\n", ", ")}` : ""}${waiting ? ` · ${t("sidebar.preview.waiting")}` : working ? ` · ${t("chat.activity.working")}` : teammateWait ? ` · ${t("sidebar.preview.waitingOnTeammate")}` : queued ? ` · ${t("task.queued")}` : ""}${unread ? ` · ${t("task.unread")}` : ""}`
             : undefined
         }
         aria-busy={deleting || undefined}

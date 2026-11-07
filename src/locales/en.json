@@ -14098,5 +14098,9 @@
   "telemetry.remove": "Turn off",
   "telemetry.removed": "Export is off.",
   "telemetry.loadError": "Could not load the OpenTelemetry settings.",
-  "telemetry.actionError": "That did not work."
+  "telemetry.actionError": "That did not work.",
+  "sidebar.bot.shared": "Shared with others",
+  "sidebar.bot.partiallyShared": "Partially shared",
+  "sidebar.bot.partiallySharedIn": "Shared in {name}",
+  "sidebar.bot.partiallySharedMany": "Shared in {count} conversations"
 }

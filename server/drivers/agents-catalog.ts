@@ -185,7 +185,8 @@ const toolDefinitions = (externalRuntime: boolean) => [
   computersTools.DEF_LIST_SHARED_COMPUTERS,
   computersTools.DEF_SHARED_COMPUTER,
   coreTools.DEF_LIST_ROOM_TARGETS,
-  coreTools.DEF_COORDINATE_BOTS,
+  externalRuntime ? coreTools.DEF_COORDINATE_BOTS_EXTERNAL : coreTools.DEF_COORDINATE_BOTS,
+  ...(externalRuntime ? [coreTools.DEF_ASSIGNMENT_STATUS] : []),
   coreTools.DEF_SEND_TO_BOT,
   coreTools.DEF_LIST_BOTS,
   roomsTools.DEF_LIST_ROOMS,
@@ -227,6 +228,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   coreTools.DEF_REQUEST_CREDENTIAL,
   extrasTools.DEF_CONNECT_GITHUB,
   settingsFamilyTools.DEF_REQUEST_LOGIN,
+  settingsFamilyTools.DEF_REQUEST_SIGN_IN,
   settingsFamilyTools.DEF_OPEN_CONNECTOR_SETUP,
   extrasTools.DEF_SEND_VOICE_NOTE,
   phoneFamilyTools.DEF_END_CALL,
@@ -343,7 +345,7 @@ export const PEER_HOP_ABSENT_TOOLS: ReadonlySet<string> = new Set([
   // a part run on another engine is one hop already (server/run-with-engine.ts)
   "run_with_engine",
 ]);
-const EXTERNAL_TOOL_NAMES = new Set(["list_bots", "ask_bot", "delegate_bot", "check_delegation", "wait_delegation"]);
+const EXTERNAL_TOOL_NAMES = new Set(["list_bots", "coordinate_bots", "assignment_status", "ask_bot", "delegate_bot", "check_delegation", "wait_delegation"]);
 const WATCHER_TOOL_NAMES = new Set(["create_options_card"]);
 
 // A Cloud home never offers this computer or a Local VM, so its bots are not
@@ -380,7 +382,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // #2023 / #1944: fleet Edit-bot writes are occasional; keep them behind ToolSearch.
   "list_agent_models", "update_agent_model", "update_agent_settings", "update_routine",
   "workspace_read", "workspace_search", "session_read", "close_thread", "list_threads",
-  "request_login", "place_phone_call", "phone_call_owner", "phone_line_contact", "place_call", "send_dtmf", "transfer", "hang_up",
+  "request_login", "request_sign_in", "place_phone_call", "phone_call_owner", "phone_line_contact", "place_call", "send_dtmf", "transfer", "hang_up",
   // The person's iPhone (agents-phone-tools.ts): rare, and long.
   "phone_tool",
   // A post into a room from a 1:1 chat, or a message to another person: rare.

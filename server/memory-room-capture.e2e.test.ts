@@ -58,7 +58,7 @@ it("captures a member bot's room turn into its memory, sourced to the room, once
     await runControlOmb(["wait", "--bot", lead.id, "--timeout", "30"], { env });
 
     await expect.poll(async () => (await api<{ text: string }>(`/api/bots/${lead.id}/memory/file?path=MEMORY.md`)).text, { timeout: 30_000 })
-      .toMatch(/- \d{4}-\d{2}-\d{2} · from room "Garden room" \(noticed\) · The garden launch moved to Friday/);
+      .toMatch(/- \d{4}-\d{2}-\d{2} · from room "Garden room" \(noticed\) · readers person · The garden launch moved to Friday/);
     const prompt = capturePrompt();
     expect(prompt).toContain("Person: Lead, the garden launch moved to Friday.");
     expect(prompt).toContain('This is a group chat ("room") Lead is a member of.');
@@ -113,7 +113,7 @@ it("captures a Codex member bot's room turn through Codex's own background call"
     await runControlOmb(["wait", "--bot", lead.id, "--timeout", "30"], { env });
 
     await expect.poll(async () => (await api<{ text: string }>(`/api/bots/${lead.id}/memory/file?path=MEMORY.md`)).text, { timeout: 30_000 })
-      .toMatch(/- \d{4}-\d{2}-\d{2} · from room "Orchard room" \(noticed\) · The orchard tour moved to Monday/);
+      .toMatch(/- \d{4}-\d{2}-\d{2} · from room "Orchard room" \(noticed\) · readers person · The orchard tour moved to Monday/);
     const capture = execCalls().find((call) => call.prompt.includes(CAPTURE_MARKER));
     expect(capture?.prompt).toContain("Person: Lead, the orchard tour moved to Monday.");
     expect(capture?.argv).toEqual(expect.arrayContaining(["exec", "--ignore-user-config", "--ephemeral"]));

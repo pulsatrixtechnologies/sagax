@@ -20,6 +20,30 @@ export const DEF_REQUEST_LOGIN = {
     },
   };
 
+export const DEF_REQUEST_SIGN_IN = {
+    name: "request_sign_in",
+    description:
+      "Ask the person to sign in to a website themselves, in the browser or on the computer you are using now. Use it when a page needs a login you do not have in the vault (request_login), or a one-time code, CAPTCHA or other step only they can do. They get a card and a notification, sign in where you work, and press Done. Never ask for a password or code in chat. After calling it, end your turn; Sagax resumes you when they finish or decline, and then check you are signed in.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        site: { type: "string", minLength: 1, maxLength: 2048, description: "The page to sign in on: its address, or the domain, such as example.com." },
+        reason: { type: "string", maxLength: 240, description: "One short sentence, in your words, on what the sign-in is for." },
+      },
+      required: ["site"],
+    },
+  };
+
+/** request_sign_in's answer names the place the person was sent to, in the
+ * words the panel and the prompt use (server/surface.ts surfaceLabel). */
+const SIGN_IN_PLACES: Record<string, string> = {
+  browser: "your built-in browser",
+  local: "this computer",
+  vm: "the Local VM",
+  cloud: "the cloud computer",
+};
+
 export const DEF_OPEN_CONNECTOR_SETUP = {
     name: "open_connector_setup",
     description:
@@ -260,7 +284,7 @@ export const DEF_ADD_MCP_SERVER = {
     },
   };
 
-export const SETTINGS_TOOL_NAMES: ReadonlySet<string> = new Set(['request_login', 'open_connector_setup', 'list_terminal_resources', 'offer_shell_terminal', 'resource_usage', 'rules_update', 'docs_update', 'manage_pairing', 'manage_settings', 'skills_list', 'skill_manage', 'add_mcp_server'] as const);
+export const SETTINGS_TOOL_NAMES: ReadonlySet<string> = new Set(['request_login', 'request_sign_in', 'open_connector_setup', 'list_terminal_resources', 'offer_shell_terminal', 'resource_usage', 'rules_update', 'docs_update', 'manage_pairing', 'manage_settings', 'skills_list', 'skill_manage', 'add_mcp_server'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callSettingsTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -290,6 +314,19 @@ export async function callSettingsTool(name: string, args: Json, context: ToolCa
     }
     return {
       text: "A secure login request card is ready for the person. End this turn; Sagax resumes the task with the login's handle after they allow it or decline. Never ask them for a password or a code in chat.",
+    };
+  }
+  if (name === "request_sign_in") {
+    const site = typeof args.site === "string" ? args.site.trim() : "";
+    if (!site) return { text: "request_sign_in needs site: the page's address or its domain, such as example.com.", isError: true };
+    const reason = typeof args.reason === "string" ? args.reason.trim().slice(0, 240) : "";
+    const { ok, body: r } = await apiResponse("/api/internal/request-sign-in", {
+      method: "POST",
+      body: JSON.stringify({ site, ...(reason ? { reason } : {}) }),
+    });
+    if (!ok) return { text: `Couldn't ask the person to sign in: ${String(r.error ?? "the request failed")}`, isError: true };
+    return {
+      text: `The person was asked to sign in to ${r.site ?? site} on ${SIGN_IN_PLACES[String(r.place)] ?? "the place you work"}. Your turn ends now: say in one short line that you are waiting for them, then stop. Sagax resumes you when they finish or decline. Never ask for the password or a code in chat.`,
     };
   }
   if (name === "list_terminal_resources") {

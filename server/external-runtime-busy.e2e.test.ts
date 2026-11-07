@@ -56,7 +56,9 @@ it.each(["already busy", "became busy during approval"])(
       };
       // Lot 3: the ask is a runtime consultation on the caller's poll root.
       const waiting = (id: string) => readHandoffs(session.info.dataDir).find((node) => node.id === id)?.status === "queued";
-      await api("PATCH", `/api/bots/${source.id}`, { approvePeerComms: true });
+      // A new bot starts at Full access (#2111), which pre-approves peer
+      // contact: this case is about the card, so the gateway runs at Ask.
+      await api("PATCH", `/api/bots/${source.id}`, { approvePeerComms: true, approvalMode: "ask" });
       writeFileSync(join(session.info.dataDir, "external-runtimes.json"), JSON.stringify({ [source.id]: { token: TOKEN, threadId: sourceThread } }), { mode: 0o600 });
       const requestText = `Only this queued request: ${scenario}`;
       const occupy = async () => {
@@ -86,8 +88,8 @@ it.each(["already busy", "became busy during approval"])(
       evidence.push({ scenario, queued, waitingOnBusy: true, beforeRelease: await sourceCards() });
 
       writeFileSync(gate, "release only the isolated provider");
-      await expect.poll(async () => (await receipt(queued.taskId)).status, { timeout: 20_000 }).toBe("done");
-      expect((await receipt(queued.taskId)).result).toContain(requestText);
+      await expect.poll(async () => (await receipt(queued.taskId)).assignment?.status, { timeout: 20_000 }).toBe("completed");
+      expect((await receipt(queued.taskId)).assignment.result).toContain(requestText);
       expect((await control("wait", "--bot", peer.id, "--task", peerThread)).status).toBe("settled");
       // The gateway polls this receipt; the source bot's own engine never runs.
       expect((await control("wait", "--bot", source.id, "--task", sourceThread)).status).toBe("settled");

@@ -59,6 +59,10 @@ function baseDeps(over: Partial<InternalBotChatDeps> = {}): InternalBotChatDeps 
       has: () => false,
       enqueue: () => ({ node: { id: "n1", botId: PEER.id, threadId: "t-new", status: "queued" } }),
       tick: () => undefined,
+      endTurn: () => undefined,
+      status: () => undefined,
+      poll: () => undefined,
+      outstandingFor: () => [],
     },
     approvalBus: {} as InternalBotChatDeps["approvalBus"],
     delegationWatch: new Map(),
@@ -90,6 +94,7 @@ function baseDeps(over: Partial<InternalBotChatDeps> = {}): InternalBotChatDeps 
     openerFrom: () => undefined,
     latestFailedTurnCause: () => null,
     requireActive: () => undefined,
+    beginExternalRoot: () => undefined,
     ...over,
   };
 }

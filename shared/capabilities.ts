@@ -152,7 +152,7 @@ export const CAPABILITIES_PATH = (botId: string) => `/api/bots/${encodeURICompon
  * have no native file tools. Managed skills_list/workspace_read allow a
  * short index with bodies loaded on demand (#1997); without those reads,
  * the prompt carries whole files within each capability's visible budget. */
-export const ENGINES_WITHOUT_FILES: readonly string[] = ["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq"];
+export const ENGINES_WITHOUT_FILES: readonly string[] = ["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq", "meta"];
 
 export function engineWorksInFiles(driverKind: string): boolean {
   return !ENGINES_WITHOUT_FILES.includes(driverKind);

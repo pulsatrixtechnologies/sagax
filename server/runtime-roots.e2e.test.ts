@@ -101,7 +101,9 @@ async function loopbackModel() {
     const reply = (out: ServerResponse, given: ModelAnswer) => {
       out.writeHead(200, { "content-type": "text/event-stream" });
       out.end("say" in given ? frame({ content: given.say }, "stop") + "data: [DONE]\n\n"
-        : frame({ tool_calls: [{ index: 0, id: `call_${++callSerial}`, type: "function", function: { name: tool, arguments: "{}" } }] }, "tool_calls") + "data: [DONE]\n\n");
+        // Each call carries its own round: a local model that repeats one identical
+        // call is stopped after ten (chat-repeat-guard.ts), and T6 runs to the step cap.
+        : frame({ tool_calls: [{ index: 0, id: `call_${++callSerial}`, type: "function", function: { name: tool, arguments: JSON.stringify({ round: callSerial }) } }] }, "tool_calls") + "data: [DONE]\n\n");
     };
     reply(res, answer(request));
   });

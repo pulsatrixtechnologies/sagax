@@ -111,6 +111,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   end_call: "conversation",
   request_credential: "conversation",
   request_login: "conversation",
+  request_sign_in: "conversation",
   // a sign-in card in the member's own conversation, for their own engine account
   open_connector_setup: "conversation",
   // claims (perspicax-claims.ts): a lease in Perspicax held by this bot for

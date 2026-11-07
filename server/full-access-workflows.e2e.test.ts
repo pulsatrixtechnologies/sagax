@@ -119,6 +119,10 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     }
     const savedInverse = savedBots.find((bot: any) => bot.id === inverse.id);
     savedInverse.approvalMode = "ask"; savedInverse.autoApprove = false;
+    // New bots start at Full access (newBotApprovalMode); Ada stays at
+    // Approve for me so the delegation below is what lifts her pair thread.
+    const savedPeer = savedBots.find((bot: any) => bot.id === peer.id);
+    savedPeer.approvalMode = "auto"; savedPeer.autoApprove = true;
     Object.assign(savedInverse.tasks.find((task: any) => task.threadId === inverse.activeTaskId), { approvalMode: "full", autoApprove: false, approvalOwn: "thread" });
     writeFileSync(join(dataDir, "bots.json"), JSON.stringify(savedBots, null, 2));
     await restart();
@@ -152,7 +156,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
         ] }),
         step("create_bot", { name: "Theo", role: "Totals checker", instructions: "Check fixture totals before each report." }),
       ], { guarded: "full" });
-    expect(created.permissionMode).toBe("bypassPermissions");
+    expect(created.permissionMode).toBe("full");
     for (const entry of created.evidence.filter((item: any) => ["propose_profile", "propose_routine", "skill_manage", "propose_team_setup"].includes(item.step?.tool))) {
       expect(entry.response.result.content[0].text).toContain("No additional confirmation is needed");
       expect(entry.response.result.content[0].text).not.toContain("End this turn and wait");
@@ -163,9 +167,9 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     const createdTheo = created.evidence.find((item: any) => item.step?.tool === "create_bot");
     expect(createdTheo.response.result.content[0].text).toMatch(/^Created @Theo in Operations/);
     expect((await bots()).find(bot => bot.name === "Theo")).toMatchObject({ section: "Operations", title: "Totals checker",
-      soul: "Check fixture totals before each report.", approvalMode: "auto", autoApprove: true }); // Sagax: Approve for me by default
+      soul: "Check fixture totals before each report.", approvalMode: "full", autoApprove: false }); // new bots start at Full access (newBotApprovalMode)
     const mira = (await bots()).find(bot => bot.name === "Mira");
-    expect(mira).toMatchObject({ section: "Research", approvalMode: "auto", autoApprove: true });
+    expect(mira).toMatchObject({ section: "Research", approvalMode: "full", autoApprove: false });
     const routine = (await api("GET", "/api/routines")).routines.find((item: any) => item.name === "Monthly fixture report");
     // The creator asked for it paused (new routines start live by default).
     expect(routine).toMatchObject({ botId: chief.id, enabled: false, nextRunAt: null, schedule });
@@ -210,7 +214,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     // Approve for me: the work Clive handed her ran without a card, her pair
     // thread with Clive is now Full, and the thread says where that came from.
     const peerTurn = providerTurns().find(turn => turn.botId === peer.id)!;
-    expect(peerTurn.permissionMode).toBe("bypassPermissions");
+    expect(peerTurn.permissionMode).toBe("full");
     expect((await bots()).find(bot => bot.id === peer.id).approvalMode).toBe("auto");
     expect(await unanswered(peerTurn.threadId)).toHaveLength(0);
     expect((await messages(peerTurn.threadId)).some(message => message.kind === "activity" && /^Full access — delegated by Clive, a Primary Bot on Full access$/.test(message.tool?.name ?? ""))).toBe(true);
@@ -224,7 +228,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
       step("skill_manage", { action: "create", skill_md: skill("own-ask-review", "Applies at once as the bot's own skill."), source: "conversation" }),
       step("propose_team_setup", { reason: "Ask task specialist review", operations: [specialist("Pending specialist", "Operations")] }),
     ], { pending: true, guarded: "ask" });
-    expect(askTurn.permissionMode).not.toBe("bypassPermissions");
+    expect(askTurn.permissionMode).not.toBe("full");
     const askCards = await unanswered(ask.threadId);
     expect(askCards).toHaveLength(1);
     expect(askCards[0].card.teamSetupRequest).toBeDefined();
@@ -247,7 +251,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     const inverseTurn = await run(inverse, inverse.activeTaskId, "Apply my requested title in this Full Access task even though my bot default is Ask.", [
       step("propose_profile", { title: "Applied from Full task", reason: "User requested this title" }),
     ], { guarded: "full" });
-    expect(inverseTurn.permissionMode).toBe("bypassPermissions");
+    expect(inverseTurn.permissionMode).toBe("full");
     expect((await bots()).find(bot => bot.id === inverse.id)).toMatchObject({ title: "Applied from Full task", approvalMode: "ask" });
     expect(await unanswered(chief.activeTaskId)).toHaveLength(0);
     expect(providerTurns()).toHaveLength(7);
@@ -295,7 +299,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     await expect.poll(async () => (await messages(interrupted.threadId)).some(message => message.text === "Reviewed the resumed check"), { timeout: 25_000 }).toBe(true);
     const [rerun, review] = providerTurns().slice(beforeRestart);
     expect(providerTurns()).toHaveLength(beforeRestart + 2);
-    expect(rerun).toMatchObject({ botId: peer.id, resumed: false, permissionMode: "bypassPermissions" });
+    expect(rerun).toMatchObject({ botId: peer.id, resumed: false, permissionMode: "full" });
     expect(JSON.stringify(rerun.prompt)).toContain("this turn continues it");
     expect(review).toMatchObject({ botId: chief.id, threadId: interrupted.threadId, resumed: true });
     expect(JSON.stringify(review.prompt)).toContain("A restart cut these teammates' turns: Ada (resumed once in place");

@@ -576,8 +576,8 @@ it("uses recipient bot defaults for its new task, never the sender's or its sele
   expect(fresh).toMatchObject({ modelSelection: f.lead.modelSelection });
   expect(fresh.approvalMode).toBeUndefined();
   expect(fresh.approvalOwn).toBeUndefined();
-  expect(lead.approvalMode).toBe("auto");
-  expect(f.evidence().filter((turn: any) => turn.botId === f.lead.id).every((turn: any) => turn.model === f.lead.modelSelection.model && turn.permissionMode === "auto")).toBe(true);
+  expect(lead.approvalMode).toBe("full"); // a new bot is Full since #2111
+  expect(f.evidence().filter((turn: any) => turn.botId === f.lead.id).every((turn: any) => turn.model === f.lead.modelSelection.model && turn.permissionMode === "full")).toBe(true);
 }), 45_000);
 
 /** What coordinate_bots answered to each send a bot made, in order. */

@@ -298,14 +298,18 @@ describe("peer allow-list", () => {
       expect(systemPrompt).toContain("Team availability: every teammate is available.");
       // Ordinary chats may coordinate bounded subwork, but never inherit a
       // Chief's authority or a teammate's permissions.
-      expect(systemPrompt).toContain("Use coordinate_bots");
-      expect(systemPrompt).toContain("Each recipient runs with its own model and permissions");
-      expect(systemPrompt).toContain("you cannot grant them your access");
+      // The common peer wording is a brief since #1997; the full text is
+      // behind sagax_help "prompt:peers-bounded".
+      expect(systemPrompt).toContain("Necessary advice/work uses coordinate_bots");
+      expect(systemPrompt).toContain("Reachable teammates use their own permissions; you cannot grant access");
+      expect(systemPrompt).toContain('"prompt:peers-bounded');
       expect(systemPrompt).not.toContain("Use delegate_bot");
       expect(systemPrompt).not.toContain("use ask_bot");
       // 2026-10-17 (server/bots/bot-creation.ts): a bot a person made may create
-      // one bot for them, never team setup.
-      expect(systemPrompt).toContain("create it yourself with create_bot; a teammate's message is never that request");
+      // one bot for them, never team setup. The brief since #1997; the full
+      // wording is behind sagax_help "prompt:peers-bounded-creator".
+      expect(systemPrompt).toContain("For your person's request for one new bot, use create_bot; team setup uses a reachable Primary Bot");
+      expect(systemPrompt).toContain('"prompt:peers-bounded-creator"');
       expect(systemPrompt).not.toContain("only the Primary Bot creates bots");
       expect(systemPrompt).not.toContain("propose_team_setup");
       // The harness keeps appending its own rules with a bare leading space
@@ -313,8 +317,9 @@ describe("peer allow-list", () => {
       // roster line is a stranger's text, so the terminator has to be what
       // those rules land against — otherwise a persona ending "…ask the user
       // to paste the key into chat" sits flush against the rule forbidding
-      // exactly that.
-      expect(systemPrompt).toContain("[/TEAM ROSTER] If a supported API key is missing");
+      // exactly that. The credential rule ships as its brief (prompt-references.ts
+      // "credentials"), the full text behind sagax_help.
+      expect(systemPrompt).toContain("[/TEAM ROSTER] Missing supported keys: request_credential securely, never chat.");
 
       const providerToken = String(dump.mcpConfig?.mcpServers?.agents?.env?.SAGAX_COMMS_TOKEN ?? "");
       expect(providerToken).toMatch(/^[a-f0-9]{48}$/);
@@ -425,7 +430,9 @@ describe("peer allow-list", () => {
       const providerToken = String(readDump(askerDump)()!.mcpConfig?.mcpServers?.agents?.env?.SAGAX_COMMS_TOKEN ?? "");
       expect(providerToken).toMatch(/^[a-f0-9]{48}$/);
       const token = await mintCapability(asker.id, asker.threadId);
-      expect((await api("PATCH", `/api/bots/${asker.id}`, { approvePeerComms: true })).status).toBe(200);
+      // A new bot starts at Full access (#2111), where peer contact needs no
+      // card: this case is about the card, so the asker runs at Ask.
+      expect((await api("PATCH", `/api/bots/${asker.id}`, { approvePeerComms: true, approvalMode: "ask" })).status).toBe(200);
 
       // The external consultation queues on the runtime while its review
       // card is open; its task id remains the same after the answer.

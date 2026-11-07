@@ -272,6 +272,8 @@ export interface Coordinator {
   beginTurn(req: BeginTurnRequest): HandoffView;
   /** That turn ended (completed, failed, parked on cards, or continuing in place). */
   endTurn(id: string, result: HostTurnResult): void;
+  /** A root whose turn never started (its request went to a backup engine): dropped without a result. */
+  dropTurn(id: string, reason: string): void;
   /** The person acted on a parked node's cards (a root or a child): the
    * node runs its next execution with the harness text. False when the
    * node is not parked. */

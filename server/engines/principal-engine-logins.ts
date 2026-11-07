@@ -29,6 +29,7 @@ import { CodexDeviceAuthController } from "../drivers/codex-device-auth.ts";
 import { DeviceLoginController } from "../drivers/device-login.ts";
 import { probeGrokModels, readGrokModelsCache } from "../drivers/acp/grok.ts";
 import { ProviderAuthSessions } from "./provider-auth-sessions.ts";
+import { separateAccountInstance } from "./separate-account.ts";
 import { isPrincipalId } from "../auth/principals.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
@@ -89,15 +90,8 @@ export function loginCliFor(driver: string, configured: unknown, driverDefault: 
 const LOGIN_DIR: Readonly<Record<LoginDriver, string>> = { claudeAgent: "claude", codex: "codex", grokAgent: "grok", kimiAgent: "kimi" };
 /** The drivers with a second sign-in per person, and its directory. */
 const SECOND_LOGIN_DIR: Readonly<Partial<Record<LoginDriver, string>>> = { grokAgent: "grok-2" };
-/** 2026-11-06 (#2373): an account added next to a driver's first one
- * (Providers > Add account: `claude-<uuid>`, `chatgpt-<uuid>`,
- * `antigravity-<uuid>`) keeps its own sign-in per person. Every other
- * instance of a driver shares the person's first sign-in, the folder it has
- * always used, so nobody signed in before loses it. */
-const SEPARATE_ACCOUNT = /^[a-z][\w.]*-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export function separateAccountInstance(instanceId: string | null | undefined): instanceId is string {
-  return typeof instanceId === "string" && SEPARATE_ACCOUNT.test(instanceId);
-}
+// #2373: kept in a leaf so engine-credentials.ts reads it without this file
+export { separateAccountInstance } from "./separate-account.ts";
 
 export function secondLoginSupported(driver: string): boolean {
   return isLoginDriver(driver) && SECOND_LOGIN_DIR[driver] !== undefined;

@@ -28,14 +28,14 @@ const height = Number(params.get("height") ?? 760);
 
 const NOW = Date.now();
 const M = 60_000;
-const TASK = "melonie-task";
+const TASK = "orla-task";
 const bot = {
-  id: "melonie", threadId: "melonie-thread", mainThreadId: "melonie-thread", name: "Melonie", title: "", description: "", color: "green",
+  id: "orla", threadId: "orla-thread", mainThreadId: "orla-thread", name: "Orla", title: "", description: "", color: "green",
   notifications: true, unread: false, busy: false, messages: [], modelSelection: { instanceId: "test", model: "test" },
   tasks: [
-    { threadId: "melonie-thread", title: "Main", createdAt: NOW - 48 * 60 * M },
+    { threadId: "orla-thread", title: "Main", createdAt: NOW - 48 * 60 * M },
     { threadId: TASK, title: "Proactive teammate message", createdAt: NOW - 10 * M, updatedAt: NOW - M, activity: "waiting-on-you",
-      parallelOf: { threadId: "melonie-thread" } },
+      parallelOf: { threadId: "orla-thread" } },
   ],
 } as unknown as Bot;
 
@@ -88,7 +88,7 @@ function Pane({ title, children, composer, sample }: { title: string; children: 
       <div className="mx-auto flex w-full max-w-[640px] flex-1 flex-col justify-end gap-3 overflow-hidden px-6 pb-[132px] pt-4">{children}</div>
       <div className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[640px] px-6 pb-4">
         {composer}
-        <div className="rounded-2xl border border-hairline/60 bg-panel px-4 py-3 text-[14px] text-ink-tertiary">{lang === "fr" ? "Écris à Melonie" : "Message Melonie"}</div>
+        <div className="rounded-2xl border border-hairline/60 bg-panel px-4 py-3 text-[14px] text-ink-tertiary">{lang === "fr" ? "Écris à Orla" : "Message Orla"}</div>
       </div>
     </div>
   );
@@ -99,23 +99,23 @@ function Shell() {
   useEffect(() => {
     dispatch({ type: "hydrate", bots: [bot], groups: [], sections: [], computerControl: {} } as never);
     dispatch({ type: "routinesHydrated", routines: [], runs: [] });
-    dispatch({ type: "select", id: "melonie" });
+    dispatch({ type: "select", id: "orla" });
   }, [dispatch]);
-  const live = state.bots.find((candidate) => candidate.id === "melonie");
+  const live = state.bots.find((candidate) => candidate.id === "orla");
   const cards = useParallelCards(live) as { pendings: never[]; questions?: unknown[] };
   // before #2082 the strip also took the task's questions
   const strip = { parallelQuestions: cards.questions ?? [] } as Record<string, unknown>;
   return (
     <div data-gallery-sample="parallel-question" className="flex overflow-hidden bg-app text-ink" style={{ width, height }}>
-      <Pane sample="source" title="Melonie" composer={live && (
-        <ComposerPendingStrip bot={live} approvals={[]} threadId="melonie-thread" approvalBotFor={() => live} onCancelTurn={() => {}} {...strip} />
+      <Pane sample="source" title="Orla" composer={live && (
+        <ComposerPendingStrip bot={live} approvals={[]} threadId="orla-thread" approvalBotFor={() => live} onCancelTurn={() => {}} {...strip} />
       )}>
         {thread.map((message) => message.parallelTask
-          ? <ParallelTaskCard key={message.id} message={message} botId="melonie" />
+          ? <ParallelTaskCard key={message.id} message={message} botId="orla" />
           : <Bubble key={message.id} message={message} />)}
       </Pane>
-      <Pane sample="task" title={lang === "fr" ? "Melonie · Proactive teammate message" : "Melonie · Proactive teammate message"}>
-        {optionsCardRow({ message: question, transcript: [question], botId: "melonie", botName: "Melonie", threadId: TASK })}
+      <Pane sample="task" title={lang === "fr" ? "Orla · Proactive teammate message" : "Orla · Proactive teammate message"}>
+        {optionsCardRow({ message: question, transcript: [question], botId: "orla", botName: "Orla", threadId: TASK })}
       </Pane>
     </div>
   );

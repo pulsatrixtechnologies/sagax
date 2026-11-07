@@ -262,7 +262,7 @@ export function RoutineRunCard({
         : (run.summary ?? run.attention ?? routineRunError(run.error))).text,
   );
   const handedTo = run.handedTo ?? [];
-  // 2026-11-06 (JC, Katarina's chat read 7:24, 7:27, 7:30, 7:34, 7:28,
+  // 2026-11-06 (JC, Wren's chat read 7:24, 7:27, 7:30, 7:34, 7:28,
   // 7:30): the bubble sits where the run posted it, so its time is when it
   // posted. The trigger's time (a webhook queued behind another run, a late
   // schedule) stays in the tooltip. Showing scheduledFor put times out of order.

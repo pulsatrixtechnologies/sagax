@@ -74,7 +74,7 @@
 // section 4 bis.
 import type { PiModelServer } from "../drivers/pi-model-servers.ts";
 import { join } from "node:path";
-import { separateAccountInstance } from "./principal-engine-logins.ts";
+import { separateAccountInstance } from "./separate-account.ts";
 
 import { routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engine-access.ts";
 import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-link.ts";

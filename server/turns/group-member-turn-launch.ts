@@ -232,9 +232,17 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
       }
     }
   }
-  // chained mentions: a member's reply can summon teammates  -  one hop only
+  // chained mentions: a member's reply can summon teammates  -  one hop only.
+  // A turn that handed work out this execution is waiting on its teammates'
+  // results, which resume it: a name in its reply is context, not a new
+  // participant (upstream c418456019, room-coordination "incidental mentions").
+  const roomRootId = orchestration?.coordination?.id ?? internalGeneration;
+  const roomRoot = coordinator.node(roomRootId);
+  const handedOut = roomRoot !== undefined
+    && coordinator.children(roomRootId).some((child: { createdAt: number }) => child.createdAt >= (roomRoot.startedAt ?? 0));
   if (
     (orchestration?.followMentions ?? true) &&
+    !handedOut &&
     !orchestration?.roomHandoffId &&
     // Since #2390 every room turn opens its own runtime root under this id:
     // only a node the runtime dispatched skips the mention hop, not that root.

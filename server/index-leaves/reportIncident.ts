@@ -48,8 +48,10 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
   // A thread another bot opened and is watching is that bot's to handle:
   // the delegator is woken with the failure already (wakeDelegationSource).
   // A thread running coordinated work is its requester's to handle: the
-  // runtime reports the failure there (the report hook).
-  if (task?.openedBy?.delegationId || host.delegationWatch.has(threadId) || host.coordinator.activeDirect(threadId) || host.coordinator.assignerOf(threadId)) return;
+  // runtime reports the failure there (the report hook). Since every turn
+  // opens a root, a live root of the thread's own is no longer such work:
+  // only an assigner still awaiting it is (upstream a5b2e437fd).
+  if (task?.openedBy?.delegationId || host.delegationWatch.has(threadId) || host.coordinator.assignerOf(threadId)) return;
   const group = host.store.groupByThread(threadId);
   const incident: Incident = {
     kind: input.kind,

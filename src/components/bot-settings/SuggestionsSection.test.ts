@@ -12,7 +12,7 @@ vi.mock("@/state/store", () => ({
   useStore: () => ({ state: {}, dispatch: vi.fn() }),
 }));
 
-import { SuggestionsSection } from "./SuggestionsSection";
+import { SuggestionsCard, SuggestionsSection } from "./SuggestionsSection";
 import type { Bot } from "@/state/store";
 
 const bot = { id: "b1", name: "Pepper", tasks: [{ threadId: "t1", title: "Deploy", activity: "waiting-on-you" }] } as unknown as Bot;
@@ -21,8 +21,8 @@ describe("SuggestionsSection", () => {
   it("draws the card while the global preference is on", () => {
     fixture.shown = true;
     const html = renderToStaticMarkup(createElement(SuggestionsSection, { bot, routineCount: 0 }));
-    // the bot panel's card has no Hide and always offers Add to Slack (#2125)
-    expect(html).not.toContain("data-suggestions-hide");
+    // the bot panel's card has Hide and always offers Add to Slack
+    expect(html).toContain("data-suggestions-hide");
     expect(html).toContain('data-suggestion="approval:t1"');
     expect(html).toContain('data-suggestion="slack"');
     expect(html).toContain("data-slack-logo");
@@ -32,6 +32,15 @@ describe("SuggestionsSection", () => {
     fixture.shown = false;
     expect(renderToStaticMarkup(createElement(SuggestionsSection, { bot, routineCount: 0 }))).toBe("");
     expect(renderToStaticMarkup(createElement(SuggestionsSection, { bot: { ...bot, id: "b2" } as Bot, routineCount: 0 }))).toBe("");
+  });
+
+  it("clicking Hide turns the preference off (the Settings switch reads the same one)", () => {
+    fixture.hide.mockClear();
+    const tree = SuggestionsCard({ headingId: "h", panel: true, rows: [{ id: "slack", title: "Add to Slack" }] }) as any;
+    const header = tree.props.children[0];
+    const button = [header.props.children].flat().find((c: any) => c?.props?.["data-suggestions-hide"] !== undefined);
+    button.props.onClick();
+    expect(fixture.hide).toHaveBeenCalledWith(false);
   });
 
   it("Hide sets the one global preference, not a per-bot flag", () => {

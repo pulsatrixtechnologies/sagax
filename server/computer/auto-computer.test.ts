@@ -7,8 +7,10 @@ import {
   autoComputerGuidance,
   autoComputerReason,
   autoComputerToolRefusal,
+  autoComputerUnavailable,
   autoStartLine,
   autoStartTarget,
+  pinnedWorkspaceStart,
   parseAutoComputerTarget,
   selectAutoComputer,
   type AutoComputerState,
@@ -153,7 +155,7 @@ describe("Auto guidance (prompt fixture)", () => {
     expect(text).toMatch(/local_vm: isolated/);
     expect(text).toMatch(/browser: pure web work/);
     expect(text).toMatch(/cloud: work that must keep running while the person is away .*routine.*offline or asleep.*long job/);
-    expect(text).toContain("each new message starts over from the default (a person-asked turn: the person's computer when it is connected; a routine: the cloud)");
+    expect(text).toContain("each new message starts over from the default (the place the person picked in the Computer menu; else a person-asked turn: the person's computer when it is connected; a routine: the cloud)");
     expect(text).toContain("Routines may call computer_select for this_computer or local_vm only when the owner allowed routines on their computer");
     expect(text).toMatch(/Sub-agents: start_thread .* and create_agent take a workspace too/);
   });
@@ -163,7 +165,7 @@ describe("Auto guidance (prompt fixture)", () => {
       expect(text).toMatch(new RegExp(`${phrase}[^;]*mean this_computer`));
     }
     expect(text).toMatch(/"dans une VM", "in a VM" mean local_vm/);
-    expect(text).toMatch(/"dans le cloud", "in the cloud", "sur le serveur", "on the server" mean cloud/);
+    expect(text).toMatch(/"dans le cloud", "in the cloud", "sur le serveur", "on the server", "dans ton sandbox", "dans ton bac à sable", "in your sandbox" mean cloud/);
     expect(text).toContain("say why (the tool's answer) instead of quietly working elsewhere");
   });
 
@@ -295,5 +297,39 @@ describe("the thread line", () => {
     expect(workspaceLineName({ target: "browser" })).toBe("notice: Workspace: In the browser");
     expect(parseWorkspaceLine(workspaceLineName({ target: "local_vm" }))).toEqual({ target: "local_vm" });
     expect(parseWorkspaceLine("notice: something else")).toBeNull();
+  });
+});
+
+describe("a place pinned from the Computer menu (#2576)", () => {
+  it("is where Auto starts, not a lock: an explicit request elsewhere can still switch", () => {
+    expect(pinnedWorkspaceStart({ auto: false, fixed: "local" }, false)).toBe("this_computer");
+    expect(pinnedWorkspaceStart({ auto: false, fixed: "vm" }, false)).toBe("local_vm");
+    expect(pinnedWorkspaceStart({ auto: false, fixed: "cloud" }, false)).toBe("cloud");
+    // Pinned on their computer, the person asks for the sandbox: the turn
+    // starts on their computer and computer_select reaches the cloud.
+    const start = autoStartTarget({
+      wanted: pinnedWorkspaceStart({ auto: false, fixed: "local" }, false),
+      routine: false, personAsked: true, desktopConnected: true, routinesAllowed: false, sandboxConfigured: true, browserAvailable: true,
+    });
+    expect(start).toEqual({ target: "this_computer", wanted: "this_computer", fallback: null });
+    const state = { auto: true, selected: start.target, routine: false, sandboxConfigured: true, desktopMounted: true, routinesAllowed: false, browserAvailable: true };
+    expect(autoComputerUnavailable(state, "cloud", true)).toBeNull();
+  });
+
+  it("stays fixed when the bot or the turn forces the place, or no computer was chosen", () => {
+    expect(pinnedWorkspaceStart({ auto: false, fixed: "cloud" }, true)).toBeNull();
+    expect(pinnedWorkspaceStart({ auto: false, fixed: "off" }, false)).toBeNull();
+    expect(pinnedWorkspaceStart({ auto: false, fixed: "browser" }, false)).toBeNull();
+    expect(pinnedWorkspaceStart({ auto: true }, false)).toBeNull();
+  });
+
+  it("tells the bot the menu is a starting place and maps sandbox words to the cloud", () => {
+    expect(AUTO_COMPUTER_RULES).toContain("without asking the person to change the menu");
+    expect(AUTO_COMPUTER_RULES).toContain("\"dans ton sandbox\"");
+  });
+
+  it("sends live-state questions to the direct state tool, never the shell", () => {
+    expect(AUTO_COMPUTER_RULES).toContain("host_health");
+    expect(AUTO_COMPUTER_RULES).toMatch(/Never read state through a shell/);
   });
 });

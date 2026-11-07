@@ -233,6 +233,10 @@
 //   FAKE_CLAUDE_MCP_DUMP path to write {servers, calls:[{server, tool, listed,
 //                      ok, text}]} as JSON after the calls (text cut at
 //                      FAKE_CLAUDE_MCP_TEXT_LIMIT characters, default 500).
+//   FAKE_CLAUDE_MCP_DUMP_CALLS_ONLY=1 a turn with no call to make (no `when`
+//                      in its prompt, such as the server's follow-up nudge
+//                      after a tool-only reply) leaves the dump as it is,
+//                      instead of overwriting the last turn's calls with none.
 //   FAKE_CLAUDE_EXIT_DELAY_MS ms this process keeps running after SIGTERM
 //                      before it exits: a CLI that is slow to stop, as one
 //                      can be on Windows, where taskkill is asynchronous.
@@ -1305,7 +1309,7 @@ async function runFakeMcpCalls(calls: FakeMcpCall[], configPath: string | null):
       }
     }
   }
-  if (process.env.FAKE_CLAUDE_MCP_DUMP) {
+  if (process.env.FAKE_CLAUDE_MCP_DUMP && !(calls.length === 0 && process.env.FAKE_CLAUDE_MCP_DUMP_CALLS_ONLY === "1")) {
     writeFileSync(process.env.FAKE_CLAUDE_MCP_DUMP, JSON.stringify({ servers: Object.keys(servers), calls: results }, null, 2));
   }
   return notes.join(" ");

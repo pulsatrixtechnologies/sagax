@@ -592,7 +592,7 @@ struct DesktopExperimentalSettings: View {
             accessory: AnyView(DesktopText(verbatim: "· " + String(format: AppStrings.localized("%@ of %@ on"), "\(on)", "7"), color: \.inkSecondary).lineLimit(1)),
             identifier: "experimental"
         ) {
-            row("skillAuthoring", Text("Bots may write their own skills"), aria: Text("Allow bots to draft skills"), on: skills, busy: busy, identifier: "desktop-settings.skill-authoring")
+            row("skillAuthoring", Text("Bots may write and improve their own skills"), aria: Text("Allow bots to draft skills"), on: skills, busy: busy, identifier: "desktop-settings.skill-authoring")
             row("browser", Text("Built-in browser"), aria: Text("Enable the built-in browser"), on: browser, busy: busy,
                 unavailable: !browserReady && !browserInstallable,
                 reason: Text(verbatim: AppStrings.localized("The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")),
@@ -601,16 +601,16 @@ struct DesktopExperimentalSettings: View {
             row("decisionModel", Text("Decision model"), aria: Text("Decision model"), on: decision, busy: busy, identifier: "desktop-settings.decision-model")
             row("dataWindow", Text("Data window"), aria: Text("Turn on the Data window"), on: dataWindow, busy: busy,
                 unavailable: features?.dataWindow == nil,
-                reason: Text("This server does not offer the Data window yet. It comes with Sagax 0.5.3 on the server."),
+                reason: Text("Arrives with the next server update."),
                 identifier: "desktop-settings.data-window")
             row("meetingNotetaker", Text("Meeting notetaker (Google Meet)"), aria: Text("Meeting notetaker (Google Meet)"), on: notetaker, busy: busy,
                 unavailable: features?.meetingNotetaker == nil,
                 reason: Text("This server does not offer the meeting notetaker yet."),
-                note: Text("Bots can ask to join a Google Meet and take notes, after your approval on each meeting. Not yet tested on real meetings."),
+                note: Text("A bot takes notes in your meetings. Not yet proven in a real meeting."),
                 identifier: "desktop-settings.meeting-notetaker")
             row("llmThreadTitles", Text("Generated conversation titles"), aria: Text("Turn on generated conversation titles"), on: titles, busy: busy,
                 unavailable: features?.llmThreadTitles == nil,
-                reason: Text("This server does not offer this feature yet. Update Sagax on the server."),
+                reason: Text("Arrives with the next server update."),
                 identifier: "desktop-settings.thread-titles")
             DesktopDescribedRow(Text("Context pods for development"), identifier: "devPods") {
                 DesktopSwitch(isOn: devPods, label: Text("Turn on context pods for development"), identifier: "desktop-settings.dev-pods") { devPods.toggle() }
@@ -619,10 +619,10 @@ struct DesktopExperimentalSettings: View {
     }
 
     /// `FeatureRow`: a feature the server cannot run keeps its row, greyed,
-    /// with "Not available on this server" and the reason behind the help.
+    /// with "Needs a server update" and the reason behind the help.
     private func row(_ feature: String, _ label: Text, aria: Text, on: Bool, busy: Bool, unavailable: Bool = false,
                      reason: Text? = nil, note: Text? = nil, identifier: String) -> some View {
-        DesktopDescribedRow(label, description: unavailable ? Text("Not available on this server") : note, identifier: feature) {
+        DesktopDescribedRow(label, description: unavailable ? Text("Needs a server update") : note, identifier: feature) {
             if unavailable, let reason { DesktopHelpTip(help: reason) }
             DesktopSwitch(isOn: on, label: aria, identifier: identifier, disabled: busy || (unavailable && !on)) {
                 Task { _ = await model.apply(.feature(feature, !on), key: feature) }

@@ -1089,7 +1089,7 @@ struct DesktopEnginesSettings: View {
 
     private var header: some View {
         HStack(spacing: 4) {
-            DesktopHelpTip(help: Text("A provider is an account, a key or a server. Each row says who pays, where its key lives and what it brings. Bots, Auto and voice only choose among them."))
+            DesktopHelpTip(help: Text("Bots, Auto and voice only use the providers listed here."))
             Spacer(minLength: 0)
             ForEach([("all", AppStrings.localized("All")), ("mine", AppStrings.localized("Mine")), ("computer", AppStrings.localized("This computer"))], id: \.0) { option in
                 Button { filter = option.0 } label: {

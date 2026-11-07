@@ -105,7 +105,7 @@ describe("import from zip", () => {
     // the Start from pill (#596) lists the other ways to start after the roles
     expect(container.querySelector("[data-new-bot-start]")).not.toBeNull();
     const other = startOptions([], false, true).filter(option => option.value.startsWith("action:"));
-    expect(other.map(option => option.label)).toEqual(["Template from the catalog…", "Zip file…", "Grok Bot or Claude Code…"]);
+    expect(other.map(option => option.label)).toEqual(["Template from the catalog…", "Zip file…", "Grok Bot, Claude Code or Hermes…"]);
     expect(new Set(other.map(option => option.group)).size).toBe(1);
     expect(draft.patch).not.toHaveBeenCalled();
     // the installation's defaults are not a bot: no import there

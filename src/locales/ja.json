@@ -3727,5 +3727,12 @@
   "approvalMode.antigravityLocalOnly": "自動（フルアクセス）は、インストール済みのデスクトップアプリで使えます。",
   "approvalMode.trustedLocalOnly": "フルアクセスとカスタムは、インストール済みのデスクトップアプリで使えます。",
   "computer.askedHands": "があなたの操作を求めています:",
-  "computer.dismiss": "閉じる"
+  "computer.dismiss": "閉じる",
+  "agentImport.hermesIntro": ".hermes フォルダー、またはそのプロファイルのいずれかを選んでください。Sagax が読むのは SOUL.md、メモリー、skills、cron/jobs.json、config.yaml の MCP サーバーだけです。",
+  "leftOut.name.profile": "プロファイル「{name}」",
+  "leftOut.reason.maxProfiles": "一度にインポートできるプロファイルは最大 {max} 件です",
+  "leftOut.reason.maxPackageSkills": "1 つのパッケージに入る skills は最大 {max} 件です",
+  "leftOut.reason.intervalRoutine": "時刻のスケジュールに合わない間隔で繰り返します。時刻を指定して追加し直してください",
+  "leftOut.reason.onceRoutine": "1 回だけ実行するため、スケジュールされませんでした。まだ必要なら手動で実行してください",
+  "leftOut.reason.invalidYaml": "有効な YAML ではありません"
 }

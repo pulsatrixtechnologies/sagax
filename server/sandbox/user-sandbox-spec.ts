@@ -66,6 +66,11 @@ export interface SandboxdConfig {
   runtime?: string;
   subnetPool: string;
   idleStopMs: number;
+  /** Hibernation: a sandbox stopped and unused this long loses its
+   * container (Kubernetes: Pod) and network; /workspace stays and the next
+   * call wakes it (recreated from the current image). 0 means never
+   * (SAGAX_SANDBOX_HIBERNATE_MINUTES=off). */
+  hibernateAfterMs: number;
   maxRunning: number;
   limits: SandboxLimits;
   /** Ask Docker for a hard size on each workspace volume (local driver
@@ -104,6 +109,7 @@ export const DEFAULT_SANDBOX_LIMITS: SandboxLimits = {
 };
 export const DEFAULT_MAX_RUNNING = 2;
 export const DEFAULT_IDLE_MINUTES = 10;
+export const DEFAULT_HIBERNATE_MINUTES = 60;
 export const DEFAULT_SUBNET_POOL = "10.213.0.0/16";
 export const DEFAULT_SANDBOXD_PORT = 8791;
 
@@ -198,6 +204,9 @@ export function sandboxdConfigFromEnv(env: NodeJS.ProcessEnv = process.env): San
     ...(runtime ? { runtime } : {}),
     subnetPool,
     idleStopMs: positiveInt(env.SAGAX_SANDBOX_IDLE_MINUTES, DEFAULT_IDLE_MINUTES, "SAGAX_SANDBOX_IDLE_MINUTES", 24 * 60) * 60_000,
+    hibernateAfterMs: /^(off|never|false|no)$/i.test(env.SAGAX_SANDBOX_HIBERNATE_MINUTES?.trim() ?? "")
+      ? 0
+      : positiveInt(env.SAGAX_SANDBOX_HIBERNATE_MINUTES, DEFAULT_HIBERNATE_MINUTES, "SAGAX_SANDBOX_HIBERNATE_MINUTES", 30 * 24 * 60) * 60_000,
     maxRunning: Math.floor(positiveInt(env.SAGAX_SANDBOX_MAX_RUNNING, DEFAULT_MAX_RUNNING, "SAGAX_SANDBOX_MAX_RUNNING", 64)),
     limits: {
       memoryBytes: Math.floor(positiveInt(env.SAGAX_SANDBOX_MEMORY_MB, DEFAULT_SANDBOX_LIMITS.memoryBytes / MiB, "SAGAX_SANDBOX_MEMORY_MB", 65536) * MiB),

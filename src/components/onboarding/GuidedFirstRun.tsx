@@ -233,7 +233,7 @@ export function GuidedFirstRun({
                   </QuietButton>
                 </>
               )}
-              {/* Bring an agent from Grok Bot or Claude Code: it arrives inert,
+              {/* Bring an agent from Grok Bot, Claude Code or Hermes: it arrives inert,
                   so it needs no engine yet and is offered in every case. */}
               {canImport && (
                 <QuietButton onClick={() => setImportOpen(true)} className="mt-2 self-center" data-first-run-import="">

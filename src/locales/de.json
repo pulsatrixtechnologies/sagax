@@ -1875,5 +1875,12 @@
   "approvalMode.antigravityLocalOnly": "Automatisch (voller Zugriff) gibt es in der installierten Desktop-App.",
   "approvalMode.trustedLocalOnly": "Voller Zugriff und Benutzerdefiniert gibt es in der installierten Desktop-App.",
   "computer.askedHands": "braucht deine Hilfe:",
-  "computer.dismiss": "Verwerfen"
+  "computer.dismiss": "Verwerfen",
+  "agentImport.hermesIntro": "Wähle deinen .hermes-Ordner oder eines seiner Profile. Sagax liest SOUL.md, die Erinnerungen, die Skills, cron/jobs.json und die MCP-Server aus config.yaml, sonst nichts.",
+  "leftOut.name.profile": "Profil „{name}“",
+  "leftOut.reason.maxProfiles": "ein Import bringt höchstens {max} Profile mit",
+  "leftOut.reason.maxPackageSkills": "ein Paket enthält höchstens {max} Skills",
+  "leftOut.reason.intervalRoutine": "es wiederholt sich in einem Intervall, das in keinen Zeitplan passt; füge es mit einer Uhrzeit neu hinzu",
+  "leftOut.reason.onceRoutine": "es läuft nur einmal und wurde daher nicht geplant; starte es von Hand, wenn es noch gebraucht wird",
+  "leftOut.reason.invalidYaml": "es ist kein gültiges YAML"
 }

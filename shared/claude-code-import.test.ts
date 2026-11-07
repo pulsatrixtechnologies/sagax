@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  claudeCodeRelativePath, claudeCodeSecretPath, claudeCodeToPackage, claudeCodeWantedPath, frontmatter,
+  claudeCodeRelativePath, claudeCodeSecretPath, claudeCodeToPackage, claudeCodeWantedPath, frontmatter, isHermesHome,
 } from "./claude-code-import.ts";
 import { GrokImportError } from "./grok-import.ts";
 import { parsePackageDocument } from "./package-format.ts";
@@ -144,6 +144,121 @@ describe("left out, in the person's language", () => {
       template.replace(/\{(\w+)\}/g, (match, name: string) => (name in params ? String(params[name]) : match));
     const { leftOut } = claudeCodeToPackage(project, { folderName: "acme-app", skippedSecrets: [".env"] });
     expect(leftOut.length).toBeGreaterThan(2);
+    for (const item of leftOut) {
+      expect(en[item.reasonKey!], item.reason).toBeDefined();
+      expect(fill(en[item.reasonKey!]!, item.params)).toBe(item.reason);
+      if (item.nameKey) expect(fill(en[item.nameKey]!, item.params)).toBe(item.name);
+    }
+  });
+});
+
+const hermes = [
+  { path: "SOUL.md", text: "<!-- template comment -->\nYou are Atlas, a terse ops assistant." },
+  { path: "memories/MEMORY.md", text: "Prod deploys go through the release branch.\n§\nThe NAS is at 10.0.0.5\nand backs up nightly.\n§\n" },
+  { path: "memories/USER.md", text: "Prefers answers in French.\n§\nWorks Eastern time." },
+  { path: "skills/devops/release-check/SKILL.md", text: "---\nname: release-check\ndescription: Check a release before it ships\nmetadata:\n  hermes:\n    tags: [ops]\n---\n\n# Release check\n\nRun the smoke tests." },
+  { path: "skills/.hub/cache/SKILL.md", text: "---\nname: cached\n---\n\nHub cache." },
+  { path: "cron/jobs.json", text: JSON.stringify({ jobs: [
+    { id: "a1", name: "Morning brief", prompt: "Summarise the night.", skills: ["release-check"], schedule: { kind: "cron", expr: "0 8 * * 1-5", display: "0 8 * * 1-5" }, enabled: true },
+    { id: "a2", name: "Every 30m", prompt: "Check the queue.", schedule: { kind: "interval", minutes: 30, display: "every 30m" } },
+    { id: "a3", name: "Every 45m", prompt: "Odd interval.", schedule: { kind: "interval", minutes: 45, display: "every 45m" } },
+    { id: "a4", name: "Once", prompt: "One shot.", schedule: { kind: "once", run_at: "2026-12-01T09:00:00Z", display: "once" } },
+  ] }) },
+  { path: "config.yaml", text: "model:\n  default: some-model\nmcp_servers:\n  tracker:\n    url: https://mcp.example.com/mcp\n    headers:\n      Authorization: Bearer sk-live-abcdefghijklmnopqrstuvwx\n  github:\n    command: npx\n    args: [\"-y\", \"@modelcontextprotocol/server-github\"]\n    env:\n      GITHUB_TOKEN: ghp_x\n" },
+  { path: "profiles/coder/SOUL.md", text: "You write code." },
+  { path: "profiles/coder/skills/devops/release-check/SKILL.md", text: "---\nname: release-check\ndescription: Check a release before it ships\nmetadata:\n  hermes:\n    tags: [ops]\n---\n\n# Release check\n\nRun the smoke tests." },
+  { path: "profiles/coder/skills/dev/review/SKILL.md", text: "---\nname: review\ndescription: Review a diff\n---\n\nReview the diff." },
+  { path: "profiles/coder/config.yaml", text: "mcp_servers:\n  tracker:\n    url: https://mcp.example.com/mcp\n" },
+  { path: "profiles/empty/config.yaml", text: "model:\n  default: x\n" },
+  { path: "sessions/s1.json", text: "{}" },
+];
+
+describe("Hermes home", () => {
+  const { document, leftOut } = claudeCodeToPackage(hermes, { folderName: ".hermes", skippedSecrets: [".env", "auth.json"], timeZone: "America/New_York" });
+  const pkg = document.package;
+  const main = pkg.agents[0]!;
+
+  it("is told apart from a Claude Code project", () => {
+    expect(isHermesHome(hermes.map((file) => file.path))).toBe(true);
+    expect(isHermesHome(["CLAUDE.md", "SOUL.md"])).toBe(false);
+    expect(isHermesHome(["AGENTS.md"], "my-app")).toBe(false);
+    expect(isHermesHome(["config.yaml"], ".hermes")).toBe(true);
+    expect(claudeCodeRelativePath(".hermes/SOUL.md")).toBe("SOUL.md");
+    expect(claudeCodeWantedPath("memories/MEMORY.md")).toBe(true);
+    expect(claudeCodeWantedPath("skills/devops/release-check/SKILL.md")).toBe(true);
+    expect(claudeCodeWantedPath("skills/.hub/cache/SKILL.md")).toBe(false);
+    expect(claudeCodeWantedPath("state.db")).toBe(false);
+  });
+
+  it("makes the main bot from SOUL.md, without template comments", () => {
+    expect(main.name).toBe("Hermes");
+    expect(main.title).toBe("Hermes agent");
+    expect(main.soul).toBe("You are Atlas, a terse ops assistant.");
+  });
+
+  it("seeds its memory from MEMORY.md and USER.md, one bullet per entry", () => {
+    const notes = main.seed!.memory["MEMORY.md"]!;
+    expect(notes).toContain("## What the agent noted (MEMORY.md)");
+    expect(notes).toContain("- Prod deploys go through the release branch.");
+    expect(notes).toContain("- The NAS is at 10.0.0.5\n  and backs up nightly.");
+    expect(notes).toContain("## About you (USER.md)\n\n- Prefers answers in French.\n- Works Eastern time.");
+  });
+
+  it("brings skills off, shared between profiles, never the hub cache", () => {
+    expect(pkg.skills!.entries.map((entry) => entry.name).sort()).toEqual(["release-check", "review"]);
+    expect(main.skills).toEqual(["release-check"]);
+    expect(pkg.agents[1]!.skills!.sort()).toEqual(["release-check", "review"]);
+  });
+
+  it("turns cron jobs into paused routines and lists what cannot run on a clock", () => {
+    const routines = pkg.routines!;
+    expect(routines.map((routine) => routine.name)).toEqual(["Morning brief", "Every 30m"]);
+    expect(routines.every((routine) => routine.enabledAfterInstall === false && routine.agent === main.key)).toBe(true);
+    expect(routines[0]!.schedule).toMatchObject({ type: "cron", expression: "0 8 * * 1-5" });
+    expect(routines[0]!.prompt).toBe("Use the skill release-check.\n\nSummarise the night.");
+    expect(routines[1]!.schedule).toMatchObject({ type: "cron", expression: "*/30 * * * *" });
+    expect(leftOut.find((item) => item.name === "Routine “Every 45m”")?.reasonKey).toBe("leftOut.reason.intervalRoutine");
+    expect(leftOut.find((item) => item.name === "Routine “Once”")?.reasonKey).toBe("leftOut.reason.onceRoutine");
+  });
+
+  it("brings http MCP servers as one shared slot, without header values; command servers are listed", () => {
+    expect(pkg.connections!.map((connection) => connection.key)).toEqual(["tracker"]);
+    expect(JSON.stringify(document)).not.toContain("sk-live");
+    expect(JSON.stringify(document)).not.toContain("ghp_x");
+    expect(pkg.connections![0]!.mcp).toMatchObject({ url: "https://mcp.example.com/mcp", valueNames: ["Authorization"] });
+    expect(main.connections).toEqual(["tracker"]);
+    expect(pkg.agents[1]!.connections).toEqual(["tracker"]);
+    expect(leftOut.find((item) => item.name === "App “github”")?.reasonKey).toBe("leftOut.reason.runsProgram");
+  });
+
+  it("makes one more bot per profile that has content", () => {
+    expect(pkg.agents.map((agent) => agent.name)).toEqual(["Hermes", "coder"]);
+    expect(pkg.agents[1]!.title).toBe("Hermes profile");
+    expect(pkg.agents[1]!.soul).toBe("You write code.");
+    expect(new Set(pkg.agents.map((agent) => agent.key)).size).toBe(2);
+    expect(leftOut.filter((item) => item.reasonKey === "leftOut.reason.secretFile").map((item) => item.name)).toEqual([".env", "auth.json"]);
+    expect(() => parsePackageDocument(document, { trust: "file" })).not.toThrow();
+  });
+
+  it("reads a single picked profile folder as the main bot", () => {
+    const profile = claudeCodeToPackage([{ path: "SOUL.md", text: "You write code." }], { folderName: "coder" });
+    expect(profile.document.package.agents[0]!.name).toBe("coder");
+  });
+
+  it("lists invalid files and refuses a home with nothing to bring", () => {
+    const broken = claudeCodeToPackage([
+      { path: "SOUL.md", text: "Hi." },
+      { path: "config.yaml", text: "mcp_servers: [\n" },
+      { path: "cron/jobs.json", text: "{" },
+    ], { folderName: ".hermes" });
+    expect(broken.leftOut.map((item) => item.reasonKey)).toEqual(expect.arrayContaining(["leftOut.reason.invalidYaml", "leftOut.reason.invalidJson"]));
+    expect(() => claudeCodeToPackage([{ path: "config.yaml", text: "model: x\n" }], { folderName: ".hermes" })).toThrow(GrokImportError);
+  });
+
+  it("names a catalog key for every left-out line", async () => {
+    const en = (await import("../src/locales/en.json")).default as Record<string, string>;
+    const fill = (template: string, params: Record<string, string | number> = {}) =>
+      template.replace(/\{(\w+)\}/g, (match, name: string) => (name in params ? String(params[name]) : match));
     for (const item of leftOut) {
       expect(en[item.reasonKey!], item.reason).toBeDefined();
       expect(fill(en[item.reasonKey!]!, item.params)).toBe(item.reason);

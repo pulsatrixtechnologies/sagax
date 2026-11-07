@@ -24,7 +24,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
     dispatch: vi.fn(),
   }),
 }));
-vi.mock("@/lib/analytics", () => ({ analyticsEnabled: () => false, setAnalyticsEnabled: vi.fn() }));
+vi.mock("@/lib/analytics", () => ({ analyticsEnabled: () => false, setAnalyticsEnabled: vi.fn(), usageMeterEnabled: () => false, setUsageMeterEnabled: vi.fn() }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => true }));
 vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/perspicax-org")>(),
@@ -166,8 +166,9 @@ describe("an organization member", () => {
     expect(nav).toContain(">Usage<");
     // #2265: no manageBackups, no Backups page (it would be empty without Import).
     expect(nav).not.toContain(">Backups<");
-    // General is out of the navigation (2026-10-26); Account is first
-    expect(nav).not.toContain(">General<");
+    // General is back in the navigation (#2430): it holds the composer and
+    // system options a member sets for themself
+    expect(nav).toContain(">General<");
     expect(nav).toContain(">Account<");
     expect(nav).toContain(">Computer<");
   });
@@ -192,7 +193,10 @@ describe("an organization member", () => {
     expect(general).not.toContain("Defaults for new bots");
     expect(general).not.toContain("Routines in the conversation");
     expect(general).not.toContain("Group turns");
-    expect(general).toContain("Language");
+    // the member's own language sits under Account > Language and region
+    // since #2080 L2, and stays there for a member
+    fixture.section = "account";
+    expect(await render()).toContain("Language");
 
     fixture.section = "appearance";
     const appearance = await render();

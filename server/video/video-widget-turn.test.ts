@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { initMediaProxy } from "../media/media-proxy.ts";
-import { videoMessagesFromTool } from "./video-widget-turn.ts";
+import { videoMessagesFromText, videoMessagesFromTool } from "./video-widget-turn.ts";
 
 describe("videoMessagesFromTool", () => {
   it("maps Glitcho list_followed output to video messages", () => {
@@ -30,5 +30,19 @@ describe("videoMessagesFromTool", () => {
     const output = JSON.stringify({ items: [{ title: "Ranked", hls_url: "https://cdn.example/live.m3u8", login: "ninja" }] });
     expect(videoMessagesFromTool("mcp__glitcho__list_followed", output, "t", "who do I follow that is online?")).toEqual([]);
     expect(videoMessagesFromTool("mcp__glitcho__list_followed", output, "t", undefined)).toEqual([]);
+  });
+});
+
+describe("videoMessagesFromText", () => {
+  it("turns a ```json sagaxVideos block into a proxied player row and strips it", () => {
+    initMediaProxy(mkdtempSync(join(tmpdir(), "vw-text-")));
+    const url = "https://glitcho.test/v1/share/live/ninja/index.m3u8?u=7&exp=1&t=sig";
+    const reply = `She's live.\n\n\`\`\`json\n{"sagaxVideos":[{"kind":"live","url":"${url}","source":"Glitcho"}]}\n\`\`\`\n\nHit play.`;
+    const out = videoMessagesFromText(reply, "thread-1", 1_700_000_000_000);
+    expect(out.text).toBe("She's live.\n\nHit play.");
+    expect(out.messages).toHaveLength(1);
+    expect(out.messages[0]).toMatchObject({ role: "bot", kind: "video", requested: true, video: { kind: "live", format: "hls" } });
+    expect(out.messages[0]!.video!.playbackUrl.startsWith("/api/media/proxy/")).toBe(true);
+    expect(videoMessagesFromText("plain", "t")).toEqual({ text: "plain", messages: [] });
   });
 });

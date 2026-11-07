@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** cloudComputerTools (#1388). Pure move from server/index.ts. */
+import { harnessMcpTokenEnv } from "../harness-mcp-token.ts";
+
 export type Host = Record<string, any>;
 
 export function createCloudComputerTools(getHost: () => Host): any {
@@ -10,7 +12,7 @@ function cloudComputerTools(botId: string, owner: TurnOwner, boxId: string | nul
   return {
     command: process.execPath,
     args: [host.SPAWNED_PROXIES.harnessMcp, "computer"],
-    env: { ...host.AGENTS_NODE_FLAG, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`, SAGAX_MCP_TOKEN: control.token },
+    env: { ...host.AGENTS_NODE_FLAG, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`, [harnessMcpTokenEnv("computer")]: control.token },
     platform: "linux"
   };
 

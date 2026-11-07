@@ -581,7 +581,7 @@ import { toolWorkingStep } from "./working-step.ts";
 import { autoRecallLogLine, turnStartLogLine } from "./turns/turn-log.ts";
 import { CONFIDENTIAL_INCIDENT_TEXT, CONFIDENTIAL_PEER_REFUSED, ConfidentialMemoryPasses, confidentialBrowserSession } from "./threads/confidential-threads.ts";
 import { makeCapContinuationSubscriber } from "./turns/turn-continuation.ts";
-import { TurnStops, stoppedTurnOutcome } from "./turns/turn-outcome.ts";
+import { TurnStops, outwardActions, stoppedTurnOutcome } from "./turns/turn-outcome.ts";
 import { buildRecoveryText, buildTurnContext, engineIsFresh, replaysNatively } from "./turns/turn-context.ts";
 import { ReplayBuffer } from "./streams/sse-replay.ts";
 import { Handoffs, handedStateUsable, isContextMessage, recordHanded, renderUnseen, sessionStart, unseenMessages, withUnseenMessages } from "./context/delta-context.ts";
@@ -1469,6 +1469,7 @@ import { createAutoRecallPrompt } from "./index-leaves/autoRecallPrompt.ts";
 import { createResolveImessageCard } from "./index-leaves/resolveImessageCard.ts";
 import { createMoveOffComputerEngine } from "./index-leaves/moveOffComputerEngine.ts";
 import { createInterruptDirectThread } from "./index-leaves/interruptDirectThread.ts";
+import { createInterruptParkedTurn } from "./index-leaves/interruptParkedTurn.ts";
 import { createDescribeInstances } from "./index-leaves/describeInstances.ts";
 import { createActivityChildren } from "./index-leaves/activityChildren.ts";
 import { createRelayEnginesFor } from "./index-leaves/relayEnginesFor.ts";
@@ -7419,6 +7420,7 @@ const requestedTaskBot = createRequestedTaskBot(getLeafHost);
 const markThreadStopping = createMarkThreadStopping(getLeafHost);
 const stopDirectThreadByPerson = createStopDirectThreadByPerson(getLeafHost);
 const interruptDirectThread = createInterruptDirectThread(getLeafHost);
+export const interruptParkedTurn = createInterruptParkedTurn(getLeafHost);
 const noteTeammatesLeftRunning = createNoteTeammatesLeftRunning(getLeafHost);
 const interruptAllDirectThreads = createInterruptAllDirectThreads(getLeafHost);
 const purgeTurnAttachmentsForThread = createPurgeTurnAttachmentsForThread(getLeafHost);
@@ -8454,7 +8456,7 @@ function liveSessionPerson(sessionId: string): string | null {
 // (server/desktop/desktop-bridge.ts): bots in their conversations run shell, files,
 // search, fetch, browser, computer use and Local VM there, and their network
 // traffic leaves through it (server/desktop/desktop-egress.ts).
-const desktopBridges = new DesktopBridges(liveSessionPerson, Date.now, join(DATA_DIR, "desktop-computer-names.json"));
+const desktopBridges = new DesktopBridges(liveSessionPerson, Date.now, join(DATA_DIR, "desktop-computer-names.json"), join(DATA_DIR, "desktop-mac-apps.json"));
 /** The last model fallback per thread (session.model-fallback). */
 const modelFallbackByThread = new Map<string, { requested: string; actual: string }>();
 /** #1154: the last model fallback per person, engine and picked model, so a
@@ -13943,7 +13945,19 @@ const coordinator: Coordinator = createCoordinator({
     // level (omb #3470). `source` is the requester's node whose parents lead
     // up the chain.
     levelOf: (target, source) => delegatedLevel.levelOf(target, source),
-    chiefOf: address => Boolean(store.bot(address.botId)?.chiefOfStaff)
+    chiefOf: address => Boolean(store.bot(address.botId)?.chiefOfStaff),
+    // A person's cut root never reruns after a follow-up in its thread: that
+    // would hand the person's words to a model again, or redo an older
+    // request (port of OpenMausBot #2735). Otherwise a cut turn that already
+    // sent, posted, pushed or paid ends with what it did (contract §5).
+    outward: node => {
+      const followup = node.parentId || node.groupId ? undefined : followupAtBoot(node.threadId);
+      if (followup) {
+        followupEndedRoots.set(node.id, followup === "pending" ? "turn interrupted — Sagax restarted" : undefined);
+        return [followup === "pending" ? "queued follow-up waiting" : "queued follow-up dispatched"];
+      }
+      return outwardActions(turnRows(node));
+    }
   }
 });
 threadsWithActiveCoordination = () => coordinator.activeDirectThreads();
@@ -22018,6 +22032,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     handleDesktopBridgeMcp,
     desktopBridgesRequest: (person, operation, active, onProgress) => desktopBridges.request(person, operation, active, onProgress),
     desktopBridgeMacApps: (person) => desktopBridges.current(person)?.capabilities.macApps === true,
+    desktopBridgeMacAppsOn: (person) => desktopBridges.macAppsOn(person),
     bridgeAuditRecord: (row) => bridgeAudit.record(row as never),
     broadcast,
     turnWorkplace: (threadId) => turnWorkplaces.get(threadId) as never,
@@ -28121,6 +28136,22 @@ function consoleOwner(principalId: string): AdminPerson | null {
  * conversations stored on Ask follow to Auto; a conversation on any other
  * level keeps it (never lowered). The caller audits the change. */
 
+/** 2026-11-06 (Perspicax #973): the console's New bot and New routine replay
+ * the app's own route as the person (performAsMember), never as an admin:
+ * a blank bot starts from nothing the admin saved. */
+async function consoleCreateAs(principalId: string, path: "/api/bots" | "/api/routines", body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const person = principals.byId(principalId);
+  if (!person) throw new ConsoleRefusal(404, "owner_not_found", "No such person to own the bot, or they are disabled.");
+  const member: MemberPerson = { principalId, sub: person.subject?.sub ?? "", name: personDisplayName(person) || "", admin: false, actor: "console" };
+  const created = await performAsMember(member, { method: "POST", path, body });
+  const answer = (created.body ?? {}) as Record<string, unknown>;
+  if (created.status >= 300) {
+    const message = typeof answer.error === "string" ? answer.error.slice(0, 300) : "The server could not do this.";
+    throw new ConsoleRefusal(created.status, typeof answer.code === "string" ? answer.code : created.status === 404 ? "not_found" : created.status === 403 ? "forbidden" : "refused", message);
+  }
+  return answer;
+}
+
 const orgBotsDeps: BotsDeps = {
   bots: () => orgAdminBots(),
   capabilities: (botId, viewer) => consoleBotCapabilities(botId, viewer),
@@ -28175,6 +28206,7 @@ const orgBotsDeps: BotsDeps = {
       ...(source.loopGuard !== undefined ? { loopGuard: source.loopGuard } : {}),
       ...(storedTeamMemorySharing(source) ? { teamMemorySharing: "private" as const } : {}),
       ...(source.memoryUpkeep !== undefined ? { memoryUpkeep: source.memoryUpkeep } : {}),
+      ...(source.builtinPlugins !== undefined ? { builtinPlugins: { ...source.builtinPlugins } } : {}),
       ...(source.helperModel !== undefined ? { helperModel: source.helperModel } : {}),
       ...(source.browser !== undefined ? { browser: source.browser } : {}),
       ...(source.computer !== undefined ? { computer: source.computer } : {}),
@@ -28188,6 +28220,22 @@ const orgBotsDeps: BotsDeps = {
     const current = store.bot(copy.id);
     if (current) broadcast({ kind: "bot", bot: publicBot(current) });
     return copy.id;
+  },
+  create: async (input) => {
+    const answer = await consoleCreateAs(input.owner.principalId, "/api/bots", { name: input.name });
+    const made = answer.bot as { id?: unknown } | undefined;
+    const id = String(made?.id ?? answer.id ?? "");
+    if (!store.bot(id)) throw new ConsoleRefusal(500, "create_failed", "The bot could not be made.");
+    if (input.model) {
+      // the model asked for, by the console's own rules; a refusal leaves no bot behind
+      try {
+        orgBotsDeps.setModel(id, input.model);
+      } catch (error) {
+        await deleteBotWithLifecycle(id);
+        throw error;
+      }
+    }
+    return id;
   },
   setArchived: (botId, archived) => {
     const bot = store.bot(botId);
@@ -28489,6 +28537,13 @@ const orgRoutinesDeps: RoutinesDeps = {
   runNow: (routineId) => routines?.runNow(routineId) ?? null,
   // No writer meta: an admin pausing a routine does not make it run as them.
   setEnabled: (routineId, enabled) => routines?.update(routineId, { enabled }) ?? null,
+  create: async (input) => {
+    const answer = await consoleCreateAs(input.asPrincipalId, "/api/routines", { botId: input.botId, name: input.name, prompt: input.prompt, schedule: input.schedule });
+    const id = String((answer.routine as { id?: unknown } | undefined)?.id ?? "");
+    const routine = (routines?.listRoutines() ?? []).find((candidate) => candidate.id === id);
+    if (!routine) throw new ConsoleRefusal(500, "create_failed", "The routine could not be made.");
+    return routine;
+  },
   orgApprovals: (viewer) => pendingApprovalsFor(viewer, "org"),
   decisions: (range) => readDecisionRange(DATA_DIR, range),
   decisionPerson: (actor) => {

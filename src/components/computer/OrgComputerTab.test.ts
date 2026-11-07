@@ -8,7 +8,14 @@ import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import { ConfirmProvider } from "@/components/ConfirmProvider";
 
 const renderToStaticMarkup = (node: ReactNode) => renderMarkup(createElement(ConfirmProvider, null, node));
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Settings > Computer now carries the store-backed rows of #2080 L3 (server
+// mode access, Mac control): they read a resting store here
+vi.mock("@/state/store", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/state/store")>();
+  return { ...original, useStore: () => ({ state: original.initialState, dispatch: () => {}, flushBotPatches: () => {} }) };
+});
 
 import { chosenComputer, computerChoices, type DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { localVmView, parseLocalVmAnswer, runtimeSummaryKey, type DesktopLocalVmStatus } from "@/lib/desktop-local-vm";

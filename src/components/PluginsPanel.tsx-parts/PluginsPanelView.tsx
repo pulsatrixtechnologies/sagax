@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { BookOpen, ClipboardPaste, KeyRound, X } from "lucide-react";
 
-import { confirmAsync } from "@/components/ConfirmProvider";
-import { api } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
-import { canEditBotField } from "@/lib/bot-capabilities";
 import { canEditConfig } from "@/lib/viewer";
-import { discoverItems, entryIcon, installedEntries, privateSkills, type InstalledEntry } from "@/lib/installed-model";
+import { discoverItems, entryIcon, privateSkills } from "@/lib/installed-model";
 import { connectedSummary } from "@/lib/plugins-model";
 import { organizationRows } from "@/lib/capabilities";
 import { openSettings } from "@/lib/settings-link";
@@ -26,19 +23,14 @@ import { ConnectAppsView, connectAppsTabLabel, connectedCounts, type ConnectApps
 import type { Crumb } from "../Breadcrumb";
 import { CATEGORY_MODAL } from "../category-modal";
 import { BotCatalogPane } from "../lazy-bot-catalog";
-import { catalogSections, type CatalogItem } from "@/lib/bot-catalog";
-import { searchConnectApps, visibleResults, type SearchPage, type SearchResult, type SearchSource } from "@/lib/connect-apps-search";
-import { ConnectAppsSearchField, ConnectAppsSearchResults } from "../plugins/ConnectAppsSearch";
-import type { PublishedPageSummary } from "../../../shared/published-pages";
-import { AddMenu, bringsLabel, InstalledView, type EntryActions } from "../plugins/InstalledView";
+import { AddMenu, bringsLabel, InstalledView } from "../plugins/InstalledView";
 import { PLUGINS } from "../plugins/plugins-style";
 import { DiscoverView, type FromSagaxRow } from "../plugins/DiscoverView";
 import { AccountsView } from "../plugins/AccountsView";
 import { SourcesView } from "../plugins/SourcesView";
 import { OrgSourcesAccess } from "../plugins/OrgSourcesAccess";
 import { OrgCapabilitiesAdmin, OrgCapabilitiesForMe } from "../plugins/OrgCapabilitiesSection";
-import { accountConnectorRows, accountConnectorSub, connectedAccountRows, connectorGroups, type AccountConnectorRow } from "../plugins/HarnessConnectorGroups";
-import { botServersAfter, botUsesServers } from "../plugins/BotsForView";
+import { accountConnectorRows, connectedAccountRows, connectorGroups, type AccountConnectorRow } from "../plugins/HarnessConnectorGroups";
 import { PublishedPagesSettings } from "../PublishedPages";
 import { MarketplacesSection } from "../plugins/MarketplacesSection";
 import { DataCenterDialog } from "../plugins/DataCenterDialog";
@@ -49,23 +41,25 @@ import { pluginSourceLabel } from "./helpers";
 import { pageLabel, PluginsPanelSubpage } from "./PluginsPanelSubpage";
 import type { PluginsPanelState } from "./usePluginsPanelState";
 import type { PluginsPanelActions } from "./usePluginsPanelActions";
+import { usePluginsInstalledEntries } from "./usePluginsInstalledEntries";
+import { usePluginsSearch } from "./usePluginsSearch";
 
 /** Plugins shell: title, scope, search, tabs and dialog frame for PluginsPanel. */
 export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPanelActions }) {
   const {
-    state, dispatch, dialogRef, mcp, stack, page, push, popTo, botsBack, botSources, botFocus, setBotFocus,
-    search, setSearch, openedGroups, setOpenedGroups, activeResult, setActiveResult, filter, setFilter,
+    state, dispatch, flushBotPatches, dialogRef, mcp, stack, page, push, popTo, botsBack, botSources, botFocus,
+    filter, setFilter,
     type, setType, tab, setTab, harness,
     ownerOrAdmin, libraryEditor, perspicaxOrg, organization, dataCenterFor, setDataCenterFor,
-    macAppsVisible, macAppsSetup, skills, setInstalling, panelError, setPanelError, panelNotice,
+    macAppsVisible, macAppsSetup, skills, panelError, setPanelError, panelNotice,
     scopeBot, setScopeChoice, scope, scopedPluginView, orgRevision, botCapabilities, botView,
-    skillsLibraryOn, close, revealLater, shownMarketplaces, grokConfigured, items, scopedItems,
-    refreshAll, refreshing, chooseTab, setMarketplaces, loadSkills, loadFeatured,
+    skillsLibraryOn, close, shownMarketplaces, grokConfigured, items, scopedItems,
+    refreshAll, refreshing, chooseTab,
   } = s;
   const {
     openItem, installFeatured, marketRoute, addMarketplace, setMarketplaceVisibility, refreshMarketplace,
-    removeMarketplace, githubHere, openGithub, marketCredentials, marketSummaries, installForBot,
-    uninstallForBot, updatePlugin, renderAction, renderBelow, botBusy, removeSuperseded,
+    removeMarketplace, githubHere, openGithub, marketCredentials, marketSummaries,
+    renderAction, renderBelow, botBusy, removeSuperseded,
   } = a;
   const marketBusy = s.marketBusy;
   // Me on an organization server: the person's own MCP servers, rows of
@@ -109,61 +103,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     </div>
   );
 
-  // Manage > Installed: one entry per thing (installed-model.ts).
-  const entries = useMemo(() => installedEntries(scopedItems, s.featured ?? []), [scopedItems, s.featured]);
-  const enabledServers = useMemo(() => (mcp.servers ?? []).filter((server) => server.enabled).map((server) => server.name), [mcp.servers]);
-  // the person's bots whose MCP list they may change (their own, or any bot
-  // on a solo installation)
-  const editableBots = state.bots.filter((bot) => !bot.hidden && canEditBotField(state.config, bot, "mcpServers"));
-  const botsForRows = (entry: InstalledEntry) => editableBots.map((bot) => ({ id: bot.id, name: bot.name, on: botUsesServers(bot.mcpServers, enabledServers, entry.servers) }));
-  const toggleBotServers = (entry: InstalledEntry, botId: string, on: boolean) => {
-    const bot = state.bots.find((candidate) => candidate.id === botId);
-    if (!bot) return;
-    dispatch({ type: "updateBot", botId, patch: { mcpServers: botServersAfter(bot.mcpServers, enabledServers, entry.servers, on) } });
-  };
-  /** Remove: the plugin (its servers and skills go with it) and every
-   * server of the entry added by hand or from the catalog, after one
-   * confirmation. */
-  const removeEntry = async (entry: InstalledEntry) => {
-    if (!(await confirmAsync({ title: t("connectApps.entry.removeConfirm", { name: entry.name }), confirmLabel: t("common.confirmRemove"), tone: "danger" }))) return;
-    setPanelError(null);
-    setInstalling(entry.key);
-    try {
-      const plugins = entry.members.filter((member) => member.kind === "plugin");
-      const pluginKeys = new Set(plugins.map((plugin) => plugin.key));
-      for (const plugin of plugins) {
-        const [name, marketplace] = plugin.id.split("@") as [string, string];
-        const result = await api(`/api/marketplaces/${encodeURIComponent(marketplace)}/plugins/${encodeURIComponent(name)}`, { method: "DELETE" });
-        setMarketplaces(result.marketplaces ?? []);
-      }
-      for (const server of entry.members.filter((member) => member.kind === "mcp" && !(member.parent && pluginKeys.has(member.parent)))) {
-        await api(`/api/mcp/servers/${encodeURIComponent(server.id)}`, { method: "DELETE" });
-      }
-      await Promise.all([mcp.load(true), loadSkills(), loadFeatured()]);
-    } catch (cause) {
-      setPanelError(readableError(cause));
-      void mcp.load(true);
-    } finally {
-      setInstalling(null);
-    }
-  };
-  const entryActions = (entry: InstalledEntry): EntryActions => {
-    const plugin = entry.members.find((member) => member.kind === "plugin");
-    if (scope !== "workspace") {
-      if (!plugin || !scopedPluginView?.canChange) return {};
-      return {
-        ...(plugin.updateAvailable ? { update: () => installForBot(plugin.id) } : {}),
-        remove: () => uninstallForBot(plugin.id),
-      };
-    }
-    const removable = entry.members.some((member) => member.kind === "plugin" || member.kind === "mcp");
-    return {
-      ...(plugin?.updateAvailable ? { update: () => void updatePlugin(plugin) } : {}),
-      ...(entry.servers.length > 0 ? { bots: () => push({ page: "botsFor", key: entry.key }) } : {}),
-      ...(removable && !mcp.restricted ? { remove: () => void removeEntry(entry) } : {}),
-    };
-  };
-  const botsForEntry = page.page === "botsFor" ? entries.find((entry) => entry.key === page.key) : undefined;
+  const { entries, botsForRows, toggleBotServers, entryActions, botsForEntry } = usePluginsInstalledEntries(s, a);
 
   // The breadcrumb: each page under the current one. A page opened from a
   // tab shows in that tab under Connect Apps' title: its first crumb is the
@@ -184,34 +124,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     />
   );
 
-  // The one search (2026-10-29): every plugin, app, skill and server of the
-  // scope, Browse Bots' bots and templates, the published pages and the
-  // sources. The pages are read the first time the search has text.
-  const searching = search.trim() !== "";
-  const [searchPages, setSearchPages] = useState<SearchPage[] | null>(null);
-  useEffect(() => {
-    if (!searching || searchPages !== null) return;
-    let alive = true;
-    api<{ pages: PublishedPageSummary[] }>("/api/pages")
-      .then((answer) => {
-        if (!alive) return;
-        setSearchPages(answer.pages.map((entry) => ({
-          id: entry.id,
-          title: entry.title,
-          status: entry.status === "published" ? (entry.expired ? t("pages.status.expired") : t("pages.status.published")) : entry.status === "revoked" ? t("pages.status.revoked") : t("pages.status.draft"),
-        })));
-      })
-      .catch(() => { if (alive) setSearchPages([]); });
-    return () => { alive = false; };
-  }, [searching, searchPages]);
-  const catalogItems = useMemo<CatalogItem[]>(
-    () => catalogSections(botSources.data ?? { organization: false, entries: [] }, botSources.templates, { category: "all", query: "", showArchived: true, app: null }).flatMap((section) => section.items),
-    [botSources.data, botSources.templates],
-  );
-  const searchSources: SearchSource[] = [
-    ...(githubHere ? [{ id: "github", name: t("myConnections.github.title") }] : []),
-    ...(marketSummaries ?? []).map((market) => ({ id: `market:${market.name}`, name: market.name, detail: market.source })),
-  ];
   const groups = connectorGroups({
     claude: harness.answer?.claude ? { available: harness.answer.claude.available, reason: harness.answer.claude.reason, connectors: harness.answer.claude.connectors ?? [], manageUrl: harness.answer.manageUrl } : null,
     claudeLoading: harness.loading && !harness.answer,
@@ -231,88 +143,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     close();
     openSettings(dispatch, "engines");
   };
-  const searchGroups = searching ? searchConnectApps({
-    query: search,
-    // a Grok connector is found as its account row (#2306)
-    items: scopedItems.filter((item) => item.source !== "grok"),
-    catalog: catalogItems,
-    pages: searchPages ?? [],
-    sources: searchSources,
-    accounts: accountSections.flatMap(({ rows }) => rows.map((row) => ({ key: row.key, name: row.name, detail: accountConnectorSub(row) }))),
-  }) : [];
-  const searchLoading = searching && (searchPages === null || mcp.servers === null || (!botSources.data && !botSources.loadFailed));
-  const changeSearch = (value: string) => {
-    setSearch(value);
-    setActiveResult(-1);
-    setOpenedGroups(new Set());
-  };
-  /** A result: its page, or its tab with it in view. The search empties. */
-  const openResult = (result: SearchResult) => {
-    changeSearch("");
-    if (result.kind === "item") {
-      const item = result.item;
-      if (item.installed || item.kind === "plugin" || item.kind === "skill") {
-        chooseTab(item.installed ? "installed" : "discover");
-        openItem(item);
-        return;
-      }
-      // not added yet: Discover, on its category, the row in view
-      chooseTab("discover");
-      setFilter(item.category);
-      setType("any");
-      revealLater(`[data-plugin-row="${CSS.escape(item.key)}"]`);
-      return;
-    }
-    if (result.kind === "catalog") {
-      chooseTab("bots");
-      setBotFocus({ key: result.item.key, nonce: Date.now() });
-      return;
-    }
-    if (result.kind === "account") {
-      // its row in Discover's "From <provider>", in view
-      chooseTab("discover");
-      setFilter("all");
-      setType("any");
-      revealLater(`[data-plugin-row="${CSS.escape(result.key)}"]`);
-      return;
-    }
-    if (result.kind === "page") {
-      chooseTab("pages");
-      revealLater(`[data-published-page="${CSS.escape(result.page.id)}"]`);
-      return;
-    }
-    if (result.source.id === "github") {
-      setTab("sources");
-      openGithub();
-      return;
-    }
-    chooseTab("sources");
-    revealLater(`[data-marketplace="${CSS.escape(result.source.name)}"]`);
-  };
-  const searchRows = visibleResults(searchGroups, openedGroups);
-  const searchField = (
-    <ConnectAppsSearchField
-      query={search}
-      onQuery={changeSearch}
-      groups={searchGroups}
-      opened={openedGroups}
-      active={activeResult < searchRows.length ? activeResult : -1}
-      onActive={setActiveResult}
-      onOpen={openResult}
-    />
-  );
-  const searchResults = searching ? (
-    <ConnectAppsSearchResults
-        query={search}
-        groups={searchGroups}
-        opened={openedGroups}
-        onOpenGroup={(id) => setOpenedGroups((current) => new Set([...current, id]))}
-        active={activeResult < searchRows.length ? activeResult : -1}
-        onActive={setActiveResult}
-        onOpen={openResult}
-        loading={searchLoading}
-      />
-  ) : undefined;
+  const { searchField, searchResults } = usePluginsSearch(s, a, accountSections);
 
   const isOrgAdmin = perspicaxOrg?.viewerRole === "admin";
   const orgHere = isOrgAdmin && scope === "workspace" && perspicaxOrg !== null;
@@ -386,6 +217,12 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
                 if (!item.orgDeclaration) return;
                 void setMine(item.orgDeclaration, next).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));
               }}
+              onToggleBuiltin={scope === "bot" && scopeBot ? (item, next) => {
+                if (!item.builtin) return;
+                dispatch({ type: "updateBot", botId: scopeBot.id, patch: { builtinPlugins: { ...scopeBot.builtinPlugins, [item.builtin]: next } } });
+                // the resolver reads the saved bot: refresh once the patch landed
+                void flushBotPatches(scopeBot.id).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));
+              } : undefined}
               botName={scopeBot?.name}
               organization={scope === "bot" && botCapabilities.data ? organizationRows(botCapabilities.data.items) : []}
               skills={scope === "bot" ? [] : privateSkills(items)}

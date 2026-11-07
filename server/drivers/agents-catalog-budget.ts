@@ -21,9 +21,14 @@
 //   - Tool count: 128 (Grok, OpenAI-compat, Groq, Mistral, Cerebras, MiniMax;
 //     same bound as server/drivers/chat-mcp-tools.ts DEFAULT_TOOL_LIMIT)
 //   - Per-server MCP catalog bytes: 1 MiB (CATALOG_BYTES there)
-//   - Agents soft ceiling: 150_000 UTF-8 bytes for a tools/list result.
+//   - Agents soft ceiling: 160_000 UTF-8 bytes for a tools/list result.
 //     Deliberate raise above the ~97 KB baselines that forced description
 //     cuts in #1655, #1649 and #1689. Still far under 1 MiB.
+//     2026-11-06: raised to 160_000 on purpose. message_user / message_person
+//     (#2118), the notify fields (native notifications), place_phone_call
+//     and the fleet tools took the widest profile (everything on, Perspicax)
+//     to 153_616 bytes; no tool was added without a use. The other profiles
+//     stay under 105 KB and groups mode still lists far less.
 import { COMPACT_CORE_AGENT_TOOL_NAMES } from "./agents-catalog.ts";
 import { isOpenApiTool } from "../mcp/openapi-tools.ts";
 import { BRIDGE_USE_TOOL } from "../../shared/searched-tool-call.ts";
@@ -32,7 +37,7 @@ import { BRIDGE_USE_TOOL } from "../../shared/searched-tool-call.ts";
 export const AGENTS_CATALOG_TOOL_COUNT_LIMIT = 128;
 
 /** Soft UTF-8 byte ceiling for an agents tools/list result (#1703). */
-export const AGENTS_CATALOG_BYTES_SOFT_CEILING = 150_000;
+export const AGENTS_CATALOG_BYTES_SOFT_CEILING = 160_000;
 
 /** Accidental-growth ratchet around BUDGET_BASELINE (agents-catalog-wire). */
 export const AGENTS_CATALOG_BUDGET_TOLERANCE = 0.02;

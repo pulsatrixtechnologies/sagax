@@ -323,7 +323,7 @@ enum DesktopInspectorButton {
     static let key = "sagax-show-inspector-button"
 }
 
-/// The 112 pt mascot (the Edit avatar button, 112x119 at y 72), then the
+/// The 92 pt mascot (the Edit avatar button, 92x99 at y 76), then the
 /// name (17/24 medium) and the label (12.5/16, "Add a label" when empty),
 /// each edited where it shows. The description lives in Edit persona.
 private struct BotPanelIdentity: View {
@@ -345,9 +345,10 @@ private struct BotPanelIdentity: View {
                     // the desktop's avatar click: Edit bot on Appearance
                     model.showAppearance()
                 } label: {
-                    // BotProfileAvatarCard: the 144 pt mascot in the panel, pt-5
-                    BotMascotView(bot: bot, size: 144, state: MausState.forChat(.bot(bot), in: session.state), animated: true, owlHandle: owlHandle)
-                        .frame(width: 144, height: 144)
+                    // the desktop panel's Edit avatar: a 92 pt mascot in a
+                    // 92x99 button at y 76 (1376x1032 reference, 2026-11-06)
+                    BotMascotView(bot: bot, size: 92, state: MausState.forChat(.bot(bot), in: session.state), animated: true, owlHandle: owlHandle)
+                        .frame(width: 92, height: 99, alignment: .top)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -371,13 +372,12 @@ private struct BotPanelIdentity: View {
                     .accessibilityIdentifier("desktop-panel-edit-persona")
                 }
             }
-            .padding(.top, 20)
-            // the name under the mascot (`-mt-1` under BotAvatar's 144 pt
-            // box, whose owl sits higher than the iPad's: measured on the
-            // 1376x1032 references, the name's baseline 15 pt lower)
+            .padding(.top, 29)
+            // the name 20 pt under the avatar button (reference: button
+            // bottom 175, name button 195)
             PanelInlineText(value: bot.name, placeholder: nil, label: "Edit name", size: 17, lineHeight: 24, weight: .medium,
                             limit: 100, required: true, isEditing: binding(.name)) { save(name: $0) }
-                .padding(.top, 11)
+                .padding(.top, 20)
                 .accessibilityIdentifier("desktop-panel-name")
             PanelInlineText(value: bot.title, placeholder: "Add a label", label: "Edit label", size: 12.5, lineHeight: 16,
                             muted: true, limit: 200, isEditing: binding(.label)) { save(title: $0) }

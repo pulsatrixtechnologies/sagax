@@ -89,7 +89,14 @@ async function openai(models: string[], answer: (call: Call, calls: Call[]) => R
 
 async function turn(instance: ProviderInstance, input: Record<string, unknown>) {
   const events: RuntimeEvent[] = [];
-  const off = instance.adapter.onEvent((event) => events.push(event));
+  const off = instance.adapter.onEvent((event) => {
+    events.push(event);
+    // #1982: a Full MCP ask reaches Sagax's gate (index.ts request.opened).
+    // There is no harness here, so answer allow the way it would.
+    if (input.approvalMode === "full" && event.type === "request.opened" && event.requestType === "permission" && event.requestId) {
+      void instance.adapter.respondToRequest("thread", event.requestId, { behavior: "allow" });
+    }
+  });
   await instance.adapter.sendTurn({ threadId: "thread", text: "hi", ...input } as never);
   await vi.waitFor(() => expect(events.some((event) => event.type === "turn.completed")).toBe(true), { timeout: 10_000 });
   off();

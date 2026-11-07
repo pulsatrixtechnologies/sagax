@@ -3,7 +3,7 @@
 // had no message, or when its messages could not be read.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const reply = vi.hoisted(() => ({ next: [] as Array<() => Promise<unknown>> }));
 
@@ -13,10 +13,14 @@ vi.mock("@/state/store", async (importOriginal) => ({
 }));
 
 import { setLocale } from "@/lib/i18n";
+import { setShowThreads } from "@/lib/thread-preferences";
 import { BotConversationLine } from "./BotConversations";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-beforeAll(() => setLocale("en"));
+// the bot-to-bot line and its sheet exist only with threads on: the unified
+// chat (the default) draws none of it (#2291, unified-chat.guard.test.ts)
+beforeAll(() => { setLocale("en"); setShowThreads(true); });
+afterAll(() => setShowThreads(false));
 
 const self = { id: "kat", name: "Ottoline", color: "green" as const };
 const row = { threadId: "w1", otherBotId: "mel", otherName: "Wren", direction: "out" as const, updatedAt: 1 };

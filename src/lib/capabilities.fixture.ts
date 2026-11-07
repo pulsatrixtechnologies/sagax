@@ -49,3 +49,14 @@ export function capabilityFixture(overrides: Partial<BotCapabilities> = {}): Bot
     ...overrides,
   };
 }
+
+/** The REA built-in row (Sagax ships it, on for every bot). */
+export function reaCapabilityFixture(overrides: Partial<Capability> = {}): Capability {
+  return {
+    key: "plugin:bot:builtin:rea", form: "plugin", name: "REA", builtin: "rea",
+    description: "Reverse engineering for agents.", source: { kind: "installation", label: "Sagax", version: "6.8.0" },
+    scope: "bot", state: "on", enabled: true, canToggle: true, brings: { skills: [], commands: [], agents: [], mcpServers: ["rea"] },
+    engine: { mcp: "mounted", nothing: false }, mounts: ["rea"],
+    ...overrides,
+  };
+}

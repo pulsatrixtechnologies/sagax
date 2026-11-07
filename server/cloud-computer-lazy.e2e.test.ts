@@ -221,6 +221,10 @@ describe("a cloud computer starts only when the bot uses it", () => {
         PATH: process.env.PATH, ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
         // Fixed Workspace seam: Auto is the only product setting since #743.
         SAGAX_TEST_FIXED_WORKSPACE: "1", SAGAX_TEST_SEAMS: "1", SAGAX_HARNESS_MCP_HTTP: "0",
+        // Three fake Claude engines share one account: once an earlier test
+        // learned claude-out is signed out, limit failover (#1986) would move
+        // the signed-out bot onto "claude" and the file would depend on order.
+        SAGAX_LIMIT_FAILOVER: "0",
         HOME: home, USERPROFILE: home, SAGAX_DATA_DIR: data, TEMP: home, TMP: home, TMPDIR: home,
         SAGAX_PORT: String(port), SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "", SAGAX_WEBHOOK_PORT: String(port + 1),
         // An own key would go here; nothing may use it.
@@ -327,15 +331,17 @@ describe("a cloud computer starts only when the bot uses it", () => {
     await apiOk("DELETE", `/api/bots/${bot.id}`);
   }, 60_000);
 
-  it("a signed-out engine fails with the existing sign-in row and no relay call", async () => {
+  it("a signed-out engine says so in the composer, with no relay call", async () => {
     const bot = await cloudBot("Signed out", { modelSelection: { instanceId: "claude-out", model: "claude-sonnet-5" } });
     const before = requests.length;
     await apiOk("POST", `/api/bots/${bot.id}/messages`, { text: "hi" });
-    const row = await failedRow(bot.id);
+    // #2013: a sign-in refused before any prompt went out is no red card in
+    // the chat; the composer says it with its action (engine_signed_out).
+    const { block } = await until<any>(() => apiOk("GET", `/api/bots/${bot.id}/send-state`), state => Boolean(state.block));
     await idle(bot.id);
-    // The row the app turns into "Sign in to Claude" (signedOutEngine).
-    expect(row.tool).toMatchObject({ ok: false, setup: true });
-    expect(row.tool.name).toMatch(/Not logged in/);
+    expect(block).toMatchObject({ reason: "engine_signed_out", advisory: true, refusal: { kind: "signed_out" } });
+    expect(block.refusal.cause).toMatch(/Not logged in/);
+    expect((await task(bot.id))?.messages.filter((message: any) => message.tool?.name?.startsWith("error:"))).toEqual([]);
     expect(requests.slice(before)).toEqual([]);
     await apiOk("DELETE", `/api/bots/${bot.id}`);
   }, 30_000);

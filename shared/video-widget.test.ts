@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractSagaxVideoBlocks,
+  fenceBareSagaxVideos,
   glitchoVideosFromTool,
+  parseSagaxVideoFence,
   isHlsVideo,
   normalizeVideoFormat,
   sagaxVideosFromJson,
+  shareLinkExpiresAt,
   videoFormatFromUrl,
   videosFromToolOutput,
   youtubeIdsInText,
@@ -120,5 +124,81 @@ describe("video format", () => {
     expect(videosFromToolOutput("mcp__glitcho__list_recordings", vod)).toEqual([
       expect.objectContaining({ kind: "vod", format: "hls", durationMs: 5_400_000, source: "Glitcho" }),
     ]);
+  });
+});
+
+describe("bot-written sagaxVideos cards", () => {
+  const url = "https://glitcho.test/v1/share/live/ninja/index.m3u8?u=7&exp=1&t=sig";
+  const envelope = `{"sagaxVideos":[{"kind":"live","url":"${url}","title":"T"}]}`;
+
+  it("reads ```json, unlabeled and ```video fences; ignores other JSON", () => {
+    for (const lang of ["json", "", "video"]) {
+      const card = parseSagaxVideoFence(envelope, lang);
+      expect(card).toEqual({ status: "videos", videos: [expect.objectContaining({ kind: "live", url, format: "hls", title: "T" })] });
+    }
+    expect(parseSagaxVideoFence('{"a":1}', "json")).toBeNull();
+    expect(parseSagaxVideoFence(envelope, "ts")).toBeNull();
+  });
+
+  it("marks broken JSON or a card without a URL invalid, with the first link", () => {
+    expect(parseSagaxVideoFence(`{"sagaxVideos":[{"url":"${url}"`, "json")).toEqual({ status: "invalid", url });
+    expect(parseSagaxVideoFence('{"sagaxVideos":[{"title":"x"}]}', "video")).toEqual({ status: "invalid", url: undefined });
+  });
+
+  it("fences bare JSON outside code and leaves fenced text alone", () => {
+    expect(fenceBareSagaxVideos(`hi\n${envelope}\nbye`)).toBe(`hi\n\`\`\`video\n${envelope}\n\`\`\`\nbye`);
+    const inside = `\`\`\`\n${envelope}\n\`\`\``;
+    expect(fenceBareSagaxVideos(inside)).toBe(inside);
+  });
+
+  it("takes cards out of a reply and keeps the words (the 2026-11-06 reply)", () => {
+    const reply = `Player's on the card.\n\n\`\`\`json\n${envelope}\n\`\`\`\n\n| Field | Value |\n|---|---|\n| State | live |\n\nHit play on that card.`;
+    const out = extractSagaxVideoBlocks(reply);
+    expect(out.videos).toHaveLength(1);
+    expect(out.text).not.toContain("sagaxVideos");
+    expect(out.text).toContain("Hit play on that card.");
+    expect(out.text).toContain("| State | live |");
+    expect(extractSagaxVideoBlocks("no video here")).toEqual({ text: "no video here", videos: [] });
+    const broken = "```json\n{\"sagaxVideos\":[\n```";
+    expect(extractSagaxVideoBlocks(broken)).toEqual({ text: broken, videos: [] });
+  });
+});
+
+describe("optional player details (parity fields)", () => {
+  it("keeps the new fields, with their aliases, and leaves old rows unchanged", () => {
+    const [row] = sagaxVideosFromJson({
+      sagaxVideos: [{
+        url: "https://x.test/live/index.m3u8?exp=1900000000&sig=a",
+        kind: "live",
+        id: 42,
+        avatar_url: "https://x.test/a.png",
+        game: "Strategy",
+        started_at: "2026-11-06T12:00:00Z",
+        tags: ["English", " ", "Finals"],
+        recording: true,
+        chapters: [{ start: 60, title: "Draft" }, { startMs: 0, title: "Intro" }, { title: "no start" }],
+        expires_at: 1_900_000_000,
+      }],
+    });
+    expect(row).toMatchObject({
+      id: "42",
+      avatarUrl: "https://x.test/a.png",
+      category: "Strategy",
+      startedAt: "2026-11-06T12:00:00Z",
+      tags: ["English", "Finals"],
+      recording: true,
+      chapters: [{ startMs: 0, title: "Intro" }, { startMs: 60_000, title: "Draft" }],
+      expiresAt: 1_900_000_000_000,
+    });
+    const [plain] = sagaxVideosFromJson({ sagaxVideos: [{ url: "https://x.test/v.mp4" }] });
+    for (const key of ["id", "avatarUrl", "category", "startedAt", "tags", "chapters", "recording", "expiresAt"]) {
+      expect(plain).not.toHaveProperty(key);
+    }
+  });
+
+  it("reads a share link's exp parameter", () => {
+    expect(shareLinkExpiresAt("https://x.test/v1/share/live/a/index?exp=1900000000&sig=b")).toBe(1_900_000_000_000);
+    expect(shareLinkExpiresAt("https://x.test/v.mp4")).toBeUndefined();
+    expect(shareLinkExpiresAt("https://x.test/v.mp4?exp=soon")).toBeUndefined();
   });
 });

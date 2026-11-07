@@ -53,6 +53,15 @@ export const GUIDES: Guide[] = [
     refs: ["tool:act", "file:server/bots/bot-plugins.ts", "file:shared/permissions.ts"],
   },
   {
+    id: "rea",
+    title: "REA, the built-in reverse engineering plugin",
+    where: "sidebar Capabilities (Capacités), scope For <bot> (Pour <bot>), Installed: the REA row and its switch",
+    access: "on for every bot; the bot's owner switches it off or on for that bot",
+    keywords: "rea reverse engineering retro ingenierie retro-ingenierie binaire binary dll exe .net assembly apk android electron javascript bundle desassembler disassemble decompile decompiler hopper ghidra runtime frida plugin integre built-in",
+    text: "REA (MIT, npm rea-agents, github.com/morluto/rea) ships with Sagax and is on for every bot, new or existing: each turn mounts its MCP server rea, started as npx -y rea-agents@<pinned version> mcp with the compact input and output schema profiles. Use it to inspect a binary, a .NET assembly, an APK or a JS/Electron app, and to observe a program at runtime, instead of guessing from strings. It never prompts: npx -y answers npm, and the Hopper first-run demo or license window (macOS) is waited for a bounded time, then the call answers an error; Sagax never runs rea-agents setup. On the desktop it needs Node.js 22.23 or later (npx): without it REA stays listed with that message and is not mounted. On an organization server it runs in the person's sandbox. The switch is per bot (bot setting builtinPlugins, rea: false turns it off).",
+    refs: ["file:shared/builtin-plugins.ts", "file:server/capabilities/builtin-plugin-mounts.ts", "file:src/components/plugins/InstalledView.tsx"],
+  },
+  {
     id: "voice-team",
     title: "Give voice mode (xAI) to a team or to people",
     where: "Perspicax console > Access > Bot rights (Accès > Droits sur les bots), tab Who has what (Qui a quoi), /sagax/permissions?tab=assign",

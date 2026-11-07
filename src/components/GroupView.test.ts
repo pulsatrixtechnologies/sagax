@@ -121,7 +121,7 @@ describe("room header", () => {
       vi.unstubAllGlobals();
     }
     expect(markup).toContain("@container/chathead");
-    expect(markup).toMatch(/<span data-bot-header-text="" title="Launch planning" class="min-w-0 truncate[^"]*"><span[^>]*>Launch planning<\/span>/);
+    expect(markup).toMatch(/<span data-bot-header-text="" title="Launch planning" class="[^"]*min-w-0[^"]*"><span data-bot-header-name="" class="[^"]*truncate[^"]*">Launch planning<\/span>/);
     expect(markup).not.toContain("data-nudge");
   });
 

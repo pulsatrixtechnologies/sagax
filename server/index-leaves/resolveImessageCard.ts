@@ -9,6 +9,7 @@ import { readMessagesSettings } from "../imessage/imessage-settings.ts";
 import { workspaceDir, TASK_WORKSPACES_DIR } from "../workspace/workspace.ts";
 import { join } from "node:path";
 import { macAppEnabled, macAppOfTool, runMacAppCall } from "../../electron/mac-apps.mjs";
+import { relayMacAppCall } from "../desktop/desktop-bridge-tools.ts";
 export type Host = Record<string, any>;
 
 export function createResolveImessageCard(getHost: () => Host): any {
@@ -32,6 +33,17 @@ async function resolveImessageCard(res: ServerResponse, threadId: string, reques
     return true;
   }
   const macCheck = messagesOnBotMac({ platform: process.platform, identityKind: host.IDENTITY.kind, bridgeAction: false });
+  if (pending.macApp?.person && !macCheck.ok) {
+    // Organization server: the write runs on the person's own Mac, through
+    // their desktop app; offline, the card says so and nothing is done.
+    const person = pending.macApp.person;
+    const result = await relayMacAppCall((operation) => host.desktopBridges.request(person, operation, () => true), pending.macApp.tool, pending.macApp.args);
+    host.bridgeAudit?.record?.({ person, botId: pending.botId, threadId, target: "user-desktop", kind: "tool", detail: `mac_app ${pending.macApp.tool}`, ok: !result.isError });
+    const detail = result.isError ? String(result.content[0]?.text ?? "It did not work.").slice(0, 300) : `Done: ${pending.to}.`;
+    host.store.patchMessage(threadId, message.id, { card: { ...card, answered: "allow", subtitle: detail } });
+    json(res, 200, { ok: true, outcome: "allowed-once", ...(result.isError ? { send: "failed" } : {}) });
+    return true;
+  }
   if (pending.macApp) {
     // An Apple app write the person allowed (Mail, Calendar, Reminders, Notes).
     const app = macAppOfTool(pending.macApp.tool);

@@ -58,7 +58,7 @@ describe("agents catalog budget strategy (#1703)", () => {
   it("matches the measured chat-completions tool count limit", () => {
     expect(AGENTS_CATALOG_TOOL_COUNT_LIMIT).toBe(DEFAULT_TOOL_LIMIT);
     expect(AGENTS_CATALOG_TOOL_COUNT_LIMIT).toBe(128);
-    expect(AGENTS_CATALOG_BYTES_SOFT_CEILING).toBe(150_000);
+    expect(AGENTS_CATALOG_BYTES_SOFT_CEILING).toBe(160_000);
   });
 
   it("puts every non-core offered tool in exactly one group", () => {

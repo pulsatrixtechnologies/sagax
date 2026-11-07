@@ -6,6 +6,8 @@
 //   GET  /api/desktop-bridge/<id>/tunnel   (WebSocket) network egress
 //   GET  /api/me/desktop-bridge            the person's own status + activity
 //   POST /api/desktop-bridge/<id>/system   coarse OS, CPU, memory, disk facts
+//   POST /api/desktop-bridge/<id>/mac-apps { on: [...] }: the Apple apps On in
+//                                          the desktop's Plugins > This Mac
 //   POST /api/me/desktop-bridge/computers/rename|remove
 //                                          { computer: id or name, name? }: the person's
 //                                          other computers (remove: offline only)
@@ -30,7 +32,7 @@ import type { DesktopTunnels } from "./desktop-egress.ts";
 import type { DesktopTerminals } from "./desktop-terminal.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 
-const ID_ROUTE = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/(poll|lease|progress|result|disconnect|system)$/;
+const ID_ROUTE = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/(poll|lease|progress|result|disconnect|system|mac-apps)$/;
 const LOCAL_VM_ROUTE = "/api/me/desktop-bridge/local-vm";
 /** Settings > Computer > Other computers: rename or remove one of the person's computers. */
 const COMPUTER_ROUTE = /^\/api\/me\/desktop-bridge\/computers\/(rename|remove)$/;
@@ -212,6 +214,11 @@ export function createDesktopBridgeRoutes(deps: {
         const parsed = desktopSystemInfo.safeParse(body);
         if (!parsed.success) return json(res, 400, { error: "Invalid system information" });
         deps.bridges.setSystem(id!, auth.session.id, secret, parsed.data);
+      }
+      if (action === "mac-apps") {
+        const on = body && typeof body === "object" && Array.isArray((body as { on?: unknown }).on) ? (body as { on: unknown[] }).on : null;
+        if (!on || on.length > 20) return json(res, 400, { error: "Invalid Apple apps list" });
+        return json(res, 200, { ok: true, on: deps.bridges.setMacApps(id!, auth.session.id, secret, on) });
       }
       return json(res, 200, { ok: true });
     } catch (error) {

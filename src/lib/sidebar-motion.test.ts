@@ -84,9 +84,12 @@ describe("no layout property animates where a transform or a clip does the job",
   const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
   it("the group call's member cards transition what they change, not everything", () => {
-    const source = read("../components/GroupCallView.tsx");
-    expect(source).not.toContain("transition-all");
-    expect(source).toContain("transition-[scale,opacity,background-color,box-shadow]");
+    // the member cards moved to GroupCallStage when GroupCall was split (#1383)
+    const view = read("../components/GroupCallView.tsx");
+    const stage = read("../components/GroupCallView.tsx-parts/GroupCallStage.tsx");
+    expect(view).not.toContain("transition-all");
+    expect(stage).not.toContain("transition-all");
+    expect(stage).toContain("transition-[scale,opacity,background-color,box-shadow]");
   });
 
   it("the composer's mic slot snaps its width and fades its button; the level meter scales", async () => {

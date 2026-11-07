@@ -2,6 +2,7 @@
 // Never imports server/index.ts.
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
+import { parseBuiltinPluginsPatch } from "../../shared/builtin-plugins.ts";
 
 export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchState): Promise<boolean> {
   const { m, body, patch, existingBot, normalizedSelection, computerSpecified, requestedComputer, patchStepUp } = state;
@@ -44,6 +45,14 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
       return true;
     }
     patch.mcpAccounts = parsed.choices;
+  }
+  if (body.builtinPlugins !== undefined) {
+    const parsed = parseBuiltinPluginsPatch(body.builtinPlugins);
+    if (!parsed.ok) {
+      env.json(env.res, 400, { error: parsed.error });
+      return true;
+    }
+    patch.builtinPlugins = { ...existingBot?.builtinPlugins, ...parsed.value };
   }
   if (body.memoryUpkeep !== undefined) {
     if (typeof body.memoryUpkeep !== "boolean") {

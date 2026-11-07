@@ -36,6 +36,12 @@ function setup() {
       add(copy, input.ownerPrincipalId, { name: input.name ?? `${bots.get(id)!.name} 2` });
       return copy;
     },
+    create: async (input) => {
+      if (input.model?.engineInstanceId === "ghost") throw new ConsoleRefusal(400, "engine_not_installed", "Not installed.");
+      const id = `new-${bots.size}`;
+      add(id, input.owner.principalId, { name: input.name, ...(input.model ? { model: input.model.model } : {}) });
+      return id;
+    },
     setArchived: (id, archived) => {
       if (id === "p" && archived) throw new ConsoleRefusal(409, "primary_bot", "Primary.");
       bots.set(id, { ...bots.get(id)!, status: archived ? "archived" : "active" });
@@ -82,6 +88,29 @@ describe("bots", () => {
     expect((await console.call("GET", "bots/a", MANAGER)).status).toBe(404);
     expect((await console.call("GET", "bots/b", MANAGER)).status).toBe(200);
     expect((await console.call("GET", "bots/zz")).status).toBe(404);
+  });
+
+  it("create: a blank bot of the caller by default, a model, another owner in reach; audited", async () => {
+    const { console } = setup();
+    const mine = await console.call("POST", "bots", { principalId: "pr_alice", body: { name: "Scout" } });
+    expect(mine).toMatchObject({ status: 201, body: { bot: { name: "Scout", owner: { principalId: "pr_alice" } } } });
+    expect(console.records.at(-1)).toMatchObject({ category: "bot", action: "bot.create", after: { ownerPrincipalId: "pr_alice" } });
+    const modeled = await console.call("POST", "bots", { principalId: "pr_alice", body: { name: "Scout 2", engineInstanceId: "claude", model: "m9" } });
+    expect(modeled.body.bot.model).toBe("m9");
+    expect((await console.call("POST", "bots", { body: { name: "For Bob", ownerSub: "bob-sub" } })).body.bot.owner.principalId).toBe("pr_bob");
+    expect(await console.call("POST", "bots", { ...MANAGER, body: { name: "X", ownerPrincipalId: "pr_alice" } })).toMatchObject({ status: 404, body: { code: "owner_not_found" } });
+    expect(await console.call("POST", "bots", { principalId: "pr_alice", body: { name: "G", engineInstanceId: "ghost" } })).toMatchObject({ status: 400, body: { code: "engine_not_installed" } });
+    expect((await console.call("POST", "bots", { principalId: "pr_alice", body: {} })).status).toBe(400);
+    expect((await console.call("POST", "bots", { principalId: "pr_alice", body: { name: "A", soul: "x" } })).status).toBe(400);
+    expect((await console.call("POST", "bots", { principalId: "pr_alice", body: { name: "A", model: 3 } })).status).toBe(400);
+  });
+
+  it("create under the own-bot grant: the bot is the caller's own", async () => {
+    const { console } = setup();
+    const own = { role: "employee" as const, principalId: "pr_alice", reach: ["pr_alice"], ownOnly: true };
+    expect((await console.call("POST", "bots", { ...own, body: { name: "Mine" } })).body.bot.owner.principalId).toBe("pr_alice");
+    expect(await console.call("POST", "bots", { ...own, body: { name: "Gift", ownerPrincipalId: "pr_bob" } })).toMatchObject({ status: 403, body: { code: "forbidden_role" } });
+    expect((await console.call("POST", "bots", { ...own, body: { name: "Gift", ownerSub: "bob-sub" } })).status).toBe(403);
   });
 
   it("clone: same owner by default, another owner in reach, a name; audited", async () => {

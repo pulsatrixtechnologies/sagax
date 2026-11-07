@@ -55,7 +55,7 @@ import { confidentialCardAnswerable } from "../threads/confidential-threads.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
 export function handleRequestOpened(event: any, ctx: any, host: any): void {
   const {
-    bot, group, speaker, pushMessage, routineRun,
+    bot, group, speaker, pushMessage,
   } = ctx;
   switch (event.type) {
     case "request.opened":
@@ -395,6 +395,16 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         });
         break;
       }
+      decideRequestOpened(event, ctx, host, { adminApproval, asker, attachmentRead, cardAnswerer, destination, destinationAnswerer, destinationOrigin, effectiveApprovalMode, emailDraftCall, emailDraftRequest, foreignDestination, gateGrantBlocked, grantsOffered, guestDriven, internalTool, memberAsker, ownComputerChoice, ownDestination, ownEnvironment, ownSandboxCall, permission, perspicaxSelfKind, readOnlyCommand, readOnlyText, safetyEffect, safetyWho, selfAnswerStepUp, serverCommandHolder, speakerEnvironmentRules, strictCard, unattended });
+      break;
+    }
+  }
+}
+
+/** The verdict half of request.opened: saved commands, custom and owner rules, then the card. */
+function decideRequestOpened(event: any, ctx: any, host: any, s: any): void {
+  const { pushMessage } = ctx;
+  const { adminApproval, asker, attachmentRead, cardAnswerer, destination, destinationAnswerer, destinationOrigin, effectiveApprovalMode, emailDraftCall, emailDraftRequest, foreignDestination, gateGrantBlocked, grantsOffered, guestDriven, internalTool, memberAsker, ownComputerChoice, ownDestination, ownEnvironment, ownSandboxCall, permission, perspicaxSelfKind, readOnlyCommand, readOnlyText, safetyEffect, safetyWho, selfAnswerStepUp, serverCommandHolder, speakerEnvironmentRules, strictCard, unattended } = s;
       const command = permission && asker && event.requestId && !event.requiresExplicitApproval && event.command && !strictCard && !guestDriven
         ? host.commandAllowlistCandidate({ ...event.command, providerInstanceId: event.providerInstanceId ?? asker.modelSelection.instanceId })
         // #1098: a command in the person's own sandbox can be saved too
@@ -442,7 +452,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
           tool: event.tool, summary: event.summary, decision: "auto-denied", source: "custom-rule-deny", rule: customDecision.rule.id,
           ...(customCall ? { call: decisionCall(customCall) } : {})
         });
-        break;
+        return;
       }
       // A person may remember one exact read-shaped tool from one configured
       // MCP server. Bind it to the provider and current server config: a
@@ -644,7 +654,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
           tool: event.tool, summary: event.summary, decision: "auto-denied", source: "owner-rule-deny", rule: owner.rule.id,
           ...(customCall ? { call: decisionCall(customCall) } : {})
         });
-        break;
+        return;
       }
       // An organization rule (Refuser, Demander d'abord) or the person's own
       // deny/ask rule always wins over the owner's mode (owner-approval.ts
@@ -729,6 +739,13 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
           }
         });
       }
+      presentRequestOpened(event, ctx, host, { adminApproval, asker, cardAnswerer, command, customCall, customDecision, customNotice, customReview, destinationAnswerer, effectiveApprovalMode, emailDraftRequest, foreignDestination, gateAllowKey, gateGrantBlocked, grantsOffered, guestDriven, ownSandboxCall, owner, ownerCall, ownerOriginRefused, ownerRuleCandidate, ownerRuleFolderCandidate, ownerStepUp, permission, safetyEffect, safetyWho, serverCommandHolder, strictCard, toolAllowKey, unattended, verdict });
+}
+
+/** The answer half of request.opened: an automatic answer, a hold, or the card the person sees. */
+function presentRequestOpened(event: any, ctx: any, host: any, s: any): void {
+  const { bot, pushMessage, routineRun } = ctx;
+  const { adminApproval, asker, cardAnswerer, command, customCall, customDecision, customNotice, customReview, destinationAnswerer, effectiveApprovalMode, emailDraftRequest, foreignDestination, gateAllowKey, gateGrantBlocked, grantsOffered, guestDriven, ownSandboxCall, owner, ownerCall, ownerOriginRefused, ownerRuleCandidate, ownerRuleFolderCandidate, ownerStepUp, permission, safetyEffect, safetyWho, serverCommandHolder, strictCard, toolAllowKey, unattended, verdict } = s;
       if (verdict?.approve && asker && event.requestId) {
         const instance = event.providerInstanceId
           ? host.registry.get(event.providerInstanceId)
@@ -784,7 +801,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
           // a new permission request after the provider took our answer.
           console.error("[approval] Could not record the provider approval result.");
         });
-        break;
+        return;
       }
       if (safetyEffect?.kind === "hold" && event.requestId) {
         safetyArm(event.requestId, {
@@ -845,7 +862,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
               tool: event.tool, summary: line, decision: "auto-approved", source: "full-access",
             });
           })().catch(() => console.error("[approval] Could not record a question Full access answered."));
-          break;
+          return;
         }
       }
       // full-access: tool-approval
@@ -1044,7 +1061,4 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
           }
         }
       }
-      break;
-    }
-  }
 }

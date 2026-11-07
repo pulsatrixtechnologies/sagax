@@ -360,9 +360,19 @@ export function CommandPalette({
         ) : (
           <>
             <Icon size={16} className="shrink-0 text-ink-secondary" />
-            <span className="truncate text-[14px] text-ink">{label}</span>
-            {item.detail && !recent && (
-              <span className="min-w-0 truncate text-[12.5px] text-ink-secondary">{item.detail}</span>
+            {item.group === "bots" && item.detail && !recent ? (
+              // a bot's title sits UNDER its name, smaller and grey (JC 2026-11-06)
+              <span data-palette-bot-name-stack="" className="flex min-w-0 flex-col">
+                <span className="truncate text-[14px] leading-[18px] text-ink">{label}</span>
+                <span className="truncate text-[12px] leading-[15px] text-ink-secondary">{item.detail}</span>
+              </span>
+            ) : (
+              <>
+                <span className="truncate text-[14px] text-ink">{label}</span>
+                {item.detail && !recent && (
+                  <span className="min-w-0 truncate text-[12.5px] text-ink-secondary">{item.detail}</span>
+                )}
+              </>
             )}
             {item.shortcut && <Keys keys={item.shortcut} />}
           </>

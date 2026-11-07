@@ -248,9 +248,9 @@ describe("unified chat mode: zero threads, following the threads setting", () =>
   });
 
   it("a hand-off on a run card names the teammate without a thread link", () => {
-    const handed = runMessage("completed", { handedTo: [{ botId: "katarina", threadId: "k-work", name: "Katarina", status: "completed" }] });
+    const handed = runMessage("completed", { handedTo: [{ botId: "wren", threadId: "k-work", name: "Wren", status: "completed" }] });
     const unified = renderToStaticMarkup(createElement(RoutineRunCard, { message: handed, onOpen: () => {} }));
-    expect(unified).toContain("Katarina");
+    expect(unified).toContain("Wren");
     expect(unified).not.toContain("data-run-teammate-thread");
     expect(unified).not.toContain("thread");
   });
@@ -298,10 +298,6 @@ const NO_ALWAYS_BY_DECISION: ReadonlyArray<{ file: string; marker: RegExp; why: 
   {
     file: "server/outbound/outbound-wiring.ts", marker: /phoneCallConsent/,
     why: "a one-time consent that turns phone calls on: a setting, never an approval of one call (full-access: exempt)",
-  },
-  {
-    file: "server/outbound/outbound-wiring.ts", marker: /options: \["deny"\]/,
-    why: "the Primary Bot's view of a call card: ÉFVP 2026-10-22, the person confirms the number on their own Sagax card, where Always call is offered",
   },
   {
     file: "server/rules/rule-requests.ts", marker: /autoApplied: true/,
@@ -399,7 +395,10 @@ describe("every approval card offers Always allow, which keeps a rule (#2091)", 
     expect(calls).toMatch(/decision !== "call" && decision !== "always" && decision !== "deny"/);
     expect(calls).toContain("STANDING_CALL_VIA");
     const wiring = readRoot("server/outbound/outbound-wiring.ts");
-    expect(wiring).toMatch(/body\.always === true \|\| body\.rule === "allow" \? "always" : "once"/);
+    // #2471: the Primary Bot answers a call card like a purchase card, once or always
+    expect(wiring).toMatch(/const always = body\.always === true \|\| body\.rule === "allow";/);
+    expect(wiring).toMatch(/if \(kind === "purchase"\) return \{ decision: always \? "always" : "once" \}/);
+    expect(wiring).toMatch(/return \{ decision: always \? "always" : "call", confirmedTo: number, confirmed: true \}/);
   });
 
   it("the client offers Always allow on every card but the organization's Refuse / Ask first, which says so", () => {
@@ -440,6 +439,8 @@ describe("every approval reads the one settings-linked decision (Full access, ru
         if (/^\s*(?:readonly\s+)?\w+\??: .*;\s*$/.test(text) && !/\(/.test(text)) return;
         if (/^\s*(?:readonly\s+)?\w+\??\(\w+\??:\s/.test(text)) return;
         if (/^\s*(?:\/\/|\*)/.test(text)) return;
+        // #2436: the leaf host's accessors (`get requestPeerApproval() { return requestPeerApproval; }`) emit no card
+        if (/^\s*get \w+\(\) \{ return \w+; \},?\s*$/.test(text)) return;
         for (const emitter of EMITTERS) {
           if (!emitter.pattern.test(text)) continue;
           count += 1;

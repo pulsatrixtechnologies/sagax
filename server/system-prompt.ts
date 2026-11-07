@@ -5,6 +5,7 @@
 // orders them, drops the empty ones, and reports the size of each section.
 // The sentences that both the direct-turn and room-turn paths use live
 // here too, so neither path can drift from the other or from the preview.
+import { BUILTIN_PLUGINS, REA_VERSION, type BuiltinPluginId } from "../shared/builtin-plugins.ts";
 import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
 import { soulSystemPrompt } from "./bots/bot-folder.ts";
 import { teammateAvailabilityPrompt, type RosterMember } from "./peers/peer-roster.ts";
@@ -241,11 +242,20 @@ export function cloudHomePrompt(sharedComputerTools: boolean): string {
 /** Names the user-added MCP servers a turn actually mounted, so the bot
  * reaches for them instead of saying it has no such tool. Empty when none. */
 export function customMcpPrompt(names: string[], off: ReadonlyArray<{ name: string; error: string }> = []): string {
-  const list = names.map((name) => `"${name}"`).join(", ");
-  const mounted = names.length === 0 ? "" : ` The user also added ${names.length === 1 ? "an MCP server" : "MCP servers"} for you: ${list}. Use their available tools under the engine's normal approval rules.`;
+  // Sagax's built-in plugins (REA) are said as Sagax's own, not the user's
+  const builtin = BUILTIN_PLUGINS.filter((plugin) => names.includes(plugin.mcpName));
+  const added = names.filter((name) => !builtin.some((plugin) => plugin.mcpName === name));
+  const list = added.map((name) => `"${name}"`).join(", ");
+  const mounted = added.length === 0 ? "" : ` The user also added ${added.length === 1 ? "an MCP server" : "MCP servers"} for you: ${list}. Use their available tools under the engine's normal approval rules.`;
+  const own = builtin.map((plugin) => ` ${BUILTIN_PROMPT[plugin.id]}`).join("");
   const left = off.map(({ name, error }) => ` The MCP server "${name}" is off for you because it doesn't start for you (${error}); it is tried again on its own.`).join("");
-  return mounted + left;
+  return mounted + own + left;
 }
+
+/** What each built-in plugin is for, said to the bot when its turn mounts it. */
+const BUILTIN_PROMPT: Record<BuiltinPluginId, string> = {
+  rea: `Sagax gives you REA (MCP server "rea", rea-agents ${REA_VERSION}): reverse engineering of native binaries, .NET assemblies, APKs and JS/Electron apps, plus runtime observation. When a task needs to know what a program or file really does (an unknown executable, a DLL, an app bundle, a crash, a protocol), use its tools instead of guessing from strings. Its first call can take a minute while npx fetches it. A Hopper license or demo window it reports is the person's to answer; never run rea-agents setup.`,
+};
 /** The ```cw sentence, built from the validator's own constants
  * (shared/cw-widgets/schema.ts) so it never names a family, a view or a
  * field the chat would refuse. */
@@ -294,6 +304,7 @@ export const RICH_OUTPUT_PROMPT =
   + PAGE_TARGET_PROMPT
   + CW_FENCE_PROMPT
   + " To show a YouTube video the person wants to watch, put its link alone on its own line: it plays inline (any other time, keep the link inside a sentence); never wrap it in an ```artifact or ```widget fence."
+  + " To show a stream or video file the person asked to watch (an HLS m3u8 or an MP4 URL, such as a video player share link), write one ```video fence holding exactly {\"sagaxVideos\":[{\"kind\":\"live\",\"url\":\"https://host/v1/share/live/channel/index\",\"format\":\"hls\",\"title\":\"Stream title\",\"streamer\":\"channel\"}]} (kind live or vod, a real URL from a tool, never invented; \"format\" is hls or mp4, needed when the URL does not end in m3u8 or mp4; optional fields the tool gave you, copied as is: \"avatarUrl\", \"posterUrl\", \"category\", \"tags\", \"viewerCount\", \"startedAt\" (ISO), \"recording\" (true while recorded), \"durationMs\", \"chapters\" [{\"startMs\",\"title\"}], \"expiresAt\" (ms)): it becomes the player card, so never also paste that JSON in a ```json block or as plain text. A player a tool's result already added shows on its own: do not repeat it, and never say a player is on screen unless you wrote that fence or the tool added one. When the person writes that a video link expired and asks for a new one, call the same tool again for a fresh link and write a new fence."
   + " To show an image, a video file or a document, attach it or link its absolute path; a remote image loads only after the person allows it.";
 
 /** The rich-output paragraph for one bot. Drafts off replaces the email

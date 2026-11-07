@@ -23,7 +23,8 @@ import {
 } from "./outbound-calls.ts";
 import { hangUpLiveCall, sendDtmfLiveCall, transferLiveCall, type LiveCallPatch } from "../phone/phone-call-control.ts";
 import { PhoneCallConsentStore } from "../phone/phone-call-consent.ts";
-import type { PrimaryCard } from "../approvals/primary-approvals.ts";
+import type { PrimaryCard, PrimaryDecision } from "../approvals/primary-approvals.ts";
+import { ORG_ALWAYS_ALLOW_OFF, standingGrantsAllowed } from "../rules/custom-rules-org.ts";
 import { createOutboundCallRoutes, type OutboundCallRouteDeps } from "../routes/outbound-calls.ts";
 import type { InternalRouteHandler } from "../routes/internal-route.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
@@ -94,14 +95,21 @@ export function purchaseCardFallback(listing: PurchaseListing): string {
 
 /** What a Primary Bot's answer means on a phone call or a purchase card:
  * this once, always (#2091: a purchase keeps the site in the bot's
- * allowance), or no. A call is confirmed by the person on the card, where
- * they check the number (ÉFVP 2026-10-22, pilot): the Primary Bot may
- * decline it, and Always is answered on the card too. */
-export function primaryOutboundDecision(kind: "call" | "purchase", body: { behavior?: unknown; always?: unknown; rule?: unknown }): { decision: string } | { refused: string } {
+ * allowance, a call keeps the number), or no. 2026-11-06 (the maintainer: the Primary
+ * Bot does everything on the person's behalf, no human click exception): a
+ * call is allowed by the Primary Bot like the person, the number it
+ * confirms being the card's own (`number`). An organization rule Refuser /
+ * Demander d'abord, the person's Ask/Deny rules and holds still gate the
+ * place_phone_call tool before any card; "Toujours permettre" off keeps
+ * Always out. */
+export function primaryOutboundDecision(kind: "call" | "purchase", body: { behavior?: unknown; always?: unknown; rule?: unknown }, number?: string): { decision: string; confirmedTo?: string; confirmed?: true } | { refused: string } {
   if (body.behavior === "deny") return { decision: "deny" };
-  if (body.behavior === "allow" && kind === "call") return { refused: "A phone call is allowed only on its card, where the person confirms the number. Ask them to open the card in Sagax." };
-  if (body.behavior === "allow") return { decision: body.always === true || body.rule === "allow" ? "always" : "once" };
-  return { refused: "Answer allow or deny." };
+  if (body.behavior !== "allow") return { refused: "Answer allow or deny." };
+  const always = body.always === true || body.rule === "allow";
+  if (kind === "purchase") return { decision: always ? "always" : "once" };
+  if (!number) return { refused: "This call card is no longer waiting. Call action list." };
+  if (always && !standingGrantsAllowed()) return { refused: ORG_ALWAYS_ALLOW_OFF.error };
+  return { decision: always ? "always" : "call", confirmedTo: number, confirmed: true };
 }
 
 /** A purchase waiting on the person, in the Primary Bot's list: allow this
@@ -120,6 +128,66 @@ export function primaryPurchaseCard(purchase: PurchaseListing, botName: string, 
     options: ["allow", "always_allow", "deny"],
     always: "rule",
     alwaysScope: `purchases at ${purchase.domain} by this bot`,
+  };
+}
+
+/** The bot's mid-call controls (DTMF, transfer, hang up) and the person's
+ * End call on the live card. */
+function liveCallControls(
+  deps: OutboundWiringDeps,
+  calls: OutboundCalls,
+  patchLive: (row: OutboundCallRecord, change: LiveCallPatch) => void,
+) {
+  return {
+    async sendDtmf(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
+      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
+      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+      return sendDtmfLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, digits: args.digits, callId: typeof args.call_id === "string" ? args.call_id : undefined });
+    },
+
+    async transfer(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
+      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
+      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+      return transferLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, to: args.to, callId: typeof args.call_id === "string" ? args.call_id : undefined });
+    },
+
+    async hangUp(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown> = {}): Promise<{ text: string; isError?: boolean }> {
+      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
+      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+      return hangUpLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, callId: typeof args.call_id === "string" ? args.call_id : undefined });
+    },
+
+    /** Person End call on the live card. */
+    async personHangUp(principalId: string, callId: string): Promise<{ ok: true } | { error: string; status: number; code: string }> {
+      const row = calls.get(callId);
+      if (!row || row.principalId !== principalId) return { error: "No such call", status: 404, code: "unknown_call" };
+      if (row.request.mode !== "conversation" || row.status !== "placed" || row.result) {
+        return { error: "This call is not live.", status: 409, code: "not_live" };
+      }
+      const outcome = await hangUpLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio({ threadId: row.threadId, generation: "person-hangup", botId: row.botId }, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId, botId: row.botId, threadId: row.threadId, callId });
+      if (outcome.isError) return { error: outcome.text, status: 502, code: "hangup_failed" };
+      return { ok: true };
+    },
   };
 }
 
@@ -286,55 +354,7 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       return api.placeCall(context, { ...parsed, to });
     },
 
-    async sendDtmf(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
-      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
-      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
-      return sendDtmfLiveCall({
-        calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
-        patchLive,
-        now: deps.now,
-      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, digits: args.digits, callId: typeof args.call_id === "string" ? args.call_id : undefined });
-    },
-
-    async transfer(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
-      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
-      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
-      return transferLiveCall({
-        calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
-        patchLive,
-        now: deps.now,
-      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, to: args.to, callId: typeof args.call_id === "string" ? args.call_id : undefined });
-    },
-
-    async hangUp(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown> = {}): Promise<{ text: string; isError?: boolean }> {
-      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
-      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
-      return hangUpLiveCall({
-        calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
-        patchLive,
-        now: deps.now,
-      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, callId: typeof args.call_id === "string" ? args.call_id : undefined });
-    },
-
-    /** Person End call on the live card. */
-    async personHangUp(principalId: string, callId: string): Promise<{ ok: true } | { error: string; status: number; code: string }> {
-      const row = calls.get(callId);
-      if (!row || row.principalId !== principalId) return { error: "No such call", status: 404, code: "unknown_call" };
-      if (row.request.mode !== "conversation" || row.status !== "placed" || row.result) {
-        return { error: "This call is not live.", status: 409, code: "not_live" };
-      }
-      const outcome = await hangUpLiveCall({
-        calls,
-        twilio: (callArgs) => deps.twilio({ threadId: row.threadId, generation: "person-hangup", botId: row.botId }, callArgs),
-        patchLive,
-        now: deps.now,
-      }, { principalId, botId: row.botId, threadId: row.threadId, callId });
-      if (outcome.isError) return { error: outcome.text, status: 502, code: "hangup_failed" };
-      return { ok: true };
-    },
+    ...liveCallControls(deps, calls, patchLive),
 
     /** Accept or decline the one-time phone-call consent card. */
     resolveConsent(input: { principalId: string; botId: string; threadId: string; requestId: string; allow: boolean }): void {
@@ -482,8 +502,11 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       return due.length;
     },
 
-    /** The Primary Bot's list: Call or Do not call, never an Always allow. */
+    /** The Primary Bot's list: Call this once, Always call this number, or
+     * Do not call, as the person has on the card (2026-11-06). Always only
+     * while the organization keeps "Toujours permettre" on. */
     primaryPending(principalId: string, needsKey: boolean): PrimaryCard[] {
+      const always = standingGrantsAllowed();
       return calls.pending(principalId).map((row) => ({
         threadId: row.threadId,
         requestId: row.id,
@@ -496,7 +519,8 @@ export function outboundWiring(deps: OutboundWiringDeps) {
           : `${row.request.purpose} It says: "${row.request.message}"`).slice(0, 240),
         kind: "permission" as const,
         needsKey,
-        options: ["deny"],
+        options: always ? ["allow", "always_allow", "deny"] as PrimaryDecision[] : ["allow", "deny"] as PrimaryDecision[],
+        ...(always ? { always: "rule" as const, alwaysScope: `calls to ${formatPhone(row.request.to)}` } : {}),
       }));
     },
 

@@ -1,5 +1,5 @@
 import { ChevronRight, Loader2, PauseCircle, Play } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { isValidElement, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { chatBubbleWidth, useChatBubbleWidthClasses } from "@/lib/chat-bubble-width";
 import { cn } from "@/lib/cn";
@@ -149,9 +149,12 @@ const QUIET_LINK = "inline-flex items-center gap-0.5 rounded text-ink-tertiary t
  * an absent part (false, null, undefined, "") never leaves its separator. */
 export function provenanceLine(parts: ReadonlyArray<ReactNode>): ReactNode[] {
   const present = parts.filter((part) => part !== false && part !== null && part !== undefined && part !== "");
+  // each separator is keyed by the part it leads, so a part that leaves takes
+  // its own separator with it and the others stay the same nodes (flash rule,
+  // 2026-11-03): an index key moved them when the status settled
   return present.flatMap((part, index) => index === 0
     ? [part]
-    : [<span key={`sep-${index}`} aria-hidden="true" data-routine-run-sep>·</span>, part]);
+    : [<span key={`sep-${isValidElement(part) && part.key != null ? part.key : index}`} aria-hidden="true" data-routine-run-sep>·</span>, part]);
 }
 
 /** Now, for a running run's elapsed time: a quarter-minute tick is enough
@@ -262,7 +265,12 @@ export function RoutineRunCard({
         : (run.summary ?? run.attention ?? routineRunError(run.error))).text,
   );
   const handedTo = run.handedTo ?? [];
-  const at = run.scheduledFor ?? message.at;
+  // 2026-11-06 (JC, Wren's chat read 7:24, 7:27, 7:30, 7:34, 7:28,
+  // 7:30): the bubble sits where the run posted it, so its time is when it
+  // posted. The trigger's time (a webhook queued behind another run, a late
+  // schedule) stays in the tooltip. Showing scheduledFor put times out of order.
+  const at = message.at;
+  const triggeredAt = run.scheduledFor && Math.abs(run.scheduledFor - at) >= 60_000 ? run.scheduledFor : undefined;
   const pausedAfter = run.autoPausedAfter && run.autoPausedAfter > 0 ? run.autoPausedAfter : null;
   const elapsed = running && run.startedAt ? routineRunDuration({ startedAt: run.startedAt, status: "running" }, now) : undefined;
   // #2081 + JC 2026-11-06 (2 h): a routine run in the chat is never a card.
@@ -323,7 +331,7 @@ export function RoutineRunCard({
               className={cn(running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}
             >{lead}</span>
           ),
-          <time key="at" dateTime={new Date(at).toISOString()}>{routineDateTime(at)}</time>,
+          <time key="at" dateTime={new Date(at).toISOString()} title={triggeredAt ? routineDateTime(triggeredAt) : undefined}>{routineDateTime(at)}</time>,
           elapsed && <span key="elapsed" data-routine-run-elapsed className="tabular-nums">{elapsed}</span>,
           onOpen && (
             <button

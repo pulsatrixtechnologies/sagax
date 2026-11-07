@@ -85870,18 +85870,18 @@
         }
       }
     },
-    "This sends something on your behalf, so it always asks first.": {
+    "This sends something on your behalf. Allow it once, or always for this tool.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This sends something on your behalf, so it always asks first."
+            "value": "This sends something on your behalf. Allow it once, or always for this tool."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ceci envoie quelque chose en votre nom, alors le bot demande toujours d'abord."
+            "value": "Ceci envoie quelque chose en votre nom. Permettez-le une fois, ou toujours pour cet outil."
           }
         }
       }
@@ -113505,6 +113505,106 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucune routine pour ce groupe pour l’instant. Les objectifs d’équipe et les routines qui publient ici apparaissent dans cette liste."
+          }
+        }
+      }
+    },
+    "%@ watching": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ en direct"
+          }
+        }
+      }
+    },
+    "Back to live": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retour au direct"
+          }
+        }
+      }
+    },
+    "Could not play this video.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de lire cette vidéo."
+          }
+        }
+      }
+    },
+    "Get a new link": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obtenir un nouveau lien"
+          }
+        }
+      }
+    },
+    "Live": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En direct"
+          }
+        }
+      }
+    },
+    "Live for": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En direct depuis"
+          }
+        }
+      }
+    },
+    "New link requested": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau lien demandé"
+          }
+        }
+      }
+    },
+    "The video link for “%@” expired. Send me a new one.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le lien vidéo de « %@ » est expiré. Envoie-moi un nouveau lien."
+          }
+        }
+      }
+    },
+    "This video link has expired.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le lien de cette vidéo est expiré."
+          }
+        }
+      }
+    },
+    "Untitled video": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo sans titre"
           }
         }
       }

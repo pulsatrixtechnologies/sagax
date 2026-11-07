@@ -364,7 +364,9 @@ struct MessageRow: View {
             }
         case .video:
             if let video = message.video, message.requested == true {
-                VideoWidgetView(video: video)
+                VideoWidgetView(video: video, onRequestRefresh: { text in
+                    Task { await session.send(text, to: chat) }
+                })
             }
         case .widget:
             // A bot's card, list or form (show_widget); its text when there is

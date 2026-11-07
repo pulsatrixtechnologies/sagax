@@ -855,6 +855,10 @@ struct TopScrollEdgeFade: ViewModifier {
     @Environment(\.themePalette) var themePalette
     var height: CGFloat = Theme.Metric.scrollEdgeHeight
     var background: Color = Theme.bg
+    /// A full-screen list reaches under the status bar; a sheet (settings)
+    /// starts below it, so its fade must start at the sheet's own top edge,
+    /// or the sheet's clip leaves only the gradient's tail over the header.
+    var underStatusBar = true
 
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
@@ -878,14 +882,14 @@ struct TopScrollEdgeFade: ViewModifier {
             startPoint: .top, endPoint: .bottom
         )
         .frame(height: height)
-        .ignoresSafeArea(edges: .top)
+        .ignoresSafeArea(edges: underStatusBar ? .top : [])
         .allowsHitTesting(false)
     }
 }
 
 extension View {
-    func topScrollEdgeFade(height: CGFloat = Theme.Metric.scrollEdgeHeight, background: Color = Theme.bg) -> some View {
-        modifier(TopScrollEdgeFade(height: height, background: background))
+    func topScrollEdgeFade(height: CGFloat = Theme.Metric.scrollEdgeHeight, background: Color = Theme.bg, underStatusBar: Bool = true) -> some View {
+        modifier(TopScrollEdgeFade(height: height, background: background, underStatusBar: underStatusBar))
     }
 }
 

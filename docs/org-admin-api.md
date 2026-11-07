@@ -360,6 +360,7 @@ disabled person's routines stop anyway). Listed in `GET capabilities` as
 | `GET bots/{id}` | manager | a bot's page |
 | `GET bots/{id}/avatar` | manager | the bot's uploaded picture |
 | `GET bots/{id}/capabilities` | manager | the bot's capabilities, read only |
+| `POST bots` | manager (new owner in reach) | a blank bot for the caller or another person |
 | `POST bots/{id}/clone` | manager (bot and new owner in reach) | a copy for its owner or another person |
 | `POST bots/{id}/archive` | manager in reach, admin | archive |
 | `POST bots/{id}/restore` | manager in reach, admin | restore |
@@ -467,6 +468,22 @@ turn; `canToggle` says what they could change in Sagax). Read only, not
 audited; the bot route's reach rules (out of a manager's reach is 404); the
 owner reaches it by the `own-bot` grant. The Perspicax console shows it on
 the bot's page, labelled « Gérée dans Sagax ».
+
+### `POST bots`
+
+```json
+{ "name": "Scout", "ownerSub": "01J9...", "engineInstanceId": "claude", "model": "claude-sonnet-5" }
+```
+
+A blank bot, made the way the app's New bot makes it (`POST /api/bots`
+replayed as the owner, never as an admin: nothing the admin saved in New bot
+defaults). `name` is required (1 to 80 characters); the owner defaults to
+the caller; `engineInstanceId` and `model` are optional and follow the rules
+of `POST bots/{id}/model` (a refused model leaves no bot behind). The app's
+own refusals come back with their status (for example `403` when the
+organization keeps bot creation to some people). Answers `201 {bot}`.
+Audited `bot.create`. A server without this route answers `404 not_found`
+(older servers: `405`), and the console then hands off to the app.
 
 ### `POST bots/{id}/clone`
 
@@ -610,6 +627,7 @@ document without `format` still works).
 | Method and path | Role | What |
 |---|---|---|
 | `GET routines?q&status&bot&owner&limit&cursor` | manager | every routine in reach |
+| `POST routines` | manager (bot in reach) | a new routine |
 | `GET routines/{id}` | manager | one routine |
 | `GET routines/{id}/runs?limit&cursor` | manager | its runs, newest first |
 | `GET routines/runs?from&to&scope&bot&routine&state&q&limit&cursor` | employee | the calendar: every run in a window, past and planned |
@@ -738,6 +756,19 @@ GET /api/org/admin/routines/runs?from=2026-10-05&to=2026-10-11&scope=all&limit=2
   routine, bot, owner and run-as names. Pages of `limit` 1 to 500 (default
   200) by `cursor`. A routine plans at most 500 occurrences per window and
   a window at most 20,000 items; past either, `truncated` is true.
+
+### `POST routines`
+
+```json
+{ "botId": "b_123", "name": "Morning brief", "prompt": "Summarize my day.", "schedule": "0 8 * * 1-5", "timeZone": "America/Toronto" }
+```
+
+A routine made the way the app makes it (`POST /api/routines` replayed as
+the bot's owner, who it runs as). `schedule` is a 5-field cron, with an
+optional `timeZone`, or the app's schedule object (`{type: "cron",
+expression, timeZone?}` and the other kinds). The bot must be in reach
+(`404` otherwise). Answers `201 {routine}` (the row of `GET routines`,
+never the prompt). Audited `routine.create`.
 
 ### `POST routines/{id}/run`
 
@@ -1056,8 +1087,8 @@ no call of a member is ever signed above their own role:
 
 | Grant kind | Routes | Answered |
 |---|---|---|
-| `own-bot` | `GET bots`, `GET bots/{id}`, `bots/{id}/avatar`, `bots/{id}/package`, `bots/{id}/capabilities`, `files/{bot}/roots\|list\|stat\|read\|download`, `POST bots/{id}/clone\|archive\|restore\|model\|stop\|delete`, `GET usage`, `GET incidents`, `GET logs`, `GET audit?target=<bot>` | the person's own bots only (not one shared with them); a copy stays theirs (another owner `403`); usage rows, incidents and log lines of their own bots; the activity of one bot of theirs (`target` required) |
-| `own-routine` | `GET routines`, `GET routines/{id}`, `GET routines/{id}/runs`, `POST routines/{id}/run\|pause` | the routines of the person's own bots |
+| `own-bot` | `GET bots`, `GET bots/{id}`, `bots/{id}/avatar`, `bots/{id}/package`, `bots/{id}/capabilities`, `files/{bot}/roots\|list\|stat\|read\|download`, `POST bots`, `POST bots/{id}/clone\|archive\|restore\|model\|stop\|delete`, `GET usage`, `GET incidents`, `GET logs`, `GET audit?target=<bot>` | the person's own bots only (not one shared with them); a new bot or a copy stays theirs (another owner `403`); usage rows, incidents and log lines of their own bots; the activity of one bot of theirs (`target` required) |
+| `own-routine` | `GET routines`, `POST routines`, `GET routines/{id}`, `GET routines/{id}/runs`, `POST routines/{id}/run\|pause` | the routines of the person's own bots; a new one on their own bot only |
 
 The transfer, `bots/bulk`, `bots/import` and every other route take no
 grant.

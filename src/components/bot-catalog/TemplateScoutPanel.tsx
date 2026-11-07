@@ -118,9 +118,9 @@ export function TemplateScoutPanel(props: {
                         {member.name.slice(0, 1).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <div className="truncate text-[14px] font-medium text-ink">
-                          {member.name} <span className="font-normal text-ink-secondary">· {member.title}</span>
-                        </div>
+                        {/* name, then the title under it (JC: never "Name · Title" on one line) */}
+                        <div data-member-name="" className="truncate text-[14px] font-medium text-ink">{member.name}</div>
+                        {member.title && <div data-member-title="" className="truncate text-[12px] leading-4 text-ink-secondary">{member.title}</div>}
                         <div className="mt-0.5 truncate text-[12px] text-ink-secondary">{scouted.suggestion.reasons[member.key] ?? ""}</div>
                       </div>
                     </div>

@@ -317,6 +317,14 @@ describe("shared sentences", () => {
       .toContain('The MCP server "broken" is off for you because it doesn\'t start for you (closed)');
   });
 
+  it("customMcpPrompt says REA is Sagax's own built-in, not a server the user added", () => {
+    const text = customMcpPrompt(["notes", "rea"]);
+    expect(text).toContain('The user also added an MCP server for you: "notes".');
+    expect(text).toContain('Sagax gives you REA (MCP server "rea"');
+    expect(text).toContain("never run rea-agents setup");
+    expect(customMcpPrompt(["rea"])).not.toContain("The user also added");
+  });
+
   it("mentionPrompt names every tagged bot with its id, and is empty for none", () => {
     expect(mentionPrompt([])).toBe("");
     expect(mentionPrompt([{ id: "a1", name: "Ana" }, { id: "b2", name: "Bo" }])).toBe(

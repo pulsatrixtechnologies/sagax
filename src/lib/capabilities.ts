@@ -121,7 +121,16 @@ const REASON_KEY: Record<CapabilityReason, LocaleKey> = {
   unknown_profile: "capabilities.reason.unknownProfile",
   disabled: "capabilities.reason.disabled",
   offered: "capabilities.reason.offered",
+  needs_runtime: "capabilities.reason.needsRuntime",
 };
+
+const BUILTIN_DESCRIPTION_KEY: Record<string, LocaleKey> = {
+  rea: "capabilities.builtin.rea.description",
+};
+
+/** A Sagax built-in's description in the app's language; null otherwise. */
+export const builtinDescription = (item: Pick<Capability, "builtin">): string | null =>
+  item.builtin && BUILTIN_DESCRIPTION_KEY[item.builtin] ? t(BUILTIN_DESCRIPTION_KEY[item.builtin]) : null;
 
 export const formWord = (form: CapabilityForm): string => t(FORM_KEY[form]);
 export const scopeWord = (scope: CapabilityScope): string => t(SCOPE_KEY[scope]);

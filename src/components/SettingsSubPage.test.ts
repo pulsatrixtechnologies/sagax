@@ -11,6 +11,7 @@ import { setLocale } from "@/lib/i18n";
 import { createAboutMeDraft } from "./about-me-draft";
 import { subPageKeyAction } from "./SettingsSubPage";
 import { aboutMeBotPreview, aboutMeCount, withOutline, ABOUT_ME_MAX } from "./AboutMeSettings";
+import { SUB_PAGES } from "./settings/settings-sub-pages";
 
 const fixture = vi.hoisted(() => ({
   section: "account" as AppSettingsSection,
@@ -52,11 +53,13 @@ const render = async () => {
 
 describe("sub-page navigation", () => {
   it("opens from the row, keeps its section, and any other navigation clears it", () => {
-    const open = reducer(initialState, { type: "toggleAppSettings", open: true, section: "general", subPage: "general.aboutMe" });
+    // the row opens the page on its home section (SUB_PAGES): General is a
+    // page of its own again since #2430, so About me names Account itself
+    const open = reducer(initialState, { type: "toggleAppSettings", open: true, section: SUB_PAGES["general.aboutMe"]!.section, subPage: "general.aboutMe" });
     expect(open.appSettingsSection).toBe("account");
     expect(open.appSettingsSubPage).toBe("general.aboutMe");
     // back: the section again, no page
-    expect(reducer(open, { type: "toggleAppSettings", open: true, section: "general" }).appSettingsSubPage).toBeNull();
+    expect(reducer(open, { type: "toggleAppSettings", open: true, section: "account" }).appSettingsSubPage).toBeNull();
     // another section, or closing Settings
     expect(reducer(open, { type: "toggleAppSettings", open: true, section: "appearance" }).appSettingsSubPage).toBeNull();
     expect(reducer(open, { type: "toggleAppSettings", open: false }).appSettingsSubPage).toBeNull();

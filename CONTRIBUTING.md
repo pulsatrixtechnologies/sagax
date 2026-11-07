@@ -152,7 +152,7 @@ how chat routine proposals failed in the field hours after 0.1.38 shipped (#544)
   is pinned byte for byte and size-budgeted by `server/drivers/agents-catalog-wire.test.ts`.
   After changing one on purpose, run that file once with `UPDATE_AGENTS_CATALOG_GOLDENS=1`,
   review the golden diff, and move its `BUDGET_BASELINE` by hand. Stay under the soft ceiling
-  in `agents-catalog-budget.ts` (150_000 bytes, 128 tools). When a profile approaches that
+  in `agents-catalog-budget.ts` (160_000 bytes, 128 tools). When a profile approaches that
   ceiling, use `SAGAX_CATALOG_GROUPS=1` (or an existing lazy path) rather than shortening
   descriptions only to pass the +2% ratchet (#1703).
 

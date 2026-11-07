@@ -13,6 +13,7 @@ import { t } from "@/lib/i18n";
 import { useCopyFeedback } from "@/lib/copy-text";
 import {
   capabilityName,
+  builtinDescription,
   formWord,
   indexCut,
   kilobytes,
@@ -199,8 +200,10 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
   const source = [formWord(item.form), item.source.label, item.source.version ? `v${item.source.version}` : null].filter(Boolean).join(" · ");
   const reason = item.supersededBy ? t("capabilities.installed.supersededByFlow", item.supersededBy) : reasonText(item.reason);
   const brings = item.brings;
+  // a Sagax built-in (REA): translated description, shown in the detail like every row
+  const about = builtinDescription(item) ?? item.description;
   return (
-    <li data-capability={item.form} data-capability-scope={item.scope} data-capability-state={item.state} className="border-b border-hairline-weak last:border-b-0">
+    <li data-capability={item.form} {...(item.builtin ? { "data-capability-builtin": item.builtin } : {})} data-capability-scope={item.scope} data-capability-state={item.state} className="border-b border-hairline-weak last:border-b-0">
       <div className={cn("flex min-w-0 items-center gap-2 px-2.5 py-1.5", item.supersededBy && "flex-wrap")}>
         <button type="button" aria-expanded={expanded} onClick={onExpand}
           aria-label={t("capabilities.row.openAria", { name })}
@@ -228,7 +231,7 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
       </p>}
       {expanded && (
         <dl data-capability-detail="" className="grid grid-cols-[minmax(80px,auto)_1fr] gap-x-3 gap-y-1 px-8 pb-2.5 text-[12px] leading-[17px]">
-          {item.description && <Detail label={t("capabilities.detail.about")} value={item.description} />}
+          {about && <Detail label={t("capabilities.detail.about")} value={about} />}
           <Detail label={t("capabilities.detail.state")} value={reason ? `${stateWord(item.state)} · ${reason}` : stateWord(item.state)} />
           {brings && brings.skills.length > 0 && <Detail label={t("capabilities.detail.skills")} value={brings.skills.join(", ")} />}
           {brings && brings.commands.length > 0 && <Detail label={t("capabilities.detail.commands")} value={brings.commands.join(", ")} />}

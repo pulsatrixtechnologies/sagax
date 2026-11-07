@@ -129,7 +129,7 @@ describe("evaluateCustomRules precedence", () => {
     expect(decision.kind === "none" && decision.riskBlocked?.missing).toEqual(["irreversible"]);
   });
 
-  it("names who started the turn, and a routine does not send on an allow that does not name it", () => {
+  it("names who started the turn, and an allow that names no start is respected on a routine send too", () => {
     expect(turnStartOf(undefined)).toBe("person");
     expect(turnStartOf({ origin: "operator" })).toBe("person");
     expect(turnStartOf({ origin: "owner-routine" })).toBe("routine");
@@ -138,7 +138,7 @@ describe("evaluateCustomRules precedence", () => {
     expect(turnStartOf({ origin: "peer" })).toBe("delegation");
     const open = rule("l'envoi de courriels", "allow", { riskScope: ["external-send"] });
     expect(evaluateCustomRules([open], sendMail, { startedBy: "person" }).kind).toBe("allow");
-    expect(evaluateCustomRules([open], sendMail, { startedBy: "routine" }).kind).toBe("none");
+    expect(evaluateCustomRules([open], sendMail, { startedBy: "routine" }).kind).toBe("allow");
     expect(evaluateCustomRules([open], sendMail, { startedBy: "delegation" }).kind).toBe("allow");
     const named = rule("l'envoi de courriels", "allow", { riskScope: ["external-send"], startedBy: "routine" });
     expect(evaluateCustomRules([named], sendMail, { startedBy: "routine" }).kind).toBe("allow");
@@ -150,10 +150,10 @@ describe("evaluateCustomRules precedence", () => {
     expect(evaluateCustomRules([rule("l'envoi de courriels", "deny")], sendMail, { startedBy: "routine" }).kind).toBe("deny");
     const org = rule("l'envoi de courriels", "deny", { org: true, startedBy: "person" });
     expect(evaluateCustomRules([org], sendMail, { startedBy: "routine" }).kind).toBe("deny");
-    expect(modelReviewRules([open], "b1", "routine", sendMail)).toEqual([]);
+    expect(modelReviewRules([open], "b1", "routine", sendMail).map((item) => item.id)).toEqual([open.id]);
     expect(modelReviewRules([open], "b1", "person", sendMail).map((item) => item.id)).toEqual([open.id]);
     const reply = JSON.stringify({ decision: "allow", rule: "R1", reason: "The rule covers this send." });
-    expect(modelCustomDecision({ kind: "none" }, [open], sendMail, reply, "routine").kind).toBe("none");
+    expect(modelCustomDecision({ kind: "none" }, [open], sendMail, reply, "routine").kind).toBe("allow");
     expect(modelCustomDecision({ kind: "none" }, [open], sendMail, reply, "person").kind).toBe("allow");
   });
 

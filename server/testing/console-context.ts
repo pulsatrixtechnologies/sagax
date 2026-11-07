@@ -5,7 +5,7 @@ import { compileRoutes, ConsoleRefusal, matchRoutes } from "../org/org-admin-con
 import type { ConsoleRole } from "../org/org-admin-routes.ts";
 
 export interface FakeConsole {
-  call(method: "GET" | "POST", path: string, input?: { role?: ConsoleRole; principalId?: string; reach?: string[] | null; body?: unknown; locale?: "en" | "fr"; request?: unknown; headers?: Record<string, string>; teams?: ConsoleContext["viewer"]["teams"] }): Promise<{ status: number; body: any; raw?: Buffer; headers?: Record<string, string> }>;
+  call(method: "GET" | "POST", path: string, input?: { role?: ConsoleRole; principalId?: string; reach?: string[] | null; body?: unknown; locale?: "en" | "fr"; request?: unknown; headers?: Record<string, string>; teams?: ConsoleContext["viewer"]["teams"]; ownOnly?: boolean }): Promise<{ status: number; body: any; raw?: Buffer; headers?: Record<string, string> }>;
   records: ConsoleAuditEntry[];
 }
 
@@ -35,6 +35,7 @@ export function fakeConsole(routes: ConsoleRoute[], now = () => Date.now()): Fak
         botVisible: (facts) => !reach || reach.has(facts.ownerPrincipalId) || facts.grantTargets.some((target) => target.startsWith("user:") && reach.has(target.slice(5))),
         record: (entry) => records.push(entry),
         now,
+        ...(input.ownOnly ? { ownOnly: true } : {}),
       };
       try {
         const answer = await hit.route.handle(ctx);

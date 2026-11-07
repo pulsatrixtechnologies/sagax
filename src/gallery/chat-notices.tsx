@@ -74,7 +74,7 @@ function Gallery() {
     return <JsonViewer path="/w/sample.json" name="sample.json" message={{ threadId: "t", messageId: "m" }} onClose={() => {}} returnFocus={null} />;
   }
   if (view === "bot-pill") {
-    // The bot chat's header pill: "Name · Title" on one line, like Grok Bot
+    // The bot chat's header pill: the name with the title stacked under it
     // (JC 2026-11-06), then a long title that ends in an ellipsis.
     const mascot = <span className="flex size-[22px] items-center justify-center rounded-full bg-raised text-[11px]">M</span>;
     return (
@@ -82,7 +82,7 @@ function Gallery() {
         {[["Chief of Staff", 760], ["Chief of Staff for every client of the managed services desk", 520]].map(([label, width]) => (
           <div key={String(label)} className="@container/chathead relative flex min-h-[52px] items-center justify-end px-5 py-2.5" style={{ width: Number(width) }}>
             <div className="absolute left-1/2 top-1/2 flex max-w-[60%] -translate-x-1/2 -translate-y-1/2 items-center gap-2">
-              <BotChatHeader name="Melonie" label={String(label)} panelOpen={false} onToggle={() => {}} avatar={mascot} />
+              <BotChatHeader name="Orla" label={String(label)} panelOpen={false} onToggle={() => {}} avatar={mascot} />
             </div>
           </div>
         ))}

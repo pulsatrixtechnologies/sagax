@@ -164,13 +164,16 @@ async function followNotification() {
 }
 
 describe("following a notification", () => {
-  it("opens a thread outside the one conversation beside it while threads are hidden, never in its place", async () => {
+  // #2081 (2026-11-05, owner: "there is a unified chat mode and you keep
+  // putting threads everywhere"): a thread outside the stream is no
+  // destination and opens no column beside the conversation either
+  it("shows the one conversation for a thread outside it while threads are hidden, never the thread nor a column beside it", async () => {
     await threadsShown(false);
     await followNotification();
     // no switch to the job: the conversation stays the one on screen
     expect(sent().filter((request) => request.startsWith("/api/bots/scout/tasks/finished"))).toHaveLength(0);
     expect(scoutNow().threadId).toBe("main-chat");
-    expect(currentSideThread()).toEqual({ botId: "scout", threadId: "finished" });
+    expect(currentSideThread()).toBeNull();
     // the conversation reads its earlier topic with it
     expect(reads()).toContain("left-behind");
     expect(unread("left-behind")).toBe(false);
@@ -211,9 +214,9 @@ describe("opening a bot with threads hidden", () => {
   });
 
   // 2026-10-28: with one conversation, a thread outside the stream (a job
-  // the bot opened) never takes the conversation's place: it opens in the
-  // side column beside it (the reference design's thread beside the chat).
-  it("lands on a search hit in a job thread beside the conversation, which stays at its newest topic", async () => {
+  // the bot opened) never takes the conversation's place; since #2081
+  // (2026-11-05) it opens no side column either: the conversation is shown.
+  it("lands on a search hit in a job thread on the conversation, which stays at its newest topic, with no column beside it", async () => {
     await threadsShown(false);
     closeSideThread();
     await landOnSearchHit({
@@ -223,7 +226,7 @@ describe("opening a bot with threads hidden", () => {
     await settle();
     expect(sent().filter((request) => request.startsWith("/api/bots/scout/tasks/finished"))).toEqual([]);
     expect(scoutNow().threadId).toBe("main-chat");
-    expect(currentSideThread()).toEqual({ botId: "scout", threadId: "finished" });
+    expect(currentSideThread()).toBeNull();
     expect(state.focusMessage).toMatchObject({ threadId: "finished", messageId: "hit" });
   });
 });

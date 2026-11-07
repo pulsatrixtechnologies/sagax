@@ -126,5 +126,5 @@ delivery paths to the runtime incrementally after those reproductions.
 - [Skills, routines and automations](https://docs.x.ai/grok-bot/skills-routines-and-automations)
 - [Computer and apps](https://docs.x.ai/grok-bot/computer-and-apps)
 - [Approvals, security and privacy](https://docs.x.ai/grok-bot/approvals-security-and-privacy)
-- [Catalog budget follow-up, #1703](https://github.com/pulsatrixtechnologies/sagax/issues/1703) (strategy: soft ceiling 150_000 bytes / 128 tools, `SAGAX_CATALOG_GROUPS=1`, margin test)
+- [Catalog budget follow-up, #1703](https://github.com/pulsatrixtechnologies/sagax/issues/1703) (strategy: soft ceiling 160_000 bytes / 128 tools, `SAGAX_CATALOG_GROUPS=1`, margin test)
 - [Physical device follow-up, #1708](https://github.com/pulsatrixtechnologies/sagax/issues/1708)

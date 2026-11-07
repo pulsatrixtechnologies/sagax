@@ -81,7 +81,8 @@ import { ChartBlock } from "./ChartBlock";
 import { RichTable, tableModelFromDelimited, tableModelFromMarkdown } from "./RichTable";
 import { TableFileButton } from "./TableFilePreview";
 import { exportableMermaidSource, inlineDiagramMaxHeight, inlineDiagramSize, svgSize } from "@/lib/diagram-view";
-import { youtubeVideoId } from "../../shared/video-widget.ts";
+import { fenceBareSagaxVideos, parseSagaxVideoFence, youtubeVideoId } from "../../shared/video-widget.ts";
+import { SagaxVideoFenceView } from "./video/SagaxVideoFence";
 import { YouTubeMiniPlayer } from "./video/YouTubeMiniPlayer";
 import { readableError } from "@/lib/plain-error";
 
@@ -1131,7 +1132,8 @@ function normalizeMessageMarkdown(text: string) {
   // Claude.ai <antArtifact> tags become the fences this renderer already
   // draws (widget, mermaid, chart, code). Lift before table repair so a
   // tag that contains pipes is not treated as a table.
-  const lifted = liftClaudeChatBlocks(text);
+  // A bare {"sagaxVideos":...} line becomes a ```video fence first.
+  const lifted = liftClaudeChatBlocks(fenceBareSagaxVideos(text));
   // A near-miss table from a model renders as an unreadable run of pipes
   // unless it is repaired before parsing. Table repair moves image source
   // offsets, so image messages skip that repair but still normalize math.
@@ -1419,6 +1421,9 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         if (lang.trim().toLowerCase() === "mermaid") {
           return <MermaidDiagram code={code} />;
         }
+        // a video card the bot wrote: ```video, or the envelope as ```json
+        const videoFence = pending || inert ? null : parseSagaxVideoFence(code, lang);
+        if (videoFence) return <SagaxVideoFenceView fence={videoFence} onRequestRefresh={youtubeSendToBot} />;
         const kind = inert && (richFenceKind(lang) === "widget" || richFenceKind(lang) === "cw") ? null : richFenceKind(lang);
         if (kind === "cw" && !pending) {
           const widget = parseCwWidgetText(code);

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
-import { capabilityFixture } from "@/lib/capabilities.fixture";
+import { capabilityFixture, reaCapabilityFixture } from "@/lib/capabilities.fixture";
 import { containsUuid } from "../../../shared/human-id";
 
 const { CapabilitiesBody } = await import("./CapabilitiesTab");
@@ -101,5 +101,24 @@ describe("Resolved capability list", () => {
     expect(text).toContain("Non servie par ce moteur");
     expect(text).toContain("Ce bot");
     expect(text).toContain("4 activées");
+  });
+
+  it("shows REA as a built-in plugin with its translated description in the detail and a switch", () => {
+    const data = capabilityFixture();
+    data.items.unshift(reaCapabilityFixture());
+    const html = render({ data });
+    expect(html).toContain('data-capability-builtin="rea"');
+    expect(html).not.toContain("data-capability-builtin-icon");
+    expect(visible(html)).not.toContain("Reverse engineering built into Sagax");
+    expect(visible(render({ data, openAll: true }))).toContain("Reverse engineering built into Sagax");
+    expect(html.match(/role="switch"/g)?.length).toBe(6);
+    setLocale("fr");
+    expect(visible(render({ data, openAll: true }))).toContain("Rétro-ingénierie intégrée à Sagax");
+  });
+
+  it("keeps REA listed with a clear message when Node.js is missing", () => {
+    const data = capabilityFixture();
+    data.items.unshift(reaCapabilityFixture({ state: "not_served", reason: "needs_runtime", mounts: undefined }));
+    expect(visible(render({ data, openAll: true }))).toContain("Needs Node.js 22.23 or later (npx)");
   });
 });

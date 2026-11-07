@@ -128,13 +128,14 @@ struct DesktopComposerPill: View {
     @ViewBuilder
     private var chips: some View {
         plusButton
-        // #2106: compact model + effort chip; picking writes the bot's model
-        // for every thread (ModelMenuSheet). Keep it out of the + menu.
-        if modelLabel != nil { modelChip }
     }
 
     @ViewBuilder
     private var actions: some View {
+        // #2106: compact model + effort chip; picking writes the bot's model
+        // for every thread (ModelMenuSheet). Keep it out of the + menu. The
+        // desktop (Grok Bot) shows it on the right, just before the mic.
+        if modelLabel != nil { modelChip }
         // the mic stays beside the draft (ComposerActionBar: hidden only
         // while dictating or recording a voice note)
         dictationButton

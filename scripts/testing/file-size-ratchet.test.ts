@@ -15,7 +15,7 @@ const HARD_CAP = 2000;
 const LISTED_FROM = 1000;
 
 const LINES: Record<string, number> = {
-  "server/index.ts": 50342,
+  "server/index.ts": 32877,
   "electron/main.mjs": 5964,
   "server/routines/routines.ts": 4951,
   "server/store.ts": 4096,
@@ -45,7 +45,7 @@ const LINES: Record<string, number> = {
   "scripts/mcp-server.ts": 1494,
   "server/computer/container-computer.ts": 1493,
   "server/computer/boat.ts": 1490,
-  "shared/custom-rules.ts": 1442,
+  "shared/custom-rules.ts": 1437,
   "electron/floating-bot-window.mjs": 1395,
   "server/mcp/mcp-oauth.ts": 1363,
   "server/drivers/pi.ts": 1360,
@@ -71,7 +71,6 @@ const LINES: Record<string, number> = {
   "src/components/ogre-moves.ts": 1086,
   "src/components/SidebarProfileMenu.tsx": 1084,
   "server/auth/idp-session.ts": 1075,
-  "src/components/bot-profile/BotProfilePage.tsx": 1068,
   "server/auth/sessions.ts": 1043,
   "server/drivers/claude.ts": 1031,
   "server/drivers/pi-mcp-extension.ts": 1029,

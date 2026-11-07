@@ -749,6 +749,7 @@ describe("agents-proxy MCP surface", () => {
       "message_user",
       "message_person",
       "react_to_message",
+      "set_reply_notify",
       "remove_reaction",
       "create_bot",
       "list_team_setup",
@@ -1060,6 +1061,8 @@ describe("agents-proxy MCP surface", () => {
       groupId: "room-launch",
       message: "shipping at 4",
       attachVoiceNote: false,
+      // left out, notify defaults to true (#2389)
+      notify: true,
     });
   });
 

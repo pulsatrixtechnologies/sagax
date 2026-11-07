@@ -469,7 +469,7 @@ surface alone: add the surface to the gate and its regression to
 The agents `tools/list` wire is pinned and size-budgeted by
 `server/drivers/agents-catalog-wire.test.ts`. Default listing stays the full
 catalog (Grok, Codex and Pi discover by name, #1314). Measured provider
-limits: 128 tools per request (chat-completions), 150_000 UTF-8 bytes soft
+limits: 128 tools per request (chat-completions), 160_000 UTF-8 bytes soft
 ceiling for an agents listing (`AGENTS_CATALOG_BYTES_SOFT_CEILING`). The +2%
 ratchet around `BUDGET_BASELINE` still catches accidental growth; raise the
 baseline on purpose when a tool lands, do not shorten descriptions only to
@@ -1015,6 +1015,48 @@ old connections. Keep the existing file/AAD compatibility tests.
 - Validation: `capabilities-scopes.e2e.test.ts` drives the real HTTP routes
   for two bots and all three plugin scopes; personal-skills, plugin scope,
   install, receipt, integrity and native-link tests cover isolation.
+
+## Built-in plugins: REA (2026-11-06)
+
+Sagax ships plugins of its own, on for every bot. The first is REA
+(https://github.com/morluto/rea, MIT, npm `rea-agents`): reverse
+engineering of binaries, .NET assemblies, APKs and JS/Electron bundles,
+plus runtime observation.
+
+- One constant: `shared/builtin-plugins.ts` (`REA_VERSION`, `REA_PLUGIN`).
+  The launch is `npx -y rea-agents@<REA_VERSION> mcp` with
+  `REA_MCP_INPUT_SCHEMA_PROFILE=compact` and
+  `REA_MCP_OUTPUT_SCHEMA_PROFILE=compact`. Bumping REA = that constant,
+  its NOTICE line, a smoke run of `npx -y rea-agents@<ver> --help`.
+- Never interactive: `npx -y` and `npm_config_yes` answer npm, the update
+  notifier is off, and the Hopper first-run demo/license dialog is a macOS
+  window REA waits for a bounded time (`REA_HOPPER_DEMO_DIALOG_TIMEOUT_MS`,
+  10 s) before the tool call answers an error. Sagax never runs
+  `rea-agents setup`: the mount is Sagax's own, no harness config changes.
+- On by default: `WireBot.builtinPlugins[id] === false` is the only off.
+  A bot saved before a built-in existed has no entry and has it on (no data
+  migration). PATCH `builtinPlugins` takes known ids with booleans
+  (`parseBuiltinPluginsPatch`), merged into the bot's map; permission
+  `bots.behaviour`; settings action `bot.builtinPlugins`; zip `settings`.
+- Mounts: `scopedPluginMcp` appends `builtinPluginMcp(bot)` last (an
+  installed server keeps its name), as scope `bot`, key `builtin:<id>`, so
+  `mountPluginMcp` mounts it like any plugin server: on the desktop as is,
+  on an organization through `personalStdioIntegration` in the person's
+  sandbox (whose relay re-resolves the same entry).
+- Missing runtime: on the desktop `builtinRuntimeMissing` looks `npx` up
+  on PATH (cached 60 s). Missing: no mount, and the row keeps its place
+  with reason `needs_runtime` ("Needs Node.js 22.23 or later"). An
+  organization does not check: the sandbox relay answers the error.
+- The list: `resolveBotCapabilities` adds one `plugin:bot:builtin:<id>` row
+  (`builtin: <id>`, source Sagax with the version); the pluginMcp loop turns
+  it on with its mounts. Plugins > Installed draws the icon chip, the
+  translated description (`capabilities.builtin.<id>.description`) and a
+  switch (`onToggleBuiltin`: updateBot, flush, reload).
+- Tests: `shared/builtin-plugins.test.ts`,
+  `server/capabilities/builtin-plugin-mounts.test.ts` (spawn mocked),
+  `server/capabilities/capabilities.test.ts`,
+  `src/components/bot-settings/CapabilitiesTab.test.ts`. Gallery:
+  `bot-capabilities.html?rea=on|off|missing`.
 
 ## Capabilities: one resolved list per bot (lot 1a, 2026-10-30)
 
@@ -7237,6 +7279,16 @@ Windows, Linux or the web.
   app is on in its own `mac-apps.json` (userData) and runs it. The bridge
   journal keeps the operation and the target (recipient, calendar, list),
   never the content. Setup is read over IPC (`mac-apps:status|set|test|open-settings`).
+- Organization server, any engine or computer (2026-11-06): the desktop
+  reports the apps On (`POST /api/desktop-bridge/<id>/mac-apps {on}`, on
+  connect, every system refresh and after each switch). The server keeps the
+  list per person (`desktop-mac-apps.json`, kept while the Mac is offline)
+  and mounts the `messages` MCP for that person's bots in every sandbox and
+  engine, listing the `mac_*` tools of each app On. A call is relayed through
+  the bridge (`relayMacAppCall`). Mac offline: the tool stays listed and
+  answers "Your Mac is offline" (`MAC_OFFLINE_MESSAGE`), never a missing tool.
+  A bot with an On app never says it has no Calendar, Contacts, Reminders,
+  Notes, Mail or Messages tool: it calls it and reports the answer.
 - Scripts are constant JXA texts; the arguments go as one JSON argv
   (`macAppArgv`, `osascript -l JavaScript -e <script> <json>`), never
   concatenated. Messages reads `chat.db` with `node:sqlite` (read only).
@@ -10200,6 +10252,30 @@ the person asked for are not views.
   any other stored row, for every client.
 - Video players from a tool's output (Glitcho `list_followed`, any
   `sagaxVideo`/`url` JSON): `videoMessagesFromTool` needs an ask ("video").
+  "is she live?", "play her", "watch", "en direct" count as a video ask
+  (2026-11-06).
+- Video cards the bot writes (2026-11-06): one `video` code fence holding
+  `{"sagaxVideos":[{"kind":"live"|"vod","url":"https://.../index.m3u8",
+  "title","streamer","format"?:"hls"|"mp4"}]}` (`RICH_OUTPUT_PROMPT`). The
+  server (`videoMessagesFromText`, `server/runtime-events/preamble.ts`) takes
+  it out of the reply and adds a proxied player row; the same envelope in a
+  `json` fence, an unlabeled fence or bare JSON is accepted too
+  (`extractSagaxVideoBlocks`, `fenceBareSagaxVideos`). `ChatMarkdown` draws a
+  fence still in the text as the player (`SagaxVideoFenceView`); invalid JSON
+  or no URL shows a note with the link, never raw JSON; a stream that fails to
+  play keeps an "Open in new tab" link.
+- Video player parity (2026-11-06): optional, backward-compatible fields
+  `id`, `avatarUrl`, `category` (alias `game`), `tags`, `startedAt` (alias
+  `started_at`, uptime), `recording` (REC badge), `chapters`
+  `[{startMs,title}]`, `channelUrl`, `expiresAt` (ms; `wireVideoFromEmit`
+  also reads a share link's `exp` param). `VideoPlayerWidget`: live DVR
+  scrubber with "Back to live", VOD drag scrub with chapter marks, ±10 s,
+  quality menu (hls.js levels) and zoom/pan, expand (top-layer popover),
+  PiP, keyboard map and resume position (`video-player-state.ts`), stall
+  recovery with backoff. An expired link (401/403/410 or `expiresAt`) shows
+  "Request a new link", which sends the bot a message asking for a fresh
+  link (`onRequestRefresh`). Gallery `?expanded=1`; captures
+  `scripts/capture/video-widgets.mjs`.
 - Settled screenshot at the end of a computer turn: needs an ask ("screen");
   the live screen panel is unchanged.
 - Video and screen rows the server lets through carry `requested: true`;

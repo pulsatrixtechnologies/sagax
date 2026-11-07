@@ -136,8 +136,12 @@ final class RoutinesUITests: XCTestCase {
     private func choose(_ option: String, in picker: String, app: XCUIApplication) {
         let control = element(picker, in: app)
         scrollTo(control, in: app)
-        control.tap()
         let item = app.buttons[option].firstMatch
+        // a first tap can go to dismissing the keyboard: open the menu again
+        for _ in 0..<3 where !item.exists {
+            if control.isHittable { control.tap() }
+            _ = item.waitForExistence(timeout: 2)
+        }
         XCTAssertTrue(item.waitForExistence(timeout: 5), "no \(option) in \(picker)")
         item.tap()
     }
@@ -176,18 +180,24 @@ final class RoutinesUITests: XCTestCase {
         XCTAssertTrue(failed.waitForExistence(timeout: 10))
         XCTAssertFalse(element("routine-run-row.lab-run-done", in: app).exists, "Problems shows only failed and missed runs")
         XCTAssertTrue(element("routine-run-unseen.lab-run-failed", in: app).exists)
+        // #2098: the run opens in the bot's conversation. A failed run is a
+        // passing banner, never a row (TransientNotices, 2026-10-26), and an
+        // old one is history: the chat opens without a card to land on.
         failed.tap()
-        XCTAssertTrue(element("routine-run-status", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Aurora"].firstMatch.waitForExistence(timeout: 15), "Aurora's chat opens")
         try eventually("the failed run is seen on the server") { try run("lab-run-failed")?["seenAt"] != nil }
-        // the run's own Done, over the Automations sheet's
-        app.buttons.matching(NSPredicate(format: "label == %@", "Done")).allElementsBoundByIndex.last?.tap()
 
-        element("routines-menu", in: app).tap()
-        element("routines-mark-all-seen", in: app).tap()
+        // back to Automations: the badge counts what is still unseen
+        let again = openRoutines()
+        let left = element("routines-problems-badge", in: again)
+        XCTAssertTrue(left.waitForExistence(timeout: 10))
+        XCTAssertEqual(left.value as? String, "\(unseen.count - 1)")
+        element("routines-menu", in: again).tap()
+        element("routines-mark-all-seen", in: again).tap()
         try eventually("every failure is seen on the server") {
             try runs().allSatisfy { !["failed", "missed"].contains($0["status"] as? String) || $0["seenAt"] != nil }
         }
-        XCTAssertTrue(badge.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(left.waitForNonExistence(timeout: 10))
     }
 
     /// Run logs: search and the status filter narrow to what the server holds.
@@ -205,6 +215,8 @@ final class RoutinesUITests: XCTestCase {
         XCTAssertTrue(element("routine-run-row.lab-run-done", in: app).waitForExistence(timeout: 5))
         XCTAssertFalse(element("routine-run-row.lab-run-failed", in: app).exists)
         search.buttons["Clear text"].firstMatch.tap()
+        // submit the empty search: the keyboard goes, the filters are reachable
+        if app.keyboards.firstMatch.exists { search.typeText("\n") }
         app.swipeDown()
 
         choose("Missed", in: "routines-status-filter", app: app)
@@ -237,10 +249,20 @@ final class RoutinesUITests: XCTestCase {
         let app = openRoutines()
         XCTAssertTrue(element("routines-row.Scan skills populaires mensuel", in: app).waitForExistence(timeout: 10))
         element("routines-menu", in: app).tap()
-        app.buttons["Filter by bot"].firstMatch.tap()
         // the submenu opens over the Automations sheet
-        let auroraItem = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Aurora")).firstMatch
-        XCTAssertTrue(auroraItem.waitForExistence(timeout: 5), "Aurora in the bot filter")
+        // the menu item reads the bot's name alone; the home row under the
+        // sheet ("Aurora · Finance Manager, …") is not it
+        let items = app.buttons.matching(NSPredicate(format: "label == %@", "Aurora"))
+        // a tap while the menu still springs open is swallowed: tap the
+        // submenu row again until its bots show
+        let submenu = app.buttons["Filter by bot"].firstMatch
+        XCTAssertTrue(submenu.waitForExistence(timeout: 5))
+        for _ in 0..<3 where !items.firstMatch.exists {
+            if submenu.isHittable { submenu.tap() }
+            _ = items.firstMatch.waitForExistence(timeout: 2)
+        }
+        XCTAssertTrue(items.firstMatch.waitForExistence(timeout: 5), "Aurora in the bot filter")
+        let auroraItem = items.allElementsBoundByIndex.first { $0.isHittable } ?? items.firstMatch
         auroraItem.tap()
         XCTAssertTrue(element("routines-row.\(lab)", in: app).waitForExistence(timeout: 5))
         XCTAssertFalse(element("routines-row.Scan skills populaires mensuel", in: app).exists)
@@ -344,8 +366,13 @@ final class RoutinesUITests: XCTestCase {
         let id = try scratchRoutine("Objectif WP8")
         let app = openRoutines()
         openEditor("Objectif WP8", in: app)
-        app.segmentedControls["routine-editor-type"].buttons["Team goal"].tap()
-        XCTAssertTrue(element("routine-editor-lead", in: app).waitForExistence(timeout: 5))
+        // What sits under When: scroll to the routine type first
+        let type = app.segmentedControls["routine-editor-type"]
+        scrollTo(type, in: app)
+        type.buttons["Team goal"].tap()
+        let lead = element("routine-editor-lead", in: app)
+        scrollTo(lead, in: app)
+        XCTAssertTrue(lead.waitForExistence(timeout: 5))
         save(app)
         try eventually("the routine is a team goal on the server") {
             let saved = try self.routines().first { $0["id"] as? String == id }

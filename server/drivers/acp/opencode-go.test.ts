@@ -434,7 +434,8 @@ describe("OpenCode catalog", () => {
     const firstLoad = source.indexOf("await registry.load(providerConfigs(), decorateHostedProvider);");
     expect(wired).toBeGreaterThan(0);
     expect(firstLoad).toBeGreaterThan(wired);
-    expect(source.match(/setOpenCodeProviderKeyPolicy\(/g)).toHaveLength(1);
+    // one call; the leaf host's `get setOpenCodeProviderKeyPolicy()` getter (#2331) is not one
+    expect(source.match(/(?<!get )setOpenCodeProviderKeyPolicy\(/g)).toHaveLength(1);
     const policy = source.slice(source.indexOf("const openCodeKeysAllowed = "), wired);
     expect(policy).toContain("sharedSignIn: sharedSignIn(signInAllowList())");
     expect(policy).toContain("cloudHome: false");
@@ -1130,8 +1131,11 @@ describe("OpenCode session variants", () => {
   // An engine's notice is technical: it goes to the server log and the
   // Events lens, never into the chat (the maintainer, 2026-10-26, shared/chat-notices.ts).
   it("goes to the log, never into the chat", () => {
-    const source = readFileSync(new URL("../../index.ts", import.meta.url), "utf8");
-    const handler = source.slice(source.indexOf('case "runtime.notice":'), source.indexOf('case "runtime.error":'));
+    // The runtime event switch left index.ts with the split (#2331).
+    const source = readFileSync(new URL("../../runtime-events/runtime-lifecycle.ts", import.meta.url), "utf8");
+    const start = source.indexOf('case "runtime.notice":');
+    expect(start).toBeGreaterThan(0);
+    const handler = source.slice(start, source.indexOf('case "runtime.error":', start));
     expect(handler).toContain("console.info(");
     expect(handler).not.toContain("pushMessage(");
     expect(handler).not.toContain("appendMessage(");

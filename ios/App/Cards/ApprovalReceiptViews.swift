@@ -95,7 +95,7 @@ enum ApprovalWords {
     static func held(_ card: OptionCard) -> String? {
         guard ApprovalHeldNote.shows(card) else { return nil }
         switch card.heldCode {
-        case "approval.held.outbound": return String(localized: "This sends something on your behalf, so it always asks first.")
+        case "approval.held.outbound": return String(localized: "This sends something on your behalf. Allow it once, or always for this tool.")
         case "approval.held.sandbox": return String(localized: "This changes the provider sandbox, so only Full access can approve it automatically.")
         case "approval.held.undelivered": return String(localized: "Approve for me couldn't answer this one.")
         case "approval.held.undeliveredFull": return String(localized: "Full access couldn't deliver this approval.")

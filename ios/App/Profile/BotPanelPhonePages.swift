@@ -553,7 +553,7 @@ struct BotVoiceSections: View {
         }
         .task {
             async let status = session.configStatus()
-            async let options = session.voiceOptions()
+            async let options = session.voiceOptions(quiet: true)
             async let environment = session.serverEnvironment()
             let loaded = await status
             config = loaded
@@ -589,7 +589,7 @@ struct BotVoiceSections: View {
             config = status
             engine = status.voiceProvider
             voices = []
-            voices = await session.voiceOptions()
+            voices = await session.voiceOptions(quiet: true)
             if reset.voice != voice || reset.speakReplies != (current.speakReplies == true) {
                 var patch = BotProfilePatch()
                 patch.voice = reset.voice
@@ -612,7 +612,7 @@ struct BotVoiceSections: View {
         defer { savingServer = false }
         if let status = await session.saveChatterboxServer(baseURL: address, model: chatterboxModel.trimmingCharacters(in: .whitespacesAndNewlines)) {
             config = status
-            voices = await session.voiceOptions()
+            voices = await session.voiceOptions(quiet: true)
         }
     }
 

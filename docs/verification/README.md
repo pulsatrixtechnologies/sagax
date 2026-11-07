@@ -129,9 +129,6 @@ renderer components and isolated HTTP routes.
 The [desktop server connection smoke](desktop-server-connection.md) mounts the
 real Settings connection component in disposable Electron windows.
 
-The [loading screen and tray smoke](startup-tray.md) checks the startup close
-button, hidden handoff, tray restore, and Quit in a disposable Electron profile.
-
 The [optional organization connection smoke](organization-settings.md) checks
 the real Settings panel and production desktop client against a synthetic
 Admin server, including cancellation, revocation and unchanged normal startup.
@@ -344,9 +341,12 @@ printed path. Never kill processes by name and never delete a broad temp root.
 ## Also
 
 - [Claude cold prewarm](claude-cold-prewarm.md)
+- [Connectors card patch past send](connectors-patch-defer.md)
 - [Cursor secondary monitors](cursor-secondary-monitors.md)
 - [Flow superseded tenants](flow-superseded.md)
 - [Grok ACP cold start](grok-acp-cold-start.md)
 - [HTTP MCP prewarm](http-mcp-prewarm.md)
+- [Mtime prompt caches](mtime-prompt-cache.md)
 - [Prompt diet](prompt-diet.md)
 - [Routine smoke](routine-smoke.md)
+- [Team isolation](teams-isolation-2045.md)

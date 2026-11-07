@@ -25,7 +25,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import type { McpServerSpec, RemoteMcpSpec } from "../contracts.ts";
 import { McpHttpError, RemoteMcpClient } from "./mcp-http.ts";
 import { discoverMcpAuth } from "./mcp-oauth-discovery.ts";
-import { sendsCredentials, SIGN_IN_CHECK_TOOL } from "./mcp-probe.ts";
+import { sendsCredentials, SIGN_IN_CHECK_TOOL } from "./mcp-sign-in-check.ts";
 import { guardedFetch } from "../public-fetch.ts";
 import type { VaultKeySource } from "../vault/vault-key-source.ts";
 

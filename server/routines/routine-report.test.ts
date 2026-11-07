@@ -8,6 +8,14 @@ import {
 } from "./routine-report.ts";
 
 describe("routineReportOutcome", () => {
+  it("is quiet when the final message is only control tokens, and strips one after a report", () => {
+    expect(routineReportOutcome("<|eos|>")).toEqual({ quiet: true, report: "" });
+    expect(routineReportOutcome("  <|im_end|>\n<|endoftext|> ")).toEqual({ quiet: true, report: "" });
+    expect(routineReportOutcome("Deux courriels classés.<|eos|>")).toEqual({ quiet: false, report: "Deux courriels classés." });
+    // No bubble, no unread, no notification: the run has nothing to post.
+    expect(routineRunReportable({ status: "completed", quiet: routineReportOutcome("<|eos|>").quiet, postResults: true })).toBe(false);
+  });
+
   it("is quiet when the bot ends with the marker, and keeps the note for the logs", () => {
     expect(routineReportOutcome(`Checked 12 invoices, all have a PO.\n\n${ROUTINE_QUIET_MARKER}`))
       .toEqual({ quiet: true, report: "Checked 12 invoices, all have a PO." });

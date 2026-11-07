@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { initialState, reducer, type AppState, type Bot } from "./store";
 
-const bot = { id: "pepper", name: "Pepper" } as Bot;
+// a bot always carries its messages: select reads the visible ones
+const bot = { id: "pepper", name: "Pepper", messages: [] } as unknown as Bot;
 const withBot: AppState = { ...initialState, bots: [bot] };
 
 describe("Persona editor state", () => {
@@ -101,7 +102,7 @@ describe("Persona editor state", () => {
   });
 
   it("fills the main panel in place of any view, and sidebar navigation leaves it (#2136)", () => {
-    const bots = [bot, { id: "salt", name: "Salt" } as Bot];
+    const bots = [bot, { id: "salt", name: "Salt", messages: [] } as unknown as Bot];
     const base: AppState = { ...initialState, bots, selectedId: "pepper" };
     const fromRoutines = reducer({ ...base, activeView: "routines" as const }, { type: "openPersonaEditor", botId: "pepper" });
     expect(fromRoutines.activeView).toBe("chat");

@@ -189,9 +189,10 @@ describe("destructive actions need their own explicit Always rule", () => {
     expect(destructiveKindOf({ tool: "mcp__gmail__send_email", input: "{}" })).toBe("external-message");
     expect(destructiveKindOf({ tool: CW_WRITE, input: ticketUpdate })).toBeUndefined();
   });
-  it("an allow rule with any target does not cover a delete, in any mode", () => {
+  it("an allow rule with any target does not cover a delete at Approval or Auto (Bypass asks nothing, 2026-11-06)", () => {
     const wide = rule({ scope: {} });
-    for (const mode of ["approval", "auto", "bypass"] as const) {
+    expect(ownerDecision({ mode: "bypass", rules: [wide], call: call(ticketDelete) })).toMatchObject({ kind: "allow" });
+    for (const mode of ["approval", "auto"] as const) {
       expect(ownerDecision({ mode, rules: [wide], call: call(ticketDelete) })).toMatchObject({ kind: "card", reason: "destructive", destructive: "delete" });
     }
   });
@@ -230,8 +231,9 @@ describe("a destructive shell command is a delete, in every mode (2026-10-22)", 
     expect(destructiveKindOf({ tool: BASH, input: shell("npm run build") })).toBeUndefined();
   });
 
-  it("auto and bypass hold a card for it unless an allow rule was made for a delete; a plain command still auto-approves", () => {
-    for (const mode of ["auto", "bypass"] as const) {
+  it("auto holds a card for it unless an allow rule was made for a delete; bypass runs it; a plain command still auto-approves", () => {
+    expect(ownerDecision({ mode: "bypass", rules: [], call: shellCall(BASH, "rm -rf /tmp/zzz") })).toEqual({ kind: "allow", source: "owner-bypass" });
+    for (const mode of ["auto"] as const) {
       expect(ownerDecision({ mode, rules: [], call: shellCall(BASH, "rm -rf /tmp/zzz") }))
         .toMatchObject({ kind: "card", reason: "destructive", destructive: "delete" });
       // a wide allow rule (any target) never covers it (same guard as an MCP delete)
@@ -255,8 +257,13 @@ describe("a destructive shell command is a delete, in every mode (2026-10-22)", 
     }
   });
 
-  it("outside it (another person's, the real computer, a connector), at Approval, or for a message to a third party, the delete card stays", () => {
-    for (const mode of ["auto", "bypass"] as const) {
+  it("outside it (another person's, the real computer, a connector), at Approval, or for a message to a third party, the delete card stays (Bypass: only another person's)", () => {
+    // 2026-11-06: Bypass asks nothing a rule did not keep; another
+    // person's environment still holds its card
+    expect(ownerDecision({ mode: "bypass", rules: [], call: shellCall(BASH, "rm -rf /tmp/zzz") })).toEqual({ kind: "allow", source: "owner-bypass" });
+    expect(ownerDecision({ mode: "bypass", rules: [], call: { ...call(smsSend), tool: "mcp__perspicax_quasar__twilio_api_write" }, ownEnvironment: true })).toEqual({ kind: "allow", source: "owner-bypass" });
+    expect(ownerDecision({ mode: "bypass", rules: [], call: shellCall(BASH, "rm -rf build"), ownEnvironment: true, crossPerson: true })).toEqual({ kind: "card", reason: "cross-person" });
+    for (const mode of ["auto"] as const) {
       // not the person's own environment
       expect(ownerDecision({ mode, rules: [], call: shellCall(BASH, "rm -rf /tmp/zzz") })).toMatchObject({ kind: "card", reason: "destructive", destructive: "delete" });
       expect(ownerDecision({ mode, rules: [], call: call(ticketDelete) })).toMatchObject({ kind: "card", reason: "destructive" });
@@ -333,8 +340,11 @@ describe("2026-10-19: Toujours permettre on every card", () => {
     const wholeRule = { ...shellRule("x"), tool: whole.tool, scope: whole.scope };
     expect(matchOwnerRule([wholeRule], { ownerId: ALICE, botId: "bot-a", tool: "mcp__db__run", input: sql("select 1") })?.id).toBe("s1");
     expect(matchOwnerRule([wholeRule], { ownerId: ALICE, botId: "bot-a", tool: "mcp__db__run", input: sql("drop table t") })).toBeUndefined();
-    // arguments the scope does not read keep the whole request, never the whole tool
-    expect(ruleCandidateFor({ tool: "mcp__mail__send", input: JSON.stringify({ message: { toRecipients: ["a@x.ca"] } }) }).scope[WHOLE_CALL_KEY]).toMatch(/^[0-9a-f]{32}$/);
+    // 2026-11-06: arguments the scope does not read keep this tool on
+    // this server for this bot, so the next call matches the saved rule
+    const sendCandidate = ruleCandidateFor({ tool: "mcp__mail__send", input: JSON.stringify({ message: { toRecipients: ["a@x.ca"] } }) });
+    expect(sendCandidate.scope).toEqual({});
+    expect(sendCandidate.destructive).toBe("external-message");
     expect(ruleCandidateFor({ tool: "mcp__mail__list", input: "{}" }).scope).toEqual({});
     // a target too long to keep never becomes "any value"
     expect(ruleScopeFor(JSON.stringify({ domain: "a".repeat(200) })).domain).toBeDefined();
@@ -670,10 +680,11 @@ describe("Bypass on the owner's own computer, and what always wins over it (#106
     }
   });
 
-  it("a delete, a hold, a security key and the owner's deny rule still stop Bypass on the owner's computer", () => {
+  it("a hold, a security key and the owner's deny rule still stop Bypass on the owner's computer", () => {
     const rm = JSON.stringify({ command: "rm -rf docs", cwd: "C:/repo" });
     const own = { mode: "bypass" as const, autonomyRefused: true, ownComputerOwnTurn: true };
-    expect(ownerDecision({ ...own, rules: [], call: desktop(DESKTOP_RUN, rm) })).toMatchObject({ kind: "card", reason: "destructive" });
+    // 2026-11-06: a delete is the person's own authorized work in Bypass
+    expect(ownerDecision({ ...own, rules: [], call: desktop(DESKTOP_RUN, rm) })).toEqual({ kind: "allow", source: "owner-bypass" });
     expect(ownerDecision({ ...own, rules: [], call: desktop(DESKTOP_READ, readme), personMustAnswer: true })).toMatchObject({ kind: "card", reason: "hold" });
     expect(ownerDecision({ ...own, rules: [], call: desktop(DESKTOP_READ, readme), stepUpRequired: true })).toMatchObject({ kind: "card", reason: "step-up" });
     const deny: OwnerRule = { id: "d1", ownerId: ALICE, botId: null, tool: "sagax-desktop__read_file", scope: {}, behavior: "deny", description: "never", createdAt: 1, updatedAt: 1 };

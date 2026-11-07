@@ -75,6 +75,8 @@ function scan(): Hit[] {
       if (/^\s*(?:readonly\s+)?\w+\??: .*;\s*$/.test(text) && !/\(/.test(text)) return;
       if (/^\s*(?:readonly\s+)?\w+\??\(\w+\??:\s/.test(text)) return;
       if (/^\s*(?:\/\/|\*)/.test(text)) return;
+      // a leaf host accessor that only forwards a binding (#2440), not a call
+      if (/^\s*get \w+\(\) \{ return \w+; \},?\s*$/.test(text)) return;
       for (const emitter of EMITTERS) {
         if (!emitter.pattern.test(text)) continue;
         // the marker on the line itself or the three lines above it

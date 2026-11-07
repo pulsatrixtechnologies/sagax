@@ -32,28 +32,16 @@
 // change says why (botSectionLock); nothing is hidden for lack of a
 // permission. The page itself carries no gear: the bot's settings live here
 // and in the right-hand bot panel.
-import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { BellRing, Brain, ChevronDown, ChevronRight, Cpu, Lock, Mail, MessageCircle, Palette, Plug, Search, Star, Users } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Brain, ChevronRight, Users } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
-import { CIRCLE_LABEL } from "@/lib/circle-button";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { simpleHidesBotSection } from "@/lib/interface-visibility";
 import { canEditBotField } from "@/lib/bot-capabilities";
-import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
-import { viewerActorId } from "@/lib/viewer";
-import { personLabel } from "@/lib/human-label";
-import { useOrgPeople } from "@/lib/perspicax-org";
-import { personaPagesMatching } from "@/lib/persona-search";
-import { applySettingsSearch, clearSettingsSearch, settingsQuery } from "@/lib/settings-search";
-import { useBotInboundMailState } from "@/lib/bot-inbound-mail";
-import { useReachMe } from "@/lib/reach-me";
-import { loadMessagesSetup } from "@/lib/mac-messages-setup";
-import { capabilityName, orderedCapabilities, stateWord, useBotCapabilities } from "@/lib/capabilities";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import {
   BOT_PROFILE_TABS,
   BOT_PROFILE_TAB_SECTIONS,
@@ -66,134 +54,22 @@ import {
 } from "@/lib/persona-sections";
 import { personaSharingSummary } from "@/lib/bot-sharing";
 import { MAUS_COLORS } from "@/lib/mascot";
-import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
-import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { mascotColorGroup } from "../../../shared/mascot-colors";
-import { botMascotSkin } from "../../../shared/mascot-skins";
-import { completeMascotLook } from "../../../shared/mascot-look";
-import type { MessagesSetupStatus } from "../../../shared/mac-messages-setup";
-import { BOT_PROFILE_LIMITS } from "../../../shared/bot-profile";
-import { useCaptionChrome, useMacInsetChrome } from "../DesktopCapabilities";
-import { WindowCloseButton } from "../WindowCloseButton";
-import { AnchoredPopover, useAnchoredDismissRoot } from "../AnchoredPopover";
 import { PILL, SettingsSurfaceProvider } from "../SettingsPrimitives";
-import { ShareBotButton } from "./ShareBotButton";
-import { useAvatarSources } from "../appearance/AvatarSources";
-import { MASCOT_HERO_BUTTON, MascotLookPreview } from "../floating-bots/MascotLookPreview";
-import { MascotHeroSlotContext, type MascotHeroSlot } from "../floating-bots/mascot-hero-slot";
-import { InlineEditableText } from "../bot-settings/InlineEditableText";
-import { BOT_SECTIONS } from "../bot-settings/sections";
+import { MascotHeroSlotContext } from "../floating-bots/mascot-hero-slot";
 import { RulesSection } from "../bot-settings/RulesSection";
 import { WorkspaceFilesSection } from "../bot-settings/WorkspaceFilesSection";
-import { SlackSection } from "../bot-settings/SlackSection";
-import { BotEmailAddress } from "../bot-settings/BotEmailAddress";
-import { BotReachMe } from "../bot-settings/BotReachMe";
 import { botSectionLock, useBotSectionAvailability, useBotSectionContent } from "../bot-settings/useBotSectionContent";
-
-const ENTRY = new Map(BOT_SECTIONS.map((entry) => [entry.id, entry]));
-
-/** A section's name, as the editor's rail named it. */
-function sectionLabel(id: BotSettingsSection): string {
-  const entry = ENTRY.get(id);
-  if (!entry) return id;
-  return entry.labelKey ? t(entry.labelKey) : entry.label;
-}
-
-/** The five tabs' names (#2271). */
-const TAB_LABEL: Record<BotProfileTab, LocaleKey> = {
-  general: "botProfile.tab.general",
-  knowledge: "botProfile.tab.knowledge",
-  tools: "botProfile.tab.tools",
-  activity: "botProfile.tab.activity",
-  analytics: "botProfile.tab.analytics",
-};
-
-const REACH_LABEL: Record<string, LocaleKey> = {
-  push: "botPanel.reachMe.push.label",
-  sms: "botPanel.reachMe.sms.label",
-  teams: "botPanel.reachMe.teams.label",
-  telegram: "botPanel.reachMe.telegram.label",
-  whatsapp: "botPanel.reachMe.whatsapp.label",
-};
-
-/** The sections each tab's single column holds, in order. The channels and
- * the accounts cards head General; Slack is a row of the channels card. */
-const SECTIONS: Record<BotProfileTab, readonly PersonaCategory[]> = {
-  general: ["summary", "sharing", "visibility"],
-  knowledge: ["skills", "soul", "rules", "files"],
-  tools: ["model", "worksOn", "access", "permissions", "voice"],
-  activity: ["history"],
-  analytics: ["usage"],
-};
-
-type Channel = "slack" | "email" | "reachMe" | "messages";
-
-/** The row of a locked section's card: why this viewer may only read it. */
-function Note({ children }: { children: ReactNode }) {
-  return (
-    <p role="note" data-persona-locked="" aria-label={t("persona.lockedBadge")} className="m-0 flex min-h-[44px] items-center gap-3 px-4 py-2 text-[14px] leading-5 text-ink-secondary">
-      <Lock strokeWidth={1.5} aria-hidden="true" className="size-5 shrink-0" />
-      <span className="min-w-0">{children}</span>
-    </p>
-  );
-}
-
-/** One row of a card: icon, name, state under it, an action on the right,
- * and what the action unfolds under the row. */
-function CardRow({ icon, label, state, action, children, rowId }: {
-  icon: ReactNode;
-  label: string;
-  state?: ReactNode;
-  action?: ReactNode;
-  children?: ReactNode;
-  rowId: string;
-}) {
-  return (
-    <div data-bot-profile-row={rowId} className="flex flex-col">
-      <div className={cn("flex items-center gap-3 px-4", action ? "min-h-[56px] py-2.5" : "min-h-[44px] py-2")}>
-        <span className="flex size-5 shrink-0 items-center justify-center text-ink-secondary [&>svg]:size-5" aria-hidden="true">{icon}</span>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-[14px] leading-5 text-ink">{label}</span>
-          {state !== undefined && state !== null && <span data-bot-profile-state="" className="truncate text-[12px] leading-4 text-ink-secondary">{state}</span>}
-        </div>
-        {action}
-      </div>
-      {children && <div className="px-4 pb-3 pt-1">{children}</div>}
-    </div>
-  );
-}
-
-/** A section of a tab's page: the same body as the bot panel's, whose
- * cards carry their own grey labels (the page adds no heading of its own).
- * A section this viewer may only read says so in its body (a Note). */
-function Block({ id, locked, children }: { id: PersonaCategory; locked: boolean; children: ReactNode }) {
-  return (
-    <section
-      aria-label={sectionLabel(id)}
-      data-bot-profile-section={id}
-      data-persona-section={id}
-      data-bot-profile-locked={locked ? "" : undefined}
-      data-open=""
-      className="flex min-w-0 flex-col gap-6"
-    >
-      {children}
-    </section>
-  );
-}
-
-// The character registry and its labels: fetched with the page's hero card,
-// the same chunk the Appearance pane's editor loads.
-const MascotLookEditor = lazy(() => import("../floating-bots/MascotLookEditor"));
+import { AccountsCard, Block, CardRow, ChannelsCard, Note, ProfileCard, SECTIONS, sectionLabel, type Channel } from "./BotProfilePage.tsx-parts/cards";
+import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
+import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
+import { BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
 
 export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: BotSettingsSection; onClose: () => void }) {
   const { state, dispatch } = useStore();
   const advanced = useAdvancedMode();
   const rootRef = useRef<HTMLElement>(null);
-  const { noDragStyle, controlsShiftStyle, dragProps, dragStyle } = useCaptionChrome();
-  const searchRef = useRef<HTMLInputElement>(null);
   const { available, slackUrl } = useBotSectionAvailability(bot.id);
-  const viewerId = viewerActorId(state.config);
-  const people = useOrgPeople();
 
   // A page this server does not offer (Slack without an Admin page, Shared
   // with off Perspicax, Who can see it where one person signs in) is not
@@ -222,9 +98,6 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   // or a link to Appearance.
   const [appearanceOpen, setAppearanceOpen] = useState(() => personaCategoryForSection(section) === "appearance");
   const [channel, setChannel] = useState<Channel | null>(() => (personaCategoryForSection(section) === "slack" ? "slack" : null));
-  const [searching, setSearching] = useState(false);
-  const [query, setQuery] = useState("");
-  const q = settingsQuery(query);
   const scrollTo = useRef<string | null>(null);
   // The Share popover of the top bar (Grok Bot): the one place the people
   // and groups the bot is shared with are managed.
@@ -369,102 +242,20 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
 
   const block = (id: PersonaCategory) => (shown(id) ? <Block key={id} id={id} locked={lockOf(id) !== null}>{body(id)}</Block> : null);
 
-  // The search: the pages the query leads to, best first. The first one's
-  // tab opens and hides its rows that do not match; the tabs of the others
-  // stay plain, the rest dim.
   const pages = useMemo(
     () => PERSONA_CATEGORIES.filter((id) => id !== "overview" && shown(id)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [advanced, slackUrl, available("sharing"), available("visibility")],
   );
-  const results = useMemo(() => personaPagesMatching(pages, q, sectionLabel), [pages, q]);
-  const searchHit = q ? results[0] ?? null : null;
-  const matching = new Set(results.filter((id) => id !== "appearance").map(tabOf));
-  const changeQuery = (value: string) => {
-    setQuery(value);
-    const next = settingsQuery(value);
-    if (!next) return;
-    const first = personaPagesMatching(pages, next, sectionLabel)[0];
-    if (!first) return;
-    if (first === "appearance") setAppearanceOpen(true);
-    else setTab(tabOf(first));
-  };
-  useLayoutEffect(() => {
-    const root = searchHit ? rootRef.current?.querySelector<HTMLElement>(`[data-bot-profile-section="${searchHit}"]`) : null;
-    if (!root || !q) return;
-    let scroll = true;
-    const apply = () => {
-      const hit = applySettingsSearch(root, q);
-      if (scroll && hit) hit.scrollIntoView?.({ block: "center", inline: "nearest" });
-      scroll = false;
-    };
-    apply();
-    const observer = new MutationObserver(() => apply());
-    observer.observe(root, { childList: true, subtree: true });
-    return () => {
-      observer.disconnect();
-      clearSettingsSearch(root);
-    };
-  }, [q, searchHit, tab, appearanceOpen]);
-
-  const focusSearch = () =>
-    requestAnimationFrame(() => {
-      searchRef.current?.focus();
-      searchRef.current?.select();
-    });
-  const openSearch = () => {
-    setSearching(true);
-    focusSearch();
-  };
-  const closeSearch = () => {
-    setSearching(false);
-    setQuery("");
-  };
-
-  // Command-F or a slash opens the search, from anywhere on the page.
-  const openSearchRef = useRef(openSearch);
-  openSearchRef.current = openSearch;
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      const root = rootRef.current;
-      if (!root || !(event.target instanceof Node) || (event.target !== document.body && !root.contains(event.target))) return;
-      const find = (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "f";
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      const typing = target !== null && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
-      const slash = event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !typing;
-      if (!find && !slash) return;
-      event.preventDefault();
-      openSearchRef.current();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // Escape clears the query, then puts the field away; on the page it closes.
-  const onSearchKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (query) {
-      setQuery("");
-      return;
-    }
-    closeSearch();
-    rootRef.current?.focus({ preventScroll: true });
-  };
-
-  // Header: who sees it, who owns it, what this viewer may change.
-  const sharing = personaSharingSummary(bot);
-  const notShared = sharing === t("botSettings.sharing.empty");
-  const audience = notShared && viewerOwnsBot(bot, viewerId) ? t("botProfile.privateToYou") : sharing;
-  const isPrimary = isViewersPrimaryBot(bot, viewerId);
-  const ownerId = bot.ownerUserId?.trim() ?? "";
-  const ownerPerson = people.get(ownerId.toLowerCase());
-  const owner = ownerId && !viewerOwnsBot(bot, viewerId) ? personLabel(ownerPerson?.name, ownerPerson?.login, ownerId) : "";
-  const canName = canEditBotField(state.config, bot, "name");
-  const canLabel = canEditBotField(state.config, bot, "title");
-  const canDescribe = canEditBotField(state.config, bot, "description");
+  const search = useBotProfileSearch({
+    rootRef,
+    pages,
+    tabOf,
+    tab,
+    appearanceOpen,
+    onOpenTab: setTab,
+    onOpenAppearance: () => setAppearanceOpen(true),
+  });
 
   const tabs: readonly BotProfileTab[] = BOT_PROFILE_TABS.filter(tabShown);
 
@@ -492,7 +283,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     };
   }, []);
 
-  const privateBot = notShared;
+  const privateBot = personaSharingSummary(bot) === t("botSettings.sharing.empty");
   // The banner is a wash of the mascot's colour (#2173, back after #2313):
   // its hex goes to the stylesheet as a variable; a neutral mascot keeps a
   // visible grey there. The top bar carries the wash's top colour so the
@@ -501,107 +292,14 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   const bannerStyle = { "--bot-profile-banner-color": bannerColor } as CSSProperties;
   const bannerPalette = mascotColorGroup(bot.color);
 
-  // The top bar (#2313): X and Private / Shared never scroll away, on the
-  // sidebar head's centre line with its circles' size. The sidebar's head
-  // is one 48px row in the title bar (macOS inset or the browser's dots, no
-  // logo, circles 24px down), else a 56px row (28px down), under the 36px
-  // inset strip when the logo shows on macOS or in a browser.
-  const { macInset, browser } = useMacInsetChrome();
-  const showLogo = useShowSidebarLogo();
-  const titleBarHead = (macInset || browser) && !showLogo;
-  const insetStrip = (macInset || browser) && showLogo;
-
-  // The header is the Appearance > Mascot hero card (#2313): the open
-  // mascot editor draws it into this slot (so a character picked in its
-  // grid previews here), the page draws it for the bot's own look while the
-  // editor is closed. A picture dropped on it or pasted becomes the bot's.
-  const [heroTarget, setHeroTarget] = useState<HTMLElement | null>(null);
-  const [heroClaimed, setHeroClaimed] = useState(false);
-  const claimHero = useCallback((claimed: boolean) => setHeroClaimed(claimed), []);
-  const heroSources = useAvatarSources(bot, derived.patch);
-  const [heroDropping, setHeroDropping] = useState(false);
-  const heroTitle = (
-    // The name alone on its line at 28px, the label under it, smaller and
-    // secondary (JC: never "Name · Label" on one line).
-    <h2 id="bot-profile-title" data-bot-profile-title="" className="flex min-w-0 max-w-full text-[28px] font-normal leading-9 text-ink">
-      <InlineEditableText
-        value={bot.name}
-        required
-        maxLength={BOT_PROFILE_LIMITS.name}
-        ariaLabel={t("botPanel.name.edit")}
-        onSave={canName ? (name) => derived.patch({ name }) : undefined}
-        className="min-w-0 text-[28px] font-normal leading-9 text-ink"
-      />
-    </h2>
-  );
-  const heroLabel = (bot.title?.trim() || canLabel) ? (
-    <div data-bot-profile-label="" className="flex min-w-0 max-w-full text-[15px] leading-5 text-ink-secondary">
-      <InlineEditableText
-        value={bot.title ?? ""}
-        maxLength={BOT_PROFILE_LIMITS.title}
-        placeholder={t("botPanel.label.add")}
-        ariaLabel={t("botPanel.label.edit")}
-        onSave={canLabel ? (title) => derived.patch({ title }) : undefined}
-        className="min-w-0 text-[15px] leading-5 text-ink-secondary"
-      />
-    </div>
-  ) : undefined;
-  // Where the hero's Randomize was: Appearance unfolds its four tabs under
-  // the header (the sources in the Mascot tab, Reset and Randomize in the tab row).
-  const appearanceButton = shown("appearance") ? (
-    <button
-      type="button"
-      data-bot-profile-appearance-toggle=""
-      aria-expanded={appearanceOpen}
-      aria-controls="bot-profile-appearance"
-      onClick={() => setAppearanceOpen((prev) => !prev)}
-      className={cn(MASCOT_HERO_BUTTON, appearanceOpen && "bg-raised-hover")}
-    >
-      <Palette size={13} aria-hidden="true" />
-      {t("botProfile.appearanceButton")}
-      {lockOf("appearance") !== null && <Lock size={11} aria-label={t("persona.lockedBadge")} className="shrink-0 text-ink-tertiary" />}
-      <ChevronDown size={13} aria-hidden="true" className={cn("transition-transform", appearanceOpen && "rotate-180")} />
-    </button>
-  ) : undefined;
-  const heroSlot: MascotHeroSlot = {
-    target: heroTarget,
-    claim: claimHero,
-    heading: heroTitle,
-    subheading: heroLabel,
-    action: appearanceButton,
-    state: derived.activeState,
-    motion: derived.mascotMotion,
-  };
-  const heroLook = completeMascotLook(bot.mascotLook);
-  const heroPicture = (bot.avatarCrop ?? "mascot") !== "mascot" && bot.avatarUrl ? bot : undefined;
-  // The hero before the editor's chunk arrives (and for a picture): the same
-  // card, without the character's summary and moves.
-  const staticHero = (
-    <MascotLookPreview
-      bot={bot}
-      shown={heroLook.character}
-      shownName=""
-      shownLook={heroLook}
-      shownLock={{ locked: false }}
-      summary={heroPicture ? t("appearance.pictureInUse") : ""}
-      tint={MAUS_COLORS[bot.color] ?? MAUS_COLORS.green}
-      owlSkin={botMascotSkin(bot.mascotSkin)}
-      previewSkin={null}
-      inUse
-      moves={[]}
-      owlMotion={null}
-      fxMove={null}
-      onUse={() => {}}
-      onPlay={() => {}}
-      onPlayNext={() => {}}
-      heading={heroTitle}
-      subheading={heroLabel}
-      action={appearanceButton}
-      picture={heroPicture}
-      liveState={derived.activeState}
-      liveMotion={derived.mascotMotion}
-    />
-  );
+  const { heroSlot, hero } = useBotProfileHero({
+    bot,
+    derived,
+    appearanceShown: shown("appearance"),
+    appearanceLocked: lockOf("appearance") !== null,
+    appearanceOpen,
+    onToggleAppearance: () => setAppearanceOpen((prev) => !prev),
+  });
 
   // A tab's page: one column of cards (JC 2026-11-06). Knowledge stays
   // mounted (hidden) so Rules and the Bot folder keep an unsaved draft
@@ -643,31 +341,16 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
       }}
       className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-app text-ink outline-none"
     >
-      {/* The top bar (#2313): the close button and who sees the bot stay
-          put while the page scrolls, on an opaque bar, centred like the
-          sidebar head's search and + circles. */}
-      {insetStrip && <div aria-hidden="true" data-bot-profile-inset-strip="" className="content-topbar-strip h-9 shrink-0 bg-app" {...dragProps} />}
-      <div
-        data-bot-profile-topbar=""
-        data-bot-profile-banner-palette={bannerPalette}
-        {...dragProps}
-        style={{ ...dragStyle, ...bannerStyle, minHeight: 0 }}
-        className={cn("content-topbar bot-profile-banner-top relative z-10 flex shrink-0 items-center justify-between gap-2 px-3", titleBarHead ? "h-12" : "h-14")}
-      >
-        <WindowCloseButton onClose={onClose} place="relative max-sm:ml-11" />
-        <div className="flex items-center gap-2" style={controlsShiftStyle ?? noDragStyle}>
-          <span
-            data-bot-profile-visibility={privateBot ? "private" : "shared"}
-            className={CIRCLE_LABEL}
-          >
-            {privateBot ? <Lock size={14} strokeWidth={1.75} aria-hidden="true" /> : <Users size={14} strokeWidth={1.75} aria-hidden="true" />}
-            {privateBot ? t("botProfile.private") : t("botProfile.shared")}
-          </span>
-          {/* Share (Grok Bot): the popover where the people and groups the
-              bot is shared with are managed, the one place for it. */}
-          {shown("sharing") && <ShareBotButton bot={bot} open={shareOpen} onOpenChange={setShareOpen} />}
-        </div>
-      </div>
+      <BotProfileTopBar
+        bot={bot}
+        onClose={onClose}
+        privateBot={privateBot}
+        shareShown={shown("sharing")}
+        shareOpen={shareOpen}
+        onShareOpenChange={setShareOpen}
+        bannerStyle={bannerStyle}
+        bannerPalette={bannerPalette}
+      />
       <div data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {/* Banner in the mascot's colour under the bar, the hero card over its lower edge. */}
         <div
@@ -680,177 +363,14 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
         {/* One centred column, a comfortable reading width (Grok Bot), a
             16px gutter on a phone. */}
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[820px] flex-col px-4 pb-10 sm:px-6">
-          {/* The header: the mascot hero card with the bot's name and label,
-              then who sees it and its description, edited in place. */}
-          <header data-bot-profile-header="" data-bot-profile-section="overview" data-persona-section="overview" data-open="" aria-label={sectionLabel("overview")} className="flex min-w-0 flex-col">
-            <div
-              data-bot-profile-hero=""
-              onDragOver={(event) => {
-                if (heroSources.busy || !dragMayCarryImage(event.dataTransfer)) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-                setHeroDropping(true);
-              }}
-              onDragLeave={() => setHeroDropping(false)}
-              onDrop={(event) => {
-                setHeroDropping(false);
-                const file = avatarImageFrom(event.dataTransfer);
-                if (!file) return;
-                // preventDefault tells the chat's window drop target (ComposerAttachments) it is taken
-                event.preventDefault();
-                void heroSources.upload(file);
-              }}
-              onPaste={(event) => {
-                const file = avatarImageFrom(event.clipboardData);
-                if (!file) return;
-                // the chat's own drop and paste targets must not also take it
-                event.preventDefault();
-                event.stopPropagation();
-                void heroSources.upload(file);
-              }}
-              title={t("botPanel.avatar.dropOrPaste")}
-              data-avatar-dropping={heroDropping ? "" : undefined}
-              className={cn("@container relative -mt-[40px] rounded-[18px]", heroDropping && "ring-2 ring-accent")}
-            >
-              <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
-              {!heroClaimed && (
-                heroPicture ? staticHero : (
-                  <Suspense fallback={staticHero}>
-                    <MascotLookEditor
-                      heroOnly
-                      bot={bot}
-                      onPatch={derived.patch}
-                      onOwlMove={(kind) => dispatch({ type: "playMascotMotion", botId: bot.id, kind })}
-                    />
-                  </Suspense>
-                )
-              )}
-            </div>
-            {heroSources.error && <p role="alert" className="mt-1 text-[11.5px] text-danger">{heroSources.error}</p>}
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] leading-5 text-ink-secondary">
-              <span data-bot-profile-audience="" className="inline-flex items-center gap-1.5">
-                <Lock size={13} aria-hidden="true" /> {audience}
-              </span>
-              {owner && (
-                <span data-bot-profile-owner="" className="inline-flex items-center gap-1.5">
-                  <Users size={13} aria-hidden="true" /> {t("persona.overview.owner")}: {owner}
-                </span>
-              )}
-              {isPrimary && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-hover px-2 py-0.5 text-[11.5px]">
-                  <Star size={11} aria-hidden="true" className="text-accent" /> {t("primaryBot.badge")}
-                </span>
-              )}
-            </div>
-            {/* The description, typed in place; grows with its text. */}
-            {canDescribe ? (
-              <textarea
-                data-bot-profile-description=""
-                rows={2}
-                maxLength={BOT_PROFILE_LIMITS.description}
-                placeholder={t("botPanel.identity.blurbPlaceholder")}
-                aria-label={t("persona.overview.description")}
-                value={bot.description}
-                onChange={(event) => derived.patch({ description: event.target.value })}
-                className="mt-3 max-h-[12lh] w-full resize-none rounded-lg bg-transparent px-0 py-0 text-[14px] leading-6 text-ink field-sizing-content placeholder:text-ink-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-              />
-            ) : (
-              <p data-bot-profile-description="" className="mt-3 whitespace-pre-wrap text-[14px] leading-6 text-ink">
-                {bot.description.trim() || <span className="text-ink-secondary">{t("persona.overview.noDescription")}</span>}
-              </p>
-            )}
-            {/* Nothing of the Appearance shows here while it is folded: the colour
-                dots live in its Color tab only (JC 2026-11-06). */}
-            {appearanceOpen && shown("appearance") && (
-              <section
-                id="bot-profile-appearance"
-                aria-label={sectionLabel("appearance")}
-                data-bot-profile-section="appearance"
-                data-persona-section="appearance"
-                data-open=""
-                className="mt-4 flex flex-col gap-3"
-              >
-                {body("appearance")}
-              </section>
-            )}
-          </header>
+          <BotProfileHeader
+            bot={bot}
+            derived={derived}
+            hero={hero}
+            appearance={appearanceOpen && shown("appearance") ? body("appearance") : null}
+          />
 
-          {/* The pill tabs, wrapping when the window is narrow, and the
-              search behind the magnifier. */}
-          <div className="mt-5 flex items-start gap-1">
-            <div
-              role="tablist"
-              data-bot-profile-tabs=""
-              aria-label={t("botProfile.tabsAria")}
-              onKeyDown={(event) => {
-                const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-                if (!step) return;
-                event.preventDefault();
-                const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length]!;
-                setTab(next);
-                event.currentTarget.querySelector<HTMLElement>(`[data-bot-profile-tab="${next}"]`)?.focus();
-              }}
-              className="flex min-w-0 flex-1 flex-wrap items-center gap-1"
-            >
-              {tabs.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  id={`bot-profile-tab-${id}`}
-                  aria-controls={`bot-profile-panel-${id}`}
-                  data-bot-profile-tab={id}
-                  data-bot-profile-tab-match={q && matching.has(id) ? "" : undefined}
-                  aria-selected={tab === id}
-                  tabIndex={tab === id ? 0 : -1}
-                  onClick={() => setTab(id)}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[14px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                    tab === id ? "bg-hover text-ink" : "text-ink-secondary hover:text-ink",
-                    q && !matching.has(id) && "opacity-40",
-                  )}
-                >
-                  {t(TAB_LABEL[id])}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              data-bot-profile-search-toggle=""
-              aria-expanded={searching}
-              aria-label={t("persona.searchAria")}
-              title={t("persona.search")}
-              onClick={() => (searching ? closeSearch() : openSearch())}
-              className={cn(
-                "flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                searching ? "bg-hover text-ink" : "text-ink-secondary",
-              )}
-            >
-              <Search size={15} aria-hidden="true" />
-            </button>
-          </div>
-          {searching && (
-            <div data-bot-profile-search="" className="mt-3 flex flex-col">
-              <div className="flex items-center gap-2 rounded-xl bg-card px-3 py-2">
-                <Search size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
-                <input
-                  ref={searchRef}
-                  data-persona-search=""
-                  value={query}
-                  onChange={(event) => changeQuery(event.target.value)}
-                  onKeyDown={onSearchKey}
-                  placeholder={t("persona.search")}
-                  aria-label={t("persona.searchAria")}
-                  className="w-full bg-transparent text-[13px] leading-[18px] text-ink placeholder:text-ink-secondary focus:outline-none"
-                />
-              </div>
-              {q && results.length === 0 && (
-                <div data-persona-no-match="" role="status" className="px-2.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
-                  {t("persona.noMatch", { query: query.trim() })}
-                </div>
-              )}
-            </div>
-          )}
+          <BotProfileTabBar tabs={tabs} tab={tab} onTab={setTab} search={search} />
 
           {panel(
             "general",
@@ -890,206 +410,5 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     </main>
     </SettingsSurfaceProvider>
     </MascotHeroSlotContext.Provider>
-  );
-}
-
-/** A card of the page: a grey label (and its accessory) over a borderless
- * surface a step lighter than the page (Grok Bot). */
-function ProfileCard({ title, groupId, accessory, children }: {
-  title: string;
-  groupId: string;
-  accessory?: ReactNode;
-  children: ReactNode;
-}) {
-  const headingId = useId();
-  return (
-    <section aria-labelledby={headingId} data-settings-group={groupId} className="flex flex-col gap-2">
-      <div className="flex min-w-0 items-center gap-1.5 px-1">
-        <h3 id={headingId} className="shrink-0 text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>
-        {accessory}
-      </div>
-      <div className="flex flex-col rounded-2xl bg-card py-1">{children}</div>
-    </section>
-  );
-}
-
-/** Slack's own four-color mark (the lucide outline, filled). */
-function SlackLogo() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" data-slack-logo="">
-      <rect x="2" y="8" width="8" height="3" rx="1.5" fill="#36C5F0" />
-      <path d="M8.5 5H10V3.5A1.5 1.5 0 1 0 8.5 5" fill="#36C5F0" />
-      <rect x="13" y="2" width="3" height="8" rx="1.5" fill="#2EB67D" />
-      <path d="M19 8.5V10h1.5A1.5 1.5 0 1 0 19 8.5" fill="#2EB67D" />
-      <rect x="14" y="13" width="8" height="3" rx="1.5" fill="#ECB22E" />
-      <path d="M15.5 19H14v1.5a1.5 1.5 0 1 0 1.5-1.5" fill="#ECB22E" />
-      <rect x="8" y="14" width="3" height="8" rx="1.5" fill="#E01E5A" />
-      <path d="M5 15.5V14H3.5A1.5 1.5 0 1 0 5 15.5" fill="#E01E5A" />
-    </svg>
-  );
-}
-
-/** General > Channels: where the bot can be reached, each with its state. */
-function ChannelsCard({ bot, slackUrl, open, onOpen }: {
-  bot: Bot;
-  slackUrl: string | null | undefined;
-  open: Channel | null;
-  onOpen: (channel: Channel | null) => void;
-}) {
-  const { dispatch } = useStore();
-  const [mail] = useBotInboundMailState(bot.id);
-  const [reach] = useReachMe(bot.id);
-  const [messages, setMessages] = useState<MessagesSetupStatus | null | undefined>(undefined);
-  useEffect(() => {
-    let cancelled = false;
-    loadMessagesSetup().then((status) => { if (!cancelled) setMessages(status); }, () => { if (!cancelled) setMessages(null); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const pill = (channel: Channel, connected: boolean) => (
-    <button
-      type="button"
-      data-bot-profile-action={channel}
-      aria-expanded={open === channel}
-      onClick={() => onOpen(open === channel ? null : channel)}
-      className={cn(PILL, "shrink-0")}
-    >
-      {open === channel ? t("botProfile.hide") : connected ? t("botProfile.manage") : t("botProfile.connect")}
-    </button>
-  );
-
-  const reachOn = (reach?.settings.channels ?? []).map((id) => (REACH_LABEL[id] ? t(REACH_LABEL[id]!) : null)).filter((label): label is string => label !== null);
-  const messagesHere = messages ? messages.available && messages.onThisMac : false;
-
-  return (
-    <ProfileCard title={t("botProfile.channels")} groupId="bot-profile-channels">
-      <CardRow
-        rowId="slack"
-        icon={<SlackLogo />}
-        label={t("botProfile.channel.slack")}
-        state={slackUrl ? t("botProfile.state.managedInAdmin") : t("botProfile.state.notOffered")}
-        action={slackUrl ? pill("slack", true) : undefined}
-      >
-        {slackUrl && open === "slack" ? <SlackSection managementUrl={slackUrl} /> : null}
-      </CardRow>
-      <CardRow
-        rowId="email"
-        icon={<Mail />}
-        label={t("botProfile.channel.email")}
-        state={mail === null ? null : !mail.available ? t("botProfile.state.notOffered") : mail.address ?? t("botProfile.state.noAddress")}
-        action={mail?.available && mail.address ? pill("email", true) : undefined}
-      >
-        {open === "email" && mail?.address ? <BotEmailAddress botId={bot.id} /> : null}
-      </CardRow>
-      <CardRow
-        rowId="reachMe"
-        icon={<BellRing />}
-        label={t("botPanel.reachMe.label")}
-        state={reach === null ? null : reachOn.length > 0 ? reachOn.join(", ") : t("botProfile.state.notConnected")}
-        action={reach === null ? undefined : pill("reachMe", reachOn.length > 0)}
-      >
-        {open === "reachMe" ? <BotReachMe botId={bot.id} /> : null}
-      </CardRow>
-      <CardRow
-        rowId="messages"
-        icon={<MessageCircle />}
-        label={t("botProfile.channel.messages")}
-        state={messages === undefined ? null : !messagesHere ? t("botProfile.state.unavailable") : messages!.useMessages ? t("botProfile.state.on") : t("botProfile.state.notConnected")}
-        action={messagesHere ? (
-          <button
-            type="button"
-            data-bot-profile-action="messages"
-            onClick={() => {
-              dispatch({ type: "togglePlugins", open: true, surface: "apps" });
-              window.dispatchEvent(new CustomEvent("sagax:open-mac-messages"));
-            }}
-            className={cn(PILL, "shrink-0")}
-          >
-            {messages!.useMessages ? t("botProfile.manage") : t("botProfile.connect")}
-          </button>
-        ) : undefined}
-      />
-    </ProfileCard>
-  );
-}
-
-/** General > Bot accounts: the bot's engine and the connectors it receives;
- * "Add" opens Connect apps for this bot. */
-function AccountsCard({ bot, onEngine }: { bot: Bot; onEngine: () => void }) {
-  const { dispatch } = useStore();
-  const { data, error, loading, reload } = useBotCapabilities(bot.id);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const anchorRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const dismissRoot = useAnchoredDismissRoot(anchorRef, popoverRef);
-  usePopoverDismiss(menuOpen, dismissRoot, () => setMenuOpen(false));
-
-  const connect = (surface: "apps" | "mcp") => {
-    setMenuOpen(false);
-    dispatch({ type: "togglePlugins", open: true, surface, botId: bot.id });
-  };
-  const accounts = data ? orderedCapabilities(data.items).filter((item) => item.form === "connector" || item.form === "mcp") : [];
-
-  const add = (
-    <div className="ml-auto">
-      <button
-        ref={anchorRef}
-        type="button"
-        data-bot-profile-add=""
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        onClick={() => setMenuOpen((value) => !value)}
-        className={cn(PILL, "inline-flex items-center gap-1")}
-      >
-        {t("botProfile.add")} <ChevronDown size={13} aria-hidden="true" />
-      </button>
-      {menuOpen && (
-        <AnchoredPopover
-          anchorRef={anchorRef}
-          popoverRef={popoverRef}
-          align="end"
-          role="menu"
-          aria-label={t("botProfile.add")}
-          className="w-[220px] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1 text-[13px] text-ink shadow-xl"
-        >
-          <button type="button" role="menuitem" onClick={() => connect("apps")} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover">
-            <Plug size={15} aria-hidden="true" /> {t("botProfile.add.apps")}
-          </button>
-          <button type="button" role="menuitem" onClick={() => connect("mcp")} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover">
-            <Cpu size={15} aria-hidden="true" /> {t("botProfile.add.mcp")}
-          </button>
-        </AnchoredPopover>
-      )}
-    </div>
-  );
-
-  return (
-    <ProfileCard title={t("botProfile.accounts")} groupId="bot-profile-accounts" accessory={add}>
-      {error && !data ? (
-        <div role="alert" data-bot-profile-accounts-error="" className="flex flex-col items-start gap-1 px-4 py-3.5">
-          <span className="text-[14px] font-normal leading-5 text-ink">{t("botProfile.accounts.error")}</span>
-          <span className="text-[12.5px] leading-snug text-ink-secondary">{error}</span>
-          <button type="button" onClick={() => void reload()} className={cn(PILL, "mt-1")}>{t("botProfile.retry")}</button>
-        </div>
-      ) : !data ? (
-        <div role="status" className="px-4 py-3 text-[12.5px] text-ink-secondary">{loading ? t("botProfile.accounts.loading") : null}</div>
-      ) : (
-        <>
-          <CardRow
-            rowId="engine"
-            icon={<Cpu />}
-            label={data.engine.label}
-            state={t("botProfile.engine")}
-            action={<button type="button" data-bot-profile-action="engine" onClick={onEngine} className={cn(PILL, "shrink-0")}>{t("botProfile.manage")}</button>}
-          />
-          {accounts.map((item, index) => (
-            <CardRow key={`${item.form}-${index}`} rowId={`account-${index}`} icon={<Plug />} label={capabilityName(item)} state={stateWord(item.state)} />
-          ))}
-          {accounts.length === 0 && (
-            <p className="px-4 pb-2 pt-1 text-[12.5px] leading-snug text-ink-secondary">{t("botProfile.accounts.empty")}</p>
-          )}
-        </>
-      )}
-    </ProfileCard>
   );
 }

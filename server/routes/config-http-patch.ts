@@ -29,61 +29,225 @@ import type { ConfigWriteContext } from "./config-http.ts";
 
 export type ConfigHttpPatchHost = Record<string, any>;
 
+/** Step validateConfigPatch, first half: parse the patch and check the
+ * model selections, the decider and the voice provider it names. Either
+ * the response it already sent, or the patch to apply. */
+function checkConfigPatch(host: ConfigHttpPatchHost, body: unknown, auth: ConfigWriteContext["auth"], res: ConfigWriteContext["res"], json: ConfigWriteContext["json"]): any {
+  const patch = parseConfigPatch(body as Parameters<typeof parseConfigPatch>[0]);
+  // Grok voice runs on the xAI key (2026-10-14): a Grok voice key from an
+  // older client fills the xAI key when none is saved. Logged, never the value.
+  const grokVoiceFold = foldGrokVoiceKeyPatch(patch, host.cfg.xai?.key, { allowMove: !host.hostedModels });
+  if (grokVoiceFold) console.log(grokVoiceKeyFoldMessage(grokVoiceFold));
+  if (patch.newBotDefaults) {
+    if (patch.newBotDefaults.profile.modelSelection) {
+      const checked = host.checkedModelSelection(patch.newBotDefaults.profile.modelSelection);
+      if (!checked.ok) return { sent: json(res, checked.status, { error: checked.error }) };
+      patch.newBotDefaults.profile.modelSelection = checked.selection;
+    }
+    for (const skill of patch.newBotDefaults.skills) {
+      const parsed = parseSkillMd(skill.text);
+      if ("error" in parsed || parsed.name !== skill.name) return { sent: json(res, 400, { error: "Skill name does not match its contents" }) };
+    }
+  }
+  if (host.hostedModels && patch.defaultModelSelection) {
+    const checked = host.checkedModelSelection(patch.defaultModelSelection);
+    if (!checked.ok) return { sent: json(res, checked.status, { error: checked.error }) };
+  }
+  if (patch.automaticRecovery?.enabled) {
+    const checked = host.checkedModelSelection(patch.automaticRecovery.backup, undefined, true);
+    if (!checked.ok) return { sent: json(res, checked.status, { error: checked.error }) };
+    const target = host.registry.get(checked.selection.instanceId)!;
+    if (!target.enabled) return { sent: json(res, 400, { error: "Enable the backup engine before selecting it for recovery." }) };
+    const refusal = host.policyModelRefusal(target);
+    if (refusal) return { sent: json(res, 403, { error: refusal, code: "managed_policy" }) };
+    patch.automaticRecovery.backup = checked.selection;
+  }
+  if (!Object.keys(patch).length) {
+    // Only a Grok voice key that was not kept: nothing else to save.
+    if (grokVoiceFold) return { sent: json(res, 200, host.orgXaiMediaView(host.configForPerson(host.configForAccess(host.configStatus(), auth.scopes.includes("admin")), host.viewerIdentity(auth)), host.viewerIdentity(auth))) };
+    return { sent: json(res, 400, { error: "nothing to save" }) };
+  }
+  if (patch.decider) {
+    // Saving a key is the "turn it on"; clearing it turns it off, or
+    // falls back to Cloud Pro's included decisions where there are some.
+    const planned = deciderSavePatch(patch.decider, host.cfg.decider, deciderIncludedHere());
+    if (!planned.ok) return { sent: json(res, 400, { error: planned.error }) };
+    patch.decider = planned.patch;
+  }
+  const changingVoiceProvider = patch.tts?.provider !== undefined
+    && patch.tts.provider !== host.tts.voiceProvider(host.cfg);
+  if (changingVoiceProvider && patch.tts?.voice === undefined) {
+    // Voice ids are provider-owned opaque values. Never carry a default
+    // from one catalog into another. A caller may explicitly supply a
+    // voice for the newly selected provider in this same atomic patch.
+    patch.tts = { ...patch.tts, voice: "" };
+  }
+  return { patch, changingVoiceProvider };
+}
+
+/** Step validateConfigPatch: a browser profile list that would reroute a
+ * live partition, reuse one still being erased, or drop one a running turn
+ * uses. The 409 body, or null. */
+function browserProfilePatchConflict(host: ConfigHttpPatchHost, patch: any): { error: string } | null {
+  if (patch.browserProfiles !== undefined) {
+    const currentProfiles = new Map((host.cfg.browserProfiles ?? []).map((profile) => [profile.id, profile]));
+    const nextProfiles = patch.browserProfiles.map((profile) => {
+      const partitionId = currentProfiles.get(profile.id)?.partitionId;
+      return partitionId ? { ...profile, partitionId } : profile;
+    });
+    const routingConflict = browserProfileReplacementConflict(host.cfg.browserProfiles ?? [], nextProfiles);
+    if (routingConflict) return { error: routingConflict };
+    const currentIds = new Set((host.cfg.browserProfiles ?? []).map((profile) => profile.id));
+    const pendingReuse = patch.browserProfiles.find(
+      (profile) => !currentIds.has(profile.id) && host.browserCleanup.hasPendingProfile(profile.id),
+    );
+    if (pendingReuse) {
+      return {
+        error: `the previous “${pendingReuse.name}” browser session is still being erased — wait before reusing it`
+      };
+    }
+  }
+  if (patch.browserProfiles !== undefined) {
+    const retained = new Set(patch.browserProfiles.map((profile) => profile.id));
+    const activeReference = host.store.bots.find(
+      (bot) => bot.busy && bot.browserProfile && bot.browserProfile !== "guest" && !host.isPersonalBrowserProfileId(bot.browserProfile) && !retained.has(bot.browserProfile),
+    );
+    if (activeReference) {
+      return {
+        error: `stop ${activeReference.name}'s turn before removing its browser profile`
+      };
+    }
+  }
+  return null;
+}
+
+/** Step commitConfigPatch, after the config is durable: the principal,
+ * keys, browser and engine consequences, then the response. */
+async function applyCommittedConfigEffects(host: ConfigHttpPatchHost, step: any): Promise<any> {
+  const { patch, resetKeys, disablingBuiltInBrowser, browserCleanupRequests, enginesBefore, removedBrowserProfileIds, res, auth, json } = step;
+  // The operator keeps one principal id, so the org owner needs no
+  // rewrite when the profile email changes; only the attribute moves,
+  // once the config is saved. A cleared email clears it on the principal.
+  if (patch.profile && typeof patch.profile.email === "string") {
+    if (patch.profile.email.trim()) host.principals.localOperator(patch.profile.email);
+    else host.principals.setEmail(host.principals.localOperator().id, "");
+  }
+  if (host.IDENTITY.kind !== "perspicax" && typeof patch.anthropic?.key === "string" && patch.anthropic.key.trim()) {
+    host.recordAchievements(host.localPrincipalId(), [{ type: "claude.linked" }]);
+  }
+  for (const key of resetKeys) if (key) host.forgetKey(key);
+  // A saved key reaches an engine through the environment its status read uses, often with no reload.
+  host.registry.forgetSnapshots();
+  // Desktops already counting down move to the new window at once, in
+  // every isolation mode; busy work still defers its expiry.
+  if (patch.localVm?.idleTimeoutMinutes !== undefined) {
+    for (const idle of host.localVmIdles.values()) idle.setIdleMs(host.localVmIdleMs());
+  }
+  let browserReferenceCleanupError: unknown = null;
+  if (patch.signIn !== undefined) {
+    host.sessions.revalidateEmailSessions();
+    host.resyncOpenCodeProviderKeys();
+  }
+  if (!host.lendingEnabled()) {
+    host.sharedComputers.close();
+    host.sharedComputerControl.close();
+  }
+  if (disablingBuiltInBrowser) { host.browserLive.closeAll(); host.browserNetworkDebug.clearAll(); }
+  // The meeting notetaker (or the browser it runs in) was turned off: every
+  // meeting leaves now.
+  if (!meetingNotetakerEnabled(host.cfg) || disablingBuiltInBrowser) host.meetingService.leaveAll();
+  for (const request of browserCleanupRequests) {
+    if (request.kind === "profile") {
+      host.browserLive.closeForSession(browserSessionId("", request.partitionId));
+      host.browserNetworkDebug.clearSession(browserSessionId("", request.partitionId));
+    }
+  }
+  if (patch.browserProfiles !== undefined) {
+    const retained = new Set(patch.browserProfiles.map((profile) => profile.id));
+    try {
+      for (const bot of host.store.bots) {
+        if (bot.browserProfile && bot.browserProfile !== "guest" && !host.isPersonalBrowserProfileId(bot.browserProfile) && !retained.has(bot.browserProfile)) {
+          // The profile list and every bot reference change in the same
+          // config request. Non-renderer clients therefore cannot leave a
+          // bot pointing at a deleted cookie partition.
+          host.store.patchBot(bot.id, { browserProfile: undefined });
+        }
+      }
+    } catch (error) {
+      // Config is already durable. Keep the cleanup intent prepared (so
+      // it cannot wipe ambiguous state and its id remains locked), but do
+      // not let this secondary write failure skip revocation/reload below.
+      browserReferenceCleanupError = error;
+    }
+  }
+  // Only an engine whose launch config this write changed is rebuilt: a
+  // provider key, URL or model default reaches its own engines and no
+  // others, and a setting no driver reads (profile, language, voice, VPS,
+  // room timeout, onboarding progress), or the same values saved again,
+  // rebuilds nothing and interrupts no turn.
+  const changedEngines = new Set(changedInstanceIds(enginesBefore, engineLaunches(host.providerConfigs())));
+  // Config is already durable. A changed engine's old children are
+  // invalid immediately, including when browser cleanup below has to
+  // await Electron before reloadProviders begins.
+  host.revokeEngineCapabilities(changedEngines);
+  // The cleanup marker becomes committed only after both pieces of durable
+  // application state agree. Commit/ACK failures are deferred until every
+  // mandatory consequence of the config write has run: no journal I/O
+  // failure may leave a two-hour bearer or stale provider fleet active.
+  const finalized = await finalizeBrowserCleanupMutation({
+    requests: browserCleanupRequests,
+    referenceError: browserReferenceCleanupError,
+    commit: (request) => host.browserCleanup.commit(request),
+    ensure: (request) => host.browserCleanup.ensure(request),
+    mandatory: async () => {
+      let mandatoryError: unknown = null;
+      if (disablingBuiltInBrowser) {
+        try {
+        } catch (error) {
+          mandatoryError = error;
+        }
+      }
+      if (changedEngines.size > 0) {
+        try {
+          await host.reloadProviders(enginesBefore);
+        } catch (error) {
+          if (!mandatoryError) mandatoryError = error;
+        }
+      }
+      const status = host.configStatus();
+      host.broadcast({ kind: "config", ...status });
+      if (patch.threads !== undefined) {
+        host.drainQueuedSends();
+        host.drainDelegationWakes();
+        host.drainComputerResumes();
+        host.drainSecretResumes();
+        host.drainTeamSetupResumes();
+      }
+      if (mandatoryError) throw mandatoryError;
+      return status;
+    }
+  });
+  // Normal desktop deletes wait for Electron's acknowledgement. If
+  // Electron is restarting, the committed journal keeps retrying and the
+  // id-reuse guard above prevents stale logins from resurfacing. Delaying
+  // this assertion until after every mandatory post-commit effect keeps
+  // the runtime aligned with the config even on a truthful 503 response.
+  requireBrowserCleanupAcknowledged(
+    finalized.acknowledgements.every(Boolean),
+    removedBrowserProfileIds.length === 1 ? "The browser profile" : "The browser profiles",
+  );
+  return json(res, 200, host.orgXaiMediaView(host.configForPerson(finalized.value, host.viewerIdentity(auth)), host.viewerIdentity(auth)));
+}
+
 /** Full PUT/PATCH /api/config pipeline. `getHost` runs per request. */
 export function createApplyConfigHttpPatch(getHost: () => ConfigHttpPatchHost): any {
   return async function applyConfigHttpPatch({ res, url, auth, body, json }: ConfigWriteContext): Promise<void> {
     const host = getHost();
 
     // --- step: validateConfigPatch ---
-    const patch = parseConfigPatch(body as Parameters<typeof parseConfigPatch>[0]);
-    // Grok voice runs on the xAI key (2026-10-14): a Grok voice key from an
-    // older client fills the xAI key when none is saved. Logged, never the value.
-    const grokVoiceFold = foldGrokVoiceKeyPatch(patch, host.cfg.xai?.key, { allowMove: !host.hostedModels });
-    if (grokVoiceFold) console.log(grokVoiceKeyFoldMessage(grokVoiceFold));
-    if (patch.newBotDefaults) {
-      if (patch.newBotDefaults.profile.modelSelection) {
-        const checked = host.checkedModelSelection(patch.newBotDefaults.profile.modelSelection);
-        if (!checked.ok) return json(res, checked.status, { error: checked.error });
-        patch.newBotDefaults.profile.modelSelection = checked.selection;
-      }
-      for (const skill of patch.newBotDefaults.skills) {
-        const parsed = parseSkillMd(skill.text);
-        if ("error" in parsed || parsed.name !== skill.name) return json(res, 400, { error: "Skill name does not match its contents" });
-      }
-    }
-    if (host.hostedModels && patch.defaultModelSelection) {
-      const checked = host.checkedModelSelection(patch.defaultModelSelection);
-      if (!checked.ok) return json(res, checked.status, { error: checked.error });
-    }
-    if (patch.automaticRecovery?.enabled) {
-      const checked = host.checkedModelSelection(patch.automaticRecovery.backup, undefined, true);
-      if (!checked.ok) return json(res, checked.status, { error: checked.error });
-      const target = host.registry.get(checked.selection.instanceId)!;
-      if (!target.enabled) return json(res, 400, { error: "Enable the backup engine before selecting it for recovery." });
-      const refusal = host.policyModelRefusal(target);
-      if (refusal) return json(res, 403, { error: refusal, code: "managed_policy" });
-      patch.automaticRecovery.backup = checked.selection;
-    }
-    if (!Object.keys(patch).length) {
-      // Only a Grok voice key that was not kept: nothing else to save.
-      if (grokVoiceFold) return json(res, 200, host.orgXaiMediaView(host.configForPerson(host.configForAccess(host.configStatus(), auth.scopes.includes("admin")), host.viewerIdentity(auth)), host.viewerIdentity(auth)));
-      return json(res, 400, { error: "nothing to save" });
-    }
-    if (patch.decider) {
-      // Saving a key is the "turn it on"; clearing it turns it off, or
-      // falls back to Cloud Pro's included decisions where there are some.
-      const planned = deciderSavePatch(patch.decider, host.cfg.decider, deciderIncludedHere());
-      if (!planned.ok) return json(res, 400, { error: planned.error });
-      patch.decider = planned.patch;
-    }
-    const changingVoiceProvider = patch.tts?.provider !== undefined
-      && patch.tts.provider !== host.tts.voiceProvider(host.cfg);
-    if (changingVoiceProvider && patch.tts?.voice === undefined) {
-      // Voice ids are provider-owned opaque values. Never carry a default
-      // from one catalog into another. A caller may explicitly supply a
-      // voice for the newly selected provider in this same atomic patch.
-      patch.tts = { ...patch.tts, voice: "" };
-    }
+    const checkedPatch = checkConfigPatch(host, body, auth, res, json);
+    if ("sent" in checkedPatch) return checkedPatch.sent;
+    const { patch, changingVoiceProvider } = checkedPatch;
     if (host.providerConfigBusy) return json(res, 409, { error: "provider settings are already being updated" });
     const bodyRecord = body && typeof body === "object" ? body as Record<string, unknown> : null;
     if (patch.browserProfiles !== undefined && bodyRecord && bodyRecord.expectedBrowserProfiles !== undefined) {
@@ -103,35 +267,8 @@ export function createApplyConfigHttpPatch(getHost: () => ConfigHttpPatchHost): 
       return target && host.browserRuntime.heldBy(browserSessionId("", target.partitionId));
     });
     if (profileControlConflict()) return json(res, 409, { error: "Release browser control before deleting its profile." });
-    if (patch.browserProfiles !== undefined) {
-      const currentProfiles = new Map((host.cfg.browserProfiles ?? []).map((profile) => [profile.id, profile]));
-      const nextProfiles = patch.browserProfiles.map((profile) => {
-        const partitionId = currentProfiles.get(profile.id)?.partitionId;
-        return partitionId ? { ...profile, partitionId } : profile;
-      });
-      const routingConflict = browserProfileReplacementConflict(host.cfg.browserProfiles ?? [], nextProfiles);
-      if (routingConflict) return json(res, 409, { error: routingConflict });
-      const currentIds = new Set((host.cfg.browserProfiles ?? []).map((profile) => profile.id));
-      const pendingReuse = patch.browserProfiles.find(
-        (profile) => !currentIds.has(profile.id) && host.browserCleanup.hasPendingProfile(profile.id),
-      );
-      if (pendingReuse) {
-        return json(res, 409, {
-          error: `the previous “${pendingReuse.name}” browser session is still being erased — wait before reusing it`
-        });
-      }
-    }
-    if (patch.browserProfiles !== undefined) {
-      const retained = new Set(patch.browserProfiles.map((profile) => profile.id));
-      const activeReference = host.store.bots.find(
-        (bot) => bot.busy && bot.browserProfile && bot.browserProfile !== "guest" && !host.isPersonalBrowserProfileId(bot.browserProfile) && !retained.has(bot.browserProfile),
-      );
-      if (activeReference) {
-        return json(res, 409, {
-          error: `stop ${activeReference.name}'s turn before removing its browser profile`
-        });
-      }
-    }
+    const profileConflict = browserProfilePatchConflict(host, patch);
+    if (profileConflict) return json(res, 409, profileConflict);
     if (patch.box?.token !== undefined) patch.box.token = patch.box.token.trim();
     const currentBoatToken = host.cfg.box?.token?.trim() ?? "";
     // --- step: validateConfigCredentials ---
@@ -476,118 +613,9 @@ export function createApplyConfigHttpPatch(getHost: () => ConfigHttpPatchHost): 
       }
       throw error;
     }
-    // The operator keeps one principal id, so the org owner needs no
-    // rewrite when the profile email changes; only the attribute moves,
-    // once the config is saved. A cleared email clears it on the principal.
-    if (patch.profile && typeof patch.profile.email === "string") {
-      if (patch.profile.email.trim()) host.principals.localOperator(patch.profile.email);
-      else host.principals.setEmail(host.principals.localOperator().id, "");
-    }
-    if (host.IDENTITY.kind !== "perspicax" && typeof patch.anthropic?.key === "string" && patch.anthropic.key.trim()) {
-      host.recordAchievements(host.localPrincipalId(), [{ type: "claude.linked" }]);
-    }
-    for (const key of resetKeys) if (key) host.forgetKey(key);
-    // A saved key reaches an engine through the environment its status read uses, often with no reload.
-    host.registry.forgetSnapshots();
-    // Desktops already counting down move to the new window at once, in
-    // every isolation mode; busy work still defers its expiry.
-    if (patch.localVm?.idleTimeoutMinutes !== undefined) {
-      for (const idle of host.localVmIdles.values()) idle.setIdleMs(host.localVmIdleMs());
-    }
-    let browserReferenceCleanupError: unknown = null;
-    if (patch.signIn !== undefined) {
-      host.sessions.revalidateEmailSessions();
-      host.resyncOpenCodeProviderKeys();
-    }
-    if (!host.lendingEnabled()) {
-      host.sharedComputers.close();
-      host.sharedComputerControl.close();
-    }
-    if (disablingBuiltInBrowser) { host.browserLive.closeAll(); host.browserNetworkDebug.clearAll(); }
-    // The meeting notetaker (or the browser it runs in) was turned off: every
-    // meeting leaves now.
-    if (!meetingNotetakerEnabled(host.cfg) || disablingBuiltInBrowser) host.meetingService.leaveAll();
-    for (const request of browserCleanupRequests) {
-      if (request.kind === "profile") {
-        host.browserLive.closeForSession(browserSessionId("", request.partitionId));
-        host.browserNetworkDebug.clearSession(browserSessionId("", request.partitionId));
-      }
-    }
-    if (patch.browserProfiles !== undefined) {
-      const retained = new Set(patch.browserProfiles.map((profile) => profile.id));
-      try {
-        for (const bot of host.store.bots) {
-          if (bot.browserProfile && bot.browserProfile !== "guest" && !host.isPersonalBrowserProfileId(bot.browserProfile) && !retained.has(bot.browserProfile)) {
-            // The profile list and every bot reference change in the same
-            // config request. Non-renderer clients therefore cannot leave a
-            // bot pointing at a deleted cookie partition.
-            host.store.patchBot(bot.id, { browserProfile: undefined });
-          }
-        }
-      } catch (error) {
-        // Config is already durable. Keep the cleanup intent prepared (so
-        // it cannot wipe ambiguous state and its id remains locked), but do
-        // not let this secondary write failure skip revocation/reload below.
-        browserReferenceCleanupError = error;
-      }
-    }
-    // Only an engine whose launch config this write changed is rebuilt: a
-    // provider key, URL or model default reaches its own engines and no
-    // others, and a setting no driver reads (profile, language, voice, VPS,
-    // room timeout, onboarding progress), or the same values saved again,
-    // rebuilds nothing and interrupts no turn.
-    const changedEngines = new Set(changedInstanceIds(enginesBefore, engineLaunches(host.providerConfigs())));
-    // Config is already durable. A changed engine's old children are
-    // invalid immediately, including when browser cleanup below has to
-    // await Electron before reloadProviders begins.
-    host.revokeEngineCapabilities(changedEngines);
-    // The cleanup marker becomes committed only after both pieces of durable
-    // application state agree. Commit/ACK failures are deferred until every
-    // mandatory consequence of the config write has run: no journal I/O
-    // failure may leave a two-hour bearer or stale provider fleet active.
-    const finalized = await finalizeBrowserCleanupMutation({
-      requests: browserCleanupRequests,
-      referenceError: browserReferenceCleanupError,
-      commit: (request) => host.browserCleanup.commit(request),
-      ensure: (request) => host.browserCleanup.ensure(request),
-      mandatory: async () => {
-        let mandatoryError: unknown = null;
-        if (disablingBuiltInBrowser) {
-          try {
-          } catch (error) {
-            mandatoryError = error;
-          }
-        }
-        if (changedEngines.size > 0) {
-          try {
-            await host.reloadProviders(enginesBefore);
-          } catch (error) {
-            if (!mandatoryError) mandatoryError = error;
-          }
-        }
-        const status = host.configStatus();
-        host.broadcast({ kind: "config", ...status });
-        if (patch.threads !== undefined) {
-          host.drainQueuedSends();
-          host.drainDelegationWakes();
-          host.drainComputerResumes();
-          host.drainSecretResumes();
-          host.drainTeamSetupResumes();
-        }
-        if (mandatoryError) throw mandatoryError;
-        return status;
-      }
+    return await applyCommittedConfigEffects(host, {
+      patch, resetKeys, disablingBuiltInBrowser, browserCleanupRequests, enginesBefore, removedBrowserProfileIds, res, auth, json,
     });
-    // Normal desktop deletes wait for Electron's acknowledgement. If
-    // Electron is restarting, the committed journal keeps retrying and the
-    // id-reuse guard above prevents stale logins from resurfacing. Delaying
-    // this assertion until after every mandatory post-commit effect keeps
-    // the runtime aligned with the config even on a truthful 503 response.
-    requireBrowserCleanupAcknowledged(
-      finalized.acknowledgements.every(Boolean),
-      removedBrowserProfileIds.length === 1 ? "The browser profile" : "The browser profiles",
-    );
-    return json(res, 200, host.orgXaiMediaView(host.configForPerson(finalized.value, host.viewerIdentity(auth)), host.viewerIdentity(auth)));
     } finally {
       for (const provider of transitioningProviders) host.computerProviderConfigTransitions.delete(provider);
       if (changingLocalVmMode) host.localVmModeChangeBusy = false;

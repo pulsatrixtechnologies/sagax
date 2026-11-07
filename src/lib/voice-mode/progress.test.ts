@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { tIn } from "@/lib/i18n";
@@ -242,7 +242,14 @@ describe("turnToolAuthor: a room turn may reach several bots", () => {
 
 describe("realtime progress and the remaining legacy call pipelines", () => {
   const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
-  const calls = { LiveCall: read("../../components/voice-mode/LiveCall.tsx"), GroupCallView: read("../../components/GroupCallView.tsx") };
+  // each call reads as its view plus the hooks it was split into (#1383)
+  const readAll = (paths: string[]) => paths.map(read).join("\n");
+  const calls = {
+    LiveCall: readAll(["../../components/voice-mode/LiveCall.tsx", "../../components/voice-mode/useLiveCallEngineSession.ts",
+      "../../components/voice-mode/useLiveCallEngineTurns.ts"]),
+    GroupCallView: readAll(["../../components/GroupCallView.tsx", ...readdirSync(new URL("../../components/GroupCallView.tsx-parts/", import.meta.url))
+      .filter((name) => /\.tsx?$/.test(name) && !/\.test\./.test(name)).map((name) => `../../components/GroupCallView.tsx-parts/${name}`)]),
+  };
 
   it.each(Object.entries(calls))("%s never reads the server's chip narration: only the planner's line, in the call's words", (_name, source) => {
     expect(source).not.toMatch(/tool\??\.spoken/);

@@ -40,6 +40,12 @@ export interface WireVideoWidget {
   kind: VideoWidgetKind;
   /** Client playback URL (often `/api/media/proxy/<token>`: a signed, thread-bound, 4 h capability for this one media URL, never a session credential). */
   playbackUrl: string;
+  /**
+   * Original media URL when `playbackUrl` is a proxy path: the player falls
+   * back to it when the proxy cannot serve the stream (a host the server
+   * refuses or cannot reach, while the browser can).
+   */
+  directUrl?: string;
   /** Stream container, decided server side from the original URL. Absent on older messages. */
   format?: VideoWidgetFormat;
   title?: string;
@@ -48,6 +54,29 @@ export interface WireVideoWidget {
   posterUrl?: string;
   durationMs?: number;
   viewerCount?: number;
+  /**
+   * Optional details (2026-11-06, all additive: older clients ignore them).
+   * `id` keys the resume position; `avatarUrl` is the channel picture;
+   * `category` the game or topic; `startedAt` (ISO) drives the live uptime;
+   * `tags` are short labels; `chapters` mark a recording's parts;
+   * `recording` shows a REC badge; `channelUrl` opens the channel page;
+   * `expiresAt` (epoch ms) is when the share link stops working.
+   */
+  id?: string;
+  avatarUrl?: string;
+  category?: string;
+  startedAt?: string;
+  tags?: string[];
+  chapters?: VideoChapter[];
+  recording?: boolean;
+  channelUrl?: string;
+  expiresAt?: number;
+}
+
+/** One part of a recording: where it starts and what it is called. */
+export interface VideoChapter {
+  startMs: number;
+  title: string;
 }
 
 export interface SagaxVideoEmit {
@@ -63,6 +92,23 @@ export interface SagaxVideoEmit {
   durationMs?: number;
   duration?: number;
   viewerCount?: number;
+  /**
+   * Optional details (2026-11-06, all additive: older clients ignore them).
+   * `id` keys the resume position; `avatarUrl` is the channel picture;
+   * `category` the game or topic; `startedAt` (ISO) drives the live uptime;
+   * `tags` are short labels; `chapters` mark a recording's parts;
+   * `recording` shows a REC badge; `channelUrl` opens the channel page;
+   * `expiresAt` (epoch ms) is when the share link stops working.
+   */
+  id?: string;
+  avatarUrl?: string;
+  category?: string;
+  startedAt?: string;
+  tags?: string[];
+  chapters?: VideoChapter[];
+  recording?: boolean;
+  channelUrl?: string;
+  expiresAt?: number;
 }
 
 /**
@@ -145,6 +191,93 @@ function poster(row: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+function pickString(row: Record<string, unknown>, keys: readonly string[]): string | undefined {
+  for (const key of keys) {
+    const v = row[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return undefined;
+}
+
+function pickTags(row: Record<string, unknown>): string[] | undefined {
+  const raw = row.tags;
+  if (!Array.isArray(raw)) return undefined;
+  const tags = raw.filter((tag): tag is string => typeof tag === "string" && tag.trim() !== "").map((tag) => tag.trim()).slice(0, 12);
+  return tags.length ? tags : undefined;
+}
+
+function pickChapters(row: Record<string, unknown>): VideoChapter[] | undefined {
+  const raw = row.chapters;
+  if (!Array.isArray(raw)) return undefined;
+  const chapters: VideoChapter[] = [];
+  for (const entry of raw) {
+    const c = asRecord(entry);
+    if (!c) continue;
+    const title = pickString(c, ["title", "name", "label"]);
+    const startMs = typeof c.startMs === "number" ? c.startMs
+      : typeof c.start === "number" ? c.start * 1000
+      : typeof c.startSeconds === "number" ? c.startSeconds * 1000
+      : NaN;
+    if (title && Number.isFinite(startMs) && startMs >= 0) chapters.push({ startMs: Math.round(startMs), title });
+  }
+  chapters.sort((a, b) => a.startMs - b.startMs);
+  return chapters.length ? chapters.slice(0, 100) : undefined;
+}
+
+function pickStartedAt(row: Record<string, unknown>): string | undefined {
+  const raw = pickString(row, ["startedAt", "started_at", "liveSince", "live_since"]);
+  return raw && Number.isFinite(Date.parse(raw)) ? raw : undefined;
+}
+
+function pickExpiresAt(row: Record<string, unknown>): number | undefined {
+  const raw = row.expiresAt ?? row.expires_at;
+  if (typeof raw === "number" && raw > 0) return raw < 1e12 ? Math.round(raw * 1000) : Math.round(raw);
+  if (typeof raw === "string") {
+    const at = Date.parse(raw);
+    if (Number.isFinite(at)) return at;
+  }
+  return undefined;
+}
+
+/**
+ * When a share link stops working, from its `exp` query parameter (epoch
+ * seconds, as the video player server signs it); undefined when absent.
+ */
+export function shareLinkExpiresAt(url: string): number | undefined {
+  let exp: string | null;
+  try {
+    exp = new URL(url, "http://local.invalid").searchParams.get("exp");
+  } catch {
+    return undefined;
+  }
+  if (!exp || !/^\d{9,11}$/.test(exp)) return undefined;
+  return Number(exp) * 1000;
+}
+
+/** The optional details of a row, only the ones present (keeps old rows unchanged). */
+function rowDetails(row: Record<string, unknown>): Partial<SagaxVideoEmit> {
+  const id = pickString(row, ["id", "videoId", "video_id", "recordingId", "recording_id"]) ?? (typeof row.id === "number" ? String(row.id) : undefined);
+  const avatarUrl = pickString(row, ["avatarUrl", "avatar_url", "avatar", "profileImageUrl", "profile_image_url"]);
+  const category = pickString(row, ["category", "game", "gameName", "game_name"]);
+  const startedAt = pickStartedAt(row);
+  const tags = pickTags(row);
+  const chapters = pickChapters(row);
+  const recording = row.recording === true || row.isRecording === true ? true : undefined;
+  const channelUrl = pickString(row, ["channelUrl", "channel_url"]);
+  const expiresAt = pickExpiresAt(row);
+  return {
+    ...(id ? { id } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
+    ...(category ? { category } : {}),
+    ...(startedAt ? { startedAt } : {}),
+    ...(tags ? { tags } : {}),
+    ...(chapters ? { chapters } : {}),
+    ...(recording ? { recording } : {}),
+    ...(channelUrl ? { channelUrl } : {}),
+    ...(expiresAt ? { expiresAt } : {}),
+  };
+}
+
 function rowToWidget(row: Record<string, unknown>, defaults?: { source?: string; live?: boolean }): SagaxVideoEmit | null {
   const picked = pickUrl(row);
   if (!picked) return null;
@@ -160,6 +293,7 @@ function rowToWidget(row: Record<string, unknown>, defaults?: { source?: string;
     posterUrl: poster(row),
     durationMs: durationMs(row),
     viewerCount: viewerCount(row),
+    ...rowDetails(row),
   };
 }
 
@@ -266,4 +400,143 @@ export function youtubeIdsInText(text: string): string[] {
   for (const match of text.matchAll(/https?:\/\/[^\s<>)]+/gi)) add(youtubeVideoId(match[0]!));
   for (const match of text.matchAll(/\[[^\]]*]\((https?:\/\/[^)]+)\)/gi)) add(youtubeVideoId(match[1]!));
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Video cards a bot writes in its own reply (2026-11-06: a model wrote the
+// envelope as a ```json fence and the person saw raw JSON, no player).
+//
+// The taught form is one ```video fence holding {"sagaxVideos":[...]}; the
+// renderer also accepts the same envelope in a ```json fence, a fence with no
+// language, or bare JSON on its own lines.
+
+const VIDEO_FENCE_LANGS = new Set(["video", "videos", "sagax-video", "sagax-videos", "sagaxvideo", "sagaxvideos"]);
+const JSON_FENCE_LANGS = new Set(["", "json", "jsonc", "json5"]);
+const ENVELOPE_KEY = /"sagaxVideos?"\s*:/;
+
+/** Outcome of reading one fence as a video card: null when it is not one. */
+export type SagaxVideoFence =
+  | { status: "videos"; videos: SagaxVideoEmit[] }
+  | { status: "invalid"; url?: string };
+
+function firstHttpUrl(text: string): string | undefined {
+  const match = /https?:\/\/[^\s"'<>\\]+/i.exec(text);
+  return match?.[0];
+}
+
+/**
+ * Read a fenced block as a Sagax video card. A ```video fence is always one;
+ * a ```json (or unlabeled) fence is one when its root holds `sagaxVideos` or
+ * `sagaxVideo`. Unparsable JSON or a card without a URL is `invalid` (the
+ * renderer then shows a fallback with the first link it finds).
+ */
+export function parseSagaxVideoFence(code: string, lang: string): SagaxVideoFence | null {
+  const language = lang.trim().toLowerCase();
+  const declared = VIDEO_FENCE_LANGS.has(language);
+  if (!declared && !(JSON_FENCE_LANGS.has(language) && ENVELOPE_KEY.test(code))) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(code.trim());
+  } catch {
+    return { status: "invalid", url: firstHttpUrl(code) };
+  }
+  const root = asRecord(parsed);
+  if (!declared && !(root && ("sagaxVideos" in root || "sagaxVideo" in root))) return null;
+  const videos = Array.isArray(parsed)
+    ? parsed.map((entry) => rowToWidget(asRecord(entry) ?? {})).filter((v): v is SagaxVideoEmit => v !== null)
+    : sagaxVideosFromJson(parsed);
+  const playable = videos.filter((v) => /^https?:\/\//i.test(v.url) || v.url.startsWith("/"));
+  if (!playable.length) return { status: "invalid", url: firstHttpUrl(code) };
+  return { status: "videos", videos: playable };
+}
+
+/** End index (exclusive) of the JSON object that opens at `start`, or -1. */
+function balancedObjectEnd(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+const BARE_ENVELOPE_LINE = /^[ \t]{0,3}\{\s*"sagaxVideos?"\s*:/;
+const FENCE_OPEN = /^[ \t]{0,3}(`{3,}|~{3,})/;
+
+/**
+ * Wrap bare `{"sagaxVideos":...}` JSON written outside any fence into a
+ * ```video fence, so the renderer (and the server) see one form. Text inside
+ * existing fences is left alone.
+ */
+export function fenceBareSagaxVideos(text: string): string {
+  if (!text.includes("sagaxVideo")) return text;
+  const out: string[] = [];
+  let fence: string | null = null;
+  let pos = 0;
+  while (pos <= text.length) {
+    const nl = text.indexOf("\n", pos);
+    const lineEnd = nl === -1 ? text.length : nl;
+    const line = text.slice(pos, lineEnd);
+    const open = FENCE_OPEN.exec(line);
+    if (fence) {
+      if (open && open[1]![0] === fence[0] && open[1]!.length >= fence.length && !line.trim().slice(open[1]!.length).trim()) fence = null;
+      out.push(line);
+    } else if (open) {
+      fence = open[1]!;
+      out.push(line);
+    } else if (BARE_ENVELOPE_LINE.test(line)) {
+      const start = pos + line.indexOf("{");
+      const end = balancedObjectEnd(text, start);
+      if (end > 0) {
+        const afterNl = text.indexOf("\n", end);
+        const blockEnd = afterNl === -1 ? text.length : afterNl;
+        out.push("```video", text.slice(start, end).trim(), "```");
+        const tail = text.slice(end, blockEnd).trim();
+        if (tail) out.push(tail);
+        if (afterNl === -1) break;
+        pos = afterNl + 1;
+        continue;
+      }
+      out.push(line);
+    } else {
+      out.push(line);
+    }
+    if (nl === -1) break;
+    pos = nl + 1;
+  }
+  return out.join("\n");
+}
+
+const VIDEO_BLOCK = /(^|\n)[ \t]{0,3}(`{3,}|~{3,})[ \t]*([\w-]*)[^\n]*\n([\s\S]*?)\n[ \t]{0,3}\2[ \t]*(?=\n|$)/g;
+
+/**
+ * Take the video cards a bot wrote in its reply out of the text: every
+ * fence (or bare JSON) that parses as a card becomes a video emit and leaves
+ * the text. Invalid blocks stay in the text for the renderer's fallback.
+ */
+export function extractSagaxVideoBlocks(text: string): { text: string; videos: SagaxVideoEmit[] } {
+  if (!text.includes("sagaxVideo") && !/(`{3,}|~{3,})[ \t]*(?:sagax-?)?videos?\b/i.test(text)) return { text, videos: [] };
+  const fenced = fenceBareSagaxVideos(text);
+  const videos: SagaxVideoEmit[] = [];
+  const stripped = fenced.replace(VIDEO_BLOCK, (whole, lead: string, _fence: string, lang: string, body: string) => {
+    const card = parseSagaxVideoFence(body, lang);
+    if (card?.status !== "videos") return whole;
+    videos.push(...card.videos);
+    return lead;
+  });
+  if (!videos.length) return { text, videos: [] };
+  return { text: stripped.replace(/\n{3,}/g, "\n\n").trim(), videos };
 }

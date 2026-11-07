@@ -148,3 +148,9 @@ origin; bodies drawn there as a direct outline or with extra parts are kept as
 their radial version only (a jaw and four legs are left out). The pumpkin, the
 eyes, the moves and the rest of the Shapes engine are Pulsatrix Technologies
 inc.'s own.
+
+The built-in REA plugin (shared/builtin-plugins.ts) starts REA, reverse
+engineering for agents, https://github.com/morluto/rea (npm rea-agents, version
+pinned in REA_VERSION), Copyright (c) 2026 morluto, used under the MIT License
+(third_party/rea/LICENSE). Sagax does not bundle REA's code: npx fetches the
+pinned package from the npm registry when a bot first uses it.

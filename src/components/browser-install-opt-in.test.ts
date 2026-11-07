@@ -36,7 +36,7 @@ vi.mock("@/state/store", async (importOriginal) => {
   };
 });
 
-import { SettingsModal } from "./SettingsModal";
+import { ComputerBrowserSettings } from "./settings/ComputerBrowserSettings";
 import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { ComputerPanel } from "./ComputerPanel";
 import { WorksOnSetting } from "./computer/WorksOnSetting";
@@ -53,13 +53,12 @@ const switchTag = (markup: string, label: string) => {
   expect(match, `missing switch: ${label}`).not.toBeNull();
   return match![0];
 };
-const settings = () => renderToStaticMarkup(createElement(SettingsModal));
+// the workspace switch lives on Settings > Computer > Browser since #2080 L3 (#2225)
+const settings = () => renderToStaticMarkup(createElement(ComputerBrowserSettings));
 const access = () => renderToStaticMarkup(createElement(BotAccess, { bot }));
 const panel = (browser: boolean) => renderToStaticMarkup(createElement(ConfirmProvider, null, createElement(ComputerPanel, { bot: { ...bot, browser } })));
 
-beforeEach(async () => {
-  const { ExperimentalSettings } = await import("./lazy-settings-sections");
-  await ExperimentalSettings.preload();
+beforeEach(() => {
   fixture.config = { features: { browser: false }, browserEngine: { kind: "unavailable", installable: true } };
   fixture.browserMcp = true;
   fixture.dispatch.mockClear();

@@ -173,24 +173,26 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // 2026-11-01 (#1703): deliberate raise to the measured wire. The old
 // baselines sat inside 40 to 528 bytes of the +2% cap (room+non-chief was
 // the tightest), which forced description cuts on every new tool. The soft
-// ceiling is now AGENTS_CATALOG_BYTES_SOFT_CEILING (150_000); groups mode
+// ceiling is now AGENTS_CATALOG_BYTES_SOFT_CEILING (160_000, raised 2026-11-06); groups mode
 // (SAGAX_CATALOG_GROUPS=1) is the growth path when a profile approaches it.
 // 2026-11-05 (#2018): claude_artifact (claude.ai artifacts through the
 // person's own Claude account) joins the catalog; baselines move to the
 // measured wire.
+// 2026-11-06 (#2439): run_on_startup joins the routine tools; the eight direct
+// profiles move to the measured wire (about +280 bytes each).
 const BUDGET_BASELINE: Record<string, number> = {
   // #2118: message_user and message_person join the direct catalog (measured wire).
   // native-notifications: notify on post_to_room/message_user/message_person/send_to_bot
   // and set_reply_notify (the bot chooses per message whether it alerts; measured wire).
 
-  "direct": 97901,
-  "direct+voice": 98868,
-  "direct+shared": 99902,
-  "direct+shared+voice": 100869,
-  "direct+skills": 99523,
-  "direct+skills+voice": 100490,
-  "direct+skills+shared": 101524,
-  "direct+skills+shared+voice": 102491,
+  "direct": 100030,
+  "direct+voice": 100997,
+  "direct+shared": 102031,
+  "direct+shared+voice": 102998,
+  "direct+skills": 101652,
+  "direct+skills+voice": 102619,
+  "direct+skills+shared": 103653,
+  "direct+skills+shared+voice": 104620,
   "room": 87787,
   "room+voice": 88754,
   "room+shared": 89788,

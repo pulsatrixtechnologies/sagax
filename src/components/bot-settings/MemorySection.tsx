@@ -25,9 +25,6 @@ import {
   revertMemoryChange,
   saveMemoryDoc,
   fetchUpkeepStatus,
-  fetchSemanticRecallStatus,
-  semanticRecallConfig,
-  type SemanticRecallStatus,
   tidyMemoryNow,
   tidySummary,
   topicFileName,
@@ -45,13 +42,14 @@ import { teamMemorySharingOf } from "../../../shared/team-memory-sharing";
 import { ApiError, api, useStore, type Bot, type ConfigStatus } from "@/state/store";
 import { PILL, PillSelect, SettingRow, SwitchRow } from "../SettingsPrimitives";
 import { AdvancedFold } from "./AdvancedFold";
+import { DeveloperLink } from "../settings/DeveloperLink";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import { inputCls } from "./field";
 import { PaneSection } from "./PaneSection";
 import { readableError } from "@/lib/plain-error";
 
 // Settings' grey pill (2026-10-16).
-import { topicTemplate, MemoryUpkeepCard, SemanticRecallCard, MemoryGauge, ConflictNotice, MemoryFileRows, MemoryJournalList } from "./MemorySectionParts";
+import { topicTemplate, MemoryUpkeepCard, MemoryGauge, ConflictNotice, MemoryFileRows, MemoryJournalList } from "./MemorySectionParts";
 
 const buttonCls = PILL;
 const quietButtonCls = "rounded-md px-2 py-1 text-[12.5px] text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-50";
@@ -291,7 +289,6 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
   const [reverting, setReverting] = useState<string | null>(null);
   const [newTopic, setNewTopic] = useState("");
   const [upkeep, setUpkeep] = useState<UpkeepStatus | null>(null);
-  const [semantic, setSemantic] = useState<SemanticRecallStatus | null>(null);
   const [tidying, setTidying] = useState(false);
   // OMB Cloud home: memory changed where the owner did not write.
   const [lendingReview, setLendingReview] = useState<LendingReview | null>(null);
@@ -303,18 +300,15 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
   const [roomsError, setRoomsError] = useState("");
 
   const refresh = async (openPath?: string) => {
-    const [nextOverview, nextJournal, nextUpkeep, nextSemantic] = await Promise.all([
+    const [nextOverview, nextJournal, nextUpkeep] = await Promise.all([
       fetchMemoryOverview(bot.id),
       fetchMemoryJournal(bot.id),
       fetchUpkeepStatus(bot.id).catch(() => null),
-      // an older server has no semantic recall: no card
-      fetchSemanticRecallStatus(bot.id).catch(() => null),
     ]);
     setOverview(nextOverview);
     setLendingReview(nextOverview.lendingReview ?? null);
     setJournal(nextJournal);
     setUpkeep(nextUpkeep);
-    setSemantic(nextSemantic);
     if (openPath) {
       const doc = await fetchMemoryDoc(bot.id, openPath);
       setEditing({ path: doc.path, text: doc.text, hash: doc.hash, dirty: false, readOnly: openPath.startsWith("memory/log/") });
@@ -573,8 +567,9 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
         </PaneSection>
       )}
 
-      {/* The size gauges, the upkeep, the daily logs and the change log:
-          folded, one click away. */}
+      {/* The size gauge, the upkeep and the change log: folded, one click
+          away. #2658: the daily logs and the embeddings endpoint (recall by
+          meaning) are on Settings > Developer > Per bot, one link below. */}
       <AdvancedFold id="memory">
         {overview && <MemoryGauge index={overview.index} />}
         {bot.memoryEnabled !== false && <MemoryUpkeepCard
@@ -585,32 +580,11 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
           onTidy={() => void tidyNow()}
           rooms={canEditConfig(state.config) ? { enabled: learnFromRooms, saving: roomsSaving, error: roomsError, onToggle: () => void toggleRooms() } : undefined}
         />}
-        {bot.memoryEnabled !== false && semantic && <SemanticRecallCard
-          status={semantic}
-          config={semanticRecallConfig(state.config)}
-          editable={canEditConfig(state.config)}
-          onSave={async (patch) => {
-            const config = await api<ConfigStatus>("/api/config", { method: "PATCH", body: JSON.stringify({ memory: patch }) });
-            dispatch({ type: "configStatus", config });
-            setSemantic(await fetchSemanticRecallStatus(bot.id).catch(() => null));
-          }}
-        />}
-        {overview && overview.logs.length > 0 && (
-          <PaneSection title={t("botPanel.memory.logs")} help={t("botPanel.memory.logsHint")}>
-            <MemoryFileRows
-              files={overview.logs}
-              empty={t("botPanel.memory.noneYet")}
-              selected={editing?.path}
-              onOpen={(file) => void open(file.path)}
-              onDelete={(file) => void remove(file)}
-            />
-          </PaneSection>
-        )}
-
         <PaneSection title={t("botPanel.memory.changes")} help={t("botPanel.memory.changesHelp")}>
           <MemoryJournalList rows={journal} botName={bot.name} reverting={reverting} onRevert={(row) => void revert(row)} />
         </PaneSection>
       </AdvancedFold>
+      <DeveloperLink bot={bot} />
 
       {notice && <div role="status" className="text-[12.5px] text-ink-secondary">{notice}</div>}
       {error && <div role="alert" className="text-[12.5px] text-danger">{error}</div>}

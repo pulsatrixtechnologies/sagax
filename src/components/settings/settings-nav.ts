@@ -69,7 +69,10 @@ export const SECTIONS: Array<{
   // Developer (#2636, JC 2026-11-07): every technical option on one page, for
   // every member, in Simple and Advanced mode: run details, timeouts, loop
   // guard, OpenTelemetry, event log cleanup, diagnostics, logs, context pods.
-  { id: "developer", group: "app", labelKey: "settings.section.developer", introKey: "settings.intro.developer", icon: Code2, keywords: ["developer", "développeur", "technical", "technique", "run", "this run", "run card", "carte d'exécution", "inspector", "inspecteur", "turn timing", "minutage", "latency", "latence", "usage meter", "usage measure", "mesure d'utilisation", "compteur", "loop guard", "garde-fou", "opentelemetry", "telemetry", "télémétrie", "otlp", "trace", "traces", "collector", "collecteur", "group turns", "rooms", "room turn", "tour de groupe", "mcp", "mcp call", "appel mcp", "timeout", "délai", "tool call", "cleanup", "retention", "rétention", "nettoyage", "event log", "journal des événements", "log size", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "context pods", "pods", "dev pods", "pods de contexte"] },
+  // #2658 (lot 2): the bot page's technical cards (working folder, tool
+  // selection, webhooks, always-allowed list, memory logs and embeddings,
+  // export zip) and the Claude Code switches.
+  { id: "developer", group: "app", labelKey: "settings.section.developer", introKey: "settings.intro.developer", icon: Code2, keywords: ["developer", "développeur", "technical", "technique", "run", "this run", "run card", "carte d'exécution", "inspector", "inspecteur", "turn timing", "minutage", "latency", "latence", "usage meter", "usage measure", "mesure d'utilisation", "compteur", "loop guard", "garde-fou", "opentelemetry", "telemetry", "télémétrie", "otlp", "trace", "traces", "collector", "collecteur", "group turns", "rooms", "room turn", "tour de groupe", "mcp", "mcp call", "appel mcp", "timeout", "délai", "tool call", "cleanup", "retention", "rétention", "nettoyage", "event log", "journal des événements", "log size", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "context pods", "pods", "dev pods", "pods de contexte", "webhooks", "webhook", "crochets", "export zip", "export the bot", "exporter le bot", "zip", "embeddings", "embedding", "recall by meaning", "rappel par sens", "skills folder", "dossier de skills", "claude code", "working folder", "dossier de travail", "always allowed", "toujours autorisé", "daily logs", "journaux quotidiens", "tool selection", "sélection d'outils", "per bot"] },
   // About (was "Help and about", JC 2026-11-07): the About window, the tours
   // and Send feedback as a card of the page (#2636: diagnostics and logs are on Developer).
   { id: "about", group: "app", labelKey: "settings.section.about", introKey: "settings.intro.about", icon: Info, keywords: ["app", "application", "about", "à propos", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot", "tour", "tours", "visite", "welcome", "bienvenue", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"] },
@@ -100,6 +103,9 @@ export const CARD_KEYWORDS: Record<string, string[]> = {
   "general.telemetry": ["opentelemetry", "telemetry", "télémétrie", "otlp"],
   "developer.diagnostics": ["diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux"],
   "developer.devPods": ["context pods", "dev pods", "pods de contexte"],
+  // #2658 (lot 2): the bot page's technical cards, and Claude Code on this computer
+  "developer.bot": ["per bot", "webhooks", "webhook", "crochets", "export zip", "export the bot", "exporter le bot", "zip", "embeddings", "embedding", "recall by meaning", "rappel par sens", "working folder", "dossier de travail", "always allowed", "toujours autorisé", "daily logs", "journaux quotidiens", "tool selection", "sélection d'outils"],
+  "developer.claudeCode": ["claude code", "skills folder", "dossier de skills"],
   "connections.integrations": ["box", "vps"],
   "connections.image": ["image", "avatar", "gpt image"],
   "voice.advanced": ["live call", "read replies", "hang up", "gpt-live"],

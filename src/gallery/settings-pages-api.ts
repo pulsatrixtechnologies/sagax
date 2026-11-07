@@ -115,6 +115,20 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
       wallets: { shop_pay: { chosen: true, ready: true, missing: "" }, link: { chosen: false, ready: false, missing: "the Link CLI" } },
       onePassword: { available: false, reason: "absent" },
     },
+    // Settings > Developer > Per bot (#2658): the first bot's technical cards
+    "/api/webhooks": { webhooks: [], attempts: [] },
+    "/api/mcp/servers": { servers: [] },
+    "/api/bots/bot-0/memory": {
+      botId: "bot-0",
+      workspacePath: "~/Sagax/Scout",
+      index: { lines: 120, bytes: 6400, maxLines: 400, maxBytes: 32000, loadedLines: 120, loadedBytes: 6400, truncated: false, hash: "h1" },
+      topics: [],
+      logs: [
+        { path: "memory/log/2026-11-06.md", name: "2026-11-06.md", bytes: 820, modifiedAt: NOW - DAY },
+        { path: "memory/log/2026-11-05.md", name: "2026-11-05.md", bytes: 1310, modifiedAt: NOW - 2 * DAY },
+      ],
+    },
+    "/api/bots/bot-0/memory/semantic": { enabled: true, encoder: "built-in", memoryPassages: 42, conversationPassages: 7 },
   };
   return API;
 }

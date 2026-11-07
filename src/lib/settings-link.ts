@@ -53,7 +53,9 @@ const SECTION_LABEL = {
   pages: "connectApps.title",
 } as const satisfies Record<AppSettingsSection, LocaleKey>;
 
-export type SettingsLinkTarget = { section: AppSettingsSection; cardId?: string };
+/** `prepare` runs just before the page opens (#2658: the bot page's link
+ * names the bot that Developer > Per bot should show). */
+export type SettingsLinkTarget = { section: AppSettingsSection; cardId?: string; prepare?: () => void };
 
 export function settingsSectionLabel(section: AppSettingsSection): string {
   return t(SECTION_LABEL[section]);

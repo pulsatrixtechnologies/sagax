@@ -133,7 +133,9 @@ describe("Settings search keywords", () => {
       backups: ["stockage"],
       security: ["people's tool access"],
       // #2636: every technical option is on Developer
-      developer: ["loop guard", "diagnostics", "download logs", "cleanup", "retention", "event log", "usage meter"],
+      developer: ["loop guard", "diagnostics", "download logs", "cleanup", "retention", "event log", "usage meter",
+        // #2658: the bot page's technical cards and the Claude Code switches
+        "webhooks", "export zip", "embeddings", "skills folder", "always allowed", "daily logs"],
     };
     for (const [page, queries] of Object.entries(home)) {
       for (const query of queries) {
@@ -148,6 +150,7 @@ describe("Settings search keywords", () => {
       // #2636: the technical cards are on Developer
       "general.loopGuard": "developer", "general.diagnostics": "developer", "general.logs": "developer",
       "general.threadCleanup": "developer", "general.usage": "developer",
+      "developer.bot": "developer", "developer.claudeCode": "developer",
       // old links of the App page land on the page that holds the card now
       "about.startup": "general", "about.input": "general", "about.holding": "general",
     };

@@ -86,6 +86,9 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   "developer.devPods": "developer",
   "organization.roomTurns": "developer",
   "organization.mcpCalls": "developer",
+  // #2658 (lot 2): the bot page's technical cards and the Claude Code switches
+  "developer.bot": "developer",
+  "developer.claudeCode": "developer",
   // old App card ids (#2080 L2) open the page that holds their rows now
   "about.startup": "general",
   "about.input": "general",

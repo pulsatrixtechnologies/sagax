@@ -40,6 +40,8 @@ const DEVELOPER_CARDS = [
   "developer.conversation", "general.usage", "organization.roomTurns", "organization.mcpCalls",
   "general.loopGuard", "general.telemetry", "general.threadCleanup", "developer.diagnostics",
   "general.diagnostics", "general.logs", "developer.devPods",
+  // #2658 (lot 2): the bot page's technical cards and the Claude Code switches
+  "developer.bot", "developer.claudeCode",
 ];
 
 // The settings pages load on demand; a static render shows a page only once its chunk is here.
@@ -74,7 +76,7 @@ describe("Settings > Developer (#2636)", () => {
   it("holds every technical option in its own card, with a heading each", () => {
     const html = render();
     for (const card of DEVELOPER_CARDS) expect(html, card).toContain(`data-settings-card="${card}"`);
-    for (const heading of ["Conversation", "Bots", "Loop guard", "OpenTelemetry", "Event log cleanup", "Diagnostics", "Context pods"]) {
+    for (const heading of ["Conversation", "Bots", "Loop guard", "OpenTelemetry", "Event log cleanup", "Diagnostics", "Context pods", "Per bot", "Claude Code"]) {
       expect(html, heading).toMatch(new RegExp(`<h3[^>]*>${heading}</h3>`));
     }
     // nothing folds away on this page: it is the technical page
@@ -128,7 +130,12 @@ describe("Settings > Developer (#2636)", () => {
       expect(CARD_HOME[card], card).toBe("developer");
       expect(currentSettingsSection("general", card), card).toBe("developer");
     }
-    for (const query of ["loop guard", "opentelemetry", "usage meter", "diagnostics", "download logs", "inspector", "run card", "turn timing", "context pods", "event log", "retention", "mcp call", "timeout"]) {
+    for (const card of ["developer.bot", "developer.claudeCode"]) {
+      expect(CARD_HOME[card], card).toBe("developer");
+    }
+    for (const query of ["loop guard", "opentelemetry", "usage meter", "diagnostics", "download logs", "inspector", "run card", "turn timing", "context pods", "event log", "retention", "mcp call", "timeout",
+      // #2658: the bot page's technical cards and the Claude Code switches
+      "webhooks", "export zip", "embeddings", "skills folder", "working folder", "daily logs", "always allowed", "tool selection"]) {
       const found = SECTIONS.filter((entry) => sectionMatches(entry, query)).map((entry) => entry.id);
       expect(found, query).toEqual(["developer"]);
     }
@@ -141,6 +148,28 @@ describe("Settings > Developer (#2636)", () => {
     const html = render();
     expect(html).toContain('<option value="developer" selected="">Développeur</option>');
     expect(html).toContain(">Garde-fou de boucle</h3>");
+    expect(html).toContain(">Par bot</h3>");
     expect(html).not.toMatch(/[–—]/);
+  });
+
+  // #2658 (lot 2): the bot page's technical cards (working folder, tool
+  // selection, webhooks, always-allowed list, memory logs and embeddings,
+  // export zip) and the Claude Code switches live on Developer only.
+  it("holds the per-bot technical cards behind a bot picker, with no bot yet", () => {
+    const html = render();
+    expect(html).toContain('data-settings-card="developer.bot"');
+    expect(html).toContain('data-developer-bot-picker=""');
+    expect(html).toContain("No bot yet");
+    expect(html).not.toContain('data-bot-webhooks=""');
+  });
+
+  it("keeps the Claude Code switches for those who may edit the config", () => {
+    let html = render();
+    expect(html).toContain('data-settings-card="developer.claudeCode"');
+    expect(html).toContain('data-settings-row="claudeUserMcp"');
+    expect(html).toContain('data-settings-row="claudeUserSkills"');
+    fixture.config = { rooms: { turnTimeoutMinutes: 5 }, viewer: { operator: false, role: "member" } };
+    html = render();
+    expect(html).not.toContain('data-settings-card="developer.claudeCode"');
   });
 });

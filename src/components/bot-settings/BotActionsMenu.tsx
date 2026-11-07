@@ -2,16 +2,17 @@
 // the mascot's right-click menu, the five quick actions of the editor's
 // Overview, the header's Export and Inspector buttons and the Primary bot
 // button of Permissions: Edit bot, Rename, Put on the desktop, Make primary
-// bot, Export the conversation (copy or download), Export the bot (.zip),
-// Archive and, in Advanced mode, the Inspector. A right click on the mascot
+// bot, Export the conversation (copy or download), Archive and, in Advanced
+// mode, the Inspector (#2658: Export the bot (.zip) is on Settings >
+// Developer > Per bot). A right click on the mascot
 // or the name opens the same menu where the pointer is. 2026-10-21: Copy
 // link to this bot (sagax://bot/<id>) and Reset
 // the history (src/lib/bot-history-reset.ts: a new conversation, the open
 // ones archived; memory, files and routines kept; routine runs,
 // confidential threads, hidden client threads and bot-to-bot threads stay).
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Archive, Bug, Check, Copy, Database, Download, FileArchive, Link2, MoreHorizontal, Pencil, PictureInPicture2, RotateCcw, Star, UserRoundPen } from "lucide-react";
+import { Archive, Bug, Check, Copy, Database, Download, Link2, MoreHorizontal, Pencil, PictureInPicture2, RotateCcw, Star, UserRoundPen } from "lucide-react";
 
 import { useStore, visibleMessages, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -24,7 +25,6 @@ import { botRefUrl } from "@/lib/thread-refs";
 import { archiveBlockReason, primaryBotOffer, requestBotHidden, requestPrimaryBot } from "@/lib/bot-quick-actions";
 import { viewerOwnsBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
-import { downloadBotZip, showBotZipExport } from "@/lib/bot-zip";
 import { isBotFloating, subscribeFloatingBots, toggleFloatingBot } from "@/lib/floating-bots";
 import {
   copyTranscriptToClipboard,
@@ -36,10 +36,7 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { useHeldMenuMotion } from "../MenuMotion";
 import { navigateThreadMenu } from "../BotProjects";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { PILL, PRIMARY_PILL, Switch } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
-import { AnchoredPopover, useAnchoredDismissRoot } from "../AnchoredPopover";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 
 /** Where the menu opens: under the "..." button, or at a right click. */
 export interface BotActionsMenuAnchor {
@@ -71,7 +68,6 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
   const floating = useSyncExternalStore(subscribeFloatingBots, () => isBotFloating(bot.id), () => false);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
-  const [zipOpen, setZipOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -84,7 +80,6 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
   const owns = viewerOwnsBot(bot, viewerId);
   const archiveAllowed = showBotArchive(state.config, bot);
   const archiveBlocked = archiveBlockReason(state.bots, bot);
-  const zipAllowed = showBotZipExport(state.config, bot);
   const messages = visibleMessages(bot);
   const fail = (cause: unknown) => dispatch({ type: "error", message: readableError(cause) });
 
@@ -230,7 +225,6 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
         copyFailed && <div key="copy-failed" role="status" className="px-2 py-1.5 text-[12px] text-ink-secondary">{t("chat.export.copyFailed")}</div>,
         item("download-markdown", <Download />, t("chat.export.download"), () => downloadMarkdownTranscript(slugifyTranscriptFilename(bot.name), markdown())),
       ]),
-    zipAllowed && item("export-zip", <FileArchive />, t("chat.export.botZip"), () => setZipOpen(true)),
     (archiveAllowed || advanced || data) && divider("more"),
     archiveAllowed && item("archive", <Archive />, `${t("sidebar.bot.archive")}…`, () => setArchiveOpen(true), {
       disabled: archiveBlocked !== null || busy,
@@ -274,13 +268,6 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
         </div>,
         document.body,
       )}
-      {zipOpen && (
-        <BotZipExportPopover
-          bot={bot}
-          anchorRef={buttonRef}
-          onClose={() => { setZipOpen(false); buttonRef.current?.focus(); }}
-        />
-      )}
       <ConfirmDialog
         open={archiveOpen}
         title={t("sidebar.confirm.archiveTitle", { name: bot.name })}
@@ -304,65 +291,5 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger 
         onConfirm={resetHistory}
       />
     </>
-  );
-}
-
-/** Export the bot as a .sagaxbot.zip: what to include, then the download.
- * Anchored popover under the "..." button (one choice, one download). */
-function BotZipExportPopover({ bot, anchorRef, onClose }: {
-  bot: Bot;
-  anchorRef: RefObject<HTMLElement | null>;
-  onClose: () => void;
-}) {
-  const [withConversations, setWithConversations] = useState(false);
-  const [withSharing, setWithSharing] = useState(false);
-  const [exported, setExported] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const dismissRoot = useAnchoredDismissRoot(wrapRef, popoverRef);
-  usePopoverDismiss(true, dismissRoot, onClose);
-  const shared = (bot.grants?.length ?? 0) > 0 || bot.visibility !== undefined;
-  useEffect(() => {
-    popoverRef.current?.querySelector<HTMLElement>("button")?.focus();
-  }, []);
-  return (
-    <div ref={wrapRef} className="contents">
-      <AnchoredPopover
-        anchorRef={anchorRef}
-        popoverRef={popoverRef}
-        align="end"
-        side="bottom"
-        role="dialog"
-        aria-label={t("chat.export.botZip")}
-        data-bot-zip-export=""
-        className="w-[min(320px,calc(100vw-24px))] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-3 text-[13px] text-ink shadow-xl"
-      >
-        <p className="text-ink-secondary">{t("botZip.exportBody", { name: bot.name })}</p>
-        <label className="mt-3 flex items-center justify-between gap-3">
-          <span className="min-w-0"><span className="block">{t("botZip.includeConversations")}</span><span className="block text-[12px] text-ink-secondary">{t("botZip.includeConversationsHint")}</span></span>
-          <Switch checked={withConversations} onClick={() => setWithConversations((value) => !value)} aria-label={t("botZip.includeConversations")} data-bot-zip-conversations="" />
-        </label>
-        {shared && (
-          <label className="mt-2 flex items-center justify-between gap-3">
-            <span>{t("botZip.includeSharing")}</span>
-            <Switch checked={withSharing} onClick={() => setWithSharing((value) => !value)} aria-label={t("botZip.includeSharing")} data-bot-zip-sharing="" />
-          </label>
-        )}
-        {exported && <span role="status" className="mt-2 block text-[12px] text-ink-secondary">{t("botZip.exportStarted")}</span>}
-        <div className="mt-3 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className={PILL}>
-            {exported ? t("common.close") : t("common.cancel")}
-          </button>
-          <button
-            type="button"
-            data-bot-zip-download=""
-            onClick={() => { downloadBotZip(bot.id, { conversations: withConversations, sharing: shared && withSharing }); setExported(true); }}
-            className={PRIMARY_PILL}
-          >
-            {t("botZip.download")}
-          </button>
-        </div>
-      </AnchoredPopover>
-    </div>
   );
 }

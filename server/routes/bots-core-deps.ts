@@ -99,6 +99,8 @@ export interface BotsCoreRouteDeps {
   store: BotsCoreStore;
   /** #2045: stable section id for a display name (org servers). */
   resolveSectionId?: (section: string, auth: RequestAuth, bot?: { ownerUserId?: string }) => string | undefined;
+  /** I2: the caller's team model and computer for a new bot in that team. */
+  teamDefaultsFor?: (auth: RequestAuth, section: string) => import("../rooms/section-context.ts").TeamDefaultsRecord | null;
   cfg: { newBotDefaults?: NewBotDefaults; browserProfiles?: ReadonlyArray<{ id: string }> };
   identity: { kind: "solo" | "perspicax" };
   desktopManaged: boolean;

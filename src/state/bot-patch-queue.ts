@@ -88,12 +88,16 @@ export type BotUpdatePatch = Partial<BotPatchBody> & {
   keepThreadModels?: boolean;
   /** With modelSelection: the thread this client shows. Body only: Bot.threadId is the server's selection. */
   threadId?: string;
+  /** I2, body only: the change comes from the team settings, so the bot keeps following its team. */
+  teamApply?: boolean;
+  /** I2, body only: the bot drops its own model or computer and follows its team again. */
+  teamInherit?: Array<"model" | "computer">;
 };
 
 /** A wire patch after clear-only values have been normalized for Bot state. */
 export type BotStatePatch = Omit<
   BotUpdatePatch,
-  "computer" | "host" | "acknowledgeLocalAuto" | "confirmFullAccess" | "applyToAllThreads" | "organizationFullAccess" | "keepThreadModels" | "threadId"
+  "computer" | "host" | "acknowledgeLocalAuto" | "confirmFullAccess" | "applyToAllThreads" | "organizationFullAccess" | "keepThreadModels" | "threadId" | "teamApply" | "teamInherit"
 
 > & {
   computer?: BotComputer;
@@ -155,6 +159,8 @@ const stateOverlay = (patch: BotUpdatePatch): BotStatePatch => {
     organizationFullAccess: _orgFull,
     keepThreadModels: _keepThreadModels,
     threadId: _threadId,
+    teamApply: _teamApply,
+    teamInherit: _teamInherit,
     host: _host,
     computer,
     ...fields
@@ -256,6 +262,9 @@ export function createBotPatchQueue<B>(options: BotPatchQueueOptions<B>): BotPat
       // An all-threads scope belongs to the level it came with: a newer level
       // without one (a quick switch from Full back to Ask) is the default only.
       if (hasOwn(patch, "approvalMode") && !hasOwn(patch, "applyToAllThreads")) delete entry.pending.applyToAllThreads;
+      // I2: the team flags belong to the edit they came with; a later own
+      // model or computer edit is the bot's own.
+      if ((hasOwn(patch, "modelSelection") || hasOwn(patch, "computer")) && !hasOwn(patch, "teamApply")) delete entry.pending.teamApply;
       // A private Full/Custom grant cannot be cancelled after it crosses the
       // Electron bridge. Signal the sender as soon as a newer level exists so
       // it can compensate a late grant back to Ask before this lane advances.

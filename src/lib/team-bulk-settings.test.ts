@@ -87,8 +87,34 @@ describe("team-wide settings", () => {
     const plan = planTeamChange([bot("a")], instances, { kind: "model", model: "sonnet" });
     await applyTeamPlan(plan, (target, patch) => persistBotUpdate(target.id, patch, new AbortController().signal, request, undefined, target));
     expect(request.mock.calls.map(([path, init]) => [path, JSON.parse(String(init?.body))])).toEqual([
-      ["/api/bots/a", { modelSelection: { instanceId: "claude", model: "sonnet" }, keepThreadModels: true }],
+      ["/api/bots/a", { modelSelection: { instanceId: "claude", model: "sonnet" }, keepThreadModels: true, teamApply: true }],
     ]);
+  });
+
+  it("sets the team computer on the bots that follow the team, and leaves a bot's own computer alone (I2)", () => {
+    const plan = planTeamChange([
+      bot("follows"),
+      bot("already", { computer: "cloud" }),
+      bot("own", { computer: "local", teamOverrides: ["computer"] }),
+      bot("busy", { busy: true }),
+    ], instances, { kind: "computer", computer: "cloud" });
+    expect(plan.map((row) => row.status)).toEqual(["apply", "unchanged", "skip", "skip"]);
+    expect(plan[0]).toMatchObject({ patch: { computer: "cloud", teamApply: true } });
+    expect(plan[2]).toMatchObject({ reason: "it has its own setting" });
+  });
+
+  it("Auto clears the bot computer so it runs where the server decides (I2)", () => {
+    const [row] = planTeamChange([bot("a", { computer: "local" })], instances, { kind: "computer", computer: "auto" });
+    expect(row).toMatchObject({ status: "apply", patch: { computer: null, teamApply: true } });
+  });
+
+  it("including the bots with their own setting makes them follow the team again (I2)", () => {
+    const own = bot("own", { teamOverrides: ["model", "computer"], computer: "cloud" });
+    const [computer] = planTeamChange([own], instances, { kind: "computer", computer: "cloud" }, { includeOwn: true });
+    expect(computer).toMatchObject({ status: "apply", patch: { computer: "cloud", teamInherit: ["computer"] } });
+    const [model] = planTeamChange([own], instances, { kind: "model", model: "opus" }, { includeOwn: true });
+    expect(model).toMatchObject({ status: "apply", patch: { modelSelection: { instanceId: "claude", model: "opus" }, teamInherit: ["model"] } });
+    expect(planTeamChange([own], instances, { kind: "model", model: "sonnet" })[0]!.status).toBe("skip");
   });
 
   it("calls a bot already set only when every one of its threads is, and skips one with any thread working", () => {

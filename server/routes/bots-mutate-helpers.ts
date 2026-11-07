@@ -25,6 +25,8 @@ export type BotPatchState = {
   patch: Record<string, unknown>;
   section: string | null | undefined;
   computerSpecified: boolean;
+  /** I2: the bot's next team overrides, when this request changes them. */
+  teamOverrides?: Array<"model" | "computer">;
   requestedComputer: any;
   requestedMcpServers: any;
   requestedApprovalMode: ApprovalMode | undefined;

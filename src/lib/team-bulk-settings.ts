@@ -15,6 +15,11 @@
 // (applyToAllThreads). A model moves the threads that follow each bot and
 // leaves a thread's own model alone, the selected thread included
 // (keepThreadModels): the panel instead moves the selected thread with it.
+//
+// I2: the model and the computer are also saved as the team's own
+// (PUT /api/team-defaults), so a new bot in the team starts on them. A bot
+// that set its own model or computer is skipped unless the person includes
+// those bots; they then follow the team again (teamInherit).
 import { t } from "@/lib/i18n";
 import { threadApprovalModes, type Bot, type InstanceInfo } from "@/state/store";
 import type { BotUpdatePatch } from "@/state/bot-patch-queue";
@@ -32,7 +37,27 @@ export type TeamChange =
   | { kind: "approval"; mode: TeamApprovalMode }
   /** `model` undefined keeps each bot's model; `effort` undefined keeps each
    * bot's effort and null clears it (the engine decides). */
-  | { kind: "model"; model?: string; effort?: EffortLevel | null };
+  | { kind: "model"; model?: string; effort?: EffortLevel | null }
+  /** I2: where the team's bots work. */
+  | { kind: "computer"; computer: TeamComputer };
+
+/** I2: the places a whole team may work on. A Local VM and the browser are
+ * per bot (the server reads them as Auto). */
+export const TEAM_COMPUTERS = ["auto", "cloud", "local", "off"] as const;
+export type TeamComputer = (typeof TEAM_COMPUTERS)[number];
+
+/** I2: which of a team's settings a bot set for itself. */
+export type TeamSetting = "model" | "computer";
+export interface TeamPlanOptions {
+  /** Also move the bots that set this themselves; they follow the team again. */
+  includeOwn?: boolean;
+}
+
+/** The team flag each bot's PATCH carries: a bot that follows the team keeps
+ * following it, a bot with its own setting follows it again (includeOwn). */
+function teamFlag(bot: Bot, setting: TeamSetting): BotUpdatePatch {
+  return bot.teamOverrides?.includes(setting) ? { teamInherit: [setting] } : { teamApply: true };
+}
 
 export type TeamPlanRow =
   | { bot: Bot; status: "apply"; patch: BotUpdatePatch }
@@ -92,10 +117,22 @@ export function teamEffortChoices(bots: readonly Bot[], instances: readonly Inst
 
 /** What each bot would get, before anything is sent. Mirrors the server's
  * refusals so the summary can name them; the server still re-checks. */
-export function planTeamChange(bots: readonly Bot[], instances: readonly InstanceInfo[], change: TeamChange): TeamPlanRow[] {
+export function planTeamChange(bots: readonly Bot[], instances: readonly InstanceInfo[], change: TeamChange, options: TeamPlanOptions = {}): TeamPlanRow[] {
   return bots.map((bot): TeamPlanRow => {
     const engine = engineOf(bot, instances);
     const engineName = engine?.displayName ?? bot.modelSelection.instanceId;
+    if (change.kind !== "approval") {
+      const setting: TeamSetting = change.kind === "computer" ? "computer" : "model";
+      if (!options.includeOwn && bot.teamOverrides?.includes(setting)) {
+        return { bot, status: "skip", reason: t("teamSettings.skip.ownSetting") };
+      }
+    }
+    if (change.kind === "computer") {
+      const current = bot.computer === "cloud" || bot.computer === "local" || bot.computer === "off" ? bot.computer : "auto";
+      if (current === change.computer && !bot.teamOverrides?.includes("computer")) return { bot, status: "unchanged" };
+      if (bot.busy) return { bot, status: "skip", reason: t("teamSettings.skip.busy") };
+      return { bot, status: "apply", patch: { computer: change.computer === "auto" ? null : change.computer, ...teamFlag(bot, "computer") } };
+    }
     if (change.kind === "approval") {
       // Already set only when the bot and every one of its threads are.
       if ([approvalModeFor(bot), ...threadApprovalModes(bot)].every((mode) => mode === change.mode)) return { bot, status: "unchanged" };
@@ -125,11 +162,12 @@ export function planTeamChange(bots: readonly Bot[], instances: readonly Instanc
       next.effort = change.effort;
       delete next.variant;
     }
-    if (next.model === current.model && next.effort === current.effort && next.variant === current.variant) {
+    if (next.model === current.model && next.effort === current.effort && next.variant === current.variant
+      && !bot.teamOverrides?.includes("model")) {
       return { bot, status: "unchanged" };
     }
     if (bot.busy) return { bot, status: "skip", reason: t("teamSettings.skip.busy") };
-    return { bot, status: "apply", patch: { modelSelection: next, keepThreadModels: true } };
+    return { bot, status: "apply", patch: { modelSelection: next, keepThreadModels: true, ...teamFlag(bot, "model") } };
   });
 }
 

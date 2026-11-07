@@ -171,6 +171,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   section: "settings",
   sectionId: "settings",
   managedSections: "settings",
+  // I2: which team settings the bot set itself; it follows its team on import.
+  teamOverrides: { drop: "the importing team decides" },
   projects: "settings",
   playbooks: "settings",
   pinned: "settings",

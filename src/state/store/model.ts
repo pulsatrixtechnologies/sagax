@@ -571,6 +571,8 @@ export interface Bot {
   chiefOfStaff?: boolean;
   /** Additional teams the owner explicitly lets this Primary Bot work with. */
   managedSections?: string[];
+  /** I2: the team settings this bot set itself; the team leaves them alone. */
+  teamOverrides?: Array<"model" | "computer">;
   /** When this bot wants to talk to another bot (ask_bot/delegate_bot),
    * pause and ask the user first. Off by default. */
   approvePeerComms?: boolean;

@@ -2,6 +2,7 @@
  * POST /api/bots (#1388 B1). Literal path, ahead of /api/bots/:id patterns.
  * Never imports server/index.ts.
  */
+import { withTeamDefaultsForCreate } from "../team/team-defaults.ts";
 import { validateBotCwd } from "../bots/bot-cwd.ts";
 import { parseBotProfilePatch } from "../bots/bot-profile.ts";
 import { parseVisibility } from "../bots/bot-visibility.ts";
@@ -68,6 +69,14 @@ export function createBotsCoreCreateRoutes(deps: BotsCoreRouteDeps): RouteHandle
         temporary = taken;
         const { temporaryToken: _token, ...rest } = body;
         body = rest;
+      }
+      // I2: a new bot in a team starts on the team's model and computer;
+      // what the request chose itself stays the bot's own.
+      let teamOverrides: Array<"model" | "computer"> | undefined;
+      if (typeof body.section === "string" && body.section.trim() && deps.teamDefaultsFor) {
+        const team = withTeamDefaultsForCreate(body, deps.teamDefaultsFor(auth, body.section.trim()));
+        body = team.body;
+        teamOverrides = team.teamOverrides;
       }
       // An organization member's bot starts from nothing the admin saved
       // (New bot defaults can set a folder, a computer or skills): only the
@@ -212,6 +221,7 @@ export function createBotsCoreCreateRoutes(deps: BotsCoreRouteDeps): RouteHandle
           browserProfile: ordinary.browserProfile || undefined,
           approvalMode,
           autoApprove: approvalMode === "auto",
+          ...(teamOverrides ? { teamOverrides } : {}),
         });
         store.patchTask(bot.id, bot.threadId, { approvalMode, autoApprove: approvalMode === "auto" });
         // What the preset brings wins over the saved defaults for the same

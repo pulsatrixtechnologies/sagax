@@ -1776,6 +1776,10 @@ export class RoutineManager {
         resumable = true;
         continue;
       }
+      // A bot run past its one resume whose teammates' work the runtime still
+      // carries goes on with it: the runtime reruns the cut turn and resumes
+      // the run with the results (docs/runtime-contract.md §5).
+      if (run.status === "running" && run.target === "bot" && run.threadId && this.options.teammatesContinue?.(run.threadId)) continue;
       if (run.status === "waiting" && run.target !== "room-goal" && run.threadId && this.options.teammatesContinue?.(run.threadId)) continue;
       // 2026-11-03: a question card survives the restart, and its answer starts the next turn
       if (run.status === "waiting" && isEngineReconnectAttention(run.attention)) continue;

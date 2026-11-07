@@ -469,7 +469,7 @@ surface alone: add the surface to the gate and its regression to
 The agents `tools/list` wire is pinned and size-budgeted by
 `server/drivers/agents-catalog-wire.test.ts`. Default listing stays the full
 catalog (Grok, Codex and Pi discover by name, #1314). Measured provider
-limits: 128 tools per request (chat-completions), 150_000 UTF-8 bytes soft
+limits: 128 tools per request (chat-completions), 160_000 UTF-8 bytes soft
 ceiling for an agents listing (`AGENTS_CATALOG_BYTES_SOFT_CEILING`). The +2%
 ratchet around `BUDGET_BASELINE` still catches accidental growth; raise the
 baseline on purpose when a tool lands, do not shorten descriptions only to

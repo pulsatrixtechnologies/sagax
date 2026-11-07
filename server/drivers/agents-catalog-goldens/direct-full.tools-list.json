@@ -2531,6 +2531,10 @@
             "type": "boolean",
             "description": "true: feed latest completed run report into the next run. false starts fresh."
           },
+          "run_on_startup": {
+            "type": "boolean",
+            "description": "true: also run once each time Sagax starts (repeating schedules only). false stops it."
+          },
           "overlap": {
             "type": "string",
             "enum": [
@@ -2825,6 +2829,10 @@
               "continuity": {
                 "type": "boolean",
                 "description": "true: feed latest completed run report into the next run. false starts fresh."
+              },
+              "run_on_startup": {
+                "type": "boolean",
+                "description": "true: also run once each time Sagax starts (repeating schedules only). false stops it."
               },
               "overlap": {
                 "type": "string",

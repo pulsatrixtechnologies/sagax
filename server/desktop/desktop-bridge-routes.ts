@@ -27,7 +27,7 @@ import { Socket } from "node:net";
 import type { Duplex } from "node:stream";
 
 import { localVmDesktopSpec } from "../computer/container-computer.ts";
-import { desktopBridgeRegistration, desktopSystemInfo, type DesktopBridgeOperation, type DesktopBridges } from "./desktop-bridge.ts";
+import { desktopBridgeRegistration, desktopSystemInfo, isDeviceAccess, type DesktopBridgeOperation, type DesktopBridges, type MyDevice } from "./desktop-bridge.ts";
 import type { DesktopTunnels } from "./desktop-egress.ts";
 import type { DesktopTerminals } from "./desktop-terminal.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
@@ -35,7 +35,7 @@ import { PASS, type RouteHandler } from "../routes/table.ts";
 const ID_ROUTE = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/(poll|lease|progress|result|disconnect|system|mac-apps)$/;
 const LOCAL_VM_ROUTE = "/api/me/desktop-bridge/local-vm";
 /** Settings > Computer > Other computers: rename or remove one of the person's computers. */
-const COMPUTER_ROUTE = /^\/api\/me\/desktop-bridge\/computers\/(rename|remove)$/;
+const COMPUTER_ROUTE = /^\/api\/me\/desktop-bridge\/computers\/(rename|remove|access)$/;
 const LOCAL_MODELS_ROUTE = "/api/me/local-models";
 const LOCAL_MODELS_PUBLISH = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/local-models$/;
 /** What the person's Computer tab may ask of their own Local VM. */
@@ -110,6 +110,9 @@ export function createDesktopBridgeRoutes(deps: {
     update(person: string, body: unknown): { ok: true; value: unknown } | { ok: false; error: string };
     publish(person: string, body: unknown): { ok: true } | { ok: false; error: string };
   };
+  /** The person's phones with Sagax (push registrations): listed among their
+   * devices for presence only, bots never use them. */
+  phones?: (person: string) => Array<{ name: string; platform: string; lastSeenAt: number; online: boolean }>;
 }): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
     const publishMatch = LOCAL_MODELS_PUBLISH.exec(path);
@@ -124,6 +127,13 @@ export function createDesktopBridgeRoutes(deps: {
         connected: deps.bridges.connected(person),
         tunnel: deps.tunnels.connected(person),
         desktops: deps.bridges.status(person),
+        devices: [
+          ...deps.bridges.devices(person, auth.session.id),
+          ...(deps.phones?.(person) ?? []).map((phone, index): MyDevice => ({
+            key: `phone-${index}`, name: phone.name, kind: "phone", platform: phone.platform, online: phone.online,
+            lastSeenAt: phone.lastSeenAt, access: null, current: false, desktopId: null,
+          })).sort((a, b) => Number(b.online) - Number(a.online) || b.lastSeenAt - a.lastSeenAt),
+        ],
         workplace: deps.workplace(person),
         activity: deps.audit.recent(person),
       });
@@ -147,6 +157,10 @@ export function createDesktopBridgeRoutes(deps: {
         if (computerRoute[1] === "rename") {
           if (typeof body.name !== "string") return json(res, 400, { error: "name must be text", code: "computer_name" });
           return json(res, 200, { ok: true, ...deps.bridges.rename(person, body.computer, body.name) });
+        }
+        if (computerRoute[1] === "access") {
+          if (!isDeviceAccess(body.access)) return json(res, 400, { error: "access is always, ask or never", code: "device_access" });
+          return json(res, 200, { ok: true, ...deps.bridges.setAccess(person, body.computer, body.access) });
         }
         return json(res, 200, { ok: true, ...deps.bridges.remove(person, body.computer) });
       } catch (error) {

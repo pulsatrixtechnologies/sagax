@@ -135,13 +135,32 @@ export function desktopBridgeCapability(action: DesktopBridgeAction): keyof Desk
   }
 }
 
-export type DesktopBridgeStatus = { id: string; name: string; platform: string; online: boolean; busy: boolean; lastSeenAt: number; capabilities: DesktopBridgeRegistration["capabilities"]; system?: DesktopSystemInfo };
+/** What a person's bots may do with one of their devices (Remote sessions >
+ * Enrolled hosts, 2026-11-07): always use it, ask the person first each
+ * time (an approval card with Always allow), or never (it leaves the
+ * Computer menu and the server refuses it). Default: always. */
+export const DEVICE_ACCESS = ["always", "ask", "never"] as const;
+export type DeviceAccess = typeof DEVICE_ACCESS[number];
+export const isDeviceAccess = (value: unknown): value is DeviceAccess => typeof value === "string" && (DEVICE_ACCESS as readonly string[]).includes(value);
+
+export type DesktopBridgeStatus = { id: string; name: string; platform: string; online: boolean; busy: boolean; lastSeenAt: number; capabilities: DesktopBridgeRegistration["capabilities"]; system?: DesktopSystemInfo; access: DeviceAccess };
+
+/** One of the person's devices: a Sagax desktop (computer, with an access
+ * level) or, merged in by the route, a phone (presence only, access null).
+ * `key` is the computer's name in lower case, stable across reconnects (the
+ * registration id is not); `desktopId` is its live registration, if any. */
+export type MyDevice = { key: string; name: string; kind: "computer" | "phone"; platform: string; online: boolean; lastSeenAt: number; access: DeviceAccess | null; current: boolean; desktopId: string | null };
+/** The bot turn behind a desktop request, so Ask every time can raise its card. */
+export type DeviceAskContext = { botId: string; threadId: string };
+export type DeviceAskHook = (input: { person: string; device: { id: string; name: string }; context: DeviceAskContext }) => Promise<boolean>;
+type KnownDevice = { name: string; platform: string; lastSeenAt: number; access?: Exclude<DeviceAccess, "always"> };
 
 type Job = { id: string; operation: DesktopBridgeOperation; active: () => boolean; sent: boolean; resolve: (result: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout; progress?: (message: string) => void; progressCount: number };
 type Bridge = { registration: DesktopBridgeRegistration; session: string; person: string; secret: string; seen: number; connectedAt: number; jobs: Map<string, Job>; wake?: () => void; system?: DesktopSystemInfo };
 
 const failure = (message: string, status = 409, code?: string) => Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
 const normalize = (value: string | null | undefined) => value?.trim().toLowerCase() || null;
+const hostKey = (name: string) => name.trim().toLowerCase();
 /** Bounds memory: one entry per signed-in desktop. */
 const TOTAL = 500;
 /** A desktop that stopped polling this long ago is offline. */
@@ -155,6 +174,8 @@ export const DESKTOP_BRIDGE_MESSAGES = {
   capability: "Your Sagax desktop app does not offer this on this computer.",
   ended: "The requesting turn ended.",
   chosenOffline: "That computer is not connected right now. Open the Sagax desktop app on it, signed in to this server, or pick another computer. Nothing ran.",
+  never: "This computer is set to Never allow for bots (Remote sessions > Enrolled hosts). Nothing ran.",
+  denied: "The person did not allow this bot to use that computer. Nothing ran.",
 } as const;
 
 export class DesktopBridges {
@@ -176,11 +197,27 @@ export class DesktopBridges {
    * vanishing (2026-11-06). */
   private macApps = new Map<string, MacAppSetupId[]>();
   private macAppsFile: string | undefined;
-  constructor(sessionPerson: (sessionId: string) => string | null, now: () => number = Date.now, labelsFile?: string, macAppsFile?: string) {
+  /** Every computer the person signed in from, by person and computer name
+   * (lower case): its last presence and its access level, kept after the
+   * bridge entry is reaped and, with a file, across a server restart. */
+  private known = new Map<string, KnownDevice>();
+  private devicesFile: string | undefined;
+  private askHook: DeviceAskHook | undefined;
+  constructor(sessionPerson: (sessionId: string) => string | null, now: () => number = Date.now, labelsFile?: string, macAppsFile?: string, devicesFile?: string) {
     this.sessionPerson = sessionPerson;
     this.now = now;
     this.labelsFile = labelsFile;
     this.macAppsFile = macAppsFile;
+    this.devicesFile = devicesFile;
+    if (devicesFile) {
+      try {
+        const stored = JSON.parse(readFileSync(devicesFile, "utf8")) as Record<string, Partial<KnownDevice>>;
+        for (const [key, value] of Object.entries(stored)) {
+          if (!value || typeof value.name !== "string" || typeof value.platform !== "string" || typeof value.lastSeenAt !== "number") continue;
+          this.known.set(key, { name: value.name.slice(0, 120), platform: value.platform, lastSeenAt: value.lastSeenAt, ...(value.access === "ask" || value.access === "never" ? { access: value.access } : {}) });
+        }
+      } catch { /* none yet, or unreadable: no devices remembered */ }
+    }
     if (macAppsFile) {
       try {
         const stored = JSON.parse(readFileSync(macAppsFile, "utf8")) as Record<string, unknown>;
@@ -228,6 +265,38 @@ export class DesktopBridges {
     return MAC_APP_SETUP_IDS.filter(app => on.has(app));
   }
 
+  private saveDevices(): void {
+    if (!this.devicesFile) return;
+    const temporary = `${this.devicesFile}.${process.pid}.tmp`;
+    try {
+      mkdirSync(dirname(this.devicesFile), { recursive: true });
+      writeFileSync(temporary, `${JSON.stringify(Object.fromEntries(this.known))}\n`, { mode: 0o600 });
+      renameSync(temporary, this.devicesFile);
+    } catch { /* the list still holds in memory */ }
+  }
+
+  /** Remember a computer's presence (connect, disconnect, reaped). */
+  private remember(entry: Bridge): void {
+    const key = `${entry.person}\n${hostKey(entry.registration.name)}`;
+    const before = this.known.get(key);
+    this.known.set(key, { ...before, name: entry.registration.name, platform: entry.registration.platform, lastSeenAt: Math.max(entry.seen, before?.lastSeenAt ?? 0) });
+    this.saveDevices();
+  }
+
+  private accessOf(person: string, name: string): DeviceAccess {
+    return this.known.get(`${person}\n${hostKey(name)}`)?.access ?? "always";
+  }
+
+  /** The name the person gave this computer, by its registration or by its
+   * computer name (a rename outlives the app's next reconnect). */
+  private nameOf(entry: Bridge): string {
+    return this.labels.get(`${entry.person}\n${entry.registration.id}`) ?? this.labels.get(`${entry.person}\nhost:${hostKey(entry.registration.name)}`) ?? entry.registration.name;
+  }
+
+  /** Who decides on Ask every time: the server raises the bot's approval
+   * card (index.ts). Without a hook, Ask every time refuses a bot. */
+  setAskHook(hook: DeviceAskHook | undefined): void { this.askHook = hook; }
+
   /** Temp-and-rename, so a crash never leaves a truncated file. A failed
    * write keeps the name for this run. */
   private saveLabels(): void {
@@ -263,18 +332,21 @@ export class DesktopBridges {
     }
     if (this.bridges.size >= TOTAL) throw failure("Too many connected desktops", 503);
     const at = this.now();
-    this.bridges.set(key, { registration, session, person, secret, seen: at, connectedAt: at, jobs: new Map() });
+    const bridge: Bridge = { registration, session, person, secret, seen: at, connectedAt: at, jobs: new Map() };
+    this.bridges.set(key, bridge);
+    this.remember(bridge);
   }
 
   private drop(key: string, entry: Bridge, message: string) {
     this.bridges.delete(key); entry.wake?.();
+    if (this.known.has(`${entry.person}\n${hostKey(entry.registration.name)}`)) this.remember(entry);
     for (const job of entry.jobs.values()) this.finish(entry, job, failure(message));
   }
 
   private reap() {
     for (const [key, entry] of this.bridges) {
       if (normalize(this.sessionPerson(entry.session)) !== entry.person) this.drop(key, entry, DESKTOP_BRIDGE_MESSAGES.offline);
-      else if (entry.jobs.size === 0 && this.now() - entry.seen > 24 * 60 * 60_000) this.bridges.delete(key);
+      else if (entry.jobs.size === 0 && this.now() - entry.seen > 24 * 60 * 60_000) { this.bridges.delete(key); this.remember(entry); }
     }
   }
 
@@ -310,7 +382,7 @@ export class DesktopBridges {
     if (!key) return null;
     let best: Bridge | null = null;
     for (const entry of this.bridges.values()) {
-      if (entry.person !== key || !this.online(entry)) continue;
+      if (entry.person !== key || !this.online(entry) || this.accessOf(key, entry.registration.name) === "never") continue;
       if (!best || entry.connectedAt > best.connectedAt) best = entry;
     }
     return best?.registration ?? null;
@@ -324,10 +396,61 @@ export class DesktopBridges {
     if (!key) return [];
     this.reap();
     return [...this.bridges.values()].filter(entry => entry.person === key).map(entry => ({
-      id: entry.registration.id, name: this.labels.get(`${key}\n${entry.registration.id}`) ?? entry.registration.name, platform: entry.registration.platform,
+      id: entry.registration.id, name: this.nameOf(entry), platform: entry.registration.platform,
       online: this.online(entry), busy: entry.jobs.size > 0, lastSeenAt: entry.seen, capabilities: { ...entry.registration.capabilities },
       ...(entry.system ? { system: { ...entry.system } } : {}),
+      access: this.accessOf(key, entry.registration.name),
     }));
+  }
+
+  /** The person's computers, live or remembered, one per computer name:
+   * the one this session runs on first, then online ones, then the most
+   * recently seen. `session`: the asking app's session (this PC). */
+  devices(person: string | null, session?: string): MyDevice[] {
+    const key = normalize(person);
+    if (!key) return [];
+    this.reap();
+    const byHost = new Map<string, MyDevice>();
+    for (const entry of this.bridges.values()) {
+      if (entry.person !== key) continue;
+      const host = hostKey(entry.registration.name);
+      const online = this.online(entry);
+      const current = session !== undefined && entry.session === session;
+      const before = byHost.get(host);
+      // the live registration wins over a stale one of the same computer
+      if (before && !current && (before.current || (before.online && !online) || (before.online === online && before.lastSeenAt >= entry.seen))) continue;
+      byHost.set(host, {
+        key: host, name: this.nameOf(entry), kind: "computer", platform: entry.registration.platform, online, lastSeenAt: entry.seen,
+        access: this.accessOf(key, entry.registration.name), current: current || Boolean(before?.current), desktopId: entry.registration.id,
+      });
+    }
+    for (const [stored, device] of this.known) {
+      if (!stored.startsWith(`${key}\n`)) continue;
+      const host = stored.slice(key.length + 1);
+      if (byHost.has(host)) continue;
+      byHost.set(host, {
+        key: host, name: this.labels.get(`${key}\nhost:${host}`) ?? device.name, kind: "computer", platform: device.platform, online: false,
+        lastSeenAt: device.lastSeenAt, access: device.access ?? "always", current: false, desktopId: null,
+      });
+    }
+    return [...byHost.values()].sort((a, b) => Number(b.current) - Number(a.current) || Number(b.online) - Number(a.online) || b.lastSeenAt - a.lastSeenAt);
+  }
+
+  /** Set what the person's bots may do with one of their computers, named by
+   * its id, its name or its computer name (online or remembered). */
+  setAccess(person: string | null, which: string, access: DeviceAccess): { key: string; access: DeviceAccess } {
+    const key = normalize(person);
+    if (!key) throw failure("Sign in to this server first", 401);
+    if (!isDeviceAccess(access)) throw failure("access is always, ask or never", 400, "device_access");
+    const wanted = which.trim().toLowerCase();
+    const device = this.devices(key).find((entry) => entry.desktopId === which.trim() || entry.key === wanted || entry.name.toLowerCase() === wanted);
+    if (!device) throw failure("That computer is not in your list", 404, "computer_unknown");
+    const stored = `${key}\n${device.key}`;
+    const before = this.known.get(stored) ?? { name: device.name, platform: device.platform, lastSeenAt: device.lastSeenAt };
+    const { access: _previous, ...rest } = before;
+    this.known.set(stored, access === "always" ? rest : { ...rest, access });
+    this.saveDevices();
+    return { key: device.key, access };
   }
 
   /** The person's computer named by `which` (its id, or its name, upper or
@@ -337,7 +460,7 @@ export class DesktopBridges {
     if (!wanted) throw failure("Name the computer", 400, "computer_missing");
     const mine = [...this.bridges.values()].filter(entry => entry.person === person);
     const byId = mine.filter(entry => entry.registration.id === wanted);
-    const found = byId.length ? byId : mine.filter(entry => [this.labels.get(`${person}\n${entry.registration.id}`), entry.registration.name].some(name => name?.toLowerCase() === wanted.toLowerCase()));
+    const found = byId.length ? byId : mine.filter(entry => [this.nameOf(entry), entry.registration.name].some(name => name?.toLowerCase() === wanted.toLowerCase()));
     if (found.length === 0) throw failure("That computer is not in your list", 404, "computer_unknown");
     if (new Set(found.map(entry => entry.registration.id)).size > 1) throw failure("Several computers have that name; use another name or its id", 409, "computer_ambiguous");
     return found;
@@ -350,8 +473,10 @@ export class DesktopBridges {
     const label = name.trim();
     if (label.length < 1 || label.length > 120 || !NO_CONTROL.test(label)) throw failure("A computer's name is 1 to 120 characters", 400, "computer_name");
     this.reap();
-    const id = this.pick(key, which)[0]!.registration.id;
+    const picked = this.pick(key, which)[0]!;
+    const id = picked.registration.id;
     this.labels.set(`${key}\n${id}`, label);
+    this.labels.set(`${key}\nhost:${hostKey(picked.registration.name)}`, label);
     this.saveLabels();
     return { id, name: label };
   }
@@ -362,7 +487,17 @@ export class DesktopBridges {
     const key = normalize(person);
     if (!key) throw failure("Sign in to this server first", 401);
     this.reap();
-    const found = this.pick(key, which);
+    let found: Bridge[];
+    try { found = this.pick(key, which); } catch (error) {
+      // a computer only remembered (app closed past the reap, or a restart)
+      const wanted = which.trim().toLowerCase();
+      const remembered = (error as { code?: string }).code === "computer_unknown"
+        ? this.devices(key).find((device) => device.desktopId === null && (device.key === wanted || device.name.toLowerCase() === wanted)) : undefined;
+      if (!remembered) throw error;
+      this.known.delete(`${key}\n${remembered.key}`); this.saveDevices();
+      if (this.labels.delete(`${key}\nhost:${remembered.key}`)) this.saveLabels();
+      return { id: remembered.key };
+    }
     if (found.some(entry => this.online(entry))) throw failure("A computer cannot be removed while it is online", 409, "computer_online");
     const at = this.now();
     const recent = (this.removals.get(key) ?? []).filter(time => at - time < 60_000);
@@ -370,7 +505,9 @@ export class DesktopBridges {
     this.removals.set(key, [...recent, at]);
     const id = found[0]!.registration.id;
     for (const [bridgeKey, entry] of this.bridges) if (entry.person === key && entry.registration.id === id) this.drop(bridgeKey, entry, DESKTOP_BRIDGE_MESSAGES.offline);
-    if (this.labels.delete(`${key}\n${id}`)) this.saveLabels();
+    const removedHost = hostKey(found[0]!.registration.name);
+    if ([this.labels.delete(`${key}\n${id}`), this.labels.delete(`${key}\nhost:${removedHost}`)].some(Boolean)) this.saveLabels();
+    if (this.known.delete(`${key}\n${removedHost}`)) this.saveDevices();
     if (this.macApps.delete(`${key}\n${found[0]!.registration.name}`)) this.saveMacApps();
     return { id };
   }
@@ -382,7 +519,7 @@ export class DesktopBridges {
   inventory(): Array<{ person: string; id: string; name: string; platform: string; online: boolean; lastSeenAt: number; localVm: boolean; version: string | null }> {
     this.reap();
     return [...this.bridges.values()].map(entry => ({
-      person: entry.person, id: entry.registration.id, name: this.labels.get(`${entry.person}\n${entry.registration.id}`) ?? entry.registration.name, platform: entry.registration.platform,
+      person: entry.person, id: entry.registration.id, name: this.nameOf(entry), platform: entry.registration.platform,
       online: this.online(entry), lastSeenAt: entry.seen, localVm: entry.registration.capabilities.localVm, version: entry.registration.version ?? null,
     }));
   }
@@ -474,21 +611,41 @@ export class DesktopBridges {
    * `desktopId` (a person with several computers picking one by its name,
    * from their Computer tab) it is that desktop of theirs or nothing;
    * without it, their most recently connected online desktop. */
-  request(person: string | null, operation: DesktopBridgeOperation, active: () => boolean, onProgress?: (message: string) => void, desktopId?: string): Promise<unknown> {
+  request(person: string | null, operation: DesktopBridgeOperation, active: () => boolean, onProgress?: (message: string) => void, desktopId?: string, context?: DeviceAskContext): Promise<unknown> {
     const key = normalize(person);
     if (!key) return Promise.reject(failure("No person asked in this turn, so no one's computer can be used.", 403, "no_person"));
     let entry: Bridge | null = null;
     for (const candidate of this.bridges.values()) {
       if (candidate.person !== key || !this.online(candidate)) continue;
       if (desktopId !== undefined && candidate.registration.id !== desktopId) continue;
+      // Never allow: not the bots' default computer, and refused when named
+      if (desktopId === undefined && this.accessOf(key, candidate.registration.name) === "never") continue;
       if (!entry || candidate.connectedAt > entry.connectedAt) entry = candidate;
     }
     if (!entry && desktopId !== undefined) return Promise.reject(failure(DESKTOP_BRIDGE_MESSAGES.chosenOffline, 409, "not_connected"));
     if (!entry) return Promise.reject(failure(DESKTOP_BRIDGE_MESSAGES.offline, 409, "not_connected"));
+    const access = this.accessOf(key, entry.registration.name);
+    if (access === "never") return Promise.reject(failure(DESKTOP_BRIDGE_MESSAGES.never, 403, "access_never"));
     if (!entry.registration.capabilities[desktopBridgeCapability(operation.action)]) return Promise.reject(failure(DESKTOP_BRIDGE_MESSAGES.capability, 403, "capability"));
     if (entry.jobs.size >= MAX_QUEUED) return Promise.reject(failure(DESKTOP_BRIDGE_MESSAGES.busy, 429, "busy"));
     if (!active()) return Promise.reject(failure(DESKTOP_BRIDGE_MESSAGES.ended, 401));
-    const bridge = entry;
+    const chosen = entry;
+    // Ask every time: a bot's request waits on the person's card; the
+    // person's own request (their Computer tab, no bot) is theirs to make.
+    if (access === "ask" && context) {
+      const hook = this.askHook;
+      if (!hook) return Promise.reject(failure(DESKTOP_BRIDGE_MESSAGES.denied, 403, "access_denied"));
+      return hook({ person: key, device: { id: `${key}/${hostKey(chosen.registration.name)}`, name: this.nameOf(chosen) }, context }).then((allowed) => {
+        if (!allowed) throw failure(DESKTOP_BRIDGE_MESSAGES.denied, 403, "access_denied");
+        if (!this.online(chosen) || !this.bridges.has(DesktopBridges.key(chosen.session, chosen.registration.id))) throw failure(DESKTOP_BRIDGE_MESSAGES.chosenOffline, 409, "not_connected");
+        if (!active()) throw failure(DESKTOP_BRIDGE_MESSAGES.ended, 401);
+        return this.enqueue(chosen, operation, active, onProgress);
+      });
+    }
+    return this.enqueue(chosen, operation, active, onProgress);
+  }
+
+  private enqueue(bridge: Bridge, operation: DesktopBridgeOperation, active: () => boolean, onProgress?: (message: string) => void): Promise<unknown> {
     const timeoutMs = Math.min(660_000, ((operation.timeout_seconds ?? 120) + 60) * 1000);
     return new Promise((resolve, reject) => {
       const id = randomUUID();

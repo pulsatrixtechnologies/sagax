@@ -2,7 +2,8 @@
  * page: the active list, history (ended and failed rows), the unattended
  * column, and the logs view. Not shipped in the app. A mocked fetch feeds
  * seeded rows and a redacted log so nothing connects.
- * ?lang=<code>&skin=<id>&width=<px>&height=<px>&hosts=0 (no enrolled host). */
+ * ?lang=<code>&skin=<id>&width=<px>&height=<px>&hosts=0 (no enrolled host)
+ * &devices=0 (none of the person's devices: an older server). */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -61,6 +62,20 @@ const hosts: UnattendedHostRow[] = params.get("hosts") === "0" ? [] : [
   { hostId: "h-paie", hostname: "SERVEUR-PAIE", org: "Clinique Nord", scope: "full-control", installedBy: null, enrolledAt: "2026-10-10T14:00:00Z", expiresAt: "2027-01-08T14:00:00Z", lastSeenAt: `${DAY}11:40:00Z`, revokedAt: null, state: "enrolled" },
 ];
 
+// My devices: this Mac first, another Mac asked every time, a PC never lent,
+// a phone listed for presence only.
+const now = Date.now();
+const devices = params.get("devices") === "0" ? [] : [
+  { key: "k-mbp", name: "MacBook Pro", kind: "computer", platform: "darwin", online: true, lastSeenAt: now, access: "always", current: true, desktopId: "d-mbp" },
+  { key: "k-mini", name: "Mac mini", kind: "computer", platform: "darwin", online: true, lastSeenAt: now, access: "ask", current: false, desktopId: "d-mini" },
+  { key: "k-pc", name: "PC-BUREAU", kind: "computer", platform: "win32", online: false, lastSeenAt: now - 26 * 3_600_000, access: "never", current: false, desktopId: null },
+  { key: "k-iphone", name: "iPhone", kind: "phone", platform: "ios", online: false, lastSeenAt: now - 5 * 3_600_000, access: null, current: false, desktopId: null },
+];
+const bridge = {
+  connected: true, tunnel: false, activity: [], devices,
+  desktops: devices.filter((d) => d.desktopId).map((d) => ({ id: d.desktopId, name: d.name, platform: d.platform, connectedAt: now, lastSeenAt: d.lastSeenAt, online: d.online, busy: false, capabilities: { localVm: true }, access: d.access, current: d.current })),
+};
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -79,6 +94,8 @@ window.fetch = async (input, init) => {
     if (search) shown = shown.filter((r) => `${r.host} ${r.user ?? ""} ${r.code} ${r.botLabel}`.toLowerCase().includes(search));
     return new Response(JSON.stringify({ sessions: shown, admin: true }), { status: 200, headers: { "content-type": "application/json" } });
   }
+  if (url.includes("/api/me/desktop-bridge/computers/access")) return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+  if (url.includes("/api/me/desktop-bridge")) return new Response(JSON.stringify(bridge), { status: 200, headers: { "content-type": "application/json" } });
   if (url.includes("/api/auth/session")) return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } });
   return realFetch(input, init);
 };

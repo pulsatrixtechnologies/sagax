@@ -39,12 +39,37 @@ export interface DesktopBridgeDesktop {
   lastSeenAt: number;
   capabilities?: { localVm?: boolean };
   system?: DesktopSystemInfo;
+  /** What bots may do with it (Remote sessions > Enrolled hosts). */
+  access?: DeviceAccess;
+}
+
+/** What a person's bots may do with one of their computers: use it, ask the
+ * person each time (an approval card with Always allow), or never. */
+export type DeviceAccess = "always" | "ask" | "never";
+export const DEVICE_ACCESS: readonly DeviceAccess[] = ["always", "ask", "never"];
+
+/** One of the person's devices (server/desktop/desktop-bridge.ts MyDevice):
+ * a Sagax desktop, live or remembered, or a phone (presence only). */
+export interface MyDevice {
+  key: string;
+  name: string;
+  kind: "computer" | "phone";
+  platform: string;
+  online: boolean;
+  lastSeenAt: number;
+  /** Null for a phone: bots never use it. */
+  access: DeviceAccess | null;
+  /** The computer this app runs on. */
+  current: boolean;
+  desktopId: string | null;
 }
 
 export interface DesktopBridgeStatus {
   connected: boolean;
   tunnel: boolean;
   desktops: DesktopBridgeDesktop[];
+  /** Every device of the person, this one first (older servers omit it). */
+  devices?: MyDevice[];
   workplace: BotWorkplace;
   activity: DesktopBridgeActivity[];
 }
@@ -84,6 +109,9 @@ export function sameDesktopBridgeStatus(previous: DesktopBridgeStatus | null, ne
   return JSON.stringify(previous) === JSON.stringify(next);
 }
 
+/** Fired after the person changes one of their computers. */
+export const DESKTOP_BRIDGE_CHANGED = "sagax:desktop-bridge-changed";
+
 /** The person's bridge status, refreshed while shown (organization only). */
 export function useDesktopBridgeStatus(refreshMs = 20_000): DesktopBridgeStatus | null {
   const [status, setStatus] = useState<DesktopBridgeStatus | null>(null);
@@ -100,14 +128,17 @@ export function useDesktopBridgeStatus(refreshMs = 20_000): DesktopBridgeStatus 
     };
     void load();
     const timer = window.setInterval(() => { if (!stopped && document.visibilityState !== "hidden") void load(); }, refreshMs);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    // A rename, a removal or an access change shows at once everywhere
+    const changed = () => { if (!stopped) void load(); };
+    window.addEventListener(DESKTOP_BRIDGE_CHANGED, changed);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener(DESKTOP_BRIDGE_CHANGED, changed); };
   }, [refreshMs]);
   return status;
 }
 
 /** The desktop bots use now: the most recently seen online one. */
 export function currentDesktop(status: DesktopBridgeStatus | null): DesktopBridgeDesktop | null {
-  const online = (status?.desktops ?? []).filter((desktop) => desktop.online);
+  const online = (status?.desktops ?? []).filter((desktop) => desktop.online && desktop.access !== "never");
   return online.sort((a, b) => b.lastSeenAt - a.lastSeenAt)[0] ?? null;
 }
 
@@ -123,7 +154,8 @@ export type ComputerChoice =
  * A person with two PCs sees both; looking is not where the bot works. */
 export function computerChoices(status: DesktopBridgeStatus | null): ComputerChoice[] {
   const desktops = (status?.desktops ?? [])
-    .filter((desktop) => desktop.online && desktop.capabilities?.localVm)
+    // Never allow: the computer leaves the Computer menu
+    .filter((desktop) => desktop.online && desktop.capabilities?.localVm && desktop.access !== "never")
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
   return [
     { key: "server", source: "server" },
@@ -151,14 +183,17 @@ export class ComputerChangeError extends Error {
   }
 }
 
-async function changeComputer(action: "rename" | "remove", body: Record<string, string>, fetchImpl: typeof fetch): Promise<void> {
+async function changeComputer(action: "rename" | "remove" | "access", body: Record<string, string>, fetchImpl: typeof fetch): Promise<void> {
   const response = await fetchImpl(`/api/me/desktop-bridge/computers/${action}`, {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (response.ok) return;
+  if (response.ok) {
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(DESKTOP_BRIDGE_CHANGED));
+    return;
+  }
   const answer = await response.json().catch(() => ({})) as { error?: unknown; code?: unknown };
   throw new ComputerChangeError(typeof answer.error === "string" ? answer.error : `computer ${action} ${response.status}`, typeof answer.code === "string" ? answer.code : undefined);
 }
@@ -171,4 +206,20 @@ export function renameComputer(id: string, name: string, fetchImpl: typeof fetch
 /** Take one of the person's computers off the list; refused while it is online. */
 export function removeComputer(id: string, fetchImpl: typeof fetch = fetch): Promise<void> {
   return changeComputer("remove", { computer: id }, fetchImpl);
+}
+
+/** Set what the person's bots may do with one of their computers. */
+export function setComputerAccess(computer: string, access: DeviceAccess, fetchImpl: typeof fetch = fetch): Promise<void> {
+  return changeComputer("access", { computer, access }, fetchImpl);
+}
+
+/** The person's devices: the server's list, else (an older server) their
+ * desktops as computers. */
+export function myDevices(status: DesktopBridgeStatus | null): MyDevice[] {
+  if (!status) return [];
+  if (status.devices) return status.devices;
+  return [...(status.desktops ?? [])].sort((a, b) => Number(b.online) - Number(a.online) || b.lastSeenAt - a.lastSeenAt).map((desktop) => ({
+    key: desktop.name.toLowerCase(), name: desktop.name, kind: "computer", platform: desktop.platform, online: desktop.online,
+    lastSeenAt: desktop.lastSeenAt, access: desktop.access ?? "always", current: false, desktopId: desktop.id,
+  }));
 }

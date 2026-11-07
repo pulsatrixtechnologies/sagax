@@ -1,6 +1,6 @@
 // Settings > Computer on an organization server, laid out as the reference design's
 // Computer page (0.5.6, the owner): "Your computer" with its name, rows with one
-// short grey line, the other computers behind a count pill, the activity
+// short grey line, a pointer to the person's devices, the activity
 // still hidden (#555), then "Bots' computer" with Reset as a red pill.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { setLocale } from "@/lib/i18n";
-import { otherComputers } from "./BotWorkplaceSettings";
 import { OrgComputerSettings } from "./OrgComputerSettings";
 
 // the Computer page's rows (server-mode access, Mac control) read the store
@@ -56,14 +55,13 @@ describe("Settings > Computer, the reference design's layout", () => {
     expect(render(bridge({ connected: false }))).toContain("Not connected: until the Sagax app connects");
   });
 
-  it("summarises the other computers and lists them only on demand", () => {
+  it("points to the person's devices (one place: Remote sessions), with their count", () => {
     const html = render(bridge());
-    const row = html.slice(html.indexOf('data-settings-row="others"'));
-    expect(row).toContain("JeanChrphesMini.localdomain · Last seen");
-    expect(row).toMatch(/aria-expanded="false" aria-label="Show other computers"[^>]*>1</);
-    expect(html).not.toContain("data-other-computers");
-    expect(render(bridge({ desktops: [desktop("d1", "JeanChrophesMBP", true, 3)] }))).not.toContain('data-settings-row="others"');
-    expect(otherComputers(bridge()).map((entry) => entry.id)).toEqual(["d2"]);
+    const row = html.slice(html.indexOf('data-settings-row="myDevices"'));
+    expect(row).toContain("My devices");
+    expect(row).toContain('data-my-devices-count="">2<');
+    expect(html).not.toContain('data-settings-row="others"');
+    expect(html).not.toContain("JeanChrphesMini.localdomain");
   });
 
   it("still hides the recent activity behind its link (#555), with no host name", () => {
@@ -88,7 +86,7 @@ describe("Settings > Computer, the reference design's layout", () => {
     const html = render(bridge());
     expect(html).toContain(">Votre ordinateur</h3>");
     expect(html).toContain(">Ordinateur des bots</h3>");
-    expect(html).toContain("Autres ordinateurs");
+    expect(html).toContain("Mes appareils");
     expect(html).toContain("Réinitialiser l&#x27;environnement serveur");
     expect(html).not.toMatch(/[–—]/);
   });

@@ -8,8 +8,6 @@ import { useEffect, useState } from "react";
 import { Building2 } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { serverModeBridge } from "@/lib/launch";
-import { sharedComputersEnabled } from "@/lib/feature-flags";
-import { useStore } from "@/state/store";
 import { ComputerSharingSettings } from "./ComputerSharingSettings";
 import { Card, DescribedRow, PILL } from "./SettingsPrimitives";
 
@@ -48,25 +46,21 @@ export function ManagedByOrganization({ cardId, title }: { cardId: string; title
  * never use the server's own machine. */
 export function ServerModeComputerAccess() {
   const serverMode = useServerMode();
-  const { state } = useStore();
   const [open, setOpen] = useState(false);
   if (!serverMode?.active || !window.ogb?.computerSharing) return null;
-  const offered = sharedComputersEnabled(state.config);
-  // 0.5.6: a Grok-style row of "This computer"; the access choices
-  // open under it.
+  // 2026-11-07: the person's own computers are theirs to lend; no
+  // server-wide admin switch gates them (Remote sessions > My devices).
   return (
     <div data-settings-card="organization.serverModeComputer">
       <DescribedRow
         label={t("settings.serverMode.computerTitle")}
         rowId="serverModeComputer"
-        description={offered ? t("settings.serverMode.computerShort") : t("settings.serverMode.computerOff")}
-        below={offered && open && <div className="mt-2"><ComputerSharingSettings key={serverMode.id} workspace={serverMode} onClose={() => setOpen(false)} /></div>}
+        description={t("settings.serverMode.computerShort")}
+        below={open && <div className="mt-2"><ComputerSharingSettings key={serverMode.id} workspace={serverMode} onClose={() => setOpen(false)} /></div>}
       >
-        {offered && (
-          <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={PILL}>
-            {t("settings.serverMode.computerOpen")}
-          </button>
-        )}
+        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={PILL}>
+          {t("settings.serverMode.computerOpen")}
+        </button>
       </DescribedRow>
     </div>
   );

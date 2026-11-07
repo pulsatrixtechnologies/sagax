@@ -7464,6 +7464,23 @@ it. Keep these rules, each covered by `server/desktop/desktop-bridge*.test.ts`,
   `companion/test/proxy-response.test.ts`.
 - The desktop never reads or writes the app's own data, its cookies or the
   person's credential stores through the bridge.
+- My devices (2026-11-07): every Sagax install of the person is one of their
+  devices. `DesktopBridges` keys a desktop by person + host name (lowercase)
+  and remembers it in `DATA_DIR/desktop-devices.json` (name, platform, last
+  seen, access) across reconnects and restarts; phones come from the push
+  devices (presence only, never used by bots). Access per computer: `always`
+  (bots use it), `ask` (a bot's request waits on the `use_computer` peer
+  approval card, which offers Always allow), `never` (out of the Computer
+  menu and of the default pick; a request naming it gets 403
+  `access_never`). GET `/api/me/desktop-bridge` returns `devices` (this one
+  first); POST `/api/me/desktop-bridge/computers/access` sets the level. The
+  one place for them is Remote sessions > Enrolled hosts and the Computers
+  panel (`src/components/remote-session/MyDevicesList.tsx`); the Computer
+  menu reads the same status (`computerChoices` drops `never`) and Settings >
+  Computer only points there. A member's own computers need no server-wide
+  admin switch. Tests: `server/desktop/desktop-bridge-devices*.test.ts`,
+  `src/components/remote-session/MyDevicesList.dom.test.ts`,
+  `src/lib/desktop-bridge.test.ts`.
 
 A change under `server/` needs the server image redeployed; under `electron/`
 a desktop rebuild.

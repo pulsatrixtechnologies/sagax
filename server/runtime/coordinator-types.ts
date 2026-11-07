@@ -368,6 +368,10 @@ export interface CoordinatorOptions {
   /** The confidential threads, read once when the runtime opens: their
    * teammate work is forgotten (docs/confidential-threads.md). */
   confidentialThreads?: () => Iterable<string>;
+  /** Whether a thread is confidential now (docs/confidential-threads.md): a
+   * turn of it is recorded without words, and its tree is forgotten once it
+   * settles, so the runtime database keeps none of its words at rest. */
+  isConfidential?: (threadId: string) => boolean;
   /** Names the threads the one-time delegation-ledger import cannot (a
    * target's standing thread, a source thread's bot); without it those
    * rows carry an empty thread id the host's validate refuses. */

@@ -614,7 +614,9 @@ describe("coordinate_bots on a teammate", () => {
     const qa = await createBot("Quinn", "gated");
     try {
       const originalConversation = await messages(qa.threadId);
-      expect((await api("PATCH", `/api/bots/${pm.id}`, { approvePeerComms: true })).status).toBe(200);
+      // A new bot starts at Full access (Sagax), where the peer card is never
+      // asked (full-access-gate.ts): the card is asked below it.
+      expect((await api("PATCH", `/api/bots/${pm.id}`, { approvePeerComms: true, approvalMode: "ask" })).status).toBe(200);
       const token = await heldTurn(pm, "Hand it to QA.");
       const pending = api("POST", "/api/internal/coordinate-bots", { botIds: [qa.id], message: "Test it." }, token);
       await expect.poll(async () => (await messages(pm.threadId)).some((message) => message.card?.tool === "delegate_bot"), { timeout: 15_000 }).toBe(true);

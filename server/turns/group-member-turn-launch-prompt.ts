@@ -82,6 +82,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     store,
     supportsWorkspaceFiles,
     surfaceOfComputerKind,
+    recordTurnPlace,
     surfacePrompt,
     syncPluginsForTurn,
     teamAvailabilityPart,
@@ -206,6 +207,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
   // (#754) the room is told, once per source thread, rather than the
   // crossing being blocked.
   const recentLines = recentWorkFor(bot, threadId, { userName });
+  recordTurnPlace(bot.id, threadId, (roomTeamComputer ? "cloud" : roomVmTarget ? "vm" : surfaceOfComputerKind(roomComputerKind)) ?? (integrations.browser ? "browser" : null));
   const roomComputerPromptKind = resolveComputerPromptKind({
     kind: roomTeamComputer || roomComputerKind === "box" ? "box" : roomVmTarget ? "vm" : roomComputerKind,
     vmPrivate: localVmMode(cfg) === "per-bot"

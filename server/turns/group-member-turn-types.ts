@@ -242,6 +242,7 @@ export type GroupMemberTurnHost = {
   store: any,
   supportsWorkspaceFiles: any,
   surfaceOfComputerKind: any,
+  recordTurnPlace: any,
   surfacePrompt: any,
   teamAvailabilityPart: any,
   teamComputerPrompt: any,

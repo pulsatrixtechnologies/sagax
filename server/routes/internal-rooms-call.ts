@@ -153,6 +153,7 @@ export function openInternalRoomsCall(deps: InternalRoomsDeps, ctx: InternalRout
     startParallelTask,
     turnOrigin,
     applyDelegatedLevel,
+    coordinateTeammateThread: deps.coordinateTeammateThread ? (body: Record<string, unknown>) => deps.coordinateTeammateThread!(ctx, body) : undefined,
     threadBusy,
     botAtThreadCapacity,
     activeGroupTurnForBot,

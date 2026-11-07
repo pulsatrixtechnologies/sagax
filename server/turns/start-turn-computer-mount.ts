@@ -38,6 +38,7 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     cloudEngine,
     computerPlaceRefusal,
     computerSelectionTurns,
+    recordTurnPlace,
     controlIntegration,
     dataIntegration,
     directRequestOwners,
@@ -211,6 +212,7 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
           onRejected: state.surfaceLazyClaimRejection("this computer"),
           claim: async () => {
             await bindTurnComputer(state.resourceOwner, HOST_COMPUTER_RESOURCE, true);
+            recordTurnPlace(state.bot.id, state.threadId, "local");
           }
         });
         state.integrations.localComputer = gatedLocalComputer(
@@ -385,6 +387,10 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     // built-in browser or a computer it claims, is never written to the
     // conversation. The next message decides again; only the person's own
     // pin holds a place (honouredPin).
+    // Where this turn works, for a request_sign_in it makes (signInPlace):
+    // the built-in browser, else the computer it mounted.
+    recordTurnPlace(state.bot.id, state.threadId, state.plan.computer === undefined && state.mountedComputer === "local" && state.integrations.browser
+      ? "browser" : state.mountedComputer ?? (state.integrations.browser ? "browser" : null));
     const computerSelection = computerSelectionTurns.get(state.threadId);
     if (computerSelection) computerSelection.mounted = state.mountedComputer ?? (state.integrations.browser ? "browser" : undefined);
     // A cancelled adapter can be between accepting sendTurn and revealing

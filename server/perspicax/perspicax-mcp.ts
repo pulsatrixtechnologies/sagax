@@ -115,7 +115,14 @@ export interface PerspicaxMcpOptions {
   turnRole?(turn: { threadId: string; botId: string; principalId: string; routine: boolean }): { slug: string; reason: "person" | "routine" } | undefined;
   /** What a read refused (403) under `from` does: one fallback to "Moi"
    * with a card, the owner's saved rule (no card), or stay. Absent: fallback. */
-  roleFallback?(turn: { threadId: string; botId: string; principalId: string; from: string; path: string }): "fallback" | "rule" | "stay";
+  roleFallback?(turn: { threadId: string; botId: string; principalId: string; from: string; path: string; to?: string }): "fallback" | "rule" | "stay";
+  /** #2581: a read refused (403) under `from` that another held role `to`
+   * may read: the person's approval card for this one call (with its
+   * Always allow). Absent: the switch is never run. */
+  askRoleSwitch?(input: { threadId: string; botId: string; principalId: string; from: { slug: string; name: string }; to: { slug: string; name: string }; tool: string; permission: CwPermission }): Promise<"allow" | "deny" | "timeout">;
+  /** #2581: the journal already saw `slug` refused (403) for a read on
+   * `path`: that role is not offered again. */
+  knownReadRefusal?(input: { principalId: string; botId: string; slug: string; path: string }): boolean;
   /** Writing as "Moi" in a routine that runs under a role changes the
    * vendor attribution: the person's GO, on the approval card family.
    * Absent: such a write is refused. */
@@ -269,6 +276,21 @@ interface Entry {
   routineRole?: string;
   /** A write was refused (403): no switch to get around it in this turn. */
   writeRefused?: boolean;
+  /** A read was refused (403) for good (#2577/#2581): its one role switch is
+   * spent (declined, or tried and still refused), no other switch now. */
+  readRefused?: boolean;
+  /** #2581 (decided 2026-11-07): after a read 403, the one held role offered for
+   * that call. The bot switching to it means the person already allowed it
+   * (in the conversation or a saved instruction); the same call again asks
+   * the person with a card. */
+  roleOffer?: { from: string; to: string; tool: string; path: string; permission: CwPermission; needs: string };
+  /** The bot switched to the offered role: the next vendor call runs under
+   * it, then Sagax puts `back` again. */
+  oneCall?: { back: string; via: string };
+  /** Permission paths whose one role switch this turn is spent (no loop). */
+  switchedPaths?: Set<string>;
+  /** Role switches the bot made in this turn: one is allowed (#2577). */
+  switches?: number;
   /** Tools the person allowed to write as "Moi" in this routine turn. */
   meWritesAllowed?: Set<string>;
   /** The role lapsed during the last call and could not be renewed. */
@@ -335,6 +357,15 @@ function withNote(answer: PerspicaxRelayAnswer, note: string): PerspicaxRelayAns
   const result = answer.body.result;
   const content = Array.isArray(result.content) ? result.content : [];
   return { ...answer, body: { ...answer.body, result: { ...result, content: [{ type: "text", text: note }, ...content] } } };
+}
+
+/** A refusal the model must read as a block (#2577): the note in front of a
+ * tool result, or a JSON-RPC error turned into a tool error with it. */
+function blockWith(answer: PerspicaxRelayAnswer, id: unknown, note: string): PerspicaxRelayAnswer {
+  if (isObject(answer.body) && isObject(answer.body.result)) return withNote(answer, note);
+  const error = isObject(answer.body) && isObject(answer.body.error) ? answer.body.error : null;
+  const message = error && typeof error.message === "string" ? error.message.slice(0, 300) : "";
+  return toolError(id, message ? `${note}\nVendor answer: ${message}` : note);
 }
 
 function toolError(id: unknown, text: string): PerspicaxRelayAnswer {
@@ -1069,6 +1100,13 @@ export class PerspicaxMcp {
    * pick: the default surface ("Moi"), never a stored choice. */
   private applyTurnRole(entry: Entry, routine: boolean): void {
     entry.writeRefused = false;
+    entry.readRefused = false;
+    entry.switches = 0;
+    entry.roleOffer = undefined;
+    // a one-call switch the last turn left open goes back first
+    if (entry.oneCall) this.putBack(entry, entry.oneCall.back);
+    entry.oneCall = undefined;
+    entry.switchedPaths = undefined;
     entry.meWritesAllowed = undefined;
     entry.lapsedNow = false;
     entry.roleLocked = false;
@@ -1082,6 +1120,24 @@ export class PerspicaxMcp {
     entry.roleLocked = picked.reason === "person";
     if (picked.reason === "routine" && slug) entry.routineRole = slug;
     if (slug && slug !== this.currentRole(entry)) this.setIdentity(entry, slug);
+  }
+
+  /** #2581: the role a one-call switch left goes back to `back` (applied by
+   * the next call's identity ensure, like "Rester en …"). */
+  private putBack(entry: Entry, back: string): void {
+    if (this.currentRole(entry) === back) return;
+    if (back) this.setIdentity(entry, back);
+    else {
+      const identity = entry.identity;
+      entry.identity = undefined;
+      void identity?.clear().catch(() => undefined);
+      if (entry.profileChoice) {
+        entry.profileChoice = undefined;
+        void this.identityRpc(entry, "tools/call", { name: "profile_use", arguments: { clear: true } }).catch(() => undefined);
+      }
+    }
+    this.clearToolCatalog(entry);
+    entry.toolsChangedPending = true;
   }
 
   /** "Rester en …" on an "Agit comme" card: every live connection of this
@@ -1224,19 +1280,40 @@ export class PerspicaxMcp {
     const before = this.currentRole(entry);
     if (name === "identity_switch" || name === "profile_use") {
       const target = typeof args.profile === "string" && args.profile.trim() ? args.profile.trim() : args.clear === true ? ME_ROLE : undefined;
-      if (target !== undefined && target !== before && (entry.roleLocked || entry.writeRefused)) {
+      // #2581 (decided 2026-11-07): the role Sagax offered after a read 403. The
+      // bot takes it itself only when the person already allowed it (said so
+      // in the conversation, or a saved instruction): one call, then back.
+      const offer = entry.roleOffer;
+      if (offer && target === offer.to && before === offer.from && !entry.roleLocked && !entry.writeRefused) {
+        entry.roleOffer = undefined;
+        (entry.switchedPaths ??= new Set()).add(offer.path);
+        const answer = await this.relayFrameCore(input);
+        this.noteListing(entry, identityValue(answer.body));
+        const after = this.currentRole(entry);
+        if (after !== before) { entry.roleReason = "switch"; entry.oneCall = { back: before, via: name }; }
+        if (after) await this.ensureHeldRoles(entry);
+        this.emitRole(entry, "step", name, { ...this.roleView(entry, after), reason: entry.roleReason ?? "default", ...(after !== before ? { previous: this.roleView(entry, before) } : {}) });
+        if (after === before) return answer;
+        const back = this.roleView(entry, before).name || "the person's own account";
+        return withNote(answer, `Sagax runs only your next call as ${this.roleView(entry, after).name || "the person's own account"}, then puts ${back} back by itself. Send the refused read again now; no other call in between.`);
+      }
+      if (target !== undefined && target !== before && (entry.roleLocked || entry.writeRefused || entry.readRefused || (entry.switches ?? 0) >= 1)) {
         await this.ensureHeldRoles(entry);
         const now = this.roleView(entry, before);
         const why = entry.roleLocked
           ? `Refused by Sagax: the person fixed the role for this turn (${now.name || "their own account"}). Keep working under it; do not switch roles.`
-          : "Refused by Sagax: a write was refused (403) in this turn. Stop and report the missing permission; switching roles to get around it is not allowed.";
+          : entry.writeRefused
+            ? "Refused by Sagax: a write was refused (403) in this turn. Stop and report the missing permission; switching roles to get around it is not allowed."
+            : entry.readRefused
+              ? "Refused by Sagax: a read was refused (403) in this turn and its one role switch is spent (the person declined it, or the other role was refused too). Report what could not be read and the missing permission; do not try other roles."
+              : `Refused by Sagax: one role switch per turn, and this turn already switched (now ${now.name || "the person's own account"}). Keep working under it, or report what is blocked.`;
         this.emitRole(entry, "step", name, { ...now, reason: entry.roleReason ?? "default" });
         return toolError(id, why);
       }
       const answer = await this.relayFrameCore(input);
       this.noteListing(entry, identityValue(answer.body));
       const after = this.currentRole(entry);
-      if (after !== before) entry.roleReason = "switch";
+      if (after !== before) { entry.roleReason = "switch"; entry.switches = (entry.switches ?? 0) + 1; }
       if (after) await this.ensureHeldRoles(entry);
       this.emitRole(entry, "step", name, { ...this.roleView(entry, after), reason: entry.roleReason ?? "default", ...(after !== before ? { previous: this.roleView(entry, before) } : {}) });
       return answer;
@@ -1245,6 +1322,12 @@ export class PerspicaxMcp {
     // connection before telling a read from a write
     if (!entry.readOnlyTools && !PERSPICAX_READ_ONLY_TOOLS.has(name)) await this.identityRpc(entry, "tools/list").catch(() => undefined);
     const read = perspicaxReplayable(frame, entry.readOnlyTools);
+    // #2581: the offered read sent again: the person decides with a card
+    const offered = entry.roleOffer;
+    if (read && offered && offered.tool === name && offered.from === before) {
+      entry.roleOffer = undefined;
+      return this.switchOnceWithCard(entry, frame, id, name, offered);
+    }
     if (!read && entry.source === "delegation" && entry.routineRole && before === ME_ROLE && vendorWriteTool(name) && !entry.meWritesAllowed?.has(name)) {
       await this.ensureHeldRoles(entry);
       const role = this.roleView(entry, entry.routineRole);
@@ -1257,6 +1340,9 @@ export class PerspicaxMcp {
       (entry.meWritesAllowed ??= new Set()).add(name);
     }
     const answer = await this.relayFrameCore(input);
+    // #2581: the one call the bot ran under the offered role is done: back
+    const oneCall = entry.oneCall;
+    if (oneCall && before !== oneCall.back) { entry.oneCall = undefined; this.putBack(entry, oneCall.back); }
     if (entry.lapsedNow || (isObject(answer.body) && isObject(answer.body.error) && /could not restore the explicitly selected/.test(String(answer.body.error.message ?? "")))) {
       const lapsed = entry.lapsedNow;
       entry.lapsedNow = false;
@@ -1281,30 +1367,87 @@ export class PerspicaxMcp {
       this.emitRole(entry, "write_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
       return withNote(answer, `STOP: this write was refused (403) under ${label}. Missing permission: ${needs}. Do not retry it under another role; report the missing permission to the person.`);
     }
-    const decision = before ? this.options.roleFallback?.({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, from: before, path: permission.path }) ?? "fallback" : "stay";
-    if (decision === "stay") {
+    // #2577/#2581: a refusal is never "no data"; decided 2026-11-07: the bot's
+    // limited role is wanted, so a read refused looks for one held role that
+    // may read it (live listing), switches for this one call only when the
+    // person allowed it (a rule, or what they said), else asks with a card.
+    const readStop = (why: string) => `STOP: this read was refused (403) under ${label}${why}. Missing permission: ${needs}. This is a permission block, not missing data: do not retry the same records with other tools or another connection, and do not answer as if the records were empty. Tell the person the read is blocked and which permission the account needs.`;
+    const blocked = (why: string) => {
+      entry.readRefused = true;
       this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
-      return before ? withNote(answer, `This read was refused (403) under ${label}, and the person asked to stay in that role: no fallback. Missing permission: ${needs}.`) : answer;
+      return blockWith(answer, id, readStop(why));
+    };
+    if (oneCall && before !== oneCall.back) return blocked(", the one role switch for it");
+    if (entry.switchedPaths?.has(permission.path)) return blocked(", and its one role switch in this turn is spent");
+    const candidate = await this.switchCandidate(entry, before, permission.path);
+    const decision = this.options.roleFallback?.({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, from: before, path: permission.path, ...(candidate ? { to: candidate.slug } : {}) }) ?? "fallback";
+    if (decision === "stay") return blocked(", and the person asked to stay in that role: no switch");
+    if (!candidate) return blocked(", and no other role you hold can be tried");
+    if (candidate.slug !== ME_ROLE && decision !== "rule") {
+      // no rule: the bot decides whether the person already allowed it
+      entry.roleOffer = { from: before, to: candidate.slug, tool: name, path: permission.path, permission, needs };
+      this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
+      const other = candidate.name || candidate.slug;
+      return blockWith(answer, id, `REFUSED: this read was refused (403) under ${label}. Missing permission: ${needs}. This is a permission block, not missing data: never answer as if the records were empty. Another role you hold, ${other} (profile "${candidate.slug}"), may read it. Run this one call as ${other}, exactly one of:\n- the person already allowed it (said so in this conversation, or a saved instruction says so): call identity_switch with profile "${candidate.slug}", then this same call; Sagax runs that one call as ${other} and puts ${label} back by itself;\n- otherwise: call this same tool again with the same arguments; Sagax asks the person with an approval card to run it once as ${other}.\nIf the person declines, tell them what could not be read and the missing permission. Do not try any other role or tool for it.`);
     }
-    const again = await this.readAsMe(entry, frame, before);
+    (entry.switchedPaths ??= new Set()).add(permission.path);
+    const again = await this.readAs(entry, frame, before, candidate.slug);
     if (!again || again.status !== 200 || roleRefusalOf(again.body) || (isObject(again.body) && isObject(again.body.error))) {
-      this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
-      return answer;
+      return blocked(candidate.slug ? ` and again as ${candidate.name || candidate.slug}` : " and again in the person's own name");
     }
-    this.emitRole(entry, "step", name, { slug: ME_ROLE, name: "", reason: decision === "rule" ? "rule" : "fallback", refusedTool: name, previous: refusedRole }, { permission, refusedRole });
-    return withNote(again, `Sagax read this once in the person's own name: ${label} was refused (403) for it (missing ${needs}). The next call runs under ${label} again.`);
+    const reason = decision === "rule" ? "rule" : "fallback";
+    this.emitRole(entry, "step", name, { slug: candidate.slug, name: candidate.name, reason, refusedTool: name, previous: refusedRole }, { permission, refusedRole });
+    return withNote(again, candidate.slug
+      ? `Sagax read this once as ${candidate.name || candidate.slug} (the person's saved rule): ${label} was refused (403) for it (missing ${needs}). The next call runs under ${label} again.`
+      : `Sagax read this once in the person's own name: ${label} was refused (403) for it (missing ${needs}). The next call runs under ${label} again.`);
   }
 
-  /** One read sent again in the person's own name ("Moi") after a 403 under
-   * `previous`, then `previous` put back for the next call. Never a write;
-   * never more than once per call. */
-  private async readAsMe(entry: Entry, frame: Json, previous: string): Promise<PerspicaxRelayAnswer | null> {
+  /** #2581: the one held role worth one try after a read 403 under `from`,
+   * from the live listing: "Moi" (the default surface) under a role; under
+   * "Moi", a role the person holds that reads and that the journal has not
+   * seen refused for this path, explicit-only ones first (the default
+   * surface leaves them out). Null: none. */
+  private async switchCandidate(entry: Entry, from: string, path: string): Promise<{ slug: string; name: string } | null> {
+    await this.ensureHeldRoles(entry);
+    if (from !== ME_ROLE) return { slug: ME_ROLE, name: "" };
+    const held = (entry.heldRoles ?? []).filter((role) => role.slug !== from && role.reachable && role.can?.read !== false
+      && !this.options.knownReadRefusal?.({ principalId: entry.principalId, botId: entry.botId, slug: role.slug, path }));
+    const pick = held.find((role) => role.explicitOnly) ?? held[0];
+    return pick ? { slug: pick.slug, name: pick.name } : null;
+  }
+
+  /** #2581: the offered read, after the person's card: run once as the
+   * offered role and put the role back, or report the read not done. */
+  private async switchOnceWithCard(entry: Entry, frame: Json, id: unknown, name: string, offer: NonNullable<Entry["roleOffer"]>): Promise<PerspicaxRelayAnswer> {
+    const from = this.roleView(entry, offer.from);
+    const to = this.roleView(entry, offer.to);
+    const label = from.name || "the person's own account";
+    const other = to.name || to.slug;
+    (entry.switchedPaths ??= new Set()).add(offer.path);
+    let answer: "allow" | "deny" | "timeout" = "deny";
+    try { answer = this.options.askRoleSwitch ? await this.options.askRoleSwitch({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, from, to, tool: name, permission: offer.permission }) : "deny"; } catch { answer = "deny"; }
+    const stop = (why: string) => {
+      entry.readRefused = true;
+      this.emitRole(entry, "read_refused", name, { ...from, reason: entry.roleReason ?? "default" }, { permission: offer.permission, refusedRole: from });
+      return toolError(id, `STOP: not read. ${label} was refused (403) for it (missing ${offer.needs}) and ${why}. This is a permission block, not missing data: tell the person what could not be read and which permission ${label} needs; do not try other roles or tools.`);
+    };
+    if (answer !== "allow") return stop(`the person did not approve reading it once as ${other}`);
+    const again = await this.readAs(entry, frame, offer.from, offer.to);
+    if (!again || again.status !== 200 || roleRefusalOf(again.body) || (isObject(again.body) && isObject(again.body.error))) return stop(`it was refused again as ${other}`);
+    this.emitRole(entry, "step", name, { slug: to.slug, name: to.name, reason: "fallback", refusedTool: name, previous: from }, { permission: offer.permission, refusedRole: from });
+    return withNote(again, `Sagax read this once as ${other} with the person's approval: ${label} was refused (403) for it (missing ${offer.needs}). The next call runs under ${label} again.`);
+  }
+
+  /** One read sent again as `target` ("" = the person's own name, "Moi")
+   * after a 403 under `previous`, then `previous` put back for the next call.
+   * Never a write; never more than once per call. */
+  private async readAs(entry: Entry, frame: Json, previous: string, target: string): Promise<PerspicaxRelayAnswer | null> {
     const link = this.options.link();
     if (!link || entry.ended) return null;
     const viaChoice = !entry.identity && entry.profileChoice === previous;
     const tool = viaChoice ? "profile_use" : "identity_switch";
     try {
-      await this.identityRpc(entry, "tools/call", { name: tool, arguments: { clear: true } });
+      await this.identityRpc(entry, "tools/call", { name: tool, arguments: target ? { profile: target } : { clear: true } });
       this.clearToolCatalog(entry);
       const sent = await this.send(link, entry, { ...frame }, undefined, true);
       if (typeof sent === "string" || !sent.response.ok) return null;
@@ -1313,7 +1456,7 @@ export class PerspicaxMcp {
       return null;
     } finally {
       try {
-        const back = await this.identityRpc(entry, "tools/call", { name: tool, arguments: { profile: previous } });
+        const back = await this.identityRpc(entry, "tools/call", { name: tool, arguments: previous ? { profile: previous } : { clear: true } });
         if (!viaChoice) await entry.identity?.observe(back);
         else entry.profileChoiceNeedsRestore = false;
       } catch {

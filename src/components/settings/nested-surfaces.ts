@@ -63,3 +63,56 @@ export function openFolds(root: Element, click: (button: HTMLElement) => void = 
   }
   return opened;
 }
+
+/** The shared rows of Settings (`DescribedRow`, `CompactRow`, `SettingRow`,
+ * `FieldRow`, `LinkRow`, `SwitchRow`) carry `data-settings-rowkind`. */
+const SHARED_ROW = "[data-settings-rowkind]";
+
+function insideCard(node: Element, root: Element): boolean {
+  let parent = node.parentElement;
+  while (parent && parent !== root) {
+    if (isCardSurface(parent)) return true;
+    parent = parent.parentElement;
+  }
+  return false;
+}
+
+/** Rows drawn off the reference (JC 2026-11-07, Developer in Experimental): a
+ * shared row standing outside any card (a fold row left loose on the page,
+ * indented under a heading), and a switch that is not in a shared row (a row
+ * made by hand). Every row of a settings page is a shared row in a card
+ * (docs/design/ux-reference-grokbot-cursor.md 2.5, AGENTS.md "Settings
+ * layout"). Hidden content is skipped: open the folds first. */
+export function rowsOffReference(root: Element): string[] {
+  const out: string[] = [];
+  for (const row of root.querySelectorAll(SHARED_ROW)) {
+    if (row.closest("[hidden]")) continue;
+    if (!insideCard(row, root)) out.push(`row outside a card: ${describeSurface(row)}`);
+  }
+  for (const control of root.querySelectorAll('[role="switch"]')) {
+    if (control.closest("[hidden]")) continue;
+    // a switch in a row's `below` slot is a hand-drawn row nested under it
+    const owner = control.closest(`${SHARED_ROW}, [data-settings-below]`);
+    if (!owner || owner.hasAttribute("data-settings-below")) out.push(`switch outside a shared row: ${describeSurface(control.parentElement ?? control)}`);
+  }
+  out.push(...mixedIconRows(root));
+  return out;
+}
+
+/** One page, one row style (JC 2026-11-07, Context pods in Experimental): on a
+ * page either every shared row carries an icon tile (Providers) or none does
+ * (General). A lone tile among plain rows is drawn off the reference. */
+export function mixedIconRows(root: Element): string[] {
+  const withIcon: Element[] = [];
+  const without: Element[] = [];
+  for (const row of root.querySelectorAll(SHARED_ROW)) {
+    if (row.closest("[hidden]")) continue;
+    // a row nested in another row's below slot belongs to that row's body
+    if (row.parentElement?.closest("[data-settings-below]")) continue;
+    (row.querySelector(":scope [data-settings-icon]") && row.querySelector("[data-settings-icon]")?.closest(SHARED_ROW) === row ? withIcon : without).push(row);
+  }
+  if (!withIcon.length || !without.length) return [];
+  const minority = withIcon.length <= without.length ? withIcon : without;
+  const kind = minority === withIcon ? "an icon tile among rows without" : "no icon tile among rows with";
+  return minority.map((row) => `mixed row style, ${kind}: ${describeSurface(row)}`);
+}

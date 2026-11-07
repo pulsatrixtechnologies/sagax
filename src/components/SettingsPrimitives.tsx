@@ -62,7 +62,7 @@ export function SwitchRow({
   className?: string;
 }) {
   return (
-    <label className={cn("flex min-w-0 items-center justify-between gap-4 text-[13px] text-ink", disabled ? "cursor-not-allowed" : "cursor-pointer", className)}>
+    <label data-settings-rowkind="switch" className={cn("flex min-w-0 items-center justify-between gap-4 text-[13px] text-ink", disabled ? "cursor-not-allowed" : "cursor-pointer", className)}>
       <span className="min-w-0">
         <span className="flex items-center gap-1.5 leading-[18px]">
           <span className="min-w-0">{label}</span>
@@ -219,7 +219,7 @@ export function SettingRow({
 }) {
   const titleId = useId();
   return (
-    <div role="group" aria-labelledby={titleId} className={cn("setting-row px-3.5 py-2.5", className)}>
+    <div role="group" aria-labelledby={titleId} data-settings-rowkind="setting" className={cn("setting-row px-3.5 py-2.5", className)}>
       <div className="grid min-w-0 grid-cols-1 items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
@@ -702,7 +702,7 @@ export function CompactRow({ label, children, className, rowId, keywords }: { la
   // 14px titles in a 16px gutter.
   const plain = useSettingsSurface() === "plain";
   return (
-    <div role="group" aria-labelledby={labelId} data-settings-row={rowId} data-settings-keywords={keywords} className={cn("flex min-h-[44px] items-center justify-between gap-5 py-2", plain ? "px-4" : "px-3.5", className)}>
+    <div role="group" aria-labelledby={labelId} data-settings-row={rowId} data-settings-rowkind="compact" data-settings-keywords={keywords} className={cn("flex min-h-[44px] items-center justify-between gap-5 py-2", plain ? "px-4" : "px-3.5", className)}>
       <div id={labelId} className={cn("min-w-0 text-ink", plain ? "text-[14px] leading-5" : "text-[13px] leading-[18px]")}>{label}</div>
       <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">{children}</div>
     </div>
@@ -712,6 +712,15 @@ export function CompactRow({ label, children, className, rowId, keywords }: { la
 /** A Grok-style row that keeps one short grey line under its label (the
  * Computer page): label and explanation at the left, the control at the
  * right. `below` holds what the row opens (a list, a screen, steps). */
+/** The small square an icon sits in at the start of a settings row (the
+ * reference's row: icon tile, label, grey line, control at the right; JC
+ * 2026-11-07). Every row icon goes through it, never a bare glyph. */
+export const SETTINGS_ICON_TILE = "flex size-7 shrink-0 items-center justify-center rounded-lg border-[0.5px] border-border bg-panel text-ink-secondary";
+
+export function SettingsIconTile({ children }: { children: React.ReactNode }) {
+  return <span aria-hidden="true" data-settings-icon="" className={SETTINGS_ICON_TILE}>{children}</span>;
+}
+
 export function DescribedRow({
   label,
   description,
@@ -738,10 +747,12 @@ export function DescribedRow({
   // 14px titles, a 20px line icon in a 16px gutter.
   const plain = useSettingsSurface() === "plain";
   return (
-    <div role="group" aria-labelledby={labelId} data-settings-row={rowId} data-settings-keywords={keywords} className={plain ? "px-4 py-2.5" : "px-3.5 py-2.5"}>
+    <div role="group" aria-labelledby={labelId} data-settings-row={rowId} data-settings-rowkind="described" data-settings-keywords={keywords} className={plain ? "px-4 py-2.5" : "px-3.5 py-2.5"}>
       <div className="flex min-h-[28px] flex-wrap items-center justify-between gap-x-5 gap-y-2">
-        <div className={cn("flex min-w-0 flex-1 basis-[240px] items-start", plain ? "gap-3" : "gap-2")}>
-          {icon && <span aria-hidden="true" className={cn("shrink-0 text-ink-secondary", plain ? "flex size-5 items-center justify-center [&>svg]:size-5" : "mt-px")}>{icon}</span>}
+        <div className={cn("flex min-w-0 flex-1 basis-[240px]", plain ? "items-start gap-3" : icon ? "items-center gap-3" : "items-start gap-2")}>
+          {icon && (plain
+            ? <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center text-ink-secondary [&>svg]:size-5">{icon}</span>
+            : <SettingsIconTile>{icon}</SettingsIconTile>)}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <div id={labelId} className={cn("text-ink", plain ? "text-[14px] leading-5" : "text-[13px] leading-[18px]")}>{label}</div>
@@ -752,7 +763,7 @@ export function DescribedRow({
         </div>
         {children && <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">{children}</div>}
       </div>
-      {below}
+      {below && <div data-settings-below="">{below}</div>}
     </div>
   );
 }
@@ -997,6 +1008,7 @@ export function LinkRow({ label, onClick, external, rowId }: { label: string; on
       type="button"
       onClick={onClick}
       data-link-row={rowId ?? ""}
+      data-settings-rowkind="link"
       className="flex min-h-[44px] w-full min-w-0 items-center gap-3 px-3.5 py-2 text-left text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70 motion-reduce:transition-none md:min-h-[36px]"
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -1020,7 +1032,7 @@ export function FieldRow({ label, hint, hintId, children, rowId }: {
   rowId?: string;
 }) {
   return (
-    <label data-settings-row={rowId} className="flex min-w-0 flex-col gap-1.5 px-3.5 py-2.5">
+    <label data-settings-row={rowId} data-settings-rowkind="field" className="flex min-w-0 flex-col gap-1.5 px-3.5 py-2.5">
       <span className="text-[13px] leading-[18px] text-ink">{label}</span>
       {children}
       {hint && <span id={hintId} className="text-[12px] leading-4 text-ink-secondary">{hint}</span>}

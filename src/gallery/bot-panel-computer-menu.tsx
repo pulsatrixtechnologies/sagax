@@ -1,6 +1,6 @@
 /** Gallery for screenshots: the bot panel's Computer section above an Upcoming-style
  * header, so the bare "..." on both header rows compare side by side. Not shipped.
- * ?skin=<id>&lang=<code> */
+ * ?skin=<id>&lang=<code>&computer=<place|auto> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MoreHorizontal } from "lucide-react";
@@ -16,7 +16,7 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "fr");
 
-const bot = { id: "bot-1", name: "Scout", title: "", description: "", messages: [], tasks: [], threadId: "t1", busy: false, computer: "cloud" } as never as Bot;
+const bot = { id: "bot-1", name: "Scout", title: "", description: "", messages: [], tasks: [], threadId: "t1", busy: false, computer: params.get("computer") === "auto" ? undefined : (params.get("computer") ?? "cloud") } as never as Bot;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

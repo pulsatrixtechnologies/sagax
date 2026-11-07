@@ -260,7 +260,6 @@ function SettingsConnectors({ answer, loading, error, expired, signIn, onRefresh
       )}
     </>
   );
-  const icon = <Plug size={14} />;
   const list = claude?.available && claude.connectors.length > 0 ? claude.connectors : null;
   const description = loading && !answer
     ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" aria-hidden="true" />{t("harnessConnectors.loading")}</span>
@@ -273,14 +272,14 @@ function SettingsConnectors({ answer, loading, error, expired, signIn, onRefresh
     <div data-harness-connectors="settings" data-harness-connectors-unavailable={claude && !claude.available ? (claude.reason ?? "unknown") : undefined}>
       <SettingsGroup groupId="providers-claude-connectors">
         {list ? (
-          <FoldRow cardId="providers.advanced.connectors" label={title} description={description} help={help} icon={icon}
+          <FoldRow cardId="providers.advanced.connectors" label={title} description={description} help={help}
             count={list.length} toggleLabel={t("harnessConnectors.show")} controls={controls}>
             <ul className="flex flex-col" data-harness-connector-list="">
               {list.map((connector) => <ConnectorRow key={connector.name} connector={connector} manageUrl={answer?.manageUrl} />)}
             </ul>
           </FoldRow>
         ) : (
-          <DescribedRow label={title} description={description} help={help} icon={icon} rowId="providers.claudeConnectors"
+          <DescribedRow label={title} description={description} help={help} rowId="providers.claudeConnectors"
             below={signIn && (
               <div className="mt-2">
                 <ClaudeSignIn

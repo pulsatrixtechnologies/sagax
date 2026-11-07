@@ -12,4 +12,15 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT.startsWith("\n\n")).toBe(true);
     expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/[–—]/);
   });
+  // QA c1: D3 (#2577) direct reads, D4 (#2578) not served, D7 (#2581) 403 block
+  it("sends a simple read straight to its tool and stops early on what is not served", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/simple read or lookup .* calls the vendor tool directly/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/No skills_list, workspace_read, sagax_help, flow_run or identity_switch before it/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/Flow .* is for a routine or a multi-step procedure only/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("n'est pas servi ici");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/a missing source is not a source with nothing in it/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/one held role that may read it: if the person already allowed it .*, identity_switch to it for that one call/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/Sagax asks with a card/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A read still refused, a declined card or a refused write is a block/);
+  });
 });

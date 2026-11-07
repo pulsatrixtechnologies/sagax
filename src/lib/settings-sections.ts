@@ -65,7 +65,7 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   "engines.decisionModel": "engines",
   // JC 2026-11-06: the App catch-all split. Cleanup lives on Backups and
   // storage, people's tool access on Security, the usage meter on Usage,
-  // startup, keys and the loop guard on General, help rows on Help and about.
+  // startup, keys and the loop guard on General, help rows on About.
   "general.threadCleanup": "backups",
   "general.peopleToolAccess": "security",
   "general.usage": "usage",

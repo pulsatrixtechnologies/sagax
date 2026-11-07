@@ -83,6 +83,11 @@ interface QueueEntry {
      * `after`): the drain starts the turn on that row instead of writing a
      * second one, and no pending chip shows them twice. */
     existingMessageId?: string;
+    /** #2575: a prompt a person's AI client sent (send_prompt): it starts a
+     * turn of its own, never merged with another waiting line, so the
+     * handle that waits on it gets its own reply; the drained line keeps
+     * the aiClient mark (#291). */
+    aiClient?: boolean;
   }>;
 }
 
@@ -159,7 +164,7 @@ export function queueSteeredMessage(
   botId: string,
   threadId: string,
   text: string,
-  options: { prompt?: string; replyToId?: string; sendId?: string; dataContext?: Message["dataContext"]; reason?: SteerQueueReason; unattended?: boolean; peerAsk?: Message["peerAsk"]; origin?: WorkOrigin; sender?: ResolvedSender; trigger?: UsageTrigger; speaker?: TurnSpeaker; voiceCall?: Message["voiceCall"]; callId?: string; via?: "call" | "sms"; existingMessageId?: string; front?: boolean } = {},
+  options: { prompt?: string; replyToId?: string; sendId?: string; dataContext?: Message["dataContext"]; reason?: SteerQueueReason; unattended?: boolean; peerAsk?: Message["peerAsk"]; origin?: WorkOrigin; sender?: ResolvedSender; trigger?: UsageTrigger; speaker?: TurnSpeaker; voiceCall?: Message["voiceCall"]; callId?: string; via?: "call" | "sms"; existingMessageId?: string; front?: boolean; aiClient?: boolean } = {},
 ): QueuedSteer {
   const id = newId();
   const entry = queues.get(threadId) ?? { botId, items: [] };
@@ -184,6 +189,7 @@ export function queueSteeredMessage(
     queuedAt: Date.now(),
     ...spokenLineFields(options.via, options.callId),
     ...(options.existingMessageId ? { existingMessageId: options.existingMessageId } : {}),
+    ...(options.aiClient ? { aiClient: true } : {}),
   };
   saveChatFollowup({ id, kind: "bot", ownerId: botId, threadId, payload: item });
   if (options.front) {
@@ -321,6 +327,7 @@ export function drainSteeredMessages(
           sender: item.sender,
           ...(item.voiceCall ? { voiceCall: item.voiceCall } : {}),
           ...spokenLineFields(item.via, item.callId),
+          ...(item.aiClient ? { aiClient: true as const } : {}),
         }),
       );
     }
@@ -377,6 +384,8 @@ function joinQueuedPrompts(prompts: string[]): string {
  * A spoken line never drains with a typed line or another call's line:
  * each call's record contains only turns its own lines started. */
 function coalesceIdentity(item: QueueEntry["items"][number]): string {
+  // #2575: one AI client prompt, one turn, one reply
+  if (item.aiClient === true) return `ai-client:${item.messageId}`;
   if (item.peerAsk?.incident) return "incident";
   if (item.peerAsk) return `peer:${item.peerAsk.botId}:${item.unattended === true ? "unattended" : "attended"}:${JSON.stringify(item.origin ?? null)}`;
   if (item.unattended === true) return "unattended";

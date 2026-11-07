@@ -1,6 +1,7 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
 import { randomUUID } from "node:crypto";
+import { pinnedWorkspaceStart } from "../computer/auto-computer.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 
@@ -285,7 +286,11 @@ export function createPrepareAdmitStartTurn(
     runOnCloud: state.opts?.runOn === "cloud" || cloudOnlyBot(state.bot.id),
     hasTeamComputer: Boolean(inheritedTeamComputer(state.bot))
   });
-  const turnWorks = turnWorksOn(state.plan, turnRemote.forceCloud);
+  // A place the person pinned from the Computer menu is where Auto starts,
+  // not a lock (#2576): "dans ton sandbox" still reaches the cloud.
+  const turnWorksPinned = turnWorksOn(state.plan, turnRemote.forceCloud);
+  const turnPinnedStart = IDENTITY.kind === "perspicax" ? pinnedWorkspaceStart(turnWorksPinned, turnRemote.forceCloud) : null;
+  const turnWorks = turnPinnedStart ? { auto: true } : turnWorksPinned;
   state.turnPrincipal = sandboxPrincipalForTurn({
     botOwnerPrincipalId: effectiveBotOwner(state.bot),
     confidentialOwnerPrincipalId: confidentialThreadOwner(state.threadId),
@@ -298,7 +303,7 @@ export function createPrepareAdmitStartTurn(
   // in the cloud; routinesAllowed only permits an explicit computer_select
   // to this_computer. A thread opened with a workspace starts there when
   // allowed (server/computer/auto-computer.ts).
-  const turnAutoWanted = turnWorks.auto ? autoWorkspaceWanted(state.bot, state.threadId) : null;
+  const turnAutoWanted = turnPinnedStart ?? (turnWorks.auto ? autoWorkspaceWanted(state.bot, state.threadId) : null);
   const turnAutoStart = turnWorks.auto && IDENTITY.kind === "perspicax" && state.turnPrincipal ? autoStartTarget({
     wanted: turnAutoWanted,
     routine: routineLineage(state.speaker),
@@ -309,7 +314,7 @@ export function createPrepareAdmitStartTurn(
     browserAvailable: state.plan.browser
   }) : null;
   state.turnPlace = decideWorkplace({
-    desktopTargeted: state.plan.computer === "local" || state.plan.computer === "vm" || turnAutoStart?.target === "this_computer" || turnAutoStart?.target === "local_vm",
+    desktopTargeted: turnAutoStart ? turnAutoStart.target === "this_computer" || turnAutoStart.target === "local_vm" : state.plan.computer === "local" || state.plan.computer === "vm",
     routine: routineLineage(state.speaker),
     principal: state.turnPrincipal,
     personAsked: turnPersonAsked

@@ -2,7 +2,7 @@
 // is a label, a grey line and one action. Reveal, notes, bots, edit and
 // delete live in the unfolded detail.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CreditCard, Ellipsis, Globe, KeyRound, MapPin, Plus, StickyNote, User } from "lucide-react";
+import { Ellipsis, Plus } from "lucide-react";
 
 import { allowBotAlways, deleteCredential, importOnePasswordItem, loadCredentials, loadOnePasswordItems, revealCredential, revealCredentialNotes, revokeBot, type CredentialVaultState, type OnePasswordItem, type VaultItemListing } from "@/lib/credential-vault";
 import { copyText } from "@/lib/copy-text";
@@ -36,15 +36,6 @@ const TAB_LABEL: Record<VaultFilterTab, LocaleKey> = {
   payments: "vault.tab.payments",
   contacts: "vault.tab.contacts",
 };
-
-const KIND_ICON = {
-  login: Globe,
-  apiKey: KeyRound,
-  note: StickyNote,
-  card: CreditCard,
-  address: MapPin,
-  contact: User,
-} as const;
 
 export function CredentialsSettings() {
   const { state } = useStore();
@@ -241,7 +232,6 @@ export function ItemRow({ item, botName, bots, onEdit, onChanged, onError }: {
   onError: (error: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const Icon = KIND_ICON[item.kind];
   const used = item.lastUsedAt
     ? t("vault.settings.lastUsed", { when: when(item.lastUsedAt), bot: botName(item.lastUsedBy ?? "") })
     : t("vault.settings.neverUsed");
@@ -250,7 +240,6 @@ export function ItemRow({ item, botName, bots, onEdit, onChanged, onError }: {
     <div data-credential-item={item.id}>
       <DescribedRow
         label={item.name}
-        icon={<Icon size={14} />}
         description={grey ? `${grey} · ${used}` : used}
         rowId={`credential-${item.id}`}
         below={open ? <VaultItemDetail item={item} botName={botName} bots={bots} onEdit={onEdit} onChanged={onChanged} onError={onError} /> : undefined}

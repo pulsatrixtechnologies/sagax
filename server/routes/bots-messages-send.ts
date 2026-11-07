@@ -246,6 +246,8 @@ async function runSequencedBotSend(input: {
       trigger,
       speaker: speakerFor(auth),
       ...(voiceCall ? { voiceCall } : {}),
+      // #2575: an AI client's prompt keeps its own turn and reply
+      ...(body.aiClient === true ? { aiClient: true } : {}),
     });
     return { ok: true as const, queued: true as const, queueId: queued.id, threadId };
   }

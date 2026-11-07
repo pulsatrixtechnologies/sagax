@@ -245,10 +245,20 @@ export class RoleJournal {
   /** What a read refused under `from` does in this thread: fall back (with
    * a card), fall back by the owner's rule (no card), or stay. Rules apply
    * only when the speaker is the bot's owner. */
-  fallbackFor(input: { threadId: string; botId: string; principalId: string; ownerId?: string; from: string; path: string }): "fallback" | "rule" | "stay" {
+  fallbackFor(input: { threadId: string; botId: string; principalId: string; ownerId?: string; from: string; path: string; to?: string }): "fallback" | "rule" | "stay" {
     if (this.stays.get(input.threadId) === input.from) return "stay";
-    if (input.ownerId && input.ownerId === input.principalId && matchingRoleRule(this.rules.get(input.botId), input.ownerId, input.from, input.path)) return "rule";
+    const rule = input.ownerId && input.ownerId === input.principalId ? matchingRoleRule(this.rules.get(input.botId), input.ownerId, input.from, input.path) : undefined;
+    // #2581: a rule answers only for the role it names
+    if (rule && (input.to === undefined || rule.to.slug === input.to)) return "rule";
     return "fallback";
+  }
+
+  /** #2581: this role was already refused this read path for this person
+   * and bot (the journal), so it is not offered for it again. */
+  refusedRead(input: { principalId: string; botId: string; slug: string; path: string }): boolean {
+    const p = input.path.toLowerCase();
+    return this.refusals.some((r) => r.kind === "read" && r.principalId === input.principalId && r.botId === input.botId && r.role.slug === input.slug
+      && (r.permission.path ?? "").toLowerCase() === p);
   }
 
   stay(threadId: string, slug: string): void {

@@ -5,7 +5,7 @@
 // -> IPC "screen:frame" -> desktopCapturer), on the local page and on this
 // app's page served by the organization server alike. Without the desktop app
 // (a web browser) nothing can see this screen, so the window says so at once.
-// When frames stay empty the window says the real reason (JC 2026-11-07: the
+// When frames stay empty the window says the real reason (the
 // vague "temporarily unavailable" hid a missing bridge): Screen Recording not
 // allowed (with the button to the right System Settings pane, never a
 // prompt), allowed but still empty (relaunch), or the capture's own error.
@@ -60,7 +60,7 @@ export function LocalLiveScreen({ control }: { desktopId?: string; control: bool
   }, [inApp]);
 
   const stuck = !inApp || (!frame && misses >= LOCAL_LIVE_MISSES);
-  const problem = localScreenProblem({ inApp, mac: isMacPlatform(), screenPermission, failed: failure !== null });
+  const problem = localScreenProblem({ inApp, mac: isMacPlatform(), screenPermission, failed: failure !== null, failure });
   const canOpenSettings = problem === "permission" && typeof window.ogb?.permOpenSettings === "function";
   return (
     <div data-computer-card-local-live={control ? "control" : "watch"} className="absolute inset-0 flex items-center justify-center bg-black">

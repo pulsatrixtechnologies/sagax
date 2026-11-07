@@ -439,7 +439,7 @@ import { createCustomRulesModelReviewer } from "./rules/custom-rules-model.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes } from "./approvals/tool-auto-approval.ts";
 import { RoleJournal } from "./perspicax/role-journal.ts";
-import { createRoleEvents, meWriteSummary, missingRoleMessage } from "./perspicax/role-events.ts";
+import { createRoleEvents, meWriteSummary, missingRoleMessage, readSwitchFingerprint, readSwitchSummary } from "./perspicax/role-events.ts";
 import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
 import { createHeldRolesRoute } from "./routes/perspicax-held-roles.ts";
 import { routineRoleCoverageRoute } from "./routes/routine-role-coverage.ts";
@@ -27745,10 +27745,21 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     // 2026-11-05 (visible roles): each step's role, transitions, refusals
     onRole: (event) => roleEvents.onRole(event),
     turnRole: (turn) => perspicaxTurnRole(turn),
-    roleFallback: ({ threadId, botId, principalId, from, path }) => {
+    roleFallback: ({ threadId, botId, principalId, from, path, to }) => {
       const bot = store.bot(botId);
-      return roleJournal.fallbackFor({ threadId, botId, principalId, ...(bot ? { ownerId: effectiveBotOwner(bot) } : {}), from, path });
+      const decision = roleJournal.fallbackFor({ threadId, botId, principalId, ...(bot ? { ownerId: effectiveBotOwner(bot) } : {}), from, path, ...(to !== undefined ? { to } : {}) });
+      // #2581: "Toujours permettre" on the read switch card is a rule too
+      if (decision === "fallback" && bot && to && keptCardRule(bot, threadId, { tool: "safety:perspicax-role", scope: { action: readSwitchFingerprint(from, to, path) }, description: "" })) return "rule";
+      return decision;
     },
+    // #2581 (decided 2026-11-07): a read refused (403) under the bot's role, run
+    // once as another role the person holds: their card, "Toujours permettre"
+    askRoleSwitch: ({ threadId, botId, principalId, from, to, tool, permission }) => confirmHeldCard({
+      threadId, botId, tool: "perspicax-role",
+      summary: readSwitchSummary(languageOfPerson(principalId), { from: from.name, to: to.name || to.slug, tool, permission }),
+      fingerprint: readSwitchFingerprint(from.slug, to.slug, permission.path),
+    }),
+    knownReadRefusal: (input) => roleJournal.refusedRead(input),
     askMeWrite: ({ threadId, botId, principalId, role, tool, permission }) => confirmHeldCard({
       threadId, botId, tool: "perspicax-role",
       summary: meWriteSummary(languageOfPerson(principalId), { person: (isPrincipalId(principalId) ? personDisplayName(principals.byId(principalId)) : "") || "", role: role.name || role.slug, tool, permission }),
@@ -29547,6 +29558,7 @@ const agentApi = createAgentApi({
       kind: message.kind,
       text: message.text,
       at: message.at,
+      ...(message.queueId ? { queueId: message.queueId } : {}),
       sender: message.from?.name ?? message.peerAsk?.name ?? message.sender?.name ?? null,
       tool: message.tool ? { name: message.tool.name, ok: message.tool.ok } : null,
       attachments: (message.attachments ?? []).map((file) => ({ name: file.kind === "file" ? file.name : undefined, path: file.path }))
@@ -29566,8 +29578,10 @@ const agentApi = createAgentApi({
     if (!target) return agentRefuse(404, "unknown_agent", "No such agent.");
     if (caller.kind === "person") {
       // 2026-10-29: a person's AI client is another agent: its own
-      // conversation with the bot, never the person's chat with it
-      const threadId = agentConversationFor(target, caller.id, caller.client, false);
+      // conversation with the bot, never the person's chat with it.
+      // #2575: a fresh one on every send, as the guide promises; a send
+      // never grafts onto a conversation that is still working.
+      const threadId = agentConversationFor(target, caller.id, caller.client, true);
       if (!threadId) return agentRefuse(502, "not_started", "A conversation with this agent could not be opened.");
       return { threadId };
     }
@@ -29616,13 +29630,21 @@ const agentApi = createAgentApi({
     if (caller.kind === "person") {
       const staged = agentApiStageFiles(caller, target, files);
       if ("code" in staged) return staged;
-      const sent = await performAsMember(memberForAgentCaller(caller), { method: "POST", path: `/api/bots/${encodeURIComponent(agentId)}/messages`, body: { text: agentPromptWithFiles(prompt, staged, workspaceDir(target.id)), threadId } });
-      const body = (sent.body ?? {}) as { message?: { id?: unknown }; error?: unknown; message_?: unknown };
+      const sent = await performAsMember(memberForAgentCaller(caller), { method: "POST", path: `/api/bots/${encodeURIComponent(agentId)}/messages`, body: {
+        text: agentPromptWithFiles(prompt, staged, workspaceDir(target.id)), threadId,
+        // #2575: a busy conversation queues the prompt for its own turn
+        // (never steered into the running one, never merged with another
+        // queued prompt), so every handle gets its own reply
+        busyMode: "after", aiClient: true,
+      } });
+      const body = (sent.body ?? {}) as { message?: { id?: unknown }; queueId?: unknown; error?: unknown; message_?: unknown };
       if (sent.status >= 300) return agentRefuse(sent.status >= 400 ? sent.status : 502, "not_sent", String((sent.body as { error?: unknown })?.error ?? "The prompt could not be sent."));
-      const messageId = typeof body.message?.id === "string" ? body.message.id : null;
+      const lineId = typeof body.message?.id === "string" ? body.message.id : null;
       // #291: not the person typing: the chat folds it with the bot's answer
-      if (messageId) markAiClientLine(threadId, messageId);
-      return { messageId };
+      // (a queued prompt gets the mark when its turn stores it)
+      if (lineId) markAiClientLine(threadId, lineId);
+      // a queued prompt is anchored by its queueId until its line is stored
+      return { messageId: lineId ?? (typeof body.queueId === "string" ? body.queueId : null) };
     }
     const from = agentApiCallerBot(caller);
     const capability = caller.depth;

@@ -75,6 +75,17 @@ export function meWriteSummary(language: string, input: { person: string; role: 
   return roleText(language, "roles.meWrite.summary", { person: input.person, role: input.role, tool: input.tool, permission: permissionLine(input.permission, language) });
 }
 
+/** #2581: the card that runs one read refused (403) under `from` once as
+ * `to` ("" from = "Moi"). */
+export function readSwitchSummary(language: string, input: { from: string; to: string; tool: string; permission: CwPermission }): string {
+  return roleText(language, "roles.readSwitch.summary", { from: input.from || roleText(language, "roles.me"), role: input.to, tool: input.tool, permission: permissionLine(input.permission, language) });
+}
+
+/** #2581: the card's "Toujours permettre" key: this switch for this path. */
+export function readSwitchFingerprint(from: string, to: string, path: string): string {
+  return `role-read-switch:${from}:${to}:${path}`;
+}
+
 /** "Envoyer à l'admin" (Roles tab): the message an organization admin reads,
  * in the admin's language. Times in Eastern time (America/New_York). */
 export function missingRoleMessage(language: string, input: { person: string; bot: string; missing: MissingPermission }): string {

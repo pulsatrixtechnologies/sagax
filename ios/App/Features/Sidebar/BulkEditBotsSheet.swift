@@ -279,7 +279,7 @@ struct BulkEditBotsSheet: View {
             BulkFieldRow(title: String(localized: "Works on"), current: current, bots: bots, describe: describeComputer, touched: model.computer != nil) {
                 Picker(String(localized: "Works on"), selection: optional($model.computer)) {
                     Text("Do not change").tag(DesktopWorksOn?.none)
-                    ForEach([DesktopWorksOn.auto, .local, .cloud, .off], id: \.self) { place in
+                    ForEach([DesktopWorksOn.auto, .local, .cloud], id: \.self) { place in
                         Text(BotWorksOnSection.name(place)).tag(Optional(place))
                     }
                 }

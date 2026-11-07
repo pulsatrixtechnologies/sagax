@@ -18,7 +18,17 @@ const ALL: AgentScope[] = ["agents.read", "agents.send", "agents.create"];
 
 /** A small Sagax: agents, conversations, a fake runtime that answers a
  * prompt a few polls later, and a virtual clock. */
-function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => string; reachable?: (caller: AgentCaller, agent: AgentSummary) => boolean } = {}) {
+function world(options: {
+  replyAfterPolls?: number;
+  reply?: (prompt: string) => string;
+  reachable?: (caller: AgentCaller, agent: AgentSummary) => boolean;
+  /** The rows one turn writes after its prompt (progress, tools, answer). */
+  replyRows?: (prompt: string) => Array<Omit<StoredMessage, "id" | "at">>;
+  /** A send into a busy conversation waits in the server queue (busyMode
+   * after): the 202 answers its queueId and the row is stored when its own
+   * turn starts, carrying that queueId (#2575). */
+  queueWhenBusy?: boolean;
+} = {}) {
   let clock = 1_791_500_000_000;
   let ids = 0;
   const agents: AgentSummary[] = [
@@ -45,6 +55,7 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
   const messages = new Map<string, StoredMessage[]>();
   const state = new Map<string, TurnState>();
   const pending = new Map<string, { polls: number; prompt: string }>();
+  const waiting = new Map<string, Array<{ queueId: string; prompt: string }>>();
   const audits: Array<{ caller: string; entry: AuditEntry }> = [];
   const notified: string[] = [];
   const interrupted: string[] = [];
@@ -60,9 +71,19 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
       job.polls -= 1;
       if (job.polls <= 0) {
         pending.delete(threadId);
-        const text = (options.reply ?? ((p) => `echo: ${p}`))(job.prompt);
-        if (text) add(threadId, { role: "bot", kind: "text", text });
+        if (options.replyRows) for (const row of options.replyRows(job.prompt)) add(threadId, row);
+        else {
+          const text = (options.reply ?? ((p) => `echo: ${p}`))(job.prompt);
+          if (text) add(threadId, { role: "bot", kind: "text", text });
+        }
         state.set(threadId, "idle");
+        // the next queued send starts its own turn, one per send
+        const next = waiting.get(threadId)?.shift();
+        if (next) {
+          add(threadId, { role: "user", kind: "text", text: next.prompt, queueId: next.queueId });
+          state.set(threadId, "running");
+          pending.set(threadId, { polls: options.replyAfterPolls ?? 3, prompt: next.prompt });
+        }
       }
     }
   };
@@ -260,9 +281,10 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
       turnStateCalls.push(threadId);
       return state.get(threadId) ?? "idle";
     },
-    // #1170: the agent's single chat with the caller's person
+    // #1170: a bot keeps the agent's single chat with its person; a
+    // person's AI client opens a fresh conversation per send (#2575)
     async conversation(caller, agentId) {
-      const found = [...threads].find(([, t]) => t.agentId === agentId && t.owner === key(caller));
+      const found = caller.kind === "person" ? undefined : [...threads].find(([, t]) => t.agentId === agentId && t.owner === key(caller));
       if (found) return { threadId: found[0] };
       const threadId = `t${++ids}`;
       threads.set(threadId, { agentId, owner: key(caller), title: `${caller.name} via agent API`, hidden: false });
@@ -272,6 +294,11 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
       posted.push({ threadId, files, ...(wake ? { wake } : {}) });
       // A front send waits; it must not start a turn or move the clock.
       if (wake?.front) return { messageId: null };
+      if (options.queueWhenBusy && (state.get(threadId) ?? "idle") !== "idle") {
+        const queueId = `q${++ids}`;
+        waiting.set(threadId, [...(waiting.get(threadId) ?? []), { queueId, prompt }]);
+        return { messageId: queueId };
+      }
       const row = add(threadId, { role: "user", kind: "text", text: prompt });
       state.set(threadId, "running");
       pending.set(threadId, { polls: options.replyAfterPolls ?? 3, prompt });
@@ -574,11 +601,11 @@ describe("send_prompt / await_turn", () => {
     expect(w.threads.get(String(r.body.thread_id))).toMatchObject({ hidden: false, owner: "bot:bot-x" });
   });
 
-  it("a person's send_prompt lands in the single chat unless thread_id names one of theirs; a bot keeps one (#1170)", async () => {
+  it("a person's send_prompt opens a fresh conversation unless thread_id names one of theirs; a bot keeps one (#1170, #2575)", async () => {
     const w = world();
     const first = await w.api.call(person("p1"), "send_prompt", { agent_id: "bot-a", prompt: "one" });
     const second = await w.api.call(person("p1"), "send_prompt", { agent_id: "bot-a", prompt: "two" });
-    expect(second.body.thread_id).toBe(first.body.thread_id);
+    expect(second.body.thread_id).not.toBe(first.body.thread_id);
     const again = await w.api.call(person("p1"), "send_prompt", { agent_id: "bot-a", prompt: "three", thread_id: first.body.thread_id });
     expect(again.body).toMatchObject({ accepted: true, thread_id: first.body.thread_id });
     const foreign = await w.api.call(person("p2"), "send_prompt", { agent_id: "bot-a", prompt: "x", thread_id: first.body.thread_id });
@@ -652,6 +679,40 @@ describe("send_prompt / await_turn", () => {
     expect(w.interrupted).toEqual([]);
     await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "fifth", on_busy: "supersede" });
     expect(w.interrupted).toHaveLength(1);
+  });
+
+  it("each prompt queued behind a busy conversation gets its own reply, never an empty finished (#2575)", async () => {
+    const w = world({ queueWhenBusy: true });
+    const caller = person("p1");
+    const first = await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "first" });
+    const thread = first.body.thread_id;
+    const second = await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "second", thread_id: thread });
+    const third = await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "third", thread_id: thread });
+    expect([second.body.thread_id, third.body.thread_id]).toEqual([thread, thread]);
+    const a1 = await w.api.call(caller, "await_turn", { agent_id: "bot-a", handle: first.body.handle, timeout_ms: AWAIT_TIMEOUT_MS_MAX });
+    expect(a1.body).toMatchObject({ finished: true, reply: "echo: first" });
+    const a2 = await w.api.call(caller, "await_turn", { agent_id: "bot-a", handle: second.body.handle, timeout_ms: AWAIT_TIMEOUT_MS_MAX });
+    expect(a2.body).toMatchObject({ finished: true, reply: "echo: second" });
+    const a3 = await w.api.call(caller, "await_turn", { agent_id: "bot-a", handle: third.body.handle, timeout_ms: AWAIT_TIMEOUT_MS_MAX });
+    expect(a3.body).toMatchObject({ finished: true, reply: "echo: third" });
+  });
+
+  it("reply is the final answer only; progress lines stay in the steps (#2579)", async () => {
+    const w = world({
+      replyRows: (prompt) => [
+        { role: "bot", kind: "text", text: "Je cherche d'abord les billets ouverts." },
+        { role: "bot", kind: "activity", text: "cw_psa_find_tickets", tool: { name: "cw_psa_find_tickets", ok: true } },
+        { role: "bot", kind: "text", text: "Je regarde maintenant le temps saisi." },
+        { role: "bot", kind: "activity", text: "cw_psa_find_time_entries", tool: { name: "cw_psa_find_time_entries", ok: true } },
+        { role: "bot", kind: "text", text: `Réponse finale : ${prompt}` },
+        { role: "bot", kind: "text", text: "Trois billets ouverts." },
+      ],
+    });
+    const r = await w.api.call(bot("bot-x"), "send_prompt", { agent_id: "bot-a", prompt: "bilan", mode: "blocking", timeout_ms: 30_000 });
+    expect(r.body).toMatchObject({ finished: true, reply: "Réponse finale : bilan\n\nTrois billets ouverts." });
+    expect(String(r.body.reply)).not.toContain("Je cherche");
+    const again = await w.api.call(bot("bot-x"), "await_turn", { agent_id: "bot-a", handle: r.body.handle, timeout_ms: 1_000 });
+    expect(again.body.reply).toBe("Réponse finale : bilan\n\nTrois billets ouverts.");
   });
 
   it("validates mode, timeout, prompt and files (8 max, workspace-relative, 25 MiB)", async () => {

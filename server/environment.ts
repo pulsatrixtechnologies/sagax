@@ -132,36 +132,39 @@ export function buildStamp(): string {
   return stamp;
 }
 
-/** The desktop app passes its own version; a checkout reads package.json;
- * an image sets SAGAX_APP_VERSION at build time. */
-export function serverVersion(): string {
+/** A version field of the bundle's own version.json (written beside index.js
+ * by scripts/bundle-server.mjs), else of the checkout's package.json one level
+ * up. The image ships dist-server/ without that package.json: reading only the
+ * latter left /api/health at "unknown" in production (#2582). */
+function packagedVersionField(root: string, field: "version" | "forkVersion"): string {
+  for (const file of [join(root, "version.json"), join(root, "..", "package.json")]) {
+    try {
+      const pkg: unknown = JSON.parse(readFileSync(file, "utf8"));
+      const value = Reflect.get(Object(pkg), field);
+      if (typeof value === "string" && value) return value;
+    } catch {
+      /* not there: try the next one */
+    }
+  }
+  return "";
+}
+
+/** The desktop app passes its own version; an image or a bundle reads its
+ * version.json; a checkout reads package.json; SAGAX_APP_VERSION wins. */
+export function serverVersion(root: string = SERVER_ROOT): string {
   const fromEnv = process.env.SAGAX_APP_VERSION?.trim();
   if (fromEnv) return fromEnv;
-  try {
-    const pkg: unknown = JSON.parse(readFileSync(join(SERVER_ROOT, "..", "package.json"), "utf8"));
-    const version = Reflect.get(Object(pkg), "version");
-    if (typeof version === "string" && version) return version;
-  } catch {
-    /* no package.json next to the bundle */
-  }
-  return "unknown";
+  return packagedVersionField(root, "version") || "unknown";
 }
 
 /** The Sagax release people know (package.json `forkVersion`, 0.4.x), not
  * the base `version` the link sends (2026-10-08, console audit 6.3). An
- * image may set SAGAX_RELEASE_VERSION; else the package's forkVersion; else
- * serverVersion(). */
-export function releaseVersion(): string {
+ * image may set SAGAX_RELEASE_VERSION; else the bundle's or the package's
+ * forkVersion; else serverVersion(). */
+export function releaseVersion(root: string = SERVER_ROOT): string {
   const fromEnv = process.env.SAGAX_RELEASE_VERSION?.trim();
   if (fromEnv) return fromEnv.slice(0, 64);
-  try {
-    const pkg: unknown = JSON.parse(readFileSync(join(SERVER_ROOT, "..", "package.json"), "utf8"));
-    const version = Reflect.get(Object(pkg), "forkVersion");
-    if (typeof version === "string" && version) return version;
-  } catch {
-    /* no package.json next to the bundle */
-  }
-  return serverVersion();
+  return packagedVersionField(root, "forkVersion") || serverVersion(root);
 }
 
 /** This server's display name: SAGAX_ENVIRONMENT_LABEL, else the

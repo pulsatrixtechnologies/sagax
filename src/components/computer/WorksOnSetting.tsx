@@ -15,22 +15,21 @@ import { PaneSection } from "../bot-settings/PaneSection";
 import { useSettingsSurface } from "../SettingsPrimitives";
 import { useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
 
-/** null is Auto. This computer and the cloud computer are kept. A Local VM
- * or the browser still reads as Auto. */
-export type WorksOnMode = "off" | "local" | "cloud" | null;
-export const WORKS_ON_MODES: readonly WorksOnMode[] = [null, "local", "cloud", "off"];
+/** null is Auto. This computer and the cloud computer are kept. A Local VM,
+ * the browser or a saved Off reads as Auto: Off is gone from every menu. */
+export type WorksOnMode = "local" | "cloud" | null;
+export const WORKS_ON_MODES: readonly WorksOnMode[] = [null, "local", "cloud"];
 
 /** What the bot's stored Works on means now. */
 export function worksOnMode(computer: Bot["computer"] | null | undefined): WorksOnMode {
-  if (computer === "off" || computer === "local" || computer === "cloud") return computer;
+  if (computer === "local" || computer === "cloud") return computer;
   return null;
 }
 
-const MEANS: Record<"auto" | "local" | "cloud" | "off", LocaleKey> = {
+const MEANS: Record<"auto" | "local" | "cloud", LocaleKey> = {
   auto: "worksOn.tip.autoOnly",
   local: "worksOn.tip.local",
   cloud: "worksOn.tip.cloud",
-  off: "computer.dest.offDesc",
 };
 
 /** The tooltip of one choice: what it means. */

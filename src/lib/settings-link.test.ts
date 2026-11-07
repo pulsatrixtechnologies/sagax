@@ -29,8 +29,8 @@ describe("settings links", () => {
     expect(settingsSectionLabel("pages")).toBe("Plugins");
     expect(settingsSectionLabel("experimental")).toBe("Experimental");
     // #2090: Updates is its own page. 2026-11-06: the App page splits into
-    // General and Help and about; Import lands on Backups and storage
-    expect(settingsSectionLabel("about")).toBe("Help and about");
+    // General and About (JC 2026-11-07, was Help and about); Import lands on Backups and storage
+    expect(settingsSectionLabel("about")).toBe("About");
     expect(settingsSectionLabel("general")).toBe("General");
     expect(settingsSectionLabel("updates")).toBe("Updates");
     expect(settingsSectionLabel("import")).toBe("Backups and storage");
@@ -42,7 +42,7 @@ describe("settings links", () => {
     expect(settingsSectionLabel("credentials")).toBe("Coffre");
     expect(settingsSectionLabel("privacy")).toBe("Notifications");
     expect(settingsSectionLabel("memory")).toBe("Organisation");
-    expect(settingsSectionLabel("about")).toBe("Aide et à propos");
+    expect(settingsSectionLabel("about")).toBe("À propos");
     expect(settingsSectionLabel("general")).toBe("Général");
     expect(settingsSectionLabel("backups")).toBe("Sauvegardes et stockage");
     setLocale("en");

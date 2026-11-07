@@ -1,4 +1,4 @@
-// The Computer card's look follows the real state (JC 2026-11-07).
+// The Computer card's look follows the real state.
 import { describe, expect, it } from "vitest";
 
 import { cloudStatusAsleep, computerCardView, localScreenProblem } from "./computer-screen-state";
@@ -11,6 +11,16 @@ describe("localScreenProblem", () => {
     expect(localScreenProblem({ inApp: true, mac: true, screenPermission: undefined })).toBe("permission");
     expect(localScreenProblem({ inApp: true, mac: true, screenPermission: "granted" })).toBe("empty");
     expect(localScreenProblem({ inApp: true, mac: false })).toBe("empty");
+  });
+
+  // "Error invoking remote method 'screen:frame': Failed to get
+  // sources." is macOS refusing Screen Recording, not a broken capture: the
+  // card says what to do instead of the raw IPC error.
+  it("reads a failed capture without Screen Recording as the permission", () => {
+    expect(localScreenProblem({ inApp: true, mac: true, screenPermission: "denied", failed: true })).toBe("permission");
+    const raw = "Error invoking remote method 'screen:frame': Error: Failed to get sources.";
+    expect(localScreenProblem({ inApp: true, mac: true, screenPermission: "granted", failed: true, failure: raw })).toBe("permission");
+    expect(localScreenProblem({ inApp: true, mac: false, failed: true, failure: raw })).toBe("capture-failed");
   });
 });
 

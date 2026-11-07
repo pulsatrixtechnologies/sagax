@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AudioLines, Check, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -83,7 +83,6 @@ export function VoiceProviderOptions({ installation = false, children }: { insta
         <FoldRow
           cardId="voice.chatterbox"
           label={t("voice.engine.server")}
-          icon={<AudioLines size={14} />}
           help={t("voice.engine.serverHint")}
           description={configured ? <StatusText tone="success">{t("voice.engine.saved")}</StatusText> : t("voice.engine.notSaved")}
         >

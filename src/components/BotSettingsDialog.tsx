@@ -83,7 +83,8 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // the computer" link (the old Computer tab's included) still lands on it,
   // pushed over Activity. A bot that works nowhere (Works on: Off) and
   // Simple have no computer to show: the link lands on Activity.
-  const computerOff = bot.computer === "off";
+  // Off is gone: a saved Off reads as Auto and keeps the card.
+  const computerOff = false;
   const computerShown = showsComputer({ advanced, computerOff });
   const computerView = computerShown && state.computerOpen;
   // an organization server's bots act as Perspicax roles: a recent refusal

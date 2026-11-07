@@ -52,7 +52,7 @@ import {
   useComputerThumbnail,
 } from "@/lib/computer-thumbnail";
 
-type ComputerSelectValue = "auto" | "off" | "cloud" | "local" | "vm" | "browser";
+type ComputerSelectValue = "auto" | "cloud" | "local" | "vm" | "browser";
 
 type ComputerPatch = { computer: Bot["computer"] | null };
 
@@ -72,8 +72,8 @@ export function computerSelectValue(computer: Bot["computer"] | null | undefined
 }
 
 /** Options for the computer row's context menu: Cloud + each online local computer from
- * `computerChoices` (chat Computer menu / OrgComputerTab), plus Auto and Off
- * so the bot's Works on can follow. Solo (no bridge desktops) falls back to
+ * `computerChoices` (chat Computer menu / OrgComputerTab), plus Auto so the
+ * bot's Works on can follow. Never Off: it hid the card. Solo (no bridge desktops) falls back to
  * the Works on set alone. */
 export function computerSelectOptions(
   bridge: DesktopBridgeStatus | null,
@@ -83,13 +83,11 @@ export function computerSelectOptions(
   const localChoices = choices.filter((choice): choice is Extract<ComputerChoice, { source: "local" }> => choice.source === "local");
   const hasNamedLocals = localChoices.length > 0;
   const auto: PillOption<ComputerSelectValue> = { value: "auto", label: t(placeLabelKey("auto", organization)) };
-  const off: PillOption<ComputerSelectValue> = { value: "off", label: t(placeLabelKey("off", organization)) };
   if (!hasNamedLocals) {
     return [
       auto,
       { value: "local", label: t(placeLabelKey("local", organization)) },
       { value: "cloud", label: t(placeLabelKey("cloud", organization)) },
-      off,
     ];
   }
   const cloudLabel = placeLabel("server", t("orgComputer.choice.cloud"));
@@ -100,7 +98,6 @@ export function computerSelectOptions(
     auto,
     { value: "local", label: localLabel },
     { value: "cloud", label: cloudLabel },
-    off,
   ];
 }
 
@@ -111,7 +108,6 @@ export function computerCardTitle(
   organization: boolean,
 ): string {
   const mode = worksOnMode(computer);
-  if (mode === "off") return t(placeLabelKey("off", organization));
   if (mode === "cloud") return placeLabel("server", t("orgComputer.choice.cloud"));
   if (mode === "local") {
     const desktop = currentDesktop(bridge);
@@ -161,7 +157,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
   const desktopId = liveIsLocal ? currentDesktop(bridge)?.id : undefined;
   const caption = t("computer.screenOf", { name: bot.name });
   const canOpenLive = place !== "off" && place !== "browser";
-  // JC 2026-11-07: the thumbnail and the Awake / Asleep line follow the real
+  // the thumbnail and the Awake / Asleep line follow the real
   // state: the screen, asleep (computer offline, cloud computer stopped), or
   // unavailable with its reason, never a wallpaper that looks fine.
   const cardSource = place === "off" || place === "browser" ? "none"

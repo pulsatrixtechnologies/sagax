@@ -1,7 +1,7 @@
-// Settings > General (id "general") and Settings > Help and about (id
+// Settings > General (id "general") and Settings > About (id
 // "about"), JC 2026-11-06: the old App page was a catch-all. General holds
 // how this app behaves on the computer (System), the composer keys
-// (Keyboard and typing) and Advanced mode; Help and about holds the About
+// (Keyboard and typing) and Advanced mode; About holds the About
 // window, the tours and the help rows. Cleanup went to Backups and storage,
 // people's tool access to Security, the usage meter to Usage.
 import { useState } from "react";
@@ -34,7 +34,7 @@ import {
 } from "./AppearanceSettings";
 
 /** Guided tours: one row, two actions kept (app tour and welcome). Mounted
- * on Help and about so Account stays identity-only. */
+ * on About so Account stays identity-only. */
 export function GuidedToursRow() {
   const { state, dispatch } = useStore();
   const [saving, setSaving] = useState(false);
@@ -126,7 +126,7 @@ export function GeneralPage({ remoteActive = false }: { remoteActive?: boolean }
   );
 }
 
-/** Help and about: the About window (version, license, documentation,
+/** About: the About window (version, license, documentation,
  * release notes) and the tours, then Help (diagnostics, logs, feedback). */
 export function AboutPage({ remoteActive, openAbout }: { remoteActive: boolean; openAbout: () => void }) {
   const { state } = useStore();

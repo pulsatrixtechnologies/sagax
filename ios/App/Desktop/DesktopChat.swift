@@ -413,7 +413,9 @@ struct DesktopChatHeader: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 80)
 
-            if !(chrome.panelOpen && chrome.panelDocked) {
+            // The desktop keeps More options in the chat bar with the panel
+            // docked too (1376x1032 panel-details reference: x 1012).
+            Group {
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
                     DesktopRoundButton(systemImage: "ellipsis", label: "More options", active: moreOpen, icon: .ellipsis) {
@@ -438,11 +440,6 @@ struct DesktopChatHeader: View {
                 }
                 .padding(.top, 10)
                 .padding(.trailing, 20)
-            } else if case let .bot(bot) = chat, !DesktopSidebarState.threadsOn(model: model, prefs: prefs) {
-                // the docked panel's bar holds the menu; New topic stays here
-                HStack { Spacer(minLength: 0); DesktopNewTopicButton(bot: bot) }
-                    .padding(.top, 10)
-                    .padding(.trailing, 20)
             }
         }
         .frame(maxWidth: .infinity)

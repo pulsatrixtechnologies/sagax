@@ -66,7 +66,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
             Group {
                 if scrollable {
                     ScrollView(showsIndicators: false) { stack }
-                        .topScrollEdgeFade(height: SettingsMetrics.headerFadeHeight, background: background)
+                        .topScrollEdgeFade(height: SettingsMetrics.headerFadeHeight, background: background, underStatusBar: false)
                 } else {
                     stack
                 }

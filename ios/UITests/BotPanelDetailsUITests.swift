@@ -105,7 +105,14 @@ final class BotPanelDetailsUITests: XCTestCase {
         if let environment = fixture.environmentId { arguments += ["-parityEnvironment", environment] }
         app.launchArguments = arguments
         app.launch()
-        XCTAssertTrue(element("profile-name", in: app).waitForExistence(timeout: 30))
+        // the first launch of a run installs and starts cold, and can come up
+        // without its arguments (Welcome, unpaired): launch it once more
+        let name = element("profile-name", in: app)
+        if !name.waitForExistence(timeout: 60), element("welcome-settings", in: app).exists {
+            app.terminate()
+            app.launch()
+        }
+        XCTAssertTrue(name.waitForExistence(timeout: 60))
         return app
     }
 
@@ -113,12 +120,23 @@ final class BotPanelDetailsUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
 
-    /// One row of the panel's overview list (Coding, Routines, Library,
-    /// Computer) opens its page.
-    private func openPage(_ id: String, in app: XCUIApplication) {
-        let row = element(id, in: app)
-        XCTAssertTrue(row.waitForExistence(timeout: 15), "\(id) is listed")
-        row.tap()
+    /// The panel's gear opens the bot profile on its Settings (the edit
+    /// tree), as the desktop's gear does (#2157).
+    private func openSettings(in app: XCUIApplication) {
+        let gear = element("panel-gear", in: app)
+        XCTAssertTrue(gear.waitForExistence(timeout: 15))
+        gear.tap()
+    }
+
+    /// Edit avatar from the mascot's menu (#2157): the character row.
+    private func openAvatarEditor(in app: XCUIApplication) {
+        let mascot = element("profile-mascot", in: app)
+        XCTAssertTrue(mascot.waitForExistence(timeout: 10))
+        mascot.press(forDuration: 1.2)
+        let edit = app.buttons["Edit avatar"].firstMatch
+        XCTAssertTrue(edit.waitForExistence(timeout: 10), "the mascot's menu offers Edit avatar")
+        edit.tap()
+        XCTAssertTrue(element("phone-avatar-editor", in: app).waitForExistence(timeout: 15))
     }
 
     private func scrollTo(_ target: XCUIElement, in app: XCUIApplication) {
@@ -137,13 +155,12 @@ final class BotPanelDetailsUITests: XCTestCase {
 
     // MARK: Activity (BP10)
 
-    /// The Info tab's Activity card lists the running turn; its Stop
+    /// The Activity tab's Activity card lists the running turn; its Stop
     /// interrupts it on the server.
     @MainActor
     func testActivityCardStopsTheRunningTurn() throws {
         let lab = try busyCardLab()
         let app = launchProfile("Card Lab")
-        openPage("panel-overview.coding", in: app)
         let stop = element("activity-stop.thread:\(lab.threadId)", in: app)
         scrollTo(element("profile-activity", in: app), in: app)
         XCTAssertTrue(stop.waitForExistence(timeout: 30), "the running turn shows with Stop")
@@ -159,7 +176,6 @@ final class BotPanelDetailsUITests: XCTestCase {
     func testActivityDetailSteersThenStops() throws {
         let lab = try busyCardLab()
         let app = launchProfile("Card Lab")
-        openPage("panel-overview.coding", in: app)
         let row = element("activity-row.thread:\(lab.threadId)", in: app)
         scrollTo(element("profile-activity", in: app), in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 30))
@@ -191,12 +207,11 @@ final class BotPanelDetailsUITests: XCTestCase {
     /// lists for that filter.
     @MainActor
     func testHistoryListsWhatTheServerLists() throws {
-        let ara = try XCTUnwrap(try bot(named: "Ara"))
-        let id = try XCTUnwrap(ara["id"] as? String)
-        let listed = (try api("GET", "/api/bots/\(id)/activity?filter=other&limit=50") as? [String: Any])
+        // the Activity card shows only when something runs: Card Lab's turn
+        let lab = try busyCardLab()
+        let listed = (try api("GET", "/api/bots/\(lab.id)/activity?filter=other&limit=50") as? [String: Any])
         let ids = ((listed?["items"] as? [[String: Any]] ?? []) + (listed?["subagents"] as? [[String: Any]] ?? [])).compactMap { $0["id"] as? String }
-        let app = launchProfile()
-        openPage("panel-overview.coding", in: app)
+        let app = launchProfile("Card Lab")
         let section = element("activity-section.other", in: app)
         scrollTo(section, in: app)
         XCTAssertTrue(section.waitForExistence(timeout: 20))
@@ -225,12 +240,19 @@ final class BotPanelDetailsUITests: XCTestCase {
         let routineId = try XCTUnwrap(((created?["routine"] as? [String: Any]) ?? created)?["id"] as? String)
         defer { _ = try? api("DELETE", "/api/routines/\(routineId)", allowFailure: true) }
         let app = launchProfile()
-        openPage("panel-overview.routines", in: app)
-        let row = element("profile-routine.Routine WP7 a supprimer", in: app)
-        scrollTo(row, in: app)
-        XCTAssertTrue(row.waitForExistence(timeout: 20))
-        row.press(forDuration: 1.2)
-        let delete = app.buttons["Delete routine"].firstMatch
+        // Activity > Upcoming lists the bot's routines; a row opens its page (#2157)
+        let row = element("panel-upcoming.Routine WP7 a supprimer", in: app)
+        let more = element("panel-upcoming-show-more", in: app)
+        if !row.waitForExistence(timeout: 15), more.exists { more.tap() }
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        for _ in 0..<6 where !row.isHittable { app.swipeUp() }
+        row.tap()
+        // the page's edit button: a long press offers Delete routine, as the
+        // desktop's routine panel does
+        let edit = element("routine-edit", in: app)
+        XCTAssertTrue(edit.waitForExistence(timeout: 15))
+        edit.press(forDuration: 1.2)
+        let delete = element("routine-delete", in: app)
         XCTAssertTrue(delete.waitForExistence(timeout: 10))
         delete.tap()
         // the confirmation's own Delete routine
@@ -245,9 +267,9 @@ final class BotPanelDetailsUITests: XCTestCase {
 
     // MARK: Files (BF1, BF3, BF4)
 
-    /// "Search this chat's files" lists the thread's files as the server
-    /// does, narrows them by the search, copies a path and shows a file's
-    /// message in the chat.
+    /// The Library tab lists the thread's files as the server does, copies
+    /// a path and shows a file's message in the chat. The Library has no
+    /// search (#1112, as the desktop's Files tab).
     @MainActor
     func testThisChatsFilesSearchCopyPathAndShowInChat() throws {
         let ara = try XCTUnwrap(try bot(named: "Ara"))
@@ -257,7 +279,7 @@ final class BotPanelDetailsUITests: XCTestCase {
             throw XCTSkip("the fixture seeds no file in Ara's thread")
         }
         let app = launchProfile()
-        openPage("panel-overview.library", in: app)
+        element("panel-tab.library", in: app).tap()
         XCTAssertTrue(element("thread-files", in: app).waitForExistence(timeout: 15))
         for file in files.prefix(3) {
             let fileName = try XCTUnwrap(file["name"] as? String)
@@ -270,7 +292,7 @@ final class BotPanelDetailsUITests: XCTestCase {
             (file["name"] as? String) == name && file["available"] as? Bool == true
                 && ((file["localPath"] as? String ?? file["path"] as? String ?? "").hasPrefix("/"))
         }
-        let actions = element("thread-file-actions.\(name)", in: app)
+        let actions = element("library-actions.\(name)", in: app)
         XCTAssertTrue(actions.waitForExistence(timeout: 10))
         if copyable != nil {
             actions.tap()
@@ -284,19 +306,8 @@ final class BotPanelDetailsUITests: XCTestCase {
             XCTAssertTrue(copied, "the path is copied")
         }
 
-
-        // the search keeps the matching file only
-        let search = app.textFields["thread-files-search"].firstMatch
-        if !search.isHittable { app.scrollViews["profile-scroll"].firstMatch.swipeDown() }
-        XCTAssertTrue(search.waitForExistence(timeout: 10))
-        search.tap()
-        search.typeText(name)
-        XCTAssertTrue(element("thread-file.\(name)", in: app).waitForExistence(timeout: 10))
-        for other in files.compactMap({ $0["name"] as? String }) where !other.localizedCaseInsensitiveContains(name) && !name.localizedCaseInsensitiveContains(other) {
-            XCTAssertFalse(element("thread-file.\(other)", in: app).exists, "\(other) is filtered out")
-        }
-
         // Show in chat closes the panel over the chat
+        RunLoop.current.run(until: Date().addingTimeInterval(2.6))
         actions.tap()
         let show = app.buttons["Show in chat"].firstMatch
         XCTAssertTrue(show.waitForExistence(timeout: 10))
@@ -318,17 +329,19 @@ final class BotPanelDetailsUITests: XCTestCase {
         try api("PATCH", "/api/bots/\(id)", ["voiceNotes": true])
         defer { _ = try? api("PATCH", "/api/bots/\(id)", ["voiceNotes": true]) }
         let app = launchProfile()
-        element("panel-edit-persona", in: app).tap()
-        // Edit bot > Advanced > Usage
-        element("panel-edit-page.advanced", in: app).tap()
-        element("panel-row.usage", in: app).tap()
+        // the gear opens the profile with Settings unfolded (#2157): Usage
+        openSettings(in: app)
+        let usage = element("bot-profile-settings.usage", in: app)
+        for _ in 0..<10 where !(usage.exists && usage.isHittable) { app.swipeUp() }
+        XCTAssertTrue(usage.waitForExistence(timeout: 10))
+        usage.tap()
         XCTAssertTrue(element("bot-usage-empty", in: app).waitForExistence(timeout: 10) || element("bot-usage-turns", in: app).exists, "the usage section shows")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        element("settings-back", in: app).tap()
-        // Edit bot > Identity > Voice & alerts
-        element("panel-edit-page.identity", in: app).tap()
-        let voice = element("panel-row.voice", in: app)
-        for _ in 0..<6 where !(voice.exists && voice.isHittable) { app.swipeUp() }
+        let navBack = app.navigationBars.buttons.element(boundBy: 0)
+        if navBack.exists { navBack.tap() } else { element("profile-back", in: app).tap() }
+        // then Voice
+        let voice = element("bot-profile-settings.voice", in: app)
+        for _ in 0..<10 where !(voice.exists && voice.isHittable) { app.swipeUp() }
+        XCTAssertTrue(voice.waitForExistence(timeout: 10))
         voice.tap()
         let toggle = app.switches["bot-voice-notes"].firstMatch
         for _ in 0..<8 where !(toggle.exists && toggle.isHittable) { app.swipeUp() }
@@ -351,7 +364,8 @@ final class BotPanelDetailsUITests: XCTestCase {
             try api("POST", "/api/bots/\(other)/primary")
         }
         let app = launchProfile()
-        element("profile-more", in: app).tap()
+        // a long press on the gear opens the bot menu (#2157)
+        element("panel-gear", in: app).press(forDuration: 1.0)
         let make = element("profile-menu.make-primary", in: app)
         XCTAssertTrue(make.waitForExistence(timeout: 10))
         make.tap()
@@ -389,7 +403,7 @@ final class BotPanelDetailsUITests: XCTestCase {
         try api("PATCH", "/api/bots/\(id)", ["mascotLook": ["character": "owl"], "mascotSkin": "none"])
         defer { _ = try? api("PATCH", "/api/bots/\(id)", ["mascotLook": ["character": "owl"], "mascotSkin": "none"]) }
         let app = launchProfile()
-        element("profile-mascot", in: app).tap()
+        openAvatarEditor(in: app)
         let inferno = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'inferno'")).firstMatch
         XCTAssertTrue(inferno.waitForExistence(timeout: 15))
         XCTAssertEqual(inferno.value as? String, "Locked")
@@ -411,7 +425,7 @@ final class BotPanelDetailsUITests: XCTestCase {
         defer { _ = try? api("PATCH", "/api/bots/\(id)", ["mascotLook": ["character": "owl"], "color": "purple", "mascotSkin": "none"]) }
         try api("PATCH", "/api/bots/\(id)", ["mascotLook": ["character": "owl"]])
         let app = launchProfile()
-        element("profile-mascot", in: app).tap()
+        openAvatarEditor(in: app)
         XCTAssertTrue(app.buttons["Owl"].firstMatch.waitForExistence(timeout: 15), "Owl stays on the row")
         XCTAssertTrue(app.buttons["Crab"].firstMatch.waitForExistence(timeout: 10), "every character is on the row")
         let shiba = app.buttons["Shiba"].firstMatch

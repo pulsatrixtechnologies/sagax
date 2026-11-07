@@ -3271,10 +3271,13 @@ final class Session: ObservableObject {
         voiceNoteCache.removeAllObjects()
     }
 
-    func voiceOptions() async -> [Voice] {
+    /// The voices the engine serves. `quiet` for a page that only lists
+    /// them: no key yet is an empty list there (the page says Not set), not a
+    /// root alert, which would also close the bot panel the page sits in.
+    func voiceOptions(quiet: Bool = false) async -> [Voice] {
         guard let client else { return [] }
         do { return try await client.voices() }
-        catch { actionError = error.localizedDescription; return [] }
+        catch { if !quiet { actionError = error.localizedDescription }; return [] }
     }
 
     /// Cached voice-note bytes for the transcript bubble, shaped like
@@ -3778,6 +3781,9 @@ final class Session: ObservableObject {
 
     private func openRunTarget(_ target: NotificationTarget, run: RoutineRun) async {
         await openNotification(target)
+        // a chat this launch never opened has no page yet: load it, else the
+        // run's message is never found and the chat lands at its bottom
+        await loadThreadIfNeeded(target.threadId)
         let loaded = state.messages[target.threadId] ?? []
         if let report = RoutineResults.reportMessage(for: run, in: loaded) {
             await jump(to: report.id, inThread: target.threadId)

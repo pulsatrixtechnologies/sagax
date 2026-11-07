@@ -46,6 +46,7 @@ export const DEF_COORDINATE_BOTS = {
       group_id: { type: "string", description: "Optional destination room; omit for this room or, outside a room, your thread with each teammate." },
       bot_ids: { type: "array", items: { type: "string", description: "A teammate's name as your roster prints it, or its id ([id: …]) when the roster or list_bots shows one. A name shared by two reachable teammates is refused: use the id." }, minItems: 1, maxItems: 4, uniqueItems: true },
       message: { type: "string", minLength: 1, maxLength: 4000, description: "Question or task for these teammates; later requests in the same conversation can build on earlier ones. Send separate requests when responsibilities differ." },
+      reason: { type: "string", maxLength: 200, description: "Optional one line for the person about why this goes to them (shown as a chip)." },
       rework: { type: "boolean", description: "True only to send concrete work again to someone whose request already finished or failed: a correction, a re-check or a retry." },
       mode: { type: "string", enum: ["work", "consult"], description: "consult: a question only, allowed to the bot that sent you this work. Default: consult for that bot, else work." },
       relay: { type: "boolean", description: "True when the person only wants this one teammate's own answer passed back (ask it something, give its reply): the reply goes to the person directly, right after the line naming the teammate, and you are not resumed. Leave out when you must combine replies, check the work, decide or continue after it." },
@@ -472,6 +473,7 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
       : typeof canonical.defaultAnswer === "string" ? String(canonical.defaultAnswer).trim() : "";
     const r = await api("/api/internal/coordinate-bots", { method: "POST", body: JSON.stringify({
       groupId: canonical.group_id, botIds: ids, message: canonical.message,
+      ...(typeof canonical.reason === "string" && canonical.reason.trim() ? { reason: canonical.reason.trim().slice(0, 200) } : {}),
       rework: canonical.rework,
       ...(canonical.mode === "work" || canonical.mode === "consult" ? { mode: canonical.mode } : {}),
       ...(canonical.consult === true ? { consult: true } : {}),

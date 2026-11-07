@@ -4,6 +4,8 @@ type RuntimeBot = { id: string; hidden?: boolean; tasks?: Array<{ threadId: stri
 type BotLookup = (id: string) => RuntimeBot | null | undefined;
 type Registration = { botId: string; tokenHash: string; threadId: string };
 export type ExternalRuntimeGrant = { botId: string; threadId: string; tokenHash: string };
+/** The run id an external runtime's roots carry as their requester. */
+export const externalRuntimeRunId = (botId: string, threadId: string): string => `external-runtime:${botId}:${threadId}`;
 const MAX_FILE_BYTES = 1_048_576;
 const ID = /^[\w-]{1,128}$/;
 const fingerprint = (token: string) => createHash("sha256").update(token).digest("hex");

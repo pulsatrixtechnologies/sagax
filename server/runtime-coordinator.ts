@@ -19,6 +19,7 @@ import { importLegacyDelegations, importLegacyHandoffs, type LegacyThreadResolve
 import { openRuntimeStore, type RuntimeStore } from "./runtime/store.ts";
 import { childrenSince, clip, isTerminal, path } from "./runtime/tree.ts";
 import { reservedSlotAdmission, wakeKind } from "./runtime/hold.ts";
+import { externalRuntimeRunId } from "./external-runtime.ts";
 import type { Assignment, EndResult, Mode, Origin, Owner, Reply, Requester, RunInput, RunResult, StatusView, TurnRunner } from "./runtime/types.ts";
 
 /** A teammate's work as one short title: the brief's first line, without
@@ -497,7 +498,7 @@ export class RuntimeCoordinator implements Coordinator {
     // results with check/wait_delegation; nothing resumes a turn here.
     const root = this.runtime.begin({
       origin: { kind: "outside", source: "external_runtime", ref: source.threadId },
-      requester: { kind: "external_runtime", runId: source.threadId, botId: source.botId },
+      requester: { kind: "external_runtime", runId: externalRuntimeRunId(source.botId, source.threadId), botId: source.botId },
       // A room turn's poll root sits in its room, so the room's rules check it.
       assignee: { botId: source.botId, destination: source.groupId ? { kind: "room_thread", threadId: source.threadId, groupId: source.groupId }
         : { kind: "standing_thread", threadId: source.threadId } },

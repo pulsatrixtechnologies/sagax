@@ -117,6 +117,46 @@ function historyRows() {
 }
 const HISTORY = historyRows();
 
+// The V6 usage breakdown (#2612): example figures in the shape the server sends.
+function breakdown(period: string) {
+  const scale = period === "7" ? 0.25 : period === "month" ? 0.3 : 1;
+  const g = (key: string, label: string, turns: number, input: number, output: number, cached: number, cost: number | null, extra: Record<string, unknown> = {}) => ({
+    key, label, turns: Math.round(turns * scale), inputTokens: Math.round(input * scale), outputTokens: Math.round(output * scale),
+    cachedInputTokens: Math.round(cached * scale), costUsd: cost === null ? null : Number((cost * scale).toFixed(2)), ...extra,
+  });
+  const calls = (tool: number, mcp: number, subagent: number) => ({ toolCalls: Math.round(tool * scale), mcpCalls: Math.round(mcp * scale), subagentCalls: Math.round(subagent * scale) });
+  return {
+    from: new Date(NOW - 30 * DAY).toISOString(), to: new Date(NOW).toISOString(), period: period === "month" ? "month" : Number(period), currency: null,
+    totals: { ...g("", "", 151, 290_000, 66_000, 112_000, 9.59), ...calls(212, 64, 9), toolErrors: 3 },
+    byAccount: [
+      g("grok:api", "grok", 58, 120_000, 26_000, 40_000, 3.92, { engine: "grok", access: "api", ...calls(80, 22, 3) }),
+      g("claude:api", "claude", 44, 84_000, 19_000, 36_000, 2.74, { engine: "claude", access: "api", ...calls(61, 20, 4) }),
+      g("claude:subscription", "claude", 29, 54_000, 13_000, 22_000, 1.85, { engine: "claude", access: "subscription", ...calls(46, 14, 2) }),
+      g("openai:api", "openai", 14, 22_000, 6_000, 10_000, 1.08, { engine: "codex", access: "api", ...calls(19, 6, 0) }),
+      g("local", "local", 6, 10_000, 2_000, 4_000, 0, { engine: "local", ...calls(6, 2, 0) }),
+    ],
+    byModel: [
+      g("grok-4", "grok-4", 58, 120_000, 26_000, 40_000, 3.92), g("opus", "opus", 30, 60_000, 14_000, 26_000, 2.2),
+      g("sonnet", "sonnet", 29, 54_000, 13_000, 22_000, 1.85), g("gpt-5", "gpt-5", 14, 22_000, 6_000, 10_000, 1.08),
+      g("haiku", "haiku", 14, 24_000, 5_000, 10_000, 0.54), g("ornith-35b", "ornith-35b", 6, 10_000, 2_000, 4_000, 0),
+    ],
+    bySource: [
+      g("user", "Person", 92, 170_000, 40_000, 70_000, 5.6, calls(130, 40, 6)), g("routine", "Routine", 41, 90_000, 18_000, 30_000, 2.9, calls(60, 18, 2)),
+      g("owner", "Owner", 12, 20_000, 5_000, 8_000, 0.7, calls(16, 4, 1)), g("bot", "Bot", 6, 10_000, 3_000, 4_000, 0.39, calls(6, 2, 0)),
+    ],
+    byPerson: [
+      g("pr_alex", "Alex Example", 70, 130_000, 30_000, 50_000, 4.3, calls(98, 30, 5)), g("owner", "Owner", 53, 110_000, 23_000, 38_000, 3.6, calls(76, 22, 3)),
+      g("pr_sam", "Sam Rivera", 28, 50_000, 13_000, 24_000, 1.69, calls(38, 12, 1)),
+    ],
+    tools: [
+      { tool: "search_tickets", kind: "mcp", mcpServer: "helpdesk", calls: 48, errors: 1, totalMs: 9_200 },
+      { tool: "Read", kind: "builtin", calls: 41, errors: 0, totalMs: 1_100 },
+      { tool: "send_mail", kind: "mcp", mcpServer: "mail", calls: 16, errors: 2, totalMs: 4_400 },
+      { tool: "researcher", kind: "subagent", calls: 9, errors: 0, totalMs: 61_000 },
+    ],
+  };
+}
+
 function analytics(days: number) {
   const rand = rng(days * 7919);
   const series = Array.from({ length: days }, (_, i) => {
@@ -255,6 +295,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === bots) return json({ bot });
   if (path === `${bots}/overview`) return json(overview);
   if (path === `${bots}/history`) return json({ rows: HISTORY, revision: HISTORY.length });
+  if (path === `${bots}/analytics` && search.get("view") === "breakdown") return json(breakdown(search.get("period") ?? "30"));
   if (path === `${bots}/analytics`) return json(analytics([7, 30, 90].includes(Number(search.get("days"))) ? Number(search.get("days")) : 30));
   if (path === `${bots}/skills`) return json({ skills, staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices." }], library: [{ name: "invoice-review", description: "Reviews an invoice line by line." }, { name: "status-digest", description: "Digests a long thread into five lines." }], assignedSkills: ["meeting-notes"] });
   if (path === "/api/org-library/skills") return json({ organization: { name: "Northwind Studio" }, skills: [

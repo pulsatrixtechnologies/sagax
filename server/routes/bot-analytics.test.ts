@@ -13,6 +13,7 @@ import { json, readBody } from "../harness/http.ts";
 import { requiredScope } from "../auth/request-auth.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { appendUsage, flushUsageLedger, type UsageRow } from "../usage/usage-ledger.ts";
+import type { BotUsageBreakdown } from "../../shared/telemetry.ts";
 import { usageViewerOf } from "./usage.ts";
 import type { BotAnalytics } from "../../shared/bot-analytics.ts";
 import { createBotAnalyticsRoutes, type BotAnalyticsRouteDeps } from "./bot-analytics.ts";
@@ -167,5 +168,43 @@ describe("bot analytics API", () => {
     const out = await get(base, "/api/bots/pepper/analytics", "alice");
     expect(out.body.currency).toBeNull();
     expect(out.body.totals.costUsd).toBe(0.01);
+  });
+});
+
+describe("bot usage breakdown (#2612)", () => {
+  type Breakdown = BotUsageBreakdown & { error?: string };
+  const breakdown = async (base: string, query: string, viewer?: string) => {
+    const res = await fetch(`${base}/api/bots/pepper/analytics?view=breakdown${query}`, { headers: viewer ? { "x-viewer": viewer } : {} });
+    return { status: res.status, body: await res.json() as Breakdown };
+  };
+
+  it("takes 7, 30 or month, 30 by default", async () => {
+    const base = await serve();
+    expect((await breakdown(base, "&period=90", "alice")).status).toBe(400);
+    expect((await breakdown(base, "", "alice")).body.period).toBe(30);
+    const month = await breakdown(base, "&period=month", "alice");
+    expect(month.status).toBe(200);
+    expect(month.body.from).toBe("2026-11-01T00:00:00.000Z");
+  });
+
+  it("splits the bot's own turns by account, model, source and person, with names, never ids", async () => {
+    const base = await serve();
+    const { body } = await breakdown(base, "&period=7", "alice");
+    expect(body.totals.turns).toBe(3);
+    expect(body.byAccount.map((group) => group.key)).toEqual(["claude"]);
+    expect(body.byModel.map((group) => group.key)).toEqual(["claude-sonnet-5"]);
+    expect(body.bySource.map((group) => group.key).sort()).toEqual(["routine", "user"]);
+    const people = Object.fromEntries(body.byPerson.map((group) => [group.key, group.label]));
+    expect(people.alice).toBe("Alice Example");
+    // bob has no directory name: no id on screen.
+    expect(people.bob).toBe("");
+    expect(body.currency).toBe("CAD");
+  });
+
+  it("narrows a plain member to their own turns", async () => {
+    const base = await serve();
+    const { body } = await breakdown(base, "&period=30", "bob");
+    expect(body.byPerson.map((group) => group.key)).toEqual(["bob"]);
+    expect((await breakdown(base, "&period=30", "mallory")).status).toBe(404);
   });
 });

@@ -158,6 +158,29 @@ export function analyticsRange(days: BotAnalyticsDays, now: number, timeZone = "
   return { from: new Date(from), to: new Date(now), dayKeys };
 }
 
+/** The period of the bot's usage breakdown (#2612): the last 7 or 30 days,
+ * or the current calendar month, cut in the server's zone. */
+export type BotUsagePeriod = 7 | 30 | "month";
+export const BOT_USAGE_PERIODS: readonly BotUsagePeriod[] = [7, 30, "month"];
+
+/** `?period=7|30|month`; absent is 30; anything else is null (400). */
+export function parseUsagePeriod(raw: string | null | undefined): BotUsagePeriod | null {
+  if (raw === null || raw === undefined || raw === "") return 30;
+  if (raw === "month") return "month";
+  const value = Number(raw);
+  return value === 7 || value === 30 ? value : null;
+}
+
+/** [from, now] of a period: midnight of the first day in `timeZone`. */
+export function usagePeriodRange(period: BotUsagePeriod, now: number, timeZone = "UTC"): { from: Date; to: Date } {
+  if (period !== "month") {
+    const { from, to } = analyticsRange(period, now, timeZone);
+    return { from, to };
+  }
+  const today = zonedParts(now, timeZone);
+  return { from: new Date(zonedTimeToUtc(today.year, today.month, 1, 0, 0, timeZone)), to: new Date(now) };
+}
+
 interface Speaker { id: string; name?: string }
 
 function speakerOf(row: BotAnalyticsRow, localPrincipalId: string | undefined): Speaker | null {

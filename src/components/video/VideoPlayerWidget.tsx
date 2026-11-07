@@ -1,17 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { isHlsVideo, type WireVideoWidget } from "../../../shared/video-widget.ts";
+import type { WireVideoWidget } from "../../../shared/video-widget.ts";
 import { t } from "@/lib/i18n";
 import { formatMediaTime, MediaPlayerChrome, type MediaChromeActions, type MediaLiveWindow } from "./MediaPlayerChrome";
-import {
-  ExpiredLinkPanel,
-  HLS_MANIFEST_LOAD_POLICY,
-  probeExpiry,
-  qualityLevelsOf,
-  runStageKey,
-  VideoExtraControls,
-  type QualityLevel,
-} from "./VideoPlayerParts";
+import { ExpiredLinkPanel, runStageKey, VideoExtraControls, type QualityLevel } from "./VideoPlayerParts";
+import { useMediaLoader, useRetryTimer } from "./useMediaLoader";
 import { useSourceFallback } from "./useSourceFallback";
 import { useVideoClocks } from "./useVideoClocks";
 import { useVideoStage } from "./useVideoStage";
@@ -23,23 +16,11 @@ import {
   liveLatency,
   liveWindowOf,
   loadResumePosition,
-  planHlsError,
-  reloadBackoffMs,
-  RELOAD_MAX_ATTEMPTS,
   resumeKey,
   saveResumePosition,
   SEEK_STEP_SECONDS,
   uptimeMs,
 } from "./video-player-state";
-
-type HlsLike = {
-  levels: { height?: number; bitrate?: number }[];
-  currentLevel: number;
-  liveSyncPosition?: number | null;
-  startLoad: () => void;
-  recoverMediaError: () => void;
-  destroy: () => void;
-};
 
 /** Frozen states of the gallery (screenshots), never used in a chat. */
 export type VideoShowcaseState = {
@@ -71,12 +52,8 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
   const videoRef = useRef<HTMLVideoElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const hlsRef = useRef<HlsLike | null>(null);
   const actionsRef = useRef<MediaChromeActions | null>(null);
-  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const attempts = useRef({ network: 0, media: 0 });
   const lastSaved = useRef(0);
-  const resumeApplied = useRef(false);
 
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -103,17 +80,14 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
   const title = video.title ?? video.streamer ?? t("video.untitled");
   const key = useMemo(() => resumeKey(video), [video]);
 
-  const clearRetry = () => {
-    if (retryTimer.current) clearTimeout(retryTimer.current);
-    retryTimer.current = null;
-  };
+  const { clearRetry, scheduleRetry } = useRetryTimer();
 
   const markExpired = useCallback(() => {
     clearRetry();
     setExpired(true);
     setError(null);
     setLoading(false);
-  }, []);
+  }, [clearRetry]);
 
   const showError = useCallback(() => {
     setError(t("video.playbackError"));
@@ -126,87 +100,23 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
     onExpired: markExpired,
   });
 
-  const loadMedia = useCallback(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    clearRetry();
-    // a retry replaces the previous hls.js instance
-    hlsRef.current?.destroy();
-    hlsRef.current = null;
-    attempts.current = { network: 0, media: 0 };
-    resumeApplied.current = false;
-    if (isExpiredAt(video.expiresAt)) {
-      markExpired();
-      return;
-    }
-    setExpired(false);
-    setLoading(true);
-    setError(null);
-    let disposed = false;
-    // Decided from the source before the media proxy hid its extension.
-    const isHls = isHlsVideo({ format: video.format, playbackUrl: src });
-    if (isHls && !el.canPlayType("application/vnd.apple.mpegurl")) {
-      void import("hls.js").then(({ default: Hls }) => {
-        if (disposed || !videoRef.current) return;
-        if (!Hls.isSupported()) {
-          failSource();
-          return;
-        }
-        const instance = new Hls({
-          enableWorker: true,
-          lowLatencyMode: isLive,
-          backBufferLength: isLive ? 300 : 90,
-          manifestLoadPolicy: HLS_MANIFEST_LOAD_POLICY,
-        });
-        hlsRef.current = instance as unknown as HlsLike;
-        instance.loadSource(src);
-        instance.attachMedia(videoRef.current);
-        instance.on(Hls.Events.MANIFEST_PARSED, () => {
-          setLevels(qualityLevelsOf(instance.levels));
-        });
-        instance.on(Hls.Events.FRAG_LOADED, () => {
-          attempts.current = { network: 0, media: 0 };
-        });
-        instance.on(Hls.Events.ERROR, (_event: unknown, data: Parameters<typeof planHlsError>[0]) => {
-          const plan = planHlsError(data, attempts.current);
-          if (plan === "ignore") return;
-          if (plan === "expired") {
-            if (data.fatal || data.details === "manifestLoadError" || data.details === "levelLoadError") {
-              instance.destroy();
-              if (hlsRef.current === (instance as unknown as HlsLike)) hlsRef.current = null;
-              expireOrFallBack();
-            }
-            return;
-          }
-          if (plan === "reload") {
-            const n = attempts.current.network++;
-            setLoading(true);
-            clearRetry();
-            retryTimer.current = setTimeout(() => instance.startLoad(), reloadBackoffMs(n));
-            return;
-          }
-          if (plan === "recover-media") {
-            attempts.current.media++;
-            instance.recoverMediaError();
-            return;
-          }
-          instance.destroy();
-          if (hlsRef.current === (instance as unknown as HlsLike)) hlsRef.current = null;
-          if (!disposed) failSource();
-        });
-      }).catch(() => {
-        if (!disposed) failSource();
-      });
-    } else {
-      el.src = src;
-    }
-    return () => {
-      disposed = true;
-      clearRetry();
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
-    };
-  }, [src, video.playbackUrl, video.format, video.expiresAt, isLive, markExpired, failSource, expireOrFallBack]);
+  const { hlsRef, resumeApplied, loadMedia, onNativeError } = useMediaLoader({
+    videoRef,
+    src,
+    playbackUrl: video.playbackUrl,
+    format: video.format,
+    expiresAt: video.expiresAt,
+    isLive,
+    clearRetry,
+    scheduleRetry,
+    markExpired,
+    failSource,
+    expireOrFallBack,
+    setExpired,
+    setLoading,
+    setError,
+    setLevels,
+  });
 
   /** Retry button: start over from the proxied source. */
   const retry = useCallback(() => {
@@ -245,7 +155,7 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
     const target = sync != null && Number.isFinite(sync) ? sync : window ? window.end - 3 : null;
     if (target != null) el.currentTime = target;
     if (el.paused) void el.play().catch(() => {});
-  }, []);
+  }, [hlsRef]);
 
   const togglePlay = useCallback(() => {
     if (showcase) {
@@ -417,28 +327,7 @@ export const VideoPlayerWidget = memo(function VideoPlayerWidget({
               setVolume(e.currentTarget.volume);
               setMuted(e.currentTarget.muted);
             }}
-            onError={(e) => {
-              if (hlsRef.current) return; // hls.js reports its own errors
-              const el = e.currentTarget;
-              setLoading(true);
-              void probeExpiry(src).then((isExpired) => {
-                if (isExpired) {
-                  expireOrFallBack();
-                  return;
-                }
-                const n = attempts.current.network;
-                if (n < RELOAD_MAX_ATTEMPTS) {
-                  attempts.current.network = n + 1;
-                  clearRetry();
-                  retryTimer.current = setTimeout(() => {
-                    el.src = src;
-                    el.load();
-                  }, reloadBackoffMs(n));
-                  return;
-                }
-                failSource();
-              });
-            }}
+            onError={onNativeError}
           />
         )}
       </div>

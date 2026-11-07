@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { modelSharesOf, triggerLabel, type UsageRow } from "../usage/usage-ledger.ts";
 import { personOf } from "./agent-spans.ts";
 import { spansFileFor } from "./otel.ts";
+import type { UsageStats, UsageStatsGroup, UsageToolStat } from "../../shared/telemetry.ts";
 
 /** What usage-stats needs of a local span line. */
 export interface LocalSpan {
@@ -64,42 +65,7 @@ export function readToolSpans(dataDir: string, range: { from: Date; to: Date }):
   return out;
 }
 
-export interface UsageStatsGroup {
-  key: string;
-  label: string;
-  turns: number;
-  inputTokens: number;
-  outputTokens: number;
-  cachedInputTokens: number;
-  /** Null when no turn of the group was priced. */
-  costUsd: number | null;
-  /** Calls counted from the spans of this group's threads (not on byModel). */
-  toolCalls?: number;
-  mcpCalls?: number;
-  subagentCalls?: number;
-  /** account only: the engine and how the turns were paid. */
-  engine?: string;
-  access?: string;
-}
-
-export interface UsageToolStat {
-  tool: string;
-  kind: "subagent" | "mcp" | "builtin";
-  mcpServer?: string;
-  calls: number;
-  errors: number;
-  totalMs: number;
-}
-
-export interface UsageStats {
-  totals: Omit<UsageStatsGroup, "key" | "label"> & { toolCalls: number; mcpCalls: number; subagentCalls: number; toolErrors: number };
-  byAccount: UsageStatsGroup[];
-  byModel: UsageStatsGroup[];
-  bySource: UsageStatsGroup[];
-  byPerson: UsageStatsGroup[];
-  /** The most called tools, at most 50. */
-  tools: UsageToolStat[];
-}
+export type { UsageStats, UsageStatsGroup, UsageToolStat } from "../../shared/telemetry.ts";
 
 type Acc = UsageStatsGroup & { priced: boolean; threads: Set<string> };
 

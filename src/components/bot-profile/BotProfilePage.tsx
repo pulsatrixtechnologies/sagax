@@ -69,6 +69,7 @@ import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/
 import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
 import { BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
 import { GROUP_LABEL, SUBPAGE_META, SubPage, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
+import { BotUsageBreakdownSection } from "../bot-settings/BotUsageBreakdown";
 
 export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: BotSettingsSection; onClose: () => void }) {
   const { state, dispatch } = useStore();
@@ -498,7 +499,12 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
               className="mt-5 flex min-w-0 flex-col gap-6"
             >
               {tab === "stats"
-                ? block("usage")
+                ? (
+                    <>
+                      <BotUsageBreakdownSection bot={bot} />
+                      {block("usage")}
+                    </>
+                  )
                 : BOT_PROFILE_TAB_GROUPS[tab].map((group) => {
                     const rows = group.pages.filter(subPageShown);
                     if (rows.length === 0) return null;

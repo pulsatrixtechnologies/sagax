@@ -33,8 +33,8 @@ const SORT_LABEL: Record<BotAnalyticsSort, LocaleKey> = {
 const TOP_USERS_SHOWN = 10;
 const PENDING = "...";
 
-const SEGMENTS = "inline-flex shrink-0 rounded-full bg-control p-0.5";
-const segment = (selected: boolean) => cn(
+export const SEGMENTS = "inline-flex shrink-0 rounded-full bg-control p-0.5";
+export const segment = (selected: boolean) => cn(
   "rounded-full px-3 py-1 text-[13px] leading-[18px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none",
   selected ? "bg-hover text-ink" : "text-ink-secondary hover:text-ink",
 );

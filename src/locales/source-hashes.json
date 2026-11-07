@@ -17960,7 +17960,11 @@
       "teamSettings.notSet": "140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
       "teamSettings.teamSaved": "2e2c060c2905e0a6730f4ac68faf497035501d8494094533213e329062054f50",
       "teamSettings.teamSaveFailed": "ab185ca1a477bb2674bd93ac499499933379f15da706481ffebc6714795d2bc7",
-      "teamSettings.saveForTeam": "60a43387f364e91b8715f8bbbe3f61f55245f5c2d1da4ddd9266c6ed6f6702c8"
+      "teamSettings.saveForTeam": "60a43387f364e91b8715f8bbbe3f61f55245f5c2d1da4ddd9266c6ed6f6702c8",
+      "schedule.compact.github": "61b2a90161402354dfe116af5ba014043560109d019b97d44d2816fd9d12f82d",
+      "schedule.sentence.github": "305118e40c0df47817e2e5a63eebb87e93edb150a151ed766c6b7cee3d0da6fb",
+      "schedule.github.anyEvent": "9bc62e3583b0306a6e463163379a28d89c3d25aff296e696e9effe51147a5c13",
+      "schedule.incomingGithub": "3212ad6850c46d8175db6b234d1c4a7672f5f2614d8f392ac3ecba8ca1864c0a"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

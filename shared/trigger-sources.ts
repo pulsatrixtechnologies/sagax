@@ -104,7 +104,7 @@ export const TRIGGER_SOURCES: Record<TriggerSourceType, TriggerSourceDefinition>
       "pr.opened", "pr.updated", "pr.merged", "pr.closed",
       "pr.review_requested", "pr.review_submitted", "pr.review_approved", "pr.review_changes_requested", "pr.review_commented",
       "pr.comment", "pr.review_comment", "pr.thread_resolved", "pr.thread_reopened",
-      "ci.failed", "ci.succeeded", "issue.opened", "issue.assigned", "push", "release.published",
+      "ci.failed", "ci.succeeded", "issue.opened", "issue.labeled", "issue.assigned", "push", "release.published",
     ],
     filters: ["repo", "branch", "label", "sender", "reviewer", "assignee", "keyword"],
     legacyEvents: ["pr.opened", "pr.merged", "pr.closed", "pr.review_requested", "pr.review_submitted", "ci.failed", "ci.succeeded", "issue.opened", "push", "release.published"],

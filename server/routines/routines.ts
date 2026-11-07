@@ -54,6 +54,7 @@ import {
   storedTiming,
   type RoutineWindowTiming,
 } from "../../shared/routine-timing.ts";
+import { cleanGithubEventSchedule, type RoutineGithubEventSchedule } from "../../shared/routine-github.ts";
 import { isRoutineProblemRun, isTriggerSchedule, scheduleHasKnownEnd, type RoutineAccess, type RoutineRetryCause, type RoutineRunHandoff } from "../../shared/routines.ts";
 import type { LimitResetSchedule, LimitResetScheduleInput } from "../../shared/limit-reset.ts";
 import { cleanRoutineAutoPauseAfter, routineAutoPauseDue, type RoutineAutoPause } from "../../shared/routine-auto-pause.ts";
@@ -124,7 +125,8 @@ export type RoutineSchedule =
   /** Runs when an engine's usage limit resets (shared/limit-reset.ts). */
   | LimitResetSchedule
   | { type: "webhook" }
-  | { type: "event"; source: "email" };
+  | { type: "event"; source: "email" }
+  | RoutineGithubEventSchedule;
 
 export type RoutineScheduleInput =
   | Exclude<RoutineSchedule, RoutineIntervalSchedule | LimitResetSchedule>
@@ -906,7 +908,9 @@ function loadAttachments(value: unknown): RoutineContextAttachment[] {
 
 function cloneSchedule(schedule: RoutineSchedule): RoutineSchedule {
   if (schedule.type === "webhook") return { type: "webhook" };
-  if (schedule.type === "event") return { type: "event", source: "email" };
+  if (schedule.type === "event") {
+    return schedule.source === "github" ? cleanGithubEventSchedule(schedule) : { type: "event", source: "email" };
+  }
   if (schedule.type === "once") return { type: "once", at: schedule.at };
   if (schedule.type === "limit_reset") return { type: "limit_reset", engine: schedule.engine, repeat: schedule.repeat, at: schedule.at };
   if (schedule.type === "cron") return { ...schedule };
@@ -1126,6 +1130,7 @@ function parseSchedule(schedule: RoutineScheduleInput, after: number): RoutineSc
   if (schedule?.type === "webhook" || schedule?.type === "event") {
     if (hasTimingInput(schedule)) throw new Error("A trigger routine has no clock");
     if (schedule.type === "webhook") return { type: "webhook" };
+    if (schedule.source === "github") return cleanGithubEventSchedule(schedule);
     if (schedule.source !== "email") throw new Error("Choose a supported schedule");
     return { type: "event", source: "email" };
   }

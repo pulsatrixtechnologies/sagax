@@ -8,6 +8,7 @@ import { plainClock, plainTimeZone, plainWeekdays } from "../../shared/plain-tim
 import { normalizeCronSchedule, nextCronRuns } from "../../shared/routine-schedule.ts";
 import { presentTiming, storedTiming } from "../../shared/routine-timing.ts";
 import { isTriggerSchedule } from "../../shared/routines.ts";
+import { cleanGithubEventSchedule, githubEventScheduleLabel, type RoutineGithubEventSchedule } from "../../shared/routine-github.ts";
 import { newId } from "../contracts.ts";
 import { SELF_ROUTINE_CAP, UNDO_STALE, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
 import { redactSecretsInText } from "../redact.ts";
@@ -107,6 +108,13 @@ const routineToolScheduleSchema = z.discriminatedUnion("type", [
 const routineToolTriggerSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("webhook") }).strict(),
   z.object({ type: z.literal("email") }).strict(),
+  // I3: GitHub events (issue.opened, issue.labeled, pr.opened,
+  // pr.review_requested...) with optional filters (repo, label, branch...).
+  z.object({
+    type: z.literal("github"),
+    events: z.array(z.string().max(80)).max(64).optional(),
+    filters: z.record(z.string(), z.array(z.string().max(200)).max(50)).optional(),
+  }).strict(),
 ]);
 
 /** Fields a create or an update may name. The XOR of schedule and trigger
@@ -209,6 +217,27 @@ const storedCronScheduleSchema = z.object({
     context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "Invalid stored cron schedule" });
   }
 });
+/** A trigger routine started by email or by GitHub events (I3). GitHub
+ * carries its kinds and filters; email carries neither. */
+const storedEventScheduleSchema = z.object({
+  type: z.literal("event"),
+  source: z.enum(["email", "github"]),
+  events: z.array(z.string().max(80)).max(64).optional(),
+  filters: z.record(z.string(), z.array(z.string().max(200)).max(50)).optional(),
+}).strict().superRefine((schedule, context) => {
+  if (schedule.source === "email") {
+    if (schedule.events !== undefined || schedule.filters !== undefined) {
+      context.addIssue({ code: "custom", message: "An email trigger has no events or filters" });
+    }
+    return;
+  }
+  try {
+    cleanGithubEventSchedule(schedule);
+  } catch (error) {
+    context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "Invalid GitHub events" });
+  }
+}).transform((schedule): RoutineGithubEventSchedule | { type: "event"; source: "email" } =>
+  schedule.source === "github" ? cleanGithubEventSchedule(schedule) : { type: "event", source: "email" });
 const storedLimitResetScheduleSchema = z.object({
   type: z.literal("limit_reset"),
   engine: z.string().trim().min(1).max(128),
@@ -235,7 +264,7 @@ const storedScheduleSchema = z.discriminatedUnion("type", [
     ...storedTimingFields,
   }).strict(),
   z.object({ type: z.literal("webhook") }).strict(),
-  z.object({ type: z.literal("event"), source: z.literal("email") }).strict(),
+  storedEventScheduleSchema,
 ]).superRefine((schedule, context) => {
   if (schedule.type !== "interval") return;
   if (schedule.window && intervalWindowMinutes(schedule.window) < schedule.everyMinutes) {
@@ -273,7 +302,7 @@ const storedScheduleChangesSchema = z.discriminatedUnion("type", [
     ...storedTimingFields,
   }).strict(),
   z.object({ type: z.literal("webhook") }).strict(),
-  z.object({ type: z.literal("event"), source: z.literal("email") }).strict(),
+  storedEventScheduleSchema,
 ]).superRefine((schedule, context) => {
   if (schedule.type !== "interval") return;
   if (schedule.window && intervalWindowMinutes(schedule.window) < schedule.everyMinutes) {
@@ -778,8 +807,15 @@ function normalizeScheduleChanges(
   };
 }
 
-function triggerSchedule(trigger: { type: "webhook" } | { type: "email" }): RoutineRequestSchedule {
+function triggerSchedule(trigger: z.infer<typeof routineToolTriggerSchema>): RoutineRequestSchedule {
   if (trigger.type === "webhook") return { type: "webhook" };
+  if (trigger.type === "github") {
+    try {
+      return cleanGithubEventSchedule(trigger);
+    } catch (error) {
+      throw new RoutineRequestError(error instanceof Error ? error.message : "Choose GitHub events");
+    }
+  }
   return { type: "event", source: "email" };
 }
 
@@ -949,7 +985,7 @@ export function asSchedule(schedule: RoutineRequestSchedule, now: number): Routi
     };
   }
   if (schedule.type === "webhook") return { type: "webhook" };
-  if (schedule.type === "event") return { type: "event", source: "email" };
+  if (schedule.type === "event") return schedule.source === "github" ? cleanGithubEventSchedule(schedule) : { type: "event", source: "email" };
   return { type: "daily", time: schedule.time, weekdays: [...schedule.weekdays], ...timingCarry(schedule) };
 }
 
@@ -981,7 +1017,7 @@ function effectiveSchedule(
   if (incoming.type === "cron") return { ...incoming, ...keptTiming(current, incoming) };
   if (incoming.type === "limit_reset") return { ...incoming };
   if (incoming.type === "webhook") return { type: "webhook" };
-  if (incoming.type === "event") return { type: "event", source: "email" };
+  if (incoming.type === "event") return incoming.source === "github" ? cleanGithubEventSchedule(incoming) : { type: "event", source: "email" };
   if (incoming.type !== "interval") {
     return incoming.type === "once"
       ? { type: "once", at: incoming.at }
@@ -1082,6 +1118,9 @@ export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string)
   if (schedule.type === "webhook") {
     return "Trigger: incoming webhook (URL and key are shown to you after approval)";
   }
+  if (schedule.type === "event" && schedule.source === "github") {
+    return `Trigger: GitHub events (${githubEventScheduleLabel(schedule).slice("GitHub: ".length)}); the GitHub webhook URL and secret are shown to you after approval`;
+  }
   if (schedule.type === "event") {
     return "Trigger: incoming email (the mailbox setup is shown to you after approval)";
   }
@@ -1102,6 +1141,7 @@ export function consequenceLine(schedule: RoutineRequestSchedule, continuity = f
     ? ` Starts up to ${schedule.windowEarlyMinutes ?? 0} min early and ${schedule.windowLateMinutes ?? 0} min late.`
     : "";
   if (schedule.type === "webhook") return "Runs when a webhook delivery arrives.";
+  if (schedule.type === "event" && schedule.source === "github") return `Runs on ${githubEventScheduleLabel(schedule)}.`;
   if (schedule.type === "event") return "Runs when email arrives.";
   if (schedule.type === "limit_reset") {
     return schedule.repeat === "every_reset"

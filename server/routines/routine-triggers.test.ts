@@ -13,6 +13,8 @@ import {
 } from "./routine-requests.ts";
 import { RoutineManager } from "./routines.ts";
 import { WebhookManager, type WebhookEvent } from "../triggers/webhooks.ts";
+import { ownedTriggerOf } from "../../shared/routine-github.ts";
+import { createHmac } from "node:crypto";
 
 class MemoryStore implements RoutineRequestStore {
   readonly threads = new Map<string, RoutineRequestMessage[]>();
@@ -73,6 +75,7 @@ function harness() {
       botId: routine.botId,
       runOn: routine.runOn,
       enabled: routine.enabled,
+      ...ownedTriggerOf(routine.schedule).github ? { github: ownedTriggerOf(routine.schedule).github } : {},
     }),
   });
   const webhooks = new WebhookManager({
@@ -112,7 +115,7 @@ function harness() {
         prompt: routine.prompt,
         botId: routine.botId,
         runOn: routine.runOn,
-        kind: routine.schedule.type === "event" ? "email" : "webhook",
+        ...ownedTriggerOf(routine.schedule),
         enabled: routine.enabled,
       });
     },
@@ -132,7 +135,7 @@ function triggerOf(webhooks: WebhookManager, routineId: string) {
 
 async function confirmCreate(
   service: RoutineRequestService,
-  trigger: { type: "webhook" } | { type: "email" },
+  trigger: { type: "webhook" } | { type: "email" } | { type: "github"; events?: string[]; filters?: Record<string, string[]> },
   name: string,
   instructions = "Summarize the delivery.",
   // Most cases below exercise the paused, capturing trigger the creator
@@ -536,5 +539,96 @@ describe("routine webhook and email triggers", () => {
     expect(rotated?.text).toContain("The trigger key was rotated; the owner copies its key in the app.");
     expect(rotated?.text).not.toContain(planted);
     expect(rotated?.text).not.toContain("ownerCopiesKey");
+  });
+});
+
+const hubSign = (body: string, secret: string) => `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+function githubRequest(secret: string, event: string, payload: Record<string, unknown>, delivery: string) {
+  const rawBody = JSON.stringify(payload);
+  return {
+    headers: { "x-hub-signature-256": hubSign(rawBody, secret), "x-github-event": event, "x-github-delivery": delivery },
+    rawBody,
+    query: new URLSearchParams(),
+    now: Date.parse("2026-08-28T10:00:00Z"),
+  };
+}
+const issuePayload = (action: string, repo: string, labels: string[]) => ({
+  action,
+  repository: { full_name: repo },
+  sender: { login: "octocat" },
+  issue: { title: "Crash on save", html_url: `https://github.com/${repo}/issues/9`, body: HOSTILE, labels: labels.map((name) => ({ name })) },
+  ...(action === "labeled" ? { label: { name: labels[labels.length - 1] } } : {}),
+});
+
+describe("routine GitHub event triggers (I3)", () => {
+  const events = ["issue.opened", "issue.labeled", "pr.opened", "pr.review_requested"];
+
+  it("creates a routine on GitHub events whose owned trigger carries the events and filters", async () => {
+    const { service, routines, webhooks } = harness();
+    const { proposed, settled } = await confirmCreate(service, { type: "github", events, filters: { repo: ["acme/api"] } }, "Triage issues", "Triage the issue.", "default");
+    expect(proposed.detail).toContain("Trigger: GitHub events");
+    if (settled.state !== "applied") throw new Error("expected applied");
+    expect(JSON.stringify(settled)).not.toContain("whsec_");
+    const routine = routines.routineById(settled.resultId)!;
+    expect(routine.schedule).toEqual({ type: "event", source: "github", events, filters: { repo: ["acme/api"] } });
+    expect(routine.nextRunAt).toBeNull();
+    const trigger = triggerOf(webhooks, routine.id);
+    expect(trigger).toMatchObject({ enabled: true, source: { type: "github", events, filters: { repo: ["acme/api"] } } });
+    expect(JSON.stringify(trigger)).not.toContain("whsec_");
+    expect(webhooks.revealForRoutine(routine.id)?.secret.startsWith("whsec_")).toBe(true);
+  });
+
+  it("runs the routine on a labeled issue, an opened PR and a review request, and filters other repos", async () => {
+    const { service, routines, webhooks } = harness();
+    const { settled } = await confirmCreate(service, { type: "github", events, filters: { repo: ["acme/api"] } }, "Triage", "Triage the issue.", "default");
+    if (settled.state !== "applied") throw new Error("expected applied");
+    const routine = routines.routineById(settled.resultId)!;
+    const endpoint = triggerOf(webhooks, routine.id).endpointId;
+    const secret = webhooks.revealForRoutine(routine.id)!.secret;
+
+    const labeled = webhooks.receiveSource(endpoint, githubRequest(secret, "issues", issuePayload("labeled", "acme/api", ["bug", "ready"]), "d-labeled"));
+    expect(labeled).toMatchObject({ kind: "delivered", results: [{ duplicate: false }] });
+    const opened = webhooks.receiveSource(endpoint, githubRequest(secret, "issues", issuePayload("opened", "acme/api", []), "d-opened"));
+    expect(opened).toMatchObject({ kind: "delivered", results: [{ duplicate: false }] });
+    const pr = { repository: { full_name: "acme/api" }, sender: { login: "octocat" }, pull_request: { title: "Fix", base: { ref: "main" }, labels: [], html_url: "https://github.com/acme/api/pull/3" } };
+    expect(webhooks.receiveSource(endpoint, githubRequest(secret, "pull_request", { ...pr, action: "opened" }, "d-pr"))).toMatchObject({ kind: "delivered", results: [{ duplicate: false }] });
+    expect(webhooks.receiveSource(endpoint, githubRequest(secret, "pull_request", { ...pr, action: "review_requested", requested_reviewer: { login: "ana" } }, "d-review"))).toMatchObject({ kind: "delivered", results: [{ duplicate: false }] });
+    const elsewhere = webhooks.receiveSource(endpoint, githubRequest(secret, "issues", issuePayload("opened", "other/repo", []), "d-other"));
+    expect(elsewhere).toMatchObject({ kind: "delivered", results: [{ ignored: true }] });
+    expect(webhooks.receiveSource(endpoint, githubRequest("whsec_wrong_secret", "issues", issuePayload("opened", "acme/api", []), "d-bad"))).toMatchObject({ kind: "unauthorized" });
+
+    const runs = routines.listRuns().filter((run) => run.routineId === routine.id);
+    expect(runs).toHaveLength(4);
+    const labeledRunId = labeled.kind === "delivered" ? labeled.results[0]?.runId : undefined;
+    const labeledRun = runs.find((run) => run.id === labeledRunId)!;
+    expect(labeledRun).toBeDefined();
+    expect(labeledRun.prompt).toContain("issue.labeled");
+    expect(labeledRun.prompt).toContain("Triage the issue.");
+    const prompt = labeledRun.prompt ?? "";
+    const fence = prompt.indexOf("[UNTRUSTED");
+    expect(fence).toBeGreaterThan(-1);
+    expect(prompt.slice(0, fence)).not.toContain(HOSTILE);
+    expect(labeledRun.prompt).not.toContain(secret);
+  });
+
+  it("keeps the trigger's events and filters in step when the routine's GitHub schedule changes", async () => {
+    const { service, routines, webhooks } = harness();
+    const { settled } = await confirmCreate(service, { type: "github", events: ["issue.opened"] }, "Issues", "Triage.", "default");
+    if (settled.state !== "applied") throw new Error("expected applied");
+    const routine = routines.routineById(settled.resultId)!;
+    const before = triggerOf(webhooks, routine.id).id;
+    routines.update(routine.id, { schedule: { type: "event", source: "github", events: ["issue.labeled"], filters: { label: ["ready"] } } });
+    const after = triggerOf(webhooks, routine.id);
+    expect(after.id).toBe(before);
+    expect(after.source).toMatchObject({ type: "github", events: ["issue.labeled"], filters: { label: ["ready"] } });
+  });
+
+  it("refuses an event GitHub does not send", async () => {
+    const { service } = harness();
+    await expect(service.propose({
+      botId: "bot-1",
+      threadId: "thread-1",
+      proposal: { action: "create", routine: { name: "Bad", instructions: "x", trigger: { type: "github", events: ["issue.exploded"] } } },
+    })).rejects.toThrow(/GitHub has no event/);
   });
 });

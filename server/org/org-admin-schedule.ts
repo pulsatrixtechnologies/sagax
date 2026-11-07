@@ -2,6 +2,7 @@
 // calendar shows, server side and in the server's time zone): "Every hour",
 // "Every weekday at 09:00", "Custom schedule", "Once on 2026-10-09 14:00".
 import { cronScheduleLabel } from "../../shared/cron-label.ts";
+import { githubEventScheduleLabel } from "../../shared/routine-github.ts";
 import type { RoutineSchedule } from "../routines/routines.ts";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -34,7 +35,7 @@ export function routineScheduleLabel(schedule: RoutineSchedule): string {
       return parts.join(", ");
     }
     case "webhook": return "Incoming webhook";
-    case "event": return "Incoming email";
+    case "event": return schedule.source === "github" ? githubEventScheduleLabel(schedule) : "Incoming email";
     case "limit_reset":
       return schedule.at === null
         ? `When ${schedule.engine} limit resets`

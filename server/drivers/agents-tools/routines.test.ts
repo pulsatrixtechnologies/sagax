@@ -47,3 +47,23 @@ describe("run_routine readiness", () => {
     expect(DEF_RUN_ROUTINE.inputSchema.properties.action.enum).toContain("check");
   });
 });
+
+describe("propose_routine GitHub trigger (I3)", () => {
+  it("forwards a GitHub trigger with its events and filters, and refuses unknown keys", async () => {
+    const api = vi.fn(async (_path: string, _options?: { body?: string }) => ({ state: "applied" }));
+    const context = { botId: "bot", threadId: "thread", client: { api } } as unknown as ToolCallContext;
+    const trigger = { type: "github", events: ["issue.labeled", "pr.review_requested"], filters: { repo: ["acme/api"] } };
+    await callRoutinesTool("propose_routine", { name: "Triage", instructions: "Triage the issue.", trigger }, context);
+    expect(JSON.parse(api.mock.calls[0]![1]!.body as string).routine.trigger).toEqual(trigger);
+    const bad = await callRoutinesTool("propose_routine", { name: "Triage", instructions: "x", trigger: { type: "github", secret: "s" } }, context);
+    expect(bad?.isError).toBe(true);
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers github and the GitHub event kinds in the tool schema", async () => {
+    const { DEF_PROPOSE_ROUTINE } = await import("./routines.ts");
+    const trigger = DEF_PROPOSE_ROUTINE.inputSchema.properties.trigger;
+    expect(trigger.properties.type.enum).toContain("github");
+    expect(trigger.properties.events.items.enum).toEqual(expect.arrayContaining(["issue.opened", "issue.labeled", "pr.opened", "pr.review_requested"]));
+  });
+});

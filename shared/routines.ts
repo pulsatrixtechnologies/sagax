@@ -10,6 +10,7 @@ import type { RoutineWatchPrecheck } from "./routine-watch.ts";
 import type { RoutineCronSchedule } from "./routine-schedule.ts";
 import type { RoutineWindowTiming } from "./routine-timing.ts";
 import type { RoutineAutoPause } from "./routine-auto-pause.ts";
+import type { RoutineGithubEventSchedule } from "./routine-github.ts";
 
 export interface RoutineIntervalWindow {
   start: string;
@@ -34,12 +35,15 @@ export type RoutineSchedule =
   /** Runs when an engine's usage limit resets (shared/limit-reset.ts). */
   | LimitResetSchedule
   | { type: "webhook" }
-  | { type: "event"; source: "email" };
+  | { type: "event"; source: "email" }
+  /** Runs on GitHub events (issue opened or labeled, PR opened, review
+   * requested...), through the routine's own typed GitHub trigger. */
+  | RoutineGithubEventSchedule;
 
 /** A routine that starts from a delivery, never from the clock. */
 export type RoutineTriggerSchedule = Extract<RoutineSchedule, { type: "webhook" | "event" }>;
 
-/** True for a webhook or email trigger. Both shapes have no time, so every
+/** True for a webhook, email or GitHub trigger. Both shapes have no time, so every
  * clock path (the tick, a resume, a label) must handle them before it reads
  * `.time`. */
 export function isTriggerSchedule(
@@ -47,7 +51,7 @@ export function isTriggerSchedule(
 ): schedule is RoutineTriggerSchedule {
   if (!schedule) return false;
   if (schedule.type === "webhook") return true;
-  return schedule.type === "event" && schedule.source === "email";
+  return schedule.type === "event" && (schedule.source === "email" || schedule.source === "github");
 }
 
 export type RoutineScheduleInput =

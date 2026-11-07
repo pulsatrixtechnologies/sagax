@@ -131,6 +131,66 @@ export function primaryPurchaseCard(purchase: PurchaseListing, botName: string, 
   };
 }
 
+/** The bot's mid-call controls (DTMF, transfer, hang up) and the person's
+ * End call on the live card. */
+function liveCallControls(
+  deps: OutboundWiringDeps,
+  calls: OutboundCalls,
+  patchLive: (row: OutboundCallRecord, change: LiveCallPatch) => void,
+) {
+  return {
+    async sendDtmf(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
+      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
+      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+      return sendDtmfLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, digits: args.digits, callId: typeof args.call_id === "string" ? args.call_id : undefined });
+    },
+
+    async transfer(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
+      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
+      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+      return transferLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, to: args.to, callId: typeof args.call_id === "string" ? args.call_id : undefined });
+    },
+
+    async hangUp(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown> = {}): Promise<{ text: string; isError?: boolean }> {
+      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
+      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+      return hangUpLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, callId: typeof args.call_id === "string" ? args.call_id : undefined });
+    },
+
+    /** Person End call on the live card. */
+    async personHangUp(principalId: string, callId: string): Promise<{ ok: true } | { error: string; status: number; code: string }> {
+      const row = calls.get(callId);
+      if (!row || row.principalId !== principalId) return { error: "No such call", status: 404, code: "unknown_call" };
+      if (row.request.mode !== "conversation" || row.status !== "placed" || row.result) {
+        return { error: "This call is not live.", status: 409, code: "not_live" };
+      }
+      const outcome = await hangUpLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio({ threadId: row.threadId, generation: "person-hangup", botId: row.botId }, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId, botId: row.botId, threadId: row.threadId, callId });
+      if (outcome.isError) return { error: outcome.text, status: 502, code: "hangup_failed" };
+      return { ok: true };
+    },
+  };
+}
+
 export function outboundWiring(deps: OutboundWiringDeps) {
   const calls = new OutboundCalls(deps.dataDir, deps.now);
   const consent = new PhoneCallConsentStore(deps.dataDir, deps.now);
@@ -294,55 +354,7 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       return api.placeCall(context, { ...parsed, to });
     },
 
-    async sendDtmf(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
-      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
-      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
-      return sendDtmfLiveCall({
-        calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
-        patchLive,
-        now: deps.now,
-      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, digits: args.digits, callId: typeof args.call_id === "string" ? args.call_id : undefined });
-    },
-
-    async transfer(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
-      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
-      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
-      return transferLiveCall({
-        calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
-        patchLive,
-        now: deps.now,
-      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, to: args.to, callId: typeof args.call_id === "string" ? args.call_id : undefined });
-    },
-
-    async hangUp(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown> = {}): Promise<{ text: string; isError?: boolean }> {
-      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
-      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
-      return hangUpLiveCall({
-        calls,
-        twilio: (callArgs) => deps.twilio(turn, callArgs),
-        patchLive,
-        now: deps.now,
-      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, callId: typeof args.call_id === "string" ? args.call_id : undefined });
-    },
-
-    /** Person End call on the live card. */
-    async personHangUp(principalId: string, callId: string): Promise<{ ok: true } | { error: string; status: number; code: string }> {
-      const row = calls.get(callId);
-      if (!row || row.principalId !== principalId) return { error: "No such call", status: 404, code: "unknown_call" };
-      if (row.request.mode !== "conversation" || row.status !== "placed" || row.result) {
-        return { error: "This call is not live.", status: 409, code: "not_live" };
-      }
-      const outcome = await hangUpLiveCall({
-        calls,
-        twilio: (callArgs) => deps.twilio({ threadId: row.threadId, generation: "person-hangup", botId: row.botId }, callArgs),
-        patchLive,
-        now: deps.now,
-      }, { principalId, botId: row.botId, threadId: row.threadId, callId });
-      if (outcome.isError) return { error: outcome.text, status: 502, code: "hangup_failed" };
-      return { ok: true };
-    },
+    ...liveCallControls(deps, calls, patchLive),
 
     /** Accept or decline the one-time phone-call consent card. */
     resolveConsent(input: { principalId: string; botId: string; threadId: string; requestId: string; allow: boolean }): void {

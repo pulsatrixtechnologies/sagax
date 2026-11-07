@@ -12,95 +12,103 @@ import { fillPluginBot } from "../../shared/bot-act.ts";
 import { CONFIDENTIAL_PEER_REFUSED, confidentialInternalRefusal, mcpConfidentialVerdict } from "../threads/confidential-threads.ts";
 export type Host = Record<string, any>;
 
+/** POST /api/testing/org-library: a test relay of the organization library,
+ * behind its test key. */
+async function runTestingOrgLibrary(host: Host, req: IncomingMessage, res: ServerResponse) {
+  const expected = Buffer.from(process.env.SAGAX_TEST_ORG_LIBRARY_KEY ?? "");
+  const header = req.headers["x-openmausbot-test-org-library"];
+  const actual = Buffer.from(Array.isArray(header) ? "" : String(header ?? ""));
+  if (expected.length < 32 || actual.length !== expected.length || !timingSafeEqual(actual, expected) || !host.orgLibrary) {
+    json(res, 404, { error: "not found" });
+    return true;
+  }
+  const body = await readBody(req);
+  const applied = host.orgLibrary.applyRelay(body?.library ?? null);
+  await host.orgLibrary.settled();
+  json(res, applied.ok ? 200 : 400, { ...applied, report: host.orgLibrary.lastReport() });
+  return true;
+}
+
+/** POST /api/testing/internal-capability: mint a turn capability for a test,
+ * behind its test key. */
+async function runTestingInternalCapability(host: Host, req: IncomingMessage, res: ServerResponse) {
+  const expected = process.env.SAGAX_TEST_INTERNAL_CAPABILITY_KEY ?? "";
+  const actual = Array.isArray(req.headers["x-openmausbot-test-capability"])
+    ? ""
+    : String(req.headers["x-openmausbot-test-capability"] ?? "");
+  const expectedBytes = Buffer.from(expected);
+  const actualBytes = Buffer.from(actual);
+  if (
+    !expected ||
+    actualBytes.length !== expectedBytes.length ||
+    !timingSafeEqual(actualBytes, expectedBytes)
+  ) {
+    json(res, 404, { error: "not found" });
+    return true;
+  }
+  const parsed = z.object({
+    botId: z.string().regex(/^[\w-]{1,128}$/),
+    threadId: z.string().regex(/^[\w-]{1,128}$/),
+    kind: z.enum(["agents", "connectors", "computer", "data"]).default("agents"),
+    depth: z.number().int().min(0).max(host.MAX_COMMS_DEPTH).default(0),
+    skillAuthoring: z.boolean().default(false),
+    // a chat turn's capability, so a test can reach coordinate_bots
+    roomCoordination: z.boolean().default(false),
+    deliversSavedFiles: z.boolean().default(false),
+    // the person whose request this turn is, as a real turn records it
+    // (bot creation judges it, server/bots/bot-creation.ts)
+    speakerPrincipalId: z.string().regex(/^[\w:.@-]{1,200}$/).optional()
+  }).strict().safeParse(await readBody(req));
+  if (!parsed.success || !host.store.bot(parsed.data.botId)) {
+    json(res, 400, { error: "invalid test capability" });
+    return true;
+  }
+  // A turn running in that thread lends the capability its own
+  // generation and root: what the capability does belongs to that turn,
+  // whose end settles it (a card it leaves parks that root). Otherwise
+  // the capability stands in for a turn of that bot in that thread, so
+  // the hand-offs it makes need what any turn's have: the turn's root,
+  // begun as a person's turn there would begin it, and ended when a
+  // newer generation revokes it (standInRoots).
+  const live = host.activeInternalGenerationByThread.get(parsed.data.threadId);
+  const liveRoot = live ? host.coordinator.node(live) : undefined;
+  const generation = live && liveRoot && !host.ENDED.has(liveRoot.status) && !host.standInRoots.has(live)
+    ? live : host.beginInternalCapabilityGeneration(parsed.data.threadId);
+  if (generation !== live) {
+    host.standInRoots.add(generation);
+    const minted = host.store.bot(parsed.data.botId)!;
+    const threadId = parsed.data.threadId;
+    const owner = host.connectorThread(minted.id, threadId);
+    const latestUser = [...host.store.activePath(threadId)].reverse().find((message) => message.role === "user" && message.kind === "text" && message.text);
+    const opener = host.handoffOpener({ botId: minted.id, threadId }, threadId);
+    host.coordinator.beginTurn({
+      id: generation, address: { botId: minted.id, threadId, ...(owner?.group ? { groupId: owner.group.id } : {}) }, brief: latestUser?.text ?? "",
+      level: owner?.group ? host.delegatedLevel.roomTurn(minted, threadId, undefined) : host.approvalModeForTurn(host.store.projectBotForTask(minted.id, threadId) ?? minted, false, threadId),
+      ...(opener ? { opener } : {}), origin: host.requestWorkOrigin({ line: latestUser }), ...host.personForJoin(threadId),
+    });
+  }
+  const { deliversSavedFiles, speakerPrincipalId, ...grants } = parsed.data;
+  if (speakerPrincipalId) {
+    host.turnSpeakers.set(parsed.data.threadId, { origin: "person", principalId: speakerPrincipalId });
+    host.turnSpeakerPrincipals.set(parsed.data.threadId, speakerPrincipalId);
+  }
+  const token = host.mintInternalCapability({
+    ...grants,
+    ...(deliversSavedFiles ? { deliversSavedFiles } : {}),
+    generation,
+    createdBots: 0,
+    openedThreads: 0
+  });
+  json(res, 201, { token });
+  return true;
+}
+
 export function createRunInternal(getHost: () => Host): any {
 async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, auth: RequestAuth) {
   const host = getHost();
 
-  if (method === "POST" && path === "/api/testing/org-library") {
-    const expected = Buffer.from(process.env.SAGAX_TEST_ORG_LIBRARY_KEY ?? "");
-    const header = req.headers["x-openmausbot-test-org-library"];
-    const actual = Buffer.from(Array.isArray(header) ? "" : String(header ?? ""));
-    if (expected.length < 32 || actual.length !== expected.length || !timingSafeEqual(actual, expected) || !host.orgLibrary) {
-      json(res, 404, { error: "not found" });
-      return true;
-    }
-    const body = await readBody(req);
-    const applied = host.orgLibrary.applyRelay(body?.library ?? null);
-    await host.orgLibrary.settled();
-    json(res, applied.ok ? 200 : 400, { ...applied, report: host.orgLibrary.lastReport() });
-    return true;
-  }
-  if (method === "POST" && path === "/api/testing/internal-capability") {
-    const expected = process.env.SAGAX_TEST_INTERNAL_CAPABILITY_KEY ?? "";
-    const actual = Array.isArray(req.headers["x-openmausbot-test-capability"])
-      ? ""
-      : String(req.headers["x-openmausbot-test-capability"] ?? "");
-    const expectedBytes = Buffer.from(expected);
-    const actualBytes = Buffer.from(actual);
-    if (
-      !expected ||
-      actualBytes.length !== expectedBytes.length ||
-      !timingSafeEqual(actualBytes, expectedBytes)
-    ) {
-      json(res, 404, { error: "not found" });
-      return true;
-    }
-    const parsed = z.object({
-      botId: z.string().regex(/^[\w-]{1,128}$/),
-      threadId: z.string().regex(/^[\w-]{1,128}$/),
-      kind: z.enum(["agents", "connectors", "computer", "data"]).default("agents"),
-      depth: z.number().int().min(0).max(host.MAX_COMMS_DEPTH).default(0),
-      skillAuthoring: z.boolean().default(false),
-      // a chat turn's capability, so a test can reach coordinate_bots
-      roomCoordination: z.boolean().default(false),
-      deliversSavedFiles: z.boolean().default(false),
-      // the person whose request this turn is, as a real turn records it
-      // (bot creation judges it, server/bots/bot-creation.ts)
-      speakerPrincipalId: z.string().regex(/^[\w:.@-]{1,200}$/).optional()
-    }).strict().safeParse(await readBody(req));
-    if (!parsed.success || !host.store.bot(parsed.data.botId)) {
-      json(res, 400, { error: "invalid test capability" });
-      return true;
-    }
-    // A turn running in that thread lends the capability its own
-    // generation and root: what the capability does belongs to that turn,
-    // whose end settles it (a card it leaves parks that root). Otherwise
-    // the capability stands in for a turn of that bot in that thread, so
-    // the hand-offs it makes need what any turn's have: the turn's root,
-    // begun as a person's turn there would begin it, and ended when a
-    // newer generation revokes it (standInRoots).
-    const live = host.activeInternalGenerationByThread.get(parsed.data.threadId);
-    const liveRoot = live ? host.coordinator.node(live) : undefined;
-    const generation = live && liveRoot && !host.ENDED.has(liveRoot.status) && !host.standInRoots.has(live)
-      ? live : host.beginInternalCapabilityGeneration(parsed.data.threadId);
-    if (generation !== live) {
-      host.standInRoots.add(generation);
-      const minted = host.store.bot(parsed.data.botId)!;
-      const threadId = parsed.data.threadId;
-      const owner = host.connectorThread(minted.id, threadId);
-      const latestUser = [...host.store.activePath(threadId)].reverse().find((message) => message.role === "user" && message.kind === "text" && message.text);
-      const opener = host.handoffOpener({ botId: minted.id, threadId }, threadId);
-      host.coordinator.beginTurn({
-        id: generation, address: { botId: minted.id, threadId, ...(owner?.group ? { groupId: owner.group.id } : {}) }, brief: latestUser?.text ?? "",
-        level: owner?.group ? host.delegatedLevel.roomTurn(minted, threadId, undefined) : host.approvalModeForTurn(host.store.projectBotForTask(minted.id, threadId) ?? minted, false, threadId),
-        ...(opener ? { opener } : {}), origin: host.requestWorkOrigin({ line: latestUser }), ...host.personForJoin(threadId),
-      });
-    }
-    const { deliversSavedFiles, speakerPrincipalId, ...grants } = parsed.data;
-    if (speakerPrincipalId) {
-      host.turnSpeakers.set(parsed.data.threadId, { origin: "person", principalId: speakerPrincipalId });
-      host.turnSpeakerPrincipals.set(parsed.data.threadId, speakerPrincipalId);
-    }
-    const token = host.mintInternalCapability({
-      ...grants,
-      ...(deliversSavedFiles ? { deliversSavedFiles } : {}),
-      generation,
-      createdBots: 0,
-      openedThreads: 0
-    });
-    json(res, 201, { token });
-    return true;
-  }
+  if (method === "POST" && path === "/api/testing/org-library") return runTestingOrgLibrary(host, req, res);
+  if (method === "POST" && path === "/api/testing/internal-capability") return runTestingInternalCapability(host, req, res);
   // ── internal peer-agent comms (localhost + bot capability only) ───
   // The agents-proxy (spawned inside a bot's agent process) calls these to
   // discover peers and hand a message to one. Not part of the public API.

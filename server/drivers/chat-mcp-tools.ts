@@ -373,13 +373,9 @@ function toolTier(entry: { hostTool: boolean; agents: boolean; directory: boolea
   return 2;
 }
 
-/** A tool result over 50KB is saved whole in `resultFolder`, the bot's working folder, after `scrub` masks secrets (see savedOrBounded).
- * A warm mount is reused: `bindResultSave` points the next turn's results at that turn's folder and mask.
- * Under `schemaProfile` the model reads each tool's schema fitted to its provider; calls are still checked against the full one. */
-export async function mountChatTools(integrations: SendTurnInput["integrations"], signal: AbortSignal, computerUse = false, toolScope?: ToolScope, callTimeoutMs: number = DEFAULT_CALL_MS, toolLimit: number = DEFAULT_TOOL_LIMIT, resultFolder?: string, scrub: (text: string) => string = redactSecretsInText,
-  schemaProfile?: ToolSchemaProfile): Promise<ChatToolSession> {
-  let saveFolder = resultFolder;
-  let saveScrub = scrub;
+/** The MCP servers a chat turn mounts under its tool scope: the harness's
+ * own (computer, browser, agents, data, messages), then the person's. */
+function chatMcpServers(integrations: SendTurnInput["integrations"], computerUse: boolean, toolScope: ToolScope | undefined) {
   const parsed = parseToolScope(toolScope);
   if (!parsed.ok) throw new Error(parsed.error);
   const scope = parsed.scope;
@@ -403,6 +399,17 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     servers.push([name, { command: stdio.command, args: stdio.args ?? [], env: stdio.env ?? {} }]);
   }
   if (servers.length > 32) throw new Error("MCP server count exceeds the 32-server limit");
+  return { scope, servers, searchable, besideBrowser };
+}
+
+/** A tool result over 50KB is saved whole in `resultFolder`, the bot's working folder, after `scrub` masks secrets (see savedOrBounded).
+ * A warm mount is reused: `bindResultSave` points the next turn's results at that turn's folder and mask.
+ * Under `schemaProfile` the model reads each tool's schema fitted to its provider; calls are still checked against the full one. */
+export async function mountChatTools(integrations: SendTurnInput["integrations"], signal: AbortSignal, computerUse = false, toolScope?: ToolScope, callTimeoutMs: number = DEFAULT_CALL_MS, toolLimit: number = DEFAULT_TOOL_LIMIT, resultFolder?: string, scrub: (text: string) => string = redactSecretsInText,
+  schemaProfile?: ToolSchemaProfile): Promise<ChatToolSession> {
+  let saveFolder = resultFolder;
+  let saveScrub = scrub;
+  const { scope, servers, searchable, besideBrowser } = chatMcpServers(integrations, computerUse, toolScope);
   const clients: ChatMcpClient[] = [];
   // Only a server the person configured is skipped when it cannot mount; the
   // harness's own servers (browser, computer, agents, data) still

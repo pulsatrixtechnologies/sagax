@@ -53,6 +53,19 @@ import type { useBotSettingsDerived } from "./useBotSettingsDerived";
 import { useBotEditor } from "./BotEditorContext";
 import { readableError } from "@/lib/plain-error";
 
+export type PermissionsPart = "all" | "approval" | "beforeActing" | "actsAlone" | "rules" | "advanced";
+type PermissionsPiece =
+  | "approval" | "contact" | "ownerRules" | "proactive" | "pageTarget" | "recipients" | "drafts" | "memes"
+  | "customRules" | "primary" | "loopGuard" | "hooks" | "toolAccess" | "parallel" | "fold";
+/** Each piece of the section lives in exactly one V6 sub-page (one option, one place). */
+export const PERMISSIONS_PARTS: Readonly<Record<Exclude<PermissionsPart, "all">, readonly PermissionsPiece[]>> = {
+  approval: ["approval"],
+  beforeActing: ["approval", "ownerRules"],
+  actsAlone: ["proactive", "pageTarget", "recipients", "drafts", "memes"],
+  rules: ["customRules"],
+  advanced: ["primary", "contact", "loopGuard", "hooks", "toolAccess", "parallel", "fold"],
+};
+
 export function PermissionsSection({
   bot,
   derived,
@@ -61,8 +74,13 @@ export function PermissionsSection({
   bot: Bot;
   derived: ReturnType<typeof useBotSettingsDerived>;
   /** "approval": the approval level row alone, with its warnings (the bot
-   * creation wizard's Rules step, 2026-10-26). */
-  part?: "all" | "approval";
+   * creation wizard's Rules step, 2026-10-26). The bot page's V6 sub-pages
+   * (#2612) each show one share of the rest: "beforeActing" (the level and
+   * the owner's per-action rules), "actsAlone" (proactive,
+   * publish target, recipients, drafts, memes), "rules" (custom and role
+   * rules), "advanced" (Primary Bot, contacting other bots, loop guard, hooks, tool access,
+   * parallel and turn limits, the folded command list and outbound). */
+  part?: PermissionsPart;
 }) {
   const advanced = useAdvancedMode();
   const plainSurface = useSettingsSurface() === "plain";
@@ -167,25 +185,31 @@ export function PermissionsSection({
   // Making a saved bot primary is in the bot's "..." menu (BotActionsMenu);
   // this pane shows the role only while the bot holds it (to leave it and
   // pick the teams it coordinates), and on a draft.
-  const only = part === "approval";
+  const inPart = (piece: PermissionsPiece) => part === "all" || PERMISSIONS_PARTS[part].includes(piece);
   // one Primary Bot per person: never set on several bots at once
-  const showPrimaryUi = !only && !bulk && advanced && showPrimary && (draft || Boolean(bot.chiefOfStaff));
-  const showContactUi = !only && advanced && showContact;
-  const showOutboundUi = !only && advanced && showOutbound;
+  const showPrimaryUi = inPart("primary") && !bulk && advanced && showPrimary && (draft || Boolean(bot.chiefOfStaff));
+  const showContactUi = inPart("contact") && advanced && showContact;
+  const showOutboundUi = inPart("fold") && advanced && showOutbound;
   // 2026-10-21 (parité 1C): who it writes to without a card
-  const showRecipientsUi = !only && advanced && !draft && canEditBotField(state.config, bot, "allowedRecipients");
-  const showDrafts = !only && advanced && !draft && canEditBotField(state.config, bot, "emailDrafts");
-  const showMemeReplies = !only && advanced && !draft && canEditBotField(state.config, bot, "memeReplies");
-  const showLoopGuard = !only && advanced && !draft && canEditBotField(state.config, bot, "loopGuard");
-  const showHooks = !only && !draft && canEditBotField(state.config, bot, "allowedRecipients");
+  const showRecipientsUi = inPart("recipients") && advanced && !draft && canEditBotField(state.config, bot, "allowedRecipients");
+  const showDrafts = inPart("drafts") && advanced && !draft && canEditBotField(state.config, bot, "emailDrafts");
+  const showMemeReplies = inPart("memes") && advanced && !draft && canEditBotField(state.config, bot, "memeReplies");
+  const showLoopGuard = inPart("loopGuard") && advanced && !draft && canEditBotField(state.config, bot, "loopGuard");
+  const showHooks = inPart("hooks") && !draft && canEditBotField(state.config, bot, "allowedRecipients");
   // the owner always manages their own bot's permission mode and rules
-  const showOwnerPermissions = !only && !draft && viewerOwnsBot(state.config, bot);
+  const ownsBot = !draft && viewerOwnsBot(state.config, bot);
+  const showOwnerPermissions = inPart("ownerRules") && ownsBot;
+  const showCustomRules = inPart("customRules") && ownsBot;
   // 2026-10-15: this bot's tool access and parallel conversations (they were
   // Settings > General > Advanced for every bot). Owner or admin; the server
   // checks the same (server/routes/bot-runtime-settings.ts).
-  const showToolAccess = !only && advanced && !draft && canEditBotField(state.config, bot, "toolScope");
-  const showParallel = !only && advanced && !draft && canEditBotField(state.config, bot, "maxConcurrentThreads");
-  if (!showPrimaryUi && !showApproval && !showContactUi && !showRecipientsUi && !showDrafts && !showMemeReplies && !showLoopGuard && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
+  const showToolAccess = inPart("toolAccess") && advanced && !draft && canEditBotField(state.config, bot, "toolScope");
+  const showParallel = inPart("parallel") && advanced && !draft && canEditBotField(state.config, bot, "maxConcurrentThreads");
+  const showApprovalRow = showApproval && inPart("approval");
+  const showProactive = showApproval && advanced && inPart("proactive");
+  const showPageTarget = showApproval && advanced && inPart("pageTarget") && !draft && canEditBotField(state.config, bot, "pageTargetDefault");
+  const showFold = !draft && advanced && inPart("fold") && (showApproval || showOutboundUi);
+  if (!showPrimaryUi && !showApprovalRow && !showProactive && !showPageTarget && !showFold && !showCustomRules && !showContactUi && !showRecipientsUi && !showDrafts && !showMemeReplies && !showLoopGuard && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
 
   const approvalSelector = showApproval && (
     <ApprovalModeSelector
@@ -204,9 +228,9 @@ export function PermissionsSection({
       onManageCommandAllowlist={advanced && !draft && ownerOrAdmin === true ? () => setCommandAllowlistTarget({ botId: bot.id, botName: bot.name }) : undefined}
     />
   );
-  const approvalRows = (showApproval || showContactUi || showRecipientsUi || showHooks || showDrafts || showLoopGuard) ? (
+  const approvalRows = (showApprovalRow || showProactive || showPageTarget || showContactUi || showRecipientsUi || showHooks || showDrafts || showMemeReplies || showLoopGuard) ? (
     <>
-      {showApproval && (
+      {showApprovalRow && (
         <DescribedRow
           label={t("botPanel.permissions.approval")}
           help={draft && !bulk ? t("botPanel.permissions.approvalDraft") : t("botPanel.permissions.approvalHelp")}
@@ -224,12 +248,12 @@ export function PermissionsSection({
           {advanced && approvalSelector}
         </DescribedRow>
       )}
-      {showApproval && approvalNotice && bot.busy && (
+      {showApprovalRow && approvalNotice && bot.busy && (
         <div role="alert" data-approval-notice="" className={cn("mt-2 text-[12px] text-danger", plainSurface && "px-4 pb-2")}>{approvalNotice}</div>
       )}
       {/* 2026-10-28: what the open conversation really runs at, when it is
           not this setting, with why and the way back (server-derived). */}
-      {showApproval && !draft && bot.approvalApplied && (
+      {showApprovalRow && !draft && bot.approvalApplied && (
         <AppliedLevelNote
           setting={approvalMode}
           applied={bot.approvalApplied}
@@ -239,7 +263,7 @@ export function PermissionsSection({
           } : undefined}
         />
       )}
-      {showApproval && advanced && !only && (
+      {showProactive && (
         <DescribedRow
           label={t("botPanel.permissions.proactive")}
           help={t("botPanel.permissions.proactiveHelp")}
@@ -256,7 +280,7 @@ export function PermissionsSection({
         </DescribedRow>
       )}
       {/* #2048: remembered publish target (page / artifact surface). */}
-      {showApproval && advanced && !only && !draft && canEditBotField(state.config, bot, "pageTargetDefault") && (
+      {showPageTarget && (
         <DescribedRow
           label={t("botPanel.permissions.pageTarget")}
           help={t("botPanel.permissions.pageTargetHelp")}
@@ -388,12 +412,12 @@ export function PermissionsSection({
           contacting other bots, then the owner's rules (OwnerPermissionsCard). */}
       {showOwnerPermissions
         ? <OwnerPermissionsCard key={bot.id} bot={bot} leading={approvalRows} />
-        : approvalRows && <SettingsGroup title={t("botPanel.permissions.approvals")} groupId="approvals">{approvalRows}</SettingsGroup>}
+        : approvalRows && <SettingsGroup title={t(part === "actsAlone" ? "botProfile.v6.group.actsAlone" : part === "advanced" ? "botProfile.v6.group.behaviour" : "botPanel.permissions.approvals")} groupId="approvals">{approvalRows}</SettingsGroup>}
 
       {/* 2026-10-16: the person's custom rules, in their own words */}
-      {showOwnerPermissions && <CustomRulesCard key={`custom-rules:${bot.id}`} bot={bot} />}
+      {showCustomRules && <CustomRulesCard key={`custom-rules:${bot.id}`} bot={bot} />}
       {/* 2026-11-05: the owner's "Toujours ainsi" role rules (visible roles) */}
-      {showOwnerPermissions && <RoleRulesCard key={`role-rules:${bot.id}`} botId={bot.id} />}
+      {showCustomRules && <RoleRulesCard key={`role-rules:${bot.id}`} botId={bot.id} />}
 
       {showToolAccess && <BotToolAccess key={`tools:${bot.id}`} bot={bot} />}
       {showParallel && <BotParallelSettings key={`parallel:${bot.id}`} bot={bot} />}
@@ -407,7 +431,7 @@ export function PermissionsSection({
       {/* The command list (also in the approval menu) and sending on your
           behalf: folded. #1169: no "apply Full to every thread" any more:
           every thread follows the bot's level, always. */}
-      {!draft && advanced && !only && (showApproval || showOutboundUi) && <AdvancedFold id="permissions">
+      {showFold && <AdvancedFold id="permissions">
         {showApproval && ownerOrAdmin === true && <button
           type="button"
           className={cn(PILL, "self-start")}

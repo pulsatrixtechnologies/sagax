@@ -84,7 +84,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 });
 
 const { PersonaEditorModal } = await import("./PersonaEditorModal");
-const { BOT_PROFILE_TABS, BOT_PROFILE_TAB_SECTIONS, KNOWLEDGE_SECTIONS, botProfileTabFor, personaCategoryForSection } = await import("@/lib/persona-sections");
+const { BOT_PROFILE_TABS, BOT_PROFILE_SUBPAGE_SECTIONS, KNOWLEDGE_SECTIONS, botProfileSubPageFor, botProfileTabFor, personaCategoryForSection } = await import("@/lib/persona-sections");
 
 const bot = {
   id: "pepper", threadId: "t", name: "Pepper", title: "Research", description: "Finds sources.", notifications: true,
@@ -129,8 +129,11 @@ const bodiesOf = (html: string) => [...html.matchAll(/data-section-body="(\w+)"/
 const selectedTab = (html: string) => /data-bot-profile-tab-current="(\w+)"/.exec(html)?.[1];
 const tabsOf = (html: string) => [...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1]);
 
-const TABS_ALL = ["general", "knowledge", "tools", "activity", "analytics"];
-const TABS_SIMPLE = ["general", "knowledge", "tools"];
+const TABS_ALL = ["general", "knowledge", "stats"];
+const TABS_SIMPLE = ["general", "knowledge"];
+// The V6 page (#2612): the sub-page a link opens, and the rows of a tab.
+const subPageOf = (html: string) => /data-bot-profile-subpage-current="(\w+)"/.exec(html)?.[1];
+const rowsOf = (html: string) => [...html.matchAll(/data-bot-profile-subpage-open="(\w+)"/g)].map((match) => match[1]);
 /** The index of a marker in the page, -1 when absent. */
 const at = (html: string, marker: string) => html.indexOf(marker);
 
@@ -140,7 +143,7 @@ describe("bot profile page shell", () => {
     expect(html).toContain('data-bot-profile-placement="main"');
     expect(html).not.toContain("data-detail-panel");
     expect(html).toContain('data-bot-profile-visibility="private"');
-    expect(html).toContain("data-slack-logo");
+    expect(render("slack")).toContain("data-slack-logo");
     expect(html).toContain("data-bot-profile-page");
     expect(html).not.toContain('aria-modal="true"');
     expect(html).toContain('data-bot-profile-banner=""');
@@ -149,10 +152,11 @@ describe("bot profile page shell", () => {
     expect(tabsOf(html)).toEqual(TABS_ALL);
     expect(BOT_PROFILE_TABS).toEqual(TABS_ALL);
     expect(html).toContain('role="tablist"');
-    for (const label of [">General<", ">Knowledge<", ">Model &amp; tools<", ">Activity<", ">Analytics<", ">Appearance"]) expect(html).toContain(label);
-    // no chevron rows of settings, no Settings fold, no identity card of facts
+    for (const label of [">General<", ">Knowledge<", ">Stats<", ">Appearance"]) expect(html).toContain(label);
+    // V6: General is rows under grey labels, each opening its sub-page; no Settings fold, no identity card of facts
     expect(html).not.toContain("data-bot-profile-settings-toggle");
-    expect(html).not.toContain(">Settings<");
+    expect(rowsOf(html)).toEqual(["personality", "model", "beforeActing", "channels", "sharing", "accounts", "rules", "actsAlone", "voice", "advanced", "versions"]);
+    for (const label of [">Settings<", ">Channels<", ">Bot accounts<", ">More<"]) expect(html).toContain(label);
     expect(html).not.toContain(">Identity<");
     expect(selectedTab(html)).toBe("general");
     expect(html).toContain('aria-label="Close"');
@@ -179,7 +183,7 @@ describe("bot profile page shell", () => {
     // the description, edited in place
     expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*>Finds sources\.<\/textarea>/);
     // each tab is a panel of ONE column (JC 2026-11-06: no two-column grid)
-    for (const tab of TABS_ALL) {
+    for (const tab of ["general"]) {
       const panel = html.slice(at(html, `id="bot-profile-panel-${tab}"`), at(html, `id="bot-profile-panel-${tab}"`) + 400);
       expect(panel).toContain('role="tabpanel"');
       expect(panel).toContain("flex min-w-0 flex-col gap-6");
@@ -213,7 +217,7 @@ describe("bot profile page shell", () => {
       expect(html).not.toContain(marker);
     }
     for (const word of [">Generate<", ">Upload<", ">Reset<", ">Randomize<"]) expect(html).not.toContain(word);
-    // straight from the description to the General / Knowledge / Model & tools / Activity tabs
+    // straight from the description to the General / Knowledge / Stats tabs
     const description = at(html, 'data-bot-profile-description=""');
     const tabs = at(html, 'data-bot-profile-tabs=""');
     expect(description).toBeGreaterThan(0);
@@ -258,7 +262,7 @@ describe("bot profile page shell", () => {
     // nothing lost under it: who sees it, the description (the colour lives in Appearance > Color)
     for (const marker of ["data-bot-profile-audience", 'data-bot-profile-description=""']) expect(at(html, marker)).toBeGreaterThan(toggle);
     // the column a reading width (820px at most, one column) with a 16px gutter on a phone
-    expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[820px\] flex-col px-4 pb-10 sm:px-6"/);
+    expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[760px\] flex-col px-4 pb-10 sm:px-6"/);
   });
 
   it("regression #2313: X and Private / Shared sit on a bar above the scroll, never scrolled away", () => {
@@ -279,8 +283,9 @@ describe("bot profile page shell", () => {
   it("names the tabs, the header and the channels in French", () => {
     setLocale("fr");
     const html = render("overview");
-    for (const label of [">Général<", ">Connaissances<", ">Modèle et outils<", ">Activité<", ">Analytique<", ">Apparence", ">Canaux<", ">Comptes du bot<", ">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
-    expect(html).not.toContain(">Réglages<");
+    for (const label of [">Général<", ">Connaissances<", ">Statistiques<", ">Apparence", ">Réglages<", ">Canaux<", ">Comptes du bot<", ">Plus<", ">Avant d&#x27;agir<", ">Quand il agit seul<"]) expect(html).toContain(label);
+    const channels = render("slack");
+    for (const label of [">Canaux<", ">Courriel<", ">Me joindre<", ">Retour<"]) expect(channels).toContain(label);
   });
 
   it("renders nothing when closed or when the bot is gone", () => {
@@ -290,38 +295,41 @@ describe("bot profile page shell", () => {
     expect(renderToStaticMarkup(createElement(PersonaEditorModal))).toBe("");
   });
 
-  it("opens a link on the tab that holds its section, shown in place", () => {
+  it("opens a link on the sub-page that holds its section, shown in place (V6, #2612)", () => {
     expect(botProfileTabFor("overview")).toBe("general");
     expect(botProfileTabFor("appearance")).toBe("general");
     expect(botProfileTabFor("slack")).toBe("general");
     expect(botProfileTabFor("summary")).toBe("general");
-    expect(botProfileTabFor("soul")).toBe("knowledge");
+    expect(botProfileTabFor("soul")).toBe("general");
+    expect(botProfileTabFor("model")).toBe("general");
+    expect(botProfileTabFor("history")).toBe("general");
     expect(botProfileTabFor("memory")).toBe("knowledge");
-    expect(botProfileTabFor("model")).toBe("tools");
-    expect(botProfileTabFor("history")).toBe("activity");
-    expect(botProfileTabFor("usage")).toBe("analytics");
+    expect(botProfileTabFor("usage")).toBe("stats");
+    expect(botProfileSubPageFor("soul")).toBe("personality");
+    expect(botProfileSubPageFor("memory")).toBe("folder");
+    expect(botProfileSubPageFor("routines")).toBe("routines");
     expect(personaCategoryForSection("routines")).toBeNull();
-    for (const page of ["model", "voice", "usage", "access"] as const) {
-      const html = render(page);
-      const tab = botProfileTabFor(page);
-      expect(selectedTab(html)).toBe(tab);
-      expect(html).toContain(`data-bot-profile-tab="${tab}" aria-selected="true"`);
-      expect(sectionHtml(html, page).open).toBe(true);
-      expect(bodiesOf(sectionHtml(html, page).html)).toEqual([page]);
-      // the tab's other sections are on the same page, as cards
-      for (const id of BOT_PROFILE_TAB_SECTIONS[tab]) expect(sectionsOf(html)).toContain(id);
+    for (const section of ["model", "voice", "access", "soul", "history", "rules", "skills"] as const) {
+      const html = render(section);
+      const page = botProfileSubPageFor(section)!;
+      expect(subPageOf(html), section).toBe(page);
+      expect(html).toContain(`data-bot-profile-subpage="${page}"`);
+      // a sub-page is Back, a title and one line of intro, no tab row
+      expect(html).toContain("data-bot-profile-back");
+      expect(html).not.toContain('role="tablist"');
+      expect(sectionHtml(html, section === "access" ? "access" : section).open).toBe(true);
+      for (const id of BOT_PROFILE_SUBPAGE_SECTIONS[page]) if (id !== "visibility") expect(sectionsOf(html)).toContain(id);
     }
-    const soul = render("soul");
-    expect(selectedTab(soul)).toBe("knowledge");
-    expect(sectionHtml(soul, "soul").open).toBe(true);
-    expect(bodiesOf(sectionHtml(soul, "soul").html)).toEqual(["soul"]);
+    // Stats is a tab of its own, its usage block on the tab
+    const stats = render("usage");
+    expect(selectedTab(stats)).toBe("stats");
+    expect(subPageOf(stats)).toBeUndefined();
+    expect(bodiesOf(sectionHtml(stats, "usage").html)).toEqual(["usage"]);
     // the memory is managed in the Bot folder
     expect(sectionHtml(render("memory"), "files").open).toBe(true);
-    // a link to Who can see it lands on Shared with where only that is offered
-    const visibility = render("visibility");
-    expect(selectedTab(visibility)).toBe("general");
-    expect(sectionHtml(visibility, "sharing").open).toBe(true);
-    expect(sectionsOf(visibility)).not.toContain("visibility");
+    // the Accounts sub-page says when the bot has none
+    fixture.capabilities = { engine: { kind: "claude", label: "Claude Code" }, items: [] };
+    expect(render("access")).toContain("No accounts connected to this bot yet.");
   });
 
   it("draws the top bar's X and Private / Shared from the app's round header control, not a black disc", () => {
@@ -346,8 +354,8 @@ describe("bot profile page shell", () => {
   });
 });
 
-describe("General", () => {
-  it("lists the channels with their state and the bot's accounts, then What it does and Shared with", () => {
+describe("General sub-pages", () => {
+  it("Channels lists the channels with their state; What it can use the engine and accounts; Shared with its summary row", () => {
     fixture.mail = { available: true, address: "pepper@bots.example", enabled: true };
     fixture.reach = { settings: { channels: ["sms"] }, channels: {} };
     fixture.capabilities = {
@@ -357,24 +365,31 @@ describe("General", () => {
         { key: "k2", form: "skill", name: "Summaries", state: "ready", enabled: true, canToggle: true },
       ],
     };
-    const html = render("overview");
-    expect([...html.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1])).toEqual(["slack", "email", "reachMe", "messages", "engine", "account-0", "sharing"]);
-    expect(html).toContain("pepper@bots.example");
-    expect(html).toContain(">Not offered here<");
-    expect(html).toContain('data-bot-profile-action="email"');
-    expect(html).toContain('data-bot-profile-action="reachMe"');
-    expect(html).toContain(">Claude Code<");
-    expect(html).toContain(">Outlook<");
+    const channels = render("slack");
+    expect([...channels.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1])).toEqual(["slack", "email", "reachMe", "messages"]);
+    expect(channels).toContain("pepper@bots.example");
+    expect(channels).toContain(">Not offered here<");
+    expect(channels).toContain('data-bot-profile-action="email"');
+    expect(channels).toContain('data-bot-profile-action="reachMe"');
+    const accounts = render("access");
+    expect(subPageOf(accounts)).toBe("accounts");
+    expect([...accounts.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1])).toEqual(["engine", "account-0"]);
+    expect(accounts).toContain(">Claude Code<");
+    expect(accounts).toContain(">Outlook<");
     // skills are Knowledge's, not an account
-    expect(html).not.toContain(">Summaries<");
-    expect(html).toContain("data-bot-profile-add");
-    expect(html).not.toContain("k1");
-    // What it does: the server's overview of the bot; Shared with under it
-    expect(sectionHtml(html, "summary").open).toBe(true);
-    expect(bodiesOf(sectionHtml(html, "summary").html)).toEqual(["overview"]);
+    expect(accounts).not.toContain(">Summaries<");
+    expect(accounts).toContain("data-bot-profile-add");
+    expect(accounts).not.toContain("k1");
+    expect(bodiesOf(accounts)).toContain("access");
+    // Personality: What it does (the server's overview), then the Soul
+    const personality = render("summary");
+    expect(subPageOf(personality)).toBe("personality");
+    expect(bodiesOf(sectionHtml(personality, "summary").html)).toEqual(["overview"]);
+    expect(at(personality, 'data-bot-profile-section="summary"')).toBeLessThan(at(personality, 'data-bot-profile-section="soul"'));
     // Shared with is a summary row whose Manage opens the top bar's Share
-    // popover (JC 2026-11-06: the people are managed in ONE place); the
-    // people list itself is not drawn on the page
+    // popover (JC 2026-11-06: the people are managed in ONE place)
+    const html = render("sharing");
+    expect(subPageOf(html)).toBe("sharing");
     const sharing = sectionHtml(html, "sharing").html;
     expect(sharing).not.toContain('data-section-body="sharing"');
     expect(sharing).toContain('data-bot-profile-row="sharing"');
@@ -382,73 +397,80 @@ describe("General", () => {
     expect(sharing).toContain('data-bot-profile-share-open=""');
     expect(html.match(/data-bot-profile-share-open=""/g)).toHaveLength(1);
     expect(html.match(/data-bot-profile-share=""/g)).toHaveLength(1);
-    const panel = html.slice(at(html, 'id="bot-profile-panel-general"'), at(html, 'id="bot-profile-panel-knowledge"'));
-    expect(at(panel, 'data-bot-profile-section="summary"')).toBeLessThan(at(panel, 'data-bot-profile-section="sharing"'));
   });
 
   it("shows Slack as managed in Admin where the server offers it, and a Slack link opens it", () => {
     fixture.slackUrl = "https://admin.example/slack";
-    expect(render("overview")).toContain(">Managed in Admin<");
+    expect(render("slack")).toContain(">Managed in Admin<");
     expect(render("overview")).not.toContain('data-section-body="slack"');
     const html = render("slack");
     expect(selectedTab(html)).toBe("general");
+    expect(subPageOf(html)).toBe("channels");
     expect(html).toContain('data-section-body="slack"');
   });
 
   it("says when the accounts are loading and when the bot has none", () => {
-    expect(render("overview")).toContain("Loading accounts");
+    expect(render("access")).toContain("Loading accounts");
     fixture.capabilities = { engine: { kind: "claude", label: "Claude Code" }, items: [] };
-    expect(render("overview")).toContain("No accounts connected to this bot yet.");
+    expect(render("access")).toContain("No accounts connected to this bot yet.");
+  });
+
+  it("each row carries its name, description and value; the permissions and access pieces each live in one sub-page", () => {
+    fixture.state = {};
+    const html = render("overview");
+    for (const id of ["personality", "model", "beforeActing", "sharing", "actsAlone"]) expect(html).toContain(`data-bot-profile-row="page-${id}"`);
+    expect(html).toContain(">Before it acts<");
+    expect(html).toContain(">What it does alone, what it asks<");
+    expect(html).toContain("data-bot-profile-value");
+    // the permissions body sits on Before it acts, When it acts alone, Rules and Advanced, never on the home
+    expect(bodiesOf(html)).not.toContain("permissions");
+    for (const section of ["permissions"] as const) {
+      expect(subPageOf(render(section))).toBe("beforeActing");
+      expect(bodiesOf(render(section))).toEqual(expect.arrayContaining(["permissions"]));
+    }
   });
 });
 
 describe("Knowledge", () => {
-  it("holds Skills, Personality, Rules and the Bot folder as open cards, and links the Memory page", () => {
-    const html = render("skills");
-    expect(selectedTab(html)).toBe("knowledge");
+  it("lists Routines, Skills and the Folder; Skills and the Folder open as sub-pages, the folder links the Memory page", () => {
+    const home = render("skills");
+    expect(selectedTab(home)).toBe("knowledge");
+    expect(subPageOf(home)).toBe("skills");
     for (const id of KNOWLEDGE_SECTIONS) {
+      const html = render(id);
       expect(sectionHtml(html, id).open).toBe(true);
       expect(bodiesOf(sectionHtml(html, id).html)).toEqual([id]);
     }
-    expect(html).toContain("data-bot-profile-memory");
-    expect(html).toContain(">Open the Memory page<");
-  });
-
-  it("keeps the whole tab mounted while another is shown, so a draft survives", () => {
-    const html = render("model");
-    expect(selectedTab(html)).toBe("tools");
-    expect(html).toMatch(/id="bot-profile-panel-knowledge" role="tabpanel"[^>]*hidden=""/);
-    expect(bodiesOf(sectionHtml(html, "rules").html)).toEqual(["rules"]);
-    expect(bodiesOf(sectionHtml(html, "files").html)).toEqual(["files"]);
+    const folder = render("files");
+    expect(folder).toContain("data-bot-profile-memory");
+    expect(folder).toContain(">Open the Memory page<");
   });
 });
 
-describe("Model & tools and Activity", () => {
-  it("hold the other sections of the editor as cards, the search behind the magnifier", () => {
-    const html = render("model");
+describe("Stats and Simple mode", () => {
+  it("the search sits behind the magnifier; Usage is the Stats tab's, once on the page", () => {
+    const html = render("overview");
     expect(tabsOf(html)).toEqual(TABS_ALL);
-    for (const id of BOT_PROFILE_TAB_SECTIONS.tools) expect(bodiesOf(sectionHtml(html, id).html)).toEqual([id]);
     // the search opens from its button (Command-F, a slash): closed at rest
     expect(html).toContain('data-bot-profile-search-toggle="" aria-expanded="false"');
     expect(html).not.toContain("data-persona-search");
-    const activity = render("history");
-    expect(selectedTab(activity)).toBe("activity");
-    for (const id of BOT_PROFILE_TAB_SECTIONS.activity) expect(bodiesOf(sectionHtml(activity, id).html)).toEqual([id]);
-    // Usage is Analytics' (JC 2026-11-06), once on the page
-    const analytics = render("usage");
-    expect(selectedTab(analytics)).toBe("analytics");
-    expect(bodiesOf(sectionHtml(analytics, "usage").html)).toEqual(["usage"]);
-    expect(analytics.match(/data-section-body="usage"/g)).toHaveLength(1);
-    expect(sectionsOf(activity)).not.toContain("usage");
+    const versions = render("history");
+    expect(subPageOf(versions)).toBe("versions");
+    expect(bodiesOf(sectionHtml(versions, "history").html)).toEqual(["history"]);
+    expect(sectionsOf(versions)).not.toContain("usage");
+    const stats = render("usage");
+    expect(selectedTab(stats)).toBe("stats");
+    expect(stats.match(/data-section-body="usage"/g)).toHaveLength(1);
   });
 
   it("follows Simple mode", () => {
     fixture.advanced = false;
-    expect(tabsOf(render("model"))).toEqual(TABS_SIMPLE);
+    expect(tabsOf(render("overview"))).toEqual(TABS_SIMPLE);
+    expect(rowsOf(render("overview"))).not.toContain("advanced");
     expect(sectionsOf(render("model"))).not.toContain("worksOn");
-    expect(sectionsOf(render("model"))).not.toContain("access");
     // a link to a hidden setting lands on General
     expect(selectedTab(render("usage"))).toBe("general");
+    expect(subPageOf(render("usage"))).toBeUndefined();
   });
 
   it("offers no Perspicax profile configuration on either server type", () => {
@@ -463,10 +485,9 @@ describe("Model & tools and Activity", () => {
   it("names Rules, Skills and History in French", () => {
     setLocale("fr");
     // Section bodies are mocked, so the names come from the page's own landmarks.
-    const html = render("soul");
-    expect(html).toContain('aria-label="Règles"');
-    expect(html).toContain('aria-label="Compétences"');
-    expect(html).not.toContain(">Skills<");
+    expect(render("rules")).toContain('aria-label="Règles"');
+    expect(render("skills")).toContain('aria-label="Compétences"');
+    expect(render("skills")).not.toContain(">Skills<");
     expect(render("history")).toContain('aria-label="Changements"');
   });
 });
@@ -492,10 +513,10 @@ describe("bot profile for an organization member", () => {
     const history = sectionHtml(render("history", state), "history").html;
     expect(history).not.toContain('data-section-body="history"');
     expect(history).toContain("Only this bot&#x27;s owner or an admin can change this.");
-    expect(tabsOf(render("history", state))).toEqual(TABS_ALL);
+    expect(subPageOf(render("history", state))).toBe("versions");
     // the locked card says so in its own row, not the tab pill
     expect(history).toContain('data-bot-profile-locked=""');
     expect(history).toMatch(/<p role="note" data-persona-locked="" aria-label="Read only"/);
-    expect(render("history", state)).not.toMatch(/data-bot-profile-tab="activity"[^>]*>Activity<svg/);
+    expect(render("overview", state)).not.toMatch(/data-bot-profile-tab="general"[^>]*>General<svg/);
   });
 });

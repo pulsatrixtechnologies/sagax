@@ -14,7 +14,14 @@ import type { Action } from "@/state/store";
 import { setLocale, t } from "@/lib/i18n";
 import { setAdvancedMode } from "@/lib/interface-mode";
 import { editBotFixture } from "@/gallery/edit-bot-api";
-import { BOT_PROFILE_TABS, BOT_PROFILE_TAB_SECTIONS } from "@/lib/persona-sections";
+import {
+  BOT_PROFILE_SUBPAGES,
+  BOT_PROFILE_SUBPAGE_SECTIONS,
+  BOT_PROFILE_TABS,
+  botProfileTabOfPage,
+  type BotProfileSubPage,
+  type BotProfileTab,
+} from "@/lib/persona-sections";
 import { openFolds } from "../settings/nested-surfaces";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -97,19 +104,49 @@ async function unfold(node: HTMLElement) {
   }
 }
 
-/** The page's column once its tab is open and every fold is unfolded. */
-async function column(tab: (typeof BOT_PROFILE_TABS)[number]): Promise<HTMLElement> {
-  const first = BOT_PROFILE_TAB_SECTIONS[tab][0]!;
-  await act(async () => { dispatch({ type: "openPersonaEditor", botId: fixture.bot.id, section: first }); });
+type View = { tab: BotProfileTab } | { page: BotProfileSubPage };
+const VIEWS: View[] = [...BOT_PROFILE_TABS.map((tab) => ({ tab })), ...BOT_PROFILE_SUBPAGES.map((page) => ({ page }))];
+const viewName = (view: View) => ("tab" in view ? `tab:${view.tab}` : `page:${view.page}`);
+
+const click = async (node: HTMLElement | null, what: string) => {
+  if (!node) throw new Error(`nothing to click: ${what}`);
+  await act(async () => { node.click(); });
   await settle();
-  const page = host.querySelector<HTMLElement>("[data-persona-modal]");
-  if (!page) throw new Error(`no profile page for tab ${tab}`);
+};
+
+/** The page's column on a tab's home (V6, #2612): Back out of any sub-page,
+ * then the tab. */
+async function home(tab: BotProfileTab): Promise<HTMLElement> {
+  if (!host.querySelector("[data-persona-modal]")) {
+    await act(async () => { dispatch({ type: "openPersonaEditor", botId: fixture.bot.id, section: "overview" } as never); });
+    await settle();
+  }
+  const back = host.querySelector<HTMLElement>("[data-bot-profile-back]");
+  if (back) await click(back, "Back");
+  await click(host.querySelector<HTMLElement>(`[data-bot-profile-tab="${tab}"]`), `tab ${tab}`);
+  const page = host.querySelector<HTMLElement>("[data-persona-modal]")!;
   expect(page.getAttribute("data-bot-profile-tab-current")).toBe(tab);
-  const node = page.querySelector<HTMLElement>("[data-bot-profile-column]");
-  if (!node) throw new Error(`no column for tab ${tab}`);
+  return page.querySelector<HTMLElement>("[data-bot-profile-column]")!;
+}
+
+/** The page's column once a view is open (a tab's home, or a sub-page opened
+ * from its row) and every fold is unfolded. */
+async function column(view: View): Promise<HTMLElement> {
+  if ("tab" in view) {
+    const node = await home(view.tab);
+    await unfold(node);
+    return node;
+  }
+  const node = await home(botProfileTabOfPage(view.page));
+  await click(node.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${view.page}"]`), `row ${view.page}`);
+  expect(host.querySelector("[data-persona-modal]")!.getAttribute("data-bot-profile-subpage-current")).toBe(view.page);
   await unfold(node);
   return node;
 }
+
+/** What a view shows under the header: the tab's rows or the sub-page. */
+const scope = (node: HTMLElement, view: View) =>
+  node.querySelector<HTMLElement>("tab" in view ? `[data-bot-profile-panel="${view.tab}"]` : `[data-bot-profile-subpage="${view.page}"]`)!;
 
 /** The hero's appearance block (mascot preview, moves, Reset/Randomize) is
  * the other branch's scope (fix/bot-appearance-scope); HelpTip and menu
@@ -123,28 +160,50 @@ const describeNode = (node: Element) => {
   return `${section}: <${node.tagName.toLowerCase()} ${attrs}> class="${node.className}"`;
 };
 
-describe("bot profile page: one column of plain cards", () => {
-  it("every tab is one column; no section is split in two", async () => {
+describe("bot profile page V6: rows, sub-pages and plain cards", () => {
+  it("every tab and sub-page is one column; no section is split in two", async () => {
     await mount("en");
-    for (const tab of BOT_PROFILE_TABS) {
-      const node = await column(tab);
-      expect(node.className).toMatch(/max-w-\[820px\]/);
+    for (const view of VIEWS) {
+      const node = await column(view);
+      expect(node.className, viewName(view)).toMatch(/max-w-\[760px\]/);
       expect(node.querySelector("[data-bot-profile-column-side]")).toBeNull();
+      expect(scope(node, view), viewName(view)).not.toBeNull();
       for (const panel of Array.from(node.querySelectorAll("[role='tabpanel']"))) expect(panel.className).not.toMatch(/grid-cols-2/);
     }
   });
 
-  it("no bordered card, framed field or underlined link inside the column of any tab", async () => {
+  it("each row opens its sub-page (Back, title, intro) and Back returns to the row", async () => {
+    await mount("en");
+    for (const tab of BOT_PROFILE_TABS) {
+      const rows = Array.from((await home(tab)).querySelectorAll<HTMLElement>("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open") as BotProfileSubPage);
+      for (const id of rows) {
+        const node = await home(tab);
+        await click(node.querySelector<HTMLElement>(`[data-bot-profile-subpage-open="${id}"]`), `row ${id}`);
+        const sub = node.querySelector<HTMLElement>(`[data-bot-profile-subpage="${id}"]`);
+        expect(sub, `sub-page ${id}`).not.toBeNull();
+        expect(sub!.querySelector("[data-bot-profile-subpage-title]")?.textContent).toBe(t(`botProfile.v6.page.${id}.title` as never));
+        expect(node.querySelector("[role='tablist']"), `no tabs on ${id}`).toBeNull();
+        await click(sub!.querySelector<HTMLElement>("[data-bot-profile-back]"), "Back");
+        expect(node.querySelector(`[data-bot-profile-subpage]`)).toBeNull();
+        expect(document.activeElement?.getAttribute("data-bot-profile-subpage-open"), `focus back on row ${id}`).toBe(id);
+      }
+    }
+    // General carries the four groups of the canvas, Knowledge its work.
+    expect(Array.from((await home("general")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(
+      ["personality", "model", "beforeActing", "channels", "sharing", "accounts", "rules", "actsAlone", "voice", "advanced", "versions"],
+    );
+    expect(Array.from((await home("knowledge")).querySelectorAll("[data-bot-profile-subpage-open]")).map((row) => row.getAttribute("data-bot-profile-subpage-open"))).toEqual(["routines", "skills", "folder"]);
+  });
+
+  it("no bordered card, framed field or underlined link inside the column of any view", async () => {
     await mount("en");
     const hits: string[] = [];
-    for (const tab of BOT_PROFILE_TABS) {
-      const node = await column(tab);
-      const panel = node.querySelector<HTMLElement>(`[data-bot-profile-panel="${tab}"]`);
-      if (!panel) throw new Error(`no panel for tab ${tab}`);
+    for (const view of VIEWS) {
+      const panel = scope(await column(view), view);
       for (const el of Array.from(panel.querySelectorAll("*"))) {
         if (!inScope(el)) continue;
         const cls = typeof el.className === "string" ? el.className : "";
-        if (SMELL.test(cls)) hits.push(`${tab} / ${describeNode(el)}`);
+        if (SMELL.test(cls)) hits.push(`${viewName(view)} / ${describeNode(el)}`);
       }
     }
     expect(hits).toEqual([]);
@@ -153,15 +212,18 @@ describe("bot profile page: one column of plain cards", () => {
   it("every section of the editor is still on the page, named, as a plain card", async () => {
     await mount("en");
     const seen = new Set<string>();
-    for (const tab of BOT_PROFILE_TABS) {
-      const node = await column(tab);
-      for (const id of BOT_PROFILE_TAB_SECTIONS[tab]) {
-        // Slack is a row of General's Channels card, the others a card each.
+    const views: Array<[View, readonly string[]]> = [
+      ...BOT_PROFILE_SUBPAGES.map((page): [View, readonly string[]] => [{ page }, BOT_PROFILE_SUBPAGE_SECTIONS[page]]),
+      [{ tab: "stats" }, ["usage"]],
+    ];
+    for (const [view, ids] of views) {
+      const node = await column(view);
+      for (const id of ids) {
         // Who can see it (one person signs in) and Shared with (an
         // organization) stand for each other; the gallery is an organization.
         if (id === "visibility" && node.querySelector('[data-bot-profile-section="sharing"]')) continue;
         const section = node.querySelector<HTMLElement>(id === "slack" ? '[data-bot-profile-row="slack"]' : `[data-bot-profile-section="${id}"]`);
-        expect(section, `section ${id} on tab ${tab}`).not.toBeNull();
+        expect(section, `section ${id} on ${viewName(view)}`).not.toBeNull();
         if (id !== "slack") {
           expect(section!.getAttribute("aria-label")?.trim(), `section ${id} is named`).toBeTruthy();
           expect(section!.querySelector("[data-settings-group], [data-settings-card], [data-bot-profile-row], section"), `section ${id} renders a card`).not.toBeNull();
@@ -172,11 +234,11 @@ describe("bot profile page: one column of plain cards", () => {
     expect([...seen].sort()).toEqual(["access", "files", "history", "model", "permissions", "rules", "sharing", "skills", "slack", "soul", "summary", "usage", "voice", "worksOn"]);
   });
 
-  it("names every section in French too", async () => {
+  it("names every section and sub-page in French too", async () => {
     await mount("fr");
     const labels: string[] = [];
-    for (const tab of BOT_PROFILE_TABS) {
-      const node = await column(tab);
+    for (const view of VIEWS) {
+      const node = await column(view);
       for (const section of Array.from(node.querySelectorAll("[data-bot-profile-section]"))) labels.push(`${section.getAttribute("data-bot-profile-section")}=${section.getAttribute("aria-label") ?? ""}`);
     }
     const named = labels.map((label) => label.slice(label.indexOf("=") + 1));
@@ -185,14 +247,15 @@ describe("bot profile page: one column of plain cards", () => {
     expect(named).toContain(t("botSettings.nav.history"));
     expect(labels.filter((label) => label.endsWith("="))).toEqual([]);
     expect(named).not.toContain("Skills");
+    const general = await home("general");
+    expect(general.textContent).toContain("Avant d'agir");
+    expect(general.textContent).toContain("Comptes du bot");
   });
 
   it("one option in one place: who pays, sharing, usage, changes and the Plugins link render once on the whole page", async () => {
     await mount("en");
-    // A tab's panel mounts when shown (Knowledge stays mounted for its
-    // drafts), so each panel is counted on its own tab and the banner once.
     const where = new Map<string, string[]>();
-    const note = (selector: string, panel: string) => where.set(selector, [...(where.get(selector) ?? []), panel]);
+    const note = (selector: string, at: string) => where.set(selector, [...(where.get(selector) ?? []), at]);
     const selectors = [
       "[data-bot-payer]",
       "[data-bot-profile-share-open]",
@@ -203,24 +266,22 @@ describe("bot profile page: one column of plain cards", () => {
       "[data-manage-in-connect-apps]",
       "[data-sharing-permission]",
     ];
-    for (const tab of BOT_PROFILE_TABS) {
-      const node = await column(tab);
-      const panel = node.querySelector<HTMLElement>(`[data-bot-profile-panel="${tab}"]`)!;
-      for (const selector of selectors) for (const el of Array.from(panel.querySelectorAll(selector))) if (inScope(el)) note(selector, tab);
-      if (tab === "general") {
+    for (const view of VIEWS) {
+      const node = await column(view);
+      const panel = scope(node, view);
+      for (const selector of selectors) for (const el of Array.from(panel.querySelectorAll(selector))) if (inScope(el)) note(selector, viewName(view));
+      if (viewName(view) === "tab:general") {
         const page = host.querySelector<HTMLElement>("[data-persona-modal]")!;
         for (const selector of selectors) for (const el of Array.from(page.querySelectorAll(selector))) if (inScope(el) && !el.closest("[data-bot-profile-panel]")) note(selector, "banner");
       }
-      // The payer row never comes back in Model & tools (it was under the model chip).
-      if (tab === "tools") expect(panel.textContent).not.toContain(t("botModel.paidBy", { value: "" }).trim());
     }
     const at = (selector: string) => where.get(selector) ?? [];
-    expect(at("[data-bot-payer]"), "who pays").toEqual(["general"]);
-    expect(at("[data-bot-profile-share-open]"), "the Manage pill of People and groups").toEqual(["general"]);
+    expect(at("[data-bot-payer]"), "who pays").toEqual(["page:sharing"]);
+    expect(at("[data-bot-profile-share-open]"), "the Manage pill of People and groups").toEqual(["page:sharing"]);
     expect(at("[data-bot-profile-share]"), "the Share button of the banner").toEqual(["banner"]);
-    expect(at("[data-bot-profile-section='usage']"), "usage").toEqual(["analytics"]);
-    expect(at("[data-bot-profile-section='history']"), "changes").toEqual(["activity"]);
-    expect(at("[data-bot-profile-section='sharing']"), "sharing").toEqual(["general"]);
+    expect(at("[data-bot-profile-section='usage']"), "usage").toEqual(["tab:stats"]);
+    expect(at("[data-bot-profile-section='history']"), "changes").toEqual(["page:versions"]);
+    expect(at("[data-bot-profile-section='sharing']"), "sharing").toEqual(["page:sharing"]);
     expect(at("[data-manage-in-connect-apps]").length, "Manage in Plugins").toBeLessThanOrEqual(1);
     expect(at("[data-sharing-permission]"), "the people list lives in the Share popover only").toEqual([]);
   });

@@ -42,12 +42,12 @@ function StateMark({ kind }: { kind: CodingRowKind }) {
       return <DottedSpinner size={ICON_SIZE} />;
     case "merged":
       return (
-        <span data-coding-icon="merged" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success text-success-ink">
+        <span data-coding-icon="merged" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success">
           <Check size={13} strokeWidth={3} aria-hidden="true" />
         </span>
       );
     case "ready":
-      return <GitPullRequest {...PR_ICON} data-coding-icon="ready" className="shrink-0 text-[#4d9bff]" />;
+      return <GitPullRequest {...PR_ICON} data-coding-icon="ready" className="shrink-0 text-[var(--color-switch-on)]" />;
     case "draft":
       return <GitPullRequestDraft {...PR_ICON} data-coding-icon="draft" className="shrink-0 text-ink-secondary" />;
     case "changes":

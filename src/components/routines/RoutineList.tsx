@@ -218,8 +218,6 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 className="hidden size-7 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-raised hover:text-ink focus-visible:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 group-hover/routine:flex touch:flex"><MoreHorizontal size={15} /></button>}
               {toggle && !upcoming && <Switch
                 checked={routine.enabled}
-                // the panel's off switch: a dark grey track, white thumb (#2125)
-                className={leadingClock && !routine.enabled ? "bg-[var(--bot-panel-switch-off)] shadow-none" : undefined}
                 disabled={readOnly}
                 title={readOnly ? t("routines.scope.readOnly") : undefined}
                 aria-label={routine.enabled ? t("botPanel.routines.pause") : t("botPanel.routines.resume")}

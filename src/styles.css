@@ -4810,12 +4810,10 @@ select optgroup {
 [data-panel-bot] {
   --bot-panel-bg: var(--color-app);
   --bot-panel-card: var(--color-card);
-  --bot-panel-switch-off: var(--color-switch-off);
   --bot-panel-pill-border: var(--color-hairline);
 }
 [data-skin="pulsatrix"] [data-panel-bot] {
   --bot-panel-bg: #161616;
   --bot-panel-card: #1f1f1f;
-  --bot-panel-switch-off: #3a3a3a;
   --bot-panel-pill-border: #3a3a3a;
 }

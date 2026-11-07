@@ -10969,10 +10969,25 @@ around a 403, and said "no Datto alerts" for a product that is not served.
   around, and carries the style rules (no anglicisms, no signature emoji,
   ticket by number, no id or UUID: cards by bot and subject).
 - Relay (`relayFrame`, `server/perspicax/perspicax-mcp.ts`): one role switch
-  per turn (`switches`); a read refused for good (no role, the person said
-  stay, or still refused as "Moi") sets `readRefused`, carries a `STOP:` note
-  with the missing permission (`blockWith`, which also turns a JSON-RPC 403
-  error into a tool error the model reads) and refuses any later switch.
+  per turn (`switches`). A read 403 is a permission block, never "no data"
+  (`blockWith`, which also turns a JSON-RPC 403 error into a tool error the
+  model reads).
+- #2581 rework (decided 2026-11-07: the bot's limited role is wanted, the 403 is
+  taken into account, not a hard stop): under a role, the read is sent once
+  as "Moi" (unchanged). Under "Moi", `switchCandidate` picks one held role
+  from the live listing (reachable, reads, not refused for this path in the
+  role journal: `knownReadRefusal`, explicit-only first). A rule
+  (`roleFallback` "rule": a saved bot role rule for that target, or the
+  card's "Toujours permettre", fingerprint
+  `role-read-switch:<from>:<to>:<path>`) runs it once as that role with no
+  card. Otherwise the answer carries a `REFUSED:` offer (`roleOffer`): the
+  bot switches itself (`identity_switch` to that role, allowed past the
+  one-switch limit) when the person already allowed it in the conversation
+  or a saved instruction, and `oneCall` puts the role back after the next
+  call; or it sends the same read again and `askRoleSwitch` shows the card
+  (`readSwitchSummary`). A decline, or a read refused again, sets
+  `readRefused` with a `STOP:` note and refuses any later switch. One
+  switch per path per turn (`switchedPaths`): no loop.
 - Rendering: `cleanReplyStyle` (`shared/reply-style.ts`), before
   `dashFreeReply` in `runtime-events/preamble.ts`, drops a trailing signature
   emoji and hearts in a multi-line report, turns a bare ConnectWise ticket

@@ -59,4 +59,18 @@ describe("role journal", () => {
     expect(journal.rolesOf("pr_sam").map((role) => role.id)).toEqual(["prof-full"]);
     expect(journal.rolesOf("pr_nobody")).toEqual([]);
   });
+
+  // #2581: a rule answers only for the role it names; a role refused for a
+  // path is not offered for it again
+  it("matches a read rule to its target role and remembers refused reads", () => {
+    const journal = new RoleJournal(null);
+    journal.addRule("bot", { from: { slug: "", name: "" }, to: { slug: "full-access", name: "Full Access" }, path: "time/entries", ownerId: "owner" });
+    const base = { threadId: "t", botId: "bot", principalId: "owner", ownerId: "owner", from: "", path: "time/entries" };
+    expect(journal.fallbackFor({ ...base, to: "full-access" })).toBe("rule");
+    expect(journal.fallbackFor({ ...base, to: "service-desk" })).toBe("fallback");
+    journal.logRefusal({ principalId: "owner", botId: "bot", threadId: "t", role: { slug: "service-desk", name: "Service Desk" }, tool: "cw_psa_find_time_entries", kind: "read", permission: { module: "Time & Expense", func: "Time Entries", path: "time/entries", operation: "Inquire" } });
+    expect(journal.refusedRead({ principalId: "owner", botId: "bot", slug: "service-desk", path: "time/entries" })).toBe(true);
+    expect(journal.refusedRead({ principalId: "owner", botId: "bot", slug: "full-access", path: "time/entries" })).toBe(false);
+    expect(journal.refusedRead({ principalId: "alice", botId: "bot", slug: "service-desk", path: "time/entries" })).toBe(false);
+  });
 });

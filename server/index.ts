@@ -439,7 +439,7 @@ import { createCustomRulesModelReviewer } from "./rules/custom-rules-model.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes } from "./approvals/tool-auto-approval.ts";
 import { RoleJournal } from "./perspicax/role-journal.ts";
-import { createRoleEvents, meWriteSummary, missingRoleMessage } from "./perspicax/role-events.ts";
+import { createRoleEvents, meWriteSummary, missingRoleMessage, readSwitchFingerprint, readSwitchSummary } from "./perspicax/role-events.ts";
 import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
 import { createHeldRolesRoute } from "./routes/perspicax-held-roles.ts";
 import { routineRoleCoverageRoute } from "./routes/routine-role-coverage.ts";
@@ -27745,10 +27745,21 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     // 2026-11-05 (visible roles): each step's role, transitions, refusals
     onRole: (event) => roleEvents.onRole(event),
     turnRole: (turn) => perspicaxTurnRole(turn),
-    roleFallback: ({ threadId, botId, principalId, from, path }) => {
+    roleFallback: ({ threadId, botId, principalId, from, path, to }) => {
       const bot = store.bot(botId);
-      return roleJournal.fallbackFor({ threadId, botId, principalId, ...(bot ? { ownerId: effectiveBotOwner(bot) } : {}), from, path });
+      const decision = roleJournal.fallbackFor({ threadId, botId, principalId, ...(bot ? { ownerId: effectiveBotOwner(bot) } : {}), from, path, ...(to !== undefined ? { to } : {}) });
+      // #2581: "Toujours permettre" on the read switch card is a rule too
+      if (decision === "fallback" && bot && to && keptCardRule(bot, threadId, { tool: "safety:perspicax-role", scope: { action: readSwitchFingerprint(from, to, path) }, description: "" })) return "rule";
+      return decision;
     },
+    // #2581 (decided 2026-11-07): a read refused (403) under the bot's role, run
+    // once as another role the person holds: their card, "Toujours permettre"
+    askRoleSwitch: ({ threadId, botId, principalId, from, to, tool, permission }) => confirmHeldCard({
+      threadId, botId, tool: "perspicax-role",
+      summary: readSwitchSummary(languageOfPerson(principalId), { from: from.name, to: to.name || to.slug, tool, permission }),
+      fingerprint: readSwitchFingerprint(from.slug, to.slug, permission.path),
+    }),
+    knownReadRefusal: (input) => roleJournal.refusedRead(input),
     askMeWrite: ({ threadId, botId, principalId, role, tool, permission }) => confirmHeldCard({
       threadId, botId, tool: "perspicax-role",
       summary: meWriteSummary(languageOfPerson(principalId), { person: (isPrincipalId(principalId) ? personDisplayName(principals.byId(principalId)) : "") || "", role: role.name || role.slug, tool, permission }),

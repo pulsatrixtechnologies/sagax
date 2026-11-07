@@ -505,3 +505,59 @@ enum MacMessagesCopy {
         return String(localized: "Found \(count) recent conversation names.")
     }
 }
+
+
+/// Connect apps > Installed, on the phone: the Apple apps this iPhone can
+/// offer a bot. "This Mac" stays in the Mac app. iOS does not let an app
+/// read or send iMessage, so Messages is explained and not a switch.
+struct PhoneIntegrationsSection: View {
+    @State private var disabled = PhoneToolCenter.disabled
+
+    private var tools: [PhoneTool] {
+        let preferred: [PhoneTool] = [.calendar, .reminders, .contacts, .photos, .shortcut, .alarms, .home, .location, .clipboard, .status]
+        let have = Set(preferred.map(\.rawValue))
+        let rest = PhoneTool.allCases.filter { !$0.fromComputer && !have.contains($0.rawValue) }
+        return preferred + rest
+    }
+
+    var body: some View {
+        Section {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "message.fill")
+                    .frame(width: 28)
+                    .foregroundStyle(Theme.textSecondary)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "Messages"))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(String(localized: "iOS does not let an app read or send iMessage. That connection stays in the Sagax app on your Mac."))
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("connect-apps-phone-messages")
+            ForEach(tools) { tool in
+                Toggle(isOn: binding(tool)) {
+                    Label(PhoneToolWords.name(tool), systemImage: PhoneToolWords.symbol(tool))
+                }
+                .accessibilityIdentifier("connect-apps-phone-\(tool.rawValue)")
+            }
+        } header: {
+            Text(String(localized: "This iPhone"))
+        } footer: {
+            Text(String(localized: "Turn on what your bots may ask this iPhone for. You still approve each request in the app."))
+        }
+    }
+
+    private func binding(_ tool: PhoneTool) -> Binding<Bool> {
+        Binding(
+            get: { !disabled.contains(tool.rawValue) },
+            set: { on in
+                PhoneToolCenter.setEnabled(tool, on)
+                disabled = PhoneToolCenter.disabled
+                Task { await PhoneToolCenter.shared.register() }
+            }
+        )
+    }
+}

@@ -1084,14 +1084,13 @@ struct ConnectAppsManage: View {
 
     // MARK: Installed on the desktop window (InstalledView.tsx)
 
-    /// The desktop's order: This Mac, the tools (New skill), Nothing
-    /// installed with its Discover link, the entries, the private skills,
-    /// then Providers.
+    /// The phone's own Apple apps first, then the tools, the entries and
+    /// Providers. "This Mac" belongs to the Mac app only.
     @ViewBuilder
     private var desktopInstalled: some View {
         let entries = model.entries
         let skills = ConnectApps.privateSkills(model.items)
-        MacAppsInstalledSection(push: push)
+        PhoneIntegrationsSection()
         Section {
             Button { creatingSkill = true } label: {
                 HStack(spacing: 6) {
@@ -1153,8 +1152,8 @@ struct ConnectAppsManage: View {
             }
         }
         installedRows
-        // Mac apps (Messages): always listed; setup runs on the person's Mac.
-        MacAppsInstalledSection(push: push)
+        // What this iPhone can offer. The Mac's Messages setup is not shown here.
+        PhoneIntegrationsSection()
         // Providers (2026-10-29): once a tab of their own, now the last
         // section of Installed. A provider listed is already installed.
         accounts

@@ -6,6 +6,8 @@ import type { SidebarDensity } from "@/lib/sidebar-preferences";
 import { openBotConversationActions } from "../thread-home";
 import { SidebarMascotAvatar } from "../SidebarMascotAvatar";
 import { BotRoleTag } from "../LabelTag";
+import { BotShareIcon, botShareLabel } from "../BotShareIcon";
+import { botShareState } from "@/lib/bot-share-state";
 import type { MenuState } from "./types";
 
 export function SidebarPinnedGrid({
@@ -34,6 +36,7 @@ export function SidebarPinnedGrid({
       {pinnedBots.map((bot) => {
         const selected = state.activeView === "chat" && state.selectedId === bot.id;
         const title = bot.title.trim();
+        const share = botShareState(bot, state.groups, viewerId);
         return (
           <button
             key={bot.id}
@@ -45,6 +48,7 @@ export function SidebarPinnedGrid({
               setMenu({ botId: bot.id, x: event.clientX, y: event.clientY });
             }}
             aria-current={selected ? "page" : undefined}
+            title={density === "icons" && share ? [bot.name, botShareLabel(share)].join("\n") : undefined}
             className={cn(
               density === "icons"
                 ? "mx-auto flex w-full min-w-0 flex-col items-center gap-1.5 rounded-xl px-1 pb-1 pt-1.5"
@@ -60,7 +64,10 @@ export function SidebarPinnedGrid({
             <SidebarMascotAvatar botId={bot.id} bot={bot} primary={isViewersPrimaryBot(bot, viewerId)} primaryRingClassName={selected && density !== "icons" ? "ring-sidebar-card" : "ring-sidebar"} state="idle" size={density === "icons" ? 36 : 60} animated={false} />
             {density !== "icons" && (
               <span data-sidebar-tile-labels="" className="flex w-full min-w-0 flex-col items-center gap-1">
-                <span className="w-full truncate text-center text-[12px] leading-4 text-sidebar-ink">{bot.name}</span>
+                <span className="flex w-full min-w-0 items-center justify-center gap-1">
+                  <span className="min-w-0 truncate text-center text-[12px] leading-4 text-sidebar-ink">{bot.name}</span>
+                  {share ? <BotShareIcon state={share} size={12} /> : null}
+                </span>
                 {title ? <BotRoleTag text={title} tile /> : null}
               </span>
             )}

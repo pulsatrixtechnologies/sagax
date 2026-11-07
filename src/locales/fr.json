@@ -14098,5 +14098,9 @@
   "telemetry.remove": "Désactiver",
   "telemetry.removed": "L'export est désactivé.",
   "telemetry.loadError": "Impossible de charger les réglages OpenTelemetry.",
-  "telemetry.actionError": "Ça n'a pas fonctionné."
+  "telemetry.actionError": "Ça n'a pas fonctionné.",
+  "sidebar.bot.shared": "Partagé avec d'autres",
+  "sidebar.bot.partiallyShared": "Partiellement partagé",
+  "sidebar.bot.partiallySharedIn": "Partagé dans {name}",
+  "sidebar.bot.partiallySharedMany": "Partagé dans {count} conversations"
 }

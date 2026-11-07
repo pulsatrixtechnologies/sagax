@@ -117,6 +117,23 @@ if (params.get("rooms") === "1") dmGroups.push(
     messages: [message("dm3", "Parfait, merci.", minutes(35))] } as never,
 );
 
+// ?share=1 (#2615): Atlas shared with Ada (two people after the name), Iris
+// only in a group with Ada (Partially shared, one group named), Milo in two
+// groups with people (Partially shared, counted), the rest private.
+const shareMarks = params.get("share") === "1";
+if (shareMarks) {
+  for (const member of team) member.ownerUserId = "pr_me";
+  Object.assign(team.find((entry) => entry.id === "atlas")!, { grants: [{ target: "user:pr_ada", level: "use", by: "pr_me", at: 0 }] });
+  const room = (id: string, name: string, memberIds: string[], humanIds: string[], at: number) => ({
+    id, threadId: `${id}-t`, name, memberIds, humanIds, defaultResponder: { kind: "mentions" }, bulletin: "", unread: false, createdAt: minutes(at),
+    messages: [message(`${id}-m`, "On regarde ça ensemble.", minutes(at))],
+  }) as never;
+  dmGroups.push(
+    room("room-desk", "Projet Exchange", ["iris"], ["pr_me", "pr_ada"], 25),
+    room("room-audit", "Audit annuel", ["milo"], ["pr_me", "pr_bob"], 50),
+    room("room-close", "Clôture du mois", ["milo", "lina"], ["pr_me", "pr_ada"], 65),
+  );
+}
 const bulk = params.get("bulk") === "1";
 if (bulk) {
   const set = (id: string, extra: Partial<Bot>) => Object.assign(team.find((entry) => entry.id === id)!, { ownerUserId: "pr_me", ...extra });
@@ -199,13 +216,13 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     }
     if (target && one![2]?.startsWith("/grants")) return json({ grants: target.grants ?? [], administer: { any: true, teamIds: [], maxLevel: "manage", canAdd: true } });
   }
-  if (sharing && path === "/api/org") return json({ org: { identity: { kind: "perspicax" }, name: "GOX" } });
-  if (sharing && path === "/api/org/directory") return json({ people: [
+  if ((sharing || shareMarks) && path === "/api/org") return json({ org: { identity: { kind: "perspicax" }, name: "GOX" } });
+  if ((sharing || shareMarks) && path === "/api/org/directory") return json({ people: [
     { principalId: "pr_ada", name: "Ada Lovelace", login: "ada", role: "member", disabled: false, avatarUrl: "/api/people/pr_ada/avatar" },
     { principalId: "pr_bob", name: "Bob Martin", login: "bob", role: "member", disabled: false },
   ] });
   if (path === "/api/code/status") return json({ available: true });
-  if (path === "/api/config") return json({ profile: { name: "Alex Gagnon" }, ...(sharing || bulk || params.get("org") === "1" ? { viewer: { principalId: "pr_me" } } : {}) });
+  if (path === "/api/config") return json({ profile: { name: "Alex Gagnon" }, ...(sharing || bulk || shareMarks || params.get("org") === "1" ? { viewer: { principalId: "pr_me" } } : {}) });
   // the avatar menu's Usage › (a made-up plan, this month's cost)
   if (path === "/api/plan-usage") return json({ providers: [{
     id: "claude", name: "Claude", driver: "claude", plan: "Max", ok: true, error: null, state: "windows", access: "subscription",

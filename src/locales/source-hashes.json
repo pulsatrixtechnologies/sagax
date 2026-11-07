@@ -17841,7 +17841,11 @@
       "botPanel.skills.historyUndo": "a8283ade31856f71220db0e6f60a257c6889dc4dad0f275f66ad44b9ed9bf8d5",
       "botPanel.skills.historyRestore": "a76e13b9839270eb73ed11417f7d8acca55df0ad52065799361631d0fff74f27",
       "botPanel.skills.historyCreated": "b25ab5d5e2a5af58dd832b1ef11c91c333e857bdcfaed5d140af826e0630a8ce",
-      "botPanel.skills.historyChanged": "cb4bdd564d7e55545b7dbbb9394d79bc7a5d70c0f69c2db561b41c1ecd109f0e"
+      "botPanel.skills.historyChanged": "cb4bdd564d7e55545b7dbbb9394d79bc7a5d70c0f69c2db561b41c1ecd109f0e",
+      "sidebar.bot.shared": "25462957f23ac39f6e17cdf2ad45fbdd31e8534401f362fe390ec34df8a8e3ae",
+      "sidebar.bot.partiallyShared": "1df7a4c8701b06ac7b51d5086da2465d005e2d4982117f695cc9badb90024a8a",
+      "sidebar.bot.partiallySharedIn": "ee6353905cfc4bd0f25f5f9b4a757d0c49e1462644092327864ff6a14008c8e8",
+      "sidebar.bot.partiallySharedMany": "b9c5f298c1b30f6eb5d99c0dbd40f7459b9897d8726e90d04216c74fc854577d"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

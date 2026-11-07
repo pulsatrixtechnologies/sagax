@@ -1,11 +1,12 @@
-/** Isolated gallery for screenshots of the bot panel's Suggestions card and
- * All history row, and of Settings > Appearance > Sidebar switches that
- * control them (not shipped). The capture script answers /api and sets the
- * two preferences in localStorage. ?skin=<id>&lang=<code> */
+/** Isolated gallery for screenshots of the bot panel's Suggestions card,
+ * All history row and Permissions section, and of Settings > Appearance >
+ * Sidebar switches that control them (not shipped). The capture script
+ * answers /api and sets the preferences in localStorage. ?skin=<id>&lang=<code> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ActivitySection } from "../components/bot-settings/ActivitySection";
 import { SuggestionsSection } from "../components/bot-settings/SuggestionsSection";
+import { RolePermissionsSection } from "../components/bot-settings/RolePermissionsSection";
 import { AppearanceSettings } from "../components/settings/AppearanceSettings";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -30,6 +31,7 @@ createRoot(document.getElementById("root")!).render(
           <div className="flex flex-col gap-6 px-4 pb-6 pt-4">
             <SuggestionsSection bot={bot} routineCount={0} />
             <ActivitySection bot={bot} />
+            <RolePermissionsSection botId={bot.id} />
           </div>
         </aside>
         <div data-gallery-appearance="" className="w-[640px]"><AppearanceSettings /></div>

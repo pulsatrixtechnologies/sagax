@@ -311,14 +311,45 @@ add({ id: "panel-computer", phase: "main", note: "bot panel: Computer tab",
 // The desktop dropped the More tab for the persona editor (Edit persona,
 // PersonaEditorModal.tsx); the surfaces keep their panel-more ids, which the
 // iOS parity screens name.
-// Edit bot (PersonaEditorModal.tsx) opens from the panel's "..." menu or
-// the mascot: the store's openPersonaEditor, on the selected bot.
+// Edit bot is now BotProfilePage (#2126/#2173): pill tabs General | Knowledge |
+// Appearance | … with data-bot-profile-tab. data-persona-modal stays on the page.
+// openPersonaEditor deep-links a section onto the matching profile tab.
 async function openEditBot(ctx, section) {
   await openPanel(ctx);
   const botId = await ctx.eval(`__parity.state().selectedId ?? null`);
   await ctx.dispatch({ type: "openPersonaEditor", botId, ...(section ? { section } : {}) });
-  await ctx.waitFor(`Boolean(document.querySelector("[data-persona-modal]"))`, { timeoutMs: 8_000 });
+  await ctx.waitFor(`Boolean(document.querySelector("[data-persona-modal],[data-bot-profile-page]"))`, { timeoutMs: 8_000 });
   await ctx.sleep(700);
+}
+/** persona-sections.ts botProfileTabFor: overview/slack → general, Knowledge
+ * sections → knowledge, every other setting its own tab. */
+const PERSONA_FOLDED = { memory: "files" };
+const KNOWLEDGE_SECTIONS = new Set(["skills", "soul", "rules", "files"]);
+function profileTabFor(section) {
+  const page = PERSONA_FOLDED[section] ?? section;
+  if (page === "overview" || page === "slack") return "general";
+  if (KNOWLEDGE_SECTIONS.has(page)) return "knowledge";
+  return page;
+}
+async function openEditBotTab(ctx, section, { org = false, served = false } = {}) {
+  await openEditBot(ctx, section);
+  const tab = profileTabFor(section);
+  const selector = `[data-bot-profile-tab="${tab}"]`;
+  if (org || served) await ctx.waitFor(`Boolean(document.querySelector(${jsLiteral(selector)}))`, { timeoutMs: 8_000 }).catch(() => {});
+  if (!(await ctx.exists(selector))) return { skip: `page ${section} not listed for this bot` };
+  const current = await ctx.eval(`document.querySelector("[data-bot-profile-tab-current]")?.getAttribute("data-bot-profile-tab-current") ?? null`);
+  if (current !== tab) { await ctx.click(selector); await ctx.sleep(400); }
+  // Knowledge hosts soul/rules/skills/files as sections; scroll the target in.
+  const page = PERSONA_FOLDED[section] ?? section;
+  if (tab === "knowledge" && page !== "files") {
+    const sectionSel = `[data-bot-profile-section="${page}"],[data-persona-section="${page}"]`;
+    if (await ctx.exists(sectionSel)) {
+      await ctx.eval(`document.querySelector(${jsLiteral(sectionSel)})?.scrollIntoView({ block: "start" })`);
+      await ctx.sleep(300);
+    }
+  }
+  await ctx.sleep(900);
+  return null;
 }
 add({ id: "panel-more", phase: "main", note: "Edit bot window, on Identity",
   open: async (ctx) => { await openEditBot(ctx); } });
@@ -326,24 +357,11 @@ add({ id: "panel-more", phase: "main", note: "Edit bot window, on Identity",
 // tools and Works on: a server signed in with Perspicax (the organization
 // pass draws them on one server). Who can see it: an admin on a served page
 // of a server that is not an organization's.
-// persona-sections.ts FOLDED_INTO: the memory is managed in the Bot folder
-const PERSONA_FOLDED = { memory: "files" };
 const MORE_WHERE = { slack: { org: true }, worksOn: { org: true }, sharing: { org: true }, visibility: { served: true } };
 for (const section of ["overview", "slack", "soul", "skills", "memory", "access", "worksOn", "model", "permissions", "voice", "visibility", "sharing", "history", "usage"]) {
   const where = MORE_WHERE[section] ?? {};
   add({ id: `panel-more-${section.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`, phase: "main", note: `bot panel: Edit persona > ${section}${where.org ? " (organization server)" : where.served ? " (served page)" : ""}`, ...where,
-    open: async (ctx) => {
-      // the store's deep link, as the panel's links open a page (a page
-      // folded into another one, Memory into Bot folder, opens that one)
-      await openEditBot(ctx, section);
-      const page = PERSONA_FOLDED[section] ?? section;
-      const selector = `[data-persona-page="${page}"]`;
-      // these rows wait for the server's answer (the organization, the Slack link, the viewer)
-      if (where.org || where.served) await ctx.waitFor(`Boolean(document.querySelector(${jsLiteral(selector)}))`, { timeoutMs: 8_000 }).catch(() => {});
-      if (!(await ctx.exists(selector))) return { skip: `page ${section} not listed for this bot` };
-      if (!(await ctx.exists(`${selector}[aria-current="page"]`))) { await ctx.click(selector); await ctx.sleep(300); }
-      await ctx.sleep(900);
-    } });
+    open: async (ctx) => openEditBotTab(ctx, section, where) });
 }
 
 // pages
@@ -441,15 +459,11 @@ add({ id: "settings-myConnections", phase: "main", note: "Settings > myConnectio
 // the organization pages have their content). Appended so the
 // earlier numbers stay put.
 const PERSONA_ALL = ["overview", "appearance", "soul", "rules", "skills", "memory", "files", "access", "model", "permissions", "voice", "history", "usage"];
-// a deep link opens the persona editor on the category (store: toggleSettings)
-// (2026-11-04: Edit bot's deep link, openPersonaEditor; data-persona-page)
+// Deep link opens BotProfilePage on the matching pill tab (data-bot-profile-tab).
 const openPersona = async (ctx, category) => {
-  await openEditBot(ctx, category);
-  const selector = `[data-persona-page="${PERSONA_FOLDED[category] ?? category}"]`;
-  await ctx.waitFor(`Boolean(document.querySelector(${jsLiteral(selector)}))`, { timeoutMs: 8_000 }).catch(() => {});
-  if (!(await ctx.exists(selector))) return { skip: `category ${category} not listed for this bot` };
-  if (!(await ctx.exists(`${selector}[aria-current="page"]`))) await ctx.click(selector);
-  await ctx.sleep(1200);
+  const skip = await openEditBotTab(ctx, category);
+  if (skip) return { skip: `category ${category} not listed for this bot` };
+  await ctx.sleep(300);
 };
 for (const category of PERSONA_ALL) {
   add({ id: `persona-${category}`, phase: "main", note: `persona editor > ${category}`, open: (ctx) => openPersona(ctx, category) });

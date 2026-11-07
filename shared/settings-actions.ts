@@ -833,6 +833,7 @@ pref("appearance.interfaceMode", "appearance", "sagax.interfaceMode.v1", "enum:s
 pref("appearance.showThreads", "appearance", "omb-show-threads", "boolean", "Show threads", "Settings > Appearance");
 pref("appearance.showSuggestions", "appearance", "sagax.showSuggestions.v1", "boolean", "Show the Suggestions card in the bot panel", "Settings > Appearance");
 pref("appearance.showAllHistory", "appearance", "sagax.showAllHistory.v1", "boolean", "Show the All history row in the bot panel", "Settings > Appearance");
+pref("appearance.showPermissions", "appearance", "sagax.showPermissions.v1", "boolean", "Show the Permissions section in the bot panel", "Settings > Appearance");
 pref("appearance.threadsLocation", "appearance", "omb-threads-location", "string", "Threads location", "Settings > Appearance");
 pref("appearance.backgroundEffect", "appearance", "sagax-background-effect", "string", "Background effect", "Settings > Appearance > Background");
 pref("appearance.glyphRipple", "appearance", "sagax-glyph-ripple", "boolean", "Glyph ripple", "Settings > Appearance > Background");

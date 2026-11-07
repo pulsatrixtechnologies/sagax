@@ -29,8 +29,8 @@ describe("brand", () => {
       ...brandSwitchVars("#1D4ED8"),
       ...brandBubbleVars("#1D4ED8"),
     });
-    // the switch track per scheme comes with it
-    expect(brandVars({ name: "X", accent: "#1D4ED8" })["--brand-switch-on-light"]).toMatch(/^#[0-9a-f]{6}$/);
+    // the switch keeps its one on colour whatever the brand
+    expect(brandVars({ name: "X", accent: "#1D4ED8" })["--brand-switch-on-light"]).toBeUndefined();
   });
 
   it("keeps the default brand when the server is old, slow, or refuses", async () => {

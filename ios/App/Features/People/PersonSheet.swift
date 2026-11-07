@@ -196,6 +196,9 @@ struct PersonSheetContent: View {
                 inCommonCard(model)
             }
         }
+        // contain: the panel's id must not overwrite its rows' own
+        // (person-teams), which a bare VStack hands down to every child
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("person-tabpanel.profile")
     }
 

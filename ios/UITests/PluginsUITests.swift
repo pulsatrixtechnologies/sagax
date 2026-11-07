@@ -4,7 +4,7 @@ import XCTest
 /// Manage, an app's and a server's page, Providers, against the
 /// parity fixture's plugins lab (`PARITY_PLUGINS=1`, ios/parity/plugin-lab.mjs).
 /// Every action is a real request to the real server; each result is read
-/// back through the API or the lab's record of the connected-apps broker.
+/// back through the API (the managed connected-apps broker is gone).
 ///
 ///   PARITY_PLUGINS=1 node ios/parity/fixture-server.mjs &
 ///   TEST_RUNNER_PARITY_ENDPOINT=... TEST_RUNNER_PARITY_TOKEN=... \
@@ -21,6 +21,9 @@ final class PluginsUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // the phone's Settings > Connect apps (-parityScreen 15-plugins); the iPad's desktop shell opens
+        // plugins in its Capabilities window, covered by the Desktop* and YourConnections suites
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the phone's Settings > Connect apps; the iPad's Capabilities window is the desktop's")
         let env = ProcessInfo.processInfo.environment
         guard let endpoint = env["PARITY_ENDPOINT"], let token = env["PARITY_TOKEN"] else {
             throw XCTSkip("no parity fixture: set TEST_RUNNER_PARITY_ENDPOINT and TEST_RUNNER_PARITY_TOKEN")
@@ -51,14 +54,22 @@ final class PluginsUITests: XCTestCase {
     @MainActor
     private func open(_ identifier: String, in app: XCUIApplication) {
         let row = app.element(identifier)
-        for _ in 0..<8 where !(row.exists && row.isHittable) {
+        for _ in 0..<16 where !(row.exists && row.isHittable) {
             // Manage shows the first installed plugins, then Show all
             let showAll = app.element("connect-apps-show-all")
             if !row.exists, showAll.exists, showAll.isHittable, showAll.label.hasPrefix("Show all") { showAll.tap(); continue }
-            app.swipeUp()
+            scrollStep(app)
         }
         XCTAssertTrue(row.waitForExistence(timeout: 10), app.debugDescription)
         row.tap()
+    }
+
+    /// Half a page up: a full swipe can fling a lazy row past the screen
+    /// between two checks.
+    @MainActor
+    private func scrollStep(_ app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
     }
 
     // MARK: API
@@ -82,13 +93,6 @@ final class PluginsUITests: XCTestCase {
         }.resume()
         _ = done.wait(timeout: .now() + 150)
         return result
-    }
-
-    private var broker: [String: Any] { api("GET", "/__parity/plugins").1["broker"] as? [String: Any] ?? [:] }
-
-    private func gmailAccounts() -> [[String: Any]] {
-        let services = api("GET", "/api/connectors/connected").1["services"] as? [String: Any]
-        return (services?["gmail"] as? [String: Any])?["accounts"] as? [[String: Any]] ?? []
     }
 
     private func eventually(_ timeout: TimeInterval = 10, _ check: () -> Bool) -> Bool {
@@ -144,9 +148,10 @@ final class PluginsUITests: XCTestCase {
         XCTAssertTrue(app.element("connect-apps-filter").exists)
         let manage = app.element("connect-apps-manage")
         XCTAssertTrue(manage.label.contains("connected"), manage.label)
-        XCTAssertTrue(app.element("connect-apps-action.app:notion").waitForExistence(timeout: 15), app.debugDescription)
-        XCTAssertEqual(app.element("connect-apps-action.app:notion").label, "Connect")
-        XCTAssertFalse(app.element("connect-apps-action.app:gmail").exists, "a connected app shows its status, no button")
+        // the featured connectors (the managed connected-apps broker is gone)
+        let notion = app.element("connect-apps-action.featured:notion")
+        XCTAssertTrue(notion.waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertEqual(notion.label, "Connect")
     }
 
     /// One filter button (the reference iOS app's marketplace): the menu picks a
@@ -169,48 +174,6 @@ final class PluginsUITests: XCTestCase {
         XCTAssertTrue(all.waitForExistence(timeout: 5), app.debugDescription)
         all.tap()
         XCTAssertTrue(eventually(5) { filter.label.contains("All") && !filter.label.contains("MCP") }, filter.label)
-    }
-
-    /// Manage > Installed > the app's page: Disconnect revokes exactly one
-    /// account.
-    @MainActor
-    func testManageOpensTheAppPageWhereOneAccountDisconnects() throws {
-        let before = gmailAccounts()
-        guard before.count >= 2, let last = before.last?["id"] as? String else {
-            throw XCTSkip("the lab's second Gmail account was already disconnected by an earlier run")
-        }
-        let app = launch()
-        app.element("connect-apps-manage").tap()
-        open("connect-apps-installed.app:gmail", in: app)
-        let account = app.element("connect-apps-account.\(last)")
-        XCTAssertTrue(account.waitForExistence(timeout: 15), app.debugDescription)
-        account.swipeLeft()
-        let disconnect = app.buttons["Disconnect"].firstMatch
-        XCTAssertTrue(disconnect.waitForExistence(timeout: 5))
-        disconnect.tap()
-        XCTAssertTrue(eventually(15) {
-            (self.broker["removed"] as? [[String: Any]] ?? []).contains { $0["id"] as? String == last }
-        })
-        XCTAssertEqual(gmailAccounts().count, before.count - 1)
-    }
-
-    /// Connect asks for an account label, then authorizes with it.
-    @MainActor
-    func testConnectingAsksForALabelAndAuthorizes() {
-        let app = launch()
-        let action = app.element("connect-apps-action.app:notion")
-        XCTAssertTrue(action.waitForExistence(timeout: 15))
-        action.tap()
-        let field = app.alerts.textFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.typeText("Travail")
-        app.alerts.buttons["Connect"].tap()
-        XCTAssertTrue(eventually(15) {
-            (self.broker["authorizes"] as? [[String: Any]] ?? []).contains {
-                $0["slug"] as? String == "notion" && $0["alias"] as? String == "Travail"
-            }
-        })
-        app.activate()
     }
 
     // MARK: MCP servers
@@ -239,27 +202,26 @@ final class PluginsUITests: XCTestCase {
 
     // MARK: Claude connectors
 
-    /// PL7: the person's claude.ai answer, Manage, and the admin switch.
+    /// PL7: the person's claude.ai answer and Manage; the admin switch is
+    /// retired (always on since #168).
     @MainActor
-    func testClaudeConnectorsShowTheAnswerAndTheAdminSwitch() {
+    func testClaudeConnectorsShowTheAnswerAndNoAdminSwitch() {
         // Installed > Providers (#207; Providers is a section of Installed since 2026-10-29)
         let app = launch()
         app.element("connect-apps-manage").tap()
         let tabs = app.segmentedControls.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 10))
         tabs.buttons["Installed"].tap()
-        XCTAssertTrue(app.element("harness-connectors-manage").waitForExistence(timeout: 30), app.debugDescription)
+        let manage = app.element("harness-connectors-manage")
+        for _ in 0..<16 where !(manage.exists && manage.isHittable) { scrollStep(app) }
+        XCTAssertTrue(manage.waitForExistence(timeout: 30), app.debugDescription)
         let empty = app.element("harness-connectors-empty")
         let unavailable = app.element("harness-connectors-unavailable")
         XCTAssertTrue(eventually(100) { empty.exists || unavailable.exists })
 
-        let toggle = app.element("harness-connectors-allow.toggle")
-        for _ in 0..<6 where !(toggle.exists && toggle.isHittable) { app.swipeUp() }
-        XCTAssertTrue(toggle.waitForExistence(timeout: 10), app.debugDescription)
-        let enabled = api("GET", "/api/me/harness-connectors").1["enabled"] as? Bool ?? true
-        toggle.tap()
-        XCTAssertTrue(eventually(150) { (self.api("GET", "/api/me/harness-connectors").1["enabled"] as? Bool) == !enabled })
-        api("PUT", "/api/harness-connectors/settings", body: ["claudeAi": enabled])
+        // always allowed on a server (#168): no admin switch any more
+        XCTAssertFalse(app.element("harness-connectors-allow.toggle").exists, "the retired admin switch is gone")
+        XCTAssertEqual(api("GET", "/api/me/harness-connectors").1["enabled"] as? Bool, true)
     }
 }
 

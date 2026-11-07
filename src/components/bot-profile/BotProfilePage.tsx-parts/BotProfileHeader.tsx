@@ -11,6 +11,7 @@ import { canEditBotField } from "@/lib/bot-capabilities";
 import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
 import { personLabel } from "@/lib/human-label";
+import { splitBotNameTitle } from "../../bot-settings/bot-name-title";
 import { useOrgPeople } from "@/lib/perspicax-org";
 import { personaSharingSummary } from "@/lib/bot-sharing";
 import { MAUS_COLORS } from "@/lib/mascot";
@@ -51,28 +52,32 @@ export function useBotProfileHero({ bot, derived, appearanceShown, appearanceLoc
   const claimHero = useCallback((claimed: boolean) => setHeroClaimed(claimed), []);
   const heroSources = useAvatarSources(bot, derived.patch);
   const [heroDropping, setHeroDropping] = useState(false);
+  // a name stored with its title glued on ("Heron · Chief of Staff")
+  // shows as two lines too; saving either line writes both fields apart
+  const shown = splitBotNameTitle(bot.name, bot.title);
+  const gluedTitle = shown.merged && !bot.title?.trim() ? { title: shown.title } : {};
   const heroTitle = (
     // The name alone on its line at 28px, the label under it, smaller and
     // secondary (JC: never "Name · Label" on one line).
     <h2 id="bot-profile-title" data-bot-profile-title="" className="flex min-w-0 max-w-full text-[28px] font-normal leading-9 text-ink">
       <InlineEditableText
-        value={bot.name}
+        value={shown.name}
         required
         maxLength={BOT_PROFILE_LIMITS.name}
         ariaLabel={t("botPanel.name.edit")}
-        onSave={canName ? (name) => derived.patch({ name }) : undefined}
+        onSave={canName ? (name) => derived.patch({ name, ...gluedTitle }) : undefined}
         className="min-w-0 text-[28px] font-normal leading-9 text-ink"
       />
     </h2>
   );
-  const heroLabel = (bot.title?.trim() || canLabel) ? (
+  const heroLabel = (shown.title || canLabel) ? (
     <div data-bot-profile-label="" className="flex min-w-0 max-w-full text-[15px] leading-5 text-ink-secondary">
       <InlineEditableText
-        value={bot.title ?? ""}
+        value={shown.title}
         maxLength={BOT_PROFILE_LIMITS.title}
         placeholder={t("botPanel.label.add")}
         ariaLabel={t("botPanel.label.edit")}
-        onSave={canLabel ? (title) => derived.patch({ title }) : undefined}
+        onSave={canLabel ? (title) => derived.patch(shown.merged ? { title, name: shown.name } : { title }) : undefined}
         className="min-w-0 text-[15px] leading-5 text-ink-secondary"
       />
     </div>

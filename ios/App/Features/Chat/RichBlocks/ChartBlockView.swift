@@ -332,7 +332,9 @@ private struct FlowLegend: View {
     let names: [String]
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 10, alignment: .leading)], alignment: .leading, spacing: 4) {
+        // a plain flow, not a LazyVGrid: a lazy grid inside the transcript's lazy stack dropped
+        // the whole message from the iPad's accessibility tree (VoiceOver and UI tests never saw it)
+        ChatWidgetFlow(spacing: 10) {
             ForEach(Array(names.enumerated()), id: \.offset) { index, name in
                 HStack(spacing: 6) {
                     RoundedRectangle(cornerRadius: 2).fill(ChartPalette.color(index)).frame(width: 10, height: 10)

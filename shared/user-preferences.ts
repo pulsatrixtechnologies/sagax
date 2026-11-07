@@ -27,9 +27,10 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.botBubble.v1",
   "omb-font",
   "omb-show-threads",
-  // the bot panel's Suggestions card and All history row (src/lib/panel-visibility.ts)
+  // the bot panel's Suggestions card, All history row and Permissions section (src/lib/panel-visibility.ts)
   "sagax.showSuggestions.v1",
   "sagax.showAllHistory.v1",
+  "sagax.showPermissions.v1",
   "omb.retro98.on",
   "omb.retro98.unlocked",
   "omb.retro98.previousSkin",

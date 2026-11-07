@@ -32,7 +32,7 @@ const NOW = Date.now();
 const bot = (id: string, name: string, color: string, character: string, title = ""): Bot =>
   ({ id, threadId: `t-${id}`, name, title, description: "", notifications: true, color, unread: false, mascotLook: { character }, messages: [], tasks: [], computer: "local", modelSelection: { instanceId: "x", model: "x" } }) as unknown as Bot;
 
-const osprey = bot("osprey", "Osprey", "green", "shiba", "Chef d'équipe");
+const osprey = bot("osprey", params.get("botName") ?? "Osprey", params.get("botColor") ?? "green", "shiba", params.get("botTitle") ?? "Chef d'équipe");
 const members = [osprey, bot("wren", "Wren", "purple", "cat"), bot("heron", "Heron", "teal", "fox")];
 
 const routine = (id: string, name: string, extra: Partial<Routine>): Routine => ({

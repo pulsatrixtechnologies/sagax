@@ -30,6 +30,8 @@ final class OrgAvatarUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // phone shell only: home-account, the Settings card and Account are the phone's; the iPad runs the desktop shell
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the phone's home, Settings and Account; the iPad runs the desktop shell")
         let env = ProcessInfo.processInfo.environment
         guard env["PARITY_ORG"] == "avatar" || env["PARITY_OWNER"] == "1", let endpoint = env["PARITY_ENDPOINT"], let token = env["PARITY_TOKEN"],
               let rgb = env["PARITY_AVATAR_RGB"]?.split(separator: ",").compactMap({ Int($0) }), rgb.count == 3

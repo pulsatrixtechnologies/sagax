@@ -24,8 +24,10 @@ const fixture = vi.hoisted(() => ({
   showRunCard: true,
   showSuggestions: true,
   showAllHistory: false,
+  showPermissions: false,
   setShowSuggestions: vi.fn(),
   setShowAllHistory: vi.fn(),
+  setShowPermissions: vi.fn(),
   setShowRunCard: vi.fn(),
   sidebarDensity: "comfortable" as "comfortable" | "compact" | "icons",
   setSidebarDensity: vi.fn(),
@@ -74,6 +76,8 @@ vi.mock("@/lib/panel-visibility", () => ({
   setShowSuggestions: fixture.setShowSuggestions,
   useShowAllHistory: () => fixture.showAllHistory,
   setShowAllHistory: fixture.setShowAllHistory,
+  useShowPermissions: () => fixture.showPermissions,
+  setShowPermissions: fixture.setShowPermissions,
 }));
 vi.mock("@/lib/run-card-preferences", () => ({
   useShowRunCard: () => fixture.showRunCard,
@@ -138,6 +142,7 @@ beforeEach(() => {
   fixture.showRunCard = true;
   fixture.showSuggestions = true;
   fixture.showAllHistory = false;
+  fixture.showPermissions = false;
   fixture.sidebarDensity = "comfortable";
   fixture.notificationSounds = true;
   fixture.nudgeSound = true;
@@ -169,6 +174,15 @@ describe("Settings → Appearance", () => {
     expect(history.checked).toBe(false);
     history.onClick!({} as never);
     expect(fixture.setShowAllHistory).toHaveBeenCalledWith(true);
+  });
+
+  it("has the Show permissions switch, off by default, wired to the panel preference", () => {
+    const html = render();
+    expect(html).toContain("Show permissions");
+    const permissions = fixture.switches.find((props) => props["aria-label"] === "Show the Permissions section in the bot panel")!;
+    expect(permissions.checked).toBe(false);
+    permissions.onClick!({} as never);
+    expect(fixture.setShowPermissions).toHaveBeenCalledWith(true);
   });
 
   it("groups skins, thread visibility, and tool-call display with preservation copy", () => {

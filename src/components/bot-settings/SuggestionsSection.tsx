@@ -2,10 +2,10 @@
 // from its setup checklist (GET /api/bots/:id/overview) and the
 // conversations waiting on the person, then Add to Slack (the Admin link,
 // when the server has one) and Add to meeting (a new routine for the
-// calendar). Each row ends with a chevron. As the reference design, the bot
-// panel's card has no Hide and always shows Add to Slack and Add to meeting;
-// Settings > Appearance still turns the card off. Elsewhere (the group panel)
-// Hide stays, and nothing to suggest means no card at all.
+// calendar). Each row ends with a chevron. The title row has Hide on the
+// right (bot panel and group panel): it turns the one person-wide preference
+// off at once, and Settings > Appearance > Sidebar > Show suggestions brings
+// the card back.
 import { CalendarPlus, ChevronRight, Sparkles } from "lucide-react";
 import type { ComponentType } from "react";
 import { SlackLogo } from "../SlackLogo";
@@ -79,21 +79,21 @@ type SuggestionRow = { id: string; title: string; subtitle?: string; icon?: Comp
 export function SuggestionsCard({ headingId, rows, panel = false }: {
   headingId: string;
   rows: ReadonlyArray<SuggestionRow>;
-  /** The bot panel (#2125): flat card, 14px rows, no Hide. */
+  /** The bot panel (#2125): flat card, 14px rows. */
   panel?: boolean;
 }) {
   return (
     <section data-bot-settings-section="suggestions" aria-labelledby={headingId} className="flex flex-col gap-2">
-      <div className={cn("flex items-center justify-between", !panel && "px-0.5")}>
+      <div className="flex items-center justify-between">
         <h3 id={headingId} className={panel ? PANEL_LABEL : "text-[12px] leading-[17px] text-ink-tertiary"}>{t("botPanel.suggestions.title")}</h3>
-        {!panel && <button
+        <button
           type="button"
           data-suggestions-hide
           onClick={() => setShowSuggestions(false)}
-          className="rounded px-1 text-[12.5px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          className={cn("rounded px-1 text-ink-tertiary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", panel ? "text-[13px] leading-[18px]" : "text-[12.5px]")}
         >
           {t("botPanel.suggestions.hide")}
-        </button>}
+        </button>
       </div>
       <ul className={panel ? PANEL_CARD : GROUPED_CARD}>
         {rows.map((row) => (

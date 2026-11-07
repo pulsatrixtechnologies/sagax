@@ -91,21 +91,34 @@ final class OnboardingUITests: XCTestCase {
     func testDemoOpensWithBannerAnswersAndExits() {
         let app = launch()
         app.buttons["welcome-demo"].tap()
+        // first run of this install: the notifications step comes once
+        let notNow = app.buttons["Not now"].firstMatch
+        if notNow.waitForExistence(timeout: 5) { notNow.tap() }
+        // the one-time terms of use (guideline 1.2) come first, as for anyone
+        let accept = app.buttons["terms-accept"]
+        XCTAssertTrue(accept.waitForExistence(timeout: 15), "the demo asks for the terms of use once")
+        accept.tap()
+        let termsGone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: accept)
+        XCTAssertEqual(XCTWaiter.wait(for: [termsGone], timeout: 10), .completed, "the terms sheet closed")
         let banner = app.descendants(matching: .any)["demo-banner"].firstMatch
-        XCTAssertTrue(banner.waitForExistence(timeout: 10))
+        XCTAssertTrue(banner.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(app.staticTexts["Scout"].firstMatch.waitForExistence(timeout: 5))
         snapshot("onboarding-07-demo-home", app)
 
         // Approve Scout's request: the card settles and Scout answers.
         // The first tap may only put away the "needs you" island.
-        let row = app.buttons["chat-row.demo-scout"]
+        // the iPad's desktop sidebar names its rows desktop-row / desktop-pinned
+        let row = UIDevice.current.userInterfaceIdiom == .pad
+            ? app.buttons.matching(NSPredicate(format: "identifier IN %@", ["desktop-row.demo-scout", "desktop-pinned.demo-scout"])).firstMatch
+            : app.buttons["chat-row.demo-scout"]
         row.tap()
-        let allow = app.buttons["Allow"].firstMatch
+        // the approval dock: Allow once, Always allow, Deny
+        let allow = app.buttons["approval-allow-once"].firstMatch
         if !allow.waitForExistence(timeout: 3) { row.tap() }
         XCTAssertTrue(allow.waitForExistence(timeout: 10), app.debugDescription)
         snapshot("onboarding-08-demo-approval", app)
         allow.tap()
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Approved, thank you'")).firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Approved, thank you'")).firstMatch.waitForExistence(timeout: 15), app.debugDescription)
         snapshot("onboarding-09-demo-approved", app)
 
         // Leave the demo: back to the three choices, nothing kept.

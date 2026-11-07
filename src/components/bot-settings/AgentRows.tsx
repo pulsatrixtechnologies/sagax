@@ -1,11 +1,14 @@
 // The bot panel's Coding section (JC, 2026-11-06): one CodingSessionRow per
 // coding task or launched agent, in the panel card under a grey "Coding"
-// label. State mark, title, chevron: nothing else on the row. Past five
+// label. State mark, title, grey subtitle (state and "#N" pull request
+// link), chevron (2026-11-07). Past five
 // rows, "↓ N more" shows the rest. A click opens the session in the chat
 // column (the coding chat), never a side panel.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { activityStatusActive, activityTitle, codingWhere, type BotActivityItem, type BotLaunchedAgentItem } from "@/lib/bot-activity";
+import { loadBranchPull } from "@/lib/code-branches";
+import { pullOfItem, type CodingRowPull } from "@/lib/coding-row-state";
 import { PANEL_CARD } from "@/lib/grouped-card";
 import { t } from "@/lib/i18n";
 import { CodingSessionRow } from "./CodingSessionRow";
@@ -29,14 +32,48 @@ export interface AgentRowsProps {
   onIgnore?: (id: string) => void;
 }
 
+const LIVE_MS = 60_000;
+const livePulls = new Map<string, { at: number; pull: CodingRowPull | null }>();
+
+/** The job's pull request as GitHub says it now (Draft, Changes requested,
+ * Checks failing), read for a job whose own calls left it open. Without a
+ * reading the row keeps what the calls said. */
+function useLivePull(item: BotActivityItem, own: CodingRowPull | undefined): CodingRowPull | undefined {
+  const branch = item.code?.pullRequests?.at(-1)?.branch ?? item.code?.branch;
+  const wanted = own?.state === "open" && Boolean(branch) && Boolean(item.threadId);
+  const key = wanted ? `${item.botId}:${item.threadId}:${branch}` : "";
+  const [read, setRead] = useState<{ key: string; pull: CodingRowPull | null } | null>(() => {
+    const hit = key ? livePulls.get(key) : undefined;
+    return hit ? { key, pull: hit.pull } : null;
+  });
+  useEffect(() => {
+    if (!key || !item.threadId || !branch) return;
+    const hit = livePulls.get(key);
+    if (hit && Date.now() - hit.at < LIVE_MS) return;
+    let alive = true;
+    loadBranchPull(item.botId, item.threadId, branch).then(
+      (pull) => {
+        const value = pull ? { number: pull.number, url: pull.url, state: pull.state, draft: pull.draft, review: pull.review, checks: pull.checks } : null;
+        livePulls.set(key, { at: Date.now(), pull: value });
+        if (alive) setRead({ key, pull: value });
+      },
+      () => undefined,
+    );
+    return () => { alive = false; };
+  }, [key, item.botId, item.threadId, branch]);
+  return read?.key === key && read.pull ? read.pull : own;
+}
+
 function ItemRow({ item, onOpen, onStop, stopping, onIgnore }: { item: BotActivityItem; onOpen: (item: BotActivityItem) => void; onStop?: (item: BotActivityItem) => void; stopping?: ReadonlySet<string>; onIgnore?: (id: string) => void }) {
   const live = activityStatusActive(item.status);
   const canStop = live && Boolean(onStop) && (item.canStop ?? true);
+  const pull = useLivePull(item, pullOfItem(item));
   return (
     <CodingSessionRow
       title={activityTitle(item)}
       hint={codingWhere(item) || undefined}
       status={item.status}
+      pull={pull}
       attrs={{ "data-activity-card": item.id, "data-activity-status": item.status }}
       onOpen={() => onOpen(item)}
       onStop={canStop ? () => onStop?.(item) : undefined}

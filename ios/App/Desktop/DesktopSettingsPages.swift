@@ -571,13 +571,13 @@ struct DesktopUpdatesSettings: View {
                 .accessibilityIdentifier("desktop-settings.updates.check")
             }
             .accessibilityIdentifier("desktop-settings.updates.version")
-            DesktopDescribedRow(Text("Update channel"), description: Text("Stable, or Nightly for versions still in testing."),
+            DesktopDescribedRow(Text("Update channel"), description: Text("Nightly gets new versions first. They can have bugs."),
                                 help: Text("On the iPad, the App Store build is the stable channel and TestFlight carries the versions still in testing."),
                                 identifier: "updateChannel") {
                 DesktopPillSelect(options: [("stable", AppStrings.localized("Stable"))], selection: "stable",
                                   label: Text("Update channel"), identifier: "desktop-settings.updates.channel", disabled: true) { _ in }
             }
-            DesktopDescribedRow(Text("Update while I am away"), description: Text("Install a downloaded update when you are away and no bot is working."),
+            DesktopDescribedRow(Text("Update while I am away"), description: Text("Restarts after 15 min idle, when no bot is working."),
                                 help: Text("On the iPad, automatic updates are set in Settings > App Store."),
                                 identifier: "updatesAway") {
                 DesktopSwitch(isOn: false, label: Text("Update while I am away"), identifier: "desktop-settings.updates.away", disabled: true) {}

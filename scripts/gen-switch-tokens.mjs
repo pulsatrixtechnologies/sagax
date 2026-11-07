@@ -50,27 +50,10 @@ export function switchContexts(css = stylesheets()) {
   });
 }
 
-/** Inside a bot's panel (`body[data-bot-switch]`, set by App.tsx) the on track is the bot's colour, derived per scheme by botSwitchVars. */
-function botScope(contexts) {
-  const rule = (selectors, scheme) =>
-    `:is(${selectors.join(", ")}) body[data-bot-switch] {\n  --color-switch-on: var(--bot-switch-on-${scheme});\n  --color-switch-on-edge: var(--bot-switch-on-edge-${scheme});\n}\n`;
-  const of = (scheme) => contexts.filter((c) => c.scheme === scheme).map((c) => c.selector);
-  return [
-    "/* The bot's panel: the on track is the bot's colour (src/lib/switch-colors.ts, botSwitchVars). */",
-    `:root:not([data-skin]) body[data-bot-switch] {\n  --color-switch-on: var(--bot-switch-on-dark);\n  --color-switch-on-edge: var(--bot-switch-on-edge-dark);\n}\n`,
-    rule(of("light"), "light"),
-    rule(of("dark"), "dark"),
-  ].join("\n");
-}
-
 /** The stylesheet text. */
 export function switchStylesheet(css = stylesheets()) {
-  // a brand accent (brand.ts) wins over the skin's own, except on Hibou 98
-  const block = ({ id, selector, scheme, colors: c }) => {
-    const brand = !id.startsWith("retro98");
-    const on = brand ? `var(--brand-switch-on-${scheme}, ${c.on})` : c.on;
-    const onEdge = brand ? `var(--brand-switch-on-edge-${scheme}, ${c.onEdge})` : c.onEdge;
-    return `${selector} {\n  --color-switch-on: ${on};\n  --color-switch-off: ${c.off};\n  --color-switch-on-edge: ${onEdge};\n  --color-switch-off-edge: ${c.offEdge};\n}\n`;
+  const block = ({ selector, colors: c }) => {
+    return `${selector} {\n  --color-switch-on: ${c.on};\n  --color-switch-off: ${c.off};\n  --color-switch-on-edge: ${c.onEdge};\n  --color-switch-off-edge: ${c.offEdge};\n}\n`;
   };
   const contexts = switchContexts(css);
   const fallback = contexts.find((c) => c.id === "pulsatrix");
@@ -82,7 +65,6 @@ export function switchStylesheet(css = stylesheets()) {
     "",
     fallback ? block({ ...fallback, selector: ":root" }) : "",
     ...contexts.map(block),
-    botScope(contexts),
   ];
   return lines.join("\n");
 }

@@ -8,6 +8,7 @@ import type { MouseEvent } from "react";
 import { t } from "@/lib/i18n";
 import { BOT_PROFILE_LIMITS } from "../../../shared/bot-profile";
 import { InlineEditableText } from "./InlineEditableText";
+import { splitBotNameTitle } from "./bot-name-title";
 
 export function BotNameTitleStack({
   name,
@@ -24,7 +25,18 @@ export function BotNameTitleStack({
   renameRequest?: number;
   onContextMenu?: (event: MouseEvent) => void;
 }) {
-  const shownTitle = title?.trim() ?? "";
+  // a name stored with its title glued on shows on two lines too
+  const shown = splitBotNameTitle(name, title);
+  const shownTitle = shown.title;
+  // saving one line of a glued name writes both fields back apart
+  const saveName = onSaveName && ((next: string) => {
+    onSaveName(next);
+    if (shown.merged && !title?.trim()) onSaveTitle?.(shown.title);
+  });
+  const saveTitle = onSaveTitle && ((next: string) => {
+    onSaveTitle(next);
+    if (shown.merged) onSaveName?.(shown.name);
+  });
   return (
     <div
       data-bot-name-title=""
@@ -34,11 +46,11 @@ export function BotNameTitleStack({
     >
       <InlineEditableText
         id="bot-settings-title"
-        value={name}
+        value={shown.name}
         required
         maxLength={BOT_PROFILE_LIMITS.name}
         ariaLabel={t("botPanel.name.edit")}
-        onSave={onSaveName}
+        onSave={saveName}
         editRequest={renameRequest}
         className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-medium leading-[22px] text-ink"
       />
@@ -49,7 +61,7 @@ export function BotNameTitleStack({
             maxLength={BOT_PROFILE_LIMITS.title}
             placeholder={t("botPanel.label.add")}
             ariaLabel={t("botPanel.label.edit")}
-            onSave={onSaveTitle}
+            onSave={saveTitle}
             className="min-w-0 shrink gap-0 px-0.5 text-[12.5px] font-normal leading-4 text-ink-secondary"
           />
         </div>

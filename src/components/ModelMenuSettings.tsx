@@ -54,8 +54,8 @@ export function ModelMenuSettings({ fast, effort, variantRow, disabled = false }
         <button type="button" role="switch" aria-checked={fast.on} data-model-settings-fast disabled={disabled}
           title={t("model.settings.fastHint")} onClick={fast.onToggle} className={ROW}>
           <span>{t("model.fastTag")}</span>
-          <span aria-hidden="true" className={cn("relative h-[18px] w-8 shrink-0 rounded-full transition-colors", fast.on ? SWITCH_ON : SWITCH_OFF)}>
-            <span className={cn("absolute top-[2px] size-[14px] rounded-full bg-white shadow-[0_1px_2px_rgb(0_0_0/0.3)] transition-[left]", fast.on ? "left-[16px]" : "left-[2px]")} />
+          <span aria-hidden="true" className={cn("relative h-5 w-8 shrink-0 rounded-full transition-colors", fast.on ? SWITCH_ON : SWITCH_OFF)}>
+            <span className={cn("absolute top-[2px] size-4 rounded-full bg-white shadow-[0_1px_2px_rgb(0_0_0/0.3)] transition-[left]", fast.on ? "left-[14px]" : "left-[2px]")} />
           </span>
         </button>
       )}

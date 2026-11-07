@@ -405,6 +405,15 @@ export function pushError(text: string): BranchActionError {
 
 export type BranchPull = BotBranchPull;
 
+/** GitHub's check rollup, folded: any failure fails, any unfinished one is pending. */
+function checksOf(rollup: Array<{ state?: string; conclusion?: string; status?: string }> | undefined): { checks?: "failing" | "pending" | "passing" } {
+  if (!rollup?.length) return {};
+  const failed = (c: { state?: string; conclusion?: string }) => ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE", "ACTION_REQUIRED"].includes(c.conclusion ?? c.state ?? "");
+  if (rollup.some(failed)) return { checks: "failing" };
+  const pending = (c: { state?: string; status?: string }) => (c.status !== undefined && c.status !== "COMPLETED") || c.state === "PENDING" || c.state === "EXPECTED";
+  return { checks: rollup.some(pending) ? "pending" : "passing" };
+}
+
 /** owner/name of a GitHub remote, else undefined (pull requests are GitHub only). */
 export function githubRepo(remote: string | undefined): string | undefined {
   if (!remote) return undefined;
@@ -456,13 +465,15 @@ export class BranchPulls {
 
   /** The newest pull request whose head is this branch, any state. */
   async find(branch: string): Promise<BranchPull | undefined> {
-    const result = await this.gh(["pr", "list", `--head=${branch}`, "--state", "all", "--limit", "1", "--json", "number,url,state,title,isDraft"]);
+    const result = await this.gh(["pr", "list", `--head=${branch}`, "--state", "all", "--limit", "1", "--json", "number,url,state,title,isDraft,reviewDecision,statusCheckRollup"]);
     if (result.code === 127) throw new BranchActionError("The GitHub CLI (gh) is not installed where this repository is.", "no_gh", 501);
     if (result.code !== 0) throw ghError(result.stderr);
     try {
-      const [pull] = JSON.parse(result.stdout) as Array<{ number: number; url: string; state: string; title?: string; isDraft?: boolean }>;
+      const [pull] = JSON.parse(result.stdout) as Array<{ number: number; url: string; state: string; title?: string; isDraft?: boolean; reviewDecision?: string; statusCheckRollup?: Array<{ state?: string; conclusion?: string; status?: string }> }>;
       if (!pull) return undefined;
-      return { number: pull.number, url: pull.url, state: pull.state === "MERGED" ? "merged" : pull.state === "CLOSED" ? "closed" : "open", ...(pull.title ? { title: pull.title } : {}), ...(pull.isDraft ? { draft: true } : {}) };
+      const state = pull.state === "MERGED" ? "merged" : pull.state === "CLOSED" ? "closed" : "open";
+      const review = pull.reviewDecision === "CHANGES_REQUESTED" ? "changes_requested" : pull.reviewDecision === "APPROVED" ? "approved" : pull.reviewDecision === "REVIEW_REQUIRED" ? "required" : undefined;
+      return { number: pull.number, url: pull.url, state, ...(pull.title ? { title: pull.title } : {}), ...(pull.isDraft ? { draft: true } : {}), ...(state === "open" && review ? { review } : {}), ...(state === "open" ? checksOf(pull.statusCheckRollup) : {}) };
     } catch {
       return undefined;
     }

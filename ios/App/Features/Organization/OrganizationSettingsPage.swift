@@ -38,16 +38,6 @@ final class OrganizationSettingsModel: ObservableObject {
         }
     }
 
-    func setFullAccess(_ on: Bool, client: CompanionClient?) async {
-        guard let client else { return }
-        do {
-            _ = try await client.setOrganizationFullAccess(on)
-            org = try? await client.organization()
-        } catch {
-            notice = String(localized: "The setting could not be saved: \(error.localizedDescription)")
-        }
-    }
-
     func forceStop(_ bot: OrgBot, client: CompanionClient?) async {
         guard let client else { return }
         do {
@@ -101,8 +91,10 @@ struct OrganizationSettingsPage: View {
             if let org = model.org {
                 orgCard(org)
                 delegationCard
+                // no Full access switch: the organization's policy is gone
+                // (server org-full-access.ts, 2026-10-26), the bot owner's
+                // own confirmation is the only gate
                 if org.isAdmin {
-                    fullAccessCard(org)
                     approvalsCard
                 }
             } else if model.loadFailed {
@@ -274,22 +266,6 @@ struct OrganizationSettingsPage: View {
     }
 
     // MARK: Admin
-
-    private func fullAccessCard(_ org: OrgInfo) -> some View {
-        Group {
-            SettingsSectionLabel(text: "Allow full access")
-            SettingsCard {
-                SettingsRow(
-                    title: "Allow full access for the organization's bots",
-                    accessory: .toggle(Binding(get: { model.org?.settings?.allowFullAccess != false }, set: { on in
-                        Task { await model.setFullAccess(on, client: client) }
-                    })),
-                    identifier: "org-full-access"
-                )
-            }
-            SettingsFooter(text: "Lets bot owners choose Full access: their bots run commands and edit files without asking. Nothing runs on the Sagax server itself. When off, Full access is unavailable and turns asking for it are refused.")
-        }
-    }
 
     private var approvalsCard: some View {
         Group {

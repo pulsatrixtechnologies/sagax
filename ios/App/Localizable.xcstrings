@@ -2296,6 +2296,16 @@
         }
       }
     },
+    "%@ watching": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ en direct"
+          }
+        }
+      }
+    },
     "%@ words · %@ characters": {
       "localizations": {
         "fr": {
@@ -5582,22 +5592,6 @@
         }
       }
     },
-    "A group works best with bots that split the work.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A group works best with bots that split the work."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Un groupe donne sa pleine mesure avec des bots qui se partagent le travail."
-          }
-        }
-      }
-    },
     "A Sagax server": {
       "localizations": {
         "fr": {
@@ -5664,6 +5658,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un bot travaille sur cet ordinateur. Réinitialiser quand même ? Sa tâche en cours est coupée et l'ordinateur est reconstruit à partir du dernier instantané. C'est irréversible."
+          }
+        }
+      }
+    },
+    "A bot takes notes in your meetings. Not yet proven in a real meeting.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un bot prend des notes pendant tes réunions. Pas encore éprouvé en vraie réunion."
           }
         }
       }
@@ -5998,6 +6002,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un groupe de votre organisation"
+          }
+        }
+      }
+    },
+    "A group works best with bots that split the work.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A group works best with bots that split the work."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un groupe donne sa pleine mesure avec des bots qui se partagent le travail."
           }
         }
       }
@@ -6738,54 +6758,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "A value of the JSON result"
-          }
-        }
-      }
-    },
-    "Add a second bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add a second bot"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ajouter un deuxième bot"
-          }
-        }
-      }
-    },
-    "Add to meeting": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add to meeting"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ajouter à une réunion"
-          }
-        }
-      }
-    },
-    "Add to Slack": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add to Slack"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ajouter à Slack"
           }
         }
       }
@@ -7846,6 +7818,22 @@
         }
       }
     },
+    "Add a second bot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a second bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un deuxième bot"
+          }
+        }
+      }
+    },
     "Add a security key or a passkey": {
       "localizations": {
         "fr": {
@@ -8752,6 +8740,38 @@
         }
       }
     },
+    "Add to Slack": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to Slack"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter à Slack"
+          }
+        }
+      }
+    },
+    "Add to meeting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to meeting"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter à une réunion"
+          }
+        }
+      }
+    },
     "Add to section": {
       "localizations": {
         "fr": {
@@ -8800,6 +8820,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter « %@ » à votre calendrier, %@."
+          }
+        }
+      }
+    },
+    "Add, sign in, turn on or off: Plugins > Providers.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add, sign in, turn on or off: Plugins > Providers."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter, se connecter, activer ou désactiver : Plugins > Fournisseurs."
           }
         }
       }
@@ -9175,6 +9211,12 @@
             "state": "translated",
             "value": "Avancé"
           }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avançado"
+          }
         }
       }
     },
@@ -9490,6 +9532,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Todos"
+          }
+        }
+      }
+    },
+    "All achievements": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All achievements"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les succès"
           }
         }
       }
@@ -12512,6 +12570,16 @@
         }
       }
     },
+    "Arrives with the next server update.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrive avec la prochaine mise à jour du serveur."
+          }
+        }
+      }
+    },
     "Arrows": {
       "localizations": {
         "fr": {
@@ -13990,6 +14058,16 @@
         }
       }
     },
+    "Back to live": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retour au direct"
+          }
+        }
+      }
+    },
     "Background brief": {
       "localizations": {
         "fr": {
@@ -14122,6 +14200,32 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sauvegardes et import"
+          }
+        }
+      }
+    },
+    "Backups and storage": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sauvegardes et stockage"
+          }
+        }
+      }
+    },
+    "Balance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balance"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Équilibre"
           }
         }
       }
@@ -15110,6 +15214,16 @@
         }
       }
     },
+    "Bots may write and improve their own skills": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les bots peuvent écrire et améliorer leurs propres skills"
+          }
+        }
+      }
+    },
     "Bots may write their own skills": {
       "localizations": {
         "en": {
@@ -15159,7 +15273,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Os bots rodam em ferramentas de IA instaladas neste computador. Veja o que encontramos."
+            "value": "Os bots rodam em ferramentas de IA instaladas neste computador — veja o que encontramos."
           }
         }
       }
@@ -15208,6 +15322,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ordinateur des bots"
+          }
+        }
+      }
+    },
+    "Bots, Auto and voice only use the providers listed here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les bots, Auto et la voix n'utilisent que les fournisseurs listés ici."
           }
         }
       }
@@ -20804,6 +20928,22 @@
         }
       }
     },
+    "Computer of": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Computer of"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordinateur de"
+          }
+        }
+      }
+    },
     "Computer only": {
       "localizations": {
         "fr": {
@@ -21168,6 +21308,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Conectar o GitHub"
+          }
+        }
+      }
+    },
+    "Connect GitHub or a token: Plugins > Sources.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect GitHub or a token: Plugins > Sources."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connectez GitHub ou un jeton : Plugins > Sources."
           }
         }
       }
@@ -23206,6 +23362,16 @@
         }
       }
     },
+    "Could not play this video.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de lire cette vidéo."
+          }
+        }
+      }
+    },
     "Could not reach %@: %@": {
       "localizations": {
         "en": {
@@ -23466,6 +23632,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível carregar"
+          }
+        }
+      }
+    },
+    "Couldn't load the library.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load the library."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger la bibliothèque."
           }
         }
       }
@@ -23784,6 +23966,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível atualizar"
+          }
+        }
+      }
+    },
+    "Couldn't update the pin.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't update the pin."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de mettre à jour l'épingle."
           }
         }
       }
@@ -28291,7 +28489,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "A pasta de cada bot, ou um caminho absoluto"
+            "value": "A pasta de cada bot — ou um caminho absoluto"
           }
         }
       }
@@ -31668,6 +31866,22 @@
         }
       }
     },
+    "Files you and this person share in your groups and conversations show up here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files you and this person share in your groups and conversations show up here."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les fichiers que vous partagez avec cette personne dans vos groupes et conversations apparaissent ici."
+          }
+        }
+      }
+    },
     "Files you send and files this bot makes in this chat show up here.": {
       "localizations": {
         "en": {
@@ -34132,6 +34346,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Obter uma chave na ElevenLabs"
+          }
+        }
+      }
+    },
+    "Get a new link": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obtenir un nouveau lien"
           }
         }
       }
@@ -37940,6 +38164,22 @@
         }
       }
     },
+    "In common": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In common"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En commun"
+          }
+        }
+      }
+    },
     "In review": {
       "localizations": {
         "fr": {
@@ -38802,6 +39042,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Instructions modifiées par %@, %@, %@"
+          }
+        }
+      }
+    },
+    "Intelligence": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intelligence"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intelligence"
           }
         }
       }
@@ -42100,6 +42356,26 @@
         }
       }
     },
+    "Live": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En direct"
+          }
+        }
+      }
+    },
+    "Live for": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En direct depuis"
+          }
+        }
+      }
+    },
     "Live transcript": {
       "localizations": {
         "en": {
@@ -42214,6 +42490,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pack chargé : %@"
+          }
+        }
+      }
+    },
+    "Loading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement"
           }
         }
       }
@@ -43596,6 +43888,22 @@
         }
       }
     },
+    "Manage in Plugins": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage in Plugins"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gérer dans Plugins"
+          }
+        }
+      }
+    },
     "Manage members": {
       "localizations": {
         "en": {
@@ -44657,7 +44965,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mensagem para %@: %@"
+            "value": "Mensagem para %@ — %@"
           }
         }
       }
@@ -46836,6 +47144,16 @@
         }
       }
     },
+    "Needs a server update": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demande une mise à jour du serveur"
+          }
+        }
+      }
+    },
     "Needs a sign-in": {
       "localizations": {
         "en": {
@@ -47540,6 +47858,16 @@
         }
       }
     },
+    "New link requested": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau lien demandé"
+          }
+        }
+      }
+    },
     "New message": {
       "localizations": {
         "en": {
@@ -47740,6 +48068,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nova tarefa"
+          }
+        }
+      }
+    },
+    "New team goal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New team goal"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvel objectif d’équipe"
           }
         }
       }
@@ -48180,6 +48524,16 @@
         }
       }
     },
+    "Nightly gets new versions first. They can have bugs.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nightly reçoit les nouveautés en premier. Elles peuvent avoir des bogues."
+          }
+        }
+      }
+    },
     "No %@ access for this turn: the person who spoke needs their own subscription or key, or the organization's key.": {
       "localizations": {
         "en": {
@@ -48408,6 +48762,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pas encore de compte?"
+          }
+        }
+      }
+    },
+    "No achievements yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No achievements yet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun succès pour l'instant."
           }
         }
       }
@@ -49478,6 +49848,22 @@
         }
       }
     },
+    "No marketplace yet. Add one in Plugins > Sources.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No marketplace yet. Add one in Plugins > Sources."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune marketplace pour l'instant. Ajoutez-en une dans Plugins > Sources."
+          }
+        }
+      }
+    },
     "No mascot here yet.": {
       "localizations": {
         "fr": {
@@ -50276,6 +50662,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucune routine"
+          }
+        }
+      }
+    },
+    "No routine for this group yet. Team goals and routines that post here show up in this list.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No routine for this group yet. Team goals and routines that post here show up in this list."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune routine pour ce groupe pour l’instant. Les objectifs d’équipe et les routines qui publient ici apparaissent dans cette liste."
           }
         }
       }
@@ -54094,6 +54496,16 @@
         }
       }
     },
+    "On this computer: what alerts you and who sees you.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur cet ordinateur : ce qui t'alerte et qui te voit."
+          }
+        }
+      }
+    },
     "On this iPad": {
       "localizations": {
         "fr": {
@@ -55206,6 +55618,22 @@
         }
       }
     },
+    "Open Messages setup in Plugins": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Messages setup in Plugins"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir la configuration de Messages dans Plugins"
+          }
+        }
+      }
+    },
     "Open Sagax on your Mac, then go to Connect apps, Mac, Messages.": {
       "localizations": {
         "en": {
@@ -55626,6 +56054,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abrir em Automações"
+          }
+        }
+      }
+    },
+    "Open in Plugins": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Plugins"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir dans Plugins"
           }
         }
       }
@@ -56584,6 +57028,22 @@
         }
       }
     },
+    "Optimize for": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optimize for"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optimiser pour"
+          }
+        }
+      }
+    },
     "Optional": {
       "localizations": {
         "en": {
@@ -57394,22 +57854,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dono: %@"
-          }
-        }
-      }
-    },
-    "Paste image": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Paste image"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Coller l'image"
           }
         }
       }
@@ -58298,6 +58742,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Colar configuração"
+          }
+        }
+      }
+    },
+    "Paste image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste image"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coller l'image"
           }
         }
       }
@@ -60406,6 +60866,22 @@
         }
       }
     },
+    "Plugins for members of the organization.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins for members of the organization."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins pour les membres de l’organisation."
+          }
+        }
+      }
+    },
     "Plugins installed here go to %@ only, with their agents, commands and skills. Hooks and the plugin's own MCP servers are left out.": {
       "localizations": {
         "fr": {
@@ -60462,6 +60938,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Plugins, ferramentas e habilidades"
+          }
+        }
+      }
+    },
+    "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins : les plugins, les compétences, les serveurs MCP et les connecteurs des comptes de vos moteurs. Allons voir."
           }
         }
       }
@@ -61092,6 +61584,22 @@
         }
       }
     },
+    "Private": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Private"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privé"
+          }
+        }
+      }
+    },
     "Private Cua Linux desktops on the computer, with one container and durable folder per bot. Distinct bots can work concurrently and unused desktops stop after 10 minutes.": {
       "localizations": {
         "en": {
@@ -61230,6 +61738,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Habilidades privadas"
+          }
+        }
+      }
+    },
+    "Private to you": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Private to you"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privé pour toi"
           }
         }
       }
@@ -66300,6 +66824,16 @@
         }
       }
     },
+    "Restarts after 15 min idle, when no bot is working.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redémarre après 15 min d'inactivité, si aucun bot ne travaille."
+          }
+        }
+      }
+    },
     "Restore": {
       "localizations": {
         "en": {
@@ -66954,6 +67488,22 @@
         }
       }
     },
+    "Review for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review for %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Examiner %@"
+          }
+        }
+      }
+    },
     "Review requested": {
       "localizations": {
         "en": {
@@ -67588,6 +68138,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rotinas na conversa"
+          }
+        }
+      }
+    },
+    "Routines of this group's bots show here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routines of this group's bots show here."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les routines des bots de ce groupe s’affichent ici."
           }
         }
       }
@@ -68452,22 +69018,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Roda enquanto o Sagax estiver aberto neste computador: ele não consegue acordar um Mac em repouso. Uma execução perdida há menos de 12 horas ainda acontece quando o app volta; para 24/7, rode o Sagax em um VPS."
-          }
-        }
-      }
-    },
-    "Session details": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Session details"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Détails de la session"
           }
         }
       }
@@ -71986,6 +72536,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Serveurs et outils"
+          }
+        }
+      }
+    },
+    "Session details": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session details"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détails de la session"
           }
         }
       }
@@ -77518,6 +78084,22 @@
         }
       }
     },
+    "Stop the run of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop the run of %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter le run de %@"
+          }
+        }
+      }
+    },
     "Stop the running turn and send all %lld queued messages now": {
       "localizations": {
         "en": {
@@ -78063,7 +78645,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Suggérés"
+            "value": "Suggestions"
           }
         },
         "pt-BR": {
@@ -78430,6 +79012,22 @@
         }
       }
     },
+    "Switched off in Plugins > Installed. Test it and turn it on there first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switched off in Plugins > Installed. Test it and turn it on there first."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé dans Plugins > Installées. Teste-le et active-le là d'abord."
+          }
+        }
+      }
+    },
     "Switched off under Plugins. Test it and turn it on there first.": {
       "localizations": {
         "en": {
@@ -78710,6 +79308,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tirar foto"
+          }
+        }
+      }
+    },
+    "Take a full copy out, restore it, or bring a bot in from elsewhere.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save, restore and bring in your data, and how long the event log is kept."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sauvegarder, restaurer et importer tes données, et combien de temps garder le journal des événements."
           }
         }
       }
@@ -81602,6 +82217,22 @@
         }
       }
     },
+    "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Plugins pill sits right beside it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Plugins pill sits right beside it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le pied de la barre latérale : votre avatar ouvre la Carte de l’équipe, les Automatisations, Parcourir les bots et vos réglages. La pilule Plugins est juste à côté."
+          }
+        }
+      }
+    },
     "The full form: a preset or a built-in role, then every setting under More options.": {
       "localizations": {
         "en": {
@@ -83200,6 +83831,16 @@
         }
       }
     },
+    "The video link for “%@” expired. Send me a new one.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le lien vidéo de « %@ » est expiré. Envoie-moi un nouveau lien."
+          }
+        }
+      }
+    },
     "The voice choice belongs to this agent. Workspace default uses the shared voice selected on your computer.": {
       "localizations": {
         "fr": {
@@ -83462,6 +84103,16 @@
         }
       }
     },
+    "Theme, conversations and mascots.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thème, conversations et mascottes."
+          }
+        }
+      }
+    },
     "Then install the engine from a bot's Computer > Browser.": {
       "localizations": {
         "fr": {
@@ -83582,6 +84233,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ces zones restent à un administrateur : %@."
+          }
+        }
+      }
+    },
+    "These plugins serve all of your bots. You manage them here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These plugins serve all of your bots. You manage them here."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces plugins servent tous vos bots. Vous les gérez ici."
           }
         }
       }
@@ -85370,6 +86037,22 @@
         }
       }
     },
+    "This person keeps their achievements private.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This person keeps their achievements private."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette personne garde ses succès privés."
+          }
+        }
+      }
+    },
     "This phone can't recognize speech offline in this language. Type your message: %@ answers out loud.": {
       "localizations": {
         "en": {
@@ -86096,6 +86779,22 @@
         }
       }
     },
+    "This session": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This session"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette session"
+          }
+        }
+      }
+    },
     "This session expired after a long time without use. Sign in again to keep using your chats here.": {
       "localizations": {
         "fr": {
@@ -86320,6 +87019,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cette version de Sagax ne connaît pas cet outil. Mettez l'app à jour pour l'utiliser."
+          }
+        }
+      }
+    },
+    "This video link has expired.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le lien de cette vidéo est expiré."
           }
         }
       }
@@ -89520,6 +90229,16 @@
         }
       }
     },
+    "Untitled video": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidéo sans titre"
+          }
+        }
+      }
+    },
     "Unverifiable": {
       "localizations": {
         "en": {
@@ -91282,6 +92001,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ver perfil"
+          }
+        }
+      }
+    },
+    "View run for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View run for %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voir le run de %@"
           }
         }
       }
@@ -93126,6 +93861,16 @@
         }
       }
     },
+    "What your bots can use for you. Encrypted on this computer.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que tes bots peuvent utiliser pour toi. Chiffré sur cet ordinateur."
+          }
+        }
+      }
+    },
     "What your bots did, and what decided it: your rules, your organization's rules, a card you answered, or the bot's approval level.": {
       "localizations": {
         "en": {
@@ -93838,6 +94583,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Onde o trabalho roda"
+          }
+        }
+      }
+    },
+    "Where your bots work and what they can do on this computer.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The computer your bots work on."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'ordinateur où tes bots travaillent."
           }
         }
       }
@@ -94685,7 +95447,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Espace de travail"
+            "value": "Zone de travail"
           }
         },
         "pt-BR": {
@@ -96592,6 +97354,16 @@
         }
       }
     },
+    "Your identity in Sagax.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ton identité dans Sagax."
+          }
+        }
+      }
+    },
     "Your initials will show instead, in Sagax and in Perspicax.": {
       "localizations": {
         "fr": {
@@ -96630,6 +97402,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vos clés"
+          }
+        }
+      }
+    },
+    "Your keys and what your bots may do without asking you.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes clés et ce que tes bots peuvent faire sans te demander."
           }
         }
       }
@@ -96880,6 +97662,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les capacités de votre organisation sont réglées par ses admins dans Perspicax. Celles que vos bots peuvent utiliser sont listées sous Moi."
+          }
+        }
+      }
+    },
+    "Your organization's server, and what it decides for your bots.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur de ton organisation, et ce qu'elle décide pour tes bots."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your organization's server, and what it decides for your bots."
           }
         }
       }
@@ -100939,7 +101738,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "equivalente: está na sua assinatura, não é cobrado"
+            "value": "equivalente — está na sua assinatura, não é cobrado"
           }
         }
       }
@@ -112942,669 +113741,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "… %lld lignes inchangées"
-          }
-        }
-      }
-    },
-    "Private": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Private"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Privé"
-          }
-        }
-      }
-    },
-    "Private to you": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Private to you"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Privé pour toi"
-          }
-        }
-      }
-    },
-    "All achievements": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "All achievements"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tous les succès"
-          }
-        }
-      }
-    },
-    "Couldn't load the library.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't load the library."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Impossible de charger la bibliothèque."
-          }
-        }
-      }
-    },
-    "Couldn't update the pin.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't update the pin."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Impossible de mettre à jour l'épingle."
-          }
-        }
-      }
-    },
-    "Files you and this person share in your groups and conversations show up here.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Files you and this person share in your groups and conversations show up here."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les fichiers que vous partagez avec cette personne dans vos groupes et conversations apparaissent ici."
-          }
-        }
-      }
-    },
-    "In common": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "In common"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En commun"
-          }
-        }
-      }
-    },
-    "Loading": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Loading"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chargement"
-          }
-        }
-      }
-    },
-    "No achievements yet.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No achievements yet."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aucun succès pour l'instant."
-          }
-        }
-      }
-    },
-    "This person keeps their achievements private.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This person keeps their achievements private."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cette personne garde ses succès privés."
-          }
-        }
-      }
-    },
-    "Balance": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Balance"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Équilibre"
-          }
-        }
-      }
-    },
-    "Intelligence": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Intelligence"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Intelligence"
-          }
-        }
-      }
-    },
-    "Optimize for": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Optimize for"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Optimiser pour"
-          }
-        }
-      }
-    },
-    "Your organization's server, and what it decides for your bots.": {
-      "extractionState": "manual",
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le serveur de ton organisation, et ce qu'elle décide pour tes bots."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your organization's server, and what it decides for your bots."
-          }
-        }
-      }
-    },
-    "Where your bots work and what they can do on this computer.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The computer your bots work on."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "L'ordinateur où tes bots travaillent."
-          }
-        }
-      }
-    },
-    "Take a full copy out, restore it, or bring a bot in from elsewhere.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Save, restore and bring in your data, and how long the event log is kept."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sauvegarder, restaurer et importer tes données, et combien de temps garder le journal des événements."
-          }
-        }
-      }
-    },
-    "These plugins serve all of your bots. You manage them here.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "These plugins serve all of your bots. You manage them here."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ces plugins servent tous vos bots. Vous les gérez ici."
-          }
-        }
-      }
-    },
-    "No marketplace yet. Add one in Plugins > Sources.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No marketplace yet. Add one in Plugins > Sources."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aucune marketplace pour l'instant. Ajoutez-en une dans Plugins > Sources."
-          }
-        }
-      }
-    },
-    "Plugins for members of the organization.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plugins for members of the organization."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plugins pour les membres de l’organisation."
-          }
-        }
-      }
-    },
-    "Open Messages setup in Plugins": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Messages setup in Plugins"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir la configuration de Messages dans Plugins"
-          }
-        }
-      }
-    },
-    "Manage in Plugins": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manage in Plugins"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gérer dans Plugins"
-          }
-        }
-      }
-    },
-    "Switched off in Plugins > Installed. Test it and turn it on there first.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switched off in Plugins > Installed. Test it and turn it on there first."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Désactivé dans Plugins > Installées. Teste-le et active-le là d'abord."
-          }
-        }
-      }
-    },
-    "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Plugins pill sits right beside it.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Plugins pill sits right beside it."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le pied de la barre latérale : votre avatar ouvre la Carte de l’équipe, les Automatisations, Parcourir les bots et vos réglages. La pilule Plugins est juste à côté."
-          }
-        }
-      }
-    },
-    "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Plugins : les plugins, les compétences, les serveurs MCP et les connecteurs des comptes de vos moteurs. Allons voir."
-          }
-        }
-      }
-    },
-    "Open in Plugins": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open in Plugins"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir dans Plugins"
-          }
-        }
-      }
-    },
-    "Connect GitHub or a token: Plugins > Sources.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect GitHub or a token: Plugins > Sources."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connectez GitHub ou un jeton : Plugins > Sources."
-          }
-        }
-      }
-    },
-    "Add, sign in, turn on or off: Plugins > Providers.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add, sign in, turn on or off: Plugins > Providers."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ajouter, se connecter, activer ou désactiver : Plugins > Fournisseurs."
-          }
-        }
-      }
-    },
-    "View run for %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "View run for %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Voir le run de %@"
-          }
-        }
-      }
-    },
-    "Review for %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Review for %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Examiner %@"
-          }
-        }
-      }
-    },
-    "Stop the run of %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stop the run of %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Arrêter le run de %@"
-          }
-        }
-      }
-    },
-    "This session": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This session"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cette session"
-          }
-        }
-      }
-    },
-    "New team goal": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New team goal"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nouvel objectif d’équipe"
-          }
-        }
-      }
-    },
-    "Routines of this group's bots show here.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Routines of this group's bots show here."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les routines des bots de ce groupe s’affichent ici."
-          }
-        }
-      }
-    },
-    "Computer of": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Computer of"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ordinateur de"
-          }
-        }
-      }
-    },
-    "No routine for this group yet. Team goals and routines that post here show up in this list.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No routine for this group yet. Team goals and routines that post here show up in this list."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aucune routine pour ce groupe pour l’instant. Les objectifs d’équipe et les routines qui publient ici apparaissent dans cette liste."
-          }
-        }
-      }
-    },
-    "%@ watching": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ en direct"
-          }
-        }
-      }
-    },
-    "Back to live": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retour au direct"
-          }
-        }
-      }
-    },
-    "Could not play this video.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Impossible de lire cette vidéo."
-          }
-        }
-      }
-    },
-    "Get a new link": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Obtenir un nouveau lien"
-          }
-        }
-      }
-    },
-    "Live": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En direct"
-          }
-        }
-      }
-    },
-    "Live for": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "En direct depuis"
-          }
-        }
-      }
-    },
-    "New link requested": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nouveau lien demandé"
-          }
-        }
-      }
-    },
-    "The video link for “%@” expired. Send me a new one.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le lien vidéo de « %@ » est expiré. Envoie-moi un nouveau lien."
-          }
-        }
-      }
-    },
-    "This video link has expired.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le lien de cette vidéo est expiré."
-          }
-        }
-      }
-    },
-    "Untitled video": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vidéo sans titre"
           }
         }
       }

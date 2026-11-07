@@ -19,7 +19,7 @@ import { useSidebarHidden } from "@/lib/sidebar-hidden";
 import { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
 import { useOrgPeople } from "@/lib/perspicax-org";
 import { viewerActorId } from "@/lib/viewer";
-import { setShowAllHistory, setShowSuggestions, useShowAllHistory, useShowSuggestions } from "@/lib/panel-visibility";
+import { setShowAllHistory, setShowPermissions, setShowSuggestions, useShowAllHistory, useShowPermissions, useShowSuggestions } from "@/lib/panel-visibility";
 import { chooseThreadsView, useShowThreadsChoice, useThreadsLocationChoice, type ThreadsView } from "@/lib/thread-preferences";
 import { FRESH_TOPIC_AFTER_CHOICES, useFreshTopicAfter, writeFreshTopicAfter, type FreshTopicAfterHours } from "@/lib/fresh-topic";
 import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDensity, type SidebarDensity } from "@/lib/sidebar-preferences";
@@ -496,6 +496,7 @@ export function AppearanceSettings() {
   const routinesBadge = useShowRoutinesBadge();
   const suggestions = useShowSuggestions();
   const allHistory = useShowAllHistory();
+  const permissions = useShowPermissions();
   const streamReplies = useStreamReplies();
   return (
     <>
@@ -524,6 +525,7 @@ export function AppearanceSettings() {
         <SwitchLine label={t("settings.sidebarPeopleApart.title")} ariaLabel={t("settings.sidebarPeopleApart.show")} checked={peopleApart} onChange={setSidebarPeopleApart} rowId="sidebarPeopleApart" />
         <SwitchLine label={t("settings.showSuggestions.title")} ariaLabel={t("settings.showSuggestions.show")} checked={suggestions} onChange={setShowSuggestions} rowId="showSuggestions" />
         <SwitchLine label={t("settings.allHistory.title")} ariaLabel={t("settings.allHistory.show")} checked={allHistory} onChange={setShowAllHistory} rowId="allHistory" />
+        <SwitchLine label={t("settings.showPermissions.title")} ariaLabel={t("settings.showPermissions.show")} checked={permissions} onChange={setShowPermissions} rowId="showPermissions" />
         <SidebarHiddenFold />
       </SettingsGroup>
       <SettingsGroup title={[t("settings.sidebarLogo.title"), t("settings.routinesBadge.title")].join(", ")} groupId="sidebarAdvanced" advanced>

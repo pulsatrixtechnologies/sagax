@@ -16,6 +16,8 @@ struct BotPanelUpcomingCard: View {
     var onOpen: (Routine) -> Void
     var onToggle: (Routine, Bool) -> Void
     var onAdd: () -> Void
+    /// The bot's full routines page (add, sort, run logs).
+    var onAll: (() -> Void)? = nil
 
     @State private var expanded = false
 
@@ -28,10 +30,25 @@ struct BotPanelUpcomingCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Upcoming")
-                .font(Theme.Font.label)
-                .foregroundStyle(Theme.textTertiary)
-                .padding(.horizontal, 4)
+            HStack(spacing: 8) {
+                Text("Upcoming")
+                    .font(Theme.Font.label)
+                    .foregroundStyle(Theme.textTertiary)
+                Spacer(minLength: 0)
+                if loaded, !mine.isEmpty, let onAll {
+                    Button {
+                        Haptics.selection()
+                        onAll()
+                    } label: {
+                        Text("All routines")
+                            .font(Theme.Font.label)
+                            .foregroundStyle(Theme.accentText)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("panel-upcoming-all")
+                }
+            }
+            .padding(.horizontal, 4)
             ProfileCard {
                 if !loaded {
                     HStack(spacing: 8) {

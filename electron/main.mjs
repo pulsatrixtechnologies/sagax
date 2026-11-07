@@ -4108,7 +4108,11 @@ ipcMain.handle("pulsatrix-sign-in:reopen", async (event) => {
 // Local-control screen preview — served from the main process so the Screen
 // Recording permission prompt attributes to the app, never the server.
 // Windows captures without a permission step; Linux has its own preview.
-ipcMain.handle("screen:frame", localOnly("screen:frame", async () => {
+// desktopUiOnly: the bot panel's Computer window (LocalLiveScreen) also runs
+// on this app's bundle drawn on the organization server, and this computer's
+// screen is what it shows there too (it used to fall back to the Local VM's
+// screenshot and end on "The screen is temporarily unavailable.").
+ipcMain.handle("screen:frame", desktopUiOnly("screen:frame", async () => {
   if (process.platform !== "darwin" && process.platform !== "win32") return null;
   const sources = await desktopCapturer.getSources({
     types: ["screen"],
@@ -4888,6 +4892,12 @@ ipcMain.handle("perm:status", (event) => ({
       ? systemPreferences.getMediaAccessStatus?.("microphone") ?? "unknown"
       : "unsupported",
   pageMic: appPermissions?.pageMicrophone(event) ?? "refused",
+  // Read only (no prompt): lets the Computer card and window say Screen
+  // Recording is missing instead of a vague "unavailable".
+  screen: process.platform === "darwin" ? systemPreferences.getMediaAccessStatus?.("screen") ?? "unknown" : "unsupported",
+  // This computer's name, so the card applies that reason only to the row
+  // that stands for this computer (the bridge registers the same host name).
+  host: os.hostname(),
 }));
 ipcMain.handle("perm:request-mic", localOnly("perm:request-mic", async () => {
   if (!nativeActions.appleMediaPermissions) return false;
@@ -4900,7 +4910,8 @@ ipcMain.handle("perm:request-mic", localOnly("perm:request-mic", async () => {
 
 // macOS never re-prompts a denied permission — the only path is System
 // Settings; deep-link straight to the right privacy pane.
-ipcMain.handle("perm:open-settings", localOnly("perm:open-settings", (_event, pane) => {
+// desktopUiOnly: opening a Settings pane is the same on the bundled page.
+ipcMain.handle("perm:open-settings", desktopUiOnly("perm:open-settings", (_event, pane) => {
   if (!nativeActions.applePrivacySettings) return false;
   const panes = {
     mic: "Privacy_Microphone",

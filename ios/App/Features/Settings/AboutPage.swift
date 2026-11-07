@@ -70,6 +70,16 @@ struct AboutPage: View {
                 CardHairline(leadingInset: SettingsMetrics.rowInset)
                 SettingsRow(title: "License", accessory: .chevron, identifier: "about-license") { link = AboutLinks.license }
             }
+            // The legal pages of the Settings tree's About (#1168): one About
+            // for the account menu, the search and Settings > About.
+            SettingsSpacer(SettingsMetrics.cardGap)
+            SettingsCard {
+                SettingsLinkRow(title: "Privacy Policy", identifier: "settings-privacy") { SettingsLinks.privacy(french: $0) }
+                CardHairline(leadingInset: SettingsMetrics.rowInset)
+                SettingsLinkRow(title: "Terms of Service", identifier: "settings-terms") { SettingsLinks.terms(french: $0) }
+                CardHairline(leadingInset: SettingsMetrics.rowInset)
+                SettingsLinkRow(title: "Sagax Terms", identifier: "settings-sagax-terms") { _ in SettingsLinks.sagaxTerms }
+            }
             // Footer follows LICENSE on the tree (APP_LICENSE_FOOTER / about.copyright).
             SettingsFooter(text: "\(AboutLicense.footer)\n\(AboutLicense.basedOn)")
         }

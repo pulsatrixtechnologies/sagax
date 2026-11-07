@@ -306,20 +306,20 @@
      tokens existed; see the comment above `[data-skin="pulsatrix-light"]`
      for the one skin that gives the rail its own navy chrome. */
   --color-sidebar: #111111;
-  --color-sidebar-ink: #fcfcfc;
-  --color-sidebar-ink-secondary: #fcfcfca1;   /* the reference window's #a5a5a5 on the rail (ink-secondary stays #fcfcfc99) */
+  --color-sidebar-ink: #f5f5f5;           /* Grok Bot Sand Dark text/primary */
+  --color-sidebar-ink-secondary: #f5f5f5a8; /* Grok Bot text/secondary, 66% */
   --color-sidebar-hover: #7777772c;
   --color-sidebar-selected: #77777752;
   --color-sidebar-hairline: #363636;      /* #333333 measured 1.49:1 on the sidebar; nudged to clear 1.5:1 */
-  --color-ink: #fcfcfc;
-  --color-ink-secondary: #fcfcfc99;
+  --color-ink: #f5f5f5;           /* Grok Bot Sand Dark text/primary */
+  --color-ink-secondary: #f5f5f5a8; /* Grok Bot text/secondary, 66% */
   /* quiet text: timestamps, hints, placeholders, calendar hours. It used to
      be `text-ink-secondary/70`, which fades an ink already tuned close to
      AA and landed at 2.2–4:1. Each skin sets this to the quietest ink that
      still clears 4.5:1 on every text surface, raised-hover included; on the
      light skins that leaves little room below the secondary ink, so there
      size carries the hierarchy. Measured by pnpm check:contrast. */
-  --color-ink-tertiary: #fcfcfc90;
+  --color-ink-tertiary: #f5f5f58a;  /* Grok Bot text/tertiary, 54% */
   --color-accent: #d6d6d6;
   --color-accent-border: #a3a3a3;
   /* the ring a keyboard user follows; sits on the accent so focus reads as
@@ -546,18 +546,18 @@
   --color-control: #282828;
   --color-hairline: #353535;
   --color-sidebar: #0e0e0e;
-  --color-sidebar-ink: #e4e4e7;             /* = ink */
-  --color-sidebar-ink-secondary: #9e9ea3; /* = ink-secondary */
+  --color-sidebar-ink: #f5f5f5;             /* = ink */
+  --color-sidebar-ink-secondary: #f5f5f5a8; /* = ink-secondary */
   --color-sidebar-hover: #f5f5f50f;         /* 6% white */
   --color-sidebar-selected: #4f86f729;      /* accent wash on the selected row */
   --color-sidebar-hairline: #333333;
   --sidebar-mark-on-dark: inline-block;
   --sidebar-mark-on-light: none;
 
-  /* #2298: the reference's soft off-white and grey, never pure white */
-  --color-ink: #e4e4e7;
-  --color-ink-secondary: #9e9ea3;
-  --color-ink-tertiary: #f5f5f58a;    /* 54%, as Midnight */
+  /* Grok Bot Sand Dark text ramp, as Midnight: never pure white */
+  --color-ink: #f5f5f5;
+  --color-ink-secondary: #f5f5f5a8;  /* 66% */
+  --color-ink-tertiary: #f5f5f58a;   /* 54% */
 
   --color-accent: #3c76f4;
   --color-unread: var(--color-accent);
@@ -708,9 +708,9 @@
   --sidebar-mark-on-dark: inline-block;
   --sidebar-mark-on-light: none;
 
-  --color-ink: #0b1526;
-  --color-ink-secondary: #4f5868;   /* v3's #5a6577 darkened for 4.5:1 on inset and on the selected row's wash */
-  --color-ink-tertiary: #4f5868;   /* = ink-secondary: the light ground leaves no room below it */
+  --color-ink: #1c1c1c;             /* Grok Bot Sand Light text/primary */
+  --color-ink-secondary: #1c1c1cad;  /* Grok Bot text/secondary, 68% */
+  --color-ink-tertiary: #1c1c1cad;   /* = ink-secondary: Grok's 56% tertiary falls under 4.5:1 on a light ground */
 
   --color-accent: #2f62dd;
   --color-unread: var(--color-accent);
@@ -971,17 +971,17 @@
                                      card, and raised-hover still lifts off it */
   --color-hairline: #c8bda8;      /* #ece7dd was 1.11:1 on the rail → 1.65:1 */
   --color-sidebar: #fbf8f2;              /* = panel: unchanged */
-  --color-sidebar-ink: #1a1a18;           /* = ink: unchanged */
-  --color-sidebar-ink-secondary: #5c564d; /* = ink-secondary: unchanged */
+  --color-sidebar-ink: #1c1c1c;           /* = ink */
+  --color-sidebar-ink-secondary: #1c1c1cad; /* = ink-secondary */
   --color-sidebar-hover: #7777772c;       /* = hover: unchanged */
   --color-sidebar-selected: #77777752;    /* = selected: unchanged */
   --color-sidebar-hairline: #c8bda8;      /* = hairline: unchanged */
   --sidebar-mark-on-dark: none;
   --sidebar-mark-on-light: inline-block; /* a light rail: the navy-bar mark */
 
-  --color-ink: #1a1a18;           /* 17.4:1 on white */
-  --color-ink-secondary: #5c564d; /* #8b8578 was 3.67:1 → 5.78:1 */
-  --color-ink-tertiary: #5c564d;   /* = ink-secondary: the hover and selected washes leave no room below it */
+  --color-ink: #1c1c1c;             /* Grok Bot Sand Light text/primary */
+  --color-ink-secondary: #1c1c1cad;  /* Grok Bot text/secondary, 68% */
+  --color-ink-tertiary: #1c1c1cad;   /* = ink-secondary: the hover and selected washes leave no room below it */
 
   /* Two accent tones: the fill carries white, the text stands on white. */
   --color-accent: #a05f25;        /* #b06a2c darkened → 5.05:1 */
@@ -1107,17 +1107,17 @@
   --color-control: #262019;       /* = raised: Foundry is unchanged */
   --color-hairline: #3d3529;      /* visible on purpose — this UI has edges */
   --color-sidebar: #171410;              /* = panel: unchanged */
-  --color-sidebar-ink: #f4efe4;           /* = ink: unchanged */
-  --color-sidebar-ink-secondary: #b0a696; /* = ink-secondary: unchanged */
+  --color-sidebar-ink: #f5f5f5;           /* = ink */
+  --color-sidebar-ink-secondary: #f5f5f5a8; /* = ink-secondary */
   --color-sidebar-hover: #7777772c;       /* = hover: unchanged */
   --color-sidebar-selected: #77777752;    /* = selected: unchanged */
   --color-sidebar-hairline: #3d3529;      /* = hairline: unchanged */
   --sidebar-mark-on-dark: inline-block;
   --sidebar-mark-on-light: none;
 
-  --color-ink: #f4efe4;           /* warm off-white, never pure #fff */
-  --color-ink-secondary: #b0a696; /* 6.7:1 on raised, 5.9:1 on hover */
-  --color-ink-tertiary: #a59c8f;
+  --color-ink: #f5f5f5;           /* Grok Bot Sand Dark text/primary, never pure #fff */
+  --color-ink-secondary: #f5f5f5a8; /* Grok Bot text/secondary, 66% */
+  --color-ink-tertiary: #f5f5f58a;  /* Grok Bot text/tertiary, 54% */
 
   /* Brass. Bright fill, dark lettering — the inversion described above. */
   --color-accent: #d99a3e;
@@ -1752,8 +1752,8 @@
      grey that still passes; see scripts/check-skin-contrast.mjs. */
   --color-hairline: #d0d0d0;
   --color-sidebar: #f7f7f7;              /* = panel: unchanged */
-  --color-sidebar-ink: #0d0d0d;           /* = ink: unchanged */
-  --color-sidebar-ink-secondary: #575757; /* = ink-secondary: unchanged */
+  --color-sidebar-ink: #1c1c1c;           /* = ink */
+  --color-sidebar-ink-secondary: #1c1c1cad; /* = ink-secondary */
   --color-sidebar-hover: #7777772c;       /* = hover: unchanged */
   --color-sidebar-selected: #77777752;    /* = selected: unchanged */
   --color-sidebar-hairline: #c8c8c8;      /* hairline (#d0d0d0) measures 1.44:1
@@ -1761,9 +1761,9 @@
   --sidebar-mark-on-dark: none;
   --sidebar-mark-on-light: inline-block; /* a light rail: the navy-bar mark */
 
-  --color-ink: #0d0d0d;
-  --color-ink-secondary: #575757;
-  --color-ink-tertiary: #575757;   /* = ink-secondary: the selected wash leaves no room below it */
+  --color-ink: #1c1c1c;             /* Grok Bot Sand Light text/primary */
+  --color-ink-secondary: #1c1c1cad;  /* Grok Bot text/secondary, 68% */
+  --color-ink-tertiary: #1c1c1cad;   /* = ink-secondary: the selected wash leaves no room below it */
 
   /* The upstream blue is #1084fe, which carries white at 3.1:1 — fine for the
      unread dot it is mostly used for, not for a filled button's label. The
@@ -2448,11 +2448,11 @@ body {
   background-color: var(--color-app);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  /* Greyscale smoothing (`antialiased`) draws macOS stems lighter than the
-     system UI, which is the washed-out look on a Retina display. The window
-     background is opaque, so the default smoothing can stay. */
-  -webkit-font-smoothing: auto;
-  -moz-osx-font-smoothing: auto;
+  /* Grok Bot's root draws text with greyscale smoothing. The default
+     (subpixel) smoothing thickens macOS stems, so the same ink read brighter
+     and heavier than Grok Bot side by side. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
 }
 
@@ -2793,10 +2793,15 @@ body {
    page passes its hex as --bot-profile-banner-color and the wash mixes it
    with a pale base, darker at the top. The page's top bar carries the top
    colour (.bot-profile-banner-top) so bar and banner read as one header. A
-   neutral mascot keeps a visible grey. light-dark() picks the base. */
+   neutral mascot keeps a visible grey. The base is one plain colour, never
+   light-dark(): the build (lightningcss) rewrites light-dark() into
+   --lightningcss-light/-dark variables that only a literal color-scheme
+   defines, and the skins set `color-scheme: var(--code-color-scheme)`, so
+   in the shipped app the base was invalid, the banner and the bar went
+   transparent and the hero card floated under a dark gap (#2554). */
 .bot-profile-banner,
 .bot-profile-banner-top {
-  --bot-profile-banner-base: light-dark(#ffffff, #f4f4f4);
+  --bot-profile-banner-base: #f7f7f7;
   --bot-profile-banner-from: color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 58%, var(--bot-profile-banner-base));
 }
 .bot-profile-banner {
@@ -4805,12 +4810,10 @@ select optgroup {
 [data-panel-bot] {
   --bot-panel-bg: var(--color-app);
   --bot-panel-card: var(--color-card);
-  --bot-panel-switch-off: var(--color-switch-off);
   --bot-panel-pill-border: var(--color-hairline);
 }
 [data-skin="pulsatrix"] [data-panel-bot] {
   --bot-panel-bg: #161616;
   --bot-panel-card: #1f1f1f;
-  --bot-panel-switch-off: #3a3a3a;
   --bot-panel-pill-border: #3a3a3a;
 }

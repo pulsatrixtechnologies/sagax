@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /**
  * Headless screenshots of the bot panel's Computer row thumbnail (2026-11-06):
- * a fresh capture, an old one greyed out, the wallpaper without one, the
- * picture switching with the computer, and the larger view. The thumbnail
+ * a fresh capture, an old one greyed out, no capture yet (unavailable, with
+ * the reason), asleep (a stopped cloud computer, Off), the picture switching
+ * with the computer, and the larger view. Then, as the desktop app with
+ * Screen Recording not allowed (2026-11-07): the row's reason and the live
+ * window that says it, with the System Settings button. The thumbnail
  * endpoint is answered here with synthetic desktops. Headless Chromium only.
  * Usage: node scripts/capture/computer-thumbnail.mjs [--out DIR] [--port N]
  */
@@ -62,10 +65,15 @@ try {
   const at = { "scout:cloud": now - 20_000, "scout:local": now - 5_000, "echo:vm": now - 60 * 60_000, "pepper:cloud": now - 8_000 };
 
   for (const skin of skins) {
-    const page = await browser.newPage({ viewport: { width: 420, height: 420 }, deviceScaleFactor: 2 });
+    const page = await browser.newPage({ viewport: { width: 420, height: 860 }, deviceScaleFactor: 2 });
     page.on("pageerror", (error) => console.error("page error:", error.stack));
     // The newest route wins: the catch-all first, the thumbnail after.
     await page.route("**/api/**", (route) => route.fulfill({ status: 404, json: {} }));
+    // The cloud computer's status: Luna's is stopped, the others run.
+    await page.route("**/api/bots/*/computer", (route) => {
+      const botId = new URL(route.request().url()).pathname.split("/")[3];
+      return route.fulfill({ json: { configured: true, box: { state: botId === "luna" ? "stopped" : "running" } } });
+    });
     await page.route("**/api/bots/*/computer/thumbnail?*", (route) => {
       const url = new URL(route.request().url());
       const botId = url.pathname.split("/")[3];
@@ -99,6 +107,35 @@ try {
     await page.waitForTimeout(1200);
     await save("preview");
     await page.close();
+
+    // The desktop app on a Mac where Screen Recording is not allowed.
+    const app = await browser.newPage({ viewport: { width: 420, height: 860 }, deviceScaleFactor: 2 });
+    app.on("pageerror", (error) => console.error("page error:", error.stack));
+    await app.addInitScript(() => {
+      Object.defineProperty(navigator, "platform", { get: () => "MacIntel" });
+      window.ogb = {
+        platform: "darwin",
+        screenFrame: async () => null,
+        screenThumbnail: async () => null,
+        permStatus: async () => ({ mic: "granted", screen: "denied", host: "Studio-Mac" }),
+        permOpenSettings: async () => {},
+      };
+    });
+    await app.route("**/api/**", (route) => route.fulfill({ status: 404, json: {} }));
+    await app.goto(`${base}?skin=${skin.id}&lang=en`, { waitUntil: "load" });
+    await app.waitForSelector("[data-gallery-row='none'] [data-computer-problem='permission']");
+    await app.waitForTimeout(600);
+    const file = join(outDir, `permission-${skin.label}.png`);
+    await app.screenshot({ path: file });
+    console.log(file);
+    await app.locator("[data-gallery-row='none'] [data-computer-thumb]").click();
+    await app.setViewportSize({ width: 1100, height: 760 });
+    await app.waitForSelector("[data-local-live-error='permission']", { timeout: 15_000 });
+    await app.waitForTimeout(800);
+    const live = join(outDir, `live-permission-${skin.label}.png`);
+    await app.screenshot({ path: live });
+    console.log(live);
+    await app.close();
   }
   console.log(`screenshots in ${outDir}`);
 } catch (error) {

@@ -29,6 +29,11 @@ import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 
 export const AUTO_EXPAND_TOP_THRESHOLD = 250;
 
+/** Upward wheel, in pixels, that leaves the bottom while the pane is still
+ * resting there. Smaller deltas are trackpad inertia and elastic bounce:
+ * they used to drop follow, then the next line grew below the fold. */
+const UPWARD_WHEEL_DETACH = 16;
+
 /** True when the gesture started inside a scrollable box nested in the
  * transcript (code block, table, pre) that can still move up: the box eats the
  * gesture, the transcript itself does not move. */
@@ -342,7 +347,10 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
       // A real upward move: not a mostly horizontal swipe, not momentum noise,
       // not a nested scroller (code block, table) that can still move up.
       if (e.deltaY < -1 && Math.abs(e.deltaY) >= Math.abs(e.deltaX) && !nestedCanScrollUp(e.target, scrollRef.current)) {
-        if (canScrollUp()) setBottomFollow(false);
+        // Still resting on the bottom: only a real upward move detaches.
+        // A small delta there is bounce, and follow must stay so the next
+        // line does not open above the fold.
+        if (canScrollUp() && (!atEnd() || e.deltaY <= -UPWARD_WHEEL_DETACH)) setBottomFollow(false);
         const el = scrollRef.current;
         if (el && el.scrollTop <= AUTO_EXPAND_TOP_THRESHOLD) {
           triggerAutoEarlier();
@@ -381,7 +389,11 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
       // At the rest position with follow off (stale state): arm it again. No
       // scroll is issued, so this never moves the viewport.
       const atRest = el.scrollHeight - scrollTop - el.clientHeight < BOTTOM_FOLLOW_THRESHOLD;
-      if (resume || (!followRef.current && atRest && scrollTop >= prevScrollTop)) {
+      // The pixels moved up, off the bottom. A wheel that never leaves the
+      // rest position must not detach follow; this does, once they have.
+      if (followRef.current && scrollTop + 1 < prevScrollTop && !atRest) {
+        setBottomFollow(false);
+      } else if (resume || (!followRef.current && atRest && scrollTop >= prevScrollTop)) {
         setBottomFollow(true);
       } else if (!followRef.current && scrollTop <= AUTO_EXPAND_TOP_THRESHOLD) {
         triggerAutoEarlier();

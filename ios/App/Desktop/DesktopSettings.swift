@@ -172,7 +172,7 @@ extension DesktopSettingsSection {
         case .mail: "Email"
         case .activity: "Activity"
         // #2080 (L0): Backups and import; App (id "about").
-        case .backups: "Backups and import"
+        case .backups: "Backups and storage"
         case .providers: "Providers"
         case .voice: "Voice"
         case .updates: "Updates"
@@ -202,7 +202,7 @@ extension DesktopSettingsSection {
         case .people: AppStrings.localized("People")
         case .mail: AppStrings.localized("Email")
         case .activity: AppStrings.localized("Activity")
-        case .backups: AppStrings.localized("Backups and import")
+        case .backups: AppStrings.localized("Backups and storage")
         case .providers: AppStrings.localized("Providers")
         case .voice: AppStrings.localized("Voice")
         case .updates: AppStrings.localized("Updates")
@@ -217,11 +217,11 @@ extension DesktopSettingsSection {
     /// The page's one-sentence intro under the title (#2080, settings.intro.*).
     var intro: LocalizedStringKey? {
         switch self {
-        case .general: "Your account, your profile, your language and time zone."
-        case .appearance: "How Sagax looks and what it shows."
-        case .notifications: "When and how Sagax lets you know."
-        case .security: "What needs your confirmation before a bot acts."
-        case .vault: "Logins, keys and notes your bots use without seeing them."
+        case .general: "Your identity in Sagax."
+        case .appearance: "Theme, conversations and mascots."
+        case .notifications: "On this computer: what alerts you and who sees you."
+        case .security: "Your keys and what your bots may do without asking you."
+        case .vault: "What your bots can use for you. Encrypted on this computer."
         case .providers: "Where models and services come from."
         case .engines: "Which model each bot uses."
         case .voice: "How your bots speak and listen."

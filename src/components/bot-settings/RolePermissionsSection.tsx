@@ -12,6 +12,7 @@ import { activeLocale, documentLanguage, t } from "@/lib/i18n";
 import { api } from "@/state/store";
 import { useStoreDispatch } from "@/state/store-selector";
 import { useShowThreads } from "@/lib/thread-preferences";
+import { useShowPermissions } from "@/lib/panel-visibility";
 import { readableError } from "@/lib/plain-error";
 import { cn } from "@/lib/cn";
 import { stepToolName } from "@/lib/step-label";
@@ -212,7 +213,11 @@ function operationVerb(operation: CwOperation): string {
 
 /** "Dispatch Agent ne peut pas modifier les billets". */
 export function refusalLabel(entry: Pick<MissingPermission, "role" | "permission">): string {
-  return t("roles.refusal.label", { role: roleLabel(entry.role), verb: operationVerb(entry.permission.operation), object: permissionObject(entry.permission) });
+  const verb = operationVerb(entry.permission.operation);
+  const object = permissionObject(entry.permission);
+  // the person's own credentials (no role slug): "You can't ...", never "Me can't ..."
+  if (!entry.role.slug) return t("roles.refusal.labelYou", { verb, object });
+  return t("roles.refusal.label", { role: roleLabel(entry.role), verb, object });
 }
 
 /** "refusé 1 fois, dernier 5 nov. 13:10". */
@@ -321,18 +326,22 @@ export function RolePermissionsView({ botId, body, now = Date.now(), open, onOpe
 }
 
 /** Details > Permissions: reads the bot's roles once; nothing shows while
- * it loads, on a failure, or when nothing was refused lately. */
+ * it loads, on a failure, or when nothing was refused lately. Hidden (and
+ * not read) unless Settings > Appearance > Sidebar > Show permissions is on
+ * (off by default, JC 2026-11-07). */
 export function RolePermissionsSection({ botId }: { botId: string }) {
   const dispatch = useStoreDispatch();
+  const shown = useShowPermissions();
   const [body, setBody] = useState<RolesTabBody | null>(null);
   useEffect(() => {
     let alive = true;
     setBody(null);
+    if (!shown) return;
     void api<RolesTabBody>(`/api/bots/${encodeURIComponent(botId)}/roles`)
       .then((answer) => { if (alive) setBody({ nodes: answer.nodes ?? [], edges: answer.edges ?? [], missing: answer.missing ?? [], journal: answer.journal === "perspicax" ? "perspicax" : "local" }); })
       .catch(() => { if (alive) setBody(null); });
     return () => { alive = false; };
-  }, [botId]);
+  }, [botId, shown]);
   // unified chat (Show threads off, JC's mode): everything lives in the
   // bot's one chat, so the edge history never links to another thread
   const showThreads = useShowThreads();
@@ -340,5 +349,6 @@ export function RolePermissionsSection({ botId }: { botId: string }) {
     dispatch({ type: "switchTask", botId, threadId });
     dispatch({ type: "revealThread", threadId });
   };
+  if (!shown) return null;
   return <RolePermissionsView botId={botId} body={body} {...(showThreads ? { onOpenThread: openThread } : {})} />;
 }

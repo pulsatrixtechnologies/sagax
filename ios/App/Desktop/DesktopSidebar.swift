@@ -83,6 +83,9 @@ struct DesktopSidebar: View {
             } else {
                 AnyView(DesktopSidebarHead())
             }
+            // the demo's banner and its Exit demo, as on the phone's home (#2467): without it the
+            // iPad had no way out of the demo
+            if session.isDemo, !icons { DemoBanner().padding(.top, 6) }
             AnyView(DesktopSidebarList(layout: layout))
                 .frame(maxHeight: .infinity)
             // lot 6: the multi-select bar, above the foot; the rail has none
@@ -296,7 +299,7 @@ struct DesktopSidebarList: View {
     private func previewMap() -> [String: String] {
         let activity = toolCalls.detail
         var map: [String: String] = [:]
-        for summary in session.state.chatSummaries(activity: activity) { map[summary.chat.id] = summary.preview }
+        for summary in session.rosterFacts(activity: activity).summaries { map[summary.chat.id] = summary.preview }
         return map
     }
 }

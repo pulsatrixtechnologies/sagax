@@ -284,7 +284,10 @@ it("a routine run limited after handing work out runs again on the backup withou
   f.save();
   // Enabled (its next scheduled run an hour away): a usage limit reruns only an enabled routine.
   const { routineId } = await runRoutine(f, owner.id, "Ask the peer for the nightly report, then report it.", true);
-  await expect.poll(async () => (await routineRuns(f, routineId)).length, { timeout: 60_000, interval: 250 }).toBeGreaterThanOrEqual(2);
+  // Since 2026-11-02 (6ee0c3651c) a run a limit refused goes on in the same
+  // run on the backup engine, not as a second run of the routine.
+  await expect.poll(async () => (await routineRuns(f, routineId)).some((run) => run.retried === "usage_limit" && run.limitTakeover?.instanceId === "backup"),
+    { timeout: 60_000, interval: 250 }).toBe(true);
   await expect.poll(() => f.evidence().filter((turn) => turn.botId === owner.id).length, { timeout: 60_000, interval: 250 }).toBeGreaterThanOrEqual(2);
   writeFileSync(peerGate, "finish");
   await expect.poll(async () => (await routineRuns(f, routineId)).some((run) => run.status === "completed"), { timeout: 60_000, interval: 250 }).toBe(true);
@@ -832,7 +835,8 @@ it("an external runtime's synchronous ask_bot retried after a dropped connection
 it("an external runtime's delegate_bot that needs the person's review is not held open: the work waits for the card, runs once on allow and is refused on deny", () => withFixture(async (f) => {
   const gateway = (await f.cli("new-bot", "--name", "Gateway")).bot;
   const peer = (await f.cli("new-bot", "--name", "Peer")).bot;
-  await f.api(`/api/bots/${gateway.id}`, { approvePeerComms: true }, "PATCH");
+  // A new Sagax bot starts at Full access, which answers the peer card itself: the review needs "Ask".
+  await f.api(`/api/bots/${gateway.id}`, { approvePeerComms: true, approvalMode: "ask" }, "PATCH");
   const token = "convergence-external-review-0123456789abcd";
   writeFileSync(join(f.dataDir, "external-runtimes.json"), JSON.stringify({ [gateway.id]: { token, threadId: gateway.activeTaskId } }), { mode: 0o600 });
   f.plan[peer.id] = { byPrompt: [

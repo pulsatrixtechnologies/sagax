@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SERVER_FEATURE_NAMES } from "../shared/server-features.ts";
-import { environmentDescriptor, environmentLabel, loadEnvironmentId, serverVersion } from "./environment.ts";
+import { environmentDescriptor, environmentLabel, loadEnvironmentId, releaseVersion, serverVersion } from "./environment.ts";
 import { hostname } from "node:os";
 import { identityDescriptor } from "./auth/oidc-login.ts";
 
@@ -155,6 +155,31 @@ describe("environment identity", () => {
   it("falls back to the checkout's package.json version, then to unknown", () => {
     delete process.env.SAGAX_APP_VERSION;
     expect(serverVersion()).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  // #2582: the image ships dist-server/ without the checkout's package.json, so
+  // /api/health said version "unknown" in production. The bundle carries its
+  // own version.json beside index.js; both versions read it.
+  it("reads the bundle's version.json when no package.json sits above it (#2582)", () => {
+    const savedApp = process.env.SAGAX_APP_VERSION;
+    const savedRelease = process.env.SAGAX_RELEASE_VERSION;
+    delete process.env.SAGAX_APP_VERSION;
+    delete process.env.SAGAX_RELEASE_VERSION;
+    try {
+      const app = mkdtempSync(join(tmpdir(), "sagax-image-"));
+      dirs.push(app);
+      const bundle = join(app, "dist-server");
+      mkdirSync(bundle);
+      writeFileSync(join(bundle, "version.json"), JSON.stringify({ version: "0.0.1", forkVersion: "0.8.61" }));
+      expect(releaseVersion(bundle)).toBe("0.8.61");
+      expect(serverVersion(bundle)).toBe("0.0.1");
+      const bare = join(app, "bare");
+      mkdirSync(bare);
+      expect(serverVersion(bare)).toBe("unknown");
+    } finally {
+      if (savedApp !== undefined) process.env.SAGAX_APP_VERSION = savedApp;
+      if (savedRelease !== undefined) process.env.SAGAX_RELEASE_VERSION = savedRelease;
+    }
   });
 });
 

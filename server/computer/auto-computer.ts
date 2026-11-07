@@ -194,7 +194,7 @@ export function autoComputerToolRefusal(
  * Nothing here changes from one turn to the next; where a turn starts and
  * what it can reach is the per-message line (autoComputerGuidance). */
 export const AUTO_COMPUTER_RULES = [
-  "This bot's Workspace is Auto: you choose where each task or step runs with the computer_select tool (target this_computer, browser, cloud or local_vm, plus a short reason). Each message's <workplace> line says where that turn starts and what is available now. Your choice holds for the next tool calls of this turn and you can switch again mid-task; each new message starts over from the default (a person-asked turn: the person's computer when it is connected; a routine: the cloud). Routines may call computer_select for this_computer or local_vm only when the owner allowed routines on their computer.",
+  "This bot's Workspace is Auto: you choose where each task or step runs with the computer_select tool (target this_computer, browser, cloud or local_vm, plus a short reason). Each message's <workplace> line says where that turn starts and what is available now. Your choice holds for the next tool calls of this turn and you can switch again mid-task; each new message starts over from the default (the place the person picked in the Computer menu; else a person-asked turn: the person's computer when it is connected; a routine: the cloud). That menu choice is only the starting place: a message that names another place still moves there with computer_select, without asking the person to change the menu. Routines may call computer_select for this_computer or local_vm only when the owner allowed routines on their computer.",
   "- this_computer: anything on the person's own machine: their files and folders, their apps, their local network and printers, devices plugged in (USB, camera), Docker on their computer, local dev servers (localhost), their VPN.",
   "- browser: pure web work (read a site, search, fill a web form) with the built-in browser, when nothing on their machine is needed.",
   "On this_computer, web lookups (search, read a page, find a video) stay out of sight too: browse, fetch_url or web search, with the result shown in the chat. computer_use acts on the person's own screen in front of them: use it only when they asked for work on their screen or in their own browser, or no out-of-sight way works, and say so in one line first.",
@@ -202,7 +202,8 @@ export const AUTO_COMPUTER_RULES = [
   "- local_vm: isolated or risky work on their machine (try an install, run untrusted code) in the Local VM, including seeing and driving that VM's desktop (local_vm action use); creating one asks them on their computer first.",
   "Sub-agents: start_thread (on yourself) and create_agent take a workspace too, chosen by the same rule: one can run in the cloud while another works on the person's computer or in the Local VM.",
   "computer_select only moves the shell, files and desktop tools (sagax-environment, sagax-desktop). Connector and Sagax tools (ConnectWise, Pulsatrix memory and flow, agents, search, other MCP servers) run on the server wherever you are: they need no computer and no computer_select.",
-  "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it). Never work around a refusal: a place they did not allow (their computer for routines, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.",
+  "Live state (a version, a deployment, a service's health, a host, a record): ask the tool that reports it directly first, in one call (host_health for the Pulsatrix host and its versions, the connector or Sagax tool that owns the record, a service's own /api/health with fetch_url). Never read state through a shell (run_command on the person's computer or in the cloud) when such a tool exists; a shell is for work on that computer, not a way to look up the state of another system.",
+  "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\", \"dans ton sandbox\", \"dans ton bac à sable\", \"in your sandbox\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it). Never work around a refusal: a place they did not allow (their computer for routines, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.",
 ].join("\n");
 
 /** The per-message line of an Auto turn (provider text only): where this
@@ -264,6 +265,21 @@ export function autoStartTarget(input: {
     else if (!input.desktopConnected) fallback = "offline";
   }
   return { target, wanted, fallback };
+}
+
+/** Organization server (#2576): a place the person pinned from the
+ * composer's Computer menu is where Auto starts, not a lock. The person is
+ * autonomous in their own environment, so their explicit words in a message
+ * ("dans ton sandbox", "sur mon Mac") still win through computer_select.
+ * Only a place forced by the bot or the turn (a cloud-only bot, a cloud
+ * routine, a team computer) stays fixed, and so do Off and Browser (no
+ * computer chosen). Pure: tested on its own. */
+export function pinnedWorkspaceStart(worksOn: { auto: boolean; fixed?: FixedWorksOn }, forced: boolean): AutoComputerTarget | null {
+  if (forced || worksOn.auto) return null;
+  if (worksOn.fixed === "local") return "this_computer";
+  if (worksOn.fixed === "vm") return "local_vm";
+  if (worksOn.fixed === "cloud") return "cloud";
+  return null;
 }
 
 /** The thread line for a turn start, or null when it says nothing new:

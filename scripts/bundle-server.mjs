@@ -18,7 +18,7 @@
 // drivers/ nested; import.meta.url still resolves to the same location, so
 // that lookup is unaffected.
 import { build } from "esbuild";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { markModuleScope } from "./mark-module-scope.mjs";
@@ -189,6 +189,15 @@ const piMcpExtDest = join(root, "dist-server", "drivers", "pi-mcp-extension.ts")
 mkdirSync(dirname(piMcpExtDest), { recursive: true });
 await build({ entryPoints: [piMcpExtSrc], outfile: piMcpExtDest, bundle: true,
   platform: "node", target: "node24", format: "esm", external: ["typebox"], });
+
+// The server's own version beside index.js (server/environment.ts). The image
+// copies dist-server/ without the checkout's package.json, so without this
+// /api/health said version "unknown" in production (#2582).
+{
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  writeFileSync(join(root, "dist-server", "version.json"),
+    `${JSON.stringify({ version: pkg.version, forkVersion: pkg.forkVersion })}\n`);
+}
 
 // Port of OpenMausBot #2800: the packaged server must run as ES modules even
 // when a package.json above the install folder says "commonjs".

@@ -1406,7 +1406,12 @@ describe("§3 one level rule", () => {
     const lifted = ok(enqueueFrom(w, root, workFor("dev", "Build", { levels: { own: "ask", chief: "full" }, driverKind: "claudeAgent" })));
     expect(lifted.level).toBe("full");
     expect(lifted.levelSource).toBe("chief");
-    const capped = ok(enqueueFrom(w, root, workFor("qa", "Test", { levels: { own: "ask", chief: "full" }, driverKind: "unknownAgent" })));
+    // Full access runs on every engine (omb #2808, shared/approval-mode.ts), an unknown one included.
+    const anyEngine = ok(enqueueFrom(w, root, workFor("qa", "Test", { levels: { own: "ask", chief: "full" }, driverKind: "unknownAgent" })));
+    expect(anyEngine.level).toBe("full");
+    expect(anyEngine.levelSource).toBe("chief");
+    // Edits is not one it runs, so that level steps down to Ask.
+    const capped = ok(enqueueFrom(w, root, workFor("qa", "Check", { levels: { own: "ask", chief: "edits" }, driverKind: "unknownAgent" })));
     expect(capped.level).toBe("ask");
     expect(capped.levelSource).toBe("engine_cap");
     const edits = ok(enqueueFrom(w, root, workFor("ops", "Deploy", { levels: { own: "ask", chief: "auto" }, driverKind: "geminiAgent" })));

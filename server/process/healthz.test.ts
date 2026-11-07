@@ -34,8 +34,10 @@ describe("healthz", () => {
     // Public probes moved into the pre-auth table. Pin both that wiring
     // and the call order, so no SPA fallback or session gate can intercept.
     expect(source).toMatch(/PRE_AUTH_ROUTES\.push\(createHealthPublicRoutes\(\{/);
-    const preAuth = source.slice(source.indexOf("async function runPreAuth("), source.indexOf("async function authenticate("));
-    expect(preAuth.indexOf("dispatchPreAuthRoutes(PRE_AUTH_ROUTES")).toBeGreaterThan(0);
+    // runPreAuth lives in its own leaf since the index.ts split (#1388).
+    const preAuth = readFileSync(join(import.meta.dirname, "..", "index-leaves", "runPreAuth.ts"), "utf8");
+    expect(preAuth.indexOf("async function runPreAuth(")).toBeGreaterThan(0);
+    expect(preAuth.indexOf("dispatchPreAuthRoutes(PRE_AUTH_ROUTES")).toBeGreaterThan(preAuth.indexOf("async function runPreAuth("));
     expect(preAuth.indexOf("serveStatic(res, path)")).toBeGreaterThan(preAuth.indexOf("dispatchPreAuthRoutes(PRE_AUTH_ROUTES"));
     expect(preAuth).toContain("auth: null");
     const pipeline = source.slice(source.indexOf("const handleRequest = async"));
@@ -44,7 +46,8 @@ describe("healthz", () => {
   });
 
   it("drains HTTP and closes SSE streams before exit during shutdown", () => {
-    const source = readFileSync(join(import.meta.dirname, "..", "index.ts"), "utf8");
+    // drainTurnsBeforeShutdown lives in its own leaf since the index.ts split (#1388).
+    const source = readFileSync(join(import.meta.dirname, "..", "index-leaves", "drainTurnsBeforeShutdown.ts"), "utf8");
     const drain = source.indexOf("async function drainTurnsBeforeShutdown");
     expect(drain).toBeGreaterThan(0);
     const body = source.slice(drain, drain + 2_000);

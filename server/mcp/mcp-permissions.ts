@@ -121,6 +121,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("rooms:unreact", "own", "remove_reaction"),
   p("rooms:meme", "own", "send_meme"),
   p("rooms:post", "own", "post_to_room"),
+  // #2389: whether this turn's reply alerts the person (notify false = unread, no push)
+  p("replies:notify", "own", "set_reply_notify"),
   p("people:message", "own", "message_user", "sagax", ["message_person"]),
   p("threads:close", "own", "close_thread"),
   p("voice:note", "own", "send_voice_note"),

@@ -10,7 +10,11 @@ const mocks = vi.hoisted(() => ({ spawn: vi.fn(), readdir: vi.fn(), read: vi.fn(
 vi.mock("node:child_process", async (original) => ({ ...await original<typeof import("node:child_process")>(), spawn: mocks.spawn }));
 vi.mock("node:fs", async (original) => ({ ...await original<typeof import("node:fs")>(), readdirSync: mocks.readdir, readFileSync: mocks.read }));
 
-import { captureCliTree, killCliTree, spawnCli } from "./procs.ts";
+// The vitest setup file (server/testing/setup.ts) already loads procs.ts
+// through the message database's imports, bound to the real child_process.
+// A fresh copy is loaded here so it picks up the mock above.
+vi.resetModules();
+const { captureCliTree, killCliTree, spawnCli } = await import("./procs.ts");
 
 let processes: Map<number, string>;
 let denied: Set<number>;

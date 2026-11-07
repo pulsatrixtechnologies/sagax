@@ -20,6 +20,7 @@ describe("server paths never reach a prompt without server file tools", () => {
   });
 
   it("the system prompt preview runs the same net", () => {
-    expect(read("index.ts")).toContain("withholdHostToolsFor(instance) ? hideServerPathsInSections(previewParts, serverPathView(bot.id))");
+    // previewSystemPrompt moved to index-leaves/ (#1388): its host calls carry `host.`
+    expect(read("index-leaves/previewSystemPrompt.ts")).toContain("host.withholdHostToolsFor(instance) ? hideServerPathsInSections(previewParts, host.serverPathView(bot.id))");
   });
 });

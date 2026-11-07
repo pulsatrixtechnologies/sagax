@@ -413,7 +413,7 @@ describe("a room turn and the teammates outside the room", () => {
         await new Promise((wake) => setTimeout(wake, 100));
       }
     })();
-    expect(chip.tool?.name).toBe(`${OUTSIDE_BOT} isn't in this room, so that mention didn't reach them — add them to the room to bring them in.`);
+    expect(chip.tool?.name).toBe(`${OUTSIDE_BOT} isn't in this room, so that mention didn't reach them. Add them to the room to bring them in.`);
     expect((await messagesOf(outside.threadId)).some((message) => message.role === "user")).toBe(false);
     expect((await messagesOf(elsewhere.threadId)).some((message) => message.role === "user")).toBe(false);
 
@@ -741,7 +741,7 @@ describe("post_to_room", () => {
     const gated = await makeBot("Gated Poster", "Gated");
     const mate = await makeBot("Gate Mate", "Gated");
     const room = await makeRoom("Gated room", [gated.id, mate.id], "Gated");
-    expect((await api("PATCH", `/api/bots/${gated.id}`, { approvePeerComms: true })).status).toBe(200);
+    expect((await api("PATCH", `/api/bots/${gated.id}`, { approvePeerComms: true, approvalMode: "ask" })).status).toBe(200);
 
     const pending = post(gated.id, gated.threadId, room.id, "needs a human first");
     const card = await waitForPeerCard(gated.threadId);
@@ -762,7 +762,7 @@ describe("post_to_room", () => {
     const gated = await makeBot("Denied Poster", "Denied");
     const mate = await makeBot("Deny Mate", "Denied");
     const room = await makeRoom("Denied room", [gated.id, mate.id], "Denied");
-    expect((await api("PATCH", `/api/bots/${gated.id}`, { approvePeerComms: true })).status).toBe(200);
+    expect((await api("PATCH", `/api/bots/${gated.id}`, { approvePeerComms: true, approvalMode: "ask" })).status).toBe(200);
 
     const pending = post(gated.id, gated.threadId, room.id, "deploy is green");
     const card = await waitForPeerCard(gated.threadId);

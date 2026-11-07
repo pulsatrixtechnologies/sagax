@@ -5,7 +5,6 @@ import type { Scenario, Step } from "../types.ts";
 import { buildScriptedPlan } from "../providers/mock/scripted-plan.ts";
 import { BaseWorld, type WorldContext } from "./base-world.ts";
 import { waitUntil } from "./api.ts";
-import { installLibrarySkill } from "../../server/skills/skill-library.ts";
 import { readHandoffs as readRuntimeHandoffs } from "../../server/testing/handoff-rows.ts";
 
 /** The coordination world: the real server plus the scripted engine, exactly
@@ -43,17 +42,15 @@ export class CoordinationWorld extends BaseWorld {
       }
     }
     this.writePlan(scenario);
-    // Library fixtures install straight into the server's data dir, approved:
-    // the eval drives assignment visibility, not the review flow.
+    // Library fixtures go through the server's own import and review routes,
+    // approved: the eval drives assignment visibility, not the review flow.
+    // The library index lives in the server's sealed installation store
+    // (lot 5), so a file written beside it would never reach the server.
     for (const skill of scenario.librarySkills) {
-      const installed = installLibrarySkill({
-        name: skill.name,
-        instructions: skill.instructions,
-        source: "eval-fixture",
-        reviewState: "approved",
-        root: join(this.dataDir, "skills-library"),
-      });
-      if ("error" in installed) throw new Error("library skill install failed: " + installed.error);
+      const imported = await this.api.post("/api/skills-library", { text: skill.instructions });
+      if (imported.status !== 201) throw new Error("library skill install failed: " + JSON.stringify(imported.body));
+      const reviewed = await this.api.post("/api/skills-library/" + skill.name + "/review", { action: "accept" });
+      if (reviewed.status !== 200) throw new Error("library skill review failed: " + JSON.stringify(reviewed.body));
     }
   }
 

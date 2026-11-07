@@ -235,7 +235,10 @@ describe("scoped remote MCP subprocess", () => {
   it("runs the shipped helpers without a TypeScript source tree", async () => {
     fixture = await remoteFixture("http");
     scratch = mkdtempSync(join(tmpdir(), "omb-remote-bundle-"));
-    await build({ entryPoints: ["mcp-gate.ts", "mcp-remote-proxy.ts"].map((name) => join(SERVER_ROOT, name)), outdir: scratch, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    await build({ entryPoints: ["mcp-gate.ts", "mcp-remote-proxy.ts"].map((name) => join(SERVER_ROOT, name)), outdir: scratch, bundle: true, platform: "node", format: "esm", logLevel: "silent",
+      // Same require shim as scripts/bundle-server.mjs: a bundled CommonJS
+      // dependency requires node builtins, which plain ESM output refuses.
+      banner: { js: 'import { createRequire as __ombCreateRequire } from "node:module"; const require = __ombCreateRequire(import.meta.url);' } });
     const gated = gateServer({ name: "notes", server: fixture.spec, budget: 0, threadId: "fixture", toolScope: { allow: ["mcp:notes:read"] } })!;
     gated.args = [join(scratch, "mcp-gate.js")];
     const upstream = JSON.parse(gated.env.SAGAX_GATE_UPSTREAM);
@@ -665,7 +668,10 @@ describe("remote MCP tool directory", () => {
     fake = await startFakeHttpMcp({ tools: catalog });
     const scratch = mkdtempSync(join(tmpdir(), "omb-directory-bundle-"));
     try {
-      await build({ entryPoints: [join(SERVER_ROOT, "mcp-remote-proxy.ts")], outdir: scratch, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+      await build({ entryPoints: [join(SERVER_ROOT, "mcp-remote-proxy.ts")], outdir: scratch, bundle: true, platform: "node", format: "esm", logLevel: "silent",
+      // Same require shim as scripts/bundle-server.mjs: a bundled CommonJS
+      // dependency requires node builtins, which plain ESM output refuses.
+      banner: { js: 'import { createRequire as __ombCreateRequire } from "node:module"; const require = __ombCreateRequire(import.meta.url);' } });
       const descriptor = mcpStdioServer(spec(fake.url), { directory: { name: "whop" } })!;
       start({ ...descriptor, args: [join(scratch, "mcp-remote-proxy.js")] });
       await initialize();

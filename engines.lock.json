@@ -197,6 +197,18 @@
       "reason": "Google's runtime is about 2 GB unpacked under Google's own terms, and Sagax already downloads and verifies it itself (Settings, managed install) where it can run; on an organization server it runs its own tools on the Sagax host, so organization turns are refused anyway."
     },
     {
+      "id": "copilot",
+      "name": "GitHub Copilot CLI",
+      "drivers": ["copilotAgent"],
+      "reason": "Added with the OpenMausBot engines port (#2226, native ACP); it is not verified to withhold its own shell and file tools (scripts/verify/dev/verify-org-host-tools.ts), so organization turns are refused (409 host_tools) and the server image does not carry it yet."
+    },
+    {
+      "id": "deepseek-harness",
+      "name": "DeepSeek Harness (dsh)",
+      "drivers": ["deepseekAgent"],
+      "reason": "Added with the OpenMausBot engines port (#2226, native ACP); it is not verified to withhold its own shell and file tools (scripts/verify/dev/verify-org-host-tools.ts), so organization turns are refused (409 host_tools) and the server image does not carry it yet."
+    },
+    {
       "id": "minimax-cli",
       "name": "MiniMax CLI (mmx)",
       "drivers": [],

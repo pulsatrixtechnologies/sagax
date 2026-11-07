@@ -118,14 +118,17 @@ export async function withCommsRuntime(test: (fixture: CommsRuntimeFixture) => P
       return;
     }
     const steps = compatMode === "steps";
+    // Vary the arguments so the repeat guard (chat-repeat-guard.ts) does not
+    // stop the turn before the 64-step cap the "steps" mode is about.
     const delta = steps
-      ? { content: "Still exporting.", tool_calls: [{ index: 0, id: `call_${randomUUID()}`, type: "function", function: { name: "missing_tool", arguments: "{}" } }] }
+      ? { content: "Still exporting.", tool_calls: [{ index: 0, id: `call_${randomUUID()}`, type: "function", function: { name: "missing_tool", arguments: JSON.stringify({ attempt: ++stepCalls }) } }] }
       : { content: "Compat result delivered" };
     res.writeHead(200, { "content-type": "text/event-stream" });
     res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: steps ? "tool_calls" : "stop" }] })}\n\ndata: [DONE]\n\n`);
   });
   const compatPrompts: string[] = [];
   let compatMode: "hang" | "reply" | "steps" | "limit" = "hang";
+  let stepCalls = 0;
   await new Promise<void>(resolve => compat.listen(0, "127.0.0.1", resolve));
   const compatUrl = `http://127.0.0.1:${(compat.address() as AddressInfo).port}/v1`;
   const start = async () => {

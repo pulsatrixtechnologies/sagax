@@ -188,7 +188,7 @@ describe("preset store", () => {
     // fields the format does not have are dropped, and a row the format
     // refuses is not offered at all.
     const stored = JSON.parse(readFileSync(app.presetFile, "utf8"));
-    Object.assign(stored.presets[0].bot, { approvalMode: "full", modelSelection: { instanceId: "x", model: "y" }, cwd: "/", computer: "local" });
+    Object.assign(stored.presets[0].bot, { approvalMode: "ask", modelSelection: { instanceId: "x", model: "y" }, cwd: "/", computer: "local" });
     stored.presets[1].seed = { memory: { "memory/log/2026-09-24.md": "chat" } };
     writeFileSync(app.presetFile, JSON.stringify(stored));
     const after = app.presets.listBotPresets(app.presetStore, new Map());
@@ -222,8 +222,8 @@ describe("creating a bot from a preset", () => {
     for (const field of ["computer", "cwd", "composio", "mcpServers", "browser"] as const) {
       expect(record).not.toHaveProperty(field);
     }
-    // Approval stays the new-bot default, Approve for me (51647a630); the file's "full" did not reach it.
-    expect(record).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    // Approval stays the new-bot default, Full access (bdeb45dadb, omb #2808); the file's "ask" did not reach it.
+    expect(record).toMatchObject({ approvalMode: "full", autoApprove: false });
   });
 
   it("adds an organization preset's skills switched on, under the organization's own source, stamped for updates", async () => {

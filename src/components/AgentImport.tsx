@@ -1,6 +1,6 @@
 // Import an agent the person already uses (docs/import-agent.md): Grok Bot
-// (its own export, through the existing GrokImportBox) or a Claude Code
-// folder (shared/claude-code-import.ts). Both become an ordinary Sagax
+// (its own export, through the existing GrokImportBox), a Claude Code
+// folder or a Hermes home folder (shared/claude-code-import.ts). Both become an ordinary Sagax
 // package made here, then go through the bot import of New bot > Zip file
 // (POST /api/bots/import/upload, member scope: anyone who may create bots),
 // so the bot arrives inert: skills off, routines paused, connections as
@@ -15,14 +15,14 @@ import { t } from "@/lib/i18n";
 import { readClaudeCodeFolder, type PickedFile } from "@/lib/claude-code-folder";
 import type { PendingTeamImport } from "@/lib/team-import";
 import { teamImportPreview } from "@/lib/team-import";
-import { claudeCodeToPackage, CLAUDE_CODE_SOURCE } from "../../shared/claude-code-import";
+import { claudeCodeToPackage, CLAUDE_CODE_SOURCE, HERMES_SOURCE } from "../../shared/claude-code-import";
 import type { BotZipImportResult } from "../../shared/bot-zip";
 import type { GrokLeftOut } from "../../shared/grok-import";
 import { BotZipImportPanel } from "./BotZipImport";
 import { GrokImportBox, GrokLeftOutList } from "./GrokImportBox";
 import { readableError } from "@/lib/plain-error";
 
-export type AgentSource = "grok" | "claude";
+export type AgentSource = "grok" | "claude" | "hermes";
 
 interface Prepared {
   source: AgentSource;
@@ -62,7 +62,8 @@ export function AgentImportSummary({ pending }: { pending: PendingTeamImport }) 
   );
 }
 
-function ClaudeCodePicker({ onPrepared }: { onPrepared: (prepared: Prepared) => void }) {
+/** A picked folder: a Claude Code project (or ~/.claude), or a Hermes home (or one of its profiles). */
+function ClaudeCodePicker({ source, onPrepared }: { source: "claude" | "hermes"; onPrepared: (prepared: Prepared) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -73,7 +74,7 @@ function ClaudeCodePicker({ onPrepared }: { onPrepared: (prepared: Prepared) => 
     try {
       const folder = await readClaudeCodeFolder(list as unknown as ArrayLike<PickedFile>);
       const { document, leftOut } = claudeCodeToPackage(folder.files, { folderName: folder.folderName, skippedSecrets: folder.skippedSecrets, timeZone: timeZone() });
-      onPrepared({ source: "claude", file: packageFile(document), pending: teamImportPreview(document), leftOut });
+      onPrepared({ source, file: packageFile(document), pending: teamImportPreview(document), leftOut });
     } catch (cause) {
       setError(readableError(cause));
     } finally {
@@ -82,8 +83,8 @@ function ClaudeCodePicker({ onPrepared }: { onPrepared: (prepared: Prepared) => 
     }
   };
   return (
-    <div className="flex flex-col gap-3" data-agent-import-claude="">
-      <p className="text-[12.5px] leading-relaxed text-ink-secondary">{t("agentImport.claudeIntro")}</p>
+    <div className="flex flex-col gap-3" data-agent-import-claude={source}>
+      <p className="text-[12.5px] leading-relaxed text-ink-secondary">{t(source === "hermes" ? "agentImport.hermesIntro" : "agentImport.claudeIntro")}</p>
       <p className="text-[12px] leading-relaxed text-ink-secondary">{t("agentImport.claudeSecrets")}</p>
       <input ref={input} type="file" multiple className="hidden" data-agent-import-folder=""
         {...{ webkitdirectory: "", directory: "" }}
@@ -105,7 +106,7 @@ export function AgentImportPanel({ initialSource = "grok", onImported, onCancel 
 }) {
   const [source, setSource] = useState<AgentSource>(initialSource);
   const [prepared, setPrepared] = useState<Prepared | null>(null);
-  const sourceName = (value: AgentSource) => (value === "grok" ? t("agentImport.grok") : CLAUDE_CODE_SOURCE);
+  const sourceName = (value: AgentSource) => (value === "grok" ? t("agentImport.grok") : value === "hermes" ? HERMES_SOURCE : CLAUDE_CODE_SOURCE);
 
   if (prepared) {
     return (
@@ -133,10 +134,11 @@ export function AgentImportPanel({ initialSource = "grok", onImported, onCancel 
       <div role="tablist" aria-label={t("agentImport.sourceLabel")} className="inline-flex self-start rounded-lg bg-control p-0.5">
         {tab("grok")}
         {tab("claude")}
+        {tab("hermes")}
       </div>
       {source === "grok"
         ? <GrokImportBox onPreview={(pending, leftOut) => setPrepared({ source: "grok", file: packageFile(pending.manifest), pending, leftOut })} />
-        : <ClaudeCodePicker onPrepared={setPrepared} />}
+        : <ClaudeCodePicker key={source} source={source} onPrepared={setPrepared} />}
       {onCancel ? (
         <div className="flex justify-end">
           <button type="button" className="ui-button" onClick={onCancel} data-agent-import-cancel="">{t("common.cancel")}</button>

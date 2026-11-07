@@ -109,6 +109,13 @@ ordinary name whose real place is a dotfile (`server/safety/sensitive-path.ts`,
   and `sagax-user=<key>`.
 - **Idle stop:** after `SAGAX_SANDBOX_IDLE_MINUTES` without a command (default
   10). The next call starts it again; `/workspace` persists.
+- **Hibernation:** a stopped environment unused for
+  `SAGAX_SANDBOX_HIBERNATE_MINUTES` after its last command (default 60, `off`
+  to never hibernate) loses its container (Kubernetes: its Pod) and its
+  network; `/workspace` stays. Its status says `hibernated`. The next call
+  wakes it: network and container are created again, from the current
+  image, on the same `/workspace`. Running, paused, starting or busy
+  environments are never hibernated.
 - **New image:** a stopped environment created from another image than
   `SAGAX_SANDBOX_IMAGE` (an earlier deploy) is recreated from the current one
   when it starts again, keeping `/workspace` and its network. A running one
@@ -378,6 +385,7 @@ api.githubcopilot.com are reachable; only private destinations are dropped.
 | `SAGAX_SANDBOX_MAX_FILE_MB` | 512 | largest single file |
 | `SAGAX_SANDBOX_MAX_RUNNING` | 2 | running or paused at once (3 GiB at most) |
 | `SAGAX_SANDBOX_IDLE_MINUTES` | 10 | idle stop |
+| `SAGAX_SANDBOX_HIBERNATE_MINUTES` | 60 | hibernation after the last command (`off` never) |
 | `SAGAX_SANDBOX_DELETE_GRACE_HOURS` | 72 | delete after sign-out (Sagax side) |
 | `SAGAX_SANDBOX_SUBNET_POOL` | `10.213.0.0/16` | must not overlap the VNet or other Docker networks |
 | `SAGAX_SANDBOX_EGRESS_DENY` | empty | extra CIDRs to block |

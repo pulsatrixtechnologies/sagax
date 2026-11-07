@@ -1857,5 +1857,12 @@
   "approvalMode.antigravityLocalOnly": "Automático (acceso total) está disponible en la app de escritorio instalada.",
   "approvalMode.trustedLocalOnly": "Acceso total y Personalizado están disponibles en la app de escritorio instalada.",
   "computer.askedHands": "pidió tu ayuda:",
-  "computer.dismiss": "Descartar"
+  "computer.dismiss": "Descartar",
+  "agentImport.hermesIntro": "Elige tu carpeta .hermes o uno de sus perfiles. Sagax lee SOUL.md, las memorias, las skills, cron/jobs.json y los servidores MCP de config.yaml, y nada más.",
+  "leftOut.name.profile": "Perfil «{name}»",
+  "leftOut.reason.maxProfiles": "una importación trae como máximo {max} perfiles",
+  "leftOut.reason.maxPackageSkills": "un paquete contiene como máximo {max} skills",
+  "leftOut.reason.intervalRoutine": "se repite en un intervalo que no encaja en un horario; vuelve a añadirlo con una hora del día",
+  "leftOut.reason.onceRoutine": "se ejecuta solo una vez, así que no se programó; ejecútalo a mano si aún hace falta",
+  "leftOut.reason.invalidYaml": "no es YAML válido"
 }

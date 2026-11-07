@@ -559,6 +559,9 @@ export async function startKubernetesProvisioner(env: NodeJS.ProcessEnv = proces
     void service.sweepIdle().then((stopped) => {
       if (stopped.length) console.log(`sandboxd: stopped ${stopped.length} idle environment(s)`);
     }, (error: unknown) => console.error(`sandboxd: idle sweep failed: ${error instanceof Error ? error.message : String(error)}`)).catch(reportBackgroundError);
+    void service.hibernateIdle().then((hibernated) => {
+      if (hibernated.length) console.log(`sandboxd: hibernated ${hibernated.length} unused environment(s)`);
+    }, (error: unknown) => console.error(`sandboxd: hibernation sweep failed: ${error instanceof Error ? error.message : String(error)}`)).catch(reportBackgroundError);
   }, 60_000);
   sweep.unref();
   if (k8s.dedicated?.spare) {

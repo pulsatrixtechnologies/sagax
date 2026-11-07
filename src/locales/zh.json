@@ -2615,5 +2615,12 @@
   "approvalMode.antigravityLocalOnly": "自动（完全访问）可在已安装的桌面应用中使用。",
   "approvalMode.trustedLocalOnly": "完全访问和自定义可在已安装的桌面应用中使用。",
   "computer.askedHands": "请求你接手：",
-  "computer.dismiss": "忽略"
+  "computer.dismiss": "忽略",
+  "agentImport.hermesIntro": "选择你的 .hermes 文件夹或其中一个配置文件夹。Sagax 只读取 SOUL.md、记忆、skills、cron/jobs.json 和 config.yaml 中的 MCP 服务器。",
+  "leftOut.name.profile": "配置“{name}”",
+  "leftOut.reason.maxProfiles": "一次导入最多带入 {max} 个配置",
+  "leftOut.reason.maxPackageSkills": "一个包最多包含 {max} 个 skills",
+  "leftOut.reason.intervalRoutine": "它按无法对应到时间表的间隔重复；请设定一天中的时间后重新添加",
+  "leftOut.reason.onceRoutine": "它只运行一次，因此没有排程；如仍需要请手动运行",
+  "leftOut.reason.invalidYaml": "这不是有效的 YAML"
 }

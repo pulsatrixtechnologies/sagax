@@ -1847,5 +1847,12 @@
   "approvalMode.antigravityLocalOnly": "स्वचालित (पूर्ण पहुँच) इंस्टॉल किए गए डेस्कटॉप ऐप में उपलब्ध है।",
   "approvalMode.trustedLocalOnly": "पूर्ण पहुँच और कस्टम इंस्टॉल किए गए डेस्कटॉप ऐप में उपलब्ध हैं।",
   "computer.askedHands": "ने आपकी मदद माँगी:",
-  "computer.dismiss": "खारिज करें"
+  "computer.dismiss": "खारिज करें",
+  "agentImport.hermesIntro": ".hermes फ़ोल्डर या उसकी कोई प्रोफ़ाइल चुनें। Sagax सिर्फ़ SOUL.md, मेमोरी, skills, cron/jobs.json और config.yaml के MCP सर्वर पढ़ता है, और कुछ नहीं।",
+  "leftOut.name.profile": "प्रोफ़ाइल “{name}”",
+  "leftOut.reason.maxProfiles": "एक इंपोर्ट में अधिकतम {max} प्रोफ़ाइल आती हैं",
+  "leftOut.reason.maxPackageSkills": "एक पैकेज में अधिकतम {max} skills होते हैं",
+  "leftOut.reason.intervalRoutine": "यह ऐसे अंतराल पर दोहराता है जो किसी समय-सारिणी में नहीं बैठता; दिन का समय चुनकर इसे फिर जोड़ें",
+  "leftOut.reason.onceRoutine": "यह सिर्फ़ एक बार चलता है, इसलिए शेड्यूल नहीं किया गया; अगर अब भी ज़रूरी हो तो इसे हाथ से चलाएँ",
+  "leftOut.reason.invalidYaml": "यह मान्य YAML नहीं है"
 }

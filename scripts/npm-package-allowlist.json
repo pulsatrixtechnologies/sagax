@@ -51,7 +51,7 @@
   {
     "term": "grok-bot",
     "files": "^(?:dist-server/index\\.js|dist-server/src/locales/(?:en|fr)\\.json|dist/assets/(?:i18n|fr|en)-[^/]+\\.js)$",
-    "context": "Import a Grok Bot|Bring a shared Grok Bot into|[\\\"'`]Grok Bot link[\\\"'`]|Paste a Grok Bot link|or a Grok Bot marketplace page|your own Grok Bot\\.|[\\\"'`]Grok Bot's reply|Importer un Grok Bot|Faites entrer un Grok Bot|Lien du Grok Bot|Collez un lien de Grok Bot|marketplace Grok Bot\\.|votre propre Grok Bot\\.|ponse du Grok Bot|Import an agent \\(Grok Bot, Claude Code\\)|Importer un agent \\(Grok Bot, Claude Code\\)|agentImport\\.grok[\\\"'`: ]{1,8}Grok Bot|Grok Bot or Claude Code|Grok Bot ou Claude Code|Import from Grok Bot|Importer de Grok Bot",
+    "context": "Import a Grok Bot|Bring a shared Grok Bot into|[\\\"'`]Grok Bot link[\\\"'`]|Paste a Grok Bot link|or a Grok Bot marketplace page|your own Grok Bot\\.|[\\\"'`]Grok Bot's reply|Importer un Grok Bot|Faites entrer un Grok Bot|Lien du Grok Bot|Collez un lien de Grok Bot|marketplace Grok Bot\\.|votre propre Grok Bot\\.|ponse du Grok Bot|Import an agent \\(Grok Bot, Claude Code\\)|Importer un agent \\(Grok Bot, Claude Code\\)|Import an agent \\(Grok Bot, Claude Code, Hermes\\)|Importer un agent \\(Grok Bot, Claude Code, Hermes\\)|agentImport\\.grok[\\\"'`: ]{1,8}Grok Bot|Grok Bot or Claude Code|Grok Bot ou Claude Code|Grok Bot, Claude Code or Hermes|Grok Bot, Claude Code ou Hermes|Import from Grok Bot|Importer de Grok Bot",
     "reason": "The grokImport.* and agent-import strings (en, fr) of Settings > Import and New bot, which name the x.ai product the bot comes from, phrase by phrase. Covers the server locale embed and the web i18n/fr/en chunks."
   },
   {

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Import an agent (Grok Bot, Claude Code): the package is made in the app, then
+// Import an agent (Grok Bot, Claude Code, Hermes): the package is made in the app, then
 // staged and imported through the bot import any bot creator may use; the
 // preview says what arrives (inert) and what was left out.
 import { act, createElement } from "react";
@@ -97,6 +97,48 @@ describe("import a Claude Code folder", () => {
     await flush();
     expect(container.querySelector("[role=alert]")?.textContent).toContain("No CLAUDE.md");
     expect(fixture.api).not.toHaveBeenCalled();
+  });
+});
+
+describe("import a Hermes agent", () => {
+  it("reads the .hermes folder, never auth.json or .env, and imports the bots inert", async () => {
+    let uploaded = "";
+    fixture.api.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/api/bots/import/upload") {
+        uploaded = await (init!.body as Blob).text();
+        return { id: STAGED, preview: legacyPreview("Hermes") };
+      }
+      return {};
+    });
+    act(() => { root.render(createElement(AgentImportPanel, {})); });
+    click("[data-agent-import-tab=hermes]");
+    expect(container.querySelector("[data-agent-import-claude=hermes]")?.textContent).toContain("SOUL.md");
+    const input = container.querySelector("[data-agent-import-folder]") as HTMLInputElement;
+    const auth = picked(".hermes/auth.json", "{\"token\":\"sk-live-should-never-be-read\"}");
+    const authText = vi.spyOn(auth, "text");
+    Object.defineProperty(input, "files", { value: [
+      picked(".hermes/SOUL.md", "You are Atlas."),
+      picked(".hermes/memories/USER.md", "Prefers French.\n§\nEastern time."),
+      picked(".hermes/skills/ops/check/SKILL.md", "---\nname: check\ndescription: Check things\n---\n\nCheck."),
+      picked(".hermes/cron/jobs.json", JSON.stringify({ jobs: [{ name: "Brief", prompt: "Brief me.", schedule: { kind: "cron", expr: "0 8 * * *" } }] })),
+      picked(".hermes/profiles/coder/SOUL.md", "You write code."),
+      picked(".hermes/profiles/coder/.env", "X=1"),
+      picked(".hermes/state.db", "binary"),
+      auth,
+    ], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+    await flush();
+    expect(authText).not.toHaveBeenCalled();
+    const document = JSON.parse(uploaded);
+    expect(document.package.agents.map((agent: { name: string }) => agent.name)).toEqual(["Hermes", "coder"]);
+    expect(document.package.agents[0].seed.memory["MEMORY.md"]).toContain("- Prefers French.");
+    expect(document.package.routines[0].enabledAfterInstall).toBe(false);
+    expect(uploaded).not.toContain("sk-live");
+    expect(uploaded).not.toContain("binary");
+    expect(container.querySelector("[data-bot-zip-preview]")?.textContent).toContain("From Hermes");
+    const leftOut = container.querySelector("[data-grok-left-out]")?.textContent ?? "";
+    expect(leftOut).toContain("auth.json");
+    expect(leftOut).toContain("profiles/coder/.env");
   });
 });
 

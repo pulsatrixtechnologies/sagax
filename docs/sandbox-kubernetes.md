@@ -237,6 +237,9 @@ the first command until the provisioner's idle stop
 command still running is never stopped, and a voice call's heartbeat
 counts as use (`markUsed`). So the cluster stays up while anyone works,
 and the stop timer of the runbook starts when the last Pod is gone.
+After `SAGAX_SANDBOX_HIBERNATE_MINUTES` (default 60) a stopped sandbox is
+hibernated: its NetworkPolicy goes too, the claim stays, and the next
+command wakes it on the same claim.
 
 ### Cold start (2026-10-26)
 

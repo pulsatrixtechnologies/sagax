@@ -2349,5 +2349,12 @@
   "approvalMode.antigravityLocalOnly": "Авто (повний доступ) доступне в локальному пакованому десктопному застосунку.",
   "approvalMode.trustedLocalOnly": "Повний і Власний доступні в пакованому десктопному застосунку.",
   "computer.askedHands": "попросив ваших рук:",
-  "computer.dismiss": "Приховати"
+  "computer.dismiss": "Приховати",
+  "agentImport.hermesIntro": "Виберіть свою теку .hermes або один із її профілів. Sagax читає лише SOUL.md, спогади, skills, cron/jobs.json і MCP-сервери з config.yaml.",
+  "leftOut.name.profile": "Профіль «{name}»",
+  "leftOut.reason.maxProfiles": "імпорт переносить щонайбільше {max} профілів",
+  "leftOut.reason.maxPackageSkills": "пакет містить щонайбільше {max} skills",
+  "leftOut.reason.intervalRoutine": "він повторюється з інтервалом, що не вкладається в розклад; додайте його знову із часом доби",
+  "leftOut.reason.onceRoutine": "він запускається лише раз, тож його не заплановано; запустіть вручну, якщо він ще потрібен",
+  "leftOut.reason.invalidYaml": "це не коректний YAML"
 }

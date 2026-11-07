@@ -483,7 +483,7 @@ export interface OtherStarts {
   onTemplate: () => void;
   /** Browse Bots on Templates. */
   onBrowse: () => void;
-  /** Import a zip, or an agent from Grok Bot or Claude Code (#1178); absent where import is not offered. */
+  /** Import a zip, or an agent from Grok Bot, Claude Code or Hermes (#1178, #2611); absent where import is not offered. */
   onImport?: (kind: "zip" | "agent") => void;
 }
 

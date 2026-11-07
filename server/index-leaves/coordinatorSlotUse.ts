@@ -15,6 +15,10 @@ function coordinatorSlotUse(n: HandoffView): { used: number; max: number; hardBl
   // math, so host.busy admits it. Counted as {used 0, max 0}, every room
   // handoff and goal worker waited "for a free slot" forever (DEL-08).
   if (n.groupId) return undefined;
+  // A root parked at the computer wait ceiling waits for its seat, not only
+  // for a free slot (#1651, #2204): the slot math alone readmitted it at once.
+  const seat = host.parkedSeats.get(n.id);
+  if (seat && !host.turnResources.free(seat)) return { used: 0, max: 0, hardBlocked: true };
   // DEL-08's slot admission bypasses host.busy, where queued work used to
   // explain the person's card holding the last slot. Keep that receipt.
   host.noteQueuedBehindPerson(n);

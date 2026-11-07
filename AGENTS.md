@@ -417,6 +417,13 @@ no CI runs on a private PR. It writes its result on the branch's pull request
 head commit has that OK; one without it was pushed around the gate
 (`--no-verify`). The full suite runs once, at the version cut.
 
+While working, any role (and any repository: Node, Rust, Python) runs
+`scripts/fast-gate.sh`: typecheck, lint, source terms and the tests of the
+touched files, 4 at a time, from the merge base plus the working tree.
+`--list` shows the files and checks, `--only lint,tests` narrows, a
+`.fast-gate` file (`name: command`) adds a repository's own checks. The cloud
+run image ships it as `fast-gate`.
+
 Before claiming a server or conversation change works, follow
 [`docs/verification/README.md`](docs/verification/README.md). Always launch an
 isolated fixture; never verify mutations against the user's live app or data.

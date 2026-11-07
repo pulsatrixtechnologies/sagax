@@ -61,9 +61,9 @@ describe("CodingSessionRow (through AgentRows)", () => {
     expect(title.textContent).toBe("Recording tags, favorites API and stream merging");
     expect(title.className).toContain("truncate");
     expect(row.querySelector("[data-coding-chevron]")).not.toBeNull();
-    // no tag, step line, duration, tokens or badge
+    // no tag, step line, duration, tokens or badge: the grey subtitle is the state alone
     expect(row.querySelector("[data-agent-tag],[data-agent-line],[data-agent-right],[data-agent-tokens]")).toBeNull();
-    expect(row.textContent).toBe(title.textContent);
+    expect(row.textContent).toBe(`${title.textContent}Running`);
     expect(row.textContent).not.toContain("@Pepper");
     expect(row.textContent).not.toContain("21m");
     flushSync(() => row.querySelector<HTMLButtonElement>("[data-coding-open]")!.click());
@@ -106,7 +106,7 @@ describe("CodingSessionRow (through AgentRows)", () => {
     expect(list.className).toContain("rounded-xl");
     expect(list.className).toContain("bg-[var(--bot-panel-card)]");
     expect(host.innerHTML).not.toContain("font-mono");
-    expect(rows()[0]!.className).toContain("min-h-11");
+    expect(rows()[0]!.className).toContain("min-h-14");
     expect(rows()[0]!.className).toContain("hover:bg-hover");
   });
 
@@ -132,5 +132,25 @@ describe("CodingSessionRow (through AgentRows)", () => {
   it("renders nothing without rows", () => {
     flushSync(() => root.render(createElement(AgentRows, { items: [], onOpen: vi.fn() })));
     expect(host.querySelector("[data-agent-rows]")).toBeNull();
+  });
+});
+
+describe("Coding row subtitle", () => {
+  const pr = (number: number, action: "opened" | "merged") => ({ number, url: `https://github.com/acme/web/pull/${number}`, action, at: NOW });
+  const code = (...pullRequests: ReturnType<typeof pr>[]) => ({ pullRequests, branches: [], commits: [] });
+
+  it("says the state and links #N only when there is a pull request", () => {
+    const items = [
+      item("m1", "RVSQ S3: rebase PR #3 onto main", "finished", { code: code(pr(3, "merged")) }),
+      item("p1", "Recording tags", "finished", { code: { ...code(pr(40, "opened")), branch: undefined } }),
+      item("n1", "No pull request", "finished"),
+    ];
+    flushSync(() => root.render(createElement(AgentRows, { items, onOpen: vi.fn() } as never)));
+    const sub = (id: string) => host.querySelector(`[data-activity-card="thread:${id}"] [data-coding-subtitle]`)!;
+    expect(sub("m1").textContent).toBe("Merged·#3");
+    expect(sub("m1").querySelector("[data-coding-pr]")!.getAttribute("data-coding-pr")).toBe("https://github.com/acme/web/pull/3");
+    expect(sub("p1").textContent).toBe("Ready for review·#40");
+    expect(sub("n1").textContent).toBe("Finished");
+    expect(sub("n1").querySelector("[data-coding-pr]")).toBeNull();
   });
 });

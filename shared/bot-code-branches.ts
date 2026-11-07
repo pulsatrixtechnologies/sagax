@@ -83,6 +83,9 @@ export interface BotBranchPull {
   state: "open" | "merged" | "closed";
   title?: string;
   draft?: boolean;
+  /** Open only: the review decision, and the checks, when GitHub says. */
+  review?: "changes_requested" | "approved" | "required";
+  checks?: "failing" | "pending" | "passing";
 }
 
 export interface BotBranchDiff {

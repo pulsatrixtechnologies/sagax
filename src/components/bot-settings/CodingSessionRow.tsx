@@ -1,12 +1,16 @@
-// One coding session in the bot panel's right column (JC, 2026-11-06): a
-// single row, nothing else visible. State mark at the left (dotted spinner
-// while it runs, a fixed icon otherwise), the session title on one line,
-// truncated, and a grey chevron at the right. A click opens the session in
-// the chat column; Status, Duration, Tokens and the rest live there. The one
-// shared row: every place a coding session shows in the panel draws this.
-import { ChevronRight, Loader2, Square, X } from "lucide-react";
+// One coding session in the bot panel's right column (JC, 2026-11-07): a row
+// with the state mark at the left (dotted spinner while it runs, a green
+// check once merged, the pull request icon while one is open), the session
+// title on one line (truncated), a grey subtitle ("Merged · #3", "Ready for
+// review · #40") whose "#N" is an underlined link to the pull request, and a
+// grey chevron at the right. A click opens the session in the chat column;
+// Status, Duration, Tokens and the rest live there. The one shared row:
+// every place a coding session shows in the panel draws this.
+import { Check, ChevronRight, Loader2, Square, X, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { openExternalLink } from "@/lib/app-links";
+import { codingRowState, prNumberText, type CodingRowKind, type CodingRowPull } from "@/lib/coding-row-state";
 import { PANEL_ROW } from "@/lib/grouped-card";
 import { t } from "@/lib/i18n";
 import type { BotActivityStatus } from "../../../shared/bot-activity";
@@ -29,9 +33,32 @@ export function DottedSpinner({ size = 16 }: { size?: number }) {
   );
 }
 
-function StateMark({ status }: { status: BotActivityStatus }) {
-  if (status === "running") return <DottedSpinner />;
-  return <ActivityStatusIcon status={status} size={16} />;
+const ICON_SIZE = 20;
+const PR_ICON = { size: ICON_SIZE, strokeWidth: 1.9, "aria-hidden": true as const };
+
+function StateMark({ kind }: { kind: CodingRowKind }) {
+  switch (kind) {
+    case "running":
+      return <DottedSpinner size={ICON_SIZE} />;
+    case "merged":
+      return (
+        <span data-coding-icon="merged" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success text-success-ink">
+          <Check size={13} strokeWidth={3} aria-hidden="true" />
+        </span>
+      );
+    case "ready":
+      return <GitPullRequest {...PR_ICON} data-coding-icon="ready" className="shrink-0 text-[#4d9bff]" />;
+    case "draft":
+      return <GitPullRequestDraft {...PR_ICON} data-coding-icon="draft" className="shrink-0 text-ink-secondary" />;
+    case "changes":
+      return <GitPullRequest {...PR_ICON} data-coding-icon="changes" className="shrink-0 text-warning" />;
+    case "checks":
+      return <GitPullRequest {...PR_ICON} data-coding-icon="checks" className="shrink-0 text-danger" />;
+    case "closed":
+      return <GitPullRequestClosed {...PR_ICON} data-coding-icon="closed" className="shrink-0 text-danger" />;
+    default:
+      return <ActivityStatusIcon status={kind as BotActivityStatus} size={ICON_SIZE} />;
+  }
 }
 
 export interface CodingSessionRowProps {
@@ -39,6 +66,9 @@ export interface CodingSessionRowProps {
   /** Where it works (repository, branch): the tooltip only, never on the row. */
   hint?: string;
   status: BotActivityStatus;
+  /** The job's pull request, when it has one: its state picks the icon and the
+   * subtitle, its number is the "#N" link. */
+  pull?: CodingRowPull;
   /** Attributes that identify the row (ids, status) for callers and tests. */
   attrs?: Record<string, string | undefined>;
   /** Click on the row; absent: the row is not openable (no chevron). */
@@ -52,35 +82,59 @@ export interface CodingSessionRowProps {
   stopping?: boolean;
 }
 
-export function CodingSessionRow({ title, hint, status, attrs, onOpen, onIgnore, ignoreId, onStop, stopId, stopping = false }: CodingSessionRowProps) {
+export function CodingSessionRow({ title, hint, status, pull, attrs, onOpen, onIgnore, ignoreId, onStop, stopId, stopping = false }: CodingSessionRowProps) {
+  const state = codingRowState(status, pull);
+  const number = state.pr ? prNumberText(state.pr) : "";
   return (
     <li
       {...attrs}
       data-agent-row
       data-agent-status={status}
-      className={cn("group relative flex min-h-11 items-center gap-2.5 hover:bg-hover", PANEL_ROW)}
+      data-coding-state={state.kind}
+      className={cn("group relative flex min-h-14 items-center gap-3 hover:bg-hover", PANEL_ROW)}
     >
+      {/* The open button covers the row; the content above it lets clicks
+          through, except the "#N" link. */}
       <button
         type="button"
         data-coding-open
         onClick={onOpen}
         disabled={!onOpen}
         aria-label={t("botPanel.coding.openAria", { title })}
-        className="flex min-h-7 min-w-0 flex-1 items-center gap-2.5 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-default"
-      >
-        <span className="flex size-4 shrink-0 items-center justify-center">
-          <StateMark status={status} />
+        className="absolute inset-0 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60 disabled:cursor-default"
+      />
+      <span className="pointer-events-none relative flex size-5 shrink-0 items-center justify-center">
+        <StateMark kind={state.kind} />
+      </span>
+      <span className="pointer-events-none relative flex min-w-0 flex-1 flex-col">
+        <span data-agent-title className="truncate text-[15px] leading-[20px] text-ink" title={hint ? `${title} (${hint})` : title}>{title}</span>
+        <span data-coding-subtitle className="flex min-w-0 items-center gap-1 text-[14px] leading-[20px] text-ink-secondary">
+          <span data-coding-label className="shrink-0">{state.label}</span>
+          {state.pr && number && (
+            <>
+              <span aria-hidden="true">·</span>
+              <button
+                type="button"
+                data-coding-pr={state.pr.url}
+                title={state.pr.url}
+                aria-label={t("chat.codingJob.openPrAria", { name: number })}
+                onClick={() => void openExternalLink(state.pr!.url)}
+                className="pointer-events-auto relative z-10 rounded-sm underline decoration-ink-tertiary decoration-1 underline-offset-[3px] transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                {number}
+              </button>
+            </>
+          )}
         </span>
-        <span data-agent-title className="min-w-0 flex-1 truncate text-[14px] leading-[18px] text-ink" title={hint ? `${title} (${hint})` : title}>{title}</span>
-        {onOpen && (
-          <ChevronRight
-            size={15}
-            aria-hidden="true"
-            data-coding-chevron
-            className={cn("shrink-0 text-ink-tertiary", (onIgnore || onStop) && "group-hover:invisible group-focus-within:invisible")}
-          />
-        )}
-      </button>
+      </span>
+      {onOpen && (
+        <ChevronRight
+          size={16}
+          aria-hidden="true"
+          data-coding-chevron
+          className={cn("pointer-events-none relative shrink-0 text-ink-tertiary", (onIgnore || onStop) && "group-hover:invisible group-focus-within:invisible")}
+        />
+      )}
       {onStop && (
         <button
           type="button"
@@ -89,7 +143,7 @@ export function CodingSessionRow({ title, hint, status, attrs, onOpen, onIgnore,
           disabled={stopping}
           aria-label={t("botPanel.activity.stopAria", { title })}
           title={t("botPanel.activity.stop")}
-          className="absolute right-2.5 flex size-6 items-center justify-center rounded-full text-ink-tertiary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50 touch:opacity-100"
+          className="absolute right-3 z-10 flex size-6 items-center justify-center rounded-full text-ink-tertiary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50 touch:opacity-100"
         >
           {stopping ? <Loader2 size={11} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={10} fill="currentColor" aria-hidden="true" />}
         </button>
@@ -101,7 +155,7 @@ export function CodingSessionRow({ title, hint, status, attrs, onOpen, onIgnore,
           onClick={onIgnore}
           aria-label={t("botPanel.coding.ignoreAria", { title })}
           title={t("botPanel.coding.ignore")}
-          className="absolute right-2.5 flex size-6 items-center justify-center rounded-full text-ink-tertiary opacity-0 transition-opacity hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100"
+          className="absolute right-3 z-10 flex size-6 items-center justify-center rounded-full text-ink-tertiary opacity-0 transition-opacity hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100"
         >
           <X size={12} aria-hidden="true" />
         </button>

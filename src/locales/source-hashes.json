@@ -16824,6 +16824,7 @@
       "roles.transition.answered.stay": "e1e89f1ecfe747f9683319d69f098dd72b307e844f99076d8a956946bb7fec82",
       "roles.transition.answered.always": "888ad7ec18d5321f4829e1e2182fbea60b5b44d86729b0dd8c01576264cecf2d",
       "roles.meWrite.summary": "e8b223efb00a4971c9595f48d9b6413308e79ccead9be9f10e93c5521b6ab1d4",
+      "roles.readSwitch.summary": "9d57be889390e0032402eb2fb5202bc96e9d22c406e5b945b55b628cc4fdb62b",
       "roles.op.inquire": "98c3bd6d9868b29833654a5dd11e5c90e7f5e5a86103580f3878df43ee720925",
       "roles.op.add": "9fd728c66c9a256b121472dabf32a34317aed01d8427d70ec830289cf23a7cc8",
       "roles.op.edit": "464c4ffd019e1e9691dcf0537c797353ef2b1c1d4833d3d463e5b74ae4547344",

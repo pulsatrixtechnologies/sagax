@@ -13633,6 +13633,7 @@
   "roles.transition.answered.stay": "Stays as {role}",
   "roles.transition.answered.always": "Saved for this bot",
   "roles.meWrite.summary": "Write on behalf of {person} instead of {role}: {tool} ({permission}). ConnectWise will record {person} as the author.",
+  "roles.readSwitch.summary": "Read once as {role} instead of {from}: {tool} ({permission}). {from} was refused (403) for it.",
   "roles.op.inquire": "Inquire",
   "roles.op.add": "Add",
   "roles.op.edit": "Edit",

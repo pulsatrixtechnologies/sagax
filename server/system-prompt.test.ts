@@ -515,7 +515,7 @@ describe("longCommandsPrompt", () => {
 // QA c1: D4 (#2578) and D7 (#2581) blocks, D6 (#2580) style
 describe("work style blocks and house style", () => {
   it("treats a 403 or an unserved product as a blocker and states the style rules", () => {
-    expect(WORK_STYLE_PROMPT).toMatch(/permission refusal \(403\) or a product that is not served here is a blocker/);
+    expect(WORK_STYLE_PROMPT).toMatch(/A 403 or a product not served here is a blocker: .*; on a 403, follow Sagax's note/);
     expect(WORK_STYLE_PROMPT).toContain("never present it as \"nothing found\"");
     expect(WORK_STYLE_PROMPT).toMatch(/without anglicisms/);
     expect(WORK_STYLE_PROMPT).toMatch(/No signature or decorative emoji/);

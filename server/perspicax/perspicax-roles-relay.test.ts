@@ -4,12 +4,12 @@ import { PerspicaxMcp, type PerspicaxRoleEvent } from "./perspicax-mcp.ts";
 // Fake Perspicax for the visible-roles relay: no sockets, credentials or live
 // data. "service-desk" is refused (403) on time entries, read and write;
 // the person's own surface ("Moi") reads them.
-function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc" } = {}) {
+function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc"; readableBy?: string; explicitFull?: boolean; roleSwitch?: "allow" | "deny"; knownRefused?: boolean } = {}) {
   const calls: Array<{ name?: string; args?: any; acting?: string }> = [];
   const acting = new Map<string, string>();
   const profiles = [
     { slug: "service-desk", name: "Service Desk", read_only: false, explicit_only: false, reachable: true, can: { read: true, write: true } },
-    { slug: "full-access", name: "Full Access", read_only: false, explicit_only: false, reachable: true, can: { read: true, write: true } },
+    { slug: "full-access", name: "Full Access", read_only: false, explicit_only: options.explicitFull === true, reachable: true, can: { read: true, write: true } },
   ];
   const tools = [
     { name: "identity_switch", annotations: { readOnlyHint: true } },
@@ -41,6 +41,10 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     if (name === "cw_psa_find_time_entries" && options.meRefused === "rpc") {
       return new Response(JSON.stringify({ jsonrpc: "2.0", id: frame.id, error: { code: -32000, message: "ConnectWise answered 403: You do not have security permission to perform this action", data: { details: { status: 403, reason: "Security" } } } }), { headers: { "content-type": "application/json", "mcp-session-id": "s1" } });
     }
+    // #2581: time entries readable only under one role (the bot's is limited on purpose)
+    if (name === "cw_psa_find_time_entries" && options.readableBy !== undefined && role !== options.readableBy) {
+      return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
+    }
     if (name === "cw_psa_find_time_entries" && options.meRefused === "result") {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
     }
@@ -51,6 +55,7 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
   });
   const events: PerspicaxRoleEvent[] = [];
   const asked: string[] = [];
+  const switchAsked: string[] = [];
   const mcp = new PerspicaxMcp({
     issuer: "https://fake.test", version: "test", now: Date.now, fetch: fetcher,
     link: () => ({ mcpEndpoint: () => "https://fake.test/mcp", exchangeToken: async () => ({ ok: true, token: "fake-parent", expiresAt: Date.now() + 3_600_000 }), revokeExchanged: async () => true }),
@@ -65,13 +70,15 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     turnRole: () => options.turnRole,
     roleFallback: () => options.fallback ?? "fallback",
     askMeWrite: async ({ tool }) => { asked.push(tool); return options.meWrite ?? "deny"; },
+    askRoleSwitch: async ({ from, to, tool }) => { switchAsked.push(`${from.slug || "me"}>${to.slug}:${tool}`); return options.roleSwitch ?? "deny"; },
+    knownReadRefusal: () => options.knownRefused === true,
   });
   let id = 0;
   const prepare = () => mcp.prepareTurn({ threadId: "t", generation: "g", bot: { id: "bot" }, speakerPrincipalId: "alice", speakerOrigin: options.routine ? "owner-routine" : "person", ...(options.routine ? { routine: true } : {}) });
   const relay = (name: string, args: Record<string, unknown> = {}) => mcp.relay({ threadId: "t", generation: "g", botId: "bot", frame: { jsonrpc: "2.0", id: `e${++id}`, method: "tools/call", params: { name, arguments: args } } });
   const init = () => mcp.relay({ threadId: "t", generation: "g", botId: "bot", frame: { jsonrpc: "2.0", id: "i", method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } } });
   const text = (answer: { body?: unknown }) => JSON.stringify(answer.body);
-  return { mcp, calls, events, asked, prepare, relay, init, text };
+  return { mcp, calls, events, asked, switchAsked, prepare, relay, init, text };
 }
 
 describe("visible roles in the Perspicax relay", () => {
@@ -180,18 +187,102 @@ describe("visible roles in the Perspicax relay", () => {
     await switched.relay("identity_switch", { profile: "full-access" });
     expect(switched.mcp.activeProfileFor("t", "bot")).toBe("full-access");
   });
-  // #2577 / #2581: a 403 is a clean block, never a detour.
-  it("marks a refused read under the default surface as a STOP block and refuses a switch after it", async () => {
-    const f = fixture({ meRefused: "result" });
+  // #2577 / #2581: a 403 is never "no data"; decided 2026-11-07: the bot's role is
+  // limited on purpose, so a refused read offers one held role for one call.
+  const reads = (f: ReturnType<typeof fixture>) => f.calls.filter((call) => call.name === "cw_psa_find_time_entries").map((call) => call.acting);
+  const lastTickets = (f: ReturnType<typeof fixture>) => f.calls.filter((call) => call.name === "cw_psa_find_tickets").at(-1)?.acting;
+
+  it("offers another held role after a read 403 under the default surface, as a permission block", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_find_time_entries");
+    expect((answer.body as { result?: { isError?: boolean } }).result?.isError).toBe(true);
+    expect(f.text(answer)).toContain("not missing data");
+    expect(f.text(answer)).toContain("Time & Expense");
+    expect(f.text(answer)).toContain("Another role you hold, Full Access");
+    expect(f.text(answer)).toContain("approval card");
+    expect(f.text(answer)).not.toContain("STOP");
+    expect(reads(f)).toEqual([""]);
+    expect(f.switchAsked).toEqual([]);
+  });
+
+  it("lets the bot switch to the offered role for that one call when the person already allowed it, then puts Moi back", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true });
+    await f.prepare();
+    await f.init();
+    await f.relay("cw_psa_find_time_entries");
+    const go = await f.relay("identity_switch", { profile: "full-access" });
+    expect(f.text(go)).not.toContain("Refused by Sagax");
+    expect(f.text(go)).toContain("runs only your next call as Full Access");
+    const answer = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(answer)).toContain('"as":"full-access"');
+    expect(reads(f)).toEqual(["", "full-access"]);
+    await f.relay("cw_psa_find_tickets");
+    expect(lastTickets(f)).toBe("");
+    expect(f.switchAsked).toEqual([]);
+  });
+
+  it("asks the person with a card when the bot sends the refused read again, and reads it once as that role", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true, roleSwitch: "allow" });
+    await f.prepare();
+    await f.init();
+    await f.relay("cw_psa_find_time_entries");
+    const answer = await f.relay("cw_psa_find_time_entries");
+    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_time_entries"]);
+    expect(f.text(answer)).toContain("with the person's approval");
+    expect(reads(f)).toEqual(["", "full-access"]);
+    await f.relay("cw_psa_find_tickets");
+    expect(lastTickets(f)).toBe("");
+  });
+
+  it("reports the read not done when the person declines, and refuses a switch after it", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true, roleSwitch: "deny" });
+    await f.prepare();
+    await f.init();
+    await f.relay("cw_psa_find_time_entries");
+    const answer = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(answer)).toContain("did not approve reading it once as Full Access");
+    expect(f.text(answer)).toContain("not missing data");
+    expect(reads(f)).toEqual([""]);
+    const escape = await f.relay("identity_switch", { profile: "full-access" });
+    expect(f.text(escape)).toContain("its one role switch is spent");
+    expect(f.calls.some((call) => call.name === "identity_switch" && call.args.profile === "full-access")).toBe(false);
+  });
+
+  it("switches by itself for one call when a rule allows it: no card", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true, fallback: "rule" });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(answer)).toContain("read this once as Full Access");
+    expect(reads(f)).toEqual(["", "full-access"]);
+    expect(f.switchAsked).toEqual([]);
+    await f.relay("cw_psa_find_tickets");
+    expect(lastTickets(f)).toBe("");
+  });
+
+  it("never loops: a read refused again under the offered role is a final block", async () => {
+    const f = fixture({ readableBy: "nobody", explicitFull: true, roleSwitch: "allow" });
+    await f.prepare();
+    await f.init();
+    await f.relay("cw_psa_find_time_entries");
+    const again = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(again)).toContain("refused again as Full Access");
+    const third = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(third)).toContain("STOP: this read was refused (403)");
+    expect(f.switchAsked).toHaveLength(1);
+    expect(reads(f)).toEqual(["", "full-access", ""]);
+  });
+
+  it("blocks with the permission when no other held role can be tried", async () => {
+    const f = fixture({ meRefused: "result", knownRefused: true });
     await f.prepare();
     await f.init();
     const answer = await f.relay("cw_psa_find_time_entries");
     expect(f.text(answer)).toContain("STOP: this read was refused (403)");
-    expect(f.text(answer)).toContain("Time & Expense");
+    expect(f.text(answer)).toContain("no other role you hold can be tried");
     expect(f.text(answer)).toContain("not missing data");
-    const escape = await f.relay("identity_switch", { profile: "full-access" });
-    expect(f.text(escape)).toContain("a read was refused (403) in this turn");
-    expect(f.calls.some((call) => call.name === "identity_switch" && call.args.profile === "full-access")).toBe(false);
   });
 
   it("turns a JSON-RPC 403 error into a STOP block the model reads", async () => {
@@ -201,7 +292,7 @@ describe("visible roles in the Perspicax relay", () => {
     const answer = await f.relay("cw_psa_find_time_entries");
     const body = answer.body as { result?: { isError?: boolean } };
     expect(body.result?.isError).toBe(true);
-    expect(f.text(answer)).toContain("STOP: this read was refused (403)");
+    expect(f.text(answer)).toContain("this read was refused (403)");
     expect(f.text(answer)).toContain("You do not have security permission");
   });
 

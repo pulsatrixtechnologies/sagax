@@ -30215,7 +30215,13 @@ ROUTES.push(createTeamExportImportRoutes({
   broadcast,
   viewerForApproval,
   projectBotTranscript,
-  projectGroupTranscript
+  projectGroupTranscript,
+  // I1: "Import as a team" reads a marketplace plugin without installing it.
+  readPlugin: (marketplace, plugin, auth) => pluginMarketplaces.readPlugin(marketplace, plugin, sessionPrincipal(auth) ?? undefined, marketplaceViewer(auth)),
+  engines: async (auth) => ({
+    instances: selectableInstances(await registry.describe()),
+    refusal: selectionContextFor(sessionPrincipal(auth)).refusal
+  })
 }));
 ROUTES.push(createTeamLibraryRoutes());
 ROUTES.push(createSidebarSectionsRoutes({

@@ -35,6 +35,10 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { BotRecord, GroupRecord } from "../store.ts";
 import { createTeamManifest, parseTeamManifest } from "../team/team-manifest.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import { pluginTeamToPackage, PluginTeamError } from "../../shared/plugin-team.ts";
+import { resolvePluginTeamModels } from "../plugins/plugin-team.ts";
+import type { SelectableInstance } from "../models/default-model-selection.ts";
+import type { ModelSelection } from "../../shared/wire.ts";
 
 export interface TeamExportImportRouteDeps {
   profileName(): string | undefined;
@@ -108,6 +112,13 @@ export interface TeamExportImportRouteDeps {
   viewerForApproval(auth: RequestAuth): unknown;
   projectBotTranscript(bot: unknown, viewer: unknown): unknown;
   projectGroupTranscript(group: unknown, viewer: unknown): unknown;
+  /** I1: a marketplace plugin's agents and manifest, read without installing it. */
+  readPlugin?(marketplace: string, plugin: string, auth: RequestAuth): Promise<{
+    plan: { agents: Array<{ file: string; text: string }>; skipped: string[] };
+    manifest: { name?: string; displayName?: string; description?: string; version?: string };
+  }>;
+  /** I1: the engines a new bot may use, to match each agent's `model`. */
+  engines?(auth: RequestAuth): Promise<{ instances: readonly SelectableInstance[]; refusal?: (instance: SelectableInstance) => string | undefined }>;
 }
 
 export function createTeamExportImportRoutes(deps: TeamExportImportRouteDeps): RouteHandler {
@@ -115,6 +126,59 @@ export function createTeamExportImportRoutes(deps: TeamExportImportRouteDeps): R
   const scout = deps.scoutProject ?? scoutProject;
 
   return async ({ req, res, url, path, method, auth, json, readBody }) => {
+    /** A parsed package (or legacy team file) added as new bots: shared by a
+     * file import and a plugin import (I1). */
+    const finishPackageImport = async (
+      response: typeof res,
+      caller: RequestAuth,
+      source: { document: PackageDocument } | { manifest: ReturnType<typeof parseTeamManifest> },
+      options: { mode: "add" | "project"; cwd: string | null; room?: string; visibility?: BotVisibility; models?: Record<string, ModelSelection> },
+      memberImport: boolean,
+      memberOwner: string,
+      extraSkipped: string[],
+    ) => {
+      const baseDeps = deps.packageImportDeps(await deps.defaultSelection());
+      // a member's file adds no server to the server's MCP list
+      const importDeps: PackageImportDeps = memberImport
+        ? { ...baseDeps, mcp: { ...baseDeps.mcp, refusal: () => "A member's import adds no server to the server's MCP list" } }
+        : baseDeps;
+      let imported: PackageImportResult;
+      try {
+        const result = "document" in source
+          ? importPackageDocument(source.document, { ...options, trust: "file" }, importDeps)
+          : importTeamManifest(source.manifest, options, importDeps);
+        // A file import always gets a fresh install id, so it never reports
+        // "already added"; that answer belongs to the organization library.
+        if (result.alreadyAdded) return json(response, 200, result);
+        imported = result;
+      } catch (error) {
+        if (error instanceof PackageImportError) return json(response, error.status, { error: error.message, code: error.code });
+        throw error;
+      }
+      if (memberImport) {
+        for (const bot of imported.bots) {
+          const patched = deps.store.patchBot(bot.id, { ownerUserId: memberOwner, ...deps.memberImportReset() });
+          if (patched) deps.broadcast({ kind: "bot", bot: deps.publicBot(patched) });
+        }
+        for (const created of [...imported.groups, ...(imported.group ? [imported.group] : [])]) {
+          deps.store.patchGroup(created.id, { createdBy: memberOwner });
+        }
+      }
+      return json(response, 201, {
+        name: imported.name,
+        section: imported.section,
+        bots: imported.bots.map((bot) => deps.projectBotTranscript(deps.publicBot(deps.store.bot(bot.id) ?? bot), deps.viewerForApproval(caller))),
+        group: imported.group,
+        groups: imported.groups.map((created) => ({ ...created, messages: [] })),
+        routines: imported.routines,
+        offeredSkills: imported.offeredSkills,
+        connections: imported.connections,
+        skipped: extraSkipped.length ? [...imported.skipped, ...extraSkipped.map((reason) => ({ part: "plugin", reason }))] : imported.skipped,
+        brief: imported.brief,
+        notes: imported.notes,
+        presets: imported.presets ?? [],
+      });
+    };
     if (method === "POST" && path === "/api/teams/export") {
       // Pictures the Share dialog prepared ride this body, so it is larger
       // than the default JSON limit (the document itself is capped at 4 MB).
@@ -303,6 +367,49 @@ export function createTeamExportImportRoutes(deps: TeamExportImportRouteDeps): R
       return json(res, 200, { directory });
     }
 
+    if (method === "POST" && path === "/api/teams/import-plugin") {
+      // I1 (2026-11-07): a marketplace plugin's agents/*.md become the bots
+      // of ONE new team. Additive like a file import: new bots, new section.
+      if (!deps.readPlugin || !deps.engines) return json(res, 404, { error: "Not found" });
+      const memberImport = auth.kind === "session" && !auth.scopes.includes("admin");
+      const memberOwner = memberImport ? deps.creatingBotOwnerId(auth) : "";
+      if (memberImport && (!deps.botCreationAllowed(auth) || !memberOwner)) {
+        if (deps.personBotsReadOnly(auth.session.principalId)) return json(res, 403, deps.botsReadOnlyRefusal(auth.session.principalId));
+        return json(res, 403, { error: "forbidden: only a member of the organization can import bots", code: "import_bots_members_only" });
+      }
+      const body = (await readBody(req, 16 * 1024)) as { marketplace?: unknown; plugin?: unknown; team?: unknown; visibility?: unknown } | null;
+      const marketplace = typeof body?.marketplace === "string" ? body.marketplace.trim() : "";
+      const plugin = typeof body?.plugin === "string" ? body.plugin.trim() : "";
+      if (!marketplace || !plugin) return json(res, 400, { error: "Name the marketplace and the plugin." });
+      let importVisibility: BotVisibility | undefined;
+      if (body?.visibility !== undefined) {
+        const parsed = parseVisibility(body.visibility);
+        if (!parsed.ok) return json(res, 400, { error: parsed.error });
+        importVisibility = deps.ownerChosenVisibility(auth, parsed.visibility);
+      }
+      let built: ReturnType<typeof pluginTeamToPackage>;
+      let readSkipped: string[];
+      try {
+        const read = await deps.readPlugin(marketplace, plugin, auth);
+        readSkipped = read.plan.skipped.filter((line) => line.startsWith("agent "));
+        built = pluginTeamToPackage({
+          plugin,
+          manifest: read.manifest,
+          agents: read.plan.agents,
+          ...(typeof body?.team === "string" ? { teamName: body.team } : {}),
+        });
+      } catch (error) {
+        if (error instanceof PluginTeamError) return json(res, 422, { error: error.message, code: "no_agents" });
+        const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : 400;
+        return json(res, status, { error: error instanceof Error ? error.message : "The plugin could not be read" });
+      }
+      const engines = await deps.engines(auth);
+      const { models, unmatched } = resolvePluginTeamModels(built.agents, engines.instances, engines.refusal);
+      return finishPackageImport(res, auth, { document: built.document }, {
+        mode: "add", cwd: null, ...(importVisibility ? { visibility: importVisibility } : {}), models,
+      }, memberImport, memberOwner, [...readSkipped, ...built.skipped, ...unmatched]);
+    }
+
     if (method === "POST" && path === "/api/teams/import") {
       // Import is additive-only. A manifest is untrusted input (catalog,
       // GitHub, a shared file), so it must be structurally unable to reach
@@ -414,53 +521,13 @@ export function createTeamExportImportRoutes(deps: TeamExportImportRouteDeps): R
       } catch (error) {
         return json(res, 400, { error: error instanceof Error ? error.message : "Invalid bot package" });
       }
-      const baseDeps = deps.packageImportDeps(await deps.defaultSelection());
-      // a member's file adds no server to the server's MCP list
-      const importDeps: PackageImportDeps = memberImport
-        ? { ...baseDeps, mcp: { ...baseDeps.mcp, refusal: () => "A member's import adds no server to the server's MCP list" } }
-        : baseDeps;
       const options = {
         mode: importMode as "add" | "project",
         cwd: projectCwd,
         room: url.searchParams.get("room") ?? undefined,
         ...(importVisibility ? { visibility: importVisibility } : {}),
       };
-      let imported: PackageImportResult;
-      try {
-        const result = packageDocument
-          ? importPackageDocument(packageDocument, { ...options, trust: "file" }, importDeps)
-          : importTeamManifest(manifest!, options, importDeps);
-        // A file import always gets a fresh install id, so it never reports
-        // "already added"; that answer belongs to the organization library.
-        if (result.alreadyAdded) return json(res, 200, result);
-        imported = result;
-      } catch (error) {
-        if (error instanceof PackageImportError) return json(res, error.status, { error: error.message, code: error.code });
-        throw error;
-      }
-      if (memberImport) {
-        for (const bot of imported.bots) {
-          const patched = deps.store.patchBot(bot.id, { ownerUserId: memberOwner, ...deps.memberImportReset() });
-          if (patched) deps.broadcast({ kind: "bot", bot: deps.publicBot(patched) });
-        }
-        for (const created of [...imported.groups, ...(imported.group ? [imported.group] : [])]) {
-          deps.store.patchGroup(created.id, { createdBy: memberOwner });
-        }
-      }
-      return json(res, 201, {
-        name: imported.name,
-        section: imported.section,
-        bots: imported.bots.map((bot) => deps.projectBotTranscript(deps.publicBot(deps.store.bot(bot.id) ?? bot), deps.viewerForApproval(auth))),
-        group: imported.group,
-        groups: imported.groups.map((created) => ({ ...created, messages: [] })),
-        routines: imported.routines,
-        offeredSkills: imported.offeredSkills,
-        connections: imported.connections,
-        skipped: imported.skipped,
-        brief: imported.brief,
-        notes: imported.notes,
-        presets: imported.presets ?? [],
-      });
+      return finishPackageImport(res, auth, packageDocument ? { document: packageDocument } : { manifest: manifest! }, options, memberImport, memberOwner, []);
     }
 
     return PASS;

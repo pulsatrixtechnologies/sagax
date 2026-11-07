@@ -2,6 +2,8 @@
 // #2342: the Computer card's live window showed "Capturing this computer's
 // screen…" forever. It asked the desktop bridge for the Local VM's screenshot
 // instead of this computer's screen, and swallowed every failure.
+// JC 2026-11-07: "The screen is temporarily unavailable." now says the real
+// reason in every known case.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,25 +57,57 @@ describe("LocalLiveScreen", () => {
     expect(screenFrame).toHaveBeenCalledTimes(2);
   });
 
-  it("says Screen Recording is missing, with the Settings path, instead of spinning", async () => {
+  it("says Screen Recording is not allowed, with the button to System Settings, instead of spinning", async () => {
     const permOpenSettings = vi.fn();
-    (window as { ogb?: unknown }).ogb = { screenFrame: vi.fn().mockResolvedValue(null), permOpenSettings };
+    (window as { ogb?: unknown }).ogb = {
+      screenFrame: vi.fn().mockResolvedValue(null),
+      permStatus: vi.fn().mockResolvedValue({ mic: "granted", screen: "denied" }),
+      permOpenSettings,
+    };
     await mount();
     expect(host.textContent).toContain("Capturing this computer's screen");
     await tick();
     const alert = host.querySelector("[data-local-live-error]");
-    expect(alert?.getAttribute("data-local-live-error")).toBe("screen-permission");
-    expect(host.textContent).toContain("Screen Recording permission");
-    act(() => host.querySelector<HTMLButtonElement>("[data-local-live-settings]")!.click());
+    expect(alert?.getAttribute("data-local-live-error")).toBe("permission");
+    expect(host.textContent).toContain("Allow Screen Recording for Sagax in System Settings");
+    expect(host.textContent).not.toContain("temporarily unavailable");
+    const button = host.querySelector<HTMLButtonElement>("[data-local-live-settings]")!;
+    expect(button.textContent).toBe("Allow Screen Recording");
+    act(() => button.click());
     expect(permOpenSettings).toHaveBeenCalledWith("screen");
   });
 
-  it("outside the app, reads the bridge and ends on a clear error when it fails", async () => {
-    bridge.desktopLocalVm.mockRejectedValue(new Error("not connected"));
+  it("allowed but still empty: says to relaunch, no Settings button", async () => {
+    (window as { ogb?: unknown }).ogb = {
+      screenFrame: vi.fn().mockResolvedValue(null),
+      permStatus: vi.fn().mockResolvedValue({ mic: "granted", screen: "granted" }),
+      permOpenSettings: vi.fn(),
+    };
     await mount();
-    expect(bridge.desktopLocalVm).toHaveBeenCalledWith("screenshot", { desktopId: "mac-1" });
     await tick();
-    expect(host.querySelector("[data-local-live-error]")?.getAttribute("data-local-live-error")).toBe("unavailable");
+    expect(host.querySelector("[data-local-live-error]")?.getAttribute("data-local-live-error")).toBe("empty");
+    expect(host.textContent).toContain("Relaunch Sagax");
+    expect(host.querySelector("[data-local-live-settings]")).toBeNull();
+  });
+
+  it("shows the capture's own error when it fails", async () => {
+    (window as { ogb?: unknown }).ogb = {
+      screenFrame: vi.fn().mockRejectedValue(new Error("screen:frame refused for this page")),
+      permStatus: vi.fn().mockResolvedValue({ mic: "granted", screen: "granted" }),
+    };
+    await mount();
+    await tick();
+    expect(host.querySelector("[data-local-live-error]")?.getAttribute("data-local-live-error")).toBe("capture-failed");
+    expect(host.querySelector("[data-local-live-failure]")?.textContent).toBe("screen:frame refused for this page");
+  });
+
+  it("outside the desktop app, says so at once and never asks the Local VM", async () => {
+    bridge.desktopLocalVm.mockResolvedValue({ image: FRAME });
+    await mount();
+    expect(bridge.desktopLocalVm).not.toHaveBeenCalled();
+    expect(host.querySelector("[data-local-live-error]")?.getAttribute("data-local-live-error")).toBe("desktop-app-only");
+    expect(host.textContent).toContain("Open the Sagax desktop app");
     expect(host.textContent).not.toContain("Capturing this computer's screen");
+    expect(host.textContent).not.toContain("temporarily unavailable");
   });
 });

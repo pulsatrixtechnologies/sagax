@@ -80,7 +80,7 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "
 // computer's files, logins or secrets is handed to the page, and its screen
 // only as the bot panel's 320x200 Computer thumbnail, once the person
 // granted Screen Recording (screen:thumbnail, never a prompt).
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail"]);
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail", "screenFrame", "permOpenSettings"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).

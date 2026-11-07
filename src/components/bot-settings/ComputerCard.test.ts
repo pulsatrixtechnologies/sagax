@@ -14,21 +14,26 @@ import {
   computerSelectValue,
 } from "./ComputerCard";
 
+// The bridge and the organization, per test (null: a solo server).
+const env = vi.hoisted(() => ({ bridge: null as unknown, org: null as unknown }));
 vi.mock("@/lib/desktop-bridge", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/desktop-bridge")>();
   return {
     ...actual,
-    useDesktopBridgeStatus: () => null,
+    useDesktopBridgeStatus: () => env.bridge,
   };
 });
 
-vi.mock("@/lib/perspicax-org", () => ({ usePerspicaxOrg: () => null }));
+vi.mock("@/lib/perspicax-org", () => ({ usePerspicaxOrg: () => env.org }));
+vi.mock("@/lib/is-mac-platform", () => ({ isMacPlatform: () => true }));
 
-// The thumbnail endpoint: the capture time of each computer (null: none yet).
-const captures = vi.hoisted(() => ({ at: {} as Record<string, number | null>, calls: [] as string[] }));
+// The thumbnail endpoint: the capture time of each computer (null: none yet),
+// and the cloud computer's status (GET /api/bots/:id/computer).
+const captures = vi.hoisted(() => ({ at: {} as Record<string, number | null>, calls: [] as string[], cloud: {} as unknown }));
 vi.mock("@/state/store/api", () => ({
   api: vi.fn(async (url: string) => {
     captures.calls.push(url);
+    if (new URL(url, "http://localhost").pathname.endsWith("/computer")) return captures.cloud;
     const computer = new URL(url, "http://localhost").searchParams.get("computer") ?? "";
     return { computer, at: captures.at[computer] ?? null, mime: "image/png" };
   }),
@@ -58,6 +63,9 @@ let host: HTMLDivElement | null = null;
 beforeEach(() => {
   captures.at = {};
   captures.calls = [];
+  captures.cloud = { configured: true, box: { state: "running" } };
+  env.bridge = null;
+  env.org = null;
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -65,6 +73,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root?.unmount());
+  delete (window as { ogb?: unknown }).ogb;
   host?.remove();
   root = null;
   host = null;
@@ -188,12 +197,54 @@ describe("ComputerCard", () => {
     expect(img.className).not.toContain("grayscale");
   });
 
-  it("falls back to the wallpaper while the computer has no capture", async () => {
+  it("says the screen is unavailable while an awake computer has no capture, never a wallpaper", async () => {
     await act(async () => { root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })); });
     const thumb = host!.querySelector<HTMLButtonElement>("[data-computer-thumb]")!;
-    expect(thumb.dataset.computerThumb).toBe("wallpaper");
+    expect(thumb.dataset.computerThumb).toBe("unavailable");
     expect(thumb.querySelector("img")).toBeNull();
-    expect(thumb.style.background).toContain("gradient");
+    expect(thumb.style.background).not.toContain("gradient");
+    expect(thumb.title).toContain("No picture of this screen yet");
+    const status = host!.querySelector<HTMLElement>("[data-computer-status]")!;
+    expect(status.dataset.computerStatus).toBe("awake");
+    expect(status.dataset.computerProblem).toBe("no-capture");
+    expect(status.textContent).toBe("Awake \u00b7 No picture yet");
+  });
+
+  it("shows the cloud computer asleep, thumbnail and line alike, when it is stopped", async () => {
+    captures.at = { cloud: Date.now() - 60 * 60_000 };
+    captures.cloud = { configured: true, box: { state: "stopped" } };
+    await act(async () => { root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })); });
+    const thumb = host!.querySelector<HTMLButtonElement>("[data-computer-thumb]")!;
+    expect(thumb.dataset.computerThumb).toBe("asleep");
+    expect(thumb.querySelector("[data-computer-idle-bot]")).toBeTruthy();
+    expect(thumb.querySelector("img")).toBeNull();
+    expect(host!.querySelector<HTMLElement>("[data-computer-status]")!.dataset.computerStatus).toBe("asleep");
+    expect(host!.querySelector("[data-computer-status]")!.textContent).toBe("Asleep");
+  });
+
+  it("shows the person's computer asleep when its desktop is offline", async () => {
+    env.org = { id: "org" };
+    env.bridge = { connected: false, tunnel: false, desktops: [{ id: "d1", name: "Studio-Mac", platform: "darwin", online: false, lastSeenAt: 1 }], workplace: {}, activity: [] };
+    await act(async () => { root!.render(createElement(ComputerCard, { bot: { ...bot, computer: "local" } as Bot, onPatch: vi.fn() })); });
+    expect(host!.querySelector<HTMLElement>("[data-computer-thumb]")!.dataset.computerThumb).toBe("asleep");
+    expect(host!.querySelector<HTMLElement>("[data-computer-status]")!.dataset.computerStatus).toBe("asleep");
+  });
+
+  it("says Screen Recording is missing on this computer, in the thumbnail and the line", async () => {
+    env.org = { id: "org" };
+    env.bridge = { connected: true, tunnel: false, desktops: [{ id: "d1", name: "Studio-Mac.local", platform: "darwin", online: true, lastSeenAt: 1 }], workplace: {}, activity: [] };
+    (window as { ogb?: unknown }).ogb = {
+      screenFrame: vi.fn().mockResolvedValue(null),
+      screenThumbnail: vi.fn().mockResolvedValue(null),
+      permStatus: vi.fn().mockResolvedValue({ mic: "granted", screen: "denied", host: "Studio-Mac" }),
+    };
+    await act(async () => { root!.render(createElement(ComputerCard, { bot: { ...bot, computer: "local" } as Bot, onPatch: vi.fn() })); });
+    const thumb = host!.querySelector<HTMLButtonElement>("[data-computer-thumb]")!;
+    expect(thumb.dataset.computerThumb).toBe("unavailable");
+    expect(thumb.title).toContain("Screen Recording");
+    const status = host!.querySelector<HTMLElement>("[data-computer-status]")!;
+    expect(status.dataset.computerProblem).toBe("permission");
+    expect(status.textContent).toBe("Awake \u00b7 No screen access");
   });
 
   it("switches the picture at once when the bot moves to another computer", async () => {
@@ -223,6 +274,7 @@ describe("ComputerCard", () => {
   it("asks for no picture when the bot has no computer", async () => {
     await act(async () => { root!.render(createElement(ComputerCard, { bot: { ...bot, computer: "off" } as Bot, onPatch: vi.fn() })); });
     expect(captures.calls).toEqual([]);
-    expect(host!.querySelector<HTMLElement>("[data-computer-thumb]")!.dataset.computerThumb).toBe("wallpaper");
+    expect(host!.querySelector<HTMLElement>("[data-computer-thumb]")!.dataset.computerThumb).toBe("asleep");
+    expect(host!.querySelector<HTMLElement>("[data-computer-status]")!.dataset.computerStatus).toBe("asleep");
   });
 });

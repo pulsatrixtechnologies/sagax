@@ -1,7 +1,7 @@
 import { botRoutineRuns } from "@/state/view-slices";
 // The bot panel, as the reference design draws it (#2125): a round gear at
 // the top left (the bot's profile page) and a round X at the top right, a
-// mascot sized to Grok Bot (#2196) and "Name · Label" on one line, then two
+// mascot sized to Grok Bot (#2196), the name with the label under it, then two
 // tabs, Activity and Library. Once the body scrolls past the tabs, the head
 // compacts into one row: gear, tabs centered, X. The bot's menu (archive,
 // primary, export, copy link, float) opens on a right click on the mascot or

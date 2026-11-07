@@ -1,7 +1,7 @@
 // The bot's profile page (#2126, #2173, #2271, Grok Bot's layout): the
 // surface that edits one bot, filling the main panel in place of the chat.
 // Its top is the bot's appearance, edited in place: a banner in the mascot's
-// colour with the mascot over its lower edge, "Name · Label", who sees it
+// colour with the mascot over its lower edge, the name with the label under it, who sees it
 // ("Private to you") and the owner, the description and an
 // Appearance pill that unfolds the full appearance pane (its four tabs; the
 // colour dots live in its Color tab only) under them. Then five pill tabs,

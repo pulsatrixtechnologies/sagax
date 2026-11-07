@@ -2793,10 +2793,15 @@ body {
    page passes its hex as --bot-profile-banner-color and the wash mixes it
    with a pale base, darker at the top. The page's top bar carries the top
    colour (.bot-profile-banner-top) so bar and banner read as one header. A
-   neutral mascot keeps a visible grey. light-dark() picks the base. */
+   neutral mascot keeps a visible grey. The base is one plain colour, never
+   light-dark(): the build (lightningcss) rewrites light-dark() into
+   --lightningcss-light/-dark variables that only a literal color-scheme
+   defines, and the skins set `color-scheme: var(--code-color-scheme)`, so
+   in the shipped app the base was invalid, the banner and the bar went
+   transparent and the hero card floated under a dark gap (#2554). */
 .bot-profile-banner,
 .bot-profile-banner-top {
-  --bot-profile-banner-base: light-dark(#ffffff, #f4f4f4);
+  --bot-profile-banner-base: #f7f7f7;
   --bot-profile-banner-from: color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 58%, var(--bot-profile-banner-base));
 }
 .bot-profile-banner {

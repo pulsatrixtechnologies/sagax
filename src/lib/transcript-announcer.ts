@@ -4,6 +4,7 @@
 // short sentence: a reply that has finished, a turn that failed, and an
 // approval that is waiting. A stop the person asked for is none of those.
 import { t } from "@/lib/i18n";
+import { localizedServerLine } from "@/lib/step-label";
 import { failedTurnCause } from "../../shared/failed-turn";
 import type { Message } from "@/state/store";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
@@ -64,7 +65,8 @@ export function nextAnnouncement(
         ? t("chat.announce.replied", { name: reply.name, text: summary })
         : t("chat.announce.repliedEmpty", { name: reply.name }));
     } else if (snapshot.failure && snapshot.failure.id !== memory.failureId && !isUserStop(snapshot.failure.cause)) {
-      const summary = replySummary(snapshot.failure.cause);
+      // a restart or engine line is said in the app's language, as on screen
+      const summary = replySummary(localizedServerLine(snapshot.failure.cause));
       said.push(summary
         ? t("chat.announce.failed", { name: snapshot.failure.name, text: summary })
         : t("chat.announce.failedEmpty", { name: snapshot.failure.name }));

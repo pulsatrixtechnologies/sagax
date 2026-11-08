@@ -69,9 +69,10 @@ export function timelineEvents(messages: TimelineMessage[], run?: LiveToolRun): 
 }
 
 /** Export only the displayed activity, never chat text or raw provider data.
- * Apply the shared scrub again for older persisted messages. */
-export function runLogText(events: TimelineEvent[]): string {
+ * Apply the shared scrub again for older persisted messages. `labelOf` lets
+ * the app copy the same words it shows (restart lines in the app's language). */
+export function runLogText(events: TimelineEvent[], labelOf: (event: TimelineEvent) => string = (event) => event.label): string {
   return redactSecretsInText(events.map((event) =>
-    `[${new Date(event.at).toISOString()}] ${event.state} · ${event.label}${event.command ? `\n  ${event.command}` : ""}`,
+    `[${new Date(event.at).toISOString()}] ${event.state} · ${labelOf(event)}${event.command ? `\n  ${event.command}` : ""}`,
   ).join("\n"));
 }

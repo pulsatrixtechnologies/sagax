@@ -19,6 +19,10 @@ const checks: AskQuestion = { question: "Which checks?", multiSelect: true, opti
 let host: HTMLDivElement;
 let root: Root;
 const dispatch = vi.fn();
+// the card also settles itself in the store (cardSettled); these read the
+// answer actually sent to the bot
+const decides = () => dispatch.mock.calls.map((call) => call[0]).filter((action) => action.type === "decideRequest");
+const settles = () => dispatch.mock.calls.map((call) => call[0]).filter((action) => action.type === "cardSettled");
 
 function mount(questions: AskQuestion[]) {
   const message = {
@@ -82,9 +86,9 @@ describe("QuestionCard answered in one step", () => {
     mount([plan]);
     expect(button("Submit answer")).toBeUndefined();
     act(() => button("Pro").click());
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch.mock.calls[0]![0]).toMatchObject({ type: "decideRequest", requestId: "req-1", behavior: "answer" });
-    expect(dispatch.mock.calls[0]![0].message).toContain("A: Pro");
+    expect(decides()).toHaveLength(1);
+    expect(decides()[0]!).toMatchObject({ type: "decideRequest", requestId: "req-1", behavior: "answer" });
+    expect(decides()[0]!.message).toContain("A: Pro");
     const settled = host.querySelector('[data-ask-card="settled"]')!;
     expect(settled.querySelector('[aria-checked="true"]')?.textContent).toContain("Pro");
     expect(settled.querySelectorAll(".opacity-45").length).toBe(1);
@@ -93,8 +97,8 @@ describe("QuestionCard answered in one step", () => {
   it("sends a single pick from its letter key too", () => {
     mount([plan]);
     press(host.querySelector('[role="radio"]')!, { key: "b" });
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch.mock.calls[0]![0].message).toContain("A: Pro");
+    expect(decides()).toHaveLength(1);
+    expect(decides()[0]!.message).toContain("A: Pro");
   });
 
   it("opens a field from the Other row and waits for Enter or its arrow", () => {
@@ -103,15 +107,15 @@ describe("QuestionCard answered in one step", () => {
     act(() => button("Other").click());
     const field = host.querySelector("textarea")!;
     type(field, "Enterprise");
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(decides()).toHaveLength(0);
     act(() => host.querySelector<HTMLButtonElement>('button[aria-label="Submit answer"]')!.click());
-    expect(dispatch.mock.calls[0]![0].message).toContain("A: Enterprise");
+    expect(decides()[0]!.message).toContain("A: Enterprise");
   });
 
   it("does not send a multi-select pick on its own", () => {
     mount([checks]);
     act(() => button("Lint").click());
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(decides()).toHaveLength(0);
   });
 
   it("answers an open question in a text field: Shift+Enter breaks the line, Enter sends", () => {
@@ -121,34 +125,52 @@ describe("QuestionCard answered in one step", () => {
     expect(field.getAttribute("dir")).toBe("auto");
     type(field, "omb-preview");
     press(field, { key: "Enter", shiftKey: true });
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(decides()).toHaveLength(0);
     press(field, { key: "Enter" });
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch.mock.calls[0]![0].message).toContain("A: omb-preview");
+    expect(decides()).toHaveLength(1);
+    expect(decides()[0]!.message).toContain("A: omb-preview");
   });
 
   it("sends nothing from an empty open question", () => {
     mount([name]);
     press(host.querySelector("textarea")!, { key: "Enter" });
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(decides()).toHaveLength(0);
   });
 
   it("keeps options-only questions one-tap without a text field", () => {
     mount([{ ...plan, custom: false }]);
     expect(host.querySelector("textarea, input")).toBeNull();
     act(() => button("Pro").click());
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch.mock.calls[0]![0].message).toContain("A: Pro");
+    expect(decides()).toHaveLength(1);
+    expect(decides()[0]!.message).toContain("A: Pro");
   });
 
   it("restores the choices after a failed answer so it can be retried", () => {
     mount([plan]);
     act(() => button("Pro").click());
-    act(() => dispatch.mock.calls[0]![0].onError());
+    act(() => decides()[0]!.onError());
     expect(host.querySelector('[data-ask-card="pending"]')).not.toBeNull();
     act(() => button("Free").click());
-    expect(dispatch).toHaveBeenCalledTimes(2);
-    expect(dispatch.mock.calls[1]![0].message).toContain("A: Free");
+    expect(decides()).toHaveLength(2);
+    expect(decides()[1]!.message).toContain("A: Free");
+  });
+
+  it("keeps the server's outcome when the request was settled elsewhere (409)", () => {
+    mount([plan]);
+    act(() => button("Pro").click());
+    expect(settles()).toHaveLength(1);
+    act(() => decides()[0]!.onError("Already answered elsewhere", true));
+    // no roll back over the real outcome the store just wrote, no failure line
+    expect(settles()).toHaveLength(1);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("rolls the card back after a plain failure", () => {
+    mount([plan]);
+    act(() => button("Pro").click());
+    act(() => decides()[0]!.onError("network"));
+    expect(settles()).toHaveLength(2);
+    expect(settles()[1]!.patch).toEqual({ answered: undefined, answeredText: undefined });
   });
 
   it("does not send Enter while an IME composition is active", () => {
@@ -156,8 +178,8 @@ describe("QuestionCard answered in one step", () => {
     const field = host.querySelector("textarea")!;
     type(field, "新项目");
     press(field, { key: "Enter", isComposing: true });
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(decides()).toHaveLength(0);
     press(field, { key: "Enter" });
-    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(decides()).toHaveLength(1);
   });
 });

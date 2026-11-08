@@ -78,7 +78,7 @@ describe("failed turn text", () => {
     setLocale("en");
     expect(activityPreview(stored, engine())).toBe(NO_ENGINE_PERSON);
     setLocale("fr");
-    expect(activityPreview(stored, engine())).toBe("Ce bot n'a pas de moteur : choisissez-en un dans Modifier le bot > Modèle");
+    expect(activityPreview(stored, engine())).toBe("Ce bot n'a pas de moteur : choisis-en un dans Modifier le bot > Modèle");
     setLocale("en");
   });
 

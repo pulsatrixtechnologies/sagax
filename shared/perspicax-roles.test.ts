@@ -36,6 +36,13 @@ describe("perspicax roles", () => {
     expect(cwPermissionFor("cw_psa_schedule_entries_write", { action: "delete" }, false)).toMatchObject({ path: "schedule/entries", operation: "Delete" });
   });
 
+  // #2960: the dotted resource the conventions name is the same permission path
+  it("maps a dotted resource to the same path as the slashed one", () => {
+    expect(cwPermissionFor("cw_psa_query", { resource: "service.tickets" }, true)).toEqual(cwPermissionFor("cw_psa_query", { resource: "service/tickets" }, true));
+    expect(cwPermissionFor("cw_psa_query", { resource: "service.tickets" }, true)).toMatchObject({ path: "service/tickets", module: "Service Desk", func: "Service Tickets" });
+    expect(cwPermissionFor("cw_psa_write", { resource: "service.tickets.notes", action: "create" }, false)).toMatchObject({ path: "service/tickets/notes", operation: "Add" });
+  });
+
   it("computes a routine role's coverage and picks the minimal role", () => {
     const held = heldRolesOf(listing);
     const refusals = [{ role: "service-desk", path: "time/entries", operation: "Inquire" as const }, { role: "service-desk", path: "project/tickets", operation: "Edit" as const }];

@@ -16,6 +16,8 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     { name: "profile_use", annotations: { readOnlyHint: true } },
     { name: "cw_psa_find_time_entries", annotations: { readOnlyHint: true } },
     { name: "cw_psa_find_tickets", annotations: { readOnlyHint: true } },
+    { name: "cw_psa_get_ticket", annotations: { readOnlyHint: true } },
+    { name: "cw_psa_query", annotations: { readOnlyHint: true } },
     { name: "cw_psa_log_time", annotations: { readOnlyHint: false } },
   ];
   const fetcher: typeof fetch = vi.fn(async (_url, init) => {
@@ -357,17 +359,62 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.text(second)).not.toContain("this list was read under");
   });
 
-  it("names only explicit-only roles as wider than the person's own access", async () => {
+  it("names every other held role under the person's own access, explicit-only ones first", async () => {
     const plain = fixture();
     await plain.prepare();
     await plain.init();
-    expect(plain.text(await plain.relay("cw_psa_find_tickets"))).not.toContain("this list was read under");
+    const listed = plain.text(await plain.relay("cw_psa_find_tickets"));
+    expect(listed).toContain("this list was read under the person's own account");
+    expect(listed).toContain("Service Desk");
+    expect(listed).toContain("Full Access");
     const wider = fixture({ explicitFull: true });
     await wider.prepare();
     await wider.init();
     const answer = wider.text(await wider.relay("cw_psa_find_tickets"));
     expect(answer).toContain("this list was read under the person's own account");
-    expect(answer).toContain("Full Access");
-    expect(answer).not.toContain("Service Desk");
+    expect(answer.indexOf("Full Access")).toBeLessThan(answer.indexOf("Service Desk"));
+  });
+
+  // #2960: "service.tickets" (the conventions' dotted form) is the K1 read
+  it("notes a dotted service.tickets query, once per turn, and never a single ticket", async () => {
+    const f = fixture({ turnRole: { slug: "service-desk", reason: "routine" }, routine: true });
+    await f.prepare();
+    await f.init();
+    expect(f.text(await f.relay("cw_psa_get_ticket", { id: 297048 }))).not.toContain("this list was read under");
+    expect(f.text(await f.relay("cw_psa_query", { resource: "service.tickets/297048" }))).not.toContain("this list was read under");
+    const k1 = await f.relay("cw_psa_query", { resource: "service.tickets", conditions: "owner/id=168 and closedFlag=false" });
+    expect(f.text(k1)).toContain("this list was read under Service Desk");
+    expect(f.text(await f.relay("cw_psa_query", { resource: "service/boards" }))).not.toContain("this list was read under");
+    expect(f.text(await f.relay("cw_psa_find_tickets"))).not.toContain("this list was read under");
+  });
+
+  // #2960: a declined card holds even when the bot resends under the same role
+  it("never offers another role or a second card after a decline, when the read is resent under the same role", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true, roleSwitch: "deny" });
+    await f.prepare();
+    await f.init();
+    await f.relay("cw_psa_find_time_entries");
+    await f.relay("cw_psa_find_time_entries");
+    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_time_entries"]);
+    const again = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(again)).toContain("STOP");
+    expect(f.text(again)).toContain("the person declined reading it under another role");
+    expect(f.text(again)).not.toContain("Another role you hold");
+    const last = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(last)).toContain("STOP");
+    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_time_entries"]);
+    expect(reads(f).every((role) => role === "")).toBe(true);
+  });
+
+  it("never reads a declined read under Moi by a rule after the person declined", async () => {
+    const f = fixture({ turnRole: { slug: "service-desk", reason: "routine" }, routine: true, readableBy: "full-access", roleSwitch: "deny", fallback: "fallback" });
+    await f.prepare();
+    await f.init();
+    await f.relay("cw_psa_find_time_entries");
+    await f.relay("cw_psa_find_time_entries");
+    const declinedReads = reads(f).length;
+    const again = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(again)).toContain("the person declined reading it under another role");
+    expect(reads(f).slice(declinedReads).every((role) => role === "service-desk")).toBe(true);
   });
 });

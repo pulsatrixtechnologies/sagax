@@ -295,8 +295,8 @@ interface Entry {
    * turn, with the role refused: no other role reads them (no routing
    * around the person's answer). */
   declinedPaths?: Map<string, string>;
-  /** #2960 (QA 0.8.67 G1): permission paths whose partial-visibility note
-   * was already sent in this turn. */
+  /** #2960 (QA 0.8.67 G1): the partial-visibility note was sent in this
+   * turn (once per turn, on the first ticket or board list). */
   visibilityNoted?: Set<string>;
   /** #2960: role slug → the API member behind it (`cw_member:<id>`). */
   roleMembers?: Map<string, string>;
@@ -361,6 +361,15 @@ function vendorWriteTool(name: string): boolean {
 }
 
 /** The note a model reads in front of an answer (a text block first). */
+/** #2960: a read of one record (a ticket by id), not a list: no board
+ * visibility note for it. */
+function oneRecordRead(name: string, args: Record<string, unknown>): boolean {
+  if (name.replace(/_{2,}/g, "_") === "cw_psa_get_ticket") return true;
+  if (typeof args.id === "number" || (typeof args.id === "string" && args.id.trim() !== "")) return true;
+  const resource = [args.resource, args.path, args.endpoint].find((value): value is string => typeof value === "string");
+  return resource !== undefined && /[/.]\d+(?:[/.]|$)/.test(resource);
+}
+
 function withNote(answer: PerspicaxRelayAnswer, note: string): PerspicaxRelayAnswer {
   if (!isObject(answer.body) || !isObject(answer.body.result)) return answer;
   const result = answer.body.result;
@@ -1448,6 +1457,9 @@ export class PerspicaxMcp {
       this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
       return blockWith(answer, id, readStop(why));
     };
+    // #2960: the person declined this read under another role in this turn:
+    // sent again under any role, it is never offered, ruled or run as "Moi"
+    if (entry.declinedPaths?.has(permission.path)) return blocked(", and the person declined reading it under another role in this turn");
     for (;;) {
       const candidate = await this.switchCandidate(entry, from, permission.path, tried);
       const decision = this.options.roleFallback?.({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, from, path: permission.path, ...(candidate ? { to: candidate.slug } : {}) }) ?? "fallback";
@@ -1475,18 +1487,20 @@ export class PerspicaxMcp {
   }
 
   /** QA 0.8.67 G1 (#2960): a ticket or board list read under one role covers
-   * only the boards that role sees. The first such read of a turn says so
-   * when another held role may read more, so a partial count is never given
-   * as complete. */
+   * only the boards that role sees. The first such list read of a turn says
+   * so when another held role may read more, so a partial count is never
+   * given as complete. One record (a ticket by id) needs no note. */
   private async visibilityNote(entry: Entry, answer: PerspicaxRelayAnswer, name: string, args: Record<string, unknown>, role: string): Promise<PerspicaxRelayAnswer> {
     const path = cwPermissionFor(name, args, true).path;
-    if (!/^(service\/tickets|service\/boards|project\/tickets)/i.test(path)) return answer;
-    if (entry.visibilityNoted?.has(path) || !isObject(answer.body) || !isObject(answer.body.result) || answer.body.result.isError === true) return answer;
+    if (!/^(service\/tickets|service\/boards|project\/tickets)/i.test(path) || oneRecordRead(name, args)) return answer;
+    if (entry.visibilityNoted?.size || !isObject(answer.body) || !isObject(answer.body.result) || answer.body.result.isError === true) return answer;
     (entry.visibilityNoted ??= new Set()).add(path);
     await this.ensureHeldRoles(entry);
-    // the default surface ("Moi") is the union of the held roles minus the
-    // explicit-only ones: only those may see more from it
-    const others = (entry.heldRoles ?? []).filter((held) => held.slug !== role && held.reachable && held.can?.read !== false && (role !== ME_ROLE || held.explicitOnly));
+    // every other held role that reads may see boards this one does not (the
+    // default surface "Moi" included: live, it can see fewer boards than a
+    // named role), explicit-only ones first
+    const others = (entry.heldRoles ?? []).filter((held) => held.slug !== role && held.reachable && held.can?.read !== false)
+      .sort((a, b) => Number(b.explicitOnly === true) - Number(a.explicitOnly === true));
     const names = others.slice(0, 4).map((held) => `${held.name || held.slug} (profile "${held.slug}")`);
     if (role !== ME_ROLE) names.push("the person's own access (identity_switch with clear)");
     if (!names.length) return answer;

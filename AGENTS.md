@@ -11162,11 +11162,14 @@ around a 403, and said "no Datto alerts" for a product that is not served.
   role leads to the next one, and only when none is left does the answer
   carry `STOP:`, naming each role and its API member (`refusedBy`, from
   `roleMembers` filled by the identity listing). A declined card records
-  `declinedPaths`: that read is never sent under another role in the turn,
-  but other switches stay free. `visibilityNote` tells the model, once per
-  path per turn, that a ticket list read under one role covers only that
-  role's boards and names the wider held roles, so a partial count is never
-  given as complete. The prompt carries the week-time fast path (one
+  `declinedPaths`: that read is never sent under another role in the turn
+  (resent under any role, it gets `STOP:`, no new card, rule or "Moi"),
+  but other switches stay free. `cwPermissionFor` maps the dotted resource
+  (`service.tickets`) to the slashed path, so tries, declines, rules and
+  notes share one key. `visibilityNote` tells the model, once per turn on
+  the first ticket or board list (never a single ticket), that the list
+  covers only that role's boards and names the other held roles
+  (explicit-only first), so a partial count is never given as complete. The prompt carries the week-time fast path (one
   time.entries read on member and week, server total, titles optional).
 - Rendering: `cleanReplyStyle` (`shared/reply-style.ts`), before
   `dashFreeReply` in `runtime-events/preamble.ts`, drops a trailing signature

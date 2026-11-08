@@ -285,7 +285,10 @@ export function cwPermissionFor(tool: string, args: unknown, read: boolean): CwP
   if (!name.startsWith("cw_psa")) return { path: "", module: "", func: tool, operation: read ? "Inquire" : operationOf(a.action, false) };
   // cw_psa_query / cw_psa_action / cw_psa_write: the path is an argument
   const given = [a.resource, a.path, a.endpoint, a.entity, a.collection].find((value): value is string => typeof value === "string" && value.trim().length > 0);
-  let path = given ? given.trim().replace(/^\/+/, "").replace(/\/\d+.*$/, "").replace(/\{[^}]*\}.*$/, "").replace(/\/+$/, "") : "";
+  // #2960: "service.tickets" (the dotted resource the conventions name) and
+  // "service/tickets" are one permission path: one key for tries, declines,
+  // rules and notes
+  let path = given ? given.trim().replace(/\./g, "/").replace(/^\/+/, "").replace(/\/\d+.*$/, "").replace(/\{[^}]*\}.*$/, "").replace(/\/+$/, "") : "";
   if (!path) {
     // cw_psa_<group>_<entity>_write → group/entity
     const middle = name.replace(/^cw_psa_/, "").replace(/_(write|query|action)$/, "");

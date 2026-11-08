@@ -616,6 +616,33 @@ describe("send_prompt / await_turn", () => {
     expect(b2.body.thread_id).toBe(b1.body.thread_id);
   });
 
+  it("send_prompt with an idempotency_key starts one turn; a resend replays it (Perspicax #1265)", async () => {
+    const w = world();
+    const args = { agent_id: "bot-a", prompt: "ship the report", mode: "async", idempotency_key: "run-42:step.1" };
+    const [first, concurrent] = await Promise.all([
+      w.api.call(person("p1"), "send_prompt", args),
+      w.api.call(person("p1"), "send_prompt", args),
+    ]);
+    const again = await w.api.call(person("p1"), "send_prompt", args);
+    expect(w.posted).toHaveLength(1);
+    expect(first.body).toMatchObject({ accepted: true });
+    expect(first.body.replayed).toBeUndefined();
+    for (const r of [concurrent, again]) {
+      expect(r.status).toBe(200);
+      expect(r.body).toMatchObject({ accepted: true, replayed: true, thread_id: first.body.thread_id });
+      expect(String(r.body.handle)).toMatch(/^turn_/);
+    }
+    const reused = await w.api.call(person("p1"), "send_prompt", { ...args, prompt: "something else" });
+    expect(reused.status).toBe(409);
+    expect(reused.body).toMatchObject({ code: "idempotency_key_reused", thread_id: first.body.thread_id });
+    // The key is per caller: another person's same key is a new send.
+    const other = await w.api.call(person("p2"), "send_prompt", args);
+    expect(other.body.replayed).toBeUndefined();
+    expect(w.posted).toHaveLength(2);
+    const bad = await w.api.call(person("p1"), "send_prompt", { ...args, idempotency_key: "has space" });
+    expect(bad.body).toMatchObject({ code: "bad_request", details: { reason: "invalid_idempotency_key" } });
+  });
+
   it("blocking waits for the reply; empty reply with finished=true means no text", async () => {
     const w = world();
     const r = await w.api.call(bot("bot-x"), "send_prompt", { agent_id: "bot-a", prompt: "2+2?", mode: "blocking", timeout_ms: 30_000 });

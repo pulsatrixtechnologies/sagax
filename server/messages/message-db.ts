@@ -1173,6 +1173,23 @@ export function withCommandReceipt(
   });
 }
 
+/** Write (or overwrite) one receipt: for a command whose receipt changes
+ * state over its life (a "pending" marker written before an external call,
+ * then the final result). */
+export function putCommandReceipt(kind: string, key: string, result: string, at: number): void {
+  db().prepare("INSERT INTO command_receipts(kind, key, at, result) VALUES (?, ?, ?, ?) ON CONFLICT(kind, key) DO UPDATE SET at = excluded.at, result = excluded.result")
+    .run(kind, key, at, sealText(null, "receipt", `${kind}\u0000${key}`, result));
+}
+
+export function deleteCommandReceipt(kind: string, key: string): void {
+  db().prepare("DELETE FROM command_receipts WHERE kind = ? AND key = ?").run(kind, key);
+}
+
+/** Drop the receipts of one kind written before `before` (ms). */
+export function purgeCommandReceipts(kind: string, before: number): number {
+  return Number(db().prepare("DELETE FROM command_receipts WHERE kind = ? AND at < ?").run(kind, before).changes);
+}
+
 export function saveChatFollowup(followup: Omit<ChatFollowup, "status">): void {
   writeFollowups((connection) => connection.prepare(
     "INSERT INTO chat_followups(id, kind, owner_id, thread_id, send_id, status, payload) VALUES (?, ?, ?, ?, ?, 'pending', ?)",

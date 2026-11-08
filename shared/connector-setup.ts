@@ -217,3 +217,58 @@ const ACCOUNT_LABEL = {
   fr: { personal: "votre compte Grok personnel", team: "votre compte Grok d'équipe" },
   en: { personal: "your personal Grok account", team: "your team Grok account" },
 } as const;
+
+/** #2749: a connector call refused because the connector's sign-in expired
+ * ("Managed MCP gateway tool call failed: Cursor connector needs
+ * re-authentication in Cursor: ...", seen on an X routine 2026-11-07). The
+ * person must hear it plainly, with the sign-in link, not as a buried
+ * "failed 2 times". */
+const REAUTH_FAILURE = /\b(?:needs?|requires?|required)\s+(?:a\s+)?re-?authenticat(?:e|ion)\b|\bre-?authenticat(?:e|ion)\s+(?:is\s+)?required\b|\breauth(?:entication)?_required\b|\bneeds?\s+(?:a\s+)?new\s+sign-?in\b/i;
+/** A grok.com connector call goes through Grok's managed gateway. */
+const GATEWAY_FAILURE = /\bmanaged\s+mcp\s+gateway\b|\bmanaged_gateway:/i;
+
+export interface ConnectorReauthFailure {
+  /** the connector as the person knows it ("X", "Outlook") */
+  label: string;
+  /** the setup target id (resolveConnectorSetupTarget), else the cleaned label */
+  connector: string;
+  provider: ConnectorSetupProvider;
+  url: string;
+}
+
+/** The connector whose sign-in a failed call says must be renewed, or null
+ * for any other failure. `tool` is the call's name or title: a gateway id
+ * (`cursor__user-X-search_5fposts_5fall`), or a display title ending with
+ * the connector ("Search posts all · X"). */
+export function connectorReauthFailure(tool: string | undefined, output: string | undefined): ConnectorReauthFailure | null {
+  const said = String(output ?? "");
+  if (!REAUTH_FAILURE.test(said)) return null;
+  const name = String(tool ?? "").trim();
+  const gateway = name ? grokGatewayToolConnector(name) : null;
+  const titled = !gateway && name.includes(" · ") ? name.slice(name.lastIndexOf(" · ") + 3).trim() : "";
+  const claude = /^mcp__claude_ai_/i.test(name) || /\bclaude\.ai\b/i.test(said);
+  const provider: ConnectorSetupProvider | null = gateway || GATEWAY_FAILURE.test(said) ? "grok" : claude ? "claude" : null;
+  if (!provider) return null;
+  const raw = gateway?.name ?? (titled || (claude ? decodeGrokGatewayName(name.replace(/^mcp__claude_ai_/i, "").split("__")[0] ?? "").replace(/_/g, " ") : ""));
+  const target = raw ? resolveConnectorSetupTarget(raw) : null;
+  const label = target?.label ?? cleanName(raw);
+  return {
+    label: label || (provider === "grok" ? "A grok.com connector" : "A claude.ai connector"),
+    connector: target?.id ?? (label.toLowerCase() || "connector"),
+    provider,
+    url: provider === "grok" ? GROK_CONNECTORS_URL : CLAUDE_AI_CONNECTORS_URL,
+  };
+}
+
+/** The routine problem line for an expired connector sign-in. */
+export function connectorReauthProblem(failure: ConnectorReauthFailure): string {
+  return `${failure.label} needs a new sign-in: reconnect it on ${HOST_LABEL[failure.provider]} (${failure.url}), then run the routine again. Its calls failed until then.`;
+}
+
+/** The chat line beside the card for an expired sign-in. */
+export function connectorReauthText(failure: Pick<ConnectorReauthFailure, "label" | "provider" | "url">, language: "fr" | "en"): string {
+  const link = `[${HOST_LABEL[failure.provider]}](${failure.url})`;
+  return language === "fr"
+    ? `${failure.label} demande une nouvelle connexion : reconnectez-le sur ${link}. Ses appels échouent d'ici là.`
+    : `${failure.label} needs a new sign-in: reconnect it on ${link}. Its calls fail until then.`;
+}

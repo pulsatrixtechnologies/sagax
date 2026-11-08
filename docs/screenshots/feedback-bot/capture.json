@@ -1,0 +1,142 @@
+[
+  {
+    "file": "before-dark-en.png",
+    "state": "before",
+    "lang": "en",
+    "theme": "dark",
+    "skin": "pulsatrix",
+    "dom": {
+      "rows": [
+        "AtlasGrok 4.6Working…",
+        "IrisDev OpsMemory tidied up."
+      ],
+      "feedbackRow": false,
+      "cardShown": false,
+      "threadPanel": false
+    },
+    "errors": []
+  },
+  {
+    "file": "before-light-en.png",
+    "state": "before",
+    "lang": "en",
+    "theme": "light",
+    "skin": "daylight",
+    "dom": {
+      "rows": [
+        "AtlasGrok 4.6Working…",
+        "IrisDev OpsMemory tidied up."
+      ],
+      "feedbackRow": false,
+      "cardShown": false,
+      "threadPanel": false
+    },
+    "errors": []
+  },
+  {
+    "file": "before-dark-fr.png",
+    "state": "before",
+    "lang": "fr",
+    "theme": "dark",
+    "skin": "pulsatrix",
+    "dom": {
+      "rows": [
+        "AtlasGrok 4.6En cours…",
+        "IrisDev OpsMémoire nettoyée."
+      ],
+      "feedbackRow": false,
+      "cardShown": false,
+      "threadPanel": false
+    },
+    "errors": []
+  },
+  {
+    "file": "before-light-fr.png",
+    "state": "before",
+    "lang": "fr",
+    "theme": "light",
+    "skin": "daylight",
+    "dom": {
+      "rows": [
+        "AtlasGrok 4.6En cours…",
+        "IrisDev OpsMémoire nettoyée."
+      ],
+      "feedbackRow": false,
+      "cardShown": false,
+      "threadPanel": false
+    },
+    "errors": []
+  },
+  {
+    "file": "after-dark-en.png",
+    "state": "after",
+    "lang": "en",
+    "theme": "dark",
+    "skin": "pulsatrix",
+    "dom": {
+      "rows": [
+        "AtlasGrok 4.6Working…",
+        "IrisDev OpsMemory tidied up.",
+        "FeedbackYour feedbackWhat would you like"
+      ],
+      "feedbackRow": true,
+      "cardShown": true,
+      "threadPanel": false
+    },
+    "errors": []
+  },
+  {
+    "file": "after-light-en.png",
+    "state": "after",
+    "lang": "en",
+    "theme": "light",
+    "skin": "daylight",
+    "dom": {
+      "rows": [
+        "AtlasGrok 4.6Working…",
+        "IrisDev OpsMemory tidied up.",
+        "FeedbackYour feedbackWhat would you like"
+      ],
+      "feedbackRow": true,
+      "cardShown": true,
+      "threadPanel": false
+    },
+    "errors": []
+  },
+  {
+    "file": "after-dark-fr.png",
+    "state": "after",
+    "lang": "fr",
+    "theme": "dark",
+    "skin": "pulsatrix",
+    "dom": {
+      "rows": [
+        "AtlasGrok 4.6En cours…",
+        "IrisDev OpsMémoire nettoyée.",
+        "FeedbackVos retoursQu'est-ce qu'on signa"
+      ],
+      "feedbackRow": true,
+      "cardShown": true,
+      "threadPanel": false
+    },
+    "errors": []
+  },
+  {
+    "file": "after-light-fr.png",
+    "state": "after",
+    "lang": "fr",
+    "theme": "light",
+    "skin": "daylight",
+    "dom": {
+      "rows": [
+        "AtlasGrok 4.6En cours…",
+        "IrisDev OpsMémoire nettoyée.",
+        "FeedbackVos retoursQu'est-ce qu'on signa"
+      ],
+      "feedbackRow": true,
+      "cardShown": true,
+      "threadPanel": false
+    },
+    "errors": []
+  }
+]

@@ -58,6 +58,12 @@ describe("channel visibility", () => {
       inChannels: [{ humanIds: ["owner"] }],
     })).toBe(false);
   });
+  it("lists the shared Feedback bot (everyone: use) to every member of an organization (#2955)", () => {
+    const viewer = { principalId: "pr_morgan", orgAdmin: false, teams: [], disabled: false };
+    const base = { viewerId: "pr_morgan", ownerUserId: "pr_owner", directGrants: [], inChannels: [], viewer, grants: [], sections: [], channelsOpenBot: false };
+    expect(seesBotForViewer(base)).toBe(false);
+    expect(seesBotForViewer({ ...base, everyone: "use" })).toBe(true);
+  });
   it("in an organization a room opens the room, never its bots", () => {
     const viewer = { principalId: "pr_morgan", orgAdmin: false, teams: [], disabled: false };
     const room = { humanIds: ["owner", "pr_morgan"] };

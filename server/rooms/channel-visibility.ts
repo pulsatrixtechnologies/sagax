@@ -9,7 +9,7 @@ Slice 4: the rules themselves live in authz.ts (levels, team grants,
 `team:` entries in a room, shared sections); these helpers keep their
 names and answers and delegate there. A caller that knows the viewer's
 teams passes `viewer` (and a bot's `grants` and `sections`). */
-import { canInChannel, canOnBot, targetNamesViewer, type BotGrant, type SectionAccess, type Viewer } from "../auth/authz.ts";
+import { canInChannel, canOnBot, targetNamesViewer, type BotGrant, type Level, type SectionAccess, type Viewer } from "../auth/authz.ts";
 
 function actorKey(id: string): string {
   return id.trim().toLowerCase();
@@ -88,6 +88,8 @@ export function seesBotForViewer(input: {
   viewer?: Viewer;
   grants?: readonly BotGrant[];
   sections?: readonly SectionAccess[];
+  /** The level every signed-in person holds (the shared Feedback bot, #2618). */
+  everyone?: Level;
   /** Whether a channel that contains the bot opens the bot itself (its
    * Direct and its routes). Default true; an organization passes false:
    * there only bot.use does, and a room opens the room. */
@@ -96,7 +98,7 @@ export function seesBotForViewer(input: {
   if (!input.viewerId) return true;
   if (input.viewer && input.ownerUserId) {
     const grants = input.grants ?? input.directGrants.map((id) => ({ target: `user:${id}`, level: "use" as const, by: input.ownerUserId!, at: 0 }));
-    if (canOnBot(input.viewer, "bot.use", { ownerPrincipalId: input.ownerUserId, grants, sections: input.sections ?? [] })) return true;
+    if (canOnBot(input.viewer, "bot.use", { ownerPrincipalId: input.ownerUserId, grants, sections: input.sections ?? [], ...(input.everyone ? { everyone: input.everyone } : {}) })) return true;
     if (input.channelsOpenBot === false) return false;
     return input.inChannels.some((group) => canInChannel(input.viewer, "channel.read", { humanIds: group.humanIds ?? [], section: group.section ?? null }));
   }

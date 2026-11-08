@@ -18,7 +18,8 @@ function listedBotVisible(bot: { id: string; ownerUserId?: unknown; directGrants
     channelsOpenBot: host.IDENTITY.kind !== "perspicax",
     viewer: host.authzViewerFromId(viewerId),
     grants: facts.grants,
-    sections: facts.sections
+    sections: facts.sections,
+    everyone: facts.everyone
   });
 
 }

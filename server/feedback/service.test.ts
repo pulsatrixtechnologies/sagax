@@ -132,6 +132,32 @@ describe("feedback service (#2618)", () => {
     expect(service.answerCard(started.threadId, "pas-un-fb", "Envoyer", "p1")).toBeNull();
   });
 
+  it("takes a card answer in a busy chat even when progress rows follow the card (#2955)", () => {
+    const { service, store } = setup();
+    say(service, "b-main", "t-main", "/feedback");
+    const card = store.threads.get("t-main")!.at(-1)!;
+    expect(card.card?.requestId).toMatch(/^fb-/);
+    // the running turn keeps adding rows after the card
+    store.appendMessage("t-main", { role: "bot", text: "Pulling it together" } as never);
+    const done = service.answerCard("t-main", card.card!.requestId!, "A bug", "p1");
+    expect(done?.ok).toBe(true);
+    const last = store.threads.get("t-main")!.at(-1)!;
+    expect(last.feedback).toBeTruthy();
+    expect(last.id).not.toBe(card.id);
+  });
+
+  it("starts a /feedback report from the words typed after the command (#2955)", () => {
+    const { service, store } = setup();
+    const started = service.start("p1", { source: "slash", platform: "web", locale: "en", text: "bug I cannot see my routines in the sidebar" });
+    // the typed words answered the first question: the flow is already past it
+    const lastOf = () => store.threads.get(started.threadId)!.at(-1)!;
+    expect(lastOf().card?.options ?? []).toEqual([]);
+    expect(lastOf().text ?? "").not.toBe("");
+    // a bare /feedback still opens on the kind card
+    service.start("p1", { source: "slash", platform: "web", locale: "en" });
+    expect(lastOf().card?.options?.join("|")).toMatch(/bug/i);
+  });
+
   it("recognizes a free confirmation at the preview step and says the report is queued", async () => {
     const { service, store } = setup();
     const started = service.start("p1", { source: "menu", platform: "web", locale: "fr" });

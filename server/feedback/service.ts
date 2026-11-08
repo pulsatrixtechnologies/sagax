@@ -101,6 +101,9 @@ export interface FeedbackMessageInput {
   principalId: string | null;
   sendId?: string;
   sender?: unknown;
+  /** The answer is a click on the flow's own card: it never waits for the
+   * card to be the last word, whatever the busy bot said since. */
+  viaCard?: boolean;
 }
 
 const RETRY_MS = 5 * 60_000;
@@ -239,7 +242,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     const options = message.card?.options ?? [];
     const picked = options.find((option) => option.toLowerCase() === text.trim().toLowerCase());
     if (!picked && !text.trim()) return { ok: false, status: 400, error: `Pick one of: ${options.join(", ")}.` };
-    handleMessage({ botId: bot.id, threadId, text: picked ?? text.trim(), principalId });
+    handleMessage({ botId: bot.id, threadId, text: picked ?? text.trim(), principalId, viaCard: true });
     return { ok: true, status: 200 };
   }
 
@@ -400,7 +403,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
       if (record && record.status !== "draft") record = undefined;
       if (record && marker?.step === "offer") record = undefined;
       // in another bot's chat, only while the flow's question is the last word
-      if (record && bot.systemBot !== "feedback") {
+      if (record && bot.systemBot !== "feedback" && !input.viaCard) {
         const lastBot = [...messages].reverse().find((message) => message.role === "bot");
         if (lastBot?.feedback?.reportId !== record.id) record = undefined;
       }
@@ -454,7 +457,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
       threadId,
       lang,
       source: request.source,
-      preset: request.source === "error" ? { kind: "bug" } : {},
+      preset: request.source === "error" ? { kind: "bug" } : request.text ? presetFrom(request.text) : {},
       context: {
         platform: request.platform,
         ...(request.appVersion ? { appVersion: String(request.appVersion).slice(0, 80) } : {}),

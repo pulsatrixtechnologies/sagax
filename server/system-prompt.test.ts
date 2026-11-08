@@ -567,3 +567,14 @@ describe("work style: ConnectWise reads, 403 and drafts (QA 0.8.66 F2 F3 F10)", 
     expect(WORK_STYLE_PROMPT).toContain("not to such drafts");
   });
 });
+
+describe("work style: inline arithmetic and no admin wall (QA 0.8.66 F12 F10)", () => {
+  it("computes simple arithmetic inline and keeps the shell for a real need", () => {
+    expect(WORK_STYLE_PROMPT).toContain("Do arithmetic and simple conversions inline");
+    expect(WORK_STYLE_PROMPT).toContain("start a shell (run_command) only for a real need");
+  });
+  it("never tells a limited role it needs an admin, names the missing permission", () => {
+    expect(WORK_STYLE_PROMPT).toContain("Under Dispatch Agent or any limited role");
+    expect(WORK_STYLE_PROMPT).toContain("name the exact missing permission");
+  });
+});

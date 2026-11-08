@@ -340,6 +340,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"prefix","route":"/api/people/","tier":"read","readOnly":true,"scope":"people:read","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/people/labels","tier":"read","readOnly":true,"scope":"people:read","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/plan-usage","tier":"read","readOnly":true,"scope":"plan-usage:read","defaultEnabled":true},
+  {"method":"GET","kind":"exact","route":"/api/plan-usage/history","tier":"read","readOnly":true,"scope":"plan-usage:read","defaultEnabled":true},
   {"method":"GET","kind":"prefix","route":"/api/plugins/","tier":"read","readOnly":true,"scope":"plugins:read","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/plugins/install","tier":"write","readOnly":false,"scope":"plugins:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/plugins/installed","tier":"read","readOnly":true,"scope":"plugins:read","defaultEnabled":true},

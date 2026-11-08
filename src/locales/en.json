@@ -14342,5 +14342,22 @@
   "step.hostVm.rebuild": "Rebuilding the isolated computer",
   "step.hostVm.delete": "Deleting the isolated computer",
   "step.hostVm.status": "Checking the isolated computer",
-  "step.hostVm.mode": "Choosing how to use the computer"
+  "step.hostVm.mode": "Choosing how to use the computer",
+  "planHistory.title": "Plan usage history",
+  "planHistory.summary": "Share of each plan limit used, period by period",
+  "planHistory.byWeek": "Weekly limit, newest first. Open a week for its 5-hour sessions.",
+  "planHistory.byDay": "5-hour sessions by day, newest first.",
+  "planHistory.account": "Account",
+  "planHistory.range": "{from} to {to}",
+  "planHistory.session": "{from} to {to}",
+  "planHistory.ofLimit": "of limit used",
+  "planHistory.percent": "{value}%",
+  "planHistory.current": "Current",
+  "planHistory.sessions": "{count} sessions of 5 hours",
+  "planHistory.noSessions": "No 5-hour session recorded this week.",
+  "planHistory.more": "Show {count} more",
+  "planHistory.rowTitle": "Peak {peak} of the limit · {sessions} sessions of 5 hours",
+  "planHistory.sessionTitle": "Peak {peak} of the limit · {samples} readings",
+  "planHistory.empty": "No history yet. Sagax keeps each reading of your plan windows from now on, and past periods show here.",
+  "planHistory.failed": "The plan usage history could not be read."
 }

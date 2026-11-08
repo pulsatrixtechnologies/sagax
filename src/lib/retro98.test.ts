@@ -100,7 +100,7 @@ describe("/hibou98 in the composer", () => {
     expect(consume).toBeLessThan(send.indexOf('type: "send"'));
     expect(consume).toBeLessThan(send.indexOf('type: "sendGroup"'));
     // the consumed branch clears the draft and returns before anything else
-    expect(send.slice(consume, send.indexOf("}", consume) + 40)).toMatch(/setText\(""\);\s*return;/);
+    expect(send.slice(consume, send.indexOf("}", consume) + 40)).toMatch(/setText\(""\);\s*(?:refocusInput\(\);\s*)?return;/);
   });
 });
 

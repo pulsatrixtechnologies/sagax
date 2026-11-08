@@ -37,8 +37,9 @@ export function GroupCostNotice({ group }: { group: { dm?: boolean; peopleDm?: b
 
 /** A subscription's weekly window at 80 % or more, from the same report as
  * Settings > Usage. Null when the report cannot be read. Shown by the model
- * picker's limit indicator, never as a banner above the chat. */
-export function useWeeklyLimit() {
+ * picker's limit indicator, never as a banner above the chat. Scoped to the
+ * given engine instance (or its driver for servers that send no instanceId). */
+export function useWeeklyLimit(engine?: string, driver?: string) {
   const [rows, setRows] = useState<PlanRow[]>([]);
   useEffect(() => {
     let alive = true;
@@ -47,5 +48,7 @@ export function useWeeklyLimit() {
     const timer = window.setInterval(load, REFRESH_MS);
     return () => { alive = false; window.clearInterval(timer); };
   }, []);
-  return weeklyLimitNotice(rows);
+  // #2902: only the engine this bot runs on (Auto resolved); another
+  // provider's window lives on the Usage page, never in the chat bar.
+  return weeklyLimitNotice(rows.filter((row) => (row.instanceId ? row.instanceId === engine : Boolean(driver) && row.driver === driver)));
 }

@@ -8,5 +8,18 @@ const params = new URLSearchParams(location.search);
 params.set("today", "1");
 if (!params.has("n")) params.set("n", "3");
 history.replaceState(null, "", `${location.pathname}?${params}`);
+// The gallery has no Sagax server: without this the live-events stream hits
+// /api/events, gets a 404 and logs a console error on every capture.
+class SilentEventSource {
+  onmessage = null;
+  onerror = null;
+  onopen = null;
+  readyState = 0;
+  constructor(readonly url: string) {}
+  addEventListener() {}
+  removeEventListener() {}
+  close() {}
+}
+(window as unknown as { EventSource: unknown }).EventSource = SilentEventSource;
 await import("./approvals-page");
 export {};

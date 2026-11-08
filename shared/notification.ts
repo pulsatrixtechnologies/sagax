@@ -107,6 +107,10 @@ export interface Notification {
    * and unread as usual, but no native notification shows on any desktop,
    * no push reaches a phone or a watch. Absent or true: it notifies. */
   notify?: boolean;
+  /** #2695: "fyi" when the bot marked it FYI (set_reply_notify fyi): no
+   * notification anywhere now (notify is false too), and its words wait for
+   * the person's next brief. */
+  level?: "fyi";
 }
 
 /** Whether a notice may raise a native notification or a push: everything
@@ -122,7 +126,8 @@ export function botNotifyArg(value: unknown): boolean {
 
 /** The notice as the bot chose it: `notify: false` rides along to every
  * client, the desktop shell and the push relay, each of which skips it. */
-export function withBotNotify<T extends Notification | null>(note: T, notify: boolean): T {
+export function withBotNotify<T extends Notification | null>(note: T, notify: boolean | "fyi"): T {
+  if (note && notify === "fyi") return { ...note, notify: false, level: "fyi" };
   return note && !notify ? { ...note, notify: false } : note;
 }
 

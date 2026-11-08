@@ -40,4 +40,12 @@ describe("notify on the tools a bot writes with", () => {
     expect(JSON.parse(String(api.mock.calls[1]![1]!.body))).toEqual({ fromBotId: "bot", fromThreadId: "t1", notify: false });
     expect(result?.isError).toBeUndefined();
   });
+
+  it("set_reply_notify fyi waits for the brief (#2695)", async () => {
+    const api = vi.fn(async () => ({ ok: true, notify: false, fyi: true }));
+    const context = { botId: "bot", threadId: "t1", client: { api } } as unknown as ToolCallContext;
+    const result = await callCoreTool("set_reply_notify", { notify: false, fyi: true }, context);
+    expect(JSON.parse(String((api.mock.calls[0] as unknown as [string, { body: string }])[1].body))).toEqual({ fromBotId: "bot", fromThreadId: "t1", notify: false, fyi: true });
+    expect(result?.text).toContain("next brief");
+  });
 });

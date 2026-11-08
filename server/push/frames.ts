@@ -94,7 +94,8 @@ export function pushesForFrame(payload: Record<string, unknown>, deps: FramePush
     // an AI client's conversation over MCP never rings a phone or a watch
     if (raw.quietOnPhones === true) return [];
     // the bot wrote it with notify false: in the chat, never on a phone
-    if (raw.notify === false) return [];
+    // (#2695: one marked FYI still reaches the signal gate, which keeps it for the brief)
+    if (raw.notify === false && raw.level !== "fyi") return [];
     const people = note.audience ?? deps.notificationPeople(note);
     const unique = [...new Set(people.map((id) => id.trim().toLowerCase()).filter(Boolean))];
     const senderName = note.botName.trim();

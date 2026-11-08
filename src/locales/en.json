@@ -10620,7 +10620,7 @@
   "settings.notificationSound.title": "Notification sound",
   "settings.group.signals": "Daily signals",
   "settings.signals.budget.title": "Daily budget",
-  "settings.signals.budget.description": "Pushes from all your bots in 24 hours. Approvals, questions and messages from people always reach you; the rest waits for the next brief.",
+  "settings.signals.budget.description": "Pushes from all your bots each day (back to zero at midnight). Approvals, questions and messages from people always reach you; the rest waits for the next brief.",
   "settings.signals.budget.perDay": "{count} a day",
   "settings.signals.quiet.title": "Quiet hours",
   "settings.signals.quiet.description": "No push from your bots in these hours, except an approval, a question or a message from a person.",

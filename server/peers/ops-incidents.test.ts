@@ -11,5 +11,8 @@ describe("ops incidents (#2695)", () => {
   it("keeps business failures and routines in Team incidents", () => {
     expect(incidentIsOps("failed", "The invoice total does not match the agreement")).toBe(false);
     expect(incidentIsOps("routine-failed", "timeout")).toBe(false);
+    // #2695: a routine stopped by a provider limit is ops, not business
+    expect(incidentIsOps("routine-failed", "429 Too Many Requests: rate limit exceeded")).toBe(true);
+    expect(incidentIsOps("routine-failed", "You exceeded your current quota")).toBe(true);
   });
 });

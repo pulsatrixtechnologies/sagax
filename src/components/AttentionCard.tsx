@@ -10,8 +10,8 @@
 // small grey line under it (the work handed over, the routine, the run).
 // With one conversation the person answers right here: the answer is their
 // own message into the thread the question was asked in, which the runtime
-// takes as the answer (coordinator.answer). "Open thread" exists only with
-// threads shown.
+// takes as the answer (coordinator.answer). The link to the bot's chat
+// ("Open {bot}'s chat") exists only with threads shown.
 import { ArrowRight, ExternalLink } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
@@ -226,7 +226,7 @@ export function AttentionCard({
         <>
           <span aria-hidden="true">·</span>
           <button type="button" data-attention-open-thread onClick={() => onOpenThread(card.botId, card.threadId)} className={LINE_LINK}>
-            {t("needsYou.openThread")}
+            {t("approvals.openChat", { bot: card.botName })}
             <ArrowRight aria-hidden="true" size={11} />
           </button>
         </>

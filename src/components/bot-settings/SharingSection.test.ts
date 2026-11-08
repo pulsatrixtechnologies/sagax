@@ -148,13 +148,13 @@ describe("the access card", () => {
     });
   });
 
-  it("says it in French, vouvoiement, for the person it is about", () => {
+  it("says it in French, tutoiement, for the person it is about", () => {
     setLocale("fr");
     try {
       const bobs = { ...card, payer: "speaker" as const, payerPrincipalId: BOB, keysUrl: KEYS, subscriptionSignIn: true as const };
-      expect(accessCardLines(bobs, { principalId: BOB, admin: false })?.text).toBe("Vous n'avez pas d'accès Claude pour ce message : connectez votre abonnement Claude ou ajoutez votre clé dans Perspicax.");
+      expect(accessCardLines(bobs, { principalId: BOB, admin: false })?.text).toBe("Tu n'as pas d'accès Claude pour ce message : connecte ton abonnement Claude ou ajoute ta clé dans Perspicax.");
       expect(accessCardLines(bobs, { principalId: BOB, admin: false })?.hint).toBeUndefined();
-      expect(accessCardLines(bobs, { principalId: BOB, admin: true })?.hint).toBe("Comme admin, vous pouvez aussi configurer la clé de l'organisation dans Réglages > Connexions.");
+      expect(accessCardLines(bobs, { principalId: BOB, admin: true })?.hint).toBe("Comme admin, tu peux aussi configurer la clé de l'organisation dans Réglages > Connexions.");
       const markup = renderToStaticMarkup(createElement(AccessCard, { access: bobs, viewer: { principalId: BOB, admin: false }, onSignIn: () => {} }));
       expect(markup).toContain("Me connecter avec mon abonnement");
       expect(markup).toContain("Ajouter ma clé dans Perspicax");

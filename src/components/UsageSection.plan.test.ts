@@ -121,12 +121,12 @@ describe("Réglages > Utilisation : Forfait dans Détail, sous la carte de tête
     expect(page.querySelector('[data-plan-status="unavailable"]')?.textContent).toContain("Forfait indisponible pour ce compte.");
   });
 
-  it("aucun fournisseur listé : « Connectez un abonnement »", async () => {
+  it("aucun fournisseur listé : « Connecte un abonnement »", async () => {
     scene.org = ORG;
     scene.config = { viewer: { role: "member" } };
     scene.plan = { providers: [] };
     const page = await mount();
-    expect(page.querySelector('[data-plan-status="none"]')?.textContent).toContain("Connectez un abonnement");
+    expect(page.querySelector('[data-plan-status="none"]')?.textContent).toContain("Connecte un abonnement");
   });
 
   it("abonnement déconnecté : la ligne reste avec Connecter (#1774)", async () => {

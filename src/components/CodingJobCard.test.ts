@@ -20,7 +20,7 @@ const done = {
 } as BotActivityItem;
 const draw = (item: BotActivityItem, result?: string, onStop?: () => void) =>
   renderToStaticMarkup(createElement(CodingJobCard, { job: codingJobView(item, result), threadId: "t1", now: NOW, onStop }));
-const NO_THREAD = /Open thread|Go to conversation|Ouvrir le fil|Aller à la conversation|data-thread-chip|data-open-thread/i;
+const NO_THREAD = /Open thread|Go to conversation|Open the chat|Ouvrir le chat|Ouvrir le fil|Aller à la conversation|data-thread-chip|data-open-thread/i;
 
 describe("coding job card in the chat", () => {
   it("shows a running job with its step, elapsed time and Stop", () => {

@@ -61,7 +61,7 @@ describe("human approval card", () => {
   it("leaves one quiet waiting line in the thread while the box above the composer asks (Owner, 2026-10-15)", () => {
     setLocale("fr");
     const html = renderToStaticMarkup(createElement(ApprovalCard, { bot, message: ask("a", TOOL, ARGS) }));
-    expect(html).toContain("En attente de votre autorisation");
+    expect(html).toContain("En attente de ton autorisation");
     expect(html).toContain("data-step-row");
     expect(html).toContain('data-tour="approval"');
     // the request is not shown a second time

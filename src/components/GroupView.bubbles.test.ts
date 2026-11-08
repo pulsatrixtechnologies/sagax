@@ -173,7 +173,7 @@ describe("group chat bubbles", () => {
       group: { id: "dm", threadId: "thread", dm: true, messages: [ping, pong], memberIds: ["maya", "theo"] } as unknown as Group,
       members, locale: "en", messages: [ping, pong], transcript: [ping, pong], onReply: () => undefined, people,
     }));
-    expect(markup).toContain("Go to conversation");
+    expect(markup).toContain("Open the chat");
     expect(markup).toContain('data-testid="bot-exchange-chip"');
     expect(markup).not.toContain(">ping<");
     expect(markup).not.toContain(">pong<");

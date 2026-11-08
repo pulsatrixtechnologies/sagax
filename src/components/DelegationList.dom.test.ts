@@ -151,7 +151,7 @@ describe("DelegationList", () => {
     expect(work.getAttribute("aria-label")).toBe("Orla's work");
     expect(work.querySelector('[data-test-conversation="orla-work"]')?.getAttribute("data-test-title")).toBe("Draft the client summary");
     expect(row.getAttribute("aria-expanded")).toBe("true");
-    expect(host.textContent).not.toMatch(/Open thread|Go to conversation/i);
+    expect(host.textContent).not.toMatch(/Open thread|Go to conversation|Open the chat/i);
     // the other row takes the same place: never two conversations at once
     await click('[data-delegation-reveal="harrie-work"]');
     await settle();

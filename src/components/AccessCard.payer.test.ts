@@ -44,7 +44,7 @@ describe("the access card: who pays (#1137)", () => {
     expect(html).toContain("Reconnect Claude");
     expect(html).not.toContain("OAuth");
     setLocale("fr");
-    expect(accessCardLines(expired, { principalId: BOB, admin: false })).toMatchObject({ signInLabel: "Reconnecter Claude", text: expect.stringContaining("Votre connexion Claude a expiré") });
+    expect(accessCardLines(expired, { principalId: BOB, admin: false })).toMatchObject({ signInLabel: "Reconnecter Claude", text: expect.stringContaining("Ta connexion Claude a expiré") });
     // #1759: Codex and Grok use the same card and i18n keys
     for (const engine of ["Codex", "Grok"] as const) {
       setLocale("en");
@@ -53,7 +53,7 @@ describe("the access card: who pays (#1137)", () => {
       });
       setLocale("fr");
       expect(accessCardLines({ ...expired, engine }, { principalId: BOB, admin: false })).toMatchObject({
-        signInLabel: `Reconnecter ${engine}`, text: expect.stringContaining(`Votre connexion ${engine} a expiré`),
+        signInLabel: `Reconnecter ${engine}`, text: expect.stringContaining(`Ta connexion ${engine} a expiré`),
       });
     }
     // someone else reading the bot does not get the button

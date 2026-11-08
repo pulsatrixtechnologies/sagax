@@ -91,7 +91,7 @@ describe("the browser window's words", () => {
       act(() => { vi.advanceTimersByTime(delay); });
     }
     drop();
-    expect(text()).toContain("La connexion au navigateur est terminée. Reconnectez-vous pour continuer à regarder.");
+    expect(text()).toContain("La connexion au navigateur est terminée. Reconnecte-toi pour continuer à regarder.");
     expect(text()).toContain("Navigateur déconnecté");
     expect(text()).not.toContain("Reconnexion…");
     expect(host.querySelector('[role="alert"]')).not.toBeNull();

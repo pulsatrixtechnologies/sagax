@@ -99,7 +99,7 @@ describe("Settings in server mode", () => {
     const html = render();
     expect(html).toContain("Se déconnecter");
     expect(html).toContain("Ajouter une étiquette");
-    expect(html).toContain("Géré par votre organisation");
+    expect(html).toContain("Géré par ton organisation");
     expect(html).toContain("Modifier dans Perspicax");
     expect(html).toContain('title="Connecté à bot.example.test · Organisation : Example"');
   });

@@ -120,7 +120,7 @@ describe("Settings > General account card", () => {
     const text = host.textContent ?? "";
     expect(text).toContain("Ajouter une étiquette");
     expect(text).toContain("Se déconnecter");
-    expect(text).toContain("Géré par votre organisation");
+    expect(text).toContain("Géré par ton organisation");
     expect(text).toContain("Modifier dans Perspicax");
   });
 });

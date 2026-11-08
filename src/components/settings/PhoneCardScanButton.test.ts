@@ -28,7 +28,7 @@ describe("PhoneCardScanButton", () => {
 
   it("says what was read beside the masked field: the last four digits and the expiry (crypto review of #961)", () => {
     setLocale("fr");
-    expect(scannedCardSummary({ number: "4111111111111111", expMonth: 9, expYear: 2029 })).toBe("Lu sur l'iPhone : carte se terminant par 1111, expire 09/2029. Vérifiez-la sur votre carte, puis tapez vous-même le code de sécurité.");
+    expect(scannedCardSummary({ number: "4111111111111111", expMonth: 9, expYear: 2029 })).toBe("Lu sur l'iPhone : carte se terminant par 1111, expire 09/2029. Vérifie-la sur ta carte, puis tape toi-même le code de sécurité.");
     expect(scannedCardSummary({ number: "4111111111111111" })).toContain("1111");
     expect(scannedCardSummary({ number: "4111111111111111" })).not.toContain("4111111111111111");
   });

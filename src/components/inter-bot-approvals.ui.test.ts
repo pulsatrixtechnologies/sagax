@@ -91,13 +91,13 @@ describe("no engine for this person", () => {
     readiness.value = { organization: true, state: "connect", adminNames: [] };
     let html = renderToStaticMarkup(createElement(ModelNoEngineNotice));
     expect(html).toContain('data-model-no-engine="connect"');
-    expect(html).toContain("Ajoutez votre clé ou votre abonnement");
+    expect(html).toContain("Ajoute ta clé ou ton abonnement");
     expect(html).toContain("Qui a quoi");
     expect(html).toContain("data-model-no-engine-connect");
     readiness.value = { organization: true, state: "blocked", adminNames: ["Alice"] };
     html = renderToStaticMarkup(createElement(ModelNoEngineNotice));
     expect(html).toContain('data-model-no-engine="blocked"');
-    expect(html).toContain("Contactez votre admin : Alice.");
+    expect(html).toContain("Contacte ton admin : Alice.");
     expect(html).not.toContain("data-model-no-engine-connect");
   });
 });

@@ -19,7 +19,7 @@ describe("sign-in errors (slice 6, fix 2)", () => {
   it("says Sagax Business is busy on a rate limit, in English and Quebec French", () => {
     expect(signInErrorText("rate_limited")).toBe("Sagax Business is busy right now. Wait a minute and try again.");
     setLocale("fr");
-    expect(signInErrorText("rate_limited")).toBe("Sagax Business est occupé en ce moment. Attendez une minute et réessayez.");
+    expect(signInErrorText("rate_limited")).toBe("Sagax Business est occupé en ce moment. Attends une minute et réessaye.");
   });
 });
 
@@ -154,6 +154,6 @@ describe("a returned credential the server refused (2026-10-13, older server spe
     expect(take).not.toHaveBeenCalled();
     setLocale("fr");
     const fr = renderToStaticMarkup(createElement(PairPage, { initialCode: CREDENTIAL, autoSubmit: true }));
-    expect(fr).toContain("Cette connexion a déjà servi ou a expiré. Reconnectez-vous avec Sagax Business.");
+    expect(fr).toContain("Cette connexion a déjà servi ou a expiré. Reconnecte-toi avec Sagax Business.");
   });
 });

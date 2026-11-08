@@ -83,7 +83,7 @@ describe("Settings > Computer, the reference design's layout", () => {
   it("reads in French", () => {
     setLocale("fr");
     const html = render(bridge());
-    expect(html).toContain(">Votre ordinateur</h3>");
+    expect(html).toContain(">Ton ordinateur</h3>");
     expect(html).toContain(">Ordinateur des bots</h3>");
     expect(html).toContain("Mes appareils");
     expect(html).not.toMatch(/[–—]/);

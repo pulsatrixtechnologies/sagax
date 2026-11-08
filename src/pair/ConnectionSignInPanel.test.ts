@@ -17,7 +17,7 @@ describe("connection sign-in animation", () => {
   it("uses Québec French copy without anglicisms", () => {
     setLocale("fr");
     const html = renderToStaticMarkup(createElement(ConnectionSignInPanel, { name: "Jean Dupont" }));
-    expect(html).toContain("Connexion à votre session");
+    expect(html).toContain("Connexion à ta session");
     expect(html).toContain("Sagax Business");
     expect(html).not.toContain("Connecting");
     expect(html).not.toContain("Sign in");

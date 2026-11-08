@@ -976,6 +976,29 @@ test("the bot folders of an earlier run are swept, closed ones included", { skip
   await sweepBotTmpRoot({ root: path.join(fresh, "none"), platform: "darwin" });
 });
 
+test("a bot folder made while the start sweep lists the root is kept", { skip: !posix }, async (t) => {
+  const tmpRoot = botTmpRootFor(t);
+  fs.mkdirSync(path.join(tmpRoot, "c".repeat(32)), { recursive: true });
+  const fsp = fs.promises;
+  const readdir = fsp.readdir;
+  let making = null;
+  fsp.readdir = async function (target, ...rest) {
+    if (target === tmpRoot && !making) {
+      // The bot folder lands between the sweep's start and its listing.
+      making = botTmpDir(tmpRoot, "f".repeat(16), { key: Buffer.alloc(32, 7), platform: "darwin" });
+      const name = botTmpName("f".repeat(16), Buffer.alloc(32, 7));
+      for (let i = 0; i < 200 && !fs.existsSync(path.join(tmpRoot, name)); i += 1) await new Promise(r => setTimeout(r, 5));
+    }
+    return readdir.call(this, target, ...rest);
+  };
+  t.after(() => { fsp.readdir = readdir; });
+  await sweepBotTmpRoot({ root: tmpRoot, platform: "darwin" });
+  const mine = await making;
+  fsp.readdir = readdir;
+  fs.chmodSync(tmpRoot, 0o700);
+  assert.deepEqual(fs.readdirSync(tmpRoot), [path.basename(mine)]);
+});
+
 test("on macOS a bot's command runs under sandbox-exec, denied the other folders", () => {
   const argv = sandboxedCommandArgv("ls", { root: "/r/sagax-bots", own: "/r/sagax-bots/abc", shell: "/bin/zsh" });
   assert.equal(argv[0], "/usr/bin/sandbox-exec");

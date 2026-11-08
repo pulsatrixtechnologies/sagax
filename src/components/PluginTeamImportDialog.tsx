@@ -111,7 +111,7 @@ export function PluginTeamImportDialog({ onClose }: { onClose: () => void }) {
       data-plugin-team-import=""
       footer={
         <>
-          <button type="button" disabled={importing} onClick={onClose} className={PILL}>{t("common.cancel")}</button>
+          <button type="button" disabled={importing} onClick={onClose} className={`${PILL} ml-auto`}>{t("common.cancel")}</button>
           <button type="button" disabled={!ready || importing} onClick={() => void runImport()} className={PRIMARY_PILL}>
             {importing ? t("pluginTeam.importing") : preview?.bots.length ? t(preview.bots.length === 1 ? "pluginTeam.importOne" : "pluginTeam.importMany", { count: preview.bots.length }) : t("pluginTeam.import")}
           </button>
@@ -119,6 +119,7 @@ export function PluginTeamImportDialog({ onClose }: { onClose: () => void }) {
       }
     >
       <div ref={bodyRef} className="flex flex-col gap-5">
+        <SettingsGroup groupId="plugin-team-source" title={t("pluginTeam.source")} plain>
         <div className={GROUP_CARD}>
           <FieldRow label={t("pluginTeam.plugin")}>
             <select value={choice} disabled={importing || markets === null} aria-label={t("pluginTeam.plugin")} onChange={(event) => setChoice(event.target.value)} className={cn(FIELD, "min-w-0")}>
@@ -141,6 +142,7 @@ export function PluginTeamImportDialog({ onClose }: { onClose: () => void }) {
             />
           </FieldRow>
         </div>
+        </SettingsGroup>
         {picked && (
           <SettingsGroup
             groupId="plugin-team-bots"

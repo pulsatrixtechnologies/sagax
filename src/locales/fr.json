@@ -14254,6 +14254,7 @@
   "pluginTeam.none": "Aucun plugin installé",
   "pluginTeam.loading": "Chargement…",
   "pluginTeam.bots": "Bots",
+  "pluginTeam.source": "Source",
   "pluginTeam.intro": "Chaque agent du plugin devient un de vos bots dans cette nouvelle équipe, sur le modèle qu'il nomme. Sa liste d'outils devient une vraie limite quand le moteur du bot le permet.",
   "pluginTeam.noAgents": "Ce plugin n'a aucun agent à importer.",
   "pluginTeam.model": "Modèle : {model}",

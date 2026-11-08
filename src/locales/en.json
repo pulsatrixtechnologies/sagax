@@ -14254,6 +14254,7 @@
   "pluginTeam.none": "No installed plugin",
   "pluginTeam.loading": "Loading…",
   "pluginTeam.bots": "Bots",
+  "pluginTeam.source": "Source",
   "pluginTeam.intro": "Each agent of the plugin becomes one of your bots in this new team, on the model it names. Its tool list becomes a real limit where the bot's engine allows it.",
   "pluginTeam.noAgents": "This plugin has no agents to import.",
   "pluginTeam.model": "Model: {model}",

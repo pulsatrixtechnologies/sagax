@@ -755,6 +755,7 @@ describe("agents-proxy MCP surface", () => {
       "list_team_setup",
       "propose_team_setup",
       "propose_bot_deletion",
+      "import_plugin_team",
       "archive_bot",
       "create_room",
       "manage_room",

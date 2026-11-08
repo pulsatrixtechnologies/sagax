@@ -32,7 +32,7 @@ extension BotEditActions {
     func open(_ item: BotEditItem, context: BotEditContext) {
         if item == .avatar { editAvatar(); return }
         if item == .routines { openRoutines(); return }
-        if item == .voiceAlerts { return } // disclosure on the root (lot 3)
+        if item == .voiceAlerts { openSection(.voice); return }
         if let page = item.opens { openPage(page); return }
         if let section = item.section { openSection(section); return }
         if let page = BotEditTree.path(to: item, context)?.last { openPage(page) }
@@ -303,14 +303,14 @@ private struct BotEditCards: View {
                 PhoneBotIdentityFields(
                     bot: bot,
                     onAvatar: actions.editAvatar,
-                    autosave: false,
+                    // The root saves its drafts on Done; the Identity page
+                    // has no Done, so it saves as each field is left.
+                    autosave: page != .root,
                     isDirty: $identityDirty,
                     registerCommit: { identityCommit = $0 }
                 )
             case .callVoice?:
                 PhoneBotCallVoiceCard(bot: bot)
-            case .voiceAlerts?:
-                PhoneBotMoreVoiceOptions(bot: bot)
             default:
                 SettingsCard {
                     ForEach(Array(card.enumerated()), id: \.element) { position, item in
@@ -342,7 +342,7 @@ private struct BotEditCards: View {
     private func open(_ item: BotEditItem) {
         if item == .avatar { actions.editAvatar(); return }
         if item == .routines { actions.openRoutines(); return }
-        if item == .voiceAlerts { return }
+        if item == .voiceAlerts { actions.openSection(.voice); return }
         if let page = item.opens { actions.openPage(page); return }
         if let section = item.section { actions.openSection(section) }
     }
@@ -362,33 +362,5 @@ private struct BotEditCards: View {
         case .delete?: "The bot and its conversations will be deleted. This cannot be undone."
         default: nil
         }
-    }
-}
-
-/// More voice options under Voice calls (lot 3): engine, agent voice,
-/// preview, read replies aloud, voice notes. Notifications stay on the
-/// bot profile only.
-private struct PhoneBotMoreVoiceOptions: View {
-    let bot: Bot
-    @State private var expanded = false
-
-    var body: some View {
-        DisclosureGroup(isExpanded: $expanded) {
-            Form {
-                BotVoiceSections(bot: bot, showsNotifications: false)
-            }
-            .frame(minHeight: expanded ? 280 : 0)
-            .scrollDisabled(true)
-            .padding(.top, 4)
-        } label: {
-            Text("More voice options")
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.textPrimary)
-        }
-        .padding(.horizontal, SettingsMetrics.rowInset)
-        .padding(.vertical, 10)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
-        .padding(.horizontal, SettingsMetrics.cardMargin)
-        .accessibilityIdentifier("panel-edit-more-voice")
     }
 }

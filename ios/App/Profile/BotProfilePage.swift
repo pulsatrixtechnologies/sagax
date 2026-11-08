@@ -45,7 +45,10 @@ struct BotProfilePage: View {
     var onAppearanceOpened: (() -> Void)?
 
     @State private var tab: BotProfileTab
-    @State private var settingsOpen = false
+    /// Advanced (overview, usage, history, archive, delete): closed until asked.
+    @State private var advancedOpen = false
+    @State private var modelLabel: String?
+    @State private var rules: [CustomRuleRow]?
     @State private var appearanceOpen: Bool
     @StateObject private var owlHandle = OwlMascotHandle()
 
@@ -72,7 +75,6 @@ struct BotProfilePage: View {
         _appearanceOpen = State(initialValue: fillsMain && openAppearance)
         // Settings is no longer a tab (#2136); land on General.
         _tab = State(initialValue: startTab == .settings ? .general : startTab)
-        _settingsOpen = State(initialValue: startTab == .settings)
     }
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
@@ -137,7 +139,10 @@ struct BotProfilePage: View {
             }
         }
         .navigationBarHidden(fillsMain)
+        // One back button: ours, not the system one beside it.
+        .navigationBarBackButtonHidden(true)
         .onAppear { unfoldAppearanceIfAsked(openAppearance) }
+        .task(id: bot.id) { await loadSummaries() }
         .onValueChange(of: openAppearance) { unfoldAppearanceIfAsked($0) }
         // Keep children queryable for UITests (tabs, Settings disclosure).
         .accessibilityIdentifier("bot-profile-page")
@@ -477,51 +482,121 @@ struct BotProfilePage: View {
 
     // MARK: General
 
+    /// One row of a grouped card: icon, title, an optional recap line, chevron.
+    private struct LinkRow: Identifiable {
+        let id: String
+        let title: LocalizedStringKey
+        var subtitle: String?
+        let symbol: String
+        let action: () -> Void
+    }
+
+    /// General, grouped like the desktop's profile (V6, #2612): a grey label
+    /// over one card per group, rows split by hairlines, the same 24 pt
+    /// margins for the labels and the cards. Technical pages and the
+    /// destructive actions wait in Advanced, closed by default.
     private var generalBody: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            channelsCard
-            accountsCard
-            // Settings folded under General (#2136): nothing removed.
-            settingsDisclosure
+        VStack(alignment: .leading, spacing: 24) {
+            group("Profile", rows: profileRows, id: "bot-profile-group.profile")
+            group("Settings", rows: settingsRows, id: "bot-profile-group.settings")
+            channelsGroup
+            advancedDisclosure
         }
-        .padding(.horizontal, Theme.Profile.cardMargin)
     }
 
-    private var settingsDisclosure: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                Haptics.selection()
-                withAnimation(.snappy(duration: 0.2)) { settingsOpen.toggle() }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: settingsOpen ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.textTertiary)
-                        .frame(width: 14)
-                    Text("Settings")
-                        .font(Theme.Font.label)
-                        .foregroundStyle(Theme.textTertiary)
-                    Spacer(minLength: 0)
+    /// Phone only: the iPad hero edits the name, role and description in place.
+    private var profileRows: [LinkRow] {
+        guard !fillsMain else { return [] }
+        let role = BotEditSummary.role(current)
+        return [
+            LinkRow(
+                id: "bot-profile-settings.identity",
+                title: "Identity",
+                subtitle: role.isEmpty ? String(localized: "Name, role and description") : role,
+                symbol: "person.text.rectangle"
+            ) { actions.openPage(.identity) },
+        ]
+    }
+
+    private var summaries: BotEditSummaries {
+        BotEditSummaries(bot: current, rules: rules, routines: nil, modelLabel: modelLabel)
+    }
+
+    private var settingsRows: [LinkRow] {
+        var rows: [LinkRow] = []
+        if context.sections.contains(.model) {
+            rows.append(sectionRow(.model, subtitle: summaries.value(.model)))
+        }
+        if context.sections.contains(.permissions) {
+            rows.append(sectionRow(.permissions, subtitle: summaries.value(.approvals)))
+        }
+        if context.sections.contains(.access) {
+            rows.append(sectionRow(.access, subtitle: summaries.value(.toolsApps)))
+        }
+        if context.sections.contains(.worksOn) {
+            rows.append(sectionRow(.worksOn))
+        }
+        if context.sections.contains(.voice) {
+            rows.append(sectionRow(.voice))
+        }
+        return rows
+    }
+
+    private func sectionRow(_ section: DesktopPanelSection, subtitle: String? = nil) -> LinkRow {
+        LinkRow(
+            id: "bot-profile-settings.\(section.rawValue)",
+            title: section.title,
+            subtitle: subtitle,
+            symbol: settingsSymbol(section)
+        ) { actions.openSection(section) }
+    }
+
+    @ViewBuilder
+    private func group(_ title: LocalizedStringKey?, rows: [LinkRow], id: String) -> some View {
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                if let title { groupLabel(title) }
+                ProfileCard {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 { ProfileDivider() }
+                        linkRow(row)
+                    }
                 }
-                .padding(.horizontal, 4)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("bot-profile-settings-toggle")
-            .accessibilityAddTraits(settingsOpen ? [.isSelected, .isButton] : .isButton)
-            if settingsOpen {
-                settingsBody
-                    .padding(.horizontal, -Theme.Profile.cardMargin)
-            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(id)
         }
     }
 
-    private var channelsCard: some View {
+    private func groupLabel(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(Theme.Font.label)
+            .foregroundStyle(Theme.textTertiary)
+            .lineLimit(1)
+            .padding(.horizontal, Theme.Profile.cardMargin + 4)
+    }
+
+    private func linkRow(_ row: LinkRow) -> some View {
+        Button {
+            Haptics.selection()
+            row.action()
+        } label: {
+            ProfileRow(
+                icon: ProfileRowIcon(systemImage: row.symbol, size: 16),
+                title: Text(row.title),
+                subtitle: row.subtitle.map { Text(verbatim: $0) },
+                height: row.subtitle == nil ? Theme.Profile.singleRow : Theme.Profile.routineRow
+            ) { ProfileChevronTrailing() }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(row.id)
+    }
+
+    /// Slack, the inbox, then who uses and who sees the bot.
+    private var channelsGroup: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Channels")
-                .font(Theme.Font.label)
-                .foregroundStyle(Theme.textTertiary)
-                .padding(.horizontal, 4)
+            groupLabel("Channels")
             ProfileCard {
                 channelRow(
                     title: "Slack",
@@ -551,46 +626,113 @@ struct BotProfilePage: View {
                         Haptics.selection()
                     }
                 }
+                ForEach(audienceRows) { row in
+                    ProfileDivider()
+                    linkRow(row)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("bot-profile-group.channels")
+    }
+
+    private var audienceRows: [LinkRow] {
+        var rows: [LinkRow] = []
+        if context.sections.contains(.sharing) { rows.append(sectionRow(.sharing)) }
+        if context.sections.contains(.visibility) { rows.append(sectionRow(.visibility, subtitle: privacy)) }
+        return rows
+    }
+
+    private var advancedRows: [LinkRow] {
+        [DesktopPanelSection.overview, .usage, .history]
+            .filter { context.sections.contains($0) }
+            .map { sectionRow($0) }
+    }
+
+    /// Advanced: the technical pages, then Archive and Delete when this
+    /// pairing allows them (hidden, never greyed, otherwise).
+    @ViewBuilder
+    private var advancedDisclosure: some View {
+        if !advancedRows.isEmpty || context.archive || context.delete {
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    Haptics.selection()
+                    withAnimation(.snappy(duration: 0.2)) { advancedOpen.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Advanced")
+                            .font(Theme.Font.label)
+                            .foregroundStyle(Theme.textTertiary)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.textTertiary)
+                            .rotationEffect(.degrees(advancedOpen ? 0 : -90))
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, Theme.Profile.cardMargin + 4)
+                    .frame(minHeight: 28)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(Text(advancedOpen ? "Expanded" : "Collapsed"))
+                .accessibilityAddTraits(advancedOpen ? [.isSelected, .isButton] : .isButton)
+                // The id the Settings fold had, so UITests and deep links still find it.
+                .accessibilityIdentifier("bot-profile-settings-toggle")
+                if advancedOpen {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if !advancedRows.isEmpty {
+                            ProfileCard {
+                                ForEach(Array(advancedRows.enumerated()), id: \.element.id) { index, row in
+                                    if index > 0 { ProfileDivider() }
+                                    linkRow(row)
+                                }
+                            }
+                        }
+                        dangerCard
+                    }
+                    .transition(.opacity)
+                }
             }
         }
     }
 
-    private var accountsCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Bot accounts")
-                    .font(Theme.Font.label)
-                    .foregroundStyle(Theme.textTertiary)
-                Spacer()
-                Button {
-                    Haptics.selection()
-                    actions.openSection(.model)
-                } label: {
-                    Text("Add")
-                        .font(Theme.Font.label)
-                        .foregroundStyle(Theme.textPrimary)
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
-                        .background(Theme.cardRaised, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("bot-profile-accounts-add")
-            }
-            .padding(.horizontal, 4)
+    @ViewBuilder
+    private var dangerCard: some View {
+        if context.archive || context.delete {
             ProfileCard {
-                Button {
-                    Haptics.selection()
-                    actions.openSection(.model)
-                } label: {
-                    ProfileRow(
-                        icon: ProfileRowIcon(systemImage: "cpu", size: 16),
-                        title: Text("Model"),
-                        subtitle: Text(verbatim: current.modelSelection.model),
-                        height: Theme.Profile.routineRow
-                    ) { ProfileChevronTrailing() }
+                if context.archive {
+                    Button {
+                        Haptics.selection()
+                        actions.archive()
+                    } label: {
+                        ProfileRow(
+                            icon: ProfileRowIcon(systemImage: "archivebox", size: 16),
+                            title: Text("Archive…"),
+                            titleColor: Theme.textPrimary,
+                            height: Theme.Profile.singleRow
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("bot-profile-archive")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("bot-profile-account.model")
+                if context.archive, context.delete { ProfileDivider() }
+                if context.delete {
+                    Button {
+                        Haptics.selection()
+                        actions.delete()
+                    } label: {
+                        ProfileRow(
+                            icon: ProfileRowIcon(systemImage: "trash", size: 16, color: Theme.danger),
+                            title: Text("Delete bot…"),
+                            titleColor: Theme.danger,
+                            height: Theme.Profile.singleRow
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("bot-profile-delete")
+                }
             }
         }
     }
@@ -613,131 +755,75 @@ struct BotProfilePage: View {
                 Text(pill)
                     .font(Theme.Font.label)
                     .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .fixedSize()
                     .padding(.horizontal, 12)
                     .frame(height: 28)
                     .background(Theme.cardRaised, in: Capsule())
                     .padding(.trailing, Theme.Profile.textInset)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
+    }
+
+    /// Recap lines: the model's catalog label, the approval rules.
+    private func loadSummaries() async {
+        guard let client = session.settingsClient else { return }
+        if context.sections.contains(.permissions) {
+            rules = (try? await client.customRules(botId: bot.id))?.rules
+        }
+        if let instances = try? await client.instances() {
+            let selection = current.modelSelection
+            modelLabel = instances.first { $0.instanceId == selection.instanceId }?
+                .models.options.first { $0.id == selection.model }?.label
+        }
     }
 
     // MARK: Knowledge
 
-    private var knowledgeBody: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            knowledgeRow("Skills", systemImage: "book", id: "bot-profile-knowledge.skills") {
+    private var knowledgeRows: [LinkRow] {
+        var rows: [LinkRow] = []
+        if context.sections.contains(.skills) {
+            rows.append(LinkRow(id: "bot-profile-knowledge.skills", title: "Skills", symbol: "book") {
                 actions.openSection(.skills)
-            }
-            knowledgeRow("Instructions", systemImage: "text.alignleft", id: "bot-profile-knowledge.instructions") {
-                actions.openSection(.soul)
-            }
-            if context.sections.contains(.memory) {
-                knowledgeRow("Memory", systemImage: "brain", id: "bot-profile-knowledge.memory") {
-                    actions.openSection(.memory)
-                }
-            }
+            })
         }
-        .padding(.horizontal, Theme.Profile.cardMargin)
+        if context.sections.contains(.soul) {
+            rows.append(LinkRow(
+                id: "bot-profile-knowledge.instructions",
+                title: "Instructions",
+                subtitle: BotEditSummary.soulWritten(current) ? String(localized: "Written") : String(localized: "Not written yet"),
+                symbol: "text.alignleft"
+            ) { actions.openSection(.soul) })
+        }
+        if context.sections.contains(.memory) {
+            rows.append(LinkRow(id: "bot-profile-knowledge.memory", title: "Memory", symbol: "brain") {
+                actions.openSection(.memory)
+            })
+        }
+        return rows
     }
 
-    private func knowledgeRow(
-        _ title: LocalizedStringKey,
-        systemImage: String,
-        id: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: {
-            Haptics.selection()
-            action()
-        }) {
-            ProfileCard {
-                ProfileRow(
-                    icon: ProfileRowIcon(systemImage: systemImage, size: 16),
-                    title: Text(title),
-                    height: Theme.Profile.singleRow
-                ) { ProfileChevronTrailing() }
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(id)
-    }
-
-    // MARK: Settings
-
-    /// Progressive disclosure: every remaining persona section, nothing removed.
-    private var settingsBody: some View {
-        // Set.filter yields a Set; ForEach needs a RandomAccessCollection in
-        // CaseIterable order so Settings stays stable across rebuilds.
-        let items = DesktopPanelSection.allCases.filter { section in
-            guard context.sections.contains(section) else { return false }
-            switch section {
-            case .soul, .skills, .memory, .slack: return false
-            default: return true
-            }
-        }
-        return VStack(spacing: 8) {
-            ForEach(items, id: \.self) { section in
-                Button {
-                    Haptics.selection()
-                    actions.openSection(section)
-                } label: {
-                    ProfileCard {
-                        ProfileRow(
-                            icon: ProfileRowIcon(systemImage: settingsSymbol(section), size: 16),
-                            title: Text(section.title),
-                            height: Theme.Profile.singleRow
-                        ) { ProfileChevronTrailing() }
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("bot-profile-settings.\(section.rawValue)")
-            }
-            // Destructive actions stay reachable (nothing removed).
-            ProfileCard {
-                Button {
-                    Haptics.selection()
-                    actions.archive()
-                } label: {
-                    ProfileRow(
-                        title: Text("Archive…"),
-                        titleColor: Theme.textPrimary,
-                        height: Theme.Profile.singleRow
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("bot-profile-archive")
-                ProfileDivider(leading: Theme.Profile.textInset)
-                Button {
-                    Haptics.selection()
-                    actions.delete()
-                } label: {
-                    ProfileRow(
-                        title: Text("Delete bot…"),
-                        titleColor: Theme.danger,
-                        height: Theme.Profile.singleRow
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("bot-profile-delete")
-            }
-        }
-        .padding(.horizontal, Theme.Profile.cardMargin)
+    private var knowledgeBody: some View {
+        // The pill already says Knowledge: no label over the card.
+        group(nil, rows: knowledgeRows, id: "bot-profile-group.knowledge")
     }
 
     private func settingsSymbol(_ section: DesktopPanelSection) -> String {
         switch section {
         case .model: "cpu"
-        case .access, .worksOn: "desktopcomputer"
+        case .access: "square.grid.2x2"
+        case .worksOn: "desktopcomputer"
         case .permissions: "checkmark.shield"
         case .voice: "waveform"
-        case .visibility, .sharing: "person.2"
+        case .sharing: "person.2"
+        case .visibility: "eye"
         case .history: "clock.arrow.circlepath"
         case .usage: "chart.bar"
-        case .overview: "square.grid.2x2"
+        case .overview: "doc.text.magnifyingglass"
         default: "gearshape"
         }
     }
 }
-

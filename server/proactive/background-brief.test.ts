@@ -1,11 +1,11 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { memoryReadersOf } from "../memory/memory-audience.ts";
 import { memoryMayShow } from "../memory/memory-audience.ts";
-import { BriefStore, briefGist, localizedGist, suggestionAction, suggestionIdentity, toolWords, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, readConnectedBrief, runBriefPass } from "./background-brief.ts";
+import { BriefStore, briefGist, localizedGist, suggestionAction, suggestionIdentity, toolWords, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, migrateBriefIdentities, readConnectedBrief, runBriefPass } from "./background-brief.ts";
 import { briefMessageText, briefNoticeLines, runScheduledBriefs, type BriefDelivery } from "./background-brief-schedule.ts";
 
 const piece = { piece: "Inbox, Monday note", asOf: "2026-10-26", text: "Three invoices arrived, 3 in all." };
@@ -33,6 +33,36 @@ describe("background brief", () => {
     expect(memoryReadersOf(line)).toEqual({ kind: "person" });
     expect(memoryMayShow({ kind: "person" }, { kind: "room", id: "garden" })).toBe(false);
     expect(line).toContain("readers person");
+  });
+
+  it("keeps a counted gist in the person's language (#2879)", () => {
+    const day = new Date(2026, 10, 8);
+    expect(keptMemoryLine("3 invoices", day, "fr")).toContain("3 factures");
+    expect(keptMemoryLine("3 invoices", day, "en")).toContain("3 invoices");
+    expect(keptMemoryLine("3 invoices", day)).toContain("3 invoices");
+    expect(keptMemoryLine("Répondre à Carla", day, "fr")).toContain("Répondre à Carla");
+  });
+
+  it("moves a pre-#2866 counted rejection to its app and day, drops one with no source (#2879)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-brief-"));
+    dirs.push(dir);
+    const file = join(dir, "background-brief.json");
+    const source = { piece: "Teams, list messages", asOf: "2026-11-01", text: "2026-11-01: 3 messages" };
+    const old = { id: "brief_a", text: "3 messages", sources: [source], costUsd: 0, model: "fast", status: "rejected", identity: "3 messages", at: 1 };
+    writeFileSync(file, JSON.stringify({ version: 1, bots: { "bot-1": { suggestions: [old], rejected: ["3 messages", "4 invoices", "relancer paul", "relancer paul"] } } }));
+    const store = new BriefStore(file, () => 1_000);
+    const scoped = "3 messages | teams | 2026-11-01";
+    expect(store.view("bot-1").suggestions[0]?.identity).toBe(scoped);
+    const saved = JSON.parse(readFileSync(file, "utf8"));
+    expect(saved.bots["bot-1"].rejected).toEqual([scoped, "relancer paul"]);
+    // the scoped key blocks that day's Teams count again, not Outlook's
+    const teams = runBriefPass({ tools: ["list_messages"], pieces: [source], costUsd: 0, fastModel: "fast" }, saved.bots["bot-1"].rejected);
+    expect(teams.ok && teams.suggestions).toEqual([]);
+    const outlook = runBriefPass({ tools: ["list_messages"], pieces: [{ ...source, piece: "Outlook, list messages" }], costUsd: 0, fastModel: "fast" }, saved.bots["bot-1"].rejected);
+    expect(outlook.ok && outlook.suggestions.length).toBe(1);
+    // a second load changes nothing
+    const row = saved.bots["bot-1"];
+    expect(migrateBriefIdentities(row)).toBe(false);
   });
 
   it("stores the cadence the person chose and does not rewrite a rejection", () => {

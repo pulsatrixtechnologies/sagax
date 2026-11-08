@@ -29,6 +29,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   isBriefFeedback,
   keptMemoryLine,
+  localizedGist,
   readConnectedBrief,
   type BriefAppCall,
   type BriefSettings,
@@ -41,8 +42,10 @@ export interface BackgroundBriefRouteDeps {
   owns: (auth: RequestAuth, botId: string) => boolean;
   /** The bot's fast model, or null when none is set. */
   fastModel: (botId: string) => string | null;
-  /** Write the kept line into the person's memory. */
+  /** Write the kept line, already in the person's language, into their memory. */
   keep: (botId: string, line: string) => void;
+  /** #2879: the person's language, for the kept line. Absent: English. */
+  language?: (botId: string) => "fr" | "en";
   /** #2694: write a feedback line into the person's memory. */
   remember?: (botId: string, choice: import("../proactive/background-brief.ts").BriefFeedback, text: string, topic: string) => void;
   /** #2694: feedback on a wake kind, from a wake's message or a Today card. */
@@ -131,8 +134,9 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
     if (suggestionId && action === "keep" && method === "POST") {
       const kept = deps.store.takePending(botId, suggestionId);
       if (!kept) return json(res, 404, { error: "No pending suggestion." });
-      deps.keep(botId, kept.text);
-      return json(res, 200, { suggestion: kept, line: keptMemoryLine(kept.text) });
+      const language = deps.language?.(botId) ?? "en";
+      deps.keep(botId, localizedGist(kept.text, language));
+      return json(res, 200, { suggestion: kept, line: keptMemoryLine(kept.text, new Date(), language) });
     }
     return json(res, 405, { error: "Method not allowed." });
   };

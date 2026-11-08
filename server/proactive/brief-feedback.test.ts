@@ -130,6 +130,19 @@ describe("feedback on brief items and cards (#2694)", () => {
     expect((await call(chat, "/api/bots/bot-1/background-brief/wake/feedback", { choice: "less", topic: "../x" })).status).toBe(400);
     expect((await call(chat, "/api/bots/bot-1/background-brief/wake/feedback", { choice: "maybe", topic: "mail" })).status).toBe(400);
     expect(wakes).toEqual(["bot-1:heartbeat:less:m2"]);
+    // #2879: Keep writes and answers the line in the person's language
+    const [counted] = store.recordPass("bot-1", pass([piece("Outlook", "2026-11-08: 3 invoices")]));
+    expect(counted?.text).toBe("3 invoices");
+    const kept: string[] = [];
+    const fr = createBackgroundBriefRoutes({
+      store, owns: () => true, fastModel: () => "fast", keep: (_bot, line) => { kept.push(line); }, connected: () => ["Outlook"],
+      reads: async () => { throw new Error("no read"); }, language: () => "fr"
+    });
+    const keep = await call(fr, `/api/bots/bot-1/background-brief/${counted!.id}/keep`, {});
+    expect(keep.status).toBe(200);
+    expect(kept).toEqual(["3 factures"]);
+    expect((keep.sent as { line: string }).line).toContain("3 factures");
+    expect((keep.sent as { line: string }).line).not.toContain("invoices");
     const seen: string[] = [];
     const cards = createProactiveProposalRoutes({
       answer: () => ({ status: 200, body: {} }),

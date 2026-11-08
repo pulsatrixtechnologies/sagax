@@ -19685,9 +19685,12 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
  * accept runs the wake at the bot's level; decline closes the card. */
 
 /** #2694: the person's memory keeps one line per feedback, for them alone. */
-function rememberBriefFeedback(botId: string, choice: BriefFeedback, text: string, topic: string): void {
+function briefLanguage(botId: string): "fr" | "en" {
   const bot = store.bot(botId);
-  const language = reachMeLanguage(reachMePerson(bot ? effectiveBotOwner(bot) || localPrincipalId() : localPrincipalId()) || null);
+  return reachMeLanguage(reachMePerson(bot ? effectiveBotOwner(bot) || localPrincipalId() : localPrincipalId()) || null);
+}
+function rememberBriefFeedback(botId: string, choice: BriefFeedback, text: string, topic: string): void {
+  const language = briefLanguage(botId);
   updateMemory(botId, { action: "append", text: feedbackMemoryText(choice, localizedGist(text, language), topic, language) }, { source: "proactive feedback", readers: { kind: "person" } });
 }
 /** #2694: feedback on a suggestion card lands on its brief item (next pass)
@@ -23881,11 +23884,11 @@ ROUTES.push(createBackgroundBriefRoutes({
     return Boolean(me && botsOwnedBy(me).some((bot) => bot.id === botId));
   },
   fastModel: (botId) => store.bot(botId)?.modelSelection.fast?.model ?? null,
+  // the route hands the line already in the person's language (#2879)
   keep: (botId, line) => {
-    const bot = store.bot(botId);
-    const language = reachMeLanguage(reachMePerson(bot ? effectiveBotOwner(bot) || localPrincipalId() : localPrincipalId()) || null);
-    updateMemory(botId, { action: "append", text: localizedGist(line, language) }, { source: "background brief", readers: { kind: "person" } });
+    updateMemory(botId, { action: "append", text: line }, { source: "background brief", readers: { kind: "person" } });
   },
+  language: briefLanguage,
   remember: rememberBriefFeedback,
   wakeFeedback: feedbackOnWake,
   itemShown: (botId, suggestionId, choice, where) => {

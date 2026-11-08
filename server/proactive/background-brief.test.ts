@@ -65,6 +65,26 @@ describe("background brief", () => {
     expect(migrateBriefIdentities(row)).toBe(false);
   });
 
+  it("moves a counted rejection to every rejected suggestion of that text, not the first one (#2880)", () => {
+    const at = (piece: string, day: string) => ({ piece, asOf: day, text: `${day}: 3 messages` });
+    const item = (id: string, source: ReturnType<typeof at>, extra: Record<string, unknown>) => ({ id, text: "3 messages", sources: [source], costUsd: 0, model: "fast", identity: "3 messages", at: 1, ...extra });
+    const row = {
+      suggestions: [
+        item("brief_o", at("Outlook, list messages", "2026-11-01"), { status: "pending" }),
+        item("brief_t", at("Teams, list messages", "2026-11-01"), { status: "rejected" }),
+        item("brief_n", at("Teams, list messages", "2026-11-02"), { status: "pending", feedback: "never" }),
+      ],
+      rejected: ["3 messages"],
+    } as unknown as Parameters<typeof migrateBriefIdentities>[0];
+    expect(migrateBriefIdentities(row)).toBe(true);
+    expect(row.rejected).toEqual(["3 messages | teams | 2026-11-01", "3 messages | teams | 2026-11-02"]);
+    expect(migrateBriefIdentities(row)).toBe(false);
+    // with no rejected one, the first suggestion of that text stands in
+    const pending = { suggestions: [item("brief_o", at("Outlook, list messages", "2026-11-01"), { status: "pending" }), item("brief_x", at("Teams, list messages", "2026-11-03"), { status: "pending" })], rejected: ["3 messages"] } as unknown as Parameters<typeof migrateBriefIdentities>[0];
+    migrateBriefIdentities(pending);
+    expect(pending.rejected).toEqual(["3 messages | outlook | 2026-11-01"]);
+  });
+
   it("stores the cadence the person chose and does not rewrite a rejection", () => {
     const dir = mkdtempSync(join(tmpdir(), "sagax-brief-"));
     dirs.push(dir);

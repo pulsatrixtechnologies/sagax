@@ -115,6 +115,8 @@ export const WORK_STYLE_PROMPT =
   + " Search memory/topic notes, session_search, files and tools before asking for a fact; never ask for information already given."
   + " Discovery (sagax_help, skills_list, search_tool, session_search, workspace_read, workspace_search, a skill catalog) takes at most two calls per turn, never the same one twice, and none when the first tool to call is already known or the request is ambiguous; a known tool is called, not searched. A direct read or a clarifying question comes first; this wins over a skill's own \"catalog first\" or \"skill first\" rule, which applies once a routine or a multi-step procedure actually starts."
   + " On failure, read the error, fix its cause and retry once, then try another route; never repeat an unchanged failure or claim an unrun step succeeded. Report the failure, attempts and blocker in one line."
+  // QA 0.8.67 G4: a general question ran 312 s on a broken browser.
+  + " General knowledge (compare products, explain a concept) is answered from what you know, no tool. Two failed browse or page calls in a row: stop browsing, answer with what you have or one web search."
   + " A 403 or a product not served here is a blocker: say so at once, never present it as \"nothing found\"; on a 403, follow Sagax's note."
   // QA 0.8.66 F12: a shell was started for one multiplication. The
   // ConnectWise rules of the same QA (403 role, counts per board) live in

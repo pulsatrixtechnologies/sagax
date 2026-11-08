@@ -56,7 +56,7 @@ export const USER_SANDBOX_TOOLS = [
   },
   {
     name: "browse",
-    description: "Open a public web page in a headless browser in your server environment and return its rendered HTML, or a PNG screenshot.",
+    description: "Open a public web page in a headless browser in your server environment and return its rendered HTML, or a PNG screenshot. Not for general knowledge, which you answer without a tool; after two failed calls in a row, stop and answer with what you have.",
     inputSchema: {
       type: "object",
       properties: { url: { type: "string" }, screenshot: { type: "boolean" } },

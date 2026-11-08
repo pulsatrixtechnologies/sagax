@@ -154,22 +154,76 @@ export function base64Text(content: string): string | null {
   return text;
 }
 
-/** A base64 blob piped into a decoder: `echo|printf [-n] ['%s'] '<b64>' |
- * base64 -d|-D|--decode` or `base64 -d <<< '<b64>'` (#2774). */
+/** The decoders a blob can be piped into (#2774, extended #2823):
+ * `base64` with a decode flag among its options (`-d`, `-D`, `--decode`,
+ * `-di`, `-D -i -`), and `openssl base64|enc` with `-d` (`-A`, `-base64`,
+ * `-a` allowed around it). */
+const DECODER = String.raw`(?:base64|openssl\s+(?:base64|enc))(?:\s+(?:-{1,2}[A-Za-z][\w-]*|-))+`;
+const BLOB = String.raw`([A-Za-z0-9+/]{16,}={0,2})`;
 const BASE64_DECODE_IN_COMMAND = new RegExp(
-  String.raw`(?:\b(?:echo|printf)(?:\s+-[neE]+)*(?:\s+(['"])%s\1)?\s+(['"]?)([A-Za-z0-9+/]{16,}={0,2})\2\s*\|\s*base64\s+(?:-d|-D|--decode)\b`
-  + String.raw`|\bbase64\s+(?:-d|-D|--decode)\s*<<<\s*(['"]?)([A-Za-z0-9+/]{16,}={0,2})\4)`,
+  String.raw`(?:\b(?:echo|printf)(?:\s+-[neE]+)*(?:\s+(['"])%s\1)?\s+(['"]?)${BLOB}\2\s*\|\s*(${DECODER})(?![\w-])`
+  + String.raw`|\b(${DECODER})\s*<<<\s*(['"]?)${BLOB}\6)`,
   "g",
 );
 
+/** True when the options of a matched decoder ask to decode: `base64`
+ * with `-d`, `-D`, `--decode` or a short cluster holding d/D; `openssl`
+ * with `-d` and a base64 mode (`base64`, or `enc` with `-base64`/`-a`). */
+function decodes(decoder: string): boolean {
+  const words = decoder.trim().split(/\s+/);
+  if (words[0] === "openssl") {
+    const flags = words.slice(2);
+    if (!flags.includes("-d")) return false;
+    if (!flags.every((flag) => ["-d", "-A", "-a", "-base64"].includes(flag))) return false;
+    return words[1] === "base64" || flags.includes("-base64") || flags.includes("-a");
+  }
+  const flags = words.slice(1);
+  if (!flags.every((flag) => flag === "-" || /^(?:-[dDiw0-9]+|--decode|--ignore-garbage|--wrap=\d+|-i)$/.test(flag))) return false;
+  return flags.some((flag) => flag === "--decode" || /^-[A-Za-z0-9]*[dD]/.test(flag));
+}
+
+/** `b64decode('<blob>')` in a `python -c` program (also `base64.`,
+ * `standard_`, `__import__('base64').` and a bytes blob). */
+const PYTHON_C = /\bpython(?:\d+(?:\.\d+)*)?\s+(?:-[A-Za-z]+\s+)*-c\s/;
+const PYTHON_B64DECODE = new RegExp(
+  String.raw`(?:__import__\(\s*(['"])base64\1\s*\)\.|\bbase64\.|\b)(?:standard_)?b64decode\(\s*b?(['"])${BLOB}\2\s*\)`,
+  "g",
+);
+
+/** A Python string literal of `text`, delimited by `quote`, that holds no
+ * quote, `$`, backtick or backslash other than its escapes, so it sits
+ * unchanged in the shell quoting the original blob sat in. */
+function pythonLiteral(text: string, quote: string): string {
+  let out = "";
+  for (const char of text) {
+    const code = char.codePointAt(0)!;
+    if (char === "\n") out += "\\n";
+    else if (char === "\t") out += "\\t";
+    else if (code >= 0x20 && code < 0x7f && !`'"$\`\\!`.includes(char)) out += char;
+    else if (code <= 0xffff) out += `\\u${code.toString(16).padStart(4, "0")}`;
+    else out += `\\U${code.toString(16).padStart(8, "0")}`;
+  }
+  return `${quote}${out}${quote}`;
+}
+
 /** A command with every base64 script it decodes turned back into the text
  * it is (#2774): the blob and its decoder become a quoted heredoc that
- * prints the same text, so the person, the audit and the guard read the
- * script. Binary bytes, and a blob inside a multi-line command, stay as is. */
+ * prints the same text, and a `b64decode('<blob>')` of a `python -c`
+ * program becomes the same bytes as a readable literal, so the person, the
+ * audit and the guard read the script. Binary bytes, and a blob inside a
+ * multi-line command, stay as is. */
 export function plainTextCommand(command: string): string {
   if (command.includes("\n")) return command;
+  let line = command;
+  if (PYTHON_C.test(line)) {
+    line = line.replace(PYTHON_B64DECODE, (match, _q1, quote, blob) => {
+      const decoded = base64Text(String(blob));
+      return decoded === null ? match : `${pythonLiteral(decoded, String(quote))}.encode()`;
+    });
+  }
   const bodies: string[] = [];
-  const rewritten = command.replace(BASE64_DECODE_IN_COMMAND, (match, _q1, _q2, piped, _q4, herestring) => {
+  const rewritten = line.replace(BASE64_DECODE_IN_COMMAND, (match, _q1, _q2, piped, pipedDecoder, hereDecoder, _q6, herestring) => {
+    if (!decodes(String(pipedDecoder ?? hereDecoder ?? ""))) return match;
     const decoded = base64Text(String(piped ?? herestring ?? ""));
     if (decoded === null || decoded.includes("\r")) return match;
     let tag = `SAGAX_PLAIN_${bodies.length + 1}`;
@@ -177,7 +231,7 @@ export function plainTextCommand(command: string): string {
     bodies.push(`${decoded}${decoded.endsWith("\n") || decoded === "" ? "" : "\n"}${tag}`);
     return `cat <<'${tag}'`;
   });
-  return bodies.length ? `${rewritten}\n${bodies.join("\n")}` : command;
+  return bodies.length ? `${rewritten}\n${bodies.join("\n")}` : rewritten;
 }
 
 export function desktopToolOperation(name: string, args: Record<string, unknown>): DesktopBridgeOperation {
@@ -225,7 +279,7 @@ export function desktopToolOperation(name: string, args: Record<string, unknown>
       const container = optionalStr(args.container, "container", 200);
       if (args.action === "status") return { action: "vm_status" };
       if (args.action === "start") return { action: "vm_start", ...(container ? { container } : {}) };
-      if (args.action === "run") return { action: "vm_run_command", command: str(args.command, "command"), ...(container ? { container } : {}), timeout_seconds: optionalNumber(args.timeout_seconds, 1, 600) ?? 120 };
+      if (args.action === "run") return { action: "vm_run_command", command: plainTextCommand(str(args.command, "command")), ...(container ? { container } : {}), timeout_seconds: optionalNumber(args.timeout_seconds, 1, 600) ?? 120 };
       // Waits up to ten minutes; a creation that takes longer keeps going on
       // the computer and status says where it is.
       if (args.action === "create") return { action: "vm_create", arguments: { spec: localVmDesktopSpec() }, timeout_seconds: 600 };

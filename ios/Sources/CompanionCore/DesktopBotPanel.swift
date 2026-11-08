@@ -512,6 +512,7 @@ public enum WebhookPublicURL {
         "issue.updated": "Issue updated",
         "issue.status_changed": "Issue status changed",
         "issue.removed": "Issue removed",
+        "issue.labeled": "Issue labeled",
         "comment.created": "Comment added",
         "cycle.completed": "Cycle completed",
         "sms.received": "Text received",

@@ -794,6 +794,8 @@ describe("agents-proxy MCP surface", () => {
       "run_routine",
       "propose_routine",
       "propose_routine_action",
+      // #2700: the bot manages its own event subscriptions
+      "event_subscriptions",
       "propose_profile",
       "propose_model",
       "propose_rule",

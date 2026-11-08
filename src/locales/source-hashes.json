@@ -9588,7 +9588,6 @@
       "dataWindow.refused": "06c307b52329cf3278f5ace7c8e2657d8d89fd8dba5a953287e1b2df8e0d593d",
       "settings.experimental.dataWindow": "05a20917cb7b487841b6a992ae71186e2e4b39d719e912f60eaada4113c05b26",
       "settings.experimental.dataWindowAria": "c111040a8f21aedf0e044dc9e2d81d769cf6050ac3d1ab6cfd4b8409618493e1",
-      "settings.experimental.dataWindowServerOld": "7ef2cc4e9fc65fda5e69b1bcd1e645b4dc435d3503153e280f8fe3ce0ee4f166",
       "settings.experimental.llmThreadTitles": "f348b9387ababc0f4dbfb4b928ec6a4cec48b7197973385fe2e19cca8ec66fe1",
       "settings.experimental.llmThreadTitlesAria": "e594ca5c608bb2b7985e13eb4ae88486e6b3f2d81e5e6d3161dfda5278cfca81",
       "settings.experimental.serverOld": "7ef2cc4e9fc65fda5e69b1bcd1e645b4dc435d3503153e280f8fe3ce0ee4f166",
@@ -12229,7 +12228,6 @@
       "updates.dialog.windowsInstallingBody": "caece0f76d41bc2ec5ea55f98f702eb48f14d9490514b676b2b1cdd5431786a3",
       "achievements.settings.title": "74a883a037bc227f91891ab654a753d3a99f31ab06ae5b5d2b6e594a692b41f8",
       "approval.held.customRule": "79a531b21e5b5eae0b7891d01de6ebd369d75ac751c1b4f99a51c652d3cbb831",
-      "approvals.title": "2bfc3471571e5c008cb26bd839b0d4cbcb1132fc9d6c8206bb595fa26e83a45b",
       "sidebar.profile.openApprovals": "7f096978b7c1043974ff5aac426f51385cceb9dd89a9a746b2104696459ba699",
       "approvals.yes": "85a39ab345d672ff8ca9b9c6876f3adcacf45ee7c1e2dbd2408fd338bd55e07e",
       "approvals.no": "1ea442a134b2a184bd5d40104401f2a37fbc09ccf3f4bc9da161c6099be3691d",
@@ -17386,11 +17384,8 @@
       "settings.app.openAbout": "679bcae590defcbad1ad635fa2216714a5de2ff2dd761c7367527c25350a77db",
       "settings.experimental.dataWindowDescription": "d0fb23b80fc8e8b3539d7f4e32505e6b12734812be028c98bad6e1b51e1564ea",
       "settings.experimental.skillAuthoringDescription": "4d8d97409cbb08aefad087cc676275c42e01ab23525c50f28caf9ba1743d788c",
-      "settings.experimental.needsServerUpdate": "bcd4abab4eb4492483638bfc7de553bbb27bf0bfada704acefbad618c7816702",
       "settings.experimental.devPodsDescription": "f05152ae1548d981f23d3eae2338e47db28581eeeb6109b6fc15ae514b1fbce8",
-      "settings.experimental.features": "5697d03daef4de9cf8db7cb11755f71358a32b4acca94909a9d449f71040d2dd",
       "settings.experimental.browserDescription": "a02389b71d4c802f0fcc490d5c2a3ccdca761ae8dddb74b394279ac413d34fb0",
-      "settings.experimental.orgLocked": "43878058cb22f549950eba23a98707b71157be0b0981be6d227199e0d6e69a1a",
       "settings.experimental.llmThreadTitlesDescription": "b667d76670e6398f1f2f14e5592f692c8b4d88ac01c7cd7290c14ec37d91bdd2",
       "approvalMode.antigravityLocalOnly": "35eb8de54cfc75f5ad70e9215514b8f5e9660c3cb0cade3cfe346b0c393b9139",
       "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
@@ -18225,7 +18220,8 @@
       "chat.peer.replied": "4e686cee486fc30c03bf0dbb9273323d3f32f564df645a0e4c9825366194f156",
       "botPanel.grokAccountConnectors": "4199f5c9a3e498ced3556bea8a9c4828aafb15803a16ac242d64b7f91a2359c8",
       "botPanel.grokAccountConnectors.help": "d3c82dc7424f6136972fd78a01a1fd6a75ae7b2b66b51ac3b725e9a0e8738ae8",
-      "botPanel.grokAccountConnectors.on": "45583d4cb1c65f35e4640cd4f2661b677bc53cff20f38758f15c8930cd9397c4"
+      "botPanel.grokAccountConnectors.on": "45583d4cb1c65f35e4640cd4f2661b677bc53cff20f38758f15c8930cd9397c4",
+      "triggers.event.issue_labeled": "c48acae32402b0a19d4a38160c8336c8450ea154e6b9b21121cb125d41657f3d"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

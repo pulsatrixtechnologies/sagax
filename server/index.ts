@@ -23817,6 +23817,7 @@ function postDailySuggestions(botId: string, threadId: string, suggestions: read
   for (const item of picked) {
     const proposal = proactiveProposals.add({ botId, threadId, messageId: "", events: [dailySuggestionEvent(botId, item)], more: 0, hops: 0, confined: true });
     const card = dailySuggestionCard(item, language);
+    // a free suggestion that never blocks the bot's turn; full-access: exempt
     const message = store.appendMessage(threadId, { role: "bot", kind: "options", card: { title: card.title, subtitle: card.subtitle, options: [...card.options], proactiveProposal: { id: proposal.id } } });
     proactiveProposals.setMessage(proposal.id, message.id);
     // #2697: the card also reaches the phone, with Do it / Not now on the

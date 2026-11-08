@@ -504,9 +504,11 @@ settings.experimental.boatComputer
 settings.experimental.boatComputerDetail
 settings.experimental.browserDescription
 settings.experimental.decisionModel
+settings.experimental.meetingNotetakerServerOld
 settings.experimental.routineGroupSettings
 settings.experimental.routineGroupSettingsAria
 settings.experimental.routineGroupSettingsDetail
+settings.experimental.serverOld
 settings.experimental.skillReviewNoEngine
 settings.experimental.vpsComputer
 settings.experimental.vpsComputerDetail

@@ -215,6 +215,26 @@ describe("createInternalIntegrationsRoutes", () => {
     expect(sent).toEqual([{ status: 200, body: { state: "not_person" } }]);
   });
 
+  it("POST /github-connect starts a device flow for the operator at this computer (#2806)", async () => {
+    const githubStartDeviceFlow = vi.fn(async () => ({
+      userCode: "OPER-0001",
+      verificationUri: "https://github.com/login/device",
+      expiresAt: 1_700_000_000_000,
+    }));
+    const route = createInternalIntegrationsRoutes(deps({ turnSpeaker: () => ({ origin: "operator" as const }), githubStartDeviceFlow }));
+    const { sent, run } = call(route, { path: "/api/internal/github-connect" });
+    await run();
+    expect(githubStartDeviceFlow).toHaveBeenCalledWith("local");
+    expect(sent[0]?.body).toMatchObject({ state: "pending", userCode: "OPER-0001" });
+  });
+
+  it("POST /github-connect refuses the operator on a Perspicax server without a principal (#2806)", async () => {
+    const route = createInternalIntegrationsRoutes(deps({ turnSpeaker: () => ({ origin: "operator" as const }), isPerspicax: () => true }));
+    const { sent, run } = call(route, { path: "/api/internal/github-connect" });
+    await run();
+    expect(sent[0]?.status).toBe(403);
+  });
+
   it("POST /github-connect starts a device flow (happy path)", async () => {
     const githubStartDeviceFlow = vi.fn(async () => ({
       userCode: "WXYZ-9999",

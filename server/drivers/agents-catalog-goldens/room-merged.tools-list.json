@@ -1331,7 +1331,7 @@
     },
     {
       "name": "open_connector_setup",
-      "description": "When the person asks to connect a connector (Microsoft Teams, Outlook, Gmail, Google Drive, OneDrive, SharePoint, Salesforce, X, ...): one call posts a card whose button opens the right sign-in page in their browser (grok.com or claude.ai for this engine's own connectors, else Sagax's Capabilities). Sagax detects the connection. Then answer in one short sentence in their language; no steps, no settings tour.",
+      "description": "When the person asks to connect a connector (Microsoft Teams, Outlook, Gmail, Google Drive, OneDrive, SharePoint, Salesforce, X, ...): one call posts a card whose button opens the right sign-in page in their browser (grok.com or claude.ai for this engine's own connectors, else Sagax's Capabilities). Sagax detects the connection. Then answer in one short sentence in their language; no steps, no settings tour. For GitHub it posts Sagax's own link and code instead.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -2517,6 +2517,49 @@
         "required": [
           "tool"
         ]
+      }
+    },
+    {
+      "name": "event_subscriptions",
+      "description": "This bot's event subscriptions, instead of polling: when one of its routine runs reports, stays quiet or fails, call a webhook url (signed JSON) or run a routine_id (list_routines; this bot or a bot of the same person). action list (default), create (events plus url or routine_id), test (sends one sample) or delete.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "test",
+              "delete"
+            ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "run.reported",
+                "run.quiet",
+                "run.failed"
+              ]
+            }
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "routine_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subscription_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "For test and delete, from list."
+          }
+        }
       }
     },
     {

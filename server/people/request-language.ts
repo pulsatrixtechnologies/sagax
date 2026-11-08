@@ -25,7 +25,10 @@ export function requestLanguage(headers: Record<string, string | string[] | unde
 /** The last request language per person ("" is the single local person). */
 export class RequestLanguages {
   private readonly byPerson = new Map<string, string>();
-  constructor(private readonly limit = 5000) {}
+  private readonly limit: number;
+  constructor(limit = 5000) {
+    this.limit = limit;
+  }
 
   note(person: string | null | undefined, language: string | null): void {
     if (!language) return;

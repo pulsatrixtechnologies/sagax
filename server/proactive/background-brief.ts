@@ -212,7 +212,74 @@ function cited(text: string, sources: readonly BriefPiece[]): boolean {
   return numbers.every((number) => sources.some((source) => source.text.includes(number)));
 }
 
-const DATE_IN_TEXT = /\b(\d{4}-\d{2}-\d{2})\b/;
+/** #2693: a day, alone or at the head of a full ISO timestamp
+ * ("2026-11-08T14:00:00Z" counts: `\b` stops at the "T"). */
+const DATE_IN_TEXT = /(?<!\d)(\d{4}-\d{2}-\d{2})(?=$|[^\d])/;
+
+/** "list_messages" or "listMessages" as words: "list messages". */
+export function toolWords(tool: string): string {
+  return tool.trim().replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_\-.]+/g, " ").replace(/\s+/g, " ").toLowerCase().trim();
+}
+
+const GIST_FIELDS = ["subject", "title", "summary", "name", "description", "text", "body", "message"] as const;
+const GIST_LISTS = ["items", "messages", "results", "value", "data", "events", "records", "entries"] as const;
+const GIST_MAX = 160;
+
+function firstRecord(value: unknown, depth = 0): Record<string, unknown> | null {
+  if (depth > 3 || value === null || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = firstRecord(entry, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (GIST_FIELDS.some((field) => typeof record[field] === "string" && (record[field] as string).trim())) return record;
+  for (const key of GIST_LISTS) {
+    const found = firstRecord(record[key], depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function clipGist(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > GIST_MAX ? `${flat.slice(0, GIST_MAX - 1).trimEnd()}…` : flat;
+}
+
+/** #2693: what a read says, in the person's words rather than the tool's
+ * output: the subject or title of the first record of a JSON answer, else
+ * the first sentence of a text answer, without braces, quotes or keys. Never
+ * calls a model. "" when nothing readable is left. */
+export function briefGist(raw: string): string {
+  const body = raw.trim();
+  if (/^[[{]/.test(body)) {
+    try {
+      const record = firstRecord(JSON.parse(body));
+      const field = record ? GIST_FIELDS.find((key) => typeof record[key] === "string" && (record[key] as string).trim()) : undefined;
+      if (record && field) return clipGist(String(record[field]));
+    } catch {
+      // not JSON after all: read it as text below
+    }
+  }
+  const text = body
+    .replace(/"[A-Za-z_][\w.-]*"\s*:/g, " ")
+    .replace(/[{}[\]"]+/g, " ")
+    .replace(/\s*,\s*(?=,|$)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const sentence = text.split(/(?<=[.!?])\s+|\n/)[0] ?? "";
+  return clipGist(sentence.replace(/^[,:;\s]+|[,:;\s]+$/g, ""));
+}
+
+/** #2693: a suggestion as one concrete action the person can say yes to. */
+export function suggestionAction(item: Pick<BriefSuggestion, "text" | "sources">, language: "fr" | "en"): string {
+  const gist = item.text.replace(/[.\s]+$/, "");
+  const app = item.sources[0]?.piece.split(",")[0]?.trim();
+  if (language === "fr") return app ? `Faire le suivi de « ${gist} » dans ${app}` : `Faire le suivi de « ${gist} »`;
+  return app ? `Follow up on "${gist}" in ${app}` : `Follow up on "${gist}"`;
+}
 
 /** A read's text becomes a piece only when it carries a real day. A number
  * with no dated piece is not a piece. */
@@ -220,7 +287,7 @@ export function datedBriefPiece(app: string, tool: string, text: string): BriefP
   const body = text.replace(/\s+/g, " ").trim();
   const asOf = body.match(DATE_IN_TEXT)?.[1];
   if (!asOf || !app.trim() || !tool.trim() || !body) return null;
-  return { piece: `${app.trim()} / ${tool.trim()}`.slice(0, 200), asOf, text: body.slice(0, 2_000) };
+  return { piece: `${app.trim()}, ${toolWords(tool)}`.slice(0, 200), asOf, text: body.slice(0, 2_000) };
 }
 
 export interface BriefApp {
@@ -273,8 +340,9 @@ export function runBriefPass(input: BriefPassInput, rejected: readonly string[] 
   if (!model) return { ok: false, error: "This pass uses the fast model. None is set for this bot." };
   const blocked = new Set(rejected);
   const suggestions = input.pieces.flatMap((piece) => {
-    const text = piece.text.replace(/\s+/g, " ").trim().slice(0, 500);
-    if (!cited(text, [piece])) return [];
+    // #2693: the point is what the read says, not the tool's raw answer
+    const text = briefGist(piece.text);
+    if (!text || !cited(text, [piece])) return [];
     const identity = briefIdentity(text);
     if (!identity || blocked.has(identity)) return [];
     return [{ text, sources: [{ piece: piece.piece.trim().slice(0, 200), asOf: piece.asOf, text: piece.text.slice(0, 2_000) }], costUsd: input.costUsd, model, identity }];

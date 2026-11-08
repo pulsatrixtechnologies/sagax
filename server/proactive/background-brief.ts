@@ -516,7 +516,8 @@ type BotRow = z.infer<typeof botSchema>;
 
 /** #2879: a counted gist rejected before #2866 kept a bare key ("3 messages")
  * that no pass builds any more. On load, such a key takes its app and day
- * from the suggestion it came from; with no such suggestion it is dropped,
+ * from each rejected suggestion of that text (status rejected or feedback
+ * never), else from the first suggestion of that text; with no such suggestion it is dropped,
  * since it can never match again. Returns whether the row changed. */
 export function migrateBriefIdentities(row: BotRow): boolean {
   let changed = false;
@@ -534,12 +535,15 @@ export function migrateBriefIdentities(row: BotRow): boolean {
   }
   const rejected: string[] = [];
   for (const identity of row.rejected) {
-    let next: string | null = identity;
+    let next: string[] = [identity];
     if (COUNT_GIST.test(identity)) {
-      const from = row.suggestions.find((item) => item.sources[0] && briefIdentity(item.text) === identity);
-      next = from ? from.identity : null;
+      // #2880: every rejected suggestion of that text keeps its own app and
+      // day; only with none rejected does the first one of that text stand in.
+      const same = row.suggestions.filter((item) => item.sources[0] && briefIdentity(item.text) === identity);
+      const refused = same.filter((item) => item.status === "rejected" || item.feedback === "never");
+      next = (refused.length > 0 ? refused : same.slice(0, 1)).map((item) => item.identity);
     }
-    if (next && !rejected.includes(next)) rejected.push(next);
+    for (const key of next) if (!rejected.includes(key)) rejected.push(key);
   }
   if (rejected.length !== row.rejected.length || rejected.some((identity, index) => identity !== row.rejected[index])) changed = true;
   row.rejected = rejected;

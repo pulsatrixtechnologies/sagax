@@ -1,4 +1,13 @@
 {
+  "model.engines.aria": "エンジン",
+  "model.engines.all": "すべて",
+  "model.manage": "モデルを管理",
+  "model.manageOff": "{count} 件オフ",
+  "model.manager.title": "モデル",
+  "model.manager.subtitle": "エンジンを選んでからモデルを選びます。ボットとそのすべての会話に適用されます。",
+  "model.manager.connect": "プロバイダーを接続",
+  "model.manager.mode": "モード",
+  "model.manager.toggle": "{name} をオンまたはオフにする",
   "noEngines.title": "モデルプロバイダーをインストールして始めましょう",
   "noEngines.intro": "{app} 自体はモデルを持ちません。ボットはこのコンピューターにインストール済みの AI CLI 上で、既存のログインを使って動きます。どれか一つをセットアップすれば、ボットが動き出します。",
   "engines.cloud": "クラウド",

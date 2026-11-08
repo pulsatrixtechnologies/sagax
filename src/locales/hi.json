@@ -1,4 +1,13 @@
 {
+  "model.engines.aria": "इंजन",
+  "model.engines.all": "सभी",
+  "model.manage": "मॉडल प्रबंधित करें",
+  "model.manageOff": "{count} बंद",
+  "model.manager.title": "मॉडल",
+  "model.manager.subtitle": "पहले इंजन चुनें, फिर मॉडल। यह बॉट और उसकी सभी बातचीत पर लागू होता है।",
+  "model.manager.connect": "प्रदाता कनेक्ट करें",
+  "model.manager.mode": "मोड",
+  "model.manager.toggle": "{name} चालू या बंद करें",
   "noEngines.title": "शुरू करने के लिए एक मॉडल प्रदाता इंस्टॉल करें",
   "noEngines.intro": "{app} अपना कोई मॉडल नहीं देता — आपके बॉट इस कंप्यूटर पर इंस्टॉल की गई AI CLI पर, आपके मौजूदा लॉगिन से चलते हैं। इनमें से कोई भी सेट कर लें, और आपके बॉट चल पड़ेंगे।",
   "engines.cloud": "क्लाउड",

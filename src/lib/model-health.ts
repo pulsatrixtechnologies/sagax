@@ -15,6 +15,7 @@
 // policy, something pays for its turns (signed in, a valid key, or on an
 // organization server a connected engine), and, for a local model, the
 // engine can run it. A signed-out engine keeps its local models.
+import { isModelServerOption } from "../../shared/model-server-option";
 import { orgEngineState } from "@/lib/model-payers";
 import type { MyEngine } from "@/lib/perspicax-org";
 import { localModelRows, localRowUnavailable } from "@/lib/local-models";
@@ -51,6 +52,9 @@ export function modelUsable(instance: InstanceInfo, modelId: string, context: He
   if (!option) return false;
   const localRows = localModelRows(instance.models.options, context.orgMode);
   const localIds = new Set(localRows.map((row) => row.id));
+  // #2963: a Perspicax model server's model (pi) runs with that server's
+  // key, resolved per turn: no sign-in, never a model typed on this machine
+  if (isModelServerOption(option)) return true;
   // an organization server never offers its own custom models
   if (context.orgMode && option.custom && !localIds.has(option.id) && instance.access !== "api") return false;
   if (isLocalOption(option, context.orgMode, localIds)) {

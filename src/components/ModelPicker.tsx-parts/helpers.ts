@@ -121,5 +121,7 @@ export const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled])
 /** The window's rail entry that is not an engine: Auto. */
 
 /** The composer's model menu: a popover above the chip, never wider than the window. */
-export const MENU_WIDTH = 340;
+/** #2963: larger, flat menu (engines, then their models, all open). */
+export const MENU_WIDTH = 420;
+export const MENU_MAX_HEIGHT = 520;
 

@@ -7,6 +7,7 @@
 // models.json (PI_CODING_AGENT_DIR) whose `apiKey` is `$SAGAX_PI_KEY_<ID>`,
 // pi's own environment interpolation, and the value rides only the
 // environment of that turn's pi process.
+import { isModelServerProvider } from "../../shared/model-server-option.ts";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { EffortLevel } from "../../shared/model-selection.ts";
@@ -173,9 +174,7 @@ export function modelServerKeyEnv(server: Pick<ModelServer, "instanceId" | "scop
 }
 
 /** Whether a pi provider id is a model server's. */
-export function isModelServerProvider(provider: string): boolean {
-  return /^px-(org|own)-[a-z0-9][a-z0-9-]*$/.test(provider);
-}
+export { isModelServerProvider };
 
 /** Split resolved servers into what a turn carries: the keys, for the pi
  * process environment only, and the servers without them. */

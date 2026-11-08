@@ -106,7 +106,18 @@ function canHover(): boolean {
   }
 }
 
-export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, onPreview, onAutoEdit, after, autoPanel, custom }: {
+/** #2963: an engine section (not the top rows, not Favorites). */
+export function engineSections(sections: readonly ModelMenuSection[]): ModelMenuSection[] {
+  return sections.filter((section) => section.label && section.key !== "top" && section.key !== "favorites" && section.rows.some((row) => row.kind === "model"));
+}
+
+/** #2963: the sections one engine chip keeps (the top rows and that engine). */
+export function sectionsForEngine(sections: ModelMenuSection[], engine: string | null): ModelMenuSection[] {
+  if (!engine || !sections.some((section) => section.key === engine)) return sections;
+  return sections.filter((section) => section.key === "top" || section.key === engine);
+}
+
+export function ModelSearchList({ sections: allSections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, onPreview, onAutoEdit, after, autoPanel, custom, showAll = false, engineChips }: {
   sections: ModelMenuSection[];
   onPick: (row: ModelMenuRow) => void;
   onPreview?: (row: ModelMenuRow) => void;
@@ -134,8 +145,17 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   /** A typed value outside the catalog: with a search that matches no model
    * exactly, a "Use <text>" row picks the text itself. */
   custom?: { label: (text: string) => string; onPick: (text: string) => void };
+  /** #2963 (JC, 2026-11-08): every model of every engine, no Show more. */
+  showAll?: boolean;
+  /** #2963: a row of engine chips over the list (All, then each engine with
+   * its logo); a chip keeps the top rows and that engine's models. */
+  engineChips?: { mark: (sectionKey: string) => ReactNode };
 }) {
   const style = STYLE[variant];
+  const [engine, setEngine] = useState<string | null>(null);
+  const chips = engineChips ? engineSections(allSections) : [];
+  const sections = chips.length > 1 ? sectionsForEngine(allSections, engine) : allSections;
+  const engineOn = chips.length > 1 && sections !== allSections ? engine : null;
   const [query, setQuery] = useState("");
   const [moved, setMoved] = useState<string | null>(null);
   const [openSub, setOpenSub] = useState<OpenSubmenu | null>(null);
@@ -151,7 +171,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   const shown = filterModelSections(sections, query);
   const favoriteKeys = favorites?.keys ?? [];
   const previewSection = (section: ModelMenuSection): { section: ModelMenuSection; hidden: number } => {
-    if (searching || !section.label) return { section, hidden: 0 };
+    if (showAll || searching || !section.label) return { section, hidden: 0 };
     const preview = previewProviderRows(section.rows, {
       expanded: Boolean(expandedProviders[section.key]),
       favoriteKeys,
@@ -351,6 +371,32 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
           className={style.input}
         />
       </label>
+      {chips.length > 1 && (
+        <div role="radiogroup" aria-label={t("model.engines.aria")} data-model-engine-chips
+          className="mx-1.5 mb-1 flex shrink-0 gap-1 overflow-x-auto overscroll-contain px-1 pb-1 pt-1.5 [scrollbar-width:none]">
+          {[{ key: null as string | null, label: t("model.engines.all") }, ...chips.map((section) => ({ key: section.key as string | null, label: section.label! }))].map((chip) => {
+            const on = engineOn === chip.key;
+            return (
+              <button key={chip.key ?? "all"} type="button" role="radio" aria-checked={on} data-model-engine-chip={chip.key ?? "all"}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setEngine(chip.key);
+                  setMoved(null);
+                  if (openSub) setOpenSub(null);
+                }}
+                className={cn(
+                  "flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[12px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus motion-reduce:transition-none",
+                  variant === "popover"
+                    ? on ? "border-popover-accent/60 bg-popover-hover text-popover-ink" : "border-popover-hairline text-popover-ink-secondary hover:bg-popover-hover hover:text-popover-ink"
+                    : on ? "border-accent/60 bg-hover text-ink" : "border-hairline text-ink-secondary hover:bg-hover hover:text-ink",
+                )}>
+                {chip.key && <span aria-hidden="true" className="flex shrink-0 items-center">{engineChips!.mark(chip.key)}</span>}
+                <span className="max-w-[140px] truncate">{chip.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       {root ? (
         <div ref={listRef} id={listboxId} role="menu" aria-label={label ?? t("model.models")} data-model-list
           data-model-list-scroll={after !== undefined ? "" : undefined}

@@ -4,6 +4,7 @@
 // Model and effort travel through the same action from the chip and composer.
 import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Monitor } from "lucide-react";
 import { useStore, type Bot, type ModelSelection } from "@/state/store";
 import { engineOffer } from "../../shared/offered-engines";
 import { engineOfferContext, modelSwitches } from "@/lib/offered-instances";
@@ -19,6 +20,9 @@ import { useMyEngineModels, useMyEngines, usePerspicaxOrg } from "@/lib/perspica
 import { orgRefusesEngine } from "./OrgHostToolsNote";
 import { useAutoModelStatus } from "@/lib/auto-model-preview";
 import { ModelNoEngineNotice } from "./ModelNoEngineNotice";
+import { InstanceProviderMark } from "./ProviderIcons";
+import { openModelWindow } from "@/lib/model-window";
+import { ModelManager } from "./ModelPicker.tsx-parts/ModelManager";
 import { effortLabel } from "@/lib/effort-label";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
 import { useModelFavorites } from "@/lib/model-favorites";
@@ -343,6 +347,16 @@ export function ModelPicker({
   });
 
   const effortTitle = active?.capabilities?.modelVariants ? t("model.reasoning") : t("model.effort");
+  // #2963: each engine's mark, in the chips and the window's column
+  const engineMark = (key: string): ReactNode => {
+    const instance = state.instances.find((candidate) => candidate.instanceId === key);
+    return instance ? <InstanceProviderMark instance={instance} size={14} /> : <Monitor size={14} aria-hidden="true" />;
+  };
+  // #2963: the chat bar menu's footer opens the models window for this bot.
+  // Settings surfaces (list chip, profile row, bulk edit) keep their own links.
+  const onManage = !choose && bot.id && !windowOnly && !listChip && !contained && !alsoApplyTo?.length
+    ? () => { closeAll(); openModelWindow(bot.id); }
+    : undefined;
 
   const trigger = ModelPickerTrigger({
     plain: contained && surface === "plain",
@@ -413,6 +427,8 @@ export function ModelPicker({
       inComposer={inComposer}
       turnedOff={turnedOff}
       openActiveModels={openActiveModels}
+      onManage={onManage}
+      engineMark={engineMark}
       customModel={choose?.custom ? { label: choose.custom.label, onPick: (text) => { choose.onPick({ model: text }); closeAll(); } } : undefined}
     />
   );
@@ -456,6 +472,8 @@ function ModelPickerShell({
   inComposer,
   turnedOff,
   openActiveModels,
+  onManage,
+  engineMark,
   customModel,
 }: {
   rootRef: React.RefObject<HTMLDivElement | null>;
@@ -487,7 +505,7 @@ function ModelPickerShell({
   setAutoOptimize: (optimize: NonNullable<ModelSelection["autoOptimize"]>) => void;
   autoEditOpen: boolean;
   setAutoEditOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  pick: (instance: NonNullable<typeof active>, modelId: string) => void;
+  pick: (instance: NonNullable<typeof active>, modelId: string, keepOpen?: boolean) => void;
   effortTitle: string;
   headless: boolean;
   windowOnly: boolean;
@@ -496,6 +514,8 @@ function ModelPickerShell({
   inComposer: boolean;
   turnedOff: number;
   openActiveModels?: () => void;
+  onManage?: () => void;
+  engineMark: (sectionKey: string) => ReactNode;
   customModel?: { label: (text: string) => string; onPick: (text: string) => void };
 }) {
   return (
@@ -518,7 +538,29 @@ function ModelPickerShell({
         </>
       )}
 
-      {menuMotion.shown && portal(containedBusy ? (
+      {/* #2963: the models window (sidebar menu, Edit..., Manage models) */}
+      {windowOnly && menuMotion.shown && (
+        <ModelManager
+          bot={bot}
+          threadId={threadId}
+          sections={menuSections}
+          favoriteKeys={favoriteKeys}
+          selection={selection}
+          active={active}
+          autoOn={autoOn}
+          advanced={advanced}
+          effortTitle={effortTitle}
+          onRow={onRow}
+          pick={pick}
+          setEffort={setEffort}
+          setAutoOptimize={setAutoOptimize}
+          openProviders={openProviders}
+          onClose={() => closeMenu()}
+          engineMark={engineMark}
+          frameRef={menuRef}
+        />
+      )}
+      {!windowOnly && menuMotion.shown && portal(containedBusy ? (
         <div
           ref={menuRef}
           data-model-menu=""
@@ -565,6 +607,8 @@ function ModelPickerShell({
         anchorRef: (!headless && !windowOnly && (listChip || inComposer)) ? triggerRef : undefined,
         turnedOff,
         openActiveModels,
+        onManage,
+        engineMark,
         customModel,
       }))}
     </div>

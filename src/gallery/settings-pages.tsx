@@ -6,6 +6,7 @@
  * ?section=account|security|credentials|providers|engines|voice &skin=<id> &lang=<code>
  * &providers=1: several engines, keys, a named server and a local server
  * &org=1: an organization server, the viewer an admin (with providers=1)
+ * ?picker=1: the models window (ModelManager); ?picker=bar: the composer's chip and menu
  * scripts/capture/settings-pages.mjs shoots each page in light and dark. */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -71,7 +72,10 @@ const section = (params.get("section") ?? "account") as AppSettingsSection;
 
 function OpenModelPicker() {
   const { state } = useStore();
-  return state.bots[0] ? <ModelPicker bot={state.bots[0]} windowOnly /> : null;
+  if (!state.bots[0]) return null;
+  // ?picker=bar (#2963): the composer's model chip, which opens the chat bar menu.
+  if (params.get("picker") === "bar") return <div className="m-auto w-[640px]"><ModelPicker bot={state.bots[0]} inComposer /></div>;
+  return <ModelPicker bot={state.bots[0]} windowOnly />;
 }
 
 function OpenSettings() {

@@ -147,6 +147,15 @@ describe("ModelRequestService", () => {
     expect(validateTarget).toHaveBeenCalledTimes(2);
   });
 
+  it("2026-11-08: a refused quote applies under Full access and keeps the card outside Full", () => {
+    const store = new MemoryStore();
+    const bot = addBot(store, "Scout");
+    const full = new ModelRequestService({ store, autoApply: () => "full-access", driverCapabilities: caps });
+    expect(full.submit({ botId: bot.id, threadId: bot.threadId, selection: { instanceId: "codex", model: "gpt-fixture" }, reason: "asked", quoteRefused: true }).state).toBe("applied");
+    const self = new ModelRequestService({ store, autoApply: () => "self", driverCapabilities: caps });
+    expect(self.submit({ botId: bot.id, threadId: bot.threadId, selection: { instanceId: "codex", model: "gpt-other" }, reason: "asked", quoteRefused: true }).state).toBe("pending");
+  });
+
   it("auto-applies under Full Access without exposing an unanswered card", () => {
     const store = new MemoryStore();
     const bot = addBot(store, "Scout");

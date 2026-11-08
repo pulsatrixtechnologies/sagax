@@ -172,11 +172,13 @@ describe("every approval or choice card reads the Full access decision", () => {
       if (hit.emitter !== "peer card") continue;
       const lines = readFileSync(join(ROOT, hit.file), "utf8").split("\n");
       const before = lines.slice(Math.max(0, hit.line - 41), hit.line).join("\n");
-      expect(/peerReviewRequired\(/.test(before), `${describeHit(hit)}: requestPeerApproval without peerReviewRequired in reach`).toBe(true);
+      // or the shared approval bus, whose autoApply is fullAccessForSource (checked below)
+      expect(/peerReviewRequired\(/.test(before) || /requestPeerApproval\(approvalBus,/.test(lines[hit.line - 1] ?? ""), `${describeHit(hit)}: requestPeerApproval without peerReviewRequired in reach`).toBe(true);
     }
     const index = readFileSync(join(SERVER, "index.ts"), "utf8");
     expect(index).toMatch(/function peerReviewRequired[\s\S]{0,400}peerContactCardRequired\(/);
     expect(index).toMatch(/function fullAccessForSource[\s\S]{0,300}fullAccessActs\(/);
+    expect(index).toMatch(/const approvalBus: ApprovalBus = \{[^}]*autoApply: fullAccessForSource/);
     expect(index).toMatch(/setSafetyFullAccess\(\(\{ botId, threadId \}\)[\s\S]{0,600}fullAccessActs\(approvalModeForTurn\(/);
     // the ask_choice route hands the turn's level to the card
     expect(index).toMatch(/createAgentCard\(\{[\s\S]{0,600}approvalLevel: sourceApprovalMode\(bot\.id, threadId\)/);

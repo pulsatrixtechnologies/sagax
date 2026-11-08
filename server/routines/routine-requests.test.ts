@@ -269,6 +269,17 @@ describe("RoutineRequestService", () => {
     expect(autoApply).toHaveBeenLastCalledWith("bot-a", "full-thread", "bot-a");
   });
 
+  it("2026-11-08: a refused quote never brings the card back under Full access; outside Full it keeps the card", async () => {
+    const autoApply = vi.fn((_botId: string, threadId: string, _target: string) => (threadId === "full-thread" ? "full-access" as const : "self" as const));
+    const { service, routines } = harness(undefined, undefined, undefined, autoApply);
+    const full = await service.submit({ botId: "bot-a", threadId: "full-thread", proposal: createProposal(), quoteRefused: true });
+    expect(full).toMatchObject({ state: "applied", result: { action: "create" } });
+    expect(routines.listRoutines()).toHaveLength(1);
+    const ask = await service.submit({ botId: "bot-a", threadId: "ask-thread", proposal: createProposal({ name: "Second", instructions: "Remind Alubar about the evaluation." }), quoteRefused: true });
+    expect(ask.state).toBe("pending");
+    expect(routines.listRoutines()).toHaveLength(1);
+  });
+
   it("rechecks the Full Access grant after cloud readiness and preserves scope validation", async () => {
     let full = true;
     const { service, routines, store } = harness(undefined, async () => {

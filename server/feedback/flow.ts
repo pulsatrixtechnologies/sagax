@@ -184,6 +184,7 @@ export function feedbackAnswers(messages: readonly FlowMessage[], reportId: stri
 
 /** The next question, or the preview once everything is known. */
 export function nextFeedbackStep(language: FeedbackLanguage, answers: FeedbackAnswers, reportId: string): FlowStep {
+  // the Feedback bot's own questionnaire, never a permission; full-access: exempt
   if (!answers.kind) return { kind: "ask", marker: { step: "kind", reportId }, message: { kind: "options", card: { ...KIND_CARD[language] } } };
   const fields = FIELDS[answers.kind];
   for (const field of fields) {
@@ -192,6 +193,7 @@ export function nextFeedbackStep(language: FeedbackLanguage, answers: FeedbackAn
     return { kind: "ask", marker: { step: field, reportId }, message: { kind: "text", text } };
   }
   if (answers.kind !== "question" && !answers.impact) {
+    // a question of the Feedback form, not a permission; full-access: exempt
     return { kind: "ask", marker: { step: "impact", reportId }, message: { kind: "options", card: { ...IMPACT_CARD[language] } } };
   }
   if (answers.followups.length < MAX_FOLLOWUPS) {

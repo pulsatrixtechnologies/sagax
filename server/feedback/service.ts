@@ -274,6 +274,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     const words = WORDS[record.lang];
     const body = report.body.length > 6000 ? `${report.body.slice(0, 5999)}…` : report.body;
     post(record.threadId, undefined, { kind: "text", text: `${words.previewIntro}\n\n**${report.title}**\n\n${body}` });
+    // the Feedback product's send preview (a report to a third party, the person's own send); full-access: exempt
     post(record.threadId, { step: "preview", reportId: record.id }, {
       kind: "options",
       card: { title: words.previewTitle, subtitle: words.previewSubtitle, options: [...SEND_OPTIONS[record.lang]] },
@@ -478,6 +479,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     });
     const words = WORDS[lang];
     const summary = oneLine(anonymize(input.text, deps.names()), 200);
+    // the Feedback product's offer, never a permission; full-access: exempt
     post(input.threadId, { step: "offer", reportId: record.id }, {
       kind: "options",
       card: { title: words.offerTitle, subtitle: words.offerSubtitle(summary), options: [...OFFER_OPTIONS[lang]] },

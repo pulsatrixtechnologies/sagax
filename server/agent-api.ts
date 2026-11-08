@@ -426,8 +426,10 @@ export interface AgentApiDeps {
   /** #2858: the prompts still waiting in this conversation's queue
    * (chat_followups rows not yet settled), with the id a queued send's handle
    * is anchored on. They survive a restart; a pending send_prompt receipt
-   * checks them as well as the transcript. */
-  queuedPrompts?(threadId: string): Array<{ id: string; text: string }>;
+   * checks them as well as the transcript. queuedAt is when the item was
+   * queued (payload.queuedAt): only an item queued at or after the receipt's
+   * issued_at can be that send. */
+  queuedPrompts?(threadId: string): Array<{ id: string; text: string; queuedAt: number }>;
   /** Put the prompt (and the staged files) into the conversation and start or
    * queue its turn. messageId is the stored prompt's id, when known. */
   post(caller: AgentCaller, agentId: string, threadId: string, prompt: string, files: FileInput[], wake?: PriorityDelivery): Promise<{ messageId: string | null } | Refusal>;
@@ -1168,14 +1170,15 @@ function createAgentApiHandlers(env: {
         // A pending receipt with no send in flight: Sagax stopped between the
         // pending write and the final one. The prompt reached the
         // conversation if a user line at or after issued_at carries its text,
-        // or if it still waits in the conversation's queue (busyMode after:
-        // no line until its own turn, and the queue survives a restart);
+        // or if an item queued at or after issued_at still waits in the
+        // conversation's queue with that text (busyMode after: no line until
+        // its own turn, and the queue survives a restart);
         // then the receipt is completed, else the key is free again (#2858).
         if (prior?.pending) {
           const issued = prior.issued_at;
           const expected = prior.ph ?? promptHash(prompt);
           const line = deps.messages(prior.thread_id).find((message) => message.role === "user" && message.at >= issued && promptHash(message.text ?? "") === expected);
-          const queued = line ? undefined : deps.queuedPrompts?.(prior.thread_id).find((item) => promptHash(item.text) === expected);
+          const queued = line ? undefined : deps.queuedPrompts?.(prior.thread_id).find((item) => item.queuedAt >= issued && promptHash(item.text) === expected);
           const anchor = line?.id ?? queued?.id;
           if (anchor) {
             prior = { fp: prior.fp, agent_id: prior.agent_id, thread_id: prior.thread_id, message_id: anchor, issued_at: issued };

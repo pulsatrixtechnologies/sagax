@@ -55,7 +55,7 @@ function world(options: {
   const messages = new Map<string, StoredMessage[]>();
   const state = new Map<string, TurnState>();
   const pending = new Map<string, { polls: number; prompt: string }>();
-  const waiting = new Map<string, Array<{ queueId: string; prompt: string }>>();
+  const waiting = new Map<string, Array<{ queueId: string; prompt: string; queuedAt: number }>>();
   const audits: Array<{ caller: string; entry: AuditEntry }> = [];
   const notified: string[] = [];
   const interrupted: string[] = [];
@@ -296,7 +296,7 @@ function world(options: {
       if (wake?.front) return { messageId: null };
       if (options.queueWhenBusy && (state.get(threadId) ?? "idle") !== "idle") {
         const queueId = `q${++ids}`;
-        waiting.set(threadId, [...(waiting.get(threadId) ?? []), { queueId, prompt }]);
+        waiting.set(threadId, [...(waiting.get(threadId) ?? []), { queueId, prompt, queuedAt: clock }]);
         return { messageId: queueId };
       }
       const row = add(threadId, { role: "user", kind: "text", text: prompt });
@@ -304,7 +304,7 @@ function world(options: {
       pending.set(threadId, { polls: options.replyAfterPolls ?? 3, prompt });
       return { messageId: row.id };
     },
-    queuedPrompts: (threadId) => (waiting.get(threadId) ?? []).map((item) => ({ id: item.queueId, text: item.prompt })),
+    queuedPrompts: (threadId) => (waiting.get(threadId) ?? []).map((item) => ({ id: item.queueId, text: item.prompt, queuedAt: item.queuedAt })),
     async interrupt(_agentId, threadId) {
       interrupted.push(threadId);
       pending.delete(threadId);
@@ -740,6 +740,37 @@ describe("send_prompt / await_turn", () => {
     const resend = await restarted.call(person("p1"), "send_prompt", args);
     expect(resend.body.replayed).toBeUndefined();
     expect(w.posted).toHaveLength(3);
+  });
+
+  it("a pending receipt ignores a queued item older than its issued_at: K1 queued before K2, K2's resend posts (#2858)", async () => {
+    const receipts = new Map<string, SendReceipt>();
+    const store = {
+      get: (key: string) => receipts.get(key) ?? null,
+      put: (key: string, receipt: SendReceipt) => void receipts.set(key, receipt),
+      delete: (key: string) => void receipts.delete(key),
+    };
+    const w = world({ queueWhenBusy: true, replyAfterPolls: 200 });
+    const api = createAgentApi({ ...w.deps, notify: undefined, sendReceipts: store });
+    const first = await api.call(person("p1"), "send_prompt", { agent_id: "bot-a", prompt: "first job", mode: "async" });
+    const threadId = first.body.thread_id as string;
+    // K1 queues "same job" behind the busy turn.
+    const k1 = { agent_id: "bot-a", prompt: "same job", mode: "async", thread_id: threadId, on_busy: "queue", idempotency_key: "run-12:K1" };
+    const queued = await api.call(person("p1"), "send_prompt", k1);
+    expect(queued.body).toMatchObject({ accepted: true });
+    expect(w.posted).toHaveLength(2);
+    // Later, K2 sends the same text and crashes before its post.
+    w.advance(5_000);
+    const k2 = { ...k1, idempotency_key: "run-12:K2" };
+    const k1Key = [...receipts.keys()].find((stored) => stored.endsWith("run-12:K1"))!;
+    const k2Key = k1Key.replace(/run-12:K1$/, "run-12:K2");
+    receipts.set(k2Key, { ...receipts.get(k1Key)!, message_id: null, issued_at: w.deps.now!(), pending: true });
+    const restarted = createAgentApi({ ...w.deps, notify: undefined, sendReceipts: store });
+    const resend = await restarted.call(person("p1"), "send_prompt", k2);
+    // K1's queued item is older than K2's issued_at: K2 posts, never replays K1.
+    expect(resend.body.replayed).toBeUndefined();
+    expect(resend.body).toMatchObject({ accepted: true });
+    expect(w.posted).toHaveLength(3);
+    expect(receipts.get(k2Key)?.message_id).not.toBe(receipts.get(k1Key)?.message_id);
   });
 
   it("blocking waits for the reply; empty reply with finished=true means no text", async () => {

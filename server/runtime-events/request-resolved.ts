@@ -17,9 +17,13 @@ export function handleRequestResolved(event: any, ctx: any, host: any): void {
       if (event.requestId) host.settleWaitingOnPersonChips(event.threadId, event.requestId, { behavior: event.behavior, source: event.source });
       // answered (by whoever): the turn is working again, unless it settled
       const waiting = bot ?? (speaker ? host.store.bot(speaker.botId) : undefined);
-      // 2026-11-08 (#2922): another card of this thread still waits on the
-      // person, so the turn stays waiting-on-you (badge, await_turn)
-      const stillOpen = Boolean(host.openPersonCard?.(event.threadId, event.requestId));
+      // 2026-11-08 (#2922): another card of this turn still waits on the
+      // person, so the turn stays waiting-on-you (badge, await_turn). Only
+      // this turn's cards (a proposal or question left by an earlier turn
+      // does not hold it), never one a reviewer still decides, never the one
+      // settled here (its patch comes after this event).
+      const botId = bot?.id ?? speaker?.botId ?? "";
+      const stillOpen = Boolean(host.agentPendingApproval?.(botId, event.threadId, { except: event.requestId, rootOnly: true })?.open?.length);
       if (stillOpen) {
         // nothing: the remaining card keeps the thread waiting
       } else if (bot && host.store.taskByThread(bot.id, event.threadId)?.activity === "waiting-on-you") {

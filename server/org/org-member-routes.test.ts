@@ -839,6 +839,32 @@ describe("the AI-client approval loop (2026-10-17)", () => {
     confidentialThreads.add("t9");
     expect((await call("POST", "agents/await_turn", token("bob"), { agent_id: "b1", handle: "turn_x" })).body.approval).toBeNull();
   });
+
+  it("the card down the handoff is answered on its own thread, as the next text says (#2922)", async () => {
+    serveCards([bashCard({ requestId: "req_c" })], { thread: "t9" });
+    const child = { id: "req_c", threadId: "t9", kind: "permission", title: "Run Bash?", answerWith: "decision", choices: [], createdAt: 5 };
+    agentReply = () => ({ status: 200, body: { handle: "turn_x", agent_id: "b1", thread_id: "t1", finished: false, status: "waiting_for_approval", reply: "", approvals: [child] } });
+    const got = await call("POST", "agents/await_turn", token("bob"), { agent_id: "b1", handle: "turn_x" });
+    expect(got.body.next).toContain("thread_id t9");
+    const answered = await call("POST", "approvals/req_c", token("bob"), { threadId: "t9", decision: "allow" });
+    expect(answered.status).toBe(200);
+    expect(answered.body).toMatchObject({ answered: true, closed: true, decision: "allow" });
+    expect(performed.find((p) => p.request.path.endsWith("/respond"))?.request.path).toBe("/api/threads/t9/respond");
+  });
+
+  it("a card an earlier turn left open in the conversation is not the one this turn waits on (#2922)", async () => {
+    // the thread still shows an old routine proposal; the agent API scoped
+    // this turn's cards to the new permission only
+    serveCards([
+      { title: "Save this routine?", subtitle: "", options: ["Save", "Not now"], requestId: "req_old", routineRequest: { version: 1 } },
+      bashCard({ requestId: "req_new" }),
+    ]);
+    const now = { id: "req_new", threadId: "t1", kind: "permission", answerWith: "decision", choices: [], createdAt: 101 };
+    agentReply = () => ({ status: 200, body: { handle: "turn_x", agent_id: "b1", thread_id: "t1", finished: false, status: "waiting_for_approval", reply: "", approvals: [now] } });
+    const got = await call("POST", "agents/await_turn", token("bob"), { agent_id: "b1", handle: "turn_x" });
+    expect(got.body.approval).toMatchObject({ id: "req_new", threadId: "t1" });
+    expect(got.body.approvals.map((a: { id: string }) => a.id)).toEqual(["req_new"]);
+  });
 });
 
 const PLANTED_KEY = "sk-ant-abcdefghijklmnopqrstuvwxyz";

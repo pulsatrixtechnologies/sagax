@@ -336,11 +336,15 @@ export interface StoredMessage {
 
 /** #2922: the cards a conversation (and the threads it handed work to)
  * waits on, as the caller may see them. approvals: open cards for a person,
- * oldest first, each with its own threadId (answer it there). reviewing:
+ * newest first, each with its own threadId (answer it there). reviewing:
  * a card a model reviewer is still deciding (not for the person yet). */
 export interface PendingApproval {
   approvals: Array<Record<string, unknown> & { id: string; threadId: string }>;
   reviewing: boolean;
+  /** An open card of this turn another person (or no bot caller) answers. */
+  blockedElsewhere?: boolean;
+  /** The conversation still runs (engine, queue, teammates). */
+  engineBusy?: boolean;
 }
 
 export interface TranscriptEntry {
@@ -425,7 +429,7 @@ export interface AgentApiDeps {
   turnState(agentId: string, threadId: string): TurnState;
   /** #2922: the cards the turn waits on (child threads included), filtered
    * for this caller. Absent: await_turn reads turnState only. */
-  pendingApproval?(caller: AgentCaller, agentId: string, threadId: string): PendingApproval | null;
+  pendingApproval?(caller: AgentCaller, agentId: string, threadId: string, since?: number): PendingApproval | null;
   /** Where a send that names no thread goes. A bot caller: the agent's
    * single chat with the person it works for (#1170). A person's AI client:
    * a fresh conversation of its own with the agent on every send (#2575,
@@ -534,11 +538,15 @@ export interface TurnResult {
   /** Pass as cursor on the next await_turn so steps are not repeated. */
   wait_cursor?: string | null;
   recommended_wait_ms?: number;
-  /** #2922: waiting_for_approval: the oldest card to answer, with its
+  /** #2922: waiting_for_approval: the newest card to answer, with its
    * threadId (a teammate's thread when the card is down the handoff). */
   approval?: Record<string, unknown> & { id: string; threadId: string };
   approvals?: Array<Record<string, unknown> & { id: string; threadId: string }>;
 }
+
+/** #2922: a card a little older than the handle (the prompt line's own
+ * clock) is still this turn's, like turnAnchorIndex's tolerance. */
+const ANCHOR_SLACK_MS = 1_000;
 
 /** #2922: a card under model review: wait this long before looking again. */
 export const AWAIT_REVIEW_WAIT_MS = 3_000;
@@ -1748,12 +1756,20 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     const deadline = now() + timeoutMs;
     let idleLooks = 0;
     for (;;) {
-      const state = deps.turnState(body.a, body.t);
+      const raw = deps.turnState(body.a, body.t);
       const messages = deps.messages(body.t);
       const read = turnReply(messages, { id: body.m, at: body.i });
-      // #2922: a card the person must answer, here or down the handoff, is
-      // the answer, before any "finished": the turn is blocked on it.
-      const pending = caller && deps.pendingApproval ? deps.pendingApproval(caller, body.a, body.t) : null;
+      // #2922: a card of THIS turn (created after the handle's time) the
+      // caller must answer, here or down the handoff, is the answer, before
+      // any "finished": the turn is blocked on it.
+      const pending = caller && deps.pendingApproval ? deps.pendingApproval(caller, body.a, body.t, body.i - ANCHOR_SLACK_MS) : null;
+      // A waiting conversation with no card of this turn for this caller: the
+      // card is someone else's (a teammate's thread another person answers,
+      // or any card down the handoff for a bot caller), or one an earlier
+      // turn left. The turn runs on for this caller, or is done.
+      const state: TurnState = pending && raw === "waiting" && !pending.approvals.length
+        ? (pending.blockedElsewhere || pending.engineBusy ? "running" : "idle")
+        : raw;
       if (pending?.approvals.length) {
         const result = unfinished(body, handle, "waiting", read.reply, after, "waiting_for_approval");
         return { ...result, approval: pending.approvals[0]!, approvals: pending.approvals };

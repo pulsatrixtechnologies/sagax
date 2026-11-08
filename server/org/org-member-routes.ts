@@ -1266,7 +1266,13 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     const threadId = str(body.thread_id);
     if (body.status !== "waiting_for_approval" || !threadId || !THREAD_ID.test(threadId) || deps.confidential?.(threadId)) return body;
     const page = await readThread(person, threadId, null, MEMBER_THREAD_LIMIT_MAX);
-    const own: MemberApproval[] = isRead(page) ? page.approvals : [];
+    // #2922: when the agent API scoped the cards to this turn, the thread's
+    // older cards (a proposal or question an earlier turn left open) are not
+    // the ones this turn waits on
+    const scoped = Array.isArray(body.approvals)
+      ? new Set((body.approvals as unknown[]).map(objectOf).filter((row) => str(row?.threadId) === threadId).map((row) => str(row?.id)))
+      : null;
+    const own: MemberApproval[] = (isRead(page) ? page.approvals : []).filter((row) => !scoped || scoped.has(row.id));
     // #2922: the agent API already found the cards of this turn, those down
     // the handoff included (each with its own threadId): kept when this
     // person may answer them, never from a confidential thread.
@@ -1279,7 +1285,8 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
       return Boolean(info?.open) && holdsAnswerPermission(person, info);
     }) as unknown as MemberApproval[];
     if (!isRead(page) && !carried.length) return body;
-    const approvals = [...own, ...carried].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+    // newest first: the card the turn raised last is the one it waits on
+    const approvals = [...own, ...carried].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
     const approval = approvals[0] ?? null;
     const at = approval?.threadId ?? threadId;
     return {

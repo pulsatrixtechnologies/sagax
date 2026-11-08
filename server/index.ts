@@ -1280,7 +1280,7 @@ import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "
 import type { OrgRecord } from "./org/org-record.ts";
 import { createOidcLoginRoutes, identityConfigFromEnv, identityDescriptor, isInterimSignInRoute, MANAGED_PROFILE_REFUSAL, oidcSessionFields, profileManagement, writesManagedProfile } from "./auth/oidc-login.ts";
 import { OidcRelyingParty } from "./auth/oidc-rp.ts";
-import { createOrgMemberRoutes, describeMemberApproval, ORG_MEMBER_ASSERTION_ACTORS, type MemberPerson } from "./org/org-member-routes.ts";
+import { createOrgMemberRoutes, ORG_MEMBER_ASSERTION_ACTORS, type MemberPerson } from "./org/org-member-routes.ts";
 import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org/org-link-routes.ts";
 import { internalAgentApiTool } from "./routes/agent-api-internal.ts";
 import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
@@ -2213,7 +2213,7 @@ import { createUsableCredential } from "./index-leaves/usableCredential.ts";
 import { createSettingsStepUpGate } from "./index-leaves/settingsStepUpGate.ts";
 import { createPagesSeparation } from "./index-leaves/pagesSeparation.ts";
 import { createOpenPersonCard } from "./index-leaves/openPersonCard.ts";
-import { createAgentPendingApproval } from "./index-leaves/agentPendingApproval.ts";
+import { cardAnswerIds, createAgentPendingApproval, createAgentPendingForCaller } from "./index-leaves/agentPendingApproval.ts";
 import { createLocateChannelMessage } from "./index-leaves/locateChannelMessage.ts";
 import { createBotSkillsRefusal } from "./index-leaves/botSkillsRefusal.ts";
 import { createTerminalAnswerExtras } from "./index-leaves/terminalAnswerExtras.ts";
@@ -7756,6 +7756,7 @@ const localVmInventoryPayload = createLocalVmInventoryPayload(getLeafHost);
 const openQuestionCard = createOpenQuestionCard(getLeafHost);
 const openPersonCard = createOpenPersonCard(getLeafHost);
 const agentPendingApproval = createAgentPendingApproval(getLeafHost);
+const agentPendingForCaller = createAgentPendingForCaller(getLeafHost);
 const delegatorOf = createDelegatorOf(getLeafHost);
 const showWaitingOnPersonChip = createShowWaitingOnPersonChip(getLeafHost);
 const settleWaitingOnPersonChips = createSettleWaitingOnPersonChips(getLeafHost);
@@ -30243,8 +30244,10 @@ const agentApi = createAgentApi({
   },
   messages(threadId) {
     const rows = store.messagesFor(threadId);
-    // #2922: only a line answering a card is part of the turn it unblocked
-    const cardIds = new Set(rows.filter((row) => row.kind === "options").map((row) => row.id));
+    // #2922: only a line answering a card of its own turn (the card after the
+    // turn's prompt) is part of the turn it unblocked; a quote-reply to an
+    // older card is a new prompt
+    const cardIds = cardAnswerIds(rows);
     return rows.map((message) => ({
       id: message.id,
       role: message.role,
@@ -30252,27 +30255,18 @@ const agentApi = createAgentApi({
       text: message.text,
       at: message.at,
       ...(message.queueId ? { queueId: message.queueId } : {}),
-      ...(message.role === "user" && message.replyToId && cardIds.has(message.replyToId) ? { replyToId: message.replyToId } : {}),
+      ...(message.role === "user" && message.replyToId && cardIds.has(message.id) ? { replyToId: message.replyToId } : {}),
       sender: message.from?.name ?? message.peerAsk?.name ?? message.sender?.name ?? null,
       tool: message.tool ? { name: message.tool.name, ok: message.tool.ok } : null,
       attachments: (message.attachments ?? []).map((file) => ({ name: file.kind === "file" ? file.name : undefined, path: file.path }))
     }));
   },
   turnState: agentTurnState,
-  // #2922: the cards an awaited turn is blocked on, its handed-off threads
-  // included. A card down the handoff is shown only to the person who
-  // answers it (isolation between persons); the conversation's own cards
-  // are the caller's anyway.
-  pendingApproval(caller, agentId, threadId) {
-    const { open, reviewing } = agentPendingApproval(agentId, threadId);
-    const mine = (row: { threadId: string; message: Message; card: NonNullable<Message["card"]> }) => {
-      if (row.threadId === threadId) return true;
-      if (caller.kind !== "person") return false;
-      const bot = botForApproval(row.threadId, row.message);
-      return Boolean(bot && cardAnswererId(bot, row.threadId, row.card) === caller.id.trim().toLowerCase());
-    };
-    const approvals = open.filter(mine).map((row) => describeMemberApproval(row.threadId, row.message as unknown as Record<string, unknown>, row.card as unknown as Record<string, unknown>) as unknown as Record<string, unknown> & { id: string; threadId: string });
-    return { approvals, reviewing: reviewing.some(mine) };
+  // #2922: the cards an awaited turn (since its handle's time) is blocked
+  // on, its handed-off threads included, filtered for this caller
+  // (server/index-leaves/agentPendingApproval.ts, isolation between persons).
+  pendingApproval(caller, agentId, threadId, since) {
+    return agentPendingForCaller(caller, agentId, threadId, since);
   },
   // #1170 (2026-10-26): one chat per bot, like the reference design. A prompt from a
   // person's AI client or from another bot lands in the bot's single

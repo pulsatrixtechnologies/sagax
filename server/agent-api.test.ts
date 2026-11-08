@@ -1663,6 +1663,29 @@ describe("await_turn and a pending card (#2922)", () => {
     expect(r.body).toMatchObject({ status: "waiting_for_approval", approval: { id: "q-2" } });
   });
 
+  it("a card this caller does not answer keeps the turn running, never waiting with no card (#2922)", async () => {
+    const w = world({ replyAfterPolls: 50 });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "do it", mode: "async" });
+    w.deps.turnState = () => "waiting";
+    w.deps.pendingApproval = () => ({ approvals: [], reviewing: false, blockedElsewhere: true, engineBusy: false });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 300 });
+    expect(r.body.status).not.toBe("waiting_for_approval");
+    expect(r.body.finished).toBe(false);
+  });
+
+  it("the cards are asked from the handle time minus a small slack (turn scope, #2922)", async () => {
+    const w = world({ replyAfterPolls: 50 });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "do it", mode: "async" });
+    const seen: unknown[] = [];
+    w.deps.pendingApproval = (...args: unknown[]) => { seen.push(args[3]); return { approvals: [], reviewing: false }; };
+    await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 300 });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(typeof seen[0]).toBe("number");
+    expect(seen[0] as number).toBeLessThanOrEqual(Date.now());
+  });
+
   it("without a card, a finished turn still answers finished", async () => {
     const w = world({ replyAfterPolls: 1 });
     const c = person("p1");

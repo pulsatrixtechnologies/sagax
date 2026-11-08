@@ -4,7 +4,7 @@
 // from the home ("Bot templates") and from Manage. A page opened from a view
 // (a plugin, a skill, a custom connector) takes the whole pane under its own
 // bar. The shared row parts (pills, section titles, PluginRow) live here too.
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowUpRight, Bot, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -197,6 +197,8 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
   const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, connected, scope, scopeNote, homeNote, manageActions, search, results, page, notices, refreshing, onRefresh } = props;
   const shown = tabs.includes(tab) ? tab : tabs.includes("discover") ? "discover" : tabs[0] ?? "discover";
   const [stuck, setStuck] = useState(false);
+  // each view opens at its top: the hairline of a scrolled list goes with it
+  useEffect(() => setStuck(false), [shown]);
 
   if (page !== undefined && !results) {
     return (
@@ -292,21 +294,36 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown}>
       {backBar}
-      <div className="min-h-0 flex-1 overflow-y-auto outline-none" tabIndex={-1} data-plugins-list="" data-plugins-manage={shown}>
-        <div className={cn(PLUGINS.gutter, "pb-8 pt-3")}>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-            <h2 id="plugins-title" className={cn(PLUGINS.bigTitle, "min-w-0 flex-1")}>{t(BIG_TITLE_KEY[shown])}</h2>
-            {shown !== "pages" && scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
-            {shown !== "pages" && (
-              <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
-                <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
-              </button>
-            )}
-            {shown === "installed" && manageActions}
-          </div>
+      {/* The title and its pills stay put under the back bar: only the list
+          scrolls, under a hairline once it moves (#2948: the title and the
+          pills slid under "< Plugins" and were cut). */}
+      <div
+        className={cn(PLUGINS.gutter, "shrink-0 border-b border-transparent pb-3 pt-3", stuck && "border-hairline-weak")}
+        data-plugins-title-row=""
+        data-plugins-stuck={stuck ? "" : undefined}
+      >
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+          <h2 id="plugins-title" className={cn(PLUGINS.bigTitle, "min-w-0 flex-1")}>{t(BIG_TITLE_KEY[shown])}</h2>
+          {shown !== "pages" && scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
+          {shown !== "pages" && (
+            <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
+              <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
+            </button>
+          )}
+          {shown === "installed" && manageActions}
+        </div>
+      </div>
+      <div
+        className="min-h-0 flex-1 overflow-y-auto outline-none"
+        onScroll={(event) => setStuck(event.currentTarget.scrollTop > 4)}
+        tabIndex={-1}
+        data-plugins-list=""
+        data-plugins-manage={shown}
+      >
+        <div className={cn(PLUGINS.gutter, "pb-8")}>
           {shown !== "pages" && scopeNote}
           {notices}
-          <div className="mt-6">
+          <div className="mt-3">
             {shown === "installed" && props.installed}
             {shown === "pages" && props.pages}
             {shown === "sources" && props.sources}

@@ -256,14 +256,11 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
           <ul className={cn(PLUGINS.grid, "mt-1")}>
             {skills.map((skill) => (
               <li key={skill.key}>
-                <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="-mx-2 flex w-[calc(100%+16px)] items-center gap-3 rounded-xl px-2 py-[11px] text-left hover:bg-hover">
+                <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="-mx-3 flex w-[calc(100%+24px)] items-center gap-3 rounded-[14px] px-3 py-[11px] text-left hover:bg-hover">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><FileText size={18} aria-hidden="true" /></span>
                   <span className="min-w-0 flex-1">
-                    <span className={PLUGINS.rowName}>{skill.name}</span>
-                    <span className={PLUGINS.rowSub}>
-                      {skill.source === "local" ? t("connectApps.skill.createdLocally") : t("connectApps.skill.from", { source: sourceLabel(skill.source) })}
-                      {skill.description ? ` · ${skill.description}` : ""}
-                    </span>
+                    <span className={PLUGINS.rowName} title={skill.name}>{skill.name}</span>
+                    <span className={PLUGINS.rowSub} title={skillLine(skill, sourceLabel)}>{skillLine(skill, sourceLabel)}</span>
                   </span>
                   {skill.status === "off" && <span className="shrink-0 text-[13px] text-ink-secondary">{t("connectApps.status.off")}</span>}
                 </button>
@@ -282,6 +279,11 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
     </div>
   );
 }
+/** A private skill's line: where it comes from, then what it does. */
+function skillLine(skill: { source: string; description?: string }, sourceLabel: (source: string) => string): string {
+  const from = skill.source === "local" ? t("connectApps.skill.createdLocally") : t("connectApps.skill.from", { source: sourceLabel(skill.source) });
+  return skill.description ? `${from} · ${skill.description}` : from;
+}
 /** One installed entry: logo, name, what it brings, its state, "...". */
 export function InstalledRow({ entry, onOpen, actions }: { entry: InstalledEntry; onOpen: () => void; actions: EntryActions }) {
   const icon = entryIcon(entry);
@@ -290,8 +292,9 @@ export function InstalledRow({ entry, onOpen, actions }: { entry: InstalledEntry
       <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: entry.name })}>
         <PluginIcon item={icon} className="size-10 rounded-[10px]" />
         <span className="min-w-0 flex-1">
-          <span className={PLUGINS.rowName}>{entry.name}</span>
-          <span className={PLUGINS.rowSub} data-installed-brings>{bringsLabel(entry.brings)}</span>
+          {/* a card can cut the words: the whole name and line stay on hover (#2948) */}
+          <span className={PLUGINS.rowName} title={entry.name}>{entry.name}</span>
+          <span className={PLUGINS.rowSub} title={bringsLabel(entry.brings)} data-installed-brings>{bringsLabel(entry.brings)}</span>
         </span>
         <PluginStatusLabel status={entry.status} className="text-[13px] font-normal" />
       </button>

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// This Mac uses the same two-column grid as the neighbouring Installed sections (2026-11-06).
+// This Mac uses the same card grid as the neighbouring Installed sections (#2948, 2026-11-08).
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
@@ -20,7 +20,11 @@ describe("MacAppsInstalledSection", () => {
     });
     const list = host.querySelector("[data-plugins-mac] ul");
     expect(list?.className.split(" ")).toEqual(expect.arrayContaining(PLUGINS.grid.split(" ")));
-    expect(list?.className).not.toContain("grid-cols-2"); // one column (#2682)
+    // a grid of cards that fills the width: 1 column when narrow, 2 or 3 when wide (#2948)
+    expect(list?.className).toContain("auto-fill");
+    // each row keeps its chevron and fills its card
+    expect(host.querySelector("[data-mac-app] svg.lucide-chevron-right, [data-mac-app] svg:last-child")).toBeTruthy();
+    expect(host.querySelector("[data-mac-app]")?.className).toContain("w-[calc(100%+24px)]");
     expect(host.querySelectorAll("[data-mac-app]").length).toBe(6);
     await act(async () => root.unmount());
     host.remove();

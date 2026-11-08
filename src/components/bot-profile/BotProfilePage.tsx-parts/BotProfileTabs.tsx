@@ -21,8 +21,9 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, appearanceOpe
   /** What is on screen (the tab and its open sub-page): the hit is marked again when it changes. */
   view: string;
   appearanceOpen: boolean;
-  /** Opens the tab and the sub-page that hold a section (V6, #2612). */
-  onOpenCategory: (id: PersonaCategory) => void;
+  /** Opens the tab and the sub-page that hold a section (V6, #2612); with
+   * the query, the sub-page that holds the matched option (#2623). */
+  onOpenCategory: (id: PersonaCategory, query?: string) => void;
   onOpenAppearance: () => void;
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
@@ -40,7 +41,7 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, appearanceOpe
     const first = personaPagesMatching(pages, next, sectionLabel)[0];
     if (!first) return;
     if (first === "appearance") onOpenAppearance();
-    else onOpenCategory(first);
+    else onOpenCategory(first, next);
   };
   useLayoutEffect(() => {
     const root = searchHit ? rootRef.current?.querySelector<HTMLElement>(`[data-bot-profile-section="${searchHit}"]`) : null;

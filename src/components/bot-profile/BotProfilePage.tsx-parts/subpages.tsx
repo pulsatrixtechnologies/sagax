@@ -24,6 +24,7 @@ import {
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import type { BotProfileSubPage } from "@/lib/persona-sections";
+import { PILL, PRIMARY_PILL } from "../../SettingsPrimitives";
 
 type Meta = { icon: ReactNode; title: LocaleKey; desc: LocaleKey; intro: LocaleKey };
 
@@ -81,7 +82,7 @@ export function SubPageRow({ page, value, onOpen }: { page: BotProfileSubPage; v
 }
 
 /** A sub-page: Back, its title, one line of intro, then its cards. */
-export function SubPage({ page, onBack, children }: { page: BotProfileSubPage; onBack: () => void; children: ReactNode }) {
+export function SubPage({ page, onBack, footer, children }: { page: BotProfileSubPage; onBack: () => void; footer?: ReactNode; children: ReactNode }) {
   const entry = SUBPAGE_META[page];
   return (
     <div data-bot-profile-subpage={page} className="mt-4 flex min-w-0 flex-col">
@@ -97,6 +98,23 @@ export function SubPage({ page, onBack, children }: { page: BotProfileSubPage; o
       <h2 data-bot-profile-subpage-title="" className="mt-2 text-[18px] font-semibold leading-6 text-ink">{t(entry.title)}</h2>
       <p className="mt-1 text-[13px] leading-5 text-ink-secondary">{t(entry.intro)}</p>
       <div className="mt-5 flex min-w-0 flex-col gap-6">{children}</div>
+      {footer}
+    </div>
+  );
+}
+
+/** The foot of a sub-page (#2620, the prototype): one save stuck at the
+ * bottom, "Not saved" as soon as something changed, Cancel and Save. */
+export function SubPageSaveBar({ dirty, onSave, onCancel }: { dirty: boolean; onSave: () => void; onCancel: () => void }) {
+  return (
+    <div data-bot-profile-savebar="" className="sticky bottom-0 z-10 mt-6 bg-app pb-3 pt-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {dirty && <span data-bot-profile-unsaved="" role="status" className="text-[13px] leading-5 text-ink-secondary">{t("routineEditor.unsaved")}</span>}
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
+          <button type="button" data-bot-profile-cancel="" className={PILL} onClick={onCancel}>{t("common.cancel")}</button>
+          <button type="button" data-bot-profile-save="" className={PRIMARY_PILL} disabled={!dirty} onClick={onSave}>{t("common.save")}</button>
+        </div>
+      </div>
     </div>
   );
 }

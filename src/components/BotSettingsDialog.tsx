@@ -1,4 +1,3 @@
-import { botRoutineRuns } from "@/state/view-slices";
 // The bot panel, as the reference design draws it (#2125): a round gear at
 // the top left (the bot's profile page) and a round X at the top right, a
 // mascot sized to Grok Bot (#2196), the name with the label under it, then two
@@ -23,7 +22,6 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { BotActionsMenu, type BotActionsMenuAnchor } from "./bot-settings/BotActionsMenu";
 import { LibraryTab } from "./bot-settings/LibraryTab";
 import { RolePermissionsSection } from "./bot-settings/RolePermissionsSection";
-import { RoutinesSection } from "./bot-settings/RoutinesSection";
 
 import { showsComputer, visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
 import { ComputerCard } from "./bot-settings/ComputerCard";
@@ -65,7 +63,6 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   const advanced = useAdvancedMode();
   const dispatch = useStoreDispatch();
   const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored, codingChat: current.codingChat }), shallowEqual);
-  const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
   const section = state.botSettingsSection;
@@ -112,7 +109,6 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
     dispatch({ type: "pickBotPanelTab", botId: bot.id, tab: next });
   };
   // Suggested > Add to meeting opens a new routine in Upcoming.
-  const [meetingRequest, setMeetingRequest] = useState(0);
   const closePanel = () => {
     dispatch({ type: "toggleSettings", open: false });
     dispatch({ type: "toggleComputer", open: false });
@@ -347,14 +343,13 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
               {tab === "activity" && (
                 <div className="flex flex-col gap-5 px-4 pb-6">
-                  <section data-bot-settings-section="routines" className="flex flex-col gap-2">
-                    <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped upcoming createRequest={meetingRequest} />
-                  </section>
+                  {/* #2624: the routines live on the bot page's Routines
+                      sub-page only; Add to meeting opens a new one there. */}
                   <SuggestionsSection
                     bot={bot}
                     routineCount={derived.botRoutines.length}
                     slackUrl={slackUrl}
-                    onAddToMeeting={() => setMeetingRequest((count) => count + 1)}
+                    onAddToMeeting={() => dispatch({ type: "openRoutine", botId: bot.id })}
                   />
                   {computerShown && (
                     <ComputerCard

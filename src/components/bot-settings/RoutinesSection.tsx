@@ -45,8 +45,15 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   // A routine line in the conversation asked for this routine's page.
   const focus = state.routineFocus;
   useEffect(() => {
-    if (!focus || focus.botId !== bot.id || !routines.some((routine) => routine.id === focus.routineId)) return;
-    setDetailId(focus.routineId);
+    if (!focus || focus.botId !== bot.id) return;
+    if ("create" in focus) {
+      // Suggested > Add to meeting (#2624): a new routine, here.
+      setNewFolder(undefined);
+      setEditing("new");
+    } else {
+      if (!routines.some((routine) => routine.id === focus.routineId)) return;
+      setDetailId(focus.routineId);
+    }
     dispatch({ type: "routineFocused" });
   }, [focus, bot.id, routines, dispatch]);
 

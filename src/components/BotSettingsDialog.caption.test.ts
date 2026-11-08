@@ -109,7 +109,7 @@ describe("bot panel header and tabs", () => {
     expect(html).not.toContain('id="bot-instructions-bot-1"');
   });
 
-  it("shows the Activity and Library tabs, moved into the top bar once scrolled, with Upcoming routines first and no empty Coding or Activity", () => {
+  it("shows the Activity and Library tabs, moved into the top bar once scrolled, with no routines (#2624) and no empty Coding or Activity", () => {
     const html = panel();
     const tabs = [...html.matchAll(/data-panel-tab="(\w+)"/g)].map((match) => match[1]);
     expect(tabs).toEqual(["activity", "library"]);
@@ -118,12 +118,10 @@ describe("bot panel header and tabs", () => {
     expect(html).not.toContain("data-panel-tabs-compact");
     // the active tab has a small pill, not bold
     expect(html.match(/<button[^>]*data-panel-tab="activity"[^>]*>/)?.[0]).toContain("text-[14px] font-normal");
-    // Upcoming, then Suggested, then the Computer card, then Voice chat (#2125)
-    const at = (marker: string) => html.indexOf(marker);
-    expect(at('data-bot-settings-section="routines"')).toBeLessThan(at('data-bot-settings-section="voice-chat"'));
+    // #2624: the routines live on the bot page only, not in this panel
+    expect(html).not.toContain('data-bot-settings-section="routines"');
     expect(html).toContain(">Voice chat<");
     expect(html).not.toContain("Search settings");
-    expect(html.indexOf('data-bot-settings-section="routines"')).toBeGreaterThan(-1);
     // nothing running and no code work yet: neither section is drawn
     expect(html).not.toContain('data-bot-settings-section="coding"');
     expect(html).not.toContain('data-bot-settings-section="activity"');

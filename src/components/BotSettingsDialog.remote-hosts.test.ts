@@ -13,7 +13,8 @@ describe("bot panel: remote hosts placement", () => {
     expect(details).toMatch(/remote-session\/RemoteSessions/);
     expect(details).toMatch(/ComputerPanel/);
     const remoteAt = details.indexOf("<RemoteSessionsSection");
-    const routinesAt = details.indexOf('data-bot-settings-section="routines"');
+    // #2624: the routines left the panel; Suggested now heads Activity.
+    const routinesAt = details.indexOf("<SuggestionsSection");
     expect(remoteAt).toBeGreaterThan(-1);
     expect(routinesAt).toBeGreaterThan(-1);
     expect(routinesAt).toBeLessThan(remoteAt);

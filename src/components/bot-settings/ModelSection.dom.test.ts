@@ -278,9 +278,9 @@ describe("Bot > Model, rights and drafts", () => {
 
 // Hotfix 2026-11-06 (JC: "I can no longer select who pays for a shared
 // bot"): who pays was tied to the automaticRecovery right. It is the
-// owner's or an admin's choice. Since the 2026-11-06 profile restyle it
-// lives once, in General > "Who pays for replies" (BotPayerCard); Bot >
-// Model no longer repeats it.
+// owner's or an admin's choice. It lives once, in its own "Who pays for
+// replies" card (BotPayerCard), under the Model section of the profile
+// page's Model sub-page (#2625); ModelSection itself does not repeat it.
 describe("Who pays for a shared bot (#1137 regression)", () => {
   const member = (permissions: string[]) => ({ viewer: { operator: false, principalId: "pr_zara", email: "zara@example.test", name: "zara", role: "member", permissions } }) as unknown as ConfigStatus;
   const shared = (over: Partial<Bot> = {}) => bot({ grants: [{ target: "user:pr_sam", level: "use" }], ...over } as Partial<Bot>);
@@ -299,7 +299,7 @@ describe("Who pays for a shared bot (#1137 regression)", () => {
   it("the owner finds the picker in Who pays for replies even without the recovery right, and changes it", async () => {
     fixture.config = member([]);
     await renderCard(shared());
-    const card = $('[data-settings-group="botPayerSharing"]')!;
+    const card = $('[data-settings-group="botPayerModel"]')!;
     expect(card.textContent).toContain("Who pays for replies");
     const row = card.querySelector<HTMLElement>('[data-settings-row="botPayerMode"]')!;
     expect(row.querySelector("[data-bot-payer-label]")?.textContent).toBe("Paid by: The owner");
@@ -317,7 +317,7 @@ describe("Who pays for a shared bot (#1137 regression)", () => {
   it("an admin finds it on someone else's shared bot", async () => {
     fixture.config = { viewer: { operator: false, principalId: "pr_admin", role: "admin" } } as unknown as ConfigStatus;
     await renderCard(shared({ ownerUserId: "pr_other" }));
-    expect($('[data-settings-group="botPayerSharing"] [data-settings-row="botPayerMode"] [data-pill-select]')).not.toBeNull();
+    expect($('[data-settings-group="botPayerModel"] [data-settings-row="botPayerMode"] [data-pill-select]')).not.toBeNull();
   });
 
   it("nothing for someone else's bot", async () => {

@@ -1490,6 +1490,7 @@ import { createTemporaryAgentSetting } from "./index-leaves/temporaryAgentSettin
 import { createAnswerInboxCard } from "./index-leaves/answerInboxCard.ts";
 import { createPublishedPageOptions } from "./index-leaves/publishedPageOptions.ts";
 import { createObservePushFrame } from "./index-leaves/observePushFrame.ts";
+import { heldSignalsLine, PersonSignalGate, QUIET_HOURS_KEY, readQuietHours, readSignalBudget, SIGNAL_BUDGET_KEY } from "../shared/signal-levels.ts";
 import { createConfirmHeldCard } from "./index-leaves/confirmHeldCard.ts";
 import { createResumeTurnsCutByRestart } from "./index-leaves/resumeTurnsCutByRestart.ts";
 import { createDispatchComputerResume } from "./index-leaves/dispatchComputerResume.ts";
@@ -5809,6 +5810,7 @@ bindLeafHost({
   get liveActivityHub() { return liveActivityHub; },
   get pushHub() { return pushHub; },
   get reachMeService() { return reachMeService; },
+  get signalGate() { return signalGate; },
   get reachMeTeams() { return reachMeTeams; },
   get reachMeWhatsApp() { return reachMeWhatsApp; },
   get phoneToolTaintedThreads() { return phoneToolTaintedThreads; },
@@ -8629,6 +8631,12 @@ const pushHub = new PushHub({
       return undefined;
     }
   }
+});
+/** #2695: the person's signal levels, daily budget and quiet hours, across all their bots. */
+const signalGate = new PersonSignalGate((person) => {
+  let prefs: Record<string, string> = {};
+  try { prefs = userPreferenceStore.get(person).preferences ?? {}; } catch { /* the defaults */ }
+  return { budget: readSignalBudget(prefs[SIGNAL_BUDGET_KEY]), quiet: readQuietHours(prefs[QUIET_HOURS_KEY]) };
 });
 /** "Me joindre" (server/reach-me/): set once its channels exist, further down. */
 let reachMeService: ReachMe | null = null;
@@ -23705,7 +23713,9 @@ if (!process.env.VITEST) {
       const language = reachMeLanguage(person);
       const threadId = backgroundBriefThread(bot, person);
       if (threadId && !store.isConfidentialThread(threadId)) {
-        store.appendMessage(threadId, { role: "bot", kind: "text", text: briefMessageText(suggestions, language) });
+        // #2695: what waited (daily budget, quiet hours, FYI) is one line of the brief
+        const held = heldSignalsLine(signalGate.takeHeld(person), language);
+        store.appendMessage(threadId, { role: "bot", kind: "text", text: held ? `${briefMessageText(suggestions, language)}\n\n${held}` : briefMessageText(suggestions, language) });
         // #2693: the primary bot turns up to 3 points a day into one-gesture cards
         if (bot.chiefOfStaff === true) postDailySuggestions(bot.id, threadId, suggestions, language);
       }

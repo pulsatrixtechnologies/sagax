@@ -6,7 +6,9 @@ import { DATA_DIR } from "../config.ts";
 import { deliverableNotification } from "../notify.ts";
 import { appendProblem, problemReason } from "../org/org-problem-log.ts";
 import { chiefForBot, incidentChip, INCIDENTS_THREAD_TITLE, incidentText } from "../peers/incidents.ts";
+import { incidentIsOps } from "../peers/ops-incidents.ts";
 import { redactSecretsInText } from "../redact.ts";
+import { OPS_INCIDENTS_THREAD_TITLE } from "../../shared/signal-levels.ts";
 import { CONFIDENTIAL_INCIDENT_TEXT } from "../threads/confidential-threads.ts";
 import { queueSteeredMessage } from "../turns/steer-queue.ts";
 export type Host = Record<string, any>;
@@ -83,6 +85,22 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
   // no Primary Bot on duty, or the Primary Bot itself broke: the person is next
   if (!chief) {
     tellThePerson();
+    return;
+  }
+  // #2695: engine and provider noise is an ops incident: one line in the
+  // Primary Bot's "Ops incidents" thread, no chief turn, no push. "Team
+  // incidents" keeps what needs a decision.
+  if (incidentIsOps(input.kind, `${input.detail} ${incident.lastReply ?? ""}`)) {
+    const ops = host.store.tasks(chief.id).find((candidate) => candidate.title === OPS_INCIDENTS_THREAD_TITLE && !candidate.archivedAt)
+      ?? host.store.createTask(chief.id, OPS_INCIDENTS_THREAD_TITLE, false, undefined, { botId: chief.id, name: chief.name, at: Date.now() });
+    if (ops && ops.threadId !== threadId) {
+      host.store.appendMessage(ops.threadId, {
+        role: "bot",
+        kind: "activity",
+        tool: { name: incidentChip(incident), ok: false },
+        threadRef: { botId: bot.id, threadId, title: task?.title ?? (group ? group.name : `${bot.name}'s conversation`) }
+      });
+    }
     return;
   }
   const incidents = host.store.tasks(chief.id).find((candidate) => candidate.title === INCIDENTS_THREAD_TITLE && !candidate.archivedAt)

@@ -1,7 +1,7 @@
 // The bot editor is the bot's profile page (#2126, #2173, #2271, Grok
 // Bot's layout) in the main panel: its top is the bot's appearance (the
 // banner, the mascot, the name with its label under it, the description and
-// the colour, edited in place, the Appearance pane unfolding under them),
+// the description, edited in place; the Appearance is its own tab),
 // then five pill tabs at most, each one column of cards (the owner 2026-11-06).
 // Every section of the former editor is still there, on its tab; locked
 // sections are shown with their reason instead of hidden.
@@ -129,8 +129,8 @@ const bodiesOf = (html: string) => [...html.matchAll(/data-section-body="(\w+)"/
 const selectedTab = (html: string) => /data-bot-profile-tab-current="(\w+)"/.exec(html)?.[1];
 const tabsOf = (html: string) => [...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1]);
 
-const TABS_ALL = ["general", "knowledge", "stats"];
-const TABS_SIMPLE = ["general", "knowledge"];
+const TABS_ALL = ["general", "appearance", "knowledge", "stats"];
+const TABS_SIMPLE = ["general", "appearance", "knowledge"];
 // The V6 page (#2612): the sub-page a link opens, and the rows of a tab.
 const subPageOf = (html: string) => /data-bot-profile-subpage-current="(\w+)"/.exec(html)?.[1];
 const rowsOf = (html: string) => [...html.matchAll(/data-bot-profile-subpage-open="(\w+)"/g)].map((match) => match[1]);
@@ -162,11 +162,11 @@ describe("bot profile page shell", () => {
     expect(html).toContain('aria-label="Close"');
   });
 
-  it("regression #2271: the header (name, label, description, Appearance) comes before the tabs, the tabs are five at most, the panels one column (the owner 2026-11-06)", () => {
+  it("regression #2271: the header (name, label, description) comes before the tabs, the tabs are five at most, the panels one column (the owner 2026-11-06)", () => {
     const html = render("overview");
     const tabs = at(html, 'data-bot-profile-tabs=""');
     expect(tabs).toBeGreaterThan(0);
-    for (const marker of ['data-bot-profile-title=""', 'data-bot-profile-label=""', 'data-bot-profile-description=""', 'data-bot-profile-appearance-toggle=""']) {
+    for (const marker of ['data-bot-profile-title=""', 'data-bot-profile-label=""', 'data-bot-profile-description=""']) {
       expect(at(html, marker)).toBeGreaterThan(0);
       expect(at(html, marker)).toBeLessThan(tabs);
     }
@@ -197,27 +197,31 @@ describe("bot profile page shell", () => {
     expect(html).not.toContain("overflow-x-auto whitespace-nowrap");
   });
 
-  it("unfolds the Appearance pane under the header, from its pill, the mascot or a link", () => {
+  it("regression (2026-11-08): Appearance is its own tab, after General, never a dropdown under the header", () => {
     const rest = render("overview");
-    expect(rest).toContain('data-bot-profile-appearance-toggle="" aria-expanded="false"');
+    expect(tabsOf(rest)).toEqual(TABS_ALL);
+    expect(tabsOf(rest).indexOf("appearance")).toBe(1);
+    expect(rest).not.toContain("data-bot-profile-appearance-toggle");
     expect(rest).not.toContain('data-section-body="appearance"');
+    // a link to the appearance opens its tab, the whole editor in the tab's panel
     const html = render("appearance");
-    expect(selectedTab(html)).toBe("general");
-    expect(html).toContain('data-bot-profile-appearance-toggle="" aria-expanded="true"');
+    expect(selectedTab(html)).toBe("appearance");
+    expect(subPageOf(html)).toBeUndefined();
     expect(sectionHtml(html, "appearance").open).toBe(true);
     expect(bodiesOf(sectionHtml(html, "appearance").html)).toEqual(["appearance"]);
-    expect(at(html, 'id="bot-profile-appearance"')).toBeLessThan(at(html, 'data-bot-profile-tabs=""'));
-    expect(tabsOf(html)).not.toContain("appearance");
+    const panel = at(html, 'id="bot-profile-panel-appearance"');
+    expect(panel).toBeGreaterThan(at(html, 'data-bot-profile-tabs=""'));
+    expect(at(html, 'data-bot-profile-section="appearance"')).toBeGreaterThan(panel);
+    expect(html).not.toContain("data-bot-profile-appearance-toggle");
   });
 
-  it("regression: nothing of the Appearance shows while it is folded, the description then the tabs (the owner 2026-11-06)", () => {
+  it("regression: nothing of the Appearance shows on General, the description then the tabs (the owner 2026-11-06)", () => {
     const html = render("overview");
-    expect(html).toContain('data-bot-profile-appearance-toggle="" aria-expanded="false"');
     for (const marker of ["data-mascot-color", "data-bot-profile-colors", "data-appearance-modes", "data-appearance-mode=", "data-appearance-reset", "data-mascot-randomize", "data-appearance-tabs"]) {
       expect(html).not.toContain(marker);
     }
     for (const word of [">Generate<", ">Upload<", ">Reset<", ">Randomize<"]) expect(html).not.toContain(word);
-    // straight from the description to the General / Knowledge / Stats tabs
+    // straight from the description to the General / Appearance / Knowledge / Stats tabs
     const description = at(html, 'data-bot-profile-description=""');
     const tabs = at(html, 'data-bot-profile-tabs=""');
     expect(description).toBeGreaterThan(0);
@@ -233,51 +237,64 @@ describe("bot profile page shell", () => {
     }
   });
 
-  it("regression #2313: the header is the mascot hero card, the bot's name and label where the character's name was, Appearance where Randomize was", () => {
+  it("regression (2026-11-08): the mascot sits bare on the banner, no card, the name and label stacked and centred under it", () => {
     const html = render("overview");
     const hero = at(html, 'data-bot-profile-hero=""');
+    const audience = at(html, "data-bot-profile-audience");
     expect(hero).toBeGreaterThan(0);
-    // the hero card itself (tinted stage, big mascot) over the lower edge of the mascot-colour banner
-    expect(html.slice(hero)).toContain("data-mascot-hero");
     const banner = at(html, 'data-bot-profile-banner=""');
     expect(banner).toBeGreaterThan(0);
     expect(banner).toBeLessThan(hero);
     expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner /i);
-    expect(html).toContain("-mt-[40px]");
-    // name (28px), label under it, then the Appearance button, all inside the hero, before who sees it
+    // the mascot over the banner's lower edge, centred
+    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[96px\] flex flex-col items-center/);
+    const heroHtml = html.slice(hero, audience);
+    expect(heroHtml).toContain("data-mascot-hero");
+    // no card: no border, no panel, no tinted ground around the mascot
+    const card = /<section[^>]*data-mascot-hero=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
+    expect(card).not.toBe("");
+    for (const cls of ["border", "rounded-2xl", "radial-gradient", "bg-panel", "p-4"]) expect(card).not.toContain(cls);
+    expect(card).toContain("items-center");
+    // name (28px) then the label, centred, inside the hero, before who sees it
     const heading = at(html, "data-mascot-heading");
-    expect(heading).toBeGreaterThan(hero);
     const title = at(html, 'data-bot-profile-title=""');
     const label = at(html, 'data-bot-profile-label=""');
-    const toggle = at(html, 'data-bot-profile-appearance-toggle=""');
-    const audience = at(html, "data-bot-profile-audience");
+    expect(heading).toBeGreaterThan(hero);
     expect(heading).toBeLessThan(title);
     expect(title).toBeLessThan(label);
-    expect(label).toBeLessThan(toggle);
-    expect(toggle).toBeLessThan(audience);
-    expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*text-\[28px\]/);
-    // Play a move stays, Randomize leaves the header for the Appearance section
-    expect(html.slice(hero, audience)).not.toContain("data-mascot-randomize");
-    expect(html.slice(toggle, html.indexOf("</button>", toggle))).toContain(">Appearance<");
-    // nothing lost under it: who sees it, the description (the colour lives in Appearance > Color)
-    for (const marker of ["data-bot-profile-audience", 'data-bot-profile-description=""']) expect(at(html, marker)).toBeGreaterThan(toggle);
-    // the column a reading width (820px at most, one column) with a 16px gutter on a phone
+    expect(label).toBeLessThan(audience);
+    expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*justify-center text-center text-\[28px\]/);
+    // no button row nor summary in the header: they head the Appearance tab
+    for (const marker of ["data-mascot-play", "data-mascot-randomize", "data-mascot-summary", "data-mascot-action", "data-bot-profile-appearance-toggle"]) expect(heroHtml).not.toContain(marker);
+    // nothing lost under it: who sees it, the description, centred
+    expect(html.slice(audience - 200, audience)).toContain("justify-center");
+    expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*class="[^"]*text-center/);
+    // the column a reading width with a 16px gutter on a phone
     expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[760px\] flex-col px-4 pb-10 sm:px-6"/);
   });
 
-  it("regression #2313: X and Private / Shared sit on a bar above the scroll, never scrolled away", () => {
+  it("regression (2026-11-08, « why is it cutting like that »): X and Private / Shared float on a clear sticky bar in the scroll, no opaque coloured band", () => {
     const html = render("overview");
-    const bar = at(html, "data-bot-profile-topbar");
     const scroll = at(html, 'data-bot-profile-scroll=""');
-    expect(bar).toBeGreaterThan(0);
-    expect(bar).toBeLessThan(scroll);
-    const barHtml = html.slice(bar, scroll);
+    const bar = at(html, "data-bot-profile-topbar");
+    const banner = at(html, 'data-bot-profile-banner=""');
+    expect(scroll).toBeGreaterThan(0);
+    // inside the scroll, before the banner: the banner and the mascot scroll away under it, whole
+    expect(bar).toBeGreaterThan(scroll);
+    expect(bar).toBeLessThan(banner);
+    const barHtml = html.slice(bar, banner);
     expect(barHtml).toContain("data-window-close");
     expect(barHtml).toContain("data-bot-profile-visibility");
-    expect(barHtml).toContain("content-topbar");
-    // the bar carries the banner's top colour (opaque), one coloured header with the banner
-    expect(barHtml).toContain("bot-profile-banner-top");
-    expect(barHtml).not.toContain("absolute");
+    const barTag = html.slice(html.lastIndexOf("<", bar), html.indexOf(">", bar) + 1);
+    expect(barTag).toContain("sticky top-0");
+    expect(barTag).toContain("bg-transparent");
+    expect(barTag).toMatch(/-mb-1[24] h-1[24]/);
+    // never the skin's opaque header nor the banner's top colour
+    expect(barTag).not.toContain("content-topbar");
+    expect(barHtml).not.toContain("bot-profile-banner-top");
+    // the condensed head (small mascot and the name) is there, hidden until the name scrolls under the bar
+    expect(barHtml).toMatch(/data-bot-profile-condensed="" aria-hidden="true" class="[^"]*opacity-0/);
+    expect(barHtml).toContain(">Pepper<");
   });
 
   it("names the tabs, the header and the channels in French", () => {
@@ -297,7 +314,7 @@ describe("bot profile page shell", () => {
 
   it("opens a link on the sub-page that holds its section, shown in place (V6, #2612)", () => {
     expect(botProfileTabFor("overview")).toBe("general");
-    expect(botProfileTabFor("appearance")).toBe("general");
+    expect(botProfileTabFor("appearance")).toBe("appearance");
     expect(botProfileTabFor("slack")).toBe("general");
     expect(botProfileTabFor("summary")).toBe("general");
     expect(botProfileTabFor("soul")).toBe("general");

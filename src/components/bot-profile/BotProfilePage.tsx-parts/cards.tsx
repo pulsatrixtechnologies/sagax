@@ -31,9 +31,10 @@ export function sectionLabel(id: BotSettingsSection): string {
   return entry.labelKey ? t(entry.labelKey) : entry.label;
 }
 
-/** The three tabs' names (V6, #2612). */
+/** The tabs' names (V6, #2612; Appearance its own tab, JC 2026-11-08). */
 export const TAB_LABEL: Record<BotProfileTab, LocaleKey> = {
   general: "botProfile.tab.general",
+  appearance: "botProfile.tab.appearance",
   knowledge: "botProfile.tab.knowledge",
   stats: "botProfile.tab.stats",
 };

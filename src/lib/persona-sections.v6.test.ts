@@ -17,10 +17,10 @@ import {
 const count = <T,>(items: readonly T[]) => items.reduce((map, item) => map.set(item, (map.get(item) ?? 0) + 1), new Map<T, number>());
 
 describe("V6 bot page map", () => {
-  it("puts each setting on exactly one sub-page (the header and Stats aside)", () => {
+  it("puts each setting on exactly one sub-page (the header, Appearance and Stats aside)", () => {
     const placed = count(BOT_PROFILE_SUBPAGES.flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]));
     for (const category of PERSONA_CATEGORIES) {
-      const expected = (HEADER_SECTIONS as readonly string[]).includes(category) || category === "usage" ? 0 : 1;
+      const expected = (HEADER_SECTIONS as readonly string[]).includes(category) || category === "usage" || category === "appearance" ? 0 : 1;
       expect(placed.get(category) ?? 0, category).toBe(expected);
       if (expected) expect(BOT_PROFILE_SUBPAGE_SECTIONS[botProfileSubPageOf(category)!]).toContain(category);
     }
@@ -32,9 +32,10 @@ describe("V6 bot page map", () => {
     expect([...listed.keys()].sort()).toEqual([...BOT_PROFILE_SUBPAGES].sort());
   });
 
-  it("splits the 15 permissions pieces across its sub-pages once each", () => {
+  // 0.8.66 put the approval card in "Before acting" too: 16 pieces, none twice
+  it("splits the 16 permissions pieces across its sub-pages once each", () => {
     const pieces = [...PERMISSIONS_PARTS.beforeActing, ...PERMISSIONS_PARTS.actsAlone, ...PERMISSIONS_PARTS.rules, ...PERMISSIONS_PARTS.advanced];
-    expect(pieces).toHaveLength(15);
-    expect(new Set(pieces).size).toBe(15);
+    expect(pieces).toHaveLength(16);
+    expect(new Set(pieces).size).toBe(16);
   });
 });

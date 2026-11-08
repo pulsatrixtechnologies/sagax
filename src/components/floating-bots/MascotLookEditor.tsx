@@ -62,7 +62,7 @@ import { colorGroupsFor, colorTabFor, colorTabs, nextTab, skinTabFor, skinTierTa
 import { MASCOTS, SHAPE_CHOICES, type CompleteLook, type MascotDefinition } from "./mascots";
 import { characterMoves, type OwlMove } from "./moves";
 import { filterWardrobe, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelves, wardrobeStep, type WardrobeFilter, type WardrobeShelf } from "./wardrobe";
-import { MASCOT_HERO_BUTTON, MascotLookPreview } from "./MascotLookPreview";
+import { MASCOT_HERO_BUTTON, MascotLookControls, MascotLookPreview } from "./MascotLookPreview";
 import { useMascotHeroSlot } from "./mascot-hero-slot";
 
 export interface MascotLookPatch {
@@ -473,8 +473,9 @@ export default function MascotLookEditor({
   sourcePanel,
   tabActions,
 }: MascotLookEditorProps) {
-  // On the bot's profile page the hero card is the page's header: the open
-  // editor draws it there (a portal) and keeps Randomize in its tab row.
+  // On the bot's profile page the mascot is the page's hero: the open
+  // editor draws it there (a portal), its controls at the top of the
+  // Appearance tab and Randomize in its tab row.
   const slot = useMascotHeroSlot();
   const portalTarget = !heroOnly && hero && slot ? slot.target : null;
   const claim = slot?.claim;
@@ -678,7 +679,6 @@ export default function MascotLookEditor({
         onRandomize={slot || randomizeInTabRow ? undefined : randomize}
         heading={slot?.heading}
         subheading={slot?.subheading}
-        action={slot?.action}
         liveState={slot?.state}
         liveMotion={slot?.motion}
       />
@@ -688,6 +688,21 @@ export default function MascotLookEditor({
   return (
     <div data-mascot-look-editor="" className="flex flex-col gap-4">
       {slot ? portalTarget && createPortal(preview, portalTarget) : hero && preview}
+      {/* On the profile page the mascot is the page's bare hero: what it
+          shows, Use, the moves and Play a move head the Appearance tab. */}
+      {slot && hero && (
+        <MascotLookControls
+          shownName={shownName}
+          shownLock={shownLock}
+          summary={summary}
+          inUse={inUse}
+          disabled={disabled}
+          moves={moves}
+          onUse={() => setLook({ character: shown })}
+          onPlay={play}
+          onPlayNext={playNext}
+        />
+      )}
 
       {/* the tabs: each its current value under its label, the open one underlined in the bot's color; Reset and Randomize at the right */}
       <div className="flex min-w-0 items-center gap-2 border-b border-hairline-weak" data-appearance-tab-bar="">

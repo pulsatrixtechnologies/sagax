@@ -1,8 +1,10 @@
 // The page's header (#2313, split from BotProfilePage for #1383): the
-// Appearance > Mascot hero card with the bot's name and label, who sees it,
-// who owns it, its description edited in place and the unfolded Appearance.
+// mascot large over the banner's lower edge, no card around it (Grok Bot,
+// JC 2026-11-08), the bot's name with its label under it, centred, who sees
+// it, who owns it and its description edited in place. The mascot editor
+// itself is the Appearance tab.
 import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
-import { ChevronDown, Lock, Palette, Star, Users } from "lucide-react";
+import { Lock, Star, Users } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -20,7 +22,7 @@ import { botMascotSkin } from "../../../../shared/mascot-skins";
 import { completeMascotLook } from "../../../../shared/mascot-look";
 import { BOT_PROFILE_LIMITS } from "../../../../shared/bot-profile";
 import { useAvatarSources } from "../../appearance/AvatarSources";
-import { MASCOT_HERO_BUTTON, MascotLookPreview } from "../../floating-bots/MascotLookPreview";
+import { MascotLookPreview } from "../../floating-bots/MascotLookPreview";
 import type { MascotHeroSlot } from "../../floating-bots/mascot-hero-slot";
 import { InlineEditableText } from "../../bot-settings/InlineEditableText";
 import type { useBotSectionContent } from "../../bot-settings/useBotSectionContent";
@@ -32,17 +34,14 @@ type Derived = ReturnType<typeof useBotSectionContent>["derived"];
 // the same chunk the Appearance pane's editor loads.
 const MascotLookEditor = lazy(() => import("../../floating-bots/MascotLookEditor"));
 
-/** The header is the Appearance > Mascot hero card (#2313): the open
- * mascot editor draws it into this slot (so a character picked in its
- * grid previews here), the page draws it for the bot's own look while the
- * editor is closed. A picture dropped on it or pasted becomes the bot's. */
-export function useBotProfileHero({ bot, derived, appearanceShown, appearanceLocked, appearanceOpen, onToggleAppearance }: {
+/** The header's hero: the mascot, large and bare over the banner, with the
+ * name and label stacked under it. The Appearance tab's editor draws it
+ * into this slot (so a character picked in its grid previews here), the
+ * page draws it for the bot's own look otherwise. A picture dropped on it
+ * or pasted becomes the bot's. */
+export function useBotProfileHero({ bot, derived }: {
   bot: Bot;
   derived: Derived;
-  appearanceShown: boolean;
-  appearanceLocked: boolean;
-  appearanceOpen: boolean;
-  onToggleAppearance: () => void;
 }): { heroSlot: MascotHeroSlot; hero: ReactNode } {
   const { state, dispatch } = useStore();
   const canName = canEditBotField(state.config, bot, "name");
@@ -59,7 +58,7 @@ export function useBotProfileHero({ bot, derived, appearanceShown, appearanceLoc
   const heroTitle = (
     // The name alone on its line at 28px, the label under it, smaller and
     // secondary (JC: never "Name · Label" on one line).
-    <h2 id="bot-profile-title" data-bot-profile-title="" className="flex min-w-0 max-w-full text-[28px] font-normal leading-9 text-ink">
+    <h2 id="bot-profile-title" data-bot-profile-title="" className="flex min-w-0 max-w-full justify-center text-center text-[28px] font-normal leading-9 text-ink">
       <InlineEditableText
         value={shown.name}
         required
@@ -71,7 +70,7 @@ export function useBotProfileHero({ bot, derived, appearanceShown, appearanceLoc
     </h2>
   );
   const heroLabel = (shown.title || canLabel) ? (
-    <div data-bot-profile-label="" className="flex min-w-0 max-w-full text-[15px] leading-5 text-ink-secondary">
+    <div data-bot-profile-label="" className="flex min-w-0 max-w-full justify-center text-center text-[15px] leading-5 text-ink-secondary">
       <InlineEditableText
         value={shown.title}
         maxLength={BOT_PROFILE_LIMITS.title}
@@ -82,36 +81,18 @@ export function useBotProfileHero({ bot, derived, appearanceShown, appearanceLoc
       />
     </div>
   ) : undefined;
-  // Where the hero's Randomize was: Appearance unfolds its four tabs under
-  // the header (the sources in the Mascot tab, Reset and Randomize in the tab row).
-  const appearanceButton = appearanceShown ? (
-    <button
-      type="button"
-      data-bot-profile-appearance-toggle=""
-      aria-expanded={appearanceOpen}
-      aria-controls="bot-profile-appearance"
-      onClick={onToggleAppearance}
-      className={cn(MASCOT_HERO_BUTTON, appearanceOpen && "bg-raised-hover")}
-    >
-      <Palette size={13} aria-hidden="true" />
-      {t("botProfile.appearanceButton")}
-      {appearanceLocked && <Lock size={11} aria-label={t("persona.lockedBadge")} className="shrink-0 text-ink-tertiary" />}
-      <ChevronDown size={13} aria-hidden="true" className={cn("transition-transform", appearanceOpen && "rotate-180")} />
-    </button>
-  ) : undefined;
   const heroSlot: MascotHeroSlot = {
     target: heroTarget,
     claim: claimHero,
     heading: heroTitle,
     subheading: heroLabel,
-    action: appearanceButton,
     state: derived.activeState,
     motion: derived.mascotMotion,
   };
   const heroLook = completeMascotLook(bot.mascotLook);
   const heroPicture = (bot.avatarCrop ?? "mascot") !== "mascot" && bot.avatarUrl ? bot : undefined;
-  // The hero before the editor's chunk arrives (and for a picture): the same
-  // card, without the character's summary and moves.
+  // The hero before the editor's chunk arrives (and for a picture): the
+  // same bare mascot, name and label.
   const staticHero = (
     <MascotLookPreview
       bot={bot}
@@ -132,7 +113,6 @@ export function useBotProfileHero({ bot, derived, appearanceShown, appearanceLoc
       onPlayNext={() => {}}
       heading={heroTitle}
       subheading={heroLabel}
-      action={appearanceButton}
       picture={heroPicture}
       liveState={derived.activeState}
       liveMotion={derived.mascotMotion}
@@ -168,7 +148,7 @@ export function useBotProfileHero({ bot, derived, appearanceShown, appearanceLoc
         }}
         title={t("botPanel.avatar.dropOrPaste")}
         data-avatar-dropping={heroDropping ? "" : undefined}
-        className={cn("@container relative -mt-[40px] rounded-[18px]", heroDropping && "ring-2 ring-accent")}
+        className={cn("relative -mt-[96px] flex flex-col items-center rounded-[18px]", heroDropping && "ring-2 ring-accent")}
       >
         <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
         {!heroClaimed && (
@@ -191,15 +171,12 @@ export function useBotProfileHero({ bot, derived, appearanceShown, appearanceLoc
   return { heroSlot, hero };
 }
 
-/** The header: the mascot hero card with the bot's name and label, then who
- * sees it and its description, edited in place, and the Appearance pane
- * while it is unfolded. */
-export function BotProfileHeader({ bot, derived, hero, appearance }: {
+/** The header: the bare mascot with the bot's name and label, then who
+ * sees it and its description, edited in place, all centred (Grok Bot). */
+export function BotProfileHeader({ bot, derived, hero }: {
   bot: Bot;
   derived: Derived;
   hero: ReactNode;
-  /** The Appearance pane's body, or null while it is folded. */
-  appearance: ReactNode | null;
 }) {
   const { state } = useStore();
   const viewerId = viewerActorId(state.config);
@@ -217,7 +194,7 @@ export function BotProfileHeader({ bot, derived, hero, appearance }: {
   return (
     <header data-bot-profile-header="" data-bot-profile-section="overview" data-persona-section="overview" data-open="" aria-label={sectionLabel("overview")} className="flex min-w-0 flex-col">
       {hero}
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] leading-5 text-ink-secondary">
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[13.5px] leading-5 text-ink-secondary">
         <span data-bot-profile-audience="" className="inline-flex items-center gap-1.5">
           <Lock size={13} aria-hidden="true" /> {audience}
         </span>
@@ -242,26 +219,12 @@ export function BotProfileHeader({ bot, derived, hero, appearance }: {
           aria-label={t("persona.overview.description")}
           value={bot.description}
           onChange={(event) => derived.patch({ description: event.target.value })}
-          className="mt-3 max-h-[12lh] w-full resize-none rounded-lg bg-transparent px-0 py-0 text-[14px] leading-6 text-ink field-sizing-content placeholder:text-ink-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          className="mt-3 max-h-[12lh] w-full resize-none text-center rounded-lg bg-transparent px-0 py-0 text-[14px] leading-6 text-ink field-sizing-content placeholder:text-ink-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
         />
       ) : (
-        <p data-bot-profile-description="" className="mt-3 whitespace-pre-wrap text-[14px] leading-6 text-ink">
+        <p data-bot-profile-description="" className="mt-3 whitespace-pre-wrap text-center text-[14px] leading-6 text-ink">
           {bot.description.trim() || <span className="text-ink-secondary">{t("persona.overview.noDescription")}</span>}
         </p>
-      )}
-      {/* Nothing of the Appearance shows here while it is folded: the colour
-          dots live in its Color tab only (JC 2026-11-06). */}
-      {appearance !== null && (
-        <section
-          id="bot-profile-appearance"
-          aria-label={sectionLabel("appearance")}
-          data-bot-profile-section="appearance"
-          data-persona-section="appearance"
-          data-open=""
-          className="mt-4 flex flex-col gap-3"
-        >
-          {appearance}
-        </section>
       )}
     </header>
   );

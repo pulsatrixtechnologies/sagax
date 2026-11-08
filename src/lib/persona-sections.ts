@@ -86,10 +86,13 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
  * - General: Personality, Model, Before it acts (Settings); Channels,
  *   Shared with (Channels); What it can use (the bot's accounts); Rules,
  *   When it acts alone, Voice, Advanced settings, Versions (More).
+ * - Appearance: the whole mascot editor in place (character, shape, colour,
+ *   style, moves), its own tab like Grok Bot's (JC 2026-11-08: no dropdown
+ *   under the header any more).
  * - Knowledge: Routines, Skills, Folder and memory (Its work).
  * - Stats: the usage over 7, 30 or 90 days. */
-export type BotProfileTab = "general" | "knowledge" | "stats";
-export const BOT_PROFILE_TABS = ["general", "knowledge", "stats"] as const satisfies readonly BotProfileTab[];
+export type BotProfileTab = "general" | "appearance" | "knowledge" | "stats";
+export const BOT_PROFILE_TABS = ["general", "appearance", "knowledge", "stats"] as const satisfies readonly BotProfileTab[];
 
 /** The sub-pages a row of a tab opens. */
 export const BOT_PROFILE_SUBPAGES = [
@@ -137,13 +140,13 @@ export const BOT_PROFILE_TAB_GROUPS: Readonly<Record<BotProfileTab, ReadonlyArra
     { id: "accounts", pages: ["accounts"] },
     { id: "more", pages: ["rules", "actsAlone", "voice", "advanced", "versions"] },
   ],
+  appearance: [],
   knowledge: [{ id: "work", pages: ["routines", "skills", "folder"] }],
   stats: [],
 };
 
-/** The header's sections (the identity and the appearance): on every tab,
- * never a row. */
-export const HEADER_SECTIONS = ["overview", "appearance"] as const satisfies readonly PersonaCategory[];
+/** The header's section (the identity): on every tab, never a row. */
+export const HEADER_SECTIONS = ["overview"] as const satisfies readonly PersonaCategory[];
 export type HeaderSection = (typeof HEADER_SECTIONS)[number];
 
 /** Each tab's sub-pages, in order. */
@@ -151,9 +154,11 @@ export function botProfileTabPages(tab: BotProfileTab): readonly BotProfileSubPa
   return BOT_PROFILE_TAB_GROUPS[tab].flatMap((group) => group.pages);
 }
 
-/** Each tab's sections, through its sub-pages (Stats holds Usage itself). */
+/** Each tab's sections, through its sub-pages (Appearance and Stats hold
+ * their section themselves). */
 export const BOT_PROFILE_TAB_SECTIONS: Readonly<Record<BotProfileTab, readonly PersonaCategory[]>> = {
   general: botProfileTabPages("general").flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
+  appearance: ["appearance"],
   knowledge: botProfileTabPages("knowledge").flatMap((page) => BOT_PROFILE_SUBPAGE_SECTIONS[page]),
   stats: ["usage"],
 };
@@ -179,6 +184,7 @@ export function botProfileTabOfPage(page: BotProfileSubPage): BotProfileTab {
 export function botProfileTabOf(category: PersonaCategory): BotProfileTab | null {
   if (isHeaderSection(category)) return null;
   if (category === "usage") return "stats";
+  if (category === "appearance") return "appearance";
   const page = botProfileSubPageOf(category);
   return page ? botProfileTabOfPage(page) : "general";
 }

@@ -54,7 +54,7 @@ import { formatQuestionAnswers, MAX_CUSTOM_ANSWER, MAX_OPTIONS, parseAskQuestion
 import { meetingRequestBehavior } from "../../shared/meeting-request.ts";
 import { can, permissionLabel, type PermissionKey, type PermissionPrincipal } from "../../shared/permissions.ts";
 import { mask, redactSecretsInText } from "../../shared/redact.ts";
-import { skillRequestBehavior } from "../../shared/skill-request.ts";
+import { reviewedSkillSha256, skillRequestBehavior } from "../../shared/skill-request.ts";
 import { terminalRequestBehavior } from "../../shared/terminal-request.ts";
 import { parseMemoryPath } from "../memory/memory-store.ts";
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
@@ -501,7 +501,7 @@ export function describeMemberApproval(
 
 /** What `POST approvals/{id}` asks Sagax's respond route, or why it cannot. */
 export type AnswerPlan =
-  | { ok: true; body: { behavior: "allow" | "deny" | "answer"; message?: string }; decision: "allow" | "deny"; picked: string | null; via: "decision" | "option" | "text" }
+  | { ok: true; body: { behavior: "allow" | "deny" | "answer"; message?: string; reviewedSha256?: string }; decision: "allow" | "deny"; picked: string | null; via: "decision" | "option" | "text" }
   | { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
 
 export interface AnswerInput {
@@ -573,7 +573,11 @@ export function planAnswer(approval: MemberApproval, card: Record<string, unknow
       if (!decision) return { ok: false, status: 409, code: "decision_required", message: "This card is answered with decision allow or deny." };
     }
     if (!decision) return { ok: false, status: 400, code: "decision_required", message: "Send decision allow or deny." };
-    return { ok: true, decision, picked: null, via: options.length ? "option" : "decision", body: { behavior: decision } };
+    // a skill card binds approval to the exact SKILL.md the person saw: the
+    // member API echoes the hash of the card it just described (sagax_approve
+    // has no field for it), like the app and the Primary Bot do
+    const skill = decision === "allow" && card.skillRequest ? reviewedSkillSha256(card.skillRequest as never) : undefined;
+    return { ok: true, decision, picked: null, via: options.length ? "option" : "decision", body: { behavior: decision, ...(skill ? { reviewedSha256: skill } : {}) } };
   }
   // A question: an answer, never allow or deny (the broker refuses those
   // and the card would stay open; server/drivers/claude.ts).

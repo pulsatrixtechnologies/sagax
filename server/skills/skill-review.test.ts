@@ -19,6 +19,7 @@ import {
   skillReviewPrompt,
   TRANSCRIPT_MAX_CHARS,
   looksLikeCorrection,
+  looksLikeStop,
   turnSignal,
   turnToolSteps,
   type ReviewChange,
@@ -378,5 +379,14 @@ describe("the scheduler", () => {
     first.review.noteSignal(BOT.id, "thread-a", { kind: "failure", skills: ["weekly-report"] });
     first.review.stop();
     expect(harness().review.status(BOT.id, "thread-a").signal).toBe("failure");
+  });
+
+  it("a stop is an interruption, never a correction or a lesson (G4)", () => {
+    for (const text of ["Arrête, dis juste bonjour.", "Stop", "stop that", "annule", "Arrête"]) {
+      expect(looksLikeStop(text), text).toBe(true);
+      expect(looksLikeCorrection(text), text).toBe(false);
+    }
+    expect(looksLikeStop("Stopwatch notes")).toBe(false);
+    expect(skillReviewPrompt({ botName: "Marc", transcript: "x", skills: [] })).toContain("never create or update a skill about stopping");
   });
 });

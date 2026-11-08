@@ -16,6 +16,7 @@ import {
   RoutineManager,
   routineAskAction,
   routineEndsOnAnnouncement,
+  routineRerunStartedBy,
   routineWaitingLine,
   troubleToolKey,
   RoutineScheduleError,
@@ -4365,6 +4366,21 @@ describe("the organization memory before a run (2026-10-11)", () => {
     expect(h.asked).toEqual([{ runAs: "pr_alice", prompt: "Triage the new tickets" }]);
     expect(h.started.map((turn) => turn.prompt)).toEqual(["Triage the new tickets\n\nNote from the organization memory"]);
     expect(h.manager.listRuns()[0]?.memoryHint).toEqual(hint);
+  });
+
+  // #2939: a person's run rerun by the host after a usage limit is still
+  // theirs, so it never takes itself for a duplicate of the run that hit it.
+  it("keeps a person's run out of the duplicate detector when the host reruns it", async () => {
+    expect(routineRerunStartedBy({ startedBy: "person" })).toBe("person");
+    expect(routineRerunStartedBy({})).toBeUndefined();
+    expect(routineRerunStartedBy(undefined)).toBeUndefined();
+    const h = withMemory(async () => ({ hint, note: "Note from the organization memory" }));
+    const routine = h.manager.create(input, undefined, { actorPrincipalId: "pr_alice" });
+    const first = h.manager.runNow(routine.id, undefined, "person")!;
+    h.manager.runNow(routine.id, undefined, routineRerunStartedBy(first));
+    await h.manager.tick();
+    expect(h.asked).toEqual([]);
+    expect(h.manager.listRuns().every((run) => run.memoryHint === undefined)).toBe(true);
   });
 
   it("starts the run as if not asked when the memory fails, finds nothing or is slow", async () => {

@@ -764,7 +764,7 @@ import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
 import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
-import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineClaimedCardChoice, routineClaimedCardWaiting, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
+import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineClaimedCardChoice, routineClaimedCardWaiting, routineRerunStartedBy, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
 import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager } from "./calendar/calendar-calls.ts";
 import {
@@ -15671,13 +15671,14 @@ const limitFailover = createLimitFailoverHost({
     if (!routine?.enabled || !routines) return false;
     // Clear a waiting / queued run parked on reconnect or usage wait so the
     // backup run is not stuck behind it.
-    if (fromRunId) {
-      const prior = routines.listRuns().find((run) => run.id === fromRunId);
-      if (prior && ["queued", "waiting"].includes(prior.status)) {
-        void routines.cancelRun(prior.id, "Continued on a backup engine after a usage limit").catch(reportBackgroundError);
-      }
+    const prior = fromRunId ? routines.listRuns().find((run) => run.id === fromRunId) : undefined;
+    if (prior && ["queued", "waiting"].includes(prior.status)) {
+      void routines.cancelRun(prior.id, "Continued on a backup engine after a usage limit").catch(reportBackgroundError);
     }
-    return Boolean(routines.runNow(routineId));
+    // #2939: the rerun of a person's run is still theirs, so the memory's
+    // duplicate check (automatic runs only) never takes it for a copy of
+    // the run that just hit the limit.
+    return Boolean(routines.runNow(routineId, undefined, routineRerunStartedBy(prior)));
   },
   clearRoutineRun: (runId) => {
     const prior = routines?.listRuns().find((run) => run.id === runId);

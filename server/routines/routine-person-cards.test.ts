@@ -116,8 +116,9 @@ describe("a routine run's question card reaches its person", () => {
   // turn's trouble still reaches the run's problems.
   it("settles a goal and the first turn's trouble once, on the turn that ends the run", async () => {
     let drawn = false;
+    const claims: string[] = [];
     const h = harness({ awaitsPerson: () => null, cardRaisedSince: () => drawn,
-      raiseClaimedCard: () => { drawn = true; return "Waiting for your answer: Continuer?"; } });
+      raiseClaimedCard: (_threadId, claim) => { drawn = true; claims.push(claim); return "Waiting for your answer: Continuer?"; } });
     const routine = h.manager.create({ name: "Goal", prompt: "Watch.", botId: "scout", enabled: false,
       schedule: { type: "cron", expression: "30 18 * * 1-5", timeZone: "America/Toronto" }, goal: { text: "Reach 100%" } });
     h.manager.runNow(routine.id);
@@ -132,6 +133,10 @@ describe("a routine run's question card reaches its person", () => {
     h.event(run.threadId!, { type: "turn.completed", ok: true });
     expect(h.manager.listRuns()[0]!.status).toBe("waiting");
     expect(h.manager.listRoutines()[0]!.goal?.checks ?? 0).toBe(0);
+    // the card and the waiting run never show the goal's control lines
+    expect(claims).toEqual(["À 40 %. J'ai affiché une carte pour continuer."]);
+    expect(routineClaimedCardChoice(claims[0]!).question).toBe("À 40 %. J'ai affiché une carte pour continuer.");
+    expect(h.manager.listRuns()[0]!.output).toBe("À 40 %. J'ai affiché une carte pour continuer.");
     h.event(run.threadId!, { type: "turn.started" });
     h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "Fait, 50 %.\nGOAL_STATUS: in_progress: 50%" });
     h.event(run.threadId!, { type: "turn.completed", ok: true });
@@ -163,6 +168,36 @@ describe("a routine run's question card reaches its person", () => {
     expect(h.manager.listRuns()[0]!.status).toBe("waiting");
   });
 
+  // #2939: the time of the host's card is kept on the run, so a restart
+  // while the run waits does not let that card hide a later false claim.
+  it("keeps the host card's time across a restart", async () => {
+    const cards: number[] = [];
+    const clock = Date.parse("2026-11-08T17:00:00Z");
+    const extra: Partial<RoutineManagerOptions> = {
+      now: () => clock,
+      awaitsPerson: () => null,
+      cardRaisedSince: (_threadId, since) => cards.some((at) => at >= since),
+      raiseClaimedCard: () => { cards.push(clock); return "Waiting for your answer: Continuer?"; },
+    };
+    const h = harness(extra);
+    const run = await startedRun(h);
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "La carte est affichée : continuer ou arrêter?" });
+    h.event(run.threadId!, { type: "turn.completed", ok: true });
+    expect(cards).toHaveLength(1);
+    // the host's card is still open when the server comes back
+    let open = true;
+    const restarted = new RoutineManager({ ...h.options, awaitsPerson: () => (open ? "Waiting for your answer: Continuer?" : null) });
+    expect(restarted.listRuns()[0]).toMatchObject({ status: "waiting", claimCardAt: clock });
+    let at = clock;
+    const event = (rest: Record<string, unknown>) => restarted.handleRuntimeEvent({ eventId: `r-${at++}`, provider: "fake", threadId: run.threadId!, createdAt: new Date(at).toISOString(), ...rest } as never);
+    open = false;
+    event({ type: "turn.started" });
+    event({ type: "item.completed", itemType: "assistant_text", text: "Voici la carte de confirmation, elle t'attend." });
+    event({ type: "turn.completed", ok: true });
+    expect(cards).toHaveLength(2);
+    expect(restarted.listRuns()[0]!.status).toBe("waiting");
+  });
+
   // #2939: a summary list of what the bot did is never the card's choices.
   it("never offers a summary list as the card's choices", () => {
     const summary = "Résumé:\n- Ticket 1234 fermé\n- Ticket 5678 en attente\n- Facture 99 envoyée\nJ'ai affiché une carte pour confirmer l'envoi.";
@@ -173,6 +208,9 @@ describe("a routine run's question card reaches its person", () => {
     });
     // the choices offered after the account still win
     expect(routineClaimedCardChoice("Fait :\n- Billet 1 fermé\n- Billet 2 fermé\nLa carte est affichée, lequel j'envoie?\n1. Rapport A\n2. Rapport B").options).toEqual(["Rapport A", "Rapport B"]);
+    // a line that introduces the card opens its options
+    expect(routineClaimedCardChoice("Voici la carte de confirmation :\n- Envoyer\n- Annuler").options).toEqual(["Envoyer", "Annuler"]);
+    expect(routineClaimedCardChoice("Here is the card:\n- Send\n- Cancel").options).toEqual(["Send", "Cancel"]);
   });
 
   it("words the drawn card with the bot's own choices, else go on or stop in its language", () => {

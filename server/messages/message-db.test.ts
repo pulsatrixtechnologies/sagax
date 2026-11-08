@@ -20,6 +20,7 @@ import { closeMessageDb,
   openPendingInboxCards,
   latestSaidByBot,
   readMessageText,
+  readLatestMessageText,
   recentMessages,
   recallMemory,
   removeMemoryFile,
@@ -229,6 +230,12 @@ describe("message-db", () => {
     });
     expect(readMessageText("own-a", "m5")).toBeNull();
     expect(readMessageText("own-a", "nope")).toBeNull();
+    // #2748: a thread alone reads its newest text message, never an activity chip
+    insertMessage("own-latest", msg("l1", "first report", { at: 1_000 }));
+    insertMessage("own-latest", msg("l2", "second report", { role: "bot", at: 2_000 }));
+    insertMessage("own-latest", { ...msg("l3", "chip", { at: 3_000 }), kind: "activity" });
+    expect(readLatestMessageText("own-latest")).toMatchObject({ messageId: "l2", text: "second report" });
+    expect(readLatestMessageText("nobody")).toBeNull();
 
     // updates re-index; deletes drop out
     updateMessage("own-a", msg("m1", "The site audit is done; nothing to report", { role: "bot" }));

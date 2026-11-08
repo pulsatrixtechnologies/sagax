@@ -1608,6 +1608,15 @@ const HAS_TEXT_M = "(m.text IS NOT NULL OR (m.sealed IS NOT NULL AND json_extrac
  * short report reads whole; a longer one is fetched with readMessageText. */
 const SNIPPET_TOKENS = 48;
 
+/** The newest text message of a thread, for a session_read that names only
+ * the thread (#2748: the last report of an earlier run). */
+export function readLatestMessageText(threadId: string): ReturnType<typeof readMessageText> {
+  const row = db()
+    .prepare(`SELECT id FROM messages WHERE thread_id = ? AND kind = 'text' AND ${HAS_TEXT} ORDER BY at DESC, rowid DESC LIMIT 1`)
+    .get(threadId) as { id: string } | undefined;
+  return row ? readMessageText(threadId, row.id) : null;
+}
+
 /** Full text of one text message, for a session_read after a search hit.
  * Null for a missing row or a non-text kind (activity chips carry no
  * transcript text). */

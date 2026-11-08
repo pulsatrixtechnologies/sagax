@@ -494,7 +494,8 @@ beforeAll(async () => {
     }
     if (req.method === "GET" && req.url?.startsWith("/api/internal/session-read?")) {
       lastSessionReadUrl = req.url;
-      const found = req.url.includes("messageId=m-audit");
+      // #2748: a thread alone reads its newest message (m-audit here)
+      const found = req.url.includes("messageId=m-audit") || (req.url.includes("threadId=thread-old") && !req.url.includes("messageId="));
       const peer = req.url.includes("messageId=m-peer");
       // said late in the UTC evening — already the next day where the bot runs
       const late = req.url.includes("messageId=m-late");
@@ -1791,8 +1792,25 @@ describe("agents-proxy MCP surface", () => {
     expect(miss.result.isError).toBe(true);
     expect(miss.result.content[0].text).toContain("no such message in your conversations");
 
-    const missing = await callTool("session_read", { thread_id: "thread-old" });
+    const missing = await callTool("session_read", {});
     expect(missing.result.isError).toBe(true);
+    expect(missing.result.content[0].text).toContain("session_search");
+  });
+
+  it("session_read takes camelCase ids, a pasted hit label, or a thread alone (#2748)", async () => {
+    const camel = await callTool("session_read", { threadId: "thread-old", messageId: "m-audit" });
+    expect(camel.result.isError).toBeFalsy();
+    expect(lastSessionReadUrl).toContain("messageId=m-audit");
+
+    const pasted = await callTool("session_read", { thread_id: "thread thread-old · message m-audit" });
+    expect(pasted.result.isError).toBeFalsy();
+    expect(lastSessionReadUrl).toContain("threadId=thread-old");
+    expect(lastSessionReadUrl).toContain("messageId=m-audit");
+
+    const newest = await callTool("session_read", { thread_id: "thread-old" });
+    expect(newest.result.isError).toBeFalsy();
+    expect(lastSessionReadUrl).not.toContain("messageId=");
+    expect(newest.result.content[0].text).toContain("message m-audit]");
   });
 
   // A bare `since`/`until` date is read as local midnight (recent-work.ts

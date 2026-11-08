@@ -272,18 +272,25 @@ export function QuestionCard({
     if (!answer) return;
     setSent(answer);
     setFailed(false);
+    // The composer reads the card, not this component: settle it now so its
+    // placeholder goes back to normal without waiting for the server.
+    const requestId = card.requestId;
+    dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: "answer", answeredText: answer } });
     returnFocusToComposer();
     onAnswered?.();
     const rememberId = rememberTarget && card.pageTargetChoice ? answer : "";
     const respond = () => dispatch({
       type: "decideRequest",
       threadId,
-      requestId: card.requestId!,
+      requestId,
       behavior: "answer",
       message: answer,
       // The answer never reached the bot, so the card must go back to
       // being answerable rather than sitting there looking settled.
-      onError: () => { setSent(null); setFailed(true); onAnswerFailed?.(); },
+      onError: () => {
+        dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: undefined, answeredText: undefined } });
+        setSent(null); setFailed(true); onAnswerFailed?.();
+      },
     });
     if (rememberId && bot?.id) {
       void api(`/api/bots/${bot.id}`, {

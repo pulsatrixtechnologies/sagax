@@ -82,6 +82,12 @@ describe("parallel task brief and result", () => {
     expect(parallelResultText({ state: "stopped", reply: "" })).toBe("(The task was stopped.)");
     expect(parallelResultText({ state: "failed", reply: "", why: "no engine" })).toBe("(The task did not finish: no engine.)");
   });
+
+  it("writes the result line in the person's language", () => {
+    expect(parallelResultText({ state: "failed", reply: "", why: "the task could not start", language: "fr-CA" })).toBe("(La tâche n'a pas abouti : elle n'a pas pu démarrer.)");
+    expect(parallelResultText({ state: "stopped", reply: "", language: "fr" })).toBe("(La tâche a été arrêtée.)");
+    expect(parallelResultText({ state: "failed", reply: "", why: "the task could not start", language: "en" })).toBe("(The task did not finish: the task could not start.)");
+  });
 });
 
 describe("parallel task workspace", () => {

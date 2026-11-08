@@ -2,6 +2,7 @@
 // store split. Synthetic fixtures only. Behavior must stay identical after
 // the slice extraction.
 import { describe, expect, it } from "vitest";
+import { pendingQuestions } from "@/lib/pending-question";
 import { dataSheetKey, type DataSheet } from "../../shared/data-surface";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import type { WebhookAttempt, WebhookIngressStatus, WebhookTrigger } from "@/lib/webhooks";
@@ -245,6 +246,20 @@ describe("cards, computer, and catalog", () => {
       patch: { answered: "yes" },
     });
     expect(next.bots[0]?.messages[0]?.card).toMatchObject({ requestId: "req-1", answered: "yes" });
+  });
+
+  it("an answered question no longer holds the composer's question placeholder", () => {
+    const ask = message("m1", {
+      kind: "options",
+      card: { requestId: "req-q", title: "?", options: [], questionRequest: { version: 1, questions: [] } } as never,
+    });
+    const state = { ...base(), bots: [bot("maya", { messages: [ask] })] };
+    expect(pendingQuestions(state.bots[0]!.messages)).toHaveLength(1);
+    const answered = reducer(state, { type: "cardSettled", threadId: "t-maya", requestId: "req-q", patch: { answered: "answer", answeredText: "Oui" } });
+    expect(pendingQuestions(answered.bots[0]!.messages)).toHaveLength(0);
+    // a failed send puts the question back
+    const undone = reducer(answered, { type: "cardSettled", threadId: "t-maya", requestId: "req-q", patch: { answered: undefined, answeredText: undefined } });
+    expect(pendingQuestions(undone.bots[0]!.messages)).toHaveLength(1);
   });
 
   it("computerStart and computerControl update their maps", () => {

@@ -11,6 +11,7 @@
 // The product's name is the one the server declared for the tool at run
 // time (StepTool.product); no product name is written here.
 import { activeLocale, t } from "@/lib/i18n";
+import { restartSentence } from "@/lib/engine-error-text";
 import type { LocaleKey } from "@/locales";
 import * as shared from "../../shared/approval-describe";
 import { parseArgs, parseToolId } from "@/lib/approval-describe";
@@ -384,6 +385,8 @@ function serverSentence(name: string): string | undefined {
     return t(match[2] ? "step.resumed.afterRestart" : "step.resumed", { names: who });
   }
   if (name === "Resuming after a restart") return t("step.resuming");
+  const restart = restartSentence(name);
+  if (restart) return restart;
   match = /^Sent to (.+?)(?: · (.+))?$/.exec(name);
   if (match) return match[2] ? t("step.sentToIn", { names: match[1]!, room: match[2] }) : t("step.sentTo", { names: match[1]! });
   match = /^Posted in (.+)$/.exec(name);

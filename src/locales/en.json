@@ -14466,5 +14466,13 @@
   "botEvents.routineHint": "Runs with the event added to its instructions.",
   "botEvents.secretOnce": "Signing secret: copy it now, it will not be shown again. Check X-Sagax-Signature with it.",
   "botEvents.copySecret": "Copy secret",
-  "botEvents.secretDone": "Done"
+  "botEvents.secretDone": "Done",
+  "chat.restart.cut": "Turn interrupted: Sagax restarted",
+  "chat.restart.resumeFailed": "Turn interrupted: Sagax restarted and resuming failed: {detail}",
+  "chat.restart.notResumed": "Turn interrupted: Sagax restarted and this turn did not resume. Send your request again",
+  "chat.restart.notResumedNewer": "Turn interrupted: Sagax restarted and a newer request took this conversation, so the cut turn did not resume. Send it again if it is still needed",
+  "chat.restart.turnNote": "Sagax restarted during this turn; it resumes when Sagax is back",
+  "chat.restart.runNote": "Sagax restarted during this run; it resumes when Sagax is back",
+  "chat.parallel.notStarted": "The task could not start",
+  "chat.answer.notDelivered": "Couldn't deliver that answer: the request is no longer open, so the action was not run"
 }

@@ -11,6 +11,7 @@ import {
   NO_ENGINE_PERSON,
 } from "../../shared/bot-engine-error";
 import { MODEL_ACCESS_DISABLED_MESSAGE } from "../../shared/model-access-disabled";
+import { restartSentenceKey } from "../../shared/restart-words";
 
 /** The no-engine, removed-engine or model-turned-off sentence in the app's language, or null
  * when `text` is some other cause. */
@@ -19,7 +20,24 @@ export function localizedEngineCause(text: string): string | null {
   if (text === ENGINE_REMOVED_MESSAGE || text === ENGINE_REMOVED_PERSON) return t("composer.error.engineRemoved");
   // #1450: a model turned off on the account that pays for it
   if (text === MODEL_ACCESS_DISABLED_MESSAGE) return t("composer.error.modelAccessDisabled");
-  return null;
+  return restartSentence(text);
+}
+
+/** A line the server writes after a restart (shared/restart-words.ts), in
+ * the app's language, or null for any other words. */
+export function restartSentence(text: string): string | null {
+  const known = restartSentenceKey(text);
+  if (!known) return null;
+  switch (known.key) {
+    case "restart.cut": return t("chat.restart.cut");
+    case "restart.resumeFailed": return t("chat.restart.resumeFailed", { detail: known.detail });
+    case "restart.notResumed": return t("chat.restart.notResumed");
+    case "restart.notResumedNewer": return t("chat.restart.notResumedNewer");
+    case "restart.turnNote": return t("chat.restart.turnNote");
+    case "restart.runNote": return t("chat.restart.runNote");
+    case "parallel.notStarted": return t("chat.parallel.notStarted");
+    case "answer.notDelivered": return t("chat.answer.notDelivered");
+  }
 }
 
 /** The sentence for a refusal body that is the no-engine error

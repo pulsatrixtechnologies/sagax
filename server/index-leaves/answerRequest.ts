@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** answerRequest (#1388). Pure move from server/index.ts. */
 import { cardStandingGrants } from "../exec-target.ts";
+import { ANSWER_NOT_DELIVERED } from "../../shared/restart-words.ts";
 export type Host = Record<string, any>;
 
 export function createAnswerRequest(getHost: () => Host): any {
@@ -79,7 +80,10 @@ async function answerRequest(   threadId: string,   instanceId: string,   reques
   if (outcome === "answered" && behavior === "answer" && message && cardMessage) {
     const settled = host.store.messagesFor(threadId).find((m) => m.id === cardMessage.id)?.card;
     if (settled) {
-      host.store.patchMessage(threadId, cardMessage.id, { card: { ...settled, answeredText: message } });
+      // The composer reads `answered` to drop its "answer the question"
+      // placeholder: an answered question is settled even when the fold
+      // has not marked it yet (or never does for this card).
+      host.store.patchMessage(threadId, cardMessage.id, { card: { ...settled, answered: settled.answered ?? "answer", answeredText: message } });
     }
   }
   // The human's verdict, recorded only when it actually reached the engine:
@@ -119,7 +123,7 @@ async function answerRequest(   threadId: string,   instanceId: string,   reques
     if (!persistentQuestion && !existing?.card?.answered) host.store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",
-      tool: { name: "Couldn't deliver that answer — the request is no longer open, so the action was not run", ok: false }
+      tool: { name: ANSWER_NOT_DELIVERED, ok: false }
     });
   }
   return outcome;

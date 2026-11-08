@@ -304,6 +304,7 @@ function world(options: {
       pending.set(threadId, { polls: options.replyAfterPolls ?? 3, prompt });
       return { messageId: row.id };
     },
+    queuedPrompts: (threadId) => (waiting.get(threadId) ?? []).map((item) => ({ id: item.queueId, text: item.prompt })),
     async interrupt(_agentId, threadId) {
       interrupted.push(threadId);
       pending.delete(threadId);
@@ -699,6 +700,46 @@ describe("send_prompt / await_turn", () => {
     const refused = await refusing.call(person("p1"), "send_prompt", { ...args, idempotency_key: "run-9:step.2" });
     expect(refused.status).toBe(503);
     expect([...receipts.keys()].some((stored) => stored.endsWith("run-9:step.2"))).toBe(false);
+  });
+
+  it("a pending receipt finds a queued send (busyMode after) and only a line with its own text (#2858)", async () => {
+    const receipts = new Map<string, SendReceipt>();
+    const store = {
+      get: (key: string) => receipts.get(key) ?? null,
+      put: (key: string, receipt: SendReceipt) => void receipts.set(key, receipt),
+      delete: (key: string) => void receipts.delete(key),
+    };
+    const w = world({ queueWhenBusy: true, replyAfterPolls: 20 });
+    // no background watcher: the clock moves only when the test says so
+    const api = createAgentApi({ ...w.deps, notify: undefined, sendReceipts: store });
+    const first = await api.call(person("p1"), "send_prompt", { agent_id: "bot-a", prompt: "first job", mode: "async" });
+    const threadId = first.body.thread_id as string;
+    // The conversation is busy: this send waits in the queue, no user line yet.
+    const args = { agent_id: "bot-a", prompt: "second job", mode: "async", thread_id: threadId, on_busy: "queue", idempotency_key: "run-11:step.1" };
+    const queued = await api.call(person("p1"), "send_prompt", args);
+    expect(queued.body).toMatchObject({ accepted: true });
+    expect(w.posted).toHaveLength(2);
+    // Crash after the post, before the final receipt; the queue survives.
+    const key = [...receipts.keys()].find((stored) => stored.endsWith("run-11:step.1"))!;
+    receipts.set(key, { ...receipts.get(key)!, message_id: null, pending: true });
+    expect(w.messages.get(threadId)!.some((message) => message.text === "second job")).toBe(false);
+    const restarted = createAgentApi({ ...w.deps, notify: undefined, sendReceipts: store });
+    const replay = await restarted.call(person("p1"), "send_prompt", args);
+    expect(replay.body).toMatchObject({ replayed: true, thread_id: threadId });
+    expect(w.posted).toHaveLength(2);
+    expect(receipts.get(key)).toMatchObject({ message_id: expect.stringMatching(/^q/) });
+    expect(receipts.get(key)?.pending).toBeUndefined();
+    const waited = await restarted.call(person("p1"), "await_turn", { agent_id: "bot-a", handle: replay.body.handle, timeout_ms: 30_000 });
+    expect(waited.body).toMatchObject({ finished: true, reply: "echo: second job" });
+
+    // Crash before the post while another sender writes in that conversation:
+    // its line is not this prompt, so the key is free and the send goes out.
+    await w.settle();
+    receipts.set(key, { ...receipts.get(key)!, message_id: null, issued_at: w.deps.now!(), pending: true });
+    w.add(threadId, { role: "user", kind: "text", text: "a line from someone else" });
+    const resend = await restarted.call(person("p1"), "send_prompt", args);
+    expect(resend.body.replayed).toBeUndefined();
+    expect(w.posted).toHaveLength(3);
   });
 
   it("blocking waits for the reply; empty reply with finished=true means no text", async () => {

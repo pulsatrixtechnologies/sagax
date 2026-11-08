@@ -5,6 +5,7 @@ import {
   autoComputerReason,
   autoComputerToolRefusal,
   COMPUTER_SELECT_TOOL,
+  MAX_AUTO_COMPUTER_SWITCHES,
   selectAutoComputer,
   type AutoComputerState,
 } from "../computer/auto-computer.ts";
@@ -81,6 +82,8 @@ export interface ComputerSelectionSource {
   mounted?: string;
   selected?: string;
   previousSurface?: unknown;
+  /** #2763: moves this request made, the select_computer switch included. */
+  moves?: number;
 }
 
 export interface InternalEnvironmentsDeps {
@@ -359,7 +362,17 @@ async function handleComputerSelect(deps: InternalEnvironmentsDeps, ctx: Interna
           : "This computer is already selected. It starts on its first call; use its mounted tools.",
       });
     }
+    // #2763: select_computer is a move too, and the request keeps its count
+    // into the continuation turn: a third move is refused whatever the tool.
+    const workplace = deps.turnWorkplace(capability.threadId);
+    const movedSoFar = workplace && workplace.generation === capability.generation ? workplace.auto?.switches ?? 0 : 0;
+    if (movedSoFar >= MAX_AUTO_COMPUTER_SWITCHES) {
+      return json(res, 409, {
+        error: `You already moved ${movedSoFar} times for this request, the most a request may. Stay on the current computer and finish there; if it cannot do the step, tell the person why in their language and what they can do.`,
+      });
+    }
     deps.setComputerSelected(capability.threadId, bot.id, option.surface);
+    source!.moves = movedSoFar + 1;
   }
   return json(res, 200, {
     status: "pending",

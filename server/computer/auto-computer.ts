@@ -61,6 +61,15 @@ export interface AutoComputerState {
  * two moves; a third is refused, so the bot finishes where it is. */
 export const MAX_AUTO_COMPUTER_SWITCHES = 2;
 
+/** #2763: one request is one budget of moves. A select_computer switch ends
+ * the turn and a continuation turn goes on with the same request: it starts
+ * with the moves already made, so the request never gets a fresh pair. */
+export function carryAutoComputerMoves<T extends { switches?: number }>(state: T, movesSoFar: unknown): T {
+  const moves = typeof movesSoFar === "number" && Number.isFinite(movesSoFar) && movesSoFar > 0 ? Math.floor(movesSoFar) : 0;
+  if (moves <= (state.switches ?? 0)) return state;
+  return { ...state, switches: moves };
+}
+
 export interface AutoComputerSelection {
   ok: boolean;
   /** The text the tool answers with (the bot can relay it). */

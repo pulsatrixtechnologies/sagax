@@ -18476,6 +18476,8 @@ async function startTurn(
     origin?: WorkOrigin;
     /** A single tool-requested surface change continues the same human ask. */
     computerSelectionContinuation?: boolean;
+    /** #2763: computer moves the request already made (continuation only). */
+    computerMovesSoFar?: number;
     /** Earlier text message this user turn is replying to. */
     replyTo?: Message;
     /** Words said on a voice call (Message.voiceCall). */

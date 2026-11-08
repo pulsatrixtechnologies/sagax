@@ -1,7 +1,7 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
 import { randomUUID } from "node:crypto";
-import { pinnedWorkspaceStart } from "../computer/auto-computer.ts";
+import { carryAutoComputerMoves, pinnedWorkspaceStart } from "../computer/auto-computer.ts";
 import { effortForEngine } from "../../shared/ultracode-effort.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
@@ -322,6 +322,8 @@ export function createPrepareAdmitStartTurn(
     personAsked: turnPersonAsked
   });
   state.turnAuto = autoComputerStateFor(state.turnPlace, turnWorks, routineLineage(state.speaker), turnAutoStart, state.plan.browser);
+  // #2763: a continuation after select_computer goes on with the request's moves.
+  if (state.turnAuto && state.opts?.computerSelectionContinuation) state.turnAuto = carryAutoComputerMoves(state.turnAuto, state.opts.computerMovesSoFar);
   // Each call turn's words carry the call mark themselves: a live session
   // gets the volatile call section only when it changed, so from the second
   // call turn on the section alone never reached the engine.

@@ -112,7 +112,7 @@ export function UsageChartControls({ periods, period, onPeriod, periodAria, extr
             data-usage-chart-group=""
             value={group}
             onChange={(event) => onGroup(event.target.value)}
-            className="h-8 cursor-pointer appearance-none rounded-full border border-hairline bg-transparent pl-3 pr-8 text-[13px] leading-5 text-ink outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent"
+            className="ui-button cursor-pointer appearance-none pl-3 pr-8 outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {groups.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
@@ -178,7 +178,7 @@ export function UsageChartCard({ rangeLabel, onPrev, onNext, totalLabel, total, 
   );
 
   return (
-    <div data-usage-chart-card="" className={cn("usage-chart flex min-w-0 flex-col rounded-2xl border border-hairline bg-card px-4 pb-4 pt-3", className)}>
+    <div data-usage-chart-card="" className={cn("usage-chart flex min-w-0 flex-col rounded-2xl bg-card px-4 pb-4 pt-3", className)}>
       <div className="flex items-center justify-between gap-3">
         <span data-usage-chart-range="" className="min-w-0 truncate text-[14px] leading-5 text-ink-secondary">{rangeLabel}</span>
         <span className="flex shrink-0 items-center">

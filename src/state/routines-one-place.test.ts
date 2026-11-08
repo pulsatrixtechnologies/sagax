@@ -1,6 +1,6 @@
-// #2624: Routines live in one place, the Routines sub-page of the bot page.
-// The bot side panel no longer lists them; every link to a routine opens the
-// bot page there.
+// #2624: every link to a routine opens the Routines sub-page of the bot page.
+// #2941 (the owner, 2026-11-08): the bot side panel lists the routines again, as
+// Upcoming, but leaves those links to the sub-page (followFocus false).
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -24,8 +24,8 @@ describe("Routines in one place (#2624)", () => {
     expect(opened.routineFocus).toEqual({ botId: "pepper", create: true });
   });
 
-  it("no longer draws the routines in the bot side panel", () => {
+  it("draws the routines in the bot side panel, without taking the sub-page's focus (#2941)", () => {
     const panel = readFileSync(new URL("../components/BotSettingsDialog.tsx", import.meta.url), "utf8");
-    expect(panel).not.toMatch(/<RoutinesSection/);
+    expect(panel).toMatch(/<RoutinesSection[^>]*\bupcoming\b[^>]*followFocus=\{false\}/);
   });
 });

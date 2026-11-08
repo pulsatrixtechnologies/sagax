@@ -14,13 +14,17 @@ import { PanelPageHeader as RoutineDetailHeader, PanelPageLayer } from "./PanelP
 
 export { RoutineDetailHeader };
 
-export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = false, upcoming = false, createRequest = 0 }: {
+export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = false, upcoming = false, createRequest = 0, followFocus = true }: {
   bot: Bot; routines: Routine[]; runs: RoutineRun[]; defaultRunOn?: RoutineRunOn; grouped?: boolean;
   /** The bot panel's Activity tab (#2125 / #2174): titled Upcoming, one flat
    * card with `[Category]` title prefixes, five rows then Show more. */
   upcoming?: boolean;
   /** Each bump opens a new routine (Suggested > Add to meeting). */
   createRequest?: number;
+  /** Whether a routine line or Add to meeting (state.routineFocus) opens
+   * here. The bot side panel's list (#2941) leaves it to the bot page's
+   * Routines sub-page, where openRoutine sends it (#2624). */
+  followFocus?: boolean;
 }) {
   const { state, dispatch } = useStore();
   const [editing, setEditing] = useState<Routine | "new" | { copyOf: Routine } | null>(null);
@@ -45,7 +49,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   // A routine line in the conversation asked for this routine's page.
   const focus = state.routineFocus;
   useEffect(() => {
-    if (!focus || focus.botId !== bot.id) return;
+    if (!followFocus || !focus || focus.botId !== bot.id) return;
     if ("create" in focus) {
       // Suggested > Add to meeting (#2624): a new routine, here.
       setNewFolder(undefined);
@@ -55,7 +59,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
       setDetailId(focus.routineId);
     }
     dispatch({ type: "routineFocused" });
-  }, [focus, bot.id, routines, dispatch]);
+  }, [followFocus, focus, bot.id, routines, dispatch]);
 
   if (detail) {
     // 2026-11-06 (JC, "one single pane"): the routine's page is its editor;

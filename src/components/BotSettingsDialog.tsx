@@ -23,6 +23,8 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { BotActionsMenu, type BotActionsMenuAnchor } from "./bot-settings/BotActionsMenu";
 import { LibraryTab } from "./bot-settings/LibraryTab";
 import { RolePermissionsSection } from "./bot-settings/RolePermissionsSection";
+import { RoutinesSection } from "./bot-settings/RoutinesSection";
+import { botRoutineRuns } from "@/state/view-slices";
 
 import { showsComputer, visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
 import { ComputerCard } from "./bot-settings/ComputerCard";
@@ -64,6 +66,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   const advanced = useAdvancedMode();
   const dispatch = useStoreDispatch();
   const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config, botPanelTab: current.botPanelTab, botPanelRestored: current.botPanelRestored, codingChat: current.codingChat }), shallowEqual);
+  const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
   const section = state.botSettingsSection;
@@ -347,8 +350,13 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
               {tab === "activity" && (
                 <div className="flex flex-col gap-5 px-4 pb-6">
-                  {/* #2624: the routines live on the bot page's Routines
-                      sub-page only; Add to meeting opens a new one there. */}
+                  {/* #2941 (the owner, 2026-11-08): the bot's routines are listed
+                      here again, first, as Upcoming; the bot page's Routines
+                      sub-page keeps them too. Links to a routine and Add to
+                      meeting still open that sub-page (#2624). */}
+                  <section data-bot-settings-section="routines" className="flex flex-col gap-2">
+                    <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped upcoming followFocus={false} />
+                  </section>
                   <SuggestionsSection
                     bot={bot}
                     routineCount={derived.botRoutines.length}

@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createMisuseTextRefusal(getHost: () => Host): any {
-function misuseTextRefusal(   text: string,   principalId: string | undefined | null,   surface: "message" | "shell" | "file" | "terminal" | "mcp" | "flow",   extra?: { botId?: string; threadId?: string; tool?: string; origin?: string }, ) {
+function misuseTextRefusal(   text: string,   principalId: string | undefined | null,   surface: "message" | "shell" | "file" | "terminal" | "mcp" | "flow" | "desktop",   extra?: { botId?: string; threadId?: string; tool?: string; origin?: string }, ) {
   const host = getHost();
   const { misuseRefusal } = host;
 

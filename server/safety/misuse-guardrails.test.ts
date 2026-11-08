@@ -151,6 +151,7 @@ describe("surfaces", () => {
   it("maps each surface to its scope", () => {
     expect(misuseScopeFor("message")).toBe("message");
     expect(misuseScopeFor("shell")).toBe("own_environment");
+    expect(misuseScopeFor("desktop")).toBe("own_computer");
     expect(misuseScopeFor("terminal")).toBe("default");
     expect(misuseScopeFor("file")).toBe("default");
   });

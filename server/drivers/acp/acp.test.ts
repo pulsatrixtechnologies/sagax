@@ -1923,6 +1923,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(seen.argv.slice(seen.argv.indexOf("agent"))).toContain("--no-leader");
       // the process that serves the turn is the one with the isolated env
       expect(seen.env.GROK_HOME).not.toBe(realHome);
+      // the inherited socket path into the person's leader is dropped (isolateGrokMcp)
+      expect(seen.env).not.toHaveProperty("GROK_LEADER_SOCKET");
       expect(seen.env.GROK_MANAGED_MCPS_ENABLED).toBe("false");
       expect(seen.env.GROK_CLAUDE_MCPS_ENABLED).toBe("false");
       // and its isolated home links no leader socket back to the person's

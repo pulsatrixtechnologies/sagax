@@ -13504,7 +13504,7 @@
   "botPanel.loopGuard.help": "When off, this bot is not steered or stopped for a repeating shell failure.",
   "botPanel.loopGuard.off": "Loop guard is off for this bot.",
   "botPanel.grokAccountConnectors": "Grok account connectors",
-  "botPanel.grokAccountConnectors.help": "When on, this bot also loads the connectors of your own grok.com account. Each write through them still asks first.",
+  "botPanel.grokAccountConnectors.help": "When on, this bot also loads the connectors of your own grok.com account. A write through them asks first, unless an Always allow rule covers it or the bot is on Full access.",
   "botPanel.grokAccountConnectors.on": "This bot loads your grok.com connectors on your own Grok sign-in.",
   "settings.loopGuard.aria": "Turn the loop guard on or off for this installation",
   "settings.loopGuard.error": "Could not save the loop guard setting.",

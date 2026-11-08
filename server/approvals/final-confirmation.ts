@@ -17,6 +17,11 @@ const CONSENT = /(?<![\p{L}\p{N}_])(?:confirm|confirmation|approve|approval|auth
 // stays a yes/no question.
 const ALTERNATIVE = /(?:,\s*|\s)(?:ou|or)\s+(?!non\b|pas\b|not\b)(?:bien\s+|plut[oô]t\s+|rather\s+|else\s+)?(?:qu['’]|que\b|si\b|on\b|je\b|j['’]|tu\b|nous\b|vous\b|est-ce\b|should\b|shall\b|do\b|would\b|i\b|we\b|you\b|to\b|just\b|wait\b|attendre\b|avancer\b|continuer\b|garder\b)/i;
 const MISSING_FACT = /\b(?:what|which|who|where|when|how|quel(?:le)?s?|lequel|laquelle|qui|quand|combien|comment)\b/i;
+// #3001: "Peux-tu confirmer le bon numéro ?", "give me the right name"
+// ask the person to supply or correct a value: Yes/No answers neither.
+// "Peux-tu confirmer l'envoi ?" names an action, not a value, and stays.
+const VALUE_NOUN = String.raw`(?:num[eé]ro|no\.?|#|nom|pr[eé]nom|date|heure|adresse|courriel|e-?mail|t[eé]l[eé]phone|identifiant|id|code|montant|prix|valeur|number|name|time|address|phone|amount|price|value)`;
+const VALUE_REQUEST = new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:confirm(?:e[rz]?)?|v[eé]rifi(?:e[rz]?)?|verify|donne[rz]?|fourni[rs]?|fournissez|indique[rz]?|pr[eé]cise[rz]?|dire|give|provide|tell)\s+(?:(?:moi|me|nous|us)\s+)?(?:(?:le|la|les|l['’]|ton|ta|tes|votre|vos|the|your)\s*)?(?:\p{L}+\s+)?(?:(?:bon(?:ne)?s?|vrai(?:e)?s?|exact(?:e)?s?|correct(?:e)?s?|right|exact|actual)\b|${VALUE_NOUN}(?![\p{L}\p{N}_]))`, "iu");
 
 export function finalConfirmation(input: {
   text: string;
@@ -36,7 +41,7 @@ export function finalConfirmation(input: {
   // Look at direct questions in the final paragraph, not a report quoting
   // someone else's question. A period can precede the final request.
   const sentences = tail.split(/(?<=[.!?])\s+/);
-  const request = sentences.find((sentence) => !MISSING_FACT.test(sentence) && !ALTERNATIVE.test(sentence) && ((ASK.test(sentence) && CONSENT.test(sentence)) || WAIT.test(sentence)));
+  const request = sentences.find((sentence) => !MISSING_FACT.test(sentence) && !VALUE_REQUEST.test(sentence) && !ALTERNATIVE.test(sentence) && ((ASK.test(sentence) && CONSENT.test(sentence)) || WAIT.test(sentence)));
   return request ? input.text.trim().slice(-4_000) : null;
 }
 

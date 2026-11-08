@@ -45,6 +45,28 @@ describe("final blocking confirmations (#1984)", () => {
     expect(finalConfirmation({ ...context, text })).toBeNull();
   });
 
+  it.each([
+    "Le billet est introuvable.\n\nPeux-tu confirmer le bon numéro de billet ?",
+    "Peux-tu confirmer le bon numéro de billet pour ce test QA ?",
+    "Peux-tu confirmer le nom du contact ?",
+    "Pouvez-vous confirmer la bonne date ?",
+    "Peux-tu me donner le numéro du billet ?",
+    "Can you confirm the right ticket number?",
+    "Please confirm the customer name.",
+  ])("leaves a request for a value as plain text (#3001): %s", (text) => {
+    expect(finalConfirmation({ ...context, routineRun: false, mcpStarted: true, text })).toBeNull();
+  });
+
+  it.each([
+    "Peux-tu confirmer l'envoi ?",
+    "Peux-tu confirmer la création du billet ?",
+    "Can you confirm the send?",
+    "Can I send the email to the customer?",
+    "Peux-tu confirmer le billet 1234 avant que je le ferme ?",
+  ])("still raises a real action confirmation (#3001): %s", (text) => {
+    expect(finalConfirmation({ ...context, routineRun: false, mcpStarted: true, text })).toBe(text);
+  });
+
   it("leaves ordinary chats, failed/stopped turns and existing cards alone", () => {
     const text = "May I proceed with the batch?";
     for (const patch of [{ routineRun: false }, { ok: false }, { stopped: true }, { hasCard: true }]) {

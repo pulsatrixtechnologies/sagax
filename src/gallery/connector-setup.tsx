@@ -1,10 +1,12 @@
 /** Isolated gallery for headless screenshots of the "Connect Microsoft
  * Teams" card (shared/connector-setup.ts). No server: the buttons do nothing
- * here. Not shipped in the app. ?skin=<id>&lang=<code>&only=<sample> */
+ * here. Not shipped in the app. ?skin=<id>&lang=<code>&only=<sample>
+ * &desktop=1 (stands in for the desktop bridge: the Messages card shows its
+ * Open System Settings button, #2690) */
 import { StrictMode, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
-import type { ConnectorSetupView } from "../../shared/connector-setup";
+import { MAC_FULL_DISK_ACCESS_URL, type ConnectorSetupView } from "../../shared/connector-setup";
 import { ConnectorSetupBody } from "../components/connector-setup/ConnectorSetupCard";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -15,12 +17,17 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "fr");
 const only = params.get("only");
+if (params.get("desktop") === "1") (window as unknown as { ogb: Record<string, unknown> }).ogb = { ...(window as unknown as { ogb?: Record<string, unknown> }).ogb, permOpenSettings: async () => true };
 
 const teams: ConnectorSetupView = {
   id: "cs_0123456789abcdef01", connector: "microsoft-teams", label: "Microsoft Teams", provider: "grok",
   url: "https://grok.com/connectors", status: "waiting", owner: "0123456789abcdef", createdAt: 1,
 };
 const outlook: ConnectorSetupView = { ...teams, id: "cs_0123456789abcdef02", connector: "outlook", label: "Outlook", provider: "claude", url: "https://claude.ai/customize/connectors" };
+
+// #2690: the other expired connections of the proactive report
+const x: ConnectorSetupView = { ...teams, id: "cs_0123456789abcdef03", connector: "x", label: "X" };
+const messages: ConnectorSetupView = { ...teams, id: "cs_0123456789abcdef04", connector: "messages", label: "Messages", provider: "mac", url: MAC_FULL_DISK_ACCESS_URL };
 
 const noop = () => {};
 const samples: Array<{ id: string; width: number; render: () => ReactElement }> = [
@@ -29,6 +36,8 @@ const samples: Array<{ id: string; width: number; render: () => ReactElement }> 
   { id: "pending", width: 560, render: () => <ConnectorSetupBody view={{ ...teams, status: "pending" }} checking={false} opened onConnect={noop} onDone={noop} /> },
   { id: "checking", width: 560, render: () => <ConnectorSetupBody view={outlook} checking opened onConnect={noop} onDone={noop} /> },
   { id: "connected", width: 560, render: () => <ConnectorSetupBody view={{ ...teams, status: "connected" }} checking={false} opened onConnect={noop} onDone={noop} /> },
+  { id: "x", width: 560, render: () => <ConnectorSetupBody view={x} checking={false} opened={false} onConnect={noop} onDone={noop} /> },
+  { id: "messages", width: 560, render: () => <ConnectorSetupBody view={messages} checking={false} opened={false} onConnect={noop} onDone={noop} /> },
   { id: "narrow", width: 340, render: () => <ConnectorSetupBody view={teams} checking={false} opened onConnect={noop} onDone={noop} /> },
 ];
 

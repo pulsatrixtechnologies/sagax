@@ -875,6 +875,7 @@ import { DEVICE_REQUEST_KEYS, isSyncedPreference } from "../shared/settings-acti
 import { installResourceUsage } from "./resource-usage/install.ts";
 import { grokAccountReach, grokReachConnectorNames } from "./drivers/acp/grok-tool-catalog.ts";
 import { GROK_CLOUD_CONNECTORS } from "../shared/grok-cloud-connectors.ts";
+import { probeFullDiskAccess } from "./imessage/imessage-permissions.ts";
 import { connectorSetupOwner, createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes } from "./routes/connector-setup.ts";
 import { connectorReauthFailure, connectorReauthText, type ConnectorSetupView } from "../shared/connector-setup.ts";
 import { streamTerminalAttachment } from "./terminal-resources/adapters/personal.ts";
@@ -27705,6 +27706,7 @@ ROUTES.push(createClaudeArtifactRoutes({
 // person who asked checks theirs; Claude's inventory is read again.
 ROUTES.push(createConnectorSetupRoutes({
   ...connectorSetupStore(),
+  macAccess: () => probeFullDiskAccess() === "granted",
   principalId: (auth) => {
     if (auth.kind === "loopback" && auth.trust === "service") return undefined;
     return actorPrincipalId(auth) || (IDENTITY.kind === "solo" ? localPrincipalId() : undefined);

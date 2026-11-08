@@ -11247,6 +11247,8 @@
   "connectorSetup.whereGrokTeam": "You sign in on {host} with your team Grok account, the one connected here. Sagax will detect the connection.",
   "connectorSetup.whereGrokPersonal": "You sign in on {host} with your personal Grok account, the one connected here. Sagax will detect the connection.",
   "connectorSetup.waiting": "Waiting for your sign-in",
+  "connectorSetup.whereMac": "Messages needs Full Disk Access on this Mac. Turn Sagax on in System Settings, Privacy & Security, then come back.",
+  "connectorSetup.openMacSettings": "Open System Settings",
   "connectorSetup.done": "I'm done",
   "connectorSetup.checking": "Checking…",
   "connectorSetup.pending": "Not confirmed yet. Ask the bot to use it, then choose I'm done.",

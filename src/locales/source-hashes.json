@@ -18139,7 +18139,9 @@
       "connectApps.plugin.converted.hooks": "d65ffac1392889263e7d0f9537e0ad3790032b003539eaa854856a894d3caa30",
       "connectApps.plugin.converted.automations": "951cc9b3f8611e9de351ff5490ca7f05a0eb7ce3033c929fe4860ec19e7599d5",
       "myConnections.github.retry": "d8b8392e2c542950ca64867168e4ef87d4ad606882d5898f826b51c6d553988f",
-      "myConnections.github.fallbackHint": "8c9259426839715b630acd6a759cd2b6a59c5fb20fbd76244cf436235cfd8efb"
+      "myConnections.github.fallbackHint": "8c9259426839715b630acd6a759cd2b6a59c5fb20fbd76244cf436235cfd8efb",
+      "connectorSetup.whereMac": "82d458cdbab504d31ccc1f21778838f52708f692a27f8c0d802c37bdac192687",
+      "connectorSetup.openMacSettings": "18196b39b44de54ac56110e77207ad61e1d8bb3198c1649d36c3ae12f8df6768"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

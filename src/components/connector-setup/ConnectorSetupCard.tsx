@@ -15,8 +15,14 @@ import { ASK_PRIMARY_BUTTON, ASK_QUIET_BUTTON, AskCard, AskSettledLine } from ".
 import { readableError } from "@/lib/plain-error";
 
 /** Opens the card's page, only on an allowed host. */
-export async function openConnectorSetup(view: Pick<ConnectorSetupView, "url">): Promise<boolean> {
+export async function openConnectorSetup(view: Pick<ConnectorSetupView, "url" | "provider">): Promise<boolean> {
   if (!isConnectorSetupUrl(view.url)) return false;
+  // #2690: a Messages card opens this Mac's Full Disk Access pane
+  if (view.provider === "mac") {
+    if (!window.ogb?.permOpenSettings) return false;
+    await window.ogb.permOpenSettings("fullDisk");
+    return true;
+  }
   // desktop: the card's own channel, where main checks the host again
   if (window.ogb?.openConnectorSetup) {
     try {
@@ -47,14 +53,17 @@ export function ConnectorSetupBody({ view, checking, opened, error, onConnect, o
       </AskSettledLine>
     );
   }
+  const mac = view.provider === "mac";
   const host = view.provider === "claude" ? "claude.ai" : "grok.com";
-  const showDone = opened || view.status === "pending";
+  // #2690: System Settings opens only from the desktop app on this Mac; elsewhere the button is hidden
+  const canOpen = !mac || Boolean(window.ogb?.permOpenSettings);
+  const showDone = opened || view.status === "pending" || !canOpen;
   return (
     <AskCard
       ariaLabel={view.label}
       icon={<PlugZap size={15} />}
       title={view.label}
-      explanation={view.provider === "grok" && view.account
+      explanation={mac ? t("connectorSetup.whereMac") : view.provider === "grok" && view.account
         ? t(view.account === "team" ? "connectorSetup.whereGrokTeam" : "connectorSetup.whereGrokPersonal", { host })
         : t("connectorSetup.where", { host })}
       footer={
@@ -68,10 +77,12 @@ export function ConnectorSetupBody({ view, checking, opened, error, onConnect, o
               {t("connectorSetup.done")}
             </button>
           )}
-          <button type="button" data-connector-setup-connect onClick={onConnect} className={ASK_PRIMARY_BUTTON}>
-            <ExternalLink size={14} />
-            {t("connectorSetup.connect", { name: view.label })}
-          </button>
+          {canOpen && (
+            <button type="button" data-connector-setup-connect onClick={onConnect} className={ASK_PRIMARY_BUTTON}>
+              <ExternalLink size={14} />
+              {mac ? t("connectorSetup.openMacSettings") : t("connectorSetup.connect", { name: view.label })}
+            </button>
+          )}
         </>
       }
     >

@@ -847,7 +847,7 @@ export class ShapeEngine {
       pose,
       t,
       stem: live ? 0 : stem,
-      outline: outline && morphK >= 1 && !this.move ? { ...outline, morphing: false } : outline,
+      outline: outline && morphK >= 1 && !this.playing(now) ? { ...outline, morphing: false } : outline,
     });
   }
 }

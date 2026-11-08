@@ -403,12 +403,13 @@ store on `mascotLook.avatarDef`. Bodies never render disassembled
 |---|---|
 | Geometry (radii, faces, skins) | `shared/mascot-geometry.json` |
 | Portable definition schema | `shared/shape-avatar-def.ts` |
-| Object presets | `shared/shape-avatar-presets.ts` |
+| Object presets (bodies and eyes read from `mascot-geometry.json`) | `shared/shape-avatar-presets.ts` |
 | Generate from a description | `shared/shape-avatar-generate.ts`, `server/media/shape-avatar.ts` |
 | Engine, volume, motion, moves | `src/components/shape-*.ts`, `ShapeMascot.tsx` |
 | Generate a new shape (dev only, not in the UX) | `scripts/generate-shape.mjs`, `docs/design/shape-generator.md` |
 | Phone | `ios/Sources/CompanionCore/ShapeEngine*.swift`, `ShapeMascotView.swift` |
 | Screenshots | `docs/screenshots/shapes`, `docs/screenshots/shape-engine-v2` |
+| Say and sprout fix (#2981): before/after, rest and orbit move | `docs/screenshots/shapes-say-sprout` |
 
 ## HD mascots (painted art, pilot: Shiba)
 

@@ -79,7 +79,8 @@ for (const [id, inside] of Object.entries(INSIDE)) {
   // keep every radius in the geometry file's accepted band
   radii = radii.map((r) => Math.min(1.35, Math.max(0.35, r)));
   if (Math.min(...radii) < 0.35) throw new Error(`${id}: body too thin`);
-  geometry.shapes[id] = { radii, face: FACE[id] };
+  // keep the path body and its eyes (what the app draws): only the radii bridge is baked here
+  geometry.shapes[id] = { ...geometry.shapes[id], radii, face: FACE[id] };
   console.log(id, "min", Math.min(...radii).toFixed(3), "max", Math.max(...radii).toFixed(3));
 }
 

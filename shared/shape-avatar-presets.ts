@@ -1,9 +1,15 @@
 /**
  * Our own object-shaped Shape presets (clean room, v2.1): closed path
  * silhouettes with concavities and appendages that read at 28..96 px.
- * Geometry only; colour is the bot's. Path bodies are the live form;
- * polar radii in mascot-geometry.json remain a morph/catalog bridge.
+ * Geometry only; colour is the bot's. Path bodies are the live form.
+ *
+ * The bodies and eye anchors live in shared/mascot-geometry.json (`path`,
+ * `eyes`), the single geometry source: the iOS port reads the same values
+ * through the generated ShapeGeometryData.swift. Every body must stay
+ * star-shaped about the centre (50,50) with room to spare, or the volume
+ * slices leave the face (shape-set.regression.test.ts holds that).
  */
+import geometry from "./mascot-geometry.json" with { type: "json" };
 import {
   defaultPillEyes,
   SHAPE_AVATAR_SCHEMA_VERSION,
@@ -14,225 +20,37 @@ import { liveOutlineFromDef, smoothClosedOutline } from "./shape-avatar-outline.
 export { compileShapeAvatar } from "./shape-avatar-def.ts";
 export { liveOutlineFromDef };
 
-const ver = SHAPE_AVATAR_SCHEMA_VERSION;
+type ObjectBody = { path: string; eyes: { anchor: number[]; w: number; h: number } };
 
-function pathDef(
-  id: string,
-  name: string,
-  d: string,
-  eyes: ShapeAvatarDef["eyes"],
-  accessories?: ShapeAvatarDef["accessories"],
-): ShapeAvatarDef {
+function objectDef(id: "pad" | "cup" | "bulb" | "say" | "sprout" | "tin" | "tome" | "ship", name: string): ShapeAvatarDef {
+  const body = (geometry.shapes as Record<string, Partial<ObjectBody>>)[id];
+  if (!body?.path || !body.eyes) throw new Error(`mascot-geometry.json: ${id} has no path body`);
+  const { anchor, w, h } = body.eyes;
   return {
-    schemaVersion: ver,
+    schemaVersion: SHAPE_AVATAR_SCHEMA_VERSION,
     id,
     name,
-    body: { kind: "path", d },
-    eyes,
-    ...(accessories?.length ? { accessories } : {}),
+    body: { kind: "path", d: body.path },
+    eyes: defaultPillEyes([anchor[0], anchor[1]], { w, h }),
   };
 }
 
-/**
- * Pad: wide body with clear side grips (protruding handles) that read at 28 px.
- */
-const pad = pathDef(
-  "pad",
-  "Pad",
-  [
-    "M22 34",
-    "C22 24 32 18 44 18",
-    "L56 18",
-    "C68 18 78 24 78 34",
-    "L78 42",
-    "L90 46",
-    "C96 48 98 54 96 60",
-    "C94 68 86 72 78 70",
-    "L78 74",
-    "C76 84 66 90 50 90",
-    "C34 90 24 84 22 74",
-    "L22 70",
-    "C14 72 6 68 4 60",
-    "C2 54 4 48 10 46",
-    "L22 42",
-    "Z",
-  ].join(""),
-  defaultPillEyes([50, 46], { w: 7, h: 13 }),
-);
-
-/**
- * Cup: mug body with a solid C-handle (one outer silhouette, no hole) so
- * volume slices keep the handle readable at small sizes.
- */
-const cup = pathDef(
-  "cup",
-  "Cup",
-  [
-    "M26 16",
-    "L58 16",
-    "L60 30",
-    "L72 28",
-    "C90 28 98 40 98 52",
-    "C98 66 88 78 68 78",
-    "L60 76",
-    "L62 84",
-    "C62 92 54 96 44 96",
-    "C34 96 26 92 26 84",
-    "Z",
-    // Inner handle cut (evenodd): keeps the C open
-    "M60 38",
-    "L68 36",
-    "C80 36 86 44 86 52",
-    "C86 62 78 70 66 70",
-    "L60 68",
-    "Z",
-  ].join(""),
-  defaultPillEyes([42, 48], { w: 7, h: 14 }),
-);
-
-/**
- * Bulb: round glass plus a clear stepped screw base.
- */
-const bulb = pathDef(
-  "bulb",
-  "Bulb",
-  [
-    "M50 6",
-    "C72 6 90 26 90 46",
-    "C90 60 80 70 66 76",
-    "L60 80",
-    "L66 84",
-    "L66 88",
-    "L60 90",
-    "L64 94",
-    "L36 94",
-    "L40 90",
-    "L34 88",
-    "L34 84",
-    "L40 80",
-    "L34 76",
-    "C20 70 10 60 10 46",
-    "C10 26 28 6 50 6",
-    "Z",
-  ].join(""),
-  defaultPillEyes([50, 36], { w: 7.5, h: 14 }),
-);
-
-/**
- * Say: rounded speech bubble with a large triangular tail.
- */
-const say = pathDef(
-  "say",
-  "Say",
-  [
-    "M20 14",
-    "L72 14",
-    "C86 14 94 24 94 36",
-    "L94 52",
-    "C94 66 84 76 70 76",
-    "L44 76",
-    "L22 96",
-    "L34 76",
-    "L28 76",
-    "C14 76 6 66 6 52",
-    "L6 36",
-    "C6 24 10 14 20 14",
-    "Z",
-  ].join(""),
-  defaultPillEyes([50, 40], { w: 7.5, h: 14 }),
-);
-
-/**
- * Sprout: pot with two leaf lobes that stick above the rim.
- */
-const sprout = pathDef(
-  "sprout",
-  "Sprout",
-  [
-    "M50 46",
-    "C40 40 22 34 14 26",
-    "C6 18 10 6 24 6",
-    "C38 6 46 22 50 36",
-    "C54 22 62 6 76 6",
-    "C90 6 94 18 86 26",
-    "C78 34 60 40 50 46",
-    "L68 50",
-    "C78 52 84 64 82 76",
-    "L78 94",
-    "C76 98 62 100 50 100",
-    "C38 100 24 98 22 94",
-    "L18 76",
-    "C16 64 22 52 32 50",
-    "Z",
-  ].join(""),
-  defaultPillEyes([50, 74], { w: 6.5, h: 12 }),
-);
-
-/**
- * Tin: tall can with a clear spout / pull-tab on the top-right.
- */
-const tin = pathDef(
-  "tin",
-  "Tin",
-  [
-    "M30 22",
-    "L58 22",
-    "L66 10",
-    "L80 10",
-    "L80 22",
-    "L70 26",
-    "L70 88",
-    "C70 96 60 100 50 100",
-    "C40 100 30 96 30 88",
-    "Z",
-  ].join(""),
-  defaultPillEyes([50, 52], { w: 7, h: 14 }),
-);
-
-/**
- * Tome: closed book with a thick left spine step.
- */
-const tome = pathDef(
-  "tome",
-  "Tome",
-  [
-    "M12 20",
-    "L28 12",
-    "L86 12",
-    "C94 12 98 18 98 26",
-    "L98 82",
-    "C98 90 94 96 86 96",
-    "L28 96",
-    "L12 88",
-    "Z",
-  ].join(""),
-  defaultPillEyes([60, 48], { w: 7, h: 13 }),
-);
-
-/**
- * Ship: rocket with wide side fins and a pointed nose.
- */
-const ship = pathDef(
-  "ship",
-  "Ship",
-  [
-    "M50 4",
-    "C62 4 70 18 70 32",
-    "L70 58",
-    "L92 86",
-    "L70 74",
-    "L70 90",
-    "C70 98 60 100 50 100",
-    "C40 100 30 98 30 90",
-    "L30 74",
-    "L8 86",
-    "L30 58",
-    "L30 32",
-    "C30 18 38 4 50 4",
-    "Z",
-  ].join(""),
-  defaultPillEyes([50, 38], { w: 7, h: 13 }),
-);
+/** Pad: wide body with clear side grips that read at 28 px. */
+const pad = objectDef("pad", "Pad");
+/** Cup: mug body with a C-handle (evenodd hole keeps the C open). */
+const cup = objectDef("cup", "Cup");
+/** Bulb: round glass plus a stepped screw base. */
+const bulb = objectDef("bulb", "Bulb");
+/** Say: rounded speech bubble with a wide tail. */
+const say = objectDef("say", "Say");
+/** Sprout: pot with two leaf lobes joined by a wide stem. */
+const sprout = objectDef("sprout", "Sprout");
+/** Tin: tall can with a pull-tab on the top-right. */
+const tin = objectDef("tin", "Tin");
+/** Tome: closed book with a thick left spine step. */
+const tome = objectDef("tome", "Tome");
+/** Ship: rocket with wide side fins and a pointed nose. */
+const ship = objectDef("ship", "Ship");
 
 export const OBJECT_SHAPE_PRESETS = [pad, cup, bulb, say, sprout, tin, tome, ship] as const;
 

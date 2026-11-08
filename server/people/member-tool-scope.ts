@@ -174,6 +174,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   // asks unless it only reads (server/remote-support/remote-session-exec.ts)
   remote_session_snapshot: "read",
   remote_session_exec: "conversation",
+  // the speaker's own host as the bot's computer; its access rule applies (#2726)
+  host_computer: "conversation",
   // join_meeting only stages a consent card; the person approves each join
   join_meeting: "conversation",
   // 2026-10-28: the tools below reached the catalog without a class, so a

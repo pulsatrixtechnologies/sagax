@@ -8,7 +8,7 @@
 // PillSelect (Voice "Ara ⌄" style) listing the same computers as the chat
 // Computer menu / LocalComputerSection (`computerChoices`); picking one
 // changes the bot's Works on and refreshes the card.
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check, MonitorOff, MoreHorizontal } from "lucide-react";
 
@@ -36,6 +36,9 @@ import {
   type DesktopBridgeStatus,
 } from "@/lib/desktop-bridge";
 import { DEFAULT_BOT_WORKPLACE } from "../../../shared/bot-workplace";
+import { osLabel, type BotComputerHostView } from "../../../shared/bot-computer-host";
+import { useBotHostComputer } from "@/lib/host-computers";
+import { api } from "@/state/store";
 import type { PillOption } from "../SettingsPrimitives";
 import { navigateThreadMenu } from "../BotProjects";
 import { SandboxDesktopModal } from "../computer/SandboxDesktopModal";
@@ -117,6 +120,56 @@ export function computerCardTitle(
   return t("botPanel.computerCard.title");
 }
 
+/** In Auto, the computer the bot really works on now (the server's preview
+ * of its next turn), instead of guessing "this Mac when it is connected". */
+export type AutoSurface = "cloud" | "local" | "vm" | "browser" | "off";
+
+export function autoCardSource(surface: AutoSurface | null, liveIsLocal: boolean): "local" | "cloud" | "other" | "none" {
+  if (surface === null) return liveIsLocal ? "local" : "cloud";
+  if (surface === "local") return "local";
+  if (surface === "cloud") return "cloud";
+  if (surface === "vm") return "other";
+  return "none";
+}
+
+export function autoThumbnailComputer(surface: AutoSurface | null): string {
+  return surface === "local" || surface === "cloud" || surface === "vm" ? surface : "auto";
+}
+
+function useAutoSurface(botId: string, threadId: string | undefined, enabled: boolean, refreshKey: string): AutoSurface | null {
+  const [surface, setSurface] = useState<AutoSurface | null>(null);
+  useEffect(() => {
+    if (!enabled) { setSurface(null); return; }
+    let alive = true;
+    const query = new URLSearchParams({ threadId: threadId ?? "" });
+    api<{ surface?: unknown }>(`/api/bots/${encodeURIComponent(botId)}/computer?${query.toString()}`)
+      .then((body) => {
+        const value = body.surface;
+        if (alive) setSurface(value === "cloud" || value === "local" || value === "vm" || value === "browser" || value === "off" ? value : null);
+      })
+      .catch(() => { if (alive) setSurface(null); });
+    return () => { alive = false; };
+  }, [botId, threadId, enabled, refreshKey]);
+  return surface;
+}
+
+/** One marked host in the row's menu: name, OS and a status dot; offline last and greyed. */
+function HostChoiceItem({ host, checked, onPick }: { host: BotComputerHostView; checked: boolean; onPick: () => void }) {
+  return (
+    <button type="button" role="menuitemradio" aria-checked={checked} data-computer-card-host={host.online ? "online" : "offline"}
+      onClick={onPick} className={cn(MENU_ITEM, !host.online && "text-ink-tertiary")}>
+      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", host.online ? "bg-success" : "bg-ink-tertiary/60")} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate">{host.name}</span>
+        <span className="truncate text-[11.5px] leading-4 text-ink-tertiary">
+          {host.shellOnly ? `${osLabel(host.os)} \u00b7 ${t("hostComputer.shellOnly")}` : osLabel(host.os)}{host.online ? "" : ` \u00b7 ${t("hostComputer.offline")}`}
+        </span>
+      </span>
+      {checked && <Check size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
+    </button>
+  );
+}
+
 function modeToPatch(mode: ComputerSelectValue): ComputerPatch {
   if (mode === "auto") return { computer: null };
   return { computer: mode };
@@ -133,7 +186,13 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
   const [liveOpen, setLiveOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const thumbButton = useRef<HTMLButtonElement>(null);
-  const thumbComputer = thumbnailComputerFor(bot.computer, bridge, organization);
+  // Bot computers (#2726): a marked host the bot works on, chosen here.
+  const hostComputer = useBotHostComputer(readOnly ? null : bot.id);
+  const chosenHost = hostComputer.hostId ? hostComputer.hosts.find((host) => host.hostId === hostComputer.hostId) ?? null : null;
+  const autoMode = bot.computer == null && !chosenHost;
+  const autoSurface = useAutoSurface(bot.id, bot.threadId, autoMode, `${bot.messages.length}:${bot.busy ? 1 : 0}`);
+  const thumbBase = thumbnailComputerFor(bot.computer, bridge, organization);
+  const thumbComputer = chosenHost ? null : thumbBase === "auto" ? autoThumbnailComputer(autoSurface) : thumbBase;
   const ownDesktop = organization ? thumbnailDesktop(bridge) : null;
   // Refreshed after each bot action (a new message, busy flipping) and when
   // the live window closes.
@@ -148,21 +207,23 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
   const capturedLabel = capturedAt !== null
     ? t("botPanel.computerCard.capturedAt", { time: new Date(capturedAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) })
     : undefined;
-  const selectValue = computerSelectValue(bot.computer);
+  const selectValue: ComputerSelectValue | null = chosenHost ? null : computerSelectValue(bot.computer);
   const options = useMemo(() => computerSelectOptions(bridge, organization), [bridge, organization]);
-  const title = computerCardTitle(bot.computer, bridge, organization);
+  const title = chosenHost ? chosenHost.name : computerCardTitle(bot.computer, bridge, organization);
   const place = effectivePlace(bot);
   const active = activeComputer(bridge ?? EMPTY_BRIDGE, place);
   const liveIsLocal = active.source === "local";
   const desktopId = liveIsLocal ? currentDesktop(bridge)?.id : undefined;
   const caption = t("computer.screenOf", { name: bot.name });
-  const canOpenLive = place !== "off" && place !== "browser";
+  const canOpenLive = !chosenHost && place !== "off" && place !== "browser";
   // the thumbnail and the Awake / Asleep line follow the real
   // state: the screen, asleep (computer offline, cloud computer stopped), or
   // unavailable with its reason, never a wallpaper that looks fine.
-  const cardSource = place === "off" || place === "browser" ? "none"
+  const cardSource = chosenHost ? (chosenHost.shellOnly ? "none" : "local")
+    : place === "off" || place === "browser" ? "none"
     : place === "vm" ? "other"
-    : place === "local" || (place === "auto" && liveIsLocal) ? "local"
+    : place === "auto" ? autoCardSource(autoSurface, liveIsLocal)
+    : place === "local" ? "local"
     : "cloud";
   const permission = useScreenPermission();
   const appCapture = typeof window !== "undefined" && typeof window.ogb?.screenFrame === "function";
@@ -174,15 +235,17 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
     busy: bot.busy === true,
     off: place === "off",
     source: cardSource,
-    online: !organization || ownDesktop?.online === true,
+    online: chosenHost ? chosenHost.online : !organization || ownDesktop?.online === true,
     cloudAsleep,
     hasCapture: src !== null,
-    localProblem: thisComputer ? localScreenProblem({ inApp: appCapture, mac: isMacPlatform(), screenPermission: permission.screen }) : null,
+    localProblem: !chosenHost && thisComputer ? localScreenProblem({ inApp: appCapture, mac: isMacPlatform(), screenPermission: permission.screen }) : null,
   });
   const statusWord = view.status === "asleep" ? t("place.view.ccAsleep.short")
     : view.status === "working" ? t("botPanel.computerCard.working")
     : t("botPanel.computerCard.awake");
-  const status = view.problem ? `${statusWord} \u00b7 ${t(SCREEN_PROBLEM_SHORT[view.problem])}` : statusWord;
+  const status = chosenHost
+    ? [statusWord, osLabel(chosenHost.os), chosenHost.shellOnly ? t("hostComputer.shellOnly") : null].filter(Boolean).join(" \u00b7 ")
+    : view.problem ? `${statusWord} \u00b7 ${t(SCREEN_PROBLEM_SHORT[view.problem])}` : statusWord;
   const reason = view.problem ? t(SCREEN_PROBLEM_LINE[view.problem]) : undefined;
   const menuEnabled = !readOnly && !!onPatch;
   const [menu, setMenu] = useState<{ trigger: HTMLElement; x: number; y: number } | null>(null);
@@ -271,11 +334,20 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
             {options.map((option, index) => (
               <button key={option.value} type="button" role="menuitemradio" aria-checked={option.value === selectValue}
                 data-computer-card-option={option.value} autoFocus={index === 0}
-                onClick={() => { closeMenu(); if (option.value !== selectValue) onPatch?.(modeToPatch(option.value)); }}
+                onClick={() => {
+                  closeMenu();
+                  if (chosenHost) void hostComputer.select(null);
+                  if (option.value !== selectValue) onPatch?.(modeToPatch(option.value));
+                }}
                 className={MENU_ITEM}>
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
                 {option.value === selectValue && <Check size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
               </button>
+            ))}
+            {hostComputer.hosts.length > 0 && <div role="separator" className="my-1 h-px bg-hairline/50" />}
+            {hostComputer.hosts.map((host) => (
+              <HostChoiceItem key={host.hostId} host={host} checked={host.hostId === hostComputer.hostId}
+                onPick={() => { closeMenu(); if (host.hostId !== hostComputer.hostId) void hostComputer.select(host.hostId); }} />
             ))}
           </div>
         </div>, document.body)}

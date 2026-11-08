@@ -29,7 +29,7 @@ function raiseHarnessQuestion(threadId: string, choice: HarnessChoice, origin: "
     ...(choice.pageTargetChoice ? { pageTargetChoice: choice.pageTargetChoice } : {}),
   });
   const messageId = host.askMessageByRequest.get(`${threadId}:${requestId}`);
-  return messageId ? { messageId } : null;
+  return messageId ? { messageId, requestId } : null;
 
 }
   return raiseHarnessQuestion;

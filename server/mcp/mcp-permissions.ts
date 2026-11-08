@@ -141,6 +141,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // the person's own connected Tailcat session (owner and bot checked by the service)
   p("remote:snapshot", "own", "remote_session_snapshot"),
   p("remote:exec", "own", "remote_session_exec"),
+  // the person's own enrolled host used as the bot's computer (#2726)
+  p("remote:host", "own", "host_computer"),
   p("meetings:join", "own", "join_meeting"),
   // 2026-10-19 (member admin audit, docs/member-admin-audit.md): the
   // person's own data or destinations, never an admin's.

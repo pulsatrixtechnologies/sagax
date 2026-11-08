@@ -72,7 +72,7 @@ export function DeviceCardRow({ kind, icon: Icon, title, line, online, access, m
                   <MoreHorizontal size={14} aria-hidden="true" />
                 </button>
                 {open && (
-                  <div role="menu" className={cn(PAGE_POPOVER, "w-[220px] gap-0.5 p-1.5")}>
+                  <div role="menu" className={cn(PAGE_POPOVER, "w-max min-w-[220px] max-w-[300px] gap-0.5 p-1.5")}>
                     {menu.items(() => setOpen(false))}
                   </div>
                 )}

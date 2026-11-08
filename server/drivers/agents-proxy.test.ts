@@ -770,6 +770,7 @@ describe("agents-proxy MCP surface", () => {
       "publish_remote_session",
       "remote_session_snapshot",
       "remote_session_exec",
+      "host_computer",
       "memory_update",
       "rules_update",
       "docs_update",

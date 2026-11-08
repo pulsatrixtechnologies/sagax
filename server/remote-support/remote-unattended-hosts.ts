@@ -28,7 +28,7 @@ import {
   type UnattendedHostRow,
   type UnattendedHostScope,
 } from "../../shared/remote-unattended-host.ts";
-import { handleRemoteSupportCall, openUnattendedSession, type RemoteSupportContext } from "./remote-support-local.ts";
+import { handleRemoteSupportCall, newSessionId, openUnattendedSession, type RemoteSupportContext } from "./remote-support-local.ts";
 import { reportBackgroundError } from "../background-error.ts";
 import { hostInstallCommand, hostInstallCommands } from "../../shared/remote-host-install.ts";
 
@@ -70,9 +70,17 @@ export interface UnattendedHostAuditEvent {
   botId?: string;
 }
 
+/** A bot computer's session (host-computer-router.ts): opened through that
+ * bot's Perspicax link, on a conversation of its own, so no card lands in a
+ * chat the person reads. */
+export interface UnattendedSeatTarget {
+  botId: string;
+  threadId: string;
+}
+
 export type HostsListOutcome = { available: true; hosts: UnattendedHostRow[] } | { available: false; hosts: []; reason: string };
 export type HostOpenOutcome =
-  | { ok: true; code: string; botId: string; threadId: string }
+  | { ok: true; code: string; botId: string; threadId: string; session: string }
   | { ok: false; error: "invalid" | "unavailable" | "refused" | "not_found"; message: string };
 export type HostCodeOutcome =
   | { ok: true; code: string; enrollUrl: string | null; org: string; scope: UnattendedHostScope; expiresAt: string | null; installCommand: string; installCommands: { macos: string; linux: string; windows: string } }
@@ -121,7 +129,7 @@ function finished(text: string): "connected" | "over" | null {
 
 export function createUnattendedHosts(deps: {
   /** The person's Perspicax link, or a reason it cannot be made. */
-  seat(principalId: string): Promise<PerspicaxSeat | { error: string }>;
+  seat(principalId: string, target?: UnattendedSeatTarget): Promise<PerspicaxSeat | { error: string }>;
   /** The technician side on this computer (support folder, name, org). */
   local(principalId: string): RemoteSupportContext;
   /** End a Sagax session row by its 12-hex id (cuts control and the tunnel). */
@@ -196,7 +204,14 @@ export function createUnattendedHosts(deps: {
      * Always available: unattended access is not a server mode (2026-11-01).
      * Ownership: the host must be one of theirs (installed_by matches their
      * Perspicax subject, or listed as theirs when no subject is known). */
-    async open(viewer: UnattendedHostsViewer, rawHostId: string, options: { scope?: string; rights?: string } = {}): Promise<HostOpenOutcome> {
+    async open(viewer: UnattendedHostsViewer, rawHostId: string, options: {
+      scope?: string;
+      rights?: string;
+      /** Open on this bot and conversation instead of the Primary Bot's. */
+      seatFor?: UnattendedSeatTarget;
+      /** The session id, before Perspicax is asked (a bot computer marks it quiet). */
+      onSession?: (sessionId: string) => void;
+    } = {}): Promise<HostOpenOutcome> {
       const hostId = parseUnattendedHostId(rawHostId);
       if (!hostId) return { ok: false, error: "invalid", message: "That computer is not an enrolled host." };
       const scope = typeof options.scope === "string" && options.scope ? options.scope : "full-control";
@@ -224,8 +239,11 @@ export function createUnattendedHosts(deps: {
         auditOpen(false);
         return { ok: false, error: "not_found", message: "That computer is not one of your enrolled hosts." };
       }
-      const local = deps.local(viewer.principalId);
-      const seat = await deps.seat(viewer.principalId).catch(() => ({ error: NO_SEAT }));
+      const base = deps.local(viewer.principalId);
+      const local: RemoteSupportContext = options.onSession
+        ? { ...base, sessionId: () => { const id = (base.sessionId ?? newSessionId)(); options.onSession?.(id); return id; } }
+        : base;
+      const seat = await deps.seat(viewer.principalId, options.seatFor).catch(() => ({ error: NO_SEAT }));
       if ("error" in seat) {
         auditOpen(false);
         return { ok: false, error: "unavailable", message: seat.error };
@@ -247,7 +265,7 @@ export function createUnattendedHosts(deps: {
       openedFor.set(hostId, ids);
       auditOpen(true, seat.botId);
       void follow(seat, local, hostId, out.code).catch(reportBackgroundError);
-      return { ok: true, code: out.code, botId: seat.botId, threadId: seat.threadId };
+      return { ok: true, code: out.code, botId: seat.botId, threadId: seat.threadId, session: out.session };
     },
 
     /** A one-time code to enroll a new computer for unattended access

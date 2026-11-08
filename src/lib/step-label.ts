@@ -203,6 +203,21 @@ function internalName(name: string): string | undefined {
   return name.replace(INTERNAL, "");
 }
 
+const HOST_VM_STEP: Record<string, LocaleKey> = {
+  vm_provision: "step.hostVm.provision",
+  vm_rebuild: "step.hostVm.rebuild",
+  vm_delete: "step.hostVm.delete",
+  vm_status: "step.hostVm.status",
+  set_mode: "step.hostVm.mode",
+  ask_mode: "step.hostVm.mode",
+};
+
+function isHostComputerTool(name: string): boolean {
+  const internal = internalName(name);
+  const bare = (internal ?? parseToolId(name).name ?? name).toLowerCase();
+  return bare === "host_computer";
+}
+
 function kindOf(name: string): Kind | undefined {
   const builtin = BUILTIN[name];
   if (builtin) return builtin;
@@ -450,6 +465,16 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf, live?: boolean): S
     if (named) return named;
   }
   const args = parseArgs(tool.input) ?? parseArgs(tool.summary);
+  // Bot computers (#2726, #2727): a host's shell reads as a command, its
+  // screen as the screen, and its VM work as one compact provisioning line.
+  if (isHostComputerTool(name)) {
+    const action = typeof args?.action === "string" ? args.action : "";
+    if (action === "exec") return { label: kindLabel("runCommand", phase, args, nameOf), ...kindAim("runCommand", args, tool) };
+    if (action === "screenshot") return { label: kindLabel("screen", phase, args, nameOf) };
+    const vmKey = HOST_VM_STEP[action];
+    if (vmKey) return { label: t(vmKey) };
+    return { label: kindLabel("computer", phase, args, nameOf) };
+  }
   const kind = kindOf(name);
   if (kind) {
     const aim = kindAim(kind, args, tool);

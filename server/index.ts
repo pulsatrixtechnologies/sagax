@@ -31,7 +31,7 @@ import { createBotsMutateRoutes } from "./routes/bots-mutate.ts";
 // First of all, SAGAX_* settings onto the names the code reads (step 1 of
 // the rename, electron/legacy-names.mjs).
 import { isReadOnlyCommand, runCommandOf } from "../shared/read-only-command.ts";
-import { grantRemoteExecApproval, noteRemoteExecRequest, remoteSessionToolCall } from "./remote-support/remote-session-exec.ts";
+import { consumeRemoteExecApproval, grantRemoteExecApproval, noteRemoteExecRequest, remoteSessionToolCall } from "./remote-support/remote-session-exec.ts";
 import "../electron/legacy-env-boot.mjs";
 import { ENVIRONMENT_PATHS, HEALTH_IDENTITY } from "../electron/legacy-names.mjs";
 import { healthzBody, healthzUnreadyBody } from "./process/healthz.ts";
@@ -851,6 +851,8 @@ import { createRemoteSessionActionsAudit, readRemoteSessionLog } from "./remote-
 import { createUnattendedConsentStore } from "./remote-support/remote-session-consent-store.ts";
 import { createRemoteSessionsAdmin } from "./remote-support/remote-sessions-admin.ts";
 import { createUnattendedHosts } from "./remote-support/remote-unattended-hosts.ts";
+import { createHostComputerStore } from "./remote-support/host-computer-store.ts";
+import { createHostComputerRouter, hostComputerExecCommand } from "./remote-support/host-computer-router.ts";
 import { createRemoteSessionRegistrar } from "./remote-support/remote-session-register.ts";
 import { handleRemoteSupportCall, recallSupportSession } from "./remote-support/remote-support-local.ts";
 import { guardRemoteSupportOpen } from "./remote-support/remote-support-open-guard.ts";
@@ -860,6 +862,7 @@ import { createRemoteSessionInternalRoutes, createRemoteSessionRoutes } from "./
 import { createRemoteSessionsAdminRoutes } from "./routes/remote-sessions-admin.ts";
 import { createRemoteBotHosts } from "./remote-support/remote-bot-hosts.ts";
 import { createRemoteBotHostsRoutes } from "./routes/remote-bot-hosts.ts";
+import { createHostComputerInternalRoutes, createHostComputersRoutes } from "./routes/host-computers.ts";
 import { createRemoteHostsRoutes } from "./routes/remote-hosts.ts";
 import { RemoteHostTeams } from "./remote-support/remote-host-teams.ts";
 import { RemoteHostAccess, hostAccessGate } from "./remote-support/remote-host-access.ts";
@@ -6651,6 +6654,7 @@ bindLeafHost({
   get confirmHeldCard() { return confirmHeldCard; },
   get acceptDirectSend() { return acceptDirectSend; },
   get deliverLateQuestionAnswer() { return deliverLateQuestionAnswer; },
+  get hostComputers() { return hostComputers; },
   get startOrQueueOpenedThread() { return startOrQueueOpenedThread; },
   get screenPollers() { return screenPollers; },
   get computerThumbnails() { return computerThumbnails; },
@@ -14602,13 +14606,14 @@ const remoteSessionsAdmin = createRemoteSessionsAdmin({
 // on that bot's conversation, so the session card and panel row come from
 // the usual remote_support_* registrar.
 const unattendedHosts = createUnattendedHosts({
-  seat: async (principalId) => {
+  seat: async (principalId, target) => {
     const mcp = perspicaxMcp;
     if (!mcp) return { error: "This server is not linked to Perspicax." };
     const mine = store.bots.filter((bot) => !bot.temporary && effectiveBotOwner(bot).trim().toLowerCase() === principalId);
-    const bot = mine.find((candidate) => candidate.chiefOfStaff) ?? mine[0];
+    // a bot computer's session opens on that bot's own link (#2726)
+    const bot = target ? mine.find((candidate) => candidate.id === target.botId) : (mine.find((candidate) => candidate.chiefOfStaff) ?? mine[0]);
     if (!bot) return { error: "None of your bots can host this Perspicax connection." };
-    const threadId = bot.threadId;
+    const threadId = target?.threadId ?? bot.threadId;
     const generation = randomUUID();
     const plan = await mcp.prepareTurn({
       threadId, generation, bot: { id: bot.id },
@@ -14700,6 +14705,33 @@ const remoteBotHosts = createRemoteBotHosts({
       : null;
   }
 });
+// Bot computers (#2726, #2727): an enrolled host the person marked "Use as a
+// bot computer" is a choice in each bot's Computer menu. The bot's calls run
+// there on a quiet session (no Remote session card), opened through that
+// bot's own Perspicax link, reused, closed when idle.
+const hostComputerStore = createHostComputerStore({ dataDir: DATA_DIR });
+const hostComputers = createHostComputerRouter({
+  store: hostComputerStore,
+  hosts: unattendedHosts,
+  sessions: remoteSessions,
+  botThread: (botId) => store.bot(botId)?.threadId ?? null,
+  botName: (botId) => store.bot(botId)?.name ?? "bot",
+  ownerSub: (principalId) => {
+    const person = principals.byId(principalId);
+    return person?.subject && IDENTITY.kind === "perspicax" && person.subject.iss === IDENTITY.issuer
+      ? person.subject.sub
+      : null;
+  },
+  consumeApproval: (threadId, command) => consumeRemoteExecApproval(threadId, command),
+  raiseQuestion: (threadId, question) => raiseHarnessQuestion(threadId, {
+    title: question.title,
+    question: question.question,
+    options: question.options.map((option) => option.label),
+    questionOptions: question.options.map((option) => ({ id: option.id, label: option.label, description: option.description })),
+  })?.requestId ?? null,
+  log: (line) => console.warn(line),
+});
+setInterval(() => { void hostComputers.sweep().catch(reportBackgroundError); }, 60_000).unref();
 // The usage card (server/resource-usage/): read-only samples of a computer
 // the person already reaches, under the same rules as its terminal.
 const resourceUsage = installResourceUsage({
@@ -17203,6 +17235,8 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get groupUsageReader() { return groupUsageReader; },
   get handoffs() { return handoffs; },
   get holdSignInRefusal() { return holdSignInRefusal; },
+  get hostComputerExecCommand() { return hostComputerExecCommand; },
+  get hostComputers() { return hostComputers; },
   get hostScreenTurn() { return hostScreenTurn; },
   get isAgentConversation() { return isAgentConversation; },
   get isCodexAmbientMcpRefusal() { return isCodexAmbientMcpRefusal; },
@@ -21899,6 +21933,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   // publish_remote_session (server/routes/remote-sessions.ts)
   createRemoteSessionInternalRoutes({
     sessions: remoteSessions,
+    ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
+    speaker: remoteSessionSpeaker
+  }),
+  // host_computer (server/routes/host-computers.ts, #2726)
+  createHostComputerInternalRoutes({
+    router: hostComputers,
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
     speaker: remoteSessionSpeaker
   }),
@@ -30206,6 +30246,18 @@ ROUTES.push(createRemoteControlRoutes({
 ROUTES.push(createRemoteSessionFileRoutes({ sessions: remoteSessions, principalId: terminalPrincipalId }));
 ROUTES.push(createRemoteSessionsAdminRoutes({ admin: remoteSessionsAdmin, hosts: unattendedHosts, principalId: terminalPrincipalId, orgAdmin: orgAdminCaller, hostAccess: (principalId) => remoteHostAccess.forPrincipal(principalId) }));
 ROUTES.push(createRemoteBotHostsRoutes({ hosts: remoteBotHosts, principalId: terminalPrincipalId }));
+ROUTES.push(createHostComputersRoutes({
+  router: hostComputers,
+  store: hostComputerStore,
+  principalId: terminalPrincipalId,
+  // Solo: every bot is the person's. Organization: their own bots only.
+  ownsBot: (principalId, botId) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    if (IDENTITY.kind !== "perspicax") return true;
+    return effectiveBotOwner(bot).trim().toLowerCase() === principalId.trim().toLowerCase();
+  }
+}));
 ROUTES.push(createRemoteHostsRoutes({
   principalId: terminalPrincipalId,
   available: (principalId) => remoteBotHosts.available(principalId),

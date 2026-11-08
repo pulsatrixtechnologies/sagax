@@ -30,6 +30,8 @@ import { workspaceDiskLevel } from "../../../shared/workspace-disk";
 import { cn } from "@/lib/cn";
 
 import { hostPlaceKey, parseHostPlaceKey, remoteHostPlaces } from "../../../shared/remote-bot-hosts";
+import { osLabel } from "../../../shared/bot-computer-host";
+import { useBotHostComputer } from "@/lib/host-computers";
 import type { UnattendedHostRow } from "../../../shared/remote-unattended-host";
 import type { RemoteSessionView } from "../../../shared/remote-session";
 import { PLACE_LABEL_MAX } from "../../../shared/place-labels";
@@ -141,18 +143,25 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
   const choices = computerChoices(bridge);
   const labels = usePlaceLabels();
   const catalog = remoteCatalog.length > 0 ? remoteCatalog : remoteHosts;
+  // Bot computers (#2726): marked hosts are Computer choices of their own,
+  // never a remote session (no attach, no session card).
+  const botHosts = useBotHostComputer(botId ?? null);
+  const botHostIds = new Set(botHosts.hosts.map((host) => host.hostId));
   const hostPlaces = remoteHostPlaces(
     remoteHosts.map((row) => row.hostId),
     catalog,
     t("botRemoteHosts.place"),
-  );
+  ).filter((row) => !botHostIds.has(row.hostId));
   // A manual pick holds until the bot's destination (or the conversation) changes.
   const scope = `${botId ?? ""}:${threadId ?? ""}:${inUse ?? ""}`;
   const [pick, setPick] = useState<{ scope: string; key: string } | null>(null);
   // the pick ends for good when the scope moves (adjusting state while rendering)
   if (pick && pick.scope !== scope) setPick(null);
   const picked = pick && pick.scope === scope ? pick.key : null;
+  const selectBotHost = botHosts.select;
   const setPicked = useCallback((key: string) => {
+    const botHostId = botHostOfPickerKey(key);
+    if (botHostId) { void selectBotHost(botHostId); return; }
     setPick({ scope, key });
     const hostId = parseHostPlaceKey(key);
     if (!hostId) return;
@@ -162,7 +171,7 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
       return;
     }
     onPickRemoteHost?.(hostId);
-  }, [scope, onPickRemoteHost, onAttachRemoteHost, hostPlaces]);
+  }, [scope, onPickRemoteHost, onAttachRemoteHost, hostPlaces, selectBotHost]);
   const onHostAction = useCallback((key: string, action: HostPlaceAction) => {
     const hostId = parseHostPlaceKey(key);
     if (!hostId) return;
@@ -227,6 +236,14 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
           : "offline",
       };
     }),
+    ...botHosts.hosts.map((host): ScreenPickerItem => ({
+      key: botHostPickerKey(host.hostId),
+      technical: `${host.name} \u00b7 ${osLabel(host.os)}`,
+      label: host.name,
+      icon: host.shellOnly ? Server : Monitor,
+      here: botHosts.hostId === host.hostId,
+      dot: host.online ? "online" : "offline",
+    })),
     ...(browser !== null ? [{
       key: "browser",
       technical: t("computer.view.browser"),
@@ -236,7 +253,7 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
     }] : []),
   ];
   void labels; // subscribe so renames re-render
-  const showPicker = choices.length > 1 || browser !== null || hostPlaces.length > 0;
+  const showPicker = choices.length > 1 || browser !== null || hostPlaces.length > 0 || botHosts.hosts.length > 0;
   const cloudName = placeLabel("server", t("orgComputer.choice.cloud"));
   const desktopName = desktop ? placeLabel(`desktop:${desktop.id}`, desktop.name) : t("computerScreen.computer");
   const hostName = hostRow
@@ -296,6 +313,15 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
       </div>}
     </div>
   );
+}
+
+const BOT_HOST_PICKER_PREFIX = "bothost:";
+/** A bot computer's key in the screen picker (not the remote-session "host:" places). */
+export function botHostPickerKey(hostId: string): string {
+  return `${BOT_HOST_PICKER_PREFIX}${hostId}`;
+}
+export function botHostOfPickerKey(key: string | null | undefined): string | null {
+  return key && key.startsWith(BOT_HOST_PICKER_PREFIX) ? key.slice(BOT_HOST_PICKER_PREFIX.length) || null : null;
 }
 
 /** One chip of a screen picker. */

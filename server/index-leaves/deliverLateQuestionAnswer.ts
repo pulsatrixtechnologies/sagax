@@ -22,6 +22,9 @@ async function deliverLateQuestionAnswer(
   callId?: string,
 ): Promise<{ queued: boolean }> {
   const host = getHost();
+  // the isolated / as-is question of a bot computer (#2727): remember the
+  // answer for that host and bot; the bot still reads it as the next message
+  try { host.hostComputers?.answer(requestId, answer); } catch (error) { console.warn(`host computer answer: ${String(error)}`); }
   const group = host.store.groupByThread(threadId);
   const roomTarget = group
     ? group.dm

@@ -128,6 +128,10 @@ export function botTmpName(scope, key = BOT_TMP_KEY) {
 const lockedRoots = new Map();
 /** The bot folder names made by this run, by root: kept by the sweep. */
 const madeThisRun = new Map();
+function keptBotTmpNames(root) {
+  if (!madeThisRun.has(root)) madeThisRun.set(root, new Set());
+  return madeThisRun.get(root);
+}
 const BOT_TMP_ENTRY = /^[a-f0-9]{16}(?:[a-f0-9]{16})?$/;
 
 /** Removes a folder a bot may have closed (a subfolder chmod 0500 or 0000):
@@ -153,7 +157,9 @@ async function lockBotTmpRoot(root, platform) {
     lockedRoots.set(root, (async () => {
       try {
         await fs.chmod(root, 0o700).catch(() => {});
-        const keep = madeThisRun.get(root) ?? new Set();
+        // The live set of this run, read at each name: a bot folder made
+        // while the listing runs is never taken for an earlier run's.
+        const keep = keptBotTmpNames(root);
         for (const name of await fs.readdir(root)) if (BOT_TMP_ENTRY.test(name) && !keep.has(name)) await removeClosedTree(path.join(root, name));
       } catch { /* nothing to tidy */ }
       if (platform === "win32") await lockWindowsRoot(root).catch(() => {});
@@ -190,8 +196,7 @@ async function lockWindowsRoot(root) {
 export async function botTmpDir(root, scope, { key = BOT_TMP_KEY, platform = process.platform } = {}) {
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
   const name = botTmpName(scope, key);
-  if (!madeThisRun.has(root)) madeThisRun.set(root, new Set());
-  madeThisRun.get(root).add(name);
+  keptBotTmpNames(root).add(name);
   const dir = path.join(root, name);
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   await fs.chmod(dir, 0o700).catch(() => {});

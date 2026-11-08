@@ -104,7 +104,7 @@ describe("ModelSearchList footer and preview (#2181)", () => {
     })));
     const options = $$("[data-model-section=\"claude\"] [data-model-option]").map((row) => row.dataset.modelOption);
     expect(options).toEqual(["m0", "m1", "m2", "m5"]);
-    expect($("[data-model-show-more=\"claude\"]")?.textContent).toBe("Show more");
+    expect($("[data-model-show-more=\"claude\"]")?.textContent).toBe("Show more (3)");
   });
 
   it("expands and collapses a provider with Show more / Show less", () => {

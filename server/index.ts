@@ -201,7 +201,7 @@ import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
-import { createSkillReview, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
+import { createSkillReview, looksLikeStop, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
 import { summarizeSessions } from "./recall/session-summary.ts";
 import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
@@ -16430,7 +16430,9 @@ bus.subscribe((event: RuntimeEvent) => {
     const attended = !isInternalTurn(event.threadId) && !isUnattended(bot.id, event.threadId)
       && !routines?.runForThread(event.threadId) && !(CLOUD_HOME && !cloudOwnerOnlyThread(event.threadId))
       && !store.isConfidentialThread(event.threadId);
-    if (counts) skillReview.noteTurn(bot.id, event.threadId, turnToolSteps(messages, event.turnId, bot.id, Boolean(room)));
+    // a turn the person opened with a stop teaches nothing (G4)
+    const opening = messages.findLast((message) => message.role === "user" && message.kind === "text");
+    if (counts && !looksLikeStop(opening?.text)) skillReview.noteTurn(bot.id, event.threadId, turnToolSteps(messages, event.turnId, bot.id, Boolean(room)));
     // A failure or a correction while a skill was in play brings the review
     // forward, focused on that skill (#2610).
     if (attended && skillAuthoringEnabled(cfg) && bot.skillLearning !== false) {

@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
-import { createOrgMemberRoutes, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
+import { createOrgMemberRoutes, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
 
 const ISS = "https://perspicax.example";
 const ORIGIN = "https://sagax.example";
@@ -1090,5 +1090,18 @@ describe("owner-scoped routine and bot reads", () => {
     expect(admin.status).toBe(404);
     expect(performed.map((row) => row.request.path)).toEqual(["/api/bot-catalog"]);
     expect(recorded).toEqual([]);
+  });
+});
+
+describe("a skill card answered through the member API (G4)", () => {
+  const sha = "a".repeat(64);
+  const approval = { kind: "request", choices: [{ id: "1", label: "Enable" }, { id: "2", label: "Not now" }], options: [] } as never;
+  const card = { skillRequest: { preview: "---\nname: x\n---", sha256: sha } };
+  it("echoes the reviewed hash on allow, never on deny", () => {
+    const allow = planAnswer(approval, card, { decision: "allow" });
+    expect(allow).toMatchObject({ ok: true, body: { behavior: "allow", reviewedSha256: sha } });
+    const deny = planAnswer(approval, card, { decision: "deny" });
+    expect(deny).toMatchObject({ ok: true, body: { behavior: "deny" } });
+    expect((deny as { body: object }).body).not.toHaveProperty("reviewedSha256");
   });
 });

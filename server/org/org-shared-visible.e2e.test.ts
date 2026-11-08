@@ -100,7 +100,10 @@ async function openStream(auth: Auth): Promise<{ text: () => string; ended: () =
 /** The frames a stream carried, parsed. */
 const framesOf = (text: string) => text.split("\n").filter((line) => line.startsWith("data: ")).map((line) => JSON.parse(line.slice(6)) as Record<string, any>);
 
-type WireBot = { id: string; threadId: string; tasks: Array<{ threadId: string; title: string; ownerPrincipalId?: string }>; messages: Array<{ kind: string; role: string; text?: string }> };
+type WireBot = { id: string; systemBot?: string; threadId: string; tasks: Array<{ threadId: string; title: string; ownerPrincipalId?: string }>; messages: Array<{ kind: string; role: string; text?: string }> };
+// The shared Feedback bot is offered to every member (#2955): the people of these
+// tests are compared on the bots that were shared with them, not on it.
+const withoutSystemBots = <T extends { systemBot?: string }>(bots: T[]): T[] => bots.filter((bot) => !bot.systemBot);
 const botOf = async (auth: Auth, id: string) => ((await api("GET", "/api/bots", auth)).body.bots as WireBot[]).find((bot) => bot.id === id);
 
 async function start() {
@@ -178,7 +181,7 @@ posixOnly("Perspicax organization: a bot and a group shared with someone who own
     const bob = await signIn(BOB);
     // bob owns nothing and sees nothing yet
     const before = (await api("GET", "/api/bots", bob)).body;
-    expect(before.bots).toEqual([]);
+    expect(withoutSystemBots(before.bots)).toEqual([]);
     expect(before.groups).toEqual([]);
     const stream = await openStream(bob);
     await waitFor(async () => framesOf(stream.text()).some((frame) => frame.kind === "hello"));
@@ -202,7 +205,7 @@ posixOnly("Perspicax organization: a bot and a group shared with someone who own
     expect(shared.status, shared.text).toBe(200);
     await waitFor(async () => stream.ended() || framesOf(stream.text()).some((frame) => frame.kind === "bot" && frame.bot?.id === botId));
     const listed = (await api("GET", "/api/bots", bob)).body;
-    expect(listed.bots.map((bot: { id: string }) => bot.id)).toEqual([botId]);
+    expect(withoutSystemBots(listed.bots).map((bot: { id: string }) => bot.id)).toEqual([botId]);
 
     // alice adds bob to the group: the same, on a stream opened after the share
     const live = stream.ended() ? await openStream(bob) : stream;
@@ -212,11 +215,11 @@ posixOnly("Perspicax organization: a bot and a group shared with someone who own
     await waitFor(async () => live.ended() || framesOf(live.text()).some((frame) => frame.kind === "group" && frame.group?.id === roomId));
     const withRoom = (await api("GET", "/api/bots", bob)).body;
     expect(withRoom.groups.map((group: { id: string }) => group.id)).toEqual([roomId]);
-    expect(withRoom.bots.map((bot: { id: string }) => bot.id)).toEqual([botId]);
+    expect(withoutSystemBots(withRoom.bots).map((bot: { id: string }) => bot.id)).toEqual([botId]);
     expect((await api("GET", "/api/groups", bob)).body.groups.map((group: { id: string }) => group.id)).toEqual([roomId]);
 
     // SV-3: bob's view of the bot is his own thread, never alice's
-    const mine = withRoom.bots[0] as WireBot;
+    const mine = withoutSystemBots<WireBot>(withRoom.bots)[0]!;
     expect(mine.threadId).not.toBe(aliceThread);
     expect(mine.tasks.map((task) => task.threadId)).not.toContain(aliceThread);
     expect(JSON.stringify(withRoom)).not.toContain("alice secret plan");
@@ -233,9 +236,9 @@ posixOnly("Perspicax organization: a bot and a group shared with someone who own
     const stream = await openStream(carol);
     await waitFor(async () => framesOf(stream.text()).some((frame) => frame.kind === "hello"));
     const first = (await api("GET", "/api/bots", carol)).body;
-    expect(first.bots.map((bot: { id: string }) => bot.id)).toEqual([botId]);
+    expect(withoutSystemBots(first.bots).map((bot: { id: string }) => bot.id)).toEqual([botId]);
     expect(first.groups.map((group: { id: string }) => group.id)).toEqual([roomId]);
-    expect((first.bots[0] as WireBot).threadId).not.toBe(aliceThread);
+    expect(withoutSystemBots<WireBot>(first.bots)[0]!.threadId).not.toBe(aliceThread);
     expect(JSON.stringify(first)).not.toContain("alice secret plan");
     stream.close();
   }, 60_000);
@@ -287,7 +290,7 @@ posixOnly("Perspicax organization: a bot and a group shared with someone who own
     const rooms = (await api("GET", "/api/groups", carol)).body.groups as Array<{ id: string; memberProfiles: Array<{ name: string }> }>;
     expect(rooms.find((group) => group.id === scoutRoom)!.memberProfiles.map((profile) => profile.name)).toEqual(["Scout", "Xavier", "Yuki"]);
     // Scout is not carol's to open: not in her bots, its details refused
-    expect(listed.bots.map((bot: { id: string }) => bot.id)).not.toContain(scoutId);
+    expect(withoutSystemBots(listed.bots).map((bot: { id: string }) => bot.id)).not.toContain(scoutId);
     expect(await botOf(carol, scoutId)).toBeUndefined();
     for (const sub of ["soul", "system-prompt", "memory", "skills"]) {
       expect([403, 404], sub).toContain((await api("GET", `/api/bots/${scoutId}/${sub}`, carol)).status);

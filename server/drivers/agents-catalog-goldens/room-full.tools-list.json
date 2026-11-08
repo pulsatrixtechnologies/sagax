@@ -1866,7 +1866,7 @@
     },
     {
       "name": "session_read",
-      "description": "Read the full text of one message from your own earlier conversations, using the thread id and message id a session_search hit gave you. Use it when a hit's snippet is the right message but you need the whole thing (a report, a list, a set of recommendations). Long messages are cut at 8,000 characters.",
+      "description": "Read the full text of one message from your own earlier conversations, using the thread id and message id a session_search hit gave you. Use it when a hit's snippet is the right message but you need the whole thing (a report, a list, a set of recommendations). With a thread_id only, it reads the newest message of that conversation (the last report of an earlier run). Long messages are cut at 8,000 characters.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1877,12 +1877,11 @@
           },
           "message_id": {
             "type": "string",
-            "description": "The message id from the session_search hit."
+            "description": "The message id from the session_search hit. Omit to read the newest message of the thread."
           }
         },
         "required": [
-          "thread_id",
-          "message_id"
+          "thread_id"
         ]
       },
       "annotations": {

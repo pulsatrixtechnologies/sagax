@@ -3,6 +3,7 @@
 // Orchestrator owns try/catch/finally; these handlers take TurnState + host.
 // Never imports server/index.ts.
 import { recoveryCapabilityError } from "../automatic-recovery.ts";
+import { INACTIVE_CAPABILITY_FAILED, inactiveCapabilityOutcome, isInactiveTurnCapabilityError } from "./inactive-turn-capability.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -87,6 +88,14 @@ let e: any = cause;
         retireProviderTurn(e.turnId);
         if (!mayRecover) e = new DirectTurnSetupCancelled("turn stopped during provider setup");
       }
+      // #2632: a mint refused because this turn's generation was revoked
+      // mid-setup is a stop or a reload, never an error step in the thread.
+      const inactiveCapability = isInactiveTurnCapabilityError(e) ? inactiveCapabilityOutcome({
+        claimCurrent: directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId),
+        stopped: directRequestOwners.get(state.threadId)?.stopped === true,
+        retried: state.opts?.capabilityRetried === true,
+      }) : null;
+      if (inactiveCapability === "cancelled") e = new DirectTurnSetupCancelled("turn stopped while its tools were mounted");
       handoffs.abandon(state.threadId, state.dispatchClaimId);
       if (computerSelectionTurns.get(state.threadId)?.generation === state.dispatchClaimId) computerSelectionTurns.delete(state.threadId);
       clearCancelledProviderHandshake(state.threadId, `direct:${state.dispatchClaimId}`);
@@ -157,6 +166,22 @@ let e: any = cause;
       // names the composer.
       if (e instanceof PlaceUnavailableError) clearFailedAutoPin(state.bot.id, state.threadId, e.place);
       let message = e instanceof Error ? e.message : String(e);
+      if (inactiveCapability === "retry") {
+        // A provider reload retired this turn's bearers while it mounted its
+        // tools: start it again once, with fresh ones. No await between
+        // releasing this attempt and admitting the next.
+        store.setTaskActivity(state.bot.id, state.threadId, "idle");
+        directTurnBots.delete(state.threadId);
+        try {
+          await state.startTurn(state.bot.id, state.text, { ...state.opts, threadId: state.threadId, userMessage: state.userMessage, editedMessageId: undefined, capabilityRetried: true });
+          directFollowupSettlers.delete(state.dispatchClaimId);
+          directCoordinationSettlers.delete(state.dispatchClaimId);
+          coordinator.dropTurn(state.dispatchClaimId, "Restarted after an engine reload");
+          return;
+        } catch (failure) {
+          message = `${INACTIVE_CAPABILITY_FAILED} ${failure instanceof Error ? failure.message : String(failure)}`;
+        }
+      } else if (inactiveCapability === "fail") message = INACTIVE_CAPABILITY_FAILED;
       // Auto: an engine that refused to start this pick is skipped for this
       // payer, and the turn climbs the fallback chain once. A second
       // refusal is the engine's own error, below.

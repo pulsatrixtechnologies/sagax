@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** mintInternalCapability (#1388). Pure move from server/index.ts. */
 import { randomBytes } from "node:crypto";
+import { InactiveTurnCapabilityError } from "../turns/inactive-turn-capability.ts";
 export type Host = Record<string, any>;
 
 export function createMintInternalCapability(getHost: () => Host): any {
@@ -8,7 +9,7 @@ function mintInternalCapability(capability: Omit<InternalCapability, "orphanExpi
   const host = getHost();
   
   if (host.activeInternalGenerationByThread.get(capability.threadId) !== capability.generation) {
-    throw new Error("cannot mint an integration capability for an inactive turn");
+    throw new InactiveTurnCapabilityError();
   }
   // perTurn: a bridge into a machine the harness stops and starts between
   // turns (a Local VM, the VPS, a Boat). A warm engine never restarts a

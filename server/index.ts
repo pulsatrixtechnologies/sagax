@@ -18449,6 +18449,8 @@ async function startTurn(
     autoSkip?: AutoChainEntry[];
     /** Auto: this turn already climbed the fallback chain once. */
     autoRetried?: boolean;
+    /** #2632: restarted once after a reload revoked its tools mid-setup. */
+    capabilityRetried?: boolean;
     /** Cursor into this bot's ordered startup-only backups. */
     automaticRecoveryIndex?: number;
     /** Queue receipts outlive the dispatch acknowledgment until this exact turn settles. */

@@ -111,9 +111,9 @@ export function createOriginApprovals(deps: OriginApprovalsDeps) {
       // Recover a view committed before its source backlink (a cut write or
       // restart), rather than appending another card for the same call.
       const saved = store.messagesFor(destination).find(row => row.card?.approvalOrigin?.threadId === threadId && row.card.approvalOrigin.messageId === message.id);
-      // full-access: exempt (linked view, the original card already holds the turn)
       // #2915: the label is read once per copy
       const via = saved ? undefined : deps.via?.(threadId, message);
+      // full-access: exempt (linked view, the original card already holds the turn)
       const mirror = saved ? store.patchMessage(destination, saved.id, { card: mirrored })!
         : store.appendMessage(destination, { role: "bot", kind: "options", from: deps.speaker(threadId, message), card: mirrored,
           ...(via ? { relayVia: via } : {}) });

@@ -17,6 +17,7 @@ import type { RouteHandler } from "./table.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { AdminViewer, RemoteSessionsAdmin } from "../remote-support/remote-sessions-admin.ts";
 import { cleanReason, REVOKE_REASON_MAX, type UnattendedHosts } from "../remote-support/remote-unattended-hosts.ts";
+import type { UnattendedHostAccess, UnattendedHostRow } from "../../shared/remote-unattended-host.ts";
 
 const LIST = /^\/api\/admin\/remote-sessions$/;
 const UNATTENDED = /^\/api\/admin\/remote-sessions\/unattended$/;
@@ -60,6 +61,8 @@ export function createRemoteSessionsAdminRoutes(deps: {
   orgAdmin(auth: RequestAuth): boolean;
   /** Enrolled hosts at Perspicax. Absent: the hosts routes answer 404. */
   hosts?: UnattendedHosts;
+  /** The caller's per-host bot access (#2723), stamped on each host row. */
+  hostAccess?(principalId: string): Map<string, UnattendedHostAccess>;
 }): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
     if (!path.startsWith("/api/admin/remote-sessions")) return PASS;
@@ -83,7 +86,10 @@ export function createRemoteSessionsAdminRoutes(deps: {
     if (HOSTS.test(path) && deps.hosts) {
       if (method !== "GET") return json(res, 405, { error: "method not allowed" });
       const listed = await deps.hosts.list({ principalId });
-      return json(res, 200, listed);
+      const chosen = deps.hostAccess?.(principalId);
+      if (!chosen) return json(res, 200, listed);
+      const hosts: UnattendedHostRow[] = listed.hosts.map((row) => ({ ...row, access: chosen.get(row.hostId) ?? "always" }));
+      return json(res, 200, { ...listed, hosts });
     }
 
     const hostAction = HOST_ACTION.exec(path);

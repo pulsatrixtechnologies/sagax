@@ -4,7 +4,8 @@
 // (remote-unattended-hosts.ts installCode).
 
 import { UNATTENDED_HOST_SCOPES, type UnattendedHostScope } from "../../shared/remote-unattended-host.ts";
-import { HOST_CODE_TOOL, hostInstallCommand } from "./remote-unattended-hosts.ts";
+import { HOST_CODE_TOOL } from "./remote-unattended-hosts.ts";
+import { hostInstallCommands } from "../../shared/remote-host-install.ts";
 import type { RemoteSupportContext } from "./remote-support-local.ts";
 
 /** Said as is when the person asks where the host package is: the honest
@@ -13,24 +14,7 @@ export const HOST_PACKAGE_NOTE = "The host program is sagax-remote-access (repo 
 
 type Post = (tool: string, args: Record<string, unknown>) => Promise<{ status: number; body: Record<string, unknown> }>;
 
-function powershellQuoted(value: string): string {
-  // eslint-disable-next-line no-control-regex
-  return `'${value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/'/g, "''")}'`;
-}
-
-/** The exact install line per OS. macOS and Linux run it as root (sudo);
- * Windows in an administrator PowerShell. */
-export function hostInstallCommands(input: { org: string; code: string; scope: UnattendedHostScope; recordedBy: string }): { macos: string; linux: string; windows: string } {
-  const posix = `sudo ${hostInstallCommand(input)}`;
-  const windows = [
-    "sagax-remote-access.exe install --unattended",
-    `--org ${powershellQuoted(input.org)}`,
-    `--code ${powershellQuoted(input.code)}`,
-    `--scope ${input.scope}`,
-    `--consent-recorded-by ${powershellQuoted(input.recordedBy || "Sagax")}`,
-  ].join(" ");
-  return { macos: posix, linux: posix, windows };
-}
+export { hostInstallCommands };
 
 function answerObject(text: unknown): Record<string, unknown> | null {
   if (typeof text !== "string") return null;

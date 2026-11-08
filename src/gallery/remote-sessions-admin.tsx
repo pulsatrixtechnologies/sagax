@@ -11,6 +11,7 @@ import { RemoteSessionsAdminPage, RemoteSessionLogList } from "../components/rem
 import type { RemoteSessionAdminRow, RemoteSessionLogEntry } from "../../shared/remote-session-admin";
 import type { UnattendedHostRow } from "../../shared/remote-unattended-host";
 import { loadLocale, t } from "../lib/i18n";
+import { StoreProvider } from "../state/store";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import "../styles.css";
 
@@ -36,7 +37,7 @@ const rows: RemoteSessionAdminRow[] = [
     unattended: true, unattendedSince: "2026-10-10T14:00:00Z", unattendedExpiresAt: "2027-01-08T14:00:00Z", bannerVisible: true, signed: false,
   },
   {
-    id: "c3d4e5f6a7b8", code: "Z4N8RT", host: "MBP-DESIGN", user: "julie", os: "macos", osKnown: true,
+    id: "c3d4e5f6a7b8", code: "Z4N8RT", host: "srv-linux", user: "root", os: "linux", osKnown: true,
     startedAt: `${DAY}09:15:00Z`, endAt: `${DAY}10:05:00Z`, status: "ended", elevated: false,
     botId: "bot-atlas", botLabel: "Atlas", openedBy: "julie@gox", reachable: false, unattended: false,
   },
@@ -57,19 +58,20 @@ const log: RemoteSessionLogEntry[] = [
   { at: `${DAY}13:20:00Z`, kind: "control.stop", reason: "released" },
 ];
 
+// Enrolled hosts (#2723): a Linux server online now, a PC offline for days.
+// Perspicax does not say the OS: the page reads it from a past session.
+const now = Date.now();
+const iso = (ms: number) => new Date(ms).toISOString();
 const hosts: UnattendedHostRow[] = params.get("hosts") === "0" ? [] : [
-  { hostId: "h-reception", hostname: "POSTE-RECEPTION", org: "Clinique Nord", scope: "full-control", installedBy: null, enrolledAt: "2026-09-30T09:00:00Z", expiresAt: "2026-12-29T09:00:00Z", lastSeenAt: `${DAY}13:20:00Z`, revokedAt: null, state: "enrolled" },
-  { hostId: "h-paie", hostname: "SERVEUR-PAIE", org: "Clinique Nord", scope: "full-control", installedBy: null, enrolledAt: "2026-10-10T14:00:00Z", expiresAt: "2027-01-08T14:00:00Z", lastSeenAt: `${DAY}11:40:00Z`, revokedAt: null, state: "enrolled" },
+  { hostId: `h_${"ab".repeat(16)}`, hostname: "srv-linux", org: "Clinique Nord", scope: "full-control", installedBy: null, enrolledAt: "2026-09-30T09:00:00Z", expiresAt: "2026-12-29T09:00:00Z", lastSeenAt: iso(now - 20_000), revokedAt: null, state: "enrolled" },
+  { hostId: `h_${"cd".repeat(16)}`, hostname: "POSTE-COMPTA", org: "Clinique Nord", scope: "view-only", installedBy: null, enrolledAt: "2026-10-10T14:00:00Z", expiresAt: "2027-01-08T14:00:00Z", lastSeenAt: iso(now - 3 * 86_400_000), revokedAt: null, state: "enrolled" },
 ];
 
-// My devices: this Mac first, another Mac asked every time, a PC never lent,
-// a phone listed for presence only.
-const now = Date.now();
+// My devices: this Mac first, an iPhone online, an iPad offline.
 const devices = params.get("devices") === "0" ? [] : [
   { key: "k-mbp", name: "MacBook Pro", kind: "computer", platform: "darwin", online: true, lastSeenAt: now, access: "always", current: true, desktopId: "d-mbp" },
-  { key: "k-mini", name: "Mac mini", kind: "computer", platform: "darwin", online: true, lastSeenAt: now, access: "ask", current: false, desktopId: "d-mini" },
-  { key: "k-pc", name: "PC-BUREAU", kind: "computer", platform: "win32", online: false, lastSeenAt: now - 26 * 3_600_000, access: "never", current: false, desktopId: null },
-  { key: "k-iphone", name: "iPhone", kind: "phone", platform: "ios", online: false, lastSeenAt: now - 5 * 3_600_000, access: null, current: false, desktopId: null },
+  { key: "k-iphone", name: "iPhone", kind: "phone", platform: "ios", online: true, lastSeenAt: now - 60_000, access: null, current: false, desktopId: null },
+  { key: "k-ipad", name: "iPad", kind: "phone", platform: "ios", online: false, lastSeenAt: now - 26 * 3_600_000, access: null, current: false, desktopId: null },
 ];
 const bridge = {
   connected: true, tunnel: false, activity: [], devices,
@@ -94,9 +96,23 @@ window.fetch = async (input, init) => {
     if (search) shown = shown.filter((r) => `${r.host} ${r.user ?? ""} ${r.code} ${r.botLabel}`.toLowerCase().includes(search));
     return new Response(JSON.stringify({ sessions: shown, admin: true }), { status: 200, headers: { "content-type": "application/json" } });
   }
+  if (url.includes("/api/remote-hosts/code")) {
+    return new Response(JSON.stringify({
+      code: "K7QM-2R", enrollUrl: "https://sagax.example.org/enroll/K7QM-2R", org: "Clinique Nord", scope: "full-control", expiresAt: iso(now + 3_600_000),
+      installCommand: "curl -fsSL https://sagax.example.org/install.sh | sudo sh -s -- --code K7QM-2R",
+      installCommands: {
+        macos: "curl -fsSL https://sagax.example.org/install.sh | sudo sh -s -- --code K7QM-2R",
+        linux: "curl -fsSL https://sagax.example.org/install.sh | sudo sh -s -- --code K7QM-2R",
+        windows: "$env:SAGAX_CODE='K7QM-2R'; irm https://sagax.example.org/install.ps1 | iex",
+      },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  if (/\/api\/remote-hosts\/[^/]+\/access/.test(url)) return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
   if (url.includes("/api/me/desktop-bridge/computers/access")) return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
   if (url.includes("/api/me/desktop-bridge")) return new Response(JSON.stringify(bridge), { status: 200, headers: { "content-type": "application/json" } });
   if (url.includes("/api/auth/session")) return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } });
+  // The store hydrates on mount: everything else answers "not here" offline.
+  if (new URL(url, location.origin).pathname.startsWith("/api/")) return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: { "content-type": "application/json" } });
   return realFetch(input, init);
 };
 
@@ -119,6 +135,8 @@ function Gallery() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <Gallery />
+    <StoreProvider>
+      <Gallery />
+    </StoreProvider>
   </StrictMode>,
 );

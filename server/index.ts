@@ -861,6 +861,7 @@ import { createRemoteBotHosts } from "./remote-support/remote-bot-hosts.ts";
 import { createRemoteBotHostsRoutes } from "./routes/remote-bot-hosts.ts";
 import { createRemoteHostsRoutes } from "./routes/remote-hosts.ts";
 import { RemoteHostTeams } from "./remote-support/remote-host-teams.ts";
+import { RemoteHostAccess, hostAccessGate } from "./remote-support/remote-host-access.ts";
 import { createRemoteControlRoutes, isRemoteControlPath } from "./routes/remote-control.ts";
 import { BOT_ACT_ROUTE_HEADER, createRemoteSessionFileRoutes, remoteCallerIsAgent } from "./routes/remote-session-files.ts";
 import { createDeviceSettingsBroker } from "./device-settings.ts";
@@ -11312,6 +11313,8 @@ try {
 const teamComputers = new TeamComputers(join(DATA_DIR, "team-computers.json"), ENVIRONMENT_ID);
 // Computers panel (2026-11-06): enrolled hosts the person placed on a team.
 const remoteHostTeams = new RemoteHostTeams(join(DATA_DIR, "remote-host-teams.json"));
+// What bots may do with each enrolled host, per person (#2723).
+const remoteHostAccess = new RemoteHostAccess(join(DATA_DIR, "remote-host-access.json"));
 /** A bot's hosts: those attached in its Computer tab, then those its owner
  * placed on its team from the Computers panel (person isolation). */
 function effectiveRemoteHosts(bot: { remoteHosts?: string[]; section?: string; sectionId?: string } & Parameters<typeof effectiveBotOwner>[0]): string[] {
@@ -14570,6 +14573,8 @@ const unattendedConsent = createUnattendedConsentStore({ dataDir: DATA_DIR });
 const remoteSessionsAdmin = createRemoteSessionsAdmin({
   rows: () => remoteSessions.adminRows(),
   botLabel: (botId) => store.bot(botId)?.name ?? botId,
+  // "Opened by" shows the person's name; the id stays in the tooltip (#2723).
+  personLabel: (principalId) => personDisplayName(principals.byId(principalId)) || null,
   consent: unattendedConsent,
   log: (sessionId) => readRemoteSessionLog(DATA_DIR, sessionId),
   closeById: (id) => remoteSessions.adminClose(id),
@@ -20239,6 +20244,25 @@ desktopBridges.setAskHook(async ({ device, context }) => {
   // approvalBus.autoApply (fullAccessForSource) answers it at Full; full-access: peer-contact
   return (await requestPeerApproval(approvalBus, bot, device, `Use ${device.name} for this turn`, "use_computer", context.threadId)) === "allow";
 });
+// An enrolled host's bot access (#2723), where a bot opens an unattended
+// session on it: Never allow refuses, Ask every time raises the same card as
+// a device (Always allow remembered per bot and host), Always allow passes.
+async function remoteHostBotGate(input: { botId: string; threadId: string; principalId: string; hostId: string }): Promise<string | null> {
+  const access = remoteHostAccess.get(input.principalId, input.hostId);
+  if (access === "always") return null;
+  const row = await remoteBotHosts.assertOwnHost(input.principalId, input.hostId).catch(() => null);
+  const hostName = (row && "hostId" in row && row.hostname) || "this computer";
+  return hostAccessGate({
+    access,
+    hostName,
+    ask: async () => {
+      const bot = store.bot(input.botId);
+      if (!bot) return false;
+      const target = { id: `host:${input.hostId}`, name: hostName };
+      return (await requestPeerApproval(approvalBus, bot, target, `Use ${hostName} for this turn`, "use_computer", input.threadId)) === "allow";
+    },
+  });
+}
 
 // Approvals live only in memory, so any peer card still open on disk is one
 // whose resolver died with the previous process. Left alone it can never be
@@ -21803,7 +21827,11 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const folder = supportFolderOwner(REMOTE_SUPPORT_DIR, code);
       if (!folder || !folder.principalId || !folder.botId) return false;
       return Boolean(owner) && folder.principalId === owner!.principalId.trim().toLowerCase() && folder.botId === owner!.botId;
-    }
+    },
+    // remote_support_open on an enrolled host: the person's bot access (#2723)
+    hostAccess: (capability, owner, hostId) => owner
+      ? remoteHostBotGate({ botId: capability.botId, threadId: capability.threadId, principalId: owner.principalId, hostId })
+      : Promise.resolve(null)
   }),
   createMcpAuditInternalRoutes({ append: (row) => appendAdminAction(DATA_DIR, { ...row, actor: { kind: "loopback" } }), confidential: (threadId) => store.isConfidentialThread(threadId) }),
   createRoutineRunInternalRoutes<Routine, RoutineRun>({
@@ -27991,6 +28019,7 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
           const out = await remoteBotHosts.assertOwnHost(turn.principalId, hostId);
           return !("ok" in out && out.ok === false);
         },
+        hostAccess: (hostId) => remoteHostBotGate({ botId: turn.botId, threadId: turn.threadId, principalId: turn.principalId, hostId }),
         local: {
           dir: REMOTE_SUPPORT_DIR,
           technicianName: (personDisplayName(person) || cfg.profile?.name?.trim() || "").slice(0, 80),
@@ -30107,13 +30136,14 @@ ROUTES.push(createRemoteControlRoutes({
   upgrade: (req) => desktopViewer.upgradeOf(req)
 }));
 ROUTES.push(createRemoteSessionFileRoutes({ sessions: remoteSessions, principalId: terminalPrincipalId }));
-ROUTES.push(createRemoteSessionsAdminRoutes({ admin: remoteSessionsAdmin, hosts: unattendedHosts, principalId: terminalPrincipalId, orgAdmin: orgAdminCaller }));
+ROUTES.push(createRemoteSessionsAdminRoutes({ admin: remoteSessionsAdmin, hosts: unattendedHosts, principalId: terminalPrincipalId, orgAdmin: orgAdminCaller, hostAccess: (principalId) => remoteHostAccess.forPrincipal(principalId) }));
 ROUTES.push(createRemoteBotHostsRoutes({ hosts: remoteBotHosts, principalId: terminalPrincipalId }));
 ROUTES.push(createRemoteHostsRoutes({
   principalId: terminalPrincipalId,
   available: (principalId) => remoteBotHosts.available(principalId),
   installCode: (principalId, options) => unattendedHosts.installCode({ principalId }, options),
   teams: remoteHostTeams,
+  access: remoteHostAccess,
   sectionsFor: (auth) => (sectionChannels
     ? orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId())
     : store.sections),

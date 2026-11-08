@@ -33,6 +33,8 @@ export function createRemoteSessionsAdmin(deps: {
   /** Every stored session on this server, mapped to the admin input. */
   rows(): AdminSessionInput[];
   botLabel(botId: string): string;
+  /** A person's display name from their principal id (#2723), for "Opened by". */
+  personLabel?(principalId: string): string | null | undefined;
   consent: UnattendedConsentStore;
   log(sessionId: string): RemoteSessionLogEntry[];
   /** End any session by id (service.adminClose). Cuts control and the tunnel. */
@@ -51,7 +53,7 @@ export function createRemoteSessionsAdmin(deps: {
 
   const rowFor = (input: AdminSessionInput, viewer?: AdminViewer): RemoteSessionAdminRow => {
     const consent = deps.consent.get(adminHostKey(input));
-    const row = toAdminRow(input, { botLabel: deps.botLabel(input.botId), consent, now: now() });
+    const row = toAdminRow(input, { botLabel: deps.botLabel(input.botId), consent, now: now(), ...(deps.personLabel ? { personLabel: (id: string) => deps.personLabel!(id) } : {}) });
     // The person who recorded the consent revokes it themselves (their own
     // environment, no admin): the page offers Revoke on their rows.
     return viewer && row.unattended && consent?.installedBy === viewer.principalId ? { ...row, unattendedMine: true } : row;

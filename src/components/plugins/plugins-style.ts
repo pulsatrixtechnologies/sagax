@@ -19,8 +19,12 @@ export const PLUGINS = {
   sectionLink: "text-[12px] text-ink-secondary hover:text-ink",
   /** "Installed", "Accounts", "Tools": gray labels over a list or a card */
   label: "text-[12px] leading-5 text-ink-secondary",
-  /** one column of rows, no cards (JC 2026-11-06: "Remove the two columns, stick to one", #2682) */
-  grid: "grid grid-cols-1",
+  /** a grid of cards that fills the width (JC 2026-11-08, #2948: "ca devrait etre sur tout column"):
+   * one column when narrow, two or three as the window widens (by the list's
+   * own width, not the screen's). Each child is a card with the same subtle
+   * border as PLUGINS.card; rows keep their icon, name, line, status, chevron
+   * and menu. Replaces #2682's single column. */
+  grid: "grid grid-cols-[repeat(auto-fill,minmax(min(100%,264px),1fr))] gap-2 *:min-w-0 *:rounded-[14px] *:border-[0.5px] *:border-ink/[0.08] *:bg-ink/[0.015] *:px-3",
   rowName: "block truncate text-[13.5px] leading-5 text-ink",
   rowSub: "block truncate text-[12.5px] leading-5 text-ink-secondary",
   /** a card with a subtle border on the window's own background */

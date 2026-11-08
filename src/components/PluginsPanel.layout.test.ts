@@ -75,7 +75,7 @@ describe("Plugins panel views", () => {
     expect(noSources).not.toContain('data-plugins-view-link="sources"');
   });
 
-  it("Discover: no search of its own, every category pill and no Browse Bots button, sections of one-column rows (#2682)", () => {
+  it("Discover: no search of its own, every category pill and no Browse Bots button, sections in the card grid (#2948)", () => {
     const html = renderToStaticMarkup(createElement(DiscoverView, discoverProps));
     expect(html).not.toContain("placeholder=");
     expect(html).not.toContain("data-plugins-search");
@@ -86,7 +86,7 @@ describe("Plugins panel views", () => {
     expect(html).toContain("data-plugins-more-chips");
     expect(html).toContain('data-plugins-section="recommended"');
     expect(html).toContain("Recommended for you");
-    expect(html).not.toContain("grid-cols-2");
+    expect(html).toContain("grid-cols-[repeat(auto-fill,minmax(min(100%,264px),1fr))]");
     expect(html).toMatch(/data-plugin-row="featured:linear"[\s\S]*?>Connect</);
     expect(html).not.toContain("data-plugins-browse-bots");
     expect(html).not.toMatch(/Browse bots/i);

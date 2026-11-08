@@ -94,6 +94,49 @@ describe("Plugins tabs", () => {
     expect(scoped).toMatch(/id="plugins-title"[\s\S]*?data-plugins-scope-slot[\s\S]*?data-test-scope[\s\S]*?data-test-add/);
   });
 
+  it("Manage, Pages and Sources: the title row and its pills sit outside the scrolling list, so they never slide under \"< Plugins\" (#2948)", () => {
+    for (const tab of ["installed", "pages", "sources"] as const) {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const root = createRoot(host);
+      flushSync(() => root.render(createElement(ConnectAppsView, {
+        tab, onTab: noop, refreshing: false, onRefresh: noop,
+        scope: createElement("div", { "data-test-scope": "" }), manageActions: createElement("button", { "data-test-add": "" }),
+        installed: "I", pages: "G", sources: "S",
+      })));
+      const bar = host.querySelector("[data-plugins-manage-bar]");
+      const titleRow = host.querySelector("[data-plugins-title-row]");
+      const list = host.querySelector("[data-plugins-list]");
+      expect(titleRow?.querySelector("#plugins-title")).toBeTruthy();
+      if (tab !== "pages") expect(titleRow?.querySelector("[data-plugins-scope-slot]")).toBeTruthy();
+      if (tab === "installed") expect(titleRow?.querySelector("[data-test-add]")).toBeTruthy();
+      // bar, then the title row, then the list: siblings, the list alone scrolls
+      expect(bar?.nextElementSibling).toBe(titleRow);
+      expect(titleRow?.className).toContain("shrink-0");
+      expect(list?.contains(titleRow!)).toBe(false);
+      expect(list?.querySelector("#plugins-title")).toBeNull();
+      expect(list?.className).toContain("overflow-y-auto");
+      // no hairline at rest (it shows once the list moves; checked headless by scripts/capture/plugins-grid.mjs)
+      expect(titleRow?.hasAttribute("data-plugins-stuck")).toBe(false);
+      root.unmount();
+      host.remove();
+    }
+  });
+
+  it("Installed, the private skills and This Mac are a responsive grid of cards that fills the width, nothing dropped (#2948)", () => {
+    const html = renderToStaticMarkup(createElement(InstalledView, props()));
+    const lists = [...html.matchAll(/<ul class="([^"]+)"/g)].map((match) => match[1]!);
+    expect(lists.length).toBeGreaterThanOrEqual(2);
+    for (const list of lists) {
+      expect(list).toContain("grid-cols-[repeat(auto-fill,minmax(min(100%,264px),1fr))]");
+      expect(list).toContain("*:rounded-[14px]");
+      expect(list).toContain("*:border-[0.5px]");
+    }
+    // each card keeps its name, what it brings and its "..." menu
+    expect(html).toContain("data-installed-brings");
+    expect(html).toContain("data-plugin-skill");
+  });
+
   it("Bots and Pages open alone under \"< Plugins\"; the home keeps the one search (#2104)", () => {
     for (const tab of ["bots", "pages"] as const) {
       const html = renderToStaticMarkup(createElement(ConnectAppsView, {
@@ -130,7 +173,7 @@ describe("Plugins tabs", () => {
 
   it("Installed: GitHub once, named for people, saying what it brings, then the private skills", () => {
     const html = renderToStaticMarkup(createElement(ManageView, props()));
-    const names = [...html.matchAll(/data-installed-entry="[^"]+"[\s\S]*?block truncate text-\[13.5px\] leading-5 text-ink">([^<]+)</g)].map((match) => match[1]);
+    const names = [...html.matchAll(/data-installed-entry="[^"]+"[\s\S]*?block truncate text-\[13.5px\] leading-5 text-ink"[^>]*>([^<]+)</g)].map((match) => match[1]);
     expect(names).toEqual(["GitHub", "Twilio Docs"]);
     expect(html).not.toContain(">github-github<");
     expect(html).toMatch(/GitHub<\/span><span[^>]*data-installed-brings[^>]*>plugin \(claude-plugins-official\) · 1 connector</);

@@ -6,9 +6,11 @@ import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { DesktopCapabilitiesProvider } from "@/components/DesktopCapabilities";
 import { OptionCard } from "@/components/OptionCard";
+import { ChatStaleBanner } from "@/components/ChatErrorBanner";
 import { QuestionCard } from "@/components/QuestionCard";
 import { WidgetMessage } from "@/components/widget/WidgetMessage";
 import { loadLocale } from "@/lib/i18n";
+import { teamMemorySettled } from "@/lib/team-memory-settled";
 import { applySkin, type SkinId } from "@/lib/skins";
 import { CHAT_BUBBLE_WIDTH_CLASS } from "@/lib/chat-bubble-width";
 import { StoreProvider, type Message } from "@/state/store";
@@ -39,6 +41,13 @@ function flat(id: string, more: Partial<NonNullable<Message["card"]>> = {}): Mes
     id, role: "bot", kind: "options", at: 1,
     card: { title: "Je mets en pause mes deux webhooks ?", subtitle: "", options: ["Oui, mets-les en pause", "Non, garde-les actifs"], requestId: `req-${id}`, ...more },
   } as Message;
+}
+
+// Answered here, settled elsewhere (409): the optimistic local answer, then
+// the server's real outcome merged on top the way the reducer does it.
+function settledElsewhere(id: string, outcome: string): Message {
+  const settled = teamMemorySettled({ status: 409, body: { code: "team_memory_settled", outcome, settledBy: "Dana" } });
+  return ask(id, [WEBHOOKS], { answered: "answer", answeredText: "Oui, mets-les en pause", ...settled?.card });
 }
 
 const widget = parseWidgetInput(WIDGET_SAMPLES.dinnerChoice);
@@ -75,6 +84,16 @@ function Preview() {
         <Row id="ask-answered" label="AskUserQuestion, répondue">
           <QuestionCard threadId="t" bot={bot} message={ask("b", [WEBHOOKS], { answered: "answer", answeredText: "Oui, mets-les en pause" })} />
         </Row>
+        <Row id="ask-409-allow" label="Réglée ailleurs (409), acceptée par quelqu'un d'autre">
+          <QuestionCard threadId="t" bot={bot} message={settledElsewhere("h409a", "allowed-once")} />
+        </Row>
+        <Row id="ask-409-gone" label="Réglée ailleurs (409), entrée disparue">
+          <QuestionCard threadId="t" bot={bot} message={settledElsewhere("h409g", "unavailable")} />
+        </Row>
+        <section data-variant="chat-offline" className="flex flex-col items-start gap-2 p-4">
+          <div className="text-[11px] uppercase tracking-wide text-ink-tertiary">Chat hors ligne (navigateur hors ligne seulement)</div>
+          <ChatStaleBanner />
+        </section>
         <Row id="ask-multi" label="Choix multiples">
           <QuestionCard threadId="t" bot={bot} message={ask("c", [{ question: "Quels webhooks je mets en pause ?", multiSelect: true, options: [{ label: "Billets entrants" }, { label: "Facturation" }, { label: "Alertes RMM" }] }])} />
         </Row>

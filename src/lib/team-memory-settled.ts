@@ -11,8 +11,10 @@ export const TEAM_MEMORY_SETTLED_CODE = "team_memory_settled";
 export interface TeamMemorySettled {
   /** What the person reads. */
   text: string;
-  /** The card as the server now holds it. */
-  card: { answered: string; dismissed?: boolean };
+  /** The card as the server now holds it. answeredText is cleared: the card
+   * was settled optimistically with the person's local answer, which never
+   * reached the bot, and the reducer merges the patch shallowly. */
+  card: { answered: string; dismissed?: boolean; answeredText: undefined };
 }
 
 /** The settled outcome a failed card answer carries, or null for any other error. */
@@ -24,10 +26,10 @@ export function teamMemorySettled(error: unknown): TeamMemorySettled | null {
   if (code !== TEAM_MEMORY_SETTLED_CODE) return null;
   const who = typeof settledBy === "string" && settledBy.trim() ? settledBy.trim() : undefined;
   if (outcome === "allowed-once") {
-    return { text: who ? t("teamMemory.settled.accepted", { who }) : t("teamMemory.settled.someoneAccepted"), card: { answered: "allow" } };
+    return { text: who ? t("teamMemory.settled.accepted", { who }) : t("teamMemory.settled.someoneAccepted"), card: { answered: "allow", answeredText: undefined } };
   }
   if (outcome === "rejected") {
-    return { text: who ? t("teamMemory.settled.declined", { who }) : t("teamMemory.settled.someoneDeclined"), card: { answered: "deny" } };
+    return { text: who ? t("teamMemory.settled.declined", { who }) : t("teamMemory.settled.someoneDeclined"), card: { answered: "deny", answeredText: undefined } };
   }
-  return { text: t("teamMemory.settled.gone"), card: { answered: "unavailable", dismissed: true } };
+  return { text: t("teamMemory.settled.gone"), card: { answered: "unavailable", dismissed: true, answeredText: undefined } };
 }

@@ -17,7 +17,7 @@ import type { AnonymizeNames } from "./anonymize.ts";
 import { anonymize } from "./anonymize.ts";
 import type { FeedbackConfig } from "./config.ts";
 import {
-  feedbackAnswers, feedbackLanguage, isCancelOption, isSendOption, nextFeedbackStep, OFFER_OPTIONS, openFeedbackStep, parseKind,
+  feedbackAnswers, feedbackLanguage, isCancelOption, isSendOption, nextFeedbackStep, offerCard, openFeedbackStep, parseKind,
   SEND_OPTIONS, type FeedbackAnswers, type FeedbackLanguage, type FeedbackMarker, type FlowCard, type FlowMessage,
 } from "./flow.ts";
 import { fileIssue, issueStatus, type GithubFiler } from "./github.ts";
@@ -59,6 +59,11 @@ export interface FeedbackDeps {
   serverLines: () => string[];
   spans: () => ReportSpan[];
   serverVersion: () => string;
+  /** The language the person reads the app in (their saved choice, else
+   * what their app asks in, else the server's), as languageOfPerson gives
+   * it. The flow's cards follow it; the message's words are only a guess
+   * for when it is empty. */
+  language?: (principalId: string | null) => string;
   fetch?: typeof fetch;
   now?: () => number;
 }
@@ -108,8 +113,6 @@ const WORDS = {
     previewIntro: "Voici ce qui sera envoyé à l'équipe, une fois anonymisé :",
     previewTitle: "Envoyer ce signalement?",
     previewSubtitle: "Écrivez un détail pour l'ajouter, ou envoyez tel quel. La capture d'écran reste sur le serveur.",
-    offerTitle: "On dirait que quelque chose ne marche pas.",
-    offerSubtitle: (summary: string) => `Je peux envoyer un signalement à l'équipe avec ce message, la version et les journaux récents, anonymisés :\n\n« ${summary} »`,
     cancelled: "Annulé : rien n'a été envoyé.",
     queuedNoToken: "En file d'attente : signalement prêt et gardé ici : l'envoi à l'équipe n'est pas encore configuré sur ce serveur. Je réessaie toutes les 5 minutes.",
     queuedError: "L'envoi n'a pas passé pour l'instant; le signalement est gardé ici et je réessaie automatiquement.",
@@ -124,8 +127,6 @@ const WORDS = {
     previewIntro: "Here is what will be sent to the team, once anonymized:",
     previewTitle: "Send this report?",
     previewSubtitle: "Type a detail to add it, or send it as is. The screenshot stays on the server.",
-    offerTitle: "Looks like something isn't working.",
-    offerSubtitle: (summary: string) => `I can send a report to the team with this message, the version and recent logs, anonymized:\n\n"${summary}"`,
     cancelled: "Cancelled: nothing was sent.",
     queuedNoToken: "Queued: report ready and kept here: sending to the team is not set up on this server yet. I retry every 5 minutes.",
     queuedError: "Sending did not go through for now; the report is kept here and I retry on my own.",
@@ -146,6 +147,14 @@ function oneLine(text: string, max: number): string {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
+/** French for any fr-* tag, English for any other tag, the guess from the
+ * message's words when the person's language is unknown. */
+export function feedbackLanguageFor(appLanguage: string | undefined, text: string): FeedbackLanguage {
+  const tag = (appLanguage ?? "").trim().toLowerCase();
+  if (tag) return tag.split(/[-_]/)[0] === "fr" ? "fr" : "en";
+  return feedbackLanguage(text);
+}
+
 export function createFeedbackService(deps: FeedbackDeps) {
   const { dataDir, store } = deps;
   const now = deps.now ?? Date.now;
@@ -164,6 +173,14 @@ export function createFeedbackService(deps: FeedbackDeps) {
     writeFileAtomic(reportsFile, JSON.stringify(records.slice(-2000), null, 1), { mode: 0o600 });
   };
   const byId = (id: string) => records.find((record) => record.id === id);
+  /** No words to guess from (text null): French, as before. */
+  const languageFor = (principalId: string | null, text: string | null): FeedbackLanguage => {
+    let appLanguage: string | undefined;
+    try {
+      appLanguage = deps.language?.(principalId);
+    } catch { /* the guess from the words */ }
+    return text === null && !appLanguage?.trim() ? "fr" : feedbackLanguageFor(appLanguage, text ?? "");
+  };
   const track = <T>(promise: Promise<T>) => {
     pending.add(promise);
     void promise.finally(() => pending.delete(promise));
@@ -397,7 +414,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
         owner: input.principalId,
         botId: bot.id,
         threadId: input.threadId,
-        lang: feedbackLanguage(rest || text),
+        lang: languageFor(input.principalId, rest || text),
         source: command ? "slash" : "chat",
         preset: presetFrom(rest),
       });
@@ -419,7 +436,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
   function start(owner: string | null, request: FeedbackStartRequest): FeedbackStartResponse {
     const bot = ensureBot();
     const threadId = deps.threadFor(bot);
-    const lang: FeedbackLanguage = request.locale ?? "fr";
+    const lang: FeedbackLanguage = request.locale ?? languageFor(owner, null);
     const id = newReportId();
     let screenshot = false;
     const match = typeof request.screenshot === "string" ? /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(request.screenshot) : null;
@@ -466,7 +483,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
       .map((message) => message.text!);
     const signal = frustrationSignal(input.text, earlier);
     if (!signal) return;
-    const lang = feedbackLanguage(input.text);
+    const lang = languageFor(input.principalId, input.text);
     const record = draft({
       owner: input.principalId,
       botId: bot.id,
@@ -477,13 +494,9 @@ export function createFeedbackService(deps: FeedbackDeps) {
       context: { signal },
       offer: true,
     });
-    const words = WORDS[lang];
     const summary = oneLine(anonymize(input.text, deps.names()), 200);
     // the Feedback product's offer, never a permission; full-access: exempt
-    post(input.threadId, { step: "offer", reportId: record.id }, {
-      kind: "options",
-      card: { title: words.offerTitle, subtitle: words.offerSubtitle(summary), options: [...OFFER_OPTIONS[lang]] },
-    });
+    post(input.threadId, { step: "offer", reportId: record.id }, { kind: "options", card: offerCard(lang, summary) });
   }
 
   /** Retry the queue and read filed issues' status back (every 5 minutes). */

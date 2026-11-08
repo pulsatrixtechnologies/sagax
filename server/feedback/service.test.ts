@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createFeedbackService, type FeedbackStore, type StoredMessage } from "./service.ts";
+import { createFeedbackService, feedbackLanguageFor, type FeedbackStore, type StoredMessage } from "./service.ts";
 
 interface FakeBot { id: string; name: string; threadId: string; systemBot?: "feedback" }
 
@@ -42,7 +42,7 @@ function fakeStore(): FeedbackStore & { threads: Map<string, StoredMessage[]>; b
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-function setup(options: { token?: string } = {}) {
+function setup(options: { token?: string; language?: (person: string | null) => string } = {}) {
   const dataDir = mkdtempSync(join(tmpdir(), "fb-service-"));
   dirs.push(dataDir);
   const store = fakeStore();
@@ -66,6 +66,7 @@ function setup(options: { token?: string } = {}) {
     spans: () => [{ name: "tool.read", ms: 120, ok: false }],
     serverVersion: () => "0.8.70",
     fetch,
+    ...(options.language ? { language: options.language } : {}),
   });
   return { service, store, calls, dataDir };
 }
@@ -163,6 +164,27 @@ describe("feedback service (#2618)", () => {
     expect(calls.some((call) => call.method === "POST" && call.url.endsWith("/issues"))).toBe(true);
     service.maybeOffer({ botId: "b-main", threadId: "t-other", text: "Merci, parfait", principalId: "p1" });
     expect(store.threads.get("t-other")).toBeUndefined();
+  });
+
+  it("words the offer and the /feedback flow in the person's app language, not the guessed language of the message", () => {
+    const french = setup({ language: () => "fr-CA" });
+    french.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "fuck, nothing works again", principalId: "p1" });
+    const offer = french.store.threads.get("t-main")!.at(-1)!;
+    expect(offer.card?.title).toBe("On dirait que quelque chose ne marche pas.");
+    expect(offer.card?.options).toEqual(["Envoyer le signalement", "Non merci"]);
+    expect(say(french.service, "b-main", "t-other", "/feedback")).not.toBeNull();
+    expect(french.store.threads.get("t-other")!.at(-1)!.card?.title).toBe("Qu'est-ce qu'on signale?");
+
+    const english = setup({ language: () => "en-US" });
+    english.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "ça marche toujours pas, tabarnak", principalId: "p1" });
+    expect(english.store.threads.get("t-main")!.at(-1)!.card?.title).toBe("Looks like something isn't working.");
+  });
+
+  it("guesses from the words only when the person's language is unknown", () => {
+    expect(feedbackLanguageFor("", "ça marche pas")).toBe("fr");
+    expect(feedbackLanguageFor(undefined, "it broke again")).toBe("en");
+    expect(feedbackLanguageFor("fr_CA", "it broke again")).toBe("fr");
+    expect(feedbackLanguageFor("de", "ça marche pas")).toBe("en");
   });
 
   it("cancels without sending anything", async () => {

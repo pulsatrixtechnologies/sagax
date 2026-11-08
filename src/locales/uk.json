@@ -1,4 +1,13 @@
 {
+  "model.engines.aria": "Рушії",
+  "model.engines.all": "Усі",
+  "model.manage": "Керувати моделями",
+  "model.manageOff": "Вимкнено: {count}",
+  "model.manager.title": "Моделі",
+  "model.manager.subtitle": "Оберіть рушій, потім модель. Це застосовується до бота й усіх його розмов.",
+  "model.manager.connect": "Підключити провайдера",
+  "model.manager.mode": "Режим",
+  "model.manager.toggle": "Увімкнути або вимкнути {name}",
   "noEngines.title": "Встановіть провайдера моделей, щоб почати",
   "noEngines.intro": "{app} не має власної моделі — ваші боти працюють на AI-CLI, встановленому на цьому комп'ютері, з вашим наявним логіном. Налаштуйте будь-який із перелічених — і боти оживуть.",
   "engines.cloud": "Хмара",

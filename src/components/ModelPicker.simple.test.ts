@@ -67,10 +67,9 @@ describe("model picker in Simple mode", () => {
     expect(markup).toContain('data-model-search-list="popover"');
     expect(markup).toContain('placeholder="Search models"');
     expect(markup).toContain("Opus");
-    // #2181: at most 4 models per provider, then Show more for the rest.
-    expect(markup).toContain("data-model-show-more=\"claude\"");
-    expect(markup).toContain("Show more");
-    expect(markup).not.toContain("Extra three");
+    // #2963: the chat bar menu is flat: every model shows, no Show more.
+    expect(markup).not.toContain("data-model-show-more");
+    expect(markup).toContain("Extra three");
     expect(markup).not.toContain("Suggested");
     expect(markup).not.toContain("data-model-effort");
     expect(markup).not.toContain("data-model-add-api-keys");
@@ -119,11 +118,11 @@ describe("model picker in Simple mode", () => {
     expect(markup).toContain("desk8000abc::Ornith-1.5-122B-oQ4e-mtp");
   });
 
-  it("links to Providers for sign-in", () => {
+  it("links to the models window, which connects a provider (#2963)", () => {
     fixture.instances = [claude(false)];
     const markup = html();
-    expect(markup).toContain("data-model-edit");
-    expect(markup).toContain("Providers");
+    expect(markup).toContain("data-model-manage");
+    expect(markup).toContain("Manage models");
     expect(markup).not.toContain("data-claude-sign-in");
     expect(markup).not.toContain("data-model-add-api-keys");
     expect(markup).not.toContain("data-model-engines-link");

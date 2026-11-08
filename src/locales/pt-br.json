@@ -1,4 +1,13 @@
 {
+  "model.engines.aria": "Motores",
+  "model.engines.all": "Todos",
+  "model.manage": "Gerenciar modelos",
+  "model.manageOff": "{count} desativados",
+  "model.manager.title": "Modelos",
+  "model.manager.subtitle": "Escolha o motor e depois o modelo. Vale para o bot e todas as conversas dele.",
+  "model.manager.connect": "Conectar um provedor",
+  "model.manager.mode": "Modo",
+  "model.manager.toggle": "Ativar ou desativar {name}",
   "access.routineDelegation.reason.no_right": "Esta pessoa não pode mais executar as rotinas deste bot.",
   "access.routineDelegation.reason.person_out": "O Perspicax desconectou esta pessoa.",
   "access.routinePaused": "A rotina \"{routine}\" está pausada. {reason}",

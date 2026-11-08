@@ -1,5 +1,5 @@
 // Composer model menu (extracted from ModelPicker.tsx, #1383).
-import { type KeyboardEvent, type RefObject } from "react";
+import { type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { MenuMotion } from "../MenuMotion";
 import { Check, ChevronRight } from "lucide-react";
 import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
@@ -12,7 +12,7 @@ import { EffortRow } from "./EffortControls";
 import { toggleModelFavorite } from "@/lib/model-favorites";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/wire";
-import { MENU_WIDTH } from "./helpers";
+import { MENU_MAX_HEIGHT, MENU_WIDTH } from "./helpers";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
 
@@ -21,16 +21,17 @@ function menuViewportHeight(fallback = 800): number {
   return Number(window.innerHeight) || fallback;
 }
 
-/** The height a menu anchored by its bottom edge can take: up to 392px (30% under the old 560, #2181), never
- * past the window's top (8px margin). */
+/** The height a menu anchored by its bottom edge can take: up to MENU_MAX_HEIGHT
+ * (#2963: larger and flat, every section open), never past the window's top
+ * (8px margin). */
 export function menuRoomAbove(bottom: number, viewportHeight = menuViewportHeight()): number {
-  return Math.max(120, Math.min(392, viewportHeight - bottom - 8));
+  return Math.max(120, Math.min(MENU_MAX_HEIGHT, viewportHeight - bottom - 8));
 }
 
-/** The height a menu anchored by its top edge can take: up to 392px, never
+/** The height a menu anchored by its top edge can take: up to MENU_MAX_HEIGHT, never
  * past the window's bottom (8px margin). */
 export function menuRoomBelow(top: number, viewportHeight = menuViewportHeight()): number {
-  return Math.max(120, Math.min(392, viewportHeight - top - 8));
+  return Math.max(120, Math.min(MENU_MAX_HEIGHT, viewportHeight - top - 8));
 }
 
 /** Where the model window (`windowOnly`) pins its menu: top-left inside the
@@ -70,6 +71,8 @@ export function ModelPickerMenu({
   turnedOff = 0,
   openActiveModels,
   customModel,
+  onManage,
+  engineMark,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
@@ -107,6 +110,12 @@ export function ModelPickerMenu({
   openActiveModels?: () => void;
   /** Pick-only surfaces that take a model typed in the search. */
   customModel?: { label: (text: string) => string; onPick: (text: string) => void };
+  /** #2963: the one footer link, "Manage models", opening the model window
+   * (engines, favorites, on/off switches). Absent on pick-only surfaces. */
+  onManage?: () => void;
+  /** #2963: the engine chips at the top of the list (engine first, then its
+   * models): each engine section's mark. */
+  engineMark?: (sectionKey: string) => ReactNode;
 }) {
   const width = MENU_WIDTH;
   const currentOptimize = autoOptimizeOf(selection.autoOptimize);
@@ -194,16 +203,28 @@ export function ModelPickerMenu({
       {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
       {advanced && settingsPanel}
       <div className="border-t border-popover-hairline px-1.5 pt-1">
-        {openActiveModels && (
-          <ModelMenuItem variant="popover" data-model-active-models onClick={openActiveModels}>
-            <span>{turnedOff > 0 ? t("model.activeModelsLink", { count: turnedOff }) : t("model.activeModels")}</span>
-            <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
+        {onManage ? (
+          <ModelMenuItem variant="popover" data-model-manage onClick={onManage}>
+            <span>{t("model.manage")}</span>
+            <span className="flex items-center gap-1.5 text-[12px] text-popover-ink-secondary">
+              {turnedOff > 0 && <span data-model-manage-off>{t("model.manageOff", { count: turnedOff })}</span>}
+              <ChevronRight size={14} aria-hidden="true" />
+            </span>
           </ModelMenuItem>
+        ) : (
+          <>
+            {openActiveModels && (
+              <ModelMenuItem variant="popover" data-model-active-models onClick={openActiveModels}>
+                <span>{turnedOff > 0 ? t("model.activeModelsLink", { count: turnedOff }) : t("model.activeModels")}</span>
+                <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
+              </ModelMenuItem>
+            )}
+            <ModelMenuItem variant="popover" data-model-edit onClick={openProviders}>
+              <span>{t("settings.section.providers")}</span>
+              <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
+            </ModelMenuItem>
+          </>
         )}
-        <ModelMenuItem variant="popover" data-model-edit onClick={openProviders}>
-          <span>{t("settings.section.providers")}</span>
-          <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
-        </ModelMenuItem>
       </div>
     </>
   );
@@ -214,6 +235,8 @@ export function ModelPickerMenu({
         onAutoEdit={setAutoOptimize && setAutoEditOpen && !viewerLocal ? () => setAutoEditOpen((open) => !open) : undefined}
         after={below}
         custom={customModel}
+        showAll
+        engineChips={engineMark ? { mark: engineMark } : undefined}
         autoPanel={autoPanel} />
     </>
   );
@@ -224,7 +247,7 @@ export function ModelPickerMenu({
       popoverRef={menuRef as RefObject<HTMLElement | null>}
       align="start"
       gap={6}
-      maxHeight={392}
+      maxHeight={MENU_MAX_HEIGHT}
       bounds={enclosingWindowBounds}
       data-model-menu=""
       data-model-menu-anchored=""
@@ -247,7 +270,7 @@ export function ModelPickerMenu({
       ? menuRoomBelow(menuAt.top)
       : menuAt.bottom != null
         ? menuRoomAbove(menuAt.bottom)
-        : 392
+        : MENU_MAX_HEIGHT
     : undefined;
   const menuPanel = (
     <div
@@ -261,7 +284,7 @@ export function ModelPickerMenu({
       onKeyDown={onKeyDown}
       {...menuMotion.exitProps}
       className={cn(
-        "z-50 flex max-h-[min(392px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
+        "z-50 flex max-h-[min(520px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
         menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
         menuMotion.className,
       )}

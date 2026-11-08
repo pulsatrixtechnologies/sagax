@@ -1,4 +1,13 @@
 {
+  "model.engines.aria": "Engines",
+  "model.engines.all": "Alle",
+  "model.manage": "Modelle verwalten",
+  "model.manageOff": "{count} aus",
+  "model.manager.title": "Modelle",
+  "model.manager.subtitle": "Wähle die Engine, dann das Modell. Es gilt für den Bot und alle seine Unterhaltungen.",
+  "model.manager.connect": "Anbieter verbinden",
+  "model.manager.mode": "Modus",
+  "model.manager.toggle": "{name} ein- oder ausschalten",
   "noEngines.title": "Installiere einen Modellanbieter, um loszulegen",
   "noEngines.intro": "{app} bringt kein eigenes Modell mit — deine Bots laufen über eine auf diesem Rechner installierte KI-CLI mit deinem bestehenden Login. Richte eine davon ein und deine Bots erwachen zum Leben.",
   "engines.cloud": "Cloud",

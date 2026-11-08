@@ -1,4 +1,13 @@
 {
+  "model.engines.aria": "Motores",
+  "model.engines.all": "Todos",
+  "model.manage": "Gestionar modelos",
+  "model.manageOff": "{count} desactivados",
+  "model.manager.title": "Modelos",
+  "model.manager.subtitle": "Elige el motor y luego el modelo. Se aplica al bot y a todas sus conversaciones.",
+  "model.manager.connect": "Conectar un proveedor",
+  "model.manager.mode": "Modo",
+  "model.manager.toggle": "Activar o desactivar {name}",
   "noEngines.title": "Instala un proveedor de modelos para empezar",
   "noEngines.intro": "{app} no incluye un modelo propio: tus bots funcionan con una CLI de IA instalada en este equipo, usando tu sesión existente. Configura cualquiera de ellas y tus bots cobrarán vida.",
   "engines.cloud": "Nube",

@@ -1,4 +1,13 @@
 {
+  "model.engines.aria": "引擎",
+  "model.engines.all": "全部",
+  "model.manage": "管理模型",
+  "model.manageOff": "已關閉 {count} 個",
+  "model.manager.title": "模型",
+  "model.manager.subtitle": "先選引擎，再選模型。套用到這個機器人及其所有對話。",
+  "model.manager.connect": "連接供應商",
+  "model.manager.mode": "模式",
+  "model.manager.toggle": "開啟或關閉 {name}",
   "noEngines.title": "安裝模型供應商以開始使用",
   "noEngines.intro": "{app} 本身不隨附任何模型——你的機器人是透過安裝在這台電腦上的 AI CLI 執行，並使用你既有的登入資訊。只要設定好其中任何一項，你的機器人就能開始運作。",
   "engines.cloud": "雲端",

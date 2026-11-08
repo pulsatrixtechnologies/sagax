@@ -19,6 +19,7 @@ import type { ModelOption } from "./helpers";
 import { modelLabel } from "./helpers";
 import { unifyProviderSections } from "../../../shared/model-provider-unify";
 import { autoOptimizeOf } from "../../../shared/model-auto-optimize";
+import { isModelServerOption } from "../../../shared/model-server-option";
 
 export type MyEnginesState = readonly MyEngine[] | null | undefined;
 
@@ -84,10 +85,14 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       // organization in Perspicax) is listed nowhere, except the one picked
       && (modelOn(switches, instance.instanceId, option.id) || (instance.instanceId === selection.instanceId && option.id === selection.model));
     const endpointList = instance.driverKind === "openai-compat";
+    // #2963: a Perspicax model server's models (pi, `px-org-*` / `px-own-*`)
+    // are offered everywhere: the server resolves their key per turn.
     const offered = (orgMode ? options.filter((option) => !option.custom || isDesktopModelId(option.id)
+      || isModelServerOption(option)
       || (endpointList && !option.local && !option.id.includes("::"))) : options).filter(runnable);
     const localOptions = offered.filter(isLocal);
     const signInFirst = !orgMode && needsSignIn(instance);
+    const cloudOf = (list: ModelOption[]) => (signInFirst ? list.filter(isModelServerOption) : list);
     const unavailable = (id: string): string | undefined => {
       if (!localIds.has(id)) return undefined;
       const reason = localRowUnavailable(instance.driverKind, id, localRows.find((option) => option.id === id)?.anthropic);
@@ -96,7 +101,7 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
     };
     return {
       official: options.filter((option) => !option.custom),
-      cloud: signInFirst ? [] : offered.filter((option) => !isLocal(option)),
+      cloud: cloudOf(offered.filter((option) => !isLocal(option))),
       // Loaded local models first, as the old local list did.
       local: [...localOptions.filter((option) => option.loaded), ...localOptions.filter((option) => !option.loaded)],
       signInFirst,
@@ -129,7 +134,7 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
     const effortLevel = instance.capabilities?.modelVariants ? undefined
       : effortForModel(sameEngine ? selection.effort : undefined, runs, levels) ?? modelDefaultEffort(runs, levels);
     const runsWith = [variant ?? (effortLevel ? effortLabel(effortLevel) : undefined), onTwin ? t("model.fastTag") : undefined].filter(Boolean).join(" ");
-    const detail = [option.provider, runsWith || undefined, local && saysLocal ? t("model.localGroup") : undefined].filter(Boolean).join(" · ") || undefined;
+    const detail = [isModelServerOption(option) ? option.server ?? option.provider : option.provider, runsWith || undefined, local && saysLocal ? t("model.localGroup") : undefined].filter(Boolean).join(" · ") || undefined;
     return {
       key: favoriteKey(instance.instanceId, option.id),
       kind: "model",

@@ -135,4 +135,24 @@ describe("ModelSearchList footer and preview (#2181)", () => {
     expect($$("[data-model-section=\"claude\"] [data-model-option]").map((row) => row.dataset.modelOption))
       .toEqual(["m0", "m1", "m5", "m6"]);
   });
+
+  it("filters to one engine with the engine chips, keeping the top rows (#2963)", () => {
+    const two: ModelMenuSection[] = [...many, sections[1]!];
+    flushSync(() => root.render(createElement(ModelSearchList, {
+      sections: two, onPick: () => {}, variant: "popover", engineChips: { mark: () => null },
+    })));
+    expect($$("[data-model-engine-chip]").map((chip) => chip.dataset.modelEngineChip)).toEqual(["all", "claude", "grok"]);
+    click($("[data-model-engine-chip=\"grok\"]")!);
+    expect($("[data-model-section=\"claude\"]")).toBeNull();
+    expect($("[data-model-section=\"grok\"]")).toBeTruthy();
+    expect($("[data-model-section=\"top\"]")).toBeTruthy();
+  });
+
+  it("lists every model with no Show more when showAll is set (#2963)", () => {
+    flushSync(() => root.render(createElement(ModelSearchList, {
+      sections: many, onPick: () => {}, variant: "popover", showAll: true,
+    })));
+    expect($$("[data-model-section=\"claude\"] [data-model-option]")).toHaveLength(7);
+    expect($("[data-model-show-more]")).toBeNull();
+  });
 });

@@ -1,5 +1,5 @@
 // Every way to the bot's profile opens the profile page in the main area, in
-// place of the chat, never in the right DetailPanel (JC 2026-11-06, #2136,
+// place of the chat, never in the right DetailPanel (owner decision 2026-11-06, #2136,
 // #2994). QA found the command palette's "{bot} settings", the team map's
 // "Edit {bot}" card and the retro "Bot properties" still opening the right
 // panel. The chat header pill keeps the bot panel (UX reference 2.3, #2149).

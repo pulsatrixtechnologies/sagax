@@ -48,7 +48,7 @@ export function makeModelPickerActions(ctx: ModelPickerActionsCtx) {
     if (localRow && localRowUnavailable(instance.driverKind, model, localRow.anthropic)) return;
     if (viewerLocal && !alsoApplyTo?.length) {
       saveViewerChoice(dispatch, bot.id, { model: { instanceId: instance.instanceId, model } });
-      closeAll();
+      if (!keepOpen) closeAll();
       return;
     }
     const next = modelSelectionForPick(selection, instance, model);

@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 
 import type { Bot, InstanceInfo } from "@/state/store";
 import type { ComposerModelMenuControl } from "./ModelPicker";
+import { ModelManager } from "./ModelPicker.tsx-parts/ModelManager";
 
 // Opens the real picker and clicks through it without a DOM: useState is
 // held here by call order (the picker's own hooks run first, children after),
@@ -41,6 +42,11 @@ vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
   useMyEngines: () => fixture.myEngines,
   reloadMyEngines: () => Promise.resolve(fixture.myEngines),
 }));
+const modelWindow = vi.hoisted(() => ({ opened: [] as string[] }));
+vi.mock("@/lib/model-window", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/model-window")>()),
+  openModelWindow: (botId: string) => { modelWindow.opened.push(botId); },
+}));
 vi.mock("@/lib/auto-model-preview", () => ({ useAutoModelStatus: () => fixture.autoStatus }));
 vi.mock("react", async (original) => ({
   ...await original<typeof import("react")>(),
@@ -64,6 +70,15 @@ vi.mock("./ConfirmDialog", async () => {
 });
 // Menu animation has its own lifecycle checks; this hook fixture does not
 // emulate React's render-time state retries.
+// The picker's click-outside guard: the test reads the refs it was handed.
+const effects = vi.hoisted(() => ({ last: null as null | { menuRef: unknown } }));
+vi.mock("./ModelPicker.tsx-parts/useModelPickerEffects", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./ModelPicker.tsx-parts/useModelPickerEffects")>();
+  return { ...actual, useModelPickerEffects: (args: Parameters<typeof actual.useModelPickerEffects>[0]) => {
+    effects.last = args;
+    return actual.useModelPickerEffects(args);
+  } };
+});
 vi.mock("./MenuMotion", () => ({ useMenuMotion: (open: boolean) => ({ shown: open, closing: false, className: "" }) }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/state/store")>()),
@@ -382,8 +397,10 @@ describe("the composer's model menu (2026-10-12)", () => {
     // Auto first (a thread that follows its bot adds the bot's model below it).
     expect(list.props.sections[0]!.rows.map((candidate) => candidate.key)).toEqual(["auto"]);
     expect(opened.html).toContain('placeholder="Search models"');
-    expect(opened.html).toContain("data-model-edit");
-    expect(opened.html).toContain(">Providers<");
+    // #2963: one footer row opens the models window
+    expect(opened.html).toContain("data-model-manage");
+    expect(opened.html).toContain(">Manage models<");
+    expect(opened.html).not.toContain("data-model-edit");
   });
 
   // Owner, 2026-10-14: too many models shown. The root lists the providers,
@@ -448,13 +465,15 @@ describe("the composer's model menu (2026-10-12)", () => {
     expect(render(forBot, composer).html).not.toContain("data-model-menu");
   });
 
-  it("opens Providers from the menu footer and closes the menu", () => {
+  // #2963: Manage models opens the models window for this bot.
+  it("opens the models window from the menu footer and closes the menu", () => {
     fixture.instances = [signedIn()];
+    modelWindow.opened.length = 0;
     const forBot = bot("claude", "claude-opus-5-5");
     const opened = open(forBot, composer);
-    const edit = opened.nodes.find((node) => node.props["data-model-edit"] !== undefined)!;
-    (edit.props.onClick as () => void)();
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "providers" });
+    const manage = opened.nodes.find((node) => node.props["data-model-manage"] !== undefined)!;
+    (manage.props.onClick as () => void)();
+    expect(modelWindow.opened).toEqual(["atlas"]);
     expect(render(forBot, composer).html).not.toContain("data-model-menu");
   });
 
@@ -557,29 +576,50 @@ describe("the composer's model menu (2026-10-12)", () => {
   });
 });
 
-describe("the model menu from the sidebar (windowOnly)", () => {
-  it("opens with no chip and tells its host when it closes", () => {
+describe("the models window (windowOnly, #2963)", () => {
+  const manager = (shown: ReturnType<typeof render>) =>
+    shown.nodes.find((node) => node.type === ModelManager) as unknown as ReactElement<Parameters<typeof ModelManager>[0]> | undefined;
+
+  it("opens the models window with no chip and tells its host when it closes", () => {
     fixture.instances = [signedIn()];
     const closed = vi.fn();
     const shown = render(bot("claude", "claude-opus-5-5"), { windowOnly: true, onWindowClose: closed, threadId: undefined });
-    expect(shown.html).toContain("data-model-menu");
-    expect(shown.html).not.toContain("data-model-picker-content");
+    expect(shown.html).toContain("data-model-manager");
+    expect(shown.html).not.toContain("data-model-search-list");
     expect(shown.nodes.some((node) => node.props["data-tour"] === "model")).toBe(false);
-    // Escape on the search list closes and notifies the host.
-    const list = lists(shown)[0]!;
-    (list.props as { onEscape?: () => void }).onEscape?.();
+    manager(shown)!.props.onClose();
     expect(closed).toHaveBeenCalledOnce();
   });
 
-  // Refs #1979: CSS bottom: innerHeight - 96 put the menu above the window.
-  it("pins the open-alone menu by its top inside the viewport", () => {
-    fixture.instances = [signedIn()];
+  it("lists each engine in its column and its models with a star and a switch", () => {
+    fixture.instances = [signedIn(), codex];
     const shown = render(bot("claude", "claude-opus-5-5"), { windowOnly: true, threadId: undefined });
-    const menu = shown.nodes.find((node) => "data-model-menu" in node.props)!;
-    const style = menu.props.style as { top?: number; bottom?: number; left?: number; maxHeight?: number };
-    expect(style).toMatchObject({ left: 24, top: 96 });
-    expect(style.bottom).toBeUndefined();
-    expect(style.maxHeight).toBeGreaterThan(0);
+    expect(shown.html).toContain('data-model-manager-engine="claude"');
+    expect(shown.html).toContain('data-model-manager-engine="codex"');
+    const opus = manager(shown)!.props.sections.find((section) => section.key === "claude")!.rows.find((candidate) => candidate.modelId === "claude-opus-5-5")!;
+    expect(shown.html).toContain(`data-model-favorite="${opus.key}"`);
+    expect(shown.html).toContain("data-model-switch=");
+    expect(shown.html).toContain(">Models<");
+  });
+
+  it("picks a model and keeps the window open", () => {
+    fixture.instances = [signedIn(), codex];
+    const closed = vi.fn();
+    const forBot = bot("claude", "claude-opus-5-5");
+    const shown = render(forBot, { windowOnly: true, onWindowClose: closed, threadId: undefined });
+    const instance = fixture.instances.find((candidate) => candidate.instanceId === "codex")!;
+    manager(shown)!.props.pick(instance, "gpt-5.6", true);
+    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "setModel", botId: "atlas", updateBotDefault: true,
+      selection: expect.objectContaining({ instanceId: "codex", model: "gpt-5.6" }) }));
+    expect(closed).not.toHaveBeenCalled();
+  });
+
+  it("hands the window frame to the click-outside guard, so a click in the window keeps it open", () => {
+    fixture.instances = [signedIn(), codex];
+    const shown = render(bot("claude", "claude-opus-5-5"), { windowOnly: true, threadId: undefined });
+    const frameRef = manager(shown)!.props.frameRef;
+    expect(frameRef).toBeDefined();
+    expect(frameRef).toBe(effects.last!.menuRef);
   });
 });
 
@@ -638,26 +678,28 @@ describe("the flat model picker", () => {
     }
   });
 
-  it("opens Providers from its single link and closes the picker", () => {
+  it("opens the models window from its single link and closes the picker", () => {
     ready();
+    modelWindow.opened.length = 0;
     const forBot = bot("claude", "claude-opus-5-5");
     const opened = open(forBot);
-    const links = opened.nodes.filter((node) => node.props["data-model-edit"] !== undefined);
+    const links = opened.nodes.filter((node) => node.props["data-model-manage"] !== undefined);
     expect(links).toHaveLength(1);
     expect(opened.html).not.toContain("data-model-add-api-keys");
     expect(opened.html).not.toContain("data-engine-keys-link");
     (links[0]!.props.onClick as () => void)();
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "providers" });
+    expect(modelWindow.opened).toEqual(["atlas"]);
     expect(render(forBot).html).not.toContain("data-model-menu");
   });
 
   it.each([signedOut, notFound])("keeps setup reachable through Providers while offering ready models only (%#)", (unready) => {
     fixture.instances = [unready(), codex];
     const opened = open(bot("claude", "claude-opus-5-5"));
-    // Menu keeps the model in use with a warning; Providers is how setup stays reachable.
+    // Menu keeps the model in use with a warning; the models window (its
+    // Connect a provider) is how setup stays reachable.
     expect(row(opened, "claude-opus-5-5")?.props).toMatchObject({ current: true, warning: "Not responding" });
     expect(row(opened, "gpt-5.6")).toBeDefined();
-    expect(opened.html).toContain("data-model-edit");
+    expect(opened.html).toContain("data-model-manage");
     expect(opened.html).not.toContain("data-claude-sign-in");
     expect(opened.html).not.toContain("data-rail-row-action");
   });

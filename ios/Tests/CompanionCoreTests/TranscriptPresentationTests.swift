@@ -61,7 +61,8 @@ final class TranscriptPresentationTests: XCTestCase {
             XCTAssertEqual(message.text, raw, "The stored model prompt must keep its trust boundaries")
             XCTAssertEqual(message.webhookContent?.payload, "{\"service\":\"checkout\"}")
             message.role = .bot
-            XCTAssertEqual(rosterPreview([message], detail: .hidden), raw, "Only incoming user prompts are webhook cards")
+            // a bot reply reads as its plain words in a row since #2918, never as a webhook card
+            XCTAssertEqual(rosterPreview([message], detail: .hidden), PlainText.from(markdown: raw), "Only incoming user prompts are webhook cards")
         }
     }
 

@@ -6,6 +6,7 @@
 //
 // Never pre-allowed for any engine: every call rides the bot's approval mode
 // (Ask shows a card per call), exactly as the engine's own tools do in solo.
+import { createHash } from "node:crypto";
 import { localVmDesktopSpec } from "../computer/container-computer.ts";
 import { cleanCommandVariables } from "../vault/credential-command-env.ts";
 import { DESKTOP_BRIDGE_MESSAGES, type DesktopBridgeOperation } from "./desktop-bridge.ts";
@@ -372,6 +373,15 @@ export function desktopToolResult(value: unknown): ToolResult {
   return { content, ...(result.isError === true ? { isError: true } : {}) };
 }
 
+/** #2828: the operations that carry the asking bot's temporary folder. */
+const TMP_SCOPED_ACTIONS: ReadonlySet<string> = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "vm_run_command"]);
+
+/** The asking bot's temporary folder name on the desktop and in the Local
+ * VM (#2828): a short hash of the bot, so its id never shows on the computer. */
+export function botTmpScope(botId: string): string {
+  return createHash("sha256").update(`sagax-bot-tmp:${botId}`).digest("hex").slice(0, 16);
+}
+
 /** One JSON-RPC MCP request from the proxy (tools/list or tools/call). */
 export async function handleDesktopBridgeMcp(
   method: string,
@@ -388,6 +398,8 @@ export async function handleDesktopBridgeMcp(
     hold?: BoundToolTextOptions["hold"];
     /** The person's desktop is a Mac that offers its Apple apps (mac_*). */
     macApps?: () => boolean;
+    /** #2828: the asking bot's temporary folder scope (botTmpScope). */
+    tmpScope?: () => string | null;
   },
 ): Promise<unknown> {
   if (method === "tools/list") {
@@ -411,14 +423,20 @@ export async function handleDesktopBridgeMcp(
     if (payloadRefusal) return text(payloadRefusal, true);
     const commandVariables = operation.action === "run_command" || operation.action === "vm_run_command"
       ? cleanCommandVariables(options?.commandVariables?.()) : [];
+    const scope = TMP_SCOPED_ACTIONS.has(operation.action) ? options?.tmpScope?.() ?? null : null;
+    const extras = {
+      ...(commandVariables.length ? { env: Object.fromEntries(commandVariables) } : {}),
+      ...(scope && /^[a-f0-9]{16}$/.test(scope) ? { tmp_scope: scope } : {}),
+    };
     try {
       const stale = (value: ToolResult) => value.isError === true && value.content[0]?.type === "text" && (value.content[0].text === "Invalid request" || value.content[0].text === "Unsupported operation");
-      let result = desktopToolResult(await request(commandVariables.length ? { ...operation, env: Object.fromEntries(commandVariables) } : operation));
-      // A desktop app from before command variables refuses the field before
-      // running anything: the command runs without them, and the bot is told.
-      if (commandVariables.length && stale(result)) {
+      let result = desktopToolResult(await request(Object.keys(extras).length ? { ...operation, ...extras } : operation));
+      // A desktop app from before command variables (or the bots' own
+      // temporary folders, #2828) refuses the field before running anything:
+      // the operation runs without them, and the bot is told of the variables.
+      if (Object.keys(extras).length && stale(result)) {
         result = desktopToolResult(await request(operation));
-        if (!stale(result)) result = { ...result, content: [...result.content, { type: "text", text: "The Sagax desktop app on this computer is too old to receive your command variables, so this command ran without them. Update the Sagax app." }] };
+        if (commandVariables.length && !stale(result)) result = { ...result, content: [...result.content, { type: "text", text: "The Sagax desktop app on this computer is too old to receive your command variables, so this command ran without them. Update the Sagax app." }] };
       }
       const staleDesktop = stale(result);
       // A desktop app from before Local VM creation refuses the operation.

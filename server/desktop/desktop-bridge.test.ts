@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { DesktopBridges, desktopBridgeCapability, desktopBridgeOperation, resolveBotWorkplace, type DesktopBridgeRegistration } from "./desktop-bridge.ts";
 import { localVmDesktopSpec } from "../computer/container-computer.ts";
-import { desktopToolOperation, handleDesktopBridgeMcp, plainTextCommand } from "./desktop-bridge-tools.ts";
+import { botTmpScope, desktopToolOperation, handleDesktopBridgeMcp, plainTextCommand } from "./desktop-bridge-tools.ts";
 import { DEFAULT_BOT_WORKPLACE, parseBotWorkplace, serializeBotWorkplace } from "../../shared/bot-workplace.ts";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
@@ -290,6 +290,36 @@ describe("the sagax-desktop tools", () => {
     }, { commandVariables: () => ({ EXAMPLE_API_KEY: value }) }) as { content: Array<{ text: string }> };
     expect(sent.map((operation) => "env" in operation)).toEqual([true, false]);
     expect(old.content.map((item) => item.text)).toEqual(["done", expect.stringMatching(/too old to receive your command variables/)]);
+  });
+  // Each bot its own temporary folder (electron/desktop-bridge.mjs botTmpDir).
+  it("sends the bot's temp scope with file and command actions, and an older desktop runs without it", async () => {
+    const ada = botTmpScope("bot-ada");
+    expect(ada).toMatch(/^[a-f0-9]{16}$/);
+    expect(botTmpScope("bot-bob")).not.toBe(ada);
+    expect(botTmpScope("bot-ada")).toBe(ada);
+    expect(desktopBridgeOperation.safeParse({ action: "run_command", command: "ls", tmp_scope: ada }).success).toBe(true);
+    expect(desktopBridgeOperation.safeParse({ action: "run_command", command: "ls", tmp_scope: "../x" }).success).toBe(false);
+    const sent: Array<Record<string, unknown>> = [];
+    const run = async (name: string, args: Record<string, unknown>) => handleDesktopBridgeMcp("tools/call", { name, arguments: args }, async (operation) => { sent.push(operation); return { content: [{ type: "text", text: "done" }] }; }, { tmpScope: () => ada });
+    await run("run_command", { command: "ls" });
+    await run("read_file", { path: "~/x" });
+    await run("local_vm", { action: "run", command: "ls" });
+    expect(sent.map((operation) => operation.tmp_scope)).toEqual([ada, ada, ada]);
+    sent.length = 0;
+    await run("fetch_url", { url: "https://example.com" });
+    expect(sent[0] ?? {}).not.toHaveProperty("tmp_scope");
+    // the person's own call (no bot): nothing
+    sent.length = 0;
+    await handleDesktopBridgeMcp("tools/call", { name: "run_command", arguments: { command: "ls" } }, async (operation) => { sent.push(operation); return { content: [{ type: "text", text: "done" }] }; }, { tmpScope: () => null });
+    expect(sent[0]).not.toHaveProperty("tmp_scope");
+    // a desktop app from before the scope refuses the field: once more without, no variables notice
+    sent.length = 0;
+    const old = await handleDesktopBridgeMcp("tools/call", { name: "run_command", arguments: { command: "ls" } }, async (operation) => {
+      sent.push(operation);
+      return operation.tmp_scope ? { content: [{ type: "text", text: "Invalid request" }], isError: true } : { content: [{ type: "text", text: "done" }] };
+    }, { tmpScope: () => ada }) as { content: Array<{ text: string }> };
+    expect(sent.map((operation) => "tmp_scope" in operation)).toEqual([true, false]);
+    expect(old.content.map((item) => item.text)).toEqual(["done"]);
   });
   it("an older desktop app that cannot create a Local VM says to update it", async () => {
     const old = await handleDesktopBridgeMcp("tools/call", { name: "local_vm", arguments: { action: "create" } }, async () => ({ content: [{ type: "text", text: "Invalid request" }], isError: true }));

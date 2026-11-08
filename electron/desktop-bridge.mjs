@@ -76,7 +76,7 @@ const FETCH_MAX = 256 * 1024;
 /** The server's largest upload (a video, server/attachments/attachments.ts). */
 const STAGE_MAX = 1024 * 1024 * 1024;
 const ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "fetch_url", "browse", "computer_tools", "computer_call", "vm_status", "vm_start", "vm_run_command", "vm_create", "vm_stop", "vm_pause", "vm_resume", "vm_setup", "vm_install", "vm_screenshot", "vm_computer_call", "stage_file", "extract_archive", "local_model", "terminal_open", "vm_terminal_open", "mac_app"]);
-const KEYS = new Set(["action", "path", "content", "encoding", "offset", "max_bytes", "command", "cwd", "timeout_seconds", "pattern", "glob", "url", "screenshot", "tool_name", "arguments", "container", "name", "final", "endpoint", "http_method", "http_path", "json", "env"]);
+const KEYS = new Set(["action", "path", "content", "encoding", "offset", "max_bytes", "command", "cwd", "timeout_seconds", "pattern", "glob", "url", "screenshot", "tool_name", "arguments", "container", "name", "final", "endpoint", "http_method", "http_path", "json", "env", "tmp_scope"]);
 /** Command variables (run_command, vm_run_command): API keys the person
  * exposed to this bot, by the names they chose. Names a shell or Sagax
  * needs never come from the server (server/vault/credential-command-env.ts). */
@@ -94,6 +94,51 @@ const uuid = value => typeof value === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-
 const text = value => ({ content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }] });
 const failure = message => ({ ...text(message), isError: true });
 
+/** #2828: each bot has its own temporary folder on this computer and in the
+ * Local VM. `tmp_scope` is a hash of the bot (never its id), sent with the
+ * operations that touch files or run a command. */
+const TMP_SCOPE = /^[a-f0-9]{16}$/;
+const TMP_SCOPED_ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "vm_run_command"]);
+const BOT_TMP_FOLDER = "sagax-bots";
+/** The Local VM's folder for the bots' temporary folders. */
+export const VM_BOT_TMP_ROOT = `/tmp/${BOT_TMP_FOLDER}`;
+
+/** This bot's own temporary folder on this computer, created private. */
+export async function botTmpDir(root, scope) {
+  const dir = path.join(root, scope);
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  await fs.chmod(root, 0o700).catch(() => {});
+  return dir;
+}
+
+/** The other bots' temporary folders under `root`: what this bot's file
+ * tools and working folder never reach. */
+export async function otherBotTmpDirs(root, scope) {
+  let names = [];
+  try { names = await fs.readdir(root); } catch { return []; }
+  return names.filter(name => name !== scope).map(name => path.join(root, name));
+}
+
+/** The other bot's temporary folder a command names, or null (#2828): a
+ * `sagax-bots/<scope>` other than this bot's, the folder of them all, or a
+ * climb out of its own ($TMPDIR/..). */
+export function commandNamesOtherBotTmp(command, scope) {
+  if (typeof command !== "string" || !command) return null;
+  for (const match of command.matchAll(/sagax-bots(?:[/\\]+([A-Za-z0-9._-]*))?/g)) {
+    if (match[1] !== scope) return match[0];
+  }
+  const climb = command.match(/\$\{?(?:TMPDIR|TMP|TEMP)\}?[/\\]+\.\.(?=$|[/\\\s'";|&)<>`])/);
+  return climb ? climb[0] : null;
+}
+
+/** The Local VM command run with this bot's own temporary folder. */
+export function vmCommandWithBotTmp(command, scope) {
+  const dir = `${VM_BOT_TMP_ROOT}/${scope}`;
+  return `export TMPDIR=${dir} TMP=${dir} TEMP=${dir}; mkdir -p -m 700 ${dir} && chmod 700 ${VM_BOT_TMP_ROOT} 2>/dev/null\n${command}`;
+}
+
+const otherBotTmpRefusal = named => `This command names ${named}, another bot's temporary folder: each bot has its own ($TMPDIR).`;
+
 /** The server's operation, checked for shape before anything looks at it. */
 export function validBridgeOperation(operation) {
   if (!operation || typeof operation !== "object" || Array.isArray(operation)) return false;
@@ -107,6 +152,7 @@ export function validBridgeOperation(operation) {
   }
   if (operation.arguments !== undefined && (!operation.arguments || typeof operation.arguments !== "object" || Array.isArray(operation.arguments))) return false;
   if (!validCommandVariables(operation.env) || (operation.env !== undefined && operation.action !== "run_command" && operation.action !== "vm_run_command")) return false;
+  if (operation.tmp_scope !== undefined && (typeof operation.tmp_scope !== "string" || !TMP_SCOPE.test(operation.tmp_scope) || !TMP_SCOPED_ACTIONS.has(operation.action))) return false;
   if (operation.endpoint !== undefined && (typeof operation.endpoint !== "string" || !/^desk[a-z0-9]{3,24}$/.test(operation.endpoint))) return false;
   if (operation.http_method !== undefined && operation.http_method !== "GET" && operation.http_method !== "POST") return false;
   if (operation.http_path !== undefined && operation.http_path !== "/models" && operation.http_path !== "/chat/completions" && operation.http_path !== "/messages") return false;
@@ -285,19 +331,31 @@ export function commandNamesAppData(command, appDataPaths, home) {
  * the person's settings provide. */
 export async function executeBridgeOperation(operation, deps, signal) {
   const home = deps.home;
-  const protectedRoots = await protectedIdentities(deps.protectedPaths);
+  const scope = typeof operation.tmp_scope === "string" && TMP_SCOPE.test(operation.tmp_scope) ? operation.tmp_scope : null;
+  const tmpRoot = deps.botTmpRoot ?? path.join(os.tmpdir(), BOT_TMP_FOLDER);
+  // #2828: the other bots' temporary folders count as protected for this bot.
+  const otherTmp = scope && operation.action !== "vm_run_command" ? await protectedIdentities(await otherBotTmpDirs(tmpRoot, scope)) : new Set();
+  const protectedRoots = new Set([...await protectedIdentities(deps.protectedPaths), ...otherTmp]);
+  const outsideOtherBotTmp = async target => {
+    try { await assertOutsideProtected(otherTmp, target); }
+    catch { throw new Error("This path is another bot's temporary folder: each bot has its own ($TMPDIR)."); }
+  };
   switch (operation.action) {
     case "run_command": {
       const cwd = operation.cwd ? localPath(operation.cwd, home) : home;
+      const namedTmp = scope ? commandNamesOtherBotTmp(operation.command, scope) : null;
+      if (namedTmp) throw new Error(otherBotTmpRefusal(namedTmp));
+      const ownTmp = scope ? await botTmpDir(tmpRoot, scope) : null;
       // #2773: the app's own data never passes through run_command either,
       // neither named in the command nor as its working directory.
       const named = commandNamesAppData(operation.command, deps.appDataPaths, home);
       if (named) throw new Error(`This command names ${named}, the Sagax app's own data on this computer: run_command does not reach it.`);
-      if (operation.cwd) await assertOutsideProtected(protectedRoots, cwd);
-      return runCommand(operation.command, { cwd, timeoutSeconds: operation.timeout_seconds ?? 120, signal, env: { ...commandEnvironment(), ...operation.env } });
+      if (operation.cwd) { await outsideOtherBotTmp(cwd); await assertOutsideProtected(protectedRoots, cwd); }
+      return runCommand(operation.command, { cwd, timeoutSeconds: operation.timeout_seconds ?? 120, signal, env: { ...commandEnvironment(), ...operation.env, ...(ownTmp ? { TMPDIR: ownTmp, TMP: ownTmp, TEMP: ownTmp } : {}) } });
     }
     case "read_file": {
       const target = localPath(operation.path, home);
+      await outsideOtherBotTmp(target);
       await assertOutsideProtected(protectedRoots, target);
       const handle = await fs.open(target, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
       try {
@@ -316,6 +374,7 @@ export async function executeBridgeOperation(operation, deps, signal) {
     }
     case "write_file": {
       const target = localPath(operation.path, home);
+      await outsideOtherBotTmp(target);
       await assertOutsideProtected(protectedRoots, target);
       const data = Buffer.from(operation.content ?? "", operation.encoding === "base64" ? "base64" : "utf8");
       if (data.length > WRITE_MAX) throw new Error("Files are limited to 1 MiB per write");
@@ -326,6 +385,7 @@ export async function executeBridgeOperation(operation, deps, signal) {
     }
     case "list_files": {
       const target = operation.path ? localPath(operation.path, home) : home;
+      await outsideOtherBotTmp(target);
       await assertOutsideProtected(protectedRoots, target);
       const entries = await fs.readdir(target, { withFileTypes: true });
       const shown = [];
@@ -339,6 +399,7 @@ export async function executeBridgeOperation(operation, deps, signal) {
     }
     case "search_files": {
       const root = operation.path ? localPath(operation.path, home) : home;
+      await outsideOtherBotTmp(root);
       await assertOutsideProtected(protectedRoots, root);
       return searchFiles(root, { pattern: operation.pattern, glob: operation.glob, protectedRoots, signal });
     }
@@ -380,7 +441,11 @@ export async function executeBridgeOperation(operation, deps, signal) {
     case "vm_computer_call":
       if (typeof deps.localVm.computer !== "function") throw new Error("This Sagax desktop app cannot control the Local VM screen. Update it.");
       return deps.localVm.computer(operation.tool_name, operation.arguments);
-    case "vm_run_command": return deps.localVm.exec(operation.container, operation.command, { timeoutSeconds: operation.timeout_seconds ?? 120, signal, ...(operation.env ? { env: operation.env } : {}) });
+    case "vm_run_command": {
+      const namedTmp = scope ? commandNamesOtherBotTmp(operation.command, scope) : null;
+      if (namedTmp) throw new Error(otherBotTmpRefusal(namedTmp));
+      return deps.localVm.exec(operation.container, scope ? vmCommandWithBotTmp(operation.command, scope) : operation.command, { timeoutSeconds: operation.timeout_seconds ?? 120, signal, ...(operation.env ? { env: operation.env } : {}) });
+    }
     case "vm_create": return deps.localVm.create({ spec: operation.arguments?.spec, signal, progress: deps.progress });
     case "stage_file": {
       const dir = deps.attachmentsDir;

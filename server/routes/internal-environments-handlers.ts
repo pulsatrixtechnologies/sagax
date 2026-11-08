@@ -34,7 +34,7 @@ import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools
 import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 import { UserSandboxUnavailable } from "../sandbox/user-sandbox-manager.ts";
 import { handleUserSandboxMcp } from "../sandbox/user-sandbox-tools.ts";
-import { inBotFolder } from "../sandbox/sandbox-bot-folder.ts";
+import { conversationTmpPath, inBotFolder } from "../sandbox/sandbox-bot-folder.ts";
 import type { SandboxExecInput } from "../sandbox/sandboxd-core.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
 import { PASS } from "./table.ts";
@@ -536,6 +536,8 @@ async function handleSandboxMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
         return deps.userSandboxExec(ownerId, folder ? inBotFolder(placed, folder, capability.threadId) : placed, capability.botId) as never;
       },
       overQuota: async () => await deps.userSandboxOverQuota(ownerId, capability.botId),
+      // #2775: tmp/ of a file tool is this conversation's own folder.
+      conversationPath: (value) => conversationTmpPath(value, folder, capability.threadId),
       commandRefusal: (command) => deps.enginePluginCommandRefusal(command)
         ?? enginePluginCommandRefusal(command)
         ?? deps.misuseTextRefusal(command, ownerId, "shell", { botId: capability.botId, threadId: capability.threadId, tool: "run_command" }),

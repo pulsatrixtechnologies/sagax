@@ -13,6 +13,7 @@ import {
   attributionFragments,
   botFolderNote,
   conversationTmpName,
+  conversationTmpPath,
   inBotFolder,
   rewriteMovedPaths,
   slugifyBotName,
@@ -87,6 +88,43 @@ describe("inBotFolder", () => {
     const note = botFolderNote("/workspace/bots/helper", undefined, "71b4d54e-a0fd-4009-9088-cf7064884af2");
     expect(note).toContain("/workspace/bots/helper/tmp/c-71b4d54e-a0fd-4009-9088-cf7064884af2");
     expect(note).toContain("comes from another conversation and is never a result of this one");
+  });
+
+  // #2775: a relative tmp/ path of the file tools stays in the conversation.
+  it("maps a tmp/ path of the file tools into the conversation folder", () => {
+    const folder = "/workspace/bots/helper";
+    const id = "71b4d54e-a0fd-4009-9088-cf7064884af2";
+    const c = `c-${id}`;
+    expect(conversationTmpPath("tmp/mte.md", folder, id)).toBe(`tmp/${c}/mte.md`);
+    expect(conversationTmpPath("./tmp/a/b.json", folder, id)).toBe(`tmp/${c}/a/b.json`);
+    expect(conversationTmpPath("tmp", folder, id)).toBe(`tmp/${c}`);
+    expect(conversationTmpPath(`${folder}/tmp/team.json`, folder, id)).toBe(`${folder}/tmp/${c}/team.json`);
+    expect(conversationTmpPath(`tmp/${c}/mte.md`, folder, id)).toBe(`tmp/${c}/mte.md`);
+    expect(conversationTmpPath("tmp/c-other/x", folder, id)).toBe("tmp/c-other/x");
+    expect(conversationTmpPath("tmpfile.md", folder, id)).toBe("tmpfile.md");
+    expect(conversationTmpPath("out/report.md", folder, id)).toBe("out/report.md");
+    expect(conversationTmpPath("/workspace/shared/tmp/x", folder, id)).toBe("/workspace/shared/tmp/x");
+    expect(conversationTmpPath("tmp/x", folder, null)).toBe("tmp/x");
+  });
+
+  it("moves loose tmp files older than six hours out of the shared tmp/", () => {
+    const root = scratch();
+    const folder = join(root, "bots", "helper");
+    mkdirSync(join(folder, "tmp", "c-keep"), { recursive: true });
+    const old = Date.now() / 1000 - 7 * 3600;
+    writeFileSync(join(folder, "tmp", "mte.md"), "old");
+    utimesSync(join(folder, "tmp", "mte.md"), old, old);
+    writeFileSync(join(folder, "tmp", "fresh.md"), "new");
+    writeFileSync(join(folder, "tmp", ".keep"), "");
+    utimesSync(join(folder, "tmp", ".keep"), old, old);
+    utimesSync(join(folder, "tmp", "c-keep"), old, old);
+    const placed = inBotFolder({ argv: ["ls", "tmp"] }, "/workspace/bots/helper", "0f9c2c1e-1111-4222-8333-944455556666");
+    execFileSync(placed.argv[0]!, [placed.argv[1]!, placed.argv[2]!, placed.argv[3]!, folder, ...placed.argv.slice(5)], { encoding: "utf8" });
+    expect(existsSync(join(folder, "tmp", "mte.md"))).toBe(false);
+    expect(readFileSync(join(folder, "tmp", "c-earlier", "mte.md"), "utf8")).toBe("old");
+    expect(existsSync(join(folder, "tmp", "fresh.md"))).toBe(true);
+    expect(existsSync(join(folder, "tmp", ".keep"))).toBe(true);
+    expect(existsSync(join(folder, "tmp", "c-keep"))).toBe(true);
   });
 
   it("tells the bot where its folder is and never to write at the root", () => {

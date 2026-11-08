@@ -145,6 +145,10 @@ struct ExperimentalSettingsView: View {
     /// Development context pods: this device only, off by default.
     @AppStorage(DevPodsPrefs.enabled) private var devPods = false
     @State private var config: DesktopSettingsConfig?
+    /// `useServerFeature("memberPersonSettings")`: the descriptor's list,
+    /// then what a personal switch's save showed.
+    @State private var listedFeatures: [String]?
+    @State private var personalEvidence: Bool?
     @State private var saving = false
     @State private var error: String?
     @State private var showingReleaseNotes = false
@@ -166,7 +170,8 @@ struct ExperimentalSettingsView: View {
     static let reviewPresets = [3, 5, 10, 15, 20, 30, 50, 100]
 
     var body: some View {
-        let rows = ExperimentalFeatureRow.shown(config)
+        let served = ServerFeatureState.of("memberPersonSettings", listed: listedFeatures, evidence: personalEvidence)
+        let rows = ExperimentalFeatureRow.shown(config, served: served)
         SettingsPage(title: "Developer") {
 #if DEBUG
             // Parity captures: -paritySettingsRoute experimental -parityScrollEnd YES
@@ -204,7 +209,9 @@ struct ExperimentalSettingsView: View {
                         SettingsRow(
                             title: LocalizedStringKey(feature.title),
                             subtitle: feature.note,
-                            accessory: .toggle(Binding(get: { feature.on }, set: { apply(config.experimentalChange(feature.key, $0)) })),
+                            accessory: .toggle(Binding(get: { feature.on }, set: { on in
+                                if let change = config.experimentalChange(feature.key, on, served: served) { apply(change) }
+                            })),
                             identifier: "settings-experimental.\(feature.key)"
                         )
                         .disabled(saving)
@@ -218,6 +225,11 @@ struct ExperimentalSettingsView: View {
                     }
                 }
                 SettingsFooter(text: "Early features may change while we test them. Each one says whether it starts on or off.")
+            } else if let config, config.personalMissing(served) {
+                // ExperimentalSettings.tsx `personalMissing`: an older
+                // organization server without /api/me/experimental.
+                SettingsFooter(text: "Available after the server update.")
+                    .accessibilityIdentifier("settings-experimental.needsUpdate")
             }
             SettingsSectionLabel(text: "Context pods")
             SettingsCard {
@@ -242,12 +254,14 @@ struct ExperimentalSettingsView: View {
         .navigationDestination(isPresented: $showingTelemetry) { TelemetrySettingsPage() }
         .task(id: session.connection?.id) {
             guard let client = session.settingsClient else { return }
+            async let environment = try? client.environment()
             do {
                 let loaded = try await client.desktopSettingsConfig()
                 config = loaded
                 lastDays = loaded.threads?.eventLogRetentionDays ?? lastDays
                 lastCapBytes = loaded.threads?.eventLogMaxBytes ?? lastCapBytes
             } catch { self.error = error.localizedDescription }
+            listedFeatures = await environment?.capabilities?.features
         }
     }
 
@@ -344,8 +358,15 @@ struct ExperimentalSettingsView: View {
             do {
                 config = try await client.updateDesktopSettings(change)
                 DesktopSidebarFlags.shared.apply(config)
+                if case .myFeature = change { personalEvidence = true }
                 error = nil
             } catch {
+                // featureMissingOnServer: no red error, the switches go and
+                // the update note takes their place.
+                if case .myFeature = change, ServerFeatureState.routeMissing(error) {
+                    personalEvidence = false
+                    return
+                }
                 self.error = error.localizedDescription
             }
         }

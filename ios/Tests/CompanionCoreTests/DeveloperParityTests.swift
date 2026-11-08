@@ -24,8 +24,8 @@ final class DeveloperParityTests: XCTestCase {
     func testAnOwnerManagesEveryRowAndWritesTheServer() throws {
         let owner = try config(#"{"viewer":{"role":"owner"}}"#)
         XCTAssertTrue(owner.canEditConfig)
-        XCTAssertTrue(owner.mayToggleExperimental("meetingNotetaker"))
-        XCTAssertEqual(owner.experimentalChange("dataWindow", true), .feature("dataWindow", true))
+        XCTAssertTrue(owner.mayToggleExperimental("meetingNotetaker", served: .unknown))
+        XCTAssertEqual(owner.experimentalChange("dataWindow", true, served: .no), .feature("dataWindow", true))
         XCTAssertTrue(owner.canSetSkillReview)
         XCTAssertTrue(try config("{}").canEditConfig, "no viewer: a single-user server")
     }
@@ -35,17 +35,50 @@ final class DeveloperParityTests: XCTestCase {
         XCTAssertFalse(member.canEditConfig)
         XCTAssertFalse(member.canManageExperimental)
         XCTAssertTrue(member.showsExperimental)
-        XCTAssertTrue(member.mayToggleExperimental("skillAuthoring"))
-        XCTAssertFalse(member.mayToggleExperimental("meetingNotetaker"), "a server switch: hidden, not greyed")
+        XCTAssertTrue(member.mayToggleExperimental("skillAuthoring", served: .yes))
+        XCTAssertFalse(member.mayToggleExperimental("meetingNotetaker", served: .unknown), "a server switch: hidden, not greyed")
         XCTAssertFalse(member.canSetSkillReview)
-        XCTAssertEqual(member.experimentalChange("llmThreadTitles", true), .myFeature("llmThreadTitles", true))
+        XCTAssertEqual(member.experimentalChange("llmThreadTitles", true, served: .unknown), .myFeature("llmThreadTitles", true))
     }
 
     func testAMemberWithoutPersonalSettingsSeesNoExperimentalCard() throws {
         let member = try config(#"{"viewer":{"role":"member"}}"#)
         XCTAssertFalse(member.canEditConfig)
         XCTAssertFalse(member.showsExperimental)
-        XCTAssertFalse(member.mayToggleExperimental("skillAuthoring"))
+        XCTAssertFalse(member.mayToggleExperimental("skillAuthoring", served: .yes))
+    }
+
+    func testAnOlderServerWithoutPersonalSettingsHidesTheMembersSwitchesBehindTheNote() throws {
+        // ExperimentalSettings.tsx: personal = personalSettings && useServerFeature("memberPersonSettings") !== "no".
+        let member = try config(#"{"personalSettings":true,"viewer":{"role":"member","permissions":[]}}"#)
+        XCTAssertTrue(member.showsExperimental, "the card stays for the note")
+        XCTAssertFalse(member.mayToggleExperimental("skillAuthoring", served: .no), "hidden, never greyed")
+        XCTAssertNil(member.experimentalChange("skillAuthoring", true, served: .no))
+        XCTAssertTrue(member.personalMissing(.no))
+        XCTAssertFalse(member.personalMissing(.unknown), "unknown counts as served, as on the desktop")
+        XCTAssertFalse(member.personalMissing(.yes))
+        XCTAssertTrue(member.mayToggleExperimental("skillAuthoring", served: .unknown))
+
+        let owner = try config(#"{"personalSettings":true,"viewer":{"role":"owner"}}"#)
+        XCTAssertFalse(owner.personalMissing(.no), "a manager writes the server's switch: no note")
+        XCTAssertEqual(owner.experimentalChange("skillAuthoring", true, served: .no), .feature("skillAuthoring", true))
+    }
+
+    func testTheServedStateReadsEvidenceThenTheDescriptorList() throws {
+        XCTAssertEqual(ServerFeatureState.of("memberPersonSettings", listed: nil, evidence: nil), .unknown)
+        XCTAssertEqual(ServerFeatureState.of("memberPersonSettings", listed: ["memberPersonSettings"], evidence: nil), .yes)
+        XCTAssertEqual(ServerFeatureState.of("memberPersonSettings", listed: ["routineFolders"], evidence: nil), .no)
+        XCTAssertEqual(ServerFeatureState.of("memberPersonSettings", listed: ["memberPersonSettings"], evidence: false), .no)
+        XCTAssertEqual(ServerFeatureState.of("memberPersonSettings", listed: nil, evidence: true), .yes)
+        XCTAssertTrue(ServerFeatureState.routeMissing(APIError.status(code: 404, message: "no route: PATCH /api/me/experimental")))
+        XCTAssertFalse(ServerFeatureState.routeMissing(APIError.status(code: 500, message: "boom")))
+
+        let env = try JSONDecoder().decode(ServerEnvironment.self, from: Data(#"{"environmentId":"e","label":"L","capabilities":{"remoteSessions":true,"selfUpdate":"operator","features":["memberPersonSettings"]}}"#.utf8))
+        XCTAssertEqual(env.capabilities?.features, ["memberPersonSettings"])
+        let odd = try JSONDecoder().decode(ServerEnvironment.self, from: Data(#"{"environmentId":"e","label":"L","capabilities":{"features":"all"}}"#.utf8))
+        XCTAssertNil(odd.capabilities?.features, "an odd list never fails the descriptor")
+        let old = try JSONDecoder().decode(ServerEnvironment.self, from: Data(#"{"environmentId":"e","label":"L"}"#.utf8))
+        XCTAssertNil(old.capabilities)
     }
 
     func testTheServerCapabilityWinsOverTheRole() throws {

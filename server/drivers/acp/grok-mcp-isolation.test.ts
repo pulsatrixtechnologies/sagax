@@ -70,6 +70,11 @@ describe("isolateGrokMcp (#2747)", () => {
     expect(env.GROK_CLAUDE_MCPS_ENABLED).toBe("false");
     expect(env.GROK_CURSOR_MCPS_ENABLED).toBe("false");
     expect(env.GROK_CODEX_MCPS_ENABLED).toBe("false");
+    // QA of #2816: the compat plugins' skills and hooks stay the person's
+    for (const source of ["CLAUDE", "CURSOR", "CODEX"]) {
+      expect(env[`GROK_${source}_SKILLS_ENABLED`], source).toBe("false");
+      expect(env[`GROK_${source}_HOOKS_ENABLED`], source).toBe("false");
+    }
     expect(readlinkSync(join(home, "auth.json"))).toBe(join(real, "auth.json"));
     expect(readlinkSync(join(home, "skills"))).toBe(join(real, "skills"));
     // sessions live in the real home, so a resume finds them either way

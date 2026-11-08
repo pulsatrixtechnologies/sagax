@@ -11,7 +11,7 @@ import type { OsPermissionAction } from "../../../electron/os-permissions.mjs";
 import { DescribedRow, PILL, SettingsGroup, SettingsNotice } from "@/components/SettingsPrimitives";
 import { StatusText } from "@/components/settings/SettingsPatterns";
 import { t } from "@/lib/i18n";
-import { useOsPermissions, type OsPermissionId, type OsPermissionView } from "@/lib/os-permissions";
+import { osPermissionsAvailable, useOsPermissions, type OsPermissionId, type OsPermissionView } from "@/lib/os-permissions";
 import type { LocaleKey } from "@/locales";
 
 const ICONS: Record<OsPermissionId, ReactNode> = {
@@ -123,6 +123,13 @@ export function OsPermissionRow({ view, platform, busy, onAct }: {
 /** Settings > Permissions: every permission of this computer, one row each. */
 export function OsPermissionsSection() {
   const { answer, act, busy } = useOsPermissions();
+  if (!osPermissionsAvailable()) {
+    return (
+      <div data-settings-card="osPermissions" data-os-permissions-unavailable="">
+        <SettingsNotice>{t("osPermission.unavailable")}</SettingsNotice>
+      </div>
+    );
+  }
   if (!answer) return null;
   return (
     <div data-settings-card="osPermissions">

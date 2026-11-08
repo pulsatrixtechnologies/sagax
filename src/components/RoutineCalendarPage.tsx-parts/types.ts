@@ -9,7 +9,7 @@ export type CalendarRecurrenceChoice = "none" | "daily" | "weekdays" | "weekly" 
 /** A routine repeats on a pattern (HumanScheduleFields), every N minutes
  * (the interval's fields), or on a saved schedule no pattern fits
  * ("advanced", kept as it is). A call keeps the calendar's choices. */
-export type RecurrenceChoice = CalendarRecurrenceChoice | "interval" | "pattern" | "advanced" | "webhook" | "email" | "limit_reset";
+export type RecurrenceChoice = CalendarRecurrenceChoice | "interval" | "pattern" | "advanced" | "webhook" | "github" | "email" | "limit_reset";
 export type IntervalDayChoice = "every-day" | "weekdays" | "custom";
 export type IntervalWindowChoice = "all-day" | "custom";
 export type IntervalEndChoice = "never" | "on-date";

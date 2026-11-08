@@ -159,7 +159,6 @@ describe("Edit Profile boundary markers in sections", () => {
     expect(markup).not.toContain(CHIEF_COPY);
     expect(markup).toMatch(/Browser<span role="img" data-proposal-owner=""[^>]*title="Only the owner changes this/);
     expect(markup).toContain("This server has no browser engine.");
-    expect(markup).toContain("A routine’s webhook is managed in that routine; a webhook of its own, in Automations.");
   });
 
   it("shows no Access markers without a covering Chief", () => {

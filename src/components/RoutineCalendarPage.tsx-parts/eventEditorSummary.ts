@@ -1,4 +1,5 @@
 import { durationLabel, intervalLabel, scheduleLabelCompact } from "@/lib/schedule-label";
+import { githubScheduleFromDraft, type GithubDraft } from "@/components/routines/GithubTriggerFields";
 import { limitResetWhen } from "@/lib/limit-resets";
 import { personTimeZone } from "@/components/routines/schedule-editor";
 import { timeZoneCity } from "../../../shared/schedule-model";
@@ -15,6 +16,7 @@ type WhenArgs = {
   recurrence: RecurrenceChoice;
   pattern: { sentence?: string; error?: string } | null;
   limitReset: LimitResetChoice;
+  githubDraft?: GithubDraft;
   bots: { id: string; modelSelection: { instanceId?: string } }[];
   lockedBotId?: string;
   botIds: string[];
@@ -25,11 +27,13 @@ type WhenArgs = {
 };
 
 export function eventEditorWhenSentence(args: WhenArgs): string {
-  const { recurrence, pattern, limitReset, bots, lockedBotId, botIds, intervalMinutes, at, eventSchedule } = args;
+  const { recurrence, pattern, limitReset, githubDraft, bots, lockedBotId, botIds, intervalMinutes, at, eventSchedule } = args;
   return recurrence === "pattern" || recurrence === "advanced"
     ? pattern?.sentence || t("routineCalendar.validSchedule")
     : recurrence === "webhook"
       ? t("schedule.compact.webhook")
+      : recurrence === "github"
+      ? scheduleLabelCompact(githubScheduleFromDraft(githubDraft ?? { events: [], repo: "" }))
       : recurrence === "email"
         ? eventSchedule?.type === "event" && eventSchedule.source === "github" ? scheduleLabelCompact(eventSchedule) : t("schedule.compact.email")
         : recurrence === "limit_reset"

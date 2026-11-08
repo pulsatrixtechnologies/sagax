@@ -1,7 +1,7 @@
 /** Isolated gallery for headless screenshots of the routine editor's
  * schedule (2026-10-29): a routine on weekdays at three times, Toronto
  * time, opened in the editor. Mocked API; no server. Not shipped in the app.
- * ?lang=<code>&skin=<id>&cron=<expression>&zone=<IANA> */
+ * ?lang=<code>&skin=<id>&cron=<expression>&zone=<IANA>&trigger=github|webhook */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RoutineEditor } from "../components/RoutineCalendarPage";
@@ -23,11 +23,15 @@ window.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
-const bot = { id: "bot-ember", name: "Ember", color: "violet", tasks: [], threadId: "thread-ember" } as unknown as Bot;
+const bot = { id: "bot-ember", name: "Ember", color: "violet", tasks: [], modelSelection: { instanceId: "claude", model: "claude-sonnet" }, threadId: "thread-ember" } as unknown as Bot;
 const routine = {
   id: "routine-1", name: "Suivi des billets", prompt: "Passe en revue les billets ouverts et résume ce qui a changé.",
   target: "bot", botId: bot.id, runOn: "maus", enabled: true,
-  schedule: { type: "cron", expression: params.get("cron") ?? "30 8,12,16 * * 1-5", timeZone: params.get("zone") ?? "America/Toronto" },
+  schedule: params.get("trigger") === "github"
+    ? { type: "event", source: "github", events: ["issue.opened", "pr.opened"], filters: { repo: ["pulsatrixtechnologies/sagax"] } }
+    : params.get("trigger") === "webhook"
+      ? { type: "webhook" }
+      : { type: "cron", expression: params.get("cron") ?? "30 8,12,16 * * 1-5", timeZone: params.get("zone") ?? "America/Toronto" },
   durationMinutes: 30, nextRunAt: Date.now() + 3_600_000, createdAt: Date.now(), updatedAt: Date.now(),
 } as unknown as Routine;
 

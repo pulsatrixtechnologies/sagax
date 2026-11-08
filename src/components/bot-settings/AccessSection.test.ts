@@ -90,37 +90,15 @@ describe("an organization member", () => {
   });
 });
 
-describe("owner tool selection status", () => {
-  it("distinguishes the legacy catalog from an explicit no-tools selection", () => {
-    // #2092: one row per group with a readable status
-    const legacy = render(makeBot());
-    expect(legacy).toContain("Engine tools");
-    expect(legacy).toMatch(/Engine tools<\/span><span[^>]*>All tools</);
-    const empty = render(makeBot({ toolScope: { allow: [] } } as Partial<Bot>));
-    expect(empty).toContain("No tools selected");
-    expect(empty).toMatch(/Engine tools<\/span><span[^>]*>Off</);
-    expect(empty).toContain("Existing approvals still apply");
-  });
-
-  it("shows corrupt saved restrictions as a blocked setup, never all tools", () => {
-    const corrupt = render(makeBot({ toolScope: { allow: "native:*" } } as unknown as Partial<Bot>));
-    expect(corrupt).toContain("Invalid saved selection. This bot cannot start until it is repaired.");
-    expect(corrupt).toContain('role="alert"');
-  });
-
-  it("explains native restrictions that the selected engine cannot enforce", () => {
-    const engine = { driverKind: "claudeAgent" } as NonNullable<ReturnType<typeof useBotSettingsDerived>["engine"]>;
-    const markup = render(makeBot({ toolScope: { allow: ["native:read"] } } as Partial<Bot>), makeDerived({ engine }));
-    expect(markup).toContain("This engine cannot limit native tools");
-    expect(markup).toContain("native:*");
-    expect(markup).toContain("will stop before sending a prompt");
-  });
-
-  it("keeps the selection editor disabled while a task is active", () => {
-    const markup = render(makeBot({ busy: true }));
-    // each group switch is disabled
-    expect(markup).toMatch(/disabled=""[^>]*aria-label="Allow the tools of Engine tools"/);
-    expect(markup).toContain("Wait until this bot finishes all active tasks before changing its tool selection.");
+describe("AccessSection technical options live in Settings > Developer only", () => {
+  it("renders none of the Developer cards, only one discreet link", () => {
+    const markup = render(makeBot({ alwaysAllow: ["shell.run"] }));
+    for (const label of ["Tool selection", "Webhooks", "Always allowed", "Working folder", "Engine tools"]) {
+      expect(markup, label).not.toContain(`>${label}<`);
+    }
+    expect(markup).not.toContain("shell.run");
+    expect(markup).not.toContain('data-bot-webhooks=""');
+    expect(markup.match(/data-developer-link/g) ?? []).toHaveLength(1);
   });
 });
 
@@ -147,20 +125,6 @@ describe("AccessSection always-allowed list", () => {
     expect(markup).toContain("Retry");
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('disabled="" aria-label="Let this bot use Notes"');
-  });
-
-  it("shows a placeholder when nothing is standing yet", () => {
-    const markup = render(makeBot());
-    expect(markup).toContain("Nothing allowed yet.");
-  });
-
-  it("lists each always-allowed entry with a Remove button", () => {
-    const markup = render(makeBot({ alwaysAllow: ["shell.run", "fs.write"] }));
-    expect(markup).toContain("shell.run");
-    expect(markup).toContain("fs.write");
-    expect(markup).toContain('aria-label="Remove shell.run from always allowed"');
-    expect(markup).toContain('aria-label="Remove fs.write from always allowed"');
-    expect(markup).not.toContain("Nothing standing yet.");
   });
 });
 
@@ -208,7 +172,7 @@ describe("AccessSection on the profile page (plain surface)", () => {
     createElement(StoreProvider, null, createElement(SettingsSurfaceProvider, { surface: "plain", children: createElement(AccessSection, { bot, derived }) })),
   );
   // HelpTip popovers keep their own outline (a floating surface, not a card).
-  const withoutPopovers = (markup: string) => markup.replace(/<div[^>]*popover-surface[\s\S]*?<\/div>/g, "");
+  const withoutPopovers = (markup: string) => markup.replace(/<div[^>]*popover-surface[\s\S]*?<\/div>/g, "").replace(/<p data-developer-link[\s\S]*?<\/p>/g, "");
   const BORDER = /\bborder(-\[|-border|-hairline|-accent)/;
 
   it("has no border, no underline and no primary pill", () => {
@@ -224,7 +188,7 @@ describe("AccessSection on the profile page (plain surface)", () => {
     fixture.servers = [{ name: "notes", enabled: true }];
     fixture.config = { features: { boatComputer: true } } as Partial<ConfigStatus>;
     const markup = renderPlain(makeBot());
-    for (const label of ["MCP servers", "Background brief", "Tool selection", "Webhooks", "Always allowed", "Working folder", "Cloud backend"]) {
+    for (const label of ["MCP servers", "Background brief", "Cloud backend"]) {
       expect(markup).toContain(`>${label}<`);
     }
   });
@@ -251,7 +215,5 @@ describe("AccessSection on the profile page (plain surface)", () => {
     fixture.servers = [{ name: "notes", enabled: true }];
     const markup = renderPlain(makeBot({ mcpServers: ["notes"] }));
     expect(markup.match(/Manage in Plugins/g)).toHaveLength(1);
-    expect(markup).toContain("Engine tools");
-    expect(markup).toContain("Nothing allowed yet.");
   });
 });

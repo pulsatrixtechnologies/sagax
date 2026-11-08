@@ -151,3 +151,11 @@ describe("in context", () => {
     expect(button('[data-settings-row="microphoneAccess"] [data-os-permission-action="prompt"]').textContent).toBe("Allow");
   });
 });
+
+describe("Settings > Permissions outside the desktop app", () => {
+  it("says so instead of rendering nothing", async () => {
+    (window as { ogb?: unknown }).ogb = undefined;
+    await render(createElement(OsPermissionsSection));
+    expect(host.querySelector("[data-os-permissions-unavailable]")?.textContent).toContain("desktop app");
+  });
+});

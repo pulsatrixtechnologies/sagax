@@ -26,6 +26,7 @@ export function botScopeMarketplaces(view: BotPluginsView): Array<{
   visibility?: "private" | "org"; mine?: boolean;
   plugins: Array<{
     name: string; description?: string; version?: string; category?: string; homepage?: string; icon?: string; installed: boolean; servers: string[]; skills: string[];
+    convertedFrom?: string; notConverted?: string[];
     installedVersion?: string; updateAvailable?: boolean;
   }>;
 }> {
@@ -44,6 +45,8 @@ export function botScopeMarketplaces(view: BotPluginsView): Array<{
       ...(plugin.category ? { category: plugin.category } : {}),
       ...(plugin.homepage ? { homepage: plugin.homepage } : {}),
       ...(plugin.icon ? { icon: plugin.icon } : {}),
+      ...(plugin.convertedFrom ? { convertedFrom: plugin.convertedFrom } : {}),
+      ...(plugin.notConverted?.length ? { notConverted: plugin.notConverted } : {}),
       installed: plugin.installed,
       ...(plugin.installed && plugin.installedVersion ? { installedVersion: plugin.installedVersion } : {}),
       ...(plugin.installed && plugin.updateAvailable ? { updateAvailable: true } : {}),

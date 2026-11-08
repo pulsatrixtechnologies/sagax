@@ -2,7 +2,8 @@
 // Marketplaces (#2613), and the ClawHub registry searched by the bot's
 // `skills_find` tool. A catalog without a `.claude-plugin/marketplace.json`
 // (Hermes Agent, OpenClaw) is read as a folder of skills: each skill becomes
-// a one-skill plugin (server/plugins/skills-catalog.ts).
+// a one-skill plugin (server/plugins/skills-catalog.ts). The Cursor catalog
+// is converted from its `.cursor-plugin/` format (server/plugins/cursor-catalog.ts).
 
 export interface OfficialCatalog {
   /** Name the marketplace is stored under. */
@@ -17,6 +18,9 @@ export interface OfficialCatalog {
   /** Folders cloned (sparse) and read for skills; absent = the whole
    * repository, a Claude Code marketplace. */
   skillDirs?: readonly string[];
+  /** "cursor": a Cursor plugin marketplace (`.cursor-plugin/`), converted to
+   * the Claude Code layout (server/plugins/cursor-catalog.ts, #2759). */
+  format?: "cursor";
 }
 
 export const OFFICIAL_CATALOGS: readonly OfficialCatalog[] = [
@@ -49,6 +53,14 @@ export const OFFICIAL_CATALOGS: readonly OfficialCatalog[] = [
     source: "anthropics/skills",
     site: "https://github.com/anthropics/skills",
     description: "Anthropic's public Agent Skills.",
+  },
+  {
+    id: "cursor-plugins",
+    label: "Cursor plugins",
+    source: "cursor/plugins",
+    site: "https://github.com/cursor/plugins",
+    description: "Cursor's official plugins: skills, rules, agents and MCP integrations, converted for Sagax.",
+    format: "cursor",
   },
 ];
 

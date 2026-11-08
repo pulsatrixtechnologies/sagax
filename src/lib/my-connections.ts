@@ -113,6 +113,8 @@ export interface MarketplaceListing {
   updatedAt: number;
   plugins: Array<{
     name: string; description?: string; version?: string; category?: string; homepage?: string; icon?: string; installed: boolean; external: boolean; contents?: PluginContents;
+    /** #2759: converted from another format (Cursor), and what did not convert */
+    convertedFrom?: string; notConverted?: string[];
     /** the version this bot has, when it differs from `version` */
     installedVersion?: string;
     /** the marketplace offers another version or other files: Install again updates in place */

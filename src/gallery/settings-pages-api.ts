@@ -62,7 +62,15 @@ export function settingsPagesApi(params: URLSearchParams): Record<string, unknow
         { instanceId: "compat-azure", displayName: "Azure Foundry", driverKind: "openai-compat", access: "api", capabilities: { withholdsHostTools: true }, snapshot: { state: "available", authenticated: true }, models: { default: "gpt-4.1", options: [{ id: "gpt-4.1", label: "gpt-4.1", custom: true }, { id: "gpt-4.1-mini", label: "gpt-4.1-mini", custom: true }, { id: "o4-mini", label: "o4-mini", custom: true }, { id: "gpt-4o", label: "gpt-4o", custom: true }] } },
         { instanceId: "personal-lab", displayName: "Home lab", driverKind: "openai-compat", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "qwen-3.8-27b", options: [{ id: "qwen-3.8-27b", label: "Qwen 3.8 27B", custom: true }] }, capabilities: { effortLevels: [] } },
       ] : []),
+      // &pi=1 (#2983): the pi engine, so Providers shows Model servers for pi
+      ...(params.get("pi") ? [
+        { instanceId: "pi", displayName: "pi", driverKind: "piAgent", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "", options: [{ id: "px-own-sx-0a1b2c3d4e/qwen-3.8-27b", label: "qwen-3.8-27b" }] } },
+      ] : []),
     ] },
+    ...(params.get("pi") ? { "/api/me/pi-model-servers": { servers: [
+      { id: "sx-0a1b2c3d4e", name: "oMLX on this Mac", url: "http://127.0.0.1:8000/v1", configured: true, models: [{ id: "qwen-3.8-27b", contextWindow: 131072 }, { id: "qwen-3.8-7b" }], checkedAt: new Date(NOW - DAY).toISOString(), provider: "px-own-sx-0a1b2c3d4e" },
+      { id: "sx-5f6a7b8c9d", name: "Ollama", url: "http://localhost:11434/v1", configured: false, models: [], provider: "px-own-sx-5f6a7b8c9d" },
+    ] } } : {}),
     "/api/me/cloud-agent-providers": { providers: [] },
     // Providers > Advanced: the claude.ai connectors, the Grok Bot link (Advanced) and Memes (Other services)
     "/api/me/harness-connectors": { manageUrl: "https://claude.ai/customize/connectors", canManage: true, enabled: true, claude: { available: true, connectors: [

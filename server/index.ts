@@ -1362,6 +1362,10 @@ import { withDesktopModelPerson } from "./desktop/desktop-model-grant.ts";
 import { isDesktopInjectModel, isLocalModelId, setDesktopInjectModels } from "./drivers/local-inject.ts";
 import { isPiServedModel, piLocalKeyRefusalLifted } from "./models/pi-local-model.ts";
 import { modelServerAccess, overlayModelServers, type PiModelServer } from "./drivers/pi-model-servers.ts";
+import { mergeModelServers } from "./pi-own-model-servers.ts";
+import { ownServerScope, piOwnModelServersStore, piOwnServersFor } from "./pi-own-model-servers-access.ts";
+import { probeModelServer } from "./pi-own-model-servers.ts";
+import { createPiModelServerRoutes } from "./routes/pi-model-servers.ts";
 import { piKitDir, type PiKitIdentity } from "./drivers/pi-kit.ts";
 import { defaultTurnPayerMode, effectiveTurnPayerMode, type TurnPayerMode } from "../shared/turn-payer.ts";
 import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
@@ -21487,10 +21491,12 @@ function principalLoginDir(principalId: string, driver: SubscriptionDriver, slot
  * reach the shared one. */
 /** #2024: the model servers a viewer reaches, for the picker (no keys). */
 async function piModelServersForViewer(principalId: string | null | undefined): Promise<PiModelServer[]> {
-  const sub = perspicaxSubOf(principalId?.trim().toLowerCase() ?? "");
-  if (!perspicaxDirectory || !sub) return [];
-  const result = await perspicaxDirectory.resolveModelServers(sub);
-  return result.ok ? modelServerAccess(result.servers).servers : [];
+  // #2983: the viewer's own servers (solo: the server's) join Perspicax's
+  const organization = IDENTITY.kind === "perspicax";
+  const own = piOwnServersFor(organization, principalId);
+  const sub = organization ? perspicaxSubOf(principalId?.trim().toLowerCase() ?? "") : null;
+  const result = perspicaxDirectory && sub ? await perspicaxDirectory.resolveModelServers(sub) : null;
+  return modelServerAccess(mergeModelServers(result?.ok ? result.servers : [], own)).servers;
 }
 /** #1422, #1276: the pi home of a local model's turn on an organization
  * server. pi keeps its sessions (whole conversations) and models.json in
@@ -30619,6 +30625,13 @@ ROUTES.push(createAntigravityLeftoverRoutes({
   isAntigravity: (instanceId) => registry.get(instanceId)?.driverKind === "antigravityAgent",
   find: () => findAntigravityLeftovers(),
   remove: () => removeAntigravityLeftovers()
+}));
+// #2983: a person's own model servers for pi (solo: the server's list;
+// organization: each member's own, never another's).
+ROUTES.push(createPiModelServerRoutes({
+  scope: (auth) => ownServerScope(IDENTITY.kind === "perspicax", auth.kind === "session" ? auth.session.principalId : null),
+  store: piOwnModelServersStore(),
+  probe: (url, key) => probeModelServer(url, key),
 }));
 // 2026-10-30: named OpenAI-compatible servers, each an engine on its own key
 // (server/openai-compat-servers.ts); the provider-settings lock as above.

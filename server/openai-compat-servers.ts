@@ -25,7 +25,7 @@ type KeyRecord = NonNullable<Keys[string]>;
 
 /** An address the server may call: https anywhere, http only on this machine
  * or a private network (a local vLLM, Ollama, LM Studio). */
-function serverUrl(value: string): boolean {
+export function serverUrl(value: string): boolean {
   try {
     const url = new URL(value);
     if (url.username || url.password) return false;

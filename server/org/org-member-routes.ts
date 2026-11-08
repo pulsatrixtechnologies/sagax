@@ -513,7 +513,8 @@ export function describeMemberApproval(
   const questions = kind === "question" ? cardQuestions(card) : null;
   const several = questions && questions.length > 1 ? questions : null;
   const single = questions && questions.length === 1 ? questions[0]! : null;
-  const choices = kind === "permission" ? [] : several ? [] : choicesOf(single ? single.options : labels);
+  // #2922: a permission lists its two answers, so option "1"/"2" works too
+  const choices = kind === "permission" ? choicesOf(["allow", "deny"]) : several ? [] : choicesOf(single ? single.options : labels);
   const createdAt = typeof message.at === "number" ? message.at : null;
   const cardExpires = typeof card.expiresAt === "number" ? card.expiresAt : null;
   let expiresAt: number | null = cardExpires;
@@ -598,7 +599,8 @@ export function planAnswer(approval: MemberApproval, card: Record<string, unknow
     let decision = input.decision;
     if (options.length) {
       if (options.length > 1) return { ok: false, status: 400, code: "bad_request", message: "A permission takes one option: allow or deny." };
-      const word = normalLabel(options[0]!);
+      const byId = approval.choices.find((c) => c.id === options[0]!.trim());
+      const word = normalLabel(byId ? byId.label : options[0]!);
       const label = approval.options.find((o) => normalLabel(o) === word) ?? null;
       const picked: "allow" | "deny" | null = word === "allow" || word === "deny" ? word : label ? (normalLabel(label) === "deny" ? "deny" : "allow") : null;
       if (!picked) return needOption("option_unknown", `This approval is answered allow or deny${approval.options.length ? ` (its buttons: ${approval.options.join(", ")})` : ""}.`);
@@ -1264,16 +1266,37 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     const threadId = str(body.thread_id);
     if (body.status !== "waiting_for_approval" || !threadId || !THREAD_ID.test(threadId) || deps.confidential?.(threadId)) return body;
     const page = await readThread(person, threadId, null, MEMBER_THREAD_LIMIT_MAX);
-    if (!isRead(page)) return body;
-    const approval = page.approvals[0] ?? null;
+    // #2922: when the agent API scoped the cards to this turn, the thread's
+    // older cards (a proposal or question an earlier turn left open) are not
+    // the ones this turn waits on
+    const scoped = Array.isArray(body.approvals)
+      ? new Set((body.approvals as unknown[]).map(objectOf).filter((row) => str(row?.threadId) === threadId).map((row) => str(row?.id)))
+      : null;
+    const own: MemberApproval[] = (isRead(page) ? page.approvals : []).filter((row) => !scoped || scoped.has(row.id));
+    // #2922: the agent API already found the cards of this turn, those down
+    // the handoff included (each with its own threadId): kept when this
+    // person may answer them, never from a confidential thread.
+    const carried = (Array.isArray(body.approvals) ? body.approvals : []).map(objectOf).filter((row): row is Record<string, unknown> => {
+      const rowThread = str(row?.threadId);
+      const id = str(row?.id);
+      if (!row || !rowThread || !id || !THREAD_ID.test(rowThread) || deps.confidential?.(rowThread)) return false;
+      if (rowThread === threadId) return false;
+      const info = deps.approvalAnswerer?.(rowThread, id) ?? null;
+      return Boolean(info?.open) && holdsAnswerPermission(person, info);
+    }) as unknown as MemberApproval[];
+    if (!isRead(page) && !carried.length) return body;
+    // newest first: the card the turn raised last is the one it waits on
+    const approvals = [...own, ...carried].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    const approval = approvals[0] ?? null;
+    const at = approval?.threadId ?? threadId;
     return {
       ...body,
       approval,
-      approvals: page.approvals,
+      approvals,
       ...(approval ? {
         next: approval.answerWith === "option"
-          ? `Ask the person, then call sagax_approve with thread_id ${threadId}, approval_id ${approval.id} and option (one of approval.choices, by id or label); then call await_turn again with this handle.`
-          : `Ask the person, then call sagax_approve with thread_id ${threadId}, approval_id ${approval.id} and decision allow or deny; then call await_turn again with this handle.`,
+          ? `Ask the person, then call sagax_approve with thread_id ${at}, approval_id ${approval.id} and option (one of approval.choices, by id or label); then call await_turn again with this handle.`
+          : `Ask the person, then call sagax_approve with thread_id ${at}, approval_id ${approval.id} and decision allow or deny; then call await_turn again with this handle.`,
       } : {}),
     };
   };

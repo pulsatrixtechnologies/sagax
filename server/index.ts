@@ -2213,6 +2213,7 @@ import { createUsableCredential } from "./index-leaves/usableCredential.ts";
 import { createSettingsStepUpGate } from "./index-leaves/settingsStepUpGate.ts";
 import { createPagesSeparation } from "./index-leaves/pagesSeparation.ts";
 import { createOpenPersonCard } from "./index-leaves/openPersonCard.ts";
+import { cardAnswerIds, createAgentPendingApproval, createAgentPendingForCaller } from "./index-leaves/agentPendingApproval.ts";
 import { createLocateChannelMessage } from "./index-leaves/locateChannelMessage.ts";
 import { createBotSkillsRefusal } from "./index-leaves/botSkillsRefusal.ts";
 import { createTerminalAnswerExtras } from "./index-leaves/terminalAnswerExtras.ts";
@@ -6588,6 +6589,7 @@ bindLeafHost({
   get delegationWatch() { return delegationWatch; },
   get openQuestionCard() { return openQuestionCard; },
   get openPersonCard() { return openPersonCard; },
+  get agentPendingApproval() { return agentPendingApproval; },
   get delegatorOf() { return delegatorOf; },
   get waitingOnPersonChips() { return waitingOnPersonChips; },
   get showWaitingOnPersonChip() { return showWaitingOnPersonChip; },
@@ -7753,6 +7755,8 @@ const localVmAutoLifecycle = createLocalVmAutoLifecycle(getLeafHost);
 const localVmInventoryPayload = createLocalVmInventoryPayload(getLeafHost);
 const openQuestionCard = createOpenQuestionCard(getLeafHost);
 const openPersonCard = createOpenPersonCard(getLeafHost);
+const agentPendingApproval = createAgentPendingApproval(getLeafHost);
+const agentPendingForCaller = createAgentPendingForCaller(getLeafHost);
 const delegatorOf = createDelegatorOf(getLeafHost);
 const showWaitingOnPersonChip = createShowWaitingOnPersonChip(getLeafHost);
 const settleWaitingOnPersonChips = createSettleWaitingOnPersonChips(getLeafHost);
@@ -30239,19 +30243,31 @@ const agentApi = createAgentApi({
     return tasks.map((task) => ({ threadId: task.threadId, title: task.title, hidden: task.hidden === true }));
   },
   messages(threadId) {
-    return store.messagesFor(threadId).map((message) => ({
+    const rows = store.messagesFor(threadId);
+    // #2922: only a line answering a card of its own turn (the card after the
+    // turn's prompt) is part of the turn it unblocked; a quote-reply to an
+    // older card is a new prompt
+    const cardIds = cardAnswerIds(rows);
+    return rows.map((message) => ({
       id: message.id,
       role: message.role,
       kind: message.kind,
       text: message.text,
       at: message.at,
       ...(message.queueId ? { queueId: message.queueId } : {}),
+      ...(message.role === "user" && message.replyToId && cardIds.has(message.id) ? { replyToId: message.replyToId } : {}),
       sender: message.from?.name ?? message.peerAsk?.name ?? message.sender?.name ?? null,
       tool: message.tool ? { name: message.tool.name, ok: message.tool.ok } : null,
       attachments: (message.attachments ?? []).map((file) => ({ name: file.kind === "file" ? file.name : undefined, path: file.path }))
     }));
   },
   turnState: agentTurnState,
+  // #2922: the cards an awaited turn (since its handle's time) is blocked
+  // on, its handed-off threads included, filtered for this caller
+  // (server/index-leaves/agentPendingApproval.ts, isolation between persons).
+  pendingApproval(caller, agentId, threadId, since) {
+    return agentPendingForCaller(caller, agentId, threadId, since);
+  },
   // #1170 (2026-10-26): one chat per bot, like the reference design. A prompt from a
   // person's AI client or from another bot lands in the bot's single
   // conversation with that person (the one they last wrote in), never in a

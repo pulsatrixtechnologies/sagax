@@ -271,7 +271,7 @@ describe("sending", () => {
     expect(clock - start).toBeLessThan(1_000);
     expect(got.body).toMatchObject({ pending: true, status: "waiting", approvals: [{ id: "req_1", threadId: "t1", title: "Run Bash?", tool: "Bash", options: ["Allow", "Deny"] }] });
     // the card the turn waits on, in line, with how to answer it
-    expect(got.body.approval).toMatchObject({ id: "req_1", threadId: "t1", kind: "permission", answerWith: "decision", choices: [] });
+    expect(got.body.approval).toMatchObject({ id: "req_1", threadId: "t1", kind: "permission", answerWith: "decision", choices: [{ id: "1", label: "allow" }, { id: "2", label: "deny" }] });
   });
 
   it("opens a new thread when asked, and passes a Sagax refusal through", async () => {
@@ -634,7 +634,7 @@ describe("the AI-client approval loop (2026-10-17)", () => {
       { id: "c4", role: "bot", kind: "options", at: 8, card: { title: "Save this routine?", subtitle: "", options: ["Save", "Not now"], requestId: "req_r", routineRequest: { version: 1 } } },
     ] }, null);
     const [bash, delivery, several, routine] = read.approvals;
-    expect(bash).toMatchObject({ kind: "permission", answerWith: "decision", choices: [], options: ["Allow", "Deny"], createdAt: 5, freeText: false });
+    expect(bash).toMatchObject({ kind: "permission", answerWith: "decision", choices: [{ id: "1", label: "allow" }, { id: "2", label: "deny" }], options: ["Allow", "Deny"], createdAt: 5, freeText: false });
     expect(delivery).toMatchObject({ kind: "question", answerWith: "option", freeText: true, expiresAt: 99,
       choices: [{ id: "1", label: "Livrer ici" }, { id: "2", label: "Livrer ici et par le relais" }, { id: "3", label: "Non" }] });
     expect(several).toMatchObject({ kind: "question", choices: [], freeText: false, questions: [
@@ -819,6 +819,51 @@ describe("the AI-client approval loop (2026-10-17)", () => {
     agentReply = () => ({ status: 200, body: { thread_id: "t1", finished: false, status: "waiting_for_approval", reply: "" } });
     confidentialThreads.add("t1");
     expect((await call("POST", "agents/send_prompt", token("bob"), { agent_id: "b1", prompt: "x" })).body.approval).toBeUndefined();
+  });
+
+  it("await_turn carries a card held down the handoff, with the thread to answer on (#2922)", async () => {
+    serveCards([]);
+    const child = { id: "req_c", threadId: "t9", kind: "permission", title: "Run Bash?", answerWith: "decision", choices: [{ id: "1", label: "allow" }, { id: "2", label: "deny" }], createdAt: 5 };
+    cards.set("t9/req_c", { open: true, ownerPrincipalId: "pr_bob", ownerName: "Bob", adminOnly: false });
+    agentReply = () => ({ status: 200, body: { handle: "turn_x", agent_id: "b1", thread_id: "t1", finished: false, status: "waiting_for_approval", reply: "", approvals: [child] } });
+    const got = await call("POST", "agents/await_turn", token("bob"), { agent_id: "b1", handle: "turn_x" });
+    expect(got.status).toBe(200);
+    expect(got.body.approval).toMatchObject({ id: "req_c", threadId: "t9" });
+    expect(got.body.next).toContain("thread_id t9");
+    expect(got.body.next).toContain("approval_id req_c");
+    // a card this person may not answer stays out
+    cards.set("t9/req_c", { open: true, ownerPrincipalId: "pr_ann", ownerName: "Ann", adminOnly: false });
+    expect((await call("POST", "agents/await_turn", token("bob"), { agent_id: "b1", handle: "turn_x" })).body.approval).toBeNull();
+    // never a confidential child thread's card
+    cards.set("t9/req_c", { open: true, ownerPrincipalId: "pr_bob", ownerName: "Bob", adminOnly: false });
+    confidentialThreads.add("t9");
+    expect((await call("POST", "agents/await_turn", token("bob"), { agent_id: "b1", handle: "turn_x" })).body.approval).toBeNull();
+  });
+
+  it("the card down the handoff is answered on its own thread, as the next text says (#2922)", async () => {
+    serveCards([bashCard({ requestId: "req_c" })], { thread: "t9" });
+    const child = { id: "req_c", threadId: "t9", kind: "permission", title: "Run Bash?", answerWith: "decision", choices: [], createdAt: 5 };
+    agentReply = () => ({ status: 200, body: { handle: "turn_x", agent_id: "b1", thread_id: "t1", finished: false, status: "waiting_for_approval", reply: "", approvals: [child] } });
+    const got = await call("POST", "agents/await_turn", token("bob"), { agent_id: "b1", handle: "turn_x" });
+    expect(got.body.next).toContain("thread_id t9");
+    const answered = await call("POST", "approvals/req_c", token("bob"), { threadId: "t9", decision: "allow" });
+    expect(answered.status).toBe(200);
+    expect(answered.body).toMatchObject({ answered: true, closed: true, decision: "allow" });
+    expect(performed.find((p) => p.request.path.endsWith("/respond"))?.request.path).toBe("/api/threads/t9/respond");
+  });
+
+  it("a card an earlier turn left open in the conversation is not the one this turn waits on (#2922)", async () => {
+    // the thread still shows an old routine proposal; the agent API scoped
+    // this turn's cards to the new permission only
+    serveCards([
+      { title: "Save this routine?", subtitle: "", options: ["Save", "Not now"], requestId: "req_old", routineRequest: { version: 1 } },
+      bashCard({ requestId: "req_new" }),
+    ]);
+    const now = { id: "req_new", threadId: "t1", kind: "permission", answerWith: "decision", choices: [], createdAt: 101 };
+    agentReply = () => ({ status: 200, body: { handle: "turn_x", agent_id: "b1", thread_id: "t1", finished: false, status: "waiting_for_approval", reply: "", approvals: [now] } });
+    const got = await call("POST", "agents/await_turn", token("bob"), { agent_id: "b1", handle: "turn_x" });
+    expect(got.body.approval).toMatchObject({ id: "req_new", threadId: "t1" });
+    expect(got.body.approvals.map((a: { id: string }) => a.id)).toEqual(["req_new"]);
   });
 });
 
@@ -1117,6 +1162,17 @@ describe("a skill card answered through the member API (G4)", () => {
     const deny = planAnswer(approval, card, { decision: "deny" });
     expect(deny).toMatchObject({ ok: true, body: { behavior: "deny" } });
     expect((deny as { body: object }).body).not.toHaveProperty("reviewedSha256");
+  });
+});
+
+describe("a permission answered by option id (#2922)", () => {
+  it("lists allow and deny as choices and maps option 1 and 2 to them", () => {
+    const card = { requestId: "req_p", requestType: "permission", tool: "Bash", title: "Run Bash?", options: ["Allow", "Deny"] };
+    const approval = describeMemberApproval("t1", { at: 1 }, card);
+    expect(approval.choices.map((c) => c.label)).toEqual(["allow", "deny"]);
+    expect(planAnswer(approval, card, { option: "1" })).toMatchObject({ ok: true, decision: "allow", body: { behavior: "allow" } });
+    expect(planAnswer(approval, card, { option: "2" })).toMatchObject({ ok: true, decision: "deny", body: { behavior: "deny" } });
+    expect(planAnswer(approval, card, { option: "Allow" })).toMatchObject({ ok: true, decision: "allow" });
   });
 });
 

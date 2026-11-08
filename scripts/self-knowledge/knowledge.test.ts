@@ -74,6 +74,11 @@ describe("self-knowledge base", () => {
       expect(guide!.text, word).toContain(word);
     }
     expect(guide!.keywords).toMatch(/unattended/);
+    // #2725: on a Sagax without these tools (not linked to Perspicax) the bot
+    // answers at once instead of hunting for them or for an organization id.
+    expect(guide!.text).toMatch(/not in your own tool list[^.]*answer in your first reply with no other call/);
+    expect(guide!.text).toMatch(/Never pass or ask for an organization id/);
+    expect(guide!.text).toMatch(/Do not look for the tools/);
     const full = availableTools({
       externalRuntime: false, coordinating: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
       voiceNotes: true, meetings: true, cloudHome: false, memoryEnabled: true, chief: true, createBots: true,

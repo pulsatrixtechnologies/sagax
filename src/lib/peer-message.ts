@@ -13,7 +13,7 @@
 // The wire shape, so server code and tests can read peer lines too.
 import type { WireMessage as Message } from "../../shared/wire.ts";
 
-export type PeerDelivery = "ask_bot" | "delegate_bot" | "start_thread" | "coordinate_bots" | "ai_client";
+export type PeerDelivery = "ask_bot" | "delegate_bot" | "start_thread" | "coordinate_bots" | "ai_client" | "relayed_reply";
 
 export interface PeerLine {
   /** The bot that wrote it; absent on rows older than Message.peerAsk. */
@@ -70,4 +70,16 @@ export function peerRequest(
   const from = message.from;
   if (!from?.name || from.botId === threadBotId) return null;
   return { botId: from.botId, name: from.name, delivery: "coordinate_bots", body: message.text ?? "" };
+}
+
+/** #2808: a teammate's coordinate_bots reply the server relayed into this
+ * bot's chat as it is (Message.relayedFrom). The unified chat hides the
+ * "<teammate> replied" row, so the bubble itself names who wrote it. */
+export function peerRelay(
+  message: Pick<Message, "role" | "text" | "relayedFrom">,
+  threadBotId: string,
+): PeerLine | null {
+  const from = message.relayedFrom;
+  if (message.role !== "bot" || !from?.name || from.botId === threadBotId) return null;
+  return { botId: from.botId, name: from.name, delivery: "relayed_reply", body: message.text ?? "" };
 }

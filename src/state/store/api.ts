@@ -60,7 +60,9 @@ export async function api<T = any>(path: string, init?: RequestInit & { timeoutM
   // caller signal so either can cancel. Omitted means no behavior change.
   const { timeoutMs, signal, stepUpTry, ...rest } = init ?? {};
   const res = await fetch(path, {
-    headers: { "content-type": "application/json", [PERSON_THREADS_HEADER]: "1" },
+    // The app's language rides every call: a person who saved none still
+    // gets server text (a greeting, a routine card) in it (#2803, #2805).
+    headers: { "content-type": "application/json", [PERSON_THREADS_HEADER]: "1", "x-sagax-locale": activeLocale() },
     ...rest,
     signal: timeoutMs === undefined
       ? signal

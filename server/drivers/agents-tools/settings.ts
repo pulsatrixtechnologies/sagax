@@ -47,7 +47,7 @@ const SIGN_IN_PLACES: Record<string, string> = {
 export const DEF_OPEN_CONNECTOR_SETUP = {
     name: "open_connector_setup",
     description:
-      "When the person asks to connect a connector (Microsoft Teams, Outlook, Gmail, Google Drive, OneDrive, SharePoint, Salesforce, X, ...): one call posts a card whose button opens the right sign-in page in their browser (grok.com or claude.ai for this engine's own connectors, else Sagax's Capabilities). Sagax detects the connection. Then answer in one short sentence in their language; no steps, no settings tour.",
+      "When the person asks to connect a connector (Microsoft Teams, Outlook, Gmail, Google Drive, OneDrive, SharePoint, Salesforce, X, ...): one call posts a card whose button opens the right sign-in page in their browser (grok.com or claude.ai for this engine's own connectors, else Sagax's Capabilities). Sagax detects the connection. Then answer in one short sentence in their language; no steps, no settings tour. GitHub is never this tool: call connect_github (Sagax's own link and code).",
     inputSchema: {
       type: "object",
       additionalProperties: false,

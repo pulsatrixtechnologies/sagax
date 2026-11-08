@@ -1116,6 +1116,9 @@ export interface WireMessage extends WaitLineField {
    * (send_prompt, sagax_send) into this bot's chat: not the person typing.
    * The chat folds it with the bot's answer into one exchange chip. */
   aiClient?: true;
+  /** #2808: a teammate's coordinate_bots reply relayed into the requester's
+   * chat as it is: who wrote it, shown above the bubble. */
+  relayedFrom?: { botId: string; name: string; color?: string };
   /** Auto: the model this delivered work ran on, and why (the delegation
    * card and the worker's activity row). Clients that do not know it ignore it. */
   autoModel?: AutoModelRecord;

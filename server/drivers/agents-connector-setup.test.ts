@@ -34,6 +34,17 @@ describe("open_connector_setup", () => {
     expect(calls).toEqual([{ path: "/api/internal/connector-setup/open", body: { connector: "Teams", language: "fr" } }]);
   });
 
+  it("GitHub goes to Sagax's own link and code, never the engine's connector page (#2806)", async () => {
+    const { ctx, calls } = context({
+      "/api/internal/github-connect": { ok: true, status: 200, body: { state: "pending", userCode: "ABCD-1234", verificationUri: "https://github.com/login/device", card: true } },
+    });
+    const out = await callConnectorSetupTool({ connector: "GitHub", via: "claude", language: "fr" }, ctx);
+    expect(out.isError).toBeUndefined();
+    expect(out.text).toContain("ABCD-1234");
+    expect(out.text).not.toMatch(/claude\.ai|grok\.com/);
+    expect(calls).toEqual([{ path: "/api/internal/github-connect", body: { fromBotId: "b1", fromThreadId: "t1" } }]);
+  });
+
   it("already connected: says so", async () => {
     const { ctx } = context({
       "/api/internal/connector-setup/open": { ok: true, status: 200, body: { ok: true, route: "claude", label: "Gmail", status: "connected", card: "existing" } },

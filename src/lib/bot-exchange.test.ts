@@ -32,6 +32,11 @@ function kinds(messages: Message[], options?: Parameters<typeof collapseBotExcha
 }
 
 describe("collapseBotExchanges", () => {
+  it("leaves a relayed teammate reply inline for the person (#2808)", () => {
+    const relayed = line("r", "bot", "Rome.", 2, { relayedFrom: quasar });
+    expect(kinds([line("u", "user", "capital?", 1), relayed], { selfBotId: "un" })).toEqual(["message", "message"]);
+  });
+
   it("collapses a peer line and leaves the person and a reply to the person inline", () => {
     const messages = [
       line("u", "user", "hello", 1),

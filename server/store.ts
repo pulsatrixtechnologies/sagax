@@ -4065,9 +4065,9 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
 
   /** First-run seed: one bot so the app never opens empty — it gets a
    * random friendly name like every other bot. */
-  seedIfEmpty() {
-    if (!this.needsSeed()) return;
-    this.createBot();
+  seedIfEmpty(): BotRecord | null {
+    if (!this.needsSeed()) return null;
+    return this.createBot();
   }
 }
 

@@ -8475,6 +8475,7 @@
   "chat.newMessages": "New",
   "chat.newMessagesAria": "New messages",
   "chat.peer.requested": "sent a request",
+  "chat.peer.replied": "replied",
   "chat.turnStopped": "Stopped",
   "task.folder.new": "New thread in a working folder…",
   "task.folder.detail": "The folder is fixed for this thread. Enter a path on the computer running Sagax.",

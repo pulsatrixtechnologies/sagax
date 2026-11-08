@@ -159,6 +159,9 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   /** #291: a line a person's AI client sent (send_prompt): not the person
    * typing. Folded with the bot's answer into one exchange chip. */
   aiClient?: true;
+  /** #2808: a teammate's coordinate_bots reply relayed into the requester's
+   * chat as it is: who wrote it, shown above the bubble. */
+  relayedFrom?: { botId: string; name: string; color?: MausColor };
   /** Auto: the model this delivered work ran on (the delegation card and the
    * worker's activity row). */
   autoModel?: AutoModelRecord;

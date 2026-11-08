@@ -112,9 +112,11 @@ export function createOriginApprovals(deps: OriginApprovalsDeps) {
       // restart), rather than appending another card for the same call.
       const saved = store.messagesFor(destination).find(row => row.card?.approvalOrigin?.threadId === threadId && row.card.approvalOrigin.messageId === message.id);
       // full-access: exempt (linked view, the original card already holds the turn)
+      // #2915: the label is read once per copy
+      const via = saved ? undefined : deps.via?.(threadId, message);
       const mirror = saved ? store.patchMessage(destination, saved.id, { card: mirrored })!
         : store.appendMessage(destination, { role: "bot", kind: "options", from: deps.speaker(threadId, message), card: mirrored,
-          ...(deps.via?.(threadId, message) ? { relayVia: deps.via(threadId, message) } : {}) });
+          ...(via ? { relayVia: via } : {}) });
       linked.set(key, { source: threadId, sourceMessageId: message.id, threadId: destination, messageId: mirror.id, requestId: mirrored.requestId });
       store.patchMessage(threadId, message.id, { card: { ...card, approvalDestination: { threadId: destination, messageId: mirror.id } } });
     } finally {

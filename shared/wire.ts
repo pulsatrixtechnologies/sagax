@@ -77,6 +77,15 @@ export type { LiveClient, LiveCallStatus, LiveEndReason, LiveCallState, LiveCall
 
 /** A role fact as a banner row (visible roles, 2026-11-05). */
 export type RelayVia = "mcp" | "routine" | "proactive" | "teammate";
+/** #2915: why a background turn left nothing to copy. */
+export type RelayTrace = "failed" | "stopped" | "silent";
+/** #2915: the request a mirrored background reply answers. */
+export interface RelayAsk {
+  /** At most RELAY_ASK_MAX characters. */
+  text: string;
+  /** Who asked: the AI client or the teammate. */
+  by?: string;
+}
 
 export interface RoleNotice {
   kind: "lapsed" | "write_refused" | "read_refused";
@@ -944,6 +953,14 @@ export interface WireMessage extends WaitLineField {
   relayVia?: RelayVia;
   /** #2901: the background message this row mirrors (dedupe key). */
   relayOf?: string;
+  /** #2915: a background turn that ended with nothing to copy: one trace
+   * line says so (failed, stopped, or finished without a reply). */
+  relayTrace?: RelayTrace;
+  /** #2915: what the MCP client or the teammate asked, shown in the label. */
+  relayAsk?: RelayAsk;
+  /** #2915: the further background messages folded into this row (a burst
+   * of replies is one row, capped). */
+  relayGroup?: string[];
   /** Terminal receipt for a bounded multi-bot channel goal. */
   goalRun?: GroupGoalRunCardData;
   /** call rows (kind "call"): the finished Live call this row records. The

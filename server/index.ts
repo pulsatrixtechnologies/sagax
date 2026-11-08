@@ -194,7 +194,7 @@ import { DATA_DOWNLOADS_DIR } from "./data/engine.ts";
 import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./computer/team-computers.ts";
 import { instructionsLead } from "../shared/instructions-lead.ts";
 import { type BotVisibility, type RelayVia, type ResolvedSender, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
-import { backgroundOrigin } from "../shared/background-threads.ts";
+import { backgroundCardHome as backgroundCardHomeOf, backgroundCardPeople, relayViaOf as backgroundRelayVia, type BackgroundRelayDeps } from "./turns/background-relay.ts";
 import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
 import { TURN_CUT_BY_RESTART } from "../shared/restart-words.ts";
 import { closeRowsLeftByRestart, endedToolOutput } from "./threads/subagent-cleanup.ts";
@@ -14051,17 +14051,23 @@ const originApprovals = createOriginApprovals({
     const sourceBot = botForApproval(source, message);
     const sourceRoom = store.groupByThread(source);
     if (!sourceBot || sourceBot.hidden || (!sourceRoom && !store.taskByThread(sourceBot.id, source))) return false;
-    const person = cardAnswererId(sourceBot, source, message.card);
-    if (sourceRoom ? privateThreads() && !groupVisible(sourceRoom, person) : !botThreadReadable(sourceBot, source, person)) return false;
-    const room = store.groupByThread(destination);
-    if (room) return (!privateThreads() || groupVisible(room, person))
-      && (room.dm ? room.threadId === destination : Boolean(store.groupTaskByThread(room.id, destination)));
-    const destinationBot = store.botByThread(destination);
-    if (!destinationBot || destinationBot.hidden) return false;
-    const destinationTask = store.taskByThread(destinationBot.id, destination);
-    if (!destinationTask || destinationTask.archivedAt) return false;
-    return privateThreadOwner(destinationTask, effectiveBotOwner(destinationBot)) === person
-      && botThreadReadable(destinationBot, destination, person);
+    // #2915: a background thread's card is also its own person's (a member's
+    // MCP conversation on a shared bot), not only its answerer's
+    const answerer = cardAnswererId(sourceBot, source, message.card);
+    const people = !sourceRoom && relayViaOf(sourceBot.id, source)
+      ? [...new Set([...backgroundCardPeople(backgroundRelayDeps, sourceBot, source, message.card), answerer])] : [answerer];
+    return people.some((person) => {
+      if (sourceRoom ? privateThreads() && !groupVisible(sourceRoom, person) : !botThreadReadable(sourceBot, source, person)) return false;
+      const room = store.groupByThread(destination);
+      if (room) return (!privateThreads() || groupVisible(room, person))
+        && (room.dm ? room.threadId === destination : Boolean(store.groupTaskByThread(room.id, destination)));
+      const destinationBot = store.botByThread(destination);
+      if (!destinationBot || destinationBot.hidden) return false;
+      const destinationTask = store.taskByThread(destinationBot.id, destination);
+      if (!destinationTask || destinationTask.archivedAt) return false;
+      return privateThreadOwner(destinationTask, effectiveBotOwner(destinationBot)) === person
+        && botThreadReadable(destinationBot, destination, person);
+    });
   },
   speaker: (threadId, message) => {
     const bot = botForApproval(threadId, message);
@@ -14069,31 +14075,26 @@ const originApprovals = createOriginApprovals({
   },
   withdraw: (threadId, requestId) => withdrawApprovalNotice(threadId, requestId)
 });
-/** #2901 (2026-11-08, « rien d'invisible »): why a background thread is out
- * of the person's sight, as the provenance label of what is copied from it
- * into the bot's chat. Undefined: one of the person's own conversations, a
- * confidential or parallel thread, or a room. */
+/** #2901 / #2915 (2026-11-08, « rien d'invisible »): why a background
+ * thread is out of the person's sight, and where its cards are answered
+ * (server/turns/background-relay.ts). */
+const backgroundRelayDeps: BackgroundRelayDeps<BotRecord> = {
+  inRoom: (threadId) => Boolean(store.groupByThread(threadId)),
+  task: (botId, threadId) => store.taskByThread(botId, threadId) ?? undefined,
+  run: (threadId) => routines?.runForThread(threadId),
+  privateThreads: () => privateThreads(),
+  confidentialByDefault: () => confidentialThreadsByDefault(),
+  threadPerson: (bot, threadId) => attentionPerson(bot, threadId),
+  answerer: (bot, threadId, card) => cardAnswererId(bot, threadId, card),
+  readable: (bot, threadId, person) => botThreadReadable(bot, threadId, person),
+  conversationFor: (bot, person) => conversationThreadFor(bot, person),
+  conversationOrStart: (bot, person) => conversationOrStart(bot, person),
+};
 function relayViaOf(botId: string, threadId: string): RelayVia | undefined {
-  if (store.groupByThread(threadId)) return undefined;
-  const task = store.taskByThread(botId, threadId);
-  if (!task || task.confidential || task.parallelOf || task.archivedAt) return undefined;
-  const origin = backgroundOrigin({ ...task, personWrote: task.askedAt !== undefined && task.openedBy?.kind !== "agent" ? true : undefined });
-  if (!origin) return undefined;
-  if (origin === "routine-run" || origin === "routine-results") {
-    const run = routines?.runForThread(threadId);
-    return run?.proactive || run?.webhookId ? "proactive" : "routine";
-  }
-  return origin === "ai-client" ? "mcp" : "teammate";
+  return backgroundRelayVia(backgroundRelayDeps, botId, threadId);
 }
-
-/** #2901: an open question or approval in a background thread (routine run,
- * proactive wake, MCP send_prompt, teammate work) is shown and answered in
- * the bot's chat of the person it waits on. Updates and Today only reflect it. */
 function backgroundCardHome(threadId: string, message: Message): string | undefined {
-  const bot = botForApproval(threadId, message);
-  if (!bot || bot.hidden || !relayViaOf(bot.id, threadId)) return undefined;
-  const home = conversationOrStart(bot, privateThreads() ? cardAnswererId(bot, threadId, message.card) || attentionPerson(bot, threadId) : undefined);
-  return home && home !== threadId ? home : undefined;
+  return backgroundCardHomeOf(backgroundRelayDeps, botForApproval(threadId, message), threadId, message.card);
 }
 
 /** 0.8.46: send ids of lines a bot's act wrote as the person (bot-act.ts
@@ -17746,6 +17747,8 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
   feedback: (botId, topic) => backgroundBriefs.wakeLevel(botId, topic),
   relayVia: (botId, threadId) => relayViaOf(botId, threadId),
+  // #2915: the mirror reads the chat's newest rows, never its whole path
+  recent: (threadId, limit) => store.messagesTail(threadId, limit).messages,
 };
 /** 2026-11-05 (visible roles, #2032): the role a Perspicax turn starts under.
  * Only a Pulsatrix Flow routine's "Au nom de" (the run's snapshot, else the

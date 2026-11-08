@@ -362,11 +362,11 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
     // run no longer reports from. Never from the person's own conversation.
     try {
       const attentionInput = { bot, threadId: event.threadId, turnId: completedTurnId, ok: event.ok, stopped, runTurn: Boolean(routineRun) };
-      const relayed = host.relayPersonAttention(attentionInput, host.personAttentionDeps);
-      if (!relayed.posted && relayed.reason !== "muted" && !host.mirrorLateRunReply(attentionInput, host.personAttentionDeps)) {
-        // #2901: an MCP or teammate conversation never stays invisible.
-        if (!incidentsCopied) host.mirrorBackgroundReply(attentionInput, host.personAttentionDeps);
-      }
+      relayFinishedTurn({
+        attention: () => host.relayPersonAttention(attentionInput, host.personAttentionDeps),
+        lateRun: () => host.mirrorLateRunReply(attentionInput, host.personAttentionDeps),
+        background: () => host.mirrorBackgroundReply(attentionInput, host.personAttentionDeps),
+      }, incidentsCopied);
     } catch (error) {
       console.error(`[attention] not relayed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
     }
@@ -478,4 +478,21 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
     }
     host.liveTurnByThread.delete(event.threadId);
   }
+}
+
+/** #2915: where a finished turn's words reach the person, once: a card that
+ * needs them (unless they muted such cards), else the late reply of a
+ * routine run, else (#2901) the mirror of an MCP or teammate conversation,
+ * unless the Team incidents report was already copied into the chat. */
+export function relayFinishedTurn(steps: {
+  attention(): { posted: boolean; reason?: string };
+  lateRun(): boolean;
+  background(): boolean;
+}, incidentsCopied: boolean): "attention" | "muted" | "late-run" | "incidents" | "background" | "none" {
+  const relayed = steps.attention();
+  if (relayed.posted) return "attention";
+  if (relayed.reason === "muted") return "muted";
+  if (steps.lateRun()) return "late-run";
+  if (incidentsCopied) return "incidents";
+  return steps.background() ? "background" : "none";
 }

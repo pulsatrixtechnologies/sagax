@@ -18221,7 +18221,8 @@
       "suggestionFeedback.noted.up": "300f6737ee809abc257bba0c93ea40acbbcbe21ff08abc5dba0b58265f6688f0",
       "suggestionFeedback.noted.down": "dcded34f1e088ae5724bcb200333fba52c6b19607ef3b638ea9ab134714ac838",
       "suggestionFeedback.noted.less": "9afb19e3cd1b9aac7ef235f27f3bcb40fce68ebb9a74717a07a0ffdfdc0d31eb",
-      "suggestionFeedback.noted.never": "86228a822d63f324647f9216a424d8e09a649e5fdf543347c4c5e47bc67906dd"
+      "suggestionFeedback.noted.never": "86228a822d63f324647f9216a424d8e09a649e5fdf543347c4c5e47bc67906dd",
+      "chat.peer.replied": "4e686cee486fc30c03bf0dbb9273323d3f32f564df645a0e4c9825366194f156"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

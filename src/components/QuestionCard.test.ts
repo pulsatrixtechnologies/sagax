@@ -113,6 +113,15 @@ describe("QuestionCard", () => {
     expect(markup).not.toContain(">Other<");
   });
 
+  it("shows one Other row when the bot's last option already is one (#2804)", () => {
+    const markup = render(message({
+      questionRequest: { version: 1, questions: [{ question: "Quel fuseau horaire?", options: [{ label: "America/Toronto" }, { label: "America/Montreal" }, { label: "Autre fuseau", description: "Je préciserai un autre fuseau" }] }] },
+    }));
+    expect(markup).toContain("Autre fuseau");
+    expect(markup).not.toContain(">Other<");
+    expect(markup.match(/aria-keyshortcuts="[A-Z]"/g)).toHaveLength(3);
+  });
+
   it("cannot be submitted before every question is answered", () => {
     expect(render(message())).toContain("disabled");
   });

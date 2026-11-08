@@ -480,6 +480,9 @@ export interface RoutineRequestServiceOptions {
   routines: RoutineManager;
   now?: () => number;
   timeZone?: () => string;
+  /** The language the card's details are written in for the person who
+   * answers it (the bot owner): "fr" or "en". English when omitted (#2805). */
+  language?: (botId: string, threadId: string) => string;
   /** Whether a submitted change applies without a person, and why
    * (server/direct-apply.ts). Server-owned, never request input. */
   autoApply?: DirectApplyCheck;
@@ -1095,9 +1098,31 @@ function nextForOperation(operation: RoutineRequestOperation, manager: RoutineMa
   return schedule.type === "once" ? nextOccurrence(schedule, now) : manager.nextExactStart(schedule, now, current);
 }
 
-function formatInstant(at: number, timeZone: string): string {
+/** The card's language: French for any "fr" tag, else English. */
+export type CardLocale = "en" | "fr";
+export function cardLocale(language: string | null | undefined): CardLocale {
+  return language?.trim().toLowerCase().startsWith("fr") ? "fr" : "en";
+}
+
+const FR_WEEKDAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+
+/** plainWeekdays in the card's language. */
+function weekdaysText(weekdays: readonly number[], locale: CardLocale): string {
+  if (locale === "en") return plainWeekdays(weekdays);
+  const days = [...weekdays].sort((a, b) => a - b).join(",");
+  return days === "0,1,2,3,4,5,6" ? "tous les jours" : days === "1,2,3,4,5" ? "en semaine" : weekdays.map((day) => FR_WEEKDAYS[day]).join(", ");
+}
+
+/** "09:00" as the card's reader writes it: "9:00", or "9 h 00" in French. */
+function clockText(time: string, locale: CardLocale): string {
+  if (locale === "en") return plainClock(time);
+  const [hour, minute] = time.split(":");
+  return `${Number(hour)} h ${minute ?? "00"}`;
+}
+
+function formatInstant(at: number, timeZone: string, locale: CardLocale = "en"): string {
   try {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat(locale === "fr" ? "fr-CA" : "en-US", {
       timeZone,
       dateStyle: "medium",
       timeStyle: "short",
@@ -1112,47 +1137,73 @@ function timingPhrase(schedule: RoutineRequestSchedule): string {
   return ` (-${schedule.windowEarlyMinutes ?? 0}/+${schedule.windowLateMinutes ?? 0} min)`;
 }
 
-export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string): string {
+export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string, locale: CardLocale = "en"): string {
+  const fr = locale === "fr";
   const phrase = timingPhrase(schedule);
+  const around = fr ? "vers l’heure" : "around the time";
   if (schedule.type === "cron") {
     // The card says it in words; the expression stays under the hood (2026-10-29).
-    const label = cronScheduleLabel(schedule);
-    return phrase ? `${label} · around the time${phrase}` : label;
+    const label = cronScheduleLabel(schedule, locale);
+    return phrase ? `${label} · ${around}${phrase}` : label;
   }
   if (schedule.type === "limit_reset") {
+    if (fr) {
+      return schedule.repeat === "every_reset"
+        ? `Chaque fois que la limite d’utilisation de ${schedule.engine} se réinitialise`
+        : `Quand la limite d’utilisation de ${schedule.engine} se réinitialise`;
+    }
     return schedule.repeat === "every_reset"
       ? `Each time the ${schedule.engine} usage limit resets`
       : `When the ${schedule.engine} usage limit resets`;
   }
-  const zone = plainTimeZone(timeZone);
-  if (schedule.type === "once") return `${formatInstant(schedule.at, timeZone)} ${zone}`;
+  const zone = plainTimeZone(timeZone, locale);
+  if (schedule.type === "once") return `${formatInstant(schedule.at, timeZone, locale)} ${zone}`;
   if (schedule.type === "interval") {
     const restricted = intervalHasRestrictions(schedule);
+    const every = fr ? `Toutes les ${schedule.everyMinutes} minutes` : `Every ${schedule.everyMinutes} minutes`;
     const cadence = schedule.anchorAt === undefined
       ? restricted
-        ? `Every ${schedule.everyMinutes} minutes, cadence starting at confirmation; first run is the next allowed time`
-        : `Every ${schedule.everyMinutes} minutes, starting one interval after confirmation`
-      : `Every ${schedule.everyMinutes} minutes, anchored at ${formatInstant(schedule.anchorAt, timeZone)} ${zone}`;
+        ? fr
+          ? `${every}, cadence lancée à la confirmation; première exécution au prochain moment permis`
+          : `${every}, cadence starting at confirmation; first run is the next allowed time`
+        : fr
+          ? `${every}, à partir d’un intervalle après la confirmation`
+          : `${every}, starting one interval after confirmation`
+      : fr
+        ? `${every}, à partir du ${formatInstant(schedule.anchorAt, timeZone, locale)} ${zone}`
+        : `${every}, anchored at ${formatInstant(schedule.anchorAt, timeZone, locale)} ${zone}`;
     const restrictions = [
       schedule.weekdays?.length
-        ? `on ${plainWeekdays(schedule.weekdays)} (${zone})`
+        ? `${fr ? "le" : "on"} ${weekdaysText(schedule.weekdays, locale)} (${zone})`
         : null,
-      schedule.window ? `during ${plainClock(schedule.window.start)}-${plainClock(schedule.window.end)} ${zone}` : null,
-      schedule.endsAt !== undefined ? `until ${formatInstant(schedule.endsAt, timeZone)} ${zone}` : null,
+      schedule.window ? `${fr ? "entre" : "during"} ${clockText(schedule.window.start, locale)}-${clockText(schedule.window.end, locale)} ${zone}` : null,
+      schedule.endsAt !== undefined ? `${fr ? "jusqu’au" : "until"} ${formatInstant(schedule.endsAt, timeZone, locale)} ${zone}` : null,
     ].filter((part): part is string => part !== null);
     const text = restrictions.length ? `${cadence} · ${restrictions.join(" · ")}` : cadence;
-    return phrase ? `${text} · around the time${phrase}` : text;
+    return phrase ? `${text} · ${around}${phrase}` : text;
   }
   if (schedule.type === "webhook") {
-    return "Trigger: incoming webhook (URL and key are shown to you after approval)";
+    return fr
+      ? "Déclencheur : webhook entrant (l’URL et la clé vous sont montrées après l’approbation)"
+      : "Trigger: incoming webhook (URL and key are shown to you after approval)";
   }
   if (schedule.type === "event" && schedule.source === "github") {
-    return `Trigger: GitHub events (${githubEventScheduleLabel(schedule).slice("GitHub: ".length)}); the GitHub webhook URL and secret are shown to you after approval`;
+    const events = githubEventScheduleLabel(schedule).slice("GitHub: ".length);
+    return fr
+      ? `Déclencheur : événements GitHub (${events}); l’URL et le secret du webhook GitHub vous sont montrés après l’approbation`
+      : `Trigger: GitHub events (${events}); the GitHub webhook URL and secret are shown to you after approval`;
   }
   if (schedule.type === "event") {
-    return "Trigger: incoming email (the mailbox setup is shown to you after approval)";
+    return fr
+      ? "Déclencheur : courriel entrant (la configuration de la boîte vous est montrée après l’approbation)"
+      : "Trigger: incoming email (the mailbox setup is shown to you after approval)";
   }
-  const days = plainWeekdays(schedule.weekdays);
+  const days = weekdaysText(schedule.weekdays, locale);
+  if (fr) {
+    return phrase
+      ? `${days} vers ${clockText(schedule.time, locale)}${phrase} ${zone}`
+      : `${days} à ${clockText(schedule.time, locale)} ${zone}`;
+  }
   return phrase
     ? `${days} around ${plainClock(schedule.time)}${phrase} ${zone}`
     : `${days} at ${plainClock(schedule.time)} ${zone}`;
@@ -1160,7 +1211,8 @@ export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string)
 
 /** One plain sentence describing how often a routine will actually run, so
  * the approval card states the consequence rather than just the schedule. */
-export function consequenceLine(schedule: RoutineRequestSchedule, continuity = false): string {
+export function consequenceLine(schedule: RoutineRequestSchedule, continuity = false, locale: CardLocale = "en"): string {
+  if (locale === "fr") return frenchConsequenceLine(schedule, continuity);
   // A continuity routine still gets a fresh session per run; what carries
   // over is the previous run's report, so say that rather than contradict
   // the Continuity line above it.
@@ -1189,6 +1241,35 @@ export function consequenceLine(schedule: RoutineRequestSchedule, continuity = f
   const days = schedule.weekdays.length;
   const cadence = days === 7 ? "every day" : days === 1 ? "one day a week" : `${days} days a week`;
   return `Will run ${cadence}; ${session}.${window}`;
+}
+
+/** consequenceLine in French (#2805). */
+function frenchConsequenceLine(schedule: RoutineRequestSchedule, continuity: boolean): string {
+  const session = continuity ? "chaque exécution ouvre une nouvelle session avec le rapport de la précédente" : "chaque exécution ouvre une nouvelle session";
+  const window = schedule.type !== "once" && schedule.type !== "limit_reset" && !isTriggerSchedule(schedule) && schedule.timing === "flexible"
+    ? ` Démarre jusqu’à ${schedule.windowEarlyMinutes ?? 0} min plus tôt et ${schedule.windowLateMinutes ?? 0} min plus tard.`
+    : "";
+  if (schedule.type === "webhook") return "S’exécute à l’arrivée d’une livraison du webhook.";
+  if (schedule.type === "event" && schedule.source === "github") return `S’exécute sur ${githubEventScheduleLabel(schedule)}.`;
+  if (schedule.type === "event") return "S’exécute à l’arrivée d’un courriel.";
+  if (schedule.type === "limit_reset") {
+    return schedule.repeat === "every_reset"
+      ? `S’exécutera chaque fois que la limite d’utilisation de ${schedule.engine} se réinitialise; ${session}.`
+      : `S’exécutera une fois quand la limite d’utilisation de ${schedule.engine} se réinitialise; cette exécution ouvre une nouvelle session.`;
+  }
+  if (schedule.type === "cron") return `S’exécutera aux heures prévues au calendrier, ${plainTimeZone(schedule.timeZone, "fr")}; ${session}.${window}`;
+  if (schedule.type === "once") return "S’exécutera une fois; cette exécution ouvre une nouvelle session.";
+  if (schedule.type === "interval") {
+    if (intervalHasRestrictions(schedule)) {
+      return `S’exécutera toutes les ${schedule.everyMinutes} minutes quand ses restrictions de jour, d’heure et de fin le permettent; ${session}.${window}`;
+    }
+    const runsPerDay = Math.round(1440 / schedule.everyMinutes);
+    const cadence = runsPerDay <= 1 ? "environ une fois par jour" : `environ ${runsPerDay} fois par jour`;
+    return `S’exécutera ${cadence}; ${session}.${window}`;
+  }
+  const days = schedule.weekdays.length;
+  const cadence = days === 7 ? "tous les jours" : days === 1 ? "un jour par semaine" : `${days} jours par semaine`;
+  return `S’exécutera ${cadence}; ${session}.${window}`;
 }
 
 /** A stored routine's schedule as a request names it: a limit-reset time is the engine's, never part of the request. */
@@ -1260,7 +1341,8 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
 }
 
 /** The card's line for a watch: what it reads and when the run starts. */
-function watchLine(watch: RoutineWatchPrecheck | undefined): string {
+function watchLine(watch: RoutineWatchPrecheck | undefined, locale: CardLocale = "en"): string {
+  if (locale === "fr") return frenchWatchLine(watch);
   if (!watch) return "Runs: on every due time";
   const source = watch.source.type === "files"
     ? `the files in ${watch.source.path.trim() || "the bot's folder"}${watch.source.recursive ? " and its subfolders" : ""}`
@@ -1273,15 +1355,44 @@ function watchLine(watch: RoutineWatchPrecheck | undefined): string {
   return `Runs only ${when}: checks ${source}, no model until then${watch.firstRun === "wake" ? "; the first check runs once" : ""}${watch.whenAsleep === "wake" ? "; wakes an asleep computer to check" : ""}`;
 }
 
+/** watchLine in French; the condition and the command keep their own words (#2805). */
+function frenchWatchLine(watch: RoutineWatchPrecheck | undefined): string {
+  if (!watch) return "Exécution : à chaque échéance";
+  const source = watch.source.type === "files"
+    ? `les fichiers de ${watch.source.path.trim() || "le dossier du bot"}${watch.source.recursive ? " et ses sous-dossiers" : ""}`
+    : watch.source.type === "command"
+      ? `la sortie de : ${redactSecretsInText(watch.source.command)}`
+      : `l’outil ${watch.source.tool}`;
+  const when = watch.wakeOn === "match" && watch.condition
+    ? `chaque fois que ${describeCondition(watch.condition)}`
+    : watch.condition ? `quand ça change et que ${describeCondition(watch.condition)}` : "quand ça change";
+  return `S’exécute seulement ${when} : vérifie ${source}, aucun modèle d’ici là${watch.firstRun === "wake" ? "; la première vérification roule une fois" : ""}${watch.whenAsleep === "wake" ? "; réveille un ordinateur en veille pour vérifier" : ""}`;
+}
+
 /** The line a create card carries when new routines start paused. */
 export const CREATED_PAUSED_LINE = "Created paused; resume it when ready.";
+const CREATED_PAUSED_LINE_FR = "Créée en pause; reprenez-la quand vous serez prêt.";
+
+const ACTION_DETAIL_FR: Record<RoutineRequestOperation["action"], string> = {
+  create: "Créer la routine",
+  update: "Modifier la routine",
+  pause: "Mettre la routine en pause",
+  resume: "Reprendre la routine",
+  run_now: "Exécuter la routine maintenant",
+  delete: "Supprimer la routine",
+  rotate_webhook_key: "Renouveler la clé du déclencheur",
+};
 
 function cardCopy(
   operation: RoutineRequestOperation,
   manager: RoutineManager,
   timeZone: string,
   now: number,
+  locale: CardLocale = "en",
 ): RoutineCardCopy {
+  // The details panel is the person's to read: in their language (#2805).
+  // The title and summary stay as before (the client words its own heading).
+  const fr = locale === "fr";
   const definition = effectiveDefinition(operation, manager);
   const actionCopy = ACTION_COPY[operation.action];
   const actionLabel = actionCopy.title;
@@ -1293,7 +1404,7 @@ function cardCopy(
     return {
       title,
       summary: title,
-      detail: `Action: ${actionCopy.detail}\nName: ${name}`,
+      detail: fr ? `Action : ${ACTION_DETAIL_FR[operation.action]}\nNom : ${name}` : `Action: ${actionCopy.detail}\nName: ${name}`,
       nextRunAt: null,
       tool: "manage_routine",
     };
@@ -1304,6 +1415,10 @@ function cardCopy(
   const scheduleTimeZone = definition.schedule.type === "cron" ? definition.schedule.timeZone : timeZone;
   const when = operation.action === "run_now" ? "Now" : scheduleText(definition.schedule, timeZone);
   const destination = definition.runOn === "cloud" ? "Bot’s current model on its cloud computer" : "Bot’s current model and configured computer";
+  const whenText = fr ? (operation.action === "run_now" ? "Maintenant" : scheduleText(definition.schedule, timeZone, locale)) : when;
+  const destinationText = fr
+    ? definition.runOn === "cloud" ? "Modèle actuel du bot sur son ordinateur infonuagique" : "Modèle actuel du bot et ordinateur configuré"
+    : destination;
   const current = operation.action === "create"
     ? null
     : manager.listRoutines().find((routine) => routine.id === operation.routineId) ?? null;
@@ -1327,6 +1442,21 @@ function cardCopy(
           : operation.action === "delete"
             ? "None — this routine will be deleted"
             : "None";
+  const nextDescriptionFr = remainsPaused
+    ? "Aucune : cette routine reste en pause"
+    : createsPaused
+      ? "Aucune : créée en pause; reprenez-la quand vous serez prêt"
+    : deferredInterval
+      ? deferredRestrictedInterval
+        ? `Prochain moment permis après la confirmation (${plainTimeZone(timeZone, locale)})`
+        : "Un intervalle après la confirmation"
+      : nextRunAt !== null
+        ? formatInstant(nextRunAt, scheduleTimeZone, locale)
+        : operation.action === "pause"
+          ? "Aucune : cette routine sera mise en pause"
+          : operation.action === "delete"
+            ? "Aucune : cette routine sera supprimée"
+            : "Aucune";
   const status = remainsPaused ? " · Remains paused" : createsPaused ? " · Created paused" : "";
   // Existing routines may predate nested-card redaction. The approval still
   // shows every instruction, but credential-shaped values never travel back
@@ -1338,7 +1468,39 @@ function cardCopy(
   return {
     title,
     summary: `${actionLabel} “${name}”${forSuffix} · ${when} · ${destination} · ${runLimit}${status}`,
-    detail: [
+    detail: fr ? [
+      `Action : ${ACTION_DETAIL_FR[operation.action]}`,
+      `Nom : ${name}`,
+      ...(forBot ? [`Pour : @${redactSecretsInText(forBot.name)}, chaque exécution utilise le moteur et les permissions de ce bot`] : []),
+      `Horaire : ${whenText}`,
+      `Prochaine exécution : ${nextDescriptionFr}`,
+      ...(definition.schedule.type === "cron" && nextRunAt !== null && operation.action !== "run_now" && !createsPaused
+        ? [`3 prochaines exécutions (${plainTimeZone(scheduleTimeZone, locale)}) : ${nextCronRuns(definition.schedule, nextRunAt - 1, 3).map((at) => formatInstant(at, scheduleTimeZone, locale)).join(" · ")}`]
+        : []),
+      `S’exécute sur : ${destinationText}`,
+      `Durée maximale : ${definition.timeoutMinutes === undefined ? "Aucune limite" : `${definition.timeoutMinutes} minutes`}`,
+      `Continuité : ${definition.continuity ? "Transmet le rapport de l’exécution précédente à la suivante" : "Chaque exécution repart à neuf"}`,
+      `Si occupé : ${definition.overlap === "queue" ? "Met une exécution prévue en file; saute les suivantes jusqu’à son départ" : "Saute les exécutions prévues qui se chevauchent"}`,
+      ...(definition.watch ? [watchLine(definition.watch, locale)] : []),
+      ...(definition.folder ? [`Dossier : ${redactSecretsInText(definition.folder)}`] : []),
+      ...(definition.deleteWhenFinished ? ["Supprimer une fois terminée : oui"] : []),
+      ...(definition.model ? [`Modèle : ${redactSecretsInText(definition.model)} (le moteur du bot; le clavardage garde le modèle du bot)`] : []),
+      ...(definition.subagentModel ? [`Modèle des sous-agents : ${redactSecretsInText(definition.subagentModel)} (Claude Agent / travailleurs Flow; modèle principal inchangé)`] : []),
+      ...(definition.actAs !== undefined ? [`Agit en tant que : ${definition.actAs ? redactSecretsInText(definition.actAs) : "l’accès de la personne"} (rôle Perspicax)`] : []),
+      ...(definition.requiresComputer ? ["Besoin de son ordinateur : oui (la vérification avant l’exécution attend que l’ordinateur du bot soit en ligne)"] : []),
+      ...(definition.effort ? [`Effort : ${definition.effort} (le clavardage garde l’effort du bot)`] : []),
+      ...(definition.goal ? [`Objectif : ${redactSecretsInText(definition.goal.text)}${definition.goal.deadline ? ` (d’ici le ${new Date(definition.goal.deadline).toISOString()})` : ""}; le bot choisit quand vérifier et la routine s’arrête une fois l’objectif atteint`] : []),
+      ...(definition.runOnStartup || (operation.action === "update" && operation.changes.runOnStartup !== undefined)
+        ? [`Au démarrage : ${definition.runOnStartup ? "S’exécute aussi une fois à chaque démarrage de Sagax" : "S’exécute seulement selon son horaire"}`]
+        : []),
+      ...(operation.action === "create" || operation.action === "update"
+        ? [consequenceLine(definition.schedule, Boolean(definition.continuity), locale)]
+        : []),
+      ...(createsPaused ? [CREATED_PAUSED_LINE_FR] : []),
+      "",
+      "Instructions :",
+      visibleInstructions,
+    ].join("\n") : [
       `Action: ${actionCopy.detail}`,
       `Name: ${name}`,
       ...(forBot ? [`For: @${redactSecretsInText(forBot.name)} — each run uses that bot's engine and permissions`] : []),
@@ -1659,6 +1821,7 @@ export class RoutineRequestService {
   private readonly routines: RoutineManager;
   private readonly now: () => number;
   private readonly timeZone: () => string;
+  private readonly language?: RoutineRequestServiceOptions["language"];
   private readonly cloudReady?: (botId: string) => Promise<{ ready: boolean; reason?: string }>;
   private readonly canPersist?: RoutineRequestServiceOptions["canPersist"];
   private readonly validateTarget?: RoutineRequestServiceOptions["validateTarget"];
@@ -1673,6 +1836,7 @@ export class RoutineRequestService {
     this.routines = options.routines;
     this.now = options.now ?? Date.now;
     this.timeZone = options.timeZone ?? (() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+    this.language = options.language;
     this.cloudReady = options.cloudReady;
     this.canPersist = options.canPersist;
     this.validateTarget = options.validateTarget;
@@ -1727,7 +1891,7 @@ export class RoutineRequestService {
     };
     const definition = effectiveDefinition(operation, this.routines);
     const timeZone = definition?.schedule.type === "cron" ? definition.schedule.timeZone : this.timeZone();
-    const copy = cardCopy(operation, this.routines, timeZone, cardAt);
+    const copy = cardCopy(operation, this.routines, timeZone, cardAt, cardLocale(this.language?.(botId, threadId)));
     // applied without a card at Full (index.ts fullAccessForSource); full-access: proposal
     const messageInput: Parameters<RoutineRequestStore["appendMessage"]>[1] = {
       role: "bot",

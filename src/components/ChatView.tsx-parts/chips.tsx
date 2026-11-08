@@ -36,6 +36,8 @@ export function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Mes
         ? t("chat.peer.openedThread")
         : peer.delivery === "coordinate_bots"
           ? t("chat.peer.requested")
+          : peer.delivery === "relayed_reply"
+            ? t("chat.peer.replied")
           : t("chat.peer.asked");
   return (
     <div className="mb-1 flex items-center gap-1.5 pl-0.5" data-testid="peer-label">

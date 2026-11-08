@@ -280,11 +280,14 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       // is never bound to someone who did not ask for it.
       const turnSpeaker = deps.turnSpeaker(capability.threadId);
       const ghThread = capability.threadId;
-      if (turnSpeaker?.origin !== "person" || deps.turnIsRoutine(ghThread) || deps.turnIsInternal(ghThread)
+      // #2806: the operator at this computer (the desktop app, no session)
+      // is the person too; their principal is the local one below.
+      const byPerson = turnSpeaker?.origin === "person" || turnSpeaker?.origin === "operator";
+      if (!turnSpeaker || !byPerson || deps.turnIsRoutine(ghThread) || deps.turnIsInternal(ghThread)
         || deps.turnIsAutomation(ghThread) || deps.turnIsUnattended(sender.id, ghThread)) {
         return json(res, 200, { state: "not_person" });
       }
-      const speaker = turnSpeaker.principalId || (!deps.isPerspicax() ? deps.localPrincipalId() : "");
+      const speaker = ("principalId" in turnSpeaker ? turnSpeaker.principalId : undefined) || (!deps.isPerspicax() ? deps.localPrincipalId() : "");
       if (!speaker) return json(res, 403, { error: "GitHub is connected by a signed-in person." });
       const principalId = speaker.trim().toLowerCase();
       // No admin door (#2109): a person connects their own

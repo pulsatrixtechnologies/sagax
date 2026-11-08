@@ -238,7 +238,8 @@ it("coordinates a lead and its specialist from ordinary chat, returns to Clive, 
 
 it("relays a passed-on teammate reply to the person without a resume turn", () => fixture(async f => {
   f.plan[f.chief.id] = { steps: [{ arguments: { bot_ids: [f.lead.id], message: "What is the capital of Italy?", relay: true } }], reply: "Asked Engineering", resumeReply: "must not run" };
-  f.plan[f.lead.id] = { reply: "Rome." };
+  // #2808: the line the teammate addressed to the requester is plumbing
+  f.plan[f.lead.id] = { reply: `Rome.\n\n@${f.chief.name}, here it is for the person.` };
   await f.start();
   expect((await f.wait()).status).toBe("settled");
   await expect.poll(() => f.nodes().find((n: any) => n.botId === f.chief.id)?.status, { timeout: 15_000 }).toBe("completed");
@@ -251,6 +252,8 @@ it("relays a passed-on teammate reply to the person without a resume turn", () =
   const answer = thread.findIndex((m: any) => m.role === "bot" && m.kind === "text" && m.text === "Rome.");
   expect(replied).toBeGreaterThan(-1);
   expect(answer).toBeGreaterThan(replied);
+  // #2808: the unified chat hides the "replied" row, so the answer names its author
+  expect(thread[answer].relayedFrom).toMatchObject({ botId: f.lead.id, name: f.lead.name });
   expect(thread.some((m: any) => m.text === "must not run" || m.tool?.name?.startsWith("Resumed with"))).toBe(false);
 }), 45_000);
 

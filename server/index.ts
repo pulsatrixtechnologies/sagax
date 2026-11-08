@@ -16,6 +16,8 @@ import { ambientRefusalFor, clearAmbientRefusal, fixAmbientMcp } from "./drivers
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer, parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { withRequiredComputer } from "../shared/routine-readiness.ts";
+import { stripRequesterAddress } from "../shared/relay-reply.ts";
+import { RequestLanguages, requestLanguage } from "./people/request-language.ts";
 import { missingCitedPaths } from "./routines/routine-cited-paths.ts";
 import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
 import { createBotObservabilityRoutes } from "./routes/bot-observability.ts";
@@ -516,6 +518,20 @@ import { IncidentLedger, incidentRequest } from "./peers/incidents.ts";
 import { createEmptyResponseRetry, shouldEmptyResponseRetry } from "./empty-response-retry.ts";
 import { limitKindOf } from "./usage/limit-reset-time.ts";
 
+/** The language the app last asked in, per person, for a person with no saved one (#2803). */
+const requestLanguages = new RequestLanguages();
+/** The language a person's app last asked in. No person: the local one (a
+ * single-person server notes its requests under the local principal). */
+function askedLanguageOf(person: string | null | undefined): string | undefined {
+  if (person) return requestLanguages.of(person);
+  try {
+    return (IDENTITY.kind === "perspicax" ? undefined : requestLanguages.of(localPrincipalId())) ?? requestLanguages.of("");
+  } catch {
+    // Before the principal registry exists (the first-run seed).
+    return requestLanguages.of("");
+  }
+}
+
 /** A session_read answer competes with the transcript for the context
  * window; a computer-use turn's output can run to hundreds of KB. */
 import { legacyPendingAsides } from "./peers/aside.ts";
@@ -678,7 +694,7 @@ import {
   type NativeSkill,
 } from "./skills/native-skills.ts";
 import { newBotDefaultsSchema } from "./bots/new-bot-defaults.ts";
-import { greetingLanguage } from "./bots/new-bot-greeting.ts";
+import { greetingLanguage, seedGreetingPatches } from "./bots/new-bot-greeting.ts";
 import { SoloGoals, soloGoalSystemPrompt } from "./solo-goal.ts";
 import { soloGoalLineText, type SoloGoalLine } from "../shared/solo-goal-line.ts";
 import { relayAccountLabel } from "./run-with-engine.ts";
@@ -11396,7 +11412,9 @@ for (const pending of startupCatalogs) {
     broadcast({ kind: "config", ...configStatus() });
   }, () => {}).catch(reportBackgroundError);
 }
-store.seedIfEmpty();
+// The first-run bot greets before any request names the person's language;
+// the first one that does says its untouched greeting again in it (#2803).
+let seedToLocalize: string | null = store.seedIfEmpty()?.id ?? (store.bots.length === 1 ? store.bots[0]!.id : null);
 hostedModels?.reconcile(store);
 // 2026-10-28 (one source of truth): a conversation that kept a level
 // nobody chose in it (an engine change that asked again, a grant that never
@@ -13767,7 +13785,16 @@ const coordinator: Coordinator = createCoordinator({
         return false;
       }
       relayShown.delete(node.threadId);
-      for (const text of texts) store.appendMessage(node.threadId, { role: "bot", kind: "text", text });
+      // #2808: in the unified chat the "<teammate> replied" row is hidden,
+      // so each relayed reply names its teammate itself, without the line
+      // the teammate addressed to the requesting bot.
+      replies.forEach((reply, index) => {
+        const teammate = store.bot(reply.botId);
+        store.appendMessage(node.threadId, {
+          role: "bot", kind: "text", text: stripRequesterAddress(texts[index]!, bot.name),
+          ...(teammate ? { relayedFrom: { botId: teammate.id, name: teammate.name, color: teammate.color } } : {}),
+        });
+      });
       const quiet = turnAnswers(node.threadId, { cardContinuation: true, coordination: node }).quiet;
       if (!quiet) {
         const who = [...new Set(replies.map(reply => store.bot(reply.botId)?.name ?? "Teammate"))].join(", ");
@@ -19904,6 +19931,12 @@ if (recoveryOwners.length > 0) {
 const routineRequests = new RoutineRequestService({
   store,
   routines,
+  // The details panel reads in the language of the person who answers the
+  // card: the bot owner's saved choice, else the language their app asks in (#2805).
+  language: (botId) => {
+    const bot = store.bot(botId);
+    return languageOfPerson(bot ? recordedBotOwner(bot) ?? undefined : undefined);
+  },
   autoApply: appliesDirectly,
   cloudReady: cloudRoutineReadiness,
   canPersist: proposalPersistence,
@@ -24992,9 +25025,10 @@ async function finishBotAct(threadId: string, requestId: string, behavior: strin
 const cwActionPasses = createCwActionPasses();
 
 /** The language to word a text for the person behind this request: their own
- * `omb-language`, else the server's default (server/people/person-language.ts). */
+ * `omb-language`, else the language their app last asked in, else the
+ * server's default (server/people/person-language.ts, #2803). */
 function languageOfPerson(person: string | null | undefined): string {
-  return personLanguageOf(person, (id) => userPreferenceStore.get(id).preferences, cfg.language);
+  return personLanguageOf(person, (id) => userPreferenceStore.get(id).preferences, askedLanguageOf(person) ?? cfg.language);
 }
 
 /** The final text of a bot reply without em or en dashes (#1208), when the
@@ -25613,6 +25647,25 @@ function botsOwnedBy(personId: string): BotRecord[] {
 /** The language a new bot greets its person in (#1075): on an organization
  * server the owner's own language preference (kept per person), then the
  * server's language, the same default the app falls back to. */
+/** Say the first-run bot's untouched greeting and intro card again in the
+ * language a request asked in, when no saved choice names one (#2803).
+ * Returns null once decided, so it runs for the first such request only. */
+function localizeSeedGreeting(botId: string, askedIn: string): null {
+  try {
+    const bot = store.bot(botId);
+    if (!bot) return null;
+    const saved = IDENTITY.kind === "perspicax" && bot.ownerUserId ? userPreferenceStore.get(bot.ownerUserId).preferences["omb-language"] : undefined;
+    const language = greetingLanguage([saved, askedIn]);
+    const patches = seedGreetingPatches(store.messagesFor(bot.threadId), bot.name, language);
+    if (patches) {
+      store.patchMessage(bot.threadId, patches.greeting.id, { text: patches.greeting.text });
+      store.patchMessage(bot.threadId, patches.card.id, { card: patches.card.card });
+    }
+  } catch (error) {
+    console.warn(`[greeting] could not say the first greeting again: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return null;
+}
 function newBotGreetingLanguage(ownerUserId: string | undefined): "fr" | "en" {
   let person = "";
   try {
@@ -25620,7 +25673,9 @@ function newBotGreetingLanguage(ownerUserId: string | undefined): "fr" | "en" {
   } catch { /* no preference of their own */ }
   // The desktop app passes its own language to its server (#2803): the
   // first-run bot greets in it when no other choice exists.
-  return greetingLanguage([person, cfg.language, process.env.SAGAX_DESKTOP_LANGUAGE ?? ""]);
+  // Then the language the person's app last asked in, when they saved none
+  // (web, hosted server, an org member who never picked one).
+  return greetingLanguage([person, askedLanguageOf(ownerUserId), cfg.language, process.env.SAGAX_DESKTOP_LANGUAGE ?? ""]);
 }
 function newBotApprovalMode(): "ask" | "auto" | "full" {
   // omb #2808 / PRO-RÈGLE: solo bots start on Full access. Organization
@@ -32964,6 +33019,10 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
     if (await runPreAuth(req, res, url, path, method)) return;
     const auth = await authenticate(req, res, url, path, method, state);
     if (!auth) return;
+    // The app's language, for a person who never saved one (#2803, #2805).
+    const askedIn = requestLanguage(req.headers);
+    requestLanguages.note(actorPrincipalId(auth), askedIn);
+    if (askedIn && seedToLocalize) seedToLocalize = localizeSeedGreeting(seedToLocalize, askedIn);
     // Set for every request, so a kept-alive connection never inherits one.
     enterRequestScopes(state.scopes ?? { viewer: null, delegated: false, continuation: null, actConfirmed: null });
     if (await runRoutes(req, res, url, path, method, auth)) return;

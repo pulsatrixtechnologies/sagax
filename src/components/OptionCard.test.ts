@@ -93,6 +93,13 @@ describe("OptionCard", () => {
     expect(markup).toContain("eu-west-1");
   });
 
+  it("shows one Other row when the bot's last option already is one (#2804)", () => {
+    const markup = render({ title: "Pick a region", subtitle: "Where?", options: ["us-east-1", "eu-west-1", "Autre"], requestId: "r1" });
+    expect(markup).toContain(">Autre<");
+    expect(markup).not.toContain(">Other<");
+    expect(markup.match(/aria-keyshortcuts="[A-Z]"/g)).toHaveLength(3);
+  });
+
   it("keeps an answered live ask, the pick marked and the rest dimmed", () => {
     const markup = render({ title: "Pick a region", subtitle: "Where?", options: ["us-east-1", "eu-west-1"], requestId: "r1", answered: "eu-west-1" });
     expect(markup).toContain('data-ask-card="settled"');

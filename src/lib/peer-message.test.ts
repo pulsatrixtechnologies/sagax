@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { peerLine, peerRequest } from "./peer-message";
+import { peerLine, peerRelay, peerRequest } from "./peer-message";
 
 const NOTE = (opening: string, name: string, rest: string) =>
   `[${opening} @${name}, another bot in this Sagax workspace${rest}]`;
@@ -63,5 +63,18 @@ describe("peerRequest", () => {
     expect(peerRequest({ role: "bot", text: "hi", roomRequest: request }, "engineer")).toBeNull();
     expect(peerRequest({ role: "user", text: "hi", from, roomRequest: request }, "engineer")).toBeNull();
     expect(peerRequest({ role: "bot", text: "hi", from, roomRequest: request }, "pepper")).toBeNull();
+  });
+});
+
+describe("peerRelay (#2808)", () => {
+  const nova = { botId: "nova", name: "Nova", color: "green" };
+  it("names the teammate on a relayed coordinate_bots reply", () => {
+    expect(peerRelay({ role: "bot", text: "Trois idées", relayedFrom: nova }, "gaston"))
+      .toEqual({ botId: "nova", name: "Nova", delivery: "relayed_reply", body: "Trois idées" });
+  });
+  it("is null for the bot's own words and for anything not relayed", () => {
+    expect(peerRelay({ role: "bot", text: "x" }, "gaston")).toBeNull();
+    expect(peerRelay({ role: "bot", text: "x", relayedFrom: { ...nova, botId: "gaston" } }, "gaston")).toBeNull();
+    expect(peerRelay({ role: "user", text: "x", relayedFrom: nova }, "gaston")).toBeNull();
   });
 });

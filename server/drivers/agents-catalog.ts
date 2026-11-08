@@ -515,6 +515,8 @@ const OFFERED_REFERENCES: ReadonlyArray<{ tool: string; missing: string; from: s
   { tool: "await_turn", missing: "send_to_bot", from: "with the handle send_prompt or send_to_bot gave", to: "with the handle send_prompt gave" },
   // 2026-10-28: a teammate one hop away reads transcripts but starts no turn
   { tool: "read_latest_page", missing: "await_turn", from: " Do not poll: use await_turn.", to: " Do not poll." },
+  // #2806: GitHub is Sagax's own link and code, whichever tool the bot picks
+  { tool: "open_connector_setup", missing: "connect_github", from: " GitHub is never this tool: call connect_github (Sagax's own link and code).", to: " For GitHub it posts Sagax's own link and code instead." },
 ];
 
 function withOfferedReferences<T extends { name: string; description: string; inputSchema?: unknown }>(tools: T[]): T[] {

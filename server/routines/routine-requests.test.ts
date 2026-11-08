@@ -2610,3 +2610,51 @@ describe("a bot's own routine changes", () => {
     expect(undo(service, "missing")).toEqual({ claimed: false });
   });
 });
+
+describe("the approval details read in the card reader's language (#2805)", () => {
+  function frenchHarness(language: string | undefined) {
+    const dir = mkdtempSync(join(tmpdir(), "omb-routine-request-fr-"));
+    tempDirs.push(dir);
+    const routines = new RoutineManager({
+      file: join(dir, "routines.json"),
+      now: () => Date.parse("2026-08-28T10:00:00Z"),
+      botState: () => "busy",
+      goalState: () => "busy",
+      createTask: () => null,
+      startTurn: async () => {},
+    });
+    const store = new MemoryStore();
+    const service = new RoutineRequestService({
+      store,
+      routines,
+      now: () => Date.parse("2026-08-28T10:00:00Z"),
+      timeZone: () => "America/New_York",
+      language: () => language as string,
+    });
+    return { service, store };
+  }
+
+  it("writes the schedule, time zone and labels in French for a French reader", async () => {
+    const { service, store } = frenchHarness("fr-CA");
+    await service.propose({ botId: "bot-a", threadId: "t", proposal: createProposal() });
+    const detail = store.messagesFor("t")[0]!.card!.subtitle!;
+    expect(detail).toContain("Nom : Morning brief");
+    expect(detail).toContain("Horaire :");
+    expect(detail).toContain("heure de l’Est");
+    expect(detail).toContain("9 h 00");
+    expect(detail).toContain("Instructions :\nSummarize the overnight support queue.");
+    expect(detail).not.toContain("Schedule:");
+    expect(detail).not.toContain("Eastern");
+  });
+
+  it("stays in English for an English reader or no language", async () => {
+    for (const language of ["en", undefined]) {
+      const { service, store } = frenchHarness(language);
+      await service.propose({ botId: "bot-a", threadId: "t", proposal: createProposal() });
+      const detail = store.messagesFor("t")[0]!.card!.subtitle!;
+      expect(detail).toContain("Action: Create routine");
+      expect(detail).toContain("Name: Morning brief");
+      expect(detail).not.toContain("Horaire");
+    }
+  });
+});

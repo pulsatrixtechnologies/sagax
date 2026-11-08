@@ -7295,6 +7295,7 @@
   "chat.peer.delegated": "a délégué une tâche",
   "chat.peer.openedThread": "a ouvert ce fil",
   "chat.peer.requested": "a envoyé une demande",
+  "chat.peer.replied": "a répondu",
   "chat.showRawMarkdown": "Afficher le markdown brut",
   "chat.showRenderedMarkdown": "Afficher le markdown rendu",
   "chat.speak.needsSetup": "Configurez un fournisseur de voix dans le profil de cet agent pour lire les messages à voix haute",

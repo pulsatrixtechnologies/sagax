@@ -13,7 +13,7 @@ import { api, useStore, type Bot, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t, tFromServer } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { SkillRequestPreview } from "@/components/SkillRequestPreview";
+import { ProposalBody } from "@/components/ProposalBody";
 import { adminWillAnswerLine, toolApprovalView, toolLabel } from "./ApprovalCard";
 import { ApprovalHeading, TechnicalDetails } from "./ApprovalParts";
 import { describeApproval, isTechnicalText } from "@/lib/approval-describe";
@@ -334,10 +334,14 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
           )}
         </div>
       )}
-      {proposal && visibleText && (
-        <pre
-          tabIndex={0}
-          aria-label={
+      {proposal && (
+        // #2946: a short summary in the interface font; the
+        // complete text and a skill's SKILL.md behind one disclosure
+        <ProposalBody
+          key={pending.requestId}
+          text={visibleText}
+          skillRequest={card?.skillRequest}
+          ariaLabel={
             isSkillApproval(pending)
               ? t("approval.aria.reviewSkill")
               : isRoutineApproval(pending)
@@ -348,12 +352,8 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
                     ? t("approval.aria.reviewRule")
                   : t("approval.aria.reviewDetails")
           }
-          className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-inset px-3 py-2 font-mono text-[12px] leading-relaxed text-ink"
-        >
-          {visibleText}
-        </pre>
+        />
       )}
-      {card?.skillRequest && <SkillRequestPreview request={card.skillRequest} />}
       {heldNote && <div className="mt-2 text-[12px] text-ink-secondary" data-approval-held>{heldNote}</div>}
       {card?.reviewing && !card.answered && (
         <div data-auto-review="pending" className="mt-2 text-[12.5px] text-ink-secondary">{t("customRules.notice.reviewing")}</div>

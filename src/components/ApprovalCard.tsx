@@ -5,12 +5,11 @@
 // and the actual command/path in monospace, and the choices carry their
 // own behavior instead of being matched by their label text.
 import { useState } from "react";
-import { Check, ShieldCheck, Undo2, X } from "lucide-react";
+import { BookOpen, Check, ShieldCheck, Undo2, X } from "lucide-react";
 import { api, ApiError, useStore, type Bot, type Message, type OptionCardData } from "@/state/store";
-import { cn } from "@/lib/cn";
 import { t, tFromServer } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { SkillRequestPreview } from "@/components/SkillRequestPreview";
+import { ProposalBody, proposalSummary } from "@/components/ProposalBody";
 import { ApprovalHeading, TechnicalDetails } from "@/components/ApprovalParts";
 import { StepRow } from "@/components/StepRow";
 import { CustomRuleNoticeLine, CustomRuleSavedInset, customRuleNoticeLine } from "@/components/CustomRuleNotice";
@@ -456,6 +455,16 @@ function AppliedChangeLine({
   );
 }
 
+/** What a settled proposal acted on, after its outcome on the compact row:
+ * the skill, the routine or the bot by name, else its summary line. */
+function proposalTarget(card: OptionCardData): string | undefined {
+  if (card.skillRequest?.name) return card.skillRequest.name;
+  const routine = card.routineRequest?.operation;
+  if (routine?.action === "create" && routine.routine.name) return routine.routine.name;
+  if (card.profileRequest?.targetName) return card.profileRequest.targetName;
+  return proposalSummary(card.subtitle) || undefined;
+}
+
 export function ApprovalCard({
   bot,
   message,
@@ -612,71 +621,79 @@ export function ApprovalCard({
     );
   }
 
+  const detailsLabel = isRoutineRequest
+    ? t("approval.aria.routineDetails")
+    : isSkillRequest
+      ? t("approval.aria.skillDetails")
+      : isProfileRequest
+        ? t("approval.aria.profileChange")
+        : isRuleRequest
+          ? t("approval.aria.ruleChange")
+          : t("approval.aria.details");
+  const body = <ProposalBody text={card.subtitle} skillRequest={card.skillRequest} ariaLabel={detailsLabel} />;
+  const insets = (
+    <>
+      {heldNote && <div className="mt-2 text-[12.5px] text-ink-secondary">{heldNote}</div>}
+      {card.answered === "allow" && card.alwaysAllowed && <AllowRuleInset rule={card.alwaysAllowed} />}
+      {card.answered && card.ruleSaved && <OwnerRuleInset rule={card.ruleSaved} />}
+    </>
+  );
+
+  // Settled or expired (2026-11-08, #2946: no giant block in the chat): the
+  // proposal folds to one compact row, what happened and to what; the
+  // summary, the complete text and a skill's SKILL.md open under it.
+  if (!open) {
+    const done = settled === "allow" && !expired;
+    return (
+      <StepRow
+        testId="proposal-receipt"
+        data={{ "data-proposal-receipt": done ? "success" : "neutral" }}
+        icon={done ? <Check size={13} aria-hidden="true" className="text-success" /> : <X size={13} aria-hidden="true" className="text-ink-tertiary" />}
+        label={outcome ?? ""}
+        target={proposalTarget(card)}
+        extra={byVoice}
+      >
+        {() => (
+          <div className="flex flex-col text-[12.5px] text-ink-secondary">
+            <div className="text-ink">{proposalTitle}</div>
+            {body}
+            {insets}
+          </div>
+        )}
+      </StepRow>
+    );
+  }
+
   return (
     <div
-      data-tour={open ? "approval" : undefined}
-      className={cn(
-        "w-full max-w-[840px] rounded-2xl border bg-card px-4 py-3",
-        open ? "border-accent/40" : "border-hairline/30 opacity-80",
-      )}
+      data-tour="approval"
+      data-proposal-card={isSkillRequest ? "skill" : isRoutineRequest ? "routine" : isProfileRequest ? "profile" : isRuleRequest ? "rule" : "team"}
+      className="w-full max-w-[840px] rounded-2xl border border-accent/40 bg-card px-4 py-3"
     >
       <ApprovalHeading
         bot={bot}
-        title={proposalTitle}
+        title={card.skillRequest ? (
+          <span className="flex flex-col">
+            <span className="text-[12px] font-normal text-ink-tertiary">{proposalTitle}</span>
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <BookOpen size={15} aria-hidden="true" className="shrink-0 text-accent" />
+              <span className="min-w-0 truncate">{card.skillRequest.name}</span>
+            </span>
+          </span>
+        ) : proposalTitle}
       />
 
-      {/* a proposal's text is what you confirm (a tool request reads as the
-          step line or the receipt above) */}
-      <pre
-        tabIndex={0}
-        aria-label={
-          isRoutineRequest
-            ? t("approval.aria.routineDetails")
-            : isSkillRequest
-              ? t("approval.aria.skillDetails")
-              : isProfileRequest
-                ? t("approval.aria.profileChange")
-                : isRuleRequest
-                  ? t("approval.aria.ruleChange")
-                : t("approval.aria.details")
-        }
-        className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-inset px-3 py-2 font-mono text-[12.5px] leading-relaxed text-ink"
-      >
-        {card.subtitle}
-      </pre>
-
-      {card.skillRequest && <SkillRequestPreview request={card.skillRequest} />}
-
-      {heldNote && (
-        <div className="mt-2 text-[12.5px] text-ink-secondary">
-          {heldNote}
-        </div>
-      )}
-
-      {card.answered === "allow" && card.alwaysAllowed && <AllowRuleInset rule={card.alwaysAllowed} />}
-      {card.answered && card.ruleSaved && <OwnerRuleInset rule={card.ruleSaved} />}
+      {/* what you confirm: a short summary, the complete text one click away */}
+      {body}
+      {insets}
 
       {/* The decision lives in the composer (one place to answer, and it
-          can't be scrolled past); here we only record what happened. The
-          technical details join the record once it is settled, so an open
-          request is never shown twice in full. */}
+          can't be scrolled past); here we only record that it waits. */}
       <div className="mt-2 flex items-center gap-1.5 text-[13px] text-ink-secondary">
-        {outcome ? (
-          <>
-            {settled === "allow" && !expired ? <Check size={14} className="text-success" /> : <X size={14} />} {outcome}
-            {byVoice}
-          </>
-        ) : card.reviewing ? (
-          <>
-            <ShieldCheck size={14} className="text-accent" />
-            <span data-auto-review="pending">{t("customRules.notice.reviewing")}</span>
-          </>
-        ) : (
-          <>
-            <ShieldCheck size={14} className="text-accent" />
-            {t("approval.status.waitingConfirmation")}
-          </>
-        )}
+        <ShieldCheck size={14} className="text-accent" />
+        {card.reviewing
+          ? <span data-auto-review="pending">{t("customRules.notice.reviewing")}</span>
+          : t("approval.status.waitingConfirmation")}
       </div>
     </div>
   );

@@ -18238,7 +18238,14 @@
       "chat.relayVia.trace.stopped": "2e3feaa7d0e9c2ecad6a02056826e5f2bca7849125ff6059212962254f6ca2be",
       "chat.relayVia.trace.silent": "5ee5a40f9c7cda5a65b8f2238d8bec461c10cc5e49488d91ace7d88e70223cf4",
       "approvals.openChat": "16a8c2b6a394b33fbd89b8de638c86f8ca17cb23f83cf9fc20fdd17305825511",
-      "approvals.journal.openChat": "16a8c2b6a394b33fbd89b8de638c86f8ca17cb23f83cf9fc20fdd17305825511"
+      "approvals.journal.openChat": "16a8c2b6a394b33fbd89b8de638c86f8ca17cb23f83cf9fc20fdd17305825511",
+      "skillRequest.viewSkillMd": "07b799d6370dfcb357b48218cc6b365cc3d1113770ba61a05a56d606a3eea377",
+      "skillRequest.hideSkillMd": "996c455819a83633cf139d6e4efc8b06837fcf85bec1394fb121ed71633f5a53",
+      "skillRequest.reviewCreate": "f9c4f6cec2633d6773d0c1892b57669b0fd87ca817e77a8f83ce5a917cd5656b",
+      "skillRequest.reviewUpdate": "0da18976725ec681ec414c7ea72bc61a2e5a8a0bc0ea890698684214dc4a4bfc",
+      "skillRequest.source": "9f9d70c6e9c02550610692cff5686db18819f711160ae757a745aaac28a1e1e8",
+      "skillRequest.unknownSource": "b764cdc0eab7137467211272fa539f1260d1bf2e71bcf6ff3bdc960f5c16aa14",
+      "skillRequest.aria.fullSkillMd": "a9d9067efb3b0415d2548041b5eeea52de2ea622f268a0c03574353a6865e0eb"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

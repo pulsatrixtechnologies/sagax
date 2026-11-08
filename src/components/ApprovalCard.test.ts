@@ -7,6 +7,7 @@ import { approvalWho } from "./PerspicaxOrgSettings";
 import { pendingApprovals, PendingApprovalPanel, spokenApprovalPrompt, type Pending } from "./PendingApproval";
 import type { Bot, Message } from "@/state/store";
 import { skillRequestBehavior } from "../../shared/skill-request";
+import { SkillRequestPreview } from "./SkillRequestPreview";
 
 const routineRequest = {
   version: 1 as const,
@@ -319,11 +320,15 @@ describe("ApprovalCard learned skills", () => {
 
     const markup = renderToStaticMarkup(createElement(ApprovalCard, { message }));
     expect(markup).toContain("enable a learned skill");
+    expect(markup).toContain("file-expense");
     expect(markup).toContain("Files an expense in the company portal.");
-    expect(markup).toContain("Review the complete SKILL.md before enabling");
-    expect(markup).toContain("Source: learn:conversation");
-    expect(markup).toContain("name: file-expense");
-    expect(markup).toContain("sha256 abcdef01");
+    // #2946: the SKILL.md, its source and its hash wait behind the disclosure
+    expect(markup).toContain("View SKILL.md");
+    expect(markup).not.toContain("Review the complete SKILL.md before enabling");
+    expect(markup).not.toContain("Source: learn:conversation");
+    expect(markup).not.toContain("name: file-expense");
+    expect(markup).not.toContain("sha256 abcdef01");
+    expect(markup).not.toContain("font-mono");
 
     const spoken = spokenApprovalPrompt(
       { message, requestId: "skill-request", tool: "stage_skill", detail: message.card!.subtitle },
@@ -364,7 +369,7 @@ describe("ApprovalCard learned skills", () => {
     };
 
     expect(renderToStaticMarkup(createElement(ApprovalCard, { message }))).toContain("update a learned skill");
-    expect(renderToStaticMarkup(createElement(ApprovalCard, { message }))).toContain("replacing the current version");
+    expect(renderToStaticMarkup(createElement(SkillRequestPreview, { request: message.card!.skillRequest! }))).toContain("replacing the current version");
     const spoken = spokenApprovalPrompt(
       { message, requestId: "skill-update-request", tool: "stage_skill", detail: message.card!.subtitle },
       "Mochi",

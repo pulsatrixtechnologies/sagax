@@ -2,6 +2,7 @@
   "hiddenPrefixes": ["notice:", "recovery: Automatic recovery:"],
   "shown": [
     "notice: Waiting for 1Password: approve the request in 1Password on your computer.",
+    "notice: The server environment is starting. This can take a few minutes.",
     "notice: The server environment did not start in time. Send the message again in a few minutes.",
     "notice: The bot is now controlling this computer: its screen, mouse and keyboard. Stop it at any time with Stop."
   ],
@@ -9,7 +10,6 @@
     "notice: MCP server \"slack\" was skipped for this turn: 401 Unauthorized",
     "notice: Workspace: In the cloud",
     "notice: Workspace: On your computer",
-    "notice: The server environment is starting. This can take a few minutes.",
     "notice: Auto: worker Verification fixture · Claude Sonnet 5.5 (coding), the coding tier this server can run.",
     "notice: Switched to Verification fixture for Gmail.",
     "recovery: Automatic recovery: Claude Code could not start. Trying Codex · gpt-5 once in this thread."

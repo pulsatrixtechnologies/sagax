@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SERVER_FEATURE_NAMES } from "../shared/server-features.ts";
-import { environmentDescriptor, environmentLabel, loadEnvironmentId, releaseVersion, serverVersion } from "./environment.ts";
+import { environmentDescriptor, environmentLabel, linkVersion, loadEnvironmentId, releaseVersion, serverVersion } from "./environment.ts";
 import { hostname } from "node:os";
 import { identityDescriptor } from "./auth/oidc-login.ts";
 
@@ -176,6 +176,35 @@ describe("environment identity", () => {
       const bare = join(app, "bare");
       mkdirSync(bare);
       expect(serverVersion(bare)).toBe("unknown");
+    } finally {
+      if (savedApp !== undefined) process.env.SAGAX_APP_VERSION = savedApp;
+      if (savedRelease !== undefined) process.env.SAGAX_RELEASE_VERSION = savedRelease;
+    }
+  });
+
+  // QA 0.8.66 F7: Perspicax's api_list showed the linked Sagax at "0.0.0".
+  it("reports the release to Perspicax, never 0.0.0 nor an empty-looking unknown (QA 0.8.66 F7)", () => {
+    const savedApp = process.env.SAGAX_APP_VERSION;
+    const savedRelease = process.env.SAGAX_RELEASE_VERSION;
+    delete process.env.SAGAX_APP_VERSION;
+    delete process.env.SAGAX_RELEASE_VERSION;
+    try {
+      const app = mkdtempSync(join(tmpdir(), "sagax-link-version-"));
+      dirs.push(app);
+      const bundle = join(app, "dist-server");
+      mkdirSync(bundle);
+      writeFileSync(join(bundle, "version.json"), JSON.stringify({ version: "0.0.0", forkVersion: "0.8.66" }));
+      expect(linkVersion(bundle)).toBe("0.8.66");
+      const bare = join(app, "bare");
+      mkdirSync(bare);
+      expect(linkVersion(bare)).toBe("");
+      const zero = join(app, "zero");
+      mkdirSync(zero);
+      writeFileSync(join(zero, "version.json"), JSON.stringify({ version: "0.0.0" }));
+      expect(linkVersion(zero)).toBe("");
+      const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+      expect(source).not.toContain('let version = "0.0.0"');
+      expect(source).toContain("const version = linkVersion();");
     } finally {
       if (savedApp !== undefined) process.env.SAGAX_APP_VERSION = savedApp;
       if (savedRelease !== undefined) process.env.SAGAX_RELEASE_VERSION = savedRelease;

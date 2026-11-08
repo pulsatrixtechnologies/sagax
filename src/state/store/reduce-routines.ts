@@ -9,13 +9,15 @@ export type ReduceFn = (state: AppState, action: Action) => AppState;
 export function reduceRoutines(state: AppState, action: Action, _reduce: ReduceFn): AppState | undefined {
   switch (action.type) {
     case "routinesHydrated":
-      return { ...state, routines: action.routines, routineRuns: trimRoutineRuns(action.runs), routineRunsSince: action.since ?? null, routinesLoadState: "ready", ...(action.folders ? { routineFolders: action.folders } : {}) };
+      // A listing without `routines` or `runs` (an older server, the gallery, a frame of the app
+      // served where no API answers) hydrates as empty lists instead of throwing "runs is not iterable".
+      return { ...state, routines: Array.isArray(action.routines) ? action.routines : [], routineRuns: trimRoutineRuns(Array.isArray(action.runs) ? action.runs : []), routineRunsSince: action.since ?? null, routinesLoadState: "ready", ...(action.folders ? { routineFolders: action.folders } : {}) };
     case "routineFoldersPatched":
       return { ...state, routineFolders: { ...state.routineFolders, [action.botId]: action.folders } };
     case "routinesLoadFailed":
       return { ...state, routinesLoadState: "error" };
     case "routineRunsLoaded":
-      return { ...state, routineRuns: withOlderRoutineRuns(state.routineRuns, action.runs), routineRunsSince: olderRunsSince(state.routineRunsSince, action) };
+      return { ...state, routineRuns: withOlderRoutineRuns(state.routineRuns ?? [], Array.isArray(action.runs) ? action.runs : []), routineRunsSince: olderRunsSince(state.routineRunsSince, action) };
     case "routinePatched": {
       const exists = state.routines.some((routine) => routine.id === action.routine.id);
       return {

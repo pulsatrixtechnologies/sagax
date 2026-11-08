@@ -854,7 +854,7 @@ import { clearHeldSteersForThread,
   recordHeldSteer } from "./turns/held-steers.ts";
 import { continuationSpeaker } from "./turns/continuation-speaker.ts";
 import { acquireDataDirLeaseForProcess } from "./data-dir-lease.ts";
-import { environmentDescriptor, environmentLabel, loadEnvironmentId, releaseVersion, serverVersion } from "./environment.ts";
+import { environmentDescriptor, environmentLabel, linkVersion, loadEnvironmentId, releaseVersion, serverVersion } from "./environment.ts";
 import { deployFacts, hostFacts, overviewRoutes, readBackupStatus, selfCheckEngines } from "./org/org-admin-overview.ts";
 import { appendProblem, pruneProblemLog, readProblems } from "./org/org-problem-log.ts";
 import { WorkspaceBackupMaintenance } from "./backup/workspace-backup-maintenance.ts";
@@ -28314,12 +28314,9 @@ if (idpSessions) {
 // arrived. Without the file, sign-in works and the share picker is empty.
 if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_PERSPICAX_LINK_FILE?.trim()) {
   const intervalMs = directoryIntervalMs(process.env.SAGAX_PERSPICAX_DIRECTORY_SECONDS);
-  let version = "0.0.0";
-  try {
-    version = String((JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version?: unknown }).version ?? version);
-  } catch {
-    /* the header then says 0.0.0 */
-  }
+  // QA 0.8.66 F7: the release people know (forkVersion, from the bundle's
+  // version.json in an image), never the "0.0.0" a missing package.json gave.
+  const version = linkVersion();
   const manager = idpSessions;
   perspicaxDirectory = new PerspicaxDirectory({
     issuer: IDENTITY.issuer,

@@ -1231,6 +1231,7 @@
   "chat.sandboxWakeTimeout": "L'environnement n'a pas démarré à temps. Renvoie le message dans quelques minutes.",
   "chat.sandboxWaking": "Environnement en démarrage, ça peut prendre quelques minutes.",
   "chat.sandboxWakingAsleep": "L'environnement était en veille. Le démarrage peut prendre quelques minutes.",
+  "chat.sandboxWakingElapsed": "Environnement en démarrage, {seconds} s. Le premier tour après un redémarrage peut prendre quelques minutes.",
   "chat.presence.busyElsewhere": "{name} termine une autre conversation",
   "chat.activity.working": "Au travail",
   "chat.activity.writeFile": "Écrit un fichier",

@@ -98,8 +98,24 @@ export function activeLocale(): string {
 let active = "en";
 let activePack: LocalePack = en;
 
-/** Device choice, else ?lang=, else the system language. Empty device choice
- * means "follow the system". */
+/** The language of the page that holds this one in a frame, when that page is
+ * of the same origin and says it (<html lang>, set by applyLocale). A page
+ * preview frame or a widget frame carries no ?lang=, and its error screen
+ * read in English under a French page (QA 0.8.66 F11). */
+export function embeddingFrameLanguage(win: Pick<Window, "parent"> | undefined = typeof window === "undefined" ? undefined : window): string | undefined {
+  try {
+    if (!win || !win.parent || win.parent === win) return undefined;
+    const lang = win.parent.document?.documentElement?.lang;
+    return lang ? lang : undefined;
+  } catch {
+    // A frame of another origin: its language is not ours to read.
+    return undefined;
+  }
+}
+
+/** ?lang=, else the language of the same-origin page holding this frame, else
+ * the device choice, else the system language. Empty device choice means
+ * "follow the system". */
 function initialLocaleTag(): string | undefined {
   try {
     if (typeof location !== "undefined") {
@@ -109,6 +125,8 @@ function initialLocaleTag(): string | undefined {
   } catch {
     // Workers and tests may lack a real location.
   }
+  const fromFrame = embeddingFrameLanguage();
+  if (fromFrame) return fromFrame;
   const choice = languageChoice();
   if (choice === null || choice === "") return globalThis.navigator?.language;
   return choice;

@@ -167,6 +167,16 @@ export function releaseVersion(root: string = SERVER_ROOT): string {
   return packagedVersionField(root, "forkVersion") || serverVersion(root);
 }
 
+/** The version a linked server reports to Perspicax (X-Pulsabot-Version):
+ * the release people know, or "" when this server cannot tell, so Perspicax
+ * keeps the last good one. Never "0.0.0" nor "unknown": the old reading of
+ * ../package.json beside the bundle sent "0.0.0" from every image, and
+ * Perspicax's api_list showed it (QA 0.8.66 F7). */
+export function linkVersion(root: string = SERVER_ROOT): string {
+  const version = releaseVersion(root);
+  return version === "unknown" || version === "0.0.0" ? "" : version;
+}
+
 /** This server's display name: SAGAX_ENVIRONMENT_LABEL, else the
  * organization's name (SAGAX_ORG_NAME), else the host of its public address
  * (SAGAX_PUBLIC_URL), else the machine's host name. A container's host name is

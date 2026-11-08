@@ -18,6 +18,7 @@ public enum ChatNotices {
     /// computer (and can be stopped).
     public static let shown = [
         "notice: Waiting for 1Password: approve the request in 1Password on your computer.",
+        "notice: The server environment is starting. This can take a few minutes.",
         "notice: The server environment did not start in time. Send the message again in a few minutes.",
         "notice: The bot is now controlling this computer: its screen, mouse and keyboard. Stop it at any time with Stop.",
     ]

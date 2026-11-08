@@ -697,7 +697,7 @@
     },
     {
       "name": "sagax_help",
-      "description": "What Sagax and Perspicax can do, where it is in the app and how, who may do it: features, settings, your tools, permissions, engines, release notes. Call it before you answer a question about the app or say something is impossible. Returns a few short sections.",
+      "description": "What Sagax and Perspicax can do, where it is in the app and how, who may do it: features, settings, your tools, permissions, engines, release notes. Call it before you answer a question about the app or say something is impossible. Not for Sagax Remote Access (install, status, open a session): call remote_support_hosts directly instead. Returns a few short sections.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

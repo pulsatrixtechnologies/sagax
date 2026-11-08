@@ -77,6 +77,18 @@ export function statusActivity(message: Message): { kind: "recovery" | "notice" 
   return null;
 }
 
+/** QA 0.8.66 F1: the "environment is starting" row of a turn still waiting
+ * on it (busy, and nothing came after the row) counts its seconds, so a cold
+ * start never reads as a silent chat. Null when the row is not that notice
+ * or the wait is over. */
+export function sandboxWakeElapsed(message: Message, transcript: readonly Message[], busy: boolean, now: number): number | null {
+  if (!busy || message.kind !== "activity" || message.tool?.name !== SANDBOX_WAKE_NOTICE) return null;
+  const index = transcript.findIndex((m) => m.id === message.id);
+  if (index < 0 || index !== transcript.length - 1) return null;
+  if (typeof message.at !== "number" || !Number.isFinite(message.at)) return null;
+  return Math.max(0, Math.floor((now - message.at) / 1000));
+}
+
 const SOLO_GOAL_KEYS: Record<SoloGoalLineStatus, LocaleKey> = {
   none: "chat.soloGoal.none", working: "chat.soloGoal.working", blocked: "chat.soloGoal.blocked",
   stopped: "chat.soloGoal.stopped", completed: "chat.soloGoal.completed", paused: "chat.soloGoal.paused",

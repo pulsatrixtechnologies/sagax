@@ -104,7 +104,7 @@ export function useStoreLive(args: UseStoreLiveArgs): void {
           const { routines, runs, folders } = listing;
           // A server from before routine folders sends no `folders`.
           noteRoutinesListing(listing);
-          return () => rawDispatch({ type: "routinesHydrated", routines, runs, since, ...(folders && typeof folders === "object" ? { folders } : {}) });
+          return () => rawDispatch({ type: "routinesHydrated", routines: routines ?? [], runs: runs ?? [], since, ...(folders && typeof folders === "object" ? { folders } : {}) });
         },
       },
       {

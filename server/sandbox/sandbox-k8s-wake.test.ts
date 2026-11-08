@@ -392,6 +392,24 @@ describe("the cluster wake", () => {
     expect(docker.posts).toHaveLength(0);
   });
 
+  it("QA 0.8.66 F1: a restarted server (a roll) prewarms the environment of a bot that used it, from the state file", async () => {
+    const first = rig({ upAfterProbes: 2 });
+    first.cluster.up = true;
+    await first.manager.exec(ALICE, { argv: ["true"] }, "bot-1");
+    // the roll: a new manager on the same state file, the cluster asleep
+    const second = rig({ upAfterProbes: 2 });
+    second.waker.markUnreachable();
+    clock += 10 * 60_000;
+    expect(await second.manager.prewarmRecent()).toBe(1);
+    expect(second.posts).toHaveLength(1);
+    expect(second.calls.at(-1)).toBe("kubernetes:ensure");
+    // past a week of no use, a start prewarms nobody
+    clock += 8 * 24 * 3600_000;
+    const third = rig({ upAfterProbes: 2 });
+    expect(await third.manager.prewarmRecent()).toBe(0);
+    expect(third.posts).toHaveLength(0);
+  });
+
   it("never touches the Docker route", async () => {
     const r = rig({ route: "docker" });
     await r.manager.exec(ALICE, { argv: ["true"] });

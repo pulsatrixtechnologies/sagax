@@ -1653,6 +1653,7 @@
   "chat.sandboxWakeTimeout": "The server environment did not start in time. Send the message again in a few minutes.",
   "chat.sandboxWaking": "The server environment is starting. This can take a few minutes.",
   "chat.sandboxWakingAsleep": "The environment was asleep. Starting can take a few minutes.",
+  "chat.sandboxWakingElapsed": "The server environment is starting, {seconds} s. The first turn after a restart can take a few minutes.",
   "chat.presence.busyElsewhere": "{name} is finishing another conversation",
   "chat.activity.working": "Working",
   "chat.activity.writeFile": "Writing a file",

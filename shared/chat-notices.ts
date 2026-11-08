@@ -14,7 +14,7 @@
 // Workspace line back, shared/workspace-line.ts); stored ones from older
 // builds stay hidden too.
 import { ONE_PASSWORD_WAITING } from "./credential-vault.ts";
-import { SANDBOX_WAKE_TIMEOUT_NOTICE } from "./sandbox-wake.ts";
+import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE } from "./sandbox-wake.ts";
 import { HOST_CONTROL_NOTICE } from "./host-control.ts";
 
 export const CHAT_NOTICE_RULES = {
@@ -22,8 +22,9 @@ export const CHAT_NOTICE_RULES = {
   hiddenPrefixes: ["notice:", "recovery: Automatic recovery:"],
   /** Except these, which ask something of the person: approve in
    * 1Password, send the message again, see that a bot now controls this
-   * computer (and can be stopped). */
-  shown: [ONE_PASSWORD_WAITING, SANDBOX_WAKE_TIMEOUT_NOTICE, HOST_CONTROL_NOTICE],
+   * computer (and can be stopped), and wait for a cold environment (QA
+   * 0.8.66 F1: hidden, a 458 s start read as a silent chat). */
+  shown: [ONE_PASSWORD_WAITING, SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE, HOST_CONTROL_NOTICE],
 } as const;
 
 /** True for an activity row name the chat leaves out. */

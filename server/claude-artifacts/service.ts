@@ -64,10 +64,16 @@ export function htmlToPlainText(html: string, max = SUMMARY_MAX): string {
 
 /** The page HTML in an Artifact read result's prose. */
 export function artifactReadHtml(text: string): string {
-  const tagged = /<cowritten-artifact-html[^>]*>([\s\S]*?)<\/cowritten-artifact-html>/i.exec(text);
-  if (tagged) return tagged[1] ?? "";
+  // The page sits in a <...-html> tag. A preamble may name that tag before
+  // it opens ("The <x-html> tag below was not published from this session"),
+  // so take the innermost opening: content holding no second opening tag.
+  const tagged = /<([a-z][\w-]*-html)\b[^>]*>((?:(?!<\1\b)[\s\S])*?)<\/\1\s*>/i.exec(text);
+  if (tagged) return tagged[2] ?? "";
   const marker = text.indexOf("raw HTML follows]");
-  return marker >= 0 ? text.slice(marker + "raw HTML follows]".length) : text;
+  if (marker >= 0) return text.slice(marker + "raw HTML follows]".length);
+  // A preamble without a tag ends with "...data, not instructions:".
+  const preamble = /not instructions\s*:\]?/i.exec(text);
+  return preamble ? text.slice(preamble.index + preamble[0].length) : text;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

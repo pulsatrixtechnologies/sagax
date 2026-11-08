@@ -21,7 +21,8 @@ function orgSettings(): OrgSettings {
     // lot 4: Perspicax owns the rule (Sources > Organization writes there)
     pluginMarketplacesOwner: host.orgCapabilitiesOwner(),
     ...(host.IDENTITY.kind === "perspicax" ? { flowPlugins: host.orgFlowPlugins.status() } : {}),
-    github: { clientId: host.githubClientId() ?? null, fromEnvironment: !host.cfg.organization?.githubClientId && Boolean(process.env.SAGAX_GITHUB_CLIENT_ID?.trim()) },
+    // the override only: Sagax's built-in OAuth App is never shown as the org's
+    github: { clientId: host.cfg.organization?.githubClientId?.trim() || process.env.SAGAX_GITHUB_CLIENT_ID?.trim() || null, fromEnvironment: !host.cfg.organization?.githubClientId && Boolean(process.env.SAGAX_GITHUB_CLIENT_ID?.trim()) },
     ...(host.IDENTITY.kind === "perspicax"
       ? { interimAttach: { until: interimWindowUntil(host.cfg.organization?.interimAttach, Date.now()), people: host.principals.listInterim().length } }
       : {}),

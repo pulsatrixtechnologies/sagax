@@ -7608,10 +7608,12 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   stream), never on the host; without server environments it is refused.
 - A server-wide MCP command is never added (403 `org_host_command`) nor
   mounted (`withoutHostCommands`) on an organization server.
-- Connecter GitHub (`server/github/github-connect.ts`): the device flow of the
-  organization's GitHub OAuth App (`SAGAX_GITHUB_CLIENT_ID`, or
-  `organization.githubClientId` from Settings > Organization), else a pasted
-  token. The token goes into the person's environment for gh and git
+- Connecter GitHub (`server/github/github-connect.ts`): always the device
+  flow first (a link and a code, owner 2026-11-08), with Sagax's built-in OAuth
+  App (`server/github/builtin-client.ts`); `organization.githubClientId` from
+  Settings > Organization, then `SAGAX_GITHUB_CLIENT_ID`, override it. A
+  pasted token is a fallback only, under Advanced, offered by the bot only
+  when the person asks or the device flow fails. The token goes into the person's environment for gh and git
   (`githubSandboxArgv`, through `SAGAX_GH_TOKEN`, never the argv), into their
   personal servers with auth `github`, and into Sagax's own fetches for them
   (private skills, private marketplaces), and since 2026-10-28 into the
@@ -7800,8 +7802,9 @@ connectors and My MCP servers only.
   the Installed row and the server's page follow it, with "Open the
   GitHub plugin".
 - Connection (organization server): `MyGithubConnection`, one Connect
-  GitHub for everyone, with no admin step (device flow when the OAuth App
-  is set, else a token).
+  GitHub for everyone, with no admin step: the main button is always the
+  device flow (an error says so with Try again), the token only under
+  Advanced, collapsed.
 - A load that meets a proxy's bare 502/503/504 (Sagax restarting behind
   Caddy during a deploy) is asked again (`retryTransient`); a failure is one
   plain line (`readableError`), never the raw status.

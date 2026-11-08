@@ -92,27 +92,29 @@ describe("the GitHub plugin's page", () => {
     expect(host.textContent).toContain("The whole organization");
   });
 
-  it("one Connect GitHub for everyone: a token when the OAuth App is missing, never an admin step", () => {
+  it("one Connect GitHub for everyone: always the link and the code, never an admin step", () => {
     const initial = { github: { state: "none" as const, deviceFlow: false }, servers: [], sandbox: true };
     const member = renderToStaticMarkup(createElement(MyGithubConnection, { initial }));
-    expect(member).toMatch(/<button[^>]*data-github-connect="token"/);
-    expect(member).not.toMatch(/<button[^>]*data-github-connect="token"[^>]*disabled/);
+    expect(member).toMatch(/<button[^>]*data-github-connect="device"/);
+    expect(member).not.toMatch(/<button[^>]*data-github-connect="device"[^>]*disabled/);
+    expect(member).not.toMatch(/personal access token|OAuth App/i);
     expect(member).not.toMatch(/admin/i);
     expect(member).not.toContain("Use a token");
     const withApp = renderToStaticMarkup(createElement(MyGithubConnection, { initial: { ...initial, github: { state: "none" as const, deviceFlow: true } } }));
     expect(withApp).toContain('data-github-connect="device"');
     expect(withApp).not.toContain("Use a token");
-    expect(withApp).toContain("Advanced: use a personal access token");
+    expect(withApp).toContain(">Advanced<");
+    expect(withApp).not.toMatch(/personal access token/i);
     expect(withApp).not.toMatch(/admin/i);
   });
 
-  it("with no OAuth App, Connect GitHub opens the token form", () => {
+  it("with no OAuth App reported, Connect GitHub still starts the link and the code, not the token form", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const initial = { github: { state: "none" as const, deviceFlow: false }, servers: [], sandbox: true };
     flushSync(() => createRoot(host).render(createElement(MyGithubConnection, { initial })));
-    flushSync(() => (host.querySelector("[data-github-connect]") as HTMLElement).click());
-    expect(host.querySelector('input[type="password"]')).not.toBeNull();
+    expect(host.querySelector("[data-github-connect]")!.getAttribute("data-github-connect")).toBe("device");
+    expect(host.querySelector('input[type="password"]')).toBeNull();
   });
 
   it("the card's account line: connected as, or not connected", () => {

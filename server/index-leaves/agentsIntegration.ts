@@ -94,8 +94,8 @@ function agentsIntegration(
         return speaking?.memeReplies === "off" ? "0" : "1";
       })(),
       SAGAX_VOICE_CALL: host.voiceCalls.active(threadId) ? "1" : "0",
-      // connect_github: any chat (#2109) on a server with a GitHub OAuth App
-      // (device flow). The route re-checks.
+      // connect_github: any chat (#2109); the device flow has a built-in
+      // client id (server/github/builtin-client.ts). The route re-checks.
       SAGAX_GITHUB_CONNECT: host.githubConnect.deviceFlowAvailable() ? "1" : "0",
       // join_meeting: Settings > Experimental > Meeting notetaker, direct
       // conversations only. The internal route re-checks both.

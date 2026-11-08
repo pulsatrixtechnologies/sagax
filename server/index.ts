@@ -1068,6 +1068,7 @@ import { GithubConnect,
   githubGitEnvironment,
   githubTokenKind } from "./github/github-connect.ts";
 import { GithubConnectCards } from "./github/github-connect-cards.ts";
+import { resolveGithubClientId } from "./github/builtin-client.ts";
 import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox/sandbox-plugins.ts";
 import { OrgCapabilities, type OrgCapabilityMount } from "./org/org-capabilities.ts";
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
@@ -12011,10 +12012,11 @@ function usablePersonGithub(principalId: string | null | undefined) {
   if (!principalId) return undefined;
   return personGithub(principalId);
 }
-/** The organization's GitHub OAuth App for the device flow (Settings >
- * Organization, else SAGAX_GITHUB_CLIENT_ID). A client id is public. */
+/** The GitHub OAuth App for the device flow: the organization's (Settings >
+ * Developer), else SAGAX_GITHUB_CLIENT_ID, else Sagax's built-in one
+ * (server/github/builtin-client.ts). A client id is public. */
 function githubClientId(): string | undefined {
-  return cfg.organization?.githubClientId?.trim() || process.env.SAGAX_GITHUB_CLIENT_ID?.trim() || undefined;
+  return resolveGithubClientId(cfg.organization?.githubClientId);
 }
 /** Put a person's GitHub connection where gh and git read it in their
  * server environment (or take it out). Best effort: a turn re-applies it. */

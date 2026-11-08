@@ -65,6 +65,32 @@ describe("self-knowledge base", () => {
     }
   });
 
+  // #2714: a bot asked to install Sagax Remote Access unattended must know
+  // the flow from sagax_help and the tool descriptions, never search the disk.
+  it("loads the remote control knowledge and describes the unattended tools", () => {
+    const guide = committed.sections.find((section) => section.id === "guide:remote-access-unattended");
+    expect(guide, `guide:remote-access-unattended ${RUN}`).toBeDefined();
+    for (const word of ["remote_support_hosts", "remote_support_host_code", "install_commands", "host_id", "sudo", "PowerShell", "remote_support_not_permitted", "remote_support_host_refused", "Talon"]) {
+      expect(guide!.text, word).toContain(word);
+    }
+    expect(guide!.keywords).toMatch(/unattended/);
+    const full = availableTools({
+      externalRuntime: false, coordinating: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
+      voiceNotes: true, meetings: true, cloudHome: false, memoryEnabled: true, chief: true, createBots: true,
+      botId: "b", agentApi: true, perspicax: true, claims: true,
+    }) as Array<{ name: string; description: string; inputSchema: { properties?: Record<string, unknown> } }>;
+    const tool = (name: string) => full.find((entry) => entry.name === name);
+    for (const name of ["remote_support_hosts", "remote_support_host_code", "remote_support_host_revoke"]) {
+      expect(tool(name), name).toBeDefined();
+      expect(tool(name)!.description).toMatch(/unattended/i);
+      expect(committed.sections.some((section) => section.id === `tool:${name}`), `tool:${name} ${RUN}`).toBe(true);
+    }
+    expect(tool("remote_support_host_code")!.description).toContain("install_commands");
+    expect(tool("remote_support_host_code")!.description).toMatch(/Do not search this computer/);
+    expect(tool("remote_support_open")!.inputSchema.properties).toHaveProperty("host_id");
+    expect(tool("remote_support_open")!.description).toContain("remote_support_host_code");
+  });
+
   it("checks every reference of the hand-written guides", () => {
     expect(GUIDES.length).toBeGreaterThan(10);
     for (const guide of GUIDES) {

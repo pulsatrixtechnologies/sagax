@@ -776,6 +776,7 @@ describe("agents-proxy MCP surface", () => {
       "workspace_search",
       "retry_thread",
       "memory_log",
+      "skills_find",
       "session_search",
       "session_read",
       "list_cloud_agents",
@@ -822,6 +823,9 @@ describe("agents-proxy MCP surface", () => {
       "flow",
       "flow_action",
       "remote_support_open",
+      "remote_support_hosts",
+      "remote_support_host_code",
+      "remote_support_host_revoke",
       "remote_support_status",
       "remote_support_close",
       "review_write",
@@ -945,7 +949,7 @@ describe("agents-proxy MCP surface", () => {
     const trigger = create.inputSchema.properties.trigger;
     expect(trigger.additionalProperties).toBe(false);
     expect(trigger.required).toEqual(["type"]);
-    expect(trigger.properties.type.enum).toEqual(["webhook", "email"]);
+    expect(trigger.properties.type.enum).toEqual(["webhook", "email", "github"]);
     const schedule = create.inputSchema.properties.schedule;
     // No composition keywords anywhere in the tool surface: several agent
     // CLIs flatten or drop oneOf/anyOf/const when converting MCP tools for

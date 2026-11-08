@@ -56,6 +56,55 @@ enum NotificationApprovalRunner {
         case let .reply(threadId, requestId, text):
             // a question's answer is the typed text (`behavior: "answer"`, as the card sends it)
             return await send(threadId: threadId, requestId: requestId, behavior: "answer", message: text)
+        case let .needsYou(botId, threadId, groupId, approve):
+            // #2697: no request behind it: the answer is a line in the bot's conversation
+            let text = approve
+                ? String(localized: "notification.needsYou.approved", defaultValue: "Approved from the notification. Go ahead.")
+                : String(localized: "notification.needsYou.denied", defaultValue: "Denied from the notification. Do not go ahead.")
+            return await perform(key: "needs\u{0}\(threadId)\u{0}\(approve)") { client in
+                if let groupId {
+                    _ = try await client.send(text: text, toRoom: groupId, threadId: threadId)
+                } else {
+                    _ = try await client.send(text: text, toBot: botId, threadId: threadId)
+                }
+            }
+        case let .proposal(botId, proposalId, accept):
+            // #2697: the proposal card's own answer (409: already answered elsewhere)
+            return await perform(key: "proposal\u{0}\(proposalId)") { client in
+                try await client.answerProactiveProposal(botId: botId, proposalId: proposalId, accept: accept)
+            }
+        }
+    }
+
+    /// One request with the signed-in connection, once at a time per `key`.
+    private static func perform(key: String, _ body: @escaping @Sendable (CompanionClient) async throws -> Void) async -> Outcome {
+        lock.lock()
+        if inflight.contains(key) {
+            lock.unlock()
+            return .answered
+        }
+        inflight.insert(key)
+        lock.unlock()
+        defer {
+            lock.lock()
+            inflight.remove(key)
+            lock.unlock()
+        }
+        guard let connection = SagaxSharedConnectionStore.loadActiveConnection() else { return .failed }
+        let token: String
+        do {
+            guard let stored = try SagaxSharedKeychain.token(for: connection.id), !stored.isEmpty else { return .failed }
+            token = stored
+        } catch {
+            return .failed
+        }
+        do {
+            try await WidgetRouteRequest.perform(connection: connection, token: token, replay: .onlyWhenUndelivered) { client in
+                try await body(client)
+            }
+            return .answered
+        } catch {
+            return .failed
         }
     }
 

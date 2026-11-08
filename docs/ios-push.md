@@ -74,6 +74,17 @@ answers, nothing is approved. A question uses `SAGAX_UPDATE` and has no
 actions. The approval chime (`approval.caf`) is the sound of an approval
 banner when notification sounds and the chime are on.
 
+A bot that needs the person with no request behind it (a run's report, a
+proactive find) pushes with the category `SAGAX_NEEDS_YOU` and
+`needsYou: true`: **Approve** and **Deny** answer the bot with a short line
+in its own conversation (or the room's, `groupId`), as if typed in Sagax.
+A proactive proposal card (the daily suggestions) pushes with the category
+`SAGAX_PROPOSAL` and its `proposalId`: **Do it** and **Not now** answer
+`POST /api/bots/:id/proactive/:proposalId`, the card's own buttons. A
+proposal is a card-level push, so the person's daily budget and quiet
+hours (#2831) hold it back; a needs-you is urgent and always goes through
+(#2697).
+
 A push from a bot or a person is an iOS **communication notification**. The
 banner names the bot (or the person) as the sender and shows their avatar as
 the icon, the way Messages and the reference design look, instead of "Sagax" with the

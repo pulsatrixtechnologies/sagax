@@ -44,6 +44,10 @@ export type NotifyKind =
    * thread another bot opened) ended with items only the person can do; the
    * card is in their conversation with that bot (shared/person-attention.ts). */
   | "needs-you"
+  /** #2697: a proactive proposal card (a daily suggestion) waits on the
+   * person's Do it / Not now; `proposalId` names it. A card-level signal:
+   * the person's daily budget and quiet hours decide whether it buzzes. */
+  | "proposal"
   /** Something Sagax changed on its own that the person hears about once:
    * a tool turned off for the bots it does not start for. */
   | "notice"
@@ -91,6 +95,8 @@ export interface Notification {
   /** A question's own choices, in order: the phone offers them as the
    * banner's buttons (up to its limit; past it, Open). */
   choices?: string[];
+  /** #2697: the proactive proposal a `proposal` notice is about. */
+  proposalId?: string;
   /** Never on a phone or a watch (2026-10-29): a conversation an AI client
    * holds with a bot over MCP (shared/agent-conversation.ts) or a hidden
    * one (#291). The client that asked reads the answer and the approval;

@@ -39,7 +39,10 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
             deny: String(localized: "Deny"),
             reply: String(localized: "Reply"),
             send: String(localized: "Send"),
-            placeholder: String(localized: "Type your answer")
+            placeholder: String(localized: "Type your answer"),
+            approve: String(localized: "notification.needsYou.approve", defaultValue: "Approve"),
+            doIt: String(localized: "notification.proposal.doIt", defaultValue: "Do it"),
+            notNow: String(localized: "notification.proposal.notNow", defaultValue: "Not now")
         )
     }
 
@@ -68,7 +71,8 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         let needsKey = notification.needsKey == true
         let choices = confidential ? [] : (notification.choices ?? [])
         content.categoryIdentifier = NotificationApproval.category(
-            kind: notification.kind, requestId: notification.requestId, needsKey: needsKey, choices: choices
+            kind: notification.kind, requestId: notification.requestId, needsKey: needsKey, choices: choices,
+            proposalId: notification.proposalId
         )
         content.threadIdentifier = notification.threadId
         var info: [String: String] = [
@@ -80,6 +84,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         ]
         if let requestId = notification.requestId, !requestId.isEmpty { info["requestId"] = requestId }
         if needsKey { info["needsKey"] = "1" }
+        if let proposalId = notification.proposalId, !proposalId.isEmpty { info["proposalId"] = proposalId }
         if notification.kind == "question", !choices.isEmpty {
             info["choices"] = NotificationChoices.layout(choices, limit: 10).shown.joined(separator: "\u{1F}")
         }
@@ -96,7 +101,9 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         // One conversation, one banner: a replayed frame, the next line of
         // the same conversation and the APNs push for it (whose
         // apns-collapse-id is this same identifier) replace it.
-        let identifier = PushCollapse.identifier(threadId: notification.threadId, kind: notification.kind, requestId: notification.requestId)
+        let identifier = PushCollapse.identifier(
+            threadId: notification.threadId, kind: notification.kind, requestId: notification.requestId, proposalId: notification.proposalId
+        )
         let choicesCategory: UNNotificationCategory? = NotificationChoices.isChoicesCategory(content.categoryIdentifier)
             ? NotificationCategories.choices(NotificationChoices.layout(choices), openTitle: String(localized: "Open"))
             : nil
@@ -237,7 +244,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         case let .open(target):
             responseHandler?(target)
             completionHandler()
-        case .allow, .deny, .confirmKey, .reply:
+        case .allow, .deny, .confirmKey, .reply, .needsYou, .proposal:
             if case .confirmKey = decision, let target = NotificationTarget(payload: strings) {
                 responseHandler?(target)
             }

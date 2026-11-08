@@ -35,6 +35,8 @@ public struct NotificationFrame: Codable, Hashable, Sendable {
     /// False when the bot chose to post without alerting anyone
     /// (shared/notification.ts `notify`): no banner, no sound.
     public var notify: Bool? = nil
+    /// A proactive proposal card: Do it and Not now answer it (#2697).
+    public var proposalId: String? = nil
 
     /// What the banner says under the bot's name: the question first, then
     /// the detail, never the question twice.

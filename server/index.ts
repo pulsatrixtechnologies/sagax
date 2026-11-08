@@ -23730,6 +23730,10 @@ function postDailySuggestions(botId: string, threadId: string, suggestions: read
     const card = dailySuggestionCard(item, language);
     const message = store.appendMessage(threadId, { role: "bot", kind: "options", card: { title: card.title, subtitle: card.subtitle, options: [...card.options], proactiveProposal: { id: proposal.id } } });
     proactiveProposals.setMessage(proposal.id, message.id);
+    // #2697: the card also reaches the phone, with Do it / Not now on the
+    // banner; a card-level signal (budget and quiet hours, #2695, decide)
+    const bot = store.bot(botId);
+    if (bot) notify(deliverableNotification("proposal", bot, threadId, card.subtitle, { avatarUrl: bot.avatarUrl, title: card.title, proposalId: proposal.id }));
   }
   return picked.length;
 }

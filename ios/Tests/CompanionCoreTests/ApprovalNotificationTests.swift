@@ -167,7 +167,7 @@ final class ApprovalNotificationTests: XCTestCase {
     func testChoiceButtonsAreAddedNextToTheFixedOnesAndStayBounded() {
         let titles = NotificationCategories.Titles(allowOnce: "Allow once", deny: "Deny", reply: "Reply", send: "Send", placeholder: "Type")
         let fixed = NotificationCategories.fixed(titles)
-        XCTAssertEqual(Set(fixed.map(\.identifier)), [NotificationApproval.category, NotificationApproval.keyCategory, NotificationApproval.updateCategory, NotificationApproval.questionCategory])
+        XCTAssertEqual(Set(fixed.map(\.identifier)), [NotificationApproval.category, NotificationApproval.keyCategory, NotificationApproval.updateCategory, NotificationApproval.questionCategory, NotificationApproval.needsYouCategory, NotificationApproval.proposalCategory])
         let approval = try? XCTUnwrap(fixed.first { $0.identifier == NotificationApproval.category })
         XCTAssertEqual(approval?.actions.map(\.identifier), [NotificationApproval.allowAction, NotificationApproval.denyAction])
 
@@ -230,4 +230,49 @@ final class NeedsYouFollowsServerTests: XCTestCase {
     func testAnOlderServerWithoutActivityKeepsTheCard() throws {
         XCTAssertEqual(try state(activity: nil).pendingApprovals.count, 1)
     }
+}
+
+// #2697: a needs-you answers with Approve and Deny, a proactive proposal with
+// Do it and Not now, from the banner.
+final class NeedsYouProposalNotificationTests: XCTestCase {
+    func testTheCategoriesFollowTheServer() {
+        XCTAssertEqual(NotificationApproval.category(kind: "needs-you", requestId: nil, needsKey: false), "SAGAX_NEEDS_YOU")
+        XCTAssertEqual(NotificationApproval.category(kind: "proposal", requestId: nil, needsKey: false, proposalId: "p1"), "SAGAX_PROPOSAL")
+        XCTAssertEqual(NotificationApproval.category(kind: "proposal", requestId: nil, needsKey: false), NotificationApproval.updateCategory)
+        XCTAssertEqual(PushCollapse.identifier(threadId: "t1", kind: "proposal", proposalId: "p-123"), "sagax.p.p-123")
+    }
+
+    func testApproveAndDenyAnswerTheBotInItsConversation() {
+        let info = ["threadId": "t1", "botId": "b1", "kind": "approval", "groupId": "g1"]
+        XCTAssertEqual(
+            NotificationApproval.decide(actionIdentifier: NotificationApproval.approveAction, info: info),
+            .needsYou(botId: "b1", threadId: "t1", groupId: "g1", approve: true)
+        )
+        XCTAssertEqual(
+            NotificationApproval.decide(actionIdentifier: NotificationApproval.declineAction, info: ["threadId": "t1", "botId": "b1", "groupId": ""]),
+            .needsYou(botId: "b1", threadId: "t1", groupId: nil, approve: false)
+        )
+    }
+
+    func testDoItAndNotNowAnswerTheProposal() {
+        let info = ["threadId": "t1", "botId": "b1", "proposalId": "p1"]
+        XCTAssertEqual(
+            NotificationApproval.decide(actionIdentifier: NotificationApproval.doItAction, info: info),
+            .proposal(botId: "b1", proposalId: "p1", accept: true)
+        )
+        XCTAssertEqual(
+            NotificationApproval.decide(actionIdentifier: NotificationApproval.notNowAction, info: info),
+            .proposal(botId: "b1", proposalId: "p1", accept: false)
+        )
+    }
+
+    #if canImport(UserNotifications)
+    func testTheFixedCategoriesCarryTheButtons() {
+        let categories = NotificationCategories.fixed(NotificationCategories.Titles(allowOnce: "Allow once", deny: "Deny", reply: "Reply", send: "Send", placeholder: "…"))
+        let needsYou = categories.first { $0.identifier == NotificationApproval.needsYouCategory }
+        XCTAssertEqual(needsYou?.actions.map(\.title), ["Approve", "Deny"])
+        let proposal = categories.first { $0.identifier == NotificationApproval.proposalCategory }
+        XCTAssertEqual(proposal?.actions.map(\.title), ["Do it", "Not now"])
+    }
+    #endif
 }

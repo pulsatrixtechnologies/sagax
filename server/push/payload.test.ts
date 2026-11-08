@@ -211,6 +211,32 @@ describe("an approval push", () => {
     expect(body.requestId).toBeUndefined();
     expect(body.prompt).toBeUndefined();
   });
+  it("a needs-you with no request offers Approve and Deny; one with a request stays an approval (#2697)", () => {
+    expect(pushCategory({ kind: "approval", needsYou: true })).toBe("SAGAX_NEEDS_YOU");
+    expect(pushCategory({ kind: "approval", needsYou: true, requestId: "r1" })).toBe("SAGAX_APPROVAL");
+    const body = JSON.parse(buildApnsRequest({
+      message: message({ kind: "approval", needsYou: true, title: "Scout needs you", body: "sign the renewal", senderName: "Scout", botId: "b1", threadId: "t1" }),
+      bundleId: "x", nowMs: 0,
+    }).body);
+    expect(body.aps.category).toBe("SAGAX_NEEDS_YOU");
+    expect(body.needsYou).toBe(true);
+    expect(body.threadId).toBe("t1");
+    expect(body.botId).toBe("b1");
+  });
+  it("a proactive proposal offers Do it and Not now, names its proposal and keeps its own banner (#2697)", () => {
+    expect(pushCategory({ kind: "message", proposalId: "p1" })).toBe("SAGAX_PROPOSAL");
+    const request = buildApnsRequest({
+      message: message({ kind: "message", proposalId: "p-123", title: "Renew the domain", body: "Shall I handle it?", senderName: "Scout", botId: "b1", threadId: "t1" }),
+      bundleId: "x", nowMs: 0,
+    });
+    const body = JSON.parse(request.body);
+    expect(body.aps.category).toBe("SAGAX_PROPOSAL");
+    expect(body.proposalId).toBe("p-123");
+    expect(body.botId).toBe("b1");
+    // a card, not an ask: priority 5, and never collapsed into the thread's next line
+    expect(request.headers["apns-priority"]).toBe("5");
+    expect(request.headers["apns-collapse-id"]).toBe("sagax.p.p-123");
+  });
   it("never says the question twice, and a plain ask keeps its line", () => {
     const same = JSON.parse(buildApnsRequest({ message: message({ kind: "approval", prompt: "approval", ask: "Publish 2.4?", body: "Publish 2.4?", requestId: "r" }), bundleId: "x", nowMs: 0 }).body);
     expect(same.aps.alert.body).toBe("Publish 2.4?");

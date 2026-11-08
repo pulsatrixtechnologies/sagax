@@ -1,6 +1,7 @@
 // The notification categories the phone registers, in one place for the app
 // and its Notification Service Extension: Allow once and Deny on an
-// approval, a question's own choices (up to NotificationChoices.limit, then
+// approval, Approve and Deny on a needs-you, Do it and Not now on a
+// proactive proposal (#2697), a question's own choices (up to NotificationChoices.limit, then
 // Open), Reply on a question with no choices, nothing on the rest.
 //
 // A question's choices change with every question, so their category is
@@ -19,13 +20,24 @@ public enum NotificationCategories {
         public var reply: String
         public var send: String
         public var placeholder: String
+        /// #2697: a needs-you's Approve (its Deny is `deny`).
+        public var approve: String
+        /// #2697: a proactive proposal's Do it and Not now.
+        public var doIt: String
+        public var notNow: String
 
-        public init(allowOnce: String, deny: String, reply: String, send: String, placeholder: String) {
+        public init(
+            allowOnce: String, deny: String, reply: String, send: String, placeholder: String,
+            approve: String = "Approve", doIt: String = "Do it", notNow: String = "Not now"
+        ) {
             self.allowOnce = allowOnce
             self.deny = deny
             self.reply = reply
             self.send = send
             self.placeholder = placeholder
+            self.approve = approve
+            self.doIt = doIt
+            self.notNow = notNow
         }
     }
 
@@ -43,7 +55,14 @@ public enum NotificationCategories {
             identifier: NotificationApproval.replyAction, title: titles.reply, options: [.authenticationRequired],
             textInputButtonTitle: titles.send, textInputPlaceholder: titles.placeholder
         )
+        // #2697: a needs-you and a proactive proposal answer from the banner
+        let approve = UNNotificationAction(identifier: NotificationApproval.approveAction, title: titles.approve, options: [.authenticationRequired])
+        let decline = UNNotificationAction(identifier: NotificationApproval.declineAction, title: titles.deny, options: [.authenticationRequired, .destructive])
+        let doIt = UNNotificationAction(identifier: NotificationApproval.doItAction, title: titles.doIt, options: [.authenticationRequired])
+        let notNow = UNNotificationAction(identifier: NotificationApproval.notNowAction, title: titles.notNow, options: [])
         return [
+            UNNotificationCategory(identifier: NotificationApproval.needsYouCategory, actions: [approve, decline], intentIdentifiers: [], options: []),
+            UNNotificationCategory(identifier: NotificationApproval.proposalCategory, actions: [doIt, notNow], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: NotificationApproval.category, actions: [allow, deny], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: NotificationApproval.keyCategory, actions: [allowWithKey, deny], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: NotificationApproval.updateCategory, actions: [], intentIdentifiers: [], options: []),

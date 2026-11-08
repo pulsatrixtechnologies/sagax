@@ -104,7 +104,7 @@ describe("enrolled hosts at Perspicax", () => {
       },
     });
     const out = await hosts.open(viewer, HOST, { scope: "view-only" });
-    expect(out).toEqual({ ok: true, code: "K7QMNP", botId: "bot-1", threadId: "thread-1" });
+    expect(out).toEqual({ ok: true, code: "K7QMNP", botId: "bot-1", threadId: "thread-1", session: "0123456789ab" });
     const open = calls.find((c) => c.tool === "remote_support_open")!;
     expect(open.args).toMatchObject({ host_id: HOST, nodekey: NODEKEY, session: "0123456789ab", scope: "view-only", rights: "standard" });
     expect(open.args).not.toHaveProperty("code");

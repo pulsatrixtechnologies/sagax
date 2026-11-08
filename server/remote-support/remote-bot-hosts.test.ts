@@ -36,7 +36,7 @@ function make(opts: {
   const save = vi.fn((botId: string, remoteHosts: string[]) => {
     bots[botId] = { ...bots[botId]!, remoteHosts };
   });
-  const open = vi.fn(async () => ({ ok: true as const, code: "K7QMNP", botId: "wren", threadId: "t1" }));
+  const open = vi.fn(async () => ({ ok: true as const, code: "K7QMNP", botId: "wren", threadId: "t1", session: "s1" }));
   const service = createRemoteBotHosts({
     bot: (id) => bots[id] ?? null,
     canEdit: (principalId, botId) => bots[botId]?.ownerPrincipalId?.toLowerCase() === principalId.toLowerCase(),
@@ -107,7 +107,7 @@ describe("remote bot hosts (endpoint-to-bot access)", () => {
     expect(await service.open(ALICE, "wren", HOST)).toMatchObject({ ok: false, error: "not_found" });
     expect(open).not.toHaveBeenCalled();
     await service.attach(ALICE, "wren", HOST);
-    expect(await service.open(ALICE, "wren", HOST)).toEqual({ ok: true, code: "K7QMNP", botId: "wren", threadId: "t1" });
+    expect(await service.open(ALICE, "wren", HOST)).toEqual({ ok: true, code: "K7QMNP", botId: "wren", threadId: "t1", session: "s1" });
     expect(open).toHaveBeenCalledWith({ principalId: ALICE }, HOST, {});
     expect(await service.detach(ALICE, "wren", HOST)).toEqual({ ok: true, remoteHosts: [] });
   });

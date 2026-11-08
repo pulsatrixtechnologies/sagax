@@ -276,7 +276,7 @@ describe("ComputerCard", () => {
 
   it("asks for no picture when the bot works in the browser", async () => {
     await act(async () => { root!.render(createElement(ComputerCard, { bot: { ...bot, computer: "browser" } as Bot, onPatch: vi.fn() })); });
-    expect(captures.calls).toEqual([]);
+    expect(captures.calls.filter((call) => call.includes("/thumbnail"))).toEqual([]);
     expect(host!.querySelector<HTMLElement>("[data-computer-thumb]")!.dataset.computerThumb).toBe("unavailable");
   });
 });

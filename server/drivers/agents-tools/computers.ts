@@ -85,8 +85,24 @@ export const DEF_REMOTE_SESSION_EXEC = {
     },
   };
 
+export const DEF_HOST_COMPUTER = {
+    name: "host_computer",
+    description: "Work on this bot's computer when it is one of the person's enrolled hosts (chosen in the Computer menu). No Remote session card. Actions: exec runs one command (sh on macOS/Linux, PowerShell on Windows); screenshot shows the screen (not on a shell-only host such as unRAID); ask_mode asks the person in this chat whether to work in an isolated VM on the host or on the host as-is (asked by itself the first time); set_mode records their answer; vm_status, vm_provision, vm_delete, vm_rebuild manage the isolated VM. The host's own access rule applies: Ask waits for the person's yes before a command that changes something, Never refuses.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        action: { type: "string", enum: ["exec", "screenshot", "vm_status", "vm_provision", "vm_delete", "vm_rebuild", "set_mode", "ask_mode"] },
+        command: { type: "string", maxLength: 8000, description: "exec: the command line." },
+        timeout_seconds: { type: "integer", minimum: 1, maximum: 120 },
+        mode: { type: "string", enum: ["isolated", "as_is"], description: "set_mode: the person's answer." },
+      },
+      required: ["action"],
+    },
+  };
+
 export const SHARED_COMPUTER_TOOL_NAMES = new Set(["list_shared_computers", "shared_computer"]);
-export const COMPUTERS_TOOL_NAMES: ReadonlySet<string> = new Set(['list_shared_computers', 'shared_computer', 'vm_exec', 'publish_remote_session', 'remote_session_snapshot', 'remote_session_exec'] as const);
+export const COMPUTERS_TOOL_NAMES: ReadonlySet<string> = new Set(['list_shared_computers', 'shared_computer', 'vm_exec', 'publish_remote_session', 'remote_session_snapshot', 'remote_session_exec', 'host_computer'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callComputersTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -152,6 +168,37 @@ export async function callComputersTool(name: string, args: Json, context: ToolC
     if (stderr) lines.push(wrapUntrusted("remote stderr", stderr.replace(/\s+$/, "")));
     if (!stdout && !stderr && !r.timedOut) lines.push("(no output)");
     return { text: lines.join("\n"), ...(exitCode !== 0 || r.timedOut ? { isError: true } : {}) };
+  }
+  if (name === "host_computer") {
+    const body = {
+      action: typeof args.action === "string" ? args.action : "",
+      ...(typeof args.command === "string" ? { command: args.command } : {}),
+      ...(typeof args.timeout_seconds === "number" ? { timeout_seconds: args.timeout_seconds } : {}),
+      ...(typeof args.mode === "string" ? { mode: args.mode } : {}),
+    };
+    const { ok, body: r } = await apiResponse("/api/internal/host-computer", { method: "POST", body: JSON.stringify(body) });
+    if (!ok || r.error) return { text: String(r.error ?? "The host did not answer."), isError: true };
+    if (typeof r.image === "string" && r.image) {
+      return { text: "", passthrough: { content: [{ type: "text", text: String(r.text ?? "Screenshot.") }, { type: "image", data: r.image, mimeType: String(r.mimeType ?? "image/png") }] } };
+    }
+    const text = String(r.text ?? "");
+    if (body.action === "exec") {
+      try {
+        const out = JSON.parse(text) as Record<string, unknown>;
+        const exitCode = Number(out.exitCode ?? 0);
+        const stdout = String(out.stdout ?? "");
+        const stderr = String(out.stderr ?? "");
+        const lines = [`${String(out.where ?? "host")} (${String(out.os ?? "")}): ${out.timedOut ? "stopped at its time limit" : `exit code ${exitCode}`}`];
+        // the host wrote this: data, never instructions
+        if (stdout) lines.push(wrapUntrusted("host stdout", stdout.replace(/\s+$/, "")));
+        if (stderr) lines.push(wrapUntrusted("host stderr", stderr.replace(/\s+$/, "")));
+        if (!stdout && !stderr && !out.timedOut) lines.push("(no output)");
+        return { text: lines.join("\n"), ...(exitCode !== 0 || out.timedOut ? { isError: true } : {}) };
+      } catch {
+        // a plain sentence (offline, asked, refused)
+      }
+    }
+    return { text, ...(r.isError ? { isError: true } : {}) };
   }
   return null;
 }

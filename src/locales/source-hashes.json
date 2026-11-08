@@ -18085,7 +18085,21 @@
       "addComputer.back": "76900f1bfd16c8d4dd3d25e6f46638d7165aee23883ccea6bfe071c514421769",
       "addComputer.commandFor": "b421c8fb6514cfdad7daedb1ebdecce21a1804656b14f249182a66cf7929bf72",
       "addComputer.runWindows": "0676883057035659077f2e4e015fc70de7f72e2eaf37f3eaaac7e371f0a0a795",
-      "addComputer.runPosix": "1fc2e2fb796d73cf540010878e747f0f6d2cb2298d9866b96b754d4724a39366"
+      "addComputer.runPosix": "1fc2e2fb796d73cf540010878e747f0f6d2cb2298d9866b96b754d4724a39366",
+      "hostComputer.aBot": "7bcedea5b10ad528b823aeb4d71735ae99f491b4a098d404d8cb81fded167a67",
+      "hostComputer.use": "c290164043d33ac378bd50c62e414944f4694d4918efc09629d9f0c8b1256c44",
+      "hostComputer.editTags": "4687da851c22abc9d9b2f82de5b2b1fc75842622001f3f4da37a1c3acc2334ef",
+      "hostComputer.tagsPlaceholder": "ae5f75d7948c98781df260faecff65d2d15f953b6e6eb728b7ae7844ecceec15",
+      "hostComputer.mode.isolated": "ee267cc55c90994ee177ed2b63d1be9c6517e13df2bc28fe254518a6fc54916d",
+      "hostComputer.mode.asIs": "0b7063fb79e06f4b66d23676294ac151040e5aa00bd5ec12a64a7b506657881e",
+      "hostComputer.badge": "2930f1158ab3db5fc9b073110e6bdd4cc1d3f0c2b694e469b385498404a904d0",
+      "hostComputer.shellOnly": "c8f98e50cae571bfa44060bf8ca104397a1f611aac189f0c7c6f563c4e2961c2",
+      "hostComputer.offline": "a1794783aab72d205dc532b1170d1be63ebdce8816b57c21acb451c15dab969a",
+      "step.hostVm.provision": "eff7d0812d5fcf40eb60301a2b17df150299f65361a40c2c45655ea729b178ea",
+      "step.hostVm.rebuild": "123d3ddd8b85d4784a6c7e15efd4ecca4c4a54c17d1abfc59eca1753d0620490",
+      "step.hostVm.delete": "419d6839ada7ee2fe3af50e4e745ae5fc411a6c243ee5b2752f12c664757a56a",
+      "step.hostVm.status": "20dbb747e79a00a80113f8092262d7e155adeba3b13ab9d9d13640c020908856",
+      "step.hostVm.mode": "771d80ae9955b1baefc37dbaabfae8f82ea26fb3d279b6d0607eb20ddfe55722"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

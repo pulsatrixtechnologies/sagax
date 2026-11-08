@@ -19,6 +19,7 @@ import {
   type UnattendedHostOs,
   type UnattendedHostRow,
 } from "../../../shared/remote-unattended-host";
+import type { BotComputerHostView } from "../../../shared/bot-computer-host";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PAGE_ACTION_BUTTON, PageEmpty, PageMenuItem, PageSection } from "@/components/content-page";
 import { cn } from "@/lib/cn";
@@ -29,6 +30,8 @@ import { relativeTime } from "@/lib/memory";
 import { DeviceCardRow } from "./DeviceCardRow";
 import { DeviceRow, deviceRowKey } from "./MyDevicesList";
 import { setRemoteHostAccess } from "./remote-hosts-client";
+import { HostBotComputerMenuItems, HostBotComputerTags } from "./HostBotComputerControls";
+import { useHostComputers } from "@/lib/host-computers";
 import {
   openUnattendedHost,
   revokeUnattendedHost,
@@ -83,8 +86,11 @@ export function sortDeviceEntries(devices: readonly MyDevice[], hosts: readonly 
     .map(({ entry }) => entry);
 }
 
-function HostRow({ row, os, busy, onOpen, onRevoke, onError }: {
+function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotComputerChanged }: {
   row: UnattendedHostRow;
+  /** #2726: this host as a bot computer (toggle, tags, per-bot mode). */
+  botComputer: BotComputerHostView | null;
+  onBotComputerChanged: () => void;
   os?: UnattendedHostOs;
   busy: boolean;
   onOpen: (row: UnattendedHostRow) => void;
@@ -93,6 +99,7 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError }: {
 }) {
   const label = unattendedHostLabel(row);
   const [details, setDetails] = useState(false);
+  const [editingTags, setEditingTags] = useState(false);
   const [access, setAccess] = useState<UnattendedHostAccess>(row.access ?? "always");
   const [saving, setSaving] = useState(false);
   const choose = (next: UnattendedHostAccess) => {
@@ -132,9 +139,15 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError }: {
           {canRevokeUnattendedHost(row) && (
             <PageMenuItem icon={ShieldOff} data-unattended-host-revoke="" aria-disabled={busy || undefined} onClick={() => { if (busy) return; close(); onRevoke(row); }}>{t("remoteSessionsAdmin.hosts.revoke")}</PageMenuItem>
           )}
+          {row.state === "enrolled" && (
+            <HostBotComputerMenuItems hostId={row.hostId} host={botComputer} close={close}
+              onEditTags={() => setEditingTags(true)} onChanged={onBotComputerChanged} />
+          )}
           <PageMenuItem icon={Copy} data-unattended-host-copy="" title={row.hostId} onClick={() => { close(); void copyText(row.hostId); }}>{t("remoteSessionsAdmin.hosts.copyId")}</PageMenuItem>
         </>,
       }}>
+      <HostBotComputerTags hostId={row.hostId} host={botComputer} editing={editingTags}
+        onDone={() => setEditingTags(false)} onChanged={onBotComputerChanged} />
       {details && (
         <dl data-unattended-host-facts="" className="ml-12 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px] leading-[18px]">
           {facts.filter(([, value]) => value).map(([name, value]) => (
@@ -165,6 +178,8 @@ export function UnattendedHostsSection({ state, devices = [], osByHost, onOpened
   const [confirmRevoke, setConfirmRevoke] = useState<UnattendedHostRow | null>(null);
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Bot computers (#2726): the toggle, the tags and the isolated / as-is answers.
+  const botComputers = useHostComputers(hosts.length > 0);
 
   const open = async (row: UnattendedHostRow) => {
     setBusy(row.hostId);
@@ -210,7 +225,9 @@ export function UnattendedHostsSection({ state, devices = [], osByHost, onOpened
             : <HostRow key={`${entry.host.hostId}:${entry.host.access ?? ""}`} row={entry.host} busy={busy === entry.host.hostId}
                 os={entry.host.os ?? (entry.host.hostname ? osByHost?.get(entry.host.hostname.toLowerCase()) : undefined)}
                 onOpen={(row) => void open(row)} onRevoke={(row) => { setReason(""); setConfirmRevoke(row); }}
-                onError={() => setNotice({ kind: "access" })} />)}
+                onError={() => setNotice({ kind: "access" })}
+                botComputer={botComputers.hosts.find((host) => host.hostId === entry.host.hostId) ?? null}
+                onBotComputerChanged={() => botComputers.reload()} />)}
         </ul>
       )}
       {confirmRevoke && (

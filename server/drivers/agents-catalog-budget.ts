@@ -164,7 +164,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
     title: "Shared computers and remote sessions",
     tools: [
       "shared_computer", "list_shared_computers", "vm_exec",
-      "publish_remote_session", "remote_session_snapshot", "remote_session_exec",
+      "publish_remote_session", "remote_session_snapshot", "remote_session_exec", "host_computer",
     ],
   },
   {

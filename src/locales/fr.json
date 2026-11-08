@@ -14328,5 +14328,19 @@
   "pluginTeam.importOne": "Importer 1 bot",
   "pluginTeam.importMany": "Importer {count} bots",
   "pluginTeam.importing": "Importation…",
-  "approval.status.teamImported": "Équipe importée"
+  "approval.status.teamImported": "Équipe importée",
+  "hostComputer.aBot": "Un bot",
+  "hostComputer.use": "Utiliser comme ordinateur de bot",
+  "hostComputer.editTags": "Modifier les étiquettes",
+  "hostComputer.tagsPlaceholder": "Étiquettes, séparées par des virgules",
+  "hostComputer.mode.isolated": "Environnement isolé (VM sur cet hôte)",
+  "hostComputer.mode.asIs": "Utiliser l'hôte tel quel",
+  "hostComputer.badge": "Ordinateur de bot",
+  "hostComputer.shellOnly": "Shell seulement",
+  "hostComputer.offline": "Hors ligne",
+  "step.hostVm.provision": "Préparation de l'ordinateur isolé",
+  "step.hostVm.rebuild": "Reconstruction de l'ordinateur isolé",
+  "step.hostVm.delete": "Suppression de l'ordinateur isolé",
+  "step.hostVm.status": "Vérification de l'ordinateur isolé",
+  "step.hostVm.mode": "Choix de l'usage de l'ordinateur"
 }

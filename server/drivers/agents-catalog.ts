@@ -239,6 +239,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   computersTools.DEF_PUBLISH_REMOTE_SESSION,
   computersTools.DEF_REMOTE_SESSION_SNAPSHOT,
   computersTools.DEF_REMOTE_SESSION_EXEC,
+  computersTools.DEF_HOST_COMPUTER,
   phoneFamilyTools.DEF_JOIN_MEETING,
   coreTools.DEF_MEMORY_UPDATE,
   settingsFamilyTools.DEF_RULES_UPDATE,
@@ -597,8 +598,8 @@ export function knownAgentToolName(name: string): boolean {
   return everyAgentTool.has(name);
 }
 
-/** Tools of a Tailcat remote session (opened through Perspicax remote_support_*). */
-export const REMOTE_SESSION_TOOL_NAMES: ReadonlySet<string> = new Set(["publish_remote_session", "remote_session_snapshot", "remote_session_exec"]);
+/** Tools of a Tailcat remote session (opened through Perspicax remote_support_*), and the bot computer on an enrolled host that rides on it. */
+export const REMOTE_SESSION_TOOL_NAMES: ReadonlySet<string> = new Set(["publish_remote_session", "remote_session_snapshot", "remote_session_exec", "host_computer"]);
 
 function coreCatalogTools(profile: CatalogProfile) {
   const TOOLS = toolDefinitions(profile.externalRuntime);

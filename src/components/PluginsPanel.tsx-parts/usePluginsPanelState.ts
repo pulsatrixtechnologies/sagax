@@ -9,6 +9,7 @@ import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { viewerCan } from "@/lib/viewer";
 import type { SkillsLibrarySkillWire } from "../../../shared/wire";
 import { TAILSCALE_KEY, buildPluginItems, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
+import { readFeaturedCache, writeFeaturedCache } from "@/lib/featured-cache";
 import { fetchBotTailscale, type BotTailscaleView } from "@/lib/bot-tailscale";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
 import { grokProviderConfigured } from "@/lib/providers-model";
@@ -75,7 +76,7 @@ export function usePluginsPanelState() {
   const perspicaxOrg = usePerspicaxOrg();
   const organization = Boolean(serverMode?.active) || perspicaxOrg !== null;
   const mayManageOrganization = organization ? perspicaxOrg?.viewerRole === "admin" : ownerOrAdmin === true;
-  const [featured, setFeatured] = useState<FeaturedListing[] | null>(null);
+  const [featured, setFeatured] = useState<FeaturedListing[] | null>(() => readFeaturedCache());
   const [dataCenterFor, setDataCenterFor] = useState<{ item: PluginItem; regions: DataCenter[]; defaultUrl: string; anchor: HTMLElement } | null>(null);
   // Plugins > This Mac: only in the desktop app on macOS (never on Windows,
   // Linux or the web); solo reads the local server, an organization server
@@ -131,8 +132,12 @@ export function usePluginsPanelState() {
   const [botBusy, setBotBusy] = useState<string | null>(null);
 
   const loadFeatured = useCallback(() => api("/api/plugins/search?registry=0")
-    .then((result) => setFeatured(result.featured ?? []))
-    .catch(() => setFeatured([])), []);
+    .then((result) => {
+      const next: FeaturedListing[] = result.featured ?? [];
+      writeFeaturedCache(next);
+      setFeatured(next);
+    })
+    .catch(() => setFeatured((current) => current ?? [])), []);
   const skillsRoute: "/api/me/skills-library" | "/api/skills-library" = scope === "me" ? "/api/me/skills-library" : "/api/skills-library";
   const skillsRouteRef = useRef(skillsRoute);
   skillsRouteRef.current = skillsRoute;

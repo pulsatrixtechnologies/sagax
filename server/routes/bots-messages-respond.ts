@@ -12,6 +12,17 @@ import { resolveAndSendTerminal } from "../terminal/terminal-requests.ts";
 import type { BotsMessagesRouteDeps } from "./bots-messages-deps.ts";
 import { PASS, type RouteContext, type RouteHandler } from "./table.ts";
 
+function feedbackAnswer(deps: BotsMessagesRouteDeps, ctx: RouteContext, threadId: string, body: Record<string, any>): ReturnType<RouteContext["json"]> | undefined {
+  const requestId = String(body.requestId ?? "");
+  if (!deps.feedback?.answerCard || !requestId.startsWith("fb-")) return undefined;
+  const words = String(body.message ?? body.option ?? body.text ?? "");
+  const refusal = deps.cardAnswerRefusal(ctx.auth, threadId, requestId, "answer");
+  if (refusal) return ctx.json(ctx.res, 403, { error: refusal });
+  const answered = deps.feedback.answerCard(threadId, requestId, words, deps.actorPrincipalId?.(ctx.auth) || null);
+  if (!answered) return undefined;
+  return answered.ok ? ctx.json(ctx.res, 200, { ok: true }) : ctx.json(ctx.res, answered.status, { error: answered.error });
+}
+
 async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext): Promise<typeof PASS | void> {
   const { req, res, path, method, auth, json, readBody } = ctx;
   const {
@@ -37,6 +48,9 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
     if (source) {
       return handleThreadRespond(deps, { ...ctx, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
     }
+    // #2618: the Feedback bot's cards (Send / Cancel, kind, impact) are answered by its own flow
+    const feedbackDone = feedbackAnswer(deps, ctx, bot.threadId, body);
+    if (feedbackDone) return feedbackDone;
     const behavior = requestBehavior(body.behavior);
     const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
     if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });
@@ -190,6 +204,9 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
     if (source) {
       return handleThreadRespond(deps, { ...ctx, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
     }
+    // #2618: the Feedback bot's cards (Send / Cancel, kind, impact) are answered by its own flow
+    const feedbackDone = feedbackAnswer(deps, ctx, threadId, body);
+    if (feedbackDone) return feedbackDone;
     const behavior = requestBehavior(body.behavior);
     const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
     if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });

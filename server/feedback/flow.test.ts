@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { feedbackAnswers, feedbackLanguage, isVague, nextFeedbackStep, openFeedbackStep, parseKind, type FlowMessage } from "./flow.ts";
+import { isCancelOption, isSendOption, feedbackAnswers, feedbackLanguage, isVague, nextFeedbackStep, openFeedbackStep, parseKind, type FlowMessage } from "./flow.ts";
 
 function bot(step: FlowMessage["feedback"], message: Omit<FlowMessage, "role" | "feedback">): FlowMessage {
   return { role: "bot", feedback: step, ...message };
@@ -66,5 +66,14 @@ describe("feedback flow", () => {
     expect(isVague("Le bouton Enregistrer ne fait rien")).toBe(false);
     expect(feedbackLanguage("Ça marche pas quand je clique")).toBe("fr");
     expect(feedbackLanguage("It does not work when I click")).toBe("en");
+  });
+});
+
+describe("free confirmations", () => {
+  it("recognizes loose send and cancel phrases but not long sentences", () => {
+    for (const text of ["Oui, envoie-le", "go", "envoie", "send it", "Yes, send"]) expect(isSendOption(text, true)).toBe(true);
+    for (const text of ["non", "ne l'envoie pas", "annule"]) { expect(isSendOption(text, true)).toBe(false); expect(isCancelOption(text, true)).toBe(true); }
+    expect(isSendOption("Oui mais il faut aussi mentionner que le bouton est gris sur mobile quand on revient", true)).toBe(false);
+    expect(isSendOption("go", false)).toBe(false);
   });
 });

@@ -18252,7 +18252,6 @@
       "chat.relayVia.trace.stopped": "2e3feaa7d0e9c2ecad6a02056826e5f2bca7849125ff6059212962254f6ca2be",
       "chat.relayVia.trace.silent": "5ee5a40f9c7cda5a65b8f2238d8bec461c10cc5e49488d91ace7d88e70223cf4",
       "approvals.openChat": "16a8c2b6a394b33fbd89b8de638c86f8ca17cb23f83cf9fc20fdd17305825511",
-      "approvals.openChatGeneric": "a14864f36f3b530b508e0e572ec7705b11581b5b3b61eb055567a360f8c21921",
       "approvals.journal.openChat": "16a8c2b6a394b33fbd89b8de638c86f8ca17cb23f83cf9fc20fdd17305825511",
       "skillRequest.viewSkillMd": "07b799d6370dfcb357b48218cc6b365cc3d1113770ba61a05a56d606a3eea377",
       "skillRequest.hideSkillMd": "996c455819a83633cf139d6e4efc8b06837fcf85bec1394fb121ed71633f5a53",

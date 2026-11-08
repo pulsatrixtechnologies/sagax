@@ -54,7 +54,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     macAppsVisible, macAppsSetup, skills, panelError, setPanelError, panelNotice,
     scopeBot, setScopeChoice, scope, scopedPluginView, orgRevision, botCapabilities, botView,
     skillsLibraryOn, close, shownMarketplaces, grokConfigured, items, scopedItems,
-    refreshAll, refreshing, chooseTab,
+    refreshAll, refreshing, chooseTab, featured,
   } = s;
   const {
     openItem, installFeatured, marketRoute, addMarketplace, setMarketplaceVisibility, refreshMarketplace,
@@ -274,6 +274,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
             <DiscoverView
               items={discoverItems(scopedItems, state.pluginsFocusApps ?? undefined)}
               loading={mcp.servers === null || (scope !== "workspace" && scopedPluginView === null)}
+              catalogPending={featured === null}
               filter={filter}
               onFilter={setFilter}
               type={type}

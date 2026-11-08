@@ -80,6 +80,16 @@ final class LiveActivityPushTests: XCTestCase {
         XCTAssertTrue(LiveActivityTokenPlan.needsRegister(want: want, lastRegistered: [:]))
     }
 
+    func testUnregisterDeviceRequest() throws {
+        let removal = try client.unregisterLiveActivityDeviceRequest(deviceToken: "ABCD")
+        XCTAssertEqual(removal.httpMethod, "DELETE")
+        XCTAssertEqual(removal.url?.path, "/api/push/activities")
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: XCTUnwrap(removal.httpBody)) as? [String: String],
+            ["deviceToken": "abcd"]
+        )
+    }
+
     func testUnregisterRequest() throws {
         let removal = try client.unregisterLiveActivityTokenRequest(token: "ABCD")
         XCTAssertEqual(removal.httpMethod, "DELETE")

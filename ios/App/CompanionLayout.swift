@@ -22,8 +22,9 @@ enum CompanionLayout {
     static let headerWidth: CGFloat = 900
 
     /// The expanding island animation is anchored to iPhone hardware. On an
-    /// iPad it reads as an unexplained floating black card.
+    /// iPad it reads as an unexplained floating black card. Also off unless
+    /// Settings > Notifications > Live Activities (Dynamic Island) is on.
     static var supportsIslandPresentation: Bool {
-        UIDevice.current.userInterfaceIdiom == .phone
+        UIDevice.current.userInterfaceIdiom == .phone && LiveActivityPrefs.isEnabled
     }
 }

@@ -59,10 +59,12 @@ final class LiveActivityCoordinator {
         session.afterPushHydrate = { [weak self] state in
             await self?.apply(state, knowledge: .background)
         }
-        listenForPushToStartToken()
-        // Adopt tokens for activities that survived a relaunch.
-        for activity in Activity<BotActivityAttributes>.activities {
-            watchPushToken(activity)
+        if LiveActivityPrefs.isEnabled {
+            listenForPushToStartToken()
+            // Adopt tokens for activities that survived a relaunch.
+            for activity in Activity<BotActivityAttributes>.activities {
+                watchPushToken(activity)
+            }
         }
         cancellable = session.statePublisher
             .combineLatest(session.$isDemo, session.$status.map { $0 == .live }.removeDuplicates())
@@ -123,8 +125,65 @@ final class LiveActivityCoordinator {
         await pass.value
     }
 
+    /// Settings > Notifications > Live Activities changed. Off: end every
+    /// activity now, stop listening for tokens and take this phone's tokens
+    /// off the server (no more liveactivity push, no push-to-start). On:
+    /// listen again and run a pass.
+    func preferenceChanged() async {
+        if LiveActivityPrefs.isEnabled {
+            listenForPushToStartToken()
+            for activity in Activity<BotActivityAttributes>.activities { watchPushToken(activity) }
+            guard let session else { return }
+            await apply(session.isDemo ? CompanionState() : session.state, knowledge: Self.knowledge(live: session.status == .live))
+            return
+        }
+        pushToStartTask?.cancel()
+        pushToStartTask = nil
+        for task in tokenTasks.values { task.cancel() }
+        tokenTasks.removeAll()
+        await endAll()
+        let tokens = Array(registeredTokens.keys)
+        registeredTokens.removeAll()
+        guard session?.isDemo != true, let active = PushRegistrar.shared.activeClient?() else { return }
+        for token in tokens { try? await active.client.unregisterLiveActivityToken(token: token) }
+        if let device = PushRegistrar.shared.deviceToken {
+            try? await active.client.unregisterLiveActivityDevice(deviceToken: device)
+        }
+    }
+
+    /// Installs that registered tokens before the switch existed: once the
+    /// server is reachable, take this phone's tokens off it.
+    private func purgeServerTokensOnce() async {
+        let flag = "companion.prefs.liveActivities.purged0865"
+        guard !UserDefaults.standard.bool(forKey: flag), session?.isDemo != true,
+              let active = PushRegistrar.shared.activeClient?(),
+              let device = PushRegistrar.shared.deviceToken else { return }
+        if (try? await active.client.unregisterLiveActivityDevice(deviceToken: device)) != nil {
+            UserDefaults.standard.set(true, forKey: flag)
+        }
+    }
+
+    private func endAll() async {
+        let previous = running
+        let pass = Task { @MainActor [weak self] in
+            await previous?.value
+            for activity in Activity<BotActivityAttributes>.activities {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
+            self?.lastSent.removeAll()
+            self?.lastKnowledge = nil
+        }
+        running = pass
+        await pass.value
+    }
+
     private func pass(_ state: CompanionState, knowledge: LiveActivityPlan.Knowledge) async {
         let activities = Activity<BotActivityAttributes>.activities
+        guard LiveActivityPrefs.isEnabled else {
+            for activity in activities { await activity.end(nil, dismissalPolicy: .immediate) }
+            await purgeServerTokensOnce()
+            return
+        }
         guard ActivityAuthorizationInfo().areActivitiesEnabled || !activities.isEmpty else { return }
         let wants = wants(from: state)
         let forceRefresh = lastKnowledge != knowledge
@@ -219,7 +278,7 @@ final class LiveActivityCoordinator {
     }
 
     private func registerToken(_ want: LiveActivityTokenPlan.Want) async {
-        guard let session, !session.isDemo else { return }
+        guard LiveActivityPrefs.isEnabled, let session, !session.isDemo else { return }
         guard let active = PushRegistrar.shared.activeClient?() else { return }
         guard LiveActivityTokenPlan.needsRegister(want: want, lastRegistered: registeredTokens) else { return }
         let frequent = ActivityAuthorizationInfo().frequentPushesEnabled
@@ -282,6 +341,11 @@ final class LiveActivityBridge {
     func sceneChanged(active: Bool) {
         guard #available(iOS 16.2, *), let coordinator = coordinator as? LiveActivityCoordinator else { return }
         coordinator.sceneChanged(active: active)
+    }
+
+    func preferenceChanged() async {
+        guard #available(iOS 16.2, *), let coordinator = coordinator as? LiveActivityCoordinator else { return }
+        await coordinator.preferenceChanged()
     }
 
     func attach(to session: Session) {

@@ -29,6 +29,25 @@ enum AttentionPrefs {
     }
 }
 
+/// Settings > Notifications > Live Activities (Dynamic Island). Off by
+/// default (JC 2026-11-08), for new installs and, once, for existing ones.
+enum LiveActivityPrefs {
+    static let key = "companion.prefs.liveActivities"
+    private static let migratedKey = "companion.prefs.liveActivities.off0865"
+
+    static var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: key) as? Bool ?? false
+    }
+
+    /// Existing installs: force off one time. Call at launch.
+    static func migrateOnce() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: migratedKey) else { return }
+        defaults.set(false, forKey: key)
+        defaults.set(true, forKey: migratedKey)
+    }
+}
+
 /// The approval banner's own sound. On unless this phone turned it off.
 enum ApprovalChime {
     static var isEnabled: Bool {
@@ -157,6 +176,7 @@ struct NotificationsSettingsView: View {
     @AppStorage(AttentionPrefs.nudgeSoundKey) private var nudgeSound = true
     @AppStorage(AttentionPrefs.nudgeHapticKey) private var nudgeHaptic = true
     @AppStorage(AttentionPrefs.approvalChimeKey) private var approvalChime = true
+    @AppStorage(LiveActivityPrefs.key) private var liveActivities = false
     @AppStorage(ConnectionNoticePrefs.key) private var connectionNotices = ConnectionNoticePrefs.defaultValue
 
     var body: some View {
@@ -220,6 +240,18 @@ struct NotificationsSettingsView: View {
                 )
             }
             .task { await NotificationSounds.pull(session) }
+            SettingsSpacer(SettingsMetrics.cardGap)
+            SettingsCard {
+                SettingsRow(
+                    title: "Live Activities (Dynamic Island)",
+                    subtitle: "Show a bot that works or needs you, with its Allow and Deny buttons, in the Dynamic Island and on the lock screen.",
+                    accessory: .toggle(Binding(get: { liveActivities }, set: { value in
+                        liveActivities = value
+                        Task { await LiveActivityBridge.shared.preferenceChanged() }
+                    })),
+                    identifier: "settings-live-activities"
+                )
+            }
             SettingsSpacer(SettingsMetrics.cardGap)
             SettingsCard {
                 SettingsRow(

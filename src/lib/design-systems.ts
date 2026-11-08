@@ -143,18 +143,21 @@ export function designScreens(content: string): Array<{ name: string; device: st
  * per sheet. A body holding screens becomes the canvas (:has), so the bot's
  * own <body> markup stays as written. */
 export const DESIGN_CANVAS_CSS = [
-  "html{background:var(--color-inset,#f4f4f5)}",
+  "html{background:var(--secondary,#f4f4f5)}",
   "body:has(>section[data-screen]){margin:0;min-height:100vh;padding:56px 40px;box-sizing:border-box;display:flex;flex-wrap:wrap;gap:72px 48px;align-items:flex-start;justify-content:center;",
-  "background-color:var(--color-inset,#f4f4f5);background-image:radial-gradient(color-mix(in srgb,var(--color-ink,#111) 14%,transparent) 1px,transparent 1px);background-size:20px 20px}",
+  "background-color:var(--secondary,#f4f4f5);background-image:radial-gradient(color-mix(in srgb,var(--foreground,#111) 14%,transparent) 1px,transparent 1px);background-size:20px 20px;",
+  // the canvas follows the skin; the screen label keeps the canvas ink, read
+  // here before a screen sets the frame's ink to its own
+  "--canvas-label:var(--muted-foreground,#555);--canvas-edge:color-mix(in srgb,var(--foreground,#111) 12%,transparent)}",
   "body:has(>section[data-screen])>section[data-screen]{position:relative;flex:none;box-sizing:border-box;width:390px;min-height:844px;overflow:hidden;",
   "background:var(--bg,#fff);color:var(--fg,#111);font-family:var(--font-body,inherit);",
   // the frame theme colors headings and quiet text with its own ink: inside a
   // screen that ink is the screen's, or a dark skin writes white on white
   "--foreground:var(--fg,#111);--card-foreground:var(--fg,#111);--muted-foreground:var(--fg-2,#555);",
-  "border-radius:36px;box-shadow:0 0 0 1px color-mix(in srgb,var(--color-ink,#111) 12%,transparent),0 24px 60px rgba(0,0,0,.14)}",
+  "border-radius:36px;box-shadow:0 0 0 1px var(--canvas-edge,rgba(0,0,0,.12)),0 24px 60px rgba(0,0,0,.14)}",
   "body:has(>section[data-screen])>section[data-device=tablet]{width:820px;min-height:1180px;border-radius:24px}",
   "body:has(>section[data-screen])>section[data-device=desktop]{width:1280px;min-height:800px;border-radius:12px}",
-  "body:has(>section[data-screen])>section[data-screen]::before{content:attr(data-screen);position:absolute;top:-28px;left:4px;font:500 13px/18px Geist,system-ui,sans-serif;color:var(--color-ink-secondary,#555);white-space:nowrap}",
+  "body:has(>section[data-screen])>section[data-screen]::before{content:attr(data-screen);position:absolute;top:-28px;left:4px;font:500 13px/18px Geist,system-ui,sans-serif;color:var(--canvas-label,#555);white-space:nowrap}",
   "body:has(>section[data-screen])>section[data-screen]{overflow:visible}",
   "body:has(>section[data-screen])>section[data-screen]>*:first-child{border-top-left-radius:inherit;border-top-right-radius:inherit}",
   "@media print{html,body:has(>section[data-screen]){background:none}body:has(>section[data-screen]){display:block;padding:0}",

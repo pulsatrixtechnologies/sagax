@@ -127,6 +127,7 @@ describe("designs (#2717)", () => {
     const sagax = BUILTIN_DESIGN_SYSTEMS.find((system) => system.id === "sagax")!;
     // the app's --color-* names are not defined in the page frame
     expect(Object.values(sagax.tokens).join(" ")).not.toContain("--color-");
+    expect(DESIGN_CANVAS_CSS).not.toContain("--color-");
     for (const [name, value] of Object.entries(sagax.tokens)) expect(value).not.toContain(`var(${name},`);
     expect(DESIGN_CANVAS_CSS).toContain("--foreground:var(--fg,#111)");
   });

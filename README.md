@@ -76,9 +76,10 @@ approval card in the chat, and you decide how much each bot may do on its own.
 
 Each bot keeps a single running conversation; **New topic** starts fresh
 context while earlier topics stay one scroll up. The composer stays free
-while the bot works, a message sent mid-turn is taken into account, and
-"wait" stops it right away. Drag a bot, a group or a thread onto the
-conversation to open it beside the main chat.
+while the bot works, a message sent mid-turn gets its own reply once the
+current one is done, and "wait" stops it right away. The model picker sits
+in the chat bar and applies to every thread of the bot. Drag a bot, a group
+or a thread onto the conversation to open it beside the main chat.
 
 <p align="center">
   <picture>
@@ -102,15 +103,17 @@ character, a shape, a color and a skin for each bot, and a skin for the app.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/readme/appearance-light.png">
-    <img src="docs/readme/appearance-dark.png" alt="Edit bot, Appearance: the mascot editor with its Mascot, Shape, Color and Skin tabs and a live preview" width="900">
+    <img src="docs/readme/appearance-dark.png" alt="The appearance of a bot on its page: the mascot editor with its Mascot, Shape, Color and Skin choices and a live preview" width="900">
   </picture>
 </p>
 
 ### Groups of people and bots
 
-Mention a bot with `@` and it joins in. Give the group a goal and the bots
-work toward it in the group's own conversation. A group can also hold people
-only, and you can leave a group you were added to.
+Mention a bot with `@` and it joins in; `stop @Bot` halts it. Give the group
+a goal and the bots work toward it in the group's own conversation. A group
+can also hold people only, and you can leave a group you were added to. When
+a bot needs to write to someone, it does so in a group of you, that person
+and the bot, never from nowhere.
 
 <p align="center">
   <picture>
@@ -122,9 +125,11 @@ only, and you can leave a group you were added to.
 ### Routines, the daily brief and your phone
 
 Run work once, on weekdays, every few minutes, when a webhook or an email
-arrives, or only when a file or a command's output changes. Sort routines
-into folders; a routine that fails several times pauses itself. Every run
-lands on the Automations calendar. A **daily brief** runs in the background
+arrives, when a GitHub issue is opened or labeled or a review is requested,
+or only when a file or a command's output changes. Sort routines into
+folders; a routine that fails several times pauses itself. A fixed-time
+reminder costs nothing: no model turn, just the message. Every run lands on
+the Automations calendar. A **daily brief** runs in the background
 and reaches you where you are. With **Reach me**, a bot asks its questions
 outside the app: push notification, text message, Teams or Telegram. With a
 phone line, people can call your bot or text it, and a text becomes a turn of
@@ -147,27 +152,32 @@ and on iOS. ([voice](docs/voice-mode-xai.md))
 
 ### Engines, models and connectors
 
-Settings > Models shows what is signed in and what needs setup. **Auto model**
-picks the model for each turn, by task. Connect Apps brings your Claude and
-Grok connectors, MCP servers, plugins and skills to your bots, for everyone
-or for one bot, and `run_with_engine` hands part of a task to another engine.
-Other AI clients can send work to your bots through Sagax's own MCP server.
-([engines](docs/custom-engines.md), [your MCP servers](docs/custom-mcp-servers.md),
-[Sagax as an MCP server](docs/mcp-server.md))
+Settings > Providers shows what is signed in and what needs setup; an
+engine signs in from the app with a one-time code, GitHub too, from any
+chat. Settings > Models sets the model of every bot in one table, and
+**Auto model** picks the model for each turn, by task. A **team** sets the
+model and the computer for all its bots, with a per-bot override, and a
+Claude Code plugin imports as a whole team. The Plugins panel brings your
+Claude and Grok connectors, MCP servers, plugins and skills to your bots,
+for everyone or for one bot, and `run_with_engine` hands part of a task to
+another engine. Skills revise themselves and propose their changes in one
+click. Other AI clients can send work to your bots through Sagax's own MCP
+server. ([engines](docs/custom-engines.md), [your MCP servers](docs/custom-mcp-servers.md),
+[Sagax as an MCP server](docs/mcp-server.md), [teams](docs/team-sharing.md))
 
 <table>
 <tr>
 <td width="50%" valign="top">
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/readme/models-light.png">
-  <img src="docs/readme/models-dark.png" alt="Settings, Models: Auto model, Codex and Claude Code signed in, and keys to add for other providers" width="100%">
+  <img src="docs/readme/models-dark.png" alt="Settings, Models: the model and the backup of every bot in one table, and the defaults for new bots" width="100%">
 </picture>
-<p align="center"><sub>Auto model, and the engines you already pay for.</sub></p>
+<p align="center"><sub>One table for every bot's model, with Auto model and the engines you already pay for.</sub></p>
 </td>
 <td width="50%" valign="top">
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/readme/connect-apps-light.png">
-  <img src="docs/readme/connect-apps-dark.png" alt="Connect Apps, Providers tab: the connectors of your Claude account and of your Grok account, and the switch to use your Claude Code MCP servers" width="100%">
+  <img src="docs/readme/connect-apps-dark.png" alt="The Plugins panel: the connectors of your Claude account and of your Grok account, then the plugins recommended for you" width="100%">
 </picture>
 <p align="center"><sub>Your Claude and Grok connectors, served to every bot.</sub></p>
 </td>
@@ -190,14 +200,26 @@ kept.
   </picture>
 </p>
 
-### Every bot gets a panel, a library and a computer
+### Every bot gets a page, a panel and a computer
 
-Open a bot's panel for its details, suggestions, coding branches, routines,
-files and screen. A bot's computer is an isolated Linux desktop on your
-machine (Local VM), your own computer through computer use, or an isolated
-server environment. Watch the screen live and take control at any time.
-Memory recalls by meaning, not only by words. ([computer use](docs/computer-use-integration.md),
+A bot's page fills the main area: its appearance on top, then clear rows
+that each open a sub-page (instructions, memory, skills, routines, library,
+sharing) and a Stats tab with usage by account, model, source and person
+over 7, 30 or 90 days. The panel beside the conversation keeps the live
+view: suggestions, the Coding tab with its pull requests, branches and
+connectors, routines, files and the screen. A bot's computer is an isolated
+Linux desktop on your machine (Local VM), your own computer through computer
+use, or an isolated server environment; idle environments hibernate on
+their own. Watch the screen live and take control at any time. Memory
+recalls by meaning, not only by words. ([computer use](docs/computer-use-integration.md),
 [server environments](docs/user-sandbox.md), [memory](docs/memory.md))
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/readme/bot-page-light.png">
+    <img src="docs/readme/bot-page-dark.png" alt="The page of the bot Pixel in the main area: its mascot and name on top, the General tab with rows for instructions, memory, skills and routines, and the Knowledge and Stats tabs" width="900">
+  </picture>
+</p>
 
 <p align="center">
   <picture>
@@ -238,8 +260,10 @@ purchases show up as cards with a result.
 
 Follow work, answer approvals, call your bots and manage their routines from
 your phone. Each bot keeps the same single conversation as on the desktop.
-Notifications carry the bot's mascot, on the phone and on the watch.
-([iOS app](docs/ios-companion.md))
+Notifications carry the bot's mascot, on the phone and on the watch, and a
+Live Activity can follow a running task from the lock screen (off by
+default). One tap opens every OS permission still missing, and shaking the
+phone opens a feedback report. ([iOS app](docs/ios-companion.md))
 
 <table>
 <tr>
@@ -290,11 +314,21 @@ Notifications carry the bot's mascot, on the phone and on the watch.
 ### And more
 
 - **Rich answers.** Tables, charts with their source, diagrams, PDF and Excel
-  files, interactive widgets, video and voice notes, right in the chat.
+  files, interactive widgets, GIFs, video and voice notes, right in the chat.
 - **Confidential threads.** A thread only its owner can read, kept out of
   search and backups. ([confidential threads](docs/confidential-threads.md))
-- **Import an agent.** Start a bot from a Grok or a Claude Code agent you
-  already have. ([import](docs/import-agent.md))
+- **Import an agent.** Start a bot from a Grok, Claude Code or Hermes agent
+  you already have. ([import](docs/import-agent.md))
+- **Feedback in one click.** A shared Feedback bot takes a problem or an
+  idea, shows the anonymized report, and sends it. From the sidebar footer,
+  the Help menu (Cmd/Ctrl+Shift+F), `/feedback` in any chat or any error card.
+- **My devices.** Every Sagax install of yours, with bot access set per
+  device. Unattended remote access keeps a computer reachable for its bots.
+  ([remote sessions](docs/remote-sessions.md))
+- **Developer, when you need it.** MCP, tokens, webhooks, logs, embeddings,
+  the working folder and zip export live in Settings > Developer, with
+  OpenTelemetry traces, OTLP export and a usage stats API.
+  ([agent API](docs/agent-api.md))
 - **Headless too.** `sagax` on the command line gives a task, waits for the
   answer, backs up and restores. ([CLI](docs/cli-onboarding.md))
 - **Ten languages,** including English, French, German, Spanish, Portuguese,
@@ -320,7 +354,7 @@ Get the latest build from the
   **Run anyway**.
 - Your bots need at least one engine installed and signed in, such as
   [Claude Code](https://claude.com/claude-code) or
-  [Codex](https://github.com/openai/codex). Settings > Models shows what is
+  [Codex](https://github.com/openai/codex). Settings > Providers shows what is
   ready and helps with the rest.
 - Updates come only from this repository's releases. Pre-releases are opt in,
   in Settings > Updates.

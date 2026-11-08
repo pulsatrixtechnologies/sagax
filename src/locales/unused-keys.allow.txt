@@ -100,7 +100,6 @@ botPanel.rules.action
 botPanel.voice.hostUnsetTitle
 botSettings.nav.computer
 botSettings.nav.overview
-botZip.export
 browser.control.handBack
 browser.control.keptHint
 browser.control.take

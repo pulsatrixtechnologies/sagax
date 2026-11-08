@@ -3,8 +3,8 @@
  * ?lang=<code>&skin=<id>&view=notices|json|engine-limit|bot-pill&used=<weekly percent> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { GroupCostNotice, WeeklyLimitNotice } from "../components/ChatUsageNotices";
-import { EngineLimitNotice } from "../components/LimitResetContinue";
+import { GroupCostNotice } from "../components/ChatUsageNotices";
+import { EngineLimitIndicator } from "../components/LimitResetContinue";
 import { ComposerSendBlock } from "../components/ComposerSendBlock";
 import { BotChatHeader, BotHeaderPill } from "../components/BotHeaderPill";
 import { JsonViewer } from "../components/JsonViewer";
@@ -103,8 +103,10 @@ function Gallery() {
               />
             </div>
           </div>
-          <div className="chat-banners pt-[52px]">
-            <EngineLimitNotice engine="grok" botId="scout" threadId="t-scout" />
+          <div className="chat-banners pt-[52px]" />
+          <div className="relative mx-5 w-fit rounded-lg border border-hairline/40 bg-panel px-3 py-1.5 text-[13px]" data-gallery-model-chip>
+            Grok
+            <EngineLimitIndicator engine="grok" botId="scout" threadId="t-scout" />
           </div>
           {/* At the limit the top banner is gone (JC 2026-11-06): the line above
               the composer says it and carries "Continue at <reset>". */}
@@ -126,8 +128,6 @@ function Gallery() {
     <div data-gallery className="min-h-screen bg-canvas p-6 text-ink">
       <div className="mx-auto max-w-[760px]">
         <GroupCostNotice group={{ memberIds: ["a", "b"] }} />
-        <WeeklyLimitNotice />
-        <EngineLimitNotice engine="grok" botId="scout" threadId="t-scout" />
       </div>
     </div>
   );

@@ -39,6 +39,8 @@ import { BotAnalyticsSection } from "./BotAnalyticsSection";
 import { VisibilitySection } from "./VisibilitySection";
 import { SharingSection } from "./SharingSection";
 import { BotPayerCard } from "./BotPayerSettings";
+import { PaneSection } from "./PaneSection";
+import { SwitchRow } from "../SettingsPrimitives";
 import { TeamBotVaultSection } from "./TeamBotVaultSection";
 import { AppearancePane } from "../appearance/AppearancePane";
 import type { PromptPreviewData } from "./PromptPreview";
@@ -307,13 +309,36 @@ export function useBotSectionContent(bot: Bot, {
         if (!canEditBotField(config, bot, "soul")) return null;
         return <WorkspaceFilesSection bot={bot} active={expanded && section === "files"} onOpenSection={onOpenSection} memoryEditable={canEditBotField(config, bot, "memoryEnabled")} />;
       case "routines":
-        return <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} />;
+        // #2622: the owner decides whether the people the bot is shared
+        // with may create routines on it (absent = they may).
+        return (
+          <>
+            {canEditBotField(config, bot, "collaboratorsCreateRoutines") && (
+              <PaneSection>
+                <SwitchRow
+                  label={t("botPanel.routines.collaboratorsCreate")}
+                  description={t("botPanel.routines.collaboratorsCreateHint")}
+                  checked={bot.collaboratorsCreateRoutines !== false}
+                  onChange={(next) => derived.patch({ collaboratorsCreateRoutines: next })}
+                />
+              </PaneSection>
+            )}
+            <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} />
+          </>
+        );
       case "access":
         return <AccessSection bot={bot} derived={derived} />;
       case "worksOn":
         return <WorksOnSetting bot={bot} />;
       case "model":
-        return <ModelSection bot={bot} />;
+        // #2625: who pays for the replies sits with the engine that answers
+        // (the canvas's Model sub-page), its one place.
+        return (
+          <>
+            <ModelSection bot={bot} />
+            <BotPayerCard bot={bot} />
+          </>
+        );
       case "permissions":
         return <PermissionsSection bot={bot} derived={derived} />;
       case "voice":
@@ -326,8 +351,6 @@ export function useBotSectionContent(bot: Bot, {
         return (
           <>
             {!sharingElsewhere && <SharingSection bot={bot} />}
-            {/* #1137: who pays for the replies of the people it is shared with */}
-            <BotPayerCard bot={bot} />
             {Boolean(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(config, bot) || canSetBotHost(config, bot)) && (
               <TeamBotVaultSection botId={bot.id} botName={bot.name} />
             )}

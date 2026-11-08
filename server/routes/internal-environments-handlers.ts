@@ -5,7 +5,9 @@ import {
   autoComputerReason,
   autoComputerToolRefusal,
   COMPUTER_SELECT_TOOL,
+  MAX_AUTO_COMPUTER_SWITCHES,
   selectAutoComputer,
+  tooManyMovesText,
   type AutoComputerState,
 } from "../computer/auto-computer.ts";
 import { MY_CHROME_PROFILE, runMyChromeTool, toolName as browserToolName } from "../browser/my-chrome/pilot.ts";
@@ -32,7 +34,7 @@ import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools
 import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 import { UserSandboxUnavailable } from "../sandbox/user-sandbox-manager.ts";
 import { handleUserSandboxMcp } from "../sandbox/user-sandbox-tools.ts";
-import { inBotFolder } from "../sandbox/sandbox-bot-folder.ts";
+import { conversationTmpPath, inBotFolder } from "../sandbox/sandbox-bot-folder.ts";
 import type { SandboxExecInput } from "../sandbox/sandboxd-core.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
 import { PASS } from "./table.ts";
@@ -81,6 +83,8 @@ export interface ComputerSelectionSource {
   mounted?: string;
   selected?: string;
   previousSurface?: unknown;
+  /** #2763: moves this request made, the select_computer switch included. */
+  moves?: number;
 }
 
 export interface InternalEnvironmentsDeps {
@@ -176,7 +180,7 @@ export interface InternalEnvironmentsDeps {
   misuseTextRefusal(
     text: string,
     speakerId: string | undefined,
-    surface: "flow" | "mcp" | "shell" | "terminal" | "file",
+    surface: "flow" | "mcp" | "shell" | "terminal" | "file" | "desktop",
     meta?: { botId: string; threadId: string; tool?: string },
   ): string | null;
   misusePathRefusal(path: string, meta: { triage: boolean; principalId?: string; botId: string; threadId: string; tool: string; cwd?: string }): { message: string } | null;
@@ -199,6 +203,7 @@ export interface InternalEnvironmentsDeps {
     botId: string;
     review?: (prompt: string, signal?: AbortSignal) => Promise<string>;
     ownEnvironment?: boolean;
+    ownComputer?: boolean;
   }): Promise<string | null>;
   // index casts SafetySurface; keep surface as string here to avoid coupling.
   samePerson(a: string | null | undefined, b: string | null | undefined): boolean;
@@ -358,7 +363,15 @@ async function handleComputerSelect(deps: InternalEnvironmentsDeps, ctx: Interna
           : "This computer is already selected. It starts on its first call; use its mounted tools.",
       });
     }
+    // #2763: select_computer is a move too, and the request keeps its count
+    // into the continuation turn: a third move is refused whatever the tool.
+    const workplace = deps.turnWorkplace(capability.threadId);
+    const movedSoFar = workplace && workplace.generation === capability.generation ? workplace.auto?.switches ?? 0 : 0;
+    if (movedSoFar >= MAX_AUTO_COMPUTER_SWITCHES) {
+      return json(res, 409, { error: tooManyMovesText(movedSoFar, workplace?.auto?.language) });
+    }
     deps.setComputerSelected(capability.threadId, bot.id, option.surface);
+    source!.moves = movedSoFar + 1;
   }
   return json(res, 200, {
     status: "pending",
@@ -520,9 +533,11 @@ async function handleSandboxMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
     const result = await deps.handleUserSandboxMcp(rpcMethod, frame?.params, {
       exec: (input) => {
         const placed = deps.withCommandVariables(input as never, deps.commandVariablesFor(capability.botId, capability.threadId, ownerId)) as SandboxExecInput;
-        return deps.userSandboxExec(ownerId, folder ? inBotFolder(placed, folder) : placed, capability.botId) as never;
+        return deps.userSandboxExec(ownerId, folder ? inBotFolder(placed, folder, capability.threadId) : placed, capability.botId) as never;
       },
       overQuota: async () => await deps.userSandboxOverQuota(ownerId, capability.botId),
+      // #2775: tmp/ of a file tool is this conversation's own folder.
+      conversationPath: (value) => conversationTmpPath(value, folder, capability.threadId),
       commandRefusal: (command) => deps.enginePluginCommandRefusal(command)
         ?? enginePluginCommandRefusal(command)
         ?? deps.misuseTextRefusal(command, ownerId, "shell", { botId: capability.botId, threadId: capability.threadId, tool: "run_command" }),
@@ -709,6 +724,9 @@ async function handleDesktopMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
         botId: capability.botId,
         review: deps.safetyReviewer(capability.botId),
         ownEnvironment: deps.samePerson(who.principalId ?? person, person),
+        // #2738: the desktop bridge runs on the person's computer, never on
+        // the Sagax server: the server's own file rules do not apply there.
+        ownComputer: true,
       });
       if (desktopHeld) return json(res, 200, { result: { content: [{ type: "text", text: desktopHeld }], isError: true } });
       await deps.stagePendingAttachments(capability.threadId, capability.generation);
@@ -766,12 +784,12 @@ async function handleDesktopMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
     }, {
       commandRefusal: (command) => deps.enginePluginCommandRefusal(command)
         ?? enginePluginCommandRefusal(command)
-        ?? deps.misuseTextRefusal(command, person, "shell", {
+        ?? deps.misuseTextRefusal(command, person, "desktop", {
           botId: capability.botId,
           threadId: capability.threadId,
           tool: "run_command",
         }),
-      payloadRefusal: (value) => deps.misuseTextRefusal(value, person, "shell", {
+      payloadRefusal: (value) => deps.misuseTextRefusal(value, person, "desktop", {
         botId: capability.botId,
         threadId: capability.threadId,
         tool: "desktop",
@@ -826,7 +844,7 @@ async function handleWorkplaceMcp(deps: InternalEnvironmentsDeps, ctx: InternalR
     Boolean(person && deps.desktopConnected(person)),
   );
   if (answer.ok && answer.target && answer.changed) {
-    const next = { ...workplace.auto, selected: answer.target };
+    const next = { ...workplace.auto, selected: answer.target, switches: (workplace.auto.switches ?? 0) + 1 };
     deps.setTurnWorkplaceAuto(capability.threadId, next);
     const reason = autoComputerReason(args.reason);
     deps.appendAdminAction({

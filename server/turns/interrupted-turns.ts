@@ -17,6 +17,35 @@ export interface InterruptedTurn {
   at: number;
   /** Who the cut turn spoke for (TurnSpeaker), carried to its resume. */
   speaker?: Record<string, unknown>;
+  /** #2602: the runtime holds this turn as a root and resumes it itself;
+   * kept here only so the next start can check the promise was kept. */
+  runtimeHeld?: boolean;
+}
+
+/** How long after a start a turn the runtime promised to resume may stay silent. */
+export const RUNTIME_RESUME_GRACE_MS = 2 * 60_000;
+export const TURN_NOT_RESUMED = "turn interrupted — Sagax restarted and this turn did not resume; send your request again";
+export const TURN_NOT_RESUMED_NEWER = "turn interrupted — Sagax restarted; a newer request took this conversation, so the cut turn was not resumed. Send it again if it is still needed";
+
+/** #2602: whether a turn cut at `cutAt` came back: a bot answer (not an
+ * activity line) after the cut and before the person's next message. */
+export function turnResumedSince(messages: readonly { role?: string; kind?: string; at?: number }[], cutAt: number): boolean {
+  for (const message of messages) {
+    if (typeof message.at !== "number" || message.at <= cutAt) continue;
+    if (message.role === "user") return false;
+    if (message.role === "bot" && message.kind !== "activity") return true;
+  }
+  return false;
+}
+
+/** What to do now with a turn the runtime promised to resume: wait while it
+ * is held or busy, say so once when it never came back, else nothing. */
+export function runtimeResumeVerdict(turn: InterruptedTurn, view: {
+  held: boolean; busy: boolean; messages: readonly { role?: string; kind?: string; at?: number }[];
+}): "wait" | "resumed" | "lost" {
+  if (turnResumedSince(view.messages, turn.at)) return "resumed";
+  if (view.held || view.busy) return "wait";
+  return "lost";
 }
 
 const FILE = "interrupted-turns.json";
@@ -90,7 +119,7 @@ export function takeInterruptedTurns(dataDir: string, now = Date.now()): { resum
     if (seen.has(t.threadId)) continue;
     seen.add(t.threadId);
     const speaker = t.speaker && typeof t.speaker === "object" && !Array.isArray(t.speaker) ? t.speaker : undefined;
-    const turn = { botId: t.botId, threadId: t.threadId, at: t.at, ...(speaker ? { speaker } : {}) };
+    const turn = { botId: t.botId, threadId: t.threadId, at: t.at, ...(speaker ? { speaker } : {}), ...(t.runtimeHeld === true ? { runtimeHeld: true } : {}) };
     (now - t.at > INTERRUPTED_TURN_MAX_AGE_MS || now < t.at - 60_000 ? out.stale : out.resume).push(turn);
   }
   return out;

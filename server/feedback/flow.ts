@@ -24,6 +24,9 @@ export interface FlowCard {
   answered?: string;
   dismissed?: boolean;
   requestId?: string;
+  /** A question card: Sagax's approval queue and the MCP list it. */
+  requestType?: "question";
+  answeredText?: string;
 }
 
 export interface FlowMessage {
@@ -170,8 +173,7 @@ export function feedbackAnswers(messages: readonly FlowMessage[], reportId: stri
     } else if (marker.step === "impact") answers.impact = text;
     else if (marker.step === "followup") answers.followups.push({ field: marker.field ?? "describe", question: asked?.text ?? "", answer: text });
     else if (marker.step === "preview" || marker.step === "offer") {
-      const options = [...SEND_OPTIONS.fr, ...SEND_OPTIONS.en, ...OFFER_OPTIONS.fr, ...OFFER_OPTIONS.en];
-      if (!options.includes(text)) answers.extra = [...(answers.extra ?? []), text];
+      if (!isSendOption(text, true) && !isCancelOption(text, true)) answers.extra = [...(answers.extra ?? []), text];
     } else if (marker.step === "steps" || marker.step === "expected" || marker.step === "actual" || marker.step === "describe") {
       answers[marker.step] = text;
     }
@@ -182,6 +184,7 @@ export function feedbackAnswers(messages: readonly FlowMessage[], reportId: stri
 
 /** The next question, or the preview once everything is known. */
 export function nextFeedbackStep(language: FeedbackLanguage, answers: FeedbackAnswers, reportId: string): FlowStep {
+  // the Feedback bot's own questionnaire, never a permission; full-access: exempt
   if (!answers.kind) return { kind: "ask", marker: { step: "kind", reportId }, message: { kind: "options", card: { ...KIND_CARD[language] } } };
   const fields = FIELDS[answers.kind];
   for (const field of fields) {
@@ -190,6 +193,7 @@ export function nextFeedbackStep(language: FeedbackLanguage, answers: FeedbackAn
     return { kind: "ask", marker: { step: field, reportId }, message: { kind: "text", text } };
   }
   if (answers.kind !== "question" && !answers.impact) {
+    // a question of the Feedback form, not a permission; full-access: exempt
     return { kind: "ask", marker: { step: "impact", reportId }, message: { kind: "options", card: { ...IMPACT_CARD[language] } } };
   }
   if (answers.followups.length < MAX_FOLLOWUPS) {
@@ -200,10 +204,27 @@ export function nextFeedbackStep(language: FeedbackLanguage, answers: FeedbackAn
   return { kind: "preview" };
 }
 
-export function isSendOption(text: string): boolean {
-  return [SEND_OPTIONS.fr[0], SEND_OPTIONS.en[0], OFFER_OPTIONS.fr[0], OFFER_OPTIONS.en[0]].includes(text.trim());
+function words(text: string): string[] {
+  return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+}
+const SEND_WORDS = new Set(["envoie", "envoies", "envoyer", "envoyez", "envoi", "send", "go", "oui", "yes", "yep", "yeah", "ok", "okay", "confirme", "confirmer", "confirm", "ouais", "parfait", "vas", "allez", "accord"]);
+const CANCEL_WORDS = new Set(["annule", "annuler", "annulez", "cancel", "non", "no", "nope", "stop", "abandonne", "abandon", "laisse", "tomber"]);
+const NEGATIONS = new Set(["pas", "ne", "n", "not", "dont", "don", "jamais", "never", "attends", "attend", "wait", ...CANCEL_WORDS]);
+
+/** The person's words mean "send": the exact button label, or (when `loose`,
+ * only at the preview question) a short free confirmation such as "Oui,
+ * envoie-le", "go" or "send it". Anything longer is a detail to add. */
+export function isSendOption(text: string, loose = false): boolean {
+  if ([SEND_OPTIONS.fr[0], SEND_OPTIONS.en[0], OFFER_OPTIONS.fr[0], OFFER_OPTIONS.en[0]].includes(text.trim())) return true;
+  if (!loose) return false;
+  const tokens = words(text);
+  return tokens.length > 0 && tokens.length <= 5 && tokens.some((token) => SEND_WORDS.has(token)) && !tokens.some((token) => NEGATIONS.has(token));
 }
 
-export function isCancelOption(text: string): boolean {
-  return [SEND_OPTIONS.fr[1], SEND_OPTIONS.en[1], OFFER_OPTIONS.fr[1], OFFER_OPTIONS.en[1]].includes(text.trim());
+export function isCancelOption(text: string, loose = false): boolean {
+  if ([SEND_OPTIONS.fr[1], SEND_OPTIONS.en[1], OFFER_OPTIONS.fr[1], OFFER_OPTIONS.en[1]].includes(text.trim())) return true;
+  if (!loose) return false;
+  const tokens = words(text);
+  if (tokens.length === 0 || tokens.length > 5) return false;
+  return tokens.some((token) => CANCEL_WORDS.has(token)) || (tokens.some((token) => SEND_WORDS.has(token)) && tokens.some((token) => NEGATIONS.has(token)));
 }

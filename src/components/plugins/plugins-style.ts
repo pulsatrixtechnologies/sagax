@@ -19,8 +19,8 @@ export const PLUGINS = {
   sectionLink: "text-[12px] text-ink-secondary hover:text-ink",
   /** "Installed", "Accounts", "Tools": gray labels over a list or a card */
   label: "text-[12px] leading-5 text-ink-secondary",
-  /** two columns of rows, no cards */
-  grid: "grid grid-cols-1 gap-x-8 md:grid-cols-2",
+  /** one column of rows, no cards (JC 2026-11-06: "Remove the two columns, stick to one", #2682) */
+  grid: "grid grid-cols-1",
   rowName: "block truncate text-[13.5px] leading-5 text-ink",
   rowSub: "block truncate text-[12.5px] leading-5 text-ink-secondary",
   /** a card with a subtle border on the window's own background */

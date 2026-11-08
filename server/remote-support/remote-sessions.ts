@@ -95,6 +95,9 @@ interface StoredSession {
   screenDenied?: boolean;
   /** When Sagax last tried to read the computer. */
   checkedAt?: number;
+  /** A bot computer (an enrolled host the person marked "Use as a bot
+   * computer"): no chat card, no panel row; reached by its id only. */
+  quiet?: boolean;
   createdAt: number;
 }
 
@@ -249,6 +252,7 @@ type RemoteSessionEnv = {
   inspect: (session: StoredSession) => Promise<void>;
   refresh: (session: StoredSession) => void;
   writeCard: (session: StoredSession) => void;
+  quietIds: Set<string>;
 };
 
 function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
@@ -274,6 +278,8 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
   };
   const file = path.join(deps.dataDir, FILE);
   let rows: StoredSession[] = [];
+  /** Sessions opened for a bot computer, marked before their first publish. */
+  const quietIds = new Set<string>();
   try {
     const parsed = JSON.parse(readFileSync(file, "utf8")) as { sessions?: StoredSession[] };
     if (Array.isArray(parsed.sessions)) rows = parsed.sessions.filter((row) => row && typeof row.id === "string");
@@ -408,6 +414,8 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
   }
 
   function writeCard(session: StoredSession) {
+    // a bot computer works without a Remote session card (host-computer-router.ts)
+    if (session.quiet || quietIds.has(session.id)) { session.quiet = true; return; }
     const view = viewOf(session);
     const bot = deps.store.bot(session.botId);
     const from = bot ? { botId: bot.id, name: bot.name, color: bot.color } : undefined;
@@ -463,6 +471,7 @@ function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
     inspect,
     refresh,
     writeCard,
+    quietIds,
   };
 }
 
@@ -476,8 +485,13 @@ function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
     principalFor(botId: string, threadId: string): string {
       return deps.owner(botId, threadId).trim().toLowerCase();
     },
+    /** The session opened for a bot computer stays out of the chat and the
+     * panel: no card, no row (server/remote-support/host-computer-router.ts). */
+    markQuiet(id: string): void {
+      env.quietIds.add(id.trim().toLowerCase());
+    },
     list(principalId: string, botId: string): RemoteSessionView[] {
-      const mine = rows.filter((row) => row.principalId === principalId && row.botId === botId && row.state === "connected");
+      const mine = rows.filter((row) => row.principalId === principalId && row.botId === botId && row.state === "connected" && !row.quiet && !env.quietIds.has(row.id));
       for (const row of mine) refresh(row);
       return mine.map(viewOf);
     },
@@ -756,6 +770,7 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
             hostLabel: hostLabel(session),
             label: "Session à distance",
             status: opened.status,
+            openedAt: opened.openedAt,
           },
         });
         return { hostLabel: hostLabel(session), messageId: message.id };
@@ -922,8 +937,10 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
       const wanted = input.id?.trim();
       const mine = rows.filter((row) => row.principalId === principalId && row.botId === input.botId && row.state === "connected");
       if (wanted) return mine.find((row) => row.id === wanted.toLowerCase() || row.code === wanted.toUpperCase().replace(/-/g, "")) ?? null;
-      const here = mine.filter((row) => row.threadId === input.threadId);
-      return here.find((row) => row.focused) ?? here[here.length - 1] ?? (mine.length === 1 ? mine[0]! : null);
+      // a bot computer's session is reached by its id only, never by default
+      const here = mine.filter((row) => row.threadId === input.threadId && !row.quiet);
+      const open = mine.filter((row) => !row.quiet);
+      return here.find((row) => row.focused) ?? here[here.length - 1] ?? (open.length === 1 ? open[0]! : null);
     },
     sessionDir(id: string) {
       return sessionDir(home(), id);

@@ -109,7 +109,7 @@ function profiles(): Record<string, Profile> {
 
 const PROFILES = profiles();
 /** Refused by the server to every bot that is not a Primary Bot. */
-const CHIEF_ONLY_TOOLS = ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "archive_bot", "create_room", "manage_room", "retry_thread"];
+const CHIEF_ONLY_TOOLS = ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "import_plugin_team", "archive_bot", "create_room", "manage_room", "retry_thread"];
 /** Their for_bot_id, changing another bot, is a Primary Bot's alone. */
 const CHIEF_TARGET_TOOLS = ["propose_profile", "propose_model"];
 const CHIEF_PROFILE_TARGET = " A Primary Bot may pass for_bot_id (from list_bots) for a requested change to any bot of its person.";
@@ -180,61 +180,66 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // measured wire.
 // 2026-11-06 (#2439): run_on_startup joins the routine tools; the eight direct
 // profiles move to the measured wire (about +280 bytes each).
+// 2026-11-07 (#2669): import_plugin_team joins the Primary Bot's team tools,
+// and the routine github trigger already on the base moved every profile;
+// baselines move to the measured wire.
+// 2026-11-07 (#2613): skills_find (best skills and plugins for a task across
+// every catalog) joins direct and room turns; baselines move to the measured wire.
 const BUDGET_BASELINE: Record<string, number> = {
   // #2118: message_user and message_person join the direct catalog (measured wire).
   // native-notifications: notify on post_to_room/message_user/message_person/send_to_bot
   // and set_reply_notify (the bot chooses per message whether it alerts; measured wire).
 
-  "direct": 100030,
-  "direct+voice": 100997,
-  "direct+shared": 102031,
-  "direct+shared+voice": 102998,
-  "direct+skills": 101652,
-  "direct+skills+voice": 102619,
-  "direct+skills+shared": 103653,
-  "direct+skills+shared+voice": 104620,
-  "room": 87787,
-  "room+voice": 88754,
-  "room+shared": 89788,
-  "room+shared+voice": 90755,
-  "room+skills": 89409,
-  "room+skills+voice": 90376,
-  "room+skills+shared": 91410,
-  "room+skills+shared+voice": 92377,
-  "room+own-thread": 89840,
-  "room+own-thread+voice": 90807,
-  "room+own-thread+shared": 91841,
-  "room+own-thread+shared+voice": 92808,
-  "room+own-thread+skills": 91462,
-  "room+own-thread+skills+voice": 92429,
-  "room+own-thread+skills+shared": 93463,
-  "room+own-thread+skills+shared+voice": 94430,
+  "direct": 103355,
+  "direct+voice": 104322,
+  "direct+shared": 105356,
+  "direct+shared+voice": 106323,
+  "direct+skills": 104977,
+  "direct+skills+voice": 105944,
+  "direct+skills+shared": 106978,
+  "direct+skills+shared+voice": 107945,
+  "room": 91984,
+  "room+voice": 92951,
+  "room+shared": 93985,
+  "room+shared+voice": 94952,
+  "room+skills": 93606,
+  "room+skills+voice": 94573,
+  "room+skills+shared": 95607,
+  "room+skills+shared+voice": 96574,
+  "room+own-thread": 94037,
+  "room+own-thread+voice": 95004,
+  "room+own-thread+shared": 96038,
+  "room+own-thread+shared+voice": 97005,
+  "room+own-thread+skills": 95659,
+  "room+own-thread+skills+voice": 96626,
+  "room+own-thread+skills+shared": 97660,
+  "room+own-thread+skills+shared+voice": 98627,
   // #2048: choose_page_target joins the catalog (measured wire).
-  "direct+non-chief": 89256,
-  "direct+voice+non-chief": 90223,
-  "direct+shared+non-chief": 91257,
-  "direct+shared+voice+non-chief": 92224,
-  "direct+skills+non-chief": 90878,
-  "direct+skills+voice+non-chief": 91845,
-  "direct+skills+shared+non-chief": 92879,
-  "direct+skills+shared+voice+non-chief": 93846,
+  "direct+non-chief": 91735,
+  "direct+voice+non-chief": 92702,
+  "direct+shared+non-chief": 93736,
+  "direct+shared+voice+non-chief": 94703,
+  "direct+skills+non-chief": 93357,
+  "direct+skills+voice+non-chief": 94324,
+  "direct+skills+shared+non-chief": 95358,
+  "direct+skills+shared+voice+non-chief": 96325,
   // 2026-11-06 #2519 (#2204 port): assignment_status joins the room catalog (measured wire).
-  "room+non-chief": 78899,
-  "room+voice+non-chief": 79866,
-  "room+shared+non-chief": 80900,
-  "room+shared+voice+non-chief": 81867,
-  "room+skills+non-chief": 80521,
-  "room+skills+voice+non-chief": 81488,
-  "room+skills+shared+non-chief": 82522,
-  "room+skills+shared+voice+non-chief": 83489,
-  "room+own-thread+non-chief": 80952,
-  "room+own-thread+voice+non-chief": 81919,
-  "room+own-thread+shared+non-chief": 82953,
-  "room+own-thread+shared+voice+non-chief": 83920,
-  "room+own-thread+skills+non-chief": 82574,
-  "room+own-thread+skills+voice+non-chief": 83541,
-  "room+own-thread+skills+shared+non-chief": 84575,
-  "room+own-thread+skills+shared+voice+non-chief": 85542,
+  "room+non-chief": 81142,
+  "room+voice+non-chief": 82109,
+  "room+shared+non-chief": 83143,
+  "room+shared+voice+non-chief": 84110,
+  "room+skills+non-chief": 82764,
+  "room+skills+voice+non-chief": 83731,
+  "room+skills+shared+non-chief": 84765,
+  "room+skills+shared+voice+non-chief": 85732,
+  "room+own-thread+non-chief": 83195,
+  "room+own-thread+voice+non-chief": 84162,
+  "room+own-thread+shared+non-chief": 85196,
+  "room+own-thread+shared+voice+non-chief": 86163,
+  "room+own-thread+skills+non-chief": 84817,
+  "room+own-thread+skills+voice+non-chief": 85784,
+  "room+own-thread+skills+shared+non-chief": 86818,
+  "room+own-thread+skills+shared+voice+non-chief": 87785,
   // Annotations on check_delegation / wait_delegation (read-only policy).
   // External runtime does not mount send_meme (or the rest of the agents catalog).
   // 2026-11-06 #2519 (#2204 port): coordinate_bots and assignment_status on external (measured wire).

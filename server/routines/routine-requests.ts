@@ -10,7 +10,7 @@ import { presentTiming, storedTiming } from "../../shared/routine-timing.ts";
 import { isTriggerSchedule } from "../../shared/routines.ts";
 import { cleanGithubEventSchedule, githubEventScheduleLabel, type RoutineGithubEventSchedule } from "../../shared/routine-github.ts";
 import { newId } from "../contracts.ts";
-import { SELF_ROUTINE_CAP, UNDO_STALE, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
+import { SELF_ROUTINE_CAP, UNDO_STALE, grantAfterQuote, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { loadRoutinePrecheck, parseRoutinePrecheck } from "./routine-precheck.ts";
 import type { RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
@@ -502,6 +502,9 @@ export interface ProposeRoutineRequestArgs {
   canCommit?: () => boolean;
   /** Safety review: do not apply a Full-access grant until the person accepts. */
   explicitConfirm?: boolean;
+  /** A quote was given and did not prove the ask: no quote fast path and no
+   * self grant, but Full access still applies (grantAfterQuote). */
+  quoteRefused?: boolean;
 }
 
 export interface RoutineProposalResult {
@@ -1707,7 +1710,7 @@ export class RoutineRequestService {
     if (args.from) messageInput.from = args.from;
     // Resolve the current source-thread grant after the asynchronous probe.
     const owner = operation.forBot?.botId ?? botId;
-    const grant = submitted ? (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(botId, threadId, owner) ?? null) : null;
+    const grant = submitted ? grantAfterQuote(args.quoteRefused ? (this.autoApply?.(botId, threadId, owner) ?? null) : (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(botId, threadId, owner) ?? null), args.quoteRefused) : null;
     // A bot applying its own routines keeps at most SELF_ROUTINE_CAP of them
     // on; a create or resume past that shows the card, as before. Full
     // access has no cap.

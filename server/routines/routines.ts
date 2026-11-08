@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { turnTrace } from "../turns/turn-trace.ts";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 import { humanizeToolIds } from "../../shared/tool-display-name.ts";
+import { connectorReauthFailure, connectorReauthProblem } from "../../shared/connector-setup.ts";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -800,6 +801,20 @@ export function routineClaimsCard(output: string | undefined): boolean {
     || /\b(?:affich|montr|présent|show|display|post)\w*\b[^.\n]{0,30}\b(?:une|la|ta|a|the|an|your)\s+(?:\w+\s+)?(?:carte|card)\b/i.test(text);
 }
 
+/** #2635: the run's final words announce what the bot would do ("I'll pull
+ * the overdue invoices now", "Je vais vérifier…") and report nothing done.
+ * Short, opening on a future form, with no sign of a finished step. */
+export function routineEndsOnAnnouncement(output: string | undefined): boolean {
+  if (!output) return false;
+  const text = output.normalize("NFC").replace(/\s+/g, " ").trim();
+  if (!text || text.length > 300) return false;
+  const opens = /^(?:ok(?:ay)?[,.!]?\s+|d'accord[,.!]?\s+|parfait[,.!]?\s+|sure[,.!]?\s+)?(?:i'll|i will|i'm going to|i am going to|let me|now i'll|next,? i'll|je vais|laisse-moi|laissez-moi|je m'en occupe|je lance|starting|i'm starting|je commence)\b/i;
+  if (!opens.test(text)) return false;
+  return !/\b(?:done|completed|finished|found|sent|created|updated|no (?:issues|problems|items)|nothing to|fait|terminé|complété|envoyé|créé|trouvé|aucun|aucune|rien à)\b/i.test(text);
+}
+export const routineAnnouncementProblem = (output: string) =>
+  `The run ended on an announcement of what it would do (“${output.replace(/\s+/g, " ").trim().slice(0, 200)}”), with no report of what was done`;
+
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 /** 2026-10-26: a queued run cancelled because its routine paused itself. */
 export const ROUTINE_AUTO_PAUSED_BEFORE_START = "The routine paused itself after failing several times in a row before this run started";
@@ -1296,6 +1311,26 @@ export function nextOccurrence(schedule: RoutineSchedule, after: number, zone?: 
     if (d.getTime() > after && weekdays.has(d.getDay())) return d.getTime();
   }
   return null;
+}
+
+/** Whether a recurring schedule has an occurrence on the local day of `at`.
+ * A start-up run follows the schedule's days: a weekday cron or a daily
+ * routine that skips Saturday does not run on a Saturday start. Schedules
+ * with no day rule (plain intervals, triggers) always count. */
+export function scheduleRunsOnDay(schedule: RoutineSchedule, at: number, zone?: string): boolean {
+  if (schedule.type === "daily") return cleanDays(schedule.weekdays).includes(wallClock(at, scheduleZone(zone)).weekday);
+  if (schedule.type === "interval") return !schedule.weekdays || schedule.weekdays.includes(wallClock(at, scheduleZone(zone)).weekday);
+  if (schedule.type !== "cron") return true;
+  // Cron reads its own saved zone, never the routine zone.
+  const cronZone = schedule.timeZone && schedule.timeZone !== HOST_ZONE() ? schedule.timeZone : undefined;
+  const clock = wallClock(at, cronZone);
+  const dayStart = cronZone ? zonedTimeToUtc(clock.year, clock.month, clock.day, 0, 0, cronZone)
+    : new Date(clock.year, clock.month - 1, clock.day).getTime();
+  const nextDay = cronZone
+    ? (() => { const d = new Date(Date.UTC(clock.year, clock.month - 1, clock.day + 1)); return zonedTimeToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), 0, 0, cronZone); })()
+    : new Date(clock.year, clock.month - 1, clock.day + 1).getTime();
+  const first = nextOccurrence(schedule, dayStart - 1);
+  return first !== null && first < nextDay;
 }
 
 /** Next scheduled occurrence and one interval of its schedule, for a run that schedule started.
@@ -3120,6 +3155,7 @@ export class RoutineManager {
       // a start while they are away, as the scheduler does.
       (!routine.onlyWhenPresent || awayDecision(routine, this.presenceOf(routine)) === "run"));
     const marked = flagged.filter((routine) =>
+      scheduleRunsOnDay(routine.schedule, now, this.zoneOf(routine)) &&
       !(routine.nextRunAt != null && routine.nextRunAt <= now && now - routine.nextRunAt <= CATCH_UP_MS) &&
       !this.runs.some((run) => run.routineId === routine.id && ["queued", "running", "waiting"].includes(run.status)));
     // Already covered: with a launch id, still record that this launch started.
@@ -3875,6 +3911,13 @@ export class RoutineManager {
     }
     for (const failure of trouble?.unresolved.values() ?? []) {
       const title = failure.title;
+      // #2749: an expired connector sign-in is said plainly with its link, from the first refusal
+      const reauth = connectorReauthFailure(title, failure.output);
+      if (reauth) {
+        const line = connectorReauthProblem(reauth);
+        if (!problems.includes(line)) problems.push(line);
+        continue;
+      }
       // Kept failing: one miss the bot moved past (a search with no match)
       // is ordinary work, and engines that title a call by its command give
       // each command its own title. A single real failure is the bot's to
@@ -3888,6 +3931,7 @@ export class RoutineManager {
       problems.push(`Nobody answered the ${one ? "approval" : "approvals"} for ${trouble.unanswered.map((action) => `“${action}”`).join(", ")} in time, so ${one ? "that step" : "those steps"} did not run`);
     }
     if (trouble?.engine) problems.push(`The engine reported an error during the run: ${trouble.engine}`);
+    if (routineEndsOnAnnouncement(run.output)) problems.push(routineAnnouncementProblem(run.output!));
     run.status = "completed";
     run.finishedAt = this.now();
     run.error = undefined;

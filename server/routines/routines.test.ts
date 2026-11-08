@@ -15,6 +15,7 @@ import {
   ROUTINE_UNREACHABLE_SKIPPED,
   RoutineManager,
   routineAskAction,
+  routineEndsOnAnnouncement,
   routineWaitingLine,
   troubleToolKey,
   RoutineScheduleError,
@@ -3590,6 +3591,36 @@ describe("run on startup", () => {
     }
   });
 
+  it("skips a start-up run on a day the routine's schedule excludes (#2605)", async () => {
+    // Saturday 2026-09-12 10:00 in New York: a weekday cron and a weekday daily stay quiet.
+    const h = harness(Date.parse("2026-09-12T14:00:00Z"));
+    h.manager.create(daily({ name: "Weekday cron", runOnStartup: true,
+      schedule: { type: "cron" as const, expression: "0 9 * * 1-5", timeZone: "America/New_York" } }));
+    h.manager.create(daily({ name: "Weekday daily", runOnStartup: true,
+      schedule: { type: "daily" as const, time: "23:00", weekdays: [1, 2, 3, 4, 5] } }));
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    await booted.tick();
+    booted.stop();
+    expect(h.started).toHaveLength(0);
+    expect(booted.listRuns()).toHaveLength(0);
+  });
+
+  it("still runs a start-up run on a day the cron schedule names", async () => {
+    // Monday 2026-09-14 10:00 in New York, after the 09:00 occurrence and past catch-up.
+    const h = harness(Date.parse("2026-09-14T14:00:00Z"));
+    const routine = h.manager.create(daily({ runOnStartup: true,
+      schedule: { type: "cron" as const, expression: "0 9 * * 1-5", timeZone: "America/New_York" } }));
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    try {
+      await expect.poll(() => h.started.length).toBe(1);
+      expect(booted.listRuns()[0]).toMatchObject({ routineId: routine.id, triggerSource: "startup" });
+    } finally {
+      booted.stop();
+    }
+  });
+
   it("leaves unmarked and paused routines alone", async () => {
     const h = harness(start);
     h.manager.create(daily());
@@ -5178,6 +5209,31 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(h.manager.listRoutines()[0]!.weekRuns).toEqual({ ok: 0, total: 1 });
   });
 
+  // #2635: a webhook run whose last words were "I'll pull the invoices now".
+  it("a run that ends on an announcement of what it would do completes with that problem", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-1", "I'll pull the overdue invoices and post the summary in the channel.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.problems).toContain("ended on an announcement of what it would do");
+    expect(run.problems).toContain("I'll pull the overdue invoices");
+    expect(isRoutineProblemRun(run)).toBe(true);
+  });
+
+  it("tells an announcement from a report", () => {
+    expect(routineEndsOnAnnouncement("Je vais vérifier les factures en retard.")).toBe(true);
+    expect(routineEndsOnAnnouncement("Let me check the backups first.")).toBe(true);
+    expect(routineEndsOnAnnouncement("Okay, I'll start with the agreements.")).toBe(true);
+    expect(routineEndsOnAnnouncement("I'll note it: done, 3 invoices sent.")).toBe(false);
+    expect(routineEndsOnAnnouncement("Checked 12 invoices; 2 lack a PO.")).toBe(false);
+    expect(routineEndsOnAnnouncement("Je vais te laisser savoir : aucune facture en retard.")).toBe(false);
+    expect(routineEndsOnAnnouncement(`I'll summarize. ${"x".repeat(400)}`)).toBe(false);
+    expect(routineEndsOnAnnouncement(undefined)).toBe(false);
+  });
+
   it("a tool that failed then succeeded is a clean run", async () => {
     const h = harness(start);
     const routine = h.manager.create(input());
@@ -5237,6 +5293,19 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(problems).toContain(`Get message failed 2 times and never succeeded after: ${graph}`);
     expect(problems).toMatch(/Get mail message · Outlook[^\n]* failed 2 times/);
     expect(problems).not.toMatch(/__|5f/);
+  });
+
+  it("a connector whose sign-in expired is said plainly with its link, from one refusal (#2749)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const refused = "Managed MCP gateway tool call failed: Cursor connector needs re-authentication in Cursor: X won't turn on API access";
+    tool(h, "thread-1", "a", "cursor__user-X-search_5fposts_5fall", false, refused);
+    done(h, "thread-1");
+    const problems = runOf(h).problems ?? "";
+    expect(problems).toContain("needs a new sign-in");
+    expect(problems).toContain("https://grok.com/connectors");
+    expect(problems).not.toContain("failed 1 times");
   });
 
   it("one failed call the bot moved past (a search with no match, say) is not a problem: only a tool that kept failing is", async () => {

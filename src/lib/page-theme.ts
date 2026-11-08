@@ -20,9 +20,10 @@ import {
   sanitizeWidgetTokens,
   type WidgetThemeTokens,
 } from "./widget-kit.ts";
+import { DESIGN_CANVAS_CSS } from "./design-systems.ts";
 
 export type PageScheme = "light" | "dark";
-export type PageThemeKind = "html" | "markdown" | "presentation";
+export type PageThemeKind = "html" | "markdown" | "presentation" | "design";
 
 /** The cascade layer the theme sits in: a page's own rules always win. */
 export const PAGE_THEME_LAYER = "sagax-theme";
@@ -90,7 +91,8 @@ export function pageThemeVars(scheme?: PageScheme, tokens?: WidgetThemeTokens, s
  * print sheet). */
 export function pageThemeCss(input: { kind: PageThemeKind; scheme?: PageScheme; tokens?: WidgetThemeTokens; schemes?: Partial<Record<PageScheme, WidgetThemeTokens>>; font?: string; extra?: string }): string {
   const extra = input.kind === "markdown" ? `body{--page-width:720px}${MARKDOWN_CSS}`
-    : input.kind === "presentation" ? `${MARKDOWN_CSS}${PRESENTATION_CSS}` : "";
+    : input.kind === "presentation" ? `${MARKDOWN_CSS}${PRESENTATION_CSS}`
+    : input.kind === "design" ? DESIGN_CANVAS_CSS : "";
   return `${input.font ?? ""}@layer ${PAGE_THEME_LAYER}{${pageThemeVars(input.scheme, input.tokens, input.schemes)}${WIDGET_KIT_CSS}${PAGE_BASE_CSS}${extra}${input.extra ?? ""}}`;
 }
 

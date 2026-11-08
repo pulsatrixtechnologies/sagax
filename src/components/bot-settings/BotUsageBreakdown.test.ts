@@ -10,7 +10,7 @@ vi.mock("@/state/store", () => ({
   useStore: () => ({ state: { instances: [] }, dispatch: () => {} }),
 }));
 
-const { BotUsageBreakdownView, shares } = await import("./BotUsageBreakdown");
+const { BotUsageBreakdownView, foldRows, formatShare, shares } = await import("./BotUsageBreakdown");
 type ViewProps = Parameters<typeof BotUsageBreakdownView>[0];
 
 afterEach(() => setLocale("en"));
@@ -37,12 +37,18 @@ function data(): BotUsageBreakdown {
     bySource: [group("user", "Person", 3, [6000, 0]), group("routine", "Routine", 1, [3000, 1000])],
     byPerson: [group(PERSON_ID, "", 3, [6000, 0]), group("owner", "Owner", 1, [3000, 1000])],
     tools: [{ tool: "send_mail", kind: "mcp", mcpServer: "mail", calls: 3, errors: 1, totalMs: 900 }],
+    offset: 0,
+    days: [
+      { day: "2026-11-05", total: { costUsd: 1, tokens: 3000 }, byAccount: {}, byModel: { opus: { costUsd: 1, tokens: 3000 } }, bySource: {}, byPerson: {} },
+      { day: "2026-11-06", total: { costUsd: 3, tokens: 7000 }, byAccount: {}, byModel: { opus: { costUsd: 3, tokens: 7000 } }, bySource: {}, byPerson: {} },
+    ],
   };
 }
 
 function render(props: Partial<ViewProps> = {}) {
   return renderToStaticMarkup(createElement(BotUsageBreakdownView, {
     data: data(),
+    initialDetails: true,
     period: 30,
     onPeriod: () => {},
     unit: "usd",
@@ -99,5 +105,75 @@ describe("bot usage breakdown (#2612)", () => {
     const html = render({ period: "month" });
     expect(html).toContain("Par compte");
     expect(html).toContain("Mois courant");
+  });
+
+  it("folds the rows past the top six and the rows at zero into one Others row (#2671)", () => {
+    const models = Array.from({ length: 16 }, (_, index) => group(`m${index}`, `model-${index}`, index < 10 ? 10 - index : 0, [1000, 0]));
+    const { shown, others } = foldRows(shares(models, "usd"));
+    expect(shown.map((row) => row.group.key)).toEqual(["m0", "m1", "m2", "m3", "m4", "m5"]);
+    expect(others).toHaveLength(10);
+    const html = render({ data: { ...data(), byModel: models } });
+    expect(html).toContain("Others (10)");
+    expect(html.match(/data-bot-usage-row="model"/g)).toHaveLength(6);
+    const opened = render({ data: { ...data(), byModel: models }, initialOpen: ["model:others"] });
+    expect(opened.match(/data-bot-usage-row="model"/g)).toHaveLength(16);
+  });
+
+  it("draws no legend, no stacked bar and no cycled colors: one hue per row bar, a dot for a sliver", () => {
+    const html = render({ data: { ...data(), byModel: [group("big", "big", 99.6, [1000, 0]), group("tiny", "tiny", 0.4, [10, 0])] } });
+    expect(html).not.toMatch(/background:\s*#/);
+    expect(html).toContain("data-bot-usage-dot");
+    expect(html).toContain("0.4%");
+  });
+
+  it("names the way an account is paid in words, tells same-name accounts apart and merges the same person", () => {
+    const html = render({
+      data: {
+        ...data(),
+        byAccount: [
+          group("claude:owner-key", "claude", 2, [100, 0], { engine: "claude", access: "owner-key" }),
+          group("claude:org-key", "claude", 1, [100, 0], { engine: "claude", access: "org-key" }),
+          group("xaiVoice", "xaiVoice", null, [100, 0], { engine: "xai-voice" }),
+        ],
+        byPerson: [group("pr_a", "alex@example.com", 2, [100, 0]), group("alex@example.com", "alex@example.com", 1, [100, 0])],
+      },
+      accountName: () => "",
+      initialOpen: ["account:others"],
+    });
+    expect(html).toContain("Owner&#x27;s own key");
+    expect(html).toContain("Organization key");
+    expect(html).not.toContain("owner-key<");
+    expect(html).not.toContain("org-key<");
+    expect(html).toContain("xAI Voice");
+    expect(html.match(/data-bot-usage-row="person"/g)).toHaveLength(1);
+    expect(html).toContain("$3.00");
+    expect(html).not.toMatch(/>-</);
+  });
+
+  it("names an account from its key when the server hid a raw id from the label", () => {
+    const guid = "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b";
+    const html = render({
+      data: { ...data(), byAccount: [group(`${guid}:org-key`, "claudeAgent", 2, [100, 0], { engine: "claude", access: "org-key" })] },
+      accountName: (id) => (id === guid ? "Claude (work)" : ""),
+    });
+    expect(html).toContain("Claude (work)");
+    expect(html).not.toContain(guid);
+  });
+
+  it("formats a share in the active locale", () => {
+    expect(formatShare(0.31, "en")).toBe("31%");
+    expect(formatShare(0.31, "fr").replace(/\s/g, " ")).toBe("31 %");
+    expect(formatShare(0, "en")).toBe("0%");
+    expect(formatShare(0.004, "en")).toBe("0.4%");
+    expect(formatShare(0.0004, "en")).toBe("<0.1%");
+  });
+
+  it("draws a stacked chart card with one tile per series and a total", () => {
+    const html = render({ initialDetails: false });
+    expect(html).toContain("data-usage-chart-card");
+    expect(html).toContain('data-usage-chart-day="2026-11-05"');
+    expect(html).toContain('data-usage-chart-tile="opus"');
+    expect(html).toContain("100%");
+    expect(html).not.toContain("data-bot-usage-row");
   });
 });

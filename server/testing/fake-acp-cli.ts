@@ -1135,6 +1135,13 @@ function handle(msg: any) {
         writeFileSync(`${process.env.FAKE_ACP_DUMP}.prompt.json`, JSON.stringify(msg.params?.prompt ?? null, null, 2));
       }
       if (failRpc(msg)) return;
+      if (mode === "reply-then-exit-0") {
+        // #2632: the agent streams its whole answer, then its process ends
+        // with code 0 before it ever answers session/prompt.
+        out({ jsonrpc: "2.0", method: "session/update", params: { sessionId: msg.params?.sessionId, update: { sessionUpdate: "agent_message_chunk", content: { text: "On continue sans créneau." } } } });
+        setTimeout(() => process.exit(0), 50);
+        return;
+      }
       if (mode === "stall-first-prompt" && ++stallPrompts === 1) {
         // The first prompt gets nothing at all back (a provider that never
         // sends its first token); session/cancel resolves it cancelled and

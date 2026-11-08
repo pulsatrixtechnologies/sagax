@@ -3683,6 +3683,36 @@ The maintainer's GO on points 1 and 2 of the bot quality diagnostic. Rules:
 - `RUN_YOURSELF_PROMPT` sits above every persona: run commands yourself,
   never ask the person to run or paste, approvals through the card.
 
+## Auto starts in the server environment; discovery is bounded (2026-11-07, #2670)
+
+QA c2 (defects D2, D3, D7, G2, G5): bots looped 22 to 45 steps of
+`sagax_help`, `skills_list`, `session_search`, `search_tool`, `workspace_read`
+before a one-line answer or a clarifying question, and ran `run_command` or
+`fetch_url` on the person's Mac while they had a server environment.
+
+- `autoStartTarget` (`server/computer/auto-computer.ts`): a person-asked turn
+  starts in the person's server environment when they have one
+  (`sandboxConfigured`), with their computer connected or not; their computer
+  only when their words ask for it or the step needs their machine. Without a
+  server environment the old order stays (computer when connected, else cloud).
+- `WORK_STYLE_PROMPT`: discovery (sagax_help, skills_list, search_tool,
+  session_search, workspace_read, workspace_search, a skill catalog) takes at
+  most two calls per turn, never the same one twice, and none when the first
+  tool is already known or the request is ambiguous. A direct read or a
+  clarifying question comes first and wins over a skill's own "catalog first".
+- `VERIFY_FIRST_PROMPT`: a request whose object or recipient is missing and
+  several fit ("Envoie-moi le rapport") is a decision: the card is the first
+  step, in one turn, with zero tool calls before it.
+- `AUTO_COMPUTER_RULES`: product versions in production come from this
+  server's `/api/health` and the Perspicax server's `/healthz`, one `fetch_url`
+  each; `host_health` reports failures, latency and drift, never a version.
+- `PERSPICAX_CONVENTIONS_PROMPT`: after a 403 read once under another role
+  (Sagax's note or an `identity_switch`), the bot says so to the person in one
+  line by the role's name ("Lu avec le rôle Technicien"), never an id. The
+  switch itself is wanted: a 403 of the limited role means find a role that may.
+- The Flow entry skill `using-px-flow` (pulsatrix-flow repo) is aligned: a
+  clarifying question and a single-record read come before `catalog --index`.
+
 ## Workspace: always Auto, the bot chooses (2026-10-18)
 
 Decision: "It should ALWAYS stick to default, and the bot chooses. So basically bot
@@ -10655,6 +10685,38 @@ A draft is not published by that switch. Artifacts (the widget and its
 refresh) are a different object and are not changed here.
 
 Covered by `shared/page-audience.test.ts` and `server/page-share.test.ts`.
+
+## Designs: kind design of the published pages (#2717, 2026-11-08)
+
+Claude Design and nexu-io/open-design, the same way as the pages: no parallel
+system. A design is a page of kind `design` (`shared/published-pages.ts`,
+`PAGE_KINDS`), proposed by the same bot tool `propose_page` (kind design,
+optional `design_system`, `design_tokens`), stored and versioned by
+`PublishedPages`, shown in the same surface (`PageViewer`), shared the same way.
+
+- Format: one HTML document; each `<section data-screen="Name"
+  data-device="phone|tablet|desktop">` is a screen. `DESIGN_CANVAS_CSS`
+  (`src/lib/design-systems.ts`, in the page theme layer) draws the canvas and
+  the artboards without a script (`body:has(>section[data-screen])`); print
+  puts one screen per sheet. `pageIsHtml(kind)` routes design like html
+  (render, CSP, state).
+- Design system: one `<style data-sagax-design-system="id">:root{...}</style>`
+  block inside the design, so each version keeps its tokens and an export is
+  self-contained. Schema: open-design's tokens (--bg, --surface, --fg, --muted,
+  --border, --accent, --accent-on, --font-*, --text-*, --space-*, --radius-*).
+  Built in: `sagax` (the person's look through --color-*, the default) and four
+  neutral systems vendored from open-design (Apache-2.0,
+  `third_party/open-design/LICENSE`, `src/lib/design-systems-vendored.ts`,
+  tokens only). A person's own (from their code: `design_tokens`) live in
+  `published-pages-design-systems.json` per owner (`own-<slug>`, max 20).
+- Routes: `GET /api/pages/design-systems`, `DELETE /api/pages/design-systems/own-*`,
+  `POST /api/pages/:id/versions` with `designSystem` (the person's pick),
+  `GET /api/pages/:id/versions/:n/export?theme=` (`{ filename, html }`, any kind).
+- Viewer: « ⋯ » > Design system (side panel, swatches, the person's own
+  removable) and Export (HTML). Iteration stays in the same conversation
+  (`proposePageCard` appends to the thread): never a new thread.
+- Bot knowledge: guide `designs` (scripts/self-knowledge/guides.ts) and one
+  line in `PAGE_TARGET_PROMPT` (a design skips choose_page_target).
 
 ## Voice notes, microphone choice, logs and feedback (2026-10-16)
 

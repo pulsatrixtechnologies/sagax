@@ -13,8 +13,9 @@
  *   --fixture-log: reuse a fixture already running (the JSON line it printed)
  *     instead of starting one.
  *   --only: a comma list of shot names (hero, split-view, group, automations,
- *     bot-panel, connect-apps, models, appearance, vault-card, purchase-card,
- *     order-card, mascots-clip).
+ *     bot-panel, bot-page, connect-apps, models, appearance, vault-card,
+ *     purchase-card, order-card, mascots-clip).
+ *   SAGAX_README_UI_PORT=<port> pins the fixture's UI to one port.
  *   SAGAX_VERIFY_BROWSER_CHROME=<chromium> to use an installed browser.
  * Then: scripts/optimize-readme-shots.sh squeezes the PNGs and builds the GIF.
  */
@@ -68,12 +69,20 @@ async function fixtureInfo() {
 }
 
 const appShots = ["hero", "split-view", "group", "automations", "bot-panel", "connect-apps", "models"];
-const galleryShots = ["appearance", "vault-card", "purchase-card", "order-card", "mascots-clip"];
+const galleryShots = ["appearance", "bot-page", "vault-card", "purchase-card", "order-card", "mascots-clip"];
 
 async function captureApp(chromium) {
   const { info, stop } = await fixtureInfo();
   const browser = await chromium.launch(launchOptions);
   try {
+    {
+      // first visit: Vite optimizes dependencies and reloads the page; a throwaway load keeps the first shot from being blank
+      const warm = await browser.newPage();
+      await warm.goto(info.appUrl, { waitUntil: "load" });
+      await warm.waitForSelector("[data-sidebar-bot-row]", { timeout: 90_000 }); await sleep(3000);
+      await warm.waitForSelector("[data-sidebar-bot-row]", { timeout: 90_000 });
+      await warm.close();
+    }
     for (const skin of skins) {
       for (const name of appShots) {
         if (!wants(name)) continue;
@@ -119,8 +128,10 @@ async function captureApp(chromium) {
           case "bot-panel": await openBot("pixel"); await page.click("[data-bot-header-pill]"); await sleep(1500); break;
           case "connect-apps": {
             await openBot("nova");
-            await page.getByRole("button", { name: "Connect apps" }).click(); await sleep(900);
-            await page.getByText("Providers", { exact: true }).first().click(); await sleep(1500);
+            await page.click("[data-sidebar-connect-apps]"); await sleep(900);
+            // since 0.8.6x the panel filters by kind (All, Connectors, MCP servers, Skills) instead of tabs
+            const connectors = page.getByRole("button", { name: "Connectors", exact: true });
+            if (await connectors.count()) { await connectors.first().click(); await sleep(1500); } else await sleep(1200);
             break;
           }
           case "models": {
@@ -185,9 +196,10 @@ async function captureGallery(chromium) {
         console.log(`shot ${name}-${skin.label}`);
         await context.close();
       };
-      await shoot("appearance", `${base}/appearance-editor.html?skin=${skin.id}&lang=en&character=shape&color=teal`, "[role=dialog]", { width: 1440, height: 1000 }, "[role=dialog] [data-mascot-stage]", 0,
-        // the whole editor, not the window: the dialog grows with its page
-        "[role=dialog]{height:auto!important;max-height:none!important}[role=dialog] [data-persona-pane]{overflow:visible!important}[role=dialog] nav{overflow:visible!important}");
+      // the Appearance section of the bot's page (the editor is a page since 0.8.59, no dialog)
+      await shoot("appearance", `${base}/appearance-editor.html?skin=${skin.id}&lang=en&character=shape&color=teal`, "[data-bot-profile-page]", { width: 1440, height: 1000 }, "[data-bot-profile-page] [data-mascot-stage]");
+      // the bot page (fills the main area in the app) with a fictional bot and rich stand-in data
+      await shoot("bot-page", `${base}/bot-profile.html?skin=${skin.id}&lang=en`, "[data-bot-profile-page]", { width: 1440, height: 1000 });
       await shoot("vault-card", `${base}/vault-card.html?skin=${skin.id}&lang=en&state=pending`, "[data-gallery-card] > *", { width: 820, height: 900 }, "[data-gallery-card]");
       await shoot("purchase-card", `${base}/outbound-cards.html?skin=${skin.id}&lang=en&only=purchase`, "[data-outbound-card]", { width: 820, height: 1400 });
       await shoot("order-card", `${base}/outbound-cards.html?skin=${skin.id}&lang=en&only=purchase`, "[data-outbound-card]", { width: 820, height: 1400 }, undefined, 3);

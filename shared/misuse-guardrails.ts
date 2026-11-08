@@ -102,8 +102,14 @@ export const MISUSE_MAX_COMMAND_SECONDS = 600;
  *   deleting their files, clearing their shell history, sudo and passwd
  *   inside it. Escape, platform files, attacks on others, malware and
  *   resource abuse (the CPU, memory and disk of a shared machine) stay
- *   blocked. */
-export type MisuseScope = "default" | "message" | "own_environment";
+ *   blocked.
+ * - `own_computer`: the person's own computer through the desktop bridge
+ *   (#2738). Same as `own_environment`, and the platform file rules
+ *   (`platform_exfiltration`: messages.db, ~/.sagax, printenv) are not
+ *   applied either: they guard the Sagax server, and a desktop operation
+ *   never runs there. A script that names a local harness database is the
+ *   person's own work. The desktop app guards its own folders itself. */
+export type MisuseScope = "default" | "message" | "own_environment" | "own_computer";
 
 const MESSAGE_EXEMPT: ReadonlySet<MisuseCategory> = new Set(["destruction", "resource_abuse"]);
 
@@ -337,7 +343,8 @@ export function maskOwnPaths(input: string, own?: MisuseOwnPaths): string {
 function categoriesIn(text: string, scope: MisuseScope): MisuseCategory[] {
   const found = new Set<MisuseCategory>();
   for (const rule of BLOCK_RULES) {
-    if (scope === "own_environment" && rule.own) continue;
+    if ((scope === "own_environment" || scope === "own_computer") && rule.own) continue;
+    if (scope === "own_computer" && rule.category === "platform_exfiltration") continue;
     if (scope === "message" && MESSAGE_EXEMPT.has(rule.category)) continue;
     rule.pattern.lastIndex = 0;
     if (rule.pattern.test(text)) found.add(rule.category);

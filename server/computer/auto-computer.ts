@@ -10,9 +10,10 @@
 //   local_vm       the Local VM on their computer (sagax-desktop local_vm)
 //   browser        the built-in browser only, for pure web work
 //
-// Where an Auto turn starts (autoStartTarget, 2026-10-15; routines 2026-11-01):
-// a person-asked turn prefers their own computer when it is connected, else
-// the cloud. A routine starts in the cloud by default; routinesAllowed only
+// Where an Auto turn starts (autoStartTarget, 2026-10-15; routines 2026-11-01;
+// server environment first 2026-11-07, #2670): a person-asked turn starts in
+// their server environment when they have one, else on their own computer
+// when it is connected. A routine starts in the cloud by default; routinesAllowed only
 // lets computer_select choose this_computer (or local_vm) explicitly. A
 // thread opened with a workspace (start_thread, create_agent) starts there
 // when it is allowed, else falls back and says so.
@@ -51,6 +52,32 @@ export interface AutoComputerState {
   routinesAllowed: boolean;
   /** The built-in browser is mounted for this turn (absent: it is not). */
   browserAvailable?: boolean;
+  /** Places this turn already moved to with computer_select (absent: none). */
+  switches?: number;
+  /** #2762: the language of the person's message; refusals speak it. */
+  language?: "fr" | "en";
+}
+
+/** #2736 (QA 2026-11-07): a turn bounced between the server environment,
+ * the cloud computer and the person's Mac. One step elsewhere and back is
+ * two moves; a third is refused, so the bot finishes where it is. */
+export const MAX_AUTO_COMPUTER_SWITCHES = 2;
+
+/** #2736, #2762: the refusal of a third move, in the person's language. */
+export function tooManyMovesText(moves: number, language: "fr" | "en" | undefined, now?: string): string {
+  if (language === "fr") {
+    return `Tu as déjà changé d'ordinateur ${moves} fois pour cette demande, le maximum permis. Reste ${now ? `sur ${now}` : "sur l'ordinateur actuel"} et termine l'étape là avec ses outils ; s'il ne peut pas la faire, dis à la personne pourquoi, en français, et ce qu'elle peut faire, au lieu de changer encore.`;
+  }
+  return `You already moved ${moves} times in this turn, the most a turn may. Stay on ${now ?? "the current computer"} and finish the step there with its tools; if it cannot do the step, tell the person why in their language and what they can do, instead of moving again.`;
+}
+
+/** #2763: one request is one budget of moves. A select_computer switch ends
+ * the turn and a continuation turn goes on with the same request: it starts
+ * with the moves already made, so the request never gets a fresh pair. */
+export function carryAutoComputerMoves<T extends { switches?: number }>(state: T, movesSoFar: unknown): T {
+  const moves = typeof movesSoFar === "number" && Number.isFinite(movesSoFar) && movesSoFar > 0 ? Math.floor(movesSoFar) : 0;
+  if (moves <= (state.switches ?? 0)) return state;
+  return { ...state, switches: moves };
 }
 
 export interface AutoComputerSelection {
@@ -152,6 +179,9 @@ export function selectAutoComputer(
     : target === "browser" ? "Use the built-in browser tools; the shell and file tools are not in use."
     : "Use the sagax-desktop tools.";
   if (state.selected === target) return { ok: true, text: `You already work on ${autoComputerLabel(target)}. ${tools}`, target, from: target, changed: false };
+  if ((state.switches ?? 0) >= MAX_AUTO_COMPUTER_SWITCHES) {
+    return { ok: false, text: tooManyMovesText(state.switches ?? 0, state.language, now) };
+  }
   return { ok: true, text: `Now working on ${autoComputerLabel(target)}. ${tools}`, target, from: state.selected, changed: true };
 }
 
@@ -202,8 +232,9 @@ export const AUTO_COMPUTER_RULES = [
   "- local_vm: isolated or risky work on their machine (try an install, run untrusted code) in the Local VM, including seeing and driving that VM's desktop (local_vm action use); creating one asks them on their computer first.",
   "Sub-agents: start_thread (on yourself) and create_agent take a workspace too, chosen by the same rule: one can run in the cloud while another works on the person's computer or in the Local VM.",
   "computer_select only moves the shell, files and desktop tools (sagax-environment, sagax-desktop). Connector and Sagax tools (ConnectWise, Pulsatrix memory and flow, agents, search, other MCP servers) run on the server wherever you are: they need no computer and no computer_select.",
-  "Live state (a version, a deployment, a service's health, a host, a record): ask the tool that reports it directly first, in one call (host_health for the Pulsatrix host and its versions, the connector or Sagax tool that owns the record, a service's own /api/health with fetch_url). Never read state through a shell (run_command on the person's computer or in the cloud) when such a tool exists; a shell is for work on that computer, not a way to look up the state of another system.",
-  "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\", \"dans ton sandbox\", \"dans ton bac à sable\", \"in your sandbox\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it). Never work around a refusal: a place they did not allow (their computer for routines, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.",
+  "Live state (a version, a deployment, a service's health, a host, a record): ask the tool that reports it directly first, in one call (the connector or Sagax tool that owns the record; a service's own health endpoint with fetch_url). Product versions in production: this Sagax server's /api/health and the Perspicax server's /healthz (the host of the Perspicax MCP URL), each one fetch_url call; host_health reports failures, latency and drift of the Pulsatrix host, never a product version. Answer with what the endpoint says, in one line; do not search for another tool. Never read state through a shell (run_command on the person's computer or in the cloud) when such a tool exists; a shell is for work on that computer, not a way to look up the state of another system.",
+  "Server environment (#2670): when the person has a server environment, it is where a turn starts, with their computer connected or not. Their computer is used only when their words ask for it (\"sur mon Mac\", \"on my computer\") or the step needs their machine (their files, apps, local network, devices), through computer_select. Never run a shell or fetch_url on their computer to look something up that the server environment or a connector can read.",
+  "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\", \"dans ton sandbox\", \"dans ton bac à sable\", \"in your sandbox\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it); pick the place once and finish there: at most two moves per turn, and a tool failing on one place is fixed there, not a reason to move. Never work around a refusal: a place they did not allow (their computer for routines, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.",
 ].join("\n");
 
 /** The per-message line of an Auto turn (provider text only): where this
@@ -226,8 +257,9 @@ export interface AutoStart {
 
 /** Where an Auto turn starts (2026-10-15; routines default 2026-11-01). Pure:
  * tested on its own.
- * - Default: a person-asked turn prefers the person's own computer when
- *   their Sagax app is connected; a routine starts in the cloud. The owner
+ * - Default: a person-asked turn starts in the person's server environment
+ *   when they have one (#2670), else on their own computer when their Sagax
+ *   app is connected; a routine starts in the cloud. The owner
  *   preference routinesAllowed only permits an explicit computer_select to
  *   this_computer or local_vm (never the default start).
  * - When the person's computer is offline before the first turn, a routine
@@ -254,7 +286,11 @@ export function autoStartTarget(input: {
       : desktopUsable;
   // Routines start in the cloud (Owner 2026-11-01). An offline computer is
   // never the default for a routine, so the first turn does not try it.
-  const defaultTarget: AutoComputerTarget = input.routine ? "cloud" : "this_computer";
+  // A person with a server environment starts there too (#2670, QA c2
+  // D2/G5): their computer is reached only when their words or the work
+  // ask for it (computer_select, a pinned place), never as the default
+  // place to run a shell or fetch_url for a lookup.
+  const defaultTarget: AutoComputerTarget = input.routine || input.sandboxConfigured ? "cloud" : "this_computer";
   const wanted = input.wanted ?? defaultTarget;
   if (usable(wanted)) return { target: wanted, wanted, fallback: null };
   const order: AutoComputerTarget[] = ["this_computer", "local_vm", "cloud", "browser"];

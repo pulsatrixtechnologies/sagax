@@ -154,3 +154,10 @@ engineering for agents, https://github.com/morluto/rea (npm rea-agents, version
 pinned in REA_VERSION), Copyright (c) 2026 morluto, used under the MIT License
 (third_party/rea/LICENSE). Sagax does not bundle REA's code: npx fetches the
 pinned package from the npm registry when a bot first uses it.
+
+The design systems of design pages (src/lib/design-systems-vendored.ts) carry
+the design tokens of four neutral systems from open-design,
+https://github.com/nexu-io/open-design (commit 87a4f91c3081), Copyright 2026 Open
+Design contributors, used under the Apache License, Version 2.0
+(third_party/open-design/LICENSE). Only the :root token values were taken and
+reformatted; no other open-design code is included.

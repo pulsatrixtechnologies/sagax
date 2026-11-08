@@ -132,6 +132,11 @@ const MANAGE_API: Record<string, unknown> = {
       { name: "ops-flow", description: "Service desk routines", installed: true, servers: [], skills: ["triage", "dispatch", "time-review"], category: "productivity", homepage: "https://www.wikipedia.org" },
       { name: "ops-flow-tenant", description: "This organization's boards and rules", installed: true, servers: [], skills: ["tenant-rules"], category: "productivity" },
     ] },
+    // #2759: Cursor's official plugins, converted (what did not convert is on the plugin's page)
+    { name: "cursor-plugins", source: "cursor/plugins", visibility: "org", plugins: [
+      { name: "cursor-team-kit", description: "Team workflows for CI, code review and shipping", installed: true, servers: [], skills: ["ship-it", "rule-no-inline-imports"], category: "developer-tools", convertedFrom: "cursor", notConverted: ["rules_always", "agent_settings:is_background, model", "hooks"] },
+      { name: "linear", description: "Issues, projects and cycles from your editor", installed: false, servers: ["linear"], skills: [], category: "productivity", convertedFrom: "cursor", notConverted: [] },
+    ] },
   ] },
   "/api/skills-library": { skills: [
     { name: "frontend-design", description: "Distinctive interfaces", source: "claude-plugins-official", enabled: true },
@@ -147,6 +152,8 @@ const MANAGE_API: Record<string, unknown> = {
     { name: "commit", description: "", source: "claude-plugins-official", enabled: true },
     { name: "security-review", description: "", source: "claude-plugins-official", enabled: true },
     { name: "notebook", description: "", source: "claude-plugins-official", enabled: true },
+    { name: "ship-it", description: "Ship a branch", source: "cursor-plugins", enabled: true },
+    { name: "rule-no-inline-imports", description: "Keep imports at top of file", source: "cursor-plugins", enabled: true },
   ].map((skill) => ({ tags: [], version: null, importedAt: 1_761_600_000_000, warnings: [], assignedBots: [], ...skill })) },
   "/api/plugins/search": { featured: [
     { id: "notion", name: "Notion", description: "Pages, databases and notes", url: "https://mcp.notion.com/mcp", domain: "mcp.notion.com", site: "notion.so", auth: "oauth", category: "productivity" },
@@ -189,8 +196,13 @@ const MANAGE_API: Record<string, unknown> = {
     marketplaces: [{ name: "claude-plugins-official", source: "anthropics/claude-plugins-official", visibility: "org", addedAt: 1, updatedAt: 1, plugins: [
       { name: "github", description: "GitHub's MCP server", installed: false, external: false, category: "development", contents: { agents: [], commands: [], skills: [] } },
       { name: "code-review", description: "Reviews a pull request", installed: true, external: false, category: "development", contents: { agents: ["reviewer"], commands: ["review"], skills: ["code-review"] } },
+    ] }, { name: "cursor-plugins", source: "cursor/plugins", visibility: "org", addedAt: 1, updatedAt: 1, plugins: [
+      { name: "cursor-team-kit", description: "Team workflows for CI, code review and shipping", installed: true, external: false, category: "developer-tools", contents: { agents: ["ci-watcher"], commands: [], skills: ["rule-no-inline-imports", "ship-it"] }, convertedFrom: "cursor", notConverted: ["rules_always", "agent_settings:is_background, model", "hooks"] },
     ] }],
-    plugins: [{ key: "code-review@claude-plugins-official", name: "code-review", marketplace: "claude-plugins-official", enabled: true, removed: [], declaredMcpServers: [] }],
+    plugins: [
+      { key: "code-review@claude-plugins-official", name: "code-review", marketplace: "claude-plugins-official", enabled: true, removed: [], declaredMcpServers: [] },
+      { key: "cursor-team-kit@cursor-plugins", name: "cursor-team-kit", marketplace: "cursor-plugins", enabled: true, removed: [], declaredMcpServers: [] },
+    ],
     policy: { mode: "any" }, engine: { loadsPlugins: true }, canChange: true,
   },
   "/api/routines": { routines: [], runs: [] },
@@ -217,6 +229,21 @@ let flowInventory = flowSupersededFixture();
 if (superseded) {
   MANAGE_API["/api/bots/bot-a/capabilities"] = flowInventory;
   MANAGE_API["/api/bots/bot-a/plugins"] = flowSupersededPluginsFixture();
+}
+// ?bot=1 (#2759): what Rocket receives, Code Review and a converted Cursor plugin among it
+if (params.has("bot")) {
+  const plugin = (name: string, label: string, market: string, skills: string[], agents: string[] = []) => ({
+    key: `plugin:bot:${name}@${market}`, form: "plugin" as const, name: label, source: { kind: "marketplace" as const, label: market, version: "1.0.0" },
+    scope: "bot" as const, state: "on" as const, enabled: true, canToggle: true,
+    brings: { skills, commands: [], agents, mcpServers: [] }, engine: { skills: "prompt" as const, agents: "prompt" as const, nothing: false },
+  });
+  MANAGE_API["/api/bots/bot-a/capabilities"] = {
+    botId: "bot-a", engine: { kind: "claude", label: "Claude" },
+    items: [
+      plugin("code-review", "Code Review", "claude-plugins-official", ["code-review"], ["reviewer"]),
+      plugin("cursor-team-kit", "Cursor Team Kit", "cursor-plugins", ["rule-no-inline-imports", "ship-it"], ["ci-watcher"]),
+    ],
+  };
 }
 MANAGE_API["/api/me/skills-library"] = MANAGE_API["/api/skills-library"];
 
@@ -342,18 +369,21 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
   }) as typeof window.fetch;
 }
 
-const deepLinkPage = params.get("page") === "bots" || params.get("page") === "pages" ? params.get("page") as "bots" | "pages" : null;
+const forBot = params.has("bot");
+const deepLinkPage = ["bots", "pages", "sources"].includes(params.get("page") ?? "") ? params.get("page") as "bots" | "pages" | "sources" : null;
 
 function Manage() {
   const { state, dispatch } = useStore();
   const ready = state.bots.some((bot) => bot.id === "bot-a");
   useEffect(() => {
     if (superseded && ready) dispatch({ type: "togglePlugins", open: true, surface: "mcp", botId: "bot-a" });
+    // ?bot=1 (#2759): Plugins opened for Rocket, its own plugins in the "This bot" scope
+    else if (forBot && ready) dispatch({ type: "togglePlugins", open: true, surface: "mcp", botId: "bot-a" });
   }, [ready, dispatch]);
   useEffect(() => {
     if (deepLinkPage) dispatch({ type: "togglePlugins", open: true, page: deepLinkPage });
   }, [dispatch]);
-  if (superseded && (!ready || state.pluginsBotId !== "bot-a")) return <Frame>{null}</Frame>;
+  if ((superseded || forBot) && (!ready || state.pluginsBotId !== "bot-a")) return <Frame>{null}</Frame>;
   return (
     <Frame>
       <PluginsPanel />

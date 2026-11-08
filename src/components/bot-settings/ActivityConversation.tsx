@@ -5,8 +5,10 @@
 // as that column (useSideTranscript: newest page, older pages on scroll-up,
 // then the live stream), so it follows the run while it goes; no new route.
 // "Open the conversation" in the window's footer still moves the main chat there.
+// #2719: under a delegation card in the chat, the same view with Close
+// (onClose) instead, since the conversation stays where the person is.
 import { useMemo } from "react";
-import { Loader2, Maximize2 } from "lucide-react";
+import { Loader2, Maximize2, X } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -15,11 +17,14 @@ import { useSideTranscript } from "@/lib/use-side-transcript";
 import { BotAvatar } from "../Avatar";
 import { ChatView } from "../ChatView";
 
-export default function ActivityConversation({ botId, threadId, title, onOpenInMain }: {
+export default function ActivityConversation({ botId, threadId, title, onOpenInMain, onClose }: {
   botId: string;
   threadId: string;
   title: string;
-  onOpenInMain: () => void;
+  /** Moves the main chat to this conversation (the activity window). */
+  onOpenInMain?: () => void;
+  /** Puts the view away (under a delegation card, where it opened in place). */
+  onClose?: () => void;
 }) {
   const { state } = useStore();
   const bot = state.bots.find((candidate) => candidate.id === botId);
@@ -41,9 +46,16 @@ export default function ActivityConversation({ botId, threadId, title, onOpenInM
         <span dir="auto" className="truncate text-[13.5px] font-medium leading-5 text-ink">{title}</span>
         {bot && <span className="truncate text-[11.5px] leading-4 text-ink-secondary">{bot.name}</span>}
       </span>
-      <button type="button" data-activity-conversation-main onClick={onOpenInMain} aria-label={t("sideThread.openInMain")} title={t("sideThread.openInMain")} className={CIRCLE_BUTTON}>
-        <Maximize2 size={15} strokeWidth={1.75} aria-hidden="true" />
-      </button>
+      {onOpenInMain && (
+        <button type="button" data-activity-conversation-main onClick={onOpenInMain} aria-label={t("sideThread.openInMain")} title={t("sideThread.openInMain")} className={CIRCLE_BUTTON}>
+          <Maximize2 size={15} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      )}
+      {onClose && (
+        <button type="button" data-activity-conversation-close onClick={onClose} aria-label={bot ? t("delegation.workClose", { name: bot.name }) : t("common.close")} title={bot ? t("delegation.workClose", { name: bot.name }) : t("common.close")} className={CIRCLE_BUTTON}>
+          <X size={15} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 

@@ -11,7 +11,7 @@
 // anyone signed in who may read the page also gets Annotate; the page's own
 // person also gets Share.
 import { MASCOT_COLOR_NAMES } from "./mascot-colors.ts";
-import type { PageKind } from "./published-pages.ts";
+import { PAGE_KINDS, type PageKind } from "./published-pages.ts";
 
 export type ReaderLang = "fr" | "en";
 
@@ -68,7 +68,7 @@ export function parseReaderBoot(value: unknown): ReaderBoot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   if (record.v !== 1 || (record.lang !== "fr" && record.lang !== "en")) return null;
-  if (typeof record.title !== "string" || (record.kind !== "html" && record.kind !== "markdown" && record.kind !== "presentation")) return null;
+  if (typeof record.title !== "string" || (!PAGE_KINDS.includes(record.kind as PageKind))) return null;
   if (typeof record.version !== "number" || !Number.isSafeInteger(record.version) || record.version < 1) return null;
   const can = record.can && typeof record.can === "object" ? record.can as Record<string, unknown> : {};
   const pageId = typeof record.pageId === "string" && PAGE_ID.test(record.pageId) ? record.pageId : undefined;
@@ -78,7 +78,7 @@ export function parseReaderBoot(value: unknown): ReaderBoot | null {
     v: 1,
     lang: record.lang,
     title: record.title,
-    kind: record.kind,
+    kind: record.kind as PageKind,
     version: record.version,
     ...(pageId ? { pageId } : {}),
     ...(me && typeof me.id === "string" && typeof me.name === "string" ? { me: { id: me.id, name: me.name } } : {}),

@@ -197,6 +197,13 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
     }
     patch.emailDrafts = body.emailDrafts;
   }
+  if (body.collaboratorsCreateRoutines !== undefined) {
+    if (typeof body.collaboratorsCreateRoutines !== "boolean") {
+      env.json(env.res, 400, { error: "collaboratorsCreateRoutines must be true or false" });
+      return true;
+    }
+    patch.collaboratorsCreateRoutines = body.collaboratorsCreateRoutines;
+  }
   if (body.memeReplies !== undefined) {
     if (body.memeReplies !== "auto" && body.memeReplies !== "off") {
       env.json(env.res, 400, { error: "memeReplies must be auto or off" });

@@ -37,19 +37,22 @@ describe("UnattendedHostsSection", () => {
     expect(text).not.toMatch(/h_[0-9a-f]{8}/);
     // the id stays for support: in a tooltip and behind Copy
     expect(html).toContain(`title="${HOST}"`);
-    expect(html).toContain("data-unattended-host-copy");
+    expect(html).toContain("data-unattended-host-more");
     expect(isOpaqueId(unattendedHostLabel({ hostname: null }))).toBe(false);
   });
 
-  it("always offers Unattended access on an enrolled host (no server gate)", () => {
+  it("reads like a device row: kind and presence, access on a usable host, the rest behind Details", () => {
     const html = render();
-    expect(html.match(/data-unattended-host-open=""/g)).toHaveLength(2);
-    expect(html).toContain(t("remoteSessionsAdmin.hosts.open"));
+    expect(visible(html)).toContain(`${t("myDevices.computer")} · ${t("remoteSessionsAdmin.hosts.neverSeen")}`);
+    expect(html.match(/data-unattended-host-access="always"/g)).toHaveLength(2);
+    expect(html.match(/data-unattended-host-more=""/g)).toHaveLength(3);
+    expect(html).toContain("data-unattended-host-details");
+    expect(html).not.toContain("data-unattended-host-facts");
     expect(html).not.toContain("data-unattended-hosts-open-off");
   });
 
-  it("keeps Revoke except on a revoked host", () => {
-    expect(render().match(/data-unattended-host-revoke=""/g)).toHaveLength(2);
+  it("shows the stored access of a host", () => {
+    expect(render([host({ access: "never" })])).toContain('data-unattended-host-access="never"');
   });
 
   it("says when Perspicax cannot list hosts yet", () => {
@@ -61,8 +64,8 @@ describe("UnattendedHostsSection", () => {
     setLocale("fr");
     const html = render();
     expect(html).toContain("Hôtes inscrits");
-    expect(html).toContain("Accès non surveillé");
-    expect(html).toContain("Révoquer");
+    expect(html).toContain("Détails");
+    expect(html).toContain("Toujours permettre");
     expect(html).not.toContain("remoteSessionsAdmin.hosts.");
   });
 });

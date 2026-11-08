@@ -1,5 +1,5 @@
 // Rooms, session-search and session-read for internal session routes (#1383).
-import { recallMessages, recentMessages, readMessageText } from "../messages/message-db.ts";
+import { recallMessages, recentMessages, readMessageText, readLatestMessageText } from "../messages/message-db.ts";
 import type { MemoryDestination } from "../memory/memory-audience.ts";
 import { webhookPostText } from "../peers/peer-provenance.ts";
 import { claimRecallCrossings, recallCrossingLabel } from "../recall/recall-disclosure.ts";
@@ -175,11 +175,12 @@ export async function handleInternalSessionsRecall(
     }
     const threadId = String(url!.searchParams.get("threadId") ?? "").trim();
     const messageId = String(url!.searchParams.get("messageId") ?? "").trim();
-    if (!threadId || !messageId) return json(res, 400, { error: "threadId and messageId are required" });
+    // #2748: a thread alone reads its newest message
+    if (!threadId) return json(res, 400, { error: "threadId is required" });
     const readAllow = deps.privateRecallFilter(from, fromThreadId);
     const own = (threadId === from.threadId || Boolean(deps.taskByThread(from.id, threadId))) &&
       (!readAllow || readAllow(threadId));
-    const message = own ? readMessageText(threadId, messageId) : null;
+    const message = own ? (messageId ? readMessageText(threadId, messageId) : readLatestMessageText(threadId)) : null;
     if (!message) return json(res, 404, { error: "no such message in your conversations" });
     const readInRoom = Boolean(deps.groupByThread(fromThreadId));
     const readCrossed = readInRoom && threadId !== fromThreadId;

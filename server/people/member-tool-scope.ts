@@ -50,6 +50,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   // the member's own bot on another engine the member may use, for the member
   run_with_engine: "conversation",
   coordinate_bots: "conversation",
+  assignment_status: "read",
   post_to_room: "conversation",
   message_person: "conversation",
   react_to_message: "conversation",
@@ -75,6 +76,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   api_plan: "read", api_result_query: "read", identity: "read", flow: "read",
   api_upload: "conversation", flow_action: "conversation",
   remote_support_open: "conversation", remote_support_status: "conversation", remote_support_close: "conversation",
+  remote_support_hosts: "read", remote_support_host_code: "conversation", remote_support_host_revoke: "conversation",
   // chat widgets (agents-widget-tools.ts): a card in the member's own conversation
   check_widget: "read",
   show_widget: "conversation",
@@ -140,6 +142,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   propose_team_memory: "own-setup",
   propose_team_setup: "own-setup",
   propose_bot_deletion: "own-setup",
+  import_plugin_team: "own-setup",
   archive_bot: "own-setup",
   // every setting as the member (server/settings-actions.ts): the member's
   // own rights decide on the route the screen calls, a card otherwise
@@ -171,6 +174,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   // asks unless it only reads (server/remote-support/remote-session-exec.ts)
   remote_session_snapshot: "read",
   remote_session_exec: "conversation",
+  // the speaker's own host as the bot's computer; its access rule applies (#2726)
+  host_computer: "conversation",
   // join_meeting only stages a consent card; the person approves each join
   join_meeting: "conversation",
   // 2026-10-28: the tools below reached the catalog without a class, so a
@@ -186,6 +191,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   make_video: "own-work",
   // a search with the person's own provider and key (server/web-search/)
   sagax_web_search: "read",
+  // #2613: the skill catalogs the person sees, and ClawHub (read only)
+  skills_find: "read",
   // an API key of the person, sent where they allowed (credential-http.ts)
   vault_http_request: "own-account",
   // the person's own iPhone, which asks for its own consent (phone-tools.ts)

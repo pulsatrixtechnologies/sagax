@@ -140,7 +140,7 @@ export function createAgentCard(args: {
   authored?(messageId: string): void;
   /** propose_page (server/pages/published-pages.ts): stores a proposed version,
    * never a published one. Absent: the tool is refused. */
-  proposePage?(input: { pageId?: string; title: string; kind: PageKind; content: string }):
+  proposePage?(input: { pageId?: string; title: string; kind: PageKind; content: string; designSystem?: string; designTokens?: unknown }):
     { ok: true; pageId: string; version: number } | { ok: false; status: 400 | 404 | 409; error: string };
   /** #1905: the level the calling turn runs at (index.ts sourceApprovalMode),
    * so a may-I ask_choice under Full access is answered, not drawn. */
@@ -345,7 +345,7 @@ function proposePageCard(args: Parameters<typeof createAgentCard>[0], input: Rec
   const message = store.appendMessage(threadId, {
     role: "bot",
     kind: "text",
-    text: `Page proposed: ${title} (version ${proposed.version}). Review it, then choose who can see it before publishing.`,
+    text: `${parsed.value.kind === "design" ? "Design" : "Page"} proposed: ${title} (version ${proposed.version}). Review it, then choose who can see it before publishing.`,
     pagePublish: { pageId: proposed.pageId, version: proposed.version, title },
   });
   args.authored?.(message.id);

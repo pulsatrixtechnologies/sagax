@@ -276,7 +276,7 @@ describe("bot profile page V6: rows, sub-pages and plain cards", () => {
       }
     }
     const at = (selector: string) => where.get(selector) ?? [];
-    expect(at("[data-bot-payer]"), "who pays").toEqual(["page:sharing"]);
+    expect(at("[data-bot-payer]"), "who pays").toEqual(["page:model"]);
     expect(at("[data-bot-profile-share-open]"), "the Manage pill of People and groups").toEqual(["page:sharing"]);
     expect(at("[data-bot-profile-share]"), "the Share button of the banner").toEqual(["banner"]);
     expect(at("[data-bot-profile-section='usage']"), "usage").toEqual(["tab:stats"]);

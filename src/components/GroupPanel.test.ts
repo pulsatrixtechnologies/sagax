@@ -56,7 +56,8 @@ describe("group panel", () => {
     const html = render({});
     expect(html).toMatch(/role="tablist"[^>]*class="mt-4 flex max-w-full items-center justify-center gap-1"/);
     expect(html).not.toMatch(/role="tablist"[^>]*flex-wrap/);
-    expect(html).toMatch(/data-panel-tab="details"[^>]*class="rounded-full px-3 py-\[3px\] text-\[14px\][^"]*bg-raised text-ink"/);
+    // the selected pill is the sliding indicator (#2595), the bot panel's fill
+    expect(html).toMatch(/data-panel-tab="details"[^>]*class="relative rounded-full px-3 py-\[3px\] text-\[14px\][^"]*text-ink"><span aria-hidden="true" data-tab-indicator="" class="[^"]*bg-raised"/);
   });
 
   it("keeps a long name inside the panel's margin, with the (i) beside it", () => {

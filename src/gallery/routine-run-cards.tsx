@@ -12,8 +12,12 @@ import { createRoot } from "react-dom/client";
 
 import { ChatMarkdown } from "../components/ChatMarkdown";
 import { AttentionRow, RoutineRunRow } from "../components/ChatView";
+import { CodingJobCard } from "../components/CodingJobCard";
 import { GoalRunCard } from "../components/GoalRunCard";
+import { NewMessagesDivider } from "../components/NewMessagesDivider";
+import type { BotActivityItem } from "../lib/bot-activity";
 import { chatBubbleWidth, useChatBubbleWidthClasses } from "../lib/chat-bubble-width";
+import { codingJobView } from "../lib/coding-job-card";
 import { loadLocale } from "../lib/i18n";
 import { prefersWideBubble } from "../lib/rich-blocks";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -136,11 +140,59 @@ const goal: Message = {
   goalRun: { runId: "g1", goal: "Prepare the launch checklist", status: "working", coordinatorBotId: "atlas", coordinatorName: "Atlas", turnCount: 2, maxTurns: 6, startedAt: NOW - 60 * M },
 } as unknown as Message;
 
+/** ?scene=card (#2719): a realistic stretch of Atlas's conversation with
+ * two hand-offs as cards (one finished and folded, one still running and
+ * open) between normal bubbles, under the finished coding job card (#2148,
+ * the conforming neighbour) and across the "New" separator. A click on
+ * Orla's row opens her work right there (her messages come from the fetch
+ * override below). */
+const finishedRun = card("finished", {
+  routineName: "dispatch-gox-pass", status: "completed", startedAt: NOW - 70 * M, finishedAt: NOW - 62 * M,
+  summary: "Morning pass done: 41 open tickets, 3 reassigned, nothing over SLA. Harrie fixed the Northwind overage and Orla sent the weekly summary.",
+  handedTo: [
+    { botId: "harrie", threadId: "harrie-work-1", name: "Harrie", status: "completed", task: "Reconcile the bank overage for Northwind", startedAt: NOW - 70 * M, finishedAt: NOW - 66 * M, note: "Moved 2.5 h to the right agreement." },
+    { botId: "orla", threadId: "orla-work-1", name: "Orla", status: "completed", task: "Draft the weekly client summary", startedAt: NOW - 69 * M, finishedAt: NOW - 63 * M, note: "Summary sent to the three account managers." },
+  ],
+} as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 70 * M);
+const activeRun = card("active", {
+  routineName: "dispatch-gox-pass", status: "running", startedAt: NOW - 4 * M,
+  handedTo: [
+    { botId: "harrie", threadId: "harrie-work", name: "Harrie", status: "completed", task: "Reconcile the bank overage for Northwind", startedAt: NOW - 4 * M, finishedAt: NOW - 1 * M, note: "Moved 2.5 h to the right agreement." },
+    { botId: "orla", threadId: "orla-work", name: "Orla", status: "running", task: "Draft the weekly client summary", startedAt: NOW - 3 * M },
+  ],
+} as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 4 * M);
+/** The finished coding job of src/gallery/coding-job-cards.tsx, as the neighbour card. */
+const codingJob = {
+  id: "thread:job-0", kind: "session", botId: "atlas", botName: "Atlas", title: "Ajouter le widget des outils TI", status: "finished",
+  startedAt: NOW - 52 * M, endedAt: NOW - 31 * M, updatedAt: NOW - 31 * M, threadId: "job-0", coding: true,
+  code: {
+    folder: "/srv/repos/marketplace", branch: "feat/it-tools-widget", repo: "acme/marketplace",
+    pullRequests: [{ repo: "acme/marketplace", number: 42, title: "Widget des outils TI", url: "https://github.com/acme/marketplace/pull/42", action: "opened", branch: "feat/it-tools-widget", at: NOW - 32 * M }],
+    branches: [{ name: "feat/it-tools-widget", repo: "acme/marketplace", pushed: true, url: "https://github.com/acme/marketplace/tree/feat/it-tools-widget", at: NOW - 33 * M }],
+    commits: [],
+  },
+} as unknown as BotActivityItem;
+const codingResult = "J'ai ajouté le widget en grille de trois colonnes, avec ses tests. Les 48 tests passent et la PR est ouverte.";
+/** Orla's work conversation (what the click on her row shows). */
+const orlaMessages: Message[] = [
+  { id: "o1", role: "user", kind: "text", at: NOW - 3 * M, text: "Draft the weekly client summary for the three account managers: closed tickets, open escalations and the two projects that moved this week. Send it to them when it reads well." },
+  { id: "o2", role: "bot", kind: "text", at: NOW - 3 * M + 20_000, turnId: "t1", text: "I'll pull this week's closed tickets and the open escalations first." },
+  { id: "o3", role: "bot", kind: "activity", at: NOW - 3 * M + 40_000, turnId: "t1", tool: { name: "cw_psa_find_tickets", ok: true, durationMs: 1_840, input: "closedFlag=true closedSince=this week", output: "14 tickets" } },
+  { id: "o4", role: "bot", kind: "activity", at: NOW - 2 * M, turnId: "t1", tool: { name: "cw_psa_find_project_tickets", ok: true, durationMs: 960, input: "projects=Northwind rollout, Contoso VoIP", output: "2 projects, 6 tickets moved" } },
+  { id: "o5", role: "bot", kind: "text", at: NOW - 1 * M, turnId: "t1", text: "14 tickets closed, 2 escalations still open (one waiting on the client). Drafting the summary now, one paragraph per manager." },
+] as unknown as Message[];
+
+// The engine the team's bots run on; also what GET /api/instances answers,
+// since the live store reloads that list after hydrate.
+const instances = [{ instanceId: "test", driverKind: "codex", displayName: "Test", snapshot: { state: "available" }, models: { options: [{ id: "Opus 4.7", label: "Opus 4.7" }, { id: "Sonnet 4.6", label: "Sonnet 4.6" }, { id: "Haiku 4.5", label: "Haiku 4.5" }] } }];
+
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   if (url.includes("/api/bots?")) return json({ bots: team, groups: [], sections: [], computerControl: {} });
+  if (url.includes("/api/instances")) return json({ instances });
+  if (url.includes("/api/threads/orla-work/messages")) return json({ messages: orlaMessages, activeLeafId: "o5", hasMore: false });
   if (url.includes("/api/routines")) return json({ routines: [], runs: [], scope: "mine", allowed: { mine: true, team: false, all: false }, facets: { teams: [], owners: [], botChoices: [] } });
   if (url.includes("/api/")) return json({});
   return realFetch(input, init);
@@ -150,6 +202,7 @@ function Shell() {
   const { dispatch } = useStore();
   useEffect(() => {
     dispatch({ type: "hydrate", bots: team, groups: [], sections: [], computerControl: {} } as never);
+    dispatch({ type: "instances", instances } as never);
     dispatch({ type: "routinesHydrated", routines: [], runs: [] });
     dispatch({ type: "select", id: "atlas" });
   }, [dispatch]);
@@ -158,7 +211,18 @@ function Shell() {
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col">
         <div className="flex min-h-[52px] items-center px-4 text-[14px] font-semibold">Atlas</div>
         <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-3 overflow-y-auto px-6 py-4">
-          {scene === "report" ? (
+          {scene === "card" ? (
+            <>
+              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Add the IT tools widget to the marketplace.</div>
+              <CodingJobCard job={codingJobView(codingJob, codingResult)} threadId="job-0" now={NOW} />
+              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Run the dispatch pass.</div>
+              <RoutineRunRow message={finishedRun} botId="atlas" />
+              <NeighbourBubble text="Both teammates are done; the Northwind overage is on the right agreement now." />
+              <NewMessagesDivider fading={false} />
+              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Run it again for the evening.</div>
+              <RoutineRunRow message={activeRun} botId="atlas" />
+            </>
+          ) : scene === "report" ? (
             <>
               <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">What changed today?</div>
               <NeighbourBubble text={NEIGHBOUR} />

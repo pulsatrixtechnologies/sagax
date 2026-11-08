@@ -6,11 +6,23 @@ import {
   QUESTION_DISMISS_MESSAGE,
   isPersistentQuestionCard,
 } from "../../shared/ask-question.ts";
+import { closeDeclinedQuestion, isQuestionDecline } from "../approvals/question-decline.ts";
 import { resolvePeerComms } from "../peers/peer-approval.ts";
 import { personKey } from "../request-speaker.ts";
 import { resolveAndSendTerminal } from "../terminal/terminal-requests.ts";
 import type { BotsMessagesRouteDeps } from "./bots-messages-deps.ts";
 import { PASS, type RouteContext, type RouteHandler } from "./table.ts";
+
+function feedbackAnswer(deps: BotsMessagesRouteDeps, ctx: RouteContext, threadId: string, body: Record<string, any>): ReturnType<RouteContext["json"]> | undefined {
+  const requestId = String(body.requestId ?? "");
+  if (!deps.feedback?.answerCard || !requestId.startsWith("fb-")) return undefined;
+  const words = String(body.message ?? body.option ?? body.text ?? "");
+  const refusal = deps.cardAnswerRefusal(ctx.auth, threadId, requestId, "answer");
+  if (refusal) return ctx.json(ctx.res, 403, { error: refusal });
+  const answered = deps.feedback.answerCard(threadId, requestId, words, deps.actorPrincipalId?.(ctx.auth) || null);
+  if (!answered) return undefined;
+  return answered.ok ? ctx.json(ctx.res, 200, { ok: true }) : ctx.json(ctx.res, answered.status, { error: answered.error });
+}
 
 async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext): Promise<typeof PASS | void> {
   const { req, res, path, method, auth, json, readBody } = ctx;
@@ -37,6 +49,9 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
     if (source) {
       return handleThreadRespond(deps, { ...ctx, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
     }
+    // #2618: the Feedback bot's cards (Send / Cancel, kind, impact) are answered by its own flow
+    const feedbackDone = feedbackAnswer(deps, ctx, bot.threadId, body);
+    if (feedbackDone) return feedbackDone;
     const behavior = requestBehavior(body.behavior);
     const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
     if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });
@@ -146,7 +161,15 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
         store.patchMessage(bot.threadId, pending.id, { card: { ...pending.card, dismissed: true } });
         return json(res, 200, { ok: true, dismissed: true });
       }
-      const outcome = await answerRequest(bot.threadId, bot.modelSelection.instanceId, requestId, behavior, body.message, { id: bot.id, name: bot.name }, body.always === true, body.rememberCommand === true);
+      // #2633/#2634: a declined question is told in the person's language,
+      // and never becomes a message of theirs once its turn is over.
+      const declined = isQuestionDecline(body, pending?.card);
+      const message = declined ? (deps.questionDeclinedText?.(auth) ?? body.message) : body.message;
+      const outcome = await answerRequest(bot.threadId, bot.modelSelection.instanceId, requestId, behavior, message, { id: bot.id, name: bot.name }, body.always === true, body.rememberCommand === true);
+      if (outcome === "unavailable" && declined && pending) {
+        const closed = closeDeclinedQuestion(store, bot.threadId, pending.id);
+        return json(res, closed.status, closed.body);
+      }
       if (outcome === "unavailable" && isPersistentQuestionCard(pending?.card) && behavior === "answer") {
         if (!pending) return json(res, 404, { error: "this question is no longer available" });
         const answer = typeof body.message === "string" ? body.message.trim() : "";
@@ -190,6 +213,9 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
     if (source) {
       return handleThreadRespond(deps, { ...ctx, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
     }
+    // #2618: the Feedback bot's cards (Send / Cancel, kind, impact) are answered by its own flow
+    const feedbackDone = feedbackAnswer(deps, ctx, threadId, body);
+    if (feedbackDone) return feedbackDone;
     const behavior = requestBehavior(body.behavior);
     const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
     if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });
@@ -364,7 +390,15 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
       }
       if (!owner && !pending) return json(res, 404, { error: "nothing is waiting on an answer in this conversation" });
       const requestOwner = owner ? botForThread(owner.id, threadId) : null;
-      const outcome = await answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, behavior, body.message, owner ? { id: owner.id, name: owner.name } : undefined, body.always === true, body.rememberCommand === true);
+      // #2633/#2634: a declined question is told in the person's language,
+      // and never becomes a message of theirs once its turn is over.
+      const declined = isQuestionDecline(body, pending?.card);
+      const message = declined ? (deps.questionDeclinedText?.(auth) ?? body.message) : body.message;
+      const outcome = await answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, behavior, message, owner ? { id: owner.id, name: owner.name } : undefined, body.always === true, body.rememberCommand === true);
+      if (outcome === "unavailable" && declined && pending) {
+        const closed = closeDeclinedQuestion(store, threadId, pending.id);
+        return json(res, closed.status, closed.body);
+      }
       if (outcome === "unavailable" && isPersistentQuestionCard(pending?.card) && behavior === "answer") {
         if (!pending?.card) return json(res, 404, { error: "this question is no longer available" });
         const answer = typeof body.message === "string" ? body.message.trim() : "";

@@ -116,8 +116,8 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
     title: "Team, bots, rooms and profile",
     tools: [
       "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule",
-      "propose_bot_deletion", "archive_bot", "create_bot", "create_room", "manage_room",
-      "propose_team_memory", "nudge_person", "retry_thread", "start_thread",
+      "propose_bot_deletion", "import_plugin_team", "archive_bot", "create_bot", "create_room", "manage_room",
+      "propose_team_memory", "nudge_person", "retry_thread", "start_thread", "assignment_status",
     ],
   },
   {
@@ -164,7 +164,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
     title: "Shared computers and remote sessions",
     tools: [
       "shared_computer", "list_shared_computers", "vm_exec",
-      "publish_remote_session", "remote_session_snapshot", "remote_session_exec",
+      "publish_remote_session", "remote_session_snapshot", "remote_session_exec", "host_computer",
     ],
   },
   {
@@ -193,7 +193,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
       "ask_choice", "create_options_card", "task_list", "send_voice_note",
       "make_video", "remove_reaction",
       "connect_github", "sagax_web_search", "vault_http_request",
-      "group_memory_update",
+      "group_memory_update", "skills_find",
     ],
   },
   {
@@ -204,7 +204,8 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
       "memory_feedback", "api_list", "api_search", "api_describe", "api_result_query",
       "api_lookup", "api_plan", "api_upload", "api_reload", "identity",
       "flow", "flow_action", "remote_support_open", "remote_support_status",
-      "remote_support_close", "review_write",
+      "remote_support_close", "remote_support_hosts", "remote_support_host_code",
+      "remote_support_host_revoke", "review_write",
       "claim", "claim_list", "claim_release", "claim_renew",
     ],
   },

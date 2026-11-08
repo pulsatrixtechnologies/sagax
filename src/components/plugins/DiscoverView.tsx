@@ -36,6 +36,8 @@ export interface DiscoverViewProps {
   /** rows not installed yet (discoverItems) */
   items: PluginItem[];
   loading?: boolean;
+  /** the catalog has not answered and nothing is cached: skeleton rows */
+  catalogPending?: boolean;
   filter: PluginFilter;
   onFilter: (filter: PluginFilter) => void;
   type: PluginTypeFilter;
@@ -65,7 +67,7 @@ export interface DiscoverViewProps {
   onAddCustom?: () => void;
 }
 
-export function DiscoverView({ items, loading = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, fromSagax = [], onOpenFromSagax, onViewInstalled, accounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom }: DiscoverViewProps) {
+export function DiscoverView({ items, loading = false, catalogPending = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, fromSagax = [], onOpenFromSagax, onViewInstalled, accounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom }: DiscoverViewProps) {
   const [limit, setLimit] = useState(PAGE);
   useEffect(() => setLimit(PAGE), [filter, type]);
   const sections = mainSections(items, "", filter, type, extraSources, focus);
@@ -141,6 +143,11 @@ export function DiscoverView({ items, loading = false, filter, onFilter, type, o
           </div>
         </section>
       ))}
+      {catalogPending && !loading && (
+        <div data-plugins-skeleton aria-hidden className="mt-[30px] grid gap-3">
+          {[0, 1, 2, 3].map((n) => <div key={n} className="h-14 animate-pulse rounded-xl bg-card" />)}
+        </div>
+      )}
       {loading && items.length === 0 ? (
         <div className="flex items-center justify-center gap-2 py-24 text-[12px] text-ink-secondary">
           <Loader2 size={14} className="animate-spin" /> {t("connectors.loadingCatalog")}

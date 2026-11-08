@@ -113,7 +113,7 @@ const BARE: Record<string, Kind> = {
   read_transcript_page: "readConversations", read_latest_page: "readConversations",
   read_latest_page_with_threads: "readConversations", read_transcript_cold: "readConversations",
   list_routines: "routine", propose_routine: "routine", propose_routine_action: "routine", schedule_routine: "routine", manage_routine: "routine",
-  skills_list: "skill", skill_manage: "skill", stage_skill: "skill", update_skill: "skill",
+  skills_list: "skill", skill_manage: "skill", stage_skill: "skill", update_skill: "skill", skills_find: "skill",
   attach_file: "attachFile",
   react_to_message: "react", remove_reaction: "react",
   create_options_card: "card",
@@ -201,6 +201,21 @@ export function commandAim(command: string): { target: string; title: string } {
 function internalName(name: string): string | undefined {
   if (!INTERNAL.test(name)) return undefined;
   return name.replace(INTERNAL, "");
+}
+
+const HOST_VM_STEP: Record<string, LocaleKey> = {
+  vm_provision: "step.hostVm.provision",
+  vm_rebuild: "step.hostVm.rebuild",
+  vm_delete: "step.hostVm.delete",
+  vm_status: "step.hostVm.status",
+  set_mode: "step.hostVm.mode",
+  ask_mode: "step.hostVm.mode",
+};
+
+function isHostComputerTool(name: string): boolean {
+  const internal = internalName(name);
+  const bare = (internal ?? parseToolId(name).name ?? name).toLowerCase();
+  return bare === "host_computer";
 }
 
 function kindOf(name: string): Kind | undefined {
@@ -450,6 +465,16 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf, live?: boolean): S
     if (named) return named;
   }
   const args = parseArgs(tool.input) ?? parseArgs(tool.summary);
+  // Bot computers (#2726, #2727): a host's shell reads as a command, its
+  // screen as the screen, and its VM work as one compact provisioning line.
+  if (isHostComputerTool(name)) {
+    const action = typeof args?.action === "string" ? args.action : "";
+    if (action === "exec") return { label: kindLabel("runCommand", phase, args, nameOf), ...kindAim("runCommand", args, tool) };
+    if (action === "screenshot") return { label: kindLabel("screen", phase, args, nameOf) };
+    const vmKey = HOST_VM_STEP[action];
+    if (vmKey) return { label: t(vmKey) };
+    return { label: kindLabel("computer", phase, args, nameOf) };
+  }
   const kind = kindOf(name);
   if (kind) {
     const aim = kindAim(kind, args, tool);

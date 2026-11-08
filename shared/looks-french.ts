@@ -13,6 +13,12 @@ const ENGLISH_WORDS = new Set([
 ]);
 
 export function looksFrench(text: string): boolean {
+  return textLanguage(text) !== "en";
+}
+
+/** #2762: "fr" or "en" when the text says, null when it is too short or has
+ * no stopword (the caller then falls back on the person's preference). */
+export function textLanguage(text: string): "fr" | "en" | null {
   const words = text
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`[^`]*`/g, " ")
@@ -21,13 +27,13 @@ export function looksFrench(text: string): boolean {
     .split(/[^a-zà-ÿœæ']+/i)
     .flatMap((word) => word.split("'"))
     .filter(Boolean);
-  if (words.length < 4) return true;
+  if (words.length < 4) return null;
   let fr = 0;
   let en = 0;
   for (const word of words) {
     if (FRENCH_WORDS.has(word)) fr += 1;
     if (ENGLISH_WORDS.has(word)) en += 1;
   }
-  if (fr === 0 && en === 0) return true;
-  return fr >= en;
+  if (fr === 0 && en === 0) return null;
+  return fr >= en ? "fr" : "en";
 }

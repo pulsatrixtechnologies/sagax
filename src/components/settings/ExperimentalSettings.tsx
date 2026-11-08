@@ -45,6 +45,8 @@ function FeatureRow({
   onToggle: () => void;
   below?: React.ReactNode;
 }) {
+  // impossible here and not on: not rendered (hiddenWhenUnavailable)
+  if (unavailable && !checked) return null;
   return (
     <div data-experimental-feature={feature} data-unavailable={unavailable ? "" : undefined} className={cn(unavailable && "[&_[id]]:text-ink-secondary")}>
       <DescribedRow
@@ -76,17 +78,9 @@ function UnavailableRow({
   label: string;
   reason: React.ReactNode;
 }) {
-  return (
-    <div data-experimental-feature={feature} data-unavailable="" className={cn("[&_[id]]:text-ink-secondary")}>
-      <DescribedRow
-        label={label}
-        description={t("settings.experimental.unavailable")}
-        rowId={feature}
-      >
-        <HelpTip label={t("settings.moreAbout", { title: label })}>{reason}</HelpTip>
-      </DescribedRow>
-    </div>
-  );
+  // the server does not serve it: nothing to show (hiddenWhenUnavailable)
+  void feature; void label; void reason;
+  return null;
 }
 
 export function ExperimentalSettings() {

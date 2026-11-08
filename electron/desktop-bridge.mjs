@@ -241,6 +241,46 @@ export async function searchFiles(root, { pattern, glob, protectedRoots, signal 
   return text(results.length ? `${results.join("\n")}${results.length >= 200 || visited >= 20_000 ? "\n[more results not shown]" : ""}` : "No matches.");
 }
 
+/** A failed operation as the person's own bot reads it (#2606). Unlike a
+ * shared computer's (shared-computer-access.mjs sharedComputerError, which
+ * collapses absolute paths for another workspace), this is the person's own
+ * computer and the bot named the path: the error keeps the exact path that
+ * was opened, so "ENOENT ... open '/tmp/x.txt'" never reads as 'x.txt'. */
+export function bridgeOperationError(error) {
+  return { ...text(String(error?.message || "Computer action failed")), isError: true };
+}
+
+const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The app's own data folder a command line names, or null (#2773). In solo
+ * mode the Sagax server runs on this computer: its data (messages.db, the
+ * provider keys) sits in these folders, and run_command must not reach it
+ * by name, as read_file and search_files cannot. Spelled absolute, from ~,
+ * $HOME or ${HOME}, or relative to the home folder (the default cwd), with
+ * a space written as is or escaped. */
+export function commandNamesAppData(command, appDataPaths, home) {
+  if (typeof command !== "string" || !command) return null;
+  const fold = process.platform === "darwin" || process.platform === "win32";
+  // ~/.openmausbot, the legacy name, is a link to ~/.sagax (legacy-names.mjs).
+  const roots = (appDataPaths ?? []).flatMap(root => typeof root === "string" && path.basename(root) === ".sagax" ? [root, path.join(path.dirname(root), ".openmausbot")] : [root]);
+  for (const root of roots) {
+    if (typeof root !== "string" || !root) continue;
+    const clean = path.resolve(root);
+    const forms = [clean];
+    const homeDir = typeof home === "string" && home ? path.resolve(home) : "";
+    if (homeDir && clean.startsWith(homeDir + path.sep)) {
+      const rel = clean.slice(homeDir.length + 1);
+      forms.push(`~/${rel}`, `$HOME/${rel}`, `\${HOME}/${rel}`, rel);
+    }
+    for (const form of forms) {
+      const spelled = escapeRegExp(form).replace(/ /g, "(?: |\\\\ )");
+      const pattern = new RegExp(`(^|[\\s'"=(:;|&<>\`])(?:\\./)?${spelled}(?=$|[/\\s'";|&)<>\`])`, fold ? "i" : "");
+      if (pattern.test(command)) return clean;
+    }
+  }
+  return null;
+}
+
 /** Run one operation on this computer. `deps` holds what only Electron or
  * the person's settings provide. */
 export async function executeBridgeOperation(operation, deps, signal) {
@@ -249,6 +289,11 @@ export async function executeBridgeOperation(operation, deps, signal) {
   switch (operation.action) {
     case "run_command": {
       const cwd = operation.cwd ? localPath(operation.cwd, home) : home;
+      // #2773: the app's own data never passes through run_command either,
+      // neither named in the command nor as its working directory.
+      const named = commandNamesAppData(operation.command, deps.appDataPaths, home);
+      if (named) throw new Error(`This command names ${named}, the Sagax app's own data on this computer: run_command does not reach it.`);
+      if (operation.cwd) await assertOutsideProtected(protectedRoots, cwd);
       return runCommand(operation.command, { cwd, timeoutSeconds: operation.timeout_seconds ?? 120, signal, env: { ...commandEnvironment(), ...operation.env } });
     }
     case "read_file": {
@@ -652,7 +697,7 @@ export function createDesktopBridge({
             };
             try {
               result = await executeBridgeOperation(operation, {
-                home, attachmentsDir, protectedPaths: roots, fetchUrl, browse, localVm, progress, terminal: openTerminal,
+                home, attachmentsDir, protectedPaths: roots, appDataPaths: protectedPaths, fetchUrl, browse, localVm, progress, terminal: openTerminal,
                 localModelBase: (endpoint) => localCatalog.get(endpoint) ?? null,
                 localModelAnthropic: (endpoint) => localAnthropic.has(endpoint),
                 // The key for the served endpoint, by its loopback base, from
@@ -670,7 +715,7 @@ export function createDesktopBridge({
                 } : null,
               }, jobSignal);
             } catch (error) {
-              result = sharedComputerError(error);
+              result = bridgeOperationError(error);
               if (["computer_tools", "computer_call"].includes(operation.action)) { cua?.close(); cua = null; }
             } finally {
               clearInterval(heartbeat);

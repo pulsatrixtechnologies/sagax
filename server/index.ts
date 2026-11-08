@@ -31,7 +31,7 @@ import { createBotsMutateRoutes } from "./routes/bots-mutate.ts";
 // First of all, SAGAX_* settings onto the names the code reads (step 1 of
 // the rename, electron/legacy-names.mjs).
 import { isReadOnlyCommand, runCommandOf } from "../shared/read-only-command.ts";
-import { grantRemoteExecApproval, noteRemoteExecRequest, remoteSessionToolCall } from "./remote-support/remote-session-exec.ts";
+import { consumeRemoteExecApproval, grantRemoteExecApproval, noteRemoteExecRequest, remoteSessionToolCall } from "./remote-support/remote-session-exec.ts";
 import "../electron/legacy-env-boot.mjs";
 import { ENVIRONMENT_PATHS, HEALTH_IDENTITY } from "../electron/legacy-names.mjs";
 import { healthzBody, healthzUnreadyBody } from "./process/healthz.ts";
@@ -81,6 +81,7 @@ import { alwaysDenyOffered } from "../shared/approval-rule-card.ts";
 import { isOpaqueId, quotedIdOr } from "../shared/human-id.ts";
 import { createRecallTopicInternalRoutes } from "./routes/recall-topic-internal.ts";
 import { createRouteMessageInternalRoutes } from "./routes/route-message-internal.ts";
+import { createSkillsFindInternalRoutes } from "./routes/skills-find-internal.ts";
 import { claudeSignedIn, resolveClaudeConfigDir, setSoloClaudeLinkedHandler } from "./drivers/claude.ts";
 import { claudeAccountLinked, soloClaudeAccountLinked, type SoloClaudeLinkCache } from "./engines/claude-account.ts";
 import { claudeActivityEvents, isClaudeComputerTool } from "./engines/claude-activity.ts";
@@ -154,6 +155,7 @@ import * as checkpoints from "./checkpoints.ts";
 import { commandReceipt } from "./commands.ts";
 import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
+import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
 import { appendDecision, bindConfidentialDecisions, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
 import { validateBotCwd, validateBotCwdFor } from "./bots/bot-cwd.ts";
@@ -201,7 +203,7 @@ import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
-import { createSkillReview, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
+import { createSkillReview, looksLikeStop, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
 import { summarizeSessions } from "./recall/session-summary.ts";
 import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
@@ -713,6 +715,7 @@ import { LocalVmSeatPool, type LocalVmSeatHolder } from "./computer/local-vm-sea
 import { TurnReplyRepeats } from "./turns/turn-reply-repeats.ts";
 import { dispatchLoopStop, makeLoopStopSubscriber } from "./safety/loop-detector.ts";
 import { wireLoopGuard, loopGuardSettingsFrom, toolErrorCorrectiveRoundsFor, subscribeLoopGuard } from "./host/loop-guard-wiring.ts";
+import { wireTurnBudget } from "./host/turn-budget-wiring.ts";
 import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
 import { createDelegatedLevel } from "./host/delegated-level.ts";
 import { createLiveApprovalMode } from "./host/live-approval.ts";
@@ -755,14 +758,14 @@ import { BrowserNetworkDebug } from "./browser/browser-network-debug.ts";
 import { createScreenFrameSource } from "./computer/screen-frame-source.ts";
 import { screenFrameHash } from "./computer/screen-frame-gate.ts";
 import { RoutineRequestService } from "./routines/routine-requests.ts";
-import { directApply, UNDO_STALE } from "./direct-apply.ts";
+import { directApply, reviewedSkillNeedsCard, UNDO_STALE } from "./direct-apply.ts";
 import { createAgentCard } from "./widgets/chat-widgets.ts";
 import { buildBotOverview } from "./bots/bot-overview.ts";
 import { ProfileRequestService } from "./profiles/profile-requests.ts";
 import { ModelRequestService } from "./models/model-requests.ts";
 import { RuleRequestService } from "./rules/rule-requests.ts";
 import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from "./team/team-setup-requests.ts";
-import type { TeamSetupRequest } from "../shared/team-setup.ts";
+import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts";
 import { profileRevision, profileSnapshot } from "./profiles/profile-revision.ts";
 import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profiles/profile-versions.ts";
 import { BOT_PACKAGE_MAX_SKILLS, isBotPackage, packageSummary, parsePackageDocument } from "./bots/bot-package.ts";
@@ -848,6 +851,8 @@ import { createRemoteSessionActionsAudit, readRemoteSessionLog } from "./remote-
 import { createUnattendedConsentStore } from "./remote-support/remote-session-consent-store.ts";
 import { createRemoteSessionsAdmin } from "./remote-support/remote-sessions-admin.ts";
 import { createUnattendedHosts } from "./remote-support/remote-unattended-hosts.ts";
+import { createHostComputerStore } from "./remote-support/host-computer-store.ts";
+import { createHostComputerRouter, hostComputerExecCommand } from "./remote-support/host-computer-router.ts";
 import { createRemoteSessionRegistrar } from "./remote-support/remote-session-register.ts";
 import { handleRemoteSupportCall, recallSupportSession } from "./remote-support/remote-support-local.ts";
 import { guardRemoteSupportOpen } from "./remote-support/remote-support-open-guard.ts";
@@ -857,8 +862,10 @@ import { createRemoteSessionInternalRoutes, createRemoteSessionRoutes } from "./
 import { createRemoteSessionsAdminRoutes } from "./routes/remote-sessions-admin.ts";
 import { createRemoteBotHosts } from "./remote-support/remote-bot-hosts.ts";
 import { createRemoteBotHostsRoutes } from "./routes/remote-bot-hosts.ts";
+import { createHostComputerInternalRoutes, createHostComputersRoutes } from "./routes/host-computers.ts";
 import { createRemoteHostsRoutes } from "./routes/remote-hosts.ts";
 import { RemoteHostTeams } from "./remote-support/remote-host-teams.ts";
+import { RemoteHostAccess, hostAccessGate } from "./remote-support/remote-host-access.ts";
 import { createRemoteControlRoutes, isRemoteControlPath } from "./routes/remote-control.ts";
 import { BOT_ACT_ROUTE_HEADER, createRemoteSessionFileRoutes, remoteCallerIsAgent } from "./routes/remote-session-files.ts";
 import { createDeviceSettingsBroker } from "./device-settings.ts";
@@ -868,7 +875,8 @@ import { DEVICE_REQUEST_KEYS, isSyncedPreference } from "../shared/settings-acti
 import { installResourceUsage } from "./resource-usage/install.ts";
 import { grokAccountReach, grokReachConnectorNames } from "./drivers/acp/grok-tool-catalog.ts";
 import { GROK_CLOUD_CONNECTORS } from "../shared/grok-cloud-connectors.ts";
-import { createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes } from "./routes/connector-setup.ts";
+import { connectorSetupOwner, createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes } from "./routes/connector-setup.ts";
+import { connectorReauthFailure, connectorReauthText, type ConnectorSetupView } from "../shared/connector-setup.ts";
 import { streamTerminalAttachment } from "./terminal-resources/adapters/personal.ts";
 import { parseTerminalDestinationPick } from "../shared/terminal-request.ts";
 import { DesktopTerminals } from "./desktop/desktop-terminal.ts";
@@ -1367,7 +1375,7 @@ import { createInternalIntegrationsRoutes } from "./routes/internal-integrations
 // IMPORT-ANCHOR:team-map
 import { createTeamMapRoutes } from "./routes/team-map.ts";
 import { createTeamLibraryRoutes } from "./routes/team-library.ts";
-import { createTeamExportImportRoutes } from "./routes/team-export-import.ts";
+import { createPluginTeamImporter, createTeamExportImportRoutes, type TeamExportImportRouteDeps } from "./routes/team-export-import.ts";
 import { createTeamMemoryHttpRoutes } from "./routes/team-memory-http.ts";
 import { createSectionContextRoutes } from "./routes/section-context.ts";
 import { createTeamDefaultsRoutes } from "./routes/team-defaults.ts";
@@ -1393,6 +1401,7 @@ import { createComputersRoutes } from "./routes/computers.ts";
 import { createBotsContentRoutes } from "./routes/bots-content.ts";
 import { createBrowserEngineRoutes } from "./routes/browser-engine.ts";
 import { createPlanUsageRoutes } from "./routes/plan-usage.ts";
+import { createPlanHistoryStore } from "./usage/plan-history.ts";
 import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
@@ -6646,6 +6655,7 @@ bindLeafHost({
   get confirmHeldCard() { return confirmHeldCard; },
   get acceptDirectSend() { return acceptDirectSend; },
   get deliverLateQuestionAnswer() { return deliverLateQuestionAnswer; },
+  get hostComputers() { return hostComputers; },
   get startOrQueueOpenedThread() { return startOrQueueOpenedThread; },
   get screenPollers() { return screenPollers; },
   get computerThumbnails() { return computerThumbnails; },
@@ -6693,6 +6703,7 @@ bindLeafHost({
   get waitsBoot() { return waitsBoot; },
   get botWaits() { return botWaits; },
   get shellLoopGuard() { return shellLoopGuard; },
+  get directTurnBudget() { return directTurnBudget; },
   get publishRuntime() { return publishRuntime; },
   get peerNoticeHops() { return peerNoticeHops; },
   get noteWakeDryRun() { return noteWakeDryRun; },
@@ -9435,6 +9446,16 @@ function routineNeedsRun(auth: RequestAuth, botId: unknown): boolean {
   if (!bot) return false;
   return !atLeast(viewerBotLevel(auth, bot), "run");
 }
+/** #2622: the owner may keep routine creation to themself and the bot's
+ * managers ("Collaborators can create routines" off). */
+const COLLABORATORS_CANNOT_CREATE = { error: "the owner of this bot does not let collaborators create routines", code: "collaborators_cannot_create_routines" } as const;
+function routineCreateRefused(auth: RequestAuth, botId: unknown): typeof COLLABORATORS_CANNOT_CREATE | null {
+  if (IDENTITY.kind !== "perspicax" || auth.kind !== "session" || typeof botId !== "string") return null;
+  const bot = store.bot(botId);
+  if (!bot || bot.collaboratorsCreateRoutines !== false) return null;
+  const level = viewerBotLevel(auth, bot);
+  return level === "owner" || level === "manage" ? null : COLLABORATORS_CANNOT_CREATE;
+}
 function hiddenRoutineTarget(body: unknown, visible: VisibleSet): string | null {
   if (visible.everything || !body || typeof body !== "object") return null;
   const { botId, groupId } = body as { botId?: unknown; groupId?: unknown };
@@ -11300,6 +11321,8 @@ try {
 const teamComputers = new TeamComputers(join(DATA_DIR, "team-computers.json"), ENVIRONMENT_ID);
 // Computers panel (2026-11-06): enrolled hosts the person placed on a team.
 const remoteHostTeams = new RemoteHostTeams(join(DATA_DIR, "remote-host-teams.json"));
+// What bots may do with each enrolled host, per person (#2723).
+const remoteHostAccess = new RemoteHostAccess(join(DATA_DIR, "remote-host-access.json"));
 /** A bot's hosts: those attached in its Computer tab, then those its owner
  * placed on its team from the Computers panel (person isolation). */
 function effectiveRemoteHosts(bot: { remoteHosts?: string[]; section?: string; sectionId?: string } & Parameters<typeof effectiveBotOwner>[0]): string[] {
@@ -14558,6 +14581,8 @@ const unattendedConsent = createUnattendedConsentStore({ dataDir: DATA_DIR });
 const remoteSessionsAdmin = createRemoteSessionsAdmin({
   rows: () => remoteSessions.adminRows(),
   botLabel: (botId) => store.bot(botId)?.name ?? botId,
+  // "Opened by" shows the person's name; the id stays in the tooltip (#2723).
+  personLabel: (principalId) => personDisplayName(principals.byId(principalId)) || null,
   consent: unattendedConsent,
   log: (sessionId) => readRemoteSessionLog(DATA_DIR, sessionId),
   closeById: (id) => remoteSessions.adminClose(id),
@@ -14583,13 +14608,14 @@ const remoteSessionsAdmin = createRemoteSessionsAdmin({
 // on that bot's conversation, so the session card and panel row come from
 // the usual remote_support_* registrar.
 const unattendedHosts = createUnattendedHosts({
-  seat: async (principalId) => {
+  seat: async (principalId, target) => {
     const mcp = perspicaxMcp;
     if (!mcp) return { error: "This server is not linked to Perspicax." };
     const mine = store.bots.filter((bot) => !bot.temporary && effectiveBotOwner(bot).trim().toLowerCase() === principalId);
-    const bot = mine.find((candidate) => candidate.chiefOfStaff) ?? mine[0];
+    // a bot computer's session opens on that bot's own link (#2726)
+    const bot = target ? mine.find((candidate) => candidate.id === target.botId) : (mine.find((candidate) => candidate.chiefOfStaff) ?? mine[0]);
     if (!bot) return { error: "None of your bots can host this Perspicax connection." };
-    const threadId = bot.threadId;
+    const threadId = target?.threadId ?? bot.threadId;
     const generation = randomUUID();
     const plan = await mcp.prepareTurn({
       threadId, generation, bot: { id: bot.id },
@@ -14681,6 +14707,33 @@ const remoteBotHosts = createRemoteBotHosts({
       : null;
   }
 });
+// Bot computers (#2726, #2727): an enrolled host the person marked "Use as a
+// bot computer" is a choice in each bot's Computer menu. The bot's calls run
+// there on a quiet session (no Remote session card), opened through that
+// bot's own Perspicax link, reused, closed when idle.
+const hostComputerStore = createHostComputerStore({ dataDir: DATA_DIR });
+const hostComputers = createHostComputerRouter({
+  store: hostComputerStore,
+  hosts: unattendedHosts,
+  sessions: remoteSessions,
+  botThread: (botId) => store.bot(botId)?.threadId ?? null,
+  botName: (botId) => store.bot(botId)?.name ?? "bot",
+  ownerSub: (principalId) => {
+    const person = principals.byId(principalId);
+    return person?.subject && IDENTITY.kind === "perspicax" && person.subject.iss === IDENTITY.issuer
+      ? person.subject.sub
+      : null;
+  },
+  consumeApproval: (threadId, command) => consumeRemoteExecApproval(threadId, command),
+  raiseQuestion: (threadId, question) => raiseHarnessQuestion(threadId, {
+    title: question.title,
+    question: question.question,
+    options: question.options.map((option) => option.label),
+    questionOptions: question.options.map((option) => ({ id: option.id, label: option.label, description: option.description })),
+  })?.requestId ?? null,
+  log: (line) => console.warn(line),
+});
+setInterval(() => { void hostComputers.sweep().catch(reportBackgroundError); }, 60_000).unref();
 // The usage card (server/resource-usage/): read-only samples of a computer
 // the person already reaches, under the same rules as its terminal.
 const resourceUsage = installResourceUsage({
@@ -15959,6 +16012,7 @@ const watchdog = new TurnWatchdog({
     const stalledVmTarget = localVmThreadTargets.get(turn.threadId);
     revokeInternalCapabilitiesForThread(turn.threadId);
     shellLoopGuard.settle(turn.threadId);
+    directTurnBudget.settle(turn.threadId);
     const bot = botForThread(turn.botId, turn.threadId);
     const routineRun = activeRoutineRunForThread(turn.threadId);
     // The stopped process can never answer the approvals it raised: close
@@ -16400,7 +16454,9 @@ const skillReview = createSkillReview({
     // A new skill drawn from a finished task is a proposal (#2610): the
     // person keeps it in one click on the card, or turns it down. A fix to
     // a skill in use applies at once, with its receipt, Undo and history.
-    if (change.action === "create") {
+    // Under Full access the new skill applies too, with its receipt and Undo
+    // (2026-11-08: no card at Full for the bot's own work).
+    if (reviewedSkillNeedsCard(change.action, direct)) {
       appendSkillRequestCard({ botId, threadId, staged });
       return { ok: true };
     }
@@ -16430,7 +16486,9 @@ bus.subscribe((event: RuntimeEvent) => {
     const attended = !isInternalTurn(event.threadId) && !isUnattended(bot.id, event.threadId)
       && !routines?.runForThread(event.threadId) && !(CLOUD_HOME && !cloudOwnerOnlyThread(event.threadId))
       && !store.isConfidentialThread(event.threadId);
-    if (counts) skillReview.noteTurn(bot.id, event.threadId, turnToolSteps(messages, event.turnId, bot.id, Boolean(room)));
+    // a turn the person opened with a stop teaches nothing (G4)
+    const opening = messages.findLast((message) => message.role === "user" && message.kind === "text");
+    if (counts && !looksLikeStop(opening?.text)) skillReview.noteTurn(bot.id, event.threadId, turnToolSteps(messages, event.turnId, bot.id, Boolean(room)));
     // A failure or a correction while a skill was in play brings the review
     // forward, focused on that skill (#2610).
     if (attended && skillAuthoringEnabled(cfg) && bot.skillLearning !== false) {
@@ -17132,6 +17190,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get computerSelectionTurns() { return computerSelectionTurns; },
   get connectorSetupProofs() { return connectorSetupProofs; },
   get connectorSetupSpeaker() { return connectorSetupSpeaker; },
+  get noteConnectorReauth() { return noteConnectorReauth; },
   get continueComputerSelection() { return continueComputerSelection; },
   get conversationOrStart() { return conversationOrStart; },
   get customRules() { return customRules; },
@@ -17178,6 +17237,8 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get groupUsageReader() { return groupUsageReader; },
   get handoffs() { return handoffs; },
   get holdSignInRefusal() { return holdSignInRefusal; },
+  get hostComputerExecCommand() { return hostComputerExecCommand; },
+  get hostComputers() { return hostComputers; },
   get hostScreenTurn() { return hostScreenTurn; },
   get isAgentConversation() { return isAgentConversation; },
   get isCodexAmbientMcpRefusal() { return isCodexAmbientMcpRefusal; },
@@ -18415,6 +18476,8 @@ async function startTurn(
     origin?: WorkOrigin;
     /** A single tool-requested surface change continues the same human ask. */
     computerSelectionContinuation?: boolean;
+    /** #2763: computer moves the request already made (continuation only). */
+    computerMovesSoFar?: number;
     /** Earlier text message this user turn is replying to. */
     replyTo?: Message;
     /** Words said on a voice call (Message.voiceCall). */
@@ -18445,6 +18508,8 @@ async function startTurn(
     autoSkip?: AutoChainEntry[];
     /** Auto: this turn already climbed the fallback chain once. */
     autoRetried?: boolean;
+    /** #2632: restarted once after a reload revoked its tools mid-setup. */
+    capabilityRetried?: boolean;
     /** Cursor into this bot's ordered startup-only backups. */
     automaticRecoveryIndex?: number;
     /** Queue receipts outlive the dispatch acknowledgment until this exact turn settles. */
@@ -19375,6 +19440,26 @@ const shellLoopGuard = wireLoopGuard({
   }
 });
 subscribeLoopGuard(shellLoopGuard, (listener) => bus.subscribe(listener), shouldIgnoreProviderEvent);
+// #2737: a direct turn has a settable ceiling of active minutes and steps,
+// and ends with a partial answer in the person's language, never silently.
+const directTurnBudget = wireTurnBudget({
+  config: () => cfg,
+  botByThread: (threadId) => store.botByThread(threadId),
+  threadBusy,
+  steerer: (instanceId) => {
+    const adapter = registry.get(instanceId)?.adapter;
+    return adapter?.steer ? (threadId, note) => adapter.steer!(threadId, note) : undefined;
+  },
+  stopDirectThread,
+  appendMessage: (threadId, message) => store.appendMessage(threadId, message),
+  messages: (threadId) => store.activePath(threadId),
+  preferredLanguage: (_threadId, bot) => {
+    const owner = bot ? recordedBotOwner(bot as BotRecord) : undefined;
+    return languageOfPerson(owner ?? undefined);
+  },
+  subscribe: (listener) => bus.subscribe(listener),
+  ignore: shouldIgnoreProviderEvent,
+});
 const publishRuntime = bus.publish.bind(bus);
 savedSteps = createSavedSteps({
   enabled: () => savedStepsEnabled(cfg),
@@ -19846,8 +19931,70 @@ const teamSetupRequests = new TeamSetupRequestService({
   deleteBot: async (botId, revalidate, request) => {
     const result = await deleteBotWithLifecycle(botId, revalidate, request);
     if (result.status >= 400) throw new TeamSetupError(result.body.error ?? "The bot could not be deleted", result.status);
-  }
+  },
+  // #2669 import_plugin_team: the same import as POST /api/teams/import-plugin,
+  // run as the requesting bot's person.
+  importPlugin: (request) => importPluginTeamForBot(request)
 });
+
+/** #2669: the request auth of a bot's person (their screen would carry it),
+ * never persisted: the operator on a solo server, else a member session. */
+function botOwnerImportAuth(bot: BotRecord): { auth: RequestAuth; owner: string } {
+  const owner = effectiveBotOwner(bot).trim().toLowerCase();
+  if (IDENTITY.kind !== "perspicax" || !owner || owner === localPrincipalId().trim().toLowerCase()) {
+    return { auth: { kind: "loopback", scopes: ["admin", "client"] }, owner: "" };
+  }
+  const scopes: Scope[] = ["client"];
+  return {
+    owner,
+    auth: {
+      kind: "session",
+      via: "bearer",
+      scopes,
+      session: { id: "primary-bot", tokenHash: "0".repeat(64), label: `${bot.name} (on behalf)`, scopes: [...scopes], createdAt: 0, lastSeenAt: 0, expiresAt: Number.MAX_SAFE_INTEGER, principalId: owner },
+    },
+  };
+}
+
+/** #2669 import_plugin_team: read the plugin as the bot's person (preview,
+ * nothing created), then the team-setup card with its bots and models. */
+async function submitPluginTeamImport(input: Record<string, unknown>) {
+  const bot = store.bot(String(input.botId ?? ""));
+  if (!bot) return { status: 404, error: "That bot no longer exists" };
+  const { auth, owner } = botOwnerImportAuth(bot);
+  const preview = await importPluginTeam(auth, { marketplace: input.marketplace, plugin: input.plugin, team: input.team, preview: true }, owner ? { ownerPrincipalId: owner } : undefined);
+  const body = preview.body as { error?: string; team?: string; bots?: Array<{ name: string; model?: string; tools?: string[] }>; skipped?: string[] };
+  if (preview.status >= 400 || !body.team) return { status: preview.status >= 400 ? preview.status : 422, error: body.error ?? "The plugin could not be read" };
+  try {
+    return await teamSetupRequests.submitPluginImport({
+      botId: bot.id,
+      threadId: String(input.threadId ?? ""),
+      reason: String(input.reason ?? ""),
+      plugin: {
+        marketplace: String(input.marketplace), plugin: String(input.plugin), team: body.team,
+        bots: (body.bots ?? []).map((row) => ({ name: row.name, ...(row.model ? { model: row.model } : {}), ...(row.tools?.length ? { tools: row.tools } : {}) })),
+        ...(body.skipped?.length ? { skipped: body.skipped } : {}),
+      },
+      ...(input.from ? { from: input.from as { botId: string; name: string; color: string } } : {}),
+      ...(typeof input.canCommit === "function" ? { canCommit: input.canCommit as () => boolean } : {}),
+    });
+  } catch (error) {
+    if (error instanceof TeamSetupError) return { status: error.status, error: error.message };
+    throw error;
+  }
+}
+
+async function importPluginTeamForBot(request: TeamSetupRequest): Promise<TeamSetupResult> {
+  const bot = store.bot(request.botId);
+  const imported = request.pluginImport;
+  if (!bot || !imported) throw new TeamSetupError("This import no longer has a requesting bot", 409);
+  const { auth, owner } = botOwnerImportAuth(bot);
+  const outcome = await importPluginTeam(auth, { marketplace: imported.marketplace, plugin: imported.plugin, team: imported.team }, owner ? { ownerPrincipalId: owner } : undefined);
+  const body = outcome.body as { error?: string; section?: string; bots?: Array<{ id: string; name: string; section?: string; modelSelection?: ModelSelection }> };
+  if (outcome.status >= 400) throw new TeamSetupError(body.error ?? "The plugin could not be imported", outcome.status);
+  const bots = (body.bots ?? []).map((created) => ({ id: created.id, name: created.name, action: "created" as const, ...(created.section ? { section: created.section } : {}), ...(created.modelSelection ? { modelSelection: created.modelSelection } : {}) }));
+  return { state: "applied", bots, newTeams: body.section ? [body.section] : [imported.team] };
+}
 
 type TeamSetupResumeEntry = { request: TeamSetupRequest; messageId: string; generation: number };
 const pendingTeamSetupResumes = new Map<string, TeamSetupResumeEntry>();
@@ -20156,8 +20303,29 @@ const approvalBus: ApprovalBus = { store, broadcast, notify, autoApply: fullAcce
 desktopBridges.setAskHook(async ({ device, context }) => {
   const bot = store.bot(context.botId);
   if (!bot) return false;
+  // approvalBus.autoApply (fullAccessForSource) answers it at Full; full-access: peer-contact
   return (await requestPeerApproval(approvalBus, bot, device, `Use ${device.name} for this turn`, "use_computer", context.threadId)) === "allow";
 });
+// An enrolled host's bot access (#2723), where a bot opens an unattended
+// session on it: Never allow refuses, Ask every time raises the same card as
+// a device (Always allow remembered per bot and host), Always allow passes.
+async function remoteHostBotGate(input: { botId: string; threadId: string; principalId: string; hostId: string }): Promise<string | null> {
+  const access = remoteHostAccess.get(input.principalId, input.hostId);
+  if (access === "always") return null;
+  const row = await remoteBotHosts.assertOwnHost(input.principalId, input.hostId).catch(() => null);
+  const hostName = (row && "hostId" in row && row.hostname) || "this computer";
+  return hostAccessGate({
+    access,
+    hostName,
+    ask: async () => {
+      const bot = store.bot(input.botId);
+      if (!bot) return false;
+      const target = { id: `host:${input.hostId}`, name: hostName };
+      // approvalBus.autoApply (fullAccessForSource) answers it at Full; full-access: peer-contact
+      return (await requestPeerApproval(approvalBus, bot, target, `Use ${hostName} for this turn`, "use_computer", input.threadId)) === "allow";
+    },
+  });
+}
 
 // Approvals live only in memory, so any peer card still open on disk is one
 // whose resolver died with the previous process. Left alone it can never be
@@ -21549,6 +21717,16 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       return { ...page, text: redactSecretsInText(page.text) };
     }
   }),
+  // skills_find (#2613, server/routes/skills-find-internal.ts): the marketplaces
+  // this bot's person sees, read only
+  createSkillsFindInternalRoutes({
+    listings: (botId) => {
+      const bot = store.bot(botId);
+      if (!bot) return [];
+      const viewer: MarketplaceViewer = IDENTITY.kind !== "perspicax" ? { seesAll: true } : { principal: effectiveBotOwner(bot) };
+      return botPlugins.listMarketplaces(botId, viewer);
+    },
+  }),
   // route_message (server/routes/route-message-internal.ts, server/busy-routing.ts)
   createRouteMessageInternalRoutes({
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
@@ -21712,7 +21890,11 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const folder = supportFolderOwner(REMOTE_SUPPORT_DIR, code);
       if (!folder || !folder.principalId || !folder.botId) return false;
       return Boolean(owner) && folder.principalId === owner!.principalId.trim().toLowerCase() && folder.botId === owner!.botId;
-    }
+    },
+    // remote_support_open on an enrolled host: the person's bot access (#2723)
+    hostAccess: (capability, owner, hostId) => owner
+      ? remoteHostBotGate({ botId: capability.botId, threadId: capability.threadId, principalId: owner.principalId, hostId })
+      : Promise.resolve(null)
   }),
   createMcpAuditInternalRoutes({ append: (row) => appendAdminAction(DATA_DIR, { ...row, actor: { kind: "loopback" } }), confidential: (threadId) => store.isConfidentialThread(threadId) }),
   createRoutineRunInternalRoutes<Routine, RoutineRun>({
@@ -21741,6 +21923,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   // publish_remote_session (server/routes/remote-sessions.ts)
   createRemoteSessionInternalRoutes({
     sessions: remoteSessions,
+    ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
+    speaker: remoteSessionSpeaker
+  }),
+  // host_computer (server/routes/host-computers.ts, #2726)
+  createHostComputerInternalRoutes({
+    router: hostComputers,
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
     speaker: remoteSessionSpeaker
   }),
@@ -22223,6 +22411,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     botsReadOnlyBody: { error: "org_bots_read_only", message: "Your administrator lets you use shared bots only." },
     submitTeamSetup: (input) => teamSetupRequests.submit(input as unknown as Parameters<typeof teamSetupRequests.submit>[0]),
     submitBotDeletion: (input) => teamSetupRequests.submitDeletion(input as unknown as Parameters<typeof teamSetupRequests.submitDeletion>[0]),
+    submitPluginImport: (input) => submitPluginTeamImport(input),
     fullAccessForSource,
     broadcastBot: (bot) => broadcast({ kind: "bot", bot: wireBot(bot as unknown as BotRecord) })
   }),
@@ -27527,6 +27716,35 @@ ROUTES.push(createConnectorSetupRoutes({
   }
 }));
 /** The person a sign-in card is for: the one speaking, never a routine or a peer. */
+/** #2749: a connector call refused because its sign-in expired posts the
+ * Connect card (the sign-in link) in that conversation, for the person whose
+ * turn it is or, in a routine, the bot's owner: said plainly, never only a
+ * buried "failed 2 times". One open card per connector and person. */
+function noteConnectorReauth(threadId: string, toolName: string, output: string | undefined): void {
+  const failure = connectorReauthFailure(toolName, output);
+  if (!failure) return;
+  const bot = store.bots.find((candidate) => candidate.threadId === threadId) ?? store.bots.find((candidate) => store.taskByThread(candidate.id, threadId));
+  if (!bot) return;
+  const principalId = (connectorSetupSpeaker(threadId) || effectiveBotOwner(bot) || (IDENTITY.kind === "solo" ? localPrincipalId() : "")).trim().toLowerCase();
+  if (!principalId) return;
+  const owner = connectorSetupOwner(principalId);
+  const open = connectorSetupStore().cards(threadId).some(({ view }: { view: ConnectorSetupView }) =>
+    view.owner === owner && view.provider === failure.provider && view.connector === failure.connector && view.status !== "connected");
+  if (open) return;
+  const view: ConnectorSetupView = {
+    id: `cs_${randomBytes(9).toString("hex")}`,
+    connector: failure.connector,
+    label: failure.label,
+    provider: failure.provider,
+    url: failure.url,
+    status: "waiting",
+    owner,
+    createdAt: Date.now(),
+  };
+  const language = languageOfPerson(principalId).toLowerCase().startsWith("fr") ? "fr" : "en";
+  store.appendMessage(threadId, { role: "bot", kind: "text", text: connectorReauthText(failure, language), from: { botId: bot.id, name: bot.name, color: bot.color }, connectorSetup: view });
+}
+
 function connectorSetupSpeaker(threadId: string): string | undefined {
   const speaker = turnSpeakers.get(threadId);
   if (!speaker || (speaker.origin !== "person" && speaker.origin !== "operator")) return undefined;
@@ -27899,6 +28117,7 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
           const out = await remoteBotHosts.assertOwnHost(turn.principalId, hostId);
           return !("ok" in out && out.ok === false);
         },
+        hostAccess: (hostId) => remoteHostBotGate({ botId: turn.botId, threadId: turn.threadId, principalId: turn.principalId, hostId }),
         local: {
           dir: REMOTE_SUPPORT_DIR,
           technicianName: (personDisplayName(person) || cfg.profile?.name?.trim() || "").slice(0, 80),
@@ -29750,6 +29969,15 @@ const agentApi = createAgentApi({
   async interrupt(agentId, threadId) {
     await interruptDirectThread(agentId, threadId);
   },
+  retireQuestions(_agentId, threadId) {
+    retireOpenQuestions({
+      messagesFor: (id) => store.messagesFor(id),
+      isPersistentQuestionCard,
+      isApprovalCardMessage,
+      patch: (id, messageId, card) => { store.patchMessage(id, messageId, { card }); },
+      forget: (id, requestId) => { askMessageByRequest.delete(`${id}:${requestId}`); },
+    }, threadId);
+  },
   collected(agentId, threadId) {
     // Only an AI client's own conversation (openedBy kind "agent"), never a
     // person's chat a peer bot's send_prompt landed in; never one at work.
@@ -29900,6 +30128,7 @@ const orgMember = createOrgMemberRoutes({
   markAiClientLine,
   expireDueApprovals: expireDueApprovalsInThread,
   pendingApprovalExpireDays: (person) => pendingExpireDaysForPerson(person.principalId),
+  approvalWords: (person) => serverApprovalWords(languageOfPerson(person.principalId)).t,
   approvalAnswerer: (threadId, requestId) => {
     const message = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
     if (!message?.card) return null;
@@ -30005,13 +30234,26 @@ ROUTES.push(createRemoteControlRoutes({
   upgrade: (req) => desktopViewer.upgradeOf(req)
 }));
 ROUTES.push(createRemoteSessionFileRoutes({ sessions: remoteSessions, principalId: terminalPrincipalId }));
-ROUTES.push(createRemoteSessionsAdminRoutes({ admin: remoteSessionsAdmin, hosts: unattendedHosts, principalId: terminalPrincipalId, orgAdmin: orgAdminCaller }));
+ROUTES.push(createRemoteSessionsAdminRoutes({ admin: remoteSessionsAdmin, hosts: unattendedHosts, principalId: terminalPrincipalId, orgAdmin: orgAdminCaller, hostAccess: (principalId) => remoteHostAccess.forPrincipal(principalId) }));
 ROUTES.push(createRemoteBotHostsRoutes({ hosts: remoteBotHosts, principalId: terminalPrincipalId }));
+ROUTES.push(createHostComputersRoutes({
+  router: hostComputers,
+  store: hostComputerStore,
+  principalId: terminalPrincipalId,
+  // Solo: every bot is the person's. Organization: their own bots only.
+  ownsBot: (principalId, botId) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    if (IDENTITY.kind !== "perspicax") return true;
+    return effectiveBotOwner(bot).trim().toLowerCase() === principalId.trim().toLowerCase();
+  }
+}));
 ROUTES.push(createRemoteHostsRoutes({
   principalId: terminalPrincipalId,
   available: (principalId) => remoteBotHosts.available(principalId),
   installCode: (principalId, options) => unattendedHosts.installCode({ principalId }, options),
   teams: remoteHostTeams,
+  access: remoteHostAccess,
   sectionsFor: (auth) => (sectionChannels
     ? orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId())
     : store.sections),
@@ -30169,7 +30411,7 @@ ROUTES.push(createTeamMapRoutes({
   delegationWatchEntries: () => delegationWatch.entries(),
   liveHandoffEdges: () => coordinator.liveEdges()
 }));
-ROUTES.push(createTeamExportImportRoutes({
+const teamExportImportDeps: TeamExportImportRouteDeps = {
   profileName: () => cfg.profile?.name,
   bots: () => store.bots,
   groups: () => store.groups,
@@ -30222,7 +30464,10 @@ ROUTES.push(createTeamExportImportRoutes({
     instances: selectableInstances(await registry.describe()),
     refusal: selectionContextFor(sessionPrincipal(auth)).refusal
   })
-}));
+};
+ROUTES.push(createTeamExportImportRoutes(teamExportImportDeps));
+// #2669: the bot tool import_plugin_team runs the same import as the route.
+const importPluginTeam = createPluginTeamImporter(teamExportImportDeps);
 ROUTES.push(createTeamLibraryRoutes());
 ROUTES.push(createSidebarSectionsRoutes({
   sections: () => store.sections,
@@ -30383,6 +30628,7 @@ ROUTES.push(createRoutinesHttpRoutes({
   scopeDeps: (auth, visible, viewerId) => routineScopeDeps(auth, visible as VisibleSet, viewerId),
   needsRun: (auth, botId) => routineNeedsRun(auth, botId),
   needsRunBody: NEEDS_RUN,
+  createRefused: (auth, botId) => routineCreateRefused(auth, botId),
   hiddenTarget: (body, visible) => hiddenRoutineTarget(body, visible as VisibleSet),
   resultsRefusal: (auth, body) => routineResultsRefusalFor(auth, body),
   runAsChoice: (auth, body) => routineRunAsChoice(auth, body),
@@ -30471,7 +30717,7 @@ const feedbackService = createFeedbackService({
   serverLines: () => serverLog.read({ level: "warn", limit: 40 }).lines.reverse().map((line) => `${new Date(line.at).toISOString()} ${line.level} ${line.message}`),
   spans: () => readToolSpans(DATA_DIR, { from: new Date(Date.now() - 15 * 60_000), to: new Date() })
     .slice(-20).map((span) => ({ name: span.toolName ? `${span.name} ${span.toolName}` : span.name, ms: span.endMs - span.startMs, ok: span.ok })),
-  serverVersion: () => serverVersion(),
+  serverVersion: () => releaseVersion(),
 });
 try {
   feedbackService.ensureBot();
@@ -30482,6 +30728,9 @@ setInterval(() => { void feedbackService.tick().catch(() => {}); }, 5 * 60_000).
 ROUTES.push(createFeedbackRoutes({ dataDir: DATA_DIR, service: feedbackService, actorPrincipalId }));
 ROUTES.push(createBotsMessagesRoutes({
   feedback: feedbackService,
+  // #2633: a question declined from an AI client is told to the bot in the
+  // language of the person who declined it.
+  questionDeclinedText: (auth: RequestAuth) => serverApprovalWords(languageOfRequest(auth)).t("question.card.declinedByClient"),
   // 2026-11-05 (#2032): chat no longer picks a role; Flow routines use actAs
   pickPerspicaxRole: (_bot: BotRecord, _threadId: string, _auth: RequestAuth, _slug: string) => {},
   originApprovals,
@@ -31189,7 +31438,8 @@ ROUTES.push(createPlanUsageRoutes({
   perspicaxDirectory: () => perspicaxDirectory,
   identityIssuer: () => (IDENTITY.kind === "perspicax" ? IDENTITY.issuer : ""),
   localPrincipalId,
-  announcePlanThresholds
+  announcePlanThresholds,
+  planHistory: createPlanHistoryStore(DATA_DIR, reportBackgroundError)
 }));
 ROUTES.push(createKeysTestRoutes({ cfg: () => cfg }));
 ROUTES.push(createDecisionsRoutes({ dataDir: DATA_DIR }));

@@ -160,6 +160,38 @@ describe("createBotsMessagesRoutes", () => {
       expect(deps.answerRequest).not.toHaveBeenCalled();
     });
 
+    it.each(["/api/threads/work/respond", "/api/bots/worker/respond"])("%s: a declined question is told in the person's language and never posted as their message (#2633, #2634)", async path => {
+      const rows = [{ id: "q1", role: "bot", kind: "options", card: { requestId: "request-1", requestType: "question", title: "Your bot has a question", subtitle: "Quel créneau?", options: ["Lundi", "Mardi"] } }];
+      const patched: Array<Record<string, unknown>> = [];
+      const sourceBot = { ...bot, id: "worker", threadId: "work", modelSelection: { instanceId: "claude", model: "fake" } };
+      const deps = approvalDeps({
+        originApprovals: { sourceFor: () => null },
+        store: {
+          ...baseDeps().store,
+          bot: (id: string) => (id === "worker" ? sourceBot : null),
+          botByThread: () => sourceBot,
+          messagesFor: () => rows,
+          patchMessage: (_t: string, id: string, patch: { card: Record<string, unknown> }) => { patched.push({ id, ...patch.card }); rows[0]!.card = patch.card as never; return { id }; },
+        },
+        requestedTaskBot: () => sourceBot,
+        answerRequest: vi.fn(async () => "unavailable"),
+        deliverLateQuestionAnswer: vi.fn(async () => ({ queued: false })),
+        questionDeclinedText: () => "La personne a refusé de répondre.",
+        teamSetupApplyRefusal: () => null, cloudOwnerSession: () => null, commandRememberRefusal: () => null,
+        resolveAndSendTeamSetup: () => false, resolveAndSendModel: () => false, resolveAndSendProfile: () => false, resolveAndSendRoutine: () => false, resolveAndSendRule: () => false,
+        sendSkillResolution: () => false, resolveSkillRequest: () => null, routineActor: () => null, routineKeyReveal: () => false,
+      });
+      const result = await call(deps, { path, body: { threadId: "work", requestId: "request-1", behavior: "answer", message: "The person declined to answer this question from their AI client.", declined: true } });
+      expect(result.sent).toEqual({ status: 200, body: { ok: true, outcome: "declined" } });
+      expect(deps.answerRequest).toHaveBeenCalledWith("work", "claude", "request-1", "answer", "La personne a refusé de répondre.", expect.anything(), false, false);
+      // never a message under the person's name, never a new turn
+      expect(deps.deliverLateQuestionAnswer).not.toHaveBeenCalled();
+      expect(patched).toEqual([expect.objectContaining({ id: "q1", answered: "deny", dismissed: true })]);
+      // a second decline finds the card closed
+      const again = await call(deps, { path, body: { threadId: "work", requestId: "request-1", behavior: "answer", declined: true } });
+      expect(again.sent?.status).toBe(409);
+    });
+
     it("a settled or revoked view cannot save a rule or answer again", async () => {
       const deps = approvalDeps({ originApprovals: { sourceFor: () => false } });
       const result = await call(deps, { path: "/api/threads/t1/respond", body: { requestId: "request-1", behavior: "allow", rule: "allow" } });

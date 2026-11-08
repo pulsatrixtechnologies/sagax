@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, BookOpen, Loader2, Monitor, MonitorSmartphone, Network, Plus, Save, Users, X } from "lucide-react";
+import { ArrowRight, BookOpen, Loader2, Puzzle, Monitor, MonitorSmartphone, Network, Plus, Save, Users, X } from "lucide-react";
 
 import { api, formatTime, openBot, openThread, useStore, type Bot } from "@/state/store";
 import {
@@ -18,6 +18,7 @@ import { placeOffered } from "@/lib/place";
 import { isOwnerOrAdmin, readSessionState } from "@/lib/session";
 import { TeamCanvas } from "./TeamCanvas";
 import { TeamDialog } from "./TeamDialog";
+import { PluginTeamImportDialog } from "./PluginTeamImportDialog";
 import { TeamMemoryDialog } from "./TeamMemoryDialog";
 import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -246,6 +247,7 @@ export function TeamMapPage() {
   const [contextEditor, setContextEditor] = useState<{ section: string; label: string } | null>(null);
   const [memoryEditor, setMemoryEditor] = useState<{ section: string; label: string } | null>(null);
   const [teamEditor, setTeamEditor] = useState<{ section?: string; rename?: boolean } | null>(null);
+  const [pluginImport, setPluginImport] = useState(false);
   const [deletingTeam, setDeletingTeam] = useState<string | null>(null);
   const [computersOpen, setComputersOpen] = useState(false);
   const [createComputerRequest, setCreateComputerRequest] = useState(0);
@@ -380,6 +382,7 @@ export function TeamMapPage() {
               const details = event.currentTarget.closest("details"); details?.querySelector("summary")?.focus(); details?.removeAttribute("open");
             }}>
               {canEditTeams && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => setTeamEditor({})}><Users size={16} />{t("team.create")}</button>}
+              {canEditTeams && <button data-team-map-import-plugin="" className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => { setTeamEditor(null); setPluginImport(true); }}><Puzzle size={16} />{t("pluginTeam.menu")}</button>}
               {ownComputers && <button data-team-map-unattended="" className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => { setComputersOpen(true); setCreateComputerRequest((value) => value + 1); }}><MonitorSmartphone size={16} />{t("teamMap.unattendedComputer")}</button>}
               {/* An OMB Cloud home has no Local VM (shared/cloud-home.ts). */}
               {adminTeams && placeOffered("vm", state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => dispatch({ type: "toggleAppSettings", section: "computer", open: true })}><Monitor size={16} />{t("teamMap.localVm")}</button>}
@@ -421,6 +424,7 @@ export function TeamMapPage() {
         />
       )}
       {teamEditor && <TeamDialog {...teamEditor} onClose={() => setTeamEditor(null)} />}
+      {pluginImport && !teamEditor && <PluginTeamImportDialog onClose={() => setPluginImport(false)} />}
       {memoryEditor && <TeamMemoryDialog key={memoryEditor.section} {...memoryEditor} onClose={() => setMemoryEditor(null)} />}
       <ConfirmDialog open={pendingMove !== null} tone="neutral" title={`Move ${pendingMove?.bot.name ?? "bot"} to ${pendingMove?.destination || t("sidebar.section.general")}?`}
         body="This changes the bot's home team and shared instructions, not just its position. Its conversations and model stay with it. To arrange visually, drag within the same team."

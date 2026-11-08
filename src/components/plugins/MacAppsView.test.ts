@@ -20,7 +20,7 @@ describe("MacAppsInstalledSection", () => {
     });
     const list = host.querySelector("[data-plugins-mac] ul");
     expect(list?.className.split(" ")).toEqual(expect.arrayContaining(PLUGINS.grid.split(" ")));
-    expect(list?.className).toContain("md:grid-cols-2");
+    expect(list?.className).not.toContain("grid-cols-2"); // one column (#2682)
     expect(host.querySelectorAll("[data-mac-app]").length).toBe(6);
     await act(async () => root.unmount());
     host.remove();

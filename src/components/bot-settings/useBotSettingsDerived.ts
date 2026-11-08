@@ -43,6 +43,7 @@ export type BotPatch = Partial<
     | "outbound"
     | "fallback"
     | "speakReplies"
+    | "collaboratorsCreateRoutines"
     | "memoryEnabled"
     | "loopGuard"
     | "voice"

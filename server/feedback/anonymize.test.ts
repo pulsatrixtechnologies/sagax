@@ -57,4 +57,8 @@ describe("feedback anonymizer", () => {
     expect(lines).toHaveLength(40);
     expect(lines.every((line) => line.includes("[ip]"))).toBe(true);
   });
+
+  it("keeps ISO timestamps of the log readable", () => {
+    expect(anonymize("2026-11-07T23:56:37.075Z warn engine", {})).toContain("2026-11-07T23:56:37.075Z");
+  });
 });

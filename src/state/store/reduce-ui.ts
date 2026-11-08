@@ -4,7 +4,7 @@ import type {Action, AppState} from "./model";
 import {withoutFreshTopicFor} from "./model";
 import {personaCategoryForSection} from "@/lib/persona-sections";
 import {currentSettingsSection} from "@/lib/settings-sections";
-import {reduceUiSurfaces} from "./reduce-ui-surfaces";
+import {profilePanelSnapshot, reduceUiSurfaces} from "./reduce-ui-surfaces";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
 
@@ -34,7 +34,12 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         const targetId = action.botId ?? owner?.botId ?? state.selectedId;
         if (!targetId) return state;
         const opened = reduce(state, { type: "toggleSettings", open: true, ...(owner ? { owner } : { botId: action.botId, owner: null }) });
-        return reduce(opened, { type: "openPersonaEditor", botId: targetId, section: category });
+        const page = reduce(opened, { type: "openPersonaEditor", botId: targetId, section: category });
+        // The panel the deep link opened for its section is not the one to
+        // put back: keep what the person had before (#2271).
+        return page.personaEditor
+          ? { ...page, personaEditor: { ...page.personaEditor, panel: state.personaEditor?.panel ?? profilePanelSnapshot(state) } }
+          : page;
       }
       if (action.botId !== undefined && !state.bots.some((bot) => bot.id === action.botId && !bot.hidden)) return state;
       if (owner?.botId !== undefined && !state.bots.some((bot) => bot.id === owner.botId && !bot.hidden)) return state;
@@ -78,9 +83,13 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       };
     }
     case "openRoutine": {
-      const opened = reduce(state, { type: "toggleSettings", open: true, section: "routines", botId: action.botId });
+      // #2624: one place for routines, the Routines sub-page of the bot page.
+      const opened = reduce(state, { type: "openPersonaEditor", botId: action.botId, section: "routines" });
       if (opened === state) return state;
-      return { ...opened, routineFocus: { botId: action.botId, routineId: action.routineId } };
+      return {
+        ...opened,
+        routineFocus: action.routineId ? { botId: action.botId, routineId: action.routineId } : { botId: action.botId, create: true },
+      };
     }
     case "routineFocused":
       return state.routineFocus ? { ...state, routineFocus: null } : state;

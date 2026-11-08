@@ -62,6 +62,10 @@ private struct LiveActivityTokenRemoval: Codable, Sendable {
     var token: String
 }
 
+private struct LiveActivityDeviceRemoval: Codable, Sendable {
+    var deviceToken: String
+}
+
 public enum LiveActivityPushToken {
     /// Lowercase hex, same rules as the alert device token (64+ hex chars).
     public static func isHexToken(_ value: String) -> Bool {
@@ -138,6 +142,15 @@ extension CompanionClient {
 
     public func unregisterLiveActivityTokenRequest(token: String) throws -> URLRequest {
         try makeRequest("DELETE", "/api/push/activities", encodedBody: LiveActivityTokenRemoval(token: token.lowercased()))
+    }
+
+    /// Live Activities switched off on this phone: every token it registered.
+    public func unregisterLiveActivityDeviceRequest(deviceToken: String) throws -> URLRequest {
+        try makeRequest("DELETE", "/api/push/activities", encodedBody: LiveActivityDeviceRemoval(deviceToken: deviceToken.lowercased()))
+    }
+
+    public func unregisterLiveActivityDevice(deviceToken: String) async throws {
+        try await send(unregisterLiveActivityDeviceRequest(deviceToken: deviceToken))
     }
 
     public func unregisterLiveActivityToken(token: String) async throws {

@@ -32,6 +32,23 @@ export function appliesNow(args: { fullAccess: boolean; ownerMustConfirm: boolea
   return args.fullAccess ? "full-access" : "level";
 }
 
+/** 2026-11-08 (owner decision: no confirmation card while the bot runs at
+ * Full access): a quote that did not prove the person's ask
+ * takes back the quote's own fast path and the bot's self grant, never Full
+ * access. Under Full the person already authorized the work in their own
+ * environment; a refused quote is journaled, not turned into a card. */
+export function grantAfterQuote(grant: DirectApply | null, quoteRefused: boolean | undefined): DirectApply | null {
+  if (!quoteRefused) return grant;
+  return grant === "full-access" ? grant : null;
+}
+
+/** #2610 + 2026-11-08: a new skill the automatic review draws from a
+ * finished task is a card for the person, except under Full access, where it
+ * applies with its receipt and Undo like every other change of the bot's own. */
+export function reviewedSkillNeedsCard(action: "create" | "update", grant: DirectApply | null): boolean {
+  return action === "create" && grant !== "full-access";
+}
+
 /** A bot applying its own routines directly keeps at most this many
  * enabled; past it, a create or resume shows today's card instead. */
 export const SELF_ROUTINE_CAP = 20;

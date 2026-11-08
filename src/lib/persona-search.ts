@@ -7,7 +7,7 @@
 // opens is then filtered and scrolled by applySettingsSearch like Settings.
 import { BOT_SECTIONS } from "@/components/bot-settings/sections";
 import { settingsQuery, settingsTextMatches } from "./settings-search";
-import type { PersonaCategory } from "./persona-sections";
+import { botProfileSubPageOf, type BotProfileSubPage, type PersonaCategory } from "./persona-sections";
 
 /** Search words of what each page holds, beyond the labels BOT_SECTIONS has.
  * An index, not copy: English and French side by side, accents optional. */
@@ -31,6 +31,35 @@ export const PERSONA_SEARCH_WORDS: Record<PersonaCategory, readonly string[]> = 
   history: ["changements", "changes", "historique", "history", "annuler", "undo", "restaurer", "rollback", "journal", "log"],
 };
 
+/** Permissions and Access are split across sub-pages (V6): the words of the
+ * options each part holds, so a search lands where the option is (#2623).
+ * A section's other words open its own sub-page. */
+export const PERSONA_PART_SEARCH_WORDS: Partial<Record<PersonaCategory, Partial<Record<BotProfileSubPage, readonly string[]>>>> = {
+  permissions: {
+    actsAlone: ["proactif", "proactive", "de lui-même", "on its own", "agit seul", "acts alone", "cible de publication", "publish target", "destinataires", "recipients", "brouillons", "drafts", "email drafts", "brouillons de courriel", "mèmes", "memes", "meme", "gif"],
+    rules: ["règles personnalisées", "regles personnalisees", "custom rules"],
+    advanced: ["bot principal", "primary bot", "primary", "coordination", "contacter", "contact", "pairs", "peers", "garde-fou de boucle", "loop guard", "boucle", "loop", "crochets", "hooks", "accès aux outils", "tool access", "parallèle", "parallele", "parallel", "envois en ton nom", "sending on your behalf", "limite quotidienne", "daily limit"],
+  },
+  access: {
+    actsAlone: ["résumé de fond", "resume de fond", "background brief", "brief", "en arrière-plan", "background"],
+    advanced: ["ordinateur", "computer", "nuage", "cloud", "navigateur", "browser"],
+  },
+};
+
+/** The sub-page a search for `query` opens for `category`: the one that
+ * holds the matched option, else the section's own (null: the header). */
+export function personaSubPageForQuery(category: PersonaCategory, query: string): BotProfileSubPage | null {
+  const parts = PERSONA_PART_SEARCH_WORDS[category];
+  if (parts && settingsQuery(query)) {
+    for (const [page, words] of Object.entries(parts) as Array<[BotProfileSubPage, readonly string[]]>) {
+      if (words.some((word) => settingsTextMatches(word, query))) return page;
+    }
+  }
+  return botProfileSubPageOf(category);
+}
+
+const partWords = (page: PersonaCategory): readonly string[] => Object.values(PERSONA_PART_SEARCH_WORDS[page] ?? {}).flat();
+
 const ENTRY = new Map(BOT_SECTIONS.map((entry) => [entry.id, entry]));
 
 /** How well `query` names `page`: 0 its label, 1 a keyword of the rail, 2 a
@@ -41,6 +70,7 @@ export function personaPageRank(page: PersonaCategory, label: string, query: str
   const keywords = ENTRY.get(page)?.keywords ?? [];
   if (keywords.some((word) => settingsTextMatches(word, query))) return 1;
   if (PERSONA_SEARCH_WORDS[page].some((word) => settingsTextMatches(word, query))) return 2;
+  if (partWords(page).some((word) => settingsTextMatches(word, query))) return 2;
   return null;
 }
 

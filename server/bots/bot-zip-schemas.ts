@@ -29,6 +29,7 @@ export const settingsSchema = z.object({
   voiceLanguage: z.string().refine(isVoiceModeLanguage).optional(),
   emailDrafts: z.boolean().optional(),
   memeReplies: z.enum(["auto", "off"]).optional(),
+  collaboratorsCreateRoutines: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
   loopGuard: z.boolean().optional(),
   // read as the bot reads it (shared/team-memory-sharing.ts): an archive

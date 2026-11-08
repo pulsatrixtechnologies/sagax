@@ -9,7 +9,7 @@ import type { ModelRequestCardData } from "../../shared/model-request.ts";
 import type { ModelSelection } from "../../shared/wire.ts";
 import { harnessCapabilityLines, type DriverCapabilities } from "../capabilities/harness-capabilities.ts";
 import { newId } from "../contracts.ts";
-import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
+import { UNDO_STALE, grantAfterQuote, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { BotRecord } from "../store.ts";
 
@@ -230,7 +230,7 @@ export class ModelRequestService {
       before,
     };
     const copy = modelCardCopy({ targetName, crossBot, before, selection, reason, capabilityLines });
-    const grant = submitted && !args.quoteRefused ? (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null) : null;
+    const grant = submitted ? grantAfterQuote(args.quoteRefused ? (this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null) : (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null), args.quoteRefused) : null;
     const automatic = grant !== null;
     const persistence = this.canPersist?.(args.botId, args.threadId, !automatic);
     if (persistence && !persistence.ok) throw new ModelRequestError(persistence.error, persistence.status);

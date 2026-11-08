@@ -304,7 +304,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow({ task, ownerId, 
         event.dataTransfer.setData(SPLIT_DRAG_TYPE, splitDragData({ kind: "thread", ownerId, threadId: task.threadId }));
       }}
       onDragEnd={(event) => event.stopPropagation()}
-      className={cn("group/thread relative flex min-w-0 items-center rounded-lg", canDrag && "cursor-grab active:cursor-grabbing", current ? "bg-sidebar-selected" : "hover:bg-sidebar-hover")}
+      className={cn("group/thread relative flex min-w-0 items-center rounded-lg transition-colors duration-fast ease-out-quint", canDrag && "cursor-grab active:cursor-grabbing", current ? "bg-sidebar-selected" : "hover:bg-sidebar-hover")}
     >
       {renaming ? <input autoFocus value={draft} maxLength={80} aria-label={t("task.renameAria")}
         onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(event.target.value)} onBlur={() => finishRename(true)}

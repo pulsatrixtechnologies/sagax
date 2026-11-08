@@ -184,6 +184,21 @@ describe("createInternalRequestsRoutes", () => {
     expect(submitRoutine).toHaveBeenCalled();
   });
 
+  it("2026-11-08: a routine quote that did not prove the ask is quoteRefused, never explicitConfirm (Full access still applies)", async () => {
+    const submitRoutine = vi.fn(async (_input: Record<string, unknown>) => ({
+      requestId: "req-r", messageId: "msg-r", state: "pending" as const, summary: "Create", detail: "Create",
+    }));
+    const route = createInternalRequestsRoutes(baseDeps({ submitRoutine, primaryAskedProposal: () => "the quote is not in the message" }));
+    await call(route, {
+      path: "/api/internal/routine-requests",
+      method: "POST",
+      body: { fromBotId: BOT.id, fromThreadId: "t-1", action: "pause", routineId: "r1", quote: "remind me" },
+    });
+    const input = submitRoutine.mock.calls[0]![0];
+    expect(input.quoteRefused).toBe(true);
+    expect(input.explicitConfirm).toBeUndefined();
+  });
+
   it("POST /profile-requests refuses an unknown sender (403)", async () => {
     const route = createInternalRequestsRoutes(baseDeps({
       bot: () => undefined,

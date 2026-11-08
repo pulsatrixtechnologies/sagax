@@ -9,6 +9,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import { dispatchRoutes } from "./table.ts";
 import { createRemoteHostsRoutes } from "./remote-hosts.ts";
 import { RemoteHostTeams } from "../remote-support/remote-host-teams.ts";
+import { RemoteHostAccess } from "../remote-support/remote-host-access.ts";
 import type { UnattendedHostRow } from "../../shared/remote-unattended-host.ts";
 
 const NOW = Date.parse("2026-11-06T12:00:00.000Z");
@@ -33,12 +34,14 @@ const row = (hostId: string, lastSeenAt: string | null): UnattendedHostRow => ({
 async function serve(principalId: string | null = "tech@example.org") {
   const dir = mkdtempSync(path.join(tmpdir(), "remote-hosts-route-")); dirs.push(dir);
   const teams = new RemoteHostTeams(path.join(dir, "teams.json"), () => NOW);
-  const installCode = vi.fn(async () => ({ ok: true as const, code: "K7QM", enrollUrl: null, org: "Acme", scope: "view-only" as const, expiresAt: null, installCommand: "sagax-remote-access install" }));
+  const access = new RemoteHostAccess(path.join(dir, "access.json"), () => NOW);
+  const installCode = vi.fn(async () => ({ ok: true as const, code: "K7QM", enrollUrl: null, org: "Acme", scope: "view-only" as const, expiresAt: null, installCommand: "sagax-remote-access install", installCommands: { macos: "sudo m", linux: "sudo l", windows: "w" } }));
   const routes = [createRemoteHostsRoutes({
     principalId: (a) => (a.kind === "session" ? (a.session as { principalId?: string }).principalId : undefined),
     available: async () => ({ available: true, hosts: [row(HOST, new Date(NOW - 30_000).toISOString()), row(OFF, null)] }),
     installCode,
     teams,
+    access,
     sectionsFor: () => ["Support"],
     now: () => NOW,
   })];
@@ -48,7 +51,7 @@ async function serve(principalId: string | null = "tech@example.org") {
   });
   servers.push(server);
   await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
-  return { base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, teams, installCode };
+  return { base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, teams, access, installCode };
 }
 
 const send = (url: string, method: string, body?: unknown) => fetch(url, { method, headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
@@ -69,6 +72,19 @@ describe("/api/remote-hosts", () => {
     expect(await res.json()).toMatchObject({ code: "K7QM", scope: "view-only", installCommand: "sagax-remote-access install" });
     expect(installCode).toHaveBeenCalledWith("tech@example.org", { scope: "view-only", consentRef: "CW-1" });
     expect((await send(`${base}/api/remote-hosts/code`, "POST", { scope: "root" })).status).toBe(400);
+  });
+
+  it("saves what bots may do with one of the caller's hosts and lists it", async () => {
+    const { base, access } = await serve();
+    expect((await send(`${base}/api/remote-hosts/${HOST}/access`, "PUT", { access: "never" })).status).toBe(200);
+    expect(access.get("tech@example.org", HOST)).toBe("never");
+    expect(access.get("other@example.org", HOST)).toBe("always");
+    const body = await (await fetch(`${base}/api/remote-hosts`)).json() as { hosts: Array<{ hostId: string; access: string }> };
+    expect(body.hosts.map((h) => [h.hostId, h.access])).toEqual([[HOST, "never"], [OFF, "always"]]);
+    expect((await send(`${base}/api/remote-hosts/${HOST}/access`, "PUT", { access: "sometimes" })).status).toBe(400);
+    expect((await send(`${base}/api/remote-hosts/h_${"ee".repeat(16)}/access`, "PUT", { access: "ask" })).status).toBe(404);
+    expect((await send(`${base}/api/remote-hosts/${HOST}/access`, "PUT", { access: "always" })).status).toBe(200);
+    expect(access.forPrincipal("tech@example.org").size).toBe(0);
   });
 
   it("places a host on one of the caller's teams and takes it off", async () => {

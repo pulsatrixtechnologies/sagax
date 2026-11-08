@@ -3950,6 +3950,21 @@ select optgroup {
    Restore them for enabled interactive controls across the app.
    Keep specificity low so component cursor styles can override this. */
 
+/* Every modal window fades in on its first paint (#2595), the ones not
+   drawn from DIALOG included: opacity only, on the base token, so reduced
+   motion lands at once. In the base layer, so a component's own transition
+   (Settings: opacity and scale) wins. */
+@layer base {
+  :where([role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]) {
+    transition: opacity var(--transition-duration-base) var(--ease-out-quint);
+  }
+  @starting-style {
+    :where([role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]) {
+      opacity: 0;
+    }
+  }
+}
+
 @layer base {
   :where(
     button:not(:disabled, [aria-disabled="true"], [aria-busy="true"]),
@@ -4816,4 +4831,29 @@ select optgroup {
   --bot-panel-bg: #161616;
   --bot-panel-card: #1f1f1f;
   --bot-panel-pill-border: #3a3a3a;
+}
+
+/* Usage charts (v2): the validated categorical palette of the dataviz kit,
+   light and dark steps, picked by the skin's color scheme. Series keep their
+   slot (fixed order, never cycled); "Other" is a neutral grey. */
+.usage-chart {
+  color-scheme: var(--code-color-scheme, dark);
+  --usage-other: var(--color-ink-tertiary);
+}
+/* No light-dark() (the build rewrites it): one block per skin family. */
+.usage-chart {
+  --usage-s1: #3987e5;
+  --usage-s2: #d95926;
+  --usage-s3: #199e70;
+  --usage-s4: #c98500;
+  --usage-s5: #d55181;
+  --usage-s6: #9085e9;
+}
+:is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"], [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) .usage-chart {
+  --usage-s1: #2a78d6;
+  --usage-s2: #eb6834;
+  --usage-s3: #1baf7a;
+  --usage-s4: #eda100;
+  --usage-s5: #e87ba4;
+  --usage-s6: #6250d6;
 }

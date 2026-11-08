@@ -122,6 +122,9 @@ export interface ToolExec {
    * (server/sandbox/sandbox-server-path.ts). Checked before the misuse guard, so the
    * bot reads where its folder is, never the policy refusal. */
   serverPathAnswer?(value: string, kind: "path" | "command"): string | null;
+  /** #2775: a file tool's path with tmp/ in the conversation's own folder
+   * (server/sandbox/sandbox-bot-folder.ts conversationTmpPath). */
+  conversationPath?(path: string): string;
   /** Safety review before the tool runs. A string stops the call. Plugin and
    * misuse refusals are checked first, so this cannot hide them. */
   beforeCall?(name: string, detail: string): Promise<string | null> | string | null;
@@ -524,6 +527,9 @@ export function userSandboxToolsFor(folder?: string | null): typeof USER_SANDBOX
 
 export async function callUserSandboxTool(name: string, args: Record<string, unknown>, exec: ToolExec, folder?: string | null): Promise<ToolResult> {
   try {
+    if (exec.conversationPath && (name === "read_file" || name === "write_file" || name === "list_files") && typeof args.path === "string") {
+      args = { ...args, path: exec.conversationPath(args.path) };
+    }
     const refusedEarly = earlyRefusal(name, args, exec);
     if (refusedEarly) return text(refusedEarly, true);
     if (exec.beforeCall) {

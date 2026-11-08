@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appliesNow, directApply } from "./direct-apply.ts";
+import { appliesNow, directApply, grantAfterQuote, reviewedSkillNeedsCard } from "./direct-apply.ts";
 
 describe("appliesNow", () => {
   it("reports full-access or level, and null when the owner must confirm", () => {
@@ -43,5 +43,20 @@ describe("directApply", () => {
     it("still keeps the card in a guest-driven turn", () => {
       expect(directApply({ fullAccess: false, botId: "a", targetBotId: "a2", blocked: true, ownerOf })).toBeNull();
     });
+  });
+});
+
+describe("bypass keeps every own-work card away (2026-11-08)", () => {
+  it("a refused quote drops self and primary grants, never Full access", () => {
+    expect(grantAfterQuote("full-access", true)).toBe("full-access");
+    expect(grantAfterQuote("self", true)).toBeNull();
+    expect(grantAfterQuote("level", true)).toBeNull();
+    expect(grantAfterQuote("self", false)).toBe("self");
+    expect(grantAfterQuote(null, false)).toBeNull();
+  });
+  it("a skill the automatic review learns applies at Full, stays a card otherwise", () => {
+    expect(reviewedSkillNeedsCard("create", "full-access")).toBe(false);
+    expect(reviewedSkillNeedsCard("create", "self")).toBe(true);
+    expect(reviewedSkillNeedsCard("update", "self")).toBe(false);
   });
 });

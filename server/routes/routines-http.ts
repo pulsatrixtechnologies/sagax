@@ -59,6 +59,9 @@ export interface RoutinesHttpDeps {
   scopeDeps(auth: RequestAuth, visible: RoutinesHttpVisible, viewerId: string | undefined): RoutineScopeDeps<object>;
   needsRun(auth: RequestAuth, botId: unknown): boolean;
   needsRunBody: { error: string; code: string };
+  /** #2622: a refusal when the bot's owner does not let collaborators
+   * create routines and this caller is not its owner or manager. */
+  createRefused?(auth: RequestAuth, botId: unknown): { error: string; code: string } | null;
   hiddenTarget(body: unknown, visible: RoutinesHttpVisible): string | null;
   resultsRefusal(auth: RequestAuth, body: unknown): string | null;
   runAsChoice(
@@ -145,6 +148,8 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
       if (deps.needsRun(auth, (body as { botId?: unknown } | null)?.botId)) {
         return json(res, 403, deps.needsRunBody);
       }
+      const refused = deps.createRefused?.(auth, (body as { botId?: unknown } | null)?.botId);
+      if (refused) return json(res, 403, refused);
       const notYours = deps.resultsRefusal(auth, body);
       if (notYours) return json(res, 403, { error: notYours });
       const runAsChoice = deps.runAsChoice(auth, body);

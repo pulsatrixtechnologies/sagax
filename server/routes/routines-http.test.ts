@@ -213,6 +213,17 @@ describe("createRoutinesHttpRoutes", () => {
     expect(sent[0]).toEqual({ status: 403, body: NEEDS_RUN });
   });
 
+  // #2622: the owner may turn off "collaborators can create routines".
+  it("POST /api/routines refuses a collaborator when the owner turned it off", async () => {
+    const create = vi.fn(() => routine as never);
+    const refusal = { error: "the owner of this bot does not let collaborators create routines", code: "collaborators_cannot_create_routines" };
+    const route = createRoutinesHttpRoutes(deps({ create, createRefused: (_auth, botId) => (botId === "b1" ? refusal : null) }));
+    const { sent, run } = call(route, { path: "/api/routines", method: "POST", body: { botId: "b1" } });
+    await run();
+    expect(sent[0]).toEqual({ status: 403, body: refusal });
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("POST /api/routines creates and returns 201", async () => {
     const create = vi.fn(() => routine as never);
     const route = createRoutinesHttpRoutes(deps({ create }));

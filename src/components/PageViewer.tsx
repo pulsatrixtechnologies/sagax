@@ -28,7 +28,7 @@
 // frame, and its fields are plain text (parseAnnotationMessage). Nothing
 // reaches a bot until the person presses Send.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Check, Ellipsis, Globe, Highlighter, History, Loader2, Maximize2, MessageSquare, Minimize2, Pencil, Pin, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
+import { Check, Download, Ellipsis, Globe, Highlighter, History, Loader2, Maximize2, MessageSquare, Minimize2, Palette, Pencil, Pin, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -111,13 +111,32 @@ export function renameTitle(draft: string, current: string): string | null {
   return title && title !== current ? title : null;
 }
 
-const KIND_LABEL: Record<PageKind, "pages.kind.html" | "pages.kind.markdown" | "pages.kind.presentation"> = {
+const KIND_LABEL: Record<PageKind, "pages.kind.html" | "pages.kind.markdown" | "pages.kind.presentation" | "pages.kind.design"> = {
   html: "pages.kind.html",
   markdown: "pages.kind.markdown",
   presentation: "pages.kind.presentation",
+  design: "pages.kind.design",
 };
 
-type Panel = "edit" | "comments" | "annotate" | "versions" | null;
+type Panel = "edit" | "comments" | "annotate" | "versions" | "design" | null;
+
+/** A design system as the server lists it (#2717): built in, or the person's own. */
+export interface DesignSystemEntry { id: string; name: string; summary?: string; tokens: Record<string, string>; own: boolean }
+
+/** The few colors a design system's row shows: its ground, text, accent. */
+export function designSwatches(tokens: Record<string, string>): string[] {
+  return ["--bg", "--surface", "--fg", "--accent"].map((name) => tokens[name]).filter((value): value is string => typeof value === "string");
+}
+
+/** Save a text file in the person's Downloads, by the browser. */
+function saveFile(name: string, text: string, type = "text/html") {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 const BUTTON = "inline-flex items-center gap-1.5 rounded-lg border border-hairline/60 px-2.5 py-1 text-[12.5px] text-ink hover:bg-raised disabled:opacity-40";
 const PRIMARY = "inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-40";
@@ -434,6 +453,12 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
     return Boolean(answer);
   };
 
+  const exportVersion = async () => {
+    if (!shown) return;
+    const answer = await call<{ filename: string; html: string }>(`/versions/${shown.n}/export?theme=${theme === "dark" ? "dark" : "light"}`, { method: "GET" });
+    if (answer) saveFile(answer.filename, answer.html);
+  };
+
   const present = () => {
     // Present fills the monitor via OS fullscreen (#2043), not only the frame.
     setFullscreen(true);
@@ -511,6 +536,8 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
                   <MenuItem icon={<Highlighter size={14} />} label={annotating ? t("pages.annotate.exit") : t("pages.annotate.start")} onClick={() => { close(); toggle("annotate"); }} />
                   <MenuItem icon={<Play size={14} />} label={t("pages.present")} onClick={() => { close(); present(); }} />
                   <MenuItem icon={<Pencil size={14} />} label={t("pages.edit")} onClick={() => { close(); toggle("edit"); }} />
+                  {shown?.kind === "design" && <MenuItem icon={<Palette size={14} />} label={t("pages.designSystem")} data-page-design-system="" onClick={() => { close(); toggle("design"); }} />}
+                  {shown && <MenuItem icon={<Download size={14} />} label={t("pages.export")} data-page-export="" onClick={() => { close(); void exportVersion(); }} />}
                   <MenuItem icon={<MessageSquare size={14} />} label={`${t("pages.comments.title")}${page.comments ? ` (${page.comments})` : ""}`} onClick={() => { close(); toggle("comments"); }} />
                   {proposed && (
                     <MenuItem icon={<XCircle size={14} />} label={t("pages.decline")} onClick={() => {
@@ -595,6 +622,10 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
             )}
             {panel === "edit" && shown && (
               <PageEditor pageId={pageId} version={shown.n} page={page} busy={busy} call={call}
+                onSaved={(next, n) => { update(next); setVersion(n); setReloads((count) => count + 1); }} />
+            )}
+            {panel === "design" && shown && (
+              <DesignSystemPanel version={shown.n} page={page} busy={busy} call={call}
                 onSaved={(next, n) => { update(next); setVersion(n); setReloads((count) => count + 1); }} />
             )}
             {panel === "comments" && <CommentsPanel pageId={pageId} version={version} call={call} onCount={(count) => update({ ...page, comments: count })} />}
@@ -736,6 +767,7 @@ function PageEditor({ pageId, version, page, busy, call, onSaved }: {
       <textarea data-page-editor aria-label={t("pages.edit")} spellCheck={false} value={source} onChange={(event) => setSource(event.target.value)}
         className="min-h-[320px] flex-1 resize-none rounded-md border border-hairline/50 bg-panel p-2 font-mono text-[12px] leading-relaxed" />
       {kind === "presentation" && <p className="text-[11.5px] text-ink-tertiary">{t("pages.editor.presentationHint")}</p>}
+      {kind === "design" && <p className="text-[11.5px] text-ink-tertiary">{t("pages.editor.designHint")}</p>}
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={busy || !source.trim()} className={BUTTON} onClick={() => void save(false)}><Save size={13} />{t("pages.editor.save")}</button>
         {live && (
@@ -745,6 +777,72 @@ function PageEditor({ pageId, version, page, busy, call, onSaved }: {
         )}
       </div>
       {saved && <p role="status" className="text-success">{saved}</p>}
+    </section>
+  );
+}
+
+/** The design systems a design can be drawn with (#2717): Sagax, the
+ * built-in ones and the person's own (taken from their code by a bot). A
+ * pick saves a new version of the design with that system; the one in use
+ * is checked. The person's own can be removed here. */
+function DesignSystemPanel({ version, page, busy, call, onSaved }: {
+  version: number;
+  page: PublishedPageSummary;
+  busy: boolean;
+  call: Call;
+  onSaved(page: PublishedPageSummary, version: number): void;
+}) {
+  const [systems, setSystems] = useState<DesignSystemEntry[] | null>(null);
+  const [current, setCurrent] = useState<string | null>(null);
+  const [source, setSource] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    api<{ systems: DesignSystemEntry[] }>("/api/pages/design-systems")
+      .then((answer) => { if (live) setSystems(answer.systems); })
+      .catch(() => { if (live) setSystems([]); });
+    api<{ content: string }>(`/api/pages/${encodeURIComponent(page.id)}/versions/${version}/source`)
+      .then((answer) => {
+        if (!live) return;
+        setSource(answer.content);
+        setCurrent(/data-sagax-design-system="([^"]*)"/.exec(answer.content)?.[1] ?? null);
+      })
+      .catch(() => { if (live) setSource(""); });
+    return () => { live = false; };
+  }, [page.id, version]);
+  const pick = async (id: string) => {
+    if (source === null || id === current) return;
+    const answer = await call<{ page: PublishedPageSummary; version: number }>("/versions", { method: "POST", body: JSON.stringify({ kind: "design", content: source, designSystem: id }) });
+    if (answer) { setCurrent(id); onSaved(answer.page, answer.version); }
+  };
+  const remove = async (id: string) => {
+    try {
+      await api(`/api/pages/design-systems/${encodeURIComponent(id)}`, { method: "DELETE" });
+      setSystems((list) => (list ?? []).filter((entry) => entry.id !== id));
+    } catch { /* stays listed */ }
+  };
+  return (
+    <section aria-label={t("pages.designSystem")} data-design-systems="" className="flex flex-col gap-1">
+      <h3 className="mb-1 text-[13px] font-medium text-ink">{t("pages.designSystem")}</h3>
+      <p className="mb-1 text-ink-secondary">{t("pages.designSystem.intro")}</p>
+      {systems === null && <Loader2 size={14} className="animate-spin text-ink-secondary" />}
+      {(systems ?? []).map((entry) => (
+        <div key={entry.id} className={cn("group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-hover", entry.id === current && "bg-raised")}>
+          <button type="button" aria-pressed={entry.id === current} disabled={busy || source === null} onClick={() => void pick(entry.id)} title={entry.summary}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-60">
+            <Check size={13} aria-hidden="true" className={entry.id === current ? "shrink-0 text-ink" : "invisible shrink-0"} />
+            <span className="flex shrink-0 -space-x-1" aria-hidden="true">
+              {designSwatches(entry.tokens).map((color, index) => (
+                <span key={index} className="size-3.5 rounded-full border border-hairline/60" style={{ background: color }} />
+              ))}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-ink">{entry.name}</span>
+            {entry.own && <span className="text-ink-tertiary">{t("pages.designSystem.own")}</span>}
+          </button>
+          {entry.own && (
+            <button type="button" className="table-action" aria-label={t("pages.designSystem.remove")} title={t("pages.designSystem.remove")} onClick={() => void remove(entry.id)}><Trash2 size={12} /></button>
+          )}
+        </div>
+      ))}
     </section>
   );
 }

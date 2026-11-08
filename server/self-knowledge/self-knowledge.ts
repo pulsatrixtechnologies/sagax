@@ -19,6 +19,8 @@ export const HELP_DEFAULT_RESULTS = 4;
 export const HELP_MAX_RESULTS = 6;
 /** Characters of one section's excerpt, title and lines aside. */
 const EXCERPT_CHARS = 520;
+/** A guide's whole text (the generator keeps each under this). */
+const GUIDE_CHARS = 3000;
 
 /** The base sits beside this module in a checkout, and under self-knowledge/
  * beside the bundled server (scripts/bundle-server.mjs copies it). Read
@@ -244,17 +246,19 @@ export function helpAnswer(index: KnowledgeIndex, question: string, context: Hel
   const head = [
     `Sagax ${base.version} knowledge, ${base.generated}${base.perspicax && context.organization ? `; Perspicax console ${base.perspicax.version} (this organization's may be older)` : ""}. This server: ${where}.`,
   ];
-  const matches = searchKnowledge(index, question, limit, context);
+  const found = searchKnowledge(index, question, limit, context);
+  // A guide that matches best is the whole answer: its full text, alone (#2734).
+  const matches = found[0]?.section.kind === "guide" ? found.slice(0, 1) : found;
   if (!matches.length) {
     head.push("Nothing in the knowledge base matches. Do not claim the capability exists or does not: say you did not find it, and check your own tool list" + (context.perspicaxTools ? " (and api_list, if you have it)" : "") + " before answering.");
     return { text: head.join("\n"), ids: [] };
   }
   head.push("From Sagax's own code and docs: trust it over memory, and your own tool list over it. Say where it is and who may do it.");
-  const blocks = matches.map(({ section }) => [
+  const blocks = matches.map(({ section }, at) => [
     `## ${section.title} [${section.kind}]`,
     section.where ? `Where: ${section.where}` : null,
     section.access ? `Access: ${section.access}` : null,
-    excerpt(section, question),
+    at === 0 && section.kind === "guide" ? excerpt(section, question, GUIDE_CHARS) : excerpt(section, question),
     `(${section.source})`,
   ].filter(Boolean).join("\n"));
   const tail = context.perspicaxTools ? ["For this organization's live Perspicax catalog (products, profiles, what the person may reach), if you have api_list: api_list, then api_search."] : [];

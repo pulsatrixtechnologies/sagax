@@ -127,6 +127,8 @@ export function PagePublishCard({ message, threadLatestVersion }: { message: Mes
     return <div className="chat-text w-fit max-w-[min(80%,560px)] rounded-[18px] bg-card px-3 py-[7px] text-[13px] text-ink">{message.text}</div>;
   }
   const title = page?.title || ref.title;
+  // a design reads as one on its card (#2717)
+  const cardKind = (page?.versions.find((entry) => entry.n === ref.version) ?? page?.versions.at(-1))?.kind;
   const loadedStatus = deleted ? "deleted" : pageCardState(page, ref.version);
   const status = pageCardStatusWithThreadLatest(loadedStatus, ref.version, threadLatestVersion);
   // the page's own preview address, and nothing else, is ever framed: any
@@ -166,7 +168,7 @@ export function PagePublishCard({ message, threadLatestVersion }: { message: Mes
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] font-medium text-ink">{title}</span>
           <span data-page-card-state={status ?? ""} className="block truncate text-[12px] text-ink-secondary">
-            {t("pages.label")}{stateLine}
+            {cardKind === "design" ? t("pages.kind.design") : t("pages.label")}{stateLine}
           </span>
         </span>
       </footer>

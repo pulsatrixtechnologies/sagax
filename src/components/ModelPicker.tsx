@@ -12,6 +12,7 @@ import { needsCli } from "./EngineSetup";
 import type { ModelMenuRow } from "./ModelMenu";
 import { cn } from "@/lib/cn";
 import { useMenuMotion } from "./MenuMotion";
+import { EngineLimitIndicator } from "./LimitResetContinue";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { t } from "@/lib/i18n";
 import { useMyEngineModels, useMyEngines, usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -507,7 +508,10 @@ function ModelPickerShell({
           {!viewerLocal && <ModelNoEngineNotice className="w-full" />}
         </div>
       ) : (
-        trigger
+        <>
+          {trigger}
+          <EngineLimitIndicator engine={bot.modelSelection?.instanceId} botId={bot.id} threadId={threadId ?? bot.threadId} />
+        </>
       )}
 
       {menuMotion.shown && portal(containedBusy ? (

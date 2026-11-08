@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bug, ChevronDown, ChevronRight, PanelRight, RefreshCw } from "lucide-react";
 import { api, useStore, visibleMessages, type Bot } from "@/state/store";
 import { cn } from "@/lib/cn";
+import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { useCaptionChrome, useMacInsetChrome } from "@/components/DesktopCapabilities";
 import { formatTime, toRows, type InspectorEntry, type InspectorPage, type InspectorRow } from "@/lib/inspector";
@@ -199,6 +200,7 @@ export function InspectorPanel({ bot }: { bot: Bot }) {
           tabs[next].focus();
           tabs[next].click();
         }}>
+          <TabIndicatorGroup>
           {(["run", "events", "raw"] as const).map((l) => (
             <button
               key={l}
@@ -211,13 +213,15 @@ export function InspectorPanel({ bot }: { bot: Bot }) {
               onClick={() => setLens(l)}
               // Settings' borderless pills (2026-10-16): the chosen one filled.
               className={cn(
-                "inline-flex h-7 min-h-[44px] items-center rounded-full px-2.5 text-[13px] leading-[18px] capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none md:min-h-0",
-                lens === l ? "bg-selected text-ink" : "text-ink-secondary hover:bg-hover hover:text-ink",
+                "relative inline-flex h-7 min-h-[44px] items-center rounded-full px-2.5 text-[13px] leading-[18px] capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none md:min-h-0",
+                lens === l ? "text-ink" : "text-ink-secondary hover:bg-hover hover:text-ink",
               )}
             >
-              {l === "run" ? t("inspector.run.title") : l}
+              {lens === l && <TabIndicator className="bg-selected" />}
+              <span className="relative">{l === "run" ? t("inspector.run.title") : l}</span>
             </button>
           ))}
+          </TabIndicatorGroup>
         </div>
         {lens !== "run" && <span className="ml-auto text-[11px] text-ink-secondary">
           {page ? (shown < total ? `last ${shown} of ${total}` : `${shown} entries`) : "loading…"}

@@ -17,12 +17,12 @@ describe("engineReceipt: what each engine receives", () => {
   });
 
   it("engines without files receive a plugin's and a skill's files in the prompt, tools on or off (Q8 C)", () => {
-    for (const kind of ["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq"]) {
+    for (const kind of ["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq", "meta"]) {
       expect(engineWorksInFiles(kind), kind).toBe(false);
       expect(engineReceipt(kind, "plugin", { customMcp: true, ...plugin }), kind).toEqual({ skills: "prompt", commands: "prompt", agents: "prompt", nothing: false });
       expect(engineReceipt(kind, "skill", { customMcp: true, skills: true }).skills, kind).toBe("prompt");
     }
-    expect([...ENGINES_WITHOUT_FILES].sort()).toEqual(["cerebras", "grok", "groq", "minimax", "mistral", "openai-compat"]);
+    expect([...ENGINES_WITHOUT_FILES].sort()).toEqual(["cerebras", "grok", "groq", "meta", "minimax", "mistral", "openai-compat"]);
   });
 
   it("API engines receive skills, plugin files and the organization's Flow with or without retrieval tools", () => {

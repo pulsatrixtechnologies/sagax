@@ -1,8 +1,6 @@
 import type { Dispatch } from "react";
 import { segmentsAbove } from "@/lib/single-stream";
 import { ChatErrorBanner, ChatNotice, ChatReconnectBanner, ChatStaleBanner } from "../ChatErrorBanner";
-import { WeeklyLimitNotice } from "../ChatUsageNotices";
-import { EngineLimitNotice } from "../LimitResetContinue";
 import { ChatFindBar } from "../ChatFindBar";
 import { ConfidentialBanner } from "../ConfidentialBanner";
 import { AccessCard } from "../AccessCard";
@@ -91,15 +89,7 @@ export function ChatViewBanners({
         />
       ) : <RoutineRunRow message={m} botId={bot.id} onResume={resumeAutoPaused(m, close)} />} />}
       {!side && <ChatStaleBanner />}
-      {!side && !remoteClient && <WeeklyLimitNotice />}
-      {/* Engine near/at its limit: full-width banner (not a header pill). */}
-      {!side && !remoteClient && (
-        <EngineLimitNotice
-          engine={bot.modelSelection?.instanceId}
-          botId={bot.id}
-          threadId={bot.threadId}
-        />
-      )}
+      {/* No usage or limit banner above the chat (JC 2026-11-08): the model picker's limit indicator carries it. */}
 
       {/* Pinned message banner */}
       <PinnedBanner

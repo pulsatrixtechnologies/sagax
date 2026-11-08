@@ -132,10 +132,10 @@ describe("compact schedule label", () => {
     expect(scheduleLabelCompact({ type: "interval", everyMinutes: 60, anchorAt: 0 })).toBe("Every hour");
     expect(scheduleLabelCompact({ type: "webhook" } as never)).toBe("When a webhook fires");
     expect(scheduleLabelCompact({ type: "event" } as never)).toBe("When email arrives");
-    expect(scheduleLabelCompact({ type: "event", source: "github", events: ["issue.opened", "pr.opened"] })).toBe("On GitHub issue.opened, pr.opened");
+    expect(scheduleLabelCompact({ type: "event", source: "github", events: ["issue.opened", "pr.opened"] })).toBe("On GitHub Issue opened, Pull request opened");
     expect(scheduleLabelCompact({ type: "event", source: "github", events: [] })).toBe("On GitHub any event");
-    expect(scheduleLabel({ type: "event", source: "github", events: ["issue.labeled"] })).toBe("GitHub events: issue.labeled");
-    expect(scheduleSentence({ type: "event", source: "github", events: ["issue.labeled"] })).toContain("on GitHub events (issue.labeled)");
+    expect(scheduleLabel({ type: "event", source: "github", events: ["issue.labeled"] })).toBe("GitHub events: Issue labeled");
+    expect(scheduleSentence({ type: "event", source: "github", events: ["issue.labeled"] })).toContain("on GitHub events (Issue labeled)");
     const at = new Date(new Date().getFullYear(), 9, 29, 17, 57).getTime();
     expect(scheduleLabelCompact({ type: "once", at })).toBe("Once October 29 at 5:57 PM");
   });

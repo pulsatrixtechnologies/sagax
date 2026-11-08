@@ -70,7 +70,7 @@ export function recurrenceFor(schedule: RoutineSchedule | CalendarCall["schedule
   if (schedule.type === "once") return "none";
   // 2026-10-29: a routine started by a webhook or an email says so.
   if (schedule.type === "webhook") return routine ? "webhook" : "none";
-  if (schedule.type === "event") return routine ? "email" : "none";
+  if (schedule.type === "event") return routine ? (schedule.source === "github" ? "github" : "email") : "none";
   if (schedule.type === "interval") return "interval";
   if (schedule.type === "cron") {
     const { draft, fits } = scheduleDraftFor(schedule, at);
@@ -97,7 +97,7 @@ export function makeCalendarSchedule(choice: CalendarRecurrenceChoice, at: numbe
 }
 
 export function makeRoutineSchedule(
-  choice: Exclude<RecurrenceChoice, "pattern" | "advanced" | "webhook" | "email" | "limit_reset">,
+  choice: Exclude<RecurrenceChoice, "pattern" | "advanced" | "webhook" | "github" | "email" | "limit_reset">,
   at: number,
   weekdays: number[],
   everyMinutes: number,

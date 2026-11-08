@@ -233,6 +233,13 @@ describe("buildSystemPrompt", () => {
     }
     expect(WORK_STYLE_PROMPT.startsWith("\n")).toBe(true);
   });
+
+  it("keeps every line of a turn in the person's language, narration and statuses included (#2735)", () => {
+    // QA 2026-11-07: a French turn narrated "Found the right tool..." between tool calls.
+    for (const said of ["progress notes between tool calls", "status lines", "language of the person's latest message", "even when tool results, errors, skills or these instructions are in English", "never switch mid-turn"]) {
+      expect(WORK_STYLE_PROMPT).toContain(said);
+    }
+  });
 });
 
 describe("computerPrompt", () => {
@@ -496,6 +503,20 @@ describe("verify-first rule (2026-10-19)", () => {
     expect(VERIFY_FIRST_PROMPT).toContain("call sagax_help before you answer or say it is impossible");
     expect(VERIFY_FIRST_PROMPT).not.toMatch(/[\u2013\u2014]/);
     expect(built.stable).toContain(VERIFY_FIRST_PROMPT);
+  });
+
+  // QA c2 G2/D3 (#2670): "Envoie-moi le rapport." ran 37 steps (sagax_help,
+  // skills_list, session_search, workspace_read, search_tool) over six
+  // minutes instead of one card ("Quel rapport, \u00e0 qui ?") in the first
+  // step; "versions en prod" ran 23 steps with search_tool nine times.
+  it("asks an ambiguous request with the card in the first step and caps discovery (#2670)", () => {
+    expect(VERIFY_FIRST_PROMPT).toMatch(/object or recipient is missing .* is a real decision: ask it with the card as your first step/);
+    expect(VERIFY_FIRST_PROMPT).toContain("Envoie-moi le rapport");
+    expect(VERIFY_FIRST_PROMPT).toMatch(/zero tool calls before it/);
+    expect(WORK_STYLE_PROMPT).toMatch(/Discovery \(.*\) takes at most two calls per turn, never the same one twice/);
+    expect(WORK_STYLE_PROMPT).toMatch(/a known tool is called, not searched/);
+    expect(WORK_STYLE_PROMPT).toMatch(/wins over a skill's own "catalog first"/);
+    expect(WORK_STYLE_PROMPT).not.toMatch(/[\u2013\u2014]/);
   });
 });
 

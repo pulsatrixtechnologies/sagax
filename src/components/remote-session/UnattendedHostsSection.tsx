@@ -1,25 +1,37 @@
 // "Enrolled hosts" on the Remote Sessions page (docs/inscription-hote.md,
-// "Côté Sagax"): the computers Perspicax enrolled for unattended access, with
-// "Unattended access" (opens a session against the host, then the usual
-// control flow) and "Revoke". Unattended access is always enabled
-// (2026-11-01). Hosts are cards (Tools page standard, 2026-11-06). No host id on screen: the readable name, the id only in a
-// tooltip and the Copy action. The person's own devices (every Sagax install,
-// this one first, 2026-11-07) come first, as Grok's "Manage devices" rows.
+// "Côté Sagax"): one list of the person's own devices (every Sagax install)
+// and the computers Perspicax enrolled for unattended access, as the same
+// card row (#2723, DeviceCardRow): "This device" first, then online, offline
+// last, most recent first in each group. A host row says "Linux · Online now"
+// or "Last seen ...", what bots may do with it (Always allow, Ask every time,
+// Never allow, enforced by the server) and a "⋯" menu (Unattended access,
+// Revoke, Copy the id). Organization, scope and dates sit behind Details.
+// Unattended access is always enabled (2026-11-01). No host id on screen:
+// the readable name, the id only in a tooltip and the Copy action.
 import { useState } from "react";
-import { Copy, KeyRound, Monitor, Plus, ShieldOff } from "lucide-react";
+import { ChevronDown, Copy, KeyRound, Monitor, Plus, ShieldOff } from "lucide-react";
 
 import {
   canOpenUnattendedHost,
   canRevokeUnattendedHost,
+  unattendedHostOnline,
+  type UnattendedHostAccess,
+  type UnattendedHostOs,
   type UnattendedHostRow,
 } from "../../../shared/remote-unattended-host";
+import type { BotComputerHostView } from "../../../shared/bot-computer-host";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { PAGE_ACTION_BUTTON, PageEmpty, PageSection } from "@/components/content-page";
+import { PAGE_ACTION_BUTTON, PageEmpty, PageMenuItem, PageSection } from "@/components/content-page";
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { activeLocale, t } from "@/lib/i18n";
 import type { MyDevice } from "@/lib/desktop-bridge";
-import { MyDevicesList } from "./MyDevicesList";
+import { relativeTime } from "@/lib/memory";
+import { DeviceCardRow } from "./DeviceCardRow";
+import { DeviceRow, deviceRowKey } from "./MyDevicesList";
+import { setRemoteHostAccess } from "./remote-hosts-client";
+import { HostBotComputerMenuItems, HostBotComputerTags } from "./HostBotComputerControls";
+import { useHostComputers } from "@/lib/host-computers";
 import {
   openUnattendedHost,
   revokeUnattendedHost,
@@ -39,12 +51,123 @@ export function unattendedHostLabel(row: Pick<UnattendedHostRow, "hostname">): s
   return row.hostname ?? t("remoteSessionsAdmin.hosts.unnamed");
 }
 
-type Notice = { kind: "pending" | "revoked"; host: string } | { kind: "error"; error: UnattendedHostFailure };
+type Notice = { kind: "pending" | "revoked"; host: string } | { kind: "error"; error: UnattendedHostFailure } | { kind: "access" };
 
-export function UnattendedHostsSection({ state, devices = [], onOpened, onAdd }: {
+const OS_LABEL: Record<UnattendedHostOs, string> = { macos: "macOS", windows: "Windows", linux: "Linux" };
+
+const seenAt = (row: Pick<UnattendedHostRow, "lastSeenAt">) => (row.lastSeenAt ? Date.parse(row.lastSeenAt) || 0 : 0);
+
+/** "Linux · Online now", "Computer · Last seen 5 hr ago", "Windows · Revoked". */
+export function hostLine(row: UnattendedHostRow, os: UnattendedHostOs | undefined, now = Date.now()): string {
+  const kind = os ? OS_LABEL[os] : t("myDevices.computer");
+  const seen = seenAt(row);
+  const presence = row.state !== "enrolled"
+    ? t(`remoteSessionsAdmin.hosts.state.${row.state}`)
+    : unattendedHostOnline(row, now) ? t("myDevices.onlineNow")
+      : seen > 0 ? t("remoteSessionsAdmin.hosts.lastSeen", { when: relativeTime(seen, now) }) : t("remoteSessionsAdmin.hosts.neverSeen");
+  return `${kind} · ${presence}`;
+}
+
+export type DeviceEntry = { kind: "device"; device: MyDevice } | { kind: "host"; host: UnattendedHostRow };
+
+/** One list: "This device" first, then online, offline last; the most
+ * recent activity first inside each group. */
+export function sortDeviceEntries(devices: readonly MyDevice[], hosts: readonly UnattendedHostRow[], now = Date.now()): DeviceEntry[] {
+  const rank = (entry: DeviceEntry) => entry.kind === "device"
+    ? { current: entry.device.current, online: entry.device.online, at: entry.device.lastSeenAt }
+    : { current: false, online: unattendedHostOnline(entry.host, now), at: seenAt(entry.host) };
+  const entries: DeviceEntry[] = [
+    ...devices.map((device) => ({ kind: "device" as const, device })),
+    ...hosts.map((host) => ({ kind: "host" as const, host })),
+  ];
+  return entries
+    .map((entry, index) => ({ entry, index, key: rank(entry) }))
+    .sort((a, b) => Number(b.key.current) - Number(a.key.current) || Number(b.key.online) - Number(a.key.online) || b.key.at - a.key.at || a.index - b.index)
+    .map(({ entry }) => entry);
+}
+
+function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotComputerChanged }: {
+  row: UnattendedHostRow;
+  /** #2726: this host as a bot computer (toggle, tags, per-bot mode). */
+  botComputer: BotComputerHostView | null;
+  onBotComputerChanged: () => void;
+  os?: UnattendedHostOs;
+  busy: boolean;
+  onOpen: (row: UnattendedHostRow) => void;
+  onRevoke: (row: UnattendedHostRow) => void;
+  onError: () => void;
+}) {
+  const label = unattendedHostLabel(row);
+  const [details, setDetails] = useState(false);
+  const [editingTags, setEditingTags] = useState(false);
+  const [access, setAccess] = useState<UnattendedHostAccess>(row.access ?? "always");
+  const [saving, setSaving] = useState(false);
+  const choose = (next: UnattendedHostAccess) => {
+    const previous = access;
+    setAccess(next);
+    setSaving(true);
+    void setRemoteHostAccess(row.hostId, next)
+      .catch(() => { setAccess(previous); onError(); })
+      .finally(() => setSaving(false));
+  };
+  const usable = canOpenUnattendedHost(row);
+  const facts: [string, string][] = [
+    [t("remoteSessionsAdmin.hosts.col.org"), row.org ?? ""],
+    [t("remoteSessionsAdmin.hosts.col.scope"), t(`remoteSessionsAdmin.hosts.scope.${row.scope}`)],
+    [t("remoteSessionsAdmin.hosts.col.enrolled"), dateLabel(row.enrolledAt)],
+    [t("remoteSessionsAdmin.hosts.col.expires"), dateLabel(row.expiresAt)],
+  ];
+  return (
+    <DeviceCardRow kind="unattended-host" icon={Monitor} online={unattendedHostOnline(row)} line={hostLine(row, os)}
+      rowData={{ "data-unattended-host": "", "data-state": row.state }}
+      title={(
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[13.5px] font-semibold text-ink" title={row.hostId}>{label}</span>
+          <button type="button" data-unattended-host-details="" aria-expanded={details} onClick={() => setDetails((open) => !open)}
+            className="inline-flex shrink-0 items-center gap-0.5 rounded px-1 text-[12px] text-ink-secondary hover:text-ink">
+            {t("remoteSessionsAdmin.hosts.details")}<ChevronDown size={12} aria-hidden="true" className={cn("transition-transform", details && "rotate-180")} />
+          </button>
+        </div>
+      )}
+      access={usable ? { value: access, name: label, disabled: saving || busy, onChange: choose } : undefined}
+      menu={{
+        name: label,
+        items: (close) => <>
+          {usable && (
+            <PageMenuItem icon={KeyRound} data-unattended-host-open="" aria-disabled={busy || undefined} onClick={() => { if (busy) return; close(); onOpen(row); }}>{t("remoteSessionsAdmin.hosts.open")}</PageMenuItem>
+          )}
+          {canRevokeUnattendedHost(row) && (
+            <PageMenuItem icon={ShieldOff} data-unattended-host-revoke="" aria-disabled={busy || undefined} onClick={() => { if (busy) return; close(); onRevoke(row); }}>{t("remoteSessionsAdmin.hosts.revoke")}</PageMenuItem>
+          )}
+          {row.state === "enrolled" && (
+            <HostBotComputerMenuItems hostId={row.hostId} host={botComputer} close={close}
+              onEditTags={() => setEditingTags(true)} onChanged={onBotComputerChanged} />
+          )}
+          <PageMenuItem icon={Copy} data-unattended-host-copy="" title={row.hostId} onClick={() => { close(); void copyText(row.hostId); }}>{t("remoteSessionsAdmin.hosts.copyId")}</PageMenuItem>
+        </>,
+      }}>
+      <HostBotComputerTags hostId={row.hostId} host={botComputer} editing={editingTags}
+        onDone={() => setEditingTags(false)} onChanged={onBotComputerChanged} />
+      {details && (
+        <dl data-unattended-host-facts="" className="ml-12 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px] leading-[18px]">
+          {facts.filter(([, value]) => value).map(([name, value]) => (
+            <div key={name} className="contents">
+              <dt className="text-ink-secondary">{name}</dt>
+              <dd className="min-w-0 truncate text-ink">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </DeviceCardRow>
+  );
+}
+
+export function UnattendedHostsSection({ state, devices = [], osByHost, onOpened, onAdd }: {
   state: Pick<UnattendedHostsState, "hosts" | "available" | "loading" | "reload">;
-  /** The person's own devices, listed first (src/lib/desktop-bridge.ts myDevices). */
+  /** The person's own devices, in the same list (src/lib/desktop-bridge.ts myDevices). */
   devices?: readonly MyDevice[];
+  /** A host's OS when Perspicax did not give it: from its sessions, by lowercase hostname. */
+  osByHost?: ReadonlyMap<string, UnattendedHostOs>;
   /** A session was opened against a host: the page takes over once its row connects. */
   onOpened?: (opened: { code: string; botId: string }) => void;
   /** The empty state's action: enrol a computer (the page's "Add computer"). */
@@ -55,6 +178,8 @@ export function UnattendedHostsSection({ state, devices = [], onOpened, onAdd }:
   const [confirmRevoke, setConfirmRevoke] = useState<UnattendedHostRow | null>(null);
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Bot computers (#2726): the toggle, the tags and the isolated / as-is answers.
+  const botComputers = useHostComputers(hosts.length > 0);
 
   const open = async (row: UnattendedHostRow) => {
     setBusy(row.hostId);
@@ -74,19 +199,16 @@ export function UnattendedHostsSection({ state, devices = [], onOpened, onAdd }:
     setNotice({ kind: "revoked", host: unattendedHostLabel(row) });
     reload();
   };
-  const copy = (row: UnattendedHostRow) => {
-    void copyText(row.hostId);
-  };
+  const entries = sortDeviceEntries(devices, hosts);
 
   return (
     <PageSection title={t("remoteSessionsAdmin.hosts.title")} count={hosts.length + devices.length || undefined} data-unattended-hosts="">
       {notice && (
         <p data-unattended-hosts-notice={notice.kind} role="status" className={cn("rounded-lg border px-3 py-2 text-[12.5px]", notice.kind === "error" ? "border-danger/30 bg-danger/10 text-danger" : "border-hairline/50 bg-panel text-ink-secondary")}>
-          {notice.kind === "error" ? t(`remoteSessionsAdmin.hosts.error.${notice.error}`) : t(`remoteSessionsAdmin.hosts.${notice.kind}`, { host: notice.host })}
+          {notice.kind === "error" ? t(`remoteSessionsAdmin.hosts.error.${notice.error}`) : notice.kind === "access" ? t("remoteSessionsAdmin.hosts.accessFailed") : t(`remoteSessionsAdmin.hosts.${notice.kind}`, { host: notice.host })}
         </p>
       )}
-      <MyDevicesList devices={devices} />
-      {hosts.length === 0 && devices.length === 0 && (
+      {entries.length === 0 && (
         <div data-unattended-hosts-empty="">
           <PageEmpty icon={Monitor} action={!loading && available && onAdd
             ? <button type="button" data-unattended-hosts-add="" onClick={onAdd} className={PAGE_ACTION_BUTTON}><Plus size={15} aria-hidden="true" />{t("remoteSessionsAdmin.addComputer")}</button>
@@ -96,52 +218,16 @@ export function UnattendedHostsSection({ state, devices = [], onOpened, onAdd }:
           </PageEmpty>
         </div>
       )}
-      {hosts.length > 0 && (
-        <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-          {hosts.map((row) => {
-            const label = unattendedHostLabel(row);
-            const working = busy === row.hostId;
-            const meta = [
-              row.org ? `${t("remoteSessionsAdmin.hosts.col.org")}: ${row.org}` : null,
-              t(`remoteSessionsAdmin.hosts.scope.${row.scope}`),
-              `${t("remoteSessionsAdmin.hosts.col.enrolled")}: ${dateLabel(row.enrolledAt)}`,
-              `${t("remoteSessionsAdmin.hosts.col.expires")}: ${dateLabel(row.expiresAt)}`,
-              `${t("remoteSessionsAdmin.hosts.col.seen")}: ${row.lastSeenAt ? dateLabel(row.lastSeenAt) : t("remoteSessionsAdmin.hosts.never")}`,
-            ].filter(Boolean);
-            return (
-              <li key={row.hostId} data-unattended-host="" data-state={row.state} className="flex flex-col gap-2 rounded-xl border border-hairline/50 bg-panel p-3 transition-colors hover:border-hairline">
-                <div className="flex min-w-0 items-start gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-raised text-ink-secondary"><Monitor size={16} aria-hidden="true" /></span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <span className="truncate text-[13.5px] font-semibold text-ink" title={row.hostId}>{label}</span>
-                      <span className={cn("inline-flex items-center gap-1.5 text-[12px]", row.state === "enrolled" ? "text-success" : row.state === "revoked" ? "text-danger" : "text-warning")}>
-                        <span className={cn("size-1.5 rounded-full", row.state === "enrolled" ? "bg-success" : row.state === "revoked" ? "bg-danger" : "bg-warning")} aria-hidden="true" />{t(`remoteSessionsAdmin.hosts.state.${row.state}`)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[12px] leading-[18px] text-ink-secondary">{meta.join(" · ")}</p>
-                  </div>
-                  <button type="button" data-unattended-host-copy="" title={row.hostId} aria-label={t("remoteSessionsAdmin.hosts.copyId")} onClick={() => copy(row)} className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-hairline/50 text-ink-secondary hover:bg-raised hover:text-ink">
-                    <Copy size={13} aria-hidden="true" />
-                  </button>
-                </div>
-                {(canOpenUnattendedHost(row) || canRevokeUnattendedHost(row)) && (
-                  <div className="flex flex-wrap gap-1.5 pl-12">
-                    {canOpenUnattendedHost(row) && (
-                      <button type="button" data-unattended-host-open="" disabled={working} onClick={() => void open(row)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-2.5 text-[12px] text-ink hover:bg-raised disabled:opacity-50">
-                        <KeyRound size={13} aria-hidden="true" /> {t("remoteSessionsAdmin.hosts.open")}
-                      </button>
-                    )}
-                    {canRevokeUnattendedHost(row) && (
-                      <button type="button" data-unattended-host-revoke="" disabled={working} onClick={() => { setReason(""); setConfirmRevoke(row); }} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-danger/50 px-2.5 text-[12px] text-danger hover:bg-danger/10 disabled:opacity-50">
-                        <ShieldOff size={13} aria-hidden="true" /> {t("remoteSessionsAdmin.hosts.revoke")}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
+      {entries.length > 0 && (
+        <ul data-my-devices="" aria-label={t("myDevices.title")} className="flex flex-col gap-2">
+          {entries.map((entry) => entry.kind === "device"
+            ? <DeviceRow key={deviceRowKey(entry.device)} device={entry.device} />
+            : <HostRow key={`${entry.host.hostId}:${entry.host.access ?? ""}`} row={entry.host} busy={busy === entry.host.hostId}
+                os={entry.host.os ?? (entry.host.hostname ? osByHost?.get(entry.host.hostname.toLowerCase()) : undefined)}
+                onOpen={(row) => void open(row)} onRevoke={(row) => { setReason(""); setConfirmRevoke(row); }}
+                onError={() => setNotice({ kind: "access" })}
+                botComputer={botComputers.hosts.find((host) => host.hostId === entry.host.hostId) ?? null}
+                onBotComputerChanged={() => botComputers.reload()} />)}
         </ul>
       )}
       {confirmRevoke && (

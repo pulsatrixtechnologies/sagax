@@ -148,6 +148,9 @@ importers:
       mermaid:
         specifier: ^12.1.0
         version: 12.1.0
+      motion:
+        specifier: 13.5.1
+        version: 13.5.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       nodemailer:
         specifier: ^10.1.4
         version: 10.1.4

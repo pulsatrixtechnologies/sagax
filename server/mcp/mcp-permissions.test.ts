@@ -55,6 +55,7 @@ describe("mcp permission registry", () => {
       "memory_recall", "memory_search", "work_search", "memory_write", "memory_propose", "memory_promote", "memory_review", "memory_forget", "memory", "ask_person", "work_check", "work_open", "memory_feedback",
       // mcp/remote_support_tools.rs (1.8.43)
       "remote_support_open", "remote_support_status", "remote_support_close",
+      "remote_support_hosts", "remote_support_host_code", "remote_support_host_revoke",
       // mcp/sagax_tools.rs
       "list_agents", "find_agents", "create_agent", "send_prompt", "await_turn", "read_transcript", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads", "read_transcript_cold",
       "sagax_bots", "sagax_send", "sagax_thread", "sagax_routine_run", "sagax_routine_update", "sagax_approve", "sagax_nudge",

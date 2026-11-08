@@ -222,7 +222,7 @@ function BotAllowances({ data, bots, botName, onChanged, onError }: {
                       disabled={busy !== null || Boolean(data.unavailable)}
                       onChange={(next) => { void save(bot.id, { enabled: next }); }}
                     />
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="flex flex-col gap-2">
                       <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">
                         {t("vault.payments.perPurchase")}
                         <input

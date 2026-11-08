@@ -154,6 +154,14 @@ describe("ProfileRequestService", () => {
     expect(store.messagesFor(bot.threadId)[0]?.card).toMatchObject({ dismissed: true, options: [] });
   });
 
+  it("2026-11-08: a refused quote applies under Full access and keeps the card outside Full", () => {
+    const { store, bot } = harness({ name: "Scout" });
+    const full = new ProfileRequestService({ store, autoApply: () => "full-access" });
+    expect(full.submit({ botId: bot.id, threadId: bot.threadId, changes: { name: "Kiwi" }, reason: "requested", quoteRefused: true }).state).toBe("applied");
+    const self = new ProfileRequestService({ store, autoApply: () => "self" });
+    expect(self.submit({ botId: bot.id, threadId: bot.threadId, changes: { name: "Pomme" }, reason: "requested", quoteRefused: true }).state).toBe("pending");
+  });
+
   it("reports a committed Full Access profile accurately when its receipt cannot settle", () => {
     const { store, bot } = harness({ name: "Scout" });
     const service = new ProfileRequestService({ store, autoApply: () => "full-access" });

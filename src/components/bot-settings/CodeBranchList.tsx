@@ -31,6 +31,7 @@ import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
 import {
   branchAction, branchActions, branchAskText, branchAway, branchCanReadAgain, branchCounts, branchStatus, branchUnavailable, branchWhere, codingBranchKey, deleteNeedsSecondConfirm, loadBranchDiff, loadBranchInfo, loadBranchPull, remoteActionNeedsConfirm,
   type BotBranchDiff, type BotBranchInfo, type BotBranchPull, type BranchAskAction, type BranchTone, type CodingBranch,
+  deleteJobBranches,
 } from "@/lib/code-branches";
 import { codeWorkWhen, ignoredBranchKey } from "@/lib/bot-activity";
 import { shortRepoName } from "@/lib/coding-job-card";
@@ -611,6 +612,8 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
       }
       case "ignore":
         actions.onIgnore?.(ignoredBranchKey(key));
+        // the branch goes away on the remote and locally, no card (#2148)
+        if (botId) void deleteJobBranches(botId, branch.threadId, [branch]).then(() => actions.onChanged?.());
         return;
       case "archive":
       case "unarchive":

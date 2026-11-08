@@ -156,15 +156,51 @@ export class BotFolderRegistry {
  * tmp/), TMPDIR there. Backend-neutral: a plain argv prefix, so the Docker
  * and Kubernetes provisioners, old or new, run it the same way. */
 const IN_FOLDER_SH = 'd="$1"; shift; mkdir -p -- "$d/tmp" 2>/dev/null; if cd -- "$d" 2>/dev/null; then export TMPDIR="$d/tmp" SAGAX_BOT_DIR="$d"; else cd /workspace; fi; exec "$@"';
+/** #2739: the same, with TMPDIR in the conversation's own tmp/<conversation>/
+ * folder, so one conversation never finds another's temporary files. */
+/** #2775: loose entries at the root of tmp/ untouched for this many minutes
+ * belong to no conversation still at work: each command moves them into
+ * tmp/c-earlier, so a conversation never lists them as its own. */
+export const BOT_TMP_LOOSE_MINUTES = 360;
+export const EARLIER_TMP_NAME = "c-earlier";
+const IN_THREAD_SH = `d="$1"; c="$2"; shift 2; mkdir -p -- "$d/tmp/$c" 2>/dev/null; if [ -d "$d/tmp" ] && [ ! -L "$d/tmp" ]; then find "$d/tmp" -mindepth 1 -maxdepth 1 ! -name 'c-*' ! -name '.*' -mmin +${BOT_TMP_LOOSE_MINUTES} -exec sh -c 'mkdir -p -- "$0/${EARLIER_TMP_NAME}" && mv -f -- "$@" "$0/${EARLIER_TMP_NAME}/"' "$d/tmp" {} + 2>/dev/null; fi; if cd -- "$d" 2>/dev/null; then export TMPDIR="$d/tmp/$c" SAGAX_BOT_DIR="$d"; else cd /workspace; fi; exec "$@"`;
 
-export function inBotFolder(input: SandboxExecInput, folder: string): SandboxExecInput {
+/** A file tool's path, with tmp/ in the conversation's own folder (#2775):
+ * `tmp/x`, `./tmp/x` and `<folder>/tmp/x` become `tmp/c-<conversation>/x`,
+ * so a relative tmp path never reaches another conversation's files.
+ * A path already in a tmp/c-* folder, or outside tmp/, stays as is. */
+export function conversationTmpPath(value: string, folder: string | null | undefined, threadId: string | null | undefined): string {
+  const conversation = conversationTmpName(threadId);
+  if (!conversation || !folder) return value;
+  const relative = value.replace(/^(?:\.\/)+/, "");
+  const base = relative === "tmp" || relative.startsWith("tmp/") ? ""
+    : value === `${folder}/tmp` || value.startsWith(`${folder}/tmp/`) ? `${folder}/` : null;
+  if (base === null) return value;
+  const rest = (base ? value.slice(folder.length + 1) : relative).slice(3).replace(/^\/+/, "");
+  if (/^c-[a-z0-9-]+(?:\/|$)/.test(rest)) return value;
+  return `${base}tmp/${conversation}${rest ? `/${rest}` : ""}`;
+}
+
+/** The folder name of a conversation under a bot's tmp/ (#2739): its id
+ * reduced to letters, digits and dashes, never a path. Empty when unknown. */
+export function conversationTmpName(threadId: string | null | undefined): string {
+  const name = String(threadId ?? "").toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+/, "").slice(0, 64);
+  return name ? `c-${name}` : "";
+}
+
+/** `threadId` gives the command a TMPDIR of its own conversation (#2739). */
+export function inBotFolder(input: SandboxExecInput, folder: string, threadId?: string | null): SandboxExecInput {
   if (!BOT_FOLDER_RE.test(folder) || input.argv.length === 0) return input;
+  const conversation = conversationTmpName(threadId);
+  if (conversation) return { ...input, argv: ["sh", "-c", IN_THREAD_SH, "sagax-bot-folder", folder, conversation, ...input.argv] };
   return { ...input, argv: ["sh", "-c", IN_FOLDER_SH, "sagax-bot-folder", folder, ...input.argv] };
 }
 
 /** What the bot is told about the layout (tool descriptions, workplace note). */
-export function botFolderNote(folder: string, serverDataDir?: string): string {
-  return `In your server environment your own folder is ${folder}: your commands start there and relative paths resolve there. Keep your files in it, temporary files in ${folder}/tmp (emptied of files older than ${BOT_TMP_RETENTION_DAYS} days), and only what the person's other bots must share in ${SANDBOX_SHARED_DIR}. Never write loose files at the ${SANDBOX_WORKSPACE} root.${serverDataDir ? ` ${serverFolderNote(folder, serverDataDir)}` : ""}`;
+export function botFolderNote(folder: string, serverDataDir?: string, threadId?: string | null): string {
+  const conversation = conversationTmpName(threadId);
+  const own = conversation ? `${folder}/tmp/${conversation}` : "$TMPDIR";
+  return `In your server environment your own folder is ${folder}: your commands start there and relative paths resolve there. Keep your files in it, temporary files in ${own} ($TMPDIR, this conversation's own folder under ${folder}/tmp, emptied of files older than ${BOT_TMP_RETENTION_DAYS} days): anything else in ${folder}/tmp comes from another conversation and is never a result of this one, so make the files this task needs again. Put only what the person's other bots must share in ${SANDBOX_SHARED_DIR}. Never write loose files at the ${SANDBOX_WORKSPACE} root.${serverDataDir ? ` ${serverFolderNote(folder, serverDataDir)}` : ""}`;
 }
 
 /** 2026-11-02 (production): the engine itself runs on the Sagax server,

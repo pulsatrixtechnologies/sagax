@@ -150,7 +150,8 @@ const port = Number(new URL(url).port);
 const ui = await createServer({
   root,
   logLevel: "warn",
-  server: { host: "127.0.0.1", port: 0, strictPort: false, proxy: {
+  // SAGAX_README_UI_PORT pins the UI to one port (an agent's 5176-5206 range); unset, any free port
+  server: { host: "127.0.0.1", port: Number(process.env.SAGAX_README_UI_PORT) || 0, strictPort: Boolean(process.env.SAGAX_README_UI_PORT), proxy: {
     "/api": { ws: true, target: url },
     "/.well-known/openmausbot/environment": { target: url },
   } },

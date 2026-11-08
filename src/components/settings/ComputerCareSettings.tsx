@@ -113,7 +113,7 @@ async function readJson<T>(response: Response): Promise<T> {
   return body as T;
 }
 
-export function ComputerCareSettings() {
+export function ComputerCareSettings({ part = "care" }: { part?: "care" | "schedule" } = {}) {
   const confirm = useConfirm();
   const [view, setView] = useState<MaintenanceView | null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -203,9 +203,9 @@ export function ComputerCareSettings() {
   const schedule = view?.schedule;
   const selectedBytes = preview?.items.filter((item) => selected.has(item.id)).reduce((sum, item) => sum + item.bytes, 0) ?? 0;
 
-  return (
-    <SettingsGroup title={t("computer.group.care")} groupId="computerCare">
-      <ComputerRecoverRow />
+  if (part === "schedule") {
+    return (
+      <SettingsGroup title={t("computerCare.update.title")} groupId="developerScheduledUpdate">
       <div data-settings-card="computer.maintenance" className="px-3.5 py-2.5">
         <SwitchRow
           label={t("computerCare.update.title")}
@@ -247,6 +247,13 @@ export function ComputerCareSettings() {
         )}
       </div>
 
+      </SettingsGroup>
+    );
+  }
+
+  return (
+    <SettingsGroup title={t("computer.group.care")} groupId="computerCare">
+      <ComputerRecoverRow />
       <div data-settings-card="computer.diskSaver">
         <DescribedRow
           label={t("computerCare.disk.title")}

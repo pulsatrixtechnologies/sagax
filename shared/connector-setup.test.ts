@@ -5,6 +5,9 @@ import {
   chooseConnectorSetupRoute,
   claudeInventoryShowsConnected,
   connectorProofMatches,
+  connectorReauthFailure,
+  connectorReauthProblem,
+  connectorReauthText,
   connectorSetupText,
   isConnectorSetupUrl,
   resolveConnectorSetupTarget,
@@ -209,4 +212,23 @@ describe("the card's own text", () => {
     expect(connectorSetupText(view({ provider: "claude", url: CLAUDE_AI_CONNECTORS_URL }), "en")).toBe("Connect Microsoft Teams on [claude.ai](https://claude.ai/customize/connectors).");
   });
 
+});
+
+describe("a connector whose sign-in expired (#2749)", () => {
+  const refused = "Managed MCP gateway tool call failed: Cursor connector needs re-authentication in Cursor: X won't turn on API access for this X account from its current sign-in";
+
+  it("names the connector and its sign-in link, by tool id or by title", () => {
+    const byId = connectorReauthFailure("cursor__user-X-search_5fposts_5fall", refused);
+    expect(byId).toMatchObject({ label: "X", provider: "grok", url: GROK_CONNECTORS_URL });
+    expect(connectorReauthFailure("Search posts all · X", refused)).toMatchObject({ label: "X", provider: "grok" });
+    expect(connectorReauthProblem(byId!)).toContain(GROK_CONNECTORS_URL);
+    expect(connectorReauthText(byId!, "fr")).toContain("nouvelle connexion");
+    expect(connectorReauthText(byId!, "en")).toContain(GROK_CONNECTORS_URL);
+  });
+
+  it("leaves other failures alone", () => {
+    expect(connectorReauthFailure("cursor__user-X-search_5fposts_5fall", "Managed MCP gateway tool call failed: 404 Not Found")).toBeNull();
+    expect(connectorReauthFailure("grep", "exit 1")).toBeNull();
+    expect(connectorReauthFailure("grep", undefined)).toBeNull();
+  });
 });

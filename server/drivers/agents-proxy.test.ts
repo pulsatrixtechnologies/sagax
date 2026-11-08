@@ -494,7 +494,8 @@ beforeAll(async () => {
     }
     if (req.method === "GET" && req.url?.startsWith("/api/internal/session-read?")) {
       lastSessionReadUrl = req.url;
-      const found = req.url.includes("messageId=m-audit");
+      // #2748: a thread alone reads its newest message (m-audit here)
+      const found = req.url.includes("messageId=m-audit") || (req.url.includes("threadId=thread-old") && !req.url.includes("messageId="));
       const peer = req.url.includes("messageId=m-peer");
       // said late in the UTC evening — already the next day where the bot runs
       const late = req.url.includes("messageId=m-late");
@@ -755,6 +756,7 @@ describe("agents-proxy MCP surface", () => {
       "list_team_setup",
       "propose_team_setup",
       "propose_bot_deletion",
+      "import_plugin_team",
       "archive_bot",
       "create_room",
       "manage_room",
@@ -768,6 +770,7 @@ describe("agents-proxy MCP surface", () => {
       "publish_remote_session",
       "remote_session_snapshot",
       "remote_session_exec",
+      "host_computer",
       "memory_update",
       "rules_update",
       "docs_update",
@@ -775,6 +778,7 @@ describe("agents-proxy MCP surface", () => {
       "workspace_search",
       "retry_thread",
       "memory_log",
+      "skills_find",
       "session_search",
       "session_read",
       "list_cloud_agents",
@@ -821,6 +825,9 @@ describe("agents-proxy MCP surface", () => {
       "flow",
       "flow_action",
       "remote_support_open",
+      "remote_support_hosts",
+      "remote_support_host_code",
+      "remote_support_host_revoke",
       "remote_support_status",
       "remote_support_close",
       "review_write",
@@ -892,6 +899,18 @@ describe("agents-proxy MCP surface", () => {
     expect(computerRequests).toHaveLength(1);
   });
 
+  it("select_computer points a refused move at computer_select, but not a refused listing", async () => {
+    computerStatus = 403;
+    computerResponse = { error: "Computer selection is only available once per direct user request, with computer access enabled." };
+    const moved = await callTool("select_computer", { surface: "local" });
+    expect(moved.result.isError).toBe(true);
+    expect(moved.result.content[0].text).toContain("Computer selection is only available once");
+    expect(moved.result.content[0].text).toContain("call computer_select with target this_computer");
+    const listed = await callTool("select_computer", {});
+    expect(listed.result.isError).toBe(true);
+    expect(listed.result.content[0].text).not.toContain("computer_select");
+  });
+
   it("advertises read annotations only for the reviewed built-in reads", async () => {
     const list = await rpc("tools/list");
     const readNames = [
@@ -932,7 +951,7 @@ describe("agents-proxy MCP surface", () => {
     const trigger = create.inputSchema.properties.trigger;
     expect(trigger.additionalProperties).toBe(false);
     expect(trigger.required).toEqual(["type"]);
-    expect(trigger.properties.type.enum).toEqual(["webhook", "email"]);
+    expect(trigger.properties.type.enum).toEqual(["webhook", "email", "github"]);
     const schedule = create.inputSchema.properties.schedule;
     // No composition keywords anywhere in the tool surface: several agent
     // CLIs flatten or drop oneOf/anyOf/const when converting MCP tools for
@@ -1774,8 +1793,25 @@ describe("agents-proxy MCP surface", () => {
     expect(miss.result.isError).toBe(true);
     expect(miss.result.content[0].text).toContain("no such message in your conversations");
 
-    const missing = await callTool("session_read", { thread_id: "thread-old" });
+    const missing = await callTool("session_read", {});
     expect(missing.result.isError).toBe(true);
+    expect(missing.result.content[0].text).toContain("session_search");
+  });
+
+  it("session_read takes camelCase ids, a pasted hit label, or a thread alone (#2748)", async () => {
+    const camel = await callTool("session_read", { threadId: "thread-old", messageId: "m-audit" });
+    expect(camel.result.isError).toBeFalsy();
+    expect(lastSessionReadUrl).toContain("messageId=m-audit");
+
+    const pasted = await callTool("session_read", { thread_id: "thread thread-old · message m-audit" });
+    expect(pasted.result.isError).toBeFalsy();
+    expect(lastSessionReadUrl).toContain("threadId=thread-old");
+    expect(lastSessionReadUrl).toContain("messageId=m-audit");
+
+    const newest = await callTool("session_read", { thread_id: "thread-old" });
+    expect(newest.result.isError).toBeFalsy();
+    expect(lastSessionReadUrl).not.toContain("messageId=");
+    expect(newest.result.content[0].text).toContain("message m-audit]");
   });
 
   // A bare `since`/`until` date is read as local midnight (recent-work.ts

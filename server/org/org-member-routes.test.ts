@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
-import { createOrgMemberRoutes, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
+import { createOrgMemberRoutes, describeMemberApproval, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
 
 const ISS = "https://perspicax.example";
 const ORIGIN = "https://sagax.example";
@@ -433,7 +433,21 @@ describe("threads, approvals and nudges", () => {
     people.get("bob")!.permissions.push("clients.routinesRun");
     respond = () => ({ status: 200, body: { runs: [{ id: "run_9", routineId: "r1", status: "completed", problems: "crm_login failed 2 times", startedAt: 1, finishedAt: 2 }] } });
     const got = await call("GET", "routines/runs/run_9", token("bob"));
-    expect(got.body.run).toMatchObject({ id: "run_9", status: "completed", problems: "crm_login failed 2 times" });
+    expect(got.body.run).toMatchObject({ id: "run_9", status: "completed", problems: "crm_login failed 2 times",
+      outcome: "completed_with_problems", hasProblems: true });
+  });
+
+  // #2605: a run off its cron days must say what started it.
+  it("a run says what started it, when it was due and why it was retried", async () => {
+    people.get("bob")!.permissions.push("clients.routinesRun");
+    respond = () => ({ status: 200, body: { runs: [
+      { id: "run_s", routineId: "r1", status: "completed", triggerSource: "startup", startedAt: 1, finishedAt: 2 },
+      { id: "run_r", routineId: "r1", status: "running", scheduledFor: 900, retried: "restarted", startedAt: 3 },
+      { id: "run_m", routineId: "r1", status: "failed", manual: true, startedAt: 4, finishedAt: 5 },
+    ] } });
+    expect((await call("GET", "routines/runs/run_s", token("bob"))).body.run).toMatchObject({ trigger: "startup", outcome: "completed", hasProblems: false });
+    expect((await call("GET", "routines/runs/run_r", token("bob"))).body.run).toMatchObject({ trigger: "schedule", scheduledFor: 900, retried: "restarted", outcome: "running" });
+    expect((await call("GET", "routines/runs/run_m", token("bob"))).body.run).toMatchObject({ trigger: "manual", outcome: "failed" });
   });
 });
 
@@ -863,7 +877,7 @@ describe("owner-scoped routine and bot reads", () => {
     expect(listed.body.routines[0]).toEqual({
       id: "r_bob", name: "Morning", botId: "b1", enabled: true, suspended: { reason: "paused", at: 4 },
       schedule: { type: "webhook", hour: 9 }, nextRunAt: 50,
-      lastRun: { id: "run_new", status: "failed", startedAt: 30, endedAt: 40 },
+      lastRun: { id: "run_new", status: "failed", startedAt: 30, endedAt: 40, trigger: "schedule", outcome: "failed", hasProblems: false },
     });
     expect(JSON.stringify(listed.body)).not.toContain("instructions");
     expect(JSON.stringify(listed.body)).not.toContain("ANN PROMPT");
@@ -879,7 +893,7 @@ describe("owner-scoped routine and bot reads", () => {
     expect(detail.body.routine.instructions).not.toContain(PLANTED_KEY);
     expect(detail.body.routine.instructions).not.toContain(PLANTED_WEBHOOK);
     expect(detail.body.routine.schedule).toEqual({ type: "webhook", hour: 9 });
-    expect(detail.body.routine.lastRun).toEqual({ id: "run_new", status: "failed", startedAt: 30, endedAt: 40 });
+    expect(detail.body.routine.lastRun).toEqual({ id: "run_new", status: "failed", startedAt: 30, endedAt: 40, trigger: "schedule", outcome: "failed", hasProblems: false });
     expect(JSON.stringify(detail.body)).not.toContain("output");
     expect(JSON.stringify(detail.body)).not.toContain("signingSecret");
     expect(recorded).toEqual([]);
@@ -1092,3 +1106,35 @@ describe("owner-scoped routine and bot reads", () => {
     expect(recorded).toEqual([]);
   });
 });
+
+describe("a skill card answered through the member API (G4)", () => {
+  const sha = "a".repeat(64);
+  const approval = { kind: "request", choices: [{ id: "1", label: "Enable" }, { id: "2", label: "Not now" }], options: [] } as never;
+  const card = { skillRequest: { preview: "---\nname: x\n---", sha256: sha } };
+  it("echoes the reviewed hash on allow, never on deny", () => {
+    const allow = planAnswer(approval, card, { decision: "allow" });
+    expect(allow).toMatchObject({ ok: true, body: { behavior: "allow", reviewedSha256: sha } });
+    const deny = planAnswer(approval, card, { decision: "deny" });
+    expect(deny).toMatchObject({ ok: true, body: { behavior: "deny" } });
+    expect((deny as { body: object }).body).not.toHaveProperty("reviewedSha256");
+  });
+});
+
+describe("question title and decline in the person's language (#2633)", () => {
+  const card = { requestId: "q-1", requestType: "question", title: "Your bot has a question", subtitle: "Quel créneau?", options: ["Lundi", "Mardi"] };
+  const fr = (key: string) => ({ "question.card.title": "Votre bot a une question" } as Record<string, string>)[key] ?? key;
+
+  it("words Sagax's generic question title in the reader's language, never a bot's own title", () => {
+    expect(describeMemberApproval("t1", { at: 1 }, card, undefined, fr).title).toBe("Votre bot a une question");
+    expect(describeMemberApproval("t1", { at: 1 }, { ...card, title: "Choix du créneau" }, undefined, fr).title).toBe("Choix du créneau");
+    expect(describeMemberApproval("t1", { at: 1 }, card).title).toBe("Your bot has a question");
+    expect(readThreadPage("t1", { messages: [{ id: "m1", role: "bot", kind: "options", card }] }, null, undefined, fr).approvals[0]?.title).toBe("Votre bot a une question");
+  });
+
+  it("a declined question says so to the respond route, which words it and keeps it off the person's messages", () => {
+    const approval = describeMemberApproval("t1", { at: 1 }, { ...card, options: ["A", "B"] });
+    const plan = planAnswer(approval, { ...card, options: ["A", "B"] }, { decision: "deny" });
+    expect(plan).toMatchObject({ ok: true, decision: "deny", body: { behavior: "answer", message: QUESTION_DECLINED_MESSAGE, declined: true } });
+  });
+});
+

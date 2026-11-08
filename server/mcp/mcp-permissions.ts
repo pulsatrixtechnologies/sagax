@@ -141,10 +141,13 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // the person's own connected Tailcat session (owner and bot checked by the service)
   p("remote:snapshot", "own", "remote_session_snapshot"),
   p("remote:exec", "own", "remote_session_exec"),
+  // the person's own enrolled host used as the bot's computer (#2726)
+  p("remote:host", "own", "host_computer"),
   p("meetings:join", "own", "join_meeting"),
   // 2026-10-19 (member admin audit, docs/member-admin-audit.md): the
   // person's own data or destinations, never an admin's.
   p("teamsetup:propose", "own", "propose_team_setup"),
+  p("teamsetup:importplugin", "own", "import_plugin_team"),
   p("rules:update", "own", "rules_update"),
   // a Confirm card to add, change or remove one of the speaker's own review rules (server/rules/rule-requests.ts)
   p("rules:propose", "own", "propose_rule"),
@@ -165,6 +168,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // own GitHub account (device flow).
   p("phone:tool", "own", "phone_tool"),
   p("github:connect", "own", "connect_github"),
+  // #2613: search the skill catalogs the person sees (read only)
+  p("skills:find", "own", "skills_find"),
   // a sign-in request card for the speaker in this conversation
   p("credentials:signin", "own", "request_sign_in"),
   p("computers:select", "own", "select_computer"),
@@ -250,6 +255,11 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("remotesupport:open", "dispatch", "remote_support_open", "perspicax"),
   p("remotesupport:status", "own", "remote_support_status", "perspicax"),
   p("remotesupport:close", "own", "remote_support_close", "perspicax"),
+  // Unattended access (Sagax Remote Access, #2714): the person's own
+  // enrolled computers; Perspicax checks who enrolled each host.
+  p("remotesupport:hosts", "own", "remote_support_hosts", "perspicax"),
+  p("remotesupport:hostcode", "own", "remote_support_host_code", "perspicax"),
+  p("remotesupport:hostrevoke", "own", "remote_support_host_revoke", "perspicax"),
   // Per-profile Perspicax tools, matched by name (profileToolCall). An
   // operation's own tool is not known to be a read, so it needs dispatch.
   profileTool("api:query", "read", "query", "<profile>_query"),

@@ -539,6 +539,9 @@ export interface WireBot {
   /** #2121: whether this bot may reply with memes (send_meme). Absent or
    * "auto" = the bot decides from the person's style; "off" hides the tool. */
   memeReplies?: "auto" | "off";
+  /** #2622: whether the people the bot is shared with may create routines
+   * on it. Absent/true = they may; false = its owner and managers only. */
+  collaboratorsCreateRoutines?: boolean;
   /** Whether this bot uses native memory. Absent/true = enabled. */
   memoryEnabled?: boolean;
   /** Whether this bot's turns use the loop guard. Absent/true = on (workspace setting still applies); false = off for this bot. */

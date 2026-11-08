@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp/mcp-permissions.ts`; `server/mcp/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 168, covered 168, gaps 0.
+Totals: capabilities 174, covered 174, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -119,6 +119,7 @@ Reading the table:
 | remote:publish | sagax | `publish_remote_session` | `remote:publish` | covered |
 | remote:snapshot | sagax | `remote_session_snapshot` | `remote:snapshot` | covered |
 | remote:exec | sagax | `remote_session_exec` | `remote:exec` | covered |
+| remote:host | sagax | `host_computer` | `remote:host` | covered |
 | meetings:join | sagax | `join_meeting` | `meetings:join` | covered |
 | bots:ask | sagax | `ask_bot` | `bots:ask` | covered |
 | bots:delegate | sagax | `delegate_bot` | `bots:delegate` | covered |
@@ -141,6 +142,7 @@ Reading the table:
 | rooms:create | sagax | `create_room` | `rooms:create` | covered |
 | rooms:manage | sagax | `manage_room` | `rooms:manage` | covered |
 | teamsetup:propose | sagax | `propose_team_setup` | `teamsetup:propose` | covered |
+| teamsetup:importplugin | sagax | `import_plugin_team` | `teamsetup:importplugin` | covered |
 | teammemory:propose | sagax | `propose_team_memory` | `teammemory:propose` | covered |
 | rules:update | sagax | `rules_update` | `rules:update` | covered |
 | rules:propose | sagax | `propose_rule` | `rules:propose` | covered |
@@ -154,6 +156,7 @@ Reading the table:
 | tasks:update | sagax | `task_list` | `tasks:update` | covered |
 | phone:tool | sagax | `phone_tool` | `phone:tool` | covered |
 | github:connect | sagax | `connect_github` | `github:connect` | covered |
+| skills:find | sagax | `skills_find` | `skills:find` | covered |
 | credentials:signin | sagax | `request_sign_in` | `credentials:signin` | covered |
 | computers:select | sagax | `select_computer` | `computers:select` | covered |
 | computers:use | sagax | `shared_computer` | `computers:use` | covered |
@@ -197,6 +200,9 @@ Reading the table:
 | remotesupport:open | perspicax | `remote_support_open` | `remotesupport:open` | covered |
 | remotesupport:status | perspicax | `remote_support_status` | `remotesupport:status` | covered |
 | remotesupport:close | perspicax | `remote_support_close` | `remotesupport:close` | covered |
+| remotesupport:hosts | perspicax | `remote_support_hosts` | `remotesupport:hosts` | covered |
+| remotesupport:hostcode | perspicax | `remote_support_host_code` | `remotesupport:hostcode` | covered |
+| remotesupport:hostrevoke | perspicax | `remote_support_host_revoke` | `remotesupport:hostrevoke` | covered |
 | api:query | perspicax | `<profile>_query` | `api:query` | covered (bridge) |
 | api:write | perspicax | `<profile>_write`, `<profile>_<resource>_write` | `api:write` | covered (bridge) |
 | api:action | perspicax | `<profile>_action` | `api:action` | covered (bridge) |

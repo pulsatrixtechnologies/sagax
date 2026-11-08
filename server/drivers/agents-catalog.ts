@@ -222,6 +222,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   teamTools.DEF_LIST_TEAM_SETUP,
   teamTools.DEF_PROPOSE_TEAM_SETUP,
   teamTools.DEF_PROPOSE_BOT_DELETION,
+  teamTools.DEF_IMPORT_PLUGIN_TEAM,
   teamTools.DEF_ARCHIVE_BOT,
   teamTools.DEF_CREATE_ROOM,
   teamTools.DEF_MANAGE_ROOM,
@@ -238,6 +239,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   computersTools.DEF_PUBLISH_REMOTE_SESSION,
   computersTools.DEF_REMOTE_SESSION_SNAPSHOT,
   computersTools.DEF_REMOTE_SESSION_EXEC,
+  computersTools.DEF_HOST_COMPUTER,
   phoneFamilyTools.DEF_JOIN_MEETING,
   coreTools.DEF_MEMORY_UPDATE,
   settingsFamilyTools.DEF_RULES_UPDATE,
@@ -247,6 +249,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   teamTools.DEF_RETRY_THREAD,
   coreTools.DEF_MEMORY_LOG,
   extrasTools.DEF_GROUP_MEMORY_UPDATE,
+  extrasTools.DEF_SKILLS_FIND,
   coreTools.DEF_SESSION_SEARCH,
   transcriptsTools.DEF_RECALL_TOPIC,
   coreTools.DEF_ROUTE_MESSAGE,
@@ -308,7 +311,7 @@ const GITHUB_CONNECT_TOOL_NAMES = new Set(["connect_github"]);
 // propose_profile or propose_model. (A routine's for_bot_id is open to any
 // bot that can reach that peer, so it stays.)
 const CHIEF_ONLY_TOOL_NAMES = new Set([
-  "create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "archive_bot", "create_room", "manage_room", "retry_thread",
+  "create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "import_plugin_team", "archive_bot", "create_room", "manage_room", "retry_thread",
 ]);
 // sagax_approvals is offered to every owned bot (2026-10-27). The server
 // gate still requires the person's own message; settings stay the Primary Bot's.
@@ -369,9 +372,9 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // name, not only inside the merged routines family) so every bot that owns
   // a routine can check or run it without a ToolSearch step that may miss them.
   "propose_routine", "propose_routine_action",
-  "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule", "propose_bot_deletion", "archive_bot",
+  "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule", "propose_bot_deletion", "import_plugin_team", "archive_bot",
   "propose_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
-  "add_mcp_server", "skill_manage", "rules_update", "docs_update",
+  "add_mcp_server", "skill_manage", "skills_find", "rules_update", "docs_update",
   "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",
   "cloud_agent_follow_up", "cloud_agent_transcript", "find_cloud_agent_by_pr", "list_cloud_agent_artifacts",
   "save_artifact", "update_artifact", "delete_artifact", "list_artifacts", "claude_artifact", "choose_page_target",
@@ -595,8 +598,8 @@ export function knownAgentToolName(name: string): boolean {
   return everyAgentTool.has(name);
 }
 
-/** Tools of a Tailcat remote session (opened through Perspicax remote_support_*). */
-export const REMOTE_SESSION_TOOL_NAMES: ReadonlySet<string> = new Set(["publish_remote_session", "remote_session_snapshot", "remote_session_exec"]);
+/** Tools of a Tailcat remote session (opened through Perspicax remote_support_*), and the bot computer on an enrolled host that rides on it. */
+export const REMOTE_SESSION_TOOL_NAMES: ReadonlySet<string> = new Set(["publish_remote_session", "remote_session_snapshot", "remote_session_exec", "host_computer"]);
 
 function coreCatalogTools(profile: CatalogProfile) {
   const TOOLS = toolDefinitions(profile.externalRuntime);

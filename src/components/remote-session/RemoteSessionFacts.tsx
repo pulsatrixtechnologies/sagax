@@ -82,9 +82,9 @@ export function remoteDetailsSummary(view: RemoteSessionView): string {
 
 function FactRow({ id, label, value }: { id: string; label: string; value: string }) {
   return (
-    <div data-remote-field={id} className="flex items-baseline justify-between gap-4 border-b border-hairline/40 px-3 py-2 last:border-b-0">
+    <div data-remote-field={id} className="flex min-w-0 flex-col gap-0.5 border-b border-hairline/40 px-3 py-2 last:border-b-0 @min-[420px]/remote:flex-row @min-[420px]/remote:items-baseline @min-[420px]/remote:justify-between @min-[420px]/remote:gap-4">
       <span className="shrink-0 text-[13px] text-ink-secondary">{label}</span>
-      <span className="min-w-0 break-words text-right text-[13px] font-semibold text-ink">{value}</span>
+      <span className="min-w-0 text-[13px] font-semibold text-ink [overflow-wrap:anywhere] @min-[420px]/remote:text-right">{value}</span>
     </div>
   );
 }

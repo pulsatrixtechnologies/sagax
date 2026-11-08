@@ -16,7 +16,7 @@ it("pins the fixture starter bot's name deterministically (#1257)", async () => 
         signal: AbortSignal.timeout(10_000),
       });
       expect(response.ok).toBe(true);
-      const bots = ((await response.json()) as { bots: Array<{ name: string }> }).bots;
+      const bots = ((await response.json()) as { bots: Array<{ name: string; systemBot?: string }> }).bots.filter((bot) => !bot.systemBot);
       expect(bots).toHaveLength(1);
       expect(bots[0].name).toBe(FIXTURE_STARTER_BOT_NAME);
     } finally {

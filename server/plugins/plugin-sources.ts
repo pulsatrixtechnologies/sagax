@@ -121,6 +121,10 @@ export interface MarketplacePluginEntry {
   homepage?: string;
   /** an https image the entry declares as its icon (`icon` or `logo`) */
   icon?: string;
+  /** #2759: the format Sagax converted it from ("cursor"), and what did not
+   * convert (codes, server/plugins/cursor-catalog.ts). */
+  convertedFrom?: string;
+  notConverted?: string[];
   /** Where its files are: inside the marketplace, or another repository. */
   source: { kind: "path"; path: string } | { kind: "git"; git: GitSource; path?: string };
 }
@@ -216,10 +220,20 @@ export function readMarketplaceManifest(root: string): { name: string; descripti
       ...(text(entry.version, 40) ? { version: text(entry.version, 40) } : {}),
       ...(text(entry.category, 40) ? { category: text(entry.category, 40) } : {}),
       ...pluginMarks(entry),
+      ...conversionMarks(entry),
       source,
     });
   }
   return { name, ...(description ? { description } : {}), plugins };
+}
+
+/** What Sagax wrote about converting the entry (#2759). */
+function conversionMarks(entry: Record<string, unknown>): Pick<MarketplacePluginEntry, "convertedFrom" | "notConverted"> {
+  const from = text(entry.sagaxConvertedFrom, 20);
+  const notes = Array.isArray(entry.sagaxNotConverted)
+    ? entry.sagaxNotConverted.map((note) => text(note, 300)).filter((note): note is string => Boolean(note)).slice(0, 12)
+    : [];
+  return { ...(from ? { convertedFrom: from } : {}), ...(notes.length ? { notConverted: notes } : {}) };
 }
 
 /** A manifest entry's site and icon, when it declares them. */

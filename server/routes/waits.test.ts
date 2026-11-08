@@ -125,6 +125,14 @@ describe("the waits route", () => {
   it("treats null as absent and a body that is not an object as an error", async () => {
     expect(parseWaitRequest({ ...FILE_WAIT, text: null, hours: null }, HOME)).toMatchObject({ ok: true, request: { hours: 24 } });
     expect(parseWaitRequest("nope", HOME)).toEqual({ ok: false, error: "Send a JSON object." });
+    const now = Date.parse("2026-11-07T20:00:00Z");
+    expect(parseWaitRequest({ label: "qc1", kind: "time_reached", at: "2026-11-07T17:00:00-05:00" }, HOME, now))
+      .toMatchObject({ ok: true, request: { kind: "time_reached", at: Date.parse("2026-11-07T22:00:00Z") } });
+    expect(parseWaitRequest({ label: "qc1", kind: "time_reached", at: "2026-11-07T17:00:00" }, HOME, now)).toMatchObject({ ok: false });
+    expect(parseWaitRequest({ label: "qc1", kind: "time_reached", at: "2026-11-07T15:00:00-05:00" }, HOME, now)).toMatchObject({ ok: false });
+    expect(parseWaitRequest({ label: "qc1", kind: "time_reached", at: "2026-11-20T15:00:00-05:00" }, HOME, now)).toMatchObject({ ok: false });
+    expect(parseWaitRequest({ label: "qc1", kind: "time_reached" }, HOME, now)).toEqual({ ok: false, error: "time_reached needs at." });
+    expect(parseWaitRequest({ label: "qc1", kind: "bot_idle", bot: "x", at: "2026-11-07T17:00:00-05:00" }, HOME, now)).toEqual({ ok: false, error: "at applies only to time_reached." });
   });
   it("finds the other bot by name or id among the bots it may reach, never itself", async () => {
     const peers = [{ id: "b2", name: "Coder" }, { id: "b3", name: "Hidden", hidden: true }, { id: "bot-1", name: "Scout" }];

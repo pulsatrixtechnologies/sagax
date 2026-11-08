@@ -31,6 +31,7 @@ import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsFoldSection, Se
 import { AutoModelSettings } from "./settings/AutoModelSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
+import { NewBotDefaultsCard } from "./settings/BotModelsSettings";
 import { ModelSwitchesSettings } from "./settings/ModelSwitchesSettings";
 import { VoiceProviderSettings } from "./settings/VoiceProviderSettings";
 import { VoiceProviderOptions } from "./settings/VoiceProviderOptions";
@@ -464,7 +465,6 @@ export function useModelsVoiceAccess() {
 export function EnginesSettings() {
   const { state } = useStore();
   const { installation } = useModelsVoiceAccess();
-  const keepWarm = state.config?.cacheKeepWarm;
   const noDashes = useVoiceDashes(activeLocale());
 
   return (
@@ -481,15 +481,6 @@ export function EnginesSettings() {
               <Switch checked={noDashes} aria-label={t("voice.noDashes.title")} onClick={() => setVoiceDashes(!noDashes)} />
             </DescribedRow>
           </SettingsGroup>
-          <SettingsGroup title={t("models.autoNow.title")} groupId="models-auto">
-            <div data-auto-model-explainer=""><AutoModelSettings /></div>
-          </SettingsGroup>
-          {installation && <CacheKeepWarmSettings />}
-          {!installation && keepWarm && (
-            <SettingsGroup title={t("settings.keepWarm.title")} groupId="models-keep-warm">
-              <DescribedRow label={t("settings.keepWarm.enable")} description={keepWarm.enabled ? t("settings.keepWarm.hours", { hours: Math.round(keepWarm.windowMinutes / 60) }) : t("models.keepWarm.off")} rowId="models.keepWarm" />
-            </SettingsGroup>
-          )}
           {installation && (boatComputerEnabled(state.config) || vpsComputerEnabled(state.config)) && (
             <div data-settings-card="connections.integrations">
               <SettingsGroup title={t("keys.integrations.title")} groupId="integrations">
@@ -502,6 +493,29 @@ export function EnginesSettings() {
           )}
         </div>
       </SettingsFoldSection>
+    </div>
+  );
+}
+
+/** Settings > Developer > Models (JC 2026-11-08, Models page tidy): the
+ * cards that left the Models page, with the same content and controls:
+ * Defaults for new bots, What Auto would choose now, Keep prompt cache warm. */
+export function ModelsDeveloperCards() {
+  const { state } = useStore();
+  const { installation } = useModelsVoiceAccess();
+  const keepWarm = state.config?.cacheKeepWarm;
+  return (
+    <div className="flex min-w-0 flex-col gap-6" data-models-developer="">
+      <NewBotDefaultsCard />
+      <SettingsGroup title={t("models.autoNow.title")} groupId="models-auto">
+        <div data-auto-model-explainer=""><AutoModelSettings /></div>
+      </SettingsGroup>
+      {installation && <CacheKeepWarmSettings />}
+      {!installation && keepWarm && (
+        <SettingsGroup title={t("settings.keepWarm.title")} groupId="models-keep-warm">
+          <DescribedRow label={t("settings.keepWarm.enable")} description={keepWarm.enabled ? t("settings.keepWarm.hours", { hours: Math.round(keepWarm.windowMinutes / 60) }) : t("models.keepWarm.off")} rowId="models.keepWarm" />
+        </SettingsGroup>
+      )}
     </div>
   );
 }

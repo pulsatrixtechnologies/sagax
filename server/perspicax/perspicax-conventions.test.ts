@@ -23,4 +23,17 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/Sagax asks with a card/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A read still refused, a declined card or a refused write is a block/);
   });
+  // QA c2 D3/S8/D7 (#2670): the Flow entry skill says "catalog --index
+  // before any answer or action, including a clarifying question" and "Let
+  // me read the ticket first ... Catalog first"; bots followed it over
+  // #2577 (23 to 37 steps before a one-record read). And after Sagax's
+  // 403 re-read under another role, the person was never told which role
+  // read the record.
+  it("puts a direct read and a clarifying question before any Flow catalog, and names the role that read a record (#2670)", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/wins over the Flow skills' "catalog first"/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/clarifying question and a single-record read come before any `catalog`/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/catalog is read once a routine or a multi-step procedure actually starts/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/say so to the person in one line, by the role's name, never an id/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Lu avec le rôle");
+  });
 });

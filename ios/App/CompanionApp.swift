@@ -413,6 +413,7 @@ final class SagaxAppDelegate: UIResponder, UIApplicationDelegate {
         // The Live Activity buttons and the push refresh need the session
         // and the coordinator even when iOS launched the app in the
         // background for them, where no window appears.
+        LiveActivityPrefs.migrateOnce()
         LiveActivityBridge.shared.attach(to: SessionHub.session)
         Task { @MainActor in PushRegistrar.shared.start() }
         return true

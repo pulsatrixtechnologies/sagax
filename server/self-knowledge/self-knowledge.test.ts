@@ -50,6 +50,14 @@ describe("sagax_help", () => {
     }
   });
 
+  it("gives a guide that matches best whole, with its steps (#2734)", () => {
+    const answer = helpAnswer(index, "install sagax remote access unattended on my Linux server", { organization: false });
+    expect(answer.ids).toEqual(["guide:remote-access-unattended"]);
+    expect(answer.text).toContain("remote_support_host_code with no arguments");
+    expect(answer.text).toContain("Talon is a different product");
+    expect(answer.text.length).toBeLessThan(4000);
+  });
+
   it("puts the Perspicax console last on a solo Sagax", () => {
     const question = "Où voir les droits sur les bots ?";
     const org = searchKnowledge(index, question, 6, { organization: true }).map((match) => match.section.kind);

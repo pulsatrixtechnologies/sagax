@@ -45,7 +45,9 @@ export function remoteSuggestionText(id: string, host: string): string | null {
 
 /** The chat card for one remote computer: its live screen first, drawn like
  * the bot's own computer screen (RemoteScreenCard), then the facts and the
- * actions, details folded. A server without a desktop has no screen: its
+ * actions, details folded. The facts card takes the chat column's width like
+ * the terminal card under it; its layout follows the card's own width
+ * (@container/remote), so it reflows with the chat, not the window. A server without a desktop has no screen: its
  * facts card says shell only. Suggestions send a short prompt. */
 export function RemoteSessionCard({ botId, threadId, view, detailsOpen = false }: { botId: string; threadId: string; view: RemoteSessionView; detailsOpen?: boolean }) {
   const { dispatch } = useStore();
@@ -57,9 +59,9 @@ export function RemoteSessionCard({ botId, threadId, view, detailsOpen = false }
   };
   const hints = view.state === "connected" ? view.suggestions.filter((hint) => SUGGESTION_LABEL[hint.id]) : [];
   return (
-    <div data-remote-session="" className="flex flex-col gap-3">
+    <div data-remote-session="" className="flex w-full min-w-0 flex-col gap-3">
     {remoteHasScreen(view) && <RemoteScreenCard botId={botId} view={view} />}
-    <div data-remote-session-card="" data-remote-state={view.state} className="@container/remote w-full max-w-xl overflow-hidden rounded-xl border border-hairline text-ink">
+    <div data-remote-session-card="" data-remote-state={view.state} className="@container/remote w-full min-w-0 overflow-hidden rounded-xl border border-hairline text-ink">
       <RemoteSessionFacts view={view} detailsOpen={detailsOpen} botId={botId} />
       {hints.length > 0 && (
         <div data-remote-hints="" className="border-t border-hairline/40 px-3 pb-3 pt-2.5">
@@ -67,7 +69,7 @@ export function RemoteSessionCard({ botId, threadId, view, detailsOpen = false }
             <Sparkles size={13} aria-hidden="true" />
             <span>{t("remoteSession.hints")}</span>
           </div>
-          <div className="grid grid-cols-1 gap-1.5 @min-[440px]/remote:grid-cols-2">
+          <div className="grid grid-cols-1 gap-1.5 @min-[440px]/remote:grid-cols-2 @min-[760px]/remote:grid-cols-3 @min-[1100px]/remote:grid-cols-4">
             {hints.map((hint) => {
               const Icon = SUGGESTION_ICON[hint.id] ?? Sparkles;
               return (

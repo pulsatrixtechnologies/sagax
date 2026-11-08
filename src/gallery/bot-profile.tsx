@@ -117,36 +117,75 @@ function historyRows() {
 }
 const HISTORY = historyRows();
 
+// Per-day figures that sum back to each row's total, with a weekly rhythm so
+// the stacked bars differ day to day (the server sends the same shape).
+function usageDays(answer: { byAccount: GroupRow[]; byModel: GroupRow[]; bySource: GroupRow[]; byPerson: GroupRow[] }, count: number, offset: number) {
+  const first = NOW - (count * (offset + 1) - 1) * DAY;
+  const keys = Array.from({ length: count }, (_, index) => new Date(first + index * DAY).toISOString().slice(0, 10));
+  const weight = (seed: number, day: number) => 0.35 + ((Math.sin((seed + 1) * 12.9898 + (day + offset * 7) * 78.233) * 43758.5453) % 1 + 1) % 1;
+  const spread = (rows: GroupRow[], group: number) => keys.map((_, day) => {
+    const part: Record<string, { costUsd: number; tokens: number }> = {};
+    rows.forEach((row, index) => {
+      const sum = keys.reduce((total, __, d) => total + weight(group * 31 + index, d), 0);
+      const share = weight(group * 31 + index, day) / sum;
+      part[row.key] = { costUsd: Number(((row.costUsd ?? 0) * share).toFixed(4)), tokens: Math.round((row.inputTokens + row.outputTokens) * share) };
+    });
+    return part;
+  });
+  const accounts = spread(answer.byAccount, 1);
+  const models = spread(answer.byModel, 2);
+  const sources = spread(answer.bySource, 3);
+  const people = spread(answer.byPerson, 4);
+  return keys.map((day, index) => {
+    const total = Object.values(models[index]!).reduce((sum, value) => ({ costUsd: sum.costUsd + value.costUsd, tokens: sum.tokens + value.tokens }), { costUsd: 0, tokens: 0 });
+    return { day, total, byAccount: accounts[index]!, byModel: models[index]!, bySource: sources[index]!, byPerson: people[index]! };
+  });
+}
+
+interface GroupRow { key: string; costUsd: number | null; inputTokens: number; outputTokens: number }
+
 // The V6 usage breakdown (#2612): example figures in the shape the server sends.
-function breakdown(period: string) {
+function breakdown(period: string, offset = 0) {
   const scale = period === "7" ? 0.25 : period === "month" ? 0.3 : 1;
   const g = (key: string, label: string, turns: number, input: number, output: number, cached: number, cost: number | null, extra: Record<string, unknown> = {}) => ({
     key, label, turns: Math.round(turns * scale), inputTokens: Math.round(input * scale), outputTokens: Math.round(output * scale),
     cachedInputTokens: Math.round(cached * scale), costUsd: cost === null ? null : Number((cost * scale).toFixed(2)), ...extra,
   });
   const calls = (tool: number, mcp: number, subagent: number) => ({ toolCalls: Math.round(tool * scale), mcpCalls: Math.round(mcp * scale), subagentCalls: Math.round(subagent * scale) });
-  return {
+  const answer = {
     from: new Date(NOW - 30 * DAY).toISOString(), to: new Date(NOW).toISOString(), period: period === "month" ? "month" : Number(period), currency: null,
     totals: { ...g("", "", 151, 290_000, 66_000, 112_000, 9.59), ...calls(212, 64, 9), toolErrors: 3 },
+    // A tenant-like spread (#2671): 16 models, accounts that share a name
+    // (one per way of paying), the same person under two keys, rows at $0.
     byAccount: [
-      g("grok:api", "grok", 58, 120_000, 26_000, 40_000, 3.92, { engine: "grok", access: "api", ...calls(80, 22, 3) }),
-      g("claude:api", "claude", 44, 84_000, 19_000, 36_000, 2.74, { engine: "claude", access: "api", ...calls(61, 20, 4) }),
-      g("claude:subscription", "claude", 29, 54_000, 13_000, 22_000, 1.85, { engine: "claude", access: "subscription", ...calls(46, 14, 2) }),
-      g("openai:api", "openai", 14, 22_000, 6_000, 10_000, 1.08, { engine: "codex", access: "api", ...calls(19, 6, 0) }),
+      g("claude:subscription", "claude", 44, 84_000, 19_000, 36_000, 3.1, { engine: "claude", access: "subscription", ...calls(61, 20, 4) }),
+      g("grok:owner-key", "grok", 40, 80_000, 17_000, 30_000, 2.4, { engine: "grok", access: "owner-key", ...calls(55, 15, 2) }),
+      g("claude:org-key", "claude", 29, 54_000, 13_000, 22_000, 1.85, { engine: "claude", access: "org-key", ...calls(46, 14, 2) }),
+      g("grok:org-key", "grok", 18, 40_000, 9_000, 10_000, 1.2, { engine: "grok", access: "org-key", ...calls(25, 7, 1) }),
+      g("openai:api", "openai", 14, 22_000, 6_000, 10_000, 1.04, { engine: "codex", access: "api", ...calls(19, 6, 0) }),
+      g("xaiVoice:server", "xaiVoice", 4, 6_000, 1_000, 0, null, { engine: "xai-voice", access: "server" }),
+      g("xaiVoice", "xaiVoice", 2, 3_000, 500, 0, null, { engine: "xai-voice" }),
       g("local", "local", 6, 10_000, 2_000, 4_000, 0, { engine: "local", ...calls(6, 2, 0) }),
     ],
     byModel: [
-      g("grok-4", "grok-4", 58, 120_000, 26_000, 40_000, 3.92), g("opus", "opus", 30, 60_000, 14_000, 26_000, 2.2),
-      g("sonnet", "sonnet", 29, 54_000, 13_000, 22_000, 1.85), g("gpt-5", "gpt-5", 14, 22_000, 6_000, 10_000, 1.08),
-      g("haiku", "haiku", 14, 24_000, 5_000, 10_000, 0.54), g("ornith-35b", "ornith-35b", 6, 10_000, 2_000, 4_000, 0),
+      g("claude-fable-5", "Fable", 30, 60_000, 14_000, 26_000, 2.95), g("grok-4.7", "grok-4.7", 24, 50_000, 11_000, 18_000, 1.7),
+      g("claude-opus-5-5", "Opus", 22, 44_000, 10_000, 16_000, 1.42), g("grok-4.7-fast", "grok-4.7-fast", 18, 30_000, 7_000, 12_000, 0.9),
+      g("claude-sonnet-5", "Sonnet", 16, 28_000, 6_000, 10_000, 0.75), g("gpt-6.1", "gpt-6.1", 12, 20_000, 5_000, 8_000, 0.62),
+      g("grok-realtime", "grok-realtime", 6, 9_000, 1_500, 0, 0.21), g("claude-haiku-5", "Haiku", 8, 12_000, 2_000, 4_000, 0.04),
+      g("ornith-122b", "ornith-122b", 5, 8_000, 1_500, 2_000, 0), g("ornith-35b", "ornith-35b", 4, 6_000, 1_000, 2_000, 0),
+      g("gpt-6.1-mini", "gpt-6.1-mini", 2, 2_000, 400, 0, 0), g("grok-imagine", "grok-imagine", 1, 500, 0, 0, 0),
+      g("whisper", "whisper", 1, 300, 0, 0, null), g("tts-1", "tts-1", 1, 200, 0, 0, null),
+      g("embed-3", "embed-3", 1, 100, 0, 0, 0), g("rerank-2", "rerank-2", 1, 100, 0, 0, null),
     ],
     bySource: [
       g("user", "Person", 92, 170_000, 40_000, 70_000, 5.6, calls(130, 40, 6)), g("routine", "Routine", 41, 90_000, 18_000, 30_000, 2.9, calls(60, 18, 2)),
       g("owner", "Owner", 12, 20_000, 5_000, 8_000, 0.7, calls(16, 4, 1)), g("bot", "Bot", 6, 10_000, 3_000, 4_000, 0.39, calls(6, 2, 0)),
+      g("helper", "Helper", 1, 500, 100, 0, 0),
     ],
     byPerson: [
-      g("pr_alex", "Alex Example", 70, 130_000, 30_000, 50_000, 4.3, calls(98, 30, 5)), g("owner", "Owner", 53, 110_000, 23_000, 38_000, 3.6, calls(76, 22, 3)),
-      g("pr_sam", "Sam Rivera", 28, 50_000, 13_000, 24_000, 1.69, calls(38, 12, 1)),
+      g("pr_alex", "alex@example.com", 50, 100_000, 22_000, 40_000, 3.3, calls(70, 22, 4)), g("owner", "Owner", 53, 110_000, 23_000, 38_000, 3.6, calls(76, 22, 3)),
+      g("alex@example.com", "alex@example.com", 20, 30_000, 8_000, 10_000, 1.0, calls(28, 8, 1)), g("pr_sam", "Sam Rivera", 28, 50_000, 13_000, 24_000, 1.69, calls(38, 12, 1)),
+      g("pr_kim", "Kim Lee", 1, 400, 0, 0, null),
     ],
     tools: [
       { tool: "search_tickets", kind: "mcp", mcpServer: "helpdesk", calls: 48, errors: 1, totalMs: 9_200 },
@@ -155,6 +194,7 @@ function breakdown(period: string) {
       { tool: "researcher", kind: "subagent", calls: 9, errors: 0, totalMs: 61_000 },
     ],
   };
+  return { ...answer, offset, days: usageDays(answer, period === "7" ? 7 : period === "month" ? 7 : 30, offset) };
 }
 
 function analytics(days: number) {
@@ -295,7 +335,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === bots) return json({ bot });
   if (path === `${bots}/overview`) return json(overview);
   if (path === `${bots}/history`) return json({ rows: HISTORY, revision: HISTORY.length });
-  if (path === `${bots}/analytics` && search.get("view") === "breakdown") return json(breakdown(search.get("period") ?? "30"));
+  if (path === `${bots}/analytics` && search.get("view") === "breakdown") return json(breakdown(search.get("period") ?? "30", Number(search.get("offset") ?? "0")));
   if (path === `${bots}/analytics`) return json(analytics([7, 30, 90].includes(Number(search.get("days"))) ? Number(search.get("days")) : 30));
   if (path === `${bots}/skills`) return json({ skills, staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices." }], library: [{ name: "invoice-review", description: "Reviews an invoice line by line." }, { name: "status-digest", description: "Digests a long thread into five lines." }], assignedSkills: ["meeting-notes"] });
   if (path === "/api/org-library/skills") return json({ organization: { name: "Northwind Studio" }, skills: [

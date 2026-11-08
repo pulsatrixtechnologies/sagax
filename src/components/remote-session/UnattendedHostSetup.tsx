@@ -15,14 +15,14 @@ import { createHostInstallCode, type HostInstallCode } from "./remote-hosts-clie
 const control = "rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-40";
 const field = "w-full rounded-lg border border-hairline/60 bg-inset px-3 py-2 text-[12px] text-ink outline-none focus:border-accent";
 
-function timeLabel(iso: string | null): string {
+export function timeLabel(iso: string | null): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat(activeLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hourCycle: "h23" }).format(date);
 }
 
-function CopyRow({ label, value, mono, name }: { label: string; value: string; mono?: boolean; name: string }) {
+export function CopyRow({ label, value, mono, name }: { label: string; value: string; mono?: boolean; name: string }) {
   const [copied, setCopied] = useState(false);
   return <div className="space-y-1">
     <p className="text-[11px] text-ink-secondary">{label}</p>

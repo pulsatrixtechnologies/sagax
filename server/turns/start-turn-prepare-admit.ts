@@ -1,7 +1,8 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
 import { randomUUID } from "node:crypto";
-import { pinnedWorkspaceStart } from "../computer/auto-computer.ts";
+import { carryAutoComputerMoves, pinnedWorkspaceStart } from "../computer/auto-computer.ts";
+import { turnLanguage } from "./turn-language.ts";
 import { effortForEngine } from "../../shared/ultracode-effort.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
@@ -18,6 +19,7 @@ export function createPrepareAdmitStartTurn(
     assertModelVariantSupported,
     assertTurnAdmission,
     autoComputerStateFor,
+    languageOfPerson,
     autoModelRecord,
     autoStartTarget,
     autoTurnsByThread,
@@ -299,8 +301,9 @@ export function createPrepareAdmitStartTurn(
     speakerPrincipalId: orgSpeakerPrincipal(state.bot, state.speaker)
   });
   const turnPersonAsked = !routineLineage(state.speaker) && Boolean(orgSpeakerPrincipal(state.bot, state.speaker));
-  // Auto (2026-10-15; routines 2026-11-01): a person-asked turn prefers
-  // the person's computer when connected, else the cloud. A routine starts
+  // Auto (2026-10-15; routines 2026-11-01; #2670): a person-asked turn
+  // starts in the person's server environment when they have one, else on
+  // their computer when connected, else the cloud. A routine starts
   // in the cloud; routinesAllowed only permits an explicit computer_select
   // to this_computer. A thread opened with a workspace starts there when
   // allowed (server/computer/auto-computer.ts).
@@ -321,6 +324,10 @@ export function createPrepareAdmitStartTurn(
     personAsked: turnPersonAsked
   });
   state.turnAuto = autoComputerStateFor(state.turnPlace, turnWorks, routineLineage(state.speaker), turnAutoStart, state.plan.browser);
+  // #2763: a continuation after select_computer goes on with the request's moves.
+  if (state.turnAuto && state.opts?.computerSelectionContinuation) state.turnAuto = carryAutoComputerMoves(state.turnAuto, state.opts.computerMovesSoFar);
+  // #2762: the refusals of a move speak the language of the person's message.
+  if (state.turnAuto) state.turnAuto = { ...state.turnAuto, language: turnLanguage(state.userMessage?.text, languageOfPerson(state.turnPrincipal)) };
   // Each call turn's words carry the call mark themselves: a live session
   // gets the volatile call section only when it changed, so from the second
   // call turn on the section alone never reached the engine.
@@ -340,7 +347,7 @@ export function createPrepareAdmitStartTurn(
     state.turnImages.push(...office.images);
   }
   state.placedText = state.opts.cardContinuation ? { text: state.providerText, staging: null } : workplaceTurnText(state.providerText, state.turnPlace);
-  state.providerText = withWorkplaceNote(state.placedText.text, state.turnPlace, state.turnAuto, state.bot.id);
+  state.providerText = withWorkplaceNote(state.placedText.text, state.turnPlace, state.turnAuto, state.bot.id, state.threadId);
   // The engine's container runs in UTC: tell it the time where its person is
   // (server/turns/turn-clock.ts), so times are said in their zone.
   const clockZone = state.opts.cardContinuation || !turnClockEnabled() ? null : turnZoneFor(state.bot, state.speaker);

@@ -112,6 +112,10 @@ export interface SafetyInput {
    * the capability, never from the text. A host shell, a lent computer and
    * an MCP connector are not. */
   ownEnvironment?: boolean;
+  /** With `ownEnvironment`: the call runs on the person's own computer
+   * through the desktop bridge, never on the Sagax server, so the platform
+   * file rules do not apply (#2738). Set by the server, never from the text. */
+  ownComputer?: boolean;
   /** The person's own folders and the attachment store (MisuseOwnPaths),
    * from the server, never from the text. */
   ownPaths?: MisuseOwnPaths;
@@ -399,7 +403,7 @@ export function reviewSafety(input: SafetyInput, memory: SafetyMemory = emptySaf
   const sealed = memory.final.has(fingerprint) || (classKey !== undefined && memory.final.has(classKey));
   if (sealed) return verdict("block", "final", SAFETY_REFUSAL_FINAL, fingerprint, classKey);
 
-  const misuse = classifyMisuse(input.text, false, input.ownEnvironment ? "own_environment" : input.surface === "message" ? "message" : "default", input.ownPaths);
+  const misuse = classifyMisuse(input.text, false, input.ownEnvironment ? (input.ownComputer ? "own_computer" : "own_environment") : input.surface === "message" ? "message" : "default", input.ownPaths);
   if (misuse.action === "block") {
     return verdict("block", "misuse", misuseRefusalText(misuse.category, "block"), fingerprint, classKey);
   }

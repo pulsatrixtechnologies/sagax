@@ -13,18 +13,25 @@ import { t } from "@/lib/i18n";
 import { setShowInspectorButton, useShowInspectorButton } from "@/lib/inspector-preferences";
 import { setShowRunCard, useShowRunCard } from "@/lib/run-card-preferences";
 import { setShowTurnTiming, useShowTurnTiming } from "@/lib/turn-timing-preferences";
+import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useStore } from "@/state/store";
 
+import { ModelsDeveloperCards } from "../EnginesSettings";
 import { ClaudeCodeRows } from "../ClaudeCodeSwitches";
 import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
 import { McpCallTimeoutSettings } from "../McpCallTimeoutSettings";
 import { RoomTurnTimeoutSettings } from "../RoomTurnTimeoutSettings";
-import { CompactRow, DescribedRow, SettingsGroup, Switch } from "../SettingsPrimitives";
+import { CompactRow, DescribedRow, LinkRow, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { ThreadCleanupSettings } from "../ThreadCleanupSettings";
 import { DiagnosticsRow, DownloadLogsRow, generalAdvancedShown, LoopGuardRow } from "./AdvancedSettings";
+import { InterfaceModeRow } from "./AppearanceSettings";
 import { DeveloperBotCard } from "./DeveloperBotCard";
 import { canEditConfig } from "@/lib/viewer";
+import { OrgGrokBridgePolicy } from "./OrgGrokBridgePolicy";
+import { OrgGithubApp } from "./OrgGithubApp";
+import { ComputerCareSettings } from "./ComputerCareSettings";
+import { ServerEnvironmentCard } from "./OrgComputerSettings";
 import { TelemetrySettings } from "./TelemetrySettings";
 import { UsageMeterRow } from "./UsageMeterRow";
 
@@ -37,7 +44,7 @@ function SwitchLine({ label, checked, onChange, rowId, ariaLabel }: { label: str
   );
 }
 
-export function DeveloperSettings({ remoteActive }: { remoteActive: boolean }) {
+export function DeveloperSettings({ remoteActive, openAbout }: { remoteActive: boolean; openAbout?: () => void }) {
   const { state } = useStore();
   const editConfig = canEditConfig(state.config);
   const runCard = useShowRunCard();
@@ -83,6 +90,35 @@ export function DeveloperSettings({ remoteActive }: { remoteActive: boolean }) {
         </div>
       )}
       {editConfig && <ThreadCleanupSettings />}
+      {/* Models: the cards that left the Models page */}
+      <ModelsDeveloperCards />
+      {/* Grok bridge policy (was Organization): the admin's kill switch, same switch and wording */}
+      {organization?.viewerRole === "admin" && (
+        <OrgGrokBridgePolicy key={String(organization.settings.allowGrokBridge !== false)} initial={organization.settings.allowGrokBridge !== false} />
+      )}
+      {/* GitHub OAuth App client id (was Organization): admin input, same field and Save; the device flow is unchanged */}
+      {organization?.viewerRole === "admin" && (
+        <SettingsGroup title={t("organization.github.title")} groupId="organizationGithub">
+          <OrgGithubApp initial={organization.settings} />
+        </SettingsGroup>
+      )}
+      {/* Reset server environment (was Computer): same button, same confirmation */}
+      <ServerEnvironmentCard resetOnly />
+      {/* Scheduled update (was Computer): same switch and pickers */}
+      <ComputerCareSettings part="schedule" />
+      {/* Interface: Advanced mode (on by default), moved from General */}
+      <div data-settings-card="developer.interface">
+        <SettingsGroup title={t("settings.general.interface")} groupId="generalInterface">
+          <InterfaceModeRow />
+        </SettingsGroup>
+      </div>
+      {/* Release notes and About (moved from Updates): the update flow, app menu and app grid show the notes on their own */}
+      <div data-settings-card="developer.links">
+        <SettingsGroup groupId="updatesLinks">
+          <LinkRow rowId="releaseNotes" label={t("settings.updates.links.releaseNotes")} onClick={() => requestReleaseNotes("browse")} />
+          {openAbout && <LinkRow rowId="aboutFromUpdates" label={t("settings.updates.links.about")} onClick={openAbout} />}
+        </SettingsGroup>
+      </div>
       {/* Per bot (#2658): the bot page's technical cards, one bot at a time */}
       <DeveloperBotCard />
       {/* Claude Code on this computer (#2658, was Connect apps > Installed) */}

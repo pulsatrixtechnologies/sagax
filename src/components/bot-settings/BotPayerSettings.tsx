@@ -6,8 +6,9 @@
 // admin (server/routes/bot-runtime-settings.ts). Who pays never changes
 // who reads a conversation. Shown to the bot's owner or an admin (the
 // server's gate, bots.behaviour is always a member's own), never tied to the
-// automaticRecovery right. 2026-11-06: one place only, the "Who pays for
-// replies" card of General (Shared with); Bot > Model no longer repeats it.
+// automaticRecovery right. One place only: 2026-11-07 (#2625, the V6
+// canvas) the "Who pays for replies" card of the Model sub-page, under the
+// engine it pays for; Shared with no longer shows it.
 import { useId } from "react";
 import { Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -34,14 +35,14 @@ export function canChooseBotPayer(config: ConfigStatus | null | undefined, bot: 
   return bot.host?.kind !== "machine" && Boolean(bot.turnPayerDefault) && !viewerBotsReadOnly(config) && viewerOwnsBot(config, bot);
 }
 
-/** Who pays for replies: its own card of General (Shared with), the one
- * place it lives. */
+/** Who pays for replies: its own card of the Model sub-page, the one
+ * place it lives (#2625). */
 export function BotPayerCard({ bot }: { bot: Bot }) {
   const { state } = useStore();
   const { draft } = useBotEditor();
   if (draft || !canChooseBotPayer(state.config, bot)) return null;
   return (
-    <SettingsGroup title={t("botPayer.title")} groupId="botPayerSharing">
+    <SettingsGroup title={t("botPayer.title")} groupId="botPayerModel">
       <BotPayerRow key={`payer:${bot.id}`} bot={bot} />
     </SettingsGroup>
   );

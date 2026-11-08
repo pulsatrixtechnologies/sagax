@@ -6,9 +6,10 @@
 import { readFileSync } from "node:fs";
 
 import { modelSharesOf, triggerLabel, type UsageRow } from "../usage/usage-ledger.ts";
+import { containsUuid, isOpaqueId } from "../../shared/human-id.ts";
 import { personOf } from "./agent-spans.ts";
 import { spansFileFor } from "./otel.ts";
-import type { UsageStats, UsageStatsGroup, UsageToolStat } from "../../shared/telemetry.ts";
+import type { UsageDay, UsageDayValue, UsageStats, UsageStatsGroup, UsageToolStat } from "../../shared/telemetry.ts";
 
 /** What usage-stats needs of a local span line. */
 export interface LocalSpan {
@@ -85,6 +86,11 @@ function add(acc: Acc, input: number, output: number, cached: number, cost: numb
   if (threadId) acc.threads.add(threadId);
 }
 
+/** A label that is never a raw id: the id stays in `key`, the UI shows a name. */
+export function readableLabel(value: string, fallback: string): string {
+  return isOpaqueId(value) || containsUuid(value) ? fallback : value;
+}
+
 const SOURCE_LABELS: Record<string, string> = { user: "Person", owner: "Owner", routine: "Routine", bot: "Bot", helper: "Helper" };
 
 export function buildUsageStats(rows: readonly UsageRow[], spans: readonly LocalSpan[]): UsageStats {
@@ -102,13 +108,13 @@ export function buildUsageStats(rows: readonly UsageRow[], spans: readonly Local
     const cached = row.cachedInput ?? 0;
     add(totals, row.input, row.output, cached, row.costUsd, row.threadId, true);
     const accountKey = `${row.instanceId}${row.access ? `:${row.access}` : ""}`;
-    const account = get(byAccount, accountKey, row.instanceId);
+    const account = get(byAccount, accountKey, readableLabel(row.instanceId, row.driverKind || "Engine"));
     account.engine = row.driverKind;
     if (row.access) account.access = row.access;
     add(account, row.input, row.output, cached, row.costUsd, row.threadId, true);
     add(get(bySource, row.trigger.kind, SOURCE_LABELS[row.trigger.kind] ?? row.trigger.kind), row.input, row.output, cached, row.costUsd, row.threadId, true);
     const person = personOf(row);
-    const personLabel = row.trigger.kind === "user" ? triggerLabel(row.trigger) : person ?? "Owner";
+    const personLabel = row.trigger.kind === "user" ? triggerLabel(row.trigger) : readableLabel(person ?? "Owner", "Person");
     add(get(byPerson, person ?? "owner", personLabel), row.input, row.output, cached, row.costUsd, row.threadId, true);
     const shares = modelSharesOf(row) ?? [{ model: row.model, inputTokens: row.input - cached, outputTokens: row.output, cachedInputTokens: cached, costUsd: row.costUsd }];
     for (const share of shares) {
@@ -179,4 +185,33 @@ export function buildUsageStats(rows: readonly UsageRow[], spans: readonly Local
     byPerson: finish(byPerson, true),
     tools: [...tools.values()].sort((a, b) => b.calls - a.calls || a.tool.localeCompare(b.tool)).slice(0, 50),
   };
+}
+
+/** The usage of each day of a window, split like the group rows (same keys):
+ * `dayKeys` are the days the series must carry, `dayOf` cuts an instant in
+ * the server zone. Rows outside the days are ignored. */
+export function buildUsageDays(rows: readonly UsageRow[], dayKeys: readonly string[], dayOf: (at: number) => string): UsageDay[] {
+  const days = new Map<string, UsageDay>(dayKeys.map((day) => [day, { day, total: { costUsd: 0, tokens: 0 }, byAccount: {}, byModel: {}, bySource: {}, byPerson: {} }]));
+  const bump = (into: Record<string, UsageDayValue>, key: string, cost: number, tokens: number) => {
+    const value = (into[key] ??= { costUsd: 0, tokens: 0 });
+    value.costUsd += cost;
+    value.tokens += tokens;
+  };
+  for (const row of rows) {
+    const day = days.get(dayOf(Date.parse(row.at)));
+    if (!day) continue;
+    const tokens = row.input + row.output;
+    const cost = row.costUsd ?? 0;
+    day.total.costUsd += cost;
+    day.total.tokens += tokens;
+    bump(day.byAccount, `${row.instanceId}${row.access ? `:${row.access}` : ""}`, cost, tokens);
+    bump(day.bySource, row.trigger.kind, cost, tokens);
+    bump(day.byPerson, personOf(row) ?? "owner", cost, tokens);
+    const shares = modelSharesOf(row) ?? [{ model: row.model, inputTokens: row.input - (row.cachedInput ?? 0), outputTokens: row.output, cachedInputTokens: row.cachedInput ?? 0, costUsd: row.costUsd }];
+    for (const share of shares) {
+      const cached = share.cachedInputTokens ?? 0;
+      bump(day.byModel, share.model, share.costUsd ?? 0, share.inputTokens + cached + (share.cacheWriteTokens ?? 0) + share.outputTokens);
+    }
+  }
+  return dayKeys.map((day) => days.get(day)!);
 }

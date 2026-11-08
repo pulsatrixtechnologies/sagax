@@ -661,8 +661,9 @@ export async function launchVerificationServer(
       headers: { origin: url },
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
-    const body = list.ok ? await list.json() as { bots?: Array<{ id: string }> } : null;
-    const seeded = body?.bots;
+    const body = list.ok ? await list.json() as { bots?: Array<{ id: string; systemBot?: string }> } : null;
+    // A system bot (Feedback, #2618) is seeded beside the starter on first run.
+    const seeded = body?.bots?.filter((bot) => !bot.systemBot);
     if (!Array.isArray(seeded) || seeded.length !== 1) {
       throw new Error(`verification fixture did not seed exactly one starter bot; see ${logPath}`);
     }

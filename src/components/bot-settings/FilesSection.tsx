@@ -51,6 +51,7 @@ import { filePreviewKind, loadTextPreview } from "@/lib/file-preview";
 import { AttachmentPreviewDialog, canonicalDownloadFilename, startMessageFileDownload, type PreviewImage } from "../AttachmentPreview";
 import { HoverCard, type AnchorProps } from "../LinkHoverCard";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
+import { SkeletonRows } from "@/components/Skeleton";
 
 export const KIND_ICON: Record<FileKind, LucideIcon> = {
   image: ImageIcon,
@@ -469,9 +470,7 @@ export function FilesBrowser({ threadId, files, error, onRetry, onJump, initialF
       )}
 
       {files === null && !error ? (
-        <div role="status" className="flex items-center justify-center gap-2 py-10 text-[13px] text-ink-secondary">
-          <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> {t("botPanel.files.loading")}
-        </div>
+        <SkeletonRows label={t("botPanel.files.loading")} rows={4} />
       ) : files === null && error ? (
         <div className="flex flex-col items-center gap-2 py-10 text-center text-[13px] text-ink-secondary">
           <span role="alert">{t("botPanel.files.error")}</span>

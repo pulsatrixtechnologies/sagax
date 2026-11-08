@@ -10,6 +10,7 @@ import {
 } from "../approvals/auto-approve.ts";
 import { appendDecision, decisionCall } from "../decision-log.ts";
 import { deliverableNotification } from "../notify.ts";
+import { questionNotificationWords } from "./question-notification-words.ts";
 import {
   customRuleCandidate,
   serverHome,
@@ -295,19 +296,29 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
             const notificationRequest = notification.requestId;
             // A peer view routes back to the execution; routines keep their
             // execution thread (#1743). Allow and withdrawal use the same address.
+            // #2909: what the person reads before choosing, from the card itself
+            const words = questionNotificationWords({
+              permission, asker: asker.name, routed: notificationBot.name,
+              summary: event.summary, plain, questions, options: card.options,
+            });
             host.notify(deliverableNotification(
               permission ? "approval" : "question",
               notificationBot,
               notificationThread,
-              plain ? plain.line : event.summary,
+              words.line,
               {
                 ...(notificationBot.avatarUrl ? { avatarUrl: notificationBot.avatarUrl } : {}),
-                ...(plain ? { title: plain.title } : {}),
+                ...(words.title ? { title: words.title } : {}),
                 ...(notificationRequest ? { requestId: notificationRequest } : {}),
                 // Allow on the phone opens Sagax: this class needs the person's key.
                 ...(permission && ownerStepUp.length > 0 ? { needsKey: true } : {}),
                 // a question's own choices: the banner's buttons on the phone and the watch
-                ...(!permission && card.options?.length ? { choices: card.options } : {})
+                ...(!permission && card.options?.length ? { choices: card.options } : {}),
+                ...(words.choiceLabels ? { choiceLabels: words.choiceLabels } : {}),
+                ...(words.choiceDetails ? { choiceDetails: words.choiceDetails } : {}),
+                context: words.context,
+                // the tap opens the chat on this card (when it is in that chat)
+                ...(notificationThread === event.threadId ? { cardId: message.id } : {}),
               },
             ));
           };

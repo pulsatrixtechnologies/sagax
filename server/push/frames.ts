@@ -46,6 +46,12 @@ export interface NotifyNote {
   routineName?: string;
   ask?: string;
   choices?: string[];
+  /** #2909: the buttons' short labels; absent with choices: Open only. */
+  choiceLabels?: string[];
+  /** #2909: the readable whole context (multi-line). */
+  context?: string;
+  /** #2909: the chat message holding the card. */
+  cardId?: string;
   proposalId?: string;
 }
 
@@ -90,6 +96,9 @@ export function pushesForFrame(payload: Record<string, unknown>, deps: FramePush
       ...(text(raw.ask).trim() ? { ask: text(raw.ask).trim() } : {}),
       ...(text(raw.proposalId) ? { proposalId: text(raw.proposalId).slice(0, 128) } : {}),
       ...(Array.isArray(raw.choices) ? { choices: raw.choices.filter((choice): choice is string => typeof choice === "string" && choice.trim().length > 0) } : {}),
+      ...(Array.isArray(raw.choiceLabels) ? { choiceLabels: raw.choiceLabels.filter((label): label is string => typeof label === "string" && label.trim().length > 0) } : {}),
+      ...(text(raw.context).trim() ? { context: text(raw.context) } : {}),
+      ...(text(raw.cardId) ? { cardId: text(raw.cardId).slice(0, 128) } : {}),
     };
     // an AI client's conversation over MCP never rings a phone or a watch
     if (raw.quietOnPhones === true) return [];
@@ -120,7 +129,12 @@ export function pushesForFrame(payload: Record<string, unknown>, deps: FramePush
       ...(note.routineRunId ? { routineRunId: note.routineRunId } : {}),
       ...(note.routineName ? { routineName: note.routineName } : {}),
       ...(note.ask && (note.kind === "approval" || note.kind === "question") ? { ask: note.ask } : {}),
-      ...(note.kind === "question" && note.choices?.length ? { choices: note.choices } : {}),
+      ...((note.kind === "question" || note.kind === "needs-you") && note.choices?.length ? { choices: note.choices } : {}),
+      // #2909: labels only when one per choice, else the banner offers Open
+      ...((note.kind === "question" || note.kind === "needs-you") && note.choices?.length
+        && note.choiceLabels?.length === note.choices.length ? { choiceLabels: note.choiceLabels } : {}),
+      ...(note.context && (note.kind === "approval" || note.kind === "question" || note.kind === "needs-you") ? { context: note.context } : {}),
+      ...(note.cardId ? { cardId: note.cardId } : {}),
       ...(note.kind === "needs-you" && !note.requestId ? { needsYou: true } : {}),
       ...(note.kind === "proposal" && note.proposalId ? { proposalId: note.proposalId } : {}),
       at,

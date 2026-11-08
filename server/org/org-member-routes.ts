@@ -53,6 +53,7 @@ import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 import { formatQuestionAnswers, MAX_CUSTOM_ANSWER, MAX_OPTIONS, parseAskQuestions, parseChoices, type AskQuestion } from "../../shared/ask-question.ts";
 import { meetingRequestBehavior } from "../../shared/meeting-request.ts";
 import { APPROVAL_EN, type ApprovalTranslate } from "../../shared/approval-describe.ts";
+import { buildNotificationContext } from "../../shared/notification-context.ts";
 import { can, permissionLabel, type PermissionKey, type PermissionPrincipal } from "../../shared/permissions.ts";
 import { mask, redactSecretsInText } from "../../shared/redact.ts";
 import { reviewedSkillSha256, skillRequestBehavior } from "../../shared/skill-request.ts";
@@ -423,6 +424,8 @@ export type ApprovalKind = "permission" | "question" | "request";
 export interface ApprovalChoice {
   id: string;
   label: string;
+  /** #2909: what this answer does, when the bot said so. */
+  description?: string;
 }
 
 /** A question of a card that asks several at once. */
@@ -449,6 +452,10 @@ export interface MemberApproval {
   questions?: ApprovalQuestion[];
   /** Words of the person's own are accepted (`text`). */
   freeText: boolean;
+  /** #2909: the whole context in readable lines (markdown tables as text):
+   * the question, what happened, and what each answer does. Show it with
+   * the choices, never the choices alone. */
+  context: string;
   createdAt: number | null;
   expiresAt: number | null;
 }
@@ -478,7 +485,11 @@ export function approvalKind(card: Record<string, unknown>): ApprovalKind {
   return "request";
 }
 
-const choicesOf = (labels: readonly string[]): ApprovalChoice[] => labels.map((label, index) => ({ id: String(index + 1), label }));
+const choicesOf = (labels: readonly (string | { label: string; description?: string })[]): ApprovalChoice[] => labels.map((option, index) => {
+  const label = typeof option === "string" ? option : option.label;
+  const description = typeof option === "string" ? undefined : option.description?.trim();
+  return description ? { id: String(index + 1), label, description } : { id: String(index + 1), label };
+});
 
 /** The questions of a card that carries a structured set (AskUserQuestion). */
 function cardQuestions(card: Record<string, unknown>): AskQuestion[] | null {
@@ -502,7 +513,7 @@ export function describeMemberApproval(
   const questions = kind === "question" ? cardQuestions(card) : null;
   const several = questions && questions.length > 1 ? questions : null;
   const single = questions && questions.length === 1 ? questions[0]! : null;
-  const choices = kind === "permission" ? [] : several ? [] : choicesOf(single ? single.options.map((o) => o.label) : labels);
+  const choices = kind === "permission" ? [] : several ? [] : choicesOf(single ? single.options : labels);
   const createdAt = typeof message.at === "number" ? message.at : null;
   const cardExpires = typeof card.expiresAt === "number" ? card.expiresAt : null;
   let expiresAt: number | null = cardExpires;
@@ -519,8 +530,13 @@ export function describeMemberApproval(
     kind,
     answerWith: kind === "question" ? "option" : "decision",
     choices,
-    ...(several ? { questions: several.map((q) => ({ question: q.question, multiSelect: q.multiSelect === true, options: choicesOf(q.options.map((o) => o.label)) })) } : {}),
+    ...(several ? { questions: several.map((q) => ({ question: q.question, multiSelect: q.multiSelect === true, options: choicesOf(q.options) })) } : {}),
     freeText: kind === "question" && (questions ? questions.every((q) => q.custom !== false) : true),
+    context: buildNotificationContext({
+      question: single?.question || str(card.title) || "",
+      detail: [str(card.subtitle), ...(several ?? []).map((q) => q.question)].filter(Boolean).join("\n\n"),
+      choices: choices.map((choice) => ({ answer: choice.label, ...(choice.description ? { detail: choice.description } : {}) })),
+    }),
     createdAt,
     expiresAt,
   };

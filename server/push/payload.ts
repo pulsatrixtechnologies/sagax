@@ -8,6 +8,7 @@
 // bot sender also carries its look (`senderLook`, `senderLookVersion`): the
 // extension draws the bot's mascot as the banner's face.
 import { createHash } from "node:crypto";
+import { CHOICE_BUTTONS_MAX, CHOICE_LABEL_MAX } from "../../shared/notification-context.ts";
 
 import { botAvatarCropSchema, botAvatarUrlSchema, type BotAvatarCrop } from "../../shared/bot-avatar.ts";
 import { plainPreviewLine } from "../../shared/plain-text.ts";
@@ -29,6 +30,9 @@ export const NEEDS_YOU_CATEGORY = "SAGAX_NEEDS_YOU";
 /** #2697: a proactive proposal card: Do it and Not now answer the proposal
  * (POST /api/bots/:id/proactive/:proposalId). */
 export const PROPOSAL_CATEGORY = "SAGAX_PROPOSAL";
+/** #2909: a question or a needs-you whose answers cannot be shown whole on
+ * a button: one action, Open, which goes to the card in the bot's chat. */
+export const OPEN_CATEGORY = "SAGAX_OPEN";
 
 export interface PushMessage {
   kind: PushKind;
@@ -60,6 +64,14 @@ export interface PushMessage {
   ask?: string;
   /** A question's choices: the phone offers them as the banner's buttons. */
   choices?: string[];
+  /** #2909: one short label per choice, what the buttons show whole.
+   * Absent while `choices` is set: the banner offers Open only. */
+  choiceLabels?: string[];
+  /** #2909: the whole context, multi-line (what happened, why it waits,
+   * what each answer does): the banner body, whole in the expanded view. */
+  context?: string;
+  /** #2909: the chat message holding the card: the tap opens it. */
+  cardId?: string;
   /** #2697: a bot needs the person with no request: Approve / Deny reply in its conversation. */
   needsYou?: boolean;
   /** #2697: the proactive proposal card this is about: Do it / Not now answer it. */
@@ -166,8 +178,11 @@ export function notificationToneSound(choice: string | undefined): string {
  * gets Reply; an approval that names its request gets Allow and Deny;
  * ordinary news (and a takeover, which rides `kind: "approval"` with no
  * request) has no actions. Matches ios NotificationApproval.category. */
-export function pushCategory(message: Pick<PushMessage, "kind" | "prompt" | "needsKey" | "requestId" | "needsYou" | "proposalId">): string {
+export function pushCategory(message: Pick<PushMessage, "kind" | "prompt" | "needsKey" | "requestId" | "needsYou" | "proposalId" | "choices" | "choiceLabels">): string {
   if (message.proposalId?.trim()) return PROPOSAL_CATEGORY;
+  // #2909: answers a button cannot show whole: Open, never a cut-off choice
+  if (message.kind === "approval" && (message.prompt === "question" || message.needsYou)
+    && message.choices?.length && !pushChoiceLabels(message).length) return OPEN_CATEGORY;
   if (message.kind === "approval" && message.needsYou && !message.requestId?.trim()) return NEEDS_YOU_CATEGORY;
   if (message.kind === "approval" && message.prompt === "question") {
     return message.requestId?.trim() ? QUESTION_CATEGORY : UPDATE_CATEGORY;
@@ -235,12 +250,26 @@ export function pushPriority(kind: PushKind): 5 | 10 {
 
 /** The longest question line on the banner. */
 const ASK_MAX = 120;
+/** #2909: the longest context an ask's banner carries (the expanded view
+ * shows it whole; the payload stays under APNs's 4 KB). */
+const CONTEXT_MAX = 1200;
+
+/** Clipped, line breaks kept (spaces inside each line collapsed). */
+function clipLines(text: string, max: number): string {
+  const clean = text.replace(/\r\n?/g, "\n").split("\n").map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max - 1).trimEnd()}…`;
+}
 
 /** What the banner says under the bot's name: the question first, in plain
  * words, then the detail. Never the question twice. A lock screen draws no
  * Markdown, so a body that still carries some (a reach-me notice, an older
  * caller) reads as plain words here too. */
-export function bannerBody(message: Pick<PushMessage, "kind" | "ask" | "body">): string {
+export function bannerBody(message: Pick<PushMessage, "kind" | "ask" | "body"> & { context?: string }, contextMax = CONTEXT_MAX): string {
+  // #2909: an ask says it all, readable and multi-line: the question, the
+  // detail (tables as text), what each answer does
+  if (message.kind === "approval" && message.context?.trim() && contextMax > 0) return clipLines(message.context, contextMax);
   const detail = plainPreviewLine(message.body ?? "", BODY_MAX);
   const ask = message.kind === "approval" && message.ask ? plainPreviewLine(message.ask, ASK_MAX) : "";
   if (!ask || ask === detail) return detail;
@@ -250,9 +279,9 @@ export function bannerBody(message: Pick<PushMessage, "kind" | "ask" | "body">):
 
 /** The choices a question carries to the phone, as the banner's buttons. */
 const PUSH_CHOICES_MAX = 10;
-const PUSH_CHOICE_MAX = 60;
-export function pushChoices(message: Pick<PushMessage, "kind" | "prompt" | "choices">): string[] {
-  if (message.kind !== "approval" || message.prompt !== "question" || !message.choices?.length) return [];
+const PUSH_CHOICE_MAX = 120;
+export function pushChoices(message: Pick<PushMessage, "kind" | "prompt" | "choices" | "needsYou">): string[] {
+  if (message.kind !== "approval" || (message.prompt !== "question" && !message.needsYou) || !message.choices?.length) return [];
   const out: string[] = [];
   for (const raw of message.choices) {
     const choice = clip(raw, PUSH_CHOICE_MAX);
@@ -261,6 +290,16 @@ export function pushChoices(message: Pick<PushMessage, "kind" | "prompt" | "choi
     if (out.length >= PUSH_CHOICES_MAX) break;
   }
   return out;
+}
+
+/** #2909: the buttons' labels, one per choice, each shown whole (shared
+ * CHOICE_LABEL_MAX), at most CHOICE_BUTTONS_MAX; empty means Open only. */
+export function pushChoiceLabels(message: Pick<PushMessage, "kind" | "prompt" | "choices" | "choiceLabels" | "needsYou">): string[] {
+  const choices = pushChoices(message);
+  const labels = (message.choiceLabels ?? []).map((label) => label.replace(/\s+/g, " ").trim());
+  if (!choices.length || choices.length > CHOICE_BUTTONS_MAX || choices.length !== message.choices?.length || labels.length !== choices.length) return [];
+  if (labels.some((label) => !label || label.length > CHOICE_LABEL_MAX)) return [];
+  return labels.slice(0, choices.length);
 }
 
 export interface ApnsRequest {
@@ -346,6 +385,7 @@ export function buildApnsRequest(input: {
     title: senderName || clip(message.title, TITLE_MAX) || "Sagax",
     body: bannerBody(message),
   };
+  const contextBody = message.kind === "approval" && Boolean(message.context?.trim());
   if (message.titleLocKey) {
     alert["title-loc-key"] = message.titleLocKey;
     if (message.titleLocArgs?.length) alert["title-loc-args"] = message.titleLocArgs.map((arg) => clip(arg, TITLE_MAX));
@@ -391,7 +431,14 @@ export function buildApnsRequest(input: {
   if (message.routineRunId) payload.routineRunId = message.routineRunId;
   if (message.routineName) payload.routineName = clip(message.routineName, 80);
   const choices = pushChoices(message);
-  if (choices.length) payload.choices = choices;
+  const labels = pushChoiceLabels(message);
+  // #2909: the answers ride only with labels a button shows whole; else the
+  // category is Open (pushCategory) and the card in the chat has them
+  if (choices.length && labels.length) {
+    payload.choices = choices;
+    payload.choiceLabels = labels;
+  }
+  if (message.cardId) payload.cardId = message.cardId.slice(0, 128);
   if (senderName) payload.senderName = senderName;
   if (senderId) payload.senderId = senderId;
   if (avatarUrl) payload.avatarUrl = avatarUrl;
@@ -408,9 +455,17 @@ export function buildApnsRequest(input: {
     delete payload.senderLookVersion;
     body = JSON.stringify(payload);
   }
-  // ...then the choices: the question still asks, with Reply instead
+  // ...then the context shrinks to the plain banner line: never the push lost
+  for (const max of [600, 300, 0]) {
+    if (!contextBody || Buffer.byteLength(body) <= APNS_PAYLOAD_MAX) break;
+    alert.body = bannerBody(message, max);
+    body = JSON.stringify(payload);
+  }
+  // ...then the choices: the question still asks, with Open instead
   if (payload.choices && Buffer.byteLength(body) > APNS_PAYLOAD_MAX) {
     delete payload.choices;
+    delete payload.choiceLabels;
+    if (aps.category !== PROPOSAL_CATEGORY && (message.prompt === "question" || message.needsYou)) aps.category = OPEN_CATEGORY;
     body = JSON.stringify(payload);
   }
   const headers: Record<string, string> = {

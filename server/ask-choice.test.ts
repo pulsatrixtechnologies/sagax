@@ -78,3 +78,45 @@ describe("ask_choice, the clickable question every engine can use", () => {
     expect(availableTools(everything).some((tool) => tool.name === ASK_CHOICE_TOOL)).toBe(true);
   });
 });
+
+describe("ask_choice answers that answer the question (#2909)", () => {
+  it("refuses Yes / No for an \"A or B?\" question, on the server", () => {
+    const refused = parseAskChoiceInput({ question: "Je garde la version locale ou celle du serveur ?", options: ["Oui", "Non"] });
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.error).toContain("not Yes / No");
+    expect(parseAskChoiceInput({ question: "Keep the local copy or the server one?", options: ["Yes", "No"] }).ok).toBe(false);
+    // a real yes / no question keeps Yes / No
+    expect(parseAskChoiceInput({ question: "Je publie la version 2.4 ?", options: ["Oui", "Non"] }).ok).toBe(true);
+    expect(parseAskChoiceInput({ question: "Je garde la version locale ou celle du serveur ?", options: ["Locale", "Serveur"] }).ok).toBe(true);
+  });
+
+  it("takes {label, detail}: the label is the answer, the detail says what it does", () => {
+    const parsed = parseAskChoiceInput({
+      question: "La sauvegarde a échoué deux fois. Je relance ou j'attends ?",
+      options: [{ label: "Relancer", detail: "Relance la sauvegarde maintenant" }, "Attendre"],
+    });
+    expect(parsed).toMatchObject({ ok: true, value: { options: ["Relancer", "Attendre"], details: ["Relance la sauvegarde maintenant", undefined] } });
+    expect(parseAskChoiceInput({ question: "Je relance ou j'attends ?", options: ["Relancer", "Attendre"], details: ["Maintenant"] }))
+      .toMatchObject({ ok: true, value: { details: ["Maintenant", undefined] } });
+    const long = parseAskChoiceInput({ question: "Lequel ?", options: [{ label: "Un libellé beaucoup trop long pour un bouton" }, "B"] });
+    expect(long.ok).toBe(false);
+  });
+
+  it("raises the question with each option's detail as its description", () => {
+    const { fake } = store();
+    const raiseQuestion = vi.fn(() => ({ messageId: "m-q" }));
+    const result = createAgentCard({
+      store: fake, bot: BOT, threadId: "t", raiseQuestion,
+      input: { tool: ASK_CHOICE_TOOL, question: "Je relance ou j'attends ?", options: [{ label: "Relancer", detail: "Maintenant" }, "Attendre"] },
+    });
+    expect(result).toMatchObject({ ok: true, messageId: "m-q" });
+    expect(raiseQuestion).toHaveBeenCalledWith(expect.objectContaining({
+      options: ["Relancer", "Attendre"],
+      questionOptions: [{ label: "Relancer", description: "Maintenant" }, { label: "Attendre" }],
+    }));
+  });
+
+  it("the prompt asks for answers that answer the question", () => {
+    expect(buildSystemPrompt("You are Kiwi.", "", []).stable).toContain("never Yes / No");
+  });
+});

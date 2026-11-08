@@ -95,6 +95,18 @@ export interface Notification {
   /** A question's own choices, in order: the phone offers them as the
    * banner's buttons (up to its limit; past it, Open). */
   choices?: string[];
+  /** #2909: one short label per choice (<= CHOICE_LABEL_MAX), what the
+   * buttons show; the full choice is the answer sent. Absent while `choices`
+   * is set: the choices cannot be shown whole, so the notification offers
+   * Open only (shared/notification-context.ts). */
+  choiceLabels?: string[];
+  /** #2909: the whole context, multi-line and readable (markdown tables as
+   * text): what happened, why the bot waits, what each choice does. The
+   * expanded notification, the desktop toast and Updates show it. */
+  context?: string;
+  /** #2909: the chat message holding the card (approval, question, needs-you):
+   * the tap opens the bot's chat on it. */
+  cardId?: string;
   /** #2697: the proactive proposal a `proposal` notice is about. */
   proposalId?: string;
   /** Never on a phone or a watch (2026-10-29): a conversation an AI client

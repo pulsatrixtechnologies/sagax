@@ -232,7 +232,17 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     return { ok: true, messageId: settled.id, answered: { choice: answered.choice, question: parsed.value.subtitle } };
   }
   if (args.raiseQuestion && !from.from) {
-    const raised = args.raiseQuestion({ title: parsed.value.title, question: parsed.value.subtitle, options: parsed.value.options });
+    // #2909: an option's detail (ask_choice {label, detail}) rides as its
+    // description, so the notification and the card say what each answer does
+    const details = parsed.value.details;
+    const raised = args.raiseQuestion({
+      title: parsed.value.title,
+      question: parsed.value.subtitle,
+      options: parsed.value.options,
+      ...(details?.some(Boolean)
+        ? { questionOptions: parsed.value.options.map((label, index) => (details[index] ? { label, description: details[index] } : { label })) }
+        : {}),
+    });
     // Never a passive card here: nobody would see it, and the bot would say it showed one.
     if (!raised) return { ok: false, status: 409, error: QUESTION_NOT_RAISED };
     args.authored?.(raised.messageId);

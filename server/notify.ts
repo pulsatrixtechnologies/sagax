@@ -19,6 +19,7 @@
 // notifications today, and closed-app APNs delivery once a relay exists.
 
 import type { Notification, NotifyKind } from "../shared/notification.ts";
+import { buildNotificationContext, notificationChoiceLabels } from "../shared/notification-context.ts";
 import { plainPreviewLine } from "../shared/plain-text.ts";
 
 // The notification wire shape lives in shared/notification.ts now (part of
@@ -98,6 +99,14 @@ export function buildNotification(
     routineRunId?: string;
     routineName?: string;
     choices?: readonly string[];
+    /** #2909: the bot's short label per choice (ask_choice `{label}`). */
+    choiceLabels?: readonly (string | undefined)[];
+    /** #2909: what each choice does (ask_choice `{detail}`). */
+    choiceDetails?: readonly (string | undefined)[];
+    /** #2909: the full detail behind the one-line body (markdown welcome). */
+    context?: string;
+    /** #2909: the chat message holding the card. */
+    cardId?: string;
     proposalId?: string;
   },
 ): Notification | null {
@@ -154,10 +163,30 @@ export function buildNotification(
   if (kind === "proposal" && extra?.proposalId) notification.proposalId = extra.proposalId.slice(0, 128);
   // the card's own question, in the person's words: first on the phone
   if ((kind === "approval" || kind === "question") && extra?.title) notification.ask = title;
-  if (kind === "question" && extra?.choices?.length) {
+  const asks = kind === "approval" || kind === "question" || kind === "needs-you";
+  if ((kind === "question" || kind === "needs-you") && extra?.choices?.length) {
     const choices = notificationChoices(extra.choices);
-    if (choices.length) notification.choices = choices;
+    if (choices.length) {
+      notification.choices = choices;
+      // #2909: short labels the buttons show whole, else Open only
+      const labels = notificationChoiceLabels(choices, extra.choiceLabels ?? []);
+      if (labels.legible && labels.labels) notification.choiceLabels = labels.labels;
+    }
   }
+  // #2909: never a choice without its context
+  if (asks) {
+    const context = buildNotificationContext({
+      question: extra?.title ?? "",
+      detail: extra?.context?.trim() ? extra.context : detail,
+      choices: (notification.choices ?? []).map((answer, index) => ({
+        answer,
+        label: notification.choiceLabels?.[index],
+        detail: extra?.choiceDetails?.[index],
+      })),
+    });
+    if (context) notification.context = context;
+  }
+  if (extra?.cardId) notification.cardId = extra.cardId.slice(0, 128);
   return notification;
 }
 
@@ -180,8 +209,10 @@ export function routineIncidentTitle(who: string, run: { proactive?: unknown; we
 
 /** At most this many choices ride a notification; the phone shows fewer. */
 export const NOTIFICATION_CHOICES_MAX = 10;
-/** A choice longer than this is clipped: a button, not a paragraph. */
-export const NOTIFICATION_CHOICE_MAX = 60;
+/** A choice longer than this is clipped. It is the answer sent, so it keeps
+ * a card option whole (OPTIONS_CARD_LIMITS.option); the button shows its
+ * short label (#2909). */
+export const NOTIFICATION_CHOICE_MAX = 120;
 
 /** A question's choices as a banner can carry them: one line each, clipped,
  * no blanks, no repeats, at most NOTIFICATION_CHOICES_MAX. */
@@ -215,6 +246,14 @@ export function deliverableNotification(
     routineRunId?: string;
     routineName?: string;
     choices?: readonly string[];
+    /** #2909: the bot's short label per choice (ask_choice `{label}`). */
+    choiceLabels?: readonly (string | undefined)[];
+    /** #2909: what each choice does (ask_choice `{detail}`). */
+    choiceDetails?: readonly (string | undefined)[];
+    /** #2909: the full detail behind the one-line body (markdown welcome). */
+    context?: string;
+    /** #2909: the chat message holding the card. */
+    cardId?: string;
     proposalId?: string;
   },
 ): Notification | null {

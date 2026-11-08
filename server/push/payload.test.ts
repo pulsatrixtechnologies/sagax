@@ -251,18 +251,44 @@ describe("an approval push", () => {
     const none = JSON.parse(buildApnsRequest({ message: message({ kind: "approval", prompt: "approval", body: "Publish 2.4?", requestId: "r" }), bundleId: "x", nowMs: 0 }).body);
     expect(none.aps.alert.body).toBe("Publish 2.4?");
   });
-  it("a question carries its choices for the banner's buttons, clipped and without repeats", () => {
+  it("#2909: a question carries its choices only with labels a button shows whole", () => {
     const body = JSON.parse(buildApnsRequest({
-      message: message({ kind: "approval", prompt: "question", requestId: "q1", body: "Which color?", choices: ["Red", " Red ", "Blue", "x".repeat(200)] }),
+      message: message({ kind: "approval", prompt: "question", requestId: "q1", body: "Which color?", choices: ["Red", "Blue", "Green for the dark theme"], choiceLabels: ["Red", "Blue", "Green"] }),
       bundleId: "x", nowMs: 0,
     }).body);
-    expect(body.choices).toHaveLength(3);
-    expect(body.choices.slice(0, 2)).toEqual(["Red", "Blue"]);
-    expect(body.choices[2].length).toBeLessThanOrEqual(60);
+    expect(body.choices).toEqual(["Red", "Blue", "Green for the dark theme"]);
+    expect(body.choiceLabels).toEqual(["Red", "Blue", "Green"]);
     expect(body.aps.category).toBe("SAGAX_QUESTION");
+    // no labels, a label too long, or too many answers: Open only, no cut-off button
+    for (const extra of [
+      { choices: ["Red", "x".repeat(200)] },
+      { choices: ["Red", "Blue"], choiceLabels: ["Red", "A label far too long for a button"] },
+      { choices: ["A", "B", "C", "D"], choiceLabels: ["A", "B", "C", "D"] },
+    ]) {
+      const open = JSON.parse(buildApnsRequest({ message: message({ kind: "approval", prompt: "question", requestId: "q1", body: "Which?", ...extra }), bundleId: "x", nowMs: 0 }).body);
+      expect(open.choices).toBeUndefined();
+      expect(open.aps.category).toBe("SAGAX_OPEN");
+    }
     // an approval never carries choices
     const approval = JSON.parse(buildApnsRequest({ message: message({ kind: "approval", prompt: "approval", requestId: "r", choices: ["A"] }), bundleId: "x", nowMs: 0 }).body);
     expect(approval.choices).toBeUndefined();
+  });
+  it("#2909: an ask's banner body is its whole context, line breaks kept, under 4 KB", () => {
+    const context = "Which plan?\n\nClient : Acme · Hours : 12\n\n• Keep : keep the bank as is\n• Move : move to the 20 h bank";
+    const request = buildApnsRequest({ message: message({ kind: "approval", prompt: "question", requestId: "q", body: "Which plan?", context, cardId: "m-1" }), bundleId: "x", nowMs: 0 });
+    const body = JSON.parse(request.body);
+    expect(body.aps.alert.body).toBe(context);
+    expect(body.cardId).toBe("m-1");
+    const huge = buildApnsRequest({ message: message({ kind: "approval", prompt: "question", requestId: "q", body: "Q?", context: "é".repeat(5000) }), bundleId: "x", nowMs: 0 });
+    expect(Buffer.byteLength(huge.body)).toBeLessThanOrEqual(4096);
+  });
+  it("#2909: a needs-you with legible answers offers them; without, Open", () => {
+    const legible = JSON.parse(buildApnsRequest({ message: message({ kind: "approval", needsYou: true, body: "Close the ticket?", choices: ["Close it", "Leave it open"], choiceLabels: ["Close it", "Leave it open"] }), bundleId: "x", nowMs: 0 }).body);
+    expect(legible.choices).toEqual(["Close it", "Leave it open"]);
+    expect(legible.aps.category).toBe("SAGAX_NEEDS_YOU");
+    const open = JSON.parse(buildApnsRequest({ message: message({ kind: "approval", needsYou: true, body: "?", choices: ["x".repeat(80), "y".repeat(80)] }), bundleId: "x", nowMs: 0 }).body);
+    expect(open.choices).toBeUndefined();
+    expect(open.aps.category).toBe("SAGAX_OPEN");
   });
   it("one id per ask, the conversation's for the rest; the phone uses the same", () => {
     expect(collapseId({ kind: "approval", threadId: "t1", requestId: "r1" })).toBe("sagax.r.t1.r1");

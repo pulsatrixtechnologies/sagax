@@ -2,7 +2,7 @@
 // Definitions and handlers. Assembled in order by agents-catalog.ts;
 // dispatched by agents-call.ts. Never import server/index.ts.
 
-import { ASK_CHOICE_TOOL, ASK_CHOICE_LIMITS, OPTIONS_CARD_LIMITS } from "../../../shared/options-card.ts";
+import { ASK_CHOICE_DETAIL_MAX, ASK_CHOICE_TOOL, ASK_CHOICE_LIMITS, OPTIONS_CARD_LIMITS } from "../../../shared/options-card.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
 import { githubConnectText } from "./shared.ts";
@@ -37,7 +37,7 @@ export const ASK_CHOICE_DEF = {
       type: "object",
       additionalProperties: false,
       properties: {
-        question: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.question, description: "The question, with enough context to answer at a glance." },
+        question: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.question, description: "The question, with what happened and why you wait: enough context to answer from a notification at a glance." },
         title: { type: "string", minLength: 1, maxLength: ASK_CHOICE_LIMITS.title, description: "Optional short heading for the card." },
         options: {
           type: "array",
@@ -45,7 +45,13 @@ export const ASK_CHOICE_DEF = {
           maxItems: OPTIONS_CARD_LIMITS.maxOptions,
           uniqueItems: true,
           items: { type: "string", minLength: 1, maxLength: OPTIONS_CARD_LIMITS.option },
-          description: "2-6 short answers, the recommended one first.",
+          description: "2-6 answers to the question, a few words each, the recommended one first. \"A or B?\" takes A and B, never Yes / No.",
+        },
+        details: {
+          type: "array",
+          maxItems: OPTIONS_CARD_LIMITS.maxOptions,
+          items: { type: "string", maxLength: ASK_CHOICE_DETAIL_MAX },
+          description: "Optional, same order: what each answer does.",
         },
       },
       required: ["question", "options"],

@@ -86,9 +86,13 @@ describe("prompt size by engine and turn kind (#1997)", () => {
       // prompt-references.test.ts requires. The routine prompt measures
       // 11776 bytes (files engines) and 11551 (others); the 60 % cap now
       // leaves about 100 bytes of margin on each.
+      // Raised again (routine 19800 to 23400 and 19400 to 23000, room 51771 to 53500 and 45947 to 48100, #2921): the routine
+      // prompt now measures 13922 bytes (files engines) and 13697 (others)
+      // after the QA 0.8.66 prompt rules (#2905, #2920, sagax_help prefetch
+      // #2919); the 60 % cap leaves about 100 bytes of margin on each.
       const before = engineWorksInFiles(engine)
-        ? { chat: 62102, routine: 19800, room: 51771, "sub-agent": 59893 }
-        : { chat: 56278, routine: 19400, room: 45947, "sub-agent": 54069 };
+        ? { chat: 62102, routine: 23400, room: 53500, "sub-agent": 59893 }
+        : { chat: 56278, routine: 23000, room: 48100, "sub-agent": 54069 };
       expect(bytes).toBeLessThanOrEqual(before[kind] * 0.6);
       const oldSkills = engineWorksInFiles(engine) ? 30306 : 25249;
       expect(skills.index.bytes).toBeLessThanOrEqual(oldSkills * 0.6);

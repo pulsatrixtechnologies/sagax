@@ -117,7 +117,7 @@ public enum BotConversations {
     public static func previewText(
         _ messages: [Message], selfId: String, selfName: String, row: BotConversation
     ) -> String? {
-        lines(messages, selfId: selfId, selfName: selfName, row: row).last?.text
+        lines(messages, selfId: selfId, selfName: selfName, row: row).last.map { PlainText.from(markdown: $0.text) }
     }
 
     /// Threads the open transcript already names, so the quiet line is not

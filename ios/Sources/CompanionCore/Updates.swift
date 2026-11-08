@@ -53,7 +53,8 @@ extension CompanionState {
         for pending in pendingApprovals {
             guard let chat = chat(forThread: pending.threadId), seen.insert(chat.conversationID).inserted else { continue }
             let card = pending.message.card
-            out.append(ChatUpdate(chat: chat, kind: .needsYou, line: card?.subtitle ?? card?.title ?? "", card: card))
+            // a bot writes its question in Markdown: the lock screen reads its words
+            out.append(ChatUpdate(chat: chat, kind: .needsYou, line: PlainText.from(markdown: card?.subtitle ?? card?.title ?? ""), card: card))
         }
 
         for bot in bots where bot.hidden != true {
@@ -109,7 +110,7 @@ extension CompanionState {
 
     private func workingLine(threadId: String) -> String {
         if let live = streaming[threadId], !live.isEmpty {
-            return String(live.suffix(120)).replacingOccurrences(of: "\n", with: " ")
+            return PlainText.from(markdown: String(live.suffix(120)))
         }
         // The hidden "On your computer" line is never the working line either.
         if let last = visibleTranscript(forThread: threadId).last(where: { !isHiddenStatusNotice($0) }), last.kind == .activity, let tool = last.tool {
@@ -123,8 +124,8 @@ extension CompanionState {
         switch last.kind {
         // The new card kinds read as their text until their cards land
         // (WP2), exactly as they did while they decoded as `unknown`.
-        case .text, .unknown, .connector, .access, .goalRun, .widget, .roster: return last.text ?? ""
-        case .options: return last.card?.title ?? ""
+        case .text, .unknown, .connector, .access, .goalRun, .widget, .roster: return PlainText.from(markdown: last.text ?? "")
+        case .options: return PlainText.from(markdown: last.card?.title ?? "")
         case .secret: return last.secret?.label ?? last.text ?? "Credential required"
         case .activity: return last.tool?.name ?? ""
         case .screen: return "Screenshot"

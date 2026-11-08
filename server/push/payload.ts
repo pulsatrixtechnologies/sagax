@@ -10,6 +10,7 @@
 import { createHash } from "node:crypto";
 
 import { botAvatarCropSchema, botAvatarUrlSchema, type BotAvatarCrop } from "../../shared/bot-avatar.ts";
+import { plainPreviewLine } from "../../shared/plain-text.ts";
 import { botMascotLook, type MascotLook } from "../../shared/mascot-look.ts";
 import { botMascotSkin, type MascotSkinId } from "../../shared/mascot-skins.ts";
 
@@ -236,10 +237,12 @@ export function pushPriority(kind: PushKind): 5 | 10 {
 const ASK_MAX = 120;
 
 /** What the banner says under the bot's name: the question first, in plain
- * words, then the detail. Never the question twice. */
+ * words, then the detail. Never the question twice. A lock screen draws no
+ * Markdown, so a body that still carries some (a reach-me notice, an older
+ * caller) reads as plain words here too. */
 export function bannerBody(message: Pick<PushMessage, "kind" | "ask" | "body">): string {
-  const detail = clip(message.body, BODY_MAX);
-  const ask = message.kind === "approval" && message.ask ? clip(message.ask, ASK_MAX) : "";
+  const detail = plainPreviewLine(message.body ?? "", BODY_MAX);
+  const ask = message.kind === "approval" && message.ask ? plainPreviewLine(message.ask, ASK_MAX) : "";
   if (!ask || ask === detail) return detail;
   if (!detail) return ask;
   return `${ask}\n${detail}`;

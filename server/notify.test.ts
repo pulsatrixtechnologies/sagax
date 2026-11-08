@@ -161,6 +161,13 @@ describe("summarize", () => {
     expect(summarize("   padded   ")).toBe("padded");
   });
 
+  it("reads a model's Markdown as plain words before flattening (2026-11-08 push)", () => {
+    const body = "Cinq messages de Nova, tous dépassés. Rien à trancher.\n\n| Champ | Valeur |\n| --- | --- |\n| Source | Nova, 5 messages, tours expirés |";
+    expect(summarize(body, 240)).toBe("Cinq messages de Nova, tous dépassés. Rien à trancher. Source : Nova, 5 messages, tours expirés");
+    expect(summarize("## Bilan\n- **Trois** billets [fermés](https://example.com)\n- `ok`")).toBe("Bilan Trois billets fermés ok");
+    expect(buildNotification("done", bot, "thread-1", "**Fait.** Voir [le lien](https://example.com).")?.body).toBe("Fait. Voir le lien.");
+  });
+
   it("clamps long text with an ellipsis", () => {
     const long = summarize("x".repeat(400));
     expect(long).toHaveLength(140);

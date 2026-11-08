@@ -157,6 +157,19 @@ describe("Reach me: out", () => {
     expect(secret).not.toContain("npm test");
     expect(composeReachText({ ...out, needsKey: true })).toContain("clé de sécurité");
   });
+
+  it("a bot's Markdown reads as words on SMS, WhatsApp and Telegram; an approval's command stays exact", () => {
+    const base: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Nimbus", code: "KM3X", kind: "question", title: "**Publier** la version `2.4` ?", line: "Voir [les notes](https://example.com/n)", confidential: false, needsKey: false, language: "fr" };
+    const question = composeReachText(base);
+    expect(question).toContain("Publier la version 2.4 ?");
+    expect(question).toContain("Voir les notes");
+    expect(question).not.toMatch(/\*\*|`|\]\(/);
+    const notice = composeReachText({ ...base, kind: "notice", title: "## Résumé", line: "Rien à trancher.\n| Champ | Valeur |\n| --- | --- |\n| Source | **Nova** |" });
+    expect(notice).toBe("Nimbus : Résumé\n- Rien à trancher.\n- Source : Nova");
+    const approval = composeReachText({ ...base, kind: "approval", title: "**Lancer** une commande ?", line: "rm -rf /tmp/*.log *_x_*" });
+    expect(approval).toContain("Lancer une commande ?");
+    expect(approval).toContain("rm -rf /tmp/*.log *_x_*");
+  });
 });
 
 describe("Reach me: back", () => {

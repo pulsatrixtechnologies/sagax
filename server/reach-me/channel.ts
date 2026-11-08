@@ -8,6 +8,7 @@
 // own engine connector), telegram (./telegram.ts, the person's own bot),
 // whatsapp (./whatsapp.ts, the person's own WhatsApp Business number).
 // Push is the push hub's (server/push/).
+import { markdownToPlainText } from "../../shared/plain-text.ts";
 import type { ReachChannelId } from "../../shared/reach-me.ts";
 
 /** One card going out, in the words the person reads. */
@@ -66,6 +67,30 @@ function clip(text: string, max: number): string {
   return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
 }
 
+/** A bot's words read on a text channel: SMS, WhatsApp and Telegram (no
+ * parse mode) show Markdown as its syntax, so it leaves first. */
+function words(text: string, max: number): string {
+  return clip(markdownToPlainText(text), max);
+}
+
+/** A notice's lines as plain words: a Markdown table reads as one line of
+ * pairs, never as its pipes and `| --- |` rule. */
+function noticeLines(text: string): string[] {
+  const out: string[] = [];
+  let table: string[] = [];
+  const flush = () => {
+    if (table.length) out.push(markdownToPlainText(table.join("\n")));
+    table = [];
+  };
+  for (const line of text.split("\n")) {
+    if (/^\s*\|/.test(line)) { table.push(line); continue; }
+    flush();
+    out.push(markdownToPlainText(line));
+  }
+  flush();
+  return out.filter((line) => line.trim());
+}
+
 /** The message every text channel sends (sms, Teams, Telegram, WhatsApp): the bot,
  * what it asks, and how to answer with the code. */
 export function composeReachText(out: ReachOutbound): string {
@@ -73,8 +98,8 @@ export function composeReachText(out: ReachOutbound): string {
   const bot = clip(out.botName || (fr ? "Votre bot" : "Your bot"), 60);
   const lines: string[] = [];
   if (out.kind === "notice") {
-    lines.push(`${bot} : ${clip(out.title, MAX_TITLE)}`);
-    for (const line of out.line.split("\n").filter((entry) => entry.trim()).slice(0, 3)) lines.push(`- ${clip(line, MAX_LINE)}`);
+    lines.push(`${bot} : ${words(out.title, MAX_TITLE)}`);
+    for (const line of noticeLines(out.line).slice(0, 3)) lines.push(`- ${clip(line, MAX_LINE)}`);
     return lines.join("\n").slice(0, 1_100);
   }
   if (out.confidential) {
@@ -83,11 +108,13 @@ export function composeReachText(out: ReachOutbound): string {
       : `${bot} is waiting on you in a confidential conversation (its content stays in Sagax).`);
   } else if (out.kind === "question") {
     lines.push(fr ? `${bot} vous pose une question :` : `${bot} asks you:`);
-    lines.push(clip(out.title, MAX_TITLE));
-    if (out.line) lines.push(clip(out.line, MAX_LINE));
+    lines.push(words(out.title, MAX_TITLE));
+    if (out.line) lines.push(words(out.line, MAX_LINE));
   } else {
     lines.push(fr ? `${bot} demande votre approbation :` : `${bot} needs your approval:`);
-    lines.push(clip(out.title, MAX_TITLE));
+    lines.push(words(out.title, MAX_TITLE));
+    // the line is what gets allowed (a command, a path): it reads exactly as
+    // it will run, never with a `*` or `_` taken for emphasis
     if (out.line) lines.push(clip(out.line, MAX_LINE));
   }
   if (out.kind === "question") {

@@ -3,6 +3,7 @@
 // suppression, and which Settings > Notifications type gate applies.
 // The desktop shell shows the banner (electron/desktop-attention.mjs).
 import type { NotifyKind } from "../../shared/notification";
+import { clipAtWord } from "../../shared/plain-text";
 import { plainPreviewText } from "./plain-preview";
 
 export const NATIVE_BODY_MAX = 140;
@@ -76,9 +77,7 @@ export function notificationGroupKey(input: {
 
 /** Plain-text body for the banner: markdown stripped, capped. */
 export function notificationBodyPreview(text: string, max = NATIVE_BODY_MAX): string {
-  const plain = plainPreviewText(text).replace(/\s+/g, " ").trim();
-  if (plain.length <= max) return plain;
-  return `${plain.slice(0, max - 1).trimEnd()}…`;
+  return clipAtWord(plainPreviewText(text), max);
 }
 
 export interface NativeNotificationPayloadInput {

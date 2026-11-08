@@ -19,17 +19,19 @@
 // notifications today, and closed-app APNs delivery once a relay exists.
 
 import type { Notification, NotifyKind } from "../shared/notification.ts";
+import { plainPreviewLine } from "../shared/plain-text.ts";
 
 // The notification wire shape lives in shared/notification.ts now (part of
 // the wire model); re-exported here so existing importers keep working.
 export type { Notification, NotifyKind } from "../shared/notification.ts";
 export { botNotifyArg, notificationAlerts, withBotNotify } from "../shared/notification.ts";
 
-/** One line, short enough for a lock screen, with the newlines and code
- * fences of a model's answer flattened out of it. */
+/** One line, short enough for a lock screen: the Markdown of a model's
+ * answer read as plain words first (a table as `key : value`, code fences
+ * gone), then the newlines flattened and the line cut at a word. Flattening
+ * first left `| Champ | Valeur | | --- |` on a phone (2026-11-08). */
 export function summarize(text: string, max = 140): string {
-  const line = text.replace(/```[\s\S]*?```/g, " ").replace(/\s+/g, " ").trim();
-  return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+  return plainPreviewLine(text ?? "", max);
 }
 
 export interface NotifyBot {

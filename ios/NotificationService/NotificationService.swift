@@ -19,6 +19,9 @@ final class NotificationService: UNNotificationServiceExtension {
             contentHandler(request.content)
             return
         }
+        // a lock screen draws no Markdown: a body an older server sent with
+        // its table or bold still reads as plain words (PlainText)
+        content.body = PlainText.bannerLines(content.body)
         bestAttemptContent = content
         Task {
             let center = UNUserNotificationCenter.current()

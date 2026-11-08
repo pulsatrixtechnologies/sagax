@@ -13,7 +13,7 @@ describe("plainPreviewText", () => {
     ["## Findings\n- The form accepts any password.\n- Cookies lack `Secure`.", "Findings The form accepts any password. Cookies lack Secure."],
     ["1. first\n2) second\n- [x] done", "first second done"],
     ["> quoted line\n>> nested", "quoted line nested"],
-    ["| name | score |\n|---|:---:|\n| Ada | 9 |", "name score Ada 9"],
+    ["| name | score |\n|---|:---:|\n| Ada | 9 |", "Ada : 9"],
     ["_lightly_ and *also* and ~~gone~~ and ***all***", "lightly and also and gone and all"],
     ["above\n\n---\n\nbelow", "above below"],
     ["line one<br>line two", "line one line two"],

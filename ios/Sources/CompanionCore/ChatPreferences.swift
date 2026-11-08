@@ -241,12 +241,13 @@ public func isReceivedComm(_ comm: CommChip, toolName: String?) -> Bool {
 /// What a single message reads as in a roster row.
 func previewText(of message: Message) -> String {
     switch message.kind {
-    case .text: return message.webhookContent?.task ?? message.text ?? ""
+    // a reply's Markdown reads as its words in a row (PlainText)
+    case .text: return PlainText.from(markdown: message.webhookContent?.task ?? message.text ?? "")
     // a pending card's question is the preview; the roster row already
     // says "waiting on you" beside it
     case .options:
         guard let card = message.card else { return "" }
-        return card.isPending && !card.subtitle.isEmpty ? card.subtitle : card.title
+        return PlainText.from(markdown: card.isPending && !card.subtitle.isEmpty ? card.subtitle : card.title)
     case .secret:
         return message.secret?.label ?? message.text ?? "Credential required"
     case .activity:

@@ -35,6 +35,14 @@ describe("APNs payload", () => {
     });
   });
 
+  it("reads a body's Markdown as plain words on the lock screen (2026-11-08)", () => {
+    const flattened = "Cinq messages de Nova, tous dépassés. Rien à trancher. | Champ | Valeur | | --- | --- | | Source | Nova, 5 messages, tours expirés";
+    const request = buildApnsRequest({ message: message({ body: flattened }), bundleId: "ca.pulsatrix.sagax", nowMs: 2_000_000 });
+    expect(JSON.parse(request.body).aps.alert.body).toBe("Cinq messages de Nova, tous dépassés. Rien à trancher. Source : Nova, 5 messages, tours expirés");
+    const bold = buildApnsRequest({ message: message({ body: "**Prêt.**\n- [Rapport](https://example.com)" }), bundleId: "ca.pulsatrix.sagax", nowMs: 2_000_000 });
+    expect(JSON.parse(bold.body).aps.alert.body).toBe("Prêt. Rapport");
+  });
+
   it("a nudge is priority 10, time sensitive, with the wizz and the phone's own strings", () => {
     const request = buildApnsRequest({
       message: message({ kind: "nudge", title: "Alice sent you a nudge", body: "Open the conversation to answer.", titleLocKey: "%@ sent you a nudge", titleLocArgs: ["Alice"], bodyLocKey: "Open the conversation to answer.", id: "n1", fromId: "pr_alice" }),

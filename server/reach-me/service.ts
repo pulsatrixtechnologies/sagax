@@ -24,6 +24,7 @@
 //   the bot, the channel and the outcome.
 import { randomBytes } from "node:crypto";
 
+import { plainPreviewLine } from "../../shared/plain-text.ts";
 import { DEFAULT_REACH_ME, reachesBy, splitReachReply, readReachDecision, withinReachHours, type ReachChannelId, type ReachMeSettings, REACH_WIRED } from "../../shared/reach-me.ts";
 import type { PushMessage } from "../push/payload.ts";
 import { defang } from "../triggers/webhooks.ts";
@@ -227,7 +228,8 @@ export class ReachMe {
     if (reachesBy(settings, "push")) {
       this.deps.push({
         kind: "message", personId: notice.person, title: notice.botName || notice.title,
-        body: [notice.title, ...notice.lines].join("\n").slice(0, 600),
+        // a notice line can be a bot's Markdown: the phone reads it as words
+        body: plainPreviewLine([notice.title, ...notice.lines].join("\n"), 600),
         threadId: notice.threadId, botId: notice.botId, id: notice.id, at: this.now(),
       });
     }

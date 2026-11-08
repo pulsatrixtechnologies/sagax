@@ -39,11 +39,13 @@ public struct NotificationFrame: Codable, Hashable, Sendable {
     public var proposalId: String? = nil
 
     /// What the banner says under the bot's name: the question first, then
-    /// the detail, never the question twice.
+    /// the detail, never the question twice. A banner draws no Markdown: both
+    /// read as plain words (PlainText).
     public var bannerBody: String {
-        let ask = (self.ask ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard kind == "approval", !ask.isEmpty, ask != body else { return body }
-        return body.isEmpty ? ask : "\(ask)\n\(body)"
+        let detail = PlainText.from(markdown: body, dropCode: true)
+        let ask = PlainText.from(markdown: self.ask ?? "", dropCode: true)
+        guard kind == "approval", !ask.isEmpty, ask != detail else { return detail }
+        return detail.isEmpty ? ask : "\(ask)\n\(detail)"
     }
 
     /// A bot blocked on you, as opposed to one reporting in.

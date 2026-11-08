@@ -169,6 +169,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"exact","route":"/api/internal/shared-computers","tier":"read","readOnly":true,"scope":"internal:read","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/shared-computers","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/internal/skills","tier":"read","readOnly":true,"scope":"internal:read","defaultEnabled":true},
+  {"method":"POST","kind":"exact","route":"/api/internal/skills-find","tier":"read","readOnly":false,"scope":"internal:read","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/skills/stage","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/team-memory","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/internal/team-setup-catalog","tier":"read","readOnly":true,"scope":"internal:read","defaultEnabled":true},

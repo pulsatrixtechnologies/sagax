@@ -114,7 +114,23 @@ export const DEF_GROUP_MEMORY_UPDATE = {
     },
   };
 
-export const EXTRAS_TOOL_NAMES: ReadonlySet<string> = new Set(['create_options_card', 'ask_choice', 'remove_reaction', 'connect_github', 'send_voice_note', 'group_memory_update'] as const);
+export const DEF_SKILLS_FIND = {
+    name: "skills_find",
+    description:
+      "Find the best skills and plugins for a task in every catalog: the person's marketplaces (Hermes Agent, OpenClaw, Anthropic), official catalogs not added yet, and ClawHub. Use before a job (coding included) or when asked. Returns ranked matches with the install step (act plugins install or addMarketplace); offer the best, install what the person picks.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        query: { type: "string", minLength: 1, maxLength: 400, description: "The task, in a few words (e.g. typescript code review)." },
+        limit: { type: "integer", minimum: 1, maximum: 25, description: "Matches per source (10)." },
+        clawhub: { type: "boolean", description: "Also search ClawHub (true)." },
+      },
+      required: ["query"],
+    },
+  };
+
+export const EXTRAS_TOOL_NAMES: ReadonlySet<string> = new Set(['create_options_card', 'ask_choice', 'remove_reaction', 'connect_github', 'send_voice_note', 'group_memory_update', 'skills_find'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callExtrasTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -173,6 +189,21 @@ export async function callExtrasTool(name: string, args: Json, context: ToolCall
     }
     const entry = typeof r.entry === "string" && r.entry ? ` Entry: ${r.entry}` : "";
     return { text: `Group memory updated.${entry}` };
+  }
+  if (name === "skills_find") {
+    if (typeof args.query !== "string" || !args.query.trim()) {
+      return { text: "skills_find needs query: the task, in a few words (for example: typescript code review).", isError: true };
+    }
+    const { status, body: r } = await apiResponse("/api/internal/skills-find", {
+      method: "POST",
+      body: JSON.stringify({
+        fromBotId: BOT_ID, fromThreadId: THREAD_ID, query: args.query.trim().slice(0, 400),
+        ...(Number.isInteger(args.limit) ? { limit: Math.min(25, Math.max(1, Number(args.limit))) } : {}),
+        ...(typeof args.clawhub === "boolean" ? { clawhub: args.clawhub } : {}),
+      }),
+    });
+    if (status >= 400 || r.error) return { text: String(r.error ?? "The skill search failed."), isError: true };
+    return { text: String(r.text ?? "Nothing found.").slice(0, 12000) };
   }
   return null;
 }

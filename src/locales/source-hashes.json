@@ -18027,7 +18027,16 @@
       "pluginTeam.importing": "c01c4324f1fa14fc76957936626e11a5150c24e748dbd08cc46848dfcbe37d00",
       "approval.status.teamImported": "0a27f11e98e88d684251caa912acdad17f6e269cba16eb14f68e1e05e2fc1c89",
       "grokBridge.inbound": "b381341c995a92defe78607f3e39f32828880b4d5342d90e91e66bb255748862",
-      "grokBridge.copyInbound": "7c4e5224f9d457fe63e2a819596585224084adced91bff9c9a79d252178b847a"
+      "grokBridge.copyInbound": "7c4e5224f9d457fe63e2a819596585224084adced91bff9c9a79d252178b847a",
+      "connectApps.market.official.title": "f5b431f4c044db47bbcfe45df50abbdf4cf422450080a1b73a7ac27370abab7a",
+      "connectApps.market.official.intro": "6352972317dd909efdab128707748c98a94bd9d04b0daabc2af991d86b598b2f",
+      "connectApps.market.official.add": "9fd728c66c9a256b121472dabf32a34317aed01d8427d70ec830289cf23a7cc8",
+      "connectApps.market.official.addAria": "504f3cb6ca5d123c19ea06b2e9fcafe050a63f52e092c070ec96afea412f4664",
+      "connectApps.market.official.added": "6b02e0d363a4af1c95eef50364bb0202c8b250aa05a48a69e68fd7787b4b0632",
+      "connectApps.market.official.hermes": "44ae387c6688874f46dde842444ea8f75dea16d010fc7cdee535ed4ff41a26a1",
+      "connectApps.market.official.openclaw": "53a7d9bbddc346814034679aca02335f611030bfefd244c1325fb44aff51c7e2",
+      "connectApps.market.official.claudePlugins": "1a2f62e5cdcfe6e6578e2e6e0cdb99b96c61c351a5ec6095ee2422ce97f327a9",
+      "connectApps.market.official.agentSkills": "9b1f35bc79816f9514f7f9e7fdd496a8b6a6e585e21784cb0de7632bfcabef6c"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

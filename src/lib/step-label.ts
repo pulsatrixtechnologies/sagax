@@ -113,7 +113,7 @@ const BARE: Record<string, Kind> = {
   read_transcript_page: "readConversations", read_latest_page: "readConversations",
   read_latest_page_with_threads: "readConversations", read_transcript_cold: "readConversations",
   list_routines: "routine", propose_routine: "routine", propose_routine_action: "routine", schedule_routine: "routine", manage_routine: "routine",
-  skills_list: "skill", skill_manage: "skill", stage_skill: "skill", update_skill: "skill",
+  skills_list: "skill", skill_manage: "skill", stage_skill: "skill", update_skill: "skill", skills_find: "skill",
   attach_file: "attachFile",
   react_to_message: "react", remove_reaction: "react",
   create_options_card: "card",

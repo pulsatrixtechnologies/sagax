@@ -183,6 +183,8 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // 2026-11-07 (#2669): import_plugin_team joins the Primary Bot's team tools,
 // and the routine github trigger already on the base moved every profile;
 // baselines move to the measured wire.
+// 2026-11-07 (#2613): skills_find (best skills and plugins for a task across
+// every catalog) joins direct and room turns; baselines move to the measured wire.
 const BUDGET_BASELINE: Record<string, number> = {
   // #2118: message_user and message_person join the direct catalog (measured wire).
   // native-notifications: notify on post_to_room/message_user/message_person/send_to_bot
@@ -222,22 +224,22 @@ const BUDGET_BASELINE: Record<string, number> = {
   "direct+skills+shared+non-chief": 95358,
   "direct+skills+shared+voice+non-chief": 96325,
   // 2026-11-06 #2519 (#2204 port): assignment_status joins the room catalog (measured wire).
-  "room+non-chief": 78899,
-  "room+voice+non-chief": 79866,
-  "room+shared+non-chief": 80900,
-  "room+shared+voice+non-chief": 81867,
-  "room+skills+non-chief": 80521,
-  "room+skills+voice+non-chief": 81488,
-  "room+skills+shared+non-chief": 82522,
-  "room+skills+shared+voice+non-chief": 83489,
-  "room+own-thread+non-chief": 80952,
-  "room+own-thread+voice+non-chief": 81919,
-  "room+own-thread+shared+non-chief": 82953,
-  "room+own-thread+shared+voice+non-chief": 83920,
-  "room+own-thread+skills+non-chief": 82574,
-  "room+own-thread+skills+voice+non-chief": 83541,
-  "room+own-thread+skills+shared+non-chief": 84575,
-  "room+own-thread+skills+shared+voice+non-chief": 85542,
+  "room+non-chief": 81142,
+  "room+voice+non-chief": 82109,
+  "room+shared+non-chief": 83143,
+  "room+shared+voice+non-chief": 84110,
+  "room+skills+non-chief": 82764,
+  "room+skills+voice+non-chief": 83731,
+  "room+skills+shared+non-chief": 84765,
+  "room+skills+shared+voice+non-chief": 85732,
+  "room+own-thread+non-chief": 83195,
+  "room+own-thread+voice+non-chief": 84162,
+  "room+own-thread+shared+non-chief": 85196,
+  "room+own-thread+shared+voice+non-chief": 86163,
+  "room+own-thread+skills+non-chief": 84817,
+  "room+own-thread+skills+voice+non-chief": 85784,
+  "room+own-thread+skills+shared+non-chief": 86818,
+  "room+own-thread+skills+shared+voice+non-chief": 87785,
   // Annotations on check_delegation / wait_delegation (read-only policy).
   // External runtime does not mount send_meme (or the rest of the agents catalog).
   // 2026-11-06 #2519 (#2204 port): coordinate_bots and assignment_status on external (measured wire).

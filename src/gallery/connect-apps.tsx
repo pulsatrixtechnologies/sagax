@@ -342,7 +342,7 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
   }) as typeof window.fetch;
 }
 
-const deepLinkPage = params.get("page") === "bots" || params.get("page") === "pages" ? params.get("page") as "bots" | "pages" : null;
+const deepLinkPage = ["bots", "pages", "sources"].includes(params.get("page") ?? "") ? params.get("page") as "bots" | "pages" | "sources" : null;
 
 function Manage() {
   const { state, dispatch } = useStore();

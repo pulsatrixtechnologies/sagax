@@ -14,11 +14,12 @@
 // parent says so (`needsToken`): the pick opens there, or a link to My
 // accounts > GitHub when there is nothing to pick.
 import { useEffect, useState, type ReactNode } from "react";
-import { Loader2, Lock, Plus, RefreshCw, Store, Trash2, Users } from "lucide-react";
+import { BookOpen, Check, Loader2, Lock, Plus, RefreshCw, Store, Trash2, Users } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { credentialOptions, useGithubCredentials, type MarketplaceCredentialView } from "@/lib/github-credentials";
 import { t } from "@/lib/i18n";
+import { OFFICIAL_CATALOGS } from "../../../shared/skill-catalogs";
 
 export type MarketplaceVisibility = "private" | "org";
 
@@ -167,6 +168,8 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
   const [source, setSource] = useState("");
   const [ref, setRef] = useState("");
   const [visibility, setVisibility] = useState<MarketplaceVisibility>("private");
+  /** the official catalog being added in one click */
+  const [pendingOfficial, setPendingOfficial] = useState<string | null>(null);
   /** the credential picked for an add the git host refused */
   const [addCredential, setAddCredential] = useState<string | null>(null);
   /** "add", or the marketplace whose pick the git host asked for */
@@ -314,6 +317,60 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
           })}
         </ul>
       )}
+      <OfficialCatalogs marketplaces={marketplaces ?? []} disabled={disabled || busy !== null} adding={busy === "add" ? pendingOfficial : null}
+        onAdd={(catalogSource) => { setPendingOfficial(catalogSource); void onAdd(catalogSource, "", visibility).finally(() => setPendingOfficial(null)); }} />
     </section>
+  );
+}
+
+function officialCatalogBlurb(id: string): string {
+  switch (id) {
+    case "hermes-agent": return t("connectApps.market.official.hermes");
+    case "openclaw": return t("connectApps.market.official.openclaw");
+    case "claude-plugins-official": return t("connectApps.market.official.claudePlugins");
+    default: return t("connectApps.market.official.agentSkills");
+  }
+}
+
+/** #2613: the official skill catalogs (Hermes Agent, OpenClaw, Anthropic),
+ * each added in one click; one already in the list shows Added. */
+function OfficialCatalogs({ marketplaces, disabled, adding, onAdd }: {
+  marketplaces: MarketplaceSummary[];
+  disabled?: boolean;
+  adding: string | null;
+  onAdd: (source: string) => void;
+}) {
+  const added = new Set(marketplaces.map((market) => market.source.toLowerCase()));
+  return (
+    <div className="mt-5" data-plugins-official-catalogs="">
+      <h4 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.market.official.title")}</h4>
+      <p className="mb-2 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.market.official.intro")}</p>
+      <ul className="divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]">
+        {OFFICIAL_CATALOGS.map((catalog) => {
+          const isAdded = added.has(catalog.source.toLowerCase());
+          return (
+            <li key={catalog.id} data-official-catalog={catalog.id} className="flex items-center gap-3 px-4 py-2.5">
+              <BookOpen size={16} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium text-ink">{catalog.label}</div>
+                <div className="truncate text-[11.5px] text-ink-secondary">
+                  <span className="font-mono">{catalog.source}</span>{" · "}{officialCatalogBlurb(catalog.id)}
+                </div>
+              </div>
+              {isAdded ? (
+                <span className="flex items-center gap-1 text-[12px] text-ink-secondary" data-official-catalog-added=""><Check size={14} aria-hidden="true" />{t("connectApps.market.official.added")}</span>
+              ) : (
+                <button type="button" className="ui-button flex items-center gap-1.5 text-[12px]" disabled={disabled}
+                  data-official-catalog-add={catalog.id}
+                  aria-label={t("connectApps.market.official.addAria", { name: catalog.label })}
+                  onClick={() => onAdd(catalog.source)}>
+                  {adding === catalog.source ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {t("connectApps.market.official.add")}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

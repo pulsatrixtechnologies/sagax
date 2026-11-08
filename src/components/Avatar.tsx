@@ -356,6 +356,7 @@ function CharacterAvatar({
         sidebarGazeRef={shapeGazeRef}
         move={move}
         moveBody
+        avatarDef={full.avatarDef}
         label={label ?? null}
       />
     );

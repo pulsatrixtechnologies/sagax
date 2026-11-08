@@ -274,10 +274,25 @@ const TASKS = new Set(["idle", "working", "waiting", "error"]);
 const LIVELINESS = new Set(["calm", "normal", "lively"]);
 const MAX_TOKENS = 1e9;
 const CHARACTERS = new Set(["owl", "shape", "trombi", "bunbu", "shiba", "grump", "ogre", "frog", "crab"]);
-const SHAPES = new Set([
+export const SHAPES = new Set([
   "circle", "bean", "squircle", "pill", "pick", "hexagon", "cloud", "drop", "pumpkin", "egg", "gem", "wedge", "diamond", "star", "clover", "flower",
   "blossom", "cat", "ghost", "jellyfish", "axolotl", "puff", "pin", "marker", "sprite", "flask", "tube", "potion", "chomp", "nibble", "shield", "bubble",
+  // the object silhouettes (shared/mascot-look.ts OBJECT_MASCOT_SHAPES): without them the
+  // desktop drew a plain circle for a sprout, a cup... (#desktop-pet-mascot); the test keeps
+  // this list equal to MASCOT_SHAPES
+  "pad", "cup", "bulb", "say", "sprout", "tin", "tome", "ship",
 ]);
+/** A person's own shape (shared/shape-avatar-def.ts): passed on as plain JSON, bounded; the page validates it with the app's schema. */
+const AVATAR_DEF_MAX = 64_000;
+function avatarDef(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  try {
+    const json = JSON.stringify(value);
+    return json.length <= AVATAR_DEF_MAX ? JSON.parse(json) : null;
+  } catch {
+    return null;
+  }
+}
 /** Shapes from earlier sets and the display names (shared/mascot-look.ts LEGACY_SHAPES). */
 const LEGACY_SHAPES = { blob: "bean", pebble: "bean", triangle: "pick", capsule: "pill", droplet: "drop", sparkle: "squircle", house: "hexagon" };
 const SHAPE_SKINS = new Set(["plain", "pastel", "glossy", "night", "outline", "gold", "neon", "chrome", "crystal", "circuit", "holo", "molten", "galaxy"]);
@@ -326,6 +341,7 @@ export function mascotLook(value) {
     character: value.character,
     ...(value.style === "2d" || value.style === "3d" ? { style: value.style } : {}),
     ...(SHAPES.has(LEGACY_SHAPES[value.shape] ?? value.shape) ? { shape: LEGACY_SHAPES[value.shape] ?? value.shape } : {}),
+    ...(value.character === "shape" && avatarDef(value.avatarDef) ? { avatarDef: avatarDef(value.avatarDef) } : {}),
     ...(Object.keys(cleanSkins).length ? { skins: cleanSkins } : {}),
   };
 }

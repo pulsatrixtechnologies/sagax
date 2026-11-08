@@ -14,6 +14,7 @@ import { botAvatarProfile, clampAvatarFocus, clampAvatarZoom } from "../../share
 import { MASCOT_FAMILY_OF, type MascotCatalogFamily } from "../../shared/mascot-catalog.ts";
 import { MASCOT_COLOR_HEX, type MascotColorName } from "../../shared/mascot-colors.ts";
 import { completeMascotLook, mascotLookSchema, type MascotCharacter } from "../../shared/mascot-look.ts";
+import type { ShapeAvatarDef } from "../../shared/shape-avatar-def.ts";
 import { botMascotSkin } from "../../shared/mascot-skins.ts";
 
 /** The largest avatar the console route serves: the image attachment cap. */
@@ -38,6 +39,9 @@ export interface AdminBotLook {
   skin: string;
   /** The shape character's shape, else null. */
   shape: string | null;
+  /** The shape character's custom drawing (body, parts), so a console
+   * draws the same mascot as the bot list; null for a built-in shape. */
+  avatarDef: ShapeAvatarDef | null;
   /** The face the owl rests on, when the owner picked one. */
   expression: string | null;
   image: AdminBotImage | null;
@@ -107,6 +111,7 @@ export function botLook(bot: LookSource, avatarExists: (fileName: string) => boo
     colorHex: Object.hasOwn(MASCOT_COLOR_HEX, color) ? MASCOT_COLOR_HEX[color as MascotColorName] : null,
     skin,
     shape: character === "shape" ? complete.shape : null,
+    avatarDef: character === "shape" ? (complete.avatarDef ?? null) : null,
     expression: typeof bot.mascotExpression === "string" && bot.mascotExpression ? bot.mascotExpression.slice(0, 40) : null,
   };
   const profile = botAvatarProfile(bot);

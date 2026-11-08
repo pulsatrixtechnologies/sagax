@@ -158,7 +158,7 @@ struct CompactBotEntry: View {
     }
 
     /// The name, then the role on its own line BELOW it, smaller and grey
-    /// (JC 2026-11-06: never the name and the title side by side).
+    /// (the owner 2026-11-06: never the name and the title side by side).
     private func nameAndRole(_ bot: Bot, _ row: CompactBotRow) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             name(bot, row)

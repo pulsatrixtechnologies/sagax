@@ -70,7 +70,7 @@ enum HomeMetrics {
     /// Name line bottom to preview line top (preview baseline 55.7).
     static let previewGap: CGFloat = 5.43
     static let previewLine: CGFloat = 14.9
-    /// A bot row with a role (JC 2026-11-06): the role sits on its own line
+    /// A bot row with a role (the owner 2026-11-06): the role sits on its own line
     /// under the name, 12 pt grey, and the text block rises to stay centred.
     static let roleLine: CGFloat = 14
     static let roleGap: CGFloat = 1
@@ -78,7 +78,7 @@ enum HomeMetrics {
     static let previewIconBox: CGFloat = 12
     static let previewIconGap: CGFloat = 8
 
-    /// The bottom bar (Grok Bot iOS, 2026-11-01): 48 pt controls 28 pt in
+    /// The bottom bar (reference app iOS, 2026-11-01): 48 pt controls 28 pt in
     /// from the screen edges, 12 pt apart; the Search pill fills the rest.
     static let bottomControl: CGFloat = 48
     static let bottomInset: CGFloat = 28
@@ -122,7 +122,7 @@ struct HomeAccountButton: View {
     @ObservedObject private var approvals = OrgApprovalsCenter.shared
 
     var body: some View {
-        // A tap opens Settings, the account sheet, as in Grok Bot
+        // A tap opens Settings, the account sheet, as in the reference app
         // (2026-11-01); touch and hold keeps the whole account menu, which
         // the apps button at the bottom also lists.
         Button {
@@ -245,7 +245,7 @@ struct HomePinnedCell: View {
 
             HStack(alignment: .top, spacing: HomeMetrics.unreadGap) {
                 // the lead reads its name in the primary ink with its role
-                // BELOW (JC 2026-11-06, never "Name · Role"); the grid keeps
+                // BELOW (the owner 2026-11-06, never "Name · Role"); the grid keeps
                 // the quiet name
                 let lines = isLead ? HomeChatRow.nameAndRole(chat, name: people.name(chat, session: session)) : (name: people.name(chat, session: session), role: nil)
                 VStack(spacing: 1) {
@@ -426,7 +426,7 @@ struct HomeChatRow: View {
             VStack(alignment: .leading, spacing: 0) {
                 nameLine.frame(height: HomeMetrics.nameLine)
                 if let roleText {
-                    // the role on its own line under the name (JC 2026-11-06)
+                    // the role on its own line under the name (the owner 2026-11-06)
                     Text(verbatim: roleText)
                         .font(HomeMetrics.font12)
                         .foregroundStyle(Theme.textSecondaryHome)
@@ -560,7 +560,7 @@ struct HomeChatRow: View {
 
 // MARK: - Bottom bar
 
-/// The bottom bar's Search pill (Grok Bot iOS): a 48 pt glass capsule with
+/// The bottom bar's Search pill (reference app iOS): a 48 pt glass capsule with
 /// the magnifier and "Search", filling the row beside the apps button.
 struct HomeSearchPill: View {
     @Environment(\.themePalette) var themePalette
@@ -599,7 +599,7 @@ enum HomeApp: String, CaseIterable {
     case updates, connectApps, templates
 }
 
-/// The apps button at the bottom leading corner (Grok Bot's grid with a
+/// The apps button at the bottom leading corner (reference app's grid with a
 /// +): the places the account menu lists (Settings, Team map,
 /// Automations, Achievements, Release notes, About, Help), then Updates,
 /// Connect apps and Templates.
@@ -653,7 +653,7 @@ struct HomeAppsButton: View {
     }
 }
 
-/// Grok Bot's apps glyph: three rounded squares and a +, on a 2 x 2 grid.
+/// The reference app's apps glyph: three rounded squares and a +, on a 2 x 2 grid.
 struct AppsGridGlyph: View {
     var body: some View {
         Canvas { context, size in

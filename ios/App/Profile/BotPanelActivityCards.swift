@@ -1,4 +1,4 @@
-// Activity tab cards for the bot panel (Grok Bot parity, #2127):
+// Activity tab cards for the bot panel (reference app parity, #2127):
 // Upcoming (routines with toggle, Show more after 5), Computer
 // ("Bot's computer · Awake" with vignette), Voice chat (Voice, Speed, Language).
 import CompanionCore

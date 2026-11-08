@@ -113,6 +113,21 @@ const DOTTED_INITIALS = /(?<![\p{L}\p{N}.])(\p{L})\.\s?(\p{L})\.(?![\p{L}\p{N}])
 
 /** The allowlist: { term, context (a regex source), reason } entries, with
  * an optional `files` regex source limiting the files an entry covers. */
+// The source scan's second pass (scripts/check-source-terms.mjs): files the
+// package never holds but the public repository shows. Tests and fixtures in
+// any case (ios/Tests, ios/UITests, Fixtures/, SagaxTests/, package-fixtures/)
+// and the whole iOS tree, which ships as an app, not in the package.
+const TEST_OR_FIXTURE_PATH = /(?:\.test\.|\.e2e\.|\.node-test\.|\.spec\.|(?:^|\/)(?:__tests__|testing|[\w-]*?tests?|e2e|[\w-]*?fixtures?|__fixtures__|__snapshots__)\/|(?:Tests?|UITests?)\.swift$)/i;
+export const PUBLIC_SOURCE_TREES = ["ios"];
+const EVERYWHERE_SKIPPED_PATH = /(?:^|\/)(?:third_party|node_modules)\/|^pnpm-lock\.yaml$|^src\/data\/given-names\/|\.(?:png|jpe?g|gif|webp|ico|icns|woff2?|ttf|otf|wasm|zip|gz|mp[34]|m4a|wav|caf|aiff?|mov|pdf|bin|onnx|gguf|p8|car|mlmodelc?)$/i;
+export function everywhereSkipped(file) {
+  return EVERYWHERE_SKIPPED_PATH.test(file);
+}
+export function secondPassPath(file) {
+  if (!file || everywhereSkipped(file)) return false;
+  return TEST_OR_FIXTURE_PATH.test(file) || PUBLIC_SOURCE_TREES.some((tree) => file.startsWith(`${tree}/`));
+}
+
 export function loadAllowlist(file) {
   const entries = JSON.parse(readFileSync(file, "utf8"));
   if (!Array.isArray(entries)) throw new Error(`${file} must be a JSON array`);

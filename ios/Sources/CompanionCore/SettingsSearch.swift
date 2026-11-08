@@ -11,7 +11,7 @@ public enum SettingsDestination: String, CaseIterable, Hashable, Sendable {
     // then the pages one level in.
     case general, organization, appearance, notifications, privacy, achievements, experimental, plugins, account, botComputer, pages, usage
     case rules, approvalGrants, timeZone, language, haptics, quickReplies, walkieVoice, about, credentials, securityKeys
-    // The Grok Bot layout's own pages (SettingsTree)
+    // The reference app layout's own pages (SettingsTree)
     case bots, privacySecurity
     // Settings > Bots > My engines (#1098)
     case myEngines

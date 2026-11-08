@@ -137,7 +137,7 @@ final class DesktopPersonaWindowUITests: XCTestCase {
         XCTAssertTrue(editBot.waitForExistence(timeout: 5), "Edit bot in the menu")
         editBot.tap()
         XCTAssertTrue(element(app, "desktop-bot-profile-host").waitForExistence(timeout: 10), "Edit bot opens the profile")
-        XCTAssertTrue(element(app, "bot-profile-page").waitForExistence(timeout: 5), "the Grok Bot profile page")
+        XCTAssertTrue(element(app, "bot-profile-page").waitForExistence(timeout: 5), "the bot profile page")
         let general = element(app, "bot-profile-tab.general")
         let knowledge = element(app, "bot-profile-tab.knowledge")
         let settingsToggle = element(app, "bot-profile-settings-toggle")

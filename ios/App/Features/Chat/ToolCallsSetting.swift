@@ -1,6 +1,6 @@
 // Settings > Appearance > Tool calls ("Details" in the chat), the desktop's
 // switch (`features.showToolCalls` on the server, AppearanceSettings.tsx
-// ToolCallsRow): off, the chat reads like Grok Bot (steps gone, a turn's
+// ToolCallsRow): off, the chat reads like the reference app (steps gone, a turn's
 // narration folded, failures kept); on, every step shows. One setting for
 // the desktop, the iPad and the iPhone, read from GET /api/config and
 // refreshed by the stream's `config` frame. Last value kept on this phone

@@ -362,7 +362,7 @@ struct DesktopFindClip: ViewModifier {
 
 // MARK: - Header
 
-/// The chat header like Grok Bot (#2141 / BotChatHeader.tsx): for a bot, one
+/// The chat header like the reference app (#2141 / BotChatHeader.tsx): for a bot, one
 /// centred name pill (mascot 22, the name with the title stacked below it,
 /// 40 high) that toggles the panel. Groups keep a single pill. Trailing chrome: More options, threads,
 /// Dev pods, New topic. While the docked panel is open its top bar holds the
@@ -474,7 +474,7 @@ struct DesktopChatHeader: View {
         .accessibilityIdentifier("desktop-chat-pill")
     }
 
-    /// The name, then the title BELOW it (JC 2026-11-06: never "Name · Title"
+    /// The name, then the title BELOW it (the owner 2026-11-06: never "Name · Title"
     /// on one line, `PillName`): the name in 15 regular ink, the title in 12
     /// secondary grey, each truncated on its own line.
     private func nameAndLabel(bot: Bot) -> some View {

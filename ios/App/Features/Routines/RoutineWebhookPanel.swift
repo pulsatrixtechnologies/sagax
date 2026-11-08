@@ -19,7 +19,7 @@ struct RoutineWebhookPanel: View {
     @State private var webhooks: [WebhookListing] = []
     @State private var ingress: WebhookIngress?
     @State private var loaded = false
-    /// Lot 5: list load failed (Grok Bot shows Try again + this phrase).
+    /// Lot 5: list load failed (reference app shows Try again + this phrase).
     @State private var loadError: String?
     @State private var token: String?
     @State private var shown = false
@@ -45,7 +45,7 @@ struct RoutineWebhookPanel: View {
                 note(String(localized: "The address and the key appear once the routine is saved."))
                     .accessibilityIdentifier("routine-webhook-new")
             } else if let loadError = loadError {
-                // Lot 5 / Grok Bot: error + Try again when the webhook list
+                // Lot 5 / reference app: error + Try again when the webhook list
                 // cannot be read.
                 VStack(alignment: .leading, spacing: 10) {
                     Button {

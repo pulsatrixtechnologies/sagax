@@ -1,4 +1,4 @@
-// The Grok Bot share card's "Start from the description" (shared/grok-import.ts grokStarterPackage).
+// The x.ai bot share card's "Start from the description" (shared/grok-import.ts grokStarterPackage).
 import XCTest
 @testable import CompanionCore
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { EXACT_WORDS, JOINED_INITIALS, LOWER_CASE_WORDS, loadAllowlist, printableRuns, scanPackage, scanText, SUBSTRING_WORDS } from "./npm-package-terms.mjs";
+import { EXACT_WORDS, JOINED_INITIALS, LOWER_CASE_WORDS, loadAllowlist, printableRuns, scanPackage, scanText, secondPassPath, SUBSTRING_WORDS } from "./npm-package-terms.mjs";
 
 // The real words are private (digests only), so the scan is exercised with
 // made-up ones added to the same tables.
@@ -205,5 +205,32 @@ describe("npm package term scan", () => {
     const dir = folder();
     writeFileSync(join(dir, "list.json"), JSON.stringify([{ term: "company", context: "x", reason: " " }]));
     expect(() => loadAllowlist(join(dir, "list.json"))).toThrow("reason");
+  });
+});
+
+// #2830: the source scan's second pass takes tests and fixtures in any case
+// (ios/Tests, ios/UITests, Fixtures/) and the whole iOS tree.
+describe("secondPassPath", () => {
+  it("takes tests and fixtures whatever their case, and every iOS file", () => {
+    for (const file of [
+      "server/a.test.ts",
+      "electron/desktop-bridge.node-test.mjs",
+      "ios/Tests/CompanionCoreTests/DecodingTests.swift",
+      "ios/Tests/CompanionCoreTests/Fixtures/turn.json",
+      "ios/UITests/SettingsUITests.swift",
+      "ios/UITests/CallAudio/bot/line.txt",
+      "Fixtures/x.json",
+      "app/SagaxTests/HomeTests.swift",
+      "shared/package-fixtures/a.json",
+      "src/__TESTS__/x.ts",
+      "ios/App/HomeRoster.swift",
+      "ios/App/Localizable.xcstrings",
+      "ios/parity/desktop-wording.json",
+    ]) expect(secondPassPath(file), file).toBe(true);
+  });
+  it("leaves shipped sources, binaries and third-party code out", () => {
+    for (const file of ["server/index.ts", "src/App.tsx", "shared/direct-triggers.ts", "ios/App/Assets.xcassets/icon.png", "ios/UITests/CallAudio/bot/a.m4a", "third_party/x/tests/a.js", "iosx/App/a.swift", ""]) {
+      expect(secondPassPath(file), file).toBe(false);
+    }
   });
 });

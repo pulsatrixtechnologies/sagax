@@ -1,5 +1,5 @@
 // The profile page's privacy line under the bot's name ("Private to you"),
-// from visibility and sharing (Grok Bot parity, #2127).
+// from visibility and sharing (reference app parity, #2127).
 import Foundation
 
 public enum BotPrivacyLabel {

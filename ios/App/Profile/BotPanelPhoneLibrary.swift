@@ -5,7 +5,7 @@
 // (`BotLibraryView.pluginsLink`, CompanionCore). The bot's resolved
 // capabilities list (`PhoneBotCapabilities` below) lives inside that Plugins
 // sheet (Installed), not as its own Library button: the bot panel stays
-// Details, Library and Computer (JC, 2026-11-01).
+// Details, Library and Computer (the owner, 2026-11-01).
 import CompanionCore
 import SwiftUI
 

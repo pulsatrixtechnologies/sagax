@@ -1,7 +1,7 @@
 import XCTest
 @testable import CompanionCore
 
-/// The Grok Bot layout (2026-10-26) moves rows, never drops one.
+/// The reference app layout (2026-10-26) moves rows, never drops one.
 final class SettingsTreeTests: XCTestCase {
     /// Every row the phone's Settings had before the layout, by its old
     /// place: the root (account card, Connect apps card, Bot card, phone
@@ -43,7 +43,7 @@ final class SettingsTreeTests: XCTestCase {
         XCTAssertLessThanOrEqual(root.joined().count, 16)
         XCTAssertEqual(SettingsTree.path(to: .autoReview), [.bots])
         XCTAssertEqual(SettingsTree.path(to: .reachMe), [.bots], "Reach me sits with the bots' settings")
-        // Grok Bot's sheet lists the Vault with the profile (2026-11-01)
+        // The reference app's sheet lists the Vault with the profile (2026-11-01)
         XCTAssertEqual(SettingsTree.path(to: .vault), [])
         XCTAssertEqual(SettingsTree.cards(.root, .everything).first, [.profile, .usage, .organization, .vault])
         XCTAssertEqual(SettingsTree.path(to: .termsOfService), [.about])

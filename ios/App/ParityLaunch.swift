@@ -41,7 +41,7 @@ enum ParityScreen: String, CaseIterable {
     /// Not a reference: the home's "+" as New chat (bots and members).
     case newChat = "new-chat"
     case createBot = "20-create-bot"
-    /// Not a reference: New bot's Import from Grok Bot, a reply pasted and previewed.
+    /// Not a reference: New bot's Import from the reference app, a reply pasted and previewed.
     case createBotImport = "create-bot-import"
     case botComputer = "21-bot-computer"
     /// Not a reference: the bot creation wizard (`-parityWizardStep` picks

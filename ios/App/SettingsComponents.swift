@@ -33,7 +33,7 @@ enum SettingsMetrics {
     static let footerGap: CGFloat = 30.3
     /// The references set 13.5 pt text about 1% tighter than SwiftUI does.
     static let tracking135: CGFloat = -0.05
-    /// The sheet's top corners (Grok Bot's account sheet).
+    /// The sheet's top corners (reference app's account sheet).
     static let sheetRadius: CGFloat = 38
 }
 
@@ -86,7 +86,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
-    /// Grok Bot's sheet header (2026-11-01): the round X or back at the
+    /// The reference app's sheet header (2026-11-01): the round X or back at the
     /// leading corner, the title centred on the screen, a trailing control.
     private var header: some View {
         ZStack {
@@ -128,7 +128,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
     }
 }
 
-/// The sheet's shape: Grok Bot's card sheet, rounded at the top and
+/// The sheet's shape: reference app's card sheet, rounded at the top and
 /// running past the bottom edge.
 struct SettingsSheetShape: Shape {
     func path(in rect: CGRect) -> Path {
@@ -138,7 +138,7 @@ struct SettingsSheetShape: Shape {
 }
 
 /// Behind every Settings page: the dimmed strip under the status bar and
-/// the sheet itself, as Grok Bot presents its account sheet (2026-11-01).
+/// the sheet itself, as reference app presents its account sheet (2026-11-01).
 /// Settings still covers the whole home (owner, 2026-10-26).
 struct SettingsSheetBackground: View {
     @Environment(\.themePalette) var themePalette
@@ -177,7 +177,7 @@ struct SettingsCard<Content: View>: View {
         VStack(spacing: 0, content: content)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
-            // Grok Bot's cards carry a hairline edge (2026-11-01)
+            // The reference app's cards carry a hairline edge (2026-11-01)
             .overlay(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 1))
             .padding(.horizontal, SettingsMetrics.cardMargin)
     }

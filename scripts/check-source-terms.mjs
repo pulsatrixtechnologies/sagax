@@ -12,8 +12,9 @@
 // Tests and fixtures are not shipped, but the repository is public: a second
 // pass runs the same hashed tables over every tracked test and fixture file
 // (*.test.*, *.e2e.*, *.node-test.*, *.spec.*, and anything under tests/,
-// testing/, e2e/, fixtures/, __tests__/ or __snapshots__/), anywhere in the
-// tree, each under its own path for the allowlist (#2830). Test data uses
+// testing/, e2e/, fixtures/, __tests__/ or __snapshots__/, in any case, so
+// ios/Tests/, ios/UITests/ and Fixtures/ too), plus the whole ios/ tree,
+// anywhere in the tree, each under its own path for the allowlist (#2830). Test data uses
 // neutral names (Ada, Nimbus, acme, AB); an interop name the app really reads
 // is allowlisted for test paths only, with its reason.
 //
@@ -34,7 +35,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadAllowlist, scanText } from "./npm-package-terms.mjs";
+import { everywhereSkipped, loadAllowlist, scanText, secondPassPath } from "./npm-package-terms.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SHIPPED = ["server", "shared", "skills"];
@@ -59,12 +60,12 @@ for (const file of files) {
     console.error(`${file}: ${hit.term} in ...${hit.context.replace(/\s+/g, " ")}...`);
   }
 }
-// Second pass: tests and fixtures, anywhere in the tree, same hashed tables.
-const TESTS_AND_FIXTURES = /(?:\.test\.|\.e2e\.|\.node-test\.|\.spec\.|(?:^|\/)(?:__tests__|testing|tests?|e2e|fixtures?|__fixtures__|__snapshots__)\/)/;
-const EVERYWHERE_SKIPPED = /(?:^|\/)(?:third_party|node_modules)\/|^pnpm-lock\.yaml$|^src\/data\/given-names\/|\.(?:png|jpe?g|gif|webp|ico|icns|woff2?|ttf|otf|wasm|zip|gz|mp[34]|mov|pdf|bin|onnx|gguf|p8)$/i;
+// Second pass: tests, fixtures and the iOS tree, anywhere, same hashed tables.
+// Case does not matter (ios/Tests, ios/UITests, Fixtures/), and the iOS tree is
+// scanned whole: secondPassPath in npm-package-terms.mjs.
 const testFiles = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 })
   .split("\0")
-  .filter((file) => file && TESTS_AND_FIXTURES.test(file) && !EVERYWHERE_SKIPPED.test(file));
+  .filter(secondPassPath);
 for (const file of testFiles) {
   let text;
   try {
@@ -91,7 +92,7 @@ if (envTerms.length) {
   const word = new RegExp(`(?<![\\p{L}\\p{N}])(?:${envTerms.map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}])`, "giu");
   const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 })
     .split("\0")
-    .filter((file) => file && !EVERYWHERE_SKIPPED.test(file));
+    .filter((file) => file && !everywhereSkipped(file));
   for (const file of tracked) {
     let text;
     try {

@@ -1,4 +1,4 @@
-// The phone's Settings as one tree (2026-10-26, the Grok Bot layout): a
+// The phone's Settings as one tree (2026-10-26, the reference app layout): a
 // short root of grouped cards (the profile with Usage, the bots and apps,
 // this device, privacy and security, help), and the detail one level in.
 // The root, Bots, Privacy and security and About pages draw their cards
@@ -105,7 +105,7 @@ public enum SettingsTree {
         switch page {
         case .root:
             all = [
-                // Grok Bot's account sheet (2026-11-01): the profile with
+                // The reference app's account sheet (2026-11-01): the profile with
                 // Usage and the Vault, Connect apps, then the Bot card
                 [(.profile, true), (.usage, c.usage), (.organization, c.organization), (.vault, c.connected)],
                 [(.connectApps, c.plugins), (.publishedPages, c.connected)],

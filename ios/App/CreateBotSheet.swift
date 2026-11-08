@@ -39,7 +39,7 @@ struct CreateBotSheet: View {
     @State private var showingOptions = false
     /// "Import from zip" (#271).
     @State private var importingZip = false
-    /// "Import from Grok Bot" (desktop AgentImport.tsx).
+    /// "Import from x.ai bot" (desktop AgentImport.tsx).
     @State private var importingAgent = false
     /// Browse templates sheet (when the gate allows).
     @State private var browsingTemplates = false

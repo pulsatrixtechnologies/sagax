@@ -72,7 +72,7 @@ struct RoutineDetailView: View {
     @EnvironmentObject private var session: Session
     @State private var runs: [RoutineRun] = []
     @State private var showingInstruction = false
-    /// Lot 5: run history is its own page (Grok Bot layout).
+    /// Lot 5: run history is its own page (reference app layout).
     @State private var showingHistory = false
     @State private var editing = false
     /// Duplicate (2026-10-29): the editor opens on a copy.
@@ -133,7 +133,7 @@ struct RoutineDetailView: View {
                 }
             }
 
-            // Lot 5: Instruction text visible on the detail (Grok Bot).
+            // Lot 5: Instruction text visible on the detail (reference app).
             ProfileSectionLabel(text: "Instruction", margin: margin)
                 .padding(.top, Theme.Profile.cardGap)
             TextCardBody(text: instructionText)

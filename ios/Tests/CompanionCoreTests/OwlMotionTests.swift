@@ -34,7 +34,7 @@ final class OwlMotionTests: XCTestCase {
     }
 
     /// Without the transition, a change of state is a jump the limits catch:
-    /// the test would have failed on the code JC saw.
+    /// the test would have failed on the code the owner saw.
     func testARawChangeOfStateIsAJumpTheLimitsCatch() {
         let working = OwlArt.pose(.working, 0.0417) // the wings up
         let idle = OwlArt.pose(.idle, 0)

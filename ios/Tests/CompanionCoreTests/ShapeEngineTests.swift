@@ -197,7 +197,7 @@ final class ShapeEngineTests: XCTestCase {
         XCTAssertFalse(engine.playing(1 + ShapeMoves.length(.orbit) + 0.01))
     }
 
-    /// JC 2026-10-28: on the teardrop the eyes came out flattened, tilted, of
+    /// the owner 2026-10-28: on the teardrop the eyes came out flattened, tilted, of
     /// two sizes and at two heights. Every shape, at rest, turned and after
     /// every move: two equal, level capsules, taller than wide, upright on
     /// screen (the pose's roll undone), on the face the drawing shows.

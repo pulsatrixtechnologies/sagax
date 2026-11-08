@@ -1,15 +1,15 @@
-// The bot panel's Grok Bot parts (2026-11-01). Phone Lot 4 replaced the
+// The bot panel's reference app parts (2026-11-01). Phone Lot 4 replaced the
 // three tabs with overview rows; PanelTabBar and BotComputerSleepCard stay
 // for older shots and for any surface that still embeds the sleep card.
 import CompanionCore
 import SwiftUI
 
 enum PanelRoutinePreview {
-    /// Routines listed in Upcoming before "Show more" (Grok Bot, #2127).
+    /// Routines listed in Upcoming before "Show more" (reference app, #2127).
     static let limit = 5
 }
 
-/// Activity and Library as centred labels on a quiet capsule (Grok Bot).
+/// Activity and Library as centred labels on a quiet capsule (reference app).
 struct PanelTabBar: View {
     @Environment(\.themePalette) var themePalette
     let tabs: [DesktopPanelTab]
@@ -132,7 +132,7 @@ struct BotComputerSleepCard: View {
     }
 }
 
-/// Grok Bot's small "z Z" over the idle bot glyph on an asleep Computer screen.
+/// The reference app's small "z Z" over the idle bot glyph on an asleep Computer screen.
 struct SleepingZs: View {
     @Environment(\.themePalette) var themePalette
 

@@ -138,7 +138,7 @@ final class ConnectionNoticeCenter: ObservableObject {
 }
 
 /// The notice itself: the app's banner family (card surface, a hairline and
-/// the icon in the tone color, one sentence, an X), Grok Bot style.
+/// the icon in the tone color, one sentence, an X), reference app style.
 struct ConnectionNoticeBanner: View {
     @ObservedObject private var center = ConnectionNoticeCenter.shared
 

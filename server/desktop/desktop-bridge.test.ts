@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { DesktopBridges, desktopBridgeCapability, desktopBridgeOperation, resolveBotWorkplace, type DesktopBridgeRegistration } from "./desktop-bridge.ts";
 import { localVmDesktopSpec } from "../computer/container-computer.ts";
-import { desktopToolOperation, handleDesktopBridgeMcp } from "./desktop-bridge-tools.ts";
+import { desktopToolOperation, handleDesktopBridgeMcp, plainTextCommand } from "./desktop-bridge-tools.ts";
 import { DEFAULT_BOT_WORKPLACE, parseBotWorkplace, serializeBotWorkplace } from "../../shared/bot-workplace.ts";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
@@ -328,5 +328,38 @@ describe("the person's own computer in their Computer tab", () => {
     const { desktopSystemInfo } = await import("./desktop-bridge.ts");
     expect(desktopSystemInfo.safeParse({ ...system, hostname: "ada-mbp" }).success).toBe(false);
     expect(desktopSystemInfo.safeParse({ ...system, os: "x".repeat(81) }).success).toBe(false);
+  });
+});
+
+// #2774: a script piped through base64 -d runs as the text it is, so the
+// person, the audit and the guard read it.
+describe("run_command base64 scripts", () => {
+  const script = "import re, sys\nprint(re.findall(r'\\d+h', sys.argv[1]))\n";
+  const blob = Buffer.from(script, "utf8").toString("base64");
+
+  it("turns echo | base64 -d into a heredoc that carries the plain script", () => {
+    const op = desktopToolOperation("run_command", { command: `echo '${blob}' | base64 -d > ~/tmp/mte.py && python3 ~/tmp/mte.py 3h` }) as { command: string };
+    expect(op.command).not.toContain(blob);
+    expect(op.command.startsWith("cat <<'SAGAX_PLAIN_1' > ~/tmp/mte.py && python3 ~/tmp/mte.py 3h\n")).toBe(true);
+    expect(op.command).toContain(script);
+    expect(op.command.endsWith("\nSAGAX_PLAIN_1")).toBe(true);
+  });
+
+  it("handles printf '%s', base64 --decode, -D and a here-string", () => {
+    for (const command of [
+      `printf '%s' "${blob}" | base64 --decode > s.py`,
+      `echo -n ${blob} | base64 -D > s.py`,
+      `base64 -d <<< '${blob}' > s.py`,
+    ]) {
+      const out = plainTextCommand(command);
+      expect(out, command).not.toContain(blob);
+      expect(out, command).toContain(script);
+    }
+  });
+
+  it("leaves binary bytes and plain commands as they are", () => {
+    const binary = Buffer.from([0, 1, 2, 3, 255, 254, 0, 9, 10, 11, 12, 13]).toString("base64");
+    expect(plainTextCommand(`echo ${binary} | base64 -d > blob.bin`)).toBe(`echo ${binary} | base64 -d > blob.bin`);
+    expect(plainTextCommand("ls -la ~/work")).toBe("ls -la ~/work");
   });
 });

@@ -154,12 +154,39 @@ export function base64Text(content: string): string | null {
   return text;
 }
 
+/** A base64 blob piped into a decoder: `echo|printf [-n] ['%s'] '<b64>' |
+ * base64 -d|-D|--decode` or `base64 -d <<< '<b64>'` (#2774). */
+const BASE64_DECODE_IN_COMMAND = new RegExp(
+  String.raw`(?:\b(?:echo|printf)(?:\s+-[neE]+)*(?:\s+(['"])%s\1)?\s+(['"]?)([A-Za-z0-9+/]{16,}={0,2})\2\s*\|\s*base64\s+(?:-d|-D|--decode)\b`
+  + String.raw`|\bbase64\s+(?:-d|-D|--decode)\s*<<<\s*(['"]?)([A-Za-z0-9+/]{16,}={0,2})\4)`,
+  "g",
+);
+
+/** A command with every base64 script it decodes turned back into the text
+ * it is (#2774): the blob and its decoder become a quoted heredoc that
+ * prints the same text, so the person, the audit and the guard read the
+ * script. Binary bytes, and a blob inside a multi-line command, stay as is. */
+export function plainTextCommand(command: string): string {
+  if (command.includes("\n")) return command;
+  const bodies: string[] = [];
+  const rewritten = command.replace(BASE64_DECODE_IN_COMMAND, (match, _q1, _q2, piped, _q4, herestring) => {
+    const decoded = base64Text(String(piped ?? herestring ?? ""));
+    if (decoded === null || decoded.includes("\r")) return match;
+    let tag = `SAGAX_PLAIN_${bodies.length + 1}`;
+    while (decoded.split("\n").includes(tag)) tag += "_";
+    bodies.push(`${decoded}${decoded.endsWith("\n") || decoded === "" ? "" : "\n"}${tag}`);
+    return `cat <<'${tag}'`;
+  });
+  return bodies.length ? `${rewritten}\n${bodies.join("\n")}` : command;
+}
+
 export function desktopToolOperation(name: string, args: Record<string, unknown>): DesktopBridgeOperation {
   // The Apple apps of the person's Mac: validated and bounded here, again on the desktop.
   if (isMacAppTool(name)) return { action: "mac_app", tool_name: name, arguments: macAppOperation(name, args) };
   switch (name) {
     case "run_command":
-      return { action: "run_command", command: str(args.command, "command"), cwd: optionalStr(args.cwd, "cwd"), timeout_seconds: optionalNumber(args.timeout_seconds, 1, 600) ?? 120 };
+      // #2774: a script sent in base64 runs as the text it is.
+      return { action: "run_command", command: plainTextCommand(str(args.command, "command")), cwd: optionalStr(args.cwd, "cwd"), timeout_seconds: optionalNumber(args.timeout_seconds, 1, 600) ?? 120 };
     case "read_file":
       return {
         action: "read_file", path: str(args.path, "path", 4096), offset: optionalNumber(args.offset, 0, 100 * 1024 * 1024),

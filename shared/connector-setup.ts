@@ -26,7 +26,12 @@ export const CLAUDE_AI_CONNECTORS_URL = "https://claude.ai/customize/connectors"
 /** The only hosts a setup card may open. */
 const SETUP_HOSTS = new Set(["grok.com", "claude.ai"]);
 
-export type ConnectorSetupProvider = "grok" | "claude";
+/** #2690: "mac" is a permission of this Mac (Messages reads need Full Disk
+ * Access): the card opens that System Settings pane instead of a web page. */
+export type ConnectorSetupProvider = "grok" | "claude" | "mac";
+
+/** The System Settings pane where Sagax gets Full Disk Access back (Messages). */
+export const MAC_FULL_DISK_ACCESS_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 
 export interface ConnectorSetupTarget {
   /** a stable id: the Grok catalog id when there is one, else the cleaned name */
@@ -114,7 +119,7 @@ export function chooseConnectorSetupRoute(input: {
   };
   const route = (provider: ConnectorSetupProvider): ConnectorSetupRoute =>
     ({ route: provider, url: provider === "grok" ? GROK_CONNECTORS_URL : CLAUDE_AI_CONNECTORS_URL });
-  if (input.prefer && own[input.prefer]) return route(input.prefer);
+  if (input.prefer && input.prefer !== "mac" && own[input.prefer]) return route(input.prefer);
   // the bot's own engine first, when it runs on the person's own account
   if (input.account === "own" && (input.engine === "grok" || input.engine === "claude") && own[input.engine]) return route(input.engine);
   if (own.grok) return route("grok");
@@ -124,8 +129,10 @@ export function chooseConnectorSetupRoute(input: {
   return { refusal: "no_route" };
 }
 
-/** https on grok.com or claude.ai, no credentials in the URL. */
+/** https on grok.com or claude.ai, no credentials in the URL; or the one
+ * System Settings pane a Messages card opens. */
 export function isConnectorSetupUrl(raw: string): boolean {
+  if (raw === MAC_FULL_DISK_ACCESS_URL) return true;
   let url: URL;
   try {
     url = new URL(raw);
@@ -202,10 +209,11 @@ export function claudeInventoryShowsConnected(connectors: readonly { name: strin
   return connectors.some((connector) => connector.status === "connected" && claudeServiceMatches(connector.name, target));
 }
 
-const HOST_LABEL: Record<ConnectorSetupProvider, string> = { grok: "grok.com", claude: "claude.ai" };
+const HOST_LABEL: Record<ConnectorSetupProvider, string> = { grok: "grok.com", claude: "claude.ai", mac: "System Settings" };
 
 /** The row's text: what clients without the card draw (phones, exports). */
 export function connectorSetupText(view: Pick<ConnectorSetupView, "label" | "provider" | "url" | "account">, language: "fr" | "en"): string {
+  if (view.provider === "mac") return connectorReauthText(view, language);
   const link = `[${HOST_LABEL[view.provider]}](${view.url})`;
   const account = view.provider === "grok" && view.account ? ACCOUNT_LABEL[language][view.account] : "";
   return language === "fr"
@@ -224,6 +232,13 @@ const ACCOUNT_LABEL = {
  * person must hear it plainly, with the sign-in link, not as a buried
  * "failed 2 times". */
 const REAUTH_FAILURE = /\b(?:needs?|requires?|required)\s+(?:a\s+)?re-?authenticat(?:e|ion)\b|\bre-?authenticat(?:e|ion)\s+(?:is\s+)?required\b|\breauth(?:entication)?_required\b|\bneeds?\s+(?:a\s+)?new\s+sign-?in\b/i;
+/** #2690 (proactive report #2645, 2026-11-07): X answers an expired or
+ * revoked connection with "client-not-enrolled", GitHub with a bare HTTP 400. */
+const X_NOT_ENROLLED = /\bclient[-_]not[-_]enrolled\b/i;
+const HTTP_400 = /\bHTTP\s*(?:status\s*)?400\b|\b400\s+Bad\s+Request\b|\bstatus(?:\s+code)?[:\s]+400\b/i;
+/** The Messages tools (shared/imessage.ts MESSAGES_MCP_SERVER) and what they say without this Mac's permission. */
+const MESSAGES_TOOL = /(?:^|__|\b)(?:messages|imessage)__|^(?:mcp__)?(?:messages|imessage)\b/i;
+const MESSAGES_ACCESS_FAILURE = /\bneeds\s+Full\s+Disk\s+Access\b|\bFull\s+Disk\s+Access\b.*\b(?:denied|missing|required|needed)\b|\bnot\s+(?:authori[sz]ed|allowed)\s+to\s+send\s+Apple\s+events\b|\berror\s+-1743\b/i;
 /** A grok.com connector call goes through Grok's managed gateway. */
 const GATEWAY_FAILURE = /\bmanaged\s+mcp\s+gateway\b|\bmanaged_gateway:/i;
 
@@ -242,8 +257,13 @@ export interface ConnectorReauthFailure {
  * the connector ("Search posts all · X"). */
 export function connectorReauthFailure(tool: string | undefined, output: string | undefined): ConnectorReauthFailure | null {
   const said = String(output ?? "");
-  if (!REAUTH_FAILURE.test(said)) return null;
   const name = String(tool ?? "").trim();
+  // #2690: Messages lost this Mac's Full Disk Access (or Automation): the
+  // same one card, opening the System Settings pane
+  if (MESSAGES_TOOL.test(name) && MESSAGES_ACCESS_FAILURE.test(said)) {
+    return { label: "Messages", connector: "messages", provider: "mac", url: MAC_FULL_DISK_ACCESS_URL };
+  }
+  if (!REAUTH_FAILURE.test(said) && !X_NOT_ENROLLED.test(said) && !HTTP_400.test(said)) return null;
   const gateway = name ? grokGatewayToolConnector(name) : null;
   const titled = !gateway && name.includes(" · ") ? name.slice(name.lastIndexOf(" · ") + 3).trim() : "";
   const claude = /^mcp__claude_ai_/i.test(name) || /\bclaude\.ai\b/i.test(said);
@@ -252,6 +272,15 @@ export function connectorReauthFailure(tool: string | undefined, output: string 
   const raw = gateway?.name ?? (titled || (claude ? decodeGrokGatewayName(name.replace(/^mcp__claude_ai_/i, "").split("__")[0] ?? "").replace(/_/g, " ") : ""));
   const target = raw ? resolveConnectorSetupTarget(raw) : null;
   const label = target?.label ?? cleanName(raw);
+  // #2690: X's "client-not-enrolled" and GitHub's bare HTTP 400 are what an
+  // expired sign-in of those two looks like; for any other connector a 400
+  // stays an ordinary failure
+  if (!REAUTH_FAILURE.test(said)) {
+    const which = (target?.id ?? label).toLowerCase();
+    const isX = which === "x" || which === "twitter" || /^x\b/i.test(label);
+    const isGithub = which.includes("github");
+    if (!(X_NOT_ENROLLED.test(said) && isX) && !(HTTP_400.test(said) && isGithub)) return null;
+  }
   return {
     label: label || (provider === "grok" ? "A grok.com connector" : "A claude.ai connector"),
     connector: target?.id ?? (label.toLowerCase() || "connector"),
@@ -262,11 +291,17 @@ export function connectorReauthFailure(tool: string | undefined, output: string 
 
 /** The routine problem line for an expired connector sign-in. */
 export function connectorReauthProblem(failure: ConnectorReauthFailure): string {
+  if (failure.provider === "mac") return `${failure.label} lost this Mac's Full Disk Access: give it back to Sagax in System Settings, Privacy & Security, then run the routine again. Its calls failed until then.`;
   return `${failure.label} needs a new sign-in: reconnect it on ${HOST_LABEL[failure.provider]} (${failure.url}), then run the routine again. Its calls failed until then.`;
 }
 
 /** The chat line beside the card for an expired sign-in. */
 export function connectorReauthText(failure: Pick<ConnectorReauthFailure, "label" | "provider" | "url">, language: "fr" | "en"): string {
+  if (failure.provider === "mac") {
+    return language === "fr"
+      ? `${failure.label} n'a plus accès à ce Mac : redonnez l'accès complet au disque à Sagax dans Réglages Système, Confidentialité et sécurité. Ses appels échouent d'ici là.`
+      : `${failure.label} lost access to this Mac: give Sagax Full Disk Access again in System Settings, Privacy & Security. Its calls fail until then.`;
+  }
   const link = `[${HOST_LABEL[failure.provider]}](${failure.url})`;
   return language === "fr"
     ? `${failure.label} demande une nouvelle connexion : reconnectez-le sur ${link}. Ses appels échouent d'ici là.`

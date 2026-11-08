@@ -25,3 +25,14 @@ Check the bot's tool grants. A bot with an assigned grant list only sees the too
 
 Check internet connectivity and try again later before reconnecting every account. The packaged app preserves its installation identity across transient broker outages; rotating or deleting local credentials during an outage can separate existing grants from the installation.
 
+
+## A bot posts a "Reconnect" card
+
+When a connector's sign-in expires, the bot posts one card in its conversation, with a **Connect** button that opens the right sign-in page. You get one card per connector, not one per failed call, and it marks itself connected as soon as the connection works again. These failures count as an expired connection:
+
+- an OAuth token that is expired, revoked or refused (401, `invalid_grant`, "please re-authenticate");
+- X answering `client-not-enrolled`: the app's enrollment ended, sign in to X again;
+- GitHub answering HTTP 400 on every call: the stored grant no longer matches, sign in to GitHub again;
+- Messages (iMessage) failing because the Mac took back Full Disk Access. The card's button opens **System Settings, Privacy & Security, Full Disk Access**: turn Sagax on, then come back. In a browser the button is hidden and the card explains where to go.
+
+When an engine hits its usage limit, the bot does not post a card: its routine or proactive wake moves to another engine that is ready, or waits for the limit's reset and runs once again then.

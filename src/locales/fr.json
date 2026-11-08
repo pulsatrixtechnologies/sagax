@@ -11229,6 +11229,8 @@
   "connectorSetup.whereGrokTeam": "La connexion se fait sur {host}, avec votre compte Grok d'équipe, celui branché ici. Sagax détectera la connexion.",
   "connectorSetup.whereGrokPersonal": "La connexion se fait sur {host}, avec votre compte Grok personnel, celui branché ici. Sagax détectera la connexion.",
   "connectorSetup.waiting": "En attente de votre connexion",
+  "connectorSetup.whereMac": "Messages a besoin de l'accès complet au disque sur ce Mac. Activez Sagax dans Réglages Système, Confidentialité et sécurité, puis revenez.",
+  "connectorSetup.openMacSettings": "Ouvrir Réglages Système",
   "connectorSetup.done": "J'ai terminé",
   "connectorSetup.checking": "Vérification…",
   "connectorSetup.pending": "Pas encore confirmé. Demandez au bot de l'utiliser, puis choisissez J'ai terminé.",

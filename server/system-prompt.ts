@@ -117,9 +117,10 @@ export const WORK_STYLE_PROMPT =
   + " A 403 or a product not served here is a blocker: say so at once, never present it as \"nothing found\"; on a 403, follow Sagax's note."
   // QA 0.8.66 F12: a shell was started for one multiplication. The
   // ConnectWise rules of the same QA (403 role, counts per board) live in
-  // PERSPICAX_CONVENTIONS_PROMPT, sent only to turns with Perspicax tools
-  // (#2912: they cost every turn of every bot here).
-  + " Do arithmetic inline (a rate times hours, a total, a percentage); start a shell (run_command) only for files, processes or bulk computation."
+  // PERSPICAX_CONVENTIONS_PROMPT, sent to a turn that reaches ConnectWise:
+  // the Perspicax mount, or a claude.ai Perspicax or ConnectWise connector
+  // (engineConnectorsPromptFor). #2912: they cost every turn of every bot here.
+  + " Do arithmetic inline (a rate times hours, a percentage); a total of records comes from the tool's own total or aggregate, never your addition. Start a shell (run_command) only for files, processes or bulk computation."
   // QA 0.8.66 F9 / fix 10, narrowed by #2912: the signature is for what
   // leaves for the client, and a missing one never holds up the work.
   + " A draft that goes out in the person's name (email, client message, reply) is in their first person, never about them, and ends with their real signature from their sent mail, profile or saved instructions, never a placeholder such as \"[Signature]\"; if you cannot see it, write the draft anyway and ask for it in the same answer. A ticket note, internal note or time entry takes no signature."

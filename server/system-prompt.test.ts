@@ -552,7 +552,10 @@ describe("work style blocks and house style", () => {
 describe("work style: arithmetic and drafts (QA 0.8.66 F9 F12, #2912)", () => {
   it("computes simple arithmetic inline and keeps the shell for a real need", () => {
     expect(WORK_STYLE_PROMPT).toContain("Do arithmetic inline");
-    expect(WORK_STYLE_PROMPT).toContain("start a shell (run_command) only for files, processes or bulk computation");
+    expect(WORK_STYLE_PROMPT).toContain("Start a shell (run_command) only for files, processes or bulk computation");
+    // review of #2912: a total of records is never added by hand, on any turn
+    expect(WORK_STYLE_PROMPT).toContain("a total of records comes from the tool's own total or aggregate, never your addition");
+    expect(WORK_STYLE_PROMPT).not.toMatch(/Do arithmetic inline \([^)]*a total/);
   });
 
   it("signs only what goes out to the client and never stops the work to ask for the signature", () => {

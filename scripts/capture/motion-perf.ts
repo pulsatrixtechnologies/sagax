@@ -7,7 +7,7 @@
 // every animation frame (a frame over 25 ms counts as dropped), every long
 // task over 50 ms (PerformanceObserver) and the cumulative layout shift.
 //
-//   node --experimental-strip-types scripts/capture/motion-perf.ts <out.json> [--rounds N] [--shots DIR] [--video DIR]
+//   node --experimental-strip-types scripts/capture/motion-perf.ts <out.json> [--scheme light|dark] [--rounds N] [--shots DIR] [--video DIR]
 //
 // Needs Playwright's Chromium (or SAGAX_CAPTURE_CHROME). No window opens.
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -23,12 +23,15 @@ const rounds = Number(flag("--rounds") ?? 3);
 const shots = flag("--shots");
 const video = flag("--video");
 const only = flag("--only");
+const scheme = (flag("--scheme") ?? "light") as "light" | "dark";
 const turns = Number(flag("--turns") ?? 45);
 const out = resolve(args[0] ?? "motion-perf.json");
 
 interface Sample { frames: number; dropped: number; worstFrame: number; p95Frame: number; longTasks: number; longTaskMs: number; worstLongTask: number; cls: number }
 
 const fixture = await launchVerificationServer();
+// A run that fails midway still stops the fixture server it started.
+process.once("exit", () => { try { fixture.child.kill("SIGTERM"); } catch { /* already gone */ } });
 const url = fixture.info.url;
 const api = fixtureApi(url, { headers: { origin: url } });
 const cli = (...rest: string[]) => runControlOmb([...rest, "--url", url]) as Promise<any>;
@@ -66,12 +69,14 @@ if (terms?.current) await api("POST", "/api/me/terms", { version: terms.current 
 const ui = await mountPreview(fixture, { entry: "/scripts/testing/threads-preview.tsx", route: "/__motion-perf.html", title: "Motion perf", logLevel: "error" });
 const executablePath = process.env.SAGAX_CAPTURE_CHROME;
 const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
-const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(video ? { recordVideo: { dir: video, size: { width: 1440, height: 900 } } } : {}) });
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, ...(video ? { recordVideo: { dir: video, size: { width: 1440, height: 900 } } } : {}) });
 const page = await context.newPage();
 await page.addInitScript(() => {
   localStorage.setItem("omb-show-threads", "1");
   localStorage.setItem("omb-threads-location", "sidebar");
   localStorage.setItem("omb-language", "en");
+  // Auto: the skin follows the emulated scheme (--scheme), light or dark.
+  localStorage.setItem("omb-skin-mode", "auto");
 });
 
 const results: Record<string, Sample[]> = {};
@@ -160,6 +165,34 @@ try {
       }
     }],
   ];
+
+  // Stills of the open surfaces, for the side by side review (--shots):
+  // the bot panel on its second tab, Settings, the right panel.
+  if (shots) {
+    mkdirSync(shots, { recursive: true });
+    const still = async (name: string, open: () => Promise<void>, close: () => Promise<void>) => {
+      await open();
+      await page.waitForTimeout(700);
+      await page.screenshot({ path: resolve(shots, `open-${name}.png`) });
+      await close();
+      await page.waitForTimeout(400);
+    };
+    const escape = () => page.keyboard.press("Escape");
+    await still("bot-profile", async () => {
+      await page.locator(`[data-sidebar-bot-row="${long.id}"]`).first().click({ button: "right" });
+      await page.waitForTimeout(300);
+      await page.getByRole("menuitem", { name: "Edit bot" }).first().click({ timeout: 2_000 }).catch(() => {});
+      await page.waitForTimeout(500);
+      await page.locator("[data-bot-profile-tab]").nth(1).click({ timeout: 2_000 }).catch(() => {});
+    }, escape);
+    await still("settings", async () => {
+      await page.locator("[data-sidebar-account], [data-sidebar-account-pill]").first().click({ timeout: 2_000 }).catch(() => {});
+      await page.waitForTimeout(300);
+      await page.getByRole("menuitem", { name: "Settings", exact: true }).first().click({ timeout: 2_000 }).catch(() => {});
+    }, escape);
+    const pill = page.locator("[data-chat-pill][aria-expanded]").first();
+    await still("right-panel", () => pill.click({ timeout: 2_000 }).catch(() => {}), () => pill.click({ timeout: 2_000 }).catch(() => {}));
+  }
 
   for (let round = 0; round < rounds; round++) {
     for (const [name, run] of journeys) {

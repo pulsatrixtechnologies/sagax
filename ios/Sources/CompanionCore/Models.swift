@@ -2802,11 +2802,29 @@ public struct ServerEnvironment: Codable, Hashable, Sendable {
     public var version: String?
     /// Present on an organization server that signs people in with Pulsatrix.
     public var identity: ServerIdentity? = nil
+    /// What this server serves (`capabilities.features`, shared/server-features.ts).
+    public var capabilities: ServerDescriptorCapabilities? = nil
 
     /// The server signs people in with Pulsatrix and returns to native apps
     /// (`/auth/oidc/start?client=phone` ends on a `sagax://pair` link).
     public var offersPulsatrixSignIn: Bool {
         identity?.kind == "perspicax" && identity?.nativeReturn == true
+    }
+}
+
+/// The descriptor's `capabilities`: only the served feature list is read.
+/// A descriptor without the list (an older server) leaves `features` nil,
+/// and an odd value never fails the whole descriptor.
+public struct ServerDescriptorCapabilities: Codable, Hashable, Sendable {
+    public var features: [String]?
+
+    public init(features: [String]? = nil) { self.features = features }
+
+    private enum CodingKeys: String, CodingKey { case features }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        features = (try? c.decodeIfPresent([String].self, forKey: .features)) ?? nil
     }
 }
 

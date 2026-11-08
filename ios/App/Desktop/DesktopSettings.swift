@@ -22,6 +22,11 @@ final class DesktopSettingsModel: ObservableObject {
     @Published private(set) var loaded = false
     @Published var error: String?
     @Published private(set) var saving: Set<String> = []
+    /// `useServerFeature("memberPersonSettings")`: from the descriptor's
+    /// list, else from what a personal switch's save showed.
+    @Published private(set) var personalServed: ServerFeatureState = .unknown
+    private var listedFeatures: [String]?
+    private var personalEvidence: Bool?
 
     private weak var session: Session?
     var client: CompanionClient? { session?.settingsClient }
@@ -34,10 +39,18 @@ final class DesktopSettingsModel: ObservableObject {
         guard let client else { loaded = true; return }
         async let config = try? client.desktopSettingsConfig()
         async let usage = try? client.usage()
+        async let environment = try? client.environment()
         let loadedConfig = await config
         self.config = loadedConfig
         self.usage = await usage
+        listedFeatures = await environment?.capabilities?.features
+        notePersonal(nil)
         loaded = true
+    }
+
+    private func notePersonal(_ present: Bool?) {
+        if let present { personalEvidence = present }
+        personalServed = .of("memberPersonSettings", listed: listedFeatures, evidence: personalEvidence)
     }
 
     func reloadUsage() async {
@@ -55,8 +68,15 @@ final class DesktopSettingsModel: ObservableObject {
         do {
             config = try await client.updateDesktopSettings(change)
             DesktopSidebarFlags.shared.apply(config)
+            if case .myFeature = change { notePersonal(true) }
             return nil
         } catch {
+            // An older organization server has no /api/me/experimental: the
+            // switches go and the note says why (featureMissingOnServer).
+            if case .myFeature = change, ServerFeatureState.routeMissing(error) {
+                notePersonal(false)
+                return nil
+            }
             let message = error.localizedDescription
             self.error = message
             return message

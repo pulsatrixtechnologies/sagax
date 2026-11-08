@@ -73950,7 +73950,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Afficher la liste des commandes shell qu'un bot a exécutées pour votre demande en cours."
+            "value": "Afficher la liste des commandes shell qu'un bot a exécutées pour ta demande en cours."
           }
         },
         "pt-BR": {
@@ -73972,7 +73972,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Affiche la liste des commandes shell qu'un bot a exécutées pour votre demande en cours. Désactivez-la pour masquer la carte et son raccourci pour enregistrer l'exécution comme compétence."
+            "value": "Affiche la liste des commandes shell qu'un bot a exécutées pour ta demande en cours. Désactive-la pour masquer la carte et son raccourci pour enregistrer l'exécution comme compétence."
           }
         },
         "pt-BR": {
@@ -74950,7 +74950,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Afficher les appels d'outils dans la conversation. Désactivé : la conversation montre les messages, les étapes d'un tour se replient. Le même interrupteur que sur votre ordinateur."
+            "value": "Afficher les appels d'outils dans la conversation. Désactivé : la conversation montre les messages, les étapes d'un tour se replient. Le même interrupteur que sur ton ordinateur."
           }
         }
       }
@@ -101841,7 +101841,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "En attente de vous"
+            "value": "En attente de toi"
           }
         }
       }
@@ -114163,7 +114163,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saisissez un nombre entier de 1 à 1 440."
+            "value": "Saisis un nombre entier de 1 à 1 440."
           }
         },
         "pt-BR": {
@@ -114199,7 +114199,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Entrez un nombre entier de 1 à 60."
+            "value": "Saisis un nombre entier de 1 à 60."
           }
         }
       }
@@ -114249,7 +114249,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Entrez un nombre de jours entre 1 et 3650."
+            "value": "Saisis un nombre de jours entre 1 et 3650."
           }
         }
       }
@@ -114279,7 +114279,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Entrez une taille entre 0,25 et 4096 Mio."
+            "value": "Saisis une taille entre 0,25 et 4096 Mio."
           }
         }
       }
@@ -114299,7 +114299,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Entrez un nombre entier de %@ à %@."
+            "value": "Saisis un nombre entier de %@ à %@."
           }
         }
       }
@@ -114399,7 +114399,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enregistrée (tapez pour remplacer)"
+            "value": "Enregistrée (tape pour remplacer)"
           }
         }
       }

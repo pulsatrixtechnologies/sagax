@@ -317,20 +317,37 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
     /// organization server (shared/person-settings.ts).
     public static let personalFeatures: Set<String> = ["skillAuthoring", "dataWindow", "llmThreadTitles", "showToolCalls"]
 
+    /// ExperimentalSettings.tsx `personal`: the person keeps their own
+    /// switches only while the server serves `/api/me/experimental`
+    /// (`useServerFeature("memberPersonSettings") !== "no"`).
+    public func personalApplies(_ served: ServerFeatureState) -> Bool {
+        personalSettings == true && served != .no
+    }
+
+    /// ExperimentalSettings.tsx `personalMissing`: a member of an older
+    /// organization server, whose own switches are hidden behind the note
+    /// "Available after the server update.".
+    public func personalMissing(_ served: ServerFeatureState) -> Bool {
+        personalSettings == true && served == .no && !canManageExperimental
+    }
+
     /// ExperimentalSettings.tsx `mayToggle`: a manager flips every row; a
-    /// member with personal settings flips their own rows only.
-    public func mayToggleExperimental(_ key: String) -> Bool {
-        canManageExperimental || (personalSettings == true && Self.personalFeatures.contains(key))
+    /// member with personal settings, on a server that serves them, flips
+    /// their own rows only.
+    public func mayToggleExperimental(_ key: String, served: ServerFeatureState) -> Bool {
+        canManageExperimental || (personalApplies(served) && Self.personalFeatures.contains(key))
     }
 
     /// Whether a manager writes the server's switch, or the person their own
-    /// (`PATCH /api/me/experimental`).
-    public func experimentalChange(_ key: String, _ on: Bool) -> DesktopConfigChange {
-        canManageExperimental ? .feature(key, on) : .myFeature(key, on)
+    /// (`PATCH /api/me/experimental`); nil when this person may not flip it.
+    public func experimentalChange(_ key: String, _ on: Bool, served: ServerFeatureState) -> DesktopConfigChange? {
+        guard mayToggleExperimental(key, served: served) else { return nil }
+        return canManageExperimental ? .feature(key, on) : .myFeature(key, on)
     }
 
     /// DeveloperSettings.tsx: the Experimental card is there for a manager
-    /// or a member of an organization server with personal settings.
+    /// or a member of an organization server with personal settings; on a
+    /// server without the route it carries only the update note.
     public var showsExperimental: Bool { canManageExperimental || personalSettings == true }
 
     /// SkillReviewSettings.tsx `manage`: the threshold is a server setting.
@@ -347,6 +364,29 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
         case .openaiCompat: openaiCompat?.configured == true
         case .decider: decider?.configured == true
         }
+    }
+}
+
+/// What the connected server serves for one feature
+/// (src/lib/server-features.ts `serverFeature`): a missing route seen on a
+/// call wins, then the descriptor's list, then a success seen on a call.
+public enum ServerFeatureState: String, Equatable, Sendable {
+    case yes, no, unknown
+
+    /// `serverFeature(feature)`: `listed` is the descriptor's
+    /// `capabilities.features` (nil when it sends none), `evidence` what a
+    /// call showed (nil when none did).
+    public static func of(_ feature: String, listed: [String]?, evidence: Bool?) -> ServerFeatureState {
+        if evidence == false { return .no }
+        if let listed { return listed.contains(feature) ? .yes : .no }
+        return evidence == true ? .yes : .unknown
+    }
+
+    /// `featureMissingOnServer`: the call failed because this server has no
+    /// such route (an older one), not for another reason.
+    public static func routeMissing(_ error: Error) -> Bool {
+        guard case let .status(code, message) = error as? APIError else { return false }
+        return BotTodoList.routeMissing(code: code, message: message)
     }
 }
 

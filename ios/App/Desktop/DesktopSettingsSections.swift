@@ -531,11 +531,13 @@ struct DesktopExperimentalSettings: View {
     /// ExperimentalSettings.tsx: the four switches, each with the desktop's
     /// grey line. A switch this person may not flip (mayToggle) or this
     /// server does not report is not shown, never greyed; a member with
-    /// personal settings flips their own (PATCH /api/me/experimental).
+    /// personal settings flips their own (PATCH /api/me/experimental), and
+    /// on a server without that route reads only the update note.
     var body: some View {
         let config = model.config
         let busy = !model.saving.isEmpty || config == nil
-        let rows = ExperimentalFeatureRow.shown(config)
+        let served = model.personalServed
+        let rows = ExperimentalFeatureRow.shown(config, served: served)
         let on = rows.filter(\.on).count
         if !rows.isEmpty {
             DesktopSettingsGroup(
@@ -549,7 +551,7 @@ struct DesktopExperimentalSettings: View {
                                         identifier: feature.key) {
                         DesktopSwitch(isOn: feature.on, label: Text(verbatim: AppStrings.localized(feature.aria)),
                                       identifier: feature.identifier, disabled: busy) {
-                            guard let change = config?.experimentalChange(feature.key, !feature.on) else { return }
+                            guard let change = config?.experimentalChange(feature.key, !feature.on, served: served) else { return }
                             Task { _ = await model.apply(change, key: feature.key) }
                         }
                     }
@@ -558,6 +560,10 @@ struct DesktopExperimentalSettings: View {
                     }
                 }
             }
+        }
+        if config?.personalMissing(served) == true {
+            DesktopText("Available after the server update.", color: \.inkSecondary)
+                .accessibilityIdentifier("desktop-settings.experimental.needsUpdate")
         }
     }
 }
@@ -576,7 +582,7 @@ struct ExperimentalFeatureRow: Identifiable {
     /// ExperimentalSettings.tsx's rows, in its order: skill writing, the Data
     /// window, the meeting notetaker, generated titles. A feature the server
     /// does not report, or one this person may not flip, is left out.
-    static func shown(_ config: DesktopSettingsConfig?) -> [ExperimentalFeatureRow] {
+    static func shown(_ config: DesktopSettingsConfig?, served: ServerFeatureState) -> [ExperimentalFeatureRow] {
         guard let config else { return [] }
         let features = config.features
         var rows = [ExperimentalFeatureRow(
@@ -601,7 +607,7 @@ struct ExperimentalFeatureRow: Identifiable {
                 note: "A model names your new threads.",
                 on: titles, identifier: "desktop-settings.thread-titles"))
         }
-        return rows.filter { config.mayToggleExperimental($0.key) }
+        return rows.filter { config.mayToggleExperimental($0.key, served: served) }
     }
 }
 

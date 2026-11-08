@@ -72,6 +72,67 @@ export interface BriefSuggestion {
   status: "pending" | "rejected" | "kept";
   identity: string;
   at: number;
+  /** #2694: the person's last feedback on this item or its card. */
+  feedback?: BriefFeedback;
+}
+
+/** #2694: feedback on a brief item or a suggestion card. `down` drops this
+ * item, `less` lowers its topic, `never` blocks it for good, `up` raises its
+ * topic. It applies at the next pass and goes to the person's memory. */
+export const BRIEF_FEEDBACK = ["up", "down", "less", "never"] as const;
+export type BriefFeedback = typeof BRIEF_FEEDBACK[number];
+
+export function isBriefFeedback(value: unknown): value is BriefFeedback {
+  return typeof value === "string" && (BRIEF_FEEDBACK as readonly string[]).includes(value);
+}
+
+/** The kind of thing an item is about: the app its first piece came from. */
+export function briefTopic(item: Pick<BriefSuggestion, "sources">): string {
+  const piece = item.sources[0]?.piece ?? "";
+  const app = piece.split(" / ")[0]?.trim().toLowerCase().slice(0, 80);
+  return app || "general";
+}
+
+export interface TopicFeedback { up: number; down: number; less: number }
+
+/** A topic's weight: up raises it, down lowers it, less lowers it twice. */
+export function topicScore(row: TopicFeedback | undefined): number {
+  if (!row) return 0;
+  return row.up - row.down - 2 * row.less;
+}
+
+/** At or under this, a topic is not proposed any more. */
+export const TOPIC_MUTED_AT = -4;
+
+/** The suggestions a pass keeps, ranked by topic: a muted topic is dropped,
+ * a topic the person asked less of keeps one item a pass, the rest goes
+ * from the most liked topic down. */
+export function rankByFeedback<T extends Pick<BriefSuggestion, "sources">>(items: readonly T[], topics: Readonly<Record<string, TopicFeedback>>): T[] {
+  const perTopic = new Map<string, number>();
+  const kept: Array<{ item: T; score: number; index: number }> = [];
+  items.forEach((item, index) => {
+    const topic = briefTopic(item);
+    const row = topics[topic];
+    const score = topicScore(row);
+    if (score <= TOPIC_MUTED_AT) return;
+    const seen = perTopic.get(topic) ?? 0;
+    if (row && row.less > 0 && seen >= 1) return;
+    perTopic.set(topic, seen + 1);
+    kept.push({ item, score, index });
+  });
+  return kept.sort((a, b) => b.score - a.score || a.index - b.index).map((row) => row.item);
+}
+
+/** The memory line a feedback leaves, in the person's language. */
+export function feedbackMemoryText(choice: BriefFeedback, text: string, topic: string, language: "fr" | "en"): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const quote = flat.length > 120 ? `${flat.slice(0, 119).trimEnd()}…` : flat;
+  if (language === "fr") {
+    const what = { up: "aime ce genre de suggestion", down: "n'a pas trouvé utile", less: "veut moins de suggestions de ce genre", never: "ne veut plus jamais cette suggestion" }[choice];
+    return `Suggestions proactives : la personne ${what} (${topic}) : « ${quote} ».`;
+  }
+  const what = { up: "likes this kind of suggestion", down: "did not find this useful", less: "wants fewer suggestions like this", never: "never wants this suggestion again" }[choice];
+  return `Proactive suggestions: the person ${what} (${topic}): "${quote}".`;
 }
 
 export interface BriefPassInput {
@@ -103,7 +164,10 @@ const suggestionSchema = z.object({
   status: z.enum(["pending", "rejected", "kept"]),
   identity: z.string().min(1).max(500),
   at: z.number(),
+  feedback: z.enum(BRIEF_FEEDBACK).optional(),
 });
+
+const topicSchema = z.object({ up: z.number().int().nonnegative(), down: z.number().int().nonnegative(), less: z.number().int().nonnegative() });
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
@@ -125,6 +189,8 @@ const botSchema = z.object({
   lastScheduledDay: z.string().regex(DAY).optional(),
   /** When the last pass ran, found something or not. */
   lastPassAt: z.number().optional(),
+  /** #2694: the person's feedback per topic (briefTopic). */
+  topics: z.record(z.string(), topicSchema).optional(),
 });
 
 const fileSchema = z.object({ version: z.literal(1), bots: z.record(z.string(), botSchema) });
@@ -359,7 +425,7 @@ export class BriefStore {
   recordPass(botId: string, pass: Extract<BriefPassResult, { ok: true }>): BriefSuggestion[] {
     const row = this.bot(botId);
     const added: BriefSuggestion[] = [];
-    for (const suggestion of pass.suggestions) {
+    for (const suggestion of rankByFeedback(pass.suggestions, row.topics ?? {})) {
       if (row.rejected.includes(suggestion.identity)) continue;
       if (row.suggestions.some((item) => item.identity === suggestion.identity)) continue;
       const saved: BriefSuggestion = { ...suggestion, id: `brief_${randomUUID()}`, status: "pending", at: this.now() };
@@ -383,6 +449,32 @@ export class BriefStore {
     this.data.bots[botId] = row;
     this.save();
     return item;
+  }
+
+  /** #2694: the person's feedback on one item, answered or not. */
+  feedback(botId: string, id: string, choice: BriefFeedback): { item: BriefSuggestion; topic: string } | null {
+    const row = this.bot(botId);
+    const item = row.suggestions.find((candidate) => candidate.id === id);
+    if (!item) return null;
+    const topic = briefTopic(item);
+    const topics = row.topics ?? {};
+    const counts = topics[topic] ?? { up: 0, down: 0, less: 0 };
+    if (choice !== "never") counts[choice] += 1;
+    topics[topic] = counts;
+    row.topics = topics;
+    item.feedback = choice;
+    if ((choice === "down" || choice === "never" || choice === "less") && item.status === "pending") item.status = "rejected";
+    if (choice === "never" && !row.rejected.includes(item.identity)) {
+      row.rejected.push(item.identity);
+      row.rejected = row.rejected.slice(-200);
+    }
+    this.data.bots[botId] = row;
+    this.save();
+    return { item, topic };
+  }
+
+  topics(botId: string): Record<string, TopicFeedback> {
+    return { ...this.bot(botId).topics };
   }
 
   takePending(botId: string, id: string): BriefSuggestion | null {

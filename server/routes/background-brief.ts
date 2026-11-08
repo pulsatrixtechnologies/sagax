@@ -12,6 +12,9 @@
 //        Reads the apps already connected. No app: an empty queue.
 //   POST /api/bots/:id/background-brief/:suggestionId/reject
 //   POST /api/bots/:id/background-brief/:suggestionId/keep
+//   POST /api/bots/:id/background-brief/:suggestionId/feedback { choice }
+//        #2694: up, down, less or never. Applies at the next pass and
+//        leaves one memory line for the person.
 //
 // A pass does not invent pieces. It files only what the caller already read,
 // and only when every tool named is a read. Keep writes one memory line
@@ -20,6 +23,7 @@
 import { PASS, type RouteHandler } from "./table.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import {
+  isBriefFeedback,
   keptMemoryLine,
   readConnectedBrief,
   type BriefAppCall,
@@ -35,6 +39,8 @@ export interface BackgroundBriefRouteDeps {
   fastModel: (botId: string) => string | null;
   /** Write the kept line into the person's memory. */
   keep: (botId: string, line: string) => void;
+  /** #2694: write a feedback line into the person's memory. */
+  remember?: (botId: string, choice: import("../proactive/background-brief.ts").BriefFeedback, text: string, topic: string) => void;
   /** Names of the apps already connected. Empty: the queue stays empty. */
   connected(botId: string): readonly string[];
   /** A read of those apps. No send, no change, no browser. */
@@ -87,6 +93,15 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
       const rejected = deps.store.reject(botId, suggestionId);
       if (!rejected) return json(res, 404, { error: "No pending suggestion." });
       return json(res, 200, { suggestion: rejected });
+    }
+    if (suggestionId && action === "feedback" && method === "POST") {
+      const body = await readBody(req) as { choice?: unknown } | null;
+      const choice = body?.choice;
+      if (!isBriefFeedback(choice)) return json(res, 400, { error: "choice must be up, down, less or never" });
+      const done = deps.store.feedback(botId, suggestionId, choice);
+      if (!done) return json(res, 404, { error: "No such suggestion." });
+      deps.remember?.(botId, choice, done.item.text, done.topic);
+      return json(res, 200, { suggestion: done.item, topic: done.topic });
     }
     if (suggestionId && action === "keep" && method === "POST") {
       const kept = deps.store.takePending(botId, suggestionId);

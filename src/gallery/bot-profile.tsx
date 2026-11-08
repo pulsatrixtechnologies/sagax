@@ -378,7 +378,8 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   ] });
   if (path === `${bots}/inbound-mail`) return json({ available: true, address: "scout@northwind.example", enabled: true });
   if (path === `${bots}/reach-me`) return json({ saved: true, settings: { channels: ["push", "email"], hours: { always: true } }, channels: { push: { ready: true, devices: 2 }, email: { ready: true } } });
-  if (path === `${bots}/background-brief`) return json({ apps: 3, screenContextAvailable: true, settings: { enabled: true, at: "08:00", screenContext: true }, suggestions: ["Check the calendar for the day", "Scan unread email from clients"] });
+  if (path === `${bots}/background-brief`) return json({ apps: 3, screenContextAvailable: true, settings: { enabled: true, at: "08:00", screenContext: true }, suggestions: [{ id: "brief_a", text: "Reply to Carla about the contract due 2026-11-10", status: "pending" }, { id: "brief_b", text: "Scan unread email from clients", status: "pending", feedback: "less" }] });
+  if (/\/background-brief\/[^/]+\/feedback$/.test(path)) return json({ ok: true });
   if (path === `${bots}/tool-grants`) return json({ grants: [] });
   if (path === `${bots}/lifecycle-hooks`) return json({ enabled: true, events: ["turn.start", "turn.end"] });
   if (path === `${bots}/roles/rules`) return json({ rules: [{ id: "rr1", from: { slug: "finance", name: "Finance" }, to: { slug: "", name: "Me" }, path: "/finance/invoices", ownerId: "pr_alex", createdAt: NOW - 4 * DAY }] });

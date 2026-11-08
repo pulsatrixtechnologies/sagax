@@ -169,6 +169,9 @@ export interface RoutineRun {
    * settles when that work ends, even without another turn), or absent for
    * a question or approval for the person. */
   waitingOn?: "teammates";
+  /** #2939: when the host last drew a card this run's bot claimed without
+   * drawing it; a later claim is checked from then on, restarts included. */
+  claimCardAt?: number;
   /** Snapshot of the routine's confined access for this run. */
   access?: RoutineAccess;
   /** Items its routine's checks handed this run, so they are kept or released once it ends. */

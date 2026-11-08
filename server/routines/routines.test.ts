@@ -16,6 +16,7 @@ import {
   RoutineManager,
   routineAskAction,
   routineEndsOnAnnouncement,
+  routineRerunStartedBy,
   routineWaitingLine,
   troubleToolKey,
   RoutineScheduleError,
@@ -4344,15 +4345,42 @@ describe("the organization memory before a run (2026-10-11)", () => {
   // duplicate note of its own past runs, took itself for a duplicate and
   // failed. A run the person started never asks the duplicate detector.
   it("never asks the duplicate detector for a run the person started", async () => {
-    for (const startedBy of [undefined, "person"] as const) {
-      const h = withMemory(async () => ({ hint, note: "Note from the organization memory" }));
-      const routine = h.manager.create(input, undefined, { actorPrincipalId: "pr_alice" });
-      h.manager.runNow(routine.id, undefined, startedBy);
-      await h.manager.tick();
-      expect(h.asked).toEqual([]);
-      expect(h.started.map((turn) => turn.prompt)).toEqual(["Triage the new tickets"]);
-      expect(h.manager.listRuns()[0]?.memoryHint).toBeUndefined();
-    }
+    const h = withMemory(async () => ({ hint, note: "Note from the organization memory" }));
+    const routine = h.manager.create(input, undefined, { actorPrincipalId: "pr_alice" });
+    h.manager.runNow(routine.id, undefined, "person");
+    await h.manager.tick();
+    expect(h.asked).toEqual([]);
+    expect(h.started.map((turn) => turn.prompt)).toEqual(["Triage the new tickets"]);
+    expect(h.manager.listRuns()[0]?.memoryHint).toBeUndefined();
+  });
+
+  // #2939: the usage limit failover and the resume after a reset rerun a
+  // scheduled run through runNow with nobody behind it. That rerun is
+  // automatic, so it still asks the duplicate detector.
+  it("asks the duplicate detector for a rerun the host started on its own", async () => {
+    const h = withMemory(async () => ({ hint, note: "Note from the organization memory" }));
+    const routine = h.manager.create(input, undefined, { actorPrincipalId: "pr_alice" });
+    const run = h.manager.runNow(routine.id);
+    expect(run?.triggerSource).toBe("manual");
+    await h.manager.tick();
+    expect(h.asked).toEqual([{ runAs: "pr_alice", prompt: "Triage the new tickets" }]);
+    expect(h.started.map((turn) => turn.prompt)).toEqual(["Triage the new tickets\n\nNote from the organization memory"]);
+    expect(h.manager.listRuns()[0]?.memoryHint).toEqual(hint);
+  });
+
+  // #2939: a person's run rerun by the host after a usage limit is still
+  // theirs, so it never takes itself for a duplicate of the run that hit it.
+  it("keeps a person's run out of the duplicate detector when the host reruns it", async () => {
+    expect(routineRerunStartedBy({ startedBy: "person" })).toBe("person");
+    expect(routineRerunStartedBy({})).toBeUndefined();
+    expect(routineRerunStartedBy(undefined)).toBeUndefined();
+    const h = withMemory(async () => ({ hint, note: "Note from the organization memory" }));
+    const routine = h.manager.create(input, undefined, { actorPrincipalId: "pr_alice" });
+    const first = h.manager.runNow(routine.id, undefined, "person")!;
+    h.manager.runNow(routine.id, undefined, routineRerunStartedBy(first));
+    await h.manager.tick();
+    expect(h.asked).toEqual([]);
+    expect(h.manager.listRuns().every((run) => run.memoryHint === undefined)).toBe(true);
   });
 
   it("starts the run as if not asked when the memory fails, finds nothing or is slow", async () => {

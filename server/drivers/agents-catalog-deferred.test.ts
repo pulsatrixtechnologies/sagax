@@ -28,6 +28,8 @@ const ALWAYS_LOADED = [
   "memory_update", "memory_log", "session_search", "tool_result_read", "answer_approval", "act",
   // #1989: every bot that owns a routine can list and check/run without ToolSearch
   "list_routines", "run_routine",
+  // #2954: an edit on an attached photo calls make_image at once, never after a search
+  "make_image",
 ];
 
 async function listTools(env: Record<string, string>): Promise<Array<{ name: string; _meta?: Record<string, unknown> }>> {
@@ -108,7 +110,8 @@ describe("deferred rare agents tools", () => {
   it("keeps the loaded part of a Claude listing under its budget, byte-stable (#1997)", async () => {
     const DIRECT = { SAGAX_BOT_ID: "bot-a", SAGAX_CHIEF_OF_STAFF: "1", SAGAX_SKILL_AUTHORING_ENABLED: "1", SAGAX_SHARED_COMPUTERS_ENABLED: "1", SAGAX_VOICE_NOTES: "1" };
     const budgets = [
-      { name: "direct", env: DIRECT, maxTools: 30, maxBytes: 33_000 },
+      // 2026-11-08 (#2954): +1.5 KB for make_image, always loaded so an image edit is one call.
+      { name: "direct", env: DIRECT, maxTools: 30, maxBytes: 34_500 },
       { name: "everything", env: EVERYTHING, maxTools: 66, maxBytes: 66_000 },
     ];
     for (const budget of budgets) {

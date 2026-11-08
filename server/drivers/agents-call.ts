@@ -15,6 +15,7 @@ import { isOpenApiTool } from "../mcp/openapi-tools.ts";
 import { callCardTool, CARD_TOOL_NAMES } from "./agents-call-cards.ts";
 import { callPhoneTool, PHONE_TOOL_NAME } from "./agents-phone-tools.ts";
 import { callVideoTool, VIDEO_TOOL_NAME } from "./agents-video.ts";
+import { callImageTool, IMAGE_TOOL_NAME } from "./agents-image.ts";
 import { callVaultHttpTool, VAULT_HTTP_TOOL_NAME } from "./agents-vault-http-tools.ts";
 import { callConnectorSetupTool, CONNECTOR_SETUP_TOOL_NAME } from "./agents-connector-setup.ts";
 import { ARTIFACT_TOOL_NAMES, callArtifactTool } from "./agents-call-artifacts.ts";
@@ -86,6 +87,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
   // Already-extracted leaf handlers (definitions live beside them).
   if (CARD_TOOL_NAMES.has(name)) return callCardTool(name, args, context);
   if (name === PHONE_TOOL_NAME) return callPhoneTool(args, context);
+  if (name === IMAGE_TOOL_NAME) return callImageTool(args, context.client);
   if (name === VIDEO_TOOL_NAME) return callVideoTool(args, context.client);
   if (name === VAULT_HTTP_TOOL_NAME) return callVaultHttpTool(args, context);
   if (name === CONNECTOR_SETUP_TOOL_NAME) return callConnectorSetupTool(args, context);

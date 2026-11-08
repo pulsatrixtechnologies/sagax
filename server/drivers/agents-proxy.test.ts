@@ -808,6 +808,7 @@ describe("agents-proxy MCP surface", () => {
       "skills_list",
       "skill_manage",
       "add_mcp_server",
+      "make_image",
       "make_video",
       "memory_recall",
       "memory_search",
@@ -2469,7 +2470,7 @@ describe("standing external runtime", () => {
     expect(list.result.tools.map((tool: any) => tool.name)).toEqual([
       // #2519: a standing external runtime coordinates, then reads the receipt
       "coordinate_bots", "assignment_status",
-      "list_bots", "ask_bot", "delegate_bot", "check_delegation", "wait_delegation", "make_video",
+      "list_bots", "ask_bot", "delegate_bot", "check_delegation", "wait_delegation", "make_image", "make_video",
     ]);
     expect(JSON.stringify(list.result.tools)).not.toMatch(/after your current turn finishes|earlier turn|same turn as delegate_bot/);
     for (const name of ["start_thread", "create_bot", "request_credential", "memory_update", "skill_manage", "shared_computer", "tool_result_read", "act"]) {

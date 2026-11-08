@@ -540,7 +540,7 @@ type GalleryItem = { key: string } & (
 /** How many items the group under a reply shows before "+N more". */
 const BENEATH_LIMIT = 6;
 
-export function AttachmentGallery({ images = [], files = [], message, eager = false, beneath = false, className }: {
+export function AttachmentGallery({ images = [], files = [], message, eager = false, beneath = false, align = "start", className }: {
   images?: Array<string | TranscriptImageAttachment>;
   files?: GalleryFile[];
   message?: MessageAttachmentContext;
@@ -548,6 +548,9 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
   /** The compact group under a reply's text: image thumbnails and file
    * pills in wrapping rows, then "+N more". */
   beneath?: boolean;
+  /** beneath only: "end" lines the group up on the right, for the person's
+   * own message (#2954: their photo is a compact thumbnail, not a bubble). */
+  align?: "start" | "end";
   className?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -609,9 +612,9 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
     // a PDF under a reply is a compact pill like any other file
     const rest = shown.filter((item) => item.kind === "file" || item.kind === "audio" || item.kind === "pdf");
     return (
-      <section aria-label={label} className={cn("mt-2.5 flex max-w-full flex-col items-start gap-2 text-start whitespace-normal", className)}>
+      <section aria-label={label} className={cn("mt-2.5 flex max-w-full flex-col gap-2 text-start whitespace-normal", align === "end" ? "items-end" : "items-start", className)}>
         {thumbs.length > 0 && (
-          <div className="flex max-w-full flex-wrap gap-2">
+          <div className={cn("flex max-w-full flex-wrap gap-2", align === "end" && "justify-end")}>
             {thumbs.map((item) => item.kind === "image" && (
               <div key={item.key} className="min-w-0" title={item.image.name}>
                 {item.memeAttribution ? (
@@ -638,7 +641,7 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
           </div>
         )}
         {(rest.length > 0 || items.length > limit) && (
-          <div className="flex max-w-full flex-wrap items-start gap-1.5">
+          <div className={cn("flex max-w-full flex-wrap items-start gap-1.5", align === "end" && "justify-end")}>
             {rest.map((item) => item.kind === "audio" && message
               ? <AudioAttachment key={`${message.threadId}:${message.messageId}:${item.key}`} file={item.file} message={message} />
               : (item.kind === "file" || item.kind === "pdf") && <AttachedFileChip key={item.key} file={item.file} linked={item.file.linked} message={message} compact />)}
@@ -669,7 +672,9 @@ export function AttachmentGallery({ images = [], files = [], message, eager = fa
                   onClick={() => setSelected(item.image)}
                 />
               ) : (
-                <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className="max-h-72 rounded-2xl border-0 bg-transparent" />
+                // one picture (a generated or edited image, #2954) shows large;
+                // several share the grid at the usual height
+                <AttachmentThumbnail key={item.image.src} image={item.image} eager={eager} onPreview={() => setSelected(item.image)} className={cn("rounded-2xl border-0 bg-transparent", media.length === 1 ? "max-h-[26rem]" : "max-h-72")} />
               )}
             </div>
           ) : item.kind === "video" && message ? (

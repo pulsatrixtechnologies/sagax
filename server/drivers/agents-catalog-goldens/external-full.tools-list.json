@@ -169,6 +169,46 @@
       }
     },
     {
+      "name": "make_image",
+      "description": "Generate an image, or edit the image the person attached to their message (\"put this person in Paris\", \"make it a watercolor\", \"remove the background\"). With an image attached, it edits that image by default; set use_attached_image false to start from scratch. Uses the person's connected image provider (xAI Grok Imagine or OpenAI gpt-image), chosen automatically; this may incur API charges. The result is posted in this chat as your image: do not attach it again or describe it at length. Call it directly: no skill or tool search is needed.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "What the image should show, or the change to make to the attached image, in the person's words."
+          },
+          "image": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Optional exact attachment path or /api/attachments URL of one image in the current person's message. Default: the latest image they attached."
+          },
+          "use_attached_image": {
+            "type": "boolean",
+            "description": "Default true: edit the image attached to the person's message when there is one."
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4",
+              "3:2",
+              "2:3"
+            ],
+            "description": "For a new image only."
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      }
+    },
+    {
       "name": "make_video",
       "description": "Generate a video using the person's xAI API key, or the organization's granted xAI images and videos account. This may incur API charges. Native image_to_video and reference_to_video remain available when the engine offers them. generate starts an async job and returns job_id; status reads progress, list finds this conversation's jobs, cancel stops local polling/download, retry resumes the SAME upstream request without another paid generation. The completed MP4 is saved and attached in this chat. Never claim completion from pending status or show a temporary provider URL. Use a stable request_key for safe retries across turns. A new generate request_key starts a separately billable job.",
       "inputSchema": {

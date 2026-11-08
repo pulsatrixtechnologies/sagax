@@ -308,6 +308,8 @@ import { checkWidgetForTurn, WidgetCheckAttempts, WidgetRenderer } from "./widge
 import { bundledKnowledgeIndex } from "./self-knowledge/self-knowledge.ts";
 import { createSelfKnowledgeInternalRoutes } from "./routes/self-knowledge-internal.ts";
 import { createWebSearchInternalRoutes } from "./routes/web-search-internal.ts";
+import { createImageInternalRoutes } from "./routes/image-internal.ts";
+import { chatImageCredential } from "./media/chat-image.ts";
 import { createVideoInternalRoutes } from "./routes/video-internal.ts";
 import { VideoGenerations, VideoJobError } from "./video/video-generation.ts";
 import { videoCredential } from "./video/video-credentials.ts";
@@ -22098,6 +22100,47 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       if (!image || !["image/png", "image/jpeg", "image/webp"].includes(image.mime)) throw new VideoJobError("The attached image is unavailable or is not PNG, JPEG or WebP.", 400);
       return `data:${image.mime};base64,${image.bytes.toString("base64")}`;
     }
+  }),
+  // make_image (#2954): the person's connected image provider, the image of
+  // their current message, the result posted as this bot's image
+  createImageInternalRoutes({
+    owner: (capability) => {
+      if (!connectorThread(capability.botId, capability.threadId)) return null;
+      return turnMediaPrincipal(capability.threadId) ?? (IDENTITY.kind !== "perspicax" ? localPrincipalId() ?? "solo" : null);
+    },
+    credential: async (capability) => {
+      const principalId = turnMediaPrincipal(capability.threadId) ?? (IDENTITY.kind !== "perspicax" ? localPrincipalId() ?? "solo" : null);
+      const owner = IDENTITY.kind === "perspicax" ? providerAccountOwner(principalId) : undefined;
+      return chatImageCredential({
+        organization: IDENTITY.kind === "perspicax",
+        personal: (provider) => owner ? providerAccounts.resolve(owner, provider) : Promise.resolve({ ok: false as const, error: "no_key" as const }),
+        solo: (provider) => providerAccounts.key(undefined, provider),
+        imageGen: cfg.imageGen,
+        organizationXaiAllowed: () => orgXaiMediaGiven("image", principalId),
+        organizationXaiKey: () => cfg.xai?.key,
+      });
+    },
+    image: async (capability, reference) => {
+      const message = videoInputMessage(capability);
+      const candidates = [
+        ...(message?.attachments?.filter(item => item.kind === "image").map(item => item.path) ?? []),
+        ...messageAttachmentTags(message?.text ?? "").filter(item => item.kind === "image").map(item => item.path),
+      ];
+      const path = reference === undefined ? candidates.at(-1) : candidates.find(path => path === reference || `/api/attachments/${basename(path)}` === reference);
+      if (!path || dirname(path) !== ATTACHMENTS_DIR) return null;
+      const image = readAttachment(basename(path));
+      if (!image || !["image/png", "image/jpeg", "image/webp"].includes(image.mime)) return null;
+      return { bytes: image.bytes, mime: image.mime };
+    },
+    append: (capability, attachment) => {
+      const from = store.bot(capability.botId);
+      const source = connectorThread(capability.botId, capability.threadId);
+      if (!from || !source) return;
+      store.appendMessage(capability.threadId, {
+        role: "bot", kind: "text", text: "", attachments: [attachment],
+        ...(source.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}),
+      });
+    },
   }),
   createOpenApiInternalRoutes({
     organization: () => IDENTITY.kind === "perspicax",

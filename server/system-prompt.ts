@@ -356,6 +356,12 @@ export const MEME_PROMPT =
   + " Decide for yourself from the person's personality and style: they send memes or emojis, a playful tone, or a memory that they like memes."
   + " Use memes sparingly. Never in serious or work contexts (tickets, invoices, errors, approvals, status of a failing job, or anything they need as a real written answer)."
   + " A meme never replaces words they are waiting to read. Optional caption is for still templates only.";
+/** Images (make_image, #2954): generating or editing a picture is one
+ * native call on every engine, never a skill or tool search. */
+export const IMAGE_PROMPT =
+  "\nImages: to create an image, or to change an image the person attached (\"put this person in Paris\", \"make it a cartoon\"), call make_image { prompt } right away: it edits their attached image by default and posts the result in this chat."
+  + " Do not search skills or tools for an image capability first, and do not load a skill for it. Say at most one short sentence before the call, and after it at most one short line (the image is already shown)."
+  + " If it answers that no image provider is connected, tell the person in one line to connect xAI or OpenAI in Settings > Providers, and stop.";
 /** Ten minutes stays inside the 20-minute turn stall watchdog, which sees nothing while a command runs. */
 export const BASH_MAX_TIMEOUT_MS = 600_000;
 const LONG_COMMANDS_TEXT =

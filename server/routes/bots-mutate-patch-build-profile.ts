@@ -198,6 +198,14 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
     }
     patch.emailDrafts = body.emailDrafts;
   }
+  // #2747: grok.com connectors reach a bot on a Grok engine only when it opts in
+  if (body.grokAccountConnectors !== undefined) {
+    if (typeof body.grokAccountConnectors !== "boolean") {
+      env.json(env.res, 400, { error: "grokAccountConnectors must be true or false" });
+      return true;
+    }
+    patch.grokAccountConnectors = body.grokAccountConnectors;
+  }
   if (body.collaboratorsCreateRoutines !== undefined) {
     if (typeof body.collaboratorsCreateRoutines !== "boolean") {
       env.json(env.res, 400, { error: "collaboratorsCreateRoutines must be true or false" });

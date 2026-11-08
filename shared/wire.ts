@@ -541,6 +541,10 @@ export interface WireBot {
   /** Whether this bot may write email draft cards. Absent/true = allowed;
    * false refuses ```email fences in the prompt and the send route. */
   emailDrafts?: boolean;
+  /** #2747: a bot on a Grok engine loads its xAI account's grok.com connectors (the
+   * managed MCP gateway) on the person's own sign-in. Absent/false = off:
+   * the bot sees only the tools Sagax mounts for it. */
+  grokAccountConnectors?: boolean;
   /** #2121: whether this bot may reply with memes (send_meme). Absent or
    * "auto" = the bot decides from the person's style; "off" hides the tool. */
   memeReplies?: "auto" | "off";

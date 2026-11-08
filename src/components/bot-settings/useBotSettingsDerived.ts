@@ -51,6 +51,7 @@ export type BotPatch = Partial<
     | "voiceSpeed"
     | "voiceLanguage"
     | "emailDrafts"
+    | "grokAccountConnectors"
     | "memeReplies"
     | "chiefOfStaff"
     | "managedSections"

@@ -18632,6 +18632,10 @@ async function startTurn(
     /** A warm for a teammate's coordinate_bots turn (prewarmNamedTeammates):
      * built as that turn will be, so the turn takes the warm process as is. */
     warmCoordination?: boolean;
+    /** QA 0.8.66: a warm sent while the person types. The engine also fills
+     * the provider cache with the system prefix, so the first turn of a new
+     * conversation reads it instead of a cold prefill (start-turn-dispatch). */
+    primeCache?: boolean;
     /** Aborted when that call ends before the warm is needed. */
     warmSignal?: AbortSignal;
     /** Fired once the warm has released its claim, whether or not the
@@ -32867,6 +32871,9 @@ const startTurnRunner = createStartTurn({
   orgEngineRefusal,
   orgEngineTurnRefusal,
   orgSpeakerPrincipal,
+  principals,
+  releaseVersion,
+  bundledKnowledgeIndex,
   orgTurnAccess,
   outstandingAssignmentsPrompt,
   ownerBotsReadOnly,

@@ -38,7 +38,9 @@ export function turnClockEnabled(env: NodeJS.ProcessEnv = process.env): boolean 
 /** One line put before the turn's text. */
 export function turnClockNote(now: Date, timeZone: string): string {
   const { text, offset } = zonedNow(now, timeZone);
-  return `${TURN_CLOCK_MARKER} ${text}, ${timeZone} (${offset}). Give dates and times in ${timeZone} unless the user asks for another zone; convert UTC or other-zone timestamps from tools before showing them.]`;
+  // "exact, no tool": a bot asked the time ran search_tool, sagax_help and a
+  // shell `date` before answering, about 8 s of a 20 s turn (QA 0.8.66).
+  return `${TURN_CLOCK_MARKER} ${text}, ${timeZone} (${offset}). This clock is exact: answer the date, the time or a conversion between zones from it, without a tool. Give dates and times in ${timeZone} unless the user asks for another zone; convert UTC or other-zone timestamps from tools before showing them.]`;
 }
 
 export function withTurnClock(text: string, now: Date, timeZone: string): string {

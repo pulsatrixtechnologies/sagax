@@ -298,6 +298,10 @@ export interface SendTurnInput {
    * background prompt of the system prefix so the first spoken turn can
    * read it from the provider cache. Not awaited, and not a turn. */
   cachePrime?: boolean;
+  /** With cachePrime: how long the first real turn waits for that prime
+   * before it cancels it (default VOICE_CACHE_PRIME_JOIN_MS). A typed turn
+   * waits longer: a cancelled prime leaves the whole prefill to the turn. */
+  cachePrimeJoinMs?: number;
   /** Aborted when the call ends before that warm process is needed. The
    * driver closes the idle process this warm started. A process a real
    * turn already owns stays up. */

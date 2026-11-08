@@ -30,7 +30,7 @@ function threadWarmRequest(auth: RequestAuth, botId: string, body: Record<string
   if (body.typing === true) host.prewakeComputerWhileTyping(bot.id, host.actorPrincipalId(auth));
   // files sealed at rest start opening for the coming turn (server/encryption/content-at-rest.ts)
   host.openForComingTurn(bot.id, threadId);
-  return { status: 200, body: { warm: host.prewarmThread(bot.id, threadId, host.actorPrincipalId(auth) || "local", { speaker: host.speakerFor(auth) }) } };
+  return { status: 200, body: { warm: host.prewarmThread(bot.id, threadId, host.actorPrincipalId(auth) || "local", { speaker: host.speakerFor(auth), ...(body.typing === true ? { primeCache: true } : {}) }) } };
 
 }
   return threadWarmRequest;

@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { carryAutoComputerMoves, pinnedWorkspaceStart } from "../computer/auto-computer.ts";
 import { turnLanguage } from "./turn-language.ts";
+import { withHelpPrefetch } from "../self-knowledge/help-prefetch.ts";
 import { effortForEngine } from "../../shared/ultracode-effort.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
@@ -23,6 +24,7 @@ export function createPrepareAdmitStartTurn(
     autoModelRecord,
     autoStartTarget,
     autoTurnsByThread,
+    bundledKnowledgeIndex,
     autoWorkspaceWanted,
     botUserName,
     cfg,
@@ -56,6 +58,8 @@ export function createPrepareAdmitStartTurn(
     officeTurnText,
     orgEngineRefusal,
     orgSpeakerPrincipal,
+    principals,
+    releaseVersion,
     ownerModelOfflineRefusal,
     personalFeatureOn,
     promptWithDataContext,
@@ -354,6 +358,21 @@ export function createPrepareAdmitStartTurn(
   // (server/turns/turn-clock.ts), so times are said in their zone.
   const clockZone = state.opts.cardContinuation || !turnClockEnabled() ? null : turnZoneFor(state.bot, state.speaker);
   if (clockZone) state.providerText = withTurnClock(state.providerText, new Date(), clockZone);
+  // A question about Sagax itself: the sagax_help lookup runs here, before
+  // the engine, so it answers in one model round (server/self-knowledge/help-prefetch.ts).
+  if (state.personLine && !state.warmOnly && !state.smallTalk && !state.opts.cardContinuation && !state.opts.commsDepth && !state.userMessage.peerAsk) {
+    const organization = IDENTITY.kind === "perspicax";
+    const speakerId = organization ? orgSpeakerPrincipal(state.bot, state.speaker) : null;
+    const person = speakerId ? principals.byId(speakerId) : null;
+    const role = !organization || !person ? null : person.local === true || person.orgRole === "admin" ? "admin" : "member";
+    const prefetched = withHelpPrefetch(state.providerText, state.userMessage.text, await bundledKnowledgeIndex().catch(() => null), {
+      organization, role, perspicaxTools: organization && Boolean(speakerId), release: releaseVersion()
+    });
+    if (prefetched.ids.length) {
+      state.providerText = prefetched.text;
+      console.error(`[help-prefetch] thread=${state.threadId} sections=${prefetched.ids.length}`);
+    }
+  }
   // A compaction summarizes with the bot's engine too, so it is gated like
   // a turn, and so is a fresh delegated turn (a hop, as ask_bot's is); other
   // card continuations resume a turn already admitted.

@@ -31,6 +31,19 @@ describe("ThreadPrewarm", () => {
     expect(warm.has("t1")).toBe(false);
   });
 
+  it("primes a warm once: the typing prime after an open warm runs a single time", async () => {
+    const warm = new ThreadPrewarm({ windowMs: 60_000 });
+    expect(warm.primeOnce("t1")).toBeNull();
+    let signal: AbortSignal | null = null;
+    warm.begin("t1", "p", async (s) => { signal = s; });
+    await warm.join("t1");
+    const prime = warm.primeOnce("t1");
+    expect(prime).toBe(signal);
+    expect(warm.primeOnce("t1")).toBeNull();
+    warm.claim("t1");
+    expect(warm.primeOnce("t1")).toBeNull();
+  });
+
   it("evicts the warm used longest ago, not the one the person keeps refreshing", () => {
     const warm = new ThreadPrewarm({ windowMs: 60_000, maxWaiting: 2 });
     const aborted: string[] = [];

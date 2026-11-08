@@ -6,6 +6,7 @@ import {
 } from "./constants.ts";
 import { offeredModels, skipSubscriptionAuthForLocalInject } from "./helpers.ts";
 import type { AcpTurnCtx } from "./turn-context.ts";
+import { turnTrace } from "../../turns/turn-trace.ts";
 
 export async function establishAcpTurn(ctx: AcpTurnCtx): Promise<void> {
   const {
@@ -173,6 +174,7 @@ for (;;) {
     session.sessionKey = sessionKey;
     receiveModelVariants(result);
   });
+  turnTrace(threadId, "acp-session-new");
   break;
 }
 // every establishment path leaves a native session id behind
@@ -296,6 +298,7 @@ try {
         emit({ ...base(threadId, turnId), type: "runtime.notice", message });
       },
     });
+    turnTrace(threadId, "acp-session-configured");
     approvalUnconfirmed = false;
     ctx.approvalUnconfirmed = false;
     if (configured && typeof configured.model === "string" && configured.model !== cliTurn.model) {

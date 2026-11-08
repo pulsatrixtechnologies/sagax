@@ -179,6 +179,8 @@ export interface AcpSession {
    * null, so its chunks are not a turn. */
   cachePrime?: Promise<void>;
   cachePrimed?: boolean;
+  /** how long the next turn joins `cachePrime` (contracts cachePrimeJoinMs) */
+  cachePrimeJoinMs?: number;
 }
 
 /** Per-harness specifics — everything that differs between Grok, Gemini, … */

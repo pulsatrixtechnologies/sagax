@@ -108,8 +108,11 @@ if (session.cachePrime) {
   const pending = session.cachePrime;
   await joinCachePrime(pending, () => {
     if (sessionId) session.acp.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId } });
-  });
-  if (sessions.get(threadId) === session) session.cachePrime = undefined;
+  }, session.cachePrimeJoinMs);
+  if (sessions.get(threadId) === session) {
+    session.cachePrime = undefined;
+    session.cachePrimeJoinMs = undefined;
+  }
 }
 if (state.settled || state.stopped || session.closing) throw new Error("turn stopped");
 state.promptSent = true;

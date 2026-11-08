@@ -220,6 +220,25 @@ describe("the sagax-desktop tools", () => {
     expect(() => desktopToolOperation("search_files", {})).toThrow();
     expect(() => desktopToolOperation("nope", {})).toThrow();
   });
+  // #2740: a bot sent its script to write_file in base64; the script now
+  // reaches the computer (and the guard, the audit) as plain text.
+  it("writes a script sent in base64 as plain text, and keeps binary bytes in base64", async () => {
+    const script = "#!/usr/bin/env python3\nprint('bonjour, été')\r\n\tdone\n";
+    const encoded = Buffer.from(script).toString("base64");
+    expect(desktopToolOperation("write_file", { path: "~/c.py", content: script })).toEqual({ action: "write_file", path: "~/c.py", content: script, encoding: "utf8" });
+    expect(desktopToolOperation("write_file", { path: "~/c.py", content: encoded, encoding: "base64" })).toEqual({ action: "write_file", path: "~/c.py", content: script, encoding: "utf8" });
+    expect(desktopToolOperation("write_file", { path: "~/c.py", content: encoded.replace(/(.{8})/g, "$1\n"), encoding: "base64" })).toMatchObject({ content: script, encoding: "utf8" });
+    const bom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("a=1\n")]);
+    expect(Buffer.from((desktopToolOperation("write_file", { path: "~/b.txt", content: bom.toString("base64"), encoding: "base64" }) as { content: string }).content)).toEqual(bom);
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]).toString("base64");
+    expect(desktopToolOperation("write_file", { path: "~/i.png", content: png, encoding: "base64" })).toEqual({ action: "write_file", path: "~/i.png", content: png, encoding: "base64" });
+    expect(desktopToolOperation("write_file", { path: "~/x", content: "not base64!", encoding: "base64" })).toMatchObject({ encoding: "base64" });
+    const listed = await handleDesktopBridgeMcp("tools/list", {}, async () => null) as { tools: { name: string; description: string; inputSchema: { properties: Record<string, { description?: string }> } }[] };
+    const write = listed.tools.find((tool) => tool.name === "write_file")!;
+    expect(write.description).toMatch(/plain text/);
+    expect(write.inputSchema.properties.encoding?.description).toMatch(/only for a binary file/);
+    expect(listed.tools.find((tool) => tool.name === "run_command")!.inputSchema.properties.command?.description).toMatch(/never encoded/);
+  });
   it("lists the solo-mode set and turns a refusal into a tool error", async () => {
     const listed = await handleDesktopBridgeMcp("tools/list", {}, async () => null) as { tools: { name: string }[] };
     expect(listed.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["run_command", "read_file", "write_file", "search_files", "fetch_url", "browse", "computer_use", "local_vm"]));

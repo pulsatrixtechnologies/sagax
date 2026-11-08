@@ -22,7 +22,7 @@ export const DESKTOP_BRIDGE_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        command: { type: "string", description: "The command line." },
+        command: { type: "string", description: "The command line. A script goes in plain text (a heredoc, or write_file then run it), never encoded: the person reads what runs." },
         cwd: { type: "string", description: "Working directory (default: their home folder). ~ is their home." },
         timeout_seconds: { type: "number", description: "Stop after this many seconds (default 120, at most 600)." },
       },
@@ -47,10 +47,14 @@ export const DESKTOP_BRIDGE_TOOLS = [
   },
   {
     name: "write_file",
-    description: `Create or replace a file ${where}. Missing folders are created.`,
+    description: `Create or replace a file ${where}. Missing folders are created. Send a script or any text as is, in plain text: it arrives byte for byte.`,
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string" }, content: { type: "string" }, encoding: { type: "string", enum: ["utf8", "base64"] } },
+      properties: {
+        path: { type: "string" },
+        content: { type: "string", description: "The file's text as is. base64 only with encoding base64, for binary bytes." },
+        encoding: { type: "string", enum: ["utf8", "base64"], description: "utf8 (default) for any text, a script included. base64 only for a binary file (image, archive)." },
+      },
       required: ["path", "content"],
       additionalProperties: false,
     },
@@ -129,6 +133,27 @@ const optionalNumber = (value: unknown, min: number, max: number): number | unde
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.floor(value))) : undefined;
 
 /** The operation one tool call becomes. Throws on bad arguments. */
+/** The text a base64 payload holds, or null when it is binary (#2740):
+ * strict base64, valid UTF-8, no NUL and no other control byte than tab,
+ * newline, carriage return and form feed. */
+export function base64Text(content: string): string | null {
+  const compact = content.replace(/\s+/g, "");
+  if (!compact || compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(compact)) return null;
+  const bytes = Buffer.from(compact, "base64");
+  if (bytes.toString("base64") !== compact) return null;
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (code === 0x7f || (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0c && code !== 0x0d)) return null;
+  }
+  return text;
+}
+
 export function desktopToolOperation(name: string, args: Record<string, unknown>): DesktopBridgeOperation {
   // The Apple apps of the person's Mac: validated and bounded here, again on the desktop.
   if (isMacAppTool(name)) return { action: "mac_app", tool_name: name, arguments: macAppOperation(name, args) };
@@ -143,7 +168,12 @@ export function desktopToolOperation(name: string, args: Record<string, unknown>
     case "write_file": {
       if (typeof args.content !== "string") throw new Error("content must be a string");
       if (args.content.length > 1_400_000) throw new Error("content is larger than 1 MiB; write it in parts or generate it with run_command");
-      return { action: "write_file", path: str(args.path, "path", 4096), content: args.content, encoding: args.encoding === "base64" ? "base64" : "utf8" };
+      const path = str(args.path, "path", 4096);
+      if (args.encoding !== "base64") return { action: "write_file", path, content: args.content, encoding: "utf8" };
+      // #2740: a script sent in base64 is written as the text it is, so the
+      // audit, the guard and the person see the script, not an encoded blob.
+      const text = base64Text(args.content);
+      return text === null ? { action: "write_file", path, content: args.content, encoding: "base64" } : { action: "write_file", path, content: text, encoding: "utf8" };
     }
     case "list_files":
       return { action: "list_files", path: optionalStr(args.path, "path") };

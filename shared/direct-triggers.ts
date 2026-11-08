@@ -3,7 +3,7 @@
 //
 // Before, every event of these channels went through the bot's proactive
 // switch alone (shared/proactive-mode.ts), so a person could not say "wake
-// Melonie on mail from the client, not on newsletters", and a text from
+// the bot on mail from the client, not on newsletters", and a text from
 // someone else than the owner woke nothing when the bot had no Bot phone
 // trigger. A channel setting:
 // - absent: the channel follows the bot's proactive switch (as before);

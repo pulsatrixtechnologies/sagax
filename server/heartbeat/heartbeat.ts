@@ -246,6 +246,9 @@ export interface HeartbeatDeps {
   /** HEARTBEAT.md as text, "" when the bot has none. */
   read(botId: string): string;
   enqueue(input: HeartbeatEnqueue): unknown;
+  /** #2694: the person said "never" to heartbeat wakes, or voted them down
+   * past the mute line (votes fade): the bot is not woken. */
+  muted?(botId: string): boolean;
   probes?: Partial<HeartbeatProbes>;
   file?: string;
   now?: () => number;
@@ -314,6 +317,7 @@ export class HeartbeatManager {
         const previous = this.state[bot.id];
         const now = this.now();
         if (previous && now - previous.lastBeatAt < list.everyMs) continue;
+        if (this.deps.muted?.(bot.id)) continue;
         const threadId = this.deps.mainThread(bot.id);
         if (!threadId) continue;
         const { fresh, state } = await evaluateHeartbeat(list, previous, this.probes, now);

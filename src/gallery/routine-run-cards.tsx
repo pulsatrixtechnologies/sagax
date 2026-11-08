@@ -6,7 +6,10 @@
  * store. Neutral fictional bots and routines. Not shipped in the app.
  * ?width=<px>&height=<px>&skin=<id> (pulsatrix: dark, pulsatrix-light: light)
  * ?scene=delegation (2026-11-06): a run that handed work to three teammates,
- * Done and Running mixed, as Grok Bot's sub-agent list. */
+ * Done and Running mixed, as Grok Bot's sub-agent list.
+ * ?scene=feedback (#2694): a heartbeat and a mail wake rated in place, a
+ * "needs you" card and each point of a brief, beside a suggestion card
+ * (the compliant neighbour, OptionCard with its feedback row). */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -15,6 +18,8 @@ import { AttentionRow, RoutineRunRow } from "../components/ChatView";
 import { CodingJobCard } from "../components/CodingJobCard";
 import { GoalRunCard } from "../components/GoalRunCard";
 import { NewMessagesDivider } from "../components/NewMessagesDivider";
+import { OptionCard } from "../components/OptionCard";
+import { BriefItemsFeedback } from "../components/WakeFeedback";
 import type { BotActivityItem } from "../lib/bot-activity";
 import { chatBubbleWidth, useChatBubbleWidthClasses } from "../lib/chat-bubble-width";
 import { codingJobView } from "../lib/coding-job-card";
@@ -125,6 +130,23 @@ const question: Message = {
   },
 } as unknown as Message;
 
+const heartbeatWake = card("heartbeat", { routineName: "Heartbeat: Atlas", status: "completed", wakeTopic: "heartbeat", summary: "The backup service stopped at 3:10 AM. I restarted it; it is running again." }, NOW - 40 * M);
+const mailWake = card("mailwake", { routineName: "Mail", status: "completed", wakeTopic: "mail", feedback: "less", summary: "Carla asked for the signed quote; I drafted the answer in your Drafts folder." }, NOW - 30 * M);
+const BRIEF_ITEMS = [
+  { id: "b1", text: "Answer Carla about the signed quote (Outlook)" },
+  { id: "b2", text: "Follow up with Paul on the renewal (Outlook)", feedback: "up" as const },
+  { id: "b3", text: "Read the release thread (Teams)" },
+];
+const brief: Message = {
+  id: "brief", role: "bot", kind: "text", at: NOW - 20 * M, from: { botId: "atlas" },
+  text: "**Today's brief**\n\n" + BRIEF_ITEMS.map((item) => `- ${item.text} (2026-11-08)`).join("\n"),
+  briefItems: BRIEF_ITEMS,
+} as unknown as Message;
+const proposal: Message = {
+  id: "proposal", role: "bot", kind: "options", at: NOW - 10 * M, from: { botId: "atlas" },
+  card: { title: "Carla asked for the signed quote. Should I draft the answer?", subtitle: "", options: ["Yes, handle it", "No thanks"], requestId: "req-proposal", proactiveProposal: { id: "p1" } },
+} as unknown as Message;
+
 /** A bot reply as ChatView's own Bubble renders it (same classes, same markdown). */
 function NeighbourBubble({ text }: { text: string }) {
   const widths = useChatBubbleWidthClasses();
@@ -232,6 +254,17 @@ function Shell() {
             <>
               <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Run the dispatch pass.</div>
               <RoutineRunRow message={delegatedRun} botId="atlas" />
+            </>
+          ) : scene === "feedback" ? (
+            <>
+              <OptionCard botId="atlas" threadId="atlas-thread" message={proposal} />
+              <RoutineRunRow message={heartbeatWake} botId="atlas" threadId="atlas-thread" />
+              <RoutineRunRow message={mailWake} botId="atlas" threadId="atlas-thread" />
+              <AttentionRow message={question} threadId="atlas-thread" />
+              <div>
+                <NeighbourBubble text={brief.text ?? ""} />
+                <BriefItemsFeedback message={brief} botId="atlas" threadId="atlas-thread" />
+              </div>
             </>
           ) : scene === "unified" ? (
             <>

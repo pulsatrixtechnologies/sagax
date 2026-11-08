@@ -6,6 +6,7 @@ import { isPersistentQuestionCard, parseChoices } from "../../shared/ask-questio
 import { returnFocusToComposer } from "./AskCard";
 import { ExpandableText } from "./ExpandableText";
 import { SuggestionFeedback } from "./SuggestionFeedback";
+import { viewerOwnsBot } from "@/lib/bot-capabilities";
 import { picksInAnswer, QuestionSheet, SheetChoices, SheetField, SheetNote, sheetKeyHandler, type SheetChoice } from "./QuestionSheet";
 import { TerminalDestinationPicker, terminalAnswerPick, terminalDestinationKey, terminalDestinationLabel } from "./terminal/TerminalDestinationPicker";
 
@@ -153,7 +154,7 @@ export function OptionCard({
         <SheetNote>{reading.rest || t("question.status.answered")}</SheetNote>
       )}
       {closed && <SheetNote closed>{t("question.status.closed")}</SheetNote>}
-      {card.proactiveProposal && !groupId && (
+      {card.proactiveProposal && (!groupId || (bot && viewerOwnsBot(state.config, bot))) && (
         <SuggestionFeedback
           className="mt-2"
           value={card.feedback}

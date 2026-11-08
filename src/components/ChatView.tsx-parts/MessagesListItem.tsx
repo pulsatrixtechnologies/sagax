@@ -23,6 +23,7 @@ import { SecretRequestCard } from "../SecretRequestCard";
 import { SignInRequestCard } from "../SignInRequestCard";
 import { GithubConnectCard } from "../GithubConnectCard";
 import { optionsCardRow } from "../OptionsCardRow";
+import { BriefItemsFeedback } from "../WakeFeedback";
 import { MessageBoundary, UnknownMessageCard, isUnknownMessageKind } from "../MessageBoundary";
 import { WidgetMessage } from "../widget/WidgetMessage";
 import { AppMessage } from "../AppMessage";
@@ -305,7 +306,7 @@ export function MessagesListItem({
     }
     // 2026-11-05: what a bot's turn elsewhere left for the person (src/components/AttentionCard.tsx)
     if (m.attention && m.role === "bot" && m.kind === "text") {
-      return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} /></MessageBoundary>;
+      return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} threadId={threadId} /></MessageBoundary>;
     }
     // a bot's page proposal: its approval card (src/components/PublishedPages.tsx)
     if (m.pagePublish && m.role === "bot") {
@@ -345,7 +346,7 @@ export function MessagesListItem({
         // a bot-authored live HTML surface, drawn in the sandboxed app frame
         return <MessageBoundary fallbackText={m.text ?? ""}><AppMessage message={m} /></MessageBoundary>;
       case "routine.run":
-        return <RoutineRunRow message={m} botId={botId} />;
+        return <RoutineRunRow message={m} botId={botId} threadId={threadId} />;
       case "routines":
         return <ConversationRoutineToggle message={m} />;
       case "call":
@@ -440,6 +441,8 @@ export function MessagesListItem({
             replyTarget={lookups.replyTarget(m)}
             onReply={onReply}
           />
+          {/* #2694: each point of a brief, rated where it was said */}
+          {!user && m.briefItems?.length ? <BriefItemsFeedback message={m} botId={botId} threadId={threadId} /> : null}
           </>
         );
       }

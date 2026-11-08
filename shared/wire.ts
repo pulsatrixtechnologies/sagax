@@ -916,6 +916,10 @@ export interface WireMessage extends WaitLineField {
   signIn?: SignInRequestCardData;
   /** One idempotently updated status card for a routine run. */
   routineRun?: RoutineRunCardData;
+  /** #2694: the items of a background brief, each with the person's
+   * feedback, so the chat rates each point where it was said. `text` stays
+   * the readable fallback. */
+  briefItems?: Array<{ id: string; text: string; feedback?: "up" | "down" | "less" | "never" }>;
   /** 2026-11-05: what a bot's finished turn elsewhere (a hand-off, a
    * routine run, a thread another bot opened) left for the person, carried
    * into their own conversation with that bot (shared/person-attention.ts).

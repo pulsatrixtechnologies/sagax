@@ -48,7 +48,9 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   );
   // Never posted and nothing for the person: the chat is left alone.
   if (!existing && !reportable) return sourceThreadId;
-  const card = host.routineRunCard(run, sourceThreadId, host.routineFullReport(run));
+  const fresh = host.routineRunCard(run, sourceThreadId, host.routineFullReport(run));
+  // #2694: the person's feedback on a wake stays on its card across updates
+  const card = existing?.routineRun?.feedback ? { ...fresh, feedback: existing.routineRun.feedback } : fresh;
   const text = host.routineRunFallbackText(card);
   const statusChanged = existing?.routineRun?.status !== run.status;
   const runBotRecord = host.store.bot(run.botId);

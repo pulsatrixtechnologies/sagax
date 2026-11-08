@@ -183,6 +183,8 @@ export interface PersonAttentionCard extends PersonAttention {
   routineName?: string;
   /** The person marked it handled. */
   handledAt?: number;
+  /** #2694: the person's feedback on it (Today box or chat). */
+  feedback?: "up" | "down" | "less" | "never";
 }
 
 /** One line for a client that does not draw the card, and for the push. */

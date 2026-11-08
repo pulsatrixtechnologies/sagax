@@ -31048,6 +31048,7 @@ const feedbackService = createFeedbackService({
   spans: () => readToolSpans(DATA_DIR, { from: new Date(Date.now() - 15 * 60_000), to: new Date() })
     .slice(-20).map((span) => ({ name: span.toolName ? `${span.name} ${span.toolName}` : span.name, ms: span.endMs - span.startMs, ok: span.ok })),
   serverVersion: () => releaseVersion(),
+  language: (person) => languageOfPerson(person),
 });
 try {
   feedbackService.ensureBot();

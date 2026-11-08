@@ -103,7 +103,7 @@ const framesOf = (text: string) => text.split("\n").filter((line) => line.starts
 type WireBot = { id: string; systemBot?: string; threadId: string; tasks: Array<{ threadId: string; title: string; ownerPrincipalId?: string }>; messages: Array<{ kind: string; role: string; text?: string }> };
 // The shared Feedback bot is offered to every member (#2955): the people of these
 // tests are compared on the bots that were shared with them, not on it.
-const withoutSystemBots = <T extends { systemBot?: string }>(bots: T[]): T[] => bots.filter((bot) => !bot.systemBot);
+const withoutSystemBots = <T = any>(bots: Array<{ systemBot?: string }>): T[] => bots.filter((bot) => !bot.systemBot) as T[];
 const botOf = async (auth: Auth, id: string) => ((await api("GET", "/api/bots", auth)).body.bots as WireBot[]).find((bot) => bot.id === id);
 
 async function start() {

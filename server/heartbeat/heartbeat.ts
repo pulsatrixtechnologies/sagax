@@ -3,7 +3,10 @@
 // probes run first (a page, a file, a process, a time of day: the same probes
 // as wait_until, server/waits/wait-probes.ts). The model is woken only when a
 // probe finds a gap, and the run lands in the bot's main chat (unified chat,
-// never a separate thread). An empty checklist does nothing.
+// never a separate thread). An empty checklist does nothing. Notes (lines no
+// probe understands) never wake the model on their own: with only notes, a
+// beat costs nothing; in a mixed list they ride along as context when a probe
+// finds a gap (#2820).
 
 import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -224,16 +227,6 @@ export function heartbeatPrompt(fresh: readonly HeartbeatGap[], notes: readonly 
   return lines.join("\n");
 }
 
-/** Notes alone (no probe at all) wake the model every beat: nothing deterministic can check them. */
-export function notesOnlyPrompt(notes: readonly string[]): string {
-  return [
-    `[Heartbeat] Your ${HEARTBEAT_PATH} checklist is due:`,
-    ...notes.map((note) => `- ${note}`),
-    "",
-    `Check these now. Say something in this chat only when something needs the person; otherwise answer with one short line. You can edit ${HEARTBEAT_PATH} with docs_update.`,
-  ].join("\n");
-}
-
 export interface HeartbeatEnqueue {
   webhookId: string;
   webhookName: string;
@@ -326,10 +319,9 @@ export class HeartbeatManager {
         const { fresh, state } = await evaluateHeartbeat(list, previous, this.probes, now);
         this.state[bot.id] = state;
         changed = true;
-        let prompt: string | null = null;
-        if (fresh.length) prompt = heartbeatPrompt(fresh, list.notes);
-        else if (list.items.length === 0 && list.notes.length) prompt = notesOnlyPrompt(list.notes);
-        if (!prompt) continue;
+        // #2820: only a probe in gap wakes the model; notes are context, never a trigger
+        if (!fresh.length) continue;
+        const prompt = heartbeatPrompt(fresh, list.notes);
         this.deps.enqueue({
           webhookId: `heartbeat:${bot.id}`,
           webhookName: `Heartbeat: ${bot.name}`,

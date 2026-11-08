@@ -461,7 +461,7 @@ import { createCustomRulesModelReviewer } from "./rules/custom-rules-model.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes } from "./approvals/tool-auto-approval.ts";
 import { RoleJournal } from "./perspicax/role-journal.ts";
-import { createRoleEvents, meWriteSummary, missingRoleMessage, readSwitchFingerprint, readSwitchFingerprints, readSwitchSummary } from "./perspicax/role-events.ts";
+import { createRoleEvents, meWriteSummary, missingRoleMessage, readSwitchFingerprint, readSwitchFingerprints, readSwitchSummary, writeSwitchFingerprint, writeSwitchSummary } from "./perspicax/role-events.ts";
 import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
 import { createHeldRolesRoute } from "./routes/perspicax-held-roles.ts";
 import { routineRoleCoverageRoute } from "./routes/routine-role-coverage.ts";
@@ -28479,20 +28479,23 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     // 2026-11-05 (visible roles): each step's role, transitions, refusals
     onRole: (event) => roleEvents.onRole(event),
     turnRole: (turn) => perspicaxTurnRole(turn),
-    roleFallback: ({ threadId, botId, principalId, from, path, to }) => {
+    roleFallback: ({ threadId, botId, principalId, from, path, to, write }) => {
       const bot = store.bot(botId);
       const decision = roleJournal.fallbackFor({ threadId, botId, principalId, ...(bot ? { ownerId: effectiveBotOwner(bot) } : {}), from, path, ...(to !== undefined ? { to } : {}) });
       // #2581: "Toujours permettre" on the read switch card is a rule too
       // (#2960: a rule kept under the older dotted path still answers)
-      if (decision === "fallback" && bot && to && readSwitchFingerprints(from, to, path).some((action) => keptCardRule(bot, threadId, { tool: "safety:perspicax-role", scope: { action }, description: "" }))) return "rule";
+      // a write switch answers only to its own kept card, never the read one
+      const kept = to === undefined ? [] : write ? [writeSwitchFingerprint(from, to, path)] : readSwitchFingerprints(from, to, path);
+      if (decision === "fallback" && bot && to !== undefined && kept.some((action) => keptCardRule(bot, threadId, { tool: "safety:perspicax-role", scope: { action }, description: "" }))) return "rule";
       return decision;
     },
     // #2581 (decided 2026-11-07): a read refused (403) under the bot's role, run
     // once as another role the person holds: their card, "Toujours permettre"
-    askRoleSwitch: ({ threadId, botId, principalId, from, to, tool, permission }) => confirmHeldCard({
+    // rule d7-403-switch-role: a write refused the same way gets its own card
+    askRoleSwitch: ({ threadId, botId, principalId, from, to, tool, permission, write }) => confirmHeldCard({
       threadId, botId, tool: "perspicax-role",
-      summary: readSwitchSummary(languageOfPerson(principalId), { from: from.name, to: to.name || to.slug, tool, permission }),
-      fingerprint: readSwitchFingerprint(from.slug, to.slug, permission.path),
+      summary: (write ? writeSwitchSummary : readSwitchSummary)(languageOfPerson(principalId), { from: from.name, to: to.name || to.slug, tool, permission }),
+      fingerprint: (write ? writeSwitchFingerprint : readSwitchFingerprint)(from.slug, to.slug, permission.path),
     }),
     knownReadRefusal: (input) => roleJournal.refusedRead(input),
     askMeWrite: ({ threadId, botId, principalId, role, tool, permission }) => confirmHeldCard({

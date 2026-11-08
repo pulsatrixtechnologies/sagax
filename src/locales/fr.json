@@ -13836,6 +13836,7 @@
   "roles.transition.answered.always": "Enregistré pour ce bot",
   "roles.meWrite.summary": "Écrire au nom de {person} plutôt que {role} : {tool} ({permission}). ConnectWise inscrira {person} comme auteur.",
   "roles.readSwitch.summary": "Lire une fois en tant que {role} plutôt que {from} : {tool} ({permission}). {from} a été refusé (403) pour cette lecture.",
+  "roles.writeSwitch.summary": "Écrire une fois en tant que {role} plutôt que {from} : {tool} ({permission}). {from} a été refusé (403) pour cette écriture.",
   "roles.op.inquire": "Consulter",
   "roles.op.add": "Ajouter",
   "roles.op.edit": "Modifier",

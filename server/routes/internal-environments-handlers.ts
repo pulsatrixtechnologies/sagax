@@ -15,7 +15,7 @@ import { browserNavigationRefusal } from "../browser/browser-navigation.ts";
 import { pickComputer } from "../computer/computer-selection.ts";
 import { withCommandVariables } from "../vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "../desktop/desktop-bridge.ts";
-import { handleDesktopBridgeMcp } from "../desktop/desktop-bridge-tools.ts";
+import { botTmpScope, handleDesktopBridgeMcp } from "../desktop/desktop-bridge-tools.ts";
 import { handleMessagesMcp } from "../imessage/imessage-mcp.ts";
 import { misusePathRefusal, misuseRefusal, misuseToolFrameText } from "../safety/misuse-guardrails.ts";
 import { serverPathAnswer, serverPathInCommand } from "../sandbox/sandbox-server-path.ts";
@@ -799,6 +799,8 @@ async function handleDesktopMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
       // A Mac that reports its On apps gets them through the messages
       // server (every engine, every computer): not listed twice here.
       macApps: () => deps.desktopBridgeMacApps?.(person) === true && !deps.desktopBridgeMacAppsOn?.(person)?.length,
+      // #2828: each bot its own temporary folder on the computer and the Local VM.
+      tmpScope: () => capability.botId ? botTmpScope(capability.botId) : null,
     });
     deps.requireActive(capability);
     return json(res, 200, { result });

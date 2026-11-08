@@ -54,7 +54,8 @@ export const PERSPICAX_WRITE_REPLAYED = "Not sent again: another run made this s
  * Perspicax) are never answered from a previous call. */
 const WRITE_SUFFIX = /^(write|action|log_time|(book|update|create|delete)_[a-z0-9_]+|[A-Za-z0-9_]+_write)$/;
 const HOST_WRITES = new Set(["memory_write", "memory_propose", "memory_promote", "memory_forget", "create_agent", "delete_agent",
-  "sagax_send", "sagax_routine_run", "sagax_nudge", "remote_support_open", "remote_support_close"]);
+  "sagax_send", "sagax_routine_run", "sagax_nudge", "remote_support_open", "remote_support_close",
+  "remote_support_host_code", "remote_support_host_revoke"]);
 /** A connector's write with one `_` (Perspicax 1.9.19: `cw_psa_write`,
  * `cw_psa_time_entries_write`, `cw_psa_log_time`, `cw_psa_update_ticket`);
  * its read_action is a read. */

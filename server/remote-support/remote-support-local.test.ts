@@ -489,3 +489,35 @@ describe("callTool remote support", () => {
     expect(existsSync(join(dir, "technician.private.json"))).toBe(false);
   });
 });
+
+describe("remote_support_open with host_id from a bot (#2714)", () => {
+  it("opens an unattended session on the enrolled host and names the next call", async () => {
+    const dir = tempDir();
+    const { run } = fakeRun();
+    const host = `h_${"a".repeat(32)}`;
+    const posted: Array<Record<string, unknown>> = [];
+    const answer = await handleRemoteSupportCall({
+      name: "remote_support_open",
+      args: { host_id: host },
+      local: local(dir, run),
+      post: async (_tool, sent) => {
+        posted.push(sent);
+        return { status: 200, body: { owner: OWNER, text: JSON.stringify({ code: CODE }) } };
+      },
+    });
+    expect(answer.isError).toBeUndefined();
+    expect(posted[0]).toMatchObject({ host_id: host, nodekey: PUBLIC });
+    const out = JSON.parse(answer.text);
+    expect(out).toMatchObject({ state: "created", client: "app" });
+    expect(out.next).toContain("remote_support_status");
+    expect(answer.text).not.toContain(PRIVATE);
+  });
+
+  it("refuses a host_id that is not an enrolled host", async () => {
+    const dir = tempDir();
+    const { run } = fakeRun();
+    const answer = await handleRemoteSupportCall({ name: "remote_support_open", args: { host_id: "my-mac" }, local: local(dir, run), post: async () => ({ status: 200, body: {} }) });
+    expect(answer).toMatchObject({ isError: true });
+    expect(answer.text).toContain("remote_support_hosts");
+  });
+});

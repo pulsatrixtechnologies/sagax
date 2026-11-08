@@ -538,6 +538,15 @@ async function openCall(input: {
   local: RemoteSupportContext;
   post: (tool: string, args: Record<string, unknown>) => Promise<{ status: number; body: Record<string, unknown> }>;
 }, run: TailcatRun): Promise<ToolAnswer> {
+  if (input.args.host_id !== undefined && input.args.host_id !== null && input.args.host_id !== "") {
+    // Unattended: an enrolled host takes the session at its next beat (#2714).
+    const hostId = parseUnattendedHostId(input.args.host_id);
+    if (!hostId) return { text: "host_id: the host_id remote_support_hosts answered for an enrolled computer.", isError: true };
+    const { host_id: _host, ...rest } = input.args;
+    const out = await openUnattendedSession({ hostId, args: rest, local: { ...input.local, run }, post: input.post });
+    if (!out.ok) return { text: out.error, isError: true };
+    return { text: JSON.stringify({ code: out.code, state: "created", client: "app", next: "The computer takes the session at its next beat (about 10 s). Call remote_support_status once with this code: it connects this computer and Sagax posts the session card. End with remote_support_close." }) };
+  }
   const dir = input.local.dir;
   const now = input.local.now?.() ?? new Date();
   try { sweepSupportKeys(dir, now.getTime()); } catch { /* best effort */ }

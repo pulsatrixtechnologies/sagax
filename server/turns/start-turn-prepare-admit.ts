@@ -299,8 +299,9 @@ export function createPrepareAdmitStartTurn(
     speakerPrincipalId: orgSpeakerPrincipal(state.bot, state.speaker)
   });
   const turnPersonAsked = !routineLineage(state.speaker) && Boolean(orgSpeakerPrincipal(state.bot, state.speaker));
-  // Auto (2026-10-15; routines 2026-11-01): a person-asked turn prefers
-  // the person's computer when connected, else the cloud. A routine starts
+  // Auto (2026-10-15; routines 2026-11-01; #2670): a person-asked turn
+  // starts in the person's server environment when they have one, else on
+  // their computer when connected, else the cloud. A routine starts
   // in the cloud; routinesAllowed only permits an explicit computer_select
   // to this_computer. A thread opened with a workspace starts there when
   // allowed (server/computer/auto-computer.ts).

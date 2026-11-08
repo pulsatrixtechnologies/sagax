@@ -3683,6 +3683,36 @@ The maintainer's GO on points 1 and 2 of the bot quality diagnostic. Rules:
 - `RUN_YOURSELF_PROMPT` sits above every persona: run commands yourself,
   never ask the person to run or paste, approvals through the card.
 
+## Auto starts in the server environment; discovery is bounded (2026-11-07, #2670)
+
+QA c2 (defects D2, D3, D7, G2, G5): bots looped 22 to 45 steps of
+`sagax_help`, `skills_list`, `session_search`, `search_tool`, `workspace_read`
+before a one-line answer or a clarifying question, and ran `run_command` or
+`fetch_url` on the person's Mac while they had a server environment.
+
+- `autoStartTarget` (`server/computer/auto-computer.ts`): a person-asked turn
+  starts in the person's server environment when they have one
+  (`sandboxConfigured`), with their computer connected or not; their computer
+  only when their words ask for it or the step needs their machine. Without a
+  server environment the old order stays (computer when connected, else cloud).
+- `WORK_STYLE_PROMPT`: discovery (sagax_help, skills_list, search_tool,
+  session_search, workspace_read, workspace_search, a skill catalog) takes at
+  most two calls per turn, never the same one twice, and none when the first
+  tool is already known or the request is ambiguous. A direct read or a
+  clarifying question comes first and wins over a skill's own "catalog first".
+- `VERIFY_FIRST_PROMPT`: a request whose object or recipient is missing and
+  several fit ("Envoie-moi le rapport") is a decision: the card is the first
+  step, in one turn, with zero tool calls before it.
+- `AUTO_COMPUTER_RULES`: product versions in production come from this
+  server's `/api/health` and the Perspicax server's `/healthz`, one `fetch_url`
+  each; `host_health` reports failures, latency and drift, never a version.
+- `PERSPICAX_CONVENTIONS_PROMPT`: after a 403 read once under another role
+  (Sagax's note or an `identity_switch`), the bot says so to the person in one
+  line by the role's name ("Lu avec le rôle Technicien"), never an id. The
+  switch itself is wanted: a 403 of the limited role means find a role that may.
+- The Flow entry skill `using-px-flow` (pulsatrix-flow repo) is aligned: a
+  clarifying question and a single-record read come before `catalog --index`.
+
 ## Workspace: always Auto, the bot chooses (2026-10-18)
 
 Decision: "It should ALWAYS stick to default, and the bot chooses. So basically bot

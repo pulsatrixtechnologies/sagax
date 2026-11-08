@@ -30,6 +30,7 @@
 // without one, and a marker without a registered id).
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { permissionQuestion, recommendedPermissionAnswer, type ChoiceQuestion } from "../../shared/permission-question.ts";
+import { choiceOptionsFor } from "./final-confirmation.ts";
 
 export const FULL_ACCESS_HOLDS = ["org-rule", "person-rule", "isolation", "sensitive-path", "question"] as const;
 export type FullAccessHold = (typeof FULL_ACCESS_HOLDS)[number];
@@ -72,6 +73,10 @@ export function fullAccessActs(level: ApprovalMode | undefined, facts: FullAcces
  * first one; a real decision or a missing fact keeps its card. */
 export function fullAccessChoiceAnswer(level: ApprovalMode | undefined, card: ChoiceQuestion, facts: FullAccessFacts = {}): { choice: string } | null {
   if (!fullAccessActs(level, facts)) return null;
+  // #2911: Yes/No on "A, or B?" answers neither path. A two-path question is
+  // a real decision on every surface (ask_choice, the engine's own question
+  // tool), never a may-I: the card stays.
+  if (choiceOptionsFor(card.question, card.options) !== card.options) return null;
   if (!permissionQuestion(card)) return null;
   const choice = recommendedPermissionAnswer(card);
   return choice ? { choice } : null;

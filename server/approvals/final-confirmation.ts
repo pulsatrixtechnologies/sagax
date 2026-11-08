@@ -40,14 +40,42 @@ export function finalConfirmation(input: {
   return request ? input.text.trim().slice(-4_000) : null;
 }
 
-// #2911: the may-I forms ASK accepts ("Puis-je", "Dois-je", "Can/Could/May
-// I") are stripped too, so the first path reads as an instruction.
-const LEAD = /^(?:(?:so|then|alors|donc)\s*,?\s*)?(?:(?:do|would)\s+you\s+(?:want|like|prefer)\s+(?:me|us)?\s*(?:to\s+)?|(?:shall|should|can|could|may)\s+(?:i|we)\s+|(?:puis|dois)-je\s+|(?:pouvons|devons)-nous\s+|est-ce que\s+(?:je|j['’]|on|nous)\s*(?:peux|dois|peut|doit|pouvons|devons)\s+|(?:veux|voulez|souhaites|souhaitez|pr[eé]f[eè]res|pr[eé]f[eé]rez)-(?:tu|vous)\s+|est-ce que\s+(?:tu|vous)\s+(?:veux|voulez|pr[eé]f[eè]res|pr[eé]f[eé]rez)\s+)/i;
+// #2911: every may-I and you-want form ASK accepts is stripped too ("Puis-je",
+// "Peux-tu", "Pouvez-vous", "Est-ce qu'on peut", "Tu veux", "Can/Do I"), so
+// the first path reads as an instruction, not a question.
+const LEAD = /^(?:(?:so|then|alors|donc)\s*,?\s*)?(?:(?:do|would)\s+you\s+(?:want|like|prefer)\s+(?:me|us)?\s*(?:to\s+)?|(?:can|could|would)\s+you\s+(?:please\s+)?|(?:shall|should|can|could|may|do)\s+(?:i|we)\s+|(?:puis|dois)-je\s+|(?:peux|peut|dois|doit)-(?:tu|on)\s+|(?:pouvons|devons)-nous\s+|(?:pouvez|devez)-vous\s+|est-ce\s+qu(?:e\s+|['’]\s*)(?:je|j['’]|on|nous|tu|vous)\s*(?:peux|dois|peut|doit|pouvons|devons|pouvez|devez)\s+|(?:veux|voulez|souhaites|souhaitez|pr[eé]f[eè]res|pr[eé]f[eé]rez)-(?:tu|vous)\s+|(?:est-ce\s+que\s+)?(?:tu|vous)\s+(?:veux|voulez|souhaites|souhaitez|pr[eé]f[eè]res|pr[eé]f[eé]rez)\s+)/i;
 const ALTERNATIVE_LABEL_MAX = 80;
 
 function label(clause: string): string {
   const text = clause.replace(/^[\s,;:]+|[\s,;:?!.]+$/g, "").replace(/\s+/g, " ");
   return text ? text.charAt(0).toLocaleUpperCase() + text.slice(1) : "";
+}
+
+// What may follow the final question without being a new statement: an
+// emoji, a closing parenthesis "(Réponds avec le bouton.)", or a short
+// courtesy or answer-with-the-button line. Anything else (a report, a
+// quoted question followed by the bot's own words) ends the text instead.
+const TRAILER_MAX = 60;
+const TRAILER = /^(?:merci|thanks|thank you|r[eé]ponds|r[eé]pondez|choisis|choisissez|clique|cliquez|utilise|utilisez|reply|answer|pick|choose|click|use)\b/i;
+
+function stripTrailing(text: string): string {
+  let rest = text.trim();
+  for (;;) {
+    const next = rest.replace(/\s*\([^()]*\)\s*$/u, "").replace(/[^\p{L}\p{N}?.!»"”)\]]+$/u, "").trim();
+    if (next === rest) return rest;
+    rest = next;
+  }
+}
+
+/** The final sentence when it is a question, past an emoji, a closing
+ * parenthesis or one short courtesy line; otherwise null. */
+function finalQuestion(text: string): string | null {
+  const sentences = stripTrailing(text).split(/(?<=[.!?])\s+/).filter(Boolean);
+  let last = sentences.at(-1);
+  if (last && !/\?\s*$/.test(last) && sentences.length > 1 && last.length <= TRAILER_MAX && TRAILER.test(last)) {
+    last = stripTrailing(sentences.at(-2) ?? "");
+  }
+  return last && /\?\s*$/.test(last) ? last : null;
 }
 
 /** "A, or B?" -> ["A", "B"] (#2901): an either/or question is answered by
@@ -57,8 +85,8 @@ export function alternativeChoices(question: string): [string, string] | null {
   // #2911: only the question itself, the final sentence. An earlier "A, or
   // B?" (a quoted client question, a passing remark) never stands in for a
   // final "Shall I create the quote?" that has no alternative.
-  const sentence = question.trim().split(/(?<=[.!?])\s+/).filter(Boolean).at(-1);
-  if (!sentence || !/\?\s*$/.test(sentence) || !ALTERNATIVE.test(sentence) || MISSING_FACT.test(sentence)) return null;
+  const sentence = finalQuestion(question);
+  if (!sentence || !ALTERNATIVE.test(sentence) || MISSING_FACT.test(sentence)) return null;
   const match = ALTERNATIVE.exec(sentence);
   if (!match) return null;
   const head = sentence.slice(0, match.index);
@@ -79,7 +107,7 @@ export function finalAlternative(input: Parameters<typeof finalConfirmation>[0])
   const own = input.text.replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)/g, "")
     .split(/\r?\n/).filter((line) => !/^\s*>/.test(line)).join("\n").trim();
   const tail = own.split(/\n\s*\n/).at(-1)?.trim().slice(-4_000).replace(/^[*_]+|[*_]+$/g, "") ?? "";
-  const last = tail.split(/(?<=[.!?])\s+/).at(-1) ?? "";
+  const last = finalQuestion(tail) ?? "";
   if (!ASK.test(last) && !LEAD.test(last)) return null;
   const options = alternativeChoices(last);
   return options ? { question: input.text.trim().slice(-4_000), options } : null;
@@ -89,7 +117,7 @@ const YES_NO = /^(?:oui|non|yes|no)$/i;
 
 /** ask_choice with Yes/No on an "A, or B?" question (#2901): the two paths
  * become the options so the card answers the question it asks. */
-export function choiceOptionsFor(question: string, options: string[]): string[] {
+export function choiceOptionsFor<T extends readonly string[]>(question: string, options: T): T | [string, string] {
   if (options.length !== 2 || !options.every((option) => YES_NO.test(option.trim().replace(/[.!]$/, "")))) return options;
   return alternativeChoices(question) ?? options;
 }

@@ -244,6 +244,17 @@ describe("#1819: an invented may-I card under Full access", () => {
     expect(result).toMatchObject({ ok: true, answered: { choice: "Oui" } });
   });
 
+  it("the engine's own question tool with Yes/No on A or B keeps its card too", () => {
+    // request-opened-present.ts passes the raw options to fullAccessChoiceAnswer
+    for (const question of [
+      "Veux-tu que je refasse la collecte à neuf, ou qu'on avance directement avec ta validation ?",
+      "Veux-tu continuer l'import, ou attendre la validation ? 🙂",
+    ]) {
+      expect(fullAccessChoiceAnswer("full", { question, options: ["Oui", "Non"] }), question).toBeNull();
+    }
+    expect(fullAccessChoiceAnswer("full", { question: "Puis-je continuer l'import?", options: ["Oui", "Non"] })).toEqual({ choice: "Oui" });
+  });
+
   it("the prompt says so, so the model does not expect a click", () => {
     expect(approvalLevelPrompt("full")).toMatch(/may-I .*answered for the person/i);
     expect(fullAccessChoiceAnswer("full", { question: "Should I continue?", options: ["Yes", "No"] })).toEqual({ choice: "Yes" });

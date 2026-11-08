@@ -37830,10 +37830,16 @@
     },
     "Import an agent (Grok Bot, Claude Code)": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import an agent (Grok Bot, Claude Code, Hermes)"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Importer un agent (Grok Bot, Claude Code)"
+            "value": "Importer un agent (Grok Bot, Claude Code, Hermes)"
           }
         }
       }
@@ -84562,13 +84568,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The About window, guided tours, diagnostics, logs and feedback."
+            "value": "The About window, guided tours and feedback."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "La fenêtre À propos, les visites guidées, les diagnostics, les journaux et les commentaires."
+            "value": "La fenêtre À propos, les visites guidées et les commentaires."
           }
         }
       }

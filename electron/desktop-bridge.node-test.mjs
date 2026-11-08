@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 
-import { attachmentName, botTmpName, bridgeOperationError, commandEnvironment, commandNamesOtherBotTmp, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, sandboxedCommandArgv, validBridgeOperation, vmCommandWithBotTmp } from "./desktop-bridge.mjs";
+import { attachmentName, botTmpDir, botTmpName, bridgeOperationError, commandEnvironment, commandNamesOtherBotTmp, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, removeClosedTree, sandboxedCommandArgv, sweepBotTmpRoot, validBridgeOperation, vmCommandWithBotTmp } from "./desktop-bridge.mjs";
 import net from "node:net";
 import { zipArchive } from "../server/testing/archive-fixtures.mjs";
 
@@ -865,10 +865,18 @@ test("run_command refuses the app's own data folder, by any spelling", async () 
   assert.equal(commandNamesAppData("grep -r sagax ~/work", [path.join(home, ".sagax")], home), null);
 });
 
+// #2828: the folder of them all is 0300 (nobody lists it), so a plain rm
+// cannot remove it: opened back then removed after the test, pass or fail.
+function botTmpRootFor(t) {
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), "omb-bot-tmp-"));
+  t.after(() => removeClosedTree(parent));
+  return path.join(parent, "sagax-bots");
+}
+
 // #2828: each bot its own temporary folder on this computer and in the Local VM.
-test("a bot's temporary folder is its own: TMPDIR set, another bot's refused", { skip: !posix }, async () => {
+test("a bot's temporary folder is its own: TMPDIR set, another bot's refused", { skip: !posix }, async (t) => {
   const home = sandboxHome();
-  const tmpRoot = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "omb-bot-tmp-")), "sagax-bots");
+  const tmpRoot = botTmpRootFor(t);
   const botTmpKey = Buffer.alloc(32, 7);
   const d = { ...deps(home), botTmpRoot: tmpRoot, botTmpKey };
   const ada = "a".repeat(16);
@@ -914,9 +922,9 @@ test("a bot's temporary folder is its own: TMPDIR set, another bot's refused", {
 
 // #2828 follow-up: a detour the command text does not show (dirname, a glob,
 // a chmod back) still finds nothing of Ada's.
-test("a bot's command cannot reach another bot's temporary folder by a detour", { skip: !posix }, async () => {
+test("a bot's command cannot reach another bot's temporary folder by a detour", { skip: !posix }, async (t) => {
   const home = sandboxHome();
-  const tmpRoot = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "omb-bot-tmp-")), "sagax-bots");
+  const tmpRoot = botTmpRootFor(t);
   const d = { ...deps(home), botTmpRoot: tmpRoot, botTmpKey: Buffer.alloc(32, 3) };
   const ada = "a".repeat(16);
   const bob = "b".repeat(16);
@@ -933,6 +941,39 @@ test("a bot's command cannot reach another bot's temporary folder by a detour", 
   // Bob's own folder works as usual.
   const mine = await executeBridgeOperation({ action: "run_command", command: "echo bob > \"$TMPDIR/b.txt\" && cat \"$TMPDIR/b.txt\"", tmp_scope: bob }, d, signal());
   assert.match(mine.content[0].text, /bob/);
+});
+
+// #2828 follow-up: the key lives in memory only, so the bot folders of an
+// earlier run are unreachable: swept once per run, this run's kept.
+test("the bot folders of an earlier run are swept, closed ones included", { skip: !posix }, async (t) => {
+  const tmpRoot = botTmpRootFor(t);
+  const old = path.join(tmpRoot, "c".repeat(32));
+  const first = path.join(tmpRoot, "d".repeat(16));
+  fs.mkdirSync(path.join(old, "shut"), { recursive: true });
+  fs.writeFileSync(path.join(old, "shut", "f.txt"), "x");
+  fs.chmodSync(path.join(old, "shut"), 0o500);
+  fs.mkdirSync(first);
+  fs.writeFileSync(path.join(tmpRoot, "other.txt"), "kept");
+  // A link out of a bot folder is removed, never followed.
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "omb-bot-tmp-"));
+  t.after(() => removeClosedTree(outside));
+  fs.chmodSync(outside, 0o500);
+  fs.symlinkSync(outside, path.join(old, "out"));
+  fs.chmodSync(tmpRoot, 0o300);
+
+  await sweepBotTmpRoot({ root: tmpRoot, platform: "darwin" });
+  assert.equal(fs.statSync(tmpRoot).mode & 0o777, 0o300);
+  fs.chmodSync(tmpRoot, 0o700);
+  assert.deepEqual(fs.readdirSync(tmpRoot), ["other.txt"]);
+  assert.equal(fs.statSync(outside).mode & 0o777, 0o500);
+
+  // This run's folder is kept: the sweep of a fresh root spares it.
+  const fresh = botTmpRootFor(t);
+  const mine = await botTmpDir(fresh, "e".repeat(16), { key: Buffer.alloc(32, 9), platform: "darwin" });
+  fs.chmodSync(fresh, 0o700);
+  assert.deepEqual(fs.readdirSync(fresh), [path.basename(mine)]);
+  // No root yet: nothing to do.
+  await sweepBotTmpRoot({ root: path.join(fresh, "none"), platform: "darwin" });
 });
 
 test("on macOS a bot's command runs under sandbox-exec, denied the other folders", () => {

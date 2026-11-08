@@ -126,21 +126,48 @@ export function botTmpName(scope, key = BOT_TMP_KEY) {
 }
 
 const lockedRoots = new Map();
+/** The bot folder names made by this run, by root: kept by the sweep. */
+const madeThisRun = new Map();
+const BOT_TMP_ENTRY = /^[a-f0-9]{16}(?:[a-f0-9]{16})?$/;
+
+/** Removes a folder a bot may have closed (a subfolder chmod 0500 or 0000):
+ * each folder is opened back to its owner first, links never followed. */
+export async function removeClosedTree(target) {
+  const open = async (current) => {
+    let info;
+    try { info = await fs.lstat(current); } catch { return; }
+    if (!info.isDirectory()) return;
+    await fs.chmod(current, 0o700).catch(() => {});
+    for (const name of await fs.readdir(current).catch(() => [])) await open(path.join(current, name));
+  };
+  await open(target);
+  await fs.rm(target, { recursive: true, force: true }).catch(() => {});
+}
+
 /** The folder of them all: owner can create and traverse, nobody lists it.
- * Folders of the first #2828 build (named by the scope itself, so
- * guessable) are removed once. */
+ * Once per run it is swept: the bot folders of an earlier run (named under
+ * a key that died with it, so nobody reaches them again) and those of the
+ * first #2828 build (named by the scope itself) are removed. */
 async function lockBotTmpRoot(root, platform) {
   if (!lockedRoots.has(root)) {
     lockedRoots.set(root, (async () => {
       try {
         await fs.chmod(root, 0o700).catch(() => {});
-        for (const name of await fs.readdir(root)) if (/^[a-f0-9]{16}$/.test(name)) await fs.rm(path.join(root, name), { recursive: true, force: true });
+        const keep = madeThisRun.get(root) ?? new Set();
+        for (const name of await fs.readdir(root)) if (BOT_TMP_ENTRY.test(name) && !keep.has(name)) await removeClosedTree(path.join(root, name));
       } catch { /* nothing to tidy */ }
       if (platform === "win32") await lockWindowsRoot(root).catch(() => {});
     })());
   }
   await lockedRoots.get(root);
   if (platform !== "win32") await fs.chmod(root, 0o300).catch(() => {});
+}
+
+/** At app start: sweeps the folder of them all left by the previous run, so
+ * its bot folders do not wait for the first bot command to go. */
+export async function sweepBotTmpRoot({ root = path.join(os.tmpdir(), BOT_TMP_FOLDER), platform = process.platform } = {}) {
+  try { await fs.lstat(root); } catch { return; }
+  await lockBotTmpRoot(root, platform);
 }
 
 /** Windows: the person's account keeps traverse and create on the folder of
@@ -162,7 +189,10 @@ async function lockWindowsRoot(root) {
 /** This bot's own temporary folder on this computer, created private. */
 export async function botTmpDir(root, scope, { key = BOT_TMP_KEY, platform = process.platform } = {}) {
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
-  const dir = path.join(root, botTmpName(scope, key));
+  const name = botTmpName(scope, key);
+  if (!madeThisRun.has(root)) madeThisRun.set(root, new Set());
+  madeThisRun.get(root).add(name);
+  const dir = path.join(root, name);
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   await fs.chmod(dir, 0o700).catch(() => {});
   await lockBotTmpRoot(root, platform);

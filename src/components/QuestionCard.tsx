@@ -287,9 +287,13 @@ export function QuestionCard({
       message: answer,
       // The answer never reached the bot, so the card must go back to
       // being answerable rather than sitting there looking settled.
-      onError: () => {
+      // Settled elsewhere (409): the store already wrote the server's real
+      // outcome on the card, so keep it and show no failure.
+      onError: (_message, settledElsewhere) => {
+        setSent(null);
+        if (settledElsewhere) return;
         dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: undefined, answeredText: undefined } });
-        setSent(null); setFailed(true); onAnswerFailed?.();
+        setFailed(true); onAnswerFailed?.();
       },
     });
     if (rememberId && bot?.id) {

@@ -1690,8 +1690,11 @@ export type Action =
       /** 2026-10-26 (#1065): "folder" keeps the card's folder rule (every
        * file of the folder and its subfolders) instead of the exact path. */
       ruleScope?: "folder";
-      /** Local UI recovery hook for voice flows. Never sent to the server. */
-      onError?: (message: string) => void;
+      /** Local UI recovery hook for voice flows. Never sent to the server.
+       * `settled` is true when the request was already settled elsewhere
+       * (409): the card already shows the server's real outcome, so the
+       * caller must not roll it back. */
+      onError?: (message: string, settled?: boolean) => void;
     }
   | { type: "newTask"; botId: string; projectId?: string; cwd?: string; confidential?: boolean; /** "New topic" in the single stream */ stream?: boolean; onCreated?: () => void; onError?: (message: string) => void }
   /** One way only (src/lib/confidential-thread.ts): the server refuses any

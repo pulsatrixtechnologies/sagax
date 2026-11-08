@@ -67,7 +67,8 @@ describe("QuestionCard answer error", () => {
     mount([plan]);
     const pro = Array.from(host.querySelectorAll<HTMLElement>("[data-ask-choice]")).find((el) => el.textContent?.includes("Pro"))!;
     act(() => pro.click());
-    const { onError } = dispatch.mock.calls[0]![0] as { onError: () => void };
+    // the card settles itself first (cardSettled); the answer is the decideRequest
+    const { onError } = dispatch.mock.calls.map((call) => call[0]).find((action) => action.type === "decideRequest") as { onError: () => void };
     expect(host.querySelector('[role="alert"]')).toBeNull();
     act(() => onError());
     const alert = host.querySelector('[role="alert"]');

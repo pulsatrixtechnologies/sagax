@@ -4,6 +4,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
 import { runLogText, type TimelineEvent } from "@/lib/taskTimeline";
+import { localizedServerLine } from "@/lib/step-label";
 import { formatTime } from "@/state/store";
 
 const STATUS = {
@@ -14,12 +15,20 @@ const STATUS = {
   unverified: "inspector.run.unverified",
 } as const;
 
+/** The words a timeline row shows: fixed rows in the app's language, a tool
+ * row's stored name or cause through the shared server-line reading. */
+export function runLogLabel(event: TimelineEvent): string {
+  return event.kind === "task" ? t("inspector.run.userInput")
+    : event.kind === "screen" ? t("inspector.run.screen")
+      : event.kind === "result" ? t("inspector.run.response") : localizedServerLine(event.label);
+}
+
 export function RunLog({ events }: { events: TimelineEvent[] }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   // The full conversation remains in chat. Keep the debugging view bounded.
   const recent = events.slice(-200);
   const copy = async () => {
-    const result = await copyText(runLogText(recent));
+    const result = await copyText(runLogText(recent, runLogLabel));
     if (result !== "empty") setCopyState(result);
   };
   return (
@@ -44,9 +53,7 @@ export function RunLog({ events }: { events: TimelineEvent[] }) {
         <ol aria-label={t("inspector.run.title")} className="px-4 pb-4">
           {recent.map((event) => {
             const Icon = event.state === "failed" ? XCircle : event.state === "complete" ? CheckCircle2 : event.state === "running" ? Loader2 : Circle;
-            const label = event.kind === "task" ? t("inspector.run.userInput")
-              : event.kind === "screen" ? t("inspector.run.screen")
-                : event.kind === "result" ? t("inspector.run.response") : event.label;
+            const label = runLogLabel(event);
             return <li key={event.id} className="border-t border-hairline/30 py-3">
               <div className="flex items-start gap-2 text-[12px]">
                 <Icon size={14} aria-hidden="true" className={cn("mt-0.5 shrink-0", event.state === "failed" ? "text-danger" : event.state === "running" ? "animate-spin text-accent" : "text-ink-secondary")} />

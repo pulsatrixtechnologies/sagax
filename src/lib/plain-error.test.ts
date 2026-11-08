@@ -60,7 +60,7 @@ describe("a provider refusing a message as too large", () => {
     const cause = requestTooLargeMessage("GLM 5.3 Flash");
     expect(plainErrorLine(cause)).toBe(cause);
     setLocale("fr");
-    expect(plainErrorLine(`  ${requestTooLargeMessage("vendor/model-1.5")}\n`)).toBe("Ce message est trop volumineux pour vendor/model-1.5. Commencez une nouvelle conversation ou choisissez un modèle qui en accepte davantage.");
+    expect(plainErrorLine(`  ${requestTooLargeMessage("vendor/model-1.5")}\n`)).toBe("Ce message est trop volumineux pour vendor/model-1.5. Commence une nouvelle conversation ou choisis un modèle qui en accepte davantage.");
     expect(plainErrorLine("This message is too large for the box.")).toBeUndefined();
   });
 });

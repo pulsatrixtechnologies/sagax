@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { setLocale } from "@/lib/i18n";
+import { TURN_CUT_BY_RESTART } from "../../shared/restart-words";
 
 import type { Message } from "@/state/store";
 import {
@@ -33,6 +35,19 @@ function play(states: TranscriptSnapshot[]): string[] {
 }
 
 describe("nextAnnouncement", () => {
+  it("says a restart cause in the app's language, as the screen shows it", () => {
+    setLocale("fr");
+    try {
+      const failure = { id: "f", name: "Pepper", cause: TURN_CUT_BY_RESTART };
+      const heard = play([{ busy: false }, { busy: true }, { busy: false, failure }]);
+      expect(heard).toHaveLength(1);
+      expect(heard[0]).toContain("Sagax a redémarré");
+      expect(heard[0]).not.toContain("Sagax restarted");
+    } finally {
+      setLocale("en");
+    }
+  });
+
   const reply = (id: string, words = "Here is the plan. Step one is easy.") => ({ id, name: "Pepper", text: words });
 
   it("says nothing while the bot works, then announces the finished reply once", () => {

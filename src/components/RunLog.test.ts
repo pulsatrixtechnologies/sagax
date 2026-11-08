@@ -2,8 +2,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { RunLog } from "./RunLog";
-import { timelineEvents, type TimelineEvent } from "@/lib/taskTimeline";
+import { RunLog, runLogLabel } from "./RunLog";
+import { runLogText, timelineEvents, type TimelineEvent } from "@/lib/taskTimeline";
+import { ANSWER_NOT_DELIVERED, RESTART_TURN_NOTE, TURN_CUT_BY_RESTART } from "../../shared/restart-words";
 
 const render = (events: TimelineEvent[]) => renderToStaticMarkup(createElement(RunLog, { events }));
 
@@ -54,5 +55,27 @@ describe("Run log", () => {
     expect(html).toContain("echo item-204");
     expect(html).toContain("whitespace-pre-wrap break-all");
     expect(html.match(/<li /g)).toHaveLength(200);
+  });
+
+  it("shows and copies restart lines in the app's language", () => {
+    setLocale("fr");
+    try {
+      const events = timelineEvents([
+        { id: "a", at: 1, role: "bot", kind: "activity", tool: { name: TURN_CUT_BY_RESTART, ok: false } },
+        { id: "b", at: 2, role: "bot", kind: "activity", tool: { name: RESTART_TURN_NOTE } },
+        { id: "c", at: 3, role: "bot", kind: "activity", tool: { name: ANSWER_NOT_DELIVERED, ok: false } },
+      ]);
+      const html = render(events);
+      const copied = runLogText(events, runLogLabel);
+      for (const shown of [html, copied]) {
+        expect(shown).toContain("Sagax a redémarré");
+        expect(shown).toContain("Impossible de livrer cette réponse");
+        expect(shown).not.toContain("Sagax restarted");
+        expect(shown).not.toContain("Couldn&#x27;t deliver");
+        expect(shown).not.toContain("Couldn't deliver");
+      }
+    } finally {
+      setLocale("en");
+    }
   });
 });

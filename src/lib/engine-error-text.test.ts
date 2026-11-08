@@ -26,13 +26,13 @@ describe("a missing engine, in the app's language", () => {
     expect(localizedEngineCause(ENGINE_REMOVED_MESSAGE)).toBe(ENGINE_REMOVED_PERSON);
     setLocale("fr");
     expect(engineErrorMessage({ code: "no_engine", error: NO_ENGINE_PERSON })).toBe(
-      "Ce bot n'a pas de moteur : choisissez-en un dans Modifier le bot > Modèle",
+      "Ce bot n'a pas de moteur : choisis-en un dans Modifier le bot > Modèle",
     );
     expect(localizedEngineCause(NO_ENGINE_MESSAGE)).toBe(
-      "Ce bot n'a pas de moteur : choisissez-en un dans Modifier le bot > Modèle",
+      "Ce bot n'a pas de moteur : choisis-en un dans Modifier le bot > Modèle",
     );
     expect(localizedEngineCause(ENGINE_REMOVED_MESSAGE)).toBe(
-      "Le moteur de ce bot n'est plus disponible : choisissez-en un autre dans Modifier le bot > Modèle",
+      "Le moteur de ce bot n'est plus disponible : choisis-en un autre dans Modifier le bot > Modèle",
     );
   });
 
@@ -48,7 +48,7 @@ describe("#1450 a model turned off on the paying account, in the app's language"
     setLocale("en");
     expect(localizedEngineCause(MODEL_ACCESS_DISABLED_MESSAGE)).toContain("Pick another model in Edit bot > Model");
     setLocale("fr");
-    expect(localizedEngineCause(MODEL_ACCESS_DISABLED_MESSAGE)).toContain("Choisissez un autre modèle");
+    expect(localizedEngineCause(MODEL_ACCESS_DISABLED_MESSAGE)).toContain("Choisis un autre modèle");
     expect(localizedEngineCause("Internal error: Upstream request failed: Model access is disabled")).toBeNull();
   });
 });

@@ -231,7 +231,7 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
               if (settled) {
                 rawDispatch({ type: "cardSettled", threadId: action.threadId, requestId: action.requestId, patch: settled.card });
                 showError(settled.text);
-                action.onError?.(settled.text);
+                action.onError?.(settled.text, true);
                 return;
               }
               // A settings flush failure deliberately stops the response;

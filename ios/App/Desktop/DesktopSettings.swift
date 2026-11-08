@@ -422,8 +422,8 @@ struct DesktopSettingsPage: View {
         case .general: AnyView(DesktopGeneralSettings())
         case .organization: AnyView(DesktopOrganizationSettings())
         case .appearance: AnyView(DesktopAppearanceSettings())
-        // #2729: Experimental features is a card of Developer, as on the desktop.
-        case .experimental, .developer: AnyView(DesktopExperimentalSettings())
+        // #2729: Developer as on the desktop, Experimental features one of its cards.
+        case .experimental, .developer: AnyView(DesktopDeveloperSettings())
         case .connections: AnyView(DesktopAPIKeysSettings())
         // 2026-10-27: GitHub and the person's MCP servers live in Connect
         // apps (Sources, Providers); this page links there

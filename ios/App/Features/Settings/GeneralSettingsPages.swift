@@ -127,33 +127,84 @@ struct SystemNotificationsRow: View {
 
 // MARK: - Experimental
 
+/// Settings > Developer on iPhone (#2729), in the desktop's order
+/// (DeveloperSettings.tsx): Conversation, Bots, Interface, Experimental
+/// features, Context pods, then the release links. What iOS cannot do
+/// (turn timing, usage meter, MCP timeout, loop guard, telemetry, logs,
+/// Claude Code, the Grok bridge, the GitHub app, the Inspector button the
+/// iPhone does not draw) is left out rather than greyed.
 struct ExperimentalSettingsView: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
+    @EnvironmentObject private var navigator: SettingsNavigator
+    @ObservedObject private var mode = DesktopInterfaceMode.shared
+    @AppStorage(RunCardPreference.key) private var showRunCard = true
     /// Development context pods: this device only, off by default.
     @AppStorage(DevPodsPrefs.enabled) private var devPods = false
     @State private var config: DesktopSettingsConfig?
     @State private var saving = false
     @State private var error: String?
+    @State private var showingReleaseNotes = false
+
+    /// The group-turn lengths offered, in minutes (the desktop takes any 1 to 1440).
+    static let turnPresets = [1, 2, 5, 10, 15, 30, 60, 120]
 
     var body: some View {
+        let rows = ExperimentalFeatureRow.shown(config, templates: true)
         SettingsPage(title: "Developer") {
-            SettingsFooter(text: "Early features may change while we test them. Each one says whether it starts on or off.")
+            SettingsSectionLabel(text: "Conversation")
             SettingsCard {
-                feature("skillAuthoring", title: "Bots may draft skills for your review",
-                        detail: "On by default. Save a bot's verification run as a skill from the Verify card, or ask a supported bot to run /create-verification-skill. Every change waits for your review.",
-                        on: config?.features?.skillAuthoring ?? true)
-                CardHairline(leadingInset: SettingsMetrics.rowInset)
-                feature("browser", title: "Built-in browser",
-                        detail: config?.features?.browser == true
-                            ? "Enabled for this installation. Each bot also has its own browser switch."
-                            : "Off by default. Enable it to let supported bots use a browser tab you can watch and take over.",
-                        on: config?.features?.browser == true)
-                CardHairline(leadingInset: SettingsMetrics.rowInset)
-                feature("templates", title: "Browse Bots",
-                        detail: "Off by default. Shows Browse Bots in the sidebar menu, to find and add ready-made bots and teams.",
-                        on: config?.features?.templates == true)
-                CardHairline(leadingInset: SettingsMetrics.rowInset)
+                SettingsRow(
+                    title: "This run",
+                    subtitle: "Show a list of the shell commands a bot ran for your current request. Turn it off to hide the card and its shortcut for saving the run as a skill.",
+                    accessory: .toggle($showRunCard),
+                    identifier: "settings.runCard"
+                )
+            }
+            if let config {
+                SettingsSectionLabel(text: "Bots")
+                SettingsCard {
+                    turnsRow(config.rooms?.turnTimeoutMinutes ?? 5)
+                    CardHairline(leadingInset: SettingsMetrics.rowInset)
+                    SettingsRow(
+                        title: "Event log cleanup",
+                        subtitle: config.threads?.eventLogRetentionDays.map { String(localized: "Delete after \($0) days") }
+                            ?? "Trim the logs threads accumulate while they run.",
+                        accessory: .toggle(Binding(get: { config.threads?.eventLogRetentionDays != nil },
+                                                   set: { apply(.eventLogRetention($0 ? 30 : nil)) })),
+                        identifier: "settings-developer.cleanup"
+                    )
+                    .disabled(saving)
+                }
+            }
+            SettingsSectionLabel(text: "Interface")
+            SettingsCard {
+                SettingsRow(
+                    title: "Advanced mode",
+                    subtitle: "Show technical controls. Saved choices stay either way.",
+                    accessory: .toggle(Binding(get: { mode.advanced }, set: { mode.set($0, session: session) })),
+                    identifier: "settings-developer.advancedMode"
+                )
+            }
+            if !rows.isEmpty {
+                SettingsSectionLabel(text: LocalizedStringKey(stringLiteral: AppStrings.localized("Experimental features") + " · "
+                    + String(format: AppStrings.localized("%@ of %@ on"), "\(rows.filter(\.on).count)", "\(rows.count)")))
+                SettingsCard {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, feature in
+                        if index > 0 { CardHairline(leadingInset: SettingsMetrics.rowInset) }
+                        SettingsRow(
+                            title: LocalizedStringKey(feature.title),
+                            subtitle: feature.note,
+                            accessory: .toggle(Binding(get: { feature.on }, set: { apply(.feature(feature.key, $0)) })),
+                            identifier: "settings-experimental.\(feature.key)"
+                        )
+                        .disabled(saving || config == nil)
+                    }
+                }
+                SettingsFooter(text: "Early features may change while we test them. Each one says whether it starts on or off.")
+            }
+            SettingsSectionLabel(text: "Context pods")
+            SettingsCard {
                 SettingsRow(
                     title: LocalizedStringKey(DevPodsStrings.settingTitle),
                     subtitle: DevPodsStrings.settingDetail,
@@ -161,34 +212,49 @@ struct ExperimentalSettingsView: View {
                     identifier: "settings-experimental.devPods"
                 )
             }
+            SettingsCard {
+                SettingsRow(title: "Release notes", accessory: .chevron, identifier: "settings-developer.releaseNotes") { showingReleaseNotes = true }
+                CardHairline(leadingInset: SettingsMetrics.rowInset)
+                SettingsRow(title: "About Sagax", accessory: .chevron, identifier: "settings-developer.about") { navigator.push(.about) }
+            }
             if let error {
                 SettingsFooter(text: LocalizedStringKey(stringLiteral: error))
             }
             SettingsSpacer(40)
         }
+        .navigationDestination(isPresented: $showingReleaseNotes) { ReleaseNotesPage() }
         .task(id: session.connection?.id) {
             guard let client = session.settingsClient else { return }
             do { config = try await client.desktopSettingsConfig() } catch { self.error = error.localizedDescription }
         }
     }
 
-    private func feature(_ key: String, title: LocalizedStringKey, detail: String, on: Bool) -> some View {
-        SettingsRow(
-            title: title,
-            subtitle: detail,
-            accessory: .toggle(Binding(get: { on }, set: { value in set(key, value) })),
-            identifier: "settings-experimental.\(key)"
-        )
-        .disabled(saving || config == nil)
+    /// Group turns (RoomTurnTimeoutSettings): one maximum for every bot turn in a group.
+    private func turnsRow(_ minutes: Int) -> some View {
+        Menu {
+            Picker(selection: Binding(get: { minutes }, set: { apply(.roomTurnMinutes($0)) })) {
+                ForEach(Array(Set(Self.turnPresets + [minutes])).sorted(), id: \.self) { value in
+                    Text("\(value) min").tag(value)
+                }
+            } label: { EmptyView() }
+        } label: {
+            SettingsRow(
+                title: "Group turns",
+                subtitle: "Set one maximum duration for every bot turn in a group.",
+                accessory: .valueChevron(String(localized: "\(minutes) min"))
+            )
+        }
+        .accessibilityIdentifier("settings-developer.roomTurns")
+        .disabled(saving)
     }
 
-    private func set(_ key: String, _ on: Bool) {
+    private func apply(_ change: DesktopConfigChange) {
         guard let client = session.settingsClient else { return }
         saving = true
         Task {
             defer { saving = false }
             do {
-                config = try await client.updateDesktopSettings(.feature(key, on))
+                config = try await client.updateDesktopSettings(change)
                 DesktopSidebarFlags.shared.apply(config)
                 error = nil
             } catch {

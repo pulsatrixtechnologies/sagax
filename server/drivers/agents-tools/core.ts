@@ -180,6 +180,10 @@ export function DEF_WAIT_DELEGATION(externalRuntime: boolean) {
   });
 }
 
+/** Added to a refused select_computer move: on a Workspace Auto bot the
+ * place is chosen with computer_select (server/computer/auto-computer.ts). */
+export const SELECT_COMPUTER_REFUSAL_HINT = "If a computer_select tool is listed (Workspace Auto), call computer_select with target this_computer, cloud, local_vm or browser instead; do not retry select_computer.";
+
 export const DEF_SELECT_COMPUTER = {
     name: "select_computer",
     description:
@@ -696,10 +700,17 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
     if (args.surface !== undefined && (typeof args.surface !== "string" || !["auto", "cloud", "vm", "local", "browser"].includes(args.surface))) {
       return { text: "Choose auto, cloud, vm, local or browser; omit surface to inspect connected choices.", isError: true };
     }
-    const result = await api("/api/internal/computer/select", args.surface === undefined ? undefined : {
-      method: "POST", body: JSON.stringify({ surface: args.surface }),
-    });
-    return { text: JSON.stringify(result) };
+    try {
+      const result = await api("/api/internal/computer/select", args.surface === undefined ? undefined : {
+        method: "POST", body: JSON.stringify({ surface: args.surface }),
+      });
+      return { text: JSON.stringify(result) };
+    } catch (err) {
+      // QA 2026-11-07: a bot whose Workspace is Auto called this twice, failed
+      // twice, then searched for computer_select. A refused move points there.
+      if (args.surface === undefined) throw err;
+      return { text: `${err instanceof Error ? err.message : String(err)} ${SELECT_COMPUTER_REFUSAL_HINT}`, isError: true };
+    }
   }
   if (name === "request_credential") {
     const credentialId = args.credential_id;

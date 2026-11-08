@@ -380,7 +380,10 @@ export function createTeamExportImportRoutes(deps: TeamExportImportRouteDeps): R
           : profileName
             ? `${profileName}'s Team`
             : "My Sagax Team";
-      const memberIds = deps.bots().filter((bot) => !bot.hidden).map((bot) => bot.id);
+      // #2842: the shared Feedback bot (#2618) belongs to the server, never to
+      // the person's team or package.
+      const teamMembers = deps.bots().filter((bot) => !bot.hidden && bot.systemBot !== "feedback");
+      const memberIds = teamMembers.map((bot) => bot.id);
       if ((body.format === "backup" ? deps.bots().length : memberIds.length) === 0) {
         return json(res, 400, { error: "Create a bot before exporting your team" });
       }
@@ -389,7 +392,7 @@ export function createTeamExportImportRoutes(deps: TeamExportImportRouteDeps): R
           return json(res, 200, deps.createBackup(name));
         }
         if (body.format === "package") {
-          const selectedBots = deps.bots().filter((bot) => !bot.hidden);
+          const selectedBots = teamMembers;
           const skillNames = deps.checkedExportSkillNames(body.skillIds, selectedBots);
           if (!skillNames.ok) return json(res, 400, { error: skillNames.error });
           const document = createBotPackageExport({

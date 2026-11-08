@@ -468,9 +468,10 @@ export function runBriefPass(input: BriefPassInput, rejected: readonly string[] 
   return { ok: true, model, costUsd: input.costUsd, suggestions };
 }
 
-/** A kept suggestion as a memory line for the person alone. A room must not see it. */
-export function keptMemoryLine(text: string, now: Date = new Date()): string {
-  const line = memoryEntry(text, { source: "background brief", now, readers: BRIEF_READERS });
+/** A kept suggestion as a memory line for the person alone, in their
+ * language (a counted gist reads "3 factures" in French). A room must not see it. */
+export function keptMemoryLine(text: string, now: Date = new Date(), language: "fr" | "en" = "en"): string {
+  const line = memoryEntry(localizedGist(text, language), { source: "background brief", now, readers: BRIEF_READERS });
   if (memoryMayShow(BRIEF_READERS, { kind: "room", id: "any" })) throw new Error("a brief fact must not enter a room");
   return line;
 }
@@ -513,6 +514,38 @@ export function briefTimeCame(settings: Pick<BriefSettings, "enabled" | "at" | "
 
 type BotRow = z.infer<typeof botSchema>;
 
+/** #2879: a counted gist rejected before #2866 kept a bare key ("3 messages")
+ * that no pass builds any more. On load, such a key takes its app and day
+ * from the suggestion it came from; with no such suggestion it is dropped,
+ * since it can never match again. Returns whether the row changed. */
+export function migrateBriefIdentities(row: BotRow): boolean {
+  let changed = false;
+  const scoped = (identity: string, text: string, sources: readonly BriefSuggestion["sources"][number][]): string => {
+    const source = sources[0];
+    if (!source || !COUNT_GIST.test(identity)) return identity;
+    return suggestionIdentity(text, source);
+  };
+  for (const item of row.suggestions) {
+    const next = scoped(item.identity, item.text, item.sources);
+    if (next !== item.identity) {
+      item.identity = next;
+      changed = true;
+    }
+  }
+  const rejected: string[] = [];
+  for (const identity of row.rejected) {
+    let next: string | null = identity;
+    if (COUNT_GIST.test(identity)) {
+      const from = row.suggestions.find((item) => item.sources[0] && briefIdentity(item.text) === identity);
+      next = from ? from.identity : null;
+    }
+    if (next && !rejected.includes(next)) rejected.push(next);
+  }
+  if (rejected.length !== row.rejected.length || rejected.some((identity, index) => identity !== row.rejected[index])) changed = true;
+  row.rejected = rejected;
+  return changed;
+}
+
 const emptyBot = (): BotRow => ({
   suggestions: [],
   rejected: [],
@@ -538,6 +571,16 @@ export class BriefStore {
       this.data = fileSchema.parse(JSON.parse(readFileSync(file, "utf8")));
     } catch {
       // missing or unreadable: start empty, do not invent suggestions
+      return;
+    }
+    let migrated = false;
+    for (const row of Object.values(this.data.bots)) migrated = migrateBriefIdentities(row) || migrated;
+    if (migrated) {
+      try {
+        this.save();
+      } catch {
+        // read-only for now: the next write saves the migrated keys
+      }
     }
   }
 

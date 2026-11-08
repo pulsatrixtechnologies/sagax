@@ -290,6 +290,7 @@ export function createTerminalRequestService(deps: TerminalRequestServiceDeps) {
             hostLabel: resource.hostLabel,
             label: resource.label,
             status: session.status,
+            openedAt: session.openedAt,
           },
         });
         return { claimed: true, outcome: "allowed-once" };

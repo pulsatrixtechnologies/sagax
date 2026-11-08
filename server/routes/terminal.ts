@@ -76,6 +76,7 @@ export function createTerminalRoutes(deps: TerminalRouteDeps): RouteHandler {
         socket.destroy();
       };
       attachment.output.on("data", (chunk: Buffer) => {
+        deps.sessions.record(sessionId, chunk);
         if (!socket.destroyed) socket.write(encodeWebSocketFrame(2, chunk));
       });
       const onData = (chunk: Buffer) => {

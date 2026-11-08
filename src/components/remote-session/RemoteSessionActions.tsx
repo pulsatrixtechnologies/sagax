@@ -21,7 +21,7 @@ type Pending = "shell" | "upload" | "download" | null;
 // card (a phone) they become three equal tiles, icon over label, so no label
 // is cut and nothing wraps.
 const ACTION = "ui-button min-w-0 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
-const SECONDARY = "h-auto flex-col gap-1 rounded-xl px-1.5 py-2 text-[12px] leading-4 @min-[460px]/actions:h-[30px] @min-[460px]/actions:flex-row @min-[460px]/actions:gap-1.5 @min-[460px]/actions:rounded-full @min-[460px]/actions:px-[13px] @min-[460px]/actions:py-0 @min-[460px]/actions:text-[13px] @min-[460px]/actions:leading-[18px]";
+const SECONDARY = "flex-1 basis-[88px] whitespace-nowrap @min-[460px]/actions:flex-none @min-[460px]/actions:basis-auto h-auto flex-col gap-1 rounded-xl px-1.5 py-2 text-[12px] leading-4 @min-[460px]/actions:h-[30px] @min-[460px]/actions:flex-row @min-[460px]/actions:gap-1.5 @min-[460px]/actions:rounded-full @min-[460px]/actions:px-[13px] @min-[460px]/actions:py-0 @min-[460px]/actions:text-[13px] @min-[460px]/actions:leading-[18px]";
 
 // Panel row (compact): the same pills, one row that wraps, 28 px high.
 const COMPACT = "h-[28px] rounded-full px-[11px] text-[12.5px] leading-[18px]";
@@ -119,7 +119,7 @@ export function RemoteSessionActions({ botId, view, compact = false, leading }: 
   return (
     <div data-remote-actions={compact ? "compact" : ""} className={cn("@container/actions flex flex-col gap-2", !compact && "px-3 py-3")}>
       <div className={compact ? "flex" : "flex flex-col gap-2 @min-[460px]/actions:flex-row @min-[460px]/actions:items-center"}>
-        <div className={compact ? "flex flex-wrap items-center gap-1.5" : "grid grid-cols-3 gap-2 @min-[460px]/actions:flex @min-[460px]/actions:items-center"}>
+        <div className={compact ? "flex flex-wrap items-center gap-1.5" : "flex flex-wrap gap-2 @min-[460px]/actions:items-center"}>
           {leading}
           <ActionButton data-remote-action="shell" className={size} icon={Terminal} label={t("remoteSession.shell")} busy={pending === "shell"} disabled={busy} onClick={() => void shell()} />
           <ActionButton

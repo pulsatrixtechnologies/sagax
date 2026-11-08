@@ -133,10 +133,17 @@ export const SEND_FILE_MAX_BYTES = 25 * 1024 * 1024;
  * for the bot's file tools (a read of its own workspace is the owner's card,
  * answered at the bot's level). Never "host file tools": an organization
  * server withholds them. */
+const FILES_NOTE = "\n\n[Files sent with this message, now in your Sagax workspace folder: ";
 export function agentPromptWithFiles(prompt: string, staged: readonly string[], workspaceRoot: string): string {
   if (!staged.length) return prompt;
   const full = staged.map((rel) => join(workspaceRoot, rel));
-  return `${prompt}\n\n[Files sent with this message, now in your Sagax workspace folder: ${staged.join(", ")}. Read them with workspace_read using those paths (relative to your workspace; it reads text), or with your file tools at the full paths: ${full.join(", ")}. If you work on a VM or cloud computer, they are not there until you copy them over (read here, then write them there).]`;
+  return `${prompt}${FILES_NOTE}${staged.join(", ")}. Read them with workspace_read using those paths (relative to your workspace; it reads text), or with your file tools at the full paths: ${full.join(", ")}. If you work on a VM or cloud computer, they are not there until you copy them over (read here, then write them there).]`;
+}
+/** sha256 of a prompt as it lands in the conversation, without the staged
+ * files note (#2858): what a pending send_prompt receipt is matched on. */
+export function promptHash(text: string): string {
+  const cut = text.lastIndexOf(FILES_NOTE);
+  return createHash("sha256").update((cut >= 0 ? text.slice(0, cut) : text).trim()).digest("hex");
 }
 export const TIMEOUT_MS_MIN = 1_000;
 export const TIMEOUT_MS_MAX = 600_000;
@@ -416,6 +423,11 @@ export interface AgentApiDeps {
    * Absent: bridge_thread_id is refused.
    */
   bridgeConversation?(caller: AgentCaller, agentId: string, bridgeThreadId: string, prompt: string): Promise<{ threadId: string; prompt: string } | Refusal>;
+  /** #2858: the prompts still waiting in this conversation's queue
+   * (chat_followups rows not yet settled), with the id a queued send's handle
+   * is anchored on. They survive a restart; a pending send_prompt receipt
+   * checks them as well as the transcript. */
+  queuedPrompts?(threadId: string): Array<{ id: string; text: string }>;
   /** Put the prompt (and the staged files) into the conversation and start or
    * queue its turn. messageId is the stored prompt's id, when known. */
   post(caller: AgentCaller, agentId: string, threadId: string, prompt: string, files: FileInput[], wake?: PriorityDelivery): Promise<{ messageId: string | null } | Refusal>;
@@ -464,6 +476,10 @@ export interface SendReceipt {
   /** Written just before the post: a crash between the post and the final
    * receipt leaves it, and the resend checks the transcript (#2849). */
   pending?: boolean;
+  /** promptHash of the prompt as posted (after a bridge fence): a pending
+   * receipt is completed only by a line or a queued item with this text
+   * (#2858), never by another sender's line in the same conversation. */
+  ph?: string;
 }
 
 /** How long a send_prompt receipt (idempotency_key) holds: as long as the
@@ -1151,13 +1167,18 @@ function createAgentApiHandlers(env: {
         }
         // A pending receipt with no send in flight: Sagax stopped between the
         // pending write and the final one. The prompt reached the
-        // conversation if a user line at or after issued_at is there; then
-        // the receipt is completed, else the key is free again.
+        // conversation if a user line at or after issued_at carries its text,
+        // or if it still waits in the conversation's queue (busyMode after:
+        // no line until its own turn, and the queue survives a restart);
+        // then the receipt is completed, else the key is free again (#2858).
         if (prior?.pending) {
           const issued = prior.issued_at;
-          const line = deps.messages(prior.thread_id).find((message) => message.role === "user" && message.at >= issued);
-          if (line) {
-            prior = { fp: prior.fp, agent_id: prior.agent_id, thread_id: prior.thread_id, message_id: line.id, issued_at: issued };
+          const expected = prior.ph ?? promptHash(prompt);
+          const line = deps.messages(prior.thread_id).find((message) => message.role === "user" && message.at >= issued && promptHash(message.text ?? "") === expected);
+          const queued = line ? undefined : deps.queuedPrompts?.(prior.thread_id).find((item) => promptHash(item.text) === expected);
+          const anchor = line?.id ?? queued?.id;
+          if (anchor) {
+            prior = { fp: prior.fp, agent_id: prior.agent_id, thread_id: prior.thread_id, message_id: anchor, issued_at: issued };
             sendReceipts.put(receiptKey, prior);
           } else {
             sendReceipts.delete(receiptKey);
@@ -1262,7 +1283,7 @@ function createAgentApiHandlers(env: {
       // #2849: the receipt is written pending BEFORE the post, so a crash
       // after the post never lets a resend start a second turn.
       if (receiptKey !== null) {
-        sendReceipts.put(receiptKey, { fp, agent_id: agentId, thread_id: threadId, message_id: null, issued_at: issuedAt, pending: true });
+        sendReceipts.put(receiptKey, { fp, agent_id: agentId, thread_id: threadId, message_id: null, issued_at: issuedAt, pending: true, ph: promptHash(prompt) });
       }
       let posted: Awaited<ReturnType<typeof deps.post>>;
       try {

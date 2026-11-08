@@ -29826,6 +29826,11 @@ const agentApi = createAgentApi({
     },
     delete: (key) => dropCommandReceipt("agent.send_prompt", key),
   },
+  // #2858: a queued send (busyMode after) has no line until its turn; its
+  // chat_followups row is what a pending receipt finds after a restart.
+  queuedPrompts: (threadId) => chatFollowups("bot")
+    .filter((row) => row.threadId === threadId && (row.status === "pending" || row.status === "dispatching" || row.status === "interrupted"))
+    .map((row) => ({ id: row.id, text: String((row.payload as { text?: unknown })?.text ?? "") })),
   secret: agentApiSecret(),
   audit: agentApiAudit,
   async agents(caller) {

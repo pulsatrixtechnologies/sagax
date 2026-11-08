@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 
-import { attachmentName, bridgeOperationError, commandEnvironment, createDesktopBridge, createLocalVm, executeBridgeOperation, localPath, validBridgeOperation } from "./desktop-bridge.mjs";
+import { attachmentName, bridgeOperationError, commandEnvironment, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, validBridgeOperation } from "./desktop-bridge.mjs";
 import net from "node:net";
 import { zipArchive } from "../server/testing/archive-fixtures.mjs";
 
@@ -31,6 +31,7 @@ function sandboxHome() {
 const deps = home => ({
   home, attachmentsDir: path.join(home, "tmp", "attachments"),
   protectedPaths: [path.join(home, "app-data"), path.join(home, ".ssh")],
+  appDataPaths: [path.join(home, "app-data")],
   fetchUrl: globalThis.fetch, localVm: createLocalVm({ run: async () => ({ content: [{ type: "text", text: "[exit 1]" }], isError: true }) }),
 });
 const signal = () => new AbortController().signal;
@@ -840,4 +841,26 @@ test("a failed read on the person's own computer quotes the absolute path it ope
   fs.writeFileSync(present, "known line\n");
   const read = await executeBridgeOperation({ action: "read_file", path: present }, deps(home), signal());
   assert.match(read.content[0].text, /known line/);
+});
+
+// #2773: in solo mode the Sagax server runs on this computer; run_command
+// never reaches the app's own data by name or as its working directory.
+test("run_command refuses the app's own data folder, by any spelling", async () => {
+  const home = sandboxHome();
+  const appData = path.join(home, "app-data");
+  for (const command of [
+    `cat ${appData}/Cookies`,
+    "cat ~/app-data/Cookies",
+    "sqlite3 $HOME/app-data/messages.db .tables",
+    "cp \"${HOME}/app-data/Cookies\" /tmp/x",
+    "cat app-data/Cookies",
+    "cd ./app-data && ls",
+  ]) {
+    await assert.rejects(executeBridgeOperation({ action: "run_command", command }, deps(home), signal()), /app's own data/, command);
+  }
+  await assert.rejects(executeBridgeOperation({ action: "run_command", command: "ls", cwd: "~/app-data" }, deps(home), signal()), /cannot be accessed/i);
+  const fine = await executeBridgeOperation({ action: "run_command", command: "ls work my-app-data-notes; echo app-data-free" }, deps(home), signal());
+  assert.match(fine.content[0].text, /app-data-free/);
+  assert.equal(commandNamesAppData("sqlite3 ~/.openmausbot/messages.db", [path.join(home, ".sagax")], home), path.join(home, ".openmausbot"));
+  assert.equal(commandNamesAppData("grep -r sagax ~/work", [path.join(home, ".sagax")], home), null);
 });

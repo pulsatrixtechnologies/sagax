@@ -174,11 +174,14 @@ private struct UpdateRow: View {
                             .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
                             .lineLimit(1)
                     }
-                    Text(update.line.isEmpty ? " " : update.line)
+                    // #2909: a decision gives its whole context before any pick
+                    let text = update.kind == .needsYou ? update.context : update.line
+                    Text(text.isEmpty ? " " : text)
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
-                        .lineLimit(update.kind == .needsYou ? 3 : 1)
+                        .lineLimit(update.kind == .needsYou ? 12 : 1)
                         .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: update.kind == .needsYou)
 
                     if update.kind == .needsYou, let card = update.card, card.isPending {
                         if card.skillRequest != nil {
@@ -190,8 +193,12 @@ private struct UpdateRow: View {
                             // The answers, as pills, from the one rule every
                             // compact surface shares — never a choice
                             // invented here.
+                            // #2909: short whole labels, the full answer sent;
+                            // answers that cannot be shown whole: Open, to the card
+                            let options = update.answerOptions
+                            if let labels = update.answerLabels {
                             HStack(spacing: 8) {
-                                ForEach(update.answerOptions, id: \.self) { option in
+                                ForEach(Array(zip(labels, options)), id: \.1) { label, option in
                                     Button {
                                         Haptics.selection()
                                         answering = true
@@ -200,8 +207,10 @@ private struct UpdateRow: View {
                                             answering = false
                                         }
                                     } label: {
-                                        Text(option)
+                                        Text(label)
                                             .font(.system(size: 13, weight: .semibold))
+                                            .lineLimit(1)
+                                            .fixedSize()
                                             .foregroundStyle(CardStyle.isRefusal(option) ? Theme.textPrimary : .white)
                                             .padding(.horizontal, 14)
                                             .frame(height: 32)
@@ -215,9 +224,23 @@ private struct UpdateRow: View {
                                     }
                                     .buttonStyle(.plain)
                                     .disabled(answering)
+                                    .accessibilityLabel(option)
                                 }
                             }
                             .padding(.top, 6)
+                            } else if !options.isEmpty {
+                                Button(action: open) {
+                                    Text(String(localized: "Open"))
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 14)
+                                        .frame(height: 32)
+                                        .background(Capsule().fill(MausPalette.color(update.chat.color)))
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 6)
+                                .accessibilityIdentifier("update-open-\(update.chat.threadId)")
+                            }
                         }
                     }
                 }

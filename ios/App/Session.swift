@@ -3867,6 +3867,14 @@ final class Session: ObservableObject {
     /// routine run's push lands on the run's message in the bot's chat
     /// (#2098; `openRoutineRunInChat`), never a run view.
     func openNotification(_ target: NotificationTarget) async {
+        await openNotificationChat(target)
+        // #2909: a decision's banner lands on its card in the bot's chat
+        if let cardId = target.cardId, !target.threadId.isEmpty, client != nil {
+            await jump(to: cardId, inThread: target.threadId)
+        }
+    }
+
+    private func openNotificationChat(_ target: NotificationTarget) async {
         guard let client else {
             // Do not carry a stale destination into a future, unrelated
             // pairing. Only a saved connection waiting for Keychain access is
@@ -3886,8 +3894,9 @@ final class Session: ObservableObject {
                 try await hydrate(using: client)
                 bot = state.bot(target.botId)
             }
-            // A run's push (#1700, #2098): its message in the bot's chat.
-            if target.routineRunId != nil || RoutineResults.runId(ofThread: target.threadId, bots: state.bots, rooms: state.rooms) != nil {
+            // A run's push (#1700, #2098): its message in the bot's chat. A
+            // decision's card (#2909) is in the bot's chat already: its own place.
+            if target.cardId == nil, target.routineRunId != nil || RoutineResults.runId(ofThread: target.threadId, bots: state.bots, rooms: state.rooms) != nil {
                 let listing = await loadRoutines()
                 let known = Set(listing.runs.map(\.id))
                 if let runId = RoutineResults.runId(

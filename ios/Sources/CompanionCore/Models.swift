@@ -2662,15 +2662,20 @@ public struct NotificationTarget: Equatable, Sendable {
     /// A routine run's notification: open its detail, not the report thread
     /// (#1700, desktop `openNotificationTarget`).
     public let routineRunId: String?
+    /// #2909: the chat message holding a question's, an approval's or a
+    /// needs-you's card: the tap opens the bot's chat on it.
+    public let cardId: String?
 
-    public init?(botId: String?, threadId: String?, routineRunId: String? = nil) {
+    public init?(botId: String?, threadId: String?, routineRunId: String? = nil, cardId: String? = nil) {
         let bot = botId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let thread = threadId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let run = routineRunId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let card = cardId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !bot.isEmpty, !thread.isEmpty || !run.isEmpty else { return nil }
         self.botId = bot
         self.threadId = thread
         self.routineRunId = run.isEmpty ? nil : run
+        self.cardId = card.isEmpty || thread.isEmpty || card.utf8.count > 128 ? nil : card
     }
 
     /// A message from a person, or a tag in a room, has no bot: the
@@ -2681,7 +2686,8 @@ public struct NotificationTarget: Equatable, Sendable {
         self.init(
             botId: botId ?? payload["groupId"],
             threadId: payload["threadId"],
-            routineRunId: payload["routineRunId"]
+            routineRunId: payload["routineRunId"],
+            cardId: payload["cardId"]
         )
     }
 

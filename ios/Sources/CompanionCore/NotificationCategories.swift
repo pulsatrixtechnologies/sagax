@@ -1,8 +1,9 @@
 // The notification categories the phone registers, in one place for the app
 // and its Notification Service Extension: Allow once and Deny on an
 // approval, Approve and Deny on a needs-you, Do it and Not now on a
-// proactive proposal (#2697), a question's own choices (up to NotificationChoices.limit, then
-// Open), Reply on a question with no choices, nothing on the rest.
+// proactive proposal (#2697), a question's own choices titled with their
+// short labels, or Open alone when they cannot be shown whole (#2909), Reply
+// on a question with no choices, nothing on the rest.
 //
 // A question's choices change with every question, so their category is
 // made when the notification arrives (the extension, or the app for a local
@@ -25,10 +26,13 @@ public enum NotificationCategories {
         /// #2697: a proactive proposal's Do it and Not now.
         public var doIt: String
         public var notNow: String
+        /// #2909: the one button of answers too long to show whole.
+        public var open: String
 
         public init(
             allowOnce: String, deny: String, reply: String, send: String, placeholder: String,
-            approve: String = "Approve", doIt: String = "Do it", notNow: String = "Not now"
+            approve: String = "Approve", doIt: String = "Do it", notNow: String = "Not now",
+            open: String = NotificationCategories.openTitle()
         ) {
             self.allowOnce = allowOnce
             self.deny = deny
@@ -38,6 +42,7 @@ public enum NotificationCategories {
             self.approve = approve
             self.doIt = doIt
             self.notNow = notNow
+            self.open = open
         }
     }
 
@@ -60,7 +65,10 @@ public enum NotificationCategories {
         let decline = UNNotificationAction(identifier: NotificationApproval.declineAction, title: titles.deny, options: [.authenticationRequired, .destructive])
         let doIt = UNNotificationAction(identifier: NotificationApproval.doItAction, title: titles.doIt, options: [.authenticationRequired])
         let notNow = UNNotificationAction(identifier: NotificationApproval.notNowAction, title: titles.notNow, options: [])
+        // #2909: answers a button cannot show whole: Open, to the card
+        let open = UNNotificationAction(identifier: NotificationChoices.openAction, title: titles.open, options: [.foreground])
         return [
+            UNNotificationCategory(identifier: NotificationApproval.openCategory, actions: [open], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: NotificationApproval.needsYouCategory, actions: [approve, decline], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: NotificationApproval.proposalCategory, actions: [doIt, notNow], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: NotificationApproval.category, actions: [allow, deny], intentIdentifiers: [], options: []),

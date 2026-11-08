@@ -31,6 +31,9 @@ public enum NotificationApproval {
     /// #2697: a proactive proposal card: Do it and Not now answer the
     /// proposal (`POST /api/bots/:id/proactive/:proposalId`).
     public static let proposalCategory = "SAGAX_PROPOSAL"
+    /// #2909: answers a button cannot show whole: one action, Open, which goes
+    /// to the card in the bot's chat (server/push/payload.ts `OPEN_CATEGORY`).
+    public static let openCategory = "SAGAX_OPEN"
     public static let doItAction = "sagax.proposal.accept"
     public static let notNowAction = "sagax.proposal.decline"
     /// Bundled chime (ios/App/approval.caf). Distinct from the system sound and the nudge.
@@ -52,6 +55,9 @@ public enum NotificationApproval {
         /// Approve or Deny on a needs-you: a short answer in the bot's
         /// conversation (`groupId` when it came out of a room).
         case needsYou(botId: String, threadId: String, groupId: String?, approve: Bool)
+        /// #2909: a needs-you's own answer picked on the banner: its full
+        /// words go to the bot's conversation.
+        case needsYouAnswer(botId: String, threadId: String, groupId: String?, text: String)
         /// Do it or Not now on a proactive proposal card.
         case proposal(botId: String, proposalId: String, accept: Bool)
     }
@@ -70,14 +76,22 @@ public enum NotificationApproval {
 
     /// The category a local banner registers. Only an approval or a
     /// question that names its request gets actions: Allow and Deny, or Reply.
-    public static func category(kind: String, requestId: String?, needsKey: Bool, choices: [String] = [], proposalId: String? = nil) -> String {
+    public static func category(
+        kind: String, requestId: String?, needsKey: Bool, choices: [String] = [], choiceLabels: [String] = [], proposalId: String? = nil
+    ) -> String {
         // #2697: a proactive proposal and a needs-you with no request behind it
         if kind == "proposal" { return token(proposalId) != nil ? proposalCategory : updateCategory }
-        if kind == "needs-you", token(requestId) == nil { return needsYouCategory }
+        if kind == "needs-you", token(requestId) == nil {
+            guard !choices.isEmpty else { return needsYouCategory }
+            // #2909: its own answers, whole on the buttons, or Open only
+            guard let layout = NotificationChoices.buttons(choices: choices, labels: choiceLabels) else { return openCategory }
+            return NotificationChoices.categoryIdentifier(layout.shown, overflow: layout.overflow)
+        }
         if kind == "question" {
             guard token(requestId) != nil else { return updateCategory }
             guard !choices.isEmpty else { return questionCategory }
-            let layout = NotificationChoices.layout(choices)
+            // #2909: short whole labels on the buttons, else Open only
+            guard let layout = NotificationChoices.buttons(choices: choices, labels: choiceLabels) else { return openCategory }
             return NotificationChoices.categoryIdentifier(layout.shown, overflow: layout.overflow)
         }
         guard kind == "approval", token(requestId) != nil else { return updateCategory }
@@ -93,9 +107,13 @@ public enum NotificationApproval {
         let target = NotificationTarget(payload: info)
         if let index = NotificationChoices.index(of: actionIdentifier) {
             // a question's choice: the chosen words are the answer
+            // (the button shows its short label; the answer is the whole choice)
             let choices = NotificationChoices.choices(from: info["choices"])
-            guard let threadId, let requestId, choices.indices.contains(index) else { return target.map(Decision.open) }
-            return .reply(threadId: threadId, requestId: requestId, text: choices[index])
+            guard let threadId, choices.indices.contains(index) else { return target.map(Decision.open) }
+            if let requestId { return .reply(threadId: threadId, requestId: requestId, text: choices[index]) }
+            // #2909: a needs-you's answer is a line in the bot's conversation
+            guard let botId = token(info["botId"]) else { return target.map(Decision.open) }
+            return .needsYouAnswer(botId: botId, threadId: threadId, groupId: token(info["groupId"]), text: choices[index])
         }
         switch actionIdentifier {
         case approveAction, declineAction:
@@ -192,6 +210,31 @@ public enum NotificationChoices {
         identifier.hasPrefix("\(NotificationApproval.questionCategory).")
     }
 
+    /// #2909: the buttons a question or a needs-you offers: one per choice,
+    /// titled with its short label (shown whole), the choice itself the
+    /// answer. Nil when they cannot all be shown whole (too many, a label
+    /// missing or too long, two alike): the banner offers Open only.
+    public static func buttons(choices: [String], labels: [String]) -> Layout? {
+        // an older server sends no labels: the same rule derives them
+        guard let shown = NotificationChoiceLabels.labels(for: choices, given: labels) else { return nil }
+        return Layout(shown: shown, overflow: false)
+    }
+
+    /// The short labels a push carries (`choiceLabels`), in order.
+    public static func labels(from value: Any?) -> [String] {
+        let list: [String]
+        if let strings = value as? [String] {
+            list = strings
+        } else if let any = value as? [Any] {
+            list = any.compactMap { $0 as? String }
+        } else if let joined = value as? String, !joined.isEmpty {
+            list = joined.components(separatedBy: "\u{1F}")
+        } else {
+            return []
+        }
+        return list.prefix(10).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
     /// The choices a push or a frame carries (`choices`), cleaned.
     public static func choices(from value: Any?) -> [String] {
         if let list = value as? [String] { return layout(list, limit: 10).shown }
@@ -200,6 +243,47 @@ public enum NotificationChoices {
             return layout(joined.components(separatedBy: "\u{1F}"), limit: 10).shown
         }
         return []
+    }
+}
+
+/// #2909: short labels a button, a pill or the island shows whole, for
+/// answers that came without them (shared/notification-context.ts
+/// `choiceShortLabel` / `notificationChoiceLabels`, same rules).
+public enum NotificationChoiceLabels {
+    /// The longest label shown whole (shared `CHOICE_LABEL_MAX`).
+    public static let labelMax = 24
+    /// Past this many answers: Open only (shared `CHOICE_BUTTONS_MAX`).
+    public static let buttonsMax = 3
+
+    private static let separators = [" : ", ": ", " - ", " — ", " – ", " (", " ; ", "; ", ", ", " pour ", " to ", " so "]
+
+    /// A short label for `choice`, or nil when it has no short form.
+    public static func shortLabel(_ choice: String, max: Int = labelMax) -> String? {
+        let clean = choice.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            .replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "")
+        guard !clean.isEmpty else { return nil }
+        if clean.count <= max { return clean }
+        for separator in separators {
+            guard let range = clean.range(of: separator), range.lowerBound > clean.startIndex else { continue }
+            var head = String(clean[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+            while let last = head.last, ".,;:".contains(last) { head.removeLast() }
+            if !head.isEmpty, head.count <= max { return head }
+        }
+        return nil
+    }
+
+    /// One short label per answer (`given` first, when short), or nil: the
+    /// answers cannot all be shown whole, so the surface offers Open only.
+    public static func labels(for choices: [String], given: [String] = [], limit: Int = buttonsMax) -> [String]? {
+        guard !choices.isEmpty, choices.count <= limit else { return nil }
+        var labels: [String] = []
+        for (index, choice) in choices.enumerated() {
+            let own = index < given.count ? given[index].split(whereSeparator: \.isWhitespace).joined(separator: " ") : ""
+            guard let label = (!own.isEmpty && own.count <= labelMax) ? own : shortLabel(choice) else { return nil }
+            if labels.contains(where: { $0.lowercased() == label.lowercased() }) { return nil }
+            labels.append(label)
+        }
+        return labels
     }
 }
 
@@ -248,6 +332,7 @@ public enum AnswerFeedback: Equatable, Sendable {
         case let .needsYou(_, _, _, approve): approve ? .allowed : .denied
         case let .proposal(_, _, accept): accept ? .allowed : .denied
         case let .reply(_, _, text): .answered(text)
+        case let .needsYouAnswer(_, _, _, text): .answered(text)
         case .open: .failed
         }
     }

@@ -47,7 +47,7 @@ describe("ThreadChip", () => {
     expect(markup).not.toContain("justify-start");
     expect(markup).not.toContain("border-hairline");
     expect(markup).not.toContain("lucide-chevron-right");
-    expect(markup).toContain("Go to conversation");
+    expect(markup).toContain("Open the chat");
     expect(markup).toContain("Scout");
     expect(markup).not.toContain("Opened thread #QA PR 245 on Scout");
     expect(markup).toContain('title="Open #QA PR 245"');
@@ -89,6 +89,6 @@ describe("ThreadChip", () => {
     unseen.threadRef = { botId: "other-org-bot", threadId: "elsewhere", title: "Away", gone: true };
     expect(renderToStaticMarkup(createElement(ThreadChip, { message: unseen }))).toBe("");
     unseen.threadRef = { botId: "other-org-bot", threadId: "elsewhere", title: "Away" };
-    expect(renderToStaticMarkup(createElement(ThreadChip, { message: unseen }))).toContain("Go to conversation");
+    expect(renderToStaticMarkup(createElement(ThreadChip, { message: unseen }))).toContain("Open the chat");
   });
 });

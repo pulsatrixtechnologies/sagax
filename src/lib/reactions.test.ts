@@ -23,7 +23,7 @@ describe("reaction chips", () => {
     expect(reactionTooltip(eyes!, ["pr_me"])).toBe("Quasar reacted with 👀");
     setLocale("fr");
     try {
-      expect(reactionTooltip(thumbs!, ["pr_me"])).toBe("Réaction 👍 : Sam Taylor, Quasar et Vous");
+      expect(reactionTooltip(thumbs!, ["pr_me"])).toBe("Réaction 👍 : Sam Taylor, Quasar et Toi");
     } finally {
       setLocale("en");
     }

@@ -146,7 +146,7 @@ function ModelLockLine({ bot, lock }: { bot: Bot; lock: ModelTurnLock }) {
     <p data-model-lock={lock.reason} role="status" className={cn("mt-2 text-[12px] leading-4 text-ink-secondary", plain && "flex flex-wrap items-center gap-x-2 gap-y-1")}>
       {line}{" "}
       <button type="button" onClick={open} className={plain ? PILL : "underline underline-offset-2 hover:text-ink"}>
-        {t("botPanel.model.lockedOpen")}
+        {t("approvals.openChat", { bot: bot.name })}
       </button>
     </p>
   );

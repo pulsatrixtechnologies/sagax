@@ -11,9 +11,9 @@ const entry = (patch: Partial<JournalEntry>): JournalEntry => ({
 describe("the Journal's words (2026-10-26)", () => {
   it("names the rule in its own words, the level, and the person who answered", () => {
     setLocale("fr");
-    expect(deciderLine(entry({ decider: "custom-rule", ruleText: "lire des fichiers dans ~/Projets" }))).toBe("Votre règle : « lire des fichiers dans ~/Projets »");
+    expect(deciderLine(entry({ decider: "custom-rule", ruleText: "lire des fichiers dans ~/Projets" }))).toBe("Ta règle : « lire des fichiers dans ~/Projets »");
     expect(deciderLine(entry({ decider: "level", source: "owner-auto" }))).toBe("Niveau d'approbation : Approuver pour moi");
-    expect(deciderLine(entry({ decider: "person", answeredBy: JOURNAL_SELF }))).toBe("Répondu par vous");
+    expect(deciderLine(entry({ decider: "person", answeredBy: JOURNAL_SELF }))).toBe("Répondu par toi");
     expect(deciderLine(entry({ decider: "full-access" }))).toBe(t("approvals.journal.decider.fullAccess"));
     expect(guardLine(entry({ guard: { allow: false, reason: "not_granted", mode: "shadow" } }))).toBe(t("approvals.journal.guard.shadow"));
     expect(guardLine(entry({ guard: { allow: true, reason: "default", mode: "shadow" } }))).toBeNull();

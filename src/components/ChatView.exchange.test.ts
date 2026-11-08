@@ -76,7 +76,7 @@ describe("chat bot-to-bot collapse and dates", () => {
         message("s", "Quasar finished the check", { role: "bot" }),
       ]),
     }));
-    expect(markup).toContain("Go to conversation");
+    expect(markup).toContain("Open the chat");
     expect(markup).toContain("Quasar");
     expect(markup).toContain('data-testid="bot-exchange-chip"');
     expect(markup).not.toContain("Which database?");

@@ -155,7 +155,7 @@ describe("an artifact's refresh state on its row", () => {
     setLocale("fr");
     expect(artifactStatus(artifact("art_st00001", "Note", false), now).text).toContain("Mis à jour");
     const paused = artifact("art_pa00001", "CPU", false, { source, intervalSeconds: 60, refresh: { state: "paused", failures: 3 } });
-    expect(artifactStatus(paused, now).text).toBe("Rafraîchissement en pause après 3 échecs. Rafraîchissez maintenant ou demandez au bot.");
+    expect(artifactStatus(paused, now).text).toBe("Rafraîchissement en pause après 3 échecs. Rafraîchis maintenant ou demande au bot.");
   });
 });
 

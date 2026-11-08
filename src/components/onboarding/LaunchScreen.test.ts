@@ -95,10 +95,10 @@ describe("launch screen", () => {
     expect(html).toContain('viewBox="0 0 28 25"');
     expect(tree.some((node) => typeof node.type === "function" && /Maus|Mascot/.test(node.type.name))).toBe(false);
     expect(html).toContain("Bienvenue dans Sagax");
-    expect(html).toContain("Comment utiliserez-vous Sagax sur cet ordinateur?");
+    expect(html).toContain("Comment utiliseras-tu Sagax sur cet ordinateur?");
     expect(html).toContain("Sans serveur");
     expect(html).toContain("Continuer");
-    expect(html).toContain("Vous pourrez changer ce choix plus tard dans Réglages &gt; Général.");
+    expect(html).toContain("Tu pourras changer ce choix plus tard dans Réglages &gt; Général.");
     expect(html).not.toMatch(/Welcome to|No server|You can change/);
   });
 

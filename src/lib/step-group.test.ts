@@ -154,7 +154,7 @@ describe("the group's one line", () => {
     setLocale("fr");
     expect(stepGroupWords(summarizeSteps(turn), 173_000)).toMatchObject({
       label: "A travaillé 2 min 53 s", tools: "12 outils", failed: "5 échecs",
-      ariaLabel: "A travaillé 2 min 53 s, 12 outils, 5 échecs, appuyez pour voir le détail",
+      ariaLabel: "A travaillé 2 min 53 s, 12 outils, 5 échecs, appuie pour voir le détail",
     });
     expect(stepGroupWords(summarizeSteps([step("Read", true), step("Read", false)]), undefined)).toMatchObject({
       label: "A travaillé", tools: "2 outils", failed: "1 échec",

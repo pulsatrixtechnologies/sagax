@@ -43,7 +43,7 @@ describe("GithubConnectCard", () => {
     expect(card.getAttribute("data-github-connect-state")).toBe("pending");
     expect(host.querySelector("[data-github-connect-code]")!.textContent).toBe("ABCD-1234");
     expect(host.querySelector("[data-github-connect-expiry]")!.textContent).toBe("The code works for 15 min.");
-    expect(host.textContent).not.toMatch(/Open thread|Go to conversation/);
+    expect(host.textContent).not.toMatch(/Open thread|Go to conversation|Open the chat/);
     click("[data-github-connect-copy]");
     expect(fixture.copyText).toHaveBeenCalledWith("ABCD-1234");
     await vi.waitFor(() => expect(host.querySelector("[data-github-connect-copy]")!.textContent).toContain("Copied"));

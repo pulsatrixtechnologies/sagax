@@ -180,7 +180,7 @@ describe("EngineConnect", () => {
     expect(connectName({ driver: "geminiAgent", displayName: "Gemini CLI" })).toBe("Gemini");
     expect(connectName({ driver: "piAgent", displayName: "pi" })).toBe("pi");
     setLocale("fr");
-    expect(paysWithText({ installed: true, myTurns: "subscription" })).toBe("Payé par : votre abonnement");
+    expect(paysWithText({ installed: true, myTurns: "subscription" })).toBe("Payé par : ton abonnement");
     expect(render(engine())).toContain("Non connecté");
   });
 });
@@ -191,7 +191,7 @@ describe("a sign-in refused on an engine the server lists as installed", () => {
     const raw = "Grok is not installed on this server. Install it with xAI's installer (https://x.ai/cli), then try again.";
     expect(engineSignInError(grok, new Error(raw))).toBe("Grok is not connected. Connect it to use it.");
     setLocale("fr");
-    expect(engineSignInError(grok, new Error(raw))).toBe("Grok n'est pas connecté. Connectez-le pour l'utiliser.");
+    expect(engineSignInError(grok, new Error(raw))).toBe("Grok n'est pas connecté. Connecte-le pour l'utiliser.");
   });
   it("keeps other failures, and keeps not-installed for an engine the host really lacks", () => {
     expect(engineSignInError(grok, new Error("Grok could not reach its sign-in service."))).toBe("Grok could not reach its sign-in service.");

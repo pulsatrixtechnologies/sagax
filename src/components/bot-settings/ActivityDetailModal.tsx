@@ -149,7 +149,7 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
       {shown.threadId && (
         <button type="button" data-activity-open-thread onClick={() => onOpenThread(shown.botId, shown.threadId!)} className={cn(PRIMARY_PILL, "gap-1.5")}>
           <ExternalLink size={13} aria-hidden="true" />
-          {t("approvals.openThread")}
+          {t("approvals.openChat", { bot: botFor(shown.botId)?.name ?? shown.botName ?? "" })}
         </button>
       )}
     </>

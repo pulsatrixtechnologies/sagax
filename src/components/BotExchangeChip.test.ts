@@ -41,7 +41,7 @@ function run(steps: Message[] = []) {
 describe("BotExchangeChip", () => {
   it("draws a closed chip and hides the bot-to-bot bodies", () => {
     const markup = renderToStaticMarkup(createElement(BotExchangeChip, { run: run() }));
-    expect(markup).toContain("Go to conversation");
+    expect(markup).toContain("Open the chat");
     expect(markup).not.toContain("2 messages with");
     expect(markup).toContain("Quasar");
     expect(markup).not.toContain("Which database?");

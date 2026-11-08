@@ -5,7 +5,7 @@
 // Deny, same remembered rules) and the question its own card (OptionCard),
 // so an answer here is the same answer. A run that waits without a card
 // the sheet can read (a routine's own question) shows what it asks and
-// opens its conversation.
+// opens the bot's chat ("Open {bot}'s chat", never a thread, #2936).
 import { Hand, ExternalLink, GitFork } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -73,7 +73,7 @@ export function WaitingOnYou({ items, threadId, botFor, onCancel, onOpenThread, 
               {item.threadId && onOpenThread && (
                 <button type="button" data-task-waiting-open onClick={() => onOpenThread(item.botId, item.threadId!)} className={cn(PILL, "gap-1.5")}>
                   <ExternalLink size={13} aria-hidden="true" />
-                  {t("approvals.openThread")}
+                  {t("approvals.openChat", { bot: botFor(item.botId)?.name ?? "" })}
                 </button>
               )}
             </div>

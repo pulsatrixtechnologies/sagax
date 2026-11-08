@@ -17,7 +17,7 @@ describe("the usage-limit line", () => {
     setLocale("fr");
     expect(limitFailoverLineText(switched, NOW)).toBe("Limite atteinte sur Claude : je continue sur Codex jusqu'à la réinitialisation (vers 14 h 05).");
     expect(limitFailoverLineText({ kind: "back", engine: "Claude" }, NOW)).toBe("La limite de Claude est réinitialisée : retour sur Claude.");
-    expect(limitFailoverLineText({ kind: "waiting", from: "Claude", resetsAt: AT }, NOW)).toContain("votre message sera renvoyé à la réinitialisation (vers 14 h 05)");
+    expect(limitFailoverLineText({ kind: "waiting", from: "Claude", resetsAt: AT }, NOW)).toContain("ton message sera renvoyé à la réinitialisation (vers 14 h 05)");
     expect(limitFailoverLineText({ kind: "waitingRoutine", from: "Claude", resetsAt: AT }, NOW)).toContain("cette routine sera relancée");
   });
 
@@ -53,7 +53,7 @@ describe("the usage-limit line", () => {
     setLocale("fr");
     expect(limitFailoverLineText(guessed, NOW)).toBe("Limite atteinte sur Claude, qui n'a pas donné d'heure de réinitialisation : je continue sur Codex ; Claude sera réessayé vers 14 h 05.");
     expect(limitFailoverLineText({ kind: "waiting", from: "Claude", resetsAt: AT, estimated: true, owner: true }, NOW))
-      .toBe("Le propriétaire de ce bot a atteint sa limite d'utilisation sur Claude, qui n'a pas donné d'heure de réinitialisation, et aucun autre moteur n'est disponible : votre message sera renvoyé vers 14 h 05.");
+      .toBe("Le propriétaire de ce bot a atteint sa limite d'utilisation sur Claude, qui n'a pas donné d'heure de réinitialisation, et aucun autre moteur n'est disponible : ton message sera renvoyé vers 14 h 05.");
     expect(limitFailoverLineText({ kind: "waitingRoutine", from: "Claude", resetsAt: AT, estimated: true }, NOW))
       .toBe("Limite atteinte sur Claude, qui n'a pas donné d'heure de réinitialisation, et aucun autre moteur n'est disponible : cette routine sera relancée vers 14 h 05.");
     // The English words other clients show say the same.
@@ -125,14 +125,14 @@ describe("the usage-limit line", () => {
       expect(limitFailoverText(line, clock)).toBe(words);
     }
     setLocale("fr");
-    expect(limitFailoverLineText(waiting, NOW)).toBe("Limite atteinte sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible : votre message sera renvoyé à la réinitialisation de Claude (vers 14 h 05).");
-    expect(limitFailoverLineText({ ...waiting, estimated: true }, NOW)).toBe("Limite atteinte sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible. Claude n'a pas donné d'heure de réinitialisation : votre message sera renvoyé vers 14 h 05.");
+    expect(limitFailoverLineText(waiting, NOW)).toBe("Limite atteinte sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible : ton message sera renvoyé à la réinitialisation de Claude (vers 14 h 05).");
+    expect(limitFailoverLineText({ ...waiting, estimated: true }, NOW)).toBe("Limite atteinte sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible. Claude n'a pas donné d'heure de réinitialisation : ton message sera renvoyé vers 14 h 05.");
     expect(limitFailoverLineText(routine, NOW)).toBe("Limite atteinte sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible : cette routine sera relancée à la réinitialisation de Claude (vers 14 h 05).");
     expect(limitFailoverLineText({ ...routine, estimated: true }, NOW)).toBe("Limite atteinte sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible. Claude n'a pas donné d'heure de réinitialisation : cette routine sera relancée vers 14 h 05.");
     expect(limitFailoverLineText(owner, NOW)).toBe("Le propriétaire de ce bot a atteint sa limite d'utilisation sur Codex, qui remplaçait Claude : je continue sur Grok, puis retour sur Claude à sa réinitialisation (vers 14 h 05).");
     expect(limitFailoverLineText({ ...owner, estimated: true }, NOW)).toBe("Le propriétaire de ce bot a atteint sa limite d'utilisation sur Codex, qui remplaçait Claude : je continue sur Grok. Claude n'a pas donné d'heure de réinitialisation : il sera réessayé vers 14 h 05.");
-    expect(limitFailoverLineText(ownerWaiting, NOW)).toBe("Le propriétaire de ce bot a atteint sa limite d'utilisation sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible : votre message sera renvoyé à la réinitialisation de Claude (vers 14 h 05).");
-    expect(limitFailoverLineText({ ...ownerWaiting, estimated: true }, NOW)).toBe("Le propriétaire de ce bot a atteint sa limite d'utilisation sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible. Claude n'a pas donné d'heure de réinitialisation : votre message sera renvoyé vers 14 h 05.");
+    expect(limitFailoverLineText(ownerWaiting, NOW)).toBe("Le propriétaire de ce bot a atteint sa limite d'utilisation sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible : ton message sera renvoyé à la réinitialisation de Claude (vers 14 h 05).");
+    expect(limitFailoverLineText({ ...ownerWaiting, estimated: true }, NOW)).toBe("Le propriétaire de ce bot a atteint sa limite d'utilisation sur Codex, qui remplaçait Claude, et aucun autre moteur n'est disponible. Claude n'a pas donné d'heure de réinitialisation : ton message sera renvoyé vers 14 h 05.");
   });
 
   it("is a recovery status row the transcript never folds, whatever its English words", () => {

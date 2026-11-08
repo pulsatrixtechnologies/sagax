@@ -52,7 +52,7 @@ describe("one approval card per request", () => {
   it("shows a waiting line, not a second card, while the request waits", () => {
     mount(twilioAsk());
     expect(host.querySelectorAll("[data-step-row]")).toHaveLength(1);
-    expect(host.textContent).toBe("En attente de votre autorisation");
+    expect(host.textContent).toBe("En attente de ton autorisation");
     expect(host.querySelector("button")).toBeNull();
   });
 

@@ -109,9 +109,10 @@ describe("activity detail modal", () => {
     expect(html).toContain('data-subagent="thread:c1"');
   });
 
-  it("offers Stop only while it runs and the viewer may stop it, and Open the conversation when it is theirs", () => {
+  it("offers Stop only while it runs and the viewer may stop it, and Open {bot}'s chat when it is theirs", () => {
     expect(body({})).toContain(">Stop<");
-    expect(body({})).toContain("Open the conversation");
+    expect(body({})).toMatch(/Open Pepper(&#x27;|')s chat/);
+    expect(body({})).not.toMatch(/Open the conversation|Open thread/);
     expect(body({})).toContain("data-activity-open-thread");
     expect(body({ detail: { ...detail, canStop: false } })).not.toContain(">Stop<");
     const done = { ...detail, status: "finished" as const, endedAt: NOW - 1_000 };
@@ -168,7 +169,7 @@ describe("activity detail modal", () => {
     const head = html.slice(0, html.indexOf("data-activity-summary"));
     expect(head).toContain("data-task-actions");
     expect(head).toContain(">Stop<");
-    expect(head).toContain("Open the conversation");
+    expect(head).toMatch(/Open Pepper(&#x27;|')s chat/);
     const left = html.slice(html.indexOf("data-activity-summary"), html.indexOf("data-activity-detail-right"));
     expect(left).toContain("Sub-agents");
     expect(left).toContain("Send a message to this task");

@@ -100,7 +100,7 @@ describe("usage card", () => {
     expect(failedHtml).not.toContain("data-resource-tile");
     expect(failedHtml).toContain('role="alert"');
     const gone = render({ snapshot: null, gone: true });
-    expect(visibleText(gone)).toContain("Redemandez au bot");
+    expect(visibleText(gone)).toContain("Redemande au bot");
     expect(gone).not.toContain("data-resource-tile");
     expect(gone).not.toContain("data-resource-resume");
   });

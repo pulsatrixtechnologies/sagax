@@ -28,7 +28,7 @@ describe("unified chat guard", () => {
       bot: { name: "Wren", color: "pink" }, name: "Wren", color: "pink", onClick: () => {},
     }));
     expect(html).toBe("");
-    expect(html).not.toMatch(/Go to conversation|Open thread/);
+    expect(html).not.toMatch(/Go to conversation|Open the chat|Open thread/);
   });
 
   it("draws no grouped Go to conversation chip", () => {

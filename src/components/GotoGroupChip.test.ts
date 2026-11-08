@@ -77,7 +77,7 @@ describe("GotoGroupChip", () => {
     await render(ownerStack(), () => true);
     expect(host.textContent).toContain("3 conversations with");
     expect(host.textContent).toContain("3 agents");
-    expect(host.textContent).not.toContain("Go to conversation");
+    expect(host.textContent).not.toContain("Open the chat");
     expect(chip().getAttribute("aria-haspopup")).toBe("menu");
     expect(chip().getAttribute("aria-expanded")).toBe("false");
     expect(chip().getAttribute("aria-label")).toBe("3 conversations with 3 agents: show the list");
@@ -189,7 +189,7 @@ describe("GotoGroupChip", () => {
     const onSelect = vi.fn((_target: GotoTarget) => true);
     await render(group, onSelect);
     expect(host.querySelector("[data-testid=goto-group-chip]")).toBeNull();
-    expect(host.textContent).toContain("Go to conversation");
+    expect(host.textContent).toContain("Open the chat");
     await act(async () => host.querySelector<HTMLButtonElement>("[data-testid=bot-exchange-chip]")!.click());
     expect(onSelect).toHaveBeenCalledOnce();
   });

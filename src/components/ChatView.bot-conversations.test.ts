@@ -74,7 +74,7 @@ describe("bot-to-bot conversations in the chat", () => {
     // Two Wren conversations sit at different times (between different
     // person lines), so each stays its own quiet line.
     expect(markup.match(/data-testid="bot-exchange-chip"/g)).toHaveLength(2);
-    expect(markup).toContain("Go to conversation");
+    expect(markup).toContain("Open the chat");
   });
 
   it("folds consecutive Go to conversation rows at the same place into one chip", () => {
@@ -93,7 +93,7 @@ describe("bot-to-bot conversations in the chat", () => {
     expect(markup).toContain("3 conversations with Osprey");
     expect(markup).toContain("1 with Ember");
     expect(markup.match(/data-testid="bot-exchange-chip"/g) ?? []).toHaveLength(0);
-    expect((markup.match(/Go to conversation/g) ?? []).length).toBe(0);
+    expect((markup.match(/Open the chat/g) ?? []).length).toBe(0);
   });
 
   it("skips a conversation the transcript already links to, and shows nothing outside the main chat", () => {
@@ -129,7 +129,7 @@ describe("bot-to-bot conversations in the chat", () => {
       const self = ottoline([message("a", "hello", T)], old);
       fixture.bots = [self, wren, bru];
       const markup = renderToStaticMarkup(createElement(ChatView, { bot: self }));
-      expect(markup).not.toContain("Go to conversation");
+      expect(markup).not.toContain("Open the chat");
       expect(markup).not.toContain("data-thread-chip");
       expect(markup).toContain('data-previous-topics="closed"');
       expect(markup).toContain("Earlier topics");

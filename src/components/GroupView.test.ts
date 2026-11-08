@@ -52,7 +52,7 @@ describe("RoomToolChip", () => {
       threadRef: { botId: "scout", threadId: "qa-245", title: "QA PR 245" },
     }));
     expect(markup).toContain("<button");
-    expect(markup).toContain("Go to conversation");
+    expect(markup).toContain("Open the chat");
     expect(markup).not.toContain("Opened thread #QA PR 245 on Scout");
     expect(markup).toContain('title="Open #QA PR 245"');
   });
@@ -63,7 +63,7 @@ describe("RoomToolChip", () => {
       threadRef: { botId: "scout", threadId: "qa-245", title: "QA PR 245", gone: true },
     });
     expect(render(base)).toBe("");
-    expect(render({ ...base, threadRef: { ...base.threadRef!, gone: false } })).toContain("Go to conversation");
+    expect(render({ ...base, threadRef: { ...base.threadRef!, gone: false } })).toContain("Open the chat");
   });
 
   it("leaves an ordinary step as a quiet step row that goes nowhere", () => {
@@ -193,9 +193,9 @@ describe("room header", () => {
     expect(nudgeLineText(groupNote, "pr_ada")).toBe("Alex sent a nudge in this chat.");
     setLocale("fr");
     try {
-      expect(nudgeLineText(note, "pr_jean")).toBe("Vous avez envoyé une secousse à Ada.");
-      expect(nudgeLineText(note, "PR_ADA")).toBe("Alex vous a envoyé une secousse.");
-      expect(nudgeLineText(groupNote, "pr_jean")).toBe("Vous avez envoyé une secousse dans Launch planning.");
+      expect(nudgeLineText(note, "pr_jean")).toBe("Tu as envoyé une secousse à Ada.");
+      expect(nudgeLineText(note, "PR_ADA")).toBe("Alex t'a envoyé une secousse.");
+      expect(nudgeLineText(groupNote, "pr_jean")).toBe("Tu as envoyé une secousse dans Launch planning.");
       expect(nudgeLineText(groupNote, "pr_ada")).toBe("Alex a envoyé une secousse dans cette conversation.");
     } finally {
       setLocale("en");

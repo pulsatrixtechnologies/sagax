@@ -12,8 +12,8 @@ describe("HarnessConnectorsSection copy", () => {
       expect(Object.hasOwn(en, key), key).toBe(true);
       expect(Object.hasOwn(fr, key), key).toBe(true);
     }
-    expect((fr as Record<string, string>)["harnessConnectors.title"]).toBe("Fournis par Claude (votre compte)");
-    expect((fr as Record<string, string>)["harnessConnectors.unavailable.notSignedIn"]).toBe("Connectez votre abonnement Claude pour utiliser vos connecteurs.");
+    expect((fr as Record<string, string>)["harnessConnectors.title"]).toBe("Fournis par Claude (ton compte)");
+    expect((fr as Record<string, string>)["harnessConnectors.unavailable.notSignedIn"]).toBe("Connecte ton abonnement Claude pour utiliser tes connecteurs.");
   });
   it("falls back to the unknown sentence", () => {
     expect(harnessUnavailableKey(undefined)).toBe("harnessConnectors.unavailable.unknown");
@@ -32,6 +32,6 @@ describe("#1533: the connectors box signs in to the person's own Claude", () => 
   });
   it("has an English and a French sentence for an expired sign-in", () => {
     expect((en as Record<string, string>)["harnessConnectors.unavailable.expired"]).toContain("Reconnect Claude");
-    expect((fr as Record<string, string>)["harnessConnectors.unavailable.expired"]).toContain("Reconnectez Claude");
+    expect((fr as Record<string, string>)["harnessConnectors.unavailable.expired"]).toContain("Reconnecte Claude");
   });
 });

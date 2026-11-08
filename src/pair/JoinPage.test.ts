@@ -47,7 +47,7 @@ describe("join page", () => {
     const html = view({ kind: "open", orgName: "Example", email: "z***@example.com" });
     expect(html).toContain("Rejoindre Example");
     expect(html).toContain("Invitation pour z***@example.com");
-    expect(view({ kind: "already-member" })).toContain("Connectez-vous plutôt");
+    expect(view({ kind: "already-member" })).toContain("Connecte-toi plutôt");
   });
 
   it("reads the preview and the join answers", async () => {

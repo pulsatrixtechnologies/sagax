@@ -48,7 +48,7 @@ describe("activity outcomes and day headings resolve through i18n", () => {
   it("switch to French when the locale does", () => {
     setLocale("fr");
     expect(outcomeChip("ran").text).toBe("Exécuté");
-    expect(outcomeChip("waiting").text).toBe("Votre attention");
+    expect(outcomeChip("waiting").text).toBe("Ton attention");
     expect(outcomeChip("denied").text).toBe("Refusé");
     const now = new Date("2026-10-22T12:00:00");
     const yesterday = new Date("2026-10-21T12:00:00");

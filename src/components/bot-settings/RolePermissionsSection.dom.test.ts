@@ -155,10 +155,10 @@ describe("Details > Permissions", () => {
     expect(host.querySelector("[data-missing-sent]")?.textContent).toBe(`Envoyé ${easternTime(AT + 60_000)}`);
   });
 
-  it("says Vous, never Moi, when the person's own credentials were refused", () => {
+  it("says Tu, never Moi, when the person's own credentials were refused", () => {
     const own = { ...body, missing: [{ ...body.missing[0]!, role: { slug: "", name: "" } }] };
     flushSync(() => root.render(createElement(RolePermissionsView, { botId: "nova", body: own, now: AT })));
-    expect(host.querySelector("[data-missing-label]")?.textContent).toBe("Vous ne pouvez pas modifier les billets");
+    expect(host.querySelector("[data-missing-label]")?.textContent).toBe("Tu ne peux pas modifier les billets");
   });
 
   describe("Settings > Appearance > Show permissions (the owner 2026-11-07)", () => {

@@ -25,7 +25,7 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       // QA 0.8.67 G5: a held card (a role switch, a safety hold) of this
       // turn can no longer be answered for it: retired with the turn, its
       // card marked expired, so the next turn's await never surfaces it.
-      retireSafetyHolds(event.threadId, bot?.id);
+      retireSafetyHolds(event.threadId, bot?.id ?? speaker?.botId);
       host.appPiecesByThread.delete(event.threadId);
       host.settleWaitingOnPersonChips(event.threadId);
       // A peer-started turn settles as coordination, not as news. What keeps

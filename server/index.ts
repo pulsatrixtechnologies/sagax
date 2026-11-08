@@ -154,6 +154,7 @@ import * as checkpoints from "./checkpoints.ts";
 import { commandReceipt } from "./commands.ts";
 import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
+import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
 import { appendDecision, bindConfidentialDecisions, bindDecisionRetention, decisionRetentionDays, flushDecisionLog, pruneDecisions, readDecisionRange, readSealedChain, scrubThreadDecisions, withDecisionActor } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
 import { validateBotCwd, validateBotCwdFor } from "./bots/bot-cwd.ts";
@@ -29755,6 +29756,15 @@ const agentApi = createAgentApi({
   async interrupt(agentId, threadId) {
     await interruptDirectThread(agentId, threadId);
   },
+  retireQuestions(_agentId, threadId) {
+    retireOpenQuestions({
+      messagesFor: (id) => store.messagesFor(id),
+      isPersistentQuestionCard,
+      isApprovalCardMessage,
+      patch: (id, messageId, card) => { store.patchMessage(id, messageId, { card }); },
+      forget: (id, requestId) => { askMessageByRequest.delete(`${id}:${requestId}`); },
+    }, threadId);
+  },
   collected(agentId, threadId) {
     // Only an AI client's own conversation (openedBy kind "agent"), never a
     // person's chat a peer bot's send_prompt landed in; never one at work.
@@ -29905,6 +29915,7 @@ const orgMember = createOrgMemberRoutes({
   markAiClientLine,
   expireDueApprovals: expireDueApprovalsInThread,
   pendingApprovalExpireDays: (person) => pendingExpireDaysForPerson(person.principalId),
+  approvalWords: (person) => serverApprovalWords(languageOfPerson(person.principalId)).t,
   approvalAnswerer: (threadId, requestId) => {
     const message = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
     if (!message?.card) return null;
@@ -30487,6 +30498,9 @@ setInterval(() => { void feedbackService.tick().catch(() => {}); }, 5 * 60_000).
 ROUTES.push(createFeedbackRoutes({ dataDir: DATA_DIR, service: feedbackService, actorPrincipalId }));
 ROUTES.push(createBotsMessagesRoutes({
   feedback: feedbackService,
+  // #2633: a question declined from an AI client is told to the bot in the
+  // language of the person who declined it.
+  questionDeclinedText: (auth: RequestAuth) => serverApprovalWords(languageOfRequest(auth)).t("question.card.declinedByClient"),
   // 2026-11-05 (#2032): chat no longer picks a role; Flow routines use actAs
   pickPerspicaxRole: (_bot: BotRecord, _threadId: string, _auth: RequestAuth, _slug: string) => {},
   originApprovals,

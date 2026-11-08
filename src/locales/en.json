@@ -5372,6 +5372,7 @@
   "question.aria.tabs": "Questions",
   "question.card.named": "{name} has a question",
   "question.card.title": "Your bot has a question",
+  "question.card.declinedByClient": "The person declined to answer this question from their AI client. Do not go ahead with what it asked; continue without it, or say what you need.",
   "question.multiHint": "Choose all that apply",
   "question.origin.badge": "Agent-composed question",
   "question.other": "Other",

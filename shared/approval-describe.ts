@@ -22,6 +22,8 @@ export interface ApprovalWords {
 
 export const APPROVAL_EN: Readonly<Record<string, string>> = Object.freeze({
   "approval.card.allowTo": "Allow {name} to {action}?",
+  "question.card.title": "Your bot has a question",
+  "question.card.declinedByClient": "The person declined to answer this question from their AI client. Do not go ahead with what it asked; continue without it, or say what you need.",
   "approval.card.allowToUnnamed": "Allow this bot to {action}?",
   "approval.connector.calendarCancel": "cancel a calendar event",
   "approval.connector.calendarInvite": "send a calendar invitation",

@@ -418,6 +418,10 @@ export interface AgentApiDeps {
   post(caller: AgentCaller, agentId: string, threadId: string, prompt: string, files: FileInput[], wake?: PriorityDelivery): Promise<{ messageId: string | null } | Refusal>;
   /** Stop the conversation's running turn (on_busy supersede). */
   interrupt(agentId: string, threadId: string): Promise<void>;
+  /** #2608: after a supersede, retire the stopped turn's open question cards
+   * (interrupt keeps persistent ones for a late answer), so the thread does
+   * not stay waiting on a question nobody will answer. */
+  retireQuestions?(agentId: string, threadId: string): void;
   /** Async mode: tell the caller the turn ended (a bot is woken with the reply). */
   notify?(caller: AgentCaller, agent: AgentSummary, result: TurnResult): void;
   /** A finished turn's reply was handed to the caller: its conversation, when
@@ -1135,7 +1139,10 @@ function createAgentApiHandlers(env: {
         // the caller also asked to supersede.
         // #1170: only a turn this caller started; another's (the person's
         // own, another bot's) is never stopped: the prompt waits its turn.
-        if (onBusy === "supersede" && asked !== "now" && (state === "running" || state === "waiting") && ownsRunningTurn(caller, threadId)) await deps.interrupt(agentId, threadId);
+        if (onBusy === "supersede" && asked !== "now" && (state === "running" || state === "waiting") && ownsRunningTurn(caller, threadId)) {
+          await deps.interrupt(agentId, threadId);
+          deps.retireQuestions?.(agentId, threadId);
+        }
       }
       const slotFree = deps.turnState(agentId, threadId) === "idle";
       const senderId = wakeSenderId(caller);

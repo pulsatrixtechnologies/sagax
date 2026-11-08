@@ -8604,6 +8604,7 @@
   "question.aria.tabs": "Questions",
   "question.card.named": "{name} a une question",
   "question.card.title": "Votre bot a une question",
+  "question.card.declinedByClient": "La personne a refusé de répondre à cette question depuis son client IA. Ne poursuis pas ce qu'elle demandait ; continue sans, ou dis ce dont tu as besoin.",
   "question.details": "Détails",
   "question.hideDetails": "Masquer les détails",
   "question.multiHint": "Choisissez toutes les réponses qui s'appliquent",

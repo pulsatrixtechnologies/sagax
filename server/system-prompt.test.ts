@@ -545,3 +545,36 @@ describe("work style blocks and house style", () => {
     expect(WORK_STYLE_PROMPT).not.toMatch(/[–—]/);
   });
 });
+
+describe("work style: ConnectWise reads, 403 and drafts (QA 0.8.66 F2 F3 F10)", () => {
+  it("reads open tickets in one filtered service.tickets call and says when a list is partial", () => {
+    expect(WORK_STYLE_PROMPT).toContain("ONE filtered service.tickets call");
+    expect(WORK_STYLE_PROMPT).toContain("owner/id=<member id> and closedFlag=false");
+    expect(WORK_STYLE_PROMPT).toContain("with fields and limit, then read total");
+    expect(WORK_STYLE_PROMPT).toContain("never conclude a board does not exist from service.boards");
+    expect(WORK_STYLE_PROMPT).toContain("say it is partial");
+  });
+
+  it("treats a 403 of the limited role as a search for a role that may read, never as an admin wall", () => {
+    expect(WORK_STYLE_PROMPT).toContain("A 403 from your limited role is not the end");
+    expect(WORK_STYLE_PROMPT).toContain("Read once as <role>");
+    expect(WORK_STYLE_PROMPT).toContain("it needs an admin");
+  });
+
+  it("writes drafts in the person's first person with their real signature", () => {
+    expect(WORK_STYLE_PROMPT).toContain("is in the first person as the person");
+    expect(WORK_STYLE_PROMPT).toContain("their real signature");
+    expect(WORK_STYLE_PROMPT).toContain("not to such drafts");
+  });
+});
+
+describe("work style: inline arithmetic and no admin wall (QA 0.8.66 F12 F10)", () => {
+  it("computes simple arithmetic inline and keeps the shell for a real need", () => {
+    expect(WORK_STYLE_PROMPT).toContain("Do arithmetic and simple conversions inline");
+    expect(WORK_STYLE_PROMPT).toContain("start a shell (run_command) only for a real need");
+  });
+  it("never tells a limited role it needs an admin, names the missing permission", () => {
+    expect(WORK_STYLE_PROMPT).toContain("Under Dispatch Agent or any limited role");
+    expect(WORK_STYLE_PROMPT).toContain("name the exact missing permission");
+  });
+});

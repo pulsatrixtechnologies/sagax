@@ -62,6 +62,13 @@ describe("bot presets", () => {
     expect(created.bot).toMatchObject({ id: "created", approvalMode: "ask", proactiveMode: "off" });
   });
 
+  it("sends the chosen name in the create so the greeting uses it (#2802)", async () => {
+    const request = vi.fn().mockResolvedValueOnce({ bot }).mockResolvedValueOnce({ bot: { name: "Gaston" } });
+    await createBotWithRole(undefined, request, undefined, undefined, { name: " Gaston ", color: "green" });
+    expect(JSON.parse(request.mock.calls[0]![1].body)).toEqual({ name: "Gaston" });
+    expect(request).toHaveBeenLastCalledWith("/api/bots/created", { method: "PATCH", body: JSON.stringify({ name: " Gaston ", color: "green" }) });
+  });
+
   it("creates a restricted bot already restricted, in the one create request", async () => {
     const request = vi.fn().mockResolvedValue({ bot });
     await createBotWithRole(undefined, request, "admins");

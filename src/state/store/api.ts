@@ -18,7 +18,11 @@ import type { BotUpdatePatch } from "../bot-patch-queue";
 
 export async function createBotWithRole(role?: BotRole, request: typeof api = api, visibility?: BotVisibility, section?: string, settings?: Record<string, unknown>): Promise<{ bot: Bot; profileError?: string }> {
   const restricted = visibility && visibility !== "everyone" ? { visibility } : {};
-  const fields = { ...(role ? { name: role.name, title: role.title, description: role.description } : {}), ...restricted,
+  // The chosen name rides the create itself: the server writes the greeting
+  // with the bot's name at creation, before any follow-up patch (#2802).
+  const chosenName = typeof settings?.name === "string" && settings.name.trim() ? settings.name.trim() : undefined;
+  const fields = { ...(role ? { name: role.name, title: role.title, description: role.description } : {}),
+    ...(chosenName ? { name: chosenName } : {}), ...restricted,
     ...(section !== undefined ? { section } : {}) };
   const { bot } = await request("/api/bots", {
     method: "POST",

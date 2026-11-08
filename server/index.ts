@@ -764,7 +764,7 @@ import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
 import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
-import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
+import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, routineClaimedCardChoice, routineClaimedCardWaiting, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
 import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager } from "./calendar/calendar-calls.ts";
 import {
@@ -19105,6 +19105,11 @@ routines = new RoutineManager({
     return words ? `Waiting for your answer: ${words}` : "Waiting for your answer";
   },
   cardRaisedSince: (threadId, since) => store.messagesFor(threadId).some((message) => message.kind === "options" && message.at >= since && Boolean(message.card)),
+  // 2026-11-08 (QA 0.8.66 F4): the card the bot announced is drawn for real
+  raiseClaimedCard: (threadId, claim) => {
+    const choice = routineClaimedCardChoice(redactSecretsInText(claim));
+    return raiseHarnessQuestion(threadId, choice, "output") ? routineClaimedCardWaiting(choice) : null;
+  },
   hasPendingDelegations: (threadId) => coordinator.awaitsTeammates(threadId) ||
     [...delegationWatch.values()].some((watch) => watch.sourceThreadId === threadId) ||
     pendingDelegationWakes.has(threadId),

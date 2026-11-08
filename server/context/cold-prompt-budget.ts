@@ -12,6 +12,15 @@ import { SIGN_IN_PROMPT, type PromptPart } from "../system-prompt.ts";
 /** Soft ceiling for the whole system prompt of one cold / automation turn. */
 export const COLD_PROMPT_TOTAL_BUDGET = 40_000;
 
+/** Sections that describe the tools the bot can call. A routine turn keeps
+ * them byte for byte as the chat turn of the same bot does (QA 0.8.66 F5):
+ * cutting the Perspicax conventions to 1.5 KB made routines call api_search
+ * or a vendor tool the wrong way while the same bot did it right in chat.
+ * They are exempt from the per-section budgets and from the total trim. */
+export const COLD_TOOL_SURFACE_SECTIONS: readonly string[] = [
+  "mcp", "perspicax", "claude-ai", "dev-pods", "reach", "host-tools",
+];
+
 /** Per-section UTF-8 byte budgets for a cold / automation turn. A missing
  * id keeps its standing size. Zero drops the section. */
 export const COLD_PROMPT_SECTION_BUDGETS: Readonly<Record<string, number>> = {
@@ -37,10 +46,6 @@ export const COLD_PROMPT_SECTION_BUDGETS: Readonly<Record<string, number>> = {
   shell: 600,
   computer: 1_200,
   "team-computer": 600,
-  mcp: 800,
-  perspicax: 1_500,
-  "claude-ai": 800,
-  "dev-pods": 600,
   "section-context": 800,
   availability: 800,
   outstanding: 800,
@@ -48,11 +53,9 @@ export const COLD_PROMPT_SECTION_BUDGETS: Readonly<Record<string, number>> = {
   setup: 1_000,
   plan: 1_200,
   workplace: 1_000,
-  reach: 800,
   proactive: 600,
   "peer-contact": 400,
   "approval-level": 600,
-  "host-tools": 400,
   "files-cwd": 200,
   goal: 800,
   "finish-until": 400,
@@ -172,7 +175,7 @@ export function applyColdPromptBudgets(parts: readonly PromptPart[]): PromptPart
 const TOTAL_TRIM_ORDER = [
   "recent", "stream", "recall", "docs", "playbooks", "skill-instructions", "skills",
   "team-memory", "coordination", "availability", "outstanding", "browser", "computer",
-  "shell", "mcp", "perspicax", "claude-ai", "dev-pods", "section-context", "learn",
+  "shell", "section-context", "learn",
   "profile", "routine", "credential", "setup", "plan", "workplace", "data",
   "user-profile", "memory",
 ] as const;

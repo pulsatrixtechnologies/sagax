@@ -668,6 +668,11 @@ export interface RoutineManagerOptions {
    * started. A bot that says it showed a card when none exists fails its run
    * (routineClaimsCard), so the person is never told to look for nothing. */
   cardRaisedSince?: (threadId: string, since: number) => boolean;
+  /** 2026-11-08 (QA 0.8.66 F4): the bot said it showed a card and none was
+   * drawn. The host draws it for real (a question card in the run's thread
+   * that carries the bot's words) and answers the run's waiting line, or null
+   * when no card could be drawn (the run then fails as before). */
+  raiseClaimedCard?: (threadId: string, claim: string) => string | null;
   /** The job runtime still holds this run thread's teammate work and goes
    * on with it after a restart (docs/runtime-contract.md §5): a run waiting
    * on it stays waiting, and that work's resume completes it. */
@@ -796,6 +801,13 @@ const ROUTINE_DEFINITION_FIELDS = [
 const ACTIVE_RUN_STATUSES = new Set(["queued", "running", "waiting"]);
 /** What a run waiting on its teammates' work says while it waits. */
 export const ROUTINE_WAITING_ON_TEAMMATES = "Waiting for delegated work to finish";
+/** 2026-11-08 (QA 0.8.66 F4): a person asked for this run (Run now, a
+ * request from their conversation), so the duplicate detector of the
+ * organization memory, which only guards automatic runs, is not asked. */
+export function routineRunStartedByPerson(run: Pick<RoutineRun, "startedBy" | "manual">, triggerSource: RoutineRun["triggerSource"]): boolean {
+  return run.startedBy === "person" || triggerSource === "manual";
+}
+
 export const ROUTINE_CARD_CLAIM_WITHOUT_CARD = "The bot said it showed you a card, but no card was shown: nothing is waiting for your choice and nothing was written. Run the routine again.";
 
 /** The bot's final words say a card or a choice is on the person's screen
@@ -807,6 +819,29 @@ export function routineClaimsCard(output: string | undefined): boolean {
   return /\b(?:carte|card)s?\b[^.\n]{0,60}\b(?:affich|montr|présent|envoy|shown|displayed|posted|waiting|on your screen|en attente|t'attend|vous attend)/i.test(text)
     || /\b(?:affich|montr|présent|show|display|post)\w*\b[^.\n]{0,30}\b(?:une|la|ta|a|the|an|your)\s+(?:\w+\s+)?(?:carte|card)\b/i.test(text);
 }
+
+/** 2026-11-08 (QA 0.8.66 F4): the question card drawn for a card the bot
+ * announced without drawing it. It carries the bot's own words; the choices
+ * are the ones the bot listed (bullets or numbers), else go on or stop, in
+ * the bot's language. */
+export function routineClaimedCardChoice(claim: string): { title: string; question: string; options: string[] } {
+  const text = claim.normalize("NFC").replace(/\r\n?/g, "\n").trim();
+  const listed: string[] = [];
+  const rest: string[] = [];
+  for (const line of text.split("\n")) {
+    const item = /^\s*(?:[-*\u2022]|\d{1,2}[.)])\s+(.+?)\s*$/.exec(line)?.[1]?.replace(/\*\*/g, "").trim();
+    if (item && item.length <= 120 && listed.length < 6) listed.push(item);
+    else rest.push(line);
+  }
+  const french = /\b(?:carte|je|tu|vous|veux|choix|affich\w*|voici)\b/i.test(text);
+  const options = listed.length >= 2 ? listed : french ? ["Continuer", "Arrêter ici"] : ["Continue", "Stop here"];
+  const body = (listed.length >= 2 ? rest.join("\n") : text).replace(/\s+/g, " ").trim();
+  const question = (body.length > 500 ? `${body.slice(0, 499).trimEnd()}\u2026` : body) || (french ? "Comment veux-tu continuer?" : "How should I go on?");
+  return { title: "Your bot has a question", question, options };
+}
+/** The run's waiting line for that card (as awaitsPerson words it). */
+export const routineClaimedCardWaiting = (choice: { question: string }) =>
+  `Waiting for your answer: ${choice.question.slice(0, 300)}`;
 
 /** #2635: the run's final words announce what the bot would do ("I'll pull
  * the overdue invoices now", "Je vais vérifier…") and report nothing done.
@@ -3545,11 +3580,14 @@ export class RoutineManager {
           if (engine) this.readinessEngines.set(run.id, engine);
           const triggerSource = run.triggerSource ?? (run.manual ? "manual" : "schedule");
           // Without the hook (a solo server) nothing is awaited here, so the
-          // turn starts in the same tick as before.
-          const memoryNote = this.options.memoryHint ? await this.memoryNote(run, prompt) : "";
+          // turn starts in the same tick as before. 2026-11-08 (QA 0.8.66 F4):
+          // a run the person started is never a duplicate to question; the
+          // memory note only guards automatic runs.
+          const askMemory = Boolean(this.options.memoryHint) && !routineRunStartedByPerson(run, triggerSource);
+          const memoryNote = askMemory ? await this.memoryNote(run, prompt) : "";
           turnTrace(task.threadId, "routine-memory");
           // The run may have been cancelled while the memory answered.
-          if (this.options.memoryHint && run.status !== "running") continue;
+          if (askMemory && run.status !== "running") continue;
           if (run.target === "room-goal") {
             if (!run.groupId || !this.options.startGoal) {
               this.failThread(task.threadId, "Room goal routines are unavailable");
@@ -4011,6 +4049,14 @@ export class RoutineManager {
     // the person must hear, not a success that sends them looking for it.
     if (run.threadId && run.startedAt !== undefined && this.options.cardRaisedSince
       && routineClaimsCard(run.output) && !this.options.cardRaisedSince(run.threadId, run.startedAt)) {
+      // 2026-11-08 (QA 0.8.66 F4): the card the bot announced is drawn for
+      // real and holds the run; the person's answer starts its next turn.
+      const waiting = this.options.raiseClaimedCard?.(run.threadId, run.output ?? "") ?? null;
+      if (waiting) {
+        this.wait(run, waiting);
+        run.error = undefined;
+        return false;
+      }
       this.failRun(run, ROUTINE_CARD_CLAIM_WITHOUT_CARD);
       queueMicrotask(() => this.tickInBackground());
       return true;

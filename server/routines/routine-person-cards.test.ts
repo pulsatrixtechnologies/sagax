@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ROUTINE_CARD_CLAIM_WITHOUT_CARD, RoutineManager, routineClaimsCard, type RoutineManagerOptions } from "./routines.ts";
+import { ROUTINE_CARD_CLAIM_WITHOUT_CARD, RoutineManager, routineClaimedCardChoice, routineClaimsCard, type RoutineManagerOptions } from "./routines.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -84,7 +84,41 @@ describe("a routine run's question card reaches its person", () => {
     expect(restarted.listRuns()[0]).toMatchObject({ status: "waiting" });
   });
 
-  it("fails clearly, never Completed, when the bot says it showed a card and none was drawn", async () => {
+  // 2026-11-08 (QA 0.8.66 F4, "Overdue invoices report" run by hand): the bot
+  // said it showed a card, none existed, and the run failed in 45 s. The card
+  // it announced is now drawn for real and holds the run.
+  it("draws the card the bot announced and waits for the person, never failing the run", async () => {
+    const raised: Array<{ threadId: string; claim: string }> = [];
+    let drawn = false;
+    const h = harness({
+      awaitsPerson: () => null,
+      cardRaisedSince: () => drawn,
+      raiseClaimedCard: (threadId, claim) => { raised.push({ threadId, claim }); drawn = true; return "Waiting for your answer: Un rapport pareil roule déjà."; },
+    });
+    const run = await startedRun(h);
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "Un rapport pareil roule déjà. La carte est affichée : continuer ou arrêter?" });
+    h.event(run.threadId!, { type: "turn.completed", ok: true });
+    expect(raised).toEqual([{ threadId: run.threadId, claim: "Un rapport pareil roule déjà. La carte est affichée : continuer ou arrêter?" }]);
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "waiting", attention: "Waiting for your answer: Un rapport pareil roule déjà." });
+    expect(h.manager.listRuns()[0]!.error).toBeUndefined();
+    expect(h.failed).toHaveLength(0);
+    // the person's answer starts the next turn of the same run
+    h.event(run.threadId!, { type: "turn.started" });
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "Rapport envoyé : 7 factures en retard." });
+    h.event(run.threadId!, { type: "turn.completed", ok: true });
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "completed", output: "Rapport envoyé : 7 factures en retard." });
+    expect(raised).toHaveLength(1);
+  });
+
+  it("words the drawn card with the bot's own choices, else go on or stop in its language", () => {
+    expect(routineClaimedCardChoice("Voici la carte, choisis :\n1. Lot A\n2. **Lot B**")).toEqual({
+      title: "Your bot has a question", question: "Voici la carte, choisis :", options: ["Lot A", "Lot B"],
+    });
+    expect(routineClaimedCardChoice("La carte est affichée.").options).toEqual(["Continuer", "Arrêter ici"]);
+    expect(routineClaimedCardChoice("The approval card is waiting for you.")).toMatchObject({ question: "The approval card is waiting for you.", options: ["Continue", "Stop here"] });
+  });
+
+  it("fails clearly, never Completed, when the bot says it showed a card and none could be drawn", async () => {
     const h = harness({ awaitsPerson: () => null, cardRaisedSince: () => false });
     const run = await startedRun(h);
     h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "La carte est affichée. Rien n'est écrit tant que tu n'as pas choisi." });

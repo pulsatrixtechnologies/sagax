@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable, systemPromptReference } from "./prompt-references.ts";
+import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable, splitPromptReference, systemPromptReference } from "./prompt-references.ts";
 import { richOutputPrompt, ROUTINE_EXECUTION_PROMPT, ROUTINE_PROMPT, PROFILE_PROMPT, PROFILE_CREATOR_PROMPT, LEARN_PROMPT, REACTION_PROMPT, THREADS_PROMPT, SIGN_IN_PROMPT, computerPrompt, type PromptPart } from "../system-prompt.ts";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT } from "../browser/browser-engine.ts";
 import { peerRosterSystemPrompt } from "../peers/peer-roster.ts";
@@ -20,6 +20,10 @@ describe("on-demand system references (#1997)", () => {
     }
     expect(systemPromptReference("How do routines work?")).toBeNull();
     expect(systemPromptReference("prompt:../../other-person")).toContain("Unknown prompt reference");
+    // #2725: "prompt:<id> <question>" is a reference plus a question, not an unknown id.
+    expect(splitPromptReference("prompt:shell How do I install Sagax remote access unattended?")).toEqual({ reference: "prompt:shell", rest: "How do I install Sagax remote access unattended?" });
+    expect(splitPromptReference("prompt:shell")).toBeNull();
+    expect(splitPromptReference("How do routines work?")).toBeNull();
   });
   it("requires the actual help tool, respecting allow/deny and invalid scopes", () => {
     expect(promptReferencesAvailable(true, undefined)).toBe(true);

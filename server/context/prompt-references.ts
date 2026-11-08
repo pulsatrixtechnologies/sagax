@@ -88,6 +88,15 @@ function references(): Array<{ id: string; full: string; brief: string }> {
 
 const REFERENCE_ROWS = references();
 
+/** A reference with a question after it ("prompt:shell How do I ..."), as an
+ * engine sometimes asks (#2725): the id and the question, so sagax_help answers
+ * both instead of refusing the whole call. Null for an exact reference or a
+ * plain question. */
+export function splitPromptReference(question: string): { reference: string; rest: string } | null {
+  const match = /^prompt:(\S+)\s+(\S[\s\S]*)$/.exec(question);
+  return match ? { reference: `prompt:${match[1]}`, rest: match[2].trim() } : null;
+}
+
 /** The reserved exact query cannot accidentally replace a normal help search.
  * Returns only shipped text, even if the caller guesses a different id. */
 export function systemPromptReference(question: string): string | null {

@@ -203,10 +203,11 @@ import { prepareSemanticRecall, setSemanticIndex } from "./recall/semantic-recal
 import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./engines/retire-every-claude.ts";
 import { LocalSemanticIndex, semanticIndexFile } from "./recall/semantic-index.ts";
 import { withoutWiderAudience } from "./memory/memory-audience.ts";
-import { BriefStore } from "./proactive/background-brief.ts";
+import { BriefStore, type BriefSuggestion } from "./proactive/background-brief.ts";
 import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.ts";
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
+import { DAILY_SUGGESTIONS_WINDOW_MS, dailySuggestionCard, dailySuggestionEvent, pickDailySuggestions, suggestionsPostedSince } from "./proactive/daily-suggestions.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
 import { createSkillReview, looksLikeStop, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
 import { summarizeSessions } from "./recall/session-summary.ts";
@@ -19615,7 +19616,8 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
   bot: "bot post",
   peer: "teammate message",
   webhook: "webhook",
-  sms: "text"
+  sms: "text",
+  suggestion: "daily suggestion"
 };
 
 /** A proactive wake: background run at the bot's level, under the right
@@ -23674,6 +23676,20 @@ function backgroundBriefConnected(botId: string): readonly string[] {
 function backgroundBriefThread(bot: BotRecord, person: string): string | undefined {
   return IDENTITY.kind === "perspicax" ? conversationOrStart(bot, person) : conversationOrStart(bot);
 }
+/** #2693: the primary bot's free daily suggestions, as proactive proposal
+ * cards: "Fais-le" runs the accepted wake (answerProactiveProposal), outside
+ * the wake budget. No model call, no usage: the brief pass already costs 0. */
+function postDailySuggestions(botId: string, threadId: string, suggestions: readonly BriefSuggestion[], language: "fr" | "en"): number {
+  const posted = suggestionsPostedSince(proactiveProposals.all(), botId, Date.now() - DAILY_SUGGESTIONS_WINDOW_MS);
+  const picked = pickDailySuggestions(suggestions, posted);
+  for (const item of picked) {
+    const proposal = proactiveProposals.add({ botId, threadId, messageId: "", events: [dailySuggestionEvent(botId, item)], more: 0, hops: 0, confined: true });
+    const card = dailySuggestionCard(item, language);
+    const message = store.appendMessage(threadId, { role: "bot", kind: "options", card: { title: card.title, subtitle: card.subtitle, options: [...card.options], proactiveProposal: { id: proposal.id } } });
+    proactiveProposals.setMessage(proposal.id, message.id);
+  }
+  return picked.length;
+}
 if (!process.env.VITEST) {
   startBriefTimer({
     store: backgroundBriefs,
@@ -23688,7 +23704,11 @@ if (!process.env.VITEST) {
       if (!bot) return;
       const language = reachMeLanguage(person);
       const threadId = backgroundBriefThread(bot, person);
-      if (threadId && !store.isConfidentialThread(threadId)) store.appendMessage(threadId, { role: "bot", kind: "text", text: briefMessageText(suggestions, language) });
+      if (threadId && !store.isConfidentialThread(threadId)) {
+        store.appendMessage(threadId, { role: "bot", kind: "text", text: briefMessageText(suggestions, language) });
+        // #2693: the primary bot turns up to 3 points a day into one-gesture cards
+        if (bot.chiefOfStaff === true) postDailySuggestions(bot.id, threadId, suggestions, language);
+      }
       const { title, lines } = briefNoticeLines(suggestions, language);
       reachMeService?.notice({ id: `brief-${botId}-${suggestions[0]!.id}`, person, botId, botName, threadId: threadId ?? "", title, lines });
     },

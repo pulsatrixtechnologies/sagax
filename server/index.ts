@@ -1291,6 +1291,7 @@ import { dispatchInternalRoutes, type InternalCapabilityView, type InternalRoute
 import { createPerspicaxToolInternalRoutes } from "./routes/perspicax-tool-internal.ts";
 import { createMcpAuditInternalRoutes } from "./routes/mcp-audit-internal.ts";
 import { createRoutineRunInternalRoutes, routineRunNowAllowed } from "./routes/routine-run-internal.ts";
+import { createEventSubscriptionsInternalRoutes } from "./routes/event-subscriptions-internal.ts";
 import { createPerspicaxOrgRoutes, orgDirectoryEntries } from "./perspicax/perspicax-org-routes.ts";
 import { createMemorySyncTokenRoute } from "./memory/perspicax-memory-sync-token.ts";
 import { PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
@@ -22034,6 +22035,18 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     standing: (runId) => routines?.runStanding(runId) ?? null,
     describe: (routine, run) => routineRunReceiptFacts(routine, run),
     audit: (routine, run, principalId) => auditRoutineRunNowBy(principalId ? { kind: "person", principalId, via: "sagax" } : { kind: "worker" }, routine, run)
+  }),
+  // event_subscriptions (#2700): the bot's own outbound event subscriptions
+  createEventSubscriptionsInternalRoutes({
+    ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
+    speaker: (threadId) => safetyPrincipal(threadId).principalId,
+    botOwner: (botId) => {
+      const bot = store.bot(botId);
+      return bot ? effectiveBotOwner(bot) || undefined : undefined;
+    },
+    routine: subscriptionRoutine,
+    store: botEventSubscriptions,
+    checkDestination: botEventDestinationCheck
   }),
   // list_terminal_resources and offer_shell_terminal (server/routes/terminal-internal.ts)
   terminalFeature.internalRoute,

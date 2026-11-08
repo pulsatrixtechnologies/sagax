@@ -67,3 +67,16 @@ describe("propose_routine GitHub trigger (I3)", () => {
     expect(trigger.properties.events.items.enum).toEqual(expect.arrayContaining(["issue.opened", "issue.labeled", "pr.opened", "pr.review_requested"]));
   });
 });
+
+describe("event_subscriptions tool (#2700)", () => {
+  it("posts the action, events and target to the internal route", async () => {
+    const api = vi.fn(async (_path: string, _options?: { body?: string }) => ({ id: "s1" }));
+    const context = { botId: "bot", threadId: "thread", client: { api } } as unknown as ToolCallContext;
+    const result = await callRoutinesTool("event_subscriptions", { action: "create", events: ["run.failed"], routine_id: "r1" }, context);
+    expect(api.mock.calls[0]![0]).toBe("/api/internal/event-subscriptions");
+    expect(JSON.parse(api.mock.calls[0]![1]!.body!)).toEqual({ fromBotId: "bot", fromThreadId: "thread", action: "create", events: ["run.failed"], routineId: "r1" });
+    expect(result?.text).toContain("s1");
+    await callRoutinesTool("event_subscriptions", {}, context);
+    expect(JSON.parse(api.mock.calls[1]![1]!.body!).action).toBe("list");
+  });
+});

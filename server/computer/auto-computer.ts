@@ -52,7 +52,14 @@ export interface AutoComputerState {
   routinesAllowed: boolean;
   /** The built-in browser is mounted for this turn (absent: it is not). */
   browserAvailable?: boolean;
+  /** Places this turn already moved to with computer_select (absent: none). */
+  switches?: number;
 }
+
+/** #2736 (QA 2026-11-07): a turn bounced between the server environment,
+ * the cloud computer and the person's Mac. One step elsewhere and back is
+ * two moves; a third is refused, so the bot finishes where it is. */
+export const MAX_AUTO_COMPUTER_SWITCHES = 2;
 
 export interface AutoComputerSelection {
   ok: boolean;
@@ -153,6 +160,9 @@ export function selectAutoComputer(
     : target === "browser" ? "Use the built-in browser tools; the shell and file tools are not in use."
     : "Use the sagax-desktop tools.";
   if (state.selected === target) return { ok: true, text: `You already work on ${autoComputerLabel(target)}. ${tools}`, target, from: target, changed: false };
+  if ((state.switches ?? 0) >= MAX_AUTO_COMPUTER_SWITCHES) {
+    return { ok: false, text: `You already moved ${state.switches} times in this turn, the most a turn may. Stay on ${now} and finish the step there with its tools; if it cannot do the step, tell the person why in their language and what they can do, instead of moving again.` };
+  }
   return { ok: true, text: `Now working on ${autoComputerLabel(target)}. ${tools}`, target, from: state.selected, changed: true };
 }
 
@@ -205,7 +215,7 @@ export const AUTO_COMPUTER_RULES = [
   "computer_select only moves the shell, files and desktop tools (sagax-environment, sagax-desktop). Connector and Sagax tools (ConnectWise, Pulsatrix memory and flow, agents, search, other MCP servers) run on the server wherever you are: they need no computer and no computer_select.",
   "Live state (a version, a deployment, a service's health, a host, a record): ask the tool that reports it directly first, in one call (the connector or Sagax tool that owns the record; a service's own health endpoint with fetch_url). Product versions in production: this Sagax server's /api/health and the Perspicax server's /healthz (the host of the Perspicax MCP URL), each one fetch_url call; host_health reports failures, latency and drift of the Pulsatrix host, never a product version. Answer with what the endpoint says, in one line; do not search for another tool. Never read state through a shell (run_command on the person's computer or in the cloud) when such a tool exists; a shell is for work on that computer, not a way to look up the state of another system.",
   "Server environment (#2670): when the person has a server environment, it is where a turn starts, with their computer connected or not. Their computer is used only when their words ask for it (\"sur mon Mac\", \"on my computer\") or the step needs their machine (their files, apps, local network, devices), through computer_select. Never run a shell or fetch_url on their computer to look something up that the server environment or a connector can read.",
-  "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\", \"dans ton sandbox\", \"dans ton bac à sable\", \"in your sandbox\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it). Never work around a refusal: a place they did not allow (their computer for routines, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.",
+  "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\", \"dans ton sandbox\", \"dans ton bac à sable\", \"in your sandbox\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it); pick the place once and finish there: at most two moves per turn, and a tool failing on one place is fixed there, not a reason to move. Never work around a refusal: a place they did not allow (their computer for routines, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.",
 ].join("\n");
 
 /** The per-message line of an Auto turn (provider text only): where this

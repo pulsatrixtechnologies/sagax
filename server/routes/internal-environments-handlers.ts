@@ -826,7 +826,7 @@ async function handleWorkplaceMcp(deps: InternalEnvironmentsDeps, ctx: InternalR
     Boolean(person && deps.desktopConnected(person)),
   );
   if (answer.ok && answer.target && answer.changed) {
-    const next = { ...workplace.auto, selected: answer.target };
+    const next = { ...workplace.auto, selected: answer.target, switches: (workplace.auto.switches ?? 0) + 1 };
     deps.setTurnWorkplaceAuto(capability.threadId, next);
     const reason = autoComputerReason(args.reason);
     deps.appendAdminAction({

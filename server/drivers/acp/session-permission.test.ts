@@ -27,7 +27,7 @@ describe("a permission ask that carries only the call's id (#1931)", () => {
     const current = {
       turnId: "turn-1", state: {}, flushAssistantText: () => {}, turn: {}, turnConfig: {}, asks: new Map(),
       mountedServers: new Set(["agents"]),
-      toolInputs: new Map([["call-1", { variant: "UseTool", tool_name: id, tool_input: '{"profile":"gox"}' }]]),
+      toolInputs: new Map([["call-1", { variant: "UseTool", tool_name: id, tool_input: '{"profile":"acme"}' }]]),
     };
     handler({
       jsonrpc: "2.0", id: 7, method: "session/request_permission",
@@ -38,7 +38,7 @@ describe("a permission ask that carries only the call's id (#1931)", () => {
     }, current as never);
     const opened = events.find((event) => event.type === "request.opened");
     expect(opened).toMatchObject({ mcpTool: id, engineConnector: true });
-    expect(opened.input).toContain("gox");
+    expect(opened.input).toContain("acme");
     for (const finish of current.asks.values()) (finish as (b: string, s: string) => void)("deny", "user");
   });
 });

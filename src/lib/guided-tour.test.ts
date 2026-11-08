@@ -89,7 +89,7 @@ describe("guided tour", () => {
       if (s.anchor) ids.add(s.anchor);
       if (s.fallbackAnchor) ids.add(s.fallbackAnchor);
     }
-    // The header has no Computer button (JC 2026-11-05): its step skips.
+    // The header has no Computer button (the owner 2026-11-05): its step skips.
     // Other skipIfMissing anchors may still be absent until their panels open.
     expect(src).not.toContain('data-tour="computer"');
     for (const id of ids) {

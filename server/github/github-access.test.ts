@@ -116,9 +116,9 @@ describe("why GitHub refuses", () => {
     expect(githubAccessFailure({ status: 403, headers: headers() }, "acme/private", person)).toMatchObject({ code: "forbidden", fix: "token_scope" });
     // The person's own token on another owner's repository: the organization is named.
     const fine: GithubCredential = { token: "github_pat_x", via: "person", login: "owner" };
-    const org = githubAccessFailure({ status: 404, headers: headers() }, "goxtechnologies/repo", fine);
-    expect(org).toMatchObject({ code: "org_not_covered", fix: "reconnect_with_orgs", organization: "goxtechnologies" });
-    expect(org!.message).toContain("does not cover the organization goxtechnologies");
+    const org = githubAccessFailure({ status: 404, headers: headers() }, "acmetechnologies/repo", fine);
+    expect(org).toMatchObject({ code: "org_not_covered", fix: "reconnect_with_orgs", organization: "acmetechnologies" });
+    expect(org!.message).toContain("does not cover the organization acmetechnologies");
     expect(org!.message).toContain("fine-grained");
     expect(org!.message).not.toContain("github_pat_x");
     expect(githubAccessFailure({ status: 403, headers: headers() }, "pulsatrixtechnologies/repo", { token: "gho_x", via: "person", login: "owner" }))

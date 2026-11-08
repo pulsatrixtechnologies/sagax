@@ -131,7 +131,7 @@ describe("EngineConnect", () => {
   });
 
   // Regression: a logout must never leave an engine looking "not installed"
-  // with the Connect button gone. Grok on GOX signed out but the CLI still
+  // with the Connect button gone. Grok on ACME signed out but the CLI still
   // present (fix/engine-connect-not-blocked-by-installed).
   describe("signed-out is never a lockout", () => {
     const grok = (patch: Partial<MyEngine> = {}): MyEngine =>

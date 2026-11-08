@@ -1,4 +1,4 @@
-// #2312 (JC 2026-11-06): after New topic, a routine's report, a bot-to-bot
+// #2312 (the owner 2026-11-06): after New topic, a routine's report, a bot-to-bot
 // message or a bot's notice landed in the previous topic, under the empty
 // view: the sidebar showed it, the topic on screen did not. The server
 // delivers what arrives to the bot's newest segment (shared/single-stream.ts),

@@ -31,7 +31,7 @@ const bot = (id: string, name: string, tasks: Bot["tasks"] = []): Bot => ({
 });
 
 const entries: DelegationEntry[] = [
-  { botId: "harrie", threadId: "harrie-work", name: "Harrie", status: "completed", task: "Reconcile the bank sheet", finishedAt: Date.UTC(2026, 10, 6, 14), note: "Sheet balanced" },
+  { botId: "harrie", threadId: "harrie-work", name: "Hollis", status: "completed", task: "Reconcile the bank sheet", finishedAt: Date.UTC(2026, 10, 6, 14), note: "Sheet balanced" },
   { botId: "orla", threadId: "orla-work", name: "Orla", status: "running", task: "Draft the client summary", startedAt: Date.UTC(2026, 10, 6, 13) },
 ];
 
@@ -67,17 +67,17 @@ describe("DelegationList", () => {
     const bubble = card.querySelector("[data-delegation-bubble]")!;
     expect(bubble.className).toMatch(/\bbg-bubble-bot\b/);
     expect(bubble.className).toMatch(/rounded-\[18px\]/);
-    expect(bubble.querySelector("[data-delegation-intro]")?.textContent).toBe("Sent work to Harrie, Orla");
+    expect(bubble.querySelector("[data-delegation-intro]")?.textContent).toBe("Sent work to Hollis, Orla");
     const rows = bubble.querySelectorAll("[data-run-handed-to] > li");
     expect(rows).toHaveLength(2);
     expect(rows[0]!.getAttribute("data-run-handoff")).toBe("harrie");
     expect(rows[0]!.querySelector("[data-delegation-title]")?.textContent).toBe("Reconcile the bank sheet");
-    expect(rows[0]!.querySelector("[data-delegation-meta]")?.textContent).toBe("Harrie · Opus High");
+    expect(rows[0]!.querySelector("[data-delegation-meta]")?.textContent).toBe("Hollis · Opus High");
     expect(rows[0]!.querySelector("[data-run-handoff-status]")?.textContent).toBe("Completed");
     // the result note reads in the row, and the tooltip keeps everything
     expect(rows[0]!.querySelector("[data-delegation-note]")?.textContent).toBe("Sheet balanced");
     const tip = rows[0]!.querySelector("[title]")?.getAttribute("title") ?? "";
-    expect(tip).toContain("Harrie");
+    expect(tip).toContain("Hollis");
     expect(tip).toContain("Completed");
     expect(tip).toContain("Sheet balanced");
     // one card depth: no box inside the bubble

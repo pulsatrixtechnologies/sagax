@@ -1,4 +1,4 @@
-// Geist is the interface face and Geist Mono the code face (JC, 2026-10-28).
+// Geist is the interface face and Geist Mono the code face (the owner, 2026-10-28).
 // Three contracts: the "Skin default" stack starts with Geist, the files ship
 // with the app (no network at run time), and iOS lists them in UIAppFonts.
 import { existsSync, readFileSync } from "node:fs";

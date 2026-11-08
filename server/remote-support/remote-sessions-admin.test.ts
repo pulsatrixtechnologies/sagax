@@ -151,9 +151,9 @@ describe("unattended grant and revoke", () => {
     expect(consent.get("sn-a")?.installedBy).toBe("p");
     const onRevoke = vi.fn(async () => {});
     const withAudit = createRemoteSessionsAdmin({ rows: () => [input()], botLabel: () => "Atlas", consent, log: () => [], closeById: vi.fn(async () => true), onRevoke, now: () => NOW });
-    const out = await withAudit.revokeUnattended({ principalId: "boss@gox", orgAdmin: true }, "sn-a");
+    const out = await withAudit.revokeUnattended({ principalId: "boss@acme", orgAdmin: true }, "sn-a");
     expect(out.ok).toBe(true);
     expect(consent.get("sn-a")?.revokedAt).toBeTruthy();
-    expect(onRevoke).toHaveBeenCalledWith(expect.objectContaining({ hostKey: "sn-a", installedBy: "p" }), "boss@gox", "");
+    expect(onRevoke).toHaveBeenCalledWith(expect.objectContaining({ hostKey: "sn-a", installedBy: "p" }), "boss@acme", "");
   });
 });

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Settings > Providers after #2080 (JC 2026-11-05): one row per provider,
+// Settings > Providers after #2080 (the owner 2026-11-05): one row per provider,
 // its accounts inside; no filters, no organization band, no row the
 // organization manages in Perspicax, nothing turned off or waiting to be
 // connected (Add a provider, last row, covers it). Who pays and the models

@@ -8,8 +8,8 @@ const css = readFileSync(join(here, "../styles.css"), "utf8");
 const body = css.match(/(?:^|\n)body\s*\{([^}]*)\}/)?.[1] ?? "";
 
 describe("crisp rendering", () => {
-  it("smooths text like Grok Bot", () => {
-    // Grok Bot's root uses greyscale smoothing; the default subpixel
+  it("smooths text like the reference app", () => {
+    // the reference app's root uses greyscale smoothing; the default subpixel
     // smoothing drew the same ink heavier and whiter beside it.
     expect(body).toMatch(/-webkit-font-smoothing:\s*antialiased/);
     expect(body).toMatch(/-moz-osx-font-smoothing:\s*grayscale/);

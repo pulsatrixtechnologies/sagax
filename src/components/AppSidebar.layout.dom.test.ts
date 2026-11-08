@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The app shell's sidebar by window width (JC 2026-11-01, Grok Bot's window
+// The app shell's sidebar by window width (the owner 2026-11-01, the reference app's window
 // collapses its sidebar to icons at 700 px): the real AppSidebar and Sidebar
 // mounted on a store, the window's width driven through matchMedia.
 //   - 390 px: the drawer (menu button, scrim, Escape gives focus back), the

@@ -1,4 +1,4 @@
-// The desktop mascot wears the bot's own mascot (JC 2026-11-08: "the mascott
+// The desktop mascot wears the bot's own mascot (the owner 2026-11-08: "the mascott
 // on the desktop dont match their real mascott"). The look goes from the app
 // through Electron main (floating-bot-window.mjs mascotLook) to the window,
 // which draws it with the same ShapeMascot as the bots list. Main kept its own

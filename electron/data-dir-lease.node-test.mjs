@@ -472,7 +472,7 @@ test("a delegated child from an earlier boot cannot block a new parent", (t) => 
   assert.equal(parent.release(), true);
 });
 
-// MOCA-270: macOS renames the host when it joins another network. A lease a
+// ticket 270: macOS renames the host when it joins another network. A lease a
 // crash left on one network looked like another machine's on the next, and the
 // desktop refused to start until the person deleted the file by hand.
 const renamedHost = (current) => (current.host === "Ryans-MacBook-Pro.local" ? "Ryans-MBP.lan" : "Ryans-MacBook-Pro.local");

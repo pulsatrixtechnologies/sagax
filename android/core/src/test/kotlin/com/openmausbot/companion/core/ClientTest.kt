@@ -38,7 +38,7 @@ class ClientTest {
     @Test
     fun stopNamesTheConversationsOwnThread() = runBlocking {
         // A room's Stop goes to the room, a bot's to the bot; both name the
-        // thread on screen so a sibling thread's turn keeps running (MOCA-148).
+        // thread on screen so a sibling thread's turn keeps running (ticket 148).
         repeat(2) { server.enqueue(json("{}")) }
         client.interruptRoom("g1", "gt2")
         client.interrupt("b1", "t2")

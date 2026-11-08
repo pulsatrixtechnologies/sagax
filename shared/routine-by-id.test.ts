@@ -16,14 +16,14 @@ const sibling = "bot-ember";
 
 const routines = [
   { id: INCOMING, botId: wren, name: "Incoming texts", enabled: false, schedule: { type: "webhook" as const } },
-  { id: VOICE_ROUTINE, botId: wren, name: "Voice line requests from JC", enabled: false, schedule: { type: "webhook" as const } },
+  { id: VOICE_ROUTINE, botId: wren, name: "Voice line requests from AB", enabled: false, schedule: { type: "webhook" as const } },
   { id: "nightly", botId: wren, name: "Nightly", enabled: true, schedule: { type: "cron" as const } },
   { id: "on-ember", botId: sibling, name: "Tunnel watch", enabled: true, schedule: { type: "interval" as const } },
 ];
 
 const webhooks = [
   { id: "hook-incoming", botId: wren, routineId: INCOMING, name: "Incoming texts", enabled: false },
-  { id: VOICE_WEBHOOK, botId: wren, routineId: VOICE_ROUTINE, name: "Voice line requests from JC", enabled: false },
+  { id: VOICE_WEBHOOK, botId: wren, routineId: VOICE_ROUTINE, name: "Voice line requests from AB", enabled: false },
   { id: "standalone-phone", botId: wren, name: "Bot phone", enabled: true, source: { type: "telephony" } },
 ];
 
@@ -40,7 +40,7 @@ describe("resolveRoutineById (#1891 list_routines routine_id)", () => {
       kind: "found",
       via: "webhook",
       webhookId: VOICE_WEBHOOK,
-      routine: { id: VOICE_ROUTINE, name: "Voice line requests from JC" },
+      routine: { id: VOICE_ROUTINE, name: "Voice line requests from AB" },
     });
   });
 

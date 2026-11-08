@@ -230,9 +230,9 @@ describe("Bot email trigger (B21, 2026-10-21)", () => {
 
   it("names the bot's address with a Copy button, or says it has none yet", async () => {
     const { BotMailAddressLine } = await import("./TypedTriggers");
-    const html = renderToStaticMarkup(createElement(BotMailAddressLine, { mail: { available: true, address: "cryptic@bots.example.org", enabled: true } }));
+    const html = renderToStaticMarkup(createElement(BotMailAddressLine, { mail: { available: true, address: "nimbus@bots.example.org", enabled: true } }));
     expect(html).toContain("This bot&#x27;s address");
-    expect(html).toContain("cryptic@bots.example.org");
+    expect(html).toContain("nimbus@bots.example.org");
     expect(html).toContain("Copy address");
     const none = renderToStaticMarkup(createElement(BotMailAddressLine, { mail: { available: false, address: null, enabled: false } }));
     expect(none).toContain("This bot has no email address yet.");

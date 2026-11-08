@@ -88,7 +88,7 @@ describe("a parallel task's question (#2082)", () => {
   });
 });
 
-// JC (2026-11-05, 21:10): in the one conversation (threads off) the card has
+// the owner (2026-11-05, 21:10): in the one conversation (threads off) the card has
 // no "Open" button and never opens a side thread; the question renders inline
 // under the card, in the bot's chat, answered there.
 describe("a parallel task's card in the one conversation (#2082)", () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { BUILTIN_GITHUB_CLIENT_ID, resolveGithubClientId } from "./builtin-client.ts";
 
-// JC, 2026-11-08: every GitHub connection is a link and a code. With no
+// the owner, 2026-11-08: every GitHub connection is a link and a code. With no
 // organization setting and no environment, the built-in app is used.
 describe("resolveGithubClientId", () => {
   it("uses the built-in client id with no organization setting and no environment", () => {

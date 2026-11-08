@@ -112,7 +112,7 @@ describe("import from zip", () => {
     expect(startOptions([], true, true).some(option => option.value === "action:import-zip")).toBe(false);
     // without the right to import, the option is not drawn
     expect(startOptions([], false, false).some(option => option.value === "action:import-zip")).toBe(false);
-    // the agent import (Grok Bot, Claude Code) follows the same right
+    // the agent import (the reference app, Claude Code) follows the same right
     expect(startOptions([], true, true).some(option => option.value === "action:import-agent")).toBe(false);
     expect(startOptions([], false, false).some(option => option.value === "action:import-agent")).toBe(false);
   });

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// #2272 (2026-11-06, JC: "It not doing anything when I click it. This is
+// #2272 (2026-11-06, the owner: "It not doing anything when I click it. This is
 // innacceptable."): View run under a routine's report, a run's notification,
 // a link to a run's execution thread (an Inbox entry) and a row of a
 // routine's Runs list all open the run's WINDOW over the bot's chat column,

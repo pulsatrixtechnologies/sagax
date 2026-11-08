@@ -261,11 +261,11 @@ describe("a local model repeating itself", () => {
 
 describe("a chat-template token a local model wrote as text", () => {
   it("never shows an end token split across deltas", async () => {
-    const f = await fixture((_body, response) => say(response, "Bonjour JC.", "<|e", "os|>"));
+    const f = await fixture((_body, response) => say(response, "Bonjour AB.", "<|e", "os|>"));
     await f.start({ integrations: {} });
     expect(await f.completed()).toMatchObject({ ok: true });
-    expect(f.shown()).toBe("Bonjour JC.");
-    expect(f.replies()).toEqual(["Bonjour JC."]);
+    expect(f.shown()).toBe("Bonjour AB.");
+    expect(f.replies()).toEqual(["Bonjour AB."]);
   });
 
   it("takes a reply that is only the token as an empty reply, never as the words <|eos|>", async () => {

@@ -166,7 +166,7 @@ describe("grokCatalogSection", () => {
   });
 });
 
-// 2026-10-28 (Sagax 0.8.13 on GOX): grok.com's connectors reach the CLI as
+// 2026-10-28 (Sagax 0.8.13 on ACME): grok.com's connectors reach the CLI as
 // ONE managed gateway server whose tool names carry the connector. Sagax
 // looked for `microsoft_teams`/`outlook` servers, so a turn that had Teams
 // and Outlook was told "Connectable but not connected yet ... you have NO

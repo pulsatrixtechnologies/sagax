@@ -9,14 +9,22 @@
 //
 //   node scripts/check-source-terms.mjs
 //
-// Tests and fixtures are not shipped, so the hashed tables above do not
-// cover them. They are covered by a second pass, with the list of terms read
-// from the environment exactly as the term-guard CI job reads it
+// Tests and fixtures are not shipped, but the repository is public: a second
+// pass runs the same hashed tables over every tracked test and fixture file
+// (*.test.*, *.e2e.*, *.node-test.*, *.spec.*, and anything under tests/,
+// testing/, e2e/, fixtures/, __tests__/ or __snapshots__/), anywhere in the
+// tree, each under its own path for the allowlist (#2830). Test data uses
+// neutral names (Ada, Nimbus, acme, AB); an interop name the app really reads
+// is allowlisted for test paths only, with its reason.
+//
+// A third pass takes the list of terms from the environment exactly as the
+// term-guard CI job reads it
 // (FORBIDDEN_TERMS, newline-separated, never committed): every tracked text
 // file outside third_party/ and the generated name lists (tests, fixtures,
 // galleries, docs, iOS and Android sources) is scanned for those terms as
-// whole words, case-insensitively. Without FORBIDDEN_TERMS that pass is
-// skipped with a notice (the CI term-guard job still enforces it on a PR).
+// whole words, case-insensitively. Without FORBIDDEN_TERMS that third pass is
+// skipped with a notice (the CI term-guard job still enforces it on a PR);
+// the tests and fixtures pass above always runs.
 //
 //   FORBIDDEN_TERMS="$(cat private-terms.txt)" node scripts/check-source-terms.mjs
 //
@@ -51,12 +59,32 @@ for (const file of files) {
     console.error(`${file}: ${hit.term} in ...${hit.context.replace(/\s+/g, " ")}...`);
   }
 }
-// Second pass: every tracked text file, terms from the environment.
+// Second pass: tests and fixtures, anywhere in the tree, same hashed tables.
+const TESTS_AND_FIXTURES = /(?:\.test\.|\.e2e\.|\.node-test\.|\.spec\.|(?:^|\/)(?:__tests__|testing|tests?|e2e|fixtures?|__fixtures__|__snapshots__)\/)/;
+const EVERYWHERE_SKIPPED = /(?:^|\/)(?:third_party|node_modules)\/|^pnpm-lock\.yaml$|^src\/data\/given-names\/|\.(?:png|jpe?g|gif|webp|ico|icns|woff2?|ttf|otf|wasm|zip|gz|mp[34]|mov|pdf|bin|onnx|gguf|p8)$/i;
+const testFiles = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 })
+  .split("\0")
+  .filter((file) => file && TESTS_AND_FIXTURES.test(file) && !EVERYWHERE_SKIPPED.test(file));
+for (const file of testFiles) {
+  let text;
+  try {
+    text = readFileSync(join(root, file), "utf8");
+  } catch {
+    continue;
+  }
+  if (text.includes("\0")) continue;
+  for (const hit of scanText(text, allowlist, file)) {
+    if (hit.allowedBy) continue;
+    blocked++;
+    const line = text.slice(0, hit.index).split("\n").length;
+    console.error(`${file}:${line}: ${hit.term} in ...${hit.context.replace(/\s+/g, " ")}... (tests and fixtures)`);
+  }
+}
+// Third pass: every tracked text file, terms from the environment.
 const envTerms = (process.env.FORBIDDEN_TERMS ?? "")
   .split(/\r?\n/)
   .map((term) => term.trim())
   .filter(Boolean);
-const EVERYWHERE_SKIPPED = /(?:^|\/)(?:third_party|node_modules)\/|^pnpm-lock\.yaml$|^src\/data\/given-names\/|\.(?:png|jpe?g|gif|webp|ico|icns|woff2?|ttf|otf|wasm|zip|gz|mp[34]|mov|pdf|bin|onnx|gguf|p8)$/i;
 const escapeRegExp = (term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 let everywhere = 0;
 if (envTerms.length) {
@@ -80,11 +108,11 @@ if (envTerms.length) {
     }
   }
 } else {
-  console.log("FORBIDDEN_TERMS not set: tests and fixtures scan skipped");
+  console.log("FORBIDDEN_TERMS not set: environment terms scan skipped (tests and fixtures were scanned with the hashed tables)");
 }
 blocked += everywhere;
 if (blocked) {
   console.error(`source term scan: ${blocked} forbidden term(s); neutralize the source or justify them in scripts/npm-package-allowlist.json`);
   process.exit(1);
 }
-console.log(`source term scan clean (${files.length} shipped files${envTerms.length ? ", every tracked text file for the environment terms" : ""})`);
+console.log(`source term scan clean (${files.length} shipped files, ${testFiles.length} test and fixture files${envTerms.length ? ", every tracked text file for the environment terms" : ""})`);

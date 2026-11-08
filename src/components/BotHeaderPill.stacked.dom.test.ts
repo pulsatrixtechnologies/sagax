@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The bot's title sits UNDER its name, never "Name · Title" on one line (JC
+// The bot's title sits UNDER its name, never "Name · Title" on one line (the owner
 // rule 2026-11-06, every surface): the chat pill, the window pill, a person's
 // shared bots and a template's suggested team, mounted in a real DOM.
 import { act, createElement } from "react";
@@ -29,7 +29,7 @@ afterEach(() => {
 
 const avatar = createElement("span", { "data-test-avatar": "" });
 
-describe("bot name and title, stacked (JC 2026-11-06)", () => {
+describe("bot name and title, stacked (the owner 2026-11-06)", () => {
   for (const [label, render] of [
     ["chat header", () => createElement(BotChatHeader, { name: "Ara", label: "Admin", panelOpen: false, onToggle: () => {}, avatar })],
     ["window pill", () => createElement(BotHeaderPill, { name: "Ara", label: "Admin", panelOpen: false, onToggle: () => {}, avatar })],

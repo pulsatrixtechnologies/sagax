@@ -697,7 +697,7 @@ describe("voice mode with OpenAI and ElevenLabs (2026-10-29)", () => {
   });
 
   it("hears with OpenAI when the person picks it, and falls back on xAI when it fails", async () => {
-    const transcribe = vi.fn(async (_audio: Uint8Array, _mime: string, _key: string) => ({ text: "Bonjour Cryptic" }));
+    const transcribe = vi.fn(async (_audio: Uint8Array, _mime: string, _key: string) => ({ text: "Bonjour Nimbus" }));
     const notices: string[] = [];
     const { call, xai, usage } = harness({
       openai: { transcribe, synthesize: async () => ({ bytes: new Uint8Array([1]), mime: "audio/mpeg" }) },
@@ -708,7 +708,7 @@ describe("voice mode with OpenAI and ElevenLabs (2026-10-29)", () => {
     const status = await call({ method: "GET", path: "/api/bots/b-quasar/voice/status" });
     expect(status.body).toMatchObject({ providers: { stt: ["xai", "openai"] }, stt: "openai" });
     const heard = await call({ method: "POST", path: "/api/bots/b-quasar/voice/transcribe?language=fr", raw: WAV, contentType: "audio/wav" });
-    expect(heard.body.text).toBe("Bonjour Cryptic");
+    expect(heard.body.text).toBe("Bonjour Nimbus");
     expect(xai.transcribe).not.toHaveBeenCalled();
     expect(usage.at(-1)).toMatchObject({ model: "openai-stt", provider: "openai" });
     expect(notices.at(-1)).toContain("speech to text (whole recording, OpenAI)");

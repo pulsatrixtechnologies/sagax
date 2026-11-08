@@ -17,8 +17,8 @@ import { createReachCodeStore, createReachMeStore } from "./store.ts";
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-const CARD: ReachCard = { threadId: "t1", requestId: "r1", botId: "b1", botName: "Cryptic", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false };
-const PUSH: PushMessage = { kind: "approval", personId: "pr_a", title: "Cryptic", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 };
+const CARD: ReachCard = { threadId: "t1", requestId: "r1", botId: "b1", botName: "Nimbus", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false };
+const PUSH: PushMessage = { kind: "approval", personId: "pr_a", title: "Nimbus", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 };
 
 function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | null; respondStatus?: number; now?: number } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-reach-"));
@@ -68,10 +68,10 @@ describe("Reach me: a card left open is recalled (#2645)", () => {
     expect(pushed).toEqual([]);
     setNow(1_000 + CARD_REMINDER_AFTER_MS[0]); reach.tick(); reach.tick();
     expect(pushed).toHaveLength(1);
-    expect(pushed[0]).toMatchObject({ kind: "approval", threadId: "t1", requestId: "r1", title: "Toujours en attente (2 h) · Cryptic", id: "pr_a\u0000t1\u0000r1:reminder1" });
+    expect(pushed[0]).toMatchObject({ kind: "approval", threadId: "t1", requestId: "r1", title: "Toujours en attente (2 h) · Nimbus", id: "pr_a\u0000t1\u0000r1:reminder1" });
     setNow(1_000 + CARD_REMINDER_AFTER_MS[1]); reach.tick();
     setNow(1_000 + 3 * CARD_REMINDER_AFTER_MS[1]); reach.tick();
-    expect(pushed.map((p) => p.title)).toEqual(["Toujours en attente (2 h) · Cryptic", "Toujours en attente (24 h) · Cryptic"]);
+    expect(pushed.map((p) => p.title)).toEqual(["Toujours en attente (2 h) · Nimbus", "Toujours en attente (24 h) · Nimbus"]);
     expect(reach.openCardCount()).toBe(0);
     reach.cardRaised({ ...PUSH, requestId: "r2" });
     setCard(null);
@@ -151,7 +151,7 @@ describe("Reach me: out", () => {
   });
 
   it("the message names the bot and the code, never a confidential card's words", () => {
-    const out: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Cryptic", code: "KM3X", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false, language: "fr" };
+    const out: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Nimbus", code: "KM3X", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false, language: "fr" };
     expect(composeReachText(out)).toContain("« KM3X oui »");
     const secret = composeReachText({ ...out, confidential: true });
     expect(secret).not.toContain("npm test");
@@ -224,7 +224,7 @@ describe("Reach me: back", () => {
 });
 
 describe("Reach me: a notice (the background brief)", () => {
-  const NOTICE = { id: "brief-b1-1", person: "pr_a", botId: "b1", botName: "Cryptic", threadId: "t1", title: "Brief du jour : 2 points", lines: ["Trois factures, 3 en tout.", "Un rendez-vous mardi."] };
+  const NOTICE = { id: "brief-b1-1", person: "pr_a", botId: "b1", botName: "Nimbus", threadId: "t1", title: "Brief du jour : 2 points", lines: ["Trois factures, 3 en tout.", "Un rendez-vous mardi."] };
 
   it("no choice saved: one push, no code, no other channel", async () => {
     const { reach, sent, pushed, codes } = setup(null);

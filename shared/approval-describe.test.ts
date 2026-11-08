@@ -60,7 +60,7 @@ describe("the engines' mail, Teams, calendar and SharePoint connectors on the ca
 
   it("reads a calendar invitation: what, when and who is invited", () => {
     const plain = approvalPlain({
-      botName: "Cryptic",
+      botName: "Nimbus",
       tool: `${M365}outlook_create_event`,
       toolInput: JSON.stringify({
         subject: "Revue trimestrielle",
@@ -69,7 +69,7 @@ describe("the engines' mail, Teams, calendar and SharePoint connectors on the ca
         attendees: [{ emailAddress: { address: "ana@example.com", name: "Ana" } }, "bo@example.com", { email: "cy@example.com" }, "di@example.com"],
       }),
     }, undefined, now);
-    expect(plain.title).toBe("Allow Cryptic to send a calendar invitation in Microsoft 365?");
+    expect(plain.title).toBe("Allow Nimbus to send a calendar invitation in Microsoft 365?");
     expect(plain.line).toContain("Revue trimestrielle");
     expect(plain.line).toContain("to Ana <ana@example.com>, bo@example.com, cy@example.com and 1 more");
   });
@@ -92,11 +92,11 @@ describe("the engines' mail, Teams, calendar and SharePoint connectors on the ca
 
   it("never lets a display name hide the address it sends to (review of #943)", () => {
     const line = (attendee: unknown) => approvalPlain({ botName: "Dot", tool: `${M365}outlook_send_mail`, toolInput: JSON.stringify({ subject: "x", toRecipients: [attendee] }) }).line;
-    expect(line({ emailAddress: { name: "Ana Tremblay (GOX)", address: "attacker@evil.example" } })).toContain("Ana Tremblay (GOX) <attacker@evil.example>");
+    expect(line({ emailAddress: { name: "Ana Tremblay (ACME)", address: "attacker@evil.example" } })).toContain("Ana Tremblay (ACME) <attacker@evil.example>");
     // a name that looks like another address or a domain is dropped
-    expect(line({ emailAddress: { name: "ana@gox.ca", address: "attacker@evil.example" } })).toContain("to attacker@evil.example");
-    expect(line({ emailAddress: { name: "ana@gox.ca", address: "attacker@evil.example" } })).not.toContain("gox.ca");
-    expect(line({ name: "Support gox.ca", email: "attacker@evil.example" })).not.toContain("gox.ca");
+    expect(line({ emailAddress: { name: "ana@acme.ca", address: "attacker@evil.example" } })).toContain("to attacker@evil.example");
+    expect(line({ emailAddress: { name: "ana@acme.ca", address: "attacker@evil.example" } })).not.toContain("acme.ca");
+    expect(line({ name: "Support acme.ca", email: "attacker@evil.example" })).not.toContain("acme.ca");
     // a name with no address says so
     expect(line({ name: "Ana" })).toContain("Ana (?)");
   });
@@ -110,13 +110,13 @@ describe("a Grok gateway tool on the card (#1931)", () => {
   const ID = "cursor__user-pulsatrix-connectwise-profile_5fuse___23";
 
   it("names the connector and the tool, never 'use 23' nor the escaped id", () => {
-    const plain = approvalPlain({ botName: "Quasar", tool: ID, toolInput: '{"profile":"gox"}', detail: ID });
+    const plain = approvalPlain({ botName: "Quasar", tool: ID, toolInput: '{"profile":"acme"}', detail: ID });
     expect(plain.title).not.toMatch(/\b23\b|5f|Cursor|User /);
     expect(plain.title).toContain("Pulsatrix Connectwise");
     expect(plain.title).toMatch(/profile/i);
-    const described = describeApproval(ID, '{"profile":"gox"}');
+    const described = describeApproval(ID, '{"profile":"acme"}');
     expect(described).toMatchObject({ server: "pulsatrix-connectwise", tool: "profile_use", product: "Pulsatrix Connectwise" });
-    expect(described.argsJson).toContain('"profile": "gox"');
+    expect(described.argsJson).toContain('"profile": "acme"');
   });
 
   it("reads a known connector by grok.com's name and its verb", () => {

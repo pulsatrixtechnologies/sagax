@@ -51,11 +51,11 @@ describe("plugin detail menu", () => {
       onUpdate, onTest, onEdit: noop, onUninstall, details: [],
     })));
     expect(host.querySelector('[role="menu"]')).toBeNull();
-    // Update lives in Details (no header pill, no menu entry), like Grok Bot
+    // Update lives in Details (no header pill, no menu entry), like the reference app
     expect(host.querySelector('[data-plugins-detail-primary="update"]')).toBeNull();
     expect(host.querySelector("[data-plugin-update-row]")).not.toBeNull();
     expect(host.querySelector("[data-plugin-update-dot]")).toBeNull();
-    // Uninstall is the header's own pill, as in Grok Bot's Connect Apps
+    // Uninstall is the header's own pill, as in the reference app's Connect Apps
     expect(host.querySelector('[role="menu"] [data-plugin-action="uninstall"]')).toBeNull();
     click(host.querySelector('[data-plugin-action="uninstall"]'));
     expect(onUninstall).toHaveBeenCalledTimes(1);
@@ -128,7 +128,7 @@ describe("View all and the breadcrumb", () => {
     expect(host.querySelector("[data-breadcrumb]")).toBeNull();
   });
 
-  it("Recommended has its View all on the right, like Grok Bot's", () => {
+  it("Recommended has its View all on the right, like the reference app's", () => {
     const onType = vi.fn();
     const many = buildPluginItems({
       featured: Array.from({ length: 8 }, (_, index) => ({

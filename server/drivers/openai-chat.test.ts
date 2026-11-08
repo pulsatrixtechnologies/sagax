@@ -994,7 +994,7 @@ describe("createOpenAIChatRuntime refused tool calls", () => {
 });
 
 describe("createOpenAIChatRuntime HTTP error text", () => {
-  // MOCA-228: an xAI account with no credits left answered with a raw,
+  // ticket 228: an xAI account with no credits left answered with a raw,
   // cut-off JSON envelope instead of the provider's own sentence.
   const XAI_NO_CREDITS = "Your team 0000-fixture has either used all available credits or reached its monthly spending limit. To continue making API requests, please purchase more credits or raise your spending limit.";
   const failure = async (status: number, body: string) => {

@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
  * Every expectation here is the literal value that file's rules produce — the
  * dedup order, the three kinds, and the two line functions. The review line reads
  * by the roster's rule and both lines follow the Activity setting, as on iOS
- * (MOCA-204).
+ * (ticket 204).
  */
 class UpdatesTest {
     @Test

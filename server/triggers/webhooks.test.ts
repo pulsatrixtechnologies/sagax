@@ -1324,7 +1324,7 @@ describe("WebhookManager", () => {
     expect(h.manager.list()).toHaveLength(0);
   });
 
-  // MOCA-93: three was a code constant; a webhook fanning out a project
+  // ticket 93: three was a code constant; a webhook fanning out a project
   // manager's events got 429 from the fourth unfinished task on.
   it("lets a webhook set how many unfinished tasks it may hold", () => {
     const h = harness();

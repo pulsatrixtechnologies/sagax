@@ -69,7 +69,7 @@ function setup(options: { publicWebhook?: boolean; refuse?: number; replyOutcome
   };
 }
 
-const OUT: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Cryptic", code: "KM3X", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false, language: "fr" };
+const OUT: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Nimbus", code: "KM3X", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false, language: "fr" };
 
 function signed(body: unknown, secret = APP_SECRET) {
   const rawBody = JSON.stringify(body);
@@ -284,13 +284,13 @@ describe("Reach me by WhatsApp", () => {
   });
 
   it("a template parameter has no new lines, tabs or runs of spaces", () => {
-    expect(templateParameter("Cryptic asks:\nRun   a command?\n\tnpm test")).toBe("Cryptic asks: / Run a command? / npm test");
+    expect(templateParameter("Nimbus asks:\nRun   a command?\n\tnpm test")).toBe("Nimbus asks: / Run a command? / npm test");
     expect(templateParameter("x".repeat(2_000)).length).toBe(1_000);
   });
 });
 
 describe("Reach me by WhatsApp with the reach-me service", () => {
-  const CARD: ReachCard = { threadId: "t1", requestId: "r1", botId: "b1", botName: "Cryptic", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false };
+  const CARD: ReachCard = { threadId: "t1", requestId: "r1", botId: "b1", botName: "Nimbus", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false };
 
   it("a card goes out on WhatsApp and only the number it went to answers it, through the click", async () => {
     const env = setup();
@@ -307,7 +307,7 @@ describe("Reach me by WhatsApp with the reach-me service", () => {
       respond: async (_person, _card, body) => { responses.push(body); card = null; return { status: 200, body: {} }; },
       push: () => {}, language: () => "fr", audit: (row) => audit.push(row), now: env.now, log: () => {},
     });
-    reach.cardRaised({ kind: "approval", personId: "pr_a", title: "Cryptic", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 });
+    reach.cardRaised({ kind: "approval", personId: "pr_a", title: "Nimbus", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 });
     await reach.drain();
     const code = codes.forCard("t1", "r1")!;
     expect(code).toMatchObject({ channels: ["whatsapp"], whatsappTo: PERSON_NUMBER });

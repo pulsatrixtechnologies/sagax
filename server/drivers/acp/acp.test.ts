@@ -2019,7 +2019,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   });
 
   it("mounts the person's grok.com Teams and Outlook through grok's gateway and says so, not \"connectable\" (2026-10-28)", async () => {
-    // Sagax 0.8.13 on GOX: the turn's catalog carried `managed_gateway:cursor`
+    // Sagax 0.8.13 on ACME: the turn's catalog carried `managed_gateway:cursor`
     // (Teams, Outlook) and the prompt still said "Connectable but not
     // connected yet ... Microsoft Teams ... you have NO tool". The fake CLI
     // answers _x.ai/mcp/list with the real answer's shape, its gateway only
@@ -2436,7 +2436,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(recorder.events.some(e => e.type === "runtime.error")).toBe(false);
   });
 
-  // MOCA-260: a quiet `sleep` or build sends nothing while it runs, and the
+  // ticket 260: a quiet `sleep` or build sends nothing while it runs, and the
   // guard used to stop the turn as if the agent had hung.
   it.each([GrokAgentDriver, QwenAgentDriver])("does not expire $driverKind while a tool it started is still running", async (driver) => {
     process.env.SAGAX_ACP_PROMPT_IDLE_TIMEOUT_MS = "150";

@@ -16,7 +16,7 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIALOG_FRAME_ALLOW = new Set([
   "components/SettingsPrimitives.tsx", // definition + Settings chrome
   "components/TermsGate.tsx", // barrier (GARDER)
-  "components/ReleaseNotesPrompt.tsx", // What's new / Release notes window (JC exception)
+  "components/ReleaseNotesPrompt.tsx", // What's new / Release notes window (AB exception)
   "components/UpdateBanner.tsx", // Update ready window; errors stay on the card
   "components/remote-session/RemoteFileBrowser.tsx", // remote file catalog window (file-preview family)
   "components/bot-settings/CodeBranchList.tsx", // branch forms; empty with later bot-panel work

@@ -278,7 +278,7 @@ describe("engine-image-gate cli", () => {
   // The CLI path puts a fake `docker` shebang script first on PATH. Windows
   // cannot spawn an extensionless script (and the runner's real Docker would
   // answer instead), so this end-to-end spawn runs where the gate runs: the
-  // GOX image gate workflow is ubuntu-latest. The in-process test above keeps
+  // ACME image gate workflow is ubuntu-latest. The in-process test above keeps
   // the probe logic covered on every platform.
   it.skipIf(process.platform === "win32")("probes each lock binary --version in the image and refuses a missing one", () => {
     const versions = Object.fromEntries(bins.map((engine) => [engine.bin, `${engine.bin} ${engine.version}\n`]));
@@ -307,8 +307,8 @@ describe("engine-image-gate cli", () => {
 });
 
 describe("manual image gate workflow", () => {
-  it("keeps the GOX image gate title and checks the image through IMAGE", () => {
-    expect(workflow).toMatch(/^name: GOX image gate$/m);
+  it("keeps the image gate workflow title and checks the image through IMAGE", () => {
+    expect(workflow).toMatch(/^name: [A-Z]+ image gate$/m);
     expect(workflow).toContain("IMAGE: ${{ inputs.image }}");
     expect(workflow).toContain('docker pull "$IMAGE"');
     expect(workflow).toContain('docker run --rm --entrypoint cat "$IMAGE" /app/engines/manifest.json');

@@ -149,7 +149,7 @@ describe("Store", () => {
     expect(allowsTool((restored as unknown as { toolScope: unknown }).toolScope, { kind: "native", name: "read" })).toBe(false);
   });
 
-  // MOCA-264: a deleted bot stayed in its rooms for good — counted on the
+  // ticket 264: a deleted bot stayed in its rooms for good — counted on the
   // Save button, refused by the roster check on every save, and still the
   // room's lead.
   it("takes a deleted bot out of every room it was in and passes its lead role on", () => {

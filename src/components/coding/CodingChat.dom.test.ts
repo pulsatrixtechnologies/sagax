@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The coding chat (2026-11-03; terminal shape #2099, JC 2026-11-05): a coding
+// The coding chat (2026-11-03; terminal shape #2099, the owner 2026-11-05): a coding
 // task over the chat column, drawn the way Claude Code prints a session. One
 // line per tool call (`● Bash(pnpm vitest run src/board …)` then `⎿` and the
 // first lines of the result, "… +N lines" to unfold), edits folded behind
@@ -9,7 +9,7 @@
 // path or id on the screen. A coding window (#2149): the X of a page opened
 // by Sagax closes it, the bot's real composer (+, micro, voice) is aimed at the
 // task's thread, and the </> panel lives here, never in the normal chat.
-// #2285 (JC 2026-11-06): the header's bot is the chat's own pill
+// #2285 (the owner 2026-11-06): the header's bot is the chat's own pill
 // (BotHeaderPill); status, duration and tokens leave the header for a "This
 // session" card of the bot panel, and the dev pods move there too, as panel
 // sections, instead of the </> popover.
@@ -290,7 +290,7 @@ describe("CodingChatSheet", () => {
     expect(column.querySelector("[data-coding-tools]")).toBeNull();
   });
 
-  it("puts the session and every pod, Connectors included, in the Coding tab's host (#2599, JC 2026-11-07)", () => {
+  it("puts the session and every pod, Connectors included, in the Coding tab's host (#2599, the owner 2026-11-07)", () => {
     mountSheet("finished", {
       side: createElement("div", { "data-test-given-pods": "" }, createElement("section", { "data-dev-pod": "connectors" })),
     });
@@ -299,7 +299,7 @@ describe("CodingChatSheet", () => {
     expect(document.querySelectorAll("[data-dev-pod='connectors']")).toHaveLength(1);
   });
 
-  it("puts the working line just above the composer while the task runs, never in the transcript (JC 2026-11-06)", () => {
+  it("puts the working line just above the composer while the task runs, never in the transcript (the owner 2026-11-06)", () => {
     mountSheet("running", { composer: createElement("div", { "data-test-given-composer": "" }) });
     const lines = column.querySelectorAll(".turn-presence");
     expect(lines).toHaveLength(1);

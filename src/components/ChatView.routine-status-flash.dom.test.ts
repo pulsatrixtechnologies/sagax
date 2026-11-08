@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// JC, 0.8.35: "when a task's status changes from Running to something else
+// the owner, 0.8.35: "when a task's status changes from Running to something else
 // very fast, the page goes haywire, the app flashes". The real store, its
 // live fold and the real ChatView get a routine run whose card flips status
 // in rapid frames (queued, running, completed, running again on a retry...),

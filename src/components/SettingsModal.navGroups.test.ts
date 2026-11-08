@@ -50,7 +50,7 @@ describe("Settings nav groups", () => {
       // #2080 (L0): the final rail; Import lives in Backups (its old id stays
       // an alias). #2090: Updates is its own page. 2026-11-06: the old App
       // page splits into General (system, keyboard, mode) and About.
-      // JC 2026-11-07: App in the Apple order, General first, About last.
+      // the owner 2026-11-07: App in the Apple order, General first, About last.
       // #2614: Permissions (OS permissions of this computer) after Computer.
       "account", "appearance", "notifications", "security", "credentials",
       "providers", "engines", "voice", "usage",
@@ -71,7 +71,7 @@ describe("Settings nav groups", () => {
     for (const page of ["Account", "Security", "Vault", "Appearance", "Notifications"]) expect(you, page).toContain(`>${page}</button>`);
     expect(rail).not.toContain("data-settings-automations");
     const app = rail.slice(rail.indexOf('data-settings-nav-group="app"'));
-    // JC 2026-11-07: the Apple order, General, Updates (desktop), Developer, About last
+    // the owner 2026-11-07: the Apple order, General, Updates (desktop), Developer, About last
     const order = [">General</button>", ">Updates</button>", ">Developer</button>", ">About</button>"].map((label) => app.indexOf(label));
     expect(order.every((value) => value >= 0)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
@@ -181,7 +181,7 @@ describe("Settings nav groups", () => {
     fixture.section = "updates";
     const html = render();
     expect(html).toContain('data-settings-card="updates"');
-    // JC 2026-11-08: the Release notes / About rows moved to Developer
+    // the owner 2026-11-08: the Release notes / About rows moved to Developer
     expect(html).not.toContain('data-settings-card="updates.links"');
     expect(html).not.toMatch(/<h3[^>]*>This app<\/h3>/);
     expect(html).not.toContain("data-about-section");
@@ -200,7 +200,7 @@ describe("Settings nav groups", () => {
     expect(html).not.toMatch(/[\u2013\u2014]/);
   });
 
-  // JC 2026-11-07: General selected and Updates highlighted looked like two
+  // the owner 2026-11-07: General selected and Updates highlighted looked like two
   // active rows. One row carries the selection; the hover of the others is a
   // lighter fill than bg-selected, never the same token.
   it("marks exactly one row active, and the hover of the others stays lighter", () => {

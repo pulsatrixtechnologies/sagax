@@ -95,7 +95,7 @@ describe("CLI commands accepted from Settings", () => {
 describe("spawn ENOENT", () => {
   const enoent = () => Object.assign(new Error("spawn codex ENOENT"), { code: "ENOENT" });
 
-  it("names a missing working folder instead of blaming the install (MOCA-309)", () => {
+  it("names a missing working folder instead of blaming the install (ticket 309)", () => {
     const missing = join(mkdtempSync(join(tmpdir(), "sagax-procs-")), "deleted-project");
     expect(describeSpawnFailure(enoent(), "/home/u/.sagax/tools/npm/bin/codex", missing)).toEqual({
       message: `This chat's working folder no longer exists: ${missing}. Choose another folder in the bot's settings, or create it again.`,

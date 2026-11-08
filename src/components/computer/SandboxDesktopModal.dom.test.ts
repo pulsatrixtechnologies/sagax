@@ -63,7 +63,7 @@ describe("SandboxDesktopModal calm window", () => {
     expect(document.querySelector("[data-takeover-power]")).toBeNull();
     expect(document.querySelector("[data-takeover-more]")).toBeNull();
     expect(document.querySelector("[role=menu]")).toBeNull();
-    // 2026-11-03 (JC): the full screen button did not work in the app; removed.
+    // 2026-11-03 (the owner): the full screen button did not work in the app; removed.
     expect(document.querySelector("[data-takeover-fullscreen]")).toBeNull();
   });
 
@@ -73,7 +73,7 @@ describe("SandboxDesktopModal calm window", () => {
     const collapse = document.querySelector<HTMLButtonElement>("[data-takeover-collapse]")!;
     expect(collapse.hasAttribute("data-takeover-close")).toBe(true);
     expect(collapse.getAttribute("aria-label")).toMatch(/^Close and release control/);
-    // JC 2026-11-06: an X on the standard round button, not the shrink arrows.
+    // the owner 2026-11-06: an X on the standard round button, not the shrink arrows.
     expect(collapse.className).toContain(CIRCLE_CLOSE_BUTTON);
     expect(collapse.querySelector("svg.lucide-x")).not.toBeNull();
     expect(collapse.querySelector("svg.lucide-minimize-2")).toBeNull();

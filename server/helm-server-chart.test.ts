@@ -12,7 +12,7 @@ describe("sagax server chart", () => {
     expect(chart).toContain("Nothing in this repo applies it");
     const readme = text("README.md");
     expect(readme).toContain("No workflow applies it");
-    expect(readme.toLowerCase()).not.toContain("gox");
+    expect(readme.toLowerCase()).not.toContain("acme");
     const rendered = ["templates/deployment.yaml", "templates/service.yaml", "templates/configmap.yaml", "values.yaml"]
       .map(text).join("\n");
     expect(rendered).not.toMatch(/\bhelm upgrade\b|\bkubectl apply\b/);

@@ -40,7 +40,7 @@ const render = () => renderToStaticMarkup(createElement(SettingsModal));
 describe("Settings Simple and Advanced", () => {
   it("starts in Advanced: the switch is on and the technical sections show", () => {
     const html = render();
-    // JC 2026-11-08: the switch moved to Developer (on by default); General no longer shows it
+    // the owner 2026-11-08: the switch moved to Developer (on by default); General no longer shows it
     expect(html).not.toContain('aria-label="Advanced mode"');
     fixture.section = "developer";
     const dev = render();
@@ -78,7 +78,7 @@ describe("Settings Simple and Advanced", () => {
   it("shows the current sections when Advanced is the stored choice", () => {
     stored.set("sagax.interfaceMode.v1", "advanced");
     const html = render();
-    // JC 2026-11-08: the switch moved to Developer (on by default); General no longer shows it
+    // the owner 2026-11-08: the switch moved to Developer (on by default); General no longer shows it
     expect(html).not.toContain('aria-label="Advanced mode"');
     fixture.section = "developer";
     const dev = render();

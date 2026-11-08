@@ -86,7 +86,7 @@ describe("auto-pause words and choices (2026-10-26)", () => {
   });
 });
 
-// JC 2026-11-01: "it saturates easily, queues really badly". A queued run
+// the owner 2026-11-01: "it saturates easily, queues really badly". A queued run
 // shows its place: queued runs start oldest first, per bot.
 describe("routineQueuePosition (2026-11-01)", () => {
   it("is the run's rank among the queued runs of its bot, oldest first", async () => {

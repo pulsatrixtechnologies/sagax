@@ -16,7 +16,7 @@ vi.hoisted(() => {
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {} });
 });
 // Thread mode on: these cases cover the Go to conversation chip, which the
-// unified chat (the default) never draws (JC 2026-11-06, unified-chat.guard.test.ts).
+// unified chat (the default) never draws (the owner 2026-11-06, unified-chat.guard.test.ts).
 vi.mock("@/lib/thread-preferences", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/thread-preferences")>()),
   useShowThreads: () => true,

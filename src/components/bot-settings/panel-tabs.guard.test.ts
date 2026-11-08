@@ -1,6 +1,6 @@
-// Guard (JC, 2026-11-05, #2085, Refs #2086; #2125): the bot panel has only the
+// Guard (the owner, 2026-11-05, #2085, Refs #2086; #2125): the bot panel has only the
 // Activity and Library tabs, as the reference design, plus Coding only while
-// the bot's coding chat is open (JC 2026-11-06). No Roles tab: a recent
+// the bot's coding chat is open (the owner 2026-11-06). No Roles tab: a recent
 // refusal is one row in Activity > Permissions. No Computer tab: Activity >
 // Computer opens the computer view. Listed in GUARD_TESTS (verify-merge.mjs).
 import { readFileSync } from "node:fs";

@@ -77,7 +77,7 @@ describe("resize handles", () => {
       expect(source).not.toContain("omb-settings-panel-width");
     });
 
-    it("opens the bot panel at 308 px like Grok Bot, other panels unchanged (#2141)", () => {
+    it("opens the bot panel at 308 px like the reference app, other panels unchanged (#2141)", () => {
       expect(shared).toMatch(/BOT_PANEL_BOUNDS[^}]*key: BOT_PANEL_WIDTH_KEY,\s*min: 308,[^}]*fallback: 308/);
       expect(read("BotSettingsDialog.tsx")).toContain("useDockedPanelWidth(BOT_PANEL_BOUNDS)");
       for (const file of ["PersonPanel.tsx", "GroupPanel.tsx"]) expect(read(file)).toContain("useDockedPanelWidth()");

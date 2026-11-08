@@ -31,7 +31,7 @@ function mount(element: React.ReactElement): HTMLElement {
 beforeAll(() => setLocale("fr"));
 
 describe("role chip", () => {
-  it("no role anywhere on a chat step, even when the detail is open (JC #2033)", () => {
+  it("no role anywhere on a chat step, even when the detail is open (the owner #2033)", () => {
     const tool = { name: "cw_psa_find_tickets", ok: true, role: { slug: "service-desk", name: "Service Desk", reason: "routine" as const } };
     const view = mount(createElement(ToolActivity, { tool, defaultOpen: true }));
     expect(view.querySelector("[data-role-chip]")).toBeNull();

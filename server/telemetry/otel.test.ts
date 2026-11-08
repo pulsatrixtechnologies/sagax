@@ -55,13 +55,13 @@ describe("createTracer", () => {
   it("posts batches of at most 512 with the configured headers and service name", async () => {
     const posts: { url: string; headers: Record<string, string>; body: any }[] = [];
     const fetch: TelemetryFetch = async (url, init) => { posts.push({ url, headers: init.headers, body: JSON.parse(init.body) }); return { ok: true, status: 200 }; };
-    const tracer = createTracer({ dataDir: null, target: () => ({ endpoint: "https://otel.example.test", headers: { authorization: "Bearer x" }, serviceName: "gox-sagax" }), fetch, manual: true });
+    const tracer = createTracer({ dataDir: null, target: () => ({ endpoint: "https://otel.example.test", headers: { authorization: "Bearer x" }, serviceName: "acme-sagax" }), fetch, manual: true });
     for (let i = 0; i < SPAN_BATCH_MAX + 3; i += 1) tracer.emit(span(i));
     await tracer.flush();
     expect(posts.map((post) => post.body.resourceSpans[0].scopeSpans[0].spans.length)).toEqual([SPAN_BATCH_MAX, 3]);
     expect(posts[0]!.url).toBe("https://otel.example.test/v1/traces");
     expect(posts[0]!.headers.authorization).toBe("Bearer x");
-    expect(posts[0]!.body.resourceSpans[0].resource.attributes[0]).toEqual({ key: "service.name", value: { stringValue: "gox-sagax" } });
+    expect(posts[0]!.body.resourceSpans[0].resource.attributes[0]).toEqual({ key: "service.name", value: { stringValue: "acme-sagax" } });
     expect(tracer.stats().exported).toBe(SPAN_BATCH_MAX + 3);
   });
 

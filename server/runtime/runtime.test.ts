@@ -1045,7 +1045,7 @@ describe("Runtime: a requester that asked the person while its teammates worked"
     const w = world(undefined, { decisionCardQueueMs: 1_000, queueMs: 1e9 });
     w.runner.canStartAnswer = false;
     const root = w.runtime.begin(beginReq());
-    const child = ok(w.runtime.enqueue(toBot("wren", root.id, "Pose a GO card to JC.", {
+    const child = ok(w.runtime.enqueue(toBot("wren", root.id, "Pose a GO card to AB.", {
       doneWhen: "tool:ask_choice",
     })));
     w.runtime.tick();

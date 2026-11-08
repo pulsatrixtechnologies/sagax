@@ -260,7 +260,7 @@ describe("sidebar edge drag", () => {
   });
 });
 
-describe("the sidebar by window width (Grok Bot's narrow window, 2026-11-01)", () => {
+describe("the sidebar by window width (the reference app's narrow window, 2026-11-01)", () => {
   it("is a drawer on a phone, the rail from sm to md, the person's own above", () => {
     expect([SIDEBAR_DRAWER_BELOW, SIDEBAR_AUTO_RAIL_BELOW]).toEqual([640, 768]);
     expect(sidebarViewportFor(390)).toBe("phone");

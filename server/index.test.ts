@@ -1019,7 +1019,7 @@ beforeAll(async () => {
         }));
       }
       // Google's answer when the connection lacks a permission the action
-      // needs, as Composio relays it (MOCA-273).
+      // needs, as Composio relays it (ticket 273).
       const calledTool = body && typeof body === "object" ? ((body as { params?: { name?: unknown } }).params?.name) : undefined;
       if (calledTool === "GMAIL_CREATE_FILTER") {
         res.writeHead(200, { "content-type": "application/json" });

@@ -13,7 +13,7 @@ import { createReachMeStore } from "./store.ts";
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); setReachMeSmsHandler(null); });
 
-const OUT: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Cryptic", code: "KM3X", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false, language: "fr" };
+const OUT: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Nimbus", code: "KM3X", kind: "approval", title: "Run a command?", line: "npm test", confidential: false, needsKey: false, language: "fr" };
 
 function setup(line: unknown, sms: VoiceAnswer = { ok: true, value: { sent: true, sid: "SM1" } }) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-reach-sms-"));

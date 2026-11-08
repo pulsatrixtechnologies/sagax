@@ -7,7 +7,7 @@ const TELEPHONY_REDIRECT_REFUSAL = TELEPHONY_WRITE_REFUSAL;
 describe("telephonyRefusal", () => {
   it("refuses every number purchase or change, any profile prefix", () => {
     expect(telephonyRefusal("twilio_api_write", { resource: "IncomingPhoneNumbers", action: "create", set: { PhoneNumber: "+15145550142" } })).toBe(TELEPHONY_NUMBER_REFUSAL);
-    expect(telephonyRefusal("mcp__perspicax_gox__twilio_api_write", { resource: "Accounts_IncomingPhoneNumbers_Local", action: "create" })).toBe(TELEPHONY_NUMBER_REFUSAL);
+    expect(telephonyRefusal("mcp__perspicax_acme__twilio_api_write", { resource: "Accounts_IncomingPhoneNumbers_Local", action: "create" })).toBe(TELEPHONY_NUMBER_REFUSAL);
     expect(telephonyRefusal("twilio_api_write", { resource: "IncomingPhoneNumbers", action: "update", id: "PN1", set: { VoiceUrl: "https://x" } })).toBe(TELEPHONY_NUMBER_REFUSAL);
     expect(telephonyRefusal("twilio_api_write", { resource: "IncomingPhoneNumbers", action: "delete", id: "PN1" })).toBe(TELEPHONY_NUMBER_REFUSAL);
     expect(telephonyRefusal("twilio_api_action", { action: "CreateIncomingPhoneNumber" })).toBe(TELEPHONY_NUMBER_REFUSAL);
@@ -56,7 +56,7 @@ describe("telephonyRefusal", () => {
     expect(telephonyRefusal("twilio_api_Calls_write", { action: "create", set: { To: "+15145550142" } })).toBe(TELEPHONY_CALL_REFUSAL);
     expect(telephonyRefusal("twilio_api_IncomingPhoneNumbers_write", { action: "create" })).toBe(TELEPHONY_NUMBER_REFUSAL);
     expect(telephonyRefusal("twilio_api_Messages_write", { action: "create", set: { To: "+15145550142" } })).toBeNull();
-    expect(telephonyRefusal("mcp__perspicax-gox__twilio-api__query", { resource: "Calls" })).toBeNull();
+    expect(telephonyRefusal("mcp__perspicax-acme__twilio-api__query", { resource: "Calls" })).toBeNull();
   });
 
   it("allows reads, dry runs and other profiles", () => {

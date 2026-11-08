@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// JC 2026-11-06: Team map's header is THE Tools page standard, through the
+// the owner 2026-11-06: Team map's header is THE Tools page standard, through the
 // shared PageHeader: icon, title, count, subtitle, then an outlined + Add.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

@@ -57,7 +57,7 @@ describe("GrokBridgeService", () => {
     const view = service.saveLink("pr_ada", {
       webhookUrl: "https://grok.example/hook",
       key: "super-secret-link-key",
-      bots: ["Cryptic"],
+      bots: ["Nimbus"],
       enabled: true,
     });
     expect(view.linked).toBe(true);

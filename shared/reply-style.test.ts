@@ -18,7 +18,7 @@ describe("cleanReplyStyle", () => {
   });
 
   it("names a raw ConnectWise ticket link by its number", () => {
-    const url = "https://na.myconnectwise.net/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=297048&companyName=gox";
+    const url = "https://na.myconnectwise.net/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=297048&companyName=acme";
     expect(cleanReplyStyle(`Source : ${url}`)).toBe("Source : billet #297048");
     expect(cleanReplyStyle(`Billet #297048 (${url})`)).toBe("Billet #297048");
     expect(cleanReplyStyle(`Voir [le billet](${url}).`)).toBe(`Voir [le billet](${url}).`);

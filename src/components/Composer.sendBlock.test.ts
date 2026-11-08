@@ -48,7 +48,7 @@ const { setLocale } = await import("@/lib/i18n");
 const { SEND_BLOCK_RECHECK_MS } = await import("@/lib/send-state");
 
 const bot: Bot = {
-  id: "bot", threadId: "selected", name: "Harrie", title: "", description: "", color: "teal",
+  id: "bot", threadId: "selected", name: "Hollis", title: "", description: "", color: "teal",
   notifications: true, unread: false, busy: false, messages: [],
   modelSelection: { instanceId: "pi", model: "deskabc123::local-model" },
   tasks: [{ threadId: "selected", title: "Selected", createdAt: 1, busy: false, activity: "idle",

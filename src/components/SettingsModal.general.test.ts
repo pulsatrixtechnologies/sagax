@@ -135,7 +135,7 @@ describe("Settings > General, the reference design's layout", () => {
     expect(html).not.toContain(">Thème</div>");
     // #2080 L2: tours live on App, not Account. #2090: Updates is its own page.
     expect(html).not.toContain(">Visites guidées</div>");
-    // JC 2026-11-07: Général first, À propos last
+    // the owner 2026-11-07: Général first, À propos last
     expect(html).toContain('<option value="general">Général</option><option value="updates">Mises à jour</option>');
     expect(html).toContain('<option value="about">À propos</option>');
     expect(html).not.toContain("Aide et à propos");
@@ -181,7 +181,7 @@ describe("Settings search after the move", () => {
       expect(sectionMatches(section("about"), query), query).toBe(false);
       expect(sectionMatches(section("general"), query), query).toBe(false);
     }
-    // JC 2026-11-08: Advanced mode moved to Developer
+    // the owner 2026-11-08: Advanced mode moved to Developer
     expect(sectionMatches(section("developer"), "advanced mode")).toBe(true);
     expect(sectionMatches(section("general"), "advanced mode")).toBe(false);
     for (const query of ["open at login", "hotkey", "send key", "spellcheck", "hardware acceleration", "app icon"]) {

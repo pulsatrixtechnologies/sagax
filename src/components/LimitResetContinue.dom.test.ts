@@ -65,7 +65,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("EngineLimitIndicator (no banner above the chat, JC 2026-11-08)", () => {
+describe("EngineLimitIndicator (no banner above the chat, the owner 2026-11-08)", () => {
   it("is a quiet dot with the usage line as tooltip, never a banner", () => {
     const container = remount(createElement(EngineLimitIndicator, { engine: "claude", botId: "scout", threadId: "t-1" }));
     const dot = container.querySelector('[data-testid="engine-limit-indicator"]') as HTMLButtonElement;

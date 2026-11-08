@@ -384,7 +384,7 @@ describe("start_thread on yourself", () => {
     }
   }, 60_000);
 
-  // Grok Bot parity D1: a sub-agent of one's own that is read-only, and one
+  // the reference app parity D1: a sub-agent of one's own that is read-only, and one
   // resumed by its id instead of opening a fresh thread.
   it("opens a read-only thread in Ask and resumes its own earlier thread by id", async () => {
     const bot = await createBot("Rhea", "gated");

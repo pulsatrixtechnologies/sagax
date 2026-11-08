@@ -161,7 +161,7 @@ describe("loop guard, setting off", () => {
     // prod 2026-11-02: eight cw_psa_query calls with eight different
     // arguments, one 404, read as "Same call repeated 5×", twice
     const r = rig({ settings: { enabled: false } });
-    const id = "perspicax_pulsatrix_flow_jc__cw_psa_query";
+    const id = "perspicax_pulsatrix_flow_ab__cw_psa_query";
     for (let i = 0; i < 8; i++) {
       r.ask("other", id, T, id);
       r.play({ title: id, input: JSON.stringify({ resource: "tickets", conditions: `id=${i}` }) }, { ok: i !== 0, output: i ? "[]" : "404" });

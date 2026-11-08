@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// JC 2026-11-06 (hotfix 0.8.57): the bot panel's Coding tab. It shows only
+// the owner 2026-11-06 (hotfix 0.8.57): the bot panel's Coding tab. It shows only
 // while this bot's coding chat is the open conversation, comes forward when
 // that chat opens, holds the coding window's session and dev pods (portalled
 // by CodingChat into its host), and goes away as soon as the chat is left,
@@ -117,7 +117,7 @@ async function mount() {
   await settle();
 }
 
-describe("bot panel Coding tab (JC 2026-11-06)", () => {
+describe("bot panel Coding tab (the owner 2026-11-06)", () => {
   it("is absent outside a coding chat", async () => {
     await mount();
     expect(tabs()).toEqual(["activity", "library"]);
@@ -168,7 +168,7 @@ describe("bot panel Coding tab (JC 2026-11-06)", () => {
     expect(selected()).toBe("activity");
   });
 
-  it("holds the bot's pull requests and branches, not Activity (#2599, JC 2026-11-07)", async () => {
+  it("holds the bot's pull requests and branches, not Activity (#2599, the owner 2026-11-07)", async () => {
     activityItems = [shippedJob];
     await mount();
     expect(tabs()).toEqual(["activity", "library", "coding"]);

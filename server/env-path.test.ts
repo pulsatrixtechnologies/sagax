@@ -226,7 +226,7 @@ describe("augmentedPath", () => {
     }
   });
 
-  // MOCA-272: OMB installs Cursor from Settings with cursor.com's Windows
+  // ticket 272: OMB installs Cursor from Settings with cursor.com's Windows
   // script, which puts cursor-agent.* (and `agent` copies) in
   // %LOCALAPPDATA%\cursor-agent and adds that to the user PATH — which a
   // running app never sees. Simulated so it runs on every platform.

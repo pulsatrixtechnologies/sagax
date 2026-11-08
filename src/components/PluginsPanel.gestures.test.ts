@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // Plugins (Capabilities before #2104), the whole panel (PluginsPanel) driven
-// the way the owner uses it (redone 2026-11-06 as Grok Bot's Connect Apps):
+// the way the owner uses it (redone 2026-11-06 as the reference app's Connect Apps):
 // it opens on the home (the catalogue, "N connected", the one search, Bot
 // templates); "N connected" opens Manage ("Manage plugins and skills"), with
 // the install scope, one refresh and one + Add; Pages and Sources open from
@@ -179,7 +179,7 @@ describe("Plugins, driven like the owner does", () => {
   it("opens on Me without an organization permission and keeps its installs separate", async () => {
     owner = false;
     await open(true);
-    // Grok Bot's home has no scope line: the scope and its note are in Manage
+    // the reference app's home has no scope line: the scope and its note are in Manage
     expect($('[data-plugins-main="discover"] [data-plugins-scope-note]')).toBeNull();
     await go("installed");
     expect($('[data-plugins-scope-note="me"]')).not.toBeNull();
@@ -198,7 +198,7 @@ describe("Plugins, driven like the owner does", () => {
     expect(host.textContent).toContain("Personal Review");
   });
 
-  it("opens on the home; every view is one click away and has its way back (#2104, Grok Bot's Connect Apps)", async () => {
+  it("opens on the home; every view is one click away and has its way back (#2104, the reference app's Connect Apps)", async () => {
     paneProps = null;
     await open();
     expect(selected()).toBe("discover");

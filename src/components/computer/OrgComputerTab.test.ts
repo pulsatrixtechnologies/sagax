@@ -135,7 +135,7 @@ describe("Computer tab on an organization server", () => {
   it("names each state of the screen (calm asleep / waking / running)", () => {
     const running = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "vm", computerOff: true, botName: "Luna", initialLocal: status({ ...STALE, state: "running", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
     expect(running).toContain('data-computer-screen="running"');
-    // Running: live frame only, no badge, no Play / Pause / Stop (JC 2026-11-02).
+    // Running: live frame only, no badge, no Play / Pause / Stop (the owner 2026-11-02).
     expect(running).not.toContain('data-power=');
     expect(running).not.toContain("data-screen-controls");
     expect(running).not.toMatch(/aria-label="(Pause|Stop)"/);
@@ -358,7 +358,7 @@ describe("taking control of the server environment desktop", () => {
     expect(markup).toMatch(/data-takeover-control="release"/);
     expect(markup).toMatch(/data-takeover-control="drive"/);
     expect(markup).not.toContain("data-takeover-more");
-    // 2026-11-03 (JC): no full screen button, it did not work in the app.
+    // 2026-11-03 (the owner): no full screen button, it did not work in the app.
     expect(markup).not.toContain("data-takeover-fullscreen");
     // One close: the collapse button, labelled; no red close dot (2026-11-02).
     expect(markup).toMatch(/aria-label="Close and release control[^"]*"[^>]*data-takeover-close[^>]*data-takeover-collapse/);

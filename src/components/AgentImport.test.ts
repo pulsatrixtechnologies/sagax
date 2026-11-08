@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Import an agent (Grok Bot, Claude Code, Hermes): the package is made in the app, then
+// Import an agent (the reference app, Claude Code, Hermes): the package is made in the app, then
 // staged and imported through the bot import any bot creator may use; the
 // preview says what arrives (inert) and what was left out.
 import { act, createElement } from "react";
@@ -142,7 +142,7 @@ describe("import a Hermes agent", () => {
   });
 });
 
-describe("import a Grok Bot", () => {
+describe("import a the reference app", () => {
   it("turns the pasted export into a package and stages it for the person", async () => {
     let uploaded = "";
     fixture.api.mockImplementation(async (path: string, init?: RequestInit) => {

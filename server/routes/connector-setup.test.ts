@@ -96,7 +96,7 @@ const check = async (id: string, threadId = "t1") => {
 };
 
 describe("open_connector_setup (bot route)", () => {
-  it("a Grok bot on the person's own account: one card, grok.com, in the person's language", async () => {
+  it("a Grok-engine bot on the person's own account: one card, grok.com, in the person's language", async () => {
     const out = await open({ connector: "Microsoft Teams", language: "fr" });
     expect(out.status).toBe(200);
     expect(out.body).toMatchObject({ ok: true, route: "grok", label: "Microsoft Teams", status: "waiting" });

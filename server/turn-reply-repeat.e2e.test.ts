@@ -1,4 +1,4 @@
-// 2026-11-01 (JC: "it repeats itself several times"): a model that writes
+// 2026-11-01 (the owner: "it repeats itself several times"): a model that writes
 // the same text before each step of one turn ("Let me check the ticket.")
 // put one identical bubble in the chat per step. The real harness with the
 // fake claude CLI, whose scripted turn writes the same assistant item

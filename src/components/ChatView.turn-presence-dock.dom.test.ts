@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// JC 2026-11-06: the bot's working line ("Thinking it over 25s": dots or the
+// the owner 2026-11-06: the bot's working line ("Thinking it over 25s": dots or the
 // mascot, the phrase, the timer) always sits at the bottom of the chat, just
 // above the composer, on the message column, whatever the scroll. It lives in
 // the composer dock, never in the transcript (role=log), and only once.

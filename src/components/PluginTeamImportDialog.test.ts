@@ -6,9 +6,9 @@ describe("PluginTeamImportDialog", () => {
   it("offers only installed plugins, with their marketplace", () => {
     expect(installedPluginChoices([
       { name: "pulsatrix", plugins: [{ name: "pulsatrix-dev", installed: true }, { name: "other" }] },
-      { name: "gox", plugins: [{ name: "pulsatrix-flow-gox", installed: true }] },
+      { name: "acme", plugins: [{ name: "pulsatrix-flow-acme", installed: true }] },
       { name: "empty" },
-    ])).toEqual([{ marketplace: "pulsatrix", plugin: "pulsatrix-dev" }, { marketplace: "gox", plugin: "pulsatrix-flow-gox" }]);
+    ])).toEqual([{ marketplace: "pulsatrix", plugin: "pulsatrix-dev" }, { marketplace: "acme", plugin: "pulsatrix-flow-acme" }]);
   });
 
   it("shows each bot's model, never an instance id", () => {

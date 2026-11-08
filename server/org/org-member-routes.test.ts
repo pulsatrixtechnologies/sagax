@@ -411,7 +411,7 @@ describe("threads, approvals and nudges", () => {
     expect(got.body).toMatchObject({ code: "forbidden_permission", permission: "routines.runNowAny", message: "Only the bot's owner can run it now." });
   });
 
-  // JC 2026-11-01: "when I invoke routines they start but it is unclear what
+  // the owner 2026-11-01: "when I invoke routines they start but it is unclear what
   // started". sagax_routine_run (Perspicax) reaches this route.
   it("a start through the MCP passes on its receipt; a refused start says why and names the run under way", async () => {
     people.get("bob")!.permissions.push("clients.routinesRun");

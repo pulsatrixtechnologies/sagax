@@ -1,4 +1,4 @@
-// Settings > Developer (#2636, JC 2026-11-07: « move every item that is
+// Settings > Developer (#2636, the owner 2026-11-07: « move every item that is
 // technical into the developer section »). One page of the App group, open
 // to every member in Simple and Advanced mode, holds the technical options
 // that were spread over Appearance, General, Usage, Experimental, About and

@@ -1,4 +1,4 @@
-// Placement of remote computers (2026-11-01 JC):
+// Placement of remote computers (2026-11-01 the owner):
 // - Unattended hosts: Computer place picker only (attach/detach in its menu).
 // - Temporary attended sessions: on Activity, below Upcoming (#2125), only while active.
 import { readFileSync } from "node:fs";

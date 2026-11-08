@@ -57,10 +57,10 @@ describe("/api/telemetry", () => {
   it("saves, answers header names only, tests with the saved headers, and turns off", async () => {
     const { call, tested } = await serve();
     expect(JSON.parse((await call("GET", "/api/telemetry")).text)).toMatchObject({ enabled: false, endpoint: null, stats: { exported: 4 } });
-    const saved = await call("PUT", "/api/telemetry", { endpoint: "https://otel.example.test:4318", headers: { authorization: "Bearer hidden-token" }, serviceName: "gox" });
+    const saved = await call("PUT", "/api/telemetry", { endpoint: "https://otel.example.test:4318", headers: { authorization: "Bearer hidden-token" }, serviceName: "acme" });
     expect(saved.status).toBe(200);
     expect(saved.text).not.toContain("hidden-token");
-    expect(JSON.parse(saved.text)).toMatchObject({ enabled: true, headerNames: ["authorization"], serviceName: "gox" });
+    expect(JSON.parse(saved.text)).toMatchObject({ enabled: true, headerNames: ["authorization"], serviceName: "acme" });
     expect((await call("GET", "/api/telemetry")).text).not.toContain("hidden-token");
     expect((await call("POST", "/api/telemetry/test", { endpoint: "https://otel.example.test:4318", headers: { authorization: "" } })).status).toBe(200);
     expect(tested[0]).toEqual({ endpoint: "https://otel.example.test:4318", headers: { authorization: "Bearer hidden-token" } });

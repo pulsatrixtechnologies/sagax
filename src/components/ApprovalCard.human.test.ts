@@ -189,7 +189,7 @@ describe("a Grok gateway connector call (#1931)", () => {
   const ID = "cursor__user-pulsatrix-connectwise-profile_5fuse___23";
   const grokAsk = (): Message => ({
     id: "g", role: "bot", kind: "options", at: 1,
-    card: { title: "Approval needed", subtitle: ID, toolInput: '{"profile":"gox"}', options: ["Allow", "Deny"], requestId: "req-g", tool: "other", mcpTool: ID },
+    card: { title: "Approval needed", subtitle: ID, toolInput: '{"profile":"acme"}', options: ["Allow", "Deny"], requestId: "req-g", tool: "other", mcpTool: ID },
   });
 
   it("names the real connector and tool in the title and the full request, never 'other', 'cursor' or '23'", () => {
@@ -199,7 +199,7 @@ describe("a Grok gateway connector call (#1931)", () => {
     expect(view.title).not.toMatch(/\b23\b|5f|User /);
     expect(view).toMatchObject({ tool: "profile_use", server: "pulsatrix-connectwise" });
     expect(view.plain).toBeUndefined();
-    expect(view.args).toContain("gox");
+    expect(view.args).toContain("acme");
     const details = renderToStaticMarkup(createElement(TechnicalDetails, { tool: view.tool, server: view.server, args: view.args, defaultOpen: true }));
     expect(details).toContain("profile_use");
     expect(details).not.toContain(">other<");

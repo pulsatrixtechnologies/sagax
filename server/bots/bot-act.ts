@@ -45,7 +45,7 @@ const PENDING_CAP = 32;
 const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type PerformActor =
-  | { kind: "person"; sessionId: string; personKey: string; scopes: Array<"admin" | "client"> }
+  | { kind: "person"; sessionId: string; personKey: string; scopes: Array<"admin" | "client">; routine?: true }
   | { kind: "operator" };
 
 export type BotActAnswerer =
@@ -125,7 +125,7 @@ export type BotActDeps = {
 };
 
 const NONE_REASON: Record<string, string> = {
-  automation: "A routine or a webhook cannot act as a person.",
+  automation: "This routine has no owner to act for.",
   guest: "A guest turn cannot act as a person.",
   unproven: "This turn is not tied to a signed-in person.",
   stale: "This turn's sender was not proven.",
@@ -200,9 +200,15 @@ export function createBotActService(deps: BotActDeps): BotActService {
       let scopes: string[];
       if (actor.kind === "person") {
         const session = deps.sessionForPerson(actor.personKey);
-        if (!session) return refuse(403, "This person's session is no longer valid.");
-        performActor = { kind: "person", sessionId: session.id, personKey: actor.personKey, scopes: session.scopes };
-        scopes = session.scopes;
+        if (session) {
+          performActor = { kind: "person", sessionId: session.id, personKey: actor.personKey, scopes: session.scopes, ...(actor.routine ? { routine: true as const } : {}) };
+          scopes = session.scopes;
+        } else if (actor.routine) {
+          // #2701: the owner is not signed in while their routine runs: the
+          // act runs as them on a one-request session (performRoute, actAs)
+          performActor = { kind: "person", sessionId: "", personKey: actor.personKey, scopes: ["client"], routine: true };
+          scopes = ["client"];
+        } else return refuse(403, "This person's session is no longer valid.");
       } else {
         performActor = { kind: "operator" };
         scopes = ["admin", "client"];
@@ -245,9 +251,15 @@ export function createBotActService(deps: BotActDeps): BotActService {
       let scopes: string[];
       if (actor.kind === "person") {
         const session = deps.sessionForPerson(actor.personKey);
-        if (!session) return refuse(403, "This person's session is no longer valid.");
-        performActor = { kind: "person", sessionId: session.id, personKey: actor.personKey, scopes: session.scopes };
-        scopes = session.scopes;
+        if (session) {
+          performActor = { kind: "person", sessionId: session.id, personKey: actor.personKey, scopes: session.scopes, ...(actor.routine ? { routine: true as const } : {}) };
+          scopes = session.scopes;
+        } else if (actor.routine) {
+          // #2701: the owner is not signed in while their routine runs: the
+          // act runs as them on a one-request session (performRoute, actAs)
+          performActor = { kind: "person", sessionId: "", personKey: actor.personKey, scopes: ["client"], routine: true };
+          scopes = ["client"];
+        } else return refuse(403, "This person's session is no longer valid.");
       } else {
         performActor = { kind: "operator" };
         scopes = ["admin", "client"];

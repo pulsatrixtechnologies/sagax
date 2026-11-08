@@ -136,7 +136,7 @@ describe("bot act", () => {
     expect(narrowed.body.held).toBeUndefined();
     expect(full.performed).toHaveLength(2);
     for (const reason of [
-      { automation: true },
+      { automation: true, sharedServer: true },
       { guest: true },
       { requestUsable: false },
       { senderUnproven: true },
@@ -148,6 +148,23 @@ describe("bot act", () => {
     const missing = harness({ session: null });
     const gone = await missing.service.handle({ facts: facts(), raw: { method: "GET", path: "/api/bots" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
     expect(gone).toMatchObject({ status: 403 });
+  });
+
+  it("#2701: a routine acts for its owner, signed in or not, and as the operator on a personal server", async () => {
+    const signedIn = harness();
+    const live = await signedIn.service.handle({ facts: facts({ automation: true, sharedServer: true, provenPerson: null, routineOwner: "owner-1" }), raw: { method: "GET", path: "/api/bots" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
+    expect(live.status).toBe(200);
+    expect(signedIn.performed[0]?.actor).toMatchObject({ kind: "person", personKey: "owner-1", sessionId: "wide", routine: true });
+    const away = harness({ session: null });
+    const out = await away.service.handle({ facts: facts({ automation: true, sharedServer: true, provenPerson: null, routineOwner: "owner-1" }), raw: { method: "GET", path: "/api/bots" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
+    expect(out.status).toBe(200);
+    expect(away.performed[0]?.actor).toEqual({ kind: "person", sessionId: "", personKey: "owner-1", scopes: ["client"], routine: true });
+    const admin = await away.service.handle({ facts: facts({ automation: true, sharedServer: true, provenPerson: null, routineOwner: "owner-1" }), raw: { method: "POST", path: "/api/admin/settings" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
+    expect(admin.status).toBe(403);
+    const solo = harness();
+    const desk = await solo.service.handle({ facts: facts({ automation: true, provenPerson: null }), raw: { method: "GET", path: "/api/bots" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
+    expect(desk.status).toBe(200);
+    expect(solo.performed[0]?.actor).toEqual({ kind: "operator" });
   });
 
   it("in auto, runs a write on the person's own bot and the route still refuses another person's bot", async () => {

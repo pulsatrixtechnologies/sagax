@@ -31,7 +31,13 @@ async function performBotActRoute(actor: PerformActor, target: RouteTarget, maxC
     body = JSON.stringify(target.body);
   }
   let revokeId: string | null = null;
-  if (actor.kind === "person") {
+  if (actor.kind === "person" && actor.routine && !actor.sessionId) {
+    // #2701: a routine acting for its owner while they are signed out
+    const delegated = host.sessions.actAs({ principalId: actor.personKey, scopes: actor.scopes, label: "Routine act" });
+    if (!delegated) return { status: 403, text: "This routine's owner cannot be acted for." };
+    headers.set("authorization", `Bearer ${delegated.token}`);
+    revokeId = delegated.session.id;
+  } else if (actor.kind === "person") {
     const delegated = host.sessions.delegate(actor.sessionId);
     if (!delegated) return { status: 403, text: "This person's session is no longer valid." };
     headers.set("authorization", `Bearer ${delegated.token}`);

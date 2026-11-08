@@ -22,6 +22,8 @@ function actTurnFacts(threadId: string, generation: string) {
     requestUsable: Boolean(request?.messageId) && request?.stopped !== true && Boolean(request?.generations.has(generation)),
     senderUnproven: Boolean(rawSender) && provenPerson === null,
     provenPerson,
+    // #2701: a routine acts for the owner whose credentials it runs on
+    routineOwner: request?.automation && host.turnRoutineLineage.has(threadId) ? host.turnRoutinePayers.get(threadId)?.trim() || null : null,
     sharedServer: host.LOOPBACK.trust === "service" || host.IDENTITY.kind === "perspicax" || host.HOSTED_WORKSPACE
   };
 

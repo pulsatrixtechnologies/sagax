@@ -378,7 +378,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   ] });
   if (path === `${bots}/inbound-mail`) return json({ available: true, address: "scout@northwind.example", enabled: true });
   if (path === `${bots}/reach-me`) return json({ saved: true, settings: { channels: ["push", "email"], hours: { always: true } }, channels: { push: { ready: true, devices: 2 }, email: { ready: true } } });
-  if (path === `${bots}/background-brief`) return json({ apps: 3, settings: { enabled: true, at: "08:00" }, suggestions: ["Check the calendar for the day", "Scan unread email from clients"] });
+  if (path === `${bots}/background-brief`) return json({ apps: 3, screenContextAvailable: true, settings: { enabled: true, at: "08:00", screenContext: true }, suggestions: ["Check the calendar for the day", "Scan unread email from clients"] });
   if (path === `${bots}/tool-grants`) return json({ grants: [] });
   if (path === `${bots}/lifecycle-hooks`) return json({ enabled: true, events: ["turn.start", "turn.end"] });
   if (path === `${bots}/roles/rules`) return json({ rules: [{ id: "rr1", from: { slug: "finance", name: "Finance" }, to: { slug: "", name: "Me" }, path: "/finance/invoices", ownerId: "pr_alex", createdAt: NOW - 4 * DAY }] });

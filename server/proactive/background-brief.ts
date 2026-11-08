@@ -58,6 +58,9 @@ export interface BriefSettings {
   at: string;
   /** IANA time zone of `at` (America/Toronto). */
   timeZone: string;
+  /** #2699: the person let the bot see which app and window are in front
+   * on this computer (server/proactive/screen-context.ts). Off by default. */
+  screenContext: boolean;
 }
 
 export interface BriefSuggestion {
@@ -109,6 +112,7 @@ const settingsSchema = z.object({
   // files written before 2026-10-29 have no time: the default one
   at: z.string().regex(HHMM).optional(),
   timeZone: z.string().min(1).max(64).optional(),
+  screenContext: z.boolean().optional(),
 });
 
 const botSchema = z.object({
@@ -234,6 +238,7 @@ export function cleanBriefSettings(input: Partial<BriefSettings> | undefined, pr
     subjects,
     at,
     timeZone: zone && validTimeZone(zone) ? zone : previous?.timeZone ?? serverTimeZone(),
+    screenContext: typeof input?.screenContext === "boolean" ? input.screenContext : previous?.screenContext ?? false,
   };
 }
 
@@ -296,8 +301,13 @@ export class BriefStore {
   /** The settings in force: the person's own, else the default. */
   settings(botId: string): BriefSettings {
     const saved = this.bot(botId).settings;
-    if (saved) return cleanBriefSettings(saved, { enabled: saved.enabled, everyHours: saved.everyHours, subjects: saved.subjects, at: saved.at ?? BRIEF_DEFAULT_AT, timeZone: saved.timeZone ?? serverTimeZone() });
-    return { enabled: this.defaultEnabled(botId), everyHours: 4, subjects: [], at: BRIEF_DEFAULT_AT, timeZone: serverTimeZone() };
+    if (saved) return cleanBriefSettings(saved, { enabled: saved.enabled, everyHours: saved.everyHours, subjects: saved.subjects, at: saved.at ?? BRIEF_DEFAULT_AT, timeZone: saved.timeZone ?? serverTimeZone(), screenContext: saved.screenContext ?? false });
+    return { enabled: this.defaultEnabled(botId), everyHours: 4, subjects: [], at: BRIEF_DEFAULT_AT, timeZone: serverTimeZone(), screenContext: false };
+  }
+
+  /** #2699: the bots whose person turned screen context on. */
+  screenContextBots(): string[] {
+    return Object.entries(this.data.bots).filter(([, row]) => row.settings?.screenContext === true).map(([botId]) => botId);
   }
 
   view(botId: string): { settings: BriefSettings; suggestions: BriefSuggestion[]; costUsd: number; lastPassAt?: number } {

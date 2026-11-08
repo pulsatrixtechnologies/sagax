@@ -52,7 +52,9 @@ import { directWakeVerdict, type DirectTriggers } from "../../shared/direct-trig
 
 /** 2026-11-08 (#2691): "sms" is a text on the bot's phone line from someone
  * else than its owner, when no Bot phone trigger took it. */
-export type ProactiveSource = "mail" | "calendar" | "run" | "bot" | "peer" | "webhook" | "sms" | "suggestion";
+/** #2699: "screen" is a moment the person stayed on (front app and window),
+ * when they turned screen context on (server/proactive/screen-context.ts). */
+export type ProactiveSource = "mail" | "calendar" | "run" | "bot" | "peer" | "webhook" | "sms" | "suggestion" | "screen";
 
 export interface ProactiveEvent {
   botId: string;
@@ -173,6 +175,8 @@ export function proactiveRelevance(event: ProactiveEvent): string | null {
     case "suggestion":
       // #2693: the person tapped "Fais-le" on a daily suggestion
       return "a daily suggestion the person accepted";
+    case "screen":
+      return "the person stayed on something on their screen";
   }
 }
 
@@ -613,8 +617,15 @@ export const PEER_WAKE_RULES = [
   "Reply to a teammate only when it is waiting on something from you. Never send a reply just to acknowledge: replies count against the hop limit and a chain of bots stops there.",
 ].join(" ");
 
-/** What a wake run is told to do before the fenced events. */
-export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "events" | "more">, opts: { accepted?: boolean } = {}): string {
+/** #2699: a wake on what the person has in front of them. */
+export const SCREEN_WAKE_RULES = [
+  "Screen: the person has stayed on the app and window below for a few minutes, and let you see it. Offer help only when you have something concrete and useful for that exact work (a fact, a draft, a next step you can take);",
+  "then say it in ONE short message. Otherwise end with NOTHING_TO_REPORT. Never comment on what they do or for how long.",
+].join(" ");
+
+/** What a wake run is told to do before the fenced events. `screen` is
+ * the fenced screen context (#2699), when the person turned it on. */
+export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "events" | "more">, opts: { accepted?: boolean; screen?: string } = {}): string {
   const how = opts.accepted
     ? "The person accepted your proposal to handle these events: handle them now, at your usual approval level and rules."
     : "You are proactive: do what is useful for the person, at your usual approval level and rules, exactly as if they had asked. Org Ask/Deny rules and the person's own rules still apply. Before any write, send, payment or contact, plan it in one short line (what you would do); Sagax records that dry run on this wake, then the ordinary approval path runs the step. Never invent an extra approval card of your own.";
@@ -629,8 +640,10 @@ export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "ev
     ...(batch.events.some((event) => event.source === "peer") ? ["", PEER_WAKE_RULES] : []),
     ...(batch.events.some((event) => event.source === "suggestion") ? ["", SUGGESTION_WAKE_RULES] : []),
     ...(batch.events.some((event) => event.source === "bot" && event.dm === true) ? ["", DM_WAKE_RULES] : []),
+    ...(batch.events.some((event) => event.source === "screen") ? ["", SCREEN_WAKE_RULES] : []),
     "",
     proactiveEventsBlock(batch.events, batch.more),
+    ...(opts.screen ? ["", opts.screen] : []),
   ].join("\n");
 }
 

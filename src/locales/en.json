@@ -619,6 +619,8 @@
   "brief.delivery": "It arrives in this conversation and the way you chose in Reach me.",
   "brief.noApps": "No app is connected. The queue stays empty.",
   "brief.queueEmpty": "The queue is empty.",
+  "brief.screen": "Let the bot see what is on my screen",
+  "brief.screenHint": "Only the app in front and its window title, once a minute, kept in memory for two hours on this computer. The bot uses it to propose help at the right time.",
   "brief.read": "Read connectors and MCP servers",
   "brief.title": "Background brief",
   "botAccess.grants.noListing": "No tools listed for this service yet. You can still grant all tools.",

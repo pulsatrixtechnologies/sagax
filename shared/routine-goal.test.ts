@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   ROUTINE_GOAL_MAX_CHECK_MS,
   ROUTINE_GOAL_MIN_CHECK_MS,
+  defaultNextCheck,
+  expireGoal,
+  goalPastDeadline,
   loadRoutineGoal,
+  progressMetric,
+  progressUnchanged,
   parseNextCheck,
   parseRoutineGoal,
   readGoalReport,
@@ -98,6 +103,70 @@ describe("stepGoal", () => {
       current = step.goal;
     }
     expect(problems.map(Boolean)).toEqual([false, true, false, false, true, false]);
+  });
+});
+
+describe("stagnation (prod case: stuck at 78,95 %)", () => {
+  const goal: RoutineGoal = { text: "Reach 100%", status: "active" };
+
+  it("reads the metric whatever its writing", () => {
+    expect(progressMetric("78,95 %")).toBe(78.95);
+    expect(progressMetric("toujours 78.95% (15 sur 19)")).toBe(78.95);
+    expect(progressMetric("15 of 19 done")).toBe(15);
+    expect(progressMetric("waiting on the vendor")).toBeUndefined();
+    expect(progressUnchanged("78,95 %", "Toujours bloqué à 78.95% (15/19)")).toBe(true);
+    expect(progressUnchanged("78,95 %", "84,21 %")).toBe(false);
+    expect(progressUnchanged("Waiting on vendor.", "waiting on vendor")).toBe(true);
+  });
+
+  it("rings with notes worded differently and a run without a note", () => {
+    const notes = ["78,95 % (15 sur 19)", "Toujours 78.95%", undefined, "bloqué à 78,95 %", "78,95%", undefined];
+    let current: RoutineGoal = { ...goal };
+    const problems: (string | undefined)[] = [];
+    notes.forEach((note, run) => {
+      const step = stepGoal(current, { report: "", status: "in_progress", ...(note ? { note } : {}) }, NOW + run * HOUR);
+      problems.push(step.problem);
+      current = step.goal;
+    });
+    // First note sets the progress; then 2 unchanged checks (3 in all) ring.
+    expect(problems.map(Boolean)).toEqual([false, false, true, false, false, true]);
+    expect(current.progress).toBe("78,95%");
+    expect(current.stalled).toBe(5);
+  });
+
+  it("a missing note never resets the count; real progress does", () => {
+    let current: RoutineGoal = { ...goal, progress: "78,95 %", stalled: 1 };
+    current = stepGoal(current, { report: "", status: "in_progress" }, NOW).goal;
+    expect(current.stalled).toBe(2);
+    current = stepGoal(current, { report: "" }, NOW).goal;
+    expect(current.stalled).toBe(3);
+    current = stepGoal(current, { report: "", status: "in_progress", note: "84,21 %" }, NOW).goal;
+    expect(current.stalled).toBeUndefined();
+  });
+});
+
+describe("deadline", () => {
+  const goal: RoutineGoal = { text: "Reach 100%", status: "active", deadline: NOW };
+
+  it("refuses a run past the deadline, after a short grace", () => {
+    expect(goalPastDeadline(goal, NOW)).toBe(false);
+    expect(goalPastDeadline(goal, NOW + 4 * 60_000)).toBe(false);
+    expect(goalPastDeadline(goal, NOW + HOUR)).toBe(true);
+    expect(goalPastDeadline({ ...goal, status: "achieved" }, NOW + HOUR)).toBe(false);
+    expect(goalPastDeadline({ text: "x", status: "active" }, NOW + HOUR)).toBe(false);
+  });
+
+  it("closes the goal with a final report", () => {
+    const closed = expireGoal({ ...goal, checks: 4, progress: "78,95 %" }, NOW + HOUR);
+    expect(closed.goal).toMatchObject({ status: "expired", expiredAt: NOW + HOUR });
+    expect(closed.report).toContain("Checks run: 4.");
+    expect(closed.report).toContain("Last progress: 78,95 %");
+    expect(closed.problem).toContain("deadline passed");
+  });
+
+  it("a default next check lands a day later, never past the deadline", () => {
+    expect(defaultNextCheck({ text: "x", status: "active" }, NOW)).toBe(NOW + 24 * HOUR);
+    expect(defaultNextCheck({ ...goal, deadline: NOW + 3 * HOUR }, NOW)).toBe(NOW + 3 * HOUR);
   });
 });
 

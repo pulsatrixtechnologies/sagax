@@ -45,12 +45,12 @@ describe("navigate", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("runs the update inside a transition typed by direction and scope, and marks the root while it plays", async () => {
+  it("a page change runs the update inside a transition typed by direction and scope, and marks the root while it plays", async () => {
     const update = vi.fn();
-    navigate(update, "back", "main");
+    navigate(update, "back", "page");
     expect(update).not.toHaveBeenCalled();
-    expect(started[0].types).toEqual(["nav-back", "nav-main"]);
-    expect(dataset).toEqual({ nav: "main", navDirection: "back" });
+    expect(started[0].types).toEqual(["nav-back", "nav-page"]);
+    expect(dataset).toEqual({ nav: "page", navDirection: "back" });
     await Promise.resolve();
     expect(update).toHaveBeenCalledTimes(1);
     transitions[0].finish();
@@ -59,64 +59,91 @@ describe("navigate", () => {
   });
 
   it("never holds input: a pointer, wheel or key press skips to the new state", () => {
-    navigate(vi.fn());
+    navigate(vi.fn(), "forward", "page");
     for (const type of ["pointerdown", "wheel", "keydown"]) expect(listeners.has(type)).toBe(true);
     listeners.get("pointerdown")!();
     expect(transitions[0].skipTransition).toHaveBeenCalled();
   });
 
   it("a second navigation skips the first", () => {
-    navigate(vi.fn());
-    navigate(vi.fn());
+    navigate(vi.fn(), "forward", "page");
+    navigate(vi.fn(), "forward", "page");
     expect(transitions[0].skipTransition).toHaveBeenCalled();
-    expect(dataset.nav).toBe("main");
+    expect(dataset.nav).toBe("page");
   });
 
   it("updates at once under reduced motion, without the API, or in a hidden window", () => {
     reduced = true;
     const first = vi.fn();
-    navigate(first);
+    navigate(first, "forward", "page");
     expect(first).toHaveBeenCalledTimes(1);
     reduced = false;
     (document as { visibilityState: string }).visibilityState = "hidden";
     const second = vi.fn();
-    navigate(second);
+    navigate(second, "forward", "page");
     expect(second).toHaveBeenCalledTimes(1);
     vi.stubGlobal("document", { visibilityState: "visible", documentElement: { dataset } });
     const third = vi.fn();
-    navigate(third);
+    navigate(third, "forward", "page");
     expect(third).toHaveBeenCalledTimes(1);
     expect(started).toEqual([]);
   });
 
-  it("opening or leaving a room never animates: the update runs, then the transition is skipped", async () => {
-    // the column on screen: a 1:1 (no room inside), 1000px wide
-    let frame = { width: 1000, height: 800, room: false };
-    const query = (selector: string) => selector === ".app-content-frame"
-      ? { getBoundingClientRect: () => ({ width: frame.width, height: frame.height }), querySelector: (inner: string) => (inner === "[data-room-view]" && frame.room ? {} : null) }
-      : null;
-    Object.assign(document as object, { querySelector: query });
+  describe("a main column swap (#2755)", () => {
+    let frame: { width: number; height: number; room: boolean };
+    let animations: Array<{ keyframes: Keyframe[]; options: KeyframeAnimationOptions; cancel: ReturnType<typeof vi.fn> }>;
+    beforeEach(() => {
+      frame = { width: 1000, height: 800, room: false };
+      animations = [];
+      const column = {
+        getBoundingClientRect: () => ({ width: frame.width, height: frame.height }),
+        querySelector: (inner: string) => (inner === "[data-room-view]" && frame.room ? {} : null),
+        animate: (keyframes: Keyframe[], options: KeyframeAnimationOptions) => {
+          const animation = { keyframes, options, cancel: vi.fn(), finished: new Promise(() => {}) };
+          animations.push(animation);
+          return animation;
+        },
+      };
+      Object.assign(document as object, { querySelector: (selector: string) => (selector === ".app-content-frame" ? column : null) });
+    });
 
-    // 1:1 to 1:1, same box: the cross-fade plays
-    navigate(() => {});
-    await Promise.resolve();
-    expect(transitions[0].skipTransition).not.toHaveBeenCalled();
+    it("draws the new view at once, with no view transition, then slides only it in from the direction of travel", () => {
+      const update = vi.fn();
+      navigate(update);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(started).toEqual([]);
+      expect(dataset).toEqual({});
+      expect(animations[0].keyframes[0]).toEqual({ opacity: 0, transform: "translateX(8px)" });
+      expect(animations[0].options.duration).toBe(200);
+      navigate(vi.fn(), "back");
+      expect(animations[1].keyframes[0]).toEqual({ opacity: 0, transform: "translateX(-8px)" });
+    });
 
-    // 1:1 to a room: no slide, no fade, no zoom
-    navigate(() => { frame = { ...frame, room: true }; });
-    await Promise.resolve();
-    expect(transitions[1].skipTransition).toHaveBeenCalled();
+    it("a second swap cancels the first one's slide", () => {
+      navigate(vi.fn());
+      navigate(vi.fn());
+      expect(animations[0].cancel).toHaveBeenCalled();
+      expect(animations).toHaveLength(2);
+    });
 
-    // a room back to a 1:1
-    navigate(() => { frame = { ...frame, room: false }; });
-    await Promise.resolve();
-    expect(transitions[2].skipTransition).toHaveBeenCalled();
+    it("never animates under reduced motion or in a hidden window", () => {
+      reduced = true;
+      navigate(vi.fn());
+      reduced = false;
+      (document as { visibilityState: string }).visibilityState = "hidden";
+      navigate(vi.fn());
+      expect(animations).toEqual([]);
+    });
 
-    // the column changes size (a panel docked beside it closes): the browser
-    // would stretch the old snapshot into the new box
-    navigate(() => { frame = { ...frame, width: 640 }; });
-    await Promise.resolve();
-    expect(transitions[3].skipTransition).toHaveBeenCalled();
+    it("opening or leaving a room, or a column that changes size, stands still", () => {
+      navigate(() => { frame = { ...frame, room: true }; });
+      navigate(() => { frame = { ...frame, room: false }; });
+      navigate(() => { frame = { ...frame, width: 640 }; });
+      expect(animations).toEqual([]);
+      // 1:1 to 1:1, same box: it slides in
+      navigate(() => {});
+      expect(animations).toHaveLength(1);
+    });
   });
 
   it("swapStandsStill: a room on either side, or a resized column; a same-size 1:1 swap may animate", () => {

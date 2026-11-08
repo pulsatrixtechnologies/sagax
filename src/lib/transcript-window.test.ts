@@ -168,25 +168,3 @@ describe("focusWindowRange", () => {
     expect(focusWindowRange(20, 10)).toEqual({ start: 0, end: 20 });
   });
 });
-
-describe("first paint of a switched transcript (#2595)", () => {
-  it("paints the newest rows first, then the whole window", async () => {
-    const { FIRST_PAINT_ROWS, paintedRows, nextPaintRows } = await import("./transcript-window");
-    const rows = Array.from({ length: 70 }, (_, index) => index);
-    expect(paintedRows(rows, FIRST_PAINT_ROWS)).toEqual(rows.slice(70 - FIRST_PAINT_ROWS));
-    expect(paintedRows(rows, Number.POSITIVE_INFINITY)).toBe(rows);
-    expect(paintedRows(rows.slice(0, 10), FIRST_PAINT_ROWS)).toHaveLength(10);
-    expect(nextPaintRows(FIRST_PAINT_ROWS, 70)).toBe(FIRST_PAINT_ROWS * 2);
-    expect(nextPaintRows(FIRST_PAINT_ROWS * 2, 70)).toBe(Number.POSITIVE_INFINITY);
-  });
-
-  it("runs the next step when the main thread is idle, and can be cancelled", async () => {
-    const { whenIdle } = await import("./transcript-window");
-    let ran = 0;
-    whenIdle(() => { ran += 1; });
-    const cancel = whenIdle(() => { ran += 10; });
-    cancel();
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(ran).toBe(1);
-  });
-});

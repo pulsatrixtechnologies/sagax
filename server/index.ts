@@ -122,6 +122,8 @@ import { mailIsCalendarInvite } from "../shared/direct-triggers.ts";
 import { parsePageTargetDefault } from "../shared/page-targets.ts";
 import { createProactiveProposalRoutes } from "./routes/proactive-proposals.ts";
 import { createProactiveMetricsRoutes } from "./routes/proactive-metrics.ts";
+import { createBotEventSubscriptionRoutes } from "./routes/bot-event-subscriptions.ts";
+import { BotEventSubscriptions } from "./bot-events/bot-event-subscriptions.ts";
 import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
 import { ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
 import { ProactiveProposals, ProactiveWaker, proactivePrompt, PeerNoticeHops, ProactivePendingFile, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
@@ -304,7 +306,7 @@ import { videoCredential } from "./video/video-credentials.ts";
 import { videoSourceMessage } from "./video/video-source.ts";
 import { videoStatusRow } from "./video/video-status.ts";
 import { createXaiVideoProvider, generatedMp4Chunks, openGeneratedVideo } from "./video/video-provider.ts";
-import { mediaProxyPolicyFromEnv, blockedAddressReason, defaultMediaProxyResolver } from "./media/media-proxy-guard.ts";
+import { mediaProxyPolicyFromEnv, blockedAddressReason, defaultMediaProxyResolver, checkMediaDestination } from "./media/media-proxy-guard.ts";
 import { createWebSearchRoutes } from "./routes/web-search.ts";
 import { createTelemetryRoutes } from "./routes/telemetry.ts";
 import { createTracer } from "./telemetry/otel.ts";
@@ -14215,6 +14217,8 @@ store.onChange((change) => {
       ownerApprovals.forgetBot(change.botId);
       // #2698: its proactivity metrics (a deletion during startup may come first)
       try { proactiveMetrics.forgetBot(change.botId); } catch { /* not ready yet */ }
+      // #2700: its event subscriptions and the ones that fed its routines
+      try { botEventSubscriptions.forgetBot(change.botId); } catch { /* not ready yet */ }
       try { artifactStore.removeBot(change.botId); }
       catch { console.error("[artifacts] Could not remove deleted bot's artifacts."); }
       try { botTaskStore.removeBot(change.botId); }
@@ -18741,6 +18745,25 @@ const proactiveMetrics = new ProactiveMetricsLedger({
 });
 proactiveProposals.observe((event) => proactiveMetrics.count(event.botId, event.kind));
 if (!process.env.VITEST) process.once("exit", () => proactiveMetrics.flush());
+/** #2700: outbound event subscriptions (URL or routine) of each bot. On the
+ * shared server a URL must resolve to public addresses only. */
+const botEventDestinationCheck = async (url: URL): Promise<void> => {
+  if (IDENTITY.kind === "perspicax") await checkMediaDestination(url);
+};
+const subscriptionRoutine = (id: string) => {
+  const routine = routines?.listRoutines().find((candidate) => candidate.id === id);
+  return routine ? { id: routine.id, botId: routine.botId, name: routine.name, prompt: routine.prompt, runOn: routine.runOn } : undefined;
+};
+const botEventSubscriptions = new BotEventSubscriptions({
+  file: process.env.VITEST ? null : join(DATA_DIR, "bot-event-subscriptions.json"),
+  checkDestination: botEventDestinationCheck,
+  routine: subscriptionRoutine,
+  enqueue: (input) => {
+    if (!routines) throw new Error("routines are not ready");
+    return routines.enqueueWebhook(input);
+  },
+  botName: (botId) => store.bot(botId)?.name || "Bot"
+});
 /** Control layer for each wake step: classify, dry-run writes, defer to
  * ordinary approval. Wired from tool starts on an active wake. */
 const proactiveEngine = new ProactiveEngine({
@@ -19242,6 +19265,7 @@ routines = new RoutineManager({
     syncRoutineRunToSource(run);
     if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId);
     if (run.proactive) proactiveMetrics.noteRun(run);
+    void botEventSubscriptions.publish(run);
     if (run.webhookId === REACH_TEAMS_WEBHOOK) void reachMeTeams?.runChanged(run);
   },
   onRunRequeued: (run) => {
@@ -19611,6 +19635,15 @@ ROUTES.push(createProactiveMetricsRoutes<BotRecord>({
   sees: (auth, bot) => auth.kind === "loopback" || listedBotVisible(bot, auth.session.principalId),
   seesAll: (auth, bot) => ownerOrAdminOf(auth, bot),
   read: (botId, days) => proactiveMetrics.read(botId, days)
+}));
+ROUTES.push(createBotEventSubscriptionRoutes<BotRecord>({
+  bot: (id) => store.bot(id) ?? undefined,
+  sees: (auth, bot) => auth.kind === "loopback" || listedBotVisible(bot, auth.session.principalId),
+  seesAll: (auth, bot) => ownerOrAdminOf(auth, bot),
+  ownerId: (auth) => (auth.kind === "session" ? auth.session.principalId?.trim() : "") || "local",
+  routine: subscriptionRoutine,
+  store: botEventSubscriptions,
+  checkDestination: botEventDestinationCheck
 }));
 /** 2026-11-05 (visible roles, batch 3): the composer's role picker. The
  * signed-in person's own held roles, live; the principal is the one a turn

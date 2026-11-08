@@ -154,6 +154,26 @@ withdraws its notice and removes the source backlink. A late model review
 re-reads the live address and falls back to the original execution thread.
 Verification: `docs/verification/peer-approvals.md`.
 
+## Event subscriptions (#2700, 2026-11-08)
+
+`BotEventSubscriptions` (`server/bot-events/bot-event-subscriptions.ts`,
+shapes in `shared/bot-event-subscriptions.ts`) pushes a bot's settled routine
+runs (run.reported / run.quiet / run.failed, proactive wakes left out) to a
+URL or to one of the owner's routines, in place of polling. URL: POST signed
+`X-Sagax-Signature: v1=<hex HMAC-SHA256 of "<X-Sagax-Timestamp>.<body>">`,
+redirect manual, 10 s timeout, retries 0 / 5 s / 30 s (none on a 4xx other
+than 408/429). On the shared server (Perspicax) `checkMediaDestination` blocks
+private destinations. Routine: the target runs with webhookId `sub:<id>` and
+the event as fenced data; a `sub:` run never feeds another routine target
+(loop guard) and runs confined unless the bot is at Full. Isolation: a run
+with runAs only reaches subscriptions of that owner. Store:
+`DATA_DIR/bot-event-subscriptions.json` (0600), 20 per bot, the secret shown
+once at creation. Routes `/api/bots/:id/event-subscriptions` (GET, POST,
+DELETE /:subId, POST /:subId/test) need sees + seesAll; UI under Settings >
+Developer > Per bot, after Webhooks. MCP resources/subscribe is not done
+(per-turn tokens on the Perspicax client). Coverage:
+`server/bot-events/bot-event-subscriptions.test.ts`.
+
 ## Proactive metrics (#2698, 2026-11-08)
 
 `ProactiveMetricsLedger` (`server/proactive/proactive-metrics.ts`, shapes in

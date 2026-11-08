@@ -6762,6 +6762,22 @@
         }
       }
     },
+    "About Sagax": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À propos de Sagax"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sobre o Sagax"
+          }
+        }
+      }
+    },
     "AI": {
       "localizations": {
         "fr": {
@@ -15960,6 +15976,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "CONFIDENTIEL"
+          }
+        }
+      }
+    },
+    "Context pods": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pods de contexte"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pods de contexto"
           }
         }
       }
@@ -53813,6 +53845,16 @@
         }
       }
     },
+    "Off by default. Shows Browse Bots in the sidebar menu, to find and add ready-made bots and teams.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé par défaut. Affiche Parcourir les bots dans le menu de la barre latérale, pour trouver et ajouter des bots et des équipes prêts à l'emploi."
+          }
+        }
+      }
+    },
     "OK": {
       "localizations": {
         "en": {
@@ -68481,6 +68523,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "As rotinas nunca foram autorizadas a agir em nome desta pessoa."
+          }
+        }
+      }
+    },
+    "Routines, parallel threads, automatic recovery": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routines, fils parallèles, reprise automatique"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotinas, conversas paralelas, recuperação automática"
           }
         }
       }

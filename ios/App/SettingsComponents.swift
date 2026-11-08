@@ -363,6 +363,10 @@ struct SettingsRow: View {
         case .none: 0
         case .toggle: 60.33 + 4
         case .progress: 28
+        // The value's own width plus the chevron, so a subtitle wraps
+        // before "5 min" instead of running under it.
+        case let .valueChevron(text):
+            40 + ceil((text as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 13.5)]).width) + 11.67
         default: 40
         }
     }

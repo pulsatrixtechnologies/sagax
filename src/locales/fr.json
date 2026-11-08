@@ -14387,5 +14387,15 @@
   "planHistory.rowTitle": "Pic de {peak} de la limite · {sessions} sessions de 5 heures",
   "planHistory.sessionTitle": "Pic de {peak} de la limite · {samples} relevés",
   "planHistory.empty": "Aucun historique pour l'instant. Sagax garde désormais chaque relevé des fenêtres de votre forfait, et les périodes passées s'affichent ici.",
-  "planHistory.failed": "L'historique d'utilisation du forfait n'a pas pu être lu."
+  "planHistory.failed": "L'historique d'utilisation du forfait n'a pas pu être lu.",
+  "routineEditor.goal.label": "Objectif",
+  "routineEditor.goal.placeholder": "Facultatif : ce que cette routine doit atteindre. Le bot choisit quand vérifier.",
+  "routineEditor.goal.deadline": "Échéance",
+  "routineEditor.goal.deadlineHint": "Facultative. Une fois passée, la routine s’arrête.",
+  "routineEditor.goal.status": "État",
+  "routineEditor.goal.active": "En cours",
+  "routineEditor.goal.achieved": "Atteint",
+  "routineEditor.goal.expired": "Échéance passée",
+  "routineEditor.goal.checks": "{count} vérifications",
+  "routineEditor.goal.nextCheck": "Prochaine vérification"
 }

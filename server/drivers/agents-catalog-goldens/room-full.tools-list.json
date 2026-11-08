@@ -2414,6 +2414,14 @@
             ],
             "description": "Routine-run effort on this bot's engine (chat unchanged). null resets."
           },
+          "goal": {
+            "type": [
+              "string",
+              "object",
+              "null"
+            ],
+            "description": "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Each run decides when to check next and the routine stops once reached. null removes."
+          },
           "delete_when_finished": {
             "type": "boolean",
             "description": "Auto-delete when the schedule ends and the last run settles (once/interval+end). false keeps it listed."
@@ -2791,6 +2799,14 @@
                   null
                 ],
                 "description": "Routine-run effort on this bot's engine (chat unchanged). null resets."
+              },
+              "goal": {
+                "type": [
+                  "string",
+                  "object",
+                  "null"
+                ],
+                "description": "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Each run decides when to check next and the routine stops once reached. null removes."
               },
               "delete_when_finished": {
                 "type": "boolean",

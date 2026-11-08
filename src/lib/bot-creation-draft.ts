@@ -2,6 +2,7 @@ import type { NewBotDefaults, BotDefaultsProfile, BotRoutineTemplate } from "../
 import { api, type Bot, type ModelSelection } from "@/state/store";
 import type { BotUpdatePatch } from "@/state/bot-patch-queue";
 import type { Routine, RoutineInput } from "./routines";
+import { parseRoutineGoal } from "../../shared/routine-goal";
 import type { ChosenPreset } from "./bot-presets";
 import { AVATAR_INPUT_MAX_BYTES } from "./avatar-input";
 
@@ -120,6 +121,7 @@ export class BotCreationDraft {
       subagentModel: input.subagentModel === undefined ? previous?.subagentModel : input.subagentModel || undefined,
       actAs: input.actAs === undefined ? previous?.actAs : input.actAs ?? undefined,
       effort: input.effort === undefined ? previous?.effort : input.effort ?? undefined,
+      goal: input.goal === undefined ? previous?.goal : (() => { const parsed = parseRoutineGoal(input.goal, previous?.goal); return parsed.ok ? parsed.goal : previous?.goal; })(),
       autoPauseAfter: input.autoPauseAfter ?? undefined,
       folder: input.folder === undefined ? previous?.folder : input.folder ?? undefined,
       durationMinutes: input.durationMinutes ?? previous?.durationMinutes ?? 30,

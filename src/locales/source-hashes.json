@@ -3754,6 +3754,16 @@
       "leftOut.reason.invalidYaml": "7d3f37d73776656c6fcdc49b0bd060e5b1e5941edc3be64221f0fd6d6fefb38a"
     },
     "fr": {
+      "routineEditor.goal.label": "cdbf6975e8a35b0d03558be6822dfae166482c24fb86b0433f60e8167f5c91e4",
+      "routineEditor.goal.placeholder": "d5477fea886ea5e544da9f9af89d2260a7ec628d21e433601e05b93a53000194",
+      "routineEditor.goal.deadline": "6fcb38ddc858fc8592e4f693d04a2ed1f7d607fa95b660f456bce18a97bee884",
+      "routineEditor.goal.deadlineHint": "c4be8551f210541950f60f6e01bcc40837153be0f732c96702e30c06291d1293",
+      "routineEditor.goal.status": "920e413c7d411b61ef3e8c63b1cb6ad058d5f95f8b481dbafe60248387d8c355",
+      "routineEditor.goal.active": "c1f88e9d6c4145cf0530ae020155384d5688d70ed82a07a35d783bbc4b32238c",
+      "routineEditor.goal.achieved": "1dfd43176a2c20eb8117261960b9daf20ab7953f1651a25ff619e11d6765c048",
+      "routineEditor.goal.expired": "5881a10f0b6569f85110af27c529e2e7d7b2992632ad3d9bb848b44b9cc75dca",
+      "routineEditor.goal.checks": "c893e27883f465217b7319858bcb5aa327f511a7c7ddc952ba36be5325b68007",
+      "routineEditor.goal.nextCheck": "9625086a3d4fd222ebd2b96d4f1d7c7a1bcbd6a107151775c56ef68b6e553c8e",
       "access.addKey": "8a9f02fd9bdb83ac02d3240dcade949d6f3ffa2fc0b3df528e348bb4d29ae639",
       "access.engineMissing": "ed0d34e37647c1cf65fcbce8339c33eabc515b4ca7ed8c6f1806c3bbe03abf38",
       "access.engineMissing.owner": "83a6d7f7088c39f0b5856a79a521a00777c5f1305c17497f1d1e3664e804e8e2",

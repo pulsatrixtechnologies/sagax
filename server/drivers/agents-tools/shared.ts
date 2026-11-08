@@ -1,5 +1,6 @@
 import { EFFORT_LEVELS } from "../../../shared/model-selection.ts";
 import { parseRoutineEffort } from "../../../shared/routine-effort.ts";
+import { parseRoutineGoal } from "../../../shared/routine-goal.ts";
 // Shared schema fragments and call helpers for agents-tools families.
 // Definitions and handlers live beside each family; this module holds what
 // more than one family imports. Never import server/index.ts.
@@ -198,6 +199,10 @@ export const ROUTINE_FIELDS_SCHEMA = {
     type: ["string", "null"],
     enum: [...EFFORT_LEVELS, null],
     description: "Routine-run effort on this bot's engine (chat unchanged). null resets.",
+  },
+  goal: {
+    type: ["string", "object", "null"],
+    description: "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Each run decides when to check next and the routine stops once reached. null removes.",
   },
   delete_when_finished: {
     type: "boolean",
@@ -613,6 +618,12 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
     const effort = parseRoutineEffort(args.effort);
     if (!effort.ok) return { fields, error: effort.error };
     fields.effort = effort.effort ?? null;
+  }
+  // #2696: a goal the runs pursue (shared/routine-goal.ts).
+  if (args.goal !== undefined) {
+    const goal = parseRoutineGoal(args.goal);
+    if (!goal.ok) return { fields, error: goal.error };
+    fields.goal = args.goal === null || !goal.goal ? null : { text: goal.goal.text, ...(goal.goal.deadline ? { deadline: goal.goal.deadline } : {}) };
   }
   return { fields };
 }

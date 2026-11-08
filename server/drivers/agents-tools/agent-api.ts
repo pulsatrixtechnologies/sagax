@@ -162,6 +162,7 @@ export const AGENT_API_TOOLS = [
         model: ROUTINE_FIELDS_SCHEMA.model,
         subagent_model: ROUTINE_FIELDS_SCHEMA.subagent_model,
         effort: ROUTINE_FIELDS_SCHEMA.effort,
+        goal: ROUTINE_FIELDS_SCHEMA.goal,
       },
       required: ["routine_id"],
     },

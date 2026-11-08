@@ -18,6 +18,7 @@ import { cleanRoutineFolder, ROUTINE_FOLDER_MAX } from "../../shared/routine-fol
 import { EFFORT_LEVELS } from "../../shared/model-selection.ts";
 import { parseRoutineModel } from "../../shared/routine-model.ts";
 import { parseRoutineActAs } from "../../shared/routine-act-as.ts";
+import { parseRoutineGoal, ROUTINE_GOAL_MAX_CHARS, type RoutineGoal } from "../../shared/routine-goal.ts";
 import { withRequiredComputer, type RoutineRequirements } from "../../shared/routine-readiness.ts";
 import { describeCondition } from "./routine-watch.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "../schema.ts";
@@ -117,6 +118,24 @@ const routineToolTriggerSchema = z.discriminatedUnion("type", [
   }).strict(),
 ]);
 
+/** #2696: a goal as a sentence or { text, deadline }; stored as { text, deadline? }. */
+const routineGoalSchema = z.union([
+  z.string().trim().min(1).max(ROUTINE_GOAL_MAX_CHARS),
+  z.object({ text: z.string().trim().min(1).max(ROUTINE_GOAL_MAX_CHARS), deadline: z.union([z.number().int().positive(), z.string().min(1)]).nullable().optional() }).strict(),
+]).transform((value, ctx) => {
+  const parsed = parseRoutineGoal(value);
+  if (!parsed.ok || !parsed.goal) {
+    ctx.addIssue({ code: "custom", message: parsed.ok ? "A goal needs text." : parsed.error });
+    return z.NEVER;
+  }
+  return goalOf(parsed.goal);
+});
+
+/** The card's view of a goal: what the person wrote, not its runtime state. */
+function goalOf(goal: RoutineGoal): { text: string; deadline?: number } {
+  return { text: goal.text, ...(goal.deadline ? { deadline: goal.deadline } : {}) };
+}
+
 /** Fields a create or an update may name. The XOR of schedule and trigger
  * lives on the create schema only: an update cannot retarget a trigger. */
 const routineToolFieldsSchema = z.object({
@@ -147,6 +166,8 @@ const routineToolFieldsSchema = z.object({
    * Requirements > computer); skills and MCP requirements are kept. */
   requiresComputer: z.boolean().optional(),
   effort: z.union([z.enum(EFFORT_LEVELS), z.literal("")]).nullable().optional(),
+  /** #2696: the goal its runs pursue; null in an update removes it. */
+  goal: routineGoalSchema.nullable().optional(),
   runOnStartup: z.boolean().optional(),
   /** Create only: true starts the routine live, false paused; absent
    * follows `routines.newPaused`. A webhook or email trigger follows the
@@ -342,10 +363,11 @@ const storedDefinitionSchema = z.object({
   actAs: z.string().max(120).optional(),
   requiresComputer: z.boolean().optional(),
   effort: z.enum(EFFORT_LEVELS).optional(),
+  goal: routineGoalSchema.optional(),
   runOnStartup: z.boolean().optional(),
 }).strict();
 const storedChangesSchema = storedDefinitionSchema
-  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, subagentModel: true, actAs: true, effort: true })
+  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, subagentModel: true, actAs: true, effort: true, goal: true })
   .partial()
   .extend({
     schedule: storedScheduleChangesSchema.optional(),
@@ -356,6 +378,7 @@ const storedChangesSchema = storedDefinitionSchema
     subagentModel: z.string().min(1).max(200).nullable().optional(),
     actAs: z.string().max(120).nullable().optional(),
     effort: z.enum(EFFORT_LEVELS).nullable().optional(),
+    goal: routineGoalSchema.nullable().optional(),
   })
   .strict()
   .refine(
@@ -871,6 +894,7 @@ function normalizeDefinition(input: RoutineToolDefinitionInput, now: number): Ro
     ...(actAsInput(input.actAs) !== undefined ? { actAs: actAsInput(input.actAs)! } : {}),
     ...(input.requiresComputer === true ? { requiresComputer: true } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
+    ...(input.goal ? { goal: { ...input.goal } } : {}),
     ...(input.runOnStartup === true ? { runOnStartup: true } : {}),
   };
 }
@@ -897,6 +921,7 @@ function normalizeChanges(
   if (input.actAs !== undefined) changes.actAs = actAsInput(input.actAs) ?? null;
   if (input.requiresComputer !== undefined) changes.requiresComputer = input.requiresComputer === true;
   if (input.effort !== undefined) changes.effort = input.effort || null;
+  if (input.goal !== undefined) changes.goal = input.goal ? { ...input.goal } : null;
   if (input.runOnStartup !== undefined) changes.runOnStartup = input.runOnStartup === true;
   return changes;
 }
@@ -1203,10 +1228,11 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
     ...(existing.actAs !== undefined ? { actAs: existing.actAs } : {}),
     ...(existing.requires?.computer ? { requiresComputer: true } : {}),
     ...(existing.effort ? { effort: existing.effort } : {}),
+    ...(existing.goal ? { goal: goalOf(existing.goal) } : {}),
     ...(existing.runOnStartup ? { runOnStartup: true } : {}),
   };
   if (operation.action !== "update") return base;
-  const { schedule, timeoutMinutes, watch, folder, model, subagentModel, actAs, effort, ...changes } = operation.changes;
+  const { schedule, timeoutMinutes, watch, folder, model, subagentModel, actAs, effort, goal, ...changes } = operation.changes;
   const merged: RoutineRequestDefinition = {
     ...base,
     ...changes,
@@ -1226,6 +1252,8 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
   else if (actAs !== undefined) merged.actAs = actAs;
   if (effort === null) delete merged.effort;
   else if (effort !== undefined) merged.effort = effort;
+  if (goal === null) delete merged.goal;
+  else if (goal !== undefined) merged.goal = goal;
   // Becoming a one-time routine drops it, as the routine itself does.
   if (merged.schedule.type === "once") delete merged.runOnStartup;
   return merged;
@@ -1331,6 +1359,7 @@ function cardCopy(
       ...(definition.actAs !== undefined ? [`Acts as: ${definition.actAs ? redactSecretsInText(definition.actAs) : "the person's own access"} (Perspicax role)`] : []),
       ...(definition.requiresComputer ? ["Needs its computer: yes (the pre-run check waits for the bot's computer to be online)"] : []),
       ...(definition.effort ? [`Effort: ${definition.effort} (chat keeps the bot's effort)`] : []),
+      ...(definition.goal ? [`Goal: ${redactSecretsInText(definition.goal.text)}${definition.goal.deadline ? ` (by ${new Date(definition.goal.deadline).toISOString()})` : ""}; the bot picks when to check and the routine stops once it is reached`] : []),
       ...(definition.runOnStartup || (operation.action === "update" && operation.changes.runOnStartup !== undefined)
         ? [`On startup: ${definition.runOnStartup ? "Also runs once each time Sagax starts" : "Runs only on its schedule"}`]
         : []),
@@ -1370,6 +1399,7 @@ function inputFromDefinition(definition: RoutineRequestDefinition, botId: string
     ...(definition.actAs !== undefined ? { actAs: definition.actAs } : {}),
     ...(definition.requiresComputer ? { requires: { computer: true } } : {}),
     ...(definition.effort ? { effort: definition.effort } : {}),
+    ...(definition.goal ? { goal: { ...definition.goal } } : {}),
     ...(definition.runOnStartup ? { runOnStartup: true } : {}),
   };
 }
@@ -1397,6 +1427,7 @@ function updateFromChanges(
   if (changes.actAs !== undefined) patch.actAs = changes.actAs;
   if (changes.requiresComputer !== undefined) patch.requires = withRequiredComputer(currentRequires, changes.requiresComputer);
   if (changes.effort !== undefined) patch.effort = changes.effort;
+  if (changes.goal !== undefined) patch.goal = changes.goal;
   if (changes.runOnStartup !== undefined) patch.runOnStartup = changes.runOnStartup;
   return patch;
 }
@@ -1482,6 +1513,7 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
         || routine.actAs !== definition.actAs
         || Boolean(routine.requires?.computer) !== Boolean(definition.requiresComputer)
         || routine.effort !== definition.effort
+        || !isDeepStrictEqual(routine.goal ? goalOf(routine.goal) : undefined, definition.goal)
         || !isDeepStrictEqual(routine.precheck?.kind === "watch" ? routine.precheck : undefined, definition.watch)
         || Boolean(routine.runOnStartup) !== Boolean(definition.runOnStartup)
         || (routine.attachments?.length ?? 0) > 0) return false;
@@ -1585,6 +1617,7 @@ function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
     ...(routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
     ...(routine.requires?.computer ? { requiresComputer: true } : {}),
     ...(routine.effort ? { effort: routine.effort } : {}),
+    ...(routine.goal ? { goal: goalOf(routine.goal) } : {}),
     ...(routine.runOnStartup ? { runOnStartup: true } : {}),
     enabled: routine.enabled,
     ...(routine.target === "room-goal" ? { target: "room-goal" as const } : {}),
@@ -1616,6 +1649,7 @@ function restorePatch(before: RoutineRequestSnapshot, now: number, currentRequir
     actAs: before.actAs ?? null,
     requires: withRequiredComputer(currentRequires, before.requiresComputer === true),
     effort: before.effort ?? null,
+    goal: before.goal ? { ...before.goal } : null,
     runOnStartup: before.runOnStartup === true,
   };
 }
@@ -1892,6 +1926,7 @@ export class RoutineRequestService {
             ...(before.requiresComputer ? { requires: { computer: true } } : {}),
             ...(before.model ? { model: before.model } : {}),
             ...(before.effort ? { effort: before.effort } : {}),
+            ...(before.goal ? { goal: { ...before.goal } } : {}),
           }).id;
           break;
         }

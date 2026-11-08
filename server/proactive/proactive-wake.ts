@@ -661,6 +661,11 @@ export interface ProactiveProposal {
   answered?: "accepted" | "declined";
 }
 
+export interface ProactiveProposalEvent {
+  kind: "proposed" | "accepted" | "declined" | "expired";
+  botId: string;
+}
+
 /** A proposal waits at most this long; an older one answers "expired". */
 export const PROPOSAL_TTL_MS = 3 * 24 * 60 * 60_000;
 const PROPOSALS_KEPT = 200;
@@ -671,6 +676,8 @@ export class ProactiveProposals {
   private readonly file: string | null;
   private readonly now: () => number;
   private items: ProactiveProposal[] = [];
+  /** #2698: proposed, answered and expired proposals, for the bot's metrics. */
+  private observer: ((event: ProactiveProposalEvent) => void) | null = null;
 
   constructor(file: string | null, now: () => number = () => Date.now()) {
     this.file = file;
@@ -699,9 +706,25 @@ export class ProactiveProposals {
     }
   }
 
+  observe(observer: ((event: ProactiveProposalEvent) => void) | null): void {
+    this.observer = observer;
+  }
+
+  private tell(kind: ProactiveProposalEvent["kind"], botId: string): void {
+    try {
+      this.observer?.({ kind, botId });
+    } catch {
+      /* metrics are secondary to the proposal itself */
+    }
+  }
+
   private prune(): void {
     const cutoff = this.now() - PROPOSAL_TTL_MS;
-    this.items = this.items.filter((item) => item.createdAt >= cutoff).slice(-PROPOSALS_KEPT);
+    const kept = this.items.filter((item) => item.createdAt >= cutoff);
+    for (const item of this.items) {
+      if (item.createdAt < cutoff && !item.answered) this.tell("expired", item.botId);
+    }
+    this.items = kept.slice(-PROPOSALS_KEPT);
   }
 
   add(proposal: Omit<ProactiveProposal, "id" | "createdAt">): ProactiveProposal {
@@ -709,6 +732,7 @@ export class ProactiveProposals {
     this.items.push(item);
     this.prune();
     this.save();
+    this.tell("proposed", item.botId);
     return item;
   }
 
@@ -734,6 +758,7 @@ export class ProactiveProposals {
     start?.();
     item.answered = verdict;
     this.save();
+    this.tell(verdict, item.botId);
     return item;
   }
 

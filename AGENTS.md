@@ -154,6 +154,21 @@ withdraws its notice and removes the source backlink. A late model review
 re-reads the live address and falls back to the original execution thread.
 Verification: `docs/verification/peer-approvals.md`.
 
+## Proactive metrics (#2698, 2026-11-08)
+
+`ProactiveMetricsLedger` (`server/proactive/proactive-metrics.ts`, shapes in
+`shared/proactive-metrics.ts`) keeps one bucket per bot and day in
+`DATA_DIR/proactive-metrics.json` (0600, 400 days). A settled proactive wake
+counts once by run id (reported / quiet / failed, cost); ProactiveProposals
+events count proposed / accepted / declined / expired; a write step on a wake
+(noteWakeDryRun) counts a write. Precision = accepted / (accepted + declined +
+expired). Time saved is an estimate (10 min per report, 2 per write, 5 per
+accepted proposal) labelled as such. `GET /api/bots/:id/proactive-metrics?days=`
+needs the same sees + seesAll as bot analytics; the Proactivity group sits in
+the Analytics tab under Usage and is left out when the route answers 404 or
+the bot is not proactive with nothing recorded. No backfill: counts start at
+deploy. Coverage: `server/proactive/proactive-metrics.test.ts`.
+
 ## Goal routines (#2696, 2026-11-08)
 
 `Routine.goal` (`shared/routine-goal.ts`) is an objective in the person's

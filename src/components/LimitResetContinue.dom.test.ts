@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -19,7 +20,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
 
 const { setLocale } = await import("@/lib/i18n");
 const limits = await import("@/lib/limit-resets");
-const { EngineLimitNotice, engineLimitNoticeKey } = await import("./LimitResetContinue");
+const { EngineLimitIndicator } = await import("./LimitResetContinue");
 const { ComposerSendBlock } = await import("./ComposerSendBlock");
 
 const NOW = Date.parse("2026-10-19T15:00:00Z");
@@ -64,44 +65,32 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("engineLimitNoticeKey", () => {
-  it("changes when the reset time or blocked state changes", () => {
-    expect(engineLimitNoticeKey(claude(92))).not.toBe(engineLimitNoticeKey(claude(100, true)));
-    expect(engineLimitNoticeKey(claude(92))).not.toBe(
-      engineLimitNoticeKey({ ...claude(92), resetsAt: RESET + 3_600_000 }),
-    );
-  });
-});
-
-describe("EngineLimitNotice banner", () => {
-  it("draws a full-width dismissible banner, not a header pill", () => {
-    const container = remount(createElement(EngineLimitNotice, { engine: "claude", botId: "scout", threadId: "t-1" }));
-    const banner = container.querySelector('[data-testid="engine-limit-notice"]')!;
-    expect(banner.parentElement?.className).toContain("w-full");
-    expect(banner.getAttribute("data-notice")).toBe("engine-limit");
-    expect(banner.querySelector("button[aria-label]")).toBeTruthy();
-    expect(banner.textContent).toContain("Claude: 92% used");
-    expect(banner.className).not.toContain("rounded-full");
+describe("EngineLimitIndicator (no banner above the chat, JC 2026-11-08)", () => {
+  it("is a quiet dot with the usage line as tooltip, never a banner", () => {
+    const container = remount(createElement(EngineLimitIndicator, { engine: "claude", botId: "scout", threadId: "t-1" }));
+    const dot = container.querySelector('[data-testid="engine-limit-indicator"]') as HTMLButtonElement;
+    expect(dot.getAttribute("title")).toContain("Claude: 92% used");
+    expect(container.querySelector('[data-notice], [data-testid="engine-limit-notice"]')).toBeNull();
+    expect(container.querySelector('[data-testid="engine-limit-menu"]')).toBeNull();
   });
 
-  it("stays hidden after dismiss until a new limit event", () => {
-    const first = remount(createElement(EngineLimitNotice, { engine: "claude" }));
-    const close = first.querySelector("button[aria-label]") as HTMLButtonElement;
-    flushSync(() => close.click());
-    expect(first.querySelector('[data-testid="engine-limit-notice"]')).toBeNull();
-    const again = remount(createElement(EngineLimitNotice, { engine: "claude" }));
-    expect(again.querySelector('[data-testid="engine-limit-notice"]')).toBeNull();
-    limits.rememberLimits({ checkedAt: NOW, engines: [claude(100, true)] });
-    const blocked = remount(createElement(EngineLimitNotice, { engine: "claude" }));
-    expect(blocked.innerHTML).toBe("");
+  it("opens a menu with the line and Continue at", () => {
+    const container = remount(createElement(EngineLimitIndicator, { engine: "claude", botId: "scout", threadId: "t-1" }));
+    flushSync(() => (container.querySelector('[data-testid="engine-limit-indicator"]') as HTMLButtonElement).click());
+    const menu = container.querySelector('[data-testid="engine-limit-menu"]')!;
+    expect(menu.textContent).toContain("Claude: 92% used");
+    expect(menu.querySelector('[data-testid="engine-limit-continue"]')?.textContent).toMatch(/Continue at/);
   });
 
-  // At the limit, no banner on top (JC 2026-11-06): the composer's line says it
-  // and carries "Continue at <reset>".
-  it("draws no top banner once the engine is at its limit", () => {
-    limits.rememberLimits({ checkedAt: NOW, engines: [claude(100, true)] });
-    const container = remount(createElement(EngineLimitNotice, { engine: "claude", botId: "scout", threadId: "t-1" }));
-    expect(container.querySelector('[data-testid="engine-limit-notice"]')).toBeNull();
+  it("stays quiet for another engine", () => {
+    expect(remount(createElement(EngineLimitIndicator, { engine: "codex" })).innerHTML).toBe("");
+  });
+
+  it("no usage or limit banner is rendered by the chat banner stack or the group view", () => {
+    for (const file of ["./ChatView.tsx-parts/ChatViewBanners.tsx", "./GroupView.tsx"]) {
+      const source = readFileSync(new URL(file, import.meta.url), "utf8");
+      expect(source).not.toMatch(/EngineLimitNotice|WeeklyLimitNotice/);
+    }
   });
 
   it("offers Continue at reset in the composer line when bot and thread are known", async () => {
@@ -137,7 +126,4 @@ describe("EngineLimitNotice banner", () => {
     });
   });
 
-  it("stays quiet for another engine", () => {
-    expect(remount(createElement(EngineLimitNotice, { engine: "codex" })).innerHTML).toBe("");
-  });
 });

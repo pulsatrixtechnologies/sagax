@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
 import { dismissNotice, noticeDismissed, showsGroupCostNotice, weeklyLimitNotice } from "@/lib/usage-notices";
-import { api, useStore } from "@/state/store";
+import { api } from "@/state/store";
 
 const GROUP_KEY = "group-cost";
 const REFRESH_MS = 10 * 60_000;
@@ -36,11 +36,10 @@ export function GroupCostNotice({ group }: { group: { dm?: boolean; peopleDm?: b
 }
 
 /** A subscription's weekly window at 80 % or more, from the same report as
- * Settings > Usage. Quiet when the report cannot be read. */
-export function WeeklyLimitNotice() {
-  const { dispatch } = useStore();
+ * Settings > Usage. Null when the report cannot be read. Shown by the model
+ * picker's limit indicator, never as a banner above the chat. */
+export function useWeeklyLimit() {
   const [rows, setRows] = useState<PlanRow[]>([]);
-  const [dismissed, setDismissed] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
     const load = () => { void api<PlanUsageReport>("/api/plan-usage").then((report) => { if (alive) setRows(connectedPlanRows(report)); }, () => {}); };
@@ -48,12 +47,5 @@ export function WeeklyLimitNotice() {
     const timer = window.setInterval(load, REFRESH_MS);
     return () => { alive = false; window.clearInterval(timer); };
   }, []);
-  const notice = weeklyLimitNotice(rows);
-  if (!notice || dismissed === notice.key || noticeDismissed(notice.key)) return null;
-  return (
-    <Notice data-notice="weekly-limit" tone="warning" dismissLabel={t("chat.notice.weekly.dismiss")} onDismiss={() => { dismissNotice(notice.key); setDismissed(notice.key); }}>
-      <span>{t(notice.percent >= 100 ? "chat.notice.weekly.reached" : "chat.notice.weekly", { percent: notice.percent, name: notice.name })}</span>{" "}
-      <button type="button" className="underline hover:no-underline" onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: "usage" })}>{t("chat.notice.weekly.more")}</button>
-    </Notice>
-  );
+  return weeklyLimitNotice(rows);
 }

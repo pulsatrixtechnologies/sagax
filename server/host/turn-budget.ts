@@ -101,6 +101,10 @@ export interface TurnBudgetDeps {
 export interface TurnBudget {
   onEvent(event: RuntimeEvent): void;
   settle(threadId: string): void;
+  /** #2764: the next turn on this thread continues the same request (a
+   * computer switch restarts it): it keeps the steps, minutes and notes
+   * already spent instead of a fresh ceiling. */
+  carryNext(threadId: string): void;
 }
 
 const NOTES_KEPT = 3;
@@ -159,6 +163,9 @@ export function createTurnBudget(deps: TurnBudgetDeps): TurnBudget {
   const setTimer = deps.setTimer ?? ((fire: () => void, ms: number) => setTimeout(fire, ms));
   const clearTimer = deps.clearTimer ?? ((timer: unknown) => clearTimeout(timer as ReturnType<typeof setTimeout>));
   const turns = new Map<string, TurnState>();
+  /** The last settled turn per thread, kept for a continuation (#2764). */
+  const settled = new Map<string, TurnState>();
+  const carried = new Set<string>();
   const log = (line: string) => (deps.log ?? console.info)(`[turn-budget] ${line}`);
 
   const elapsed = (turn: TurnState) => turn.activeMs + (turn.resumedAt === null ? 0 : now() - turn.resumedAt);
@@ -170,8 +177,19 @@ export function createTurnBudget(deps: TurnBudgetDeps): TurnBudget {
 
   const settle = (threadId: string) => {
     const turn = turns.get(threadId);
-    if (turn) disarm(turn);
+    if (turn) {
+      disarm(turn);
+      if (turn.resumedAt !== null) {
+        turn.activeMs += now() - turn.resumedAt;
+        turn.resumedAt = null;
+      }
+      settled.set(threadId, turn);
+    }
     turns.delete(threadId);
+  };
+
+  const carryNext = (threadId: string) => {
+    carried.add(threadId);
   };
 
   const stop = (threadId: string, turn: TurnState, settings: TurnBudgetSettings) => {
@@ -235,9 +253,12 @@ export function createTurnBudget(deps: TurnBudgetDeps): TurnBudget {
     if (event.type === "turn.completed" || event.type === "session.exited") return settle(threadId);
     if (event.type === "turn.started") {
       settle(threadId);
+      const before = carried.delete(threadId) ? settled.get(threadId) : undefined;
+      settled.delete(threadId);
       turns.set(threadId, {
         ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
-        steps: 0, items: new Set(), activeMs: 0, resumedAt: now(), openRequests: 0, notes: [], steered: false, stopped: false, timer: undefined,
+        steps: before?.steps ?? 0, items: new Set(), activeMs: before?.activeMs ?? 0, resumedAt: now(), openRequests: 0,
+        notes: before ? [...before.notes] : [], steered: before?.steered ?? false, stopped: false, timer: undefined,
       });
       return check(threadId);
     }
@@ -274,5 +295,5 @@ export function createTurnBudget(deps: TurnBudgetDeps): TurnBudget {
     }
   };
 
-  return { onEvent, settle };
+  return { onEvent, settle, carryNext };
 }

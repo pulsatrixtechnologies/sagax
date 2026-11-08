@@ -27,6 +27,8 @@ function continueComputerSelection(threadId: string, generation: string | undefi
     // never chose it. It holds this request only, and is never recorded.
     host.computerSelectionMoves.set(threadId, surface);
     const text = `The computer selection is now ${host.surfaceLabel(surface)}. Continue the user's original request using the tools mounted for this turn; verify the result before claiming success.\n\n${selection.text}`;
+    // #2764: the same request goes on: the turn ceiling keeps what it spent.
+    host.directTurnBudget?.carryNext(threadId);
     void host.startTurn(bot.id, text, { threadId, userMessage: selection.source, computerSelectionContinuation: true, speaker: host.turnSpeakers.get(threadId), dataContext: selection.dataContext }).catch(error => {
       if (host.store.taskByThread(bot.id, threadId)) host.store.appendMessage(threadId, { role: "bot", kind: "activity",
         tool: { name: `Could not continue on ${host.surfaceLabel(surface)}: ${error instanceof Error ? error.message : String(error)}`, ok: false } });

@@ -179,22 +179,38 @@ export function inboxTitle(entry: InboxApproval): string {
 }
 
 /** One line under the title: the command, the choices, or the change. */
-export function inboxPreview(entry: InboxApproval): string {
+/** A row's one line under its title. #2936: `code` only for a real
+ * command excerpt (a Run command card), drawn in the mono font; the bot's
+ * own words and a question's choices are prose, drawn in the text font. */
+export interface InboxPreview {
+  text: string;
+  code: boolean;
+}
+
+export function inboxPreview(entry: InboxApproval): InboxPreview {
+  const prose = (text: string): InboxPreview => ({ text, code: false });
   if (entry.kind === "attention") {
     const rest = attentionOf(entry)?.items.slice(1).map((item) => item.text.replace(/\*\*|__|`/g, "")) ?? [];
-    return withoutIds(rest.join(" · ")).slice(0, 240);
+    return prose(withoutIds(rest.join(" · ")).slice(0, 240));
   }
   const card = cardOf(entry);
-  if (!card) return "";
+  if (!card) return prose("");
   if (entry.kind === "question") {
     const options = card.questionRequest?.questions?.[0]?.options?.map((option) => option.label) ?? [];
-    return withoutIds(options.join(" · "));
+    return prose(withoutIds(options.join(" · ")));
   }
   const command = card.commandAllowlist?.command;
-  if (command) return withoutIds(command);
+  if (command) return { text: withoutIds(command), code: true };
   const first = (card.subtitle ?? "").split("\n").find((line) => line.trim()) ?? "";
-  if (!first || /^\s*[{[]/.test(first)) return "";
-  return withoutIds(first).slice(0, 240);
+  if (!first || /^\s*[{[]/.test(first)) return prose("");
+  return prose(withoutIds(first).slice(0, 240));
+}
+
+/** #2936 (unified chat, never a thread): where "Open {bot}'s chat" goes,
+ * the bot's chat on the card's own message, as a notification's tap. */
+export function inboxChatTarget(entry: Pick<InboxApproval, "botId" | "threadId" | "messageId" | "message">): { botId: string; threadId: string; cardId?: string } {
+  const cardId = entry.messageId ?? (entry.message as Message | undefined)?.id;
+  return { botId: entry.botId, threadId: entry.threadId, ...(cardId ? { cardId } : {}) };
 }
 
 export { inboxKey };

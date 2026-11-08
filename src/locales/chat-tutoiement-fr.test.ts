@@ -10,3 +10,13 @@ it("fr: chat.* and composer.* use tu, never vous / votre / vos", () => {
     .map(([key, value]) => `${key}: ${value}`);
   expect(bad).toEqual([]);
 });
+
+// #2936: the Today page (approvals.*) speaks with tu as well: « T'attend »,
+// the same words as the bot's task row, never « Vous attend ».
+it("fr: approvals.* use tu, never vous / votre / vos", () => {
+  const bad = Object.entries(fr as Record<string, string>)
+    .filter(([key, value]) => key.startsWith("approvals.") && /(^|[^\p{L}])(vous|votre|vos)(?![\p{L}])/iu.test(value))
+    .map(([key, value]) => `${key}: ${value}`);
+  expect(bad).toEqual([]);
+  expect((fr as Record<string, string>)["approvals.kind.attention"]).toBe((fr as Record<string, string>)["botTasks.waiting"]);
+});

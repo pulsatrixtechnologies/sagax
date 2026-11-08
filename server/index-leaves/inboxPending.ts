@@ -112,6 +112,7 @@ function inboxPending(auth: RequestAuth, viewer: InboxViewer) {
       key: inboxKey(threadId, card.requestId!),
       threadId,
       requestId: card.requestId!,
+      messageId: message.id,
       botId: bot.id,
       botName: bot.name,
       ...(group && scope !== "team" ? { roomName: group.name } : {}),

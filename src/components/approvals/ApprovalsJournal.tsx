@@ -79,7 +79,7 @@ function JournalRow({ entry, open, onToggle, onOpenThread }: { entry: JournalEnt
           {entry.reason && <div>{t("approvals.journal.reason", { reason: withoutIds(entry.reason) })}</div>}
           {entry.threadId && onOpenThread && (
             <div>
-              <button type="button" onClick={() => onOpenThread(entry)} className="text-accent hover:underline" data-journal-open="">{t("approvals.journal.openThread")}</button>
+              <button type="button" onClick={() => onOpenThread(entry)} className="text-accent hover:underline" data-journal-open="">{t("approvals.journal.openChat", { bot: withoutIds(entry.botName) })}</button>
             </div>
           )}
         </div>

@@ -106,6 +106,8 @@ export interface BotBranchActionBody {
   paths?: string[];
   /** delete: the person confirmed deleting work that is not on origin. */
   confirmUnpushed?: boolean;
+  /** delete: Ignore on a coding job (#2148): remote branch, worktree and local branch, no confirmation. */
+  ignore?: boolean;
 }
 
 export interface BotBranchActionResult {

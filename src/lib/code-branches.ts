@@ -188,3 +188,18 @@ export function commitMessageProblem(message: string): LocaleKey | null {
 export function deleteNeedsSecondConfirm(state?: BotBranchState): boolean {
   return Boolean(state && state.exists && (!state.pushed || state.ahead > 0));
 }
+
+/** Ignore on a coding job (#2148): each branch of the job goes
+ * away on the remote and locally (worktree included), no confirmation. A branch
+ * that cannot be reached is skipped: the row leaves the list either way. */
+export async function deleteJobBranches(botId: string, threadId: string | undefined, branches: ReadonlyArray<{ name: string; threadId?: string }>): Promise<void> {
+  await Promise.all(branches.map(async (branch) => {
+    const thread = branch.threadId ?? threadId;
+    if (!thread) return;
+    try {
+      await branchAction(botId, "delete", { threadId: thread, branch: branch.name, ignore: true });
+    } catch {
+      // gone already, or the computer is not reachable
+    }
+  }));
+}

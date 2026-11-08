@@ -126,6 +126,21 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
     expect(git(repo, "branch", "--list", "feat/widgets")).toBe("");
   });
 
+  it("Ignore deletes the remote and the local branch with no confirmation (#2148)", async () => {
+    const branch = new RemoteBranchGit(shell, repo, "feat/widgets");
+    await branch.commit("Add the widget");
+    await branch.push();
+    git(repo, "checkout", "main");
+    expect(git(remote, "branch", "--list", "feat/widgets")).not.toBe("");
+    const done = await branch.deleteEverywhere();
+    expect(done).toMatchObject({ remote: true, local: true, errors: [] });
+    expect(git(remote, "branch", "--list", "feat/widgets")).toBe("");
+    expect(git(repo, "branch", "--list", "feat/widgets")).toBe("");
+    // nothing left: a second Ignore is a no-op
+    expect(await branch.deleteEverywhere()).toMatchObject({ remote: false, local: false, errors: [] });
+    await expect(new RemoteBranchGit(shell, repo, "main").deleteEverywhere()).rejects.toMatchObject({ code: "default_branch" });
+  });
+
   it("opening a pull request falls back to the compare page when gh is missing", async () => {
     const branch = new RemoteBranchGit(shell, repo, "feat/widgets");
     await branch.commit("Add the widget");

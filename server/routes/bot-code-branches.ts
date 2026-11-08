@@ -294,6 +294,11 @@ export function createBotCodeBranchRoutes(deps: BotCodeBranchRouteDeps): RouteHa
           deps.audit(auth, "code.branch.pull_request", targetRow, out.pull ? { number: out.pull.number, url: out.pull.url, ...audited } : { compareUrl: out.compareUrl, ...audited });
           return json(res, 200, { ok: true, ...(out.pull ? { pull: out.pull } : {}), ...(out.compareUrl ? { compareUrl: out.compareUrl } : {}), state: await git.state() });
         }
+        if (body.ignore === true) {
+          const done = await git.deleteEverywhere();
+          deps.audit(auth, "code.branch.ignore", targetRow, { ...done, ...audited });
+          return json(res, 200, { ok: true, ...done });
+        }
         await git.deleteLocal(body.confirmUnpushed === true);
         deps.audit(auth, "code.branch.delete", targetRow, { confirmedUnpushed: body.confirmUnpushed === true, ...audited });
         return json(res, 200, { ok: true });
@@ -375,6 +380,11 @@ export function createBotCodeBranchRoutes(deps: BotCodeBranchRouteDeps): RouteHa
         return json(res, 200, { ok: true, pull, state: shown(state) });
       }
       // delete
+      if (body.ignore === true) {
+        const done = await git.deleteEverywhere(organization ? repo : undefined);
+        deps.audit(auth, "code.branch.ignore", target, { ...done });
+        return json(res, 200, { ok: true, ...done });
+      }
       await git.deleteLocal(body.confirmUnpushed === true);
       deps.audit(auth, "code.branch.delete", target, { confirmedUnpushed: body.confirmUnpushed === true });
       return json(res, 200, { ok: true });

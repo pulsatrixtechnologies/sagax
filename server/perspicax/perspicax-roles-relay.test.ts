@@ -4,7 +4,7 @@ import { PerspicaxMcp, boardListRead, type PerspicaxRoleEvent } from "./perspica
 // Fake Perspicax for the visible-roles relay: no sockets, credentials or live
 // data. "service-desk" is refused (403) on time entries, read and write;
 // the person's own surface ("Moi") reads them.
-function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc"; readableBy?: string; explicitFull?: boolean; roleSwitch?: "allow" | "deny"; knownRefused?: boolean; projectReadableBy?: string } = {}) {
+function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc"; readableBy?: string; explicitFull?: boolean; roleSwitch?: "allow" | "deny"; knownRefused?: boolean; projectReadableBy?: string; writableBy?: string; ruleTo?: string; switchFails?: string } = {}) {
   const calls: Array<{ name?: string; args?: any; acting?: string }> = [];
   const acting = new Map<string, string>();
   const profiles = [
@@ -34,6 +34,8 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     if (frame.method === "initialize") return reply({ protocolVersion: "2025-06-18", capabilities: {} });
     if (frame.method === "tools/list") return reply({ tools });
     if (name === "identity_switch") {
+      // a switch Perspicax refuses: the role stays as it was
+      if (options.switchFails !== undefined && args.profile === options.switchFails) return reply({ isError: true, structuredContent: { code: "profile_unavailable", message: "profile not available" } });
       if (args.clear) acting.delete(key);
       if (typeof args.profile === "string") acting.set(key, args.profile);
       const now = acting.get(key);
@@ -59,6 +61,10 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     if (name === "cw_psa_find_time_entries" && options.meRefused === "result") {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
     }
+    // d7-403-switch-role: time entries writable only under one role
+    if (name === "cw_psa_log_time" && options.writableBy !== undefined && role !== options.writableBy) {
+      return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
+    }
     if ((name === "cw_psa_find_time_entries" || name === "cw_psa_log_time") && role === "service-desk") {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
     }
@@ -79,7 +85,7 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     log: () => {},
     onRole: (event) => events.push(event),
     turnRole: () => options.turnRole,
-    roleFallback: () => options.fallback ?? "fallback",
+    roleFallback: ({ to }) => options.ruleTo !== undefined ? (to === options.ruleTo ? "rule" : "fallback") : options.fallback ?? "fallback",
     askMeWrite: async ({ tool }) => { asked.push(tool); return options.meWrite ?? "deny"; },
     askRoleSwitch: async ({ from, to, tool }) => { switchAsked.push(`${from.slug || "me"}>${to.slug}:${tool}`); return options.roleSwitch ?? "deny"; },
     knownReadRefusal: () => options.knownRefused === true,
@@ -129,16 +135,68 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.events.at(-1)).toMatchObject({ kind: "read_refused", refusedRole: { slug: "service-desk" } });
   });
 
-  it("stops on a write 403, shows the permission and refuses a switch to get around it", async () => {
+  // rule d7-403-switch-role (2026-11-07): a write 403 under a limited role
+  // looks for a held role that may write, by a rule or a card, sent once
+  const writes = (f: ReturnType<typeof fixture>) => f.calls.filter((call) => call.name === "cw_psa_log_time").map((call) => call.acting);
+
+  it("asks a card on a write 403 under a limited role, and stops with the permission when the person declines", async () => {
     const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" } });
     await f.prepare();
     await f.init();
     const answer = await f.relay("cw_psa_log_time", { ticket: 1 });
-    expect(f.text(answer)).toContain("STOP: this write was refused (403) under Service Desk");
-    expect(f.calls.filter((call) => call.name === "cw_psa_log_time")).toHaveLength(1);
+    expect(f.switchAsked).toEqual(["service-desk>:cw_psa_log_time"]);
+    expect(f.text(answer)).toContain("STOP: not written");
+    expect(f.text(answer)).toContain("did not approve writing it once as the person's own account");
+    expect(writes(f)).toEqual(["service-desk"]);
     expect(f.events.at(-1)).toMatchObject({ kind: "write_refused", permission: { path: "time/entries", operation: "Add", module: "Time & Expense" }, target: "cw_member:nova" });
     const escape = await f.relay("identity_switch", { profile: "full-access" });
     expect(f.text(escape)).toContain("switching roles to get around it is not allowed");
+  });
+
+  it("sends a write refused under a limited role once as the role the person approved, then puts the role back", async () => {
+    const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, roleSwitch: "allow" });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_log_time", { ticket: 1 });
+    expect(f.text(answer)).toContain("sent this write once as the person's own account (with the person's approval)");
+    expect(f.text(answer)).toContain('"as":"me"');
+    expect(writes(f)).toEqual(["service-desk", ""]);
+    expect(f.events.find((event) => event.kind === "step" && event.tool === "cw_psa_log_time")).toMatchObject({ role: { slug: "", reason: "fallback", refusedTool: "cw_psa_log_time", previous: { slug: "service-desk" } } });
+    await f.relay("cw_psa_find_tickets");
+    expect(lastTickets(f)).toBe("service-desk");
+  });
+
+  it("switches a refused write by the role a saved rule names, with no card", async () => {
+    const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, writableBy: "full-access", ruleTo: "full-access" });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_log_time", { ticket: 1 });
+    expect(f.switchAsked).toEqual([]);
+    expect(f.text(answer)).toContain("sent this write once as Full Access (the person's saved rule)");
+    expect(writes(f)).toEqual(["service-desk", "full-access"]);
+    await f.relay("cw_psa_find_tickets");
+    expect(lastTickets(f)).toBe("service-desk");
+  });
+
+  it("sends a refused write again exactly once: refused again, it stops naming both roles", async () => {
+    const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, writableBy: "nobody", roleSwitch: "allow" });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_log_time", { ticket: 1 });
+    expect(f.text(answer)).toContain("STOP: this write was refused (403) under Service Desk");
+    expect(writes(f)).toEqual(["service-desk", ""]);
+    expect(f.switchAsked).toHaveLength(1);
+    expect(f.events.at(-1)).toMatchObject({ kind: "write_refused" });
+  });
+
+  it("never switches a refused write away from the role the person picked for the turn", async () => {
+    const f = fixture({ turnRole: { slug: "service-desk", reason: "person" }, roleSwitch: "allow" });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_log_time", { ticket: 1 });
+    expect(f.switchAsked).toEqual([]);
+    expect(f.text(answer)).toContain("STOP: this write was refused (403) under Service Desk");
+    expect(writes(f)).toEqual(["service-desk"]);
   });
 
   it("keeps the role the person picked for the turn", async () => {
@@ -530,5 +588,29 @@ describe("visible roles in the Perspicax relay", () => {
     const go = await f.relay("cw_psa_find_time_entries");
     expect(f.text(go)).toContain('"as":"full-access"');
     expect(f.text(go)).not.toContain("STOP");
+  });
+  // readAs: a switch Perspicax refused sent the call again under the refused role
+  it("never sends the call again when the switch to the other role is refused", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true, fallback: "rule", switchFails: "full-access" });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_find_time_entries");
+    // never twice under the role that refused it; the other held role is still tried
+    expect(reads(f)).toEqual(["", "service-desk"]);
+    expect(f.text(answer)).not.toContain('"as":"full-access"');
+  });
+
+  // oneCall: a lease left open after the bot moved on put back a later deliberate switch
+  it("ends the one-call lease when the bot switches roles itself", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true });
+    await f.prepare();
+    await f.init();
+    await f.relay("cw_psa_find_time_entries");
+    await f.relay("identity_switch", { profile: "full-access" });
+    await f.relay("identity_switch", { clear: true });
+    await f.relay("identity_switch", { profile: "full-access" });
+    await f.relay("cw_psa_find_tickets");
+    await f.relay("cw_psa_find_tickets");
+    expect(f.calls.filter((call) => call.name === "cw_psa_find_tickets").map((call) => call.acting)).toEqual(["full-access", "full-access"]);
   });
 });

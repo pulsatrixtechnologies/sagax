@@ -81,6 +81,17 @@ export function readSwitchSummary(language: string, input: { from: string; to: s
   return roleText(language, "roles.readSwitch.summary", { from: input.from || roleText(language, "roles.me"), role: input.to, tool: input.tool, permission: permissionLine(input.permission, language) });
 }
 
+/** Rule d7-403-switch-role: the card that sends one write refused (403)
+ * under `from` once as `to` ("" = "Moi"). */
+export function writeSwitchSummary(language: string, input: { from: string; to: string; tool: string; permission: CwPermission }): string {
+  return roleText(language, "roles.writeSwitch.summary", { from: input.from || roleText(language, "roles.me"), role: input.to || roleText(language, "roles.me"), tool: input.tool, permission: permissionLine(input.permission, language) });
+}
+
+/** The write card's "Toujours permettre" key: never the read switch's. */
+export function writeSwitchFingerprint(from: string, to: string, path: string): string {
+  return `role-write-switch:${from}:${to}:${path}`;
+}
+
 /** #2581: the card's "Toujours permettre" key: this switch for this path. */
 export function readSwitchFingerprint(from: string, to: string, path: string): string {
   return `role-read-switch:${from}:${to}:${path}`;

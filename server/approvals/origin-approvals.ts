@@ -30,6 +30,8 @@ export interface OriginApprovalsDeps {
   mayRelay(source: string, destination: string, message: Message): boolean;
   speaker(threadId: string, message: Message): Message["from"];
   withdraw(threadId: string, requestId: string): void;
+  /** #2901: provenance label of a view copied out of a background thread. */
+  via?(threadId: string, message: Message): Message["relayVia"];
 }
 
 const open = (card: Message["card"]) => Boolean(card?.requestId && !card.answered && !card.dismissed && !card.expired);
@@ -111,7 +113,8 @@ export function createOriginApprovals(deps: OriginApprovalsDeps) {
       const saved = store.messagesFor(destination).find(row => row.card?.approvalOrigin?.threadId === threadId && row.card.approvalOrigin.messageId === message.id);
       // full-access: exempt (linked view, the original card already holds the turn)
       const mirror = saved ? store.patchMessage(destination, saved.id, { card: mirrored })!
-        : store.appendMessage(destination, { role: "bot", kind: "options", from: deps.speaker(threadId, message), card: mirrored });
+        : store.appendMessage(destination, { role: "bot", kind: "options", from: deps.speaker(threadId, message), card: mirrored,
+          ...(deps.via?.(threadId, message) ? { relayVia: deps.via(threadId, message) } : {}) });
       linked.set(key, { source: threadId, sourceMessageId: message.id, threadId: destination, messageId: mirror.id, requestId: mirrored.requestId });
       store.patchMessage(threadId, message.id, { card: { ...card, approvalDestination: { threadId: destination, messageId: mirror.id } } });
     } finally {

@@ -18229,7 +18229,12 @@
       "chat.restart.turnNote": "c0330a1c09399987407f258223d3c7676c88dc4d5180800c8fdd58d1f66a282c",
       "chat.restart.runNote": "ce603b4ebdab19935204d56c25977fb3535f06249e838cda346b00d2050b50d0",
       "chat.parallel.notStarted": "aa214fe1232842e7f1b0dc667b9f40f49d444318d5aeb1b291ebb1511c8571a3",
-      "chat.answer.notDelivered": "0b0588d8dfea7d147b0059f62a3a255e5e46f0d319dcb1f850db3dd6db18babc"
+      "chat.answer.notDelivered": "0b0588d8dfea7d147b0059f62a3a255e5e46f0d319dcb1f850db3dd6db18babc",
+      "chat.relayVia.mcp": "fb3a97853cf265464a5e8bdcaf8981fe2a7c07de11a3af46d7affad52a960408",
+      "chat.relayVia.routine": "0b5baf309897ec7e2def5db089f1f4ec5b15d5912296577d655d00ca0fc40b59",
+      "chat.relayVia.proactive": "bc82f7f1ebd8d379e0bbc87fa1616e81080d79fe402f5c8cde7b5bb5dbf61a00",
+      "chat.relayVia.teammate": "ab52c21388818897aeee90bf028fc61a0867e2b35b0de9a115545932c6872a72",
+      "chat.relayVia.label": "f6782e38c848ab1550be34e356437d487a2d97f1a8c131feecf3985fe9bb5247"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

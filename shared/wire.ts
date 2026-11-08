@@ -76,6 +76,8 @@ import type { LiveCallState, LiveCallRecord } from "./wire-live.ts";
 export type { LiveClient, LiveCallStatus, LiveEndReason, LiveCallState, LiveCallRecord, LiveSettings } from "./wire-live.ts";
 
 /** A role fact as a banner row (visible roles, 2026-11-05). */
+export type RelayVia = "mcp" | "routine" | "proactive" | "teammate";
+
 export interface RoleNotice {
   kind: "lapsed" | "write_refused" | "read_refused";
   role: { slug: string; name: string };
@@ -936,6 +938,12 @@ export interface WireMessage extends WaitLineField {
   /** 2026-11-05: a bot's answer in a routine run's task after the run had
    * ended (a teammate's result resumed it), mirrored here: the source id. */
   lateRunReplyOf?: string;
+  /** #2901 (2026-11-08): a line copied into the bot's chat from a background
+   * conversation (MCP send_prompt, routine run, proactive wake, teammate
+   * work). The chat shows a discreet provenance label; nothing stays hidden. */
+  relayVia?: RelayVia;
+  /** #2901: the background message this row mirrors (dedupe key). */
+  relayOf?: string;
   /** Terminal receipt for a bounded multi-bot channel goal. */
   goalRun?: GroupGoalRunCardData;
   /** call rows (kind "call"): the finished Live call this row records. The

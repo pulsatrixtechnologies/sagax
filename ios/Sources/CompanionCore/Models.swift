@@ -717,6 +717,9 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     public var outbound: OutboundCardData? = nil
     /// The request line, live card or result of a parallel task.
     public var parallelTask: ParallelTaskRef? = nil
+    /// #2901: a line or card copied into the bot's chat from a background
+    /// conversation ("mcp", "routine", "proactive", "teammate").
+    public var relayVia: String? = nil
     /// Flat reply reference for an inline quote; unrelated to `parentId`.
     public var replyToId: String? = nil
     /// Stable client identity for at-most-once send retries.

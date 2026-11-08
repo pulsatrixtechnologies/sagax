@@ -219,3 +219,36 @@ describe("approvals in the human initiating chat", () => {
     expect(relay.sourceFor("human", views[1]!.card!.requestId!)).toEqual({ threadId: "other-work", requestId: "request-1" });
   });
 });
+
+describe("background questions land in the bot's chat (#2901)", () => {
+  it("mirrors an MCP send_prompt question with its provenance, answers the source, and recovers at startup", () => {
+    const f = fixture();
+    f.deps.rootFor = threadId => threadId === "mcp-hidden" ? "human" : undefined;
+    f.deps.via = threadId => threadId === "mcp-hidden" ? "mcp" : undefined;
+    const exact = "Veux-tu que je refasse la collecte à neuf, ou qu'on avance directement avec ta validation ?";
+    const question = { title: "Your bot has a question", subtitle: exact, options: ["Que je refasse la collecte à neuf", "Qu'on avance directement avec ta validation"], requestId: "ask-choice-1" };
+    // Saved before this process: the startup sweep links it.
+    const saved = { id: "q1", at: 1, role: "bot", kind: "options", card: question } as Message;
+    f.relay.observe({ type: "message.patch", threadId: "mcp-hidden", message: saved });
+    const mirror = f.store.messagesFor("human")[0]!;
+    expect(mirror).toMatchObject({ kind: "options", relayVia: "mcp", card: { subtitle: exact, options: question.options, approvalOrigin: { threadId: "mcp-hidden", messageId: "q1", requestId: "ask-choice-1" } } });
+    expect(f.relay.sourceFor("human", mirror.card!.requestId!)).toBeFalsy();
+    f.store.appendMessage("mcp-hidden", saved);
+    const live = f.store.messagesFor("mcp-hidden")[0]!;
+    expect(f.store.messagesFor("human")).toHaveLength(1);
+    expect(f.relay.sourceFor("human", mirror.card!.requestId!)).toEqual({ threadId: "mcp-hidden", requestId: "ask-choice-1" });
+    expect(f.relay.notificationFor("mcp-hidden", live.id)).toEqual({ threadId: "human", requestId: mirror.card!.requestId });
+    // Answered from Updates or a push: the chat card settles too.
+    f.store.patchMessage("mcp-hidden", live.id, { card: { ...live.card!, answered: "answer", answeredText: question.options[1] } });
+    expect(f.store.messagesFor("human")[0]!.card).toMatchObject({ answered: "answer", answeredText: question.options[1] });
+  });
+
+  it("never copies a confidential conversation", () => {
+    const f = fixture();
+    f.deps.rootFor = () => "human";
+    f.deps.via = () => "routine";
+    f.confidential.add("run-task");
+    f.store.appendMessage("run-task", { role: "bot", kind: "options", card: { title: "Q", subtitle: "A, ou B ?", options: ["A", "B"], requestId: "ask-choice-2" } });
+    expect(f.store.messagesFor("human")).toHaveLength(0);
+  });
+});

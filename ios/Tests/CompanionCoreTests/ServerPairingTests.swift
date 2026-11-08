@@ -165,7 +165,9 @@ final class ServerPairingTests: XCTestCase {
         ServerRequestStub.reset { _ in (200, body) }
         let connection = try XCTUnwrap(Connection.parse("https://c-7f3a9c.openmausbot.com"))
         let environment = try await CompanionClient(connection: connection, token: nil, session: session).environment()
-        XCTAssertEqual(environment, ServerEnvironment(environmentId: "env_7f3a9c", label: "cab mini", platform: "linux", version: "0.1.55"))
+        // The fixture carries a capabilities object without a features list.
+        XCTAssertEqual(environment, ServerEnvironment(environmentId: "env_7f3a9c", label: "cab mini", platform: "linux", version: "0.1.55",
+                                                      capabilities: ServerDescriptorCapabilities()))
         XCTAssertEqual(ServerRequestStub.captured().first?.url?.path, "/.well-known/openmausbot/environment")
     }
 

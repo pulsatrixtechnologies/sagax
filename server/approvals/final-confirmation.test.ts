@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalConfirmation, finalConfirmationOptions } from "./final-confirmation.ts";
+import { alternativeChoices, choiceOptionsFor, finalAlternative, finalConfirmation, finalConfirmationOptions } from "./final-confirmation.ts";
 
 const context = { routineRun: true, mcpStarted: false, ok: true, stopped: false, hasCard: false };
 
@@ -50,5 +50,31 @@ describe("final blocking confirmations (#1984)", () => {
     for (const patch of [{ routineRun: false }, { ok: false }, { stopped: true }, { hasCard: true }]) {
       expect(finalConfirmation({ ...context, ...patch, text })).toBeNull();
     }
+  });
+});
+
+describe("either/or questions offer their two paths (#2901)", () => {
+  const exact = "Veux-tu que je refasse la collecte à neuf, ou qu'on avance directement avec ta validation ?";
+  const paths = ["Que je refasse la collecte à neuf", "Qu'on avance directement avec ta validation"];
+
+  it("splits the exact live question into its two options", () => {
+    expect(alternativeChoices(exact)).toEqual(paths);
+  });
+  it("raises the two paths, not Yes/No, at the end of a routine or MCP turn", () => {
+    const text = `Voici le lot de la semaine.\n\n${exact}`;
+    expect(finalConfirmation({ ...context, text })).toBeNull();
+    expect(finalAlternative({ ...context, text })).toEqual({ question: text, options: paths });
+    expect(finalAlternative({ ...context, routineRun: false, mcpStarted: true, text })?.options).toEqual(paths);
+    expect(finalAlternative({ ...context, routineRun: false, text })).toBeNull();
+  });
+  it("replaces Yes/No on an ask_choice that asks A or B", () => {
+    expect(choiceOptionsFor(exact, ["Oui", "Non"])).toEqual(paths);
+    expect(choiceOptionsFor(exact, ["Yes", "No"])).toEqual(paths);
+    expect(choiceOptionsFor(exact, ["Refaire", "Avancer"])).toEqual(["Refaire", "Avancer"]);
+    expect(choiceOptionsFor("May I proceed with the batch?", ["Yes", "No"])).toEqual(["Yes", "No"]);
+  });
+  it("keeps Yes/No for a yes-or-no question", () => {
+    expect(alternativeChoices("May I proceed with the batch or not?")).toBeNull();
+    expect(alternativeChoices("Puis-je écrire les entrées, ou non?")).toBeNull();
   });
 });

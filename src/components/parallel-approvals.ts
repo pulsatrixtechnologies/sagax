@@ -78,6 +78,12 @@ export function approvalSources(bot: Pick<Bot, "tasks" | "threadId" | "waitingAp
   return [...parallel, ...runs, ...interBot];
 }
 
+/** #2901: drop the source cards whose answerable copy already sits in the
+ * bot's chat (server/approvals/origin-approvals.ts). */
+export function withoutMirrored(pendings: Pending[]): Pending[] {
+  return pendings.filter((pending) => !pending.message.card?.approvalDestination);
+}
+
 export function useParallelApprovals(bot: Bot | undefined, stream = false): Pending[] {
   return useParallelCards(bot, stream).pendings;
 }
@@ -99,7 +105,9 @@ export function useParallelCards(bot: Bot | undefined, stream = false): { pendin
       return pendings;
     })).then((lists) => {
       const done = lists.flatMap((list) => list.status === "fulfilled" ? [list.value] : []);
-      if (live) setFound({ key, pendings: done.flat() });
+      // #2901: a card already mirrored into the bot's chat (approvalDestination)
+      // is answered there; listing its source too would ask twice.
+      if (live) setFound({ key, pendings: withoutMirrored(done.flat()) });
     }).catch(() => {});
     return () => {
       live = false;

@@ -280,10 +280,16 @@ struct MessageRow: View {
             if let ref = message.parallelTask, ref.part == .result {
                 ParallelResultLabel(ref: ref)
             }
+            if message.role != .user, let via = message.relayVia {
+                RelayViaLabel(via: via)
+            }
             TextBubble(message: message, chat: chat, tailed: endsRun, showingSource: showingSource, openLink: openLink, cwAsk: askCw)
         case .options:
             // A structured ask draws its own card: its answers are the
             // model's questions, not an allow/deny a tap could stand for.
+            if let via = message.relayVia {
+                RelayViaLabel(via: via)
+            }
             if message.card?.roleTransition != nil {
                 // 2026-11-05 (the owner): no "Agit comme" card in the chat
                 EmptyView()

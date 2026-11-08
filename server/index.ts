@@ -137,7 +137,7 @@ import { askedBotChange, askedChange, createSettingsActions } from "./settings-a
 import { createCwActionPasses } from "./widgets/cw-widget-actions.ts";
 import { cwActionInstruction, parseCwAction } from "../shared/cw-widgets/actions.ts";
 import { cwRecordLink, cwSite } from "../shared/cw-widgets/links.ts";
-import { attentionCard, mirrorLateRunReply, relayPersonAttention, type AttentionRelayDeps } from "./turns/person-attention-relay.ts";
+import { attentionCard, mirrorBackgroundReply, mirrorLateRunReply, relayPersonAttention, type AttentionRelayDeps } from "./turns/person-attention-relay.ts";
 import { personAttention } from "../shared/person-attention.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
@@ -193,7 +193,8 @@ import { DataFailure } from "./data/types.ts";
 import { DATA_DOWNLOADS_DIR } from "./data/engine.ts";
 import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./computer/team-computers.ts";
 import { instructionsLead } from "../shared/instructions-lead.ts";
-import { type BotVisibility, type ResolvedSender, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
+import { type BotVisibility, type RelayVia, type ResolvedSender, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
+import { backgroundOrigin } from "../shared/background-threads.ts";
 import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
 import { TURN_CUT_BY_RESTART } from "../shared/restart-words.ts";
 import { closeRowsLeftByRestart, endedToolOutput } from "./threads/subagent-cleanup.ts";
@@ -469,7 +470,7 @@ import { createEmailSendPasses, sendWithMailer } from "./mail/email-draft-send.t
 import { mailConnectorsOf, type EmailConnector, type EmailSendRequestCard } from "../shared/email-draft-send.ts";
 import { builtinAgentToolName, memberOwnScopeTool, unknownAgentToolRefusal } from "./people/member-tool-scope.ts";
 import { serverApprovalWords } from "./approvals/approval-words.ts";
-import { finalConfirmation, finalConfirmationOptions } from "./approvals/final-confirmation.ts";
+import { finalAlternative, finalConfirmation, finalConfirmationOptions } from "./approvals/final-confirmation.ts";
 import { personLanguageOf } from "./people/person-language.ts";
 import {
   TurnNotStartedError,
@@ -4736,6 +4737,7 @@ bindLeafHost({
   get fileKeyConfigured() { return fileKeyConfigured; },
   get fileViewToolPaths() { return fileViewToolPaths; },
   get fillResolverFor() { return fillResolverFor; },
+  get finalAlternative() { return finalAlternative; },
   get finalConfirmation() { return finalConfirmation; },
   get finalConfirmationOptions() { return finalConfirmationOptions; },
   get findAntigravityLeftovers() { return findAntigravityLeftovers; },
@@ -5012,6 +5014,7 @@ bindLeafHost({
   get migratedCrabFromBots() { return migratedCrabFromBots; },
   get migrationOwner() { return migrationOwner; },
   get mirrorActivity() { return mirrorActivity; },
+  get mirrorBackgroundReply() { return mirrorBackgroundReply; },
   get mirrorLateRunReply() { return mirrorLateRunReply; },
   get mirrorReply() { return mirrorReply; },
   get missingCitedPaths() { return missingCitedPaths; },
@@ -14038,7 +14041,12 @@ threadsWithActiveCoordination = () => coordinator.activeDirectThreads();
 const originApprovals = createOriginApprovals({
   store,
   rootFor: (threadId, message) => humanApprovalRoot(coordinator, threadId, root => Boolean(root.request
-    && workOrigin(store.messagesFor(root.threadId).find(row => row.id === root.request)).kind === "user"), botForApproval(threadId, message)?.id),
+    && workOrigin(store.messagesFor(root.threadId).find(row => row.id === root.request)).kind === "user"), botForApproval(threadId, message)?.id)
+    ?? backgroundCardHome(threadId, message),
+  via: (threadId, message) => {
+    const bot = botForApproval(threadId, message);
+    return bot ? relayViaOf(bot.id, threadId) : undefined;
+  },
   mayRelay: (source, destination, message) => {
     const sourceBot = botForApproval(source, message);
     const sourceRoom = store.groupByThread(source);
@@ -14061,6 +14069,33 @@ const originApprovals = createOriginApprovals({
   },
   withdraw: (threadId, requestId) => withdrawApprovalNotice(threadId, requestId)
 });
+/** #2901 (2026-11-08, « rien d'invisible »): why a background thread is out
+ * of the person's sight, as the provenance label of what is copied from it
+ * into the bot's chat. Undefined: one of the person's own conversations, a
+ * confidential or parallel thread, or a room. */
+function relayViaOf(botId: string, threadId: string): RelayVia | undefined {
+  if (store.groupByThread(threadId)) return undefined;
+  const task = store.taskByThread(botId, threadId);
+  if (!task || task.confidential || task.parallelOf || task.archivedAt) return undefined;
+  const origin = backgroundOrigin({ ...task, personWrote: task.askedAt !== undefined && task.openedBy?.kind !== "agent" ? true : undefined });
+  if (!origin) return undefined;
+  if (origin === "routine-run" || origin === "routine-results") {
+    const run = routines?.runForThread(threadId);
+    return run?.proactive || run?.webhookId ? "proactive" : "routine";
+  }
+  return origin === "ai-client" ? "mcp" : "teammate";
+}
+
+/** #2901: an open question or approval in a background thread (routine run,
+ * proactive wake, MCP send_prompt, teammate work) is shown and answered in
+ * the bot's chat of the person it waits on. Updates and Today only reflect it. */
+function backgroundCardHome(threadId: string, message: Message): string | undefined {
+  const bot = botForApproval(threadId, message);
+  if (!bot || bot.hidden || !relayViaOf(bot.id, threadId)) return undefined;
+  const home = conversationOrStart(bot, privateThreads() ? cardAnswererId(bot, threadId, message.card) || attentionPerson(bot, threadId) : undefined);
+  return home && home !== threadId ? home : undefined;
+}
+
 /** 0.8.46: send ids of lines a bot's act wrote as the person (bot-act.ts
  * tagActSend). Such a line is delivered as before but never answers a
  * question the runtime parked on the person. In memory, ten minutes. */
@@ -17291,6 +17326,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get errorTranscript() { return errorTranscript; },
   get failedTurnTool() { return failedTurnTool; },
   get fileViewToolPaths() { return fileViewToolPaths; },
+  get finalAlternative() { return finalAlternative; },
   get finalConfirmation() { return finalConfirmation; },
   get finalConfirmationOptions() { return finalConfirmationOptions; },
   get finalScreenFrame() { return finalScreenFrame; },
@@ -17335,6 +17371,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get memberHostToolPlace() { return memberHostToolPlace; },
   get memberOwnScopeTool() { return memberOwnScopeTool; },
   get memberOwnedInOrg() { return memberOwnedInOrg; },
+  get mirrorBackgroundReply() { return mirrorBackgroundReply; },
   get mirrorLateRunReply() { return mirrorLateRunReply; },
   get modelAccessRefusals() { return modelAccessRefusals; },
   get modelContextWindow() { return modelContextWindow; },
@@ -17708,6 +17745,7 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
   feedback: (botId, topic) => backgroundBriefs.wakeLevel(botId, topic),
+  relayVia: (botId, threadId) => relayViaOf(botId, threadId),
 };
 /** 2026-11-05 (visible roles, #2032): the role a Perspicax turn starts under.
  * Only a Pulsatrix Flow routine's "Au nom de" (the run's snapshot, else the

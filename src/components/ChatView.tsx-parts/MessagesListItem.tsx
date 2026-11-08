@@ -31,6 +31,7 @@ import { ConversationRoutineToggle } from "../RoutineToggleLine";
 import { CallRecordRow } from "../CallRecordRow";
 import { DataResultChip } from "../DataResultChip";
 import { ParallelResultLabel, ParallelTaskCard } from "../ParallelTaskCard";
+import { RelayViaLabel } from "../RelayViaLabel";
 import { CompactionChip, DigestChip } from "../DigestChip";
 import { ScreenFrame } from "../ScreenFrame";
 import { VideoPlayerWidget } from "../video/VideoPlayerWidget";
@@ -338,6 +339,10 @@ export function MessagesListItem({
       case "signin":
         return m.signIn ? <SignInRequestCard botId={botId} botName={botName} threadId={threadId} message={m} /> : null;
       case "options":
+        if (m.relayVia) {
+          const card = optionsCardRow({ message: m, transcript, botId, botName, threadId });
+          return card && <><RelayViaLabel message={m} />{card}</>;
+        }
         return optionsCardRow({ message: m, transcript, botId, botName, threadId });
       case "widget":
         // bot-authored and persisted: one that throws while drawing falls back to its text
@@ -425,6 +430,7 @@ export function MessagesListItem({
         return (
           <>
           {m.parallelTask?.role === "result" && <ParallelResultLabel message={m} />}
+          {!user && m.relayVia && <RelayViaLabel message={m} />}
           <Bubble
             message={m}
             emerging={m.id === emergingId}

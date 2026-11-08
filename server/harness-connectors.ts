@@ -85,6 +85,9 @@ export interface ClaudeAiTurnInput extends ConnectorPrincipalInput {
   /** #2384: the account (provider instance) the turn runs on; an added
    * account (`<prefix>-<uuid>`) has its own sign-in and connectors. */
   instanceId?: string;
+  /** #2747: the bot opted in to its Grok account's grok.com connectors
+   * (bot setting grokAccountConnectors, off by default). */
+  grokAccountConnectors?: boolean;
 }
 
 const ACCOUNT_CONNECTOR_DRIVERS = new Set(["claudeAgent", "grokAgent", "grok"]);
@@ -127,10 +130,9 @@ export function grokCloudConnectorsForTurn(input: ClaudeAiTurnInput): boolean {
   // (`managed_gateway:cursor` carried the operator's "Pulsatrix Sagax"
   // connector, remote_support_host_code and the rest, into a bot's turn). A
   // bot sees only the tools Sagax mounts for it, so no bot turn loads the
-  // account's managed MCP until a bot setting asks for its account connectors
-  // explicitly. The driver path (turn.grokCloudConnectors) stays the opt-in.
-  void input;
-  return false;
+  // account's managed MCP unless the bot opted in (grokAccountConnectors,
+  // a bot setting off by default), and then only on the person's own sign-in.
+  return input.grokAccountConnectors === true && GROK_DRIVERS.has(input.driver) && accountConnectorsForTurn(input) === "own";
 }
 
 /** The system note for a turn that keeps them: what they are and whose. */

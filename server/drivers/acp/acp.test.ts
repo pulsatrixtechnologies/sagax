@@ -6,6 +6,7 @@
 //
 // The fake CLI is a shebang script Windows cannot exec directly —
 // resolveCliSpawn turns it into `node <script>`, so these run everywhere.
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1568,7 +1569,7 @@ describe("ACP turns (fake CLI)", () => {
         const seen = JSON.parse(readFileSync(dump, "utf8"));
         expect(seen.argv).toEqual([
           "--permission-mode", "auto", ...AGENTS_READ_ONLY_ALLOW,
-          "agent", "-m", model, "--reasoning-effort", "high", "stdio",
+          "agent", "--no-leader", "-m", model, "--reasoning-effort", "high", "stdio",
         ]);
         const sessionMethod = resumeCursor ? "session/load" : "session/new";
         const sent = readFileSync(join(NATIVE_DIR, `${threadId}.ndjson`), "utf8")
@@ -1883,6 +1884,51 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         const session = JSON.parse(readFileSync(`${dump}.session.json`, "utf8")) as { mcpServers: Array<{ name: string }> };
         expect(session.mcpServers.map((entry) => entry.name)).toEqual(["agents"]);
       }
+    });
+
+    it("#2747: a plain bot turn is served by its own isolated process, never by the person's shared Grok leader", async () => {
+      // the person runs Grok with a leader: its env loads every account MCP
+      const realHome = mkdtempSync(join(tmpdir(), "grok-leader-home-"));
+      const saved = { home: process.env.GROK_HOME, socket: process.env.GROK_LEADER_SOCKET, leader: process.env.FAKE_ACP_GROK_LEADER };
+      const socket = join(realHome, "leader.sock");
+      process.env.GROK_HOME = realHome;
+      process.env.GROK_LEADER_SOCKET = socket;
+      process.env.FAKE_ACP_GROK_LEADER = "1";
+      onTestFinished(() => {
+        for (const [key, value] of [["GROK_HOME", saved.home], ["GROK_LEADER_SOCKET", saved.socket], ["FAKE_ACP_GROK_LEADER", saved.leader]] as const) {
+          if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+        removeTempDir(realHome);
+      });
+      writeFileSync(join(realHome, "config.toml"), "[mcp_servers.pulsatrix_dispatch]\nurl = \"https://prod.example/mcp\"\n");
+      writeFileSync(join(realHome, "auth.json"), "{}");
+      writeFileSync(socket, JSON.stringify({ env: { GROK_HOME: realHome, GROK_MANAGED_MCPS_ENABLED: "true", GROK_CLAUDE_MCPS_ENABLED: "true" } }));
+      writeFileSync(join(realHome, "leader.lock"), "");
+      // control: the fake CLI honours the leader, so the assertions below
+      // would fail if Sagax let the turn attach to it
+      const control = join(scratch, "leader-control.json");
+      spawnSync(FAKE_CLI, ["agent", "stdio"], { env: { ...process.env, FAKE_ACP_DUMP: control }, input: "", timeout: 15_000 });
+      expect((JSON.parse(readFileSync(control, "utf8")) as { servedBy: string }).servedBy).toBe("leader");
+      await create(GrokAgentDriver);
+      const dump = join(scratch, "leader-solo.json");
+      process.env.FAKE_ACP_DUMP = dump;
+      // a solo turn: no withheld host tools, no tool scope, no account connectors
+      const { turnId } = await instance.adapter.sendTurn({
+        threadId: "t-leader-solo", botId: "bot-gated", text: "go", model: "grok-4.5", approvalMode: "auto",
+        integrations: { agents: server("agents") },
+      });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[]; env: Record<string, string>; servedBy: string };
+      expect(seen.servedBy).toBe("self");
+      expect(seen.argv.slice(seen.argv.indexOf("agent"))).toContain("--no-leader");
+      // the process that serves the turn is the one with the isolated env
+      expect(seen.env.GROK_HOME).not.toBe(realHome);
+      expect(seen.env.GROK_MANAGED_MCPS_ENABLED).toBe("false");
+      expect(seen.env.GROK_CLAUDE_MCPS_ENABLED).toBe("false");
+      // and its isolated home links no leader socket back to the person's
+      expect(existsSync(join(seen.env.GROK_HOME!, "leader.sock"))).toBe(false);
+      expect(existsSync(join(seen.env.GROK_HOME!, "leader.lock"))).toBe(false);
+      expect(existsSync(join(seen.env.GROK_HOME!, "auth.json"))).toBe(true);
     });
 
     it("runs Grok's own auto mode only for an explicit opt-out ({bots: \"none\"})", async () => {
@@ -2271,7 +2317,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     });
     await recorder.until((e) => e.type === "turn.completed");
     expect(JSON.parse(readFileSync(dump, "utf8")).argv).toEqual([
-      "--permission-mode", nativeMode, "agent", "stdio",
+      "--permission-mode", nativeMode, "agent", "--no-leader", "stdio",
     ]);
   });
 

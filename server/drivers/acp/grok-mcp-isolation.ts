@@ -123,7 +123,9 @@ export function syncGrokIsolatedHome(source: string, root: string): string {
   for (const name of SHARED_DIRECTORIES) mkdirSync(join(source, name), { recursive: true, mode: 0o700 });
   const wanted = new Set<string>();
   for (const name of readdirSync(source)) {
-    if (NOT_LINKED.has(name) || name.startsWith("mcp_auth_")) continue;
+    // leader.sock and its lock: a linked socket would let a turn attach to
+    // the person's shared leader, whose env is not this one (#2747)
+    if (NOT_LINKED.has(name) || name.startsWith("mcp_auth_") || name.startsWith("leader")) continue;
     wanted.add(name);
     const link = join(target, name);
     const real = join(source, name);
@@ -164,6 +166,8 @@ export function isolateGrokMcp(env: Record<string, string | undefined>, source: 
   Object.assign(env, GROK_COMPAT_MCP_OFF);
   // already isolated (a second pass on the same env)
   if (resolve(source).startsWith(`${resolve(root)}${sep}`)) return;
+  // no inherited socket path into the person's shared leader either
+  delete env.GROK_LEADER_SOCKET;
   env.GROK_HOME = syncGrokIsolatedHome(source, root);
   env.GROK_AUTH_PATH = join(source, "auth.json");
 }

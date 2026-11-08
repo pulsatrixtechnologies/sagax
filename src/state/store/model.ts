@@ -563,6 +563,8 @@ export interface Bot {
   collaboratorsCreateRoutines?: boolean;
   /** whether this bot may write email draft cards (on unless switched off) */
   emailDrafts?: boolean;
+  /** #2747: a bot on a Grok engine loads its account's grok.com connectors (off unless switched on) */
+  grokAccountConnectors?: boolean;
   /** whether this bot uses native memory (on unless switched off) */
   memoryEnabled?: boolean;
   /** whether this bot's turns use the loop guard (on unless switched off; workspace setting still applies) */

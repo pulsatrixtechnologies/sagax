@@ -23,13 +23,20 @@ const mismatch = params.get("level") === "mismatch";
 // ?direct=1 (#2691): Proactive on, mail narrowed by filters, texts off, the
 // calendar following the switch
 const direct = params.get("direct") === "1";
+// ?engine=grok|claude&connectors=on (#2747): the Grok account connectors row
+// shows only on a Grok engine; ?part=advanced draws one sub-page
+const engineParam = params.get("engine");
+const part = (params.get("part") ?? "all") as Parameters<typeof PermissionsSection>[0]["part"];
 const bot = {
   id: "cryptic", name: "Cryptic", approvalMode: "ask", approvePeerComms: true, emailDrafts: true, allowedRecipients: [], threadId: "t1",
   ...(mismatch ? { approvalSetting: "full", approvalApplied: { mode: "ask", reason: "engine" }, proactiveMode: "proactive" } : {}),
+  ...(params.get("connectors") === "on" ? { grokAccountConnectors: true } : {}),
   ...(direct ? { proactiveMode: "proactive", directTriggers: { mail: { on: true, filters: "from:*@client.example, -infolettre" }, sms: { on: false } } } : {}),
 } as unknown as Bot;
 const derived = {
-  patch: () => {}, engine: undefined, canCoordinate: true, approvalMode: mismatch ? "full" : "ask",
+  patch: () => {},
+  engine: engineParam === "grok" ? { instanceId: "grok", driverKind: "grokAgent", displayName: "Grok" }
+    : engineParam === "claude" ? { instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude" } : undefined, canCoordinate: true, approvalMode: mismatch ? "full" : "ask",
   trustedModesAvailable: false, sectionName: "", currentChief: undefined,
 } as unknown as ReturnType<typeof useBotSettingsDerived>;
 
@@ -38,7 +45,7 @@ createRoot(document.getElementById("root")!).render(
     <StoreProvider>
       <div className="min-h-screen bg-canvas p-6 text-ink">
         <div data-gallery-panel="" className="w-[560px] rounded-2xl border border-hairline/40 bg-panel px-4 pb-6 pt-4">
-          <PermissionsSection bot={bot} derived={derived} />
+          <PermissionsSection bot={bot} derived={derived} part={part} />
         </div>
       </div>
     </StoreProvider>

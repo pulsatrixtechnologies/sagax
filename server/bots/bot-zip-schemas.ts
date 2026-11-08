@@ -28,6 +28,7 @@ export const settingsSchema = z.object({
   voiceSpeed: z.number().finite().min(VOICE_MODE_MIN_SPEED).max(VOICE_MODE_MAX_SPEED).optional(),
   voiceLanguage: z.string().refine(isVoiceModeLanguage).optional(),
   emailDrafts: z.boolean().optional(),
+  grokAccountConnectors: z.boolean().optional(),
   memeReplies: z.enum(["auto", "off"]).optional(),
   collaboratorsCreateRoutines: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),

@@ -156,6 +156,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Speak replies | Bot editor > Voice | `sagax_settings` get, set `bot.speakReplies` | simple |
 | Voice notes | Bot editor > Voice | `sagax_settings` get, set `bot.voiceNotes` | simple |
 | Email drafts | Bot editor > Permissions > Email drafts | `sagax_settings` get, set `bot.emailDrafts` | simple |
+| Grok account connectors (grok.com) | Bot editor > Permissions > Grok account connectors | `sagax_settings` get, set `bot.grokAccountConnectors` | simple |
 | Meme replies | Bot editor > Permissions > Meme replies | `sagax_settings` get, set `bot.memeReplies` | simple |
 | Collaborators can create routines | Bot page > Routines > Collaborators can create routines | `sagax_settings` get, set `bot.collaboratorsCreateRoutines` | simple |
 | Notifications | Bot editor > Voice > Notifications | `sagax_settings` get, set `bot.notifications` | simple |

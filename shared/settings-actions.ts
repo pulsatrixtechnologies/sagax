@@ -202,6 +202,7 @@ botField("bot.voice", "voice", "string?", "Voice", "Bot editor > Voice");
 botField("bot.speakReplies", "speakReplies", "boolean", "Speak replies", "Bot editor > Voice");
 botField("bot.voiceNotes", "voiceNotes", "boolean", "Voice notes", "Bot editor > Voice");
 botField("bot.emailDrafts", "emailDrafts", "boolean", "Email drafts", "Bot editor > Permissions > Email drafts");
+botField("bot.grokAccountConnectors", "grokAccountConnectors", "boolean", "Grok account connectors (grok.com)", "Bot editor > Permissions > Grok account connectors");
 botField("bot.memeReplies", "memeReplies", "any", "Meme replies", "Bot editor > Permissions > Meme replies");
 botField("bot.collaboratorsCreateRoutines", "collaboratorsCreateRoutines", "boolean", "Collaborators can create routines", "Bot page > Routines > Collaborators can create routines");
 botField("bot.notifications", "notifications", "any", "Notifications", "Bot editor > Voice > Notifications");

@@ -534,6 +534,7 @@ export const BOT_FIELD_PERMISSIONS: Readonly<Record<string, PermissionKey>> = {
   loopGuard: "bots.behaviour",
   voiceNotes: "bots.behaviour",
   emailDrafts: "bots.behaviour",
+  grokAccountConnectors: "bots.behaviour",
   memeReplies: "bots.behaviour",
   collaboratorsCreateRoutines: "bots.behaviour",
   fallback: "bots.behaviour",

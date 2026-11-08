@@ -24,7 +24,9 @@ function accountConnectorInput(bot: BotRecord, instance: { instanceId: string; d
     ...(payerPrincipalId !== undefined ? { payerPrincipalId } : {}),
     speaker,
     ownerPrincipalId: host.effectiveBotOwner(bot),
-    localPrincipalId: host.localPrincipalId()
+    localPrincipalId: host.localPrincipalId(),
+    // #2747: grok.com connectors reach a bot only when it opted in
+    ...(bot.grokAccountConnectors === true ? { grokAccountConnectors: true } : {})
   };
 }
   return accountConnectorInput;

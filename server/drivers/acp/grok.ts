@@ -959,7 +959,7 @@ const support: AcpSupport = {
     return [
       // Global flags. `--deny` does not strip the agent-stdio tool list;
       // the session profile does. `--no-leader` is after `agent`: a shared
-      // leader ignores the profile and keeps the host tools.
+      // leader ignores the profile, the host tools and the isolated env.
       ...grokHostToolArgs(withhold),
       "--permission-mode",
       mode,
@@ -971,9 +971,12 @@ const support: AcpSupport = {
         ? grokReadOnlyAllowRules(turn.integrations).flatMap((rule) => ["--allow", rule])
         : []),
       "agent",
-      // the account's connectors follow this process's own environment
-      // (grokCloudConnectorEnv), never a shared leader's
-      ...(withhold || turn.toolScope !== undefined || accountConnectors ? ["--no-leader"] : []),
+      // Always: a shared leader keeps the env of the process that spawned it,
+      // so a bot turn attached to the person's leader would see the
+      // account's MCP servers and skip this turn's isolated GROK_HOME and
+      // connector switches (#2747). Sagax keeps its own warm stdio process
+      // per session, so no speed is lost.
+      "--no-leader",
       ...(turn.model ? ["-m", turn.model] : []),
       // long form on purpose: `--effort` is documented as an alias, and an
       // alias is the part a CLI is free to rename

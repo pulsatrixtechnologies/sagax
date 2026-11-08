@@ -30,10 +30,10 @@ const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
 const TEAM_LIST = join(SERVER_DIR, "testing", "grok-gateway-team-mcp-list.json");
 const PERSONAL_LIST = join(SERVER_DIR, "testing", "grok-gateway-mcp-list.json");
-// #2747 (QA of #2816): no bot turn loads the account's managed gateway any
-// more (harness-connectors.ts grokCloudConnectorsForTurn), so this flow waits
-// for the explicit bot setting that opts a bot into its account connectors.
-const posixOnly = describe.skip;
+// #2747 (QA of #2816): a bot loads the account's managed gateway only when it
+// opted in (bot setting grokAccountConnectors, harness-connectors.ts
+// grokCloudConnectorsForTurn), so every bot here opts in.
+const posixOnly = describe.skipIf(process.platform === "win32");
 
 const READ = "outlook__search";
 const SEND = "outlook__send_message";
@@ -63,7 +63,8 @@ function scenarios(input: { call: () => Call; log: () => string; fullBot: () => 
   // an ambient Local VM asynchronously and would make this fixture host-dependent.
   const newBot = async (name: string, instanceId: string, approvalMode: "ask" | "auto") => {
     const bot = (await api("POST", "/api/bots", { name, computer: "off", browser: false, modelSelection: { instanceId, model: "grok-4.7" } }, 201)).bot;
-    const configured = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode, computer: "off", browser: false });
+    const configured = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode, computer: "off", browser: false, grokAccountConnectors: true });
+    expect(configured.bot.grokAccountConnectors).toBe(true);
     expect(configured.bot.computer).toBe("off");
     await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.threadId}`, { approvalMode });
     return bot as { id: string; threadId: string };
@@ -203,7 +204,7 @@ posixOnly("solo server: the operator's own Grok sign-in", () => {
     const created = await fetchCall(base, "POST", "/api/bots", { name: "Sender full", computer: "off", browser: false, modelSelection: { instanceId: "groksend", model: "grok-4.7" } });
     expect(created.status, created.text).toBe(201);
     fullBot = created.body.bot;
-    expect((await fetchCall(base, "PATCH", `/api/bots/${fullBot!.id}`, { computer: "off", browser: false })).status).toBe(200);
+    expect((await fetchCall(base, "PATCH", `/api/bots/${fullBot!.id}`, { computer: "off", browser: false, grokAccountConnectors: true })).status).toBe(200);
     await waitForExit(child, { signal: "SIGTERM" });
     const saved = JSON.parse(readFileSync(join(data, "bots.json"), "utf8"));
     const row = saved.find((bot: { id: string }) => bot.id === fullBot!.id);
@@ -294,6 +295,8 @@ posixOnly("organization server: the person's own Grok sign-in", () => {
       const created = await fetchCall(base, "POST", "/api/bots", { name: "Sender full", computer: "off", browser: false, modelSelection: { instanceId: "groksend", model: "grok-4.7" } }, { cookie });
       expect(created.status, created.text).toBe(201);
       const bot = created.body.bot as { id: string; threadId: string };
+      const optIn = await fetchCall(base, "PATCH", `/api/bots/${bot.id}`, { grokAccountConnectors: true }, { cookie });
+      expect(optIn.status, optIn.text).toBe(200);
       for (const path of [`/api/bots/${bot.id}`, `/api/bots/${bot.id}/tasks/${bot.threadId}`]) {
         const patched = await fetchCall(base, "PATCH", path, { approvalMode: "full", confirmFullAccess: true }, { cookie });
         expect(patched.status, patched.text).toBe(200);

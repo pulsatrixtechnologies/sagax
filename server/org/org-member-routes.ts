@@ -52,6 +52,7 @@ import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 
 import { formatQuestionAnswers, MAX_CUSTOM_ANSWER, MAX_OPTIONS, parseAskQuestions, parseChoices, type AskQuestion } from "../../shared/ask-question.ts";
 import { meetingRequestBehavior } from "../../shared/meeting-request.ts";
+import { APPROVAL_EN, type ApprovalTranslate } from "../../shared/approval-describe.ts";
 import { can, permissionLabel, type PermissionKey, type PermissionPrincipal } from "../../shared/permissions.ts";
 import { mask, redactSecretsInText } from "../../shared/redact.ts";
 import { reviewedSkillSha256, skillRequestBehavior } from "../../shared/skill-request.ts";
@@ -192,6 +193,9 @@ export interface OrgMemberRouteDeps {
   expireDueApprovals?(threadId: string): void;
   /** #1940: effective pending-approval expire days for this person (0 = never). */
   pendingApprovalExpireDays?(person: MemberPerson): number;
+  /** #2633: the person's words for the text Sagax itself puts on a card (the
+   * generic question title), in their language. English without it. */
+  approvalWords?(person: MemberPerson): ApprovalTranslate;
 }
 
 interface Answer {
@@ -450,8 +454,12 @@ export interface MemberApproval {
 }
 
 /** The sentence a question gets when the person declines it: an answer (a
- * question takes no deny), which closes the card and tells the bot. */
-export const QUESTION_DECLINED_MESSAGE = "The person declined to answer this question from their AI client. Do not go ahead with what it asked; continue without it, or say what you need.";
+ * question takes no deny), which closes the card and tells the bot. The body
+ * also says `declined`: the respond route words it in the person's language
+ * (#2633) and never turns it into a message of theirs (#2634). */
+export const QUESTION_DECLINED_MESSAGE = APPROVAL_EN["question.card.declinedByClient"]!;
+/** The generic title Sagax gives a question with none of its own. */
+const GENERIC_QUESTION_TITLE = APPROVAL_EN["question.card.title"]!;
 
 /** How long an answer waits for its card to close before it says so. */
 export const APPROVAL_CLOSE_WAIT_MS = 3_000;
@@ -486,6 +494,8 @@ export function describeMemberApproval(
   card: Record<string, unknown>,
   /** #1940: when the card has no expiresAt, fill from createdAt + policy days. */
   expireDays?: number,
+  /** #2633: the reader's words for Sagax's own generic question title. */
+  translate?: ApprovalTranslate,
 ): MemberApproval {
   const kind = approvalKind(card);
   const labels = parseChoices(card.options, MAX_OPTIONS) ?? [];
@@ -502,7 +512,7 @@ export function describeMemberApproval(
   return {
     id: str(card.requestId) ?? "",
     threadId,
-    title: str(card.title) ?? "",
+    title: memberCardTitle(kind, str(card.title), translate),
     subtitle: str(card.subtitle) ?? "",
     tool: str(card.tool),
     options: labels,
@@ -516,9 +526,16 @@ export function describeMemberApproval(
   };
 }
 
+/** A question's generic title (Sagax's words, not the bot's) in the reader's
+ * language (#2633); any other title as the card has it. */
+function memberCardTitle(kind: ApprovalKind, title: string | null, translate?: ApprovalTranslate): string {
+  if (kind === "question" && translate && (title === null || title === GENERIC_QUESTION_TITLE)) return translate("question.card.title");
+  return title ?? "";
+}
+
 /** What `POST approvals/{id}` asks Sagax's respond route, or why it cannot. */
 export type AnswerPlan =
-  | { ok: true; body: { behavior: "allow" | "deny" | "answer"; message?: string; reviewedSha256?: string }; decision: "allow" | "deny"; picked: string | null; via: "decision" | "option" | "text" }
+  | { ok: true; body: { behavior: "allow" | "deny" | "answer"; message?: string; reviewedSha256?: string; declined?: true }; decision: "allow" | "deny"; picked: string | null; via: "decision" | "option" | "text" }
   | { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
 
 export interface AnswerInput {
@@ -614,7 +631,7 @@ export function planAnswer(approval: MemberApproval, card: Record<string, unknow
   }
   if (several) {
     if (!options.length) {
-      if (input.decision === "deny") return { ok: true, decision: "deny", picked: null, via: "decision", body: { behavior: "answer", message: QUESTION_DECLINED_MESSAGE } };
+      if (input.decision === "deny") return { ok: true, decision: "deny", picked: null, via: "decision", body: { behavior: "answer", message: QUESTION_DECLINED_MESSAGE, declined: true } };
       return needOption("option_required", `This card asks ${several.length} questions: send option as a list, one option per question, in order.`);
     }
     if (options.length !== several.length) return needOption("option_required", `Send ${several.length} options, one per question, in order.`);
@@ -630,7 +647,7 @@ export function planAnswer(approval: MemberApproval, card: Record<string, unknow
     if (input.decision === "deny") {
       const no = declineChoice(approval.choices);
       if (no) return { ok: true, decision: "deny", picked: no.label, via: "decision", body: { behavior: "answer", message: words([no.label]) } };
-      return { ok: true, decision: "deny", picked: null, via: "decision", body: { behavior: "answer", message: QUESTION_DECLINED_MESSAGE } };
+      return { ok: true, decision: "deny", picked: null, via: "decision", body: { behavior: "answer", message: QUESTION_DECLINED_MESSAGE, declined: true } };
     }
     const implied = impliedChoice(approval.choices);
     if (!implied) {
@@ -676,7 +693,7 @@ interface ThreadRead {
 }
 
 /** Reads a Sagax message page (as the person saw it) after a cursor. */
-export function readThreadPage(threadId: string, raw: unknown, since: string | null, expireDays?: number): ThreadRead {
+export function readThreadPage(threadId: string, raw: unknown, since: string | null, expireDays?: number, translate?: ApprovalTranslate): ThreadRead {
   const list = Array.isArray(objectOf(raw)?.messages) ? (objectOf(raw)!.messages as unknown[]) : [];
   const all = list.map(objectOf).filter((m): m is Record<string, unknown> => Boolean(m) && typeof m!.id === "string");
   const index = since ? all.findIndex((m) => m.id === since) : -1;
@@ -705,7 +722,7 @@ export function readThreadPage(threadId: string, raw: unknown, since: string | n
     const card = objectOf(m.card);
     const requestId = str(card?.requestId);
     if (!card || !requestId || card.answered !== undefined || card.dismissed === true || card.expired === true) continue;
-    approvals.push(describeMemberApproval(threadId, m, card, expireDays));
+    approvals.push(describeMemberApproval(threadId, m, card, expireDays, translate));
   }
   const last = all.at(-1);
   return {
@@ -1004,7 +1021,7 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     deps.expireDueApprovals?.(threadId);
     const reply = await deps.perform(person, { method: "GET", path: `/api/threads/${encodeURIComponent(threadId)}/messages`, query: { limit: String(limit) } });
     if (!okStatus(reply)) return passThrough(reply, "This conversation cannot be read.");
-    return readThreadPage(threadId, reply.body, since, expireDaysFor(person));
+    return readThreadPage(threadId, reply.body, since, expireDaysFor(person), deps.approvalWords?.(person));
   };
   const isRead = (value: ThreadRead | Answer): value is ThreadRead => "messages" in value;
 
@@ -1108,7 +1125,7 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     status = deps.threadStatus(threadId) ?? "idle";
     const page = await rawPage(person, threadId);
     if (!("raw" in page)) return { botId, threadId, messageId: input.anchor, status, pending: true, reply: null, approvals: [], cursor: null, summary: null };
-    const read = readThreadPage(threadId, page.raw, null, expireDaysFor(person));
+    const read = readThreadPage(threadId, page.raw, null, expireDaysFor(person), deps.approvalWords?.(person));
     const anchor = anchorOf(read);
     const reply = status === "idle" ? replyAfter(read.messages, anchor) : null;
     // Idle after a wait is done even without words (a failed turn says why
@@ -1153,7 +1170,7 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     if (!("raw" in page)) return page;
     deps.expireDueApprovals?.(threadId);
     const found = cardIn(page.raw, requestId);
-    const approval = found ? describeMemberApproval(threadId, found.message, found.card, expireDaysFor(person)) : null;
+    const approval = found ? describeMemberApproval(threadId, found.message, found.card, expireDaysFor(person), deps.approvalWords?.(person)) : null;
     // A card older than the page read: answered by decision, as before.
     const plan = approval && found ? planAnswer(approval, found.card, input)
       : input.decision ? { ok: true as const, decision: input.decision, picked: null, via: "decision" as const, body: { behavior: input.decision } }

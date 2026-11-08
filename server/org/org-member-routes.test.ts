@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
-import { createOrgMemberRoutes, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
+import { createOrgMemberRoutes, describeMemberApproval, planAnswer, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
 
 const ISS = "https://perspicax.example";
 const ORIGIN = "https://sagax.example";
@@ -1119,3 +1119,22 @@ describe("a skill card answered through the member API (G4)", () => {
     expect((deny as { body: object }).body).not.toHaveProperty("reviewedSha256");
   });
 });
+
+describe("question title and decline in the person's language (#2633)", () => {
+  const card = { requestId: "q-1", requestType: "question", title: "Your bot has a question", subtitle: "Quel créneau?", options: ["Lundi", "Mardi"] };
+  const fr = (key: string) => ({ "question.card.title": "Votre bot a une question" } as Record<string, string>)[key] ?? key;
+
+  it("words Sagax's generic question title in the reader's language, never a bot's own title", () => {
+    expect(describeMemberApproval("t1", { at: 1 }, card, undefined, fr).title).toBe("Votre bot a une question");
+    expect(describeMemberApproval("t1", { at: 1 }, { ...card, title: "Choix du créneau" }, undefined, fr).title).toBe("Choix du créneau");
+    expect(describeMemberApproval("t1", { at: 1 }, card).title).toBe("Your bot has a question");
+    expect(readThreadPage("t1", { messages: [{ id: "m1", role: "bot", kind: "options", card }] }, null, undefined, fr).approvals[0]?.title).toBe("Votre bot a une question");
+  });
+
+  it("a declined question says so to the respond route, which words it and keeps it off the person's messages", () => {
+    const approval = describeMemberApproval("t1", { at: 1 }, { ...card, options: ["A", "B"] });
+    const plan = planAnswer(approval, { ...card, options: ["A", "B"] }, { decision: "deny" });
+    expect(plan).toMatchObject({ ok: true, decision: "deny", body: { behavior: "answer", message: QUESTION_DECLINED_MESSAGE, declined: true } });
+  });
+});
+

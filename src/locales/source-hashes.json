@@ -18002,7 +18002,8 @@
       "githubEvent.issue.assigned": "b038225e477e31815fcd1304540e2e10079f4eb3e91507d2c5f2ed6b34d9330c",
       "githubEvent.push": "731ce7ed808913b2fb4a3db764cad1d9be4433f3fe232818d7e66c7d3fd2a9c0",
       "githubEvent.release.published": "a1c13b11b2802f2f2c40024682655f29844f158e672f32c7cf9dfa805e11b160",
-      "osPermission.unavailable": "36cb891aa87589528711d59cc9aa42dd059e06e5d4d15a2bfe9709fb44b5bcca"
+      "osPermission.unavailable": "36cb891aa87589528711d59cc9aa42dd059e06e5d4d15a2bfe9709fb44b5bcca",
+      "question.card.declinedByClient": "a3f40616ff7776605b99c9e79793ead70d3937f5373dd7f0dbe209467f8c4aab"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

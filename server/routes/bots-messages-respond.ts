@@ -6,6 +6,7 @@ import {
   QUESTION_DISMISS_MESSAGE,
   isPersistentQuestionCard,
 } from "../../shared/ask-question.ts";
+import { closeDeclinedQuestion, isQuestionDecline } from "../approvals/question-decline.ts";
 import { resolvePeerComms } from "../peers/peer-approval.ts";
 import { personKey } from "../request-speaker.ts";
 import { resolveAndSendTerminal } from "../terminal/terminal-requests.ts";
@@ -160,7 +161,15 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
         store.patchMessage(bot.threadId, pending.id, { card: { ...pending.card, dismissed: true } });
         return json(res, 200, { ok: true, dismissed: true });
       }
-      const outcome = await answerRequest(bot.threadId, bot.modelSelection.instanceId, requestId, behavior, body.message, { id: bot.id, name: bot.name }, body.always === true, body.rememberCommand === true);
+      // #2633/#2634: a declined question is told in the person's language,
+      // and never becomes a message of theirs once its turn is over.
+      const declined = isQuestionDecline(body, pending?.card);
+      const message = declined ? (deps.questionDeclinedText?.(auth) ?? body.message) : body.message;
+      const outcome = await answerRequest(bot.threadId, bot.modelSelection.instanceId, requestId, behavior, message, { id: bot.id, name: bot.name }, body.always === true, body.rememberCommand === true);
+      if (outcome === "unavailable" && declined && pending) {
+        const closed = closeDeclinedQuestion(store, bot.threadId, pending.id);
+        return json(res, closed.status, closed.body);
+      }
       if (outcome === "unavailable" && isPersistentQuestionCard(pending?.card) && behavior === "answer") {
         if (!pending) return json(res, 404, { error: "this question is no longer available" });
         const answer = typeof body.message === "string" ? body.message.trim() : "";
@@ -381,7 +390,15 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
       }
       if (!owner && !pending) return json(res, 404, { error: "nothing is waiting on an answer in this conversation" });
       const requestOwner = owner ? botForThread(owner.id, threadId) : null;
-      const outcome = await answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, behavior, body.message, owner ? { id: owner.id, name: owner.name } : undefined, body.always === true, body.rememberCommand === true);
+      // #2633/#2634: a declined question is told in the person's language,
+      // and never becomes a message of theirs once its turn is over.
+      const declined = isQuestionDecline(body, pending?.card);
+      const message = declined ? (deps.questionDeclinedText?.(auth) ?? body.message) : body.message;
+      const outcome = await answerRequest(threadId, requestOwner?.modelSelection.instanceId ?? "", requestId, behavior, message, owner ? { id: owner.id, name: owner.name } : undefined, body.always === true, body.rememberCommand === true);
+      if (outcome === "unavailable" && declined && pending) {
+        const closed = closeDeclinedQuestion(store, threadId, pending.id);
+        return json(res, closed.status, closed.body);
+      }
       if (outcome === "unavailable" && isPersistentQuestionCard(pending?.card) && behavior === "answer") {
         if (!pending?.card) return json(res, 404, { error: "this question is no longer available" });
         const answer = typeof body.message === "string" ? body.message.trim() : "";

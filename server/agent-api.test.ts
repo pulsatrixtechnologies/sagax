@@ -681,6 +681,23 @@ describe("send_prompt / await_turn", () => {
     expect(w.interrupted).toHaveLength(1);
   });
 
+  it("supersede retires the stopped turn's open question after the interrupt (#2608)", async () => {
+    const w = world({ replyAfterPolls: 50 });
+    const order: string[] = [];
+    const interrupt = w.deps.interrupt;
+    w.deps.interrupt = async (agentId, threadId) => { order.push(`interrupt:${threadId}`); await interrupt(agentId, threadId); };
+    w.deps.retireQuestions = (_agentId, threadId) => { order.push(`retire:${threadId}`); };
+    const api = createAgentApi(w.deps);
+    const caller = bot("bot-x");
+    const first = await api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "first" });
+    const thread = first.body.thread_id;
+    // queue (the default) never retires the question
+    await api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "queued", thread_id: thread });
+    expect(order).toEqual([]);
+    await api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "instead", thread_id: thread, on_busy: "supersede" });
+    expect(order).toEqual([`interrupt:${thread}`, `retire:${thread}`]);
+  });
+
   it("each prompt queued behind a busy conversation gets its own reply, never an empty finished (#2575)", async () => {
     const w = world({ queueWhenBusy: true });
     const caller = person("p1");

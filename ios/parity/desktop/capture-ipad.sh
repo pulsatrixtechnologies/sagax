@@ -24,7 +24,8 @@
 # Each device is a dedicated simulator ("parity-ipad13", "parity-ipad11";
 # PARITY_SIM_PREFIX=i2 names them "i2-ipad13", "i2-ipad11" so two worktrees
 # can capture at once),
-# dark, status bar pinned, deleted at the end unless --keep-sims. The app is
+# dark (PARITY_APPEARANCE=light for the light look, which also forces
+# -paritySkin system unless a skin is named), status bar pinned, deleted at the end unless --keep-sims. The app is
 # the Debug simulator build of ios/parity/capture.sh (unsigned; the parity
 # launch keeps its bearer in memory), built for testing: the orientation is
 # set by one UI test (UITests/ParityOrientationUITests.swift), since iPadOS
@@ -37,8 +38,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 PARITY="$(cd "$HERE/.." && pwd)"
 IOS="$(cd "$PARITY/.." && pwd)"
 ROOT="$(cd "$IOS/.." && pwd)"
-OUT="$HERE/out"
+OUT="${PARITY_OUT:-$HERE/out}"
 BUILD="$PARITY/build"
+APPEARANCE="${PARITY_APPEARANCE:-dark}"
+# more launch arguments, e.g. PARITY_EXTRA_ARGS="-AppleLanguages (fr)"
+read -r -a EXTRA_ARGS <<< "${PARITY_EXTRA_ARGS:-}"
 BUNDLE_ID="ca.pulsatrix.sagax"
 WAIT="${PARITY_WAIT:-6}"
 # Simulator names: parity-ipad13 / parity-ipad11, or another prefix so two
@@ -175,7 +179,7 @@ prepare_sim() { # name type -> udid
   fi
   xcrun simctl boot "$udid" 2>/dev/null || true
   xcrun simctl bootstatus "$udid" -b >/dev/null
-  xcrun simctl ui "$udid" appearance dark
+  xcrun simctl ui "$udid" appearance "$APPEARANCE"
   xcrun simctl status_bar "$udid" override --time "9:41" \
     --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100 >/dev/null 2>&1 || true
   xcrun simctl install "$udid" "$APP"
@@ -244,7 +248,9 @@ for row in "${PLAN[@]}"; do
       xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
       ARGS=(-parityEndpoint "$ENDPOINT" -parityToken "$TOKEN" -parityIPadScreen "$ID" -parityOrientation "$ORIENTATION")
       [ -n "$ENVIRONMENT" ] && ARGS+=(-parityEnvironment "$ENVIRONMENT")
-      [ -n "$SKIN" ] && ARGS+=(-paritySkin "$SKIN")
+      if [ -n "$SKIN" ]; then ARGS+=(-paritySkin "$SKIN")
+      elif [ "$APPEARANCE" = light ]; then ARGS+=(-paritySkin system); fi
+      [ ${#EXTRA_ARGS[@]} -gt 0 ] && ARGS+=("${EXTRA_ARGS[@]}")
       xcrun simctl launch "$UDID" "$BUNDLE_ID" "${ARGS[@]}" >/dev/null
       sleep "$WAIT"
       xcrun simctl io "$UDID" screenshot --type=png "$OUT/ipad-$VIEWPORT-$FILE_STEM.png" >/dev/null 2>&1

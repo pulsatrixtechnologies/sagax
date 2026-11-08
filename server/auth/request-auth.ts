@@ -502,7 +502,7 @@ const COMPANION_BOT_FIELDS = new Set([
   ...MEMBER_BOT_FIELDS,
   "memoryEnabled", "memoryUpkeep", "skillLearning", "helperModel", "voiceNotes", "builtinPlugins",
   // Permissions / Approval / Proactive (BotPanelPatch)
-  "approvalMode", "autoApprove", "acknowledgeLocalAuto", "proactiveMode", "pageTargetDefault", "alwaysAllow",
+  "approvalMode", "autoApprove", "acknowledgeLocalAuto", "proactiveMode", "directTriggers", "pageTargetDefault", "alwaysAllow",
   "chiefOfStaff", "approvePeerComms",
   "confirmFullAccess", "applyToAllThreads",
   // Access / Works on (BotAccessPatch, BotPanelPatch)

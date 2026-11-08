@@ -204,7 +204,7 @@ describe("Settings > Organization on a Perspicax server", () => {
     const markup = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org, onChanged: () => {} }));
     // #584: link state and role on one grey line under the organization's name
     expect(markup).toContain("Linked to Pulsatrix · Admin");
-    // JC 2026-11-06: Manage opens the org console in the browser
+    // the owner 2026-11-06: Manage opens the org console in the browser
     expect(markup).toContain("Manage in Perspicax");
     expect(markup).toContain("data-external-link-pill");
     expect(markup).toContain('href="https://px.example.test/console/"');
@@ -219,8 +219,8 @@ describe("Settings > Organization on a Perspicax server", () => {
     expect(markup).not.toContain("My subscriptions and keys");
     expect(markup).not.toContain("data-my-engines");
     expect(markup).not.toContain("Routines in my name");
-    // the GitHub OAuth App's client id stays for the admin, under advanced
-    expect(markup).toContain('data-settings-card="organization.githubApp"');
+    // #2767: the GitHub OAuth App's client id moved to Settings > Developer
+    expect(markup).not.toContain('data-settings-card="organization.githubApp"');
   });
   it("gives an admin the force actions menu on every bot, and a member none (OrgSharing.test.ts has the rest)", async () => {
     const { OrgSharing } = await import("../settings/OrgSharing");

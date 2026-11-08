@@ -8,7 +8,6 @@ export const CredentialsSettings = lazyScreen("CredentialsSettings", async () =>
 export const DecisionModelSettings = lazyScreen("DecisionModelSettings", async () => (await import("./DecisionModelSettings")).DecisionModelSettings);
 export const DeveloperSettings = lazyScreen("DeveloperSettings", async () => (await import("./settings/DeveloperSettings")).DeveloperSettings);
 export const EnginesSettings = lazyScreen("EnginesSettings", async () => (await import("./EnginesSettings")).EnginesSettings);
-export const ExperimentalSettings = lazyScreen("ExperimentalSettings", async () => (await import("./settings/ExperimentalSettings")).ExperimentalSettings);
 export const LocalComputerSection = lazyScreen("LocalComputerSection", async () => (await import("./LocalComputerSection")).LocalComputerSection);
 export const NotificationSettings = lazyScreen("NotificationSettings", async () => (await import("./NotificationSettings")).NotificationSettings);
 export const OrganizationSettings = lazyScreen("OrganizationSettings", async () => (await import("./OrganizationSettings")).OrganizationSettings);

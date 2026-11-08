@@ -2,7 +2,7 @@
 // open_page, open_routine and open_run. Mirrors shared/widget.ts
 // (`widgetAppAction`, WIDGET_APP_PAGES) and the desktop's
 // src/components/widget/widget-device.ts. The phone opens the closest
-// existing page (Grok Bot rule: a card acts; it does not ask the model).
+// existing page (reference app rule: a card acts; it does not ask the model).
 import Foundation
 
 /// Pages `open_page.payload.page` may name.
@@ -33,7 +33,7 @@ public enum ChatWidgetAppAction: Hashable, Sendable {
 }
 
 /// Where the iPhone / iPad opens each action. Pages that have no phone twin
-/// map to the closest existing surface (same rule as Grok Bot: act now).
+/// map to the closest existing surface (same rule as reference app: act now).
 public enum ChatWidgetDestination: Hashable, Sendable {
     /// Automations / routines list (`TasksRoutinesView`).
     case automations

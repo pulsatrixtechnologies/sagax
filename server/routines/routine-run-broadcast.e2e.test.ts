@@ -2,7 +2,7 @@
 // server. The frame announcing the run's task used to carry the bot's whole
 // active transcript; past the phone sidecar's 4 MiB event ceiling that ended
 // the stream, and resuming from the cursor replayed the same frame forever —
-// "loses connection about once an hour" with an hourly routine (MOCA-179).
+// "loses connection about once an hour" with an hourly routine (ticket 179).
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

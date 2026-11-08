@@ -52,7 +52,7 @@ beforeEach(() => {
   forgetSearchDisclosuresForTests();
 });
 
-describe("sidebar search disclosure (MOCA-293)", () => {
+describe("sidebar search disclosure (ticket 293)", () => {
   it("opens only rows with a matching thread, and clearing puts every row back", () => {
     const writer = row("bot:writer");
     const [, open] = writer("", false);

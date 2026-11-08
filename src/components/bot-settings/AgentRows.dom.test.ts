@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The bot panel's Coding section (JC, 2026-11-06): a grey "Coding" label
+// The bot panel's Coding section (the owner, 2026-11-06): a grey "Coding" label
 // above one CodingSessionRow per session in the panel card. Each row is a
 // state mark (dotted spinner while it runs), the title on one line
 // (truncated) and a chevron; nothing else is visible. A click opens the

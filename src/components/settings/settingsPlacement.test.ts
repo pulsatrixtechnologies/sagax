@@ -7,7 +7,7 @@ import { CARD_KEYWORDS, SECTIONS } from "./settings-nav";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-describe("Settings placement (JC 2026-11-08)", () => {
+describe("Settings placement (the owner 2026-11-08)", () => {
   it("Available renders nothing for an option made impossible by context", () => {
     expect(renderToStaticMarkup(createElement(Available, { when: false, children: createElement("p", null, "My Chrome") }))).toBe("");
     expect(renderToStaticMarkup(createElement(Available, { when: true, children: createElement("p", null, "ok") }))).toBe("<p>ok</p>");

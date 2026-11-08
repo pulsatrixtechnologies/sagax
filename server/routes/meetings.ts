@@ -20,7 +20,7 @@ export function createMeetingRoutes(deps: {
   meetings: () => MeetingService;
   /** Why this caller may not act on the card, or null. */
   refusal(auth: RequestAuth, threadId: string, requestId: string): string | null;
-  /** Settings > Experimental > Meeting notetaker. */
+  /** Settings > Developer > Experimental > Meeting notetaker. */
   enabled(): boolean;
 }): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {

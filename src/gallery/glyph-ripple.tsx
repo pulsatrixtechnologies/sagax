@@ -18,9 +18,9 @@ const on = params.get("off") !== "1";
 
 const turns = [
   { user: true, text: "Peux-tu faire le point sur les billets ouverts de la semaine ?" },
-  { user: false, text: "Voici le point : 14 billets ouverts, dont 3 en attente du client et 2 à facturer. Le plus ancien date de lundi (imprimante du 2e étage). Voulez-vous que je relance les clients en attente ?" },
+  { user: false, text: "Voici le point : 14 billets ouverts, dont 3 en attente du client et 2 à facturer. Le plus ancien date de lundi (imprimante du 2e étage). Veux-tu que je relance les clients en attente ?" },
   { user: true, text: "Oui, relance les trois." },
-  { user: false, text: "C'est fait : trois courriels de relance envoyés, avec le numéro du billet en objet. Je vous avertis dès qu'une réponse arrive." },
+  { user: false, text: "C'est fait : trois courriels de relance envoyés, avec le numéro du billet en objet. Je t'avertis dès qu'une réponse arrive." },
 ];
 
 function Gallery() {
@@ -39,7 +39,7 @@ function Gallery() {
           </div>
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] px-5 pb-5">
             <div className="pointer-events-auto mx-auto flex max-w-[760px] items-center rounded-[22px] border-[0.5px] border-border bg-composer px-4 py-3">
-              <textarea data-gallery-composer="" rows={1} placeholder="Écrivez à votre bot" className="w-full resize-none bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-tertiary" />
+              <textarea data-gallery-composer="" rows={1} placeholder="Écris à ton bot" className="w-full resize-none bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-tertiary" />
             </div>
           </div>
         </div>

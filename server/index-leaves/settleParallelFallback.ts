@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { PARALLEL_NOT_STARTED } from "../../shared/restart-words.ts";
 /** settleParallelFallback (#1388). Pure move from server/index.ts. */
 export type Host = Record<string, any>;
 
@@ -9,8 +10,10 @@ function settleParallelFallback(threadId: string) {
   setTimeout(() => {
     const pending = host.pendingParallelTask(threadId);
     if (!pending || host.threadBusy(pending.bot.id, threadId) || hasQueuedSteeredMessages(pending.bot.id, threadId)) return;
+    // #2808: its teammates still work for it; their answer settles it.
+    if (host.coordinator?.awaitsTeammates?.(threadId)) return;
     const said = [...store.messagesFor(threadId)].reverse().find((message) => message.kind === "access" || message.tool?.name.startsWith("error:"));
-    host.settleParallelTask(threadId, { ok: false, reply: "", why: said?.tool?.name.replace(/^error:\s*/, "") ?? "the task could not start" });
+    host.settleParallelTask(threadId, { ok: false, reply: "", why: said?.tool?.name.replace(/^error:\s*/, "") ?? PARALLEL_NOT_STARTED });
   }, 0).unref?.();
 
 }

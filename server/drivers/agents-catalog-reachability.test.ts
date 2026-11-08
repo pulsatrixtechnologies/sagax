@@ -133,7 +133,7 @@ function promisedTurns(where: string): { turns: string[]; env: Env; roles: strin
   if (label.startsWith("when a Perspicax profile is mounted for the person speaking")) return flag({ SAGAX_CLAIMS: "1" });
   if (label.startsWith("when the bot has a voice configured")) return flag({ SAGAX_VOICE_NOTES: "1" });
   if (label.startsWith("during a live phone call")) return flag({ SAGAX_VOICE_CALL: "1" });
-  if (label.startsWith("when Settings > Experimental > Meeting notetaker is on")) return flag({ SAGAX_MEETINGS: "1" });
+  if (label.startsWith("when Settings > Developer > Experimental > Meeting notetaker is on")) return flag({ SAGAX_MEETINGS: "1" });
   if (label.startsWith("when computer sharing is on")) return flag({ SAGAX_SHARED_COMPUTERS_ENABLED: "1" });
   if (label.startsWith("when skill authoring is on")) return flag({ SAGAX_SKILL_AUTHORING_ENABLED: "1" });
   if (label.startsWith("in a single-stream conversation")) return flag({ SAGAX_SINGLE_STREAM: "1" });

@@ -10,6 +10,8 @@ function noteWakeDryRun(threadId: string, botId: string, tool: string, command?:
   if (!run?.proactive || !host.routines) return;
   const decision = host.proactiveEngine.decideStep(botId, { tool, ...(command ? { command } : {}) });
   if (!decision.dryRun) return;
+  // #2698: each write step of a wake counts on the bot's proactivity metrics
+  host.proactiveMetrics?.count(botId, "writes");
   host.routines.noteProactiveDryRun(run.id, {
     tool,
     summary: host.proactiveDryRunSummary({ tool, ...(command ? { command } : {}) })

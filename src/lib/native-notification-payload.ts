@@ -41,6 +41,7 @@ export function notificationTypeFor(
     case "incident":
     case "delegation-settled":
     case "wait":
+    case "proposal":
       return groupId ? "groups" : "bots";
     default:
       return groupId ? "groups" : "bots";

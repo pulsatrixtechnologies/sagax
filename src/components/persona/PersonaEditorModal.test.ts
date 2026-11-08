@@ -2,7 +2,7 @@
 // Bot's layout) in the main panel: its top is the bot's appearance (the
 // banner, the mascot, the name with its label under it, the description and
 // the colour, edited in place, the Appearance pane unfolding under them),
-// then five pill tabs at most, each one column of cards (JC 2026-11-06).
+// then five pill tabs at most, each one column of cards (the owner 2026-11-06).
 // Every section of the former editor is still there, on its tab; locked
 // sections are shown with their reason instead of hidden.
 import { createElement } from "react";
@@ -162,7 +162,7 @@ describe("bot profile page shell", () => {
     expect(html).toContain('aria-label="Close"');
   });
 
-  it("regression #2271: the header (name, label, description, Appearance) comes before the tabs, the tabs are five at most, the panels one column (JC 2026-11-06)", () => {
+  it("regression #2271: the header (name, label, description, Appearance) comes before the tabs, the tabs are five at most, the panels one column (the owner 2026-11-06)", () => {
     const html = render("overview");
     const tabs = at(html, 'data-bot-profile-tabs=""');
     expect(tabs).toBeGreaterThan(0);
@@ -171,7 +171,7 @@ describe("bot profile page shell", () => {
       expect(at(html, marker)).toBeLessThan(tabs);
     }
     expect(tabsOf(html).length).toBeLessThanOrEqual(5);
-    // the name alone on its line, the label under it, smaller and secondary (JC, never "Name · Label")
+    // the name alone on its line, the label under it, smaller and secondary (the owner, never "Name · Label")
     const title = html.slice(at(html, 'data-bot-profile-title=""'), at(html, 'data-bot-profile-label=""'));
     expect(title).toContain(">Pepper<");
     expect(title).not.toContain("Research");
@@ -182,7 +182,7 @@ describe("bot profile page shell", () => {
     expect(label).toContain("text-[15px]");
     // the description, edited in place
     expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*>Finds sources\.<\/textarea>/);
-    // each tab is a panel of ONE column (JC 2026-11-06: no two-column grid)
+    // each tab is a panel of ONE column (the owner 2026-11-06: no two-column grid)
     for (const tab of ["general"]) {
       const panel = html.slice(at(html, `id="bot-profile-panel-${tab}"`), at(html, `id="bot-profile-panel-${tab}"`) + 400);
       expect(panel).toContain('role="tabpanel"');
@@ -210,7 +210,7 @@ describe("bot profile page shell", () => {
     expect(tabsOf(html)).not.toContain("appearance");
   });
 
-  it("regression: nothing of the Appearance shows while it is folded, the description then the tabs (JC 2026-11-06)", () => {
+  it("regression: nothing of the Appearance shows while it is folded, the description then the tabs (the owner 2026-11-06)", () => {
     const html = render("overview");
     expect(html).toContain('data-bot-profile-appearance-toggle="" aria-expanded="false"');
     for (const marker of ["data-mascot-color", "data-bot-profile-colors", "data-appearance-modes", "data-appearance-mode=", "data-appearance-reset", "data-mascot-randomize", "data-appearance-tabs"]) {
@@ -387,7 +387,7 @@ describe("General sub-pages", () => {
     expect(bodiesOf(sectionHtml(personality, "summary").html)).toEqual(["overview"]);
     expect(at(personality, 'data-bot-profile-section="summary"')).toBeLessThan(at(personality, 'data-bot-profile-section="soul"'));
     // Shared with is a summary row whose Manage opens the top bar's Share
-    // popover (JC 2026-11-06: the people are managed in ONE place)
+    // popover (the owner 2026-11-06: the people are managed in ONE place)
     const html = render("sharing");
     expect(subPageOf(html)).toBe("sharing");
     const sharing = sectionHtml(html, "sharing").html;

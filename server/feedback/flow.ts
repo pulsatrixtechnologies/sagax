@@ -77,6 +77,24 @@ export const OFFER_OPTIONS: Record<FeedbackLanguage, [string, string]> = {
   en: ["Send the report", "No thanks"],
 };
 
+const OFFER_WORDS: Record<FeedbackLanguage, { title: string; subtitle: (summary: string) => string }> = {
+  fr: {
+    title: "On dirait que quelque chose ne marche pas.",
+    subtitle: (summary) => `Je peux envoyer un signalement à l'équipe avec ce message, la version et les journaux récents, anonymisés :\n\n« ${summary} »`,
+  },
+  en: {
+    title: "Looks like something isn't working.",
+    subtitle: (summary) => `I can send a report to the team with this message, the version and recent logs, anonymized:\n\n"${summary}"`,
+  },
+};
+
+/** The ready-made report offered after a frustrated message, in the
+ * person's language (the app gallery shows it too). */
+export function offerCard(lang: FeedbackLanguage, summary: string): FlowCard {
+  const words = OFFER_WORDS[lang];
+  return { title: words.title, subtitle: words.subtitle(summary), options: [...OFFER_OPTIONS[lang]] };
+}
+
 const QUESTIONS: Record<FeedbackLanguage, Record<AnswerField, string>> = {
   fr: {
     steps: "Quelles étapes mènent au problème? Une par ligne, si possible.",

@@ -22,6 +22,17 @@ public enum NotificationApproval {
     public static let updateCategory = "SAGAX_UPDATE"
     /// A question that names its request (server/push/payload.ts `QUESTION_CATEGORY`).
     public static let questionCategory = "SAGAX_QUESTION"
+    /// #2697: a bot needs the person with no request behind it (a run's
+    /// report, a proactive find): Approve and Deny answer the bot in its
+    /// conversation (server/push/payload.ts `NEEDS_YOU_CATEGORY`).
+    public static let needsYouCategory = "SAGAX_NEEDS_YOU"
+    public static let approveAction = "sagax.needsyou.approve"
+    public static let declineAction = "sagax.needsyou.deny"
+    /// #2697: a proactive proposal card: Do it and Not now answer the
+    /// proposal (`POST /api/bots/:id/proactive/:proposalId`).
+    public static let proposalCategory = "SAGAX_PROPOSAL"
+    public static let doItAction = "sagax.proposal.accept"
+    public static let notNowAction = "sagax.proposal.decline"
     /// Bundled chime (ios/App/approval.caf). Distinct from the system sound and the nudge.
     public static let soundFile = "approval.caf"
     /// APNs subtitle key. `%@` is the routine's name.
@@ -38,6 +49,11 @@ public enum NotificationApproval {
         case confirmKey(threadId: String, requestId: String)
         /// Reply to a question from the banner: the typed text is the answer.
         case reply(threadId: String, requestId: String, text: String)
+        /// Approve or Deny on a needs-you: a short answer in the bot's
+        /// conversation (`groupId` when it came out of a room).
+        case needsYou(botId: String, threadId: String, groupId: String?, approve: Bool)
+        /// Do it or Not now on a proactive proposal card.
+        case proposal(botId: String, proposalId: String, accept: Bool)
     }
 
     /// What to do after the server refuses an Allow because a key is required.
@@ -54,7 +70,10 @@ public enum NotificationApproval {
 
     /// The category a local banner registers. Only an approval or a
     /// question that names its request gets actions: Allow and Deny, or Reply.
-    public static func category(kind: String, requestId: String?, needsKey: Bool, choices: [String] = []) -> String {
+    public static func category(kind: String, requestId: String?, needsKey: Bool, choices: [String] = [], proposalId: String? = nil) -> String {
+        // #2697: a proactive proposal and a needs-you with no request behind it
+        if kind == "proposal" { return token(proposalId) != nil ? proposalCategory : updateCategory }
+        if kind == "needs-you", token(requestId) == nil { return needsYouCategory }
         if kind == "question" {
             guard token(requestId) != nil else { return updateCategory }
             guard !choices.isEmpty else { return questionCategory }
@@ -79,6 +98,12 @@ public enum NotificationApproval {
             return .reply(threadId: threadId, requestId: requestId, text: choices[index])
         }
         switch actionIdentifier {
+        case approveAction, declineAction:
+            guard let threadId, let botId = token(info["botId"]) else { return target.map(Decision.open) }
+            return .needsYou(botId: botId, threadId: threadId, groupId: token(info["groupId"]), approve: actionIdentifier == approveAction)
+        case doItAction, notNowAction:
+            guard let botId = token(info["botId"]), let proposalId = token(info["proposalId"]) else { return target.map(Decision.open) }
+            return .proposal(botId: botId, proposalId: proposalId, accept: actionIdentifier == doItAction)
         case NotificationChoices.openAction:
             return target.map(Decision.open)
         case replyAction:
@@ -220,6 +245,8 @@ public enum AnswerFeedback: Equatable, Sendable {
         switch decision {
         case .allow, .confirmKey: .allowed
         case .deny: .denied
+        case let .needsYou(_, _, _, approve): approve ? .allowed : .denied
+        case let .proposal(_, _, accept): accept ? .allowed : .denied
         case let .reply(_, _, text): .answered(text)
         case .open: .failed
         }

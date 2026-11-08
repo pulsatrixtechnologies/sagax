@@ -7,9 +7,9 @@ import { createHmac } from "node:crypto";
 
 import {
   AGENT_SETTINGS_FIELDS, AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, AWAIT_RECOMMENDED_WAIT_MS, AWAIT_TIMEOUT_MS_DEFAULT, AWAIT_TIMEOUT_MS_MAX, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
-  HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, signHandle, signTurnHandle, turnLabel, verifyHandle,
+  HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, SEND_RECEIPT_TTL_MS, signHandle, signTurnHandle, turnLabel, verifyHandle,
   formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, resolveEngineInstance,
-  type AgentApiDeps, type AgentCaller, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type StoredMessage, type TurnState,
+  type AgentApiDeps, type AgentCaller, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type SendReceipt, type StoredMessage, type TurnState,
 } from "./agent-api.ts";
 import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./proactive/priority-wake.ts";
 
@@ -55,7 +55,7 @@ function world(options: {
   const messages = new Map<string, StoredMessage[]>();
   const state = new Map<string, TurnState>();
   const pending = new Map<string, { polls: number; prompt: string }>();
-  const waiting = new Map<string, Array<{ queueId: string; prompt: string }>>();
+  const waiting = new Map<string, Array<{ queueId: string; prompt: string; queuedAt: number }>>();
   const audits: Array<{ caller: string; entry: AuditEntry }> = [];
   const notified: string[] = [];
   const interrupted: string[] = [];
@@ -296,7 +296,7 @@ function world(options: {
       if (wake?.front) return { messageId: null };
       if (options.queueWhenBusy && (state.get(threadId) ?? "idle") !== "idle") {
         const queueId = `q${++ids}`;
-        waiting.set(threadId, [...(waiting.get(threadId) ?? []), { queueId, prompt }]);
+        waiting.set(threadId, [...(waiting.get(threadId) ?? []), { queueId, prompt, queuedAt: clock }]);
         return { messageId: queueId };
       }
       const row = add(threadId, { role: "user", kind: "text", text: prompt });
@@ -304,6 +304,7 @@ function world(options: {
       pending.set(threadId, { polls: options.replyAfterPolls ?? 3, prompt });
       return { messageId: row.id };
     },
+    queuedPrompts: (threadId) => (waiting.get(threadId) ?? []).map((item) => ({ id: item.queueId, text: item.prompt, queuedAt: item.queuedAt })),
     async interrupt(_agentId, threadId) {
       interrupted.push(threadId);
       pending.delete(threadId);
@@ -614,6 +615,162 @@ describe("send_prompt / await_turn", () => {
     const b1 = await w.api.call(bot("bot-x"), "send_prompt", { agent_id: "bot-a", prompt: "one" });
     const b2 = await w.api.call(bot("bot-x"), "send_prompt", { agent_id: "bot-a", prompt: "two" });
     expect(b2.body.thread_id).toBe(b1.body.thread_id);
+  });
+
+  it("send_prompt with an idempotency_key starts one turn; a resend replays it (Perspicax #1265)", async () => {
+    const w = world();
+    const args = { agent_id: "bot-a", prompt: "ship the report", mode: "async", idempotency_key: "run-42:step.1" };
+    const [first, concurrent] = await Promise.all([
+      w.api.call(person("p1"), "send_prompt", args),
+      w.api.call(person("p1"), "send_prompt", args),
+    ]);
+    const again = await w.api.call(person("p1"), "send_prompt", args);
+    expect(w.posted).toHaveLength(1);
+    expect(first.body).toMatchObject({ accepted: true });
+    expect(first.body.replayed).toBeUndefined();
+    for (const r of [concurrent, again]) {
+      expect(r.status).toBe(200);
+      expect(r.body).toMatchObject({ accepted: true, replayed: true, thread_id: first.body.thread_id });
+      expect(String(r.body.handle)).toMatch(/^turn_/);
+    }
+    const reused = await w.api.call(person("p1"), "send_prompt", { ...args, prompt: "something else" });
+    expect(reused.status).toBe(409);
+    expect(reused.body).toMatchObject({ code: "idempotency_key_reused", thread_id: first.body.thread_id });
+    // The key is per caller: another person's same key is a new send.
+    const other = await w.api.call(person("p2"), "send_prompt", args);
+    expect(other.body.replayed).toBeUndefined();
+    expect(w.posted).toHaveLength(2);
+    const bad = await w.api.call(person("p1"), "send_prompt", { ...args, idempotency_key: "has space" });
+    expect(bad.body).toMatchObject({ code: "bad_request", details: { reason: "invalid_idempotency_key" } });
+  });
+
+  it("an idempotency_key lasts the handle's lifetime: after it, a resend is a new send with a valid handle (#2849)", async () => {
+    const w = world();
+    const args = { agent_id: "bot-a", prompt: "ship the report", mode: "async", idempotency_key: "run-7:step.1" };
+    const first = await w.api.call(person("p1"), "send_prompt", args);
+    await w.settle();
+    w.advance(SEND_RECEIPT_TTL_MS - 60_000);
+    const within = await w.api.call(person("p1"), "send_prompt", args);
+    expect(within.body).toMatchObject({ replayed: true, thread_id: first.body.thread_id, expires_at: first.body.expires_at });
+    expect(w.posted).toHaveLength(1);
+    w.advance(120_000);
+    const after = await w.api.call(person("p1"), "send_prompt", args);
+    expect(after.body.replayed).toBeUndefined();
+    expect(after.body).toMatchObject({ accepted: true });
+    expect(w.posted).toHaveLength(2);
+    const waited = await w.api.call(person("p1"), "await_turn", { agent_id: "bot-a", handle: after.body.handle, timeout_ms: 30_000 });
+    expect(waited.status).toBe(200);
+    expect(waited.body).toMatchObject({ finished: true, reply: "echo: ship the report" });
+    // Within the new lifetime the key replays the new send.
+    const again = await w.api.call(person("p1"), "send_prompt", args);
+    expect(again.body).toMatchObject({ replayed: true, thread_id: after.body.thread_id });
+    expect(w.posted).toHaveLength(2);
+  });
+
+  it("an idempotency_key receipt is pending before the post: a crash after the post replays, a crash before it sends anew (#2849)", async () => {
+    const receipts = new Map<string, SendReceipt>();
+    const writes: Array<{ key: string; pending: boolean }> = [];
+    const store = {
+      get: (key: string) => receipts.get(key) ?? null,
+      put: (key: string, receipt: SendReceipt) => { writes.push({ key, pending: receipt.pending === true }); receipts.set(key, receipt); },
+      delete: (key: string) => void receipts.delete(key),
+    };
+    const w = world();
+    const api = createAgentApi({ ...w.deps, sendReceipts: store });
+    const args = { agent_id: "bot-a", prompt: "ship the report", mode: "async", idempotency_key: "run-9:step.1" };
+    const first = await api.call(person("p1"), "send_prompt", args);
+    expect(writes.map((write) => write.pending)).toEqual([true, false]);
+    // Simulate a crash after the post, before the final receipt.
+    const key = writes[0]!.key;
+    receipts.set(key, { ...receipts.get(key)!, message_id: null, pending: true });
+    const restarted = createAgentApi({ ...w.deps, sendReceipts: store });
+    const replay = await restarted.call(person("p1"), "send_prompt", args);
+    expect(replay.body).toMatchObject({ replayed: true, thread_id: first.body.thread_id });
+    expect(w.posted).toHaveLength(1);
+    expect(receipts.get(key)?.pending).toBeUndefined();
+    // A crash before the post: no user line after issued_at, the key is free.
+    await w.settle();
+    w.advance(60_000);
+    receipts.set(key, { ...receipts.get(key)!, message_id: null, issued_at: w.deps.now!(), pending: true });
+    const resend = await restarted.call(person("p1"), "send_prompt", args);
+    expect(resend.body.replayed).toBeUndefined();
+    expect(w.posted).toHaveLength(2);
+    // A refused post leaves no receipt behind.
+    const refusing = createAgentApi({ ...w.deps, sendReceipts: store, post: async () => ({ status: 503, code: "unavailable", message: "down" }) });
+    const refused = await refusing.call(person("p1"), "send_prompt", { ...args, idempotency_key: "run-9:step.2" });
+    expect(refused.status).toBe(503);
+    expect([...receipts.keys()].some((stored) => stored.endsWith("run-9:step.2"))).toBe(false);
+  });
+
+  it("a pending receipt finds a queued send (busyMode after) and only a line with its own text (#2858)", async () => {
+    const receipts = new Map<string, SendReceipt>();
+    const store = {
+      get: (key: string) => receipts.get(key) ?? null,
+      put: (key: string, receipt: SendReceipt) => void receipts.set(key, receipt),
+      delete: (key: string) => void receipts.delete(key),
+    };
+    const w = world({ queueWhenBusy: true, replyAfterPolls: 20 });
+    // no background watcher: the clock moves only when the test says so
+    const api = createAgentApi({ ...w.deps, notify: undefined, sendReceipts: store });
+    const first = await api.call(person("p1"), "send_prompt", { agent_id: "bot-a", prompt: "first job", mode: "async" });
+    const threadId = first.body.thread_id as string;
+    // The conversation is busy: this send waits in the queue, no user line yet.
+    const args = { agent_id: "bot-a", prompt: "second job", mode: "async", thread_id: threadId, on_busy: "queue", idempotency_key: "run-11:step.1" };
+    const queued = await api.call(person("p1"), "send_prompt", args);
+    expect(queued.body).toMatchObject({ accepted: true });
+    expect(w.posted).toHaveLength(2);
+    // Crash after the post, before the final receipt; the queue survives.
+    const key = [...receipts.keys()].find((stored) => stored.endsWith("run-11:step.1"))!;
+    receipts.set(key, { ...receipts.get(key)!, message_id: null, pending: true });
+    expect(w.messages.get(threadId)!.some((message) => message.text === "second job")).toBe(false);
+    const restarted = createAgentApi({ ...w.deps, notify: undefined, sendReceipts: store });
+    const replay = await restarted.call(person("p1"), "send_prompt", args);
+    expect(replay.body).toMatchObject({ replayed: true, thread_id: threadId });
+    expect(w.posted).toHaveLength(2);
+    expect(receipts.get(key)).toMatchObject({ message_id: expect.stringMatching(/^q/) });
+    expect(receipts.get(key)?.pending).toBeUndefined();
+    const waited = await restarted.call(person("p1"), "await_turn", { agent_id: "bot-a", handle: replay.body.handle, timeout_ms: 30_000 });
+    expect(waited.body).toMatchObject({ finished: true, reply: "echo: second job" });
+
+    // Crash before the post while another sender writes in that conversation:
+    // its line is not this prompt, so the key is free and the send goes out.
+    await w.settle();
+    receipts.set(key, { ...receipts.get(key)!, message_id: null, issued_at: w.deps.now!(), pending: true });
+    w.add(threadId, { role: "user", kind: "text", text: "a line from someone else" });
+    const resend = await restarted.call(person("p1"), "send_prompt", args);
+    expect(resend.body.replayed).toBeUndefined();
+    expect(w.posted).toHaveLength(3);
+  });
+
+  it("a pending receipt ignores a queued item older than its issued_at: K1 queued before K2, K2's resend posts (#2858)", async () => {
+    const receipts = new Map<string, SendReceipt>();
+    const store = {
+      get: (key: string) => receipts.get(key) ?? null,
+      put: (key: string, receipt: SendReceipt) => void receipts.set(key, receipt),
+      delete: (key: string) => void receipts.delete(key),
+    };
+    const w = world({ queueWhenBusy: true, replyAfterPolls: 200 });
+    const api = createAgentApi({ ...w.deps, notify: undefined, sendReceipts: store });
+    const first = await api.call(person("p1"), "send_prompt", { agent_id: "bot-a", prompt: "first job", mode: "async" });
+    const threadId = first.body.thread_id as string;
+    // K1 queues "same job" behind the busy turn.
+    const k1 = { agent_id: "bot-a", prompt: "same job", mode: "async", thread_id: threadId, on_busy: "queue", idempotency_key: "run-12:K1" };
+    const queued = await api.call(person("p1"), "send_prompt", k1);
+    expect(queued.body).toMatchObject({ accepted: true });
+    expect(w.posted).toHaveLength(2);
+    // Later, K2 sends the same text and crashes before its post.
+    w.advance(5_000);
+    const k2 = { ...k1, idempotency_key: "run-12:K2" };
+    const k1Key = [...receipts.keys()].find((stored) => stored.endsWith("run-12:K1"))!;
+    const k2Key = k1Key.replace(/run-12:K1$/, "run-12:K2");
+    receipts.set(k2Key, { ...receipts.get(k1Key)!, message_id: null, issued_at: w.deps.now!(), pending: true });
+    const restarted = createAgentApi({ ...w.deps, notify: undefined, sendReceipts: store });
+    const resend = await restarted.call(person("p1"), "send_prompt", k2);
+    // K1's queued item is older than K2's issued_at: K2 posts, never replays K1.
+    expect(resend.body.replayed).toBeUndefined();
+    expect(resend.body).toMatchObject({ accepted: true });
+    expect(w.posted).toHaveLength(3);
+    expect(receipts.get(k2Key)?.message_id).not.toBe(receipts.get(k1Key)?.message_id);
   });
 
   it("blocking waits for the reply; empty reply with finished=true means no text", async () => {

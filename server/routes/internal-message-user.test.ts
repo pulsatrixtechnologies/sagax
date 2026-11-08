@@ -4,11 +4,11 @@ import { findBotPersonGroup, resolveReachablePerson } from "../people/bot-messag
 import { createInternalMessageUserRoutes, type MessageUserDeps, type MessageUserGroup, type MessageUserNotice } from "./internal-message-user.ts";
 import type { InternalRouteContext } from "./internal-route.ts";
 
-const OWNER = "p_jc";
+const OWNER = "p_ab";
 const ZACH = "p_zach";
 const BOT = { id: "b_ember", name: "Ember", color: "#f80" };
 const PEOPLE = [
-  { id: OWNER, names: ["JC", "jc", "jc@example.test"] },
+  { id: OWNER, names: ["AB", "ab", "ab@example.test"] },
   { id: ZACH, names: ["Zachary Roy", "zroy", "zachary@example.test"] },
   { id: "p_zoe", names: ["Zoé Tremblay", "ztremblay", ""] },
 ];
@@ -63,7 +63,7 @@ function harness(groups: MessageUserGroup[] = []) {
 
 describe("message_user (#2118)", () => {
   it("posts in the existing group of the owner, the person and the bot", async () => {
-    const existing: MessageUserGroup = { id: "g_pair", name: "JC, Zachary Roy et Ember", memberIds: [BOT.id], humanIds: [OWNER, ZACH], threadId: "t_pair" };
+    const existing: MessageUserGroup = { id: "g_pair", name: "AB, Zachary Roy et Ember", memberIds: [BOT.id], humanIds: [OWNER, ZACH], threadId: "t_pair" };
     const t = harness([
       { id: "g_wider", name: "Équipe", memberIds: [BOT.id], humanIds: [OWNER, ZACH, "p_zoe"], threadId: "t_wider" },
       existing,
@@ -80,10 +80,10 @@ describe("message_user (#2118)", () => {
   });
 
   it("creates the group when it is missing, with the bot in it and the owner as its owner", async () => {
-    const t = harness([{ id: "g_dm", name: "JC et Zachary", memberIds: [], humanIds: [OWNER, ZACH], peopleDm: true, threadId: "t_dm" }]);
+    const t = harness([{ id: "g_dm", name: "AB et Zachary", memberIds: [], humanIds: [OWNER, ZACH], peopleDm: true, threadId: "t_dm" }]);
     const answer = await t.call({ user: "zroy", text: "Peux-tu prendre l'appel?" });
     expect(answer.status).toBe(201);
-    expect(answer.body).toMatchObject({ created: true, groupName: "JC, Zachary Roy et Ember" });
+    expect(answer.body).toMatchObject({ created: true, groupName: "AB, Zachary Roy et Ember" });
     const created = t.groups.find((group) => group.id === answer.body.groupId) as MessageUserGroup & { createdBy?: string };
     expect(created).toMatchObject({ memberIds: [BOT.id], humanIds: [OWNER, ZACH], createdBy: OWNER });
     expect(t.messages[0]?.threadId).toBe(created.threadId);
@@ -112,7 +112,7 @@ describe("message_user (#2118)", () => {
 
   it("asks which person when a name matches several", () => {
     expect(resolveReachablePerson("z", PEOPLE, OWNER)).toMatchObject({ ok: false, code: "ambiguous_person" });
-    expect(resolveReachablePerson("jc", PEOPLE, OWNER)).toMatchObject({ ok: false, code: "self" });
+    expect(resolveReachablePerson("ab", PEOPLE, OWNER)).toMatchObject({ ok: false, code: "self" });
   });
 
   it("prefers the group where this bot is the only bot", () => {

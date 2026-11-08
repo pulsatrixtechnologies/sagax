@@ -4,11 +4,16 @@ import { parallelOutcome, parallelResultText } from "../parallel-tasks.ts";
 export type Host = Record<string, any>;
 
 export function createSettleParallelTask(getHost: () => Host): any {
-function settleParallelTask(threadId: string, outcome: { ok: boolean; reply: string; why?: string }) {
+function settleParallelTask(threadId: string, outcome: { ok: boolean; reply: string; why?: string; final?: boolean }) {
   const host = getHost();
   const { DATA_DIR, appendAdminAction } = host;
   const pending = host.pendingParallelTask(threadId);
   if (!pending) return;
+  // #2808: a task whose turn handed work to teammates is not answered yet.
+  // It keeps running; the resume turn (or the relayed reply) settles it, so
+  // the teammate's answer reaches the conversation it came from.
+  if (outcome.ok && !outcome.final && outcome.why !== "interrupted" && !host.parallelStops.has(threadId)
+    && host.coordinator?.awaitsTeammates?.(threadId)) return;
   const { bot, task } = pending;
   const link = task.parallelOf!;
   const stopped = host.parallelStops.delete(threadId) || outcome.why === "interrupted";
@@ -24,7 +29,11 @@ function settleParallelTask(threadId: string, outcome: { ok: boolean; reply: str
   host.store.appendMessage(link.threadId, {
     role: "bot",
     kind: "text",
-    text: host.redactSecretsInText(parallelResultText({ state, reply: outcome.reply, why: outcome.why })),
+    text: host.redactSecretsInText(parallelResultText({
+      state, reply: outcome.reply, why: outcome.why,
+      // #2888: the person it answers reads it in their language, not English
+      language: host.languageOfPerson(task.ownerPrincipalId ?? host.effectiveBotOwner(bot) ?? undefined)
+    })),
     ...(request?.kind === "text" ? { replyToId: request.id } : {}),
     parallelTask: ref
   });

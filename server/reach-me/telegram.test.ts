@@ -43,7 +43,7 @@ function setup() {
   return { telegram, calls, replies, sealed, setUpdates: (next: unknown[]) => { updates = next; }, setWaiting: (next: boolean) => { waiting = next; } };
 }
 
-const OUT: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Cryptic", code: "KM3X", kind: "approval", title: "Run a command?", line: "", confidential: false, needsKey: false, language: "fr" };
+const OUT: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Nimbus", code: "KM3X", kind: "approval", title: "Run a command?", line: "", confidential: false, needsKey: false, language: "fr" };
 
 describe("Reach me by Telegram", () => {
   it("links the first chat that sends the one-time /start code, then sends there", async () => {

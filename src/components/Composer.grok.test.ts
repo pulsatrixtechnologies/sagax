@@ -55,7 +55,7 @@ const { openProviderKeyDialog } = await import("./settings/ProviderKeys");
 const { forgetVoiceModeStatus } = await import("@/lib/voice-mode/api");
 
 const bot = (color: string): Bot => ({
-  id: "bot", threadId: "selected", name: "Harrie", title: "", description: "", color: color as Bot["color"],
+  id: "bot", threadId: "selected", name: "Hollis", title: "", description: "", color: color as Bot["color"],
   notifications: true, unread: false, busy: false, messages: [],
   modelSelection: { instanceId: "test", model: "m" },
   tasks: [{ threadId: "selected", title: "Selected", createdAt: 1, busy: false, activity: "idle",
@@ -99,7 +99,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("composer controls (Grok Bot's prompt bar)", () => {
+describe("composer controls (the reference app's prompt bar)", () => {
   it("has no Send button: the CTA is Voice when empty and the send arrow once typed", () => {
     render(createElement(Composer, { bot: bot("pink") }));
     expect($('[aria-label="Attach a file"]')).toBeNull();

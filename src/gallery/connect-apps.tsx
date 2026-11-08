@@ -79,7 +79,7 @@ function Bots({ inApps }: { inApps?: boolean }) {
 // ?view=manage: the stand-in /api an organization member's panel reads
 // (&role=admin: an organization admin's).
 const admin = params.get("role") === "admin";
-// &app=none: no GitHub OAuth App on the server (Connect GitHub takes a token)
+// &app=none: no organization GitHub OAuth App (Connect GitHub still uses the built-in one)
 const deviceFlow = params.get("app") !== "none";
 const ORG: PerspicaxOrg = {
   org: { name: "Example Org", identity: { kind: "perspicax", issuer: "https://px.example.test" } },
@@ -293,6 +293,17 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
       MANAGE_API["/api/bots/bot-a/capabilities"] = flowInventory;
       MANAGE_API["/api/bots/bot-a/plugins"] = flowSupersededPluginsFixture(false);
       return json(MANAGE_API["/api/bots/bot-a/plugins"]);
+    }
+    // Connect GitHub: always the link and the code. &device=fail shows the
+    // refusal (Try again, token under Advanced); &code=XXXX-XXXX shows a
+    // code GitHub really handed out (scripts/capture/github-plugin.mjs).
+    if (url.pathname === "/api/me/github/device" && method === "POST") {
+      if (params.get("device") === "fail") {
+        return json({ error: "GitHub sign-in with a link and a code is not available on this server right now. Try again later.", code: "device_flow_unavailable" }, 409);
+      }
+      const started = { userCode: params.get("code") ?? "ABCD-1234", verificationUri: "https://github.com/login/device", expiresAt: Date.now() + 15 * 60_000 };
+      MANAGE_API["/api/me/connections"] = { ...(MANAGE_API["/api/me/connections"] as object), github: { state: "pending", deviceFlow: true, ...started } };
+      return json(started);
     }
     if (url.pathname === "/api/me/tailscale" && method === "GET") return json(galleryTailscale);
     if (url.pathname === "/api/me/tailscale" && method === "DELETE") {

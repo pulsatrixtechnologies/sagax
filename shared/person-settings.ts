@@ -1,4 +1,4 @@
-// A person's own Settings > Experimental choices and browser profiles on an
+// A person's own Settings > Developer > Experimental choices and browser profiles on an
 // organization server (#1098, 2026-10-27): set by the person, with no right
 // to edit the installation. Server: server/people/person-settings.ts and
 // GET/PATCH /api/me/experimental (server/routes/person-settings.ts). The

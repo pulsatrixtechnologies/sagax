@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { PersonSignalGate } from "../../shared/signal-levels.ts";
 import { pushesForFrame, type FramePushDeps } from "./frames.ts";
 
 const deps = (patch: Partial<FramePushDeps> = {}): FramePushDeps => ({
@@ -34,6 +35,43 @@ describe("frames to pushes", () => {
     ].map((kind) =>
       pushesForFrame({ kind: "notify", notification: { kind, botId: "b1", threadId: "t", title: "x", body: "y" } }, deps())[0]?.kind ?? null);
     expect(kinds).toEqual(["approval", "approval", "approval", "message", "message", "routine", "routine", null, null]);
+  });
+
+  it("a proactive report that needs the person wakes the phone at once, with Approve and Deny (#2697)", () => {
+    const push = pushesForFrame({
+      kind: "notify",
+      notification: { kind: "needs-you", botId: "b1", botName: "Scout", threadId: "t", title: "Scout needs you", body: "sign the renewal" },
+    }, deps())[0];
+    expect(push).toMatchObject({ kind: "approval", botId: "b1", title: "Scout needs you", body: "sign the renewal", needsYou: true });
+    expect(push?.requestId).toBeUndefined();
+    expect(push?.prompt).toBeUndefined();
+    const wait = pushesForFrame({ kind: "notify", notification: { kind: "wait", botId: "b1", threadId: "t", title: "x", body: "y" } }, deps())[0];
+    expect(wait?.kind).toBe("message");
+  });
+
+  it("a proactive proposal card is a card-level push that names its proposal (#2697)", () => {
+    const push = pushesForFrame({
+      kind: "notify",
+      notification: { kind: "proposal", botId: "b1", botName: "Scout", threadId: "t", title: "Renew the domain", body: "Shall I handle it?", proposalId: "p-123" },
+    }, deps())[0];
+    expect(push).toMatchObject({ kind: "message", botId: "b1", proposalId: "p-123", title: "Renew the domain" });
+    expect(push?.needsYou).toBeUndefined();
+    // a proposal frame without its id carries no proposal
+    const bare = pushesForFrame({ kind: "notify", notification: { kind: "proposal", botId: "b1", threadId: "t", title: "x", body: "y" } }, deps())[0];
+    expect(bare?.proposalId).toBeUndefined();
+  });
+
+  it("a proposal push respects the person's daily budget and quiet hours; a needs-you always goes (#2695, #2697)", () => {
+    let quiet: { start: string; end: string; timeZone: string } | null = null;
+    const gate = new PersonSignalGate(() => ({ budget: 1, quiet }), () => Date.UTC(2026, 10, 10, 15, 0));
+    const proposal = (id: string) => pushesForFrame({ kind: "notify", notification: { kind: "proposal", botId: "b1", threadId: "t", title: "x", body: "y", proposalId: id } }, deps())[0]!;
+    const needsYou = pushesForFrame({ kind: "notify", notification: { kind: "needs-you", botId: "b1", threadId: "t", title: "x", body: "y" } }, deps())[0]!;
+    expect(gate.decide(proposal("p1"))).toBe("push");
+    expect(gate.decide(proposal("p2"))).toBe("hold");
+    expect(gate.decide(needsYou)).toBe("push");
+    const fresh = new PersonSignalGate(() => ({ budget: 20, quiet }), () => Date.UTC(2026, 10, 10, 15, 0));
+    quiet = { start: "00:00", end: "23:59", timeZone: "UTC" };
+    expect(fresh.decide(proposal("p3"))).toBe("hold");
   });
 
   it("a takeover wakes like an approval but carries no Allow or Deny", () => {
@@ -105,6 +143,7 @@ describe("frames to pushes", () => {
     const note = { kind: "done", botId: "b1", botName: "Max", threadId: "t2", title: "Max", body: "Progress" };
     expect(pushesForFrame({ kind: "notify", notification: { ...note, notify: false } }, deps())).toEqual([]);
     expect(pushesForFrame({ kind: "notify", notification: { ...note, notify: true } }, deps())).toHaveLength(1);
-    expect(pushesForFrame({ kind: "notify", notification: note }, deps())).toHaveLength(1);
+    expect(pushesForFrame({ kind: "notify", notification: note }, deps())).toHaveLength(1);    // #2695: FYI passes through to the signal gate, which holds it for the brief
+    expect(pushesForFrame({ kind: "notify", notification: { ...note, notify: false, level: "fyi" } }, deps())).toHaveLength(1);
   });
 });

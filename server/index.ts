@@ -16,6 +16,8 @@ import { ambientRefusalFor, clearAmbientRefusal, fixAmbientMcp } from "./drivers
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer, parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { withRequiredComputer } from "../shared/routine-readiness.ts";
+import { stripRequesterAddress } from "../shared/relay-reply.ts";
+import { RequestLanguages, requestLanguage } from "./people/request-language.ts";
 import { missingCitedPaths } from "./routines/routine-cited-paths.ts";
 import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
 import { createBotObservabilityRoutes } from "./routes/bot-observability.ts";
@@ -59,6 +61,8 @@ import { misusePathRefusal, misuseRefusal, misuseToolFrameText, setMisuseAlert, 
 import { unwrapAgentsBridge } from "../shared/searched-tool-call.ts";
 import { safetyArm, safetyHttpRefusal, safetyPermissionEffect, safetyToolHold, setSafetyConfirm, setSafetyFullAccess } from "./safety/safety-review.ts";
 import { writeFileAtomic } from "./atomic.ts";
+import { createSignalSettingsRoutes } from "./routes/signal-settings.ts";
+import { signalGateFileStorage } from "./proactive/signal-gate-store.ts";
 import { hideServerPathsInSections } from "./server-path-prompt.ts";
 import { rm as removeDirectory } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -118,9 +122,15 @@ import { approvalModeFor,
   type ApprovalMode,
   setDefaultApprovalMode } from "../shared/approval-mode.ts";
 import { isProactiveMode, normalizeProactiveMode, proactiveModeFor } from "../shared/proactive-mode.ts";
+import { mailIsCalendarInvite } from "../shared/direct-triggers.ts";
 import { parsePageTargetDefault } from "../shared/page-targets.ts";
 import { createProactiveProposalRoutes } from "./routes/proactive-proposals.ts";
+import { createProactiveMetricsRoutes } from "./routes/proactive-metrics.ts";
+import { createBotEventSubscriptionRoutes } from "./routes/bot-event-subscriptions.ts";
+import { BotEventSubscriptions } from "./bot-events/bot-event-subscriptions.ts";
+import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
 import { ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
+import { frontMomentSampler, ScreenContextWatcher, screenContextAvailable, screenMomentKey } from "./proactive/screen-context.ts";
 import { ProactiveProposals, ProactiveWaker, proactivePrompt, PeerNoticeHops, ProactivePendingFile, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
 import { type BotActService, type PerformActor } from "./bots/bot-act.ts";
 import { askedBotChange, askedChange, createSettingsActions } from "./settings-actions.ts";
@@ -152,7 +162,7 @@ import type { CommandAllowlistCandidate } from "../shared/command-allowlist.ts";
 import { claudeAccountInfo } from "./engines/claude-accounts.ts";
 import { BrowserCleanupCoordinator, BrowserSweep, browserIdleMs, engineBrowsers } from "./browser/browser-lifecycle-cleanup.ts";
 import * as checkpoints from "./checkpoints.ts";
-import { commandReceipt } from "./commands.ts";
+import { commandReceipt, dropCommandReceipt, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
 import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
@@ -185,6 +195,7 @@ import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./com
 import { instructionsLead } from "../shared/instructions-lead.ts";
 import { type BotVisibility, type ResolvedSender, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
 import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
+import { TURN_CUT_BY_RESTART } from "../shared/restart-words.ts";
 import { closeRowsLeftByRestart, endedToolOutput } from "./threads/subagent-cleanup.ts";
 import { reapOrphanEngineGroups } from "./engines/engine-groups.ts";
 import { BOT_ACTIVITY_WINDOW_MS as SUBAGENT_SWEEP_WINDOW_MS } from "../shared/bot-activity.ts";
@@ -198,10 +209,11 @@ import { prepareSemanticRecall, setSemanticIndex } from "./recall/semantic-recal
 import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./engines/retire-every-claude.ts";
 import { LocalSemanticIndex, semanticIndexFile } from "./recall/semantic-index.ts";
 import { withoutWiderAudience } from "./memory/memory-audience.ts";
-import { BriefStore } from "./proactive/background-brief.ts";
+import { BriefStore, feedbackMemoryText, localizedGist, suggestionAction, type BriefFeedback, type BriefSuggestion } from "./proactive/background-brief.ts";
 import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.ts";
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
+import { DAILY_SUGGESTIONS_WINDOW_MS, dailySuggestionCard, dailySuggestionEvent, pickDailySuggestions, suggestionsPostedSince } from "./proactive/daily-suggestions.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
 import { createSkillReview, looksLikeStop, turnSignal, turnToolSteps } from "./skills/skill-review.ts";
 import { summarizeSessions } from "./recall/session-summary.ts";
@@ -301,7 +313,7 @@ import { videoCredential } from "./video/video-credentials.ts";
 import { videoSourceMessage } from "./video/video-source.ts";
 import { videoStatusRow } from "./video/video-status.ts";
 import { createXaiVideoProvider, generatedMp4Chunks, openGeneratedVideo } from "./video/video-provider.ts";
-import { mediaProxyPolicyFromEnv, blockedAddressReason, defaultMediaProxyResolver } from "./media/media-proxy-guard.ts";
+import { mediaProxyPolicyFromEnv, blockedAddressReason, defaultMediaProxyResolver, checkMediaDestination } from "./media/media-proxy-guard.ts";
 import { createWebSearchRoutes } from "./routes/web-search.ts";
 import { createTelemetryRoutes } from "./routes/telemetry.ts";
 import { createTracer } from "./telemetry/otel.ts";
@@ -310,6 +322,7 @@ import { createTelemetrySettingsStore } from "./telemetry/settings-store.ts";
 import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createGrokBridgeRoutes } from "./routes/grok-bridge.ts";
 import { createGrokBridgeInboundRoutes } from "./routes/grok-bridge-inbound.ts";
+import { createPushRelayRoutes } from "./routes/push-relay.ts";
 import { createGrokBridgeInternalRoutes } from "./routes/grok-bridge-internal.ts";
 import { GrokBridgeSecrets } from "./grok-bridge/secrets.ts";
 import { GrokBridgeStore } from "./grok-bridge/store.ts";
@@ -506,6 +519,20 @@ import { IncidentLedger, incidentRequest } from "./peers/incidents.ts";
 import { createEmptyResponseRetry, shouldEmptyResponseRetry } from "./empty-response-retry.ts";
 import { limitKindOf } from "./usage/limit-reset-time.ts";
 
+/** The language the app last asked in, per person, for a person with no saved one (#2803). */
+const requestLanguages = new RequestLanguages();
+/** The language a person's app last asked in. No person: the local one (a
+ * single-person server notes its requests under the local principal). */
+function askedLanguageOf(person: string | null | undefined): string | undefined {
+  if (person) return requestLanguages.of(person);
+  try {
+    return (IDENTITY.kind === "perspicax" ? undefined : requestLanguages.of(localPrincipalId())) ?? requestLanguages.of("");
+  } catch {
+    // Before the principal registry exists (the first-run seed).
+    return requestLanguages.of("");
+  }
+}
+
 /** A session_read answer competes with the transcript for the context
  * window; a computer-use turn's output can run to hundreds of KB. */
 import { legacyPendingAsides } from "./peers/aside.ts";
@@ -668,7 +695,7 @@ import {
   type NativeSkill,
 } from "./skills/native-skills.ts";
 import { newBotDefaultsSchema } from "./bots/new-bot-defaults.ts";
-import { greetingLanguage } from "./bots/new-bot-greeting.ts";
+import { greetingLanguage, seedGreetingPatches } from "./bots/new-bot-greeting.ts";
 import { SoloGoals, soloGoalSystemPrompt } from "./solo-goal.ts";
 import { soloGoalLineText, type SoloGoalLine } from "../shared/solo-goal-line.ts";
 import { relayAccountLabel } from "./run-with-engine.ts";
@@ -720,6 +747,7 @@ import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
 import { createDelegatedLevel } from "./host/delegated-level.ts";
 import { createLiveApprovalMode } from "./host/live-approval.ts";
 import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./waits/wait-host.ts";
+import { HEARTBEAT_PATH, HeartbeatManager } from "./heartbeat/heartbeat.ts";
 import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits.ts";
 import { createReadAndDraft } from "./read-and-draft.ts";
 import { createSavedSteps, savedStepsEnabled } from "./saved-steps/saved-steps.ts";
@@ -875,6 +903,7 @@ import { DEVICE_REQUEST_KEYS, isSyncedPreference } from "../shared/settings-acti
 import { installResourceUsage } from "./resource-usage/install.ts";
 import { grokAccountReach, grokReachConnectorNames } from "./drivers/acp/grok-tool-catalog.ts";
 import { GROK_CLOUD_CONNECTORS } from "../shared/grok-cloud-connectors.ts";
+import { probeFullDiskAccess } from "./imessage/imessage-permissions.ts";
 import { connectorSetupOwner, createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes } from "./routes/connector-setup.ts";
 import { connectorReauthFailure, connectorReauthText, type ConnectorSetupView } from "../shared/connector-setup.ts";
 import { streamTerminalAttachment } from "./terminal-resources/adapters/personal.ts";
@@ -1068,6 +1097,7 @@ import { GithubConnect,
   githubGitEnvironment,
   githubTokenKind } from "./github/github-connect.ts";
 import { GithubConnectCards } from "./github/github-connect-cards.ts";
+import { resolveGithubClientId } from "./github/builtin-client.ts";
 import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox/sandbox-plugins.ts";
 import { OrgCapabilities, type OrgCapabilityMount } from "./org/org-capabilities.ts";
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
@@ -1217,7 +1247,8 @@ import { askedForView } from "../shared/requested-views.ts";
 import { isCwViewTool } from "../shared/cw-widgets/tool-call.ts";
 import { createPresenceRoutes, presenceFrameAllowed } from "./routes/presence.ts";
 import { PresenceTracker } from "./people/presence.ts";
-import { readApnsConfig } from "./push/config.ts";
+import { DEFAULT_APNS_BUNDLE_ID, readApnsConfig } from "./push/config.ts";
+import { ApnsRelaySender, readApnsRelayConfig, readApnsRelayTokens } from "./push/relay.ts";
 import { createPushDeviceStore, tokensOfConnectedDevices } from "./push/devices.ts";
 import { PushHub } from "./push/hub.ts";
 import { createAndroidPushDeviceStore } from "./push/fcm-devices.ts";
@@ -1255,7 +1286,7 @@ import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
 import { activeCount as temporaryActiveCount, archiveMark, capInstructions, defaultIdleHours, mayDelete as mayDeleteTemporary, profileSections, quotaKey as temporaryQuotaKey, TEMP_AGENT_QUOTA, TEMP_AGENT_SWEEP_MS, temporaryOwner, type TemporaryAgent, type TemporaryCreator } from "./temporary-agents.ts";
 import { createTemporaryAgentRoutes } from "./routes/temporary-agents.ts";
 import { botCreationOffered } from "./bots/bot-creation.ts";
-import { agentPromptWithFiles, createAgentApi, formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, type AgentCaller } from "./agent-api.ts";
+import { agentPromptWithFiles, createAgentApi, formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, SEND_RECEIPT_TTL_MS, type AgentCaller, type SendReceipt } from "./agent-api.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
 import { backgroundIdleMs, planBackgroundSweep, RESERVED_RUN_PREFIX } from "./threads/background-sweep.ts";
 import { MemberLiveText } from "./people/member-live-text.ts";
@@ -1277,6 +1308,7 @@ import { dispatchInternalRoutes, type InternalCapabilityView, type InternalRoute
 import { createPerspicaxToolInternalRoutes } from "./routes/perspicax-tool-internal.ts";
 import { createMcpAuditInternalRoutes } from "./routes/mcp-audit-internal.ts";
 import { createRoutineRunInternalRoutes, routineRunNowAllowed } from "./routes/routine-run-internal.ts";
+import { createEventSubscriptionsInternalRoutes } from "./routes/event-subscriptions-internal.ts";
 import { createPerspicaxOrgRoutes, orgDirectoryEntries } from "./perspicax/perspicax-org-routes.ts";
 import { createMemorySyncTokenRoute } from "./memory/perspicax-memory-sync-token.ts";
 import { PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
@@ -1428,7 +1460,8 @@ import { createCompactConversation } from "./index-leaves/compactConversation.ts
 import { createBindTurnComputer } from "./index-leaves/bindTurnComputer.ts";
 import { createStartDuplexCallTurn } from "./index-leaves/startDuplexCallTurn.ts";
 import { createSseFrameFor } from "./index-leaves/sseFrameFor.ts";
-import { createInboxPending } from "./index-leaves/inboxPending.ts";
+import { createInboxPending, todayDepsFor } from "./index-leaves/inboxPending.ts";
+import { markAttentionHandled } from "./approvals/today-rows.ts";
 import { createProvideSecretFromPhone } from "./index-leaves/provideSecretFromPhone.ts";
 import { createReportIncident } from "./index-leaves/reportIncident.ts";
 import { createRespondToCard } from "./index-leaves/respondToCard.ts";
@@ -1480,6 +1513,7 @@ import { createTemporaryAgentSetting } from "./index-leaves/temporaryAgentSettin
 import { createAnswerInboxCard } from "./index-leaves/answerInboxCard.ts";
 import { createPublishedPageOptions } from "./index-leaves/publishedPageOptions.ts";
 import { createObservePushFrame } from "./index-leaves/observePushFrame.ts";
+import { heldSignalsSection, PersonSignalGate, QUIET_HOURS_KEY, readQuietHours, readSignalBudget, SIGNAL_BUDGET_KEY } from "../shared/signal-levels.ts";
 import { createConfirmHeldCard } from "./index-leaves/confirmHeldCard.ts";
 import { createResumeTurnsCutByRestart } from "./index-leaves/resumeTurnsCutByRestart.ts";
 import { createDispatchComputerResume } from "./index-leaves/dispatchComputerResume.ts";
@@ -5799,6 +5833,7 @@ bindLeafHost({
   get liveActivityHub() { return liveActivityHub; },
   get pushHub() { return pushHub; },
   get reachMeService() { return reachMeService; },
+  get signalGate() { return signalGate; },
   get reachMeTeams() { return reachMeTeams; },
   get reachMeWhatsApp() { return reachMeWhatsApp; },
   get phoneToolTaintedThreads() { return phoneToolTaintedThreads; },
@@ -6692,6 +6727,7 @@ bindLeafHost({
   get routineWatchDeps() { return routineWatchDeps; },
   get routineWatchEvaluator() { return routineWatchEvaluator; },
   get proactiveProposals() { return proactiveProposals; },
+  get proactiveMetrics() { return proactiveMetrics; },
   get proactiveEngine() { return proactiveEngine; },
   get proactivePending() { return proactivePending; },
   get proactiveWaker() { return proactiveWaker; },
@@ -6713,6 +6749,7 @@ bindLeafHost({
   get offerProactive() { return offerProactive; },
   get offerRoomPostToBots() { return offerRoomPostToBots; },
   get PROACTIVE_RUN_NAMES() { return PROACTIVE_RUN_NAMES; },
+  get screenContextBlock() { return (botId: string) => screenContext?.blockFor(botId) ?? ""; },
   get startProactiveWake() { return startProactiveWake; },
   get answerRoleTransition() { return answerRoleTransition; },
   get answerProactiveProposal() { return answerProactiveProposal; },
@@ -8568,6 +8605,8 @@ const achievementCallStarts = new Map<string, number>();
 // devices each person registered, and the hub that decides and sends. Off,
 // with one log line, until SAGAX_APNS_KEY_PATH and SAGAX_APNS_KEY_ID are set.
 const apnsConfig = readApnsConfig();
+// No key here: iPhone pushes go through a Sagax that has one (#2697).
+const apnsRelayConfig = readApnsRelayConfig();
 const pushDevices = createPushDeviceStore(DATA_DIR);
 // Android phones through FCM HTTP v1 (server/push/fcm.ts, docs/android-push.md):
 // off, with one log line, until SAGAX_FCM_SERVICE_ACCOUNT_PATH is set.
@@ -8586,6 +8625,9 @@ const liveActivityHub = new LiveActivityHub({
 });
 const pushHub = new PushHub({
   config: apnsConfig,
+  relay: apnsRelayConfig.configured
+    ? { sender: new ApnsRelaySender({ url: apnsRelayConfig.url, token: apnsRelayConfig.token }), bundleId: process.env.SAGAX_APNS_BUNDLE_ID?.trim() || DEFAULT_APNS_BUNDLE_ID }
+    : undefined,
   store: pushDevices,
   android: {
     store: androidPushDevices,
@@ -8619,6 +8661,12 @@ const pushHub = new PushHub({
     }
   }
 });
+/** #2695: the person's signal levels, daily budget and quiet hours, across all their bots. */
+const signalGate = new PersonSignalGate((person) => {
+  let prefs: Record<string, string> = {};
+  try { prefs = userPreferenceStore.get(person).preferences ?? {}; } catch { /* the defaults */ }
+  return { budget: readSignalBudget(prefs[SIGNAL_BUDGET_KEY]), quiet: readQuietHours(prefs[QUIET_HOURS_KEY]) };
+}, Date.now, signalGateFileStorage(join(DATA_DIR, "signal-gate.json")));
 /** "Me joindre" (server/reach-me/): set once its channels exist, further down. */
 let reachMeService: ReachMe | null = null;
 let reachMeTeams: ReachTeams | null = null;
@@ -11365,7 +11413,9 @@ for (const pending of startupCatalogs) {
     broadcast({ kind: "config", ...configStatus() });
   }, () => {}).catch(reportBackgroundError);
 }
-store.seedIfEmpty();
+// The first-run bot greets before any request names the person's language;
+// the first one that does says its untouched greeting again in it (#2803).
+let seedToLocalize: string | null = store.seedIfEmpty()?.id ?? (store.bots.length === 1 ? store.bots[0]!.id : null);
 hostedModels?.reconcile(store);
 // 2026-10-28 (one source of truth): a conversation that kept a level
 // nobody chose in it (an engine change that asked again, a grant that never
@@ -12011,10 +12061,11 @@ function usablePersonGithub(principalId: string | null | undefined) {
   if (!principalId) return undefined;
   return personGithub(principalId);
 }
-/** The organization's GitHub OAuth App for the device flow (Settings >
- * Organization, else SAGAX_GITHUB_CLIENT_ID). A client id is public. */
+/** The GitHub OAuth App for the device flow: the organization's (Settings >
+ * Developer), else SAGAX_GITHUB_CLIENT_ID, else Sagax's built-in one
+ * (server/github/builtin-client.ts). A client id is public. */
 function githubClientId(): string | undefined {
-  return cfg.organization?.githubClientId?.trim() || process.env.SAGAX_GITHUB_CLIENT_ID?.trim() || undefined;
+  return resolveGithubClientId(cfg.organization?.githubClientId);
 }
 /** Put a person's GitHub connection where gh and git read it in their
  * server environment (or take it out). Best effort: a turn re-applies it. */
@@ -13735,13 +13786,27 @@ const coordinator: Coordinator = createCoordinator({
         return false;
       }
       relayShown.delete(node.threadId);
-      for (const text of texts) store.appendMessage(node.threadId, { role: "bot", kind: "text", text });
+      // #2808: in the unified chat the "<teammate> replied" row is hidden,
+      // so each relayed reply names its teammate itself, without the line
+      // the teammate addressed to the requesting bot.
+      replies.forEach((reply, index) => {
+        const teammate = store.bot(reply.botId);
+        store.appendMessage(node.threadId, {
+          role: "bot", kind: "text", text: stripRequesterAddress(texts[index]!, bot.name),
+          ...(teammate ? { relayedFrom: { botId: teammate.id, name: teammate.name, color: teammate.color } } : {}),
+        });
+      });
       const quiet = turnAnswers(node.threadId, { cardContinuation: true, coordination: node }).quiet;
       if (!quiet) {
         const who = [...new Set(replies.map(reply => store.bot(reply.botId)?.name ?? "Teammate"))].join(", ");
         notify(deliverableNotification("delegation-settled", bot, node.threadId, `Results in from ${who}`, { avatarUrl: bot.avatarUrl }));
       }
       store.patchTask(bot.id, node.threadId, { unread: true });
+      // #2808: a parallel task that waited on these teammates answers in the
+      // conversation it came from with what they said.
+      if (pendingParallelTask(node.threadId)) {
+        settleParallelTask(node.threadId, { ok: true, final: true, reply: texts.map(text => stripRequesterAddress(text, bot.name)).join("\n\n") });
+      }
       return true;
     },
     run: async (node, resumed, signal, composed: ComposedTurn) => {
@@ -13962,7 +14027,7 @@ const coordinator: Coordinator = createCoordinator({
     outward: node => {
       const followup = node.parentId || node.groupId ? undefined : followupAtBoot(node.threadId);
       if (followup) {
-        followupEndedRoots.set(node.id, followup === "pending" ? "turn interrupted — Sagax restarted" : undefined);
+        followupEndedRoots.set(node.id, followup === "pending" ? TURN_CUT_BY_RESTART : undefined);
         return [followup === "pending" ? "queued follow-up waiting" : "queued follow-up dispatched"];
       }
       return outwardActions(turnRows(node));
@@ -14204,6 +14269,10 @@ store.onChange((change) => {
       catch { console.error("[bot-plugins] Could not remove deleted bot's plugins."); }
       // its own approval rules and its permission mode (all-bots rules stay)
       ownerApprovals.forgetBot(change.botId);
+      // #2698: its proactivity metrics (a deletion during startup may come first)
+      try { proactiveMetrics.forgetBot(change.botId); } catch { /* not ready yet */ }
+      // #2700: its event subscriptions and the ones that fed its routines
+      try { botEventSubscriptions.forgetBot(change.botId); } catch { /* not ready yet */ }
       try { artifactStore.removeBot(change.botId); }
       catch { console.error("[artifacts] Could not remove deleted bot's artifacts."); }
       try { botTaskStore.removeBot(change.botId); }
@@ -15800,6 +15869,8 @@ const quietTurnThreads = new Set<string>();
  * anyone (set_reply_notify, send_to_bot `notify` false): read and cleared
  * when that turn completes (runtime-events/turn-completed.ts). */
 const silentReplyThreads = new Set<string>();
+/** #2695: threads whose next reply the bot marked FYI (set_reply_notify fyi). */
+const fyiReplyThreads = new Set<string>();
 const QUIET_TURN_NEWS: ReadonlySet<Notification["kind"]> = new Set(["done", "turn-failed", "incident"]);
 
 /** Put a notification on the wire. Clients decide what to do with it — a
@@ -17312,6 +17383,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get publicGroupState() { return publicGroupState; },
   get quietTurnThreads() { return quietTurnThreads; },
   get silentReplyThreads() { return silentReplyThreads; },
+  get fyiReplyThreads() { return fyiReplyThreads; },
   get raiseHarnessQuestion() { return raiseHarnessQuestion; },
   get reachMeTeams() { return reachMeTeams; },
   get readAndDraft() { return readAndDraft; },
@@ -17635,6 +17707,7 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   },
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
+  feedback: (botId, topic) => backgroundBriefs.wakeLevel(botId, topic),
 };
 /** 2026-11-05 (visible roles, #2032): the role a Perspicax turn starts under.
  * Only a Pulsatrix Flow routine's "Au nom de" (the run's snapshot, else the
@@ -18723,6 +18796,32 @@ const routineWatchEvaluator = createRoutineWatchEvaluator(routineWatchDeps);
 // Recovery can synchronously offer failed-run events from the constructor.
 // Keep the waker ready so those events join its usual batch.
 const proactiveProposals = new ProactiveProposals(process.env.VITEST ? null : join(DATA_DIR, "proactive-proposals.json"));
+/** #2698: per-bot proactivity metrics (wakes, proposals, writes, cost). */
+const proactiveMetrics = new ProactiveMetricsLedger({
+  file: process.env.VITEST ? null : join(DATA_DIR, "proactive-metrics.json"),
+  timeZone: () => routineTimeZone()
+});
+proactiveProposals.observe((event) => proactiveMetrics.count(event.botId, event.kind));
+if (!process.env.VITEST) process.once("exit", () => proactiveMetrics.flush());
+/** #2700: outbound event subscriptions (URL or routine) of each bot. On the
+ * shared server a URL must resolve to public addresses only. */
+const botEventDestinationCheck = async (url: URL): Promise<void> => {
+  if (IDENTITY.kind === "perspicax") await checkMediaDestination(url);
+};
+const subscriptionRoutine = (id: string) => {
+  const routine = routines?.listRoutines().find((candidate) => candidate.id === id);
+  return routine ? { id: routine.id, botId: routine.botId, name: routine.name, prompt: routine.prompt, runOn: routine.runOn } : undefined;
+};
+const botEventSubscriptions = new BotEventSubscriptions({
+  file: process.env.VITEST ? null : join(DATA_DIR, "bot-event-subscriptions.json"),
+  checkDestination: botEventDestinationCheck,
+  routine: subscriptionRoutine,
+  enqueue: (input) => {
+    if (!routines) throw new Error("routines are not ready");
+    return routines.enqueueWebhook(input);
+  },
+  botName: (botId) => store.bot(botId)?.name || "Bot"
+});
 /** Control layer for each wake step: classify, dry-run writes, defer to
  * ordinary approval. Wired from tool starts on an active wake. */
 const proactiveEngine = new ProactiveEngine({
@@ -19223,6 +19322,8 @@ routines = new RoutineManager({
   onRunChanged: (run) => {
     syncRoutineRunToSource(run);
     if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId);
+    if (run.proactive) proactiveMetrics.noteRun(run);
+    void botEventSubscriptions.publish(run);
     if (run.webhookId === REACH_TEAMS_WEBHOOK) void reachMeTeams?.runChanged(run);
   },
   onRunRequeued: (run) => {
@@ -19405,6 +19506,15 @@ const waitsBoot = createWaitsBootstrap({
   cloudHome: false
 });
 const botWaits = waitsBoot.waits;
+// #2692: HEARTBEAT.md, probes first, the model only on a gap, in the bot's main chat.
+const heartbeat = new HeartbeatManager({
+  bots: () => store.bots.filter((bot) => !bot.hidden && !archivedAgent(bot)).map((bot) => ({ id: bot.id, name: bot.name })),
+  mainThread: (botId) => botMainThread(botId),
+  read: (botId) => readMemoryDoc(botId, HEARTBEAT_PATH).text,
+  enqueue: (input) => routines!.enqueueWebhook(input),
+  muted: (botId) => backgroundBriefs.wakeMuted(botId, "heartbeat"),
+});
+setInterval(() => { void heartbeat.tick().catch(reportBackgroundError); }, 60_000).unref?.();
 store.onChange((change) => {
   if (change.type === "bot" && store.bot(change.botId)?.busy) botWaits.noteBotBusy(change.botId);
 });
@@ -19563,7 +19673,10 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
   run: "failed run",
   bot: "bot post",
   peer: "teammate message",
-  webhook: "webhook"
+  webhook: "webhook",
+  sms: "text",
+  suggestion: "daily suggestion",
+  screen: "screen"
 };
 
 /** A proactive wake: background run at the bot's level, under the right
@@ -19577,7 +19690,78 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
 /** Legacy proposal cards (propose mode, retired 2026-11-01) remain answerable:
  * accept runs the wake at the bot's level; decline closes the card. */
 
-ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal }));
+/** #2694: the person's memory keeps one line per feedback, for them alone. */
+function briefLanguage(botId: string): "fr" | "en" {
+  const bot = store.bot(botId);
+  return reachMeLanguage(reachMePerson(bot ? effectiveBotOwner(bot) || localPrincipalId() : localPrincipalId()) || null);
+}
+function rememberBriefFeedback(botId: string, choice: BriefFeedback, text: string, topic: string): void {
+  const language = briefLanguage(botId);
+  updateMemory(botId, { action: "append", text: feedbackMemoryText(choice, localizedGist(text, language), topic, language) }, { source: "proactive feedback", readers: { kind: "person" } });
+}
+/** #2694: feedback on a suggestion card lands on its brief item (next pass)
+ * and on the card itself, so every surface shows the choice. */
+function feedbackOnProposal(botId: string, proposalId: string, choice: BriefFeedback): { status: number; body: Record<string, unknown> } {
+  const bot = store.bot(botId);
+  const proposal = bot ? proactiveProposals.get(proposalId) : null;
+  if (!bot || !proposal || proposal.botId !== bot.id) return { status: 404, body: { error: "no such proposal" } };
+  try {
+    routeThreadId(bot, proposal.threadId);
+  } catch {
+    return { status: 404, body: { error: "no such proposal" } };
+  }
+  const briefId = proposal.events.map((event) => /^suggestion:(.+)$/.exec(event.key)?.[1]).find(Boolean);
+  const done = briefId ? backgroundBriefs.feedback(bot.id, briefId, choice) : null;
+  const event = proposal.events[0];
+  rememberBriefFeedback(bot.id, choice, done?.item.text ?? event?.summary ?? event?.label ?? "", done?.topic ?? event?.source ?? "general");
+  const message = store.messagesFor(proposal.threadId).find((row) => row.id === proposal.messageId);
+  if (message?.card) store.patchMessage(proposal.threadId, message.id, { card: { ...message.card, feedback: choice } });
+  return { status: 200, body: { ok: true, choice } };
+}
+ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal, feedback: feedbackOnProposal }));
+/** #2694: feedback on a whole wake kind (a heartbeat or mail/calendar wake's
+ * message, a Today attention card): the next wakes of that kind follow it
+ * (votes fade in two weeks, "never" holds until a thumbs-up), one memory
+ * line for the person, and the choice kept on the message. */
+function feedbackOnWake(botId: string, topic: string, choice: BriefFeedback, where: { threadId?: string; messageId?: string }): { status: number; body: Record<string, unknown> } {
+  const bot = store.bot(botId);
+  if (!bot) return { status: 404, body: { error: "no such bot" } };
+  let message: Message | undefined;
+  if (where.threadId && where.messageId) {
+    try {
+      routeThreadId(bot, where.threadId);
+    } catch {
+      return { status: 404, body: { error: "no such message" } };
+    }
+    message = store.messagesFor(where.threadId).find((row) => row.id === where.messageId);
+    if (!message) return { status: 404, body: { error: "no such message" } };
+  }
+  // the row itself names its wake kind when it has one (a Today card sends "attention")
+  const kind = message?.routineRun?.wakeTopic ?? topic;
+  backgroundBriefs.topicFeedback(bot.id, kind, choice);
+  const said = message?.routineRun?.summary ?? message?.attention?.items[0]?.text ?? message?.text ?? "";
+  rememberBriefFeedback(bot.id, choice, said || kind, kind);
+  if (message && where.threadId) {
+    if (message.routineRun) store.patchMessage(where.threadId, message.id, { routineRun: { ...message.routineRun, feedback: choice } });
+    else if (message.attention) store.patchMessage(where.threadId, message.id, { attention: { ...message.attention, feedback: choice } });
+  }
+  return { status: 200, body: { ok: true, choice, topic: kind } };
+}
+ROUTES.push(createProactiveMetricsRoutes<BotRecord>({
+  bot: (id) => store.bot(id) ?? undefined,
+  sees: (auth, bot) => auth.kind === "loopback" || listedBotVisible(bot, auth.session.principalId),
+  seesAll: (auth, bot) => ownerOrAdminOf(auth, bot),
+  read: (botId, days) => proactiveMetrics.read(botId, days)
+}));
+ROUTES.push(createBotEventSubscriptionRoutes<BotRecord>({
+  bot: (id) => store.bot(id) ?? undefined,
+  sees: (auth, bot) => auth.kind === "loopback" || listedBotVisible(bot, auth.session.principalId),
+  seesAll: (auth, bot) => ownerOrAdminOf(auth, bot),
+  ownerId: (auth) => (auth.kind === "session" ? auth.session.principalId?.trim() : "") || "local",
+  routine: subscriptionRoutine,
+  store: botEventSubscriptions,
+  checkDestination: botEventDestinationCheck
+}));
 /** 2026-11-05 (visible roles, batch 3): the composer's role picker. The
  * signed-in person's own held roles, live; the principal is the one a turn
  * of theirs would carry (orgSpeakerPrincipal), so a pick matches its turn. */
@@ -19757,6 +19941,12 @@ if (recoveryOwners.length > 0) {
 const routineRequests = new RoutineRequestService({
   store,
   routines,
+  // The details panel reads in the language of the person who answers the
+  // card: the bot owner's saved choice, else the language their app asks in (#2805).
+  language: (botId) => {
+    const bot = store.bot(botId);
+    return languageOfPerson(bot ? recordedBotOwner(bot) ?? undefined : undefined);
+  },
   autoApply: appliesDirectly,
   cloudReady: cloudRoutineReadiness,
   canPersist: proposalPersistence,
@@ -21869,7 +22059,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const speaker = turnSpeakerPrincipals.get(threadId);
       const person = speaker ? principals.byId(speaker) : null;
       const role = !organization || !person ? null : person.local === true || person.orgRole === "admin" ? "admin" as const : "member" as const;
-      return { organization, role, perspicaxTools: organization && Boolean(speaker) };
+      return { organization, role, perspicaxTools: organization && Boolean(speaker), release: releaseVersion() };
     }
   }),
   createPerspicaxToolInternalRoutes({
@@ -21917,6 +22107,18 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     standing: (runId) => routines?.runStanding(runId) ?? null,
     describe: (routine, run) => routineRunReceiptFacts(routine, run),
     audit: (routine, run, principalId) => auditRoutineRunNowBy(principalId ? { kind: "person", principalId, via: "sagax" } : { kind: "worker" }, routine, run)
+  }),
+  // event_subscriptions (#2700): the bot's own outbound event subscriptions
+  createEventSubscriptionsInternalRoutes({
+    ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
+    speaker: (threadId) => safetyPrincipal(threadId).principalId,
+    botOwner: (botId) => {
+      const bot = store.bot(botId);
+      return bot ? effectiveBotOwner(bot) || undefined : undefined;
+    },
+    routine: subscriptionRoutine,
+    store: botEventSubscriptions,
+    checkDestination: botEventDestinationCheck
   }),
   // list_terminal_resources and offer_shell_terminal (server/routes/terminal-internal.ts)
   terminalFeature.internalRoute,
@@ -22087,7 +22289,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     voiceCallActive: (threadId) => Boolean(voiceCalls.active(threadId)),
     botReaction,
     recordPlacedReaction: (threadId, botId, info) => { placedBotReactions.set(`${threadId}:${botId}`, info); },
-    setReplyNotify: (threadId, alert) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); },
+    setReplyNotify: (threadId, alert, fyi) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); if (fyi) fyiReplyThreads.add(threadId); else fyiReplyThreads.delete(threadId); },
     roomFeedsBot,
     turnSpeaker: (threadId) => turnSpeakerPrincipals.get(threadId),
     localPrincipalId,
@@ -22500,7 +22702,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       title: `${poster.name} in ${room.name}`, body: summarize(text),
       ...(typeof poster.avatarUrl === "string" && poster.avatarUrl ? { avatarUrl: poster.avatarUrl } : {}),
     } satisfies Notification, alert)),
-    setReplyNotify: (threadId, alert) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); },
+    setReplyNotify: (threadId, alert, fyi) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); if (fyi) fyiReplyThreads.add(threadId); else fyiReplyThreads.delete(threadId); },
     proactiveHopsFromThread,
     pollOnlyCaller: (capability) => pollOnlyCaller(capability as InternalCapability),
     peerSpeaker: (fromBotId, fromThreadId) => peerSpeaker(fromBotId, fromThreadId),
@@ -22811,9 +23013,12 @@ const inboundMail = createBotInboundMailRoute({
   unhandled: (botId, mail) => {
     const event = botmailEvent(mail);
     const domain = senderDomain(mail.from.address);
+    // 2026-11-08 (#2691): an invitation by email wakes the calendar trigger
+    const invite = mailIsCalendarInvite(mail.attachments);
     offerProactive({
-      botId, source: "mail", key: `mail:${mail.dedupeKey}`, confined: true,
-      label: `Email from ${domain || "an unknown domain"}`,
+      botId, source: invite ? "calendar" : "mail", key: `mail:${mail.dedupeKey}`, confined: true,
+      from: mail.from.address,
+      label: invite ? `Invitation from ${domain || "an unknown domain"}` : `Email from ${domain || "an unknown domain"}`,
       summary: `${mail.from.address}: ${mail.subject.trim() || "(no subject)"}`,
       detail: `Subject: ${mail.subject.trim() || "(no subject)"}\n${event.text ?? ""}`,
       hops: 0
@@ -22910,6 +23115,14 @@ const inboundTelephony = createBotInboundTelephonyRoute({
     return number ? phoneLineContacts.get(ownerPrincipalId, number) : null;
   },
   noticeUnknown: (ownerPrincipalId) => phoneLineContacts.settings(ownerPrincipalId).noticeUnknown,
+  // 2026-11-08 (#2691): a text no Bot phone trigger took wakes the bot
+  // through its direct text trigger, confined like a mail wake
+  unhandled: ({ botId, ownerPrincipalId, key, from, label, text }) => {
+    offerProactive({
+      botId, source: "sms", key, confined: true, from, runAs: ownerPrincipalId,
+      label, summary: text.slice(0, 140), detail: text, hops: 0
+    });
+  },
   ownerNotice: ({ ownerPrincipalId, botId, text }) => {
     try {
       const bot = store.bot(botId);
@@ -23065,6 +23278,14 @@ ROUTES.push(createDesktopBridgeRoutes({
 }));
 // A personal computer hands its look to the paired phone (shared/desktop-appearance.ts).
 ROUTES.push(createDesktopAppearanceRoutes({ store: createDesktopAppearanceStore(DATA_DIR), organization: () => IDENTITY.kind === "perspicax" }));
+// #2695: budget and quiet hours on a personal computer (no preference sync)
+ROUTES.push(createSignalSettingsRoutes({
+  store: {
+    get: () => userPreferenceStore.get(localPrincipalId()).preferences ?? {},
+    merge: (set, remove) => { userPreferenceStore.merge(localPrincipalId(), set, remove); }
+  },
+  organization: () => IDENTITY.kind === "perspicax"
+}));
 // The bot-memory panel's routes (MEMORY.md, memory/ topics, journal); the
 // store lookups — the 404 precheck and journal thread titles — stay explicit.
 // Memory manager catalog (local bots + team + Perspicax availability).
@@ -23596,6 +23817,40 @@ function backgroundBriefConnected(botId: string): readonly string[] {
 function backgroundBriefThread(bot: BotRecord, person: string): string | undefined {
   return IDENTITY.kind === "perspicax" ? conversationOrStart(bot, person) : conversationOrStart(bot);
 }
+/** #2693: the primary bot's free daily suggestions, as proactive proposal
+ * cards: "Fais-le" runs the accepted wake (answerProactiveProposal), outside
+ * the wake budget. No model call, no usage: the brief pass already costs 0. */
+function postDailySuggestions(botId: string, threadId: string, suggestions: readonly BriefSuggestion[], language: "fr" | "en"): number {
+  const posted = suggestionsPostedSince(proactiveProposals.all(), botId, Date.now() - DAILY_SUGGESTIONS_WINDOW_MS);
+  const picked = pickDailySuggestions(suggestions, posted);
+  for (const item of picked) {
+    const proposal = proactiveProposals.add({ botId, threadId, messageId: "", events: [dailySuggestionEvent(botId, item)], more: 0, hops: 0, confined: true });
+    const card = dailySuggestionCard(item, language);
+    // a free suggestion that never blocks the bot's turn; full-access: exempt
+    const message = store.appendMessage(threadId, { role: "bot", kind: "options", card: { title: card.title, subtitle: card.subtitle, options: [...card.options], proactiveProposal: { id: proposal.id } } });
+    proactiveProposals.setMessage(proposal.id, message.id);
+    // #2697: the card also reaches the phone, with Do it / Not now on the
+    // banner; a card-level signal (budget and quiet hours, #2695, decide)
+    const bot = store.bot(botId);
+    if (bot) notify(deliverableNotification("proposal", bot, threadId, card.subtitle, { avatarUrl: bot.avatarUrl, title: card.title, proposalId: proposal.id }));
+  }
+  return picked.length;
+}
+// #2699: screen context, on the person's consent, on the desktop app only
+// (server/proactive/screen-context.ts). In memory, never on disk.
+const SCREEN_CONTEXT_AVAILABLE = screenContextAvailable({ desktop: DESKTOP_MANAGED, platform: process.platform });
+const screenSampler = SCREEN_CONTEXT_AVAILABLE ? frontMomentSampler(process.platform) : null;
+const screenContext: ScreenContextWatcher | null = screenSampler ? new ScreenContextWatcher({
+  bots: () => backgroundBriefs.screenContextBots().filter((botId) => Boolean(store.bot(botId))),
+  sample: screenSampler,
+  dwell: (botId, moment) => {
+    offerProactive({
+      botId, source: "screen", key: screenMomentKey(moment, Date.now()),
+      label: "Screen", detail: `${moment.app}${moment.title ? ` | ${moment.title}` : ""}`
+    });
+  }
+}) : null;
+if (screenContext && !process.env.VITEST) screenContext.start();
 if (!process.env.VITEST) {
   startBriefTimer({
     store: backgroundBriefs,
@@ -23610,7 +23865,18 @@ if (!process.env.VITEST) {
       if (!bot) return;
       const language = reachMeLanguage(person);
       const threadId = backgroundBriefThread(bot, person);
-      if (threadId && !store.isConfidentialThread(threadId)) store.appendMessage(threadId, { role: "bot", kind: "text", text: briefMessageText(suggestions, language) });
+      if (threadId && !store.isConfidentialThread(threadId)) {
+        // #2695: what waited (daily budget, quiet hours, FYI) arrives in the brief, in its own words
+        const held = heldSignalsSection(signalGate.takeHeld(person), language);
+        // #2694: each point carries its id, so the chat rates it in place
+        const briefItems = suggestions.slice(0, 12).map((item) => ({ id: item.id, text: suggestionAction(item, language) }));
+        store.appendMessage(threadId, { role: "bot", kind: "text", text: held ? `${briefMessageText(suggestions, language)}\n\n${held}` : briefMessageText(suggestions, language), briefItems });
+        // #2693: the primary bot turns up to 3 points a day into one-gesture cards
+        if (bot.chiefOfStaff === true) postDailySuggestions(bot.id, threadId, suggestions, language);
+      }
+      // #2695: the brief's "Me joindre" notice is a card like any other: quiet
+      // hours and the day's budget first (the brief itself is already in the chat)
+      if (!reachMeService || !signalGate.admit(person)) return;
       const { title, lines } = briefNoticeLines(suggestions, language);
       reachMeService?.notice({ id: `brief-${botId}-${suggestions[0]!.id}`, person, botId, botName, threadId: threadId ?? "", title, lines });
     },
@@ -23624,9 +23890,28 @@ ROUTES.push(createBackgroundBriefRoutes({
     return Boolean(me && botsOwnedBy(me).some((bot) => bot.id === botId));
   },
   fastModel: (botId) => store.bot(botId)?.modelSelection.fast?.model ?? null,
-  keep: (botId, line) => { updateMemory(botId, { action: "append", text: line }, { source: "background brief", readers: { kind: "person" } }); },
+  // the route hands the line already in the person's language (#2879)
+  keep: (botId, line) => {
+    updateMemory(botId, { action: "append", text: line }, { source: "background brief", readers: { kind: "person" } });
+  },
+  language: briefLanguage,
+  remember: rememberBriefFeedback,
+  wakeFeedback: feedbackOnWake,
+  itemShown: (botId, suggestionId, choice, where) => {
+    const bot = store.bot(botId);
+    if (!bot) return;
+    try {
+      routeThreadId(bot, where.threadId);
+    } catch {
+      return;
+    }
+    const message = store.messagesFor(where.threadId).find((row) => row.id === where.messageId);
+    if (!message?.briefItems?.some((item) => item.id === suggestionId)) return;
+    store.patchMessage(where.threadId, message.id, { briefItems: message.briefItems.map((item) => item.id === suggestionId ? { ...item, feedback: choice } : item) });
+  },
   connected: backgroundBriefConnected,
-  reads: backgroundBriefReads
+  reads: backgroundBriefReads,
+  screenContextAvailable: () => SCREEN_CONTEXT_AVAILABLE
 }));
 ROUTES.push(createCustomRuleRoutes({
   store: customRules,
@@ -24193,7 +24478,11 @@ ROUTES.push(createApprovalsInboxRoutes({
     org: IDENTITY.kind === "perspicax",
     team: managedTeamIds(viewer.principalId).size > 0
   }),
-  answer: (auth, item, decision, rule) => answerInboxCard(auth, item.threadId, item.requestId, decision, rule)
+  answer: (auth, item, decision, rule) => answerInboxCard(auth, item.threadId, item.requestId, decision, rule),
+  handled: (auth, viewer, item) => markAttentionHandled({
+    ...todayDepsFor(getLeafHost(), auth, viewer),
+    patch: (threadId, messageId, attention) => { store.patchMessage(threadId, messageId, { attention }); }
+  }, item.botId, item.threadId, item.messageId)
 }));
 
 ROUTES.push(createCodeRoutes({
@@ -24751,9 +25040,10 @@ async function finishBotAct(threadId: string, requestId: string, behavior: strin
 const cwActionPasses = createCwActionPasses();
 
 /** The language to word a text for the person behind this request: their own
- * `omb-language`, else the server's default (server/people/person-language.ts). */
+ * `omb-language`, else the language their app last asked in, else the
+ * server's default (server/people/person-language.ts, #2803). */
 function languageOfPerson(person: string | null | undefined): string {
-  return personLanguageOf(person, (id) => userPreferenceStore.get(id).preferences, cfg.language);
+  return personLanguageOf(person, (id) => userPreferenceStore.get(id).preferences, askedLanguageOf(person) ?? cfg.language);
 }
 
 /** The final text of a bot reply without em or en dashes (#1208), when the
@@ -25372,12 +25662,35 @@ function botsOwnedBy(personId: string): BotRecord[] {
 /** The language a new bot greets its person in (#1075): on an organization
  * server the owner's own language preference (kept per person), then the
  * server's language, the same default the app falls back to. */
+/** Say the first-run bot's untouched greeting and intro card again in the
+ * language a request asked in, when no saved choice names one (#2803).
+ * Returns null once decided, so it runs for the first such request only. */
+function localizeSeedGreeting(botId: string, askedIn: string): null {
+  try {
+    const bot = store.bot(botId);
+    if (!bot) return null;
+    const saved = IDENTITY.kind === "perspicax" && bot.ownerUserId ? userPreferenceStore.get(bot.ownerUserId).preferences["omb-language"] : undefined;
+    const language = greetingLanguage([saved, askedIn]);
+    const patches = seedGreetingPatches(store.messagesFor(bot.threadId), bot.name, language);
+    if (patches) {
+      store.patchMessage(bot.threadId, patches.greeting.id, { text: patches.greeting.text });
+      store.patchMessage(bot.threadId, patches.card.id, { card: patches.card.card });
+    }
+  } catch (error) {
+    console.warn(`[greeting] could not say the first greeting again: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return null;
+}
 function newBotGreetingLanguage(ownerUserId: string | undefined): "fr" | "en" {
   let person = "";
   try {
     if (IDENTITY.kind === "perspicax" && ownerUserId) person = userPreferenceStore.get(ownerUserId).preferences["omb-language"] ?? "";
   } catch { /* no preference of their own */ }
-  return greetingLanguage([person, cfg.language]);
+  // The desktop app passes its own language to its server (#2803): the
+  // first-run bot greets in it when no other choice exists.
+  // Then the language the person's app last asked in, when they saved none
+  // (web, hosted server, an org member who never picked one).
+  return greetingLanguage([person, askedLanguageOf(ownerUserId), cfg.language, process.env.SAGAX_DESKTOP_LANGUAGE ?? ""]);
 }
 function newBotApprovalMode(): "ask" | "auto" | "full" {
   // omb #2808 / PRO-RÈGLE: solo bots start on Full access. Organization
@@ -27703,6 +28016,7 @@ ROUTES.push(createClaudeArtifactRoutes({
 // person who asked checks theirs; Claude's inventory is read again.
 ROUTES.push(createConnectorSetupRoutes({
   ...connectorSetupStore(),
+  macAccess: () => probeFullDiskAccess() === "granted",
   principalId: (auth) => {
     if (auth.kind === "loopback" && auth.trust === "service") return undefined;
     return actorPrincipalId(auth) || (IDENTITY.kind === "solo" ? localPrincipalId() : undefined);
@@ -29506,11 +29820,35 @@ const agentCardGuard = createAgentCardGuard({
     });
   }
 });
+let sendReceiptsPurgedAt = 0;
 const agentApi = createAgentApi({
   guardMode: toolGuardMode(process.env.SAGAX_TOOL_GUARD),
   guard: (caller, policy, target) => guardDecision(policy, { kind: caller.kind === "bot" ? "bot" : "user", id: caller.id },
     caller.kind === "bot" && caller.speakerPrincipalId ? { kind: "user", id: caller.speakerPrincipalId } : null, toolGrants, target),
   agentOwner: agentOwnerPrincipal,
+  // #1265 (Perspicax): send_prompt receipts by idempotency key outlive a restart.
+  // #2849: a receipt is pending before the post, then final; it lasts
+  // SEND_RECEIPT_TTL_MS (the handle's lifetime) and is purged after.
+  sendReceipts: {
+    get: (key) => commandReceipt<SendReceipt>("agent.send_prompt", key)?.result ?? null,
+    put: (key, receipt) => {
+      if (Date.now() - sendReceiptsPurgedAt > 3_600_000) {
+        sendReceiptsPurgedAt = Date.now();
+        expireCommandReceipts("agent.send_prompt", SEND_RECEIPT_TTL_MS);
+      }
+      setCommandReceipt("agent.send_prompt", key, receipt);
+    },
+    delete: (key) => dropCommandReceipt("agent.send_prompt", key),
+  },
+  // #2858: a queued send (busyMode after) has no line until its turn; its
+  // chat_followups row is what a pending receipt finds after a restart.
+  queuedPrompts: (threadId) => chatFollowups("bot")
+    .filter((row) => row.threadId === threadId && (row.status === "pending" || row.status === "dispatching" || row.status === "interrupted"))
+    .map((row) => {
+      const payload = row.payload as { text?: unknown; queuedAt?: unknown } | undefined;
+      // a row without queuedAt reads as queued at 0: never newer than a receipt
+      return { id: row.id, text: String(payload?.text ?? ""), queuedAt: typeof payload?.queuedAt === "number" ? payload.queuedAt : 0 };
+    }),
   secret: agentApiSecret(),
   audit: agentApiAudit,
   async agents(caller) {
@@ -29822,6 +30160,7 @@ const agentApi = createAgentApi({
     if (patch.model !== undefined) body.model = patch.model;
     if (patch.subagentModel !== undefined) body.subagentModel = patch.subagentModel;
     if (patch.effort !== undefined) body.effort = patch.effort;
+    if (patch.goal !== undefined) body.goal = patch.goal;
     const patched = await performAsMember(memberForAgentCaller(caller), {
       method: "PATCH",
       path: `/api/routines/${encodeURIComponent(routineId)}`,
@@ -30718,6 +31057,7 @@ const feedbackService = createFeedbackService({
   spans: () => readToolSpans(DATA_DIR, { from: new Date(Date.now() - 15 * 60_000), to: new Date() })
     .slice(-20).map((span) => ({ name: span.toolName ? `${span.name} ${span.toolName}` : span.name, ms: span.endMs - span.startMs, ok: span.ok })),
   serverVersion: () => releaseVersion(),
+  language: (person) => languageOfPerson(person),
 });
 try {
   feedbackService.ensureBot();
@@ -31568,6 +31908,12 @@ PRE_AUTH_ROUTES.push(createHealthPublicRoutes({
 }));
 // Signed inbound envelopes from a linked Grok (#2193): HMAC, no session.
 PRE_AUTH_ROUTES.push(createGrokBridgeInboundRoutes({ service: grokBridgeService }));
+// APNs relay for keyless Sagax servers (#2697): off until SAGAX_APNS_RELAY_TOKENS is set.
+PRE_AUTH_ROUTES.push(createPushRelayRoutes({
+  tokens: readApnsRelayTokens(),
+  topic: () => pushHub.topic,
+  send: (device, request) => pushHub.relaySend(device, request),
+}));
 PRE_AUTH_ROUTES.push(createMcpOAuthCallbackRoutes({
   findOwner: (state) => [...personOAuthManagers.values()].find((manager) => manager.ownsState(state)) ?? mcpOAuth,
   phoneReturnLocation,
@@ -32708,6 +33054,10 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
     if (await runPreAuth(req, res, url, path, method)) return;
     const auth = await authenticate(req, res, url, path, method, state);
     if (!auth) return;
+    // The app's language, for a person who never saved one (#2803, #2805).
+    const askedIn = requestLanguage(req.headers);
+    requestLanguages.note(actorPrincipalId(auth), askedIn);
+    if (askedIn && seedToLocalize) seedToLocalize = localizeSeedGreeting(seedToLocalize, askedIn);
     // Set for every request, so a kept-alive connection never inherits one.
     enterRequestScopes(state.scopes ?? { viewer: null, delegated: false, continuation: null, actConfirmed: null });
     if (await runRoutes(req, res, url, path, method, auth)) return;

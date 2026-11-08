@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// A routine's page (2026-11-03, JC): the Trigger value opens the trigger
+// A routine's page (2026-11-03, the owner): the Trigger value opens the trigger
 // popover (the app's AnchoredPopover, no native control) and saves on Apply;
 // Active switches in place; "Runs (n)" has Clear run logs, asked first, which
 // clears only this routine's runs.
@@ -104,7 +104,7 @@ describe("a routine's page", () => {
   });
 });
 
-describe("the side panel's status rows (2026-11-06, JC)", () => {
+describe("the side panel's status rows (2026-11-06, the owner)", () => {
   const readiness = { checking: false, error: "", answer: null, check: () => {} } as never;
   it("drops Runs as, the Active toggle and This week when the page asks", () => {
     const weekly = { ...routine, weekRuns: { ok: 2, total: 3 } } as unknown as Routine;

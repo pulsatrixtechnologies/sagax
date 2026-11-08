@@ -67,7 +67,7 @@ export class MyChromeService {
   unavailable(): string | null {
     const settings = this.settings.get();
     if (!this.offered) return "My Chrome is not offered on an organization server.";
-    if (!settings.enabled) return "My Chrome is off. The person can turn it on in Settings > Experimental > My Chrome.";
+    if (!settings.enabled) return "My Chrome is off. The person can turn it on in Settings > Computer > My Chrome.";
     if (settings.stopped) return "The person stopped My Chrome. Only they can resume it, in Settings or the Sagax banner.";
     if (!settings.sites.length) return "No site is allowed in My Chrome yet. Ask the person to allow the site in Settings.";
     return null;
@@ -129,7 +129,7 @@ export class MyChromeService {
   recordingUnavailable(): string | null {
     const settings = this.settings.get();
     if (!this.offered) return "My Chrome is not offered on an organization server.";
-    if (!settings.enabled) return "My Chrome is off. Turn it on in Settings > Experimental > My Chrome.";
+    if (!settings.enabled) return "My Chrome is off. Turn it on in Settings > Computer > My Chrome.";
     if (settings.stopped) return "My Chrome is stopped. Resume it in Settings first.";
     return null;
   }

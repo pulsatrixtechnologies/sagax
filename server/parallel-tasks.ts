@@ -10,6 +10,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { restartSentenceIn } from "../shared/restart-words.ts";
 
 import { resourcesOverlap, type ParallelTaskState, type TaskParallelOf } from "../shared/parallel-tasks.ts";
 
@@ -208,11 +209,16 @@ export function parallelOutcome(input: { ok: boolean; stopped: boolean }): Paral
 }
 
 /** The line posted back into the conversation: the task's answer, or what
- * became of it. */
-export function parallelResultText(input: { state: ParallelTaskState; reply: string; why?: string }): string {
+ * became of it, in the language of the person it answers (languageOfPerson). */
+export function parallelResultText(input: { state: ParallelTaskState; reply: string; why?: string; language?: string }): string {
   const reply = input.reply.trim();
-  if (input.state === "done") return reply || "(The task finished without a written answer.)";
-  if (input.state === "stopped") return reply ? `(Stopped before the end.) ${reply}` : "(The task was stopped.)";
-  const why = input.why?.trim();
-  return `(The task did not finish${why ? `: ${why.slice(0, 200)}` : ""}.)${reply ? ` ${reply}` : ""}`;
+  const fr = Boolean(input.language?.toLowerCase().startsWith("fr"));
+  if (input.state === "done") return reply || (fr ? "(La tâche s'est terminée sans réponse écrite.)" : "(The task finished without a written answer.)");
+  if (input.state === "stopped") {
+    if (reply) return `${fr ? "(Arrêtée avant la fin.)" : "(Stopped before the end.)"} ${reply}`;
+    return fr ? "(La tâche a été arrêtée.)" : "(The task was stopped.)";
+  }
+  const why = input.why?.trim() ? restartSentenceIn(input.language, input.why.trim()).slice(0, 200) : "";
+  const head = fr ? `(La tâche n'a pas abouti${why ? ` : ${why}` : ""}.)` : `(The task did not finish${why ? `: ${why}` : ""}.)`;
+  return reply ? `${head} ${reply}` : head;
 }

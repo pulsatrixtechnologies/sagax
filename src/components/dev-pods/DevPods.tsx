@@ -1,5 +1,5 @@
 // Dev context pods: stacked cards in the coding window's top-right corner
-// (Settings > Experimental, off by default). #2149 (JC 2026-11-06): the </>
+// (Settings > Developer > Experimental, off by default). #2149 (JC 2026-11-06): the </>
 // panel shows only in a coding window, never in the plain chat.
 //
 // A pure overlay: the transcript keeps its centered column, width and

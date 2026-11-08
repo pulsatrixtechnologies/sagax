@@ -85,6 +85,9 @@ export interface ClaudeAiTurnInput extends ConnectorPrincipalInput {
   /** #2384: the account (provider instance) the turn runs on; an added
    * account (`<prefix>-<uuid>`) has its own sign-in and connectors. */
   instanceId?: string;
+  /** #2747: the bot opted in to its Grok account's grok.com connectors
+   * (bot setting grokAccountConnectors, off by default). */
+  grokAccountConnectors?: boolean;
 }
 
 const ACCOUNT_CONNECTOR_DRIVERS = new Set(["claudeAgent", "grokAgent", "grok"]);
@@ -122,7 +125,16 @@ export function claudeAiConnectorsForTurn(input: ClaudeAiTurnInput): boolean {
  * driver adds no tool selection (grokCloudConnectorEnv) and keeps a card on
  * every write (grok.ts spawnArgs: never Grok's own auto or bypass mode). */
 export function grokCloudConnectorsForTurn(input: ClaudeAiTurnInput): boolean {
-  return GROK_DRIVERS.has(input.driver) && accountConnectorsForTurn(input) === "own";
+  // #2747 (QA of #2816): xAI's managed gateway serves every connector of the
+  // grok.com account, the account's own third-party MCP connectors included
+  // (`managed_gateway:cursor` carried the operator's "Pulsatrix Sagax"
+  // connector, remote_support_host_code and the rest, into a bot's turn). A
+  // bot sees only the tools Sagax mounts for it, so no bot turn loads the
+  // account's managed MCP unless the bot opted in (grokAccountConnectors,
+  // a bot setting off by default), and then only on the person's own sign-in.
+  // Only the Grok CLI (grokAgent) loads them: the xAI API engine ("grok",
+  // drivers/grok.ts chat-completions) has no use_tool and no grok.com MCP.
+  return input.grokAccountConnectors === true && input.driver === GROK_CLI_DRIVER && accountConnectorsForTurn(input) === "own";
 }
 
 /** The system note for a turn that keeps them: what they are and whose. */
@@ -166,7 +178,8 @@ export function relayHint(elsewhere: readonly ConnectorElsewhere[] | undefined):
   return ` This person's other engines and sign-ins, with the connectors they bring (run_with_engine takes the engine's name exactly as written here): ${lines}. For one of those, call run_with_engine with that engine and the complete request: it runs that part on their own sign-in there and gives you the result, in this same turn.${personal ? " For Outlook, Microsoft Teams and Gmail, prefer the personal account when more than one account has them." : ""} Never answer that you cannot switch engines or accounts.`;
 }
 
-const GROK_DRIVERS = new Set(["grokAgent", "grok"]);
+/** The one Grok driver that can reach grok.com connectors (the CLI). */
+const GROK_CLI_DRIVER = "grokAgent";
 
 /** What a turn is told about mail, calendar, Teams and SharePoint (parité
  * R9 + R11, shared/engine-connectors.ts): Claude's own claude.ai
@@ -185,7 +198,7 @@ export function engineConnectorsPrompt(input: { driver: string; claudeAi: boolea
   if (input.foreign && ACCOUNT_CONNECTOR_DRIVERS.has(input.driver)) {
     return `\nThis turn runs on an engine account that is not the speaker's own (the bot owner's or another person's sign-in), so its mail, calendar, Microsoft Teams and SharePoint connectors are not used for this person: they belong to someone else. If asked for one of those, say so plainly, do not read or send anything through them, and do not claim anything was sent. The person can connect their own account to use their own.${relay}`;
   }
-  if (input.grokCloud && GROK_DRIVERS.has(input.driver)) {
+  if (input.grokCloud && input.driver === GROK_CLI_DRIVER) {
     return `\nThis turn runs on the person's own xAI account of this Grok engine, so its cloud connectors (${GROK_CLOUD_CONNECTORS.map((connector) => connector.name).join(", ")}) are reachable through use_tool when the account connected them on grok.com: find one with search_tool (for example "teams" or "outlook"), then call it. They act with that account's access. For that person's own mail and calendar, omit userId and user_id (or pass "me") so the call stays on /me with their credentials; never target another UPN or a bot inbound address. If one is missing or needs sign-in, or the person asks to connect one, call use_tool with tool_name agents__open_connector_setup right away: it posts the card that opens ${GROK_CONNECTORS_URL} for them; then answer in one short sentence.${relay}${outward}`;
   }
   if (input.relay) {

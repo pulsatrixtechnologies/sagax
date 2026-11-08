@@ -21,7 +21,7 @@ describe("foreignMailboxUserId (#1943 owner mailbox)", () => {
 
   it("names another mailbox when userId or user_id is a UPN or the bot inbound address", () => {
     expect(foreignMailboxUserId({ userId: "ceo@example.com" })).toBe("ceo@example.com");
-    expect(foreignMailboxUserId({ user_id: "cryptic@bots.example.org" })).toBe("cryptic@bots.example.org");
+    expect(foreignMailboxUserId({ user_id: "nimbus@bots.example.org" })).toBe("nimbus@bots.example.org");
     expect(foreignMailboxUserId({ "User-Id": "Ana@Example.com" })).toBe("Ana@Example.com");
     expect(foreignMailboxUserId(JSON.stringify({ userId: "owner@contoso.com", folder: "Inbox" }))).toBe("owner@contoso.com");
   });
@@ -46,7 +46,7 @@ describe("isMailboxTool / foreignMailboxAccessDenied", () => {
 
   it("maps a vendor 403 on another mailbox to the /me retry, and leaves the owner's mail and other errors alone", () => {
     expect(foreignMailboxAccessDenied("outlook__list_messages", { userId: "ceo@example.com" }, GRAPH_403)).toBe(MAILBOX_ACCESS_DENIED);
-    expect(foreignMailboxAccessDenied("outlook__list_messages", { user_id: "cryptic@bots.example.org" }, { status: 403, error: { code: "ErrorAccessDenied" } })).toBe(MAILBOX_ACCESS_DENIED);
+    expect(foreignMailboxAccessDenied("outlook__list_messages", { user_id: "nimbus@bots.example.org" }, { status: 403, error: { code: "ErrorAccessDenied" } })).toBe(MAILBOX_ACCESS_DENIED);
     expect(foreignMailboxAccessDenied("mcp__claude_ai_Microsoft_365__outlook_email_search", JSON.stringify({ userId: "owner@contoso.com" }), { content: [{ type: "text", text: GRAPH_403 }], isError: true })).toBe(MAILBOX_ACCESS_DENIED);
     expect(foreignMailboxAccessDenied("outlook__list_messages", { userId: "me" }, GRAPH_403)).toBeNull();
     expect(foreignMailboxAccessDenied("outlook__list_messages", {}, { status: 403 })).toBeNull();

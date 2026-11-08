@@ -1019,7 +1019,7 @@ beforeAll(async () => {
         }));
       }
       // Google's answer when the connection lacks a permission the action
-      // needs, as Composio relays it (MOCA-273).
+      // needs, as Composio relays it (ticket 273).
       const calledTool = body && typeof body === "object" ? ((body as { params?: { name?: unknown } }).params?.name) : undefined;
       if (calledTool === "GMAIL_CREATE_FILTER") {
         res.writeHead(200, { "content-type": "application/json" });
@@ -1875,7 +1875,10 @@ describe("harness HTTP API", () => {
     const { status, body } = await api("GET", "/api/bots");
     expect(status).toBe(200);
     expect(body.bots.length).toBeGreaterThanOrEqual(1);
-    expect(body.bots[0].messages.length).toBeGreaterThanOrEqual(1);
+    // #2618: the shared Feedback bot starts with no greeting; the starter bot has one.
+    const starter = body.bots.find((bot: { systemBot?: string }) => bot.systemBot !== "feedback");
+    expect(starter.name).not.toBe("Feedback");
+    expect(starter.messages.length).toBeGreaterThanOrEqual(1);
   });
 
   it("projects privacy-safe live team-map metadata", async () => {
@@ -5794,8 +5797,9 @@ describe("harness HTTP API", () => {
 
     const stateBefore = (await api("GET", "/api/bots")).body;
     const roomsBefore = stateBefore.groups.length;
+    // #2618: the shared Feedback bot is the server's, never part of the team file.
     const visibleNames = stateBefore.bots
-      .filter((bot: { hidden?: boolean }) => !bot.hidden)
+      .filter((bot: { hidden?: boolean; systemBot?: string }) => !bot.hidden && bot.systemBot !== "feedback")
       .map((bot: { name: string }) => bot.name);
     const exported = await api("POST", "/api/teams/export", { name: "Field Team" });
     expect(exported.status).toBe(200);
@@ -12339,7 +12343,9 @@ describe("bot memory API", () => {
       });
       // another bot's message id reads as missing, not forbidden
       expect((await read(other.threadId, theirs.hits[0]!.messageId)).status).toBe(404);
-      expect((await read(firstThreadId, "")).status).toBe(400);
+      // #2748: the thread alone reads its latest message; only a missing thread is a 400
+      expect((await read(firstThreadId, "")).status).toBe(200);
+      expect((await read("", String(hits[0]!.messageId))).status).toBe(400);
 
       // a caller cannot search from a thread it does not own, and needs a query
       expect((await search("audit", other.threadId)).status).toBe(403);

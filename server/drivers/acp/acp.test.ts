@@ -6,6 +6,7 @@
 //
 // The fake CLI is a shebang script Windows cannot exec directly —
 // resolveCliSpawn turns it into `node <script>`, so these run everywhere.
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,7 +24,7 @@ import { classifyError } from "../retry.ts";
 import { GROK_TOOL_REUSE_HINT as HINT } from "./grok.ts";
 import { contextFullMessage, contextRenewedNotice } from "../../context/context-renewal.ts";
 import { createAcpDriver, DEFAULT_ACP_PROMPT_IDLE_MS, skipSubscriptionAuthForLocalInject, type AcpSupport } from "./core.ts";
-import { GrokAgentDriver, grokAcceptsUnadvertisedImages, grokCloudConnectorEnv, grokConfigDeclaresMcp, grokConnectableConnectors, grokPermissionMode } from "./grok.ts";
+import { GrokAgentDriver, grokAcceptsUnadvertisedImages, grokCloudConnectorEnv, grokConnectableConnectors, grokPermissionMode } from "./grok.ts";
 import { grokAccountReach } from "./grok-tool-catalog.ts";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "../../tools/agent-tool-policy.ts";
 import { GeminiAgentDriver } from "./gemini.ts";
@@ -1568,7 +1569,7 @@ describe("ACP turns (fake CLI)", () => {
         const seen = JSON.parse(readFileSync(dump, "utf8"));
         expect(seen.argv).toEqual([
           "--permission-mode", "auto", ...AGENTS_READ_ONLY_ALLOW,
-          "agent", "-m", model, "--reasoning-effort", "high", "stdio",
+          "agent", "--no-leader", "-m", model, "--reasoning-effort", "high", "stdio",
         ]);
         const sessionMethod = resumeCursor ? "session/load" : "session/new";
         const sent = readFileSync(join(NATIVE_DIR, `${threadId}.ndjson`), "utf8")
@@ -1822,12 +1823,33 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       }
     });
 
-    it("keeps Grok's own auto mode on a solo turn whose Grok config declares MCP servers Sagax cannot gate", async () => {
-      await create(GrokAgentDriver);
+    it("#2747: a bot's Grok never loads the person's own MCP servers, so every Auto turn stays gated", async () => {
+      // the person's Grok declares production connectors, and so does the project
+      const realHome = mkdtempSync(join(tmpdir(), "grok-real-home-"));
+      const savedHome = process.env.GROK_HOME;
+      process.env.GROK_HOME = realHome;
+      // QA of #2816: a server that inherited the managed gateway switch on
+      // never hands it to a bot's turn
+      const savedManaged = process.env.GROK_MANAGED_MCPS_ENABLED;
+      process.env.GROK_MANAGED_MCPS_ENABLED = "true";
+      onTestFinished(() => {
+        if (savedHome === undefined) delete process.env.GROK_HOME; else process.env.GROK_HOME = savedHome;
+        if (savedManaged === undefined) delete process.env.GROK_MANAGED_MCPS_ENABLED; else process.env.GROK_MANAGED_MCPS_ENABLED = savedManaged;
+        removeTempDir(realHome);
+      });
+      writeFileSync(join(realHome, "config.toml"), [
+        "[models]", "default = \"grok-4.5\"",
+        "[mcp_servers.pulsatrix_dispatch]", "url = \"https://prod.example/mcp\"",
+        "[[marketplace.sources]]", "name = \"x\"",
+        "[model.local]", "model = \"x\"",
+      ].join("\n"));
+      writeFileSync(join(realHome, "auth.json"), "{}");
+      mkdirSync(join(realHome, "installed-plugins"));
       const project = mkdtempSync(join(tmpdir(), "grok-project-"));
       onTestFinished(() => removeTempDir(project));
       mkdirSync(join(project, ".grok"));
       writeFileSync(join(project, ".grok", "config.toml"), "[mcp_servers.mine]\ncommand = \"node\"\n");
+      await create(GrokAgentDriver);
       for (const [index, withholdHostTools] of [false, true].entries()) {
         const dump = join(scratch, `gate-config-mcp-${index}.json`);
         process.env.FAKE_ACP_DUMP = dump;
@@ -1836,11 +1858,79 @@ createInterface({ input: process.stdin }).on("line", (line) => {
           withholdHostTools, integrations: { agents: server("agents") },
         });
         await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
-        const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[] };
-        const mode = seen.argv[seen.argv.indexOf("--permission-mode") + 1];
-        // an organization turn reaches those servers through use_tool only: still gated
-        expect(mode).toBe(withholdHostTools ? "default" : "auto");
+        const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[]; env: Record<string, string> };
+        expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe("default");
+        // the CLI runs on an isolated home, logged in through the real one
+        const home = seen.env.GROK_HOME!;
+        expect(home).not.toBe(realHome);
+        expect(seen.env.GROK_AUTH_PATH).toBe(join(realHome, "auth.json"));
+        expect(readFileSync(join(home, "auth.json"), "utf8")).toBe("{}");
+        const config = readFileSync(join(home, "config.toml"), "utf8");
+        expect(config).not.toMatch(/mcp_servers|marketplace|prod\.example/);
+        expect(config).toContain("[model.local]");
+        expect(readFileSync(join(home, "requirements.toml"), "utf8")).toMatch(/^enable_all_project_mcp_servers = false$/m);
+        expect(existsSync(join(home, "installed-plugins"))).toBe(false);
+        for (const name of ["GROK_CLAUDE_MCPS_ENABLED", "GROK_CURSOR_MCPS_ENABLED", "GROK_CODEX_MCPS_ENABLED"]) expect(seen.env[name]).toBe("false");
+        // QA of #2816: the account's managed gateway (`managed_gateway:cursor`
+        // carried the operator's own connector) and the compat plugins' skills
+        // and hooks stay out of a bot's turn, as the dispatch now builds it
+        expect(seen.env.GROK_MANAGED_MCPS_ENABLED).toBe("false");
+        expect(seen.env.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED).toBe("false");
+        for (const source of ["CLAUDE", "CURSOR", "CODEX"]) {
+          expect(seen.env[`GROK_${source}_SKILLS_ENABLED`], source).toBe("false");
+          expect(seen.env[`GROK_${source}_HOOKS_ENABLED`], source).toBe("false");
+        }
+        // the only MCP server the session gets is the one Sagax mounts
+        const session = JSON.parse(readFileSync(`${dump}.session.json`, "utf8")) as { mcpServers: Array<{ name: string }> };
+        expect(session.mcpServers.map((entry) => entry.name)).toEqual(["agents"]);
       }
+    });
+
+    it("#2747: a plain bot turn is served by its own isolated process, never by the person's shared Grok leader", async () => {
+      // the person runs Grok with a leader: its env loads every account MCP
+      const realHome = mkdtempSync(join(tmpdir(), "grok-leader-home-"));
+      const saved = { home: process.env.GROK_HOME, socket: process.env.GROK_LEADER_SOCKET, leader: process.env.FAKE_ACP_GROK_LEADER };
+      const socket = join(realHome, "leader.sock");
+      process.env.GROK_HOME = realHome;
+      process.env.GROK_LEADER_SOCKET = socket;
+      process.env.FAKE_ACP_GROK_LEADER = "1";
+      onTestFinished(() => {
+        for (const [key, value] of [["GROK_HOME", saved.home], ["GROK_LEADER_SOCKET", saved.socket], ["FAKE_ACP_GROK_LEADER", saved.leader]] as const) {
+          if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+        removeTempDir(realHome);
+      });
+      writeFileSync(join(realHome, "config.toml"), "[mcp_servers.pulsatrix_dispatch]\nurl = \"https://prod.example/mcp\"\n");
+      writeFileSync(join(realHome, "auth.json"), "{}");
+      writeFileSync(socket, JSON.stringify({ env: { GROK_HOME: realHome, GROK_MANAGED_MCPS_ENABLED: "true", GROK_CLAUDE_MCPS_ENABLED: "true" } }));
+      writeFileSync(join(realHome, "leader.lock"), "");
+      // control: the fake CLI honours the leader, so the assertions below
+      // would fail if Sagax let the turn attach to it
+      const control = join(scratch, "leader-control.json");
+      spawnSync(FAKE_CLI, ["agent", "stdio"], { env: { ...process.env, FAKE_ACP_DUMP: control }, input: "", timeout: 15_000 });
+      expect((JSON.parse(readFileSync(control, "utf8")) as { servedBy: string }).servedBy).toBe("leader");
+      await create(GrokAgentDriver);
+      const dump = join(scratch, "leader-solo.json");
+      process.env.FAKE_ACP_DUMP = dump;
+      // a solo turn: no withheld host tools, no tool scope, no account connectors
+      const { turnId } = await instance.adapter.sendTurn({
+        threadId: "t-leader-solo", botId: "bot-gated", text: "go", model: "grok-4.5", approvalMode: "auto",
+        integrations: { agents: server("agents") },
+      });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[]; env: Record<string, string>; servedBy: string };
+      expect(seen.servedBy).toBe("self");
+      expect(seen.argv.slice(seen.argv.indexOf("agent"))).toContain("--no-leader");
+      // the process that serves the turn is the one with the isolated env
+      expect(seen.env.GROK_HOME).not.toBe(realHome);
+      // the inherited socket path into the person's leader is dropped (isolateGrokMcp)
+      expect(seen.env).not.toHaveProperty("GROK_LEADER_SOCKET");
+      expect(seen.env.GROK_MANAGED_MCPS_ENABLED).toBe("false");
+      expect(seen.env.GROK_CLAUDE_MCPS_ENABLED).toBe("false");
+      // and its isolated home links no leader socket back to the person's
+      expect(existsSync(join(seen.env.GROK_HOME!, "leader.sock"))).toBe(false);
+      expect(existsSync(join(seen.env.GROK_HOME!, "leader.lock"))).toBe(false);
+      expect(existsSync(join(seen.env.GROK_HOME!, "auth.json"))).toBe(true);
     });
 
     it("runs Grok's own auto mode only for an explicit opt-out ({bots: \"none\"})", async () => {
@@ -1906,7 +1996,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(seen.argv).not.toContain("--tools");
     expect(seen.argv).not.toContain("--disallowed-tools");
     expect(seen.env.HOME).toBe(homeA);
-    expect(seen.env.GROK_HOME).toBe(join(homeA, ".grok"));
+    // #2747: an isolated home over the person's own, logged in through theirs
+    expect(seen.env.GROK_AUTH_PATH).toBe(join(homeA, ".grok", "auth.json"));
+    expect(realpathSync(join(seen.env.GROK_HOME!, "sessions"))).toBe(realpathSync(join(homeA, ".grok", "sessions")));
     expect(seen.env.XAI_API_KEY).toBeUndefined();
     expect(seen.env.GROK_AGENT).toBe("grok-build");
     // the person's own grok.com connectors (Outlook, Teams) ride the managed
@@ -1950,8 +2042,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(loaded.msg.params._meta.agentProfile.disallowedTools).toContain("run_terminal_command");
     const seenB = JSON.parse(readFileSync(resumeDump, "utf8")) as { env: Record<string, string> };
     expect(seenB.env.HOME).toBe(homeB);
-    expect(seenB.env.GROK_HOME).toBe(join(homeB, ".grok"));
-    expect(seenB.env.GROK_HOME).not.toBe(join(homeA, ".grok"));
+    expect(seenB.env.GROK_AUTH_PATH).toBe(join(homeB, ".grok", "auth.json"));
+    expect(seenB.env.GROK_HOME).not.toBe(seen.env.GROK_HOME);
     expect(JSON.stringify(seenB)).not.toContain(homeA);
   });
 
@@ -1989,7 +2081,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   });
 
   it("mounts the person's grok.com Teams and Outlook through grok's gateway and says so, not \"connectable\" (2026-10-28)", async () => {
-    // Sagax 0.8.13 on GOX: the turn's catalog carried `managed_gateway:cursor`
+    // Sagax 0.8.13 on ACME: the turn's catalog carried `managed_gateway:cursor`
     // (Teams, Outlook) and the prompt still said "Connectable but not
     // connected yet ... Microsoft Teams ... you have NO tool". The fake CLI
     // answers _x.ai/mcp/list with the real answer's shape, its gateway only
@@ -2227,7 +2319,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     });
     await recorder.until((e) => e.type === "turn.completed");
     expect(JSON.parse(readFileSync(dump, "utf8")).argv).toEqual([
-      "--permission-mode", nativeMode, "agent", "stdio",
+      "--permission-mode", nativeMode, "agent", "--no-leader", "stdio",
     ]);
   });
 
@@ -2406,7 +2498,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(recorder.events.some(e => e.type === "runtime.error")).toBe(false);
   });
 
-  // MOCA-260: a quiet `sleep` or build sends nothing while it runs, and the
+  // ticket 260: a quiet `sleep` or build sends nothing while it runs, and the
   // guard used to stop the turn as if the agent had hung.
   it.each([GrokAgentDriver, QwenAgentDriver])("does not expire $driverKind while a tool it started is still running", async (driver) => {
     process.env.SAGAX_ACP_PROMPT_IDLE_TIMEOUT_MS = "150";
@@ -4412,42 +4504,3 @@ describe("grokConnectableConnectors", () => {
   });
 });
 
-describe("grokConfigDeclaresMcp", () => {
-  it("finds an MCP server table in GROK_HOME's config or the project's, and nothing else", () => {
-    const home = mkdtempSync(join(tmpdir(), "grok-home-"));
-    const project = mkdtempSync(join(tmpdir(), "grok-cwd-"));
-    try {
-      const env = { GROK_HOME: home };
-      expect(grokConfigDeclaresMcp(env, project)).toBe(false);
-      writeFileSync(join(home, "config.toml"), "[models]\ndefault = \"grok-4.5\"\n[model.local]\nmodel = \"x\"\n# [mcp_servers.commented]\n");
-      expect(grokConfigDeclaresMcp(env, project)).toBe(false);
-      writeFileSync(join(home, "config.toml"), "[models]\n  [mcp_servers.pulsatrix_dispatch]\nurl = \"https://x\"\n");
-      expect(grokConfigDeclaresMcp(env, project)).toBe(true);
-      writeFileSync(join(home, "config.toml"), "[ \"mcp_servers\" . a ]\n");
-      expect(grokConfigDeclaresMcp(env, project)).toBe(true);
-      writeFileSync(join(home, "config.toml"), "");
-      mkdirSync(join(project, ".grok"));
-      writeFileSync(join(project, ".grok", "config.toml"), "[mcp_servers]\na = { command = \"node\" }\n");
-      expect(grokConfigDeclaresMcp(env, project)).toBe(true);
-      expect(grokConfigDeclaresMcp(env, undefined)).toBe(false);
-      // a parent folder's config counts, as Grok reads it
-      const sub = join(project, "a", "b");
-      mkdirSync(sub, { recursive: true });
-      expect(grokConfigDeclaresMcp(env, sub)).toBe(true);
-      // a dotted key or an assignment counts too
-      writeFileSync(join(project, ".grok", "config.toml"), "");
-      expect(grokConfigDeclaresMcp(env, sub)).toBe(false);
-      for (const text of ["mcp_servers.x.command = \"node\"\n", "mcp_servers = { x = { command = \"node\" } }\n"]) {
-        writeFileSync(join(project, ".grok", "config.toml"), text);
-        expect(grokConfigDeclaresMcp(env, sub)).toBe(true);
-      }
-      // a config override is never read here: it counts as declaring
-      writeFileSync(join(project, ".grok", "config.toml"), "");
-      expect(grokConfigDeclaresMcp({ ...env, GROK_CONFIG: "/elsewhere.toml" }, sub)).toBe(true);
-      expect(grokConfigDeclaresMcp({ ...env, GROK_CONFIG_PATH: "/elsewhere.toml" }, sub)).toBe(true);
-    } finally {
-      removeTempDir(home);
-      removeTempDir(project);
-    }
-  });
-});

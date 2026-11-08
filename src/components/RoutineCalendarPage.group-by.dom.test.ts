@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// 2026-11-03 (JC): the Automations List view groups the routines by bot, the
+// 2026-11-03 (the owner): the Automations List view groups the routines by bot, the
 // bot's folders inside as sub-groups; folded sections are remembered for the
 // person; Group by None is the flat list it was; a row still drags into a
 // folder.
@@ -165,7 +165,7 @@ describe("Automations list grouped", () => {
   });
 });
 
-// JC 2026-11-06: the Tools header standard (Team map) and a clickable crumb.
+// the owner 2026-11-06: the Tools header standard (Team map) and a clickable crumb.
 describe("Automations header", () => {
   it("renders the shared header: icon, title, count, subtitle, an outlined + New", async () => {
     await mount();

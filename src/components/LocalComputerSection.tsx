@@ -861,7 +861,7 @@ export function LocalComputerSection() {
   // Installation inventories are admin routes. A member's own computer is
   // OrgComputerSettings; probing these every 5s only produces 403s.
   const manageComputers = canManageComputers(storeState.config);
-  // Experimental (Settings > Experimental features): off hides the cards.
+  // Experimental (Settings > Developer > Experimental features): off hides the cards.
   const boatOn = manageComputers && boatComputerEnabled(storeState.config);
   const vpsOn = manageComputers && vpsComputerEnabled(storeState.config);
   // An organization server (a desktop bridge status exists): the Local VM is

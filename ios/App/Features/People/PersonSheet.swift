@@ -268,7 +268,7 @@ struct PersonSheetContent: View {
                                 HStack(spacing: 10) {
                                     BotMascotView(bot: bot, size: 24)
                                         .frame(width: 24, height: 24)
-                                    // the title UNDER the name (JC 2026-11-06)
+                                    // the title UNDER the name (the owner 2026-11-06)
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(verbatim: bot.name)
                                             .font(.system(size: 13))

@@ -177,7 +177,7 @@ describe("scopes", () => {
       ["POST", `/api/threads/t/files/${"a1".repeat(12)}/pin`],
       // the person a bot asks to sign in answers its card
       ["POST", "/api/bots/x/sign-in-cards/m/done"], ["POST", "/api/bots/x/sign-in-cards/m/cancel"],
-      // 2026-10-22 (JC): a webhook runs on the bot's own computer, so its
+      // 2026-10-22 (the owner): a webhook runs on the bot's own computer, so its
       // owner creates and manages it without the server-settings right; the
       // handler (webhookDelegateRefusal, webhookExecTargetAdminOnly) keeps the
       // limits (an admin's bot, a Microsoft trigger, a server run target).

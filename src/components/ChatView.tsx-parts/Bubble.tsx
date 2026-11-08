@@ -37,7 +37,7 @@ import { SpeakMenuItem } from "../SpeakButton";
 import { TurnRunLine } from "../TurnRunLine";
 import { ReactionChips } from "../Reactions";
 import { myReactions, useToggleReaction } from "@/lib/reactions";
-import { peerLine, peerRequest } from "@/lib/peer-message";
+import { peerLine, peerRequest, peerRelay } from "@/lib/peer-message";
 import { OtherAuthorLabel } from "../MessageAuthor";
 import { stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
 import { claimMessageEntrance } from "@/lib/message-entrance";
@@ -163,7 +163,7 @@ export const Bubble = memo(function Bubble({
   // bot side of the chat under the peer's name, with the model-facing
   // provenance note stripped from what the reader sees. A coordinate_bots
   // request is stored bot-role and gets the same label.
-  const peer = peerLine(message) ?? peerRequest(message, botId);
+  const peer = peerLine(message) ?? peerRequest(message, botId) ?? peerRelay(message, botId);
   const user = message.role === "user" && !peer;
   // The entrance plays only for a genuinely new line, decided once at mount:
   // never for rows drawn by opening or switching threads (message-entrance.ts).
@@ -428,7 +428,7 @@ export const Bubble = memo(function Bubble({
             requestId={message.id.startsWith("optimistic-") ? undefined : message.id}
             react={react}
             view={<>
-              {message.kind === "text" && text && !peer && (
+              {message.kind === "text" && text && (!peer || peer.delivery === "relayed_reply") && (
                 <SpeakMenuItem text={text} botId={botId} messageId={message.id} voiceId={voiceId} tts={tts} localVoice={localVoice} />
               )}
               {text && (

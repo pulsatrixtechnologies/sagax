@@ -397,8 +397,8 @@ describe("resolveWebhookPublicUrl", () => {
   });
 
   it("falls back to SAGAX_PUBLIC_URL when the dedicated webhook URL is unset", () => {
-    expect(resolveWebhookPublicUrl({ SAGAX_PUBLIC_URL: "https://bot.pulsatrix.mcp.goxcloud.ca/" })).toBe(
-      "https://bot.pulsatrix.mcp.goxcloud.ca/",
+    expect(resolveWebhookPublicUrl({ SAGAX_PUBLIC_URL: "https://bot.pulsatrix.mcp.acmecloud.ca/" })).toBe(
+      "https://bot.pulsatrix.mcp.acmecloud.ca/",
     );
   });
 

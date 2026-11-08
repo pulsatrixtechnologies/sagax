@@ -113,7 +113,7 @@ describe("Settings > Models and voice", () => {
     const models = SECTIONS.find((entry) => entry.id === "engines")!;
     const voice = SECTIONS.find((entry) => entry.id === "voice")!;
     const usage = SECTIONS.find((entry) => entry.id === "usage")!;
-    // Auto's explainer, Defaults and Keep warm moved to Developer (JC 2026-11-08)
+    // Auto's explainer, Defaults and Keep warm moved to Developer (the owner 2026-11-08)
     expect(sectionMatches(models, "modèle auto")).toBe(false);
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "developer")!, "modèle auto")).toBe(true);
     // #2080 (L0): image and web search providers are found on Providers only

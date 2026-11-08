@@ -120,6 +120,12 @@
 //                   servers only when GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED=true).
 //   FAKE_ACP_DUMP   path to write {argv, env} as JSON, so a test can assert
 //                   argv shape (agent/stdio flags) and env hygiene
+//   FAKE_ACP_GROK_LEADER=1  grok's leader: an `agent` run without
+//                   `--no-leader` whose leader socket exists
+//                   ($GROK_LEADER_SOCKET, else $GROK_HOME/leader.sock; the
+//                   fake socket is a JSON {env} file) is served by that
+//                   leader, so the dump reports servedBy "leader" and the
+//                   leader's env, never this process's (#2747)
 //   FAKE_ACP_LAUNCH_COUNT_FILE  read-increment-write a process counter at
 //                       startup, so a test can tell a reused pooled session
 //                       (one launch) from a fresh child per turn (many)
@@ -416,6 +422,17 @@ const dumpEnv = Object.fromEntries(
     "XAI_API_KEY",
     "GROK_AGENT",
     "GROK_HOME",
+    "GROK_AUTH_PATH",
+    "GROK_LEADER_SOCKET",
+    "GROK_CLAUDE_MCPS_ENABLED",
+    "GROK_CURSOR_MCPS_ENABLED",
+    "GROK_CODEX_MCPS_ENABLED",
+    "GROK_CLAUDE_SKILLS_ENABLED",
+    "GROK_CURSOR_SKILLS_ENABLED",
+    "GROK_CODEX_SKILLS_ENABLED",
+    "GROK_CLAUDE_HOOKS_ENABLED",
+    "GROK_CURSOR_HOOKS_ENABLED",
+    "GROK_CODEX_HOOKS_ENABLED",
     "GROK_MANAGED_MCPS_ENABLED",
     "GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED",
     "BOX_TOKEN",
@@ -464,7 +481,23 @@ const dumpEnv = Object.fromEntries(
 );
 // pid rides along so a test can tell a respawned process (new pid, fresh
 // dump) from a pooled one whose dump was never rewritten
-const dumpState: Record<string, unknown> = { argv, env: dumpEnv, pid: process.pid, cwd: process.cwd() };
+const leaderSocket = (): string | undefined => {
+  if (process.env.FAKE_ACP_GROK_LEADER !== "1" || !argv.includes("agent") || argv.includes("--no-leader")) return undefined;
+  const path = process.env.GROK_LEADER_SOCKET
+    || (process.env.GROK_HOME ? join(process.env.GROK_HOME, "leader.sock") : undefined);
+  return path && existsSync(path) ? path : undefined;
+};
+const servingLeader = leaderSocket();
+const leaderEnv = servingLeader
+  ? (JSON.parse(readFileSync(servingLeader, "utf8")) as { env?: Record<string, string> }).env ?? {}
+  : undefined;
+const dumpState: Record<string, unknown> = {
+  argv,
+  env: leaderEnv ?? dumpEnv,
+  servedBy: servingLeader ? "leader" : "self",
+  pid: process.pid,
+  cwd: process.cwd(),
+};
 const modelProbe = process.env.SAGAX_GROK_MODEL_PROBE === "1";
 const reachProbe = process.env.SAGAX_GROK_REACH_PROBE === "1";
 const backgroundText = process.env.SAGAX_ACP_BACKGROUND_TEXT === "1";

@@ -50,7 +50,7 @@ describe("sanitizeStepRow / appendStep", () => {
   it("writes one JSONL line per result with no arguments and no email", async () => {
     const dataDir = scratch();
     const row = stepFromToolEvent({
-      botId: "bot-cryptic",
+      botId: "bot-nimbus",
       threadId: "thread-1",
       tool: "workspace_read",
       ok: false,
@@ -62,7 +62,7 @@ describe("sanitizeStepRow / appendStep", () => {
     });
     expect(row).toMatchObject({
       ts: "2026-11-01T12:00:00.000Z",
-      botId: "bot-cryptic",
+      botId: "bot-nimbus",
       threadId: "thread-1",
       tool: "workspace_read",
       ok: false,

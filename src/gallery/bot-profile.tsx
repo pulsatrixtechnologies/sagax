@@ -321,6 +321,22 @@ const memory = {
 
 const workspaceEntry = (path: string, bytes: number, extra: Record<string, unknown> = {}) => ({ path, kind: "file", bytes, load: "always", editable: true, markdown: true, forgotten: false, ...extra });
 
+/** #2698: the Proactivity group of the Analytics tab. */
+function proactiveMetrics(days: number) {
+  const scale = days / 7;
+  const totals = {
+    wakes: Math.round(42 * scale), reported: Math.round(18 * scale), quiet: Math.round(22 * scale), failed: Math.round(2 * scale),
+    proposed: Math.round(15 * scale), accepted: Math.round(9 * scale), declined: Math.round(3 * scale), expired: Math.round(2 * scale),
+    writes: Math.round(27 * scale), cost: Math.round(3.84 * scale * 100) / 100, costRuns: Math.round(40 * scale),
+  };
+  const judged = totals.accepted + totals.declined + totals.expired;
+  return {
+    botId: BOT_ID, days, from: "", to: "", series: [],
+    totals: { ...totals, precision: judged ? totals.accepted / judged : null, minutesSaved: totals.reported * 10 + totals.writes * 2 + totals.accepted * 5 },
+    minutesPerReport: 10, minutesPerWrite: 2, minutesPerAccepted: 5,
+  };
+}
+
 function answer(method: string, path: string, search: URLSearchParams, body: unknown): Response | null {
   const bots = `/api/bots/${BOT_ID}`;
   if (path === "/api/config") return json({ viewer: { operator: false, principalId: "pr_alex", name: "Alex Example", role: "admin", permissions: [] }, profile: { name: "Alex Example" }, features: {}, onboarding: { completedAt: 1, launchMode: "solo" } });
@@ -336,6 +352,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === `${bots}/overview`) return json(overview);
   if (path === `${bots}/history`) return json({ rows: HISTORY, revision: HISTORY.length });
   if (path === `${bots}/analytics` && search.get("view") === "breakdown") return json(breakdown(search.get("period") ?? "30", Number(search.get("offset") ?? "0")));
+  if (path === `${bots}/proactive-metrics`) return json(proactiveMetrics([7, 30, 90].includes(Number(search.get("days"))) ? Number(search.get("days")) : 7));
   if (path === `${bots}/analytics`) return json(analytics([7, 30, 90].includes(Number(search.get("days"))) ? Number(search.get("days")) : 30));
   if (path === `${bots}/skills`) return json({ skills, staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices." }], library: [{ name: "invoice-review", description: "Reviews an invoice line by line." }, { name: "status-digest", description: "Digests a long thread into five lines." }], assignedSkills: ["meeting-notes"] });
   if (path === "/api/org-library/skills") return json({ organization: { name: "Northwind Studio" }, skills: [
@@ -361,7 +378,8 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   ] });
   if (path === `${bots}/inbound-mail`) return json({ available: true, address: "scout@northwind.example", enabled: true });
   if (path === `${bots}/reach-me`) return json({ saved: true, settings: { channels: ["push", "email"], hours: { always: true } }, channels: { push: { ready: true, devices: 2 }, email: { ready: true } } });
-  if (path === `${bots}/background-brief`) return json({ apps: 3, settings: { enabled: true, at: "08:00" }, suggestions: ["Check the calendar for the day", "Scan unread email from clients"] });
+  if (path === `${bots}/background-brief`) return json({ apps: 3, screenContextAvailable: true, settings: { enabled: true, at: "08:00", screenContext: true }, suggestions: [{ id: "brief_a", text: "Reply to Carla about the contract due 2026-11-10", status: "pending" }, { id: "brief_b", text: "Scan unread email from clients", status: "pending", feedback: "less" }] });
+  if (/\/background-brief\/[^/]+\/feedback$/.test(path)) return json({ ok: true });
   if (path === `${bots}/tool-grants`) return json({ grants: [] });
   if (path === `${bots}/lifecycle-hooks`) return json({ enabled: true, events: ["turn.start", "turn.end"] });
   if (path === `${bots}/roles/rules`) return json({ rules: [{ id: "rr1", from: { slug: "finance", name: "Finance" }, to: { slug: "", name: "Me" }, path: "/finance/invoices", ownerId: "pr_alex", createdAt: NOW - 4 * DAY }] });

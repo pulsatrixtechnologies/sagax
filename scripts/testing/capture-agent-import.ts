@@ -1,4 +1,4 @@
-// Headless captures of Import an agent (Grok Bot, Claude Code) against a
+// Headless captures of Import an agent (the reference app, Claude Code) against a
 // disposable fake-engine server: both sources, each preview, and the import
 // itself (the bot exists afterwards, its routine paused). Nothing opens a window.
 //   node --experimental-strip-types scripts/testing/capture-agent-import.ts <outDir> [skin] [lang]
@@ -67,7 +67,7 @@ try {
   await page.click("[data-bot-zip-confirm]");
   await page.waitForFunction(() => Boolean(document.body.dataset.imported), undefined, { timeout: 15_000 });
 
-  // The Grok Bot one too, imported for real.
+  // The the reference app one too, imported for real.
   await page.goto(`${ui.previewUrl}?skin=${encodeURIComponent(skin)}&lang=${encodeURIComponent(lang)}`, { waitUntil: "load" });
   await page.waitForSelector("[data-agent-import]");
   await page.fill("#grok-import-reply", grokReply);

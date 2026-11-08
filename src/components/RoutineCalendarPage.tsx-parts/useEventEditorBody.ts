@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { goalDraftOf, type RoutineGoalDraft } from "@/components/routines/RoutineGoalFields";
 import { Clock3, Eye, Globe, Hourglass, Mail, Repeat2 } from "lucide-react";
 import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider";
 import { useBotEditor } from "@/components/bot-settings/BotEditorContext";
@@ -130,6 +131,8 @@ export function useEventEditorBody({
   // own; a duplicate starts from its source's).
   const [actAs, setActAs] = useState<string | undefined>(existingRoutine ? undefined : template?.actAs);
   const [routineEffort, setRoutineEffort] = useState<EffortLevel | "">(template?.effort ?? "");
+  // #2696: a copy keeps the goal's words, never its progress.
+  const [goalDraft, setGoalDraft] = useState<RoutineGoalDraft>(() => goalDraftOf(template?.goal));
   const [recurrence, setRecurrence] = useState<RecurrenceChoice>(seed.limitReset ? "limit_reset" : recurrenceFor(schedule, initialAt, (routinesOnly ? "routine" : seed.kind) === "routine"));
   const [githubDraft, setGithubDraft] = useState<GithubDraft>(() => githubDraftFrom(schedule));
   const [limitReset, setLimitReset] = useState<LimitResetChoice>(
@@ -327,7 +330,7 @@ export function useEventEditorBody({
       lateMinutes, name, description, routineTarget, groupId, runOn, durationMinutes, timeoutMinutes,
       overlap, autoPauseAfter, requiredSkills, requiredMcp, requiresComputer, repeatsOnClock, continuity,
       onlyWhenPresent, postResults, deleteWhenFinished, mailAlias, routineModel, routineSubagentModel,
-      actAs, roleCoverageAnswer: roleCoverage.answer, routineEffort, watchAllowed, watchBuilt, existingWatch,
+      actAs, roleCoverageAnswer: roleCoverage.answer, routineEffort, goalDraft, watchAllowed, watchBuilt, existingWatch,
       attachments, runAs, runAsOptions, seed, editorRequest, dispatch, onSavedRoutine, existingCall,
       onSavedCall, onClose,
     });
@@ -374,7 +377,7 @@ export function useEventEditorBody({
   // reopens it; a toggle only holds while this editor stays open.
   const [moreOpen, setMoreOpen] = useState(false);
   const toggleMore = (open: boolean) => setMoreOpen(open);
-  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, githubDraft, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, routineSubagentModel, actAs, routineEffort, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
+  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, githubDraft, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, routineSubagentModel, actAs, routineEffort, goalDraft, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
@@ -431,14 +434,14 @@ export function useEventEditorBody({
     otherOwner, overlap, panel, pattern, pickFiles, postResults,
     readOnly, recurrence, repeatsOnClock, requestCancelEdit, requestClose, requestDismiss,
     requiredSkills, requiredMcp, requiresComputer, roleCoverage, roleReadiness,
-    roomMembers, rooms, routineTarget, routineModel, routineSubagentModel, routineEffort, actAs,
+    roomMembers, rooms, routineTarget, routineModel, routineSubagentModel, routineEffort, goalDraft, actAs,
     runAs, runAsOptions, runOn, save, saving, scheduleDraft, selectBots, selectFrequency, selectIntervalDays,
     selectRecurrence, selectRoom, selectRoutineTarget, selectedBots, selectedRoom, setAttachments,
     setAutoPauseAfter, setContinuity, setDate, setDeleteWhenFinished, setDescription, setDurationMinutes,
     setEarlyMinutes, setIntervalEnd, setIntervalEndDate, setIntervalMinutes, setIntervalWeekdays, setIntervalWindow,
     setIntervalWindowEnd, setIntervalWindowStart, setKind, setLateMinutes, setLimitReset, setMailAlias,
     setName, setOnlyWhenPresent, setOverlap, setPostResults, setRequiredSkills, setRequiredMcp, setRequiresComputer,
-    setRoutineModel, setRoutineSubagentModel, setRoutineEffort, setActAs,
+    setRoutineModel, setRoutineSubagentModel, setRoutineEffort, setGoalDraft, setActAs,
     setRunAs, setRunOn, setStartTime, setTimeoutMinutes, setTimingMode, setWatchDraft, setWeekdays, setWhenOpen,
     simplifySchedule, startTime, state, timeoutMinutes, timingMode, titleText,
     toggleEnabled, toggleMore, triggered, valid, viewing, watchAllowed,

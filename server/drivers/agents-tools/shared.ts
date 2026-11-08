@@ -1,5 +1,6 @@
 import { EFFORT_LEVELS } from "../../../shared/model-selection.ts";
 import { parseRoutineEffort } from "../../../shared/routine-effort.ts";
+import { parseRoutineGoal } from "../../../shared/routine-goal.ts";
 // Shared schema fragments and call helpers for agents-tools families.
 // Definitions and handlers live beside each family; this module holds what
 // more than one family imports. Never import server/index.ts.
@@ -198,6 +199,10 @@ export const ROUTINE_FIELDS_SCHEMA = {
     type: ["string", "null"],
     enum: [...EFFORT_LEVELS, null],
     description: "Routine-run effort on this bot's engine (chat unchanged). null resets.",
+  },
+  goal: {
+    type: ["string", "object", "null"],
+    description: "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Each run decides when to check next and the routine stops once reached. null removes.",
   },
   delete_when_finished: {
     type: "boolean",
@@ -614,6 +619,12 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
     if (!effort.ok) return { fields, error: effort.error };
     fields.effort = effort.effort ?? null;
   }
+  // #2696: a goal the runs pursue (shared/routine-goal.ts).
+  if (args.goal !== undefined) {
+    const goal = parseRoutineGoal(args.goal);
+    if (!goal.ok) return { fields, error: goal.error };
+    fields.goal = args.goal === null || !goal.goal ? null : { text: goal.goal.text, ...(goal.goal.deadline ? { deadline: goal.goal.deadline } : {}) };
+  }
   return { fields };
 }
 
@@ -775,7 +786,7 @@ export function githubConnectText(r: Record<string, unknown>): string {
     case "not_person":
       return "GitHub is connected only on the person's own request in their 1:1 conversation, never from a routine, an automation or another bot's turn. Tell them to ask you directly or to use the GitHub plugin's page (Capabilities > Sources > GitHub connection).";
     case "no_device_flow":
-      return `This server has no GitHub OAuth App for the device flow yet.${login ? ` GitHub is connected as @${login} with a token that may not cover their organizations.` : ""} Tell the person that GitHub sign-in by link and code needs the OAuth App's client id in Settings > Organization (or SAGAX_GITHUB_CLIENT_ID on the server); until then, as a last resort, they can paste a classic personal access token with the repo and read:org scopes under Advanced in the GitHub plugin's page (Capabilities > Sources > GitHub connection); a fine-grained token reaches one owner only.`;
+      return `GitHub sign-in with a link and a code is not available on this server right now.${login ? ` GitHub is connected as @${login} with a token that may not cover their organizations.` : ""} Tell the person, in one short line in their language, to try again in a moment from the GitHub plugin's page (Capabilities > Sources > GitHub connection, Connect GitHub). Offer a token only if they ask for one or the link and code keeps failing: then a classic personal access token with the repo and read:org scopes goes under Advanced on that page; a fine-grained token reaches one owner only.`;
     case "error":
       return `GitHub is not usable right now${login ? ` for @${login}` : ""}: ${typeof r.message === "string" ? r.message : "the token was refused"}. Tell the person, in their language, to reconnect GitHub in the GitHub plugin's page (Capabilities > Sources > GitHub connection), or call connect_github with reconnect true. Never ask for gh auth login or a token in chat.`;
     default:

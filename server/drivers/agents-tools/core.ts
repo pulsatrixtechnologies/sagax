@@ -95,9 +95,10 @@ export const DEF_SEND_TO_BOT = {
 
 export const DEF_SET_REPLY_NOTIFY = {
     name: "set_reply_notify",
-    description: "Whether this turn's reply (or routine report) alerts the person. notify false: shown and unread, but no desktop notification or phone push. Not called: it notifies as usual.",
+    description: "Whether this turn's reply (or routine report) alerts the person. notify false: shown and unread, but no desktop notification or phone push. fyi true: it waits for the next brief. Not called: it notifies as usual.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       notify: BOT_NOTIFY_PARAM,
+      fyi: { type: "boolean", description: "true: FYI, waits for the next brief." },
     }, required: ["notify"] },
   };
 
@@ -501,8 +502,10 @@ async function callCoreMessagingTool(name: string, args: Json, context: ToolCall
   if (name === "set_reply_notify") {
     const r = await api("/api/internal/reply-notify", { method: "POST", body: JSON.stringify({
       fromBotId: context.botId, fromThreadId: context.threadId, notify: botNotifyArg(args.notify),
+      ...(args.fyi === true || args.fyi === "true" ? { fyi: true } : {}),
     }) });
     if (r.error) return { text: `Couldn't set that: ${String(r.error)}`, isError: true };
+    if (r.fyi === true) return { text: "This reply is FYI: no notification now; it waits for the person's next brief. It still appears in the chat." };
     return { text: r.notify === false ? "This reply will not notify anyone. It still appears in the chat." : "This reply will notify as usual." };
   }
   if (name === "send_to_bot") {

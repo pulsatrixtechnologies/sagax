@@ -24,7 +24,7 @@ describe("localScreenProblem", () => {
     expect(localScreenProblem({ inApp: true, mac: false, failed: true, failure: raw })).toBe("capture-failed");
   });
 
-  // JC 2026-11-07 (capture 16:02): Sagax checked in Screen & System Audio
+  // the owner 2026-11-07 (capture 16:02): Sagax checked in Screen & System Audio
   // Recording, the live window still said "not allowed ... Allow Screen
   // Recording". Allowed + refused capture is a relaunch, not the pane again.
   it("reads an allowed but refused capture as Relaunch Sagax, not the permission", () => {

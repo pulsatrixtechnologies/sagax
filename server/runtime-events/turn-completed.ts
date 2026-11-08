@@ -329,7 +329,10 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
     // The bot chose to settle this reply without alerting anyone
     // (set_reply_notify, send_to_bot notify false): its message and
     // unread stay, its notification and push do not ring. Read once.
-    const replyAlerts = !host.silentReplyThreads?.delete(event.threadId);
+    // #2695: FYI (set_reply_notify fyi) is quiet now and waits for the brief
+    const replyFyi = host.fyiReplyThreads?.delete(event.threadId) === true;
+    const replySilent = host.silentReplyThreads?.delete(event.threadId) === true;
+    const replyAlerts: boolean | "fyi" = replyFyi ? "fyi" : !replySilent;
     // A Team incidents report (server/peers/incidents.ts): the Primary Bot
     // worked in its "Team incidents" thread, beside its conversation;
     // what it has to say arrives as its own message in the person's one
@@ -360,7 +363,7 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
     try {
       const attentionInput = { bot, threadId: event.threadId, turnId: completedTurnId, ok: event.ok, stopped, runTurn: Boolean(routineRun) };
       const relayed = host.relayPersonAttention(attentionInput, host.personAttentionDeps);
-      if (!relayed.posted) host.mirrorLateRunReply(attentionInput, host.personAttentionDeps);
+      if (!relayed.posted && relayed.reason !== "muted") host.mirrorLateRunReply(attentionInput, host.personAttentionDeps);
     } catch (error) {
       console.error(`[attention] not relayed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
     }

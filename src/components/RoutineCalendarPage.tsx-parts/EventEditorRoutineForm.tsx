@@ -12,6 +12,7 @@ import { RoutineWebhookPanel } from "@/components/routines/RoutineWebhookPanel";
 import { RoutineTimingFields } from "@/components/routines/RoutineTimingFields";
 import { LimitResetFields } from "@/components/routines/LimitResetFields";
 import { RoutineActAsField } from "@/components/routines/RoutineActAsField";
+import { RoutineGoalFields } from "@/components/routines/RoutineGoalFields";
 import { RoutineScheduleNote } from "@/components/RoutineScheduleNote";
 import { MarkdownEditor } from "@/components/markdown/MarkdownEditor";
 import { PillSelect } from "@/components/SettingsPrimitives";
@@ -45,7 +46,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
     limitReset, githubDraft, setGithubDraft, lockedBotId, mailAlias, moreOpen, name: _name, onlyWhenPresent, otherOwner, overlap, pattern,
     pickFiles, postResults, readOnly, recurrence, repeatsOnClock, requiredSkills, requiredMcp, requiresComputer,
     roleCoverage, roleReadiness, roomMembers, rooms, routineTarget: _routineTarget, routineModel, routineSubagentModel,
-    routineEffort, actAs, runAs, runAsOptions, runOn, scheduleDraft, selectBots, selectFrequency, selectIntervalDays,
+    routineEffort, goalDraft, setGoalDraft, actAs, runAs, runAsOptions, runOn, scheduleDraft, selectBots, selectFrequency, selectIntervalDays,
     selectRecurrence, selectRoom, selectedRoom, setAttachments, setAutoPauseAfter, setContinuity,
     setDate, setDeleteWhenFinished, setDescription, setEarlyMinutes, setIntervalEnd, setIntervalEndDate,
     setIntervalMinutes, setIntervalWeekdays, setIntervalWindow, setIntervalWindowEnd, setIntervalWindowStart,
@@ -121,6 +122,8 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
               ? <InstructionText text={description} short fill onEdit={() => setInstructionEditing(true)} />
               : <MarkdownEditor compact expandable toolbarOnFocus autoFocus={onPage && Boolean(existingRoutine)} value={description} onChange={setDescription} minHeight={onPage ? "45cqh" : panel ? 120 : 160} maxHeight={onPage ? "80cqh" : panel ? "40vh" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
           </section>
+
+          {!isRoomGoal && <RoutineGoalFields goal={existingRoutine?.goal} draft={goalDraft} onChange={setGoalDraft} viewing={viewing} />}
 
           <section data-routine-editor-section="when" className="min-w-0 space-y-1">
             <h3 className={PANEL_LABEL}>{t("routineEditor.whenToRun")}</h3>

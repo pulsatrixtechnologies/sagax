@@ -387,7 +387,7 @@ const featureConfigSchema = z.object({
    * turns. Off until explicitly enabled; see roomMemoryCaptureEnabled. */
   roomMemoryCapture: z.boolean().optional(),
   /** Connected apps (Composio-style triggers and actions). Off until
-   * explicitly enabled in Settings > Experimental. */
+   * explicitly enabled in Settings > Developer > Experimental. */
   connectedApps: z.boolean().optional(),
 });
 /** First-run progress. Kept in the workspace config rather than a browser so
@@ -1305,7 +1305,7 @@ export function decisionModelEnabled(cfg: AppConfig): boolean {
 }
 
 /** The Data window and the chat header's Data button. Off unless
- * explicitly enabled in Settings > Experimental features. */
+ * explicitly enabled in Settings > Developer > Experimental features. */
 /** The meeting notetaker. Off by default (experimental); the server
  * enforces it: no join_meeting tool, and the meeting routes, the internal
  * route and the card's answer refuse while it is off. */

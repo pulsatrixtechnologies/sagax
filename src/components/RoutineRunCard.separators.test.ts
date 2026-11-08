@@ -12,7 +12,7 @@ import { RoutineRunCard } from "./RoutineRunCard";
 function message(status: RoutineRunCardData["status"], patch: Partial<RoutineRunCardData> = {}): Message {
   return {
     id: "routine-run-card", role: "bot", kind: "routine.run", at: Date.now() - 60_000, text: "Dispatch pass",
-    routineRun: { runId: "run-1", routineId: "routine-1", routineName: "dispatch-gox-pass", status, ...patch },
+    routineRun: { runId: "run-1", routineId: "routine-1", routineName: "dispatch-acme-pass", status, ...patch },
   };
 }
 

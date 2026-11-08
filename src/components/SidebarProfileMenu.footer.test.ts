@@ -267,7 +267,7 @@ describe("the foot's profile (the reference design's row)", () => {
   });
 });
 
-describe("the footer avatar (Grok Bot's foot, 2026-10-16)", () => {
+describe("the footer avatar (the reference app's foot, 2026-10-16)", () => {
   it("draws no presence dot on the avatar", () => {
     fixture.state = { ...fixture.state, config: { ...fixture.state.config, viewer: { principalId: "pr_me" } } as AppState["config"] };
     const html = renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true }));
@@ -277,7 +277,7 @@ describe("the footer avatar (Grok Bot's foot, 2026-10-16)", () => {
   });
 });
 
-describe("the routines badge in Grok Bot's foot (Owner, 2026-10-16)", () => {
+describe("the routines badge in the reference app's foot (Owner, 2026-10-16)", () => {
   const active = () => {
     fixture.state = {
       config: { profile: { name: "Jean-Baptiste Exemplar", email: "owner@example.com" } } as AppState["config"],

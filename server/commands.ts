@@ -11,7 +11,7 @@
 // publish committed state afterward. A receipt does not make external
 // side effects exactly-once.
 //
-import { readCommandReceipt, withCommandReceipt } from "./messages/message-db.ts";
+import { deleteCommandReceipt, purgeCommandReceipts, putCommandReceipt, readCommandReceipt, withCommandReceipt } from "./messages/message-db.ts";
 
 export interface Command {
   /** Stable, dotted name of the mutation: "digest.append", "hook.ingest". */
@@ -44,4 +44,20 @@ export function commandReceipt<T = unknown>(kind: string, key: string): CommandR
   const stored = readCommandReceipt(kind, key);
   if (!stored) return null;
   return { kind: stored.kind, key: stored.key, at: stored.at, result: JSON.parse(stored.result) as T };
+}
+
+/** Overwrite a receipt (a pending marker, then the final result). Unlike
+ * runCommand this is not write-once: use it only for a kind whose receipt
+ * moves through states, such as agent.send_prompt. */
+export function setCommandReceipt<T>(kind: string, key: string, result: T, now: () => number = Date.now): void {
+  putCommandReceipt(kind, key, JSON.stringify(result ?? null), now());
+}
+
+export function dropCommandReceipt(kind: string, key: string): void {
+  deleteCommandReceipt(kind, key);
+}
+
+/** Drop the receipts of `kind` older than `ttlMs`. Returns how many went. */
+export function expireCommandReceipts(kind: string, ttlMs: number, now: () => number = Date.now): number {
+  return purgeCommandReceipts(kind, now() - ttlMs);
 }

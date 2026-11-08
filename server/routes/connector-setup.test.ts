@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { ConnectorSetupView } from "../../shared/connector-setup.ts";
+import { MAC_FULL_DISK_ACCESS_URL, type ConnectorSetupView } from "../../shared/connector-setup.ts";
 import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { connectorSetupOwner, createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes, type ConnectorSetupContext, type ConnectorSetupProofs } from "./connector-setup.ts";
@@ -23,6 +23,7 @@ let proofs: ConnectorSetupProofs;
 let grokReach: Record<string, { connectors: string[]; at: number; elsewhere?: { engine: string; connectors: string[] }; account?: "personal" | "team" }> = {};
 let signInCards: string[] = [];
 let signInEngine: string | null = null;
+let macAccess = false;
 
 beforeEach(async () => {
   rows = [];
@@ -36,6 +37,7 @@ beforeEach(async () => {
   grokReach = {};
   signInCards = [];
   signInEngine = null;
+  macAccess = false;
   let seq = 0;
   const shared = {
     cards: (threadId: string) => threadId === "t1"
@@ -63,6 +65,7 @@ beforeEach(async () => {
     ...shared,
     principalId: () => caller,
     claudeConnectors: async () => { claudeReads += 1; return claudeInventory; },
+    macAccess: () => macAccess,
   });
   server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://x");
@@ -93,7 +96,7 @@ const check = async (id: string, threadId = "t1") => {
 };
 
 describe("open_connector_setup (bot route)", () => {
-  it("a Grok bot on the person's own account: one card, grok.com, in the person's language", async () => {
+  it("a Grok-engine bot on the person's own account: one card, grok.com, in the person's language", async () => {
     const out = await open({ connector: "Microsoft Teams", language: "fr" });
     expect(out.status).toBe(200);
     expect(out.body).toMatchObject({ ok: true, route: "grok", label: "Microsoft Teams", status: "waiting" });
@@ -231,6 +234,17 @@ describe("the card's check (person route)", () => {
     caller = "pr_a";
     expect((await check("cs_999999999999999999")).status).toBe(404);
     expect((await check(id, "t2")).status).toBe(404);
+  });
+
+  it("#2690: a Messages card is connected once this Mac gives Full Disk Access again", async () => {
+    rows.push({ id: "m-mac", kind: "text", at: clock, text: "Messages", connectorSetup: {
+      id: "cs_00000000000000000a", connector: "messages", label: "Messages", provider: "mac",
+      url: MAC_FULL_DISK_ACCESS_URL, status: "waiting", owner: connectorSetupOwner("pr_a"), createdAt: clock,
+    } });
+    expect((await check("cs_00000000000000000a")).body).toMatchObject({ view: { status: "pending" } });
+    macAccess = true;
+    expect((await check("cs_00000000000000000a")).body).toMatchObject({ view: { status: "connected" } });
+    expect(claudeReads).toBe(0);
   });
 
   it("the owner digest is opaque and stable", () => {

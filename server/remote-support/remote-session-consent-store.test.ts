@@ -16,20 +16,20 @@ describe("unattended consent store", () => {
   it("grants, gets, and refuses a silent install", () => {
     const store = createUnattendedConsentStore({ dataDir: dir, now: () => NOW });
     expect(store.grant({ hostKey: "SN-1", org: "", installedBy: "" })).toBeNull();
-    const granted = store.grant({ hostKey: "SN-1", hostLabel: "PC-A", org: "GOX", installedBy: "admin@gox" });
+    const granted = store.grant({ hostKey: "SN-1", hostLabel: "PC-A", org: "ACME", installedBy: "admin@acme" });
     expect(granted?.hostKey).toBe("sn-1");
-    expect(store.get("sn-1")?.org).toBe("GOX");
+    expect(store.get("sn-1")?.org).toBe("ACME");
   });
 
   it("persists across reopens", () => {
-    createUnattendedConsentStore({ dataDir: dir, now: () => NOW }).grant({ hostKey: "SN-2", org: "GOX", installedBy: "a" });
+    createUnattendedConsentStore({ dataDir: dir, now: () => NOW }).grant({ hostKey: "SN-2", org: "ACME", installedBy: "a" });
     const reopened = createUnattendedConsentStore({ dataDir: dir, now: () => NOW });
     expect(reopened.get("sn-2")).toBeTruthy();
   });
 
   it("revoke marks the record and keeps it for the audit", () => {
     const store = createUnattendedConsentStore({ dataDir: dir, now: () => NOW });
-    store.grant({ hostKey: "SN-3", org: "GOX", installedBy: "a", expiresAt: defaultUnattendedExpiry(NOW, 30) });
+    store.grant({ hostKey: "SN-3", org: "ACME", installedBy: "a", expiresAt: defaultUnattendedExpiry(NOW, 30) });
     const revoked = store.revoke("sn-3");
     expect(revoked?.revokedAt).toBeTruthy();
     expect(store.get("sn-3")?.revokedAt).toBeTruthy();

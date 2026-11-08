@@ -19,7 +19,7 @@ export function ReaderMascot({ color, look, size }: { color: string; look?: unkn
   const tint = color as MausColor;
   switch (full.character) {
     case "shape":
-      return <ShapeMascot shape={full.shape} skin={full.skins.shape} color={tint} size={size} animated={false} label={null} />;
+      return <ShapeMascot shape={full.shape} skin={full.skins.shape} color={tint} size={size} animated={false} avatarDef={full.avatarDef} label={null} />;
     case "shiba":
       return <ShibaMascot skin={full.skins.shiba} color={tint} size={size} animated={false} label={null} />;
     case "grump":

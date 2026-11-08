@@ -362,7 +362,7 @@ export function AccessSection({
                 ? t("settings.experimental.browserWindows")
                 : <BrowserUnavailableNote config={state.config} />
               : !browserFeature
-                ? <SettingsText text={t("botAccess.browserSwitchedOff")} links={{ settings: { section: "experimental", cardId: "experimental.features" } }} />
+                ? <SettingsText text={t("botAccess.browserSwitchedOff")} links={{ settings: { section: "computer", cardId: "computer.browser" } }} />
                 : !canUseBrowser
                   ? t("botPanel.access.browserModel")
                   : bot.computer === "off"

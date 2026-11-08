@@ -189,6 +189,8 @@ const BUDGET_BASELINE: Record<string, number> = {
   // #2118: message_user and message_person join the direct catalog (measured wire).
   // native-notifications: notify on post_to_room/message_user/message_person/send_to_bot
   // and set_reply_notify (the bot chooses per message whether it alerts; measured wire).
+  // #2700: event_subscriptions (the bot manages its own run-event subscriptions;
+  // non-chief direct profiles re-measured).
 
   "direct": 103355,
   "direct+voice": 104322,
@@ -215,14 +217,14 @@ const BUDGET_BASELINE: Record<string, number> = {
   "room+own-thread+skills+shared": 97660,
   "room+own-thread+skills+shared+voice": 98627,
   // #2048: choose_page_target joins the catalog (measured wire).
-  "direct+non-chief": 91735,
-  "direct+voice+non-chief": 92702,
-  "direct+shared+non-chief": 93736,
-  "direct+shared+voice+non-chief": 94703,
-  "direct+skills+non-chief": 93357,
-  "direct+skills+voice+non-chief": 94324,
-  "direct+skills+shared+non-chief": 95358,
-  "direct+skills+shared+voice+non-chief": 96325,
+  "direct+non-chief": 93934,
+  "direct+voice+non-chief": 94901,
+  "direct+shared+non-chief": 95882,
+  "direct+shared+voice+non-chief": 96849,
+  "direct+skills+non-chief": 95502,
+  "direct+skills+voice+non-chief": 96469,
+  "direct+skills+shared+non-chief": 97450,
+  "direct+skills+shared+voice+non-chief": 98417,
   // 2026-11-06 #2519 (#2204 port): assignment_status joins the room catalog (measured wire).
   "room+non-chief": 81142,
   "room+voice+non-chief": 82109,

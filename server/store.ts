@@ -2417,6 +2417,9 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       /** false = no greeting/onboarding seed. Imported bots must not open
        * with a first-person greeting the user never asked for. */
       seedMessages?: boolean;
+      /** The creating device's language for the greeting and the intro card
+       * (#2803); absent reads the owner's or the server's language. */
+      language?: "fr" | "en";
     } = {},
   ): BotRecord {
     const toolScope = parseToolScope(profile.toolScope);
@@ -2494,7 +2497,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     this.emit({ type: "bot", botId: bot.id });
     // Keep the greeting valid for configured bots and every engine.
     if (opts.seedMessages !== false) {
-      const language = this.greetingLanguage(bot.ownerUserId);
+      const language = opts.language ?? this.greetingLanguage(bot.ownerUserId);
       this.appendMessage(bot.threadId, {
         role: "bot",
         kind: "text",
@@ -4062,9 +4065,9 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
 
   /** First-run seed: one bot so the app never opens empty — it gets a
    * random friendly name like every other bot. */
-  seedIfEmpty() {
-    if (!this.needsSeed()) return;
-    this.createBot();
+  seedIfEmpty(): BotRecord | null {
+    if (!this.needsSeed()) return null;
+    return this.createBot();
   }
 }
 

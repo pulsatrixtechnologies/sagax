@@ -226,7 +226,9 @@ export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemo
     const remaining = lane.filter((item) => item.id !== bot.id);
     const cards = [...(viewport.current?.querySelectorAll<HTMLElement>("[data-bot-id]") ?? [])];
     const index = remaining.findIndex((item) => {
-      const bounds = cards.find((card) => card.dataset.botId === item.id)?.closest("article")?.getBoundingClientRect();
+      const card = cards.find((node) => node.dataset.botId === item.id);
+      // a card held off screen (#2791) carries its id on its own box
+      const bounds = (card?.closest("article") ?? card)?.getBoundingClientRect();
       return bounds ? y < bounds.top + bounds.height / 2 : false;
     });
     return { section, lane, remaining, index: index < 0 ? remaining.length : index };
@@ -306,7 +308,7 @@ export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemo
       ? t("canvas.arrangeBot", { name: dragged.bot.name, team: dropSection.name }) : t("canvas.moveBot", { name: dragged.bot.name, team: dropSection.name })
       : null;
 
-  return <div ref={viewport} role="region" aria-label={t("canvas.region")} tabIndex={0} data-team-canvas
+  return <div ref={viewport} role="region" aria-label={t("canvas.region")} tabIndex={0} data-team-canvas data-virtual-root="both"
     className={cn("relative min-h-0 flex-1 touch-none select-none overflow-clip outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40",
       spacePan && !isPanning && "cursor-grab", isPanning && "cursor-grabbing")}
     style={{ backgroundImage: "radial-gradient(circle, color-mix(in srgb, var(--color-ink-secondary) 18%, transparent) 1px, transparent 1px)", backgroundSize: `${24 * view.scale}px ${24 * view.scale}px`, backgroundPosition: `${view.x}px ${view.y}px` }}

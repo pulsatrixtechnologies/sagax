@@ -15,8 +15,8 @@ describe("remote session public text", () => {
   it("drops a tunnel token, a GUID, a node key, and control characters", () => {
     const guid = "01234567-89ab-cdef-0123-456789abcdef";
     const nodekey = `nodekey:${"ab".repeat(32)}`;
-    expect(publicText("GOXP103\n tcABCDEFGHJKMNPQRSTUVWXYZ234567890abcd extra")).toBe("GOXP103 extra");
-    expect(publicText(`GOXP103 ${guid} ${nodekey}`)).toBe("GOXP103");
+    expect(publicText("ACMEP103\n tcABCDEFGHJKMNPQRSTUVWXYZ234567890abcd extra")).toBe("ACMEP103 extra");
+    expect(publicText(`ACMEP103 ${guid} ${nodekey}`)).toBe("ACMEP103");
     expect(publicText(guid)).toBeUndefined();
     expect(publicText("   ")).toBeUndefined();
   });
@@ -30,7 +30,7 @@ describe("remote session public text", () => {
 describe("remote session inventory", () => {
   it("reads only the fixed keys and formats disk and memory", () => {
     const parsed = parseInventory([
-      "hostname=GOXP103",
+      "hostname=ACMEP103",
       "user=acme\\staylor",
       "model=OptiPlex",
       "serial=ABC123",
@@ -42,7 +42,7 @@ describe("remote session inventory", () => {
       "diskTotalKb=499122176",
       "address=tcABCDEFGHJKMNPQRSTUVWXYZ234567890abcd",
     ].join("\n"));
-    expect(parsed.hostname).toBe("GOXP103");
+    expect(parsed.hostname).toBe("ACMEP103");
     expect(parsed.user).toBe("acme\\staylor");
     expect(parsed.elevated).toBe(true);
     expect(parsed.ramGb).toBeCloseTo(16, 5);
@@ -53,7 +53,7 @@ describe("remote session inventory", () => {
   });
 
   it("suggests a full disk before the usual checks", () => {
-    const ids = remoteSessionSuggestions({ diskFreePercent: 9, ramGb: 16, hostname: "GOXP103" }, true).map((row) => row.id);
+    const ids = remoteSessionSuggestions({ diskFreePercent: 9, ramGb: 16, hostname: "ACMEP103" }, true).map((row) => row.id);
     expect(ids[0]).toBe("disk-critical");
     expect(ids).toContain("cpu");
     expect(ids).not.toContain("rights");

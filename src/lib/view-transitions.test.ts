@@ -45,78 +45,125 @@ describe("navigate", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("runs the update inside a transition typed by direction and scope, and marks the root while it plays", async () => {
-    const update = vi.fn();
-    navigate(update, "back", "main");
-    expect(update).not.toHaveBeenCalled();
-    expect(started[0].types).toEqual(["nav-back", "nav-main"]);
-    expect(dataset).toEqual({ nav: "main", navDirection: "back" });
-    await Promise.resolve();
-    expect(update).toHaveBeenCalledTimes(1);
-    transitions[0].finish();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(dataset).toEqual({});
+  describe("a page change, Settings closing (#2791)", () => {
+    function overlay() {
+      let finish!: () => void;
+      const animation = { cancel: vi.fn(), finished: new Promise<void>((resolve) => (finish = resolve)) };
+      const element = { animate: vi.fn(() => animation) };
+      return { element: element as unknown as HTMLElement, animation, finish: () => finish() };
+    }
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it("fades the leaving overlay out with no view transition, then runs the update and clears the fade", async () => {
+      const update = vi.fn();
+      const leaving = overlay();
+      navigate(update, "back", "page", leaving.element);
+      expect(started).toEqual([]);
+      expect(dataset).toEqual({});
+      expect(leaving.element.animate).toHaveBeenCalledWith([{ opacity: 1 }, { opacity: 0 }], expect.objectContaining({ duration: 120 }));
+      expect(update).not.toHaveBeenCalled();
+      leaving.finish();
+      await settle();
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(leaving.animation.cancel).toHaveBeenCalled();
+      for (const type of ["pointerdown", "wheel", "keydown"]) expect(listeners.has(type)).toBe(false);
+    });
+
+    it("never holds input: a pointer, wheel or key press runs the update at once, and only once", async () => {
+      const update = vi.fn();
+      const leaving = overlay();
+      navigate(update, "back", "page", leaving.element);
+      for (const type of ["pointerdown", "wheel", "keydown"]) expect(listeners.has(type)).toBe(true);
+      listeners.get("pointerdown")!();
+      expect(update).toHaveBeenCalledTimes(1);
+      leaving.finish();
+      await settle();
+      expect(update).toHaveBeenCalledTimes(1);
+    });
+
+    it("another navigation finishes the first one's fade before its own", () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      navigate(first, "back", "page", overlay().element);
+      navigate(second);
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).toHaveBeenCalledTimes(1);
+    });
+
+    it("updates at once without an overlay, under reduced motion, or in a hidden window", () => {
+      const first = vi.fn();
+      navigate(first, "back", "page");
+      expect(first).toHaveBeenCalledTimes(1);
+      reduced = true;
+      const leaving = overlay();
+      const second = vi.fn();
+      navigate(second, "back", "page", leaving.element);
+      expect(second).toHaveBeenCalledTimes(1);
+      reduced = false;
+      (document as { visibilityState: string }).visibilityState = "hidden";
+      const third = vi.fn();
+      navigate(third, "back", "page", leaving.element);
+      expect(third).toHaveBeenCalledTimes(1);
+      expect(leaving.element.animate).not.toHaveBeenCalled();
+      expect(started).toEqual([]);
+    });
   });
 
-  it("never holds input: a pointer, wheel or key press skips to the new state", () => {
-    navigate(vi.fn());
-    for (const type of ["pointerdown", "wheel", "keydown"]) expect(listeners.has(type)).toBe(true);
-    listeners.get("pointerdown")!();
-    expect(transitions[0].skipTransition).toHaveBeenCalled();
-  });
+  describe("a main column swap (#2755)", () => {
+    let frame: { width: number; height: number; room: boolean };
+    let animations: Array<{ keyframes: Keyframe[]; options: KeyframeAnimationOptions; cancel: ReturnType<typeof vi.fn> }>;
+    beforeEach(() => {
+      frame = { width: 1000, height: 800, room: false };
+      animations = [];
+      const column = {
+        getBoundingClientRect: () => ({ width: frame.width, height: frame.height }),
+        querySelector: (inner: string) => (inner === "[data-room-view]" && frame.room ? {} : null),
+        animate: (keyframes: Keyframe[], options: KeyframeAnimationOptions) => {
+          const animation = { keyframes, options, cancel: vi.fn(), finished: new Promise(() => {}) };
+          animations.push(animation);
+          return animation;
+        },
+      };
+      Object.assign(document as object, { querySelector: (selector: string) => (selector === ".app-content-frame" ? column : null) });
+    });
 
-  it("a second navigation skips the first", () => {
-    navigate(vi.fn());
-    navigate(vi.fn());
-    expect(transitions[0].skipTransition).toHaveBeenCalled();
-    expect(dataset.nav).toBe("main");
-  });
+    it("draws the new view at once, with no view transition, then slides only it in from the direction of travel", () => {
+      const update = vi.fn();
+      navigate(update);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(started).toEqual([]);
+      expect(dataset).toEqual({});
+      expect(animations[0].keyframes[0]).toEqual({ opacity: 0, transform: "translateX(8px)" });
+      expect(animations[0].options.duration).toBe(200);
+      navigate(vi.fn(), "back");
+      expect(animations[1].keyframes[0]).toEqual({ opacity: 0, transform: "translateX(-8px)" });
+    });
 
-  it("updates at once under reduced motion, without the API, or in a hidden window", () => {
-    reduced = true;
-    const first = vi.fn();
-    navigate(first);
-    expect(first).toHaveBeenCalledTimes(1);
-    reduced = false;
-    (document as { visibilityState: string }).visibilityState = "hidden";
-    const second = vi.fn();
-    navigate(second);
-    expect(second).toHaveBeenCalledTimes(1);
-    vi.stubGlobal("document", { visibilityState: "visible", documentElement: { dataset } });
-    const third = vi.fn();
-    navigate(third);
-    expect(third).toHaveBeenCalledTimes(1);
-    expect(started).toEqual([]);
-  });
+    it("a second swap cancels the first one's slide", () => {
+      navigate(vi.fn());
+      navigate(vi.fn());
+      expect(animations[0].cancel).toHaveBeenCalled();
+      expect(animations).toHaveLength(2);
+    });
 
-  it("opening or leaving a room never animates: the update runs, then the transition is skipped", async () => {
-    // the column on screen: a 1:1 (no room inside), 1000px wide
-    let frame = { width: 1000, height: 800, room: false };
-    const query = (selector: string) => selector === ".app-content-frame"
-      ? { getBoundingClientRect: () => ({ width: frame.width, height: frame.height }), querySelector: (inner: string) => (inner === "[data-room-view]" && frame.room ? {} : null) }
-      : null;
-    Object.assign(document as object, { querySelector: query });
+    it("never animates under reduced motion or in a hidden window", () => {
+      reduced = true;
+      navigate(vi.fn());
+      reduced = false;
+      (document as { visibilityState: string }).visibilityState = "hidden";
+      navigate(vi.fn());
+      expect(animations).toEqual([]);
+    });
 
-    // 1:1 to 1:1, same box: the cross-fade plays
-    navigate(() => {});
-    await Promise.resolve();
-    expect(transitions[0].skipTransition).not.toHaveBeenCalled();
-
-    // 1:1 to a room: no slide, no fade, no zoom
-    navigate(() => { frame = { ...frame, room: true }; });
-    await Promise.resolve();
-    expect(transitions[1].skipTransition).toHaveBeenCalled();
-
-    // a room back to a 1:1
-    navigate(() => { frame = { ...frame, room: false }; });
-    await Promise.resolve();
-    expect(transitions[2].skipTransition).toHaveBeenCalled();
-
-    // the column changes size (a panel docked beside it closes): the browser
-    // would stretch the old snapshot into the new box
-    navigate(() => { frame = { ...frame, width: 640 }; });
-    await Promise.resolve();
-    expect(transitions[3].skipTransition).toHaveBeenCalled();
+    it("opening or leaving a room, or a column that changes size, stands still", () => {
+      navigate(() => { frame = { ...frame, room: true }; });
+      navigate(() => { frame = { ...frame, room: false }; });
+      navigate(() => { frame = { ...frame, width: 640 }; });
+      expect(animations).toEqual([]);
+      // 1:1 to 1:1, same box: it slides in
+      navigate(() => {});
+      expect(animations).toHaveLength(1);
+    });
   });
 
   it("swapStandsStill: a room on either side, or a resized column; a same-size 1:1 swap may animate", () => {
@@ -141,12 +188,12 @@ describe("navigate", () => {
     expect(css).toMatch(/:root\[data-reduced-motion="true"\] \*,\n:root\[data-reduced-motion="true"\] \*::before,\n:root\[data-reduced-motion="true"\] \*::after \{\n  animation: none !important;\n  transition-duration: 0\.01ms !important;\n  transition-delay: 0ms !important;\n  scroll-behavior: auto !important;/);
   });
 
-  it("the CSS names only the main column, takes no pointer events and stands still under reduced motion", () => {
+  it("the CSS no longer names the main column, and view transitions left (onboarding) take no pointer events and stand still under reduced motion", () => {
     // A Windows checkout can hand the file over with CRLF line ends.
     const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-    expect(css).toContain('html[data-nav="main"] .app-content-frame {\n  view-transition-name: main-view;');
+    expect(css).not.toContain("view-transition-name: main-view");
+    expect(css).not.toContain("data-nav=");
     expect(css).toMatch(/::view-transition \{\s*pointer-events: none;/);
-    expect(css).toContain('html[data-nav-direction="back"]::view-transition-new(main-view)');
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*::view-transition-group\(\*\),\s*::view-transition-old\(\*\),\s*::view-transition-new\(\*\) \{\s*animation: none !important;/);
   });
 
@@ -165,7 +212,7 @@ describe("navigate", () => {
       read("../components/SettingsModal.tsx"),
       read("../components/settings/useSettingsModal.ts"),
     ].join("\n");
-    expect(settings).toContain('navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page")');
+    expect(settings).toContain('navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page", dialogRef.current)');
     expect(settings).toContain("starting:scale-98 starting:opacity-0");
   });
 });

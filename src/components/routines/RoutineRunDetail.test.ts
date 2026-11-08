@@ -210,7 +210,7 @@ describe("the run logs (2026-10-29)", async () => {
     expect(markup).not.toContain("| Area |");
   });
 
-  // JC 2026-11-01: "most routines make errors and end up showing success".
+  // the owner 2026-11-01: "most routines make errors and end up showing success".
   it("a run that completed with problems says so, with the problems, never as a plain success", () => {
     const markup = html({ run: run("completed", { output: "Checked 10 invoices.", problems: "crm_login failed 2 times and never succeeded after" }), detail: detail(1) });
     expect(markup).toContain("data-run-problems");

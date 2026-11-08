@@ -38,7 +38,7 @@ describe("a routine's action bar", () => {
   it("names every action in words, folding to an icon with a tooltip only when the bar is tight", () => {
     const markup = panel(false);
     const all = buttons(markup);
-    // 2026-11-06 (JC, one pane): [Run now] [Check] [Disable or Enable] [Delete], no Edit.
+    // 2026-11-06 (the owner, one pane): [Run now] [Check] [Disable or Enable] [Delete], no Edit.
     expect(all).toHaveLength(4);
     expect(all.map((button) => /aria-label="([^"]+)"/.exec(button)?.[1])).toEqual(["Run now", "Check routine", "Enable", "Delete"]);
     for (const button of all) {

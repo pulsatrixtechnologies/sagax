@@ -1,5 +1,5 @@
 /**
- * The Data window (experimental, Settings > Experimental features > Data
+ * The Data window (experimental, Settings > Developer > Experimental > Data
  * window): a bot's Data results (DuckDB tables, charts and SQL,
  * src/components/data) in a window of their own, opened from the chat
  * header's Data button. One window per bot: asking again brings that bot's

@@ -8,6 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { botLook, botPersona, avatarVersion, PERSONA_DESCRIPTION_MAX, readBotAvatar } from "./org-admin-look.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
+import { OBJECT_SHAPE_BY_ID } from "../../shared/shape-avatar-presets.ts";
 
 const FILE = "123e4567-e89b-12d3-a456-426614174000.webp";
 const exists = (name: string) => name === FILE;
@@ -15,8 +16,15 @@ const exists = (name: string) => name === FILE;
 describe("a bot's look", () => {
   it("is the owl in the bot's color when the owner chose nothing", () => {
     expect(botLook({ name: "Atlas", color: "blue" }, exists)).toEqual({
-      kind: "default", character: "owl", family: "classics", color: "blue", colorHex: "#377FE6", skin: "none", shape: null, expression: null, image: null,
+      kind: "default", character: "owl", family: "classics", color: "blue", colorHex: "#377FE6", skin: "none", shape: null, avatarDef: null, expression: null, image: null,
     });
+  });
+
+  it("carries the shape's own drawing so a console draws the bot list's mascot (#2784)", () => {
+    const avatarDef = { ...OBJECT_SHAPE_BY_ID.sprout, id: "my-own-mascot", name: "My own" };
+    expect(botLook({ name: "A", color: "green", mascotLook: { character: "shape", shape: "circle", avatarDef } }, exists)).toMatchObject({ character: "shape", avatarDef });
+    expect(botLook({ name: "A", color: "green", mascotLook: { character: "shape", shape: "sprout" } }, exists)).toMatchObject({ shape: "sprout", avatarDef: null });
+    expect(botLook({ name: "A", color: "green", mascotLook: { character: "shiba", avatarDef } }, exists)).toMatchObject({ avatarDef: null });
   });
 
   it("names the character, its family, skin and shape as stored", () => {

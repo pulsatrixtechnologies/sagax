@@ -3,6 +3,7 @@
  * other computers with Rename and Remove. &skin=<id>, &lang=<code>. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { StoreProvider } from "../state/store";
 import { AccessibilityGroup } from "../components/settings/AppearanceSettings";
 import { BotWorkplaceSettings } from "../components/settings/BotWorkplaceSettings";
 import { TimeZoneRows } from "../components/settings/TimeZoneSettings";
@@ -37,6 +38,7 @@ window.fetch = async (input, init) => {
   if (url.includes("/api/settings/bot")) {
     return new Response(JSON.stringify({ settings: { autoReviewDefault: false, timeZone: "America/Toronto", timeZoneAuto: params.get("auto") === "1" }, scope: "person", hostTimeZone: "UTC", effectiveTimeZone: "America/Toronto" }), { headers: { "content-type": "application/json" } });
   }
+  if (url.includes("/api/me/signals")) return new Response(JSON.stringify({ budget: "10", quiet: JSON.stringify({ start: "22:00", end: "07:00", timeZone: "America/Toronto" }) }), { headers: { "content-type": "application/json" } });
   if (url.includes("/api/me/desktop-bridge/computers/")) return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
   return original(input, init);
 };
@@ -58,4 +60,4 @@ function Gallery() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<StrictMode><Gallery /></StrictMode>);
+createRoot(document.getElementById("root")!).render(<StrictMode><StoreProvider><Gallery /></StoreProvider></StrictMode>);

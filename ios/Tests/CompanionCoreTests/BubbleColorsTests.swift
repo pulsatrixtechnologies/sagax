@@ -41,7 +41,7 @@ final class BubbleColorsTests: XCTestCase {
         XCTAssertLessThan(SkinID.pulsatrixLight.palette.bubbleAssistant.luminance, SkinID.pulsatrixLight.palette.bg.luminance)
     }
 
-    /// Black is the Grok look (2026-11-01): Grok Bot's neutral bubbles, the
+    /// Black is the Grok look (2026-11-01): reference app's neutral bubbles, the
     /// person's a step lighter than the bot's, never the accent.
     func testBlackKeepsGrokNeutralBubbles() {
         let p = SkinPalette.black

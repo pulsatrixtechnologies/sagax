@@ -1,7 +1,7 @@
 /**
  * Settings > Developer > Per bot (#2658, lot 2 of #2636). The technical
  * cards of the bot page V6 live here only: working folder, tool selection,
- * webhooks (and their tokens), the always-allowed list, the memory's daily
+ * webhooks (and their tokens), the event subscriptions (#2700), the always-allowed list, the memory's daily
  * logs and embeddings endpoint, and the export as zip. One bot at a time,
  * picked in the first row; the bot page's Advanced sub-page keeps one
  * discreet link that opens this card on that bot (requestDeveloperBot).
@@ -25,6 +25,7 @@ import { readableError } from "@/lib/plain-error";
 import { api, useStore, type Bot, type ConfigStatus } from "@/state/store";
 
 import { AlwaysAllowedCard, WorkingFolder } from "../bot-settings/AccessSection";
+import { BotEventSubscriptions } from "../bot-settings/BotEventSubscriptions";
 import { BotWebhooks, canManageBotWebhooks } from "../bot-settings/BotWebhooks";
 import { MemoryFileRows, MemoryGauge, SemanticRecallCard } from "../bot-settings/MemorySectionParts";
 import { PaneSection } from "../bot-settings/PaneSection";
@@ -78,6 +79,7 @@ function DeveloperBotSections({ bot }: { bot: Bot }) {
       <WorkingFolder bot={bot} />
       <ToolSelectionCard bot={bot} engineKind={derived.engine?.driverKind} />
       {canManageBotWebhooks(state.config, bot) && <BotWebhooks bot={bot} />}
+      {canManageBotWebhooks(state.config, bot) && <BotEventSubscriptions bot={bot} />}
       <AlwaysAllowedCard bot={bot} patch={derived.patch} />
       {bot.memoryEnabled !== false && <DeveloperMemoryCards bot={bot} />}
       {showBotZipExport(state.config, bot) && <BotZipExportCard bot={bot} />}
@@ -148,7 +150,7 @@ function DeveloperMemoryCards({ bot }: { bot: Bot }) {
 
 /** Export the bot as a .sagaxbot.zip: what to include, then the download
  * (was a popover under the bot's "..." menu). */
-function BotZipExportCard({ bot }: { bot: Bot }) {
+export function BotZipExportCard({ bot }: { bot: Bot }) {
   const [withConversations, setWithConversations] = useState(false);
   const [withSharing, setWithSharing] = useState(false);
   const [exported, setExported] = useState(false);

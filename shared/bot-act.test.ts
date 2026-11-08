@@ -16,8 +16,10 @@ function facts(patch: Partial<TurnFacts> = {}): TurnFacts {
 }
 
 describe("actorForTurn", () => {
-  it("refuses a routine even when a person is proven", () => {
-    expect(actorForTurn(facts({ automation: true, provenPerson: "p1" }))).toEqual({ kind: "none", reason: "automation" });
+  it("#2701: a routine acts for its owner, and is refused only with no owner on a shared server", () => {
+    expect(actorForTurn(facts({ automation: true, sharedServer: true, provenPerson: "p1", routineOwner: "owner" }))).toEqual({ kind: "person", personKey: "owner", routine: true });
+    expect(actorForTurn(facts({ automation: true, sharedServer: true, provenPerson: "p1" }))).toEqual({ kind: "none", reason: "automation" });
+    expect(actorForTurn(facts({ automation: true, requestUsable: false }))).toEqual({ kind: "operator" });
   });
 
   it("refuses a guest before an unproven request", () => {

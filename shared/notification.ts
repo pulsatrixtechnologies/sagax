@@ -44,6 +44,10 @@ export type NotifyKind =
    * thread another bot opened) ended with items only the person can do; the
    * card is in their conversation with that bot (shared/person-attention.ts). */
   | "needs-you"
+  /** #2697: a proactive proposal card (a daily suggestion) waits on the
+   * person's Do it / Not now; `proposalId` names it. A card-level signal:
+   * the person's daily budget and quiet hours decide whether it buzzes. */
+  | "proposal"
   /** Something Sagax changed on its own that the person hears about once:
    * a tool turned off for the bots it does not start for. */
   | "notice"
@@ -91,6 +95,8 @@ export interface Notification {
   /** A question's own choices, in order: the phone offers them as the
    * banner's buttons (up to its limit; past it, Open). */
   choices?: string[];
+  /** #2697: the proactive proposal a `proposal` notice is about. */
+  proposalId?: string;
   /** Never on a phone or a watch (2026-10-29): a conversation an AI client
    * holds with a bot over MCP (shared/agent-conversation.ts) or a hidden
    * one (#291). The client that asked reads the answer and the approval;
@@ -101,6 +107,10 @@ export interface Notification {
    * and unread as usual, but no native notification shows on any desktop,
    * no push reaches a phone or a watch. Absent or true: it notifies. */
   notify?: boolean;
+  /** #2695: "fyi" when the bot marked it FYI (set_reply_notify fyi): no
+   * notification anywhere now (notify is false too), and its words wait for
+   * the person's next brief. */
+  level?: "fyi";
 }
 
 /** Whether a notice may raise a native notification or a push: everything
@@ -116,7 +126,8 @@ export function botNotifyArg(value: unknown): boolean {
 
 /** The notice as the bot chose it: `notify: false` rides along to every
  * client, the desktop shell and the push relay, each of which skips it. */
-export function withBotNotify<T extends Notification | null>(note: T, notify: boolean): T {
+export function withBotNotify<T extends Notification | null>(note: T, notify: boolean | "fyi"): T {
+  if (note && notify === "fyi") return { ...note, notify: false, level: "fyi" };
   return note && !notify ? { ...note, notify: false } : note;
 }
 

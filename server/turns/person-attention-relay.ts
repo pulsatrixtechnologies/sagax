@@ -49,6 +49,10 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
   /** A deep link to a ConnectWise ticket, when the site is known. */
   ticketUrl?(threadId: string, ticketId: number): string | undefined;
   notify(bot: B, threadId: string, title: string, body: string): void;
+  /** #2694: the person's feedback on this kind of card ("attention", or the
+   * run card's wake kind): "muted" posts nothing, "quiet" posts the card
+   * without ringing or marking unread. Absent: "normal". */
+  feedback?(botId: string, topic: string): "muted" | "quiet" | "normal";
 }
 
 const ACTIVE_RUN = new Set(["queued", "running", "waiting"]);
@@ -75,7 +79,7 @@ export function turnWords(messages: readonly WireMessage[], turnId: string | und
 /** What happened (for tests and the log): the card's thread, or why not. */
 export type AttentionRelayOutcome =
   | { posted: true; threadId: string; card: PersonAttentionCard; onRunCard?: true }
-  | { posted: false; reason: "failed" | "no-task" | "confidential" | "agent" | "no-signal" | "run-reports" | "own-conversation" | "no-conversation" | "already" };
+  | { posted: false; reason: "failed" | "no-task" | "confidential" | "agent" | "no-signal" | "run-reports" | "own-conversation" | "no-conversation" | "already" | "muted" };
 
 export function relayPersonAttention<B extends AttentionBot>(
   input: AttentionTurn<B>,
@@ -103,9 +107,14 @@ export function relayPersonAttention<B extends AttentionBot>(
   // in the person's chat gets the items on that card, never a second card.
   // It rings once: only when the card had none yet.
   const runCard = run ? rows.findLast((message) => message.kind === "routine.run" && message.routineRun?.runId === run.id) : undefined;
+  // #2694: the thumbs-down, "less" and "never" given on these cards
+  const level = deps.feedback?.(bot.id, runCard?.routineRun?.wakeTopic ?? "attention") ?? "normal";
+  if (level === "muted") return { posted: false, reason: "muted" };
+  const ring = level === "normal";
   if (runCard) {
     if (runCard.attention) return { posted: false, reason: "already" };
     deps.patch(target, runCard.id, { attention: card });
+    if (!ring) return { posted: true, threadId: target, card, onRunCard: true };
     deps.markUnread(bot.id, target);
     deps.notify(bot, target, card.kind === "question" ? `${bot.name} has a question for you` : `${bot.name} needs you`,
       card.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"));
@@ -115,6 +124,7 @@ export function relayPersonAttention<B extends AttentionBot>(
     role: "bot", kind: "text", text: personAttentionText(card), attention: card,
     threadRef: { botId: bot.id, threadId, title: task.title },
   });
+  if (!ring) return { posted: true, threadId: target, card };
   deps.markUnread(bot.id, target);
   deps.notify(bot, target, card.kind === "question" ? `${bot.name} has a question for you` : `${bot.name} needs you`,
     card.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"));

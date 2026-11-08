@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { unclosedFenceOffset } from "../../src/lib/rich-blocks.ts";
-import { pickRoutineFullReport, routineRunCard, routineRunFallbackText, ROUTINE_REPORT_POST_MAX } from "./routine-run-card.ts";
+import { pickRoutineFullReport, routineRunCard, routineRunFallbackText, ROUTINE_REPORT_POST_MAX, wakeTopicOf } from "./routine-run-card.ts";
 import type { RoutineRun } from "./routines.ts";
 
 const REPORT = "Le suivi de 14 h 50 n'a rien écrit dans ConnectWise. J'ai libéré le verrou dispatch.";
@@ -90,6 +90,16 @@ describe("routineRunCard", () => {
 
 // 2026-11-03 (the maintainer): the problem lines belong in the run detail (View run)
 // only, never in the conversation, the message's text included.
+describe("wakeTopicOf (#2694)", () => {
+  it("names the wake kind the person rates: heartbeat, the mail or calendar source, none for a routine", () => {
+    expect(wakeTopicOf(run({ webhookId: "heartbeat:bot-1" }))).toBe("heartbeat");
+    expect(wakeTopicOf(run({ proactive: { sources: ["mail"] } } as Partial<RoutineRun>))).toBe("mail");
+    expect(routineRunCard(run({ proactive: { sources: ["calendar"] } } as Partial<RoutineRun>), "main").wakeTopic).toBe("calendar");
+    expect(wakeTopicOf(run())).toBeUndefined();
+    expect(routineRunCard(run(), "main").wakeTopic).toBeUndefined();
+  });
+});
+
 describe("routineRunFallbackText", () => {
   const problems = "Get message failed 2 times and never succeeded after: Microsoft Graph API error: 404 Not Found";
 

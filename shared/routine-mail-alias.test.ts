@@ -48,25 +48,25 @@ describe("inbound tag routing", () => {
   });
 
   it("plans tagged delivery for name+tag@ and untagged delivery for the plain address", () => {
-    expect(planMailDelivery("cryptic+reports@bots.example.org", routines, "bot_a")).toEqual({
+    expect(planMailDelivery("nimbus+reports@bots.example.org", routines, "bot_a")).toEqual({
       kind: "tagged",
       tag: "reports",
       routineIds: ["r-reports"],
     });
-    expect(planMailDelivery("cryptic+unknown@bots.example.org", routines, "bot_a")).toEqual({
+    expect(planMailDelivery("nimbus+unknown@bots.example.org", routines, "bot_a")).toEqual({
       kind: "tagged",
       tag: "unknown",
       routineIds: [],
     });
-    expect(planMailDelivery("cryptic@bots.example.org", routines, "bot_a")).toEqual({ kind: "untagged" });
+    expect(planMailDelivery("nimbus@bots.example.org", routines, "bot_a")).toEqual({ kind: "untagged" });
   });
 
   it("builds the settings rows for tag routing without leaking another bot's routines", () => {
-    expect(tagRoutingRows(routines, "bot_a", "cryptic@bots.example.org")).toEqual([
-      { tag: "reports", address: "cryptic+reports@bots.example.org", routineId: "r-reports", routineName: "Reports", enabled: true },
-      { tag: "shop", address: "cryptic+shop@bots.example.org", routineId: "r-shop", routineName: "Shop", enabled: true },
-      { tag: "reports", address: "cryptic+reports@bots.example.org", routineId: "r-off", routineName: "Off", enabled: false },
-      { tag: "shop", address: "cryptic+shop@bots.example.org", routineId: "r-paused", routineName: "Paused", enabled: false },
+    expect(tagRoutingRows(routines, "bot_a", "nimbus@bots.example.org")).toEqual([
+      { tag: "reports", address: "nimbus+reports@bots.example.org", routineId: "r-reports", routineName: "Reports", enabled: true },
+      { tag: "shop", address: "nimbus+shop@bots.example.org", routineId: "r-shop", routineName: "Shop", enabled: true },
+      { tag: "reports", address: "nimbus+reports@bots.example.org", routineId: "r-off", routineName: "Off", enabled: false },
+      { tag: "shop", address: "nimbus+shop@bots.example.org", routineId: "r-paused", routineName: "Paused", enabled: false },
     ]);
     expect(tagRoutingRows(routines, "bot_b", "other@bots.example.org").map((row) => row.routineId)).toEqual(["r-other"]);
   });

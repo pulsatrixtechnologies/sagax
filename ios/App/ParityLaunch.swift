@@ -41,7 +41,7 @@ enum ParityScreen: String, CaseIterable {
     /// Not a reference: the home's "+" as New chat (bots and members).
     case newChat = "new-chat"
     case createBot = "20-create-bot"
-    /// Not a reference: New bot's Import from Grok Bot, a reply pasted and previewed.
+    /// Not a reference: New bot's Import from the reference app, a reply pasted and previewed.
     case createBotImport = "create-bot-import"
     case botComputer = "21-bot-computer"
     /// Not a reference: the bot creation wizard (`-parityWizardStep` picks
@@ -186,7 +186,7 @@ enum IPadParityScreen: String, CaseIterable {
     case settingsOrganization = "settings-organization"
     case settingsCloudAccount = "settings-cloudAccount"
     case settingsAppearance = "settings-appearance"
-    case settingsExperimental = "settings-experimental"
+    case settingsDeveloper = "settings-developer"
     case settingsConnections = "settings-connections"
     case settingsDecisionModel = "settings-decisionModel"
     case settingsEngines = "settings-engines"
@@ -199,6 +199,7 @@ enum IPadParityScreen: String, CaseIterable {
     case settingsBackups = "settings-backups"
     case settingsWorkspaces = "settings-workspaces"
     case settingsGeneralScrolled = "settings-general-scrolled"
+    case settingsDeveloperScrolled = "settings-developer-scrolled"
     case settingsMyConnections = "settings-myConnections"
     case personaOverview = "persona-overview"
     case personaAppearance = "persona-appearance"
@@ -235,7 +236,7 @@ enum IPadParityScreen: String, CaseIterable {
     case orgSettingsNotifications = "org-settings-notifications"
     case orgSettingsOrganization = "org-settings-organization"
     case orgSettingsAppearance = "org-settings-appearance"
-    case orgSettingsExperimental = "org-settings-experimental"
+    case orgSettingsDeveloper = "org-settings-developer"
     case orgSettingsConnections = "org-settings-connections"
     case orgSettingsDecisionModel = "org-settings-decisionModel"
     case orgSettingsEngines = "org-settings-engines"

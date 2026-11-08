@@ -255,3 +255,25 @@ fingerprint, compare, write the state; Apple M3 Max, Node 26, 30 samples):
 
 Memory kept after the checks stays under 300 KB; no model turn is paid
 while nothing changes.
+
+## Event subscriptions instead of polling (#2700)
+
+A routine can call something when it finishes, so nothing has to poll its
+results. A bot subscribes to its own run events:
+
+- `run.reported`: the run reported something;
+- `run.quiet`: the run had nothing to report;
+- `run.failed`: the run failed.
+
+The target is a webhook (an http or https URL, which receives a signed JSON
+event; a private or local address is refused on a shared server) or a
+routine of this bot or of another bot of the same person, which runs on each
+event. The list lives in the bot's Developer settings, under Event subscriptions, and the bot
+manages it from the chat with the `event_subscriptions` tool: action `list`
+(the default) gives each subscription with its id, last delivery and
+failures; `create` takes `events` and exactly one of `url` or `routine_id`;
+`test` sends one sample event; `delete` removes one. The signing secret is
+shown once in the settings, never in the chat.
+
+MCP `resources/subscribe` (a Perspicax resource that pushes a change instead
+of a poll) is served by Perspicax, not by Sagax.

@@ -1,4 +1,4 @@
-// Settings > Experimental: the Data window, off by default. Routines in the
+// Settings > Developer > Experimental: the Data window, off by default. Routines in the
 // conversation and Group turns are in General > Advanced (2026-10-14): one
 // way to reach them, no second Experimental switch hiding them again. Their
 // saved values keep applying whether or not the page is open.
@@ -67,15 +67,15 @@ beforeEach(async () => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
-  const { DeveloperSettings, ExperimentalSettings, OrganizationSettings } = await import("./lazy-settings-sections");
-  await Promise.all([DeveloperSettings.preload(), ExperimentalSettings.preload(), OrganizationSettings.preload()]);
+  const { DeveloperSettings, OrganizationSettings } = await import("./lazy-settings-sections");
+  await Promise.all([DeveloperSettings.preload(), OrganizationSettings.preload()]);
   return renderToStaticMarkup(createElement(SettingsModal));
 };
 const switchNamed = (label: string) => fixture.switches.filter((props) => props["aria-label"] === label).at(-1);
 
-describe("Settings > Experimental", () => {
+describe("Settings > Developer > Experimental", () => {
   it("offers the Data window, off by default, and no longer a switch for routine and group settings", async () => {
-    fixture.section = "experimental";
+    fixture.section = "developer";
     fixture.features = { dataWindow: false };
     const html = await render();
     expect(html).toContain('data-experimental-feature="dataWindow"');
@@ -89,28 +89,28 @@ describe("Settings > Experimental", () => {
   it("folds a feature this server predates under Needs a server update (#2093)", async () => {
     // An organization server older than Sagax 0.5.3 does not know the
     // feature: its config has no dataWindow, and it refuses to save one.
-    fixture.section = "experimental";
+    fixture.section = "developer";
     const html = await render();
-    // JC 2026-11-08: an option the server cannot serve is not rendered at all
+    // the owner 2026-11-08: an option the server cannot serve is not rendered at all
     expect(html).not.toContain('data-experimental-feature="dataWindow"');
     expect(html).not.toContain("Arrives with the next server update.");
     expect(switchNamed("Turn on the Data window")).toBeUndefined();
   });
 
-  it("is a switch list with a calculated count, no Experimental features heading, no Decision model (#2093)", async () => {
-    fixture.section = "experimental";
+  it("is a titled switch list in Developer with a calculated count, no Decision model (#2093, #2729)", async () => {
+    fixture.section = "developer";
     fixture.features = { dataWindow: false, meetingNotetaker: false, llmThreadTitles: false };
     const html = await render();
     expect(html).toContain('data-settings-group="experimental"');
-    expect(html).not.toContain(">Experimental features</h3>");
+    expect(html).toContain("Experimental features");
     // skill authoring on; browser on Computer (#2080 L3); three served switches off; no Decision model (#2093)
     expect(html).toContain("· 1 of 4 on");
     for (const feature of ["skillAuthoring", "dataWindow", "meetingNotetaker", "llmThreadTitles"]) {
       expect(html, feature).toContain(`data-experimental-feature="${feature}"`);
     }
-    // #2636: Context pods are on Settings > Developer; Experimental keeps one link there
+    // #2729: Experimental is a card of Developer itself, no link back to Developer
     expect(html).not.toContain('data-experimental-feature="devPods"');
-    expect(html).toContain('data-developer-link=""');
+    expect(html).not.toContain('data-developer-link=""');
     expect(html).not.toContain('data-experimental-feature="browser"');
     expect(html).not.toContain('data-experimental-feature="decisionModel"');
     expect(html).not.toContain('data-experimental-feature="browser"');
@@ -123,14 +123,14 @@ describe("Settings > Experimental", () => {
   });
 
   it("lists an unserved feature under Needs a server update, with the reason on demand", async () => {
-    fixture.section = "experimental";
+    fixture.section = "developer";
     const html = await render();
     expect(html).not.toContain('data-experimental-feature="dataWindow"');
     expect(html).not.toContain('data-unavailable=""');
   });
 
   it("saves each switch as its own server feature", async () => {
-    fixture.section = "experimental";
+    fixture.section = "developer";
     fixture.features = { dataWindow: false };
     fixture.api.mockResolvedValue({ features: {} });
     await render();
@@ -140,7 +140,7 @@ describe("Settings > Experimental", () => {
   });
 
   it("gives generated conversation titles a switch: no more hand edit of config.json (2026-10-26)", async () => {
-    fixture.section = "experimental";
+    fixture.section = "developer";
     fixture.features = { llmThreadTitles: false };
     fixture.api.mockResolvedValue({ features: {} });
     const html = await render();

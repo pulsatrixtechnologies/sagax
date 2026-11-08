@@ -330,8 +330,8 @@ const definitions = [
     key: "server.experimental", group: "server", memberDefault: false, adminOnly: false,
     label: { en: "Manage experimental features", fr: "Gérer les fonctionnalités expérimentales" },
     description: {
-      en: "See Settings > Experimental and turn its early features on or off for the whole server (skill authoring, the built-in browser, connected apps, the decision model, the data window, the meeting notetaker). It reaches no other installation setting. Anyone who can change the server's settings already has it.",
-      fr: "Voir Réglages > Expérimental et activer ou désactiver ses fonctionnalités en avant-première pour tout le serveur (rédaction de compétences, navigateur intégré, applications connectées, modèle de décision, fenêtre de données, preneur de notes de réunion). Elle n'atteint aucun autre réglage de l'installation. Toute personne qui peut changer les réglages du serveur l'a déjà.",
+      en: "See Settings > Developer > Experimental features and turn its early features on or off for the whole server (skill authoring, the built-in browser, connected apps, the decision model, the data window, the meeting notetaker). It reaches no other installation setting. Anyone who can change the server's settings already has it.",
+      fr: "Voir Réglages > Développeur > Fonctionnalités expérimentales et activer ou désactiver ses fonctionnalités en avant-première pour tout le serveur (rédaction de compétences, navigateur intégré, applications connectées, modèle de décision, fenêtre de données, preneur de notes de réunion). Elle n'atteint aucun autre réglage de l'installation. Toute personne qui peut changer les réglages du serveur l'a déjà.",
     },
   },
   {
@@ -518,6 +518,7 @@ export const BOT_FIELD_PERMISSIONS: Readonly<Record<string, PermissionKey>> = {
   autoApprove: "bots.approvalLevel",
   acknowledgeLocalAuto: "bots.approvalLevel",
   proactiveMode: "bots.approvalLevel",
+  directTriggers: "bots.approvalLevel",
   // #2048: remembered publish target is the owner's own choice on their bot.
   pageTargetDefault: "bots.behaviour",
   // 2026-10-26: the owner's own "Always allow" list on their own bot.
@@ -533,6 +534,7 @@ export const BOT_FIELD_PERMISSIONS: Readonly<Record<string, PermissionKey>> = {
   loopGuard: "bots.behaviour",
   voiceNotes: "bots.behaviour",
   emailDrafts: "bots.behaviour",
+  grokAccountConnectors: "bots.behaviour",
   memeReplies: "bots.behaviour",
   collaboratorsCreateRoutines: "bots.behaviour",
   fallback: "bots.behaviour",
@@ -593,7 +595,7 @@ export function permissionCatalogue(): { version: number; groups: readonly Permi
 }
 
 /** The server-wide `features` keys that `server.experimental` governs, i.e.
- * the switches of Settings > Experimental (src/components/settings/
+ * the switches of Settings > Developer > Experimental (src/components/settings/
  * ExperimentalSettings.tsx). A person holding only `server.experimental` may
  * PATCH /api/config with these feature keys and nothing else; the client
  * hides every other control from them. The host-reaching feature switches

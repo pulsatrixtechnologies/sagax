@@ -386,7 +386,7 @@ it("S2b resumes the Chief once with a parked question, keeps one question card a
 // coordinator, and the restored card's message frame reaches the achievement
 // observers. They read autoTurnsByThread, declared further down: a
 // ReferenceError under strip-types, "change listener threw ... reading 'get'"
-// in the packaged bundle (0.8.29 on GOX).
+// in the packaged bundle (0.8.29 on ACME).
 it("S2d re-parks a question during an early boot store write without a listener throwing", () => scenario(async (f) => {
   f.script(f.clive.id,
     { key: "C0", match: ["S2D-JOB"], steps: [{ arguments: { bot_ids: [f.mira.id], message: "S2D-BRIEF: tag the release." } }], reply: "C0: Mira is on it." },

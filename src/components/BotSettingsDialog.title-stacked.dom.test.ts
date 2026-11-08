@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// JC 2026-11-06 (asked twice): in the bot panel the title sits under the
+// the owner 2026-11-06 (asked twice): in the bot panel the title sits under the
 // name, on its own line, smaller and secondary; never "Name · Title" on one
 // line. Both stay editable in place.
 import { act, createElement, useEffect } from "react";

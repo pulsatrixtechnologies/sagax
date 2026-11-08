@@ -44,13 +44,17 @@ export function useSidebarUnreadPills({
   // The pills follow the list: bots changing, the window resizing, a row
   // opening or closing. Plain scrolling is measured by the list's onScroll.
   useLayoutEffect(() => {
-    measureUnread();
+    // Measured on the next frame, not in this commit: reading every row's box
+    // here forced a layout in the middle of a bot switch (#2755). The pills
+    // are a hint, a frame late is invisible.
+    const frame = typeof requestAnimationFrame === "function" ? requestAnimationFrame(measureUnread) : (measureUnread(), 0);
     const list = listRef.current;
-    if (!list || typeof ResizeObserver === "undefined") return;
+    const cancel = () => { if (frame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame); };
+    if (!list || typeof ResizeObserver === "undefined") return cancel;
     const observer = new ResizeObserver(measureUnread);
     observer.observe(list);
     for (const child of Array.from(list.children)) observer.observe(child);
-    return () => observer.disconnect();
+    return () => { cancel(); observer.disconnect(); };
   }, [measureUnread, state.bots, state.groups, selecting, listRef]);
 
   return { moreUnread, measureUnread, jumpToUnread };

@@ -1,4 +1,4 @@
-// Tabs, doors, voice prefs and privacy line for the Grok Bot panel (#2127).
+// Tabs, doors, voice prefs and privacy line for the reference app panel (#2127).
 import XCTest
 @testable import CompanionCore
 

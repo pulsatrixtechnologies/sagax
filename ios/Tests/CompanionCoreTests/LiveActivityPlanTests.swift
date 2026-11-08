@@ -3,7 +3,7 @@ import XCTest
 
 /// What the Dynamic Island and the lock screen hold across the app's life:
 /// stuck "working" cards, cards that vanished on launch, asks whose buttons
-/// outlived the answer (2026-11-01, JC on a physical iPhone).
+/// outlived the answer (2026-11-01, the owner on a physical iPhone).
 final class LiveActivityPlanTests: XCTestCase {
     private let since = Date(timeIntervalSince1970: 1_800_000_000)
 

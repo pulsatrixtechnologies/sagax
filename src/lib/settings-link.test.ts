@@ -27,9 +27,9 @@ describe("settings links", () => {
     expect(settingsSectionLabel("security")).toBe("Security");
     expect(settingsSectionLabel("credentials")).toBe("Vault");
     expect(settingsSectionLabel("pages")).toBe("Plugins");
-    expect(settingsSectionLabel("experimental")).toBe("Experimental");
+    expect(settingsSectionLabel("experimental")).toBe("Developer");
     // #2090: Updates is its own page. 2026-11-06: the App page splits into
-    // General and About (JC 2026-11-07, was Help and about); Import lands on Backups and storage
+    // General and About (the owner 2026-11-07, was Help and about); Import lands on Backups and storage
     expect(settingsSectionLabel("about")).toBe("About");
     expect(settingsSectionLabel("general")).toBe("General");
     expect(settingsSectionLabel("updates")).toBe("Updates");

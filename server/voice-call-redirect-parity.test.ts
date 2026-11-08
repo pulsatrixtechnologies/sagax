@@ -33,11 +33,11 @@ const MESSAGE = { to: "+1 514 555 0142", purpose: "Rappel de rendez-vous", messa
 /** Every way a bot's frame can name voice_call on the relay. */
 const ENTRIES: Record<string, (args: Record<string, unknown>) => { name: string; arguments: unknown }> = {
   "direct": (args) => ({ name: "voice_call", arguments: args }),
-  "server prefix": (args) => ({ name: "perspicax_gox__voice_call", arguments: args }),
+  "server prefix": (args) => ({ name: "perspicax_acme__voice_call", arguments: args }),
   "other separators": (args) => ({ name: "voice-call", arguments: args }),
   "call_tool": (args) => ({ name: "call_tool", arguments: { name: "voice_call", arguments: args } }),
-  "call_tool, prefixed target": (args) => ({ name: "call_tool", arguments: { name: "mcp__perspicax_gox__voice_call", arguments: args } }),
-  "use_tool": (args) => ({ name: "use_tool", arguments: { tool_name: "perspicax_gox__voice_call", tool_input: args } }),
+  "call_tool, prefixed target": (args) => ({ name: "call_tool", arguments: { name: "mcp__perspicax_acme__voice_call", arguments: args } }),
+  "use_tool": (args) => ({ name: "use_tool", arguments: { tool_name: "perspicax_acme__voice_call", tool_input: args } }),
   "use_tool, arguments as text": (args) => ({ name: "use_tool", arguments: { tool_name: "voice_call", tool_input: JSON.stringify(args) } }),
 };
 
@@ -166,7 +166,7 @@ describe("voice_call becomes place_phone_call by every entry point", () => {
     // the gate turns call_tool into the tool's own frame before it relays it
     expect(directoryCallTarget("call_tool", { name: "voice_call", arguments: CONVERSATION })).toBe("voice_call");
     // Grok's use_tool reads as the MCP tool it runs (the permission card's tool)
-    const grok = readUseToolCall({ variant: "UseTool", tool_name: "perspicax_gox__voice_call", tool_input: CONVERSATION })!;
+    const grok = readUseToolCall({ variant: "UseTool", tool_name: "perspicax_acme__voice_call", tool_input: CONVERSATION })!;
     expect(voiceToolCall(grok.id, grok.args)).toEqual({ tool: "voice_call", args: CONVERSATION });
   });
 
@@ -257,8 +257,8 @@ describe("voice_call becomes place_phone_call by every entry point", () => {
 });
 
 describe("voice_sms is a text like a Twilio Messages create", () => {
-  const twilio = { tool: "mcp__perspicax_gox__twilio_api_write", input: JSON.stringify({ resource: "Messages", action: "create", set: { To: NUMBER, Body: "Bonjour" } }) };
-  const names = ["mcp__perspicax_gox__voice_sms", "perspicax_gox__voice_sms", "voice_sms"];
+  const twilio = { tool: "mcp__perspicax_acme__twilio_api_write", input: JSON.stringify({ resource: "Messages", action: "create", set: { To: NUMBER, Body: "Bonjour" } }) };
+  const names = ["mcp__perspicax_acme__voice_sms", "perspicax_acme__voice_sms", "voice_sms"];
 
   it.each(names)("%s: an outbound text, with its recipient read", (tool) => {
     expect(isOutboundTool(tool)).toBe(true);
@@ -269,7 +269,7 @@ describe("voice_sms is a text like a Twilio Messages create", () => {
   it.each(["approval", "auto", "bypass"] as const)("%s: the same decision as a Twilio text (a card, except at Full access)", (mode) => {
     const call = (tool: string, input: string) => ({ ownerId: PERSON, botId: "bot-rocket", tool, input });
     const viaTwilio = ownerDecision({ mode, rules: [], call: call(twilio.tool, twilio.input) });
-    const viaVoice = ownerDecision({ mode, rules: [], call: call("mcp__perspicax_gox__voice_sms", JSON.stringify({ to: NUMBER, body: "Bonjour" })) });
+    const viaVoice = ownerDecision({ mode, rules: [], call: call("mcp__perspicax_acme__voice_sms", JSON.stringify({ to: NUMBER, body: "Bonjour" })) });
     expect(viaVoice).toEqual(viaTwilio);
     // 2026-11-06 (#2468): Full access (bypass) shows no card, a text sent on the
     // person's behalf is the work they authorized; Approval and Auto keep it.
@@ -278,9 +278,9 @@ describe("voice_sms is a text like a Twilio Messages create", () => {
 
   it("allowed recipients: a listed number goes without a card, any other keeps it", () => {
     const list = [`phone:${NUMBER}`];
-    expect(sendRecipientsAllowed(list, "mcp__perspicax_gox__voice_sms", { to: NUMBER, body: "Bonjour" })).toBe(true);
-    expect(sendRecipientsAllowed(list, "mcp__perspicax_gox__voice_sms", { to: "+15145550143", body: "Bonjour" })).toBe(false);
-    expect(sendRecipientsAllowed([], "mcp__perspicax_gox__voice_sms", { to: NUMBER, body: "Bonjour" })).toBe(false);
+    expect(sendRecipientsAllowed(list, "mcp__perspicax_acme__voice_sms", { to: NUMBER, body: "Bonjour" })).toBe(true);
+    expect(sendRecipientsAllowed(list, "mcp__perspicax_acme__voice_sms", { to: "+15145550143", body: "Bonjour" })).toBe(false);
+    expect(sendRecipientsAllowed([], "mcp__perspicax_acme__voice_sms", { to: NUMBER, body: "Bonjour" })).toBe(false);
   });
 
   it("is not a call: it is never redirected to place_phone_call", () => {

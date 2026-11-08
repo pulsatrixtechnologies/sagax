@@ -96,7 +96,7 @@ public extension CompanionClient {
     }
 }
 
-// MARK: - A Grok Bot share link's public card (GrokImportBox.tsx)
+// MARK: - A x.ai bot share link's public card (GrokImportBox.tsx)
 
 /// `shared/grok-import.ts` GrokTemplateCard.
 public struct GrokTemplateCard: Decodable, Equatable, Sendable {
@@ -143,7 +143,7 @@ public struct GrokTemplateCard: Decodable, Equatable, Sendable {
 }
 
 public extension CompanionClient {
-    /// `POST /api/team-library/grok { url }`: the public card of a shared Grok Bot.
+    /// `POST /api/team-library/grok { url }`: the public card of a shared x.ai bot.
     func grokCard(url: String) async throws -> GrokTemplateCard {
         try await send(try makeRequest("POST", "/api/team-library/grok", body: ["url": url]), as: GrokTemplateCard.self)
     }

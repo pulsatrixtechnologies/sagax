@@ -31,7 +31,7 @@ describe("semantic tones", () => {
   });
 
   it("keeps the verdict tones for work that earns them", () => {
-    // a routine's run in the chat (2026-11-06, JC): a plain bot message,
+    // a routine's run in the chat (2026-11-06, the owner): a plain bot message,
     // never a toned pill or a red card
     expect(read("src/components/RoutineRunCard.tsx")).not.toContain("bg-warning/15 text-warning");
     // a task's steps (2026-10-29): no dot per row; a failed group alone takes

@@ -104,5 +104,53 @@
     "files": "^dist-server/self-knowledge/knowledge\\.generated\\.json$",
     "context": "Grok Bot|grok-bot|grokbot",
     "reason": "The packed self-knowledge quotes the public import guide (docs/import-agent.md) and agent notes that name the x.ai product the importer reads, including path stems such as ux-reference-grokbot-cursor.md and connect-apps-grokbot.mjs. Only this generated file."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^scripts/npm-package-terms\\.test\\.mjs$",
+    "context": "\\S+",
+    "reason": "The scanner's own tests: they feed it the public product name in every form to check what it finds and what the allowlist lets through."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^server/fixtures/grok-share-page[^/]*\\.html$",
+    "context": "[Gg]rok[\\s_-]*[Bb]ot",
+    "reason": "x.ai's public share page saved as it is served, which the template import parses (server/team/team-library.ts); its own markup names the product."
+  },
+  {
+    "term": "grok-bot",
+    "files": "(?:\\.test\\.|\\.e2e\\.|\\.node-test\\.|\\.spec\\.|(?:^|/)(?:__tests__|testing|tests?|e2e|fixtures?|__fixtures__|__snapshots__)/)",
+    "context": "[Ll]inkedGrokBot|Link with Grok Bot",
+    "reason": "Tests of the Link with Grok Bot settings card (src/components/settings/LinkedGrokBotSettings.tsx): the component name and the label it shows."
+  },
+  {
+    "term": "grok-bot",
+    "files": "(?:\\.test\\.|\\.e2e\\.|\\.node-test\\.|\\.spec\\.|(?:^|/)(?:__tests__|testing|tests?|e2e|fixtures?|__fixtures__|__snapshots__)/)",
+    "context": "From Grok Bot|Grok Bot, Claude Code|A Grok Bot|Grok Bot (?:export|creator|page)|a Grok Bot\\\"|source: \\\"Grok Bot\\\"|platform: \\\"grok-bot\\\"|(?:used [\\w ]+|Notes from) in Grok Bot|Notes from Grok Bot",
+    "reason": "Tests of the agent import, which reads x.ai's export and share formats: the source and platform fields of those formats, and the labels and errors the app shows about them."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^scripts/(?:qualification/model\\.test\\.ts|testing/capture-agent-import\\.ts)$",
+    "context": "Sagax \\| Grok Bot|source: \\\"Grok Bot\\\"",
+    "reason": "The qualification report compares Sagax with the x.ai product run by hand, and the import capture feeds an export in x.ai's format."
+  },
+  {
+    "term": "grok-bot",
+    "files": "(?:\\.test\\.|\\.e2e\\.|\\.node-test\\.|\\.spec\\.|(?:^|/)(?:__tests__|testing|tests?|e2e|fixtures?|__fixtures__|__snapshots__)/)",
+    "context": "ux-reference-grokbot-cursor\\.md",
+    "reason": "Path of the UX reference document in docs/design that these tests cite."
+  },
+  {
+    "term": "company",
+    "files": "^scripts/[\\w-]+\\.test\\.mjs$",
+    "context": "gox-image-gate\\.yml|gox-deploy\\.mjs",
+    "reason": "Names of real files in the repository (.github/workflows) that the image gate tests read or check against."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^ios/(?:App|Sources|parity)/",
+    "context": "Import (?:a|from) Grok Bot|Bring a (?:shared Grok Bot|bot you use in Grok Bot) into|Grok Bot link|Grok Bot\\'s reply|your own Grok Bot\\.|to your Grok Bot|From Grok Bot|Depuis Grok Bot|Import(?:er)? (?:an|un) agent \\(Grok Bot, Claude Code|Importer (?:un|depuis|de) Grok Bot|Grok Bot (?:or|ou) Claude Code|Paste a Grok Bot link|or a Grok Bot marketplace page|Collez un lien de Grok Bot|marketplace Grok Bot\\.|Faites entrer un Grok Bot|Lien du Grok Bot|ponse du Grok Bot|votre (?:propre )?Grok Bot|dans Grok Bot\\. Il arrive|started from the Grok Bot \\\\\"",
+    "reason": "iOS wording of the bot import (the same strings as the desktop locales above): the screen names the product the person imports a bot from; the import reads x.ai share links (shared/grok-import.ts)."
   }
 ]

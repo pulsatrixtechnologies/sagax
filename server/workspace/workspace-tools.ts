@@ -2,7 +2,7 @@
 // rename. Every write goes through the memory store (containment, secret
 // scrub, 0600, conflict hash) and the memory journal (an audit row the
 // person can read and revert in History), exactly like a memory edit.
-import { RULES_PATH, MemoryStoreError, readMemoryDoc } from "../memory/memory-store.ts";
+import { HEARTBEAT_FILE, RULES_PATH, MemoryStoreError, readMemoryDoc } from "../memory/memory-store.ts";
 import { journalMemoryDelete, journalMemoryWrite, type MemoryActor, type MemoryJournalEntry } from "../memory/memory-journal.ts";
 import { redactSecretsInText } from "../redact.ts";
 import {
@@ -144,10 +144,12 @@ function storeRefusal(error: unknown): WorkspaceWriteResult {
 }
 
 /** A document path as the tools accept it: `docs/<name>.md`, or a bare
- * `<name>.md` (placed in docs/). Null when it is anything else. */
+ * `<name>.md` (placed in docs/), or HEARTBEAT.md, the heartbeat checklist
+ * at the workspace root. Null when it is anything else. */
 export function docPath(input: unknown): string | null {
   if (typeof input !== "string") return null;
   const trimmed = input.trim().replace(/^\.\/+/, "");
+  if (trimmed === HEARTBEAT_FILE) return HEARTBEAT_FILE;
   const name = trimmed.startsWith(`${DOCS_DIR}/`) ? trimmed.slice(DOCS_DIR.length + 1) : trimmed;
   return isMemoryTopicName(name) ? `${DOCS_DIR}/${name}` : null;
 }
@@ -163,7 +165,7 @@ export interface DocUpdate {
  * it, replace an exact unique passage, or delete it. */
 export function updateDoc(botId: string, update: DocUpdate, opts: { threadId?: string; actor?: MemoryActor; via?: string } = {}): WorkspaceWriteResult {
   const path = docPath(update.path);
-  if (!path) return { ok: false, code: "invalid", error: "path must be docs/<name>.md: letters, digits, spaces, dots, dashes or underscores, ending in .md, no folders." };
+  if (!path) return { ok: false, code: "invalid", error: "path must be docs/<name>.md or HEARTBEAT.md: letters, digits, spaces, dots, dashes or underscores, ending in .md, no folders." };
   if (!["write", "append", "replace", "delete"].includes(update.action)) {
     return { ok: false, code: "invalid", error: "action is write, append, replace or delete." };
   }

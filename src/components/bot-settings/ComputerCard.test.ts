@@ -103,7 +103,7 @@ describe("computerSelectValue / options / title", () => {
       activity: [],
       desktops: [{
         id: "desk-1",
-        name: "MacBook de JC",
+        name: "MacBook de AB",
         platform: "darwin",
         online: true,
         busy: false,
@@ -124,7 +124,7 @@ describe("ComputerCard", () => {
     const onPatch = vi.fn();
     act(() => root!.render(createElement(ComputerCard, { bot, onPatch })));
     expect(host!.querySelector("[data-sandbox-takeover]")).toBeNull();
-    // JC 2026-11-06: no dropdown beside the section title
+    // the owner 2026-11-06: no dropdown beside the section title
     expect(host!.querySelector("[data-computer-card-select]")).toBeNull();
     expect(host!.querySelector("[data-pill-select]")).toBeNull();
     act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card]")!.click());

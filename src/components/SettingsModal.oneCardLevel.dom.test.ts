@@ -30,7 +30,7 @@ class FixtureEventSource {
   close() {}
 }
 
-const SECTIONS: AppSettingsSection[] = ["account", "appearance", "notifications", "security", "credentials", "providers", "engines", "voice", "usage", "organization", "computer", "backups", "about", "experimental"];
+const SECTIONS: AppSettingsSection[] = ["account", "appearance", "notifications", "security", "credentials", "providers", "engines", "voice", "usage", "organization", "computer", "backups", "about", "developer"];
 const VARIANTS = { solo: "", providers: "providers=1", org: "providers=1&org=1" } as const;
 
 let api: Record<string, unknown> = {};
@@ -113,7 +113,7 @@ describe("Settings keep one card level (#2175)", () => {
     }
   }
 
-  // JC 2026-11-07 (Experimental > Developer): a loose fold row under a
+  // the owner 2026-11-07 (Experimental > Developer): a loose fold row under a
   // heading with a round chevron, its switch row indented outside any card.
   // Every row is a shared row (SettingsPrimitives) inside a card.
   for (const [variant, query] of Object.entries(VARIANTS)) {

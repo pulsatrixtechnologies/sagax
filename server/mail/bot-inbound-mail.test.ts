@@ -38,7 +38,7 @@ const mail = (extra: Record<string, unknown> = {}) => ({
   dedupeKey: "e".repeat(64),
   receivedAt: "2026-10-21T22:14:03Z",
   from: { address: "ana@example.com", name: "Ana Tremblay" },
-  to: "cryptic@bots.example.org",
+  to: "nimbus@bots.example.org",
   subject: "Facture d'octobre",
   text: "Bonjour, voici la facture.",
   truncated: false,
@@ -322,7 +322,7 @@ const deps: BotMailRouteDeps = {
     if (found.actor !== "perspicax-mail") throw new Error("The assertion does not name an actor this route accepts.");
     return found;
   },
-  bot: (id) => (owners.has(id) ? { id, name: id === "bot_abc" ? "Cryptic" : "Other" } : null),
+  bot: (id) => (owners.has(id) ? { id, name: id === "bot_abc" ? "Nimbus" : "Other" } : null),
   owner: (id) => owners.get(id) ?? null,
   triggers: (botId) => state.hooks.list().filter((hook) => hook.enabled && hook.botId === botId && hook.source?.type === "botmail").map((hook) => hook.id),
   ingest: (id, event, key) => state.hooks.ingest(id, event, key),
@@ -444,7 +444,7 @@ describe(`POST ${BOT_MAIL_PATH}`, () => {
     expect(got.body).not.toHaveProperty("reason");
     expect(state.queued).toHaveLength(1);
     // Owner decision 3 (v2): the audit row keeps the full sender address, never the subject or the text
-    expect(rows).toEqual([{ botId: "bot_abc", botName: "Cryptic", ownerPrincipalId: "pr_owner", triggers: 2, delivered: 1, duplicate: 0, ignored: 1, sender: "ana@example.com" }]);
+    expect(rows).toEqual([{ botId: "bot_abc", botName: "Nimbus", ownerPrincipalId: "pr_owner", triggers: 2, delivered: 1, duplicate: 0, ignored: 1, sender: "ana@example.com" }]);
     const audit = JSON.stringify(rows);
     expect(audit).not.toContain("Facture");
     expect(audit).not.toContain("voici");
@@ -504,7 +504,7 @@ describe(`POST ${BOT_MAIL_PATH}`, () => {
       { id: "r-shop", botId: "bot_abc", name: "Shop", enabled: true, mailAlias: "shop" },
       { id: "r-other", botId: "bot_other", name: "Other", enabled: true, mailAlias: "reports" },
     ];
-    const got = await post(mail({ to: "cryptic+reports@bots.example.org", dedupeKey: "d".repeat(64) }), token("u_123"));
+    const got = await post(mail({ to: "nimbus+reports@bots.example.org", dedupeKey: "d".repeat(64) }), token("u_123"));
     expect(got).toMatchObject({ status: 202, body: { triggers: 1, delivered: 1, duplicate: 0, ignored: 0 } });
     expect(woken.map((row) => row.routineId)).toEqual(["r-reports"]);
     expect(state.queued).toHaveLength(0);
@@ -515,7 +515,7 @@ describe(`POST ${BOT_MAIL_PATH}`, () => {
     tagRoutines = [
       { id: "r-other", botId: "bot_other", enabled: true, mailAlias: "reports" },
     ];
-    const got = await post(mail({ to: "cryptic+reports@bots.example.org", dedupeKey: "1".repeat(64) }), token("u_123"));
+    const got = await post(mail({ to: "nimbus+reports@bots.example.org", dedupeKey: "1".repeat(64) }), token("u_123"));
     expect(got).toMatchObject({ status: 202, body: { triggers: 0, delivered: 0, reason: "no_trigger" } });
     expect(woken).toEqual([]);
     expect(unhandled).toEqual([{ botId: "bot_abc", subject: expect.any(String) }]);

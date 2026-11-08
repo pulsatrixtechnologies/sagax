@@ -21,7 +21,7 @@ final class DemoHomeShotsUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["-demo", "-demo-clock", "1791000000", "-demo-skip-terms"]
         app.launch()
-        // rows read "Pixel · Designer" since the Grok Bot home (2026-11-01)
+        // rows read "Pixel · Designer" since the reference app home (2026-11-01)
         let pixel = app.buttons["chat-row.demo-pixel"].firstMatch
         XCTAssertTrue(pixel.waitForExistence(timeout: 20), "demo home")
         sleep(2)

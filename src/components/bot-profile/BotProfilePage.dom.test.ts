@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The bot profile page after the 2026-11-06 refonte (JC): one column on
+// The bot profile page after the 2026-11-06 refonte (the owner): one column on
 // every tab, every section a plain filled card in the style of General >
 // Channels and Bot accounts (no border, no ring, no underlined link), every
 // section of the former editor still named, and one option in one place:

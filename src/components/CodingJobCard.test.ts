@@ -1,4 +1,4 @@
-// The coding job card in the bot's chat (#2148, JC 2026-11-06): running with
+// The coding job card in the bot's chat (#2148, the owner 2026-11-06): running with
 // its status, elapsed time and Stop; finished with the branch, a short result
 // and the PR. It never opens a thread, a thread panel or "Go to conversation".
 import { createElement } from "react";

@@ -110,7 +110,7 @@ export interface InternalMemoryDeps {
   recordPlacedReaction(threadId: string, botId: string, info: { messageId: string; emoji: string; at: number }): void;
   /** The bot's choice for the next reply settled in `threadId` (set_reply_notify):
    * false keeps that reply's notification and push off. */
-  setReplyNotify(threadId: string, notify: boolean): void;
+  setReplyNotify(threadId: string, notify: boolean, fyi?: boolean): void;
   roomFeedsBot(group: InternalMemoryGroup, bot: Pick<InternalMemoryBot, "visibility">): boolean;
   turnSpeaker(threadId: string): string | undefined;
   localPrincipalId(): string;
@@ -311,7 +311,12 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
       if (body.notify !== undefined && typeof body.notify !== "boolean") {
         return json(res, 400, { error: "notify must be true or false" });
       }
+      if (body.fyi !== undefined && typeof body.fyi !== "boolean") {
+        return json(res, 400, { error: "fyi must be true or false" });
+      }
       const notify = body.notify !== false;
+      // #2695: FYI waits for the person's next brief (no notification now)
+      const fyi = body.fyi === true;
       const asked = typeof body.threadId === "string" ? body.threadId.trim() : "";
       const threadId = asked || capability.threadId;
       if (threadId !== capability.threadId) {
@@ -319,8 +324,8 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
         const opened = toBotId ? deps.taskByThread(toBotId, threadId) : null;
         if (opened?.openedBy?.botId !== sender.id) return json(res, 403, { error: "That thread is not one you opened." });
       }
-      deps.setReplyNotify(threadId, notify);
-      return json(res, 200, { ok: true, notify, threadId });
+      deps.setReplyNotify(threadId, notify, fyi);
+      return json(res, 200, { ok: true, notify, ...(fyi ? { fyi } : {}), threadId });
     }
     if ((path === "/api/internal/memory" || path === "/api/internal/memory/log") && method === "POST") {
       if (sender.memoryEnabled === false) {

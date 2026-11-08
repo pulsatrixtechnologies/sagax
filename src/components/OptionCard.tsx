@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { useStore, visibleMessages, type Message } from "@/state/store";
+import { api, useStore, visibleMessages, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { isPersistentQuestionCard, parseChoices } from "../../shared/ask-question";
+import { otherChoiceIndex } from "../../shared/other-choice";
 import { returnFocusToComposer } from "./AskCard";
 import { ExpandableText } from "./ExpandableText";
+import { SuggestionFeedback } from "./SuggestionFeedback";
+import { viewerOwnsBot } from "@/lib/bot-capabilities";
 import { picksInAnswer, QuestionSheet, SheetChoices, SheetField, SheetNote, sheetKeyHandler, type SheetChoice } from "./QuestionSheet";
 import { TerminalDestinationPicker, terminalAnswerPick, terminalDestinationKey, terminalDestinationLabel } from "./terminal/TerminalDestinationPicker";
 
@@ -97,11 +100,15 @@ export function OptionCard({
     ? card.answeredText ?? (card.answered === "answer" || card.answered === "allow" ? "" : card.answered ?? "")
     : "";
   const reading = picksInAnswer(given, options);
+  const freeText = !settled && !card.tool && !card.proactiveProposal;
+  // a last option the bot wrote as "Other" / "Autre" becomes the card's own
+  // Other row, so the card never shows two of them (#2804)
+  const botOther = freeText ? otherChoiceIndex(options) : -1;
   const choices: SheetChoice[] = [
-    ...options.map((label) => ({ label })),
+    ...options.map((label, index) => (index === botOther ? { label, id: OTHER_ROW } : { label })),
     // a permission ask has no free-text answer: the broker only accepts
     // allow/deny, so typing here used to fail silently
-    ...(!settled && !card.tool && !card.proactiveProposal ? [{ label: t("question.other"), id: OTHER_ROW }] : []),
+    ...(freeText && botOther < 0 ? [{ label: t("question.other"), id: OTHER_ROW }] : []),
   ];
   const fieldOpen = !settled && !card.tool && !card.proactiveProposal && (other || options.length === 0);
   const pick = (id: string) => {
@@ -152,6 +159,15 @@ export function OptionCard({
         <SheetNote>{reading.rest || t("question.status.answered")}</SheetNote>
       )}
       {closed && <SheetNote closed>{t("question.status.closed")}</SheetNote>}
+      {card.proactiveProposal && (!groupId || (bot && viewerOwnsBot(state.config, bot))) && (
+        <SuggestionFeedback
+          className="mt-2"
+          value={card.feedback}
+          onPick={async (choice) => {
+            await api(`/api/bots/${botId}/proactive/${card.proactiveProposal!.id}/feedback`, { method: "POST", body: JSON.stringify({ choice }) });
+          }}
+        />
+      )}
     </QuestionSheet>
   );
 }

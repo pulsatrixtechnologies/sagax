@@ -164,7 +164,7 @@ describe("RoutinesSection", () => {
     const source = readFileSync(new URL("./RoutinesSection.tsx", import.meta.url), "utf8");
     const page = readFileSync(new URL("./RoutinePanelPage.tsx", import.meta.url), "utf8");
     const detail = source.slice(source.indexOf("if (detail)"), source.indexOf("// No routine and nothing pending"));
-    // 2026-11-06 (JC, one pane): the routine's page is its editor; Duplicate
+    // 2026-11-06 (the owner, one pane): the routine's page is its editor; Duplicate
     // from Advanced, Delete after a confirmation, Clear run logs on the page.
     for (const needle of ["<RoutinePanelPage", "onDuplicate={(routine) => setEditing({ copyOf: routine })}"]) expect(detail).toContain(needle);
     expect(detail).not.toContain('mode={editMode}');
@@ -231,7 +231,7 @@ describe("RoutineDetailHeader", () => {
   });
 
   it("is the header the detail page renders", () => {
-    // 2026-11-06 (JC, one pane): the routine's page is its editor, whose one
+    // 2026-11-06 (the owner, one pane): the routine's page is its editor, whose one
     // header row is the panel's < name × row (content-topbar).
     const src = readFileSync(new URL("./RoutinesSection.tsx", import.meta.url), "utf8");
     expect(src).toContain("<RoutinePanelPage");

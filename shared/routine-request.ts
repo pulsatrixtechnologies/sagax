@@ -15,6 +15,12 @@ import type { RoutineCronSchedule } from "./routine-schedule.ts";
 import type { RoutineWindowTiming } from "./routine-timing.ts";
 import type { RoutineGithubEventSchedule } from "./routine-github.ts";
 
+/** #2696: a goal as proposed or reviewed on a card. */
+export interface RoutineRequestGoal {
+  text: string;
+  deadline?: number;
+}
+
 export type RoutineRequestRunOn = "maus" | "cloud";
 
 export interface RoutineRequestIntervalWindow {
@@ -86,12 +92,14 @@ export interface RoutineRequestDefinition {
   requiresComputer?: boolean;
   /** Reasoning effort for runs only; absent follows the bot. */
   effort?: EffortLevel;
+  /** #2696: the goal its runs pursue (text and optional deadline, ms epoch). */
+  goal?: RoutineRequestGoal;
   /** Also run once each time Sagax starts. Repeating routines only. */
   runOnStartup?: boolean;
 }
 
 export type RoutineRequestChanges =
-  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "subagentModel" | "actAs" | "effort">
+  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "subagentModel" | "actAs" | "effort" | "goal">
   & {
     schedule?: RoutineRequestScheduleChanges;
     /** `null` removes an existing safety cap. */
@@ -108,6 +116,7 @@ export type RoutineRequestChanges =
     actAs?: string | null;
     /** null resets to the bot; omission preserves it on updates. */
     effort?: EffortLevel | null;
+    goal?: RoutineRequestGoal | null;
   };
 
 /** Another bot in the proposer's section that this proposal targets: a

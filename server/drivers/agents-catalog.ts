@@ -79,7 +79,7 @@ export interface CatalogProfile {
   voiceNotes: boolean;
   /** #2121: meme replies allowed for this bot (absent/true = auto). */
   memeReplies?: boolean;
-  /** Settings > Experimental > Meeting notetaker is on, in a direct
+  /** Settings > Developer > Experimental > Meeting notetaker is on, in a direct
    * conversation: join_meeting is offered. */
   meetings?: boolean;
   /** A person's turn in a single-stream segment (thread mode off,
@@ -91,8 +91,8 @@ export interface CatalogProfile {
   /** This turn's thread is on a live phone call. `end_call` is shown only
    * then. Absent is off, so the wire goldens stay as they are. */
   voiceCall?: boolean;
-  /** A person's 1:1 turn on a server with a GitHub OAuth App (device flow):
-   * connect_github is offered. Absent is off, so the wire goldens stay. */
+  /** A person's turn on a server with a GitHub client id for the device flow
+   * (built in since 2026-11-08, so every server): connect_github is offered. Absent is off, so the wire goldens stay. */
   githubConnect?: boolean;
   /** The server is a Cloud home (server/cloud-home.ts): no "this computer"
    * of the person's and no Local VM to offer. */
@@ -267,6 +267,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   routinesTools.DEF_RUN_ROUTINE,
   routinesTools.DEF_PROPOSE_ROUTINE,
   routinesTools.DEF_PROPOSE_ROUTINE_ACTION,
+  routinesTools.DEF_EVENT_SUBSCRIPTIONS,
   teamTools.DEF_PROPOSE_PROFILE,
   teamTools.DEF_PROPOSE_MODEL,
   teamTools.DEF_PROPOSE_RULE,
@@ -371,7 +372,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // #1989: list_routines and run_routine stay always loaded (and listed by
   // name, not only inside the merged routines family) so every bot that owns
   // a routine can check or run it without a ToolSearch step that may miss them.
-  "propose_routine", "propose_routine_action",
+  "propose_routine", "propose_routine_action", "event_subscriptions",
   "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule", "propose_bot_deletion", "import_plugin_team", "archive_bot",
   "propose_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
   "add_mcp_server", "skill_manage", "skills_find", "rules_update", "docs_update",
@@ -514,6 +515,8 @@ const OFFERED_REFERENCES: ReadonlyArray<{ tool: string; missing: string; from: s
   { tool: "await_turn", missing: "send_to_bot", from: "with the handle send_prompt or send_to_bot gave", to: "with the handle send_prompt gave" },
   // 2026-10-28: a teammate one hop away reads transcripts but starts no turn
   { tool: "read_latest_page", missing: "await_turn", from: " Do not poll: use await_turn.", to: " Do not poll." },
+  // #2806: GitHub is Sagax's own link and code, whichever tool the bot picks
+  { tool: "open_connector_setup", missing: "connect_github", from: " GitHub is never this tool: call connect_github (Sagax's own link and code).", to: " For GitHub it posts Sagax's own link and code instead." },
 ];
 
 function withOfferedReferences<T extends { name: string; description: string; inputSchema?: unknown }>(tools: T[]): T[] {

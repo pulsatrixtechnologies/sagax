@@ -132,6 +132,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("model:propose", "own", "propose_model"),
   p("routines:propose", "own", "propose_routine"),
   p("routines:propose.action", "own", "propose_routine_action"),
+  // #2700: the bot's own outbound event subscriptions
+  p("routines:events", "own", "event_subscriptions"),
   // "tell me when" waits (server/waits/waits.ts): plain checks for the speaker, no AI
   p("waits:set", "own", "wait_until"),
   p("waits:list", "read", "list_waits"),

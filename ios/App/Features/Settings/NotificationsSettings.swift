@@ -30,7 +30,7 @@ enum AttentionPrefs {
 }
 
 /// Settings > Notifications > Live Activities (Dynamic Island). Off by
-/// default (JC 2026-11-08), for new installs and, once, for existing ones.
+/// default (the owner 2026-11-08), for new installs and, once, for existing ones.
 enum LiveActivityPrefs {
     static let key = "companion.prefs.liveActivities"
     private static let migratedKey = "companion.prefs.liveActivities.off0865"

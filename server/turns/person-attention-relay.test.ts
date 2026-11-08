@@ -1,4 +1,10 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
+
+import { BriefStore, TOPIC_HALF_LIFE_MS } from "../proactive/background-brief.ts";
 
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
 import { mirrorLateRunReply, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
@@ -46,6 +52,49 @@ function world(opts: { run?: { id: string; routineName: string; status: string }
 }
 
 describe("relayPersonAttention", () => {
+  it("#2694: the feedback given on an attention card quiets or stops the next cards of that kind", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-attention-"));
+    try {
+      let now = 1_000;
+      const briefs = new BriefStore(join(dir, "background-brief.json"), () => now);
+      const relay = (choice?: "down" | "less" | "never" | "up") => {
+        // the Today card, the chat card and the approval detail all send "attention"
+        if (choice) briefs.topicFeedback(ATLAS.id, "attention", choice);
+        const w = world();
+        w.deps.feedback = (botId, topic) => briefs.wakeLevel(botId, topic);
+        w.say("work", REPORT);
+        return { w, outcome: relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps) };
+      };
+      const first = relay();
+      expect(first.outcome.posted).toBe(true);
+      expect(first.w.notified).toHaveLength(1);
+      // a thumbs-down: the card still comes, quietly (no ring, not unread)
+      const quiet = relay("down");
+      expect(quiet.outcome.posted).toBe(true);
+      expect(quiet.w.threads.get("main")!.at(-1)!.attention).toBeTruthy();
+      expect(quiet.w.notified).toEqual([]);
+      expect(quiet.w.unread).toEqual([]);
+      // "less" twice more: past the mute line, no card at all
+      relay("less");
+      const muted = relay("less");
+      expect(muted.outcome).toEqual({ posted: false, reason: "muted" });
+      expect(muted.w.threads.get("main")).toBeUndefined();
+      // votes fade: weeks later the cards come back
+      now += 6 * TOPIC_HALF_LIFE_MS;
+      expect(relay().w.notified).toHaveLength(1);
+      // "never" holds until a thumbs-up
+      expect(relay("never").outcome).toEqual({ posted: false, reason: "muted" });
+      now += 10 * TOPIC_HALF_LIFE_MS;
+      expect(relay().outcome).toEqual({ posted: false, reason: "muted" });
+      expect(relay("up").outcome.posted).toBe(true);
+      // another wake kind's votes do not touch attention cards
+      briefs.topicFeedback(ATLAS.id, "heartbeat", "never");
+      expect(relay().w.notified).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("carries [HUMAIN] items from a thread another bot opened to the person's conversation, as a card", () => {
     const w = world();
     w.say("work", REPORT);
@@ -135,5 +184,35 @@ describe("a run with [HUMAIN] items gives one card, not two", () => {
     expect(relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-later", ok: true }, w.deps)).toEqual({ posted: false, reason: "already" });
     expect(w.threads.get("main")!.filter((row) => row.attention)).toHaveLength(1);
     expect(w.notified).toHaveLength(1);
+  });
+});
+
+describe("#2694: feedback on a run's card, relayed", () => {
+  const runCardRow = (wakeTopic?: string) => ({ id: "run-card", at: 1, role: "bot", kind: "routine.run", text: "Mail", routineRun: { runId: "run-1", routineId: "r1", routineName: "Mail", status: "completed", ...(wakeTopic ? { wakeTopic } : {}) } } as unknown as WireMessage);
+
+  it("puts the items on the run's card quietly after a thumbs-down: no ring, not unread", () => {
+    const w = world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } });
+    const asked: string[] = [];
+    w.deps.feedback = (_botId, topic) => { asked.push(topic); return "quiet"; };
+    w.threads.set("main", [runCardRow()]);
+    w.say("run", REPORT, "turn-late");
+    const outcome = relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-late", ok: true }, w.deps);
+    expect(outcome).toMatchObject({ posted: true, onRunCard: true });
+    expect(w.threads.get("main")![0]!.attention).toBeTruthy();
+    expect(w.notified).toEqual([]);
+    expect(w.unread).toEqual([]);
+    expect(asked).toEqual(["attention"]);
+  });
+
+  it("reads the wake's own kind on a proactive run's card, and a muted kind gives nothing", () => {
+    const w = world({ run: { id: "run-1", routineName: "Mail", status: "completed" } });
+    const asked: string[] = [];
+    w.deps.feedback = (_botId, topic) => { asked.push(topic); return topic === "mail" ? "muted" : "normal"; };
+    w.threads.set("main", [runCardRow("mail")]);
+    w.say("run", REPORT, "turn-late");
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-late", ok: true }, w.deps)).toEqual({ posted: false, reason: "muted" });
+    expect(asked).toEqual(["mail"]);
+    expect(w.threads.get("main")![0]!.attention).toBeUndefined();
+    expect(w.notified).toEqual([]);
   });
 });

@@ -97,10 +97,10 @@ describe("createInternalMemoryRoutes", () => {
     const own = call(route, { path: "/api/internal/reply-notify", body: { notify: false } });
     await own.run();
     expect(own.sent).toEqual([{ status: 200, body: { ok: true, notify: false, threadId: "t-1" } }]);
-    expect(setReplyNotify).toHaveBeenLastCalledWith("t-1", false);
+    expect(setReplyNotify).toHaveBeenLastCalledWith("t-1", false, false);
     const opened = call(route, { path: "/api/internal/reply-notify", body: { notify: false, threadId: "t-opened", toBotId: "bot-2" } });
     await opened.run();
-    expect(setReplyNotify).toHaveBeenLastCalledWith("t-opened", false);
+    expect(setReplyNotify).toHaveBeenLastCalledWith("t-opened", false, false);
     const foreign = call(route, { path: "/api/internal/reply-notify", body: { notify: false, threadId: "t-x", toBotId: "bot-2" } });
     await foreign.run();
     expect(foreign.sent[0]?.status).toBe(403);
@@ -108,6 +108,11 @@ describe("createInternalMemoryRoutes", () => {
     await bad.run();
     expect(bad.sent[0]?.status).toBe(400);
     expect(setReplyNotify).toHaveBeenCalledTimes(2);
+    // #2695: FYI waits for the person's next brief
+    const fyi = call(route, { path: "/api/internal/reply-notify", body: { notify: false, fyi: true } });
+    await fyi.run();
+    expect(fyi.sent).toEqual([{ status: 200, body: { ok: true, notify: false, fyi: true, threadId: "t-1" } }]);
+    expect(setReplyNotify).toHaveBeenLastCalledWith("t-1", false, true);
   });
   it("passes foreign paths and methods", async () => {
     const route = createInternalMemoryRoutes(deps());

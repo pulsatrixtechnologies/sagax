@@ -1,7 +1,7 @@
 // iPad lot 2b (2026-11-03): the rest of the desktop's Settings pages, as
 // SettingsModal.tsx draws them, each on the route the desktop reads:
 // Security (your keys, the approvals that need a key, your approval rules,
-// your tool access), Vault, Notifications, Import (a Grok Bot, preference
+// your tool access), Vault, Notifications, Import (a x.ai bot, preference
 // lines), and the Account page's time zone rows.
 import SwiftUI
 import UIKit
@@ -631,7 +631,7 @@ struct DesktopNotificationsSettings: View {
 
 // MARK: - Import
 
-/// Settings > Import: a shared Grok Bot, then preference lines for the
+/// Settings > Import: a shared x.ai bot, then preference lines for the
 /// primary bot (PreferenceImportCard.tsx).
 struct DesktopImportSettings: View {
     @Environment(\.desktopTheme) private var theme

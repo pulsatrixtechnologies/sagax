@@ -105,11 +105,15 @@ public enum PushKind: String, Sendable {
 /// the next line of its conversation never replaces it and takes its
 /// buttons away; it is updated and withdrawn by that id.
 public enum PushCollapse {
-    public static func identifier(threadId: String?, kind: String, requestId: String? = nil) -> String {
+    public static func identifier(threadId: String?, kind: String, requestId: String? = nil, proposalId: String? = nil) -> String {
         let thread = threadId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let request = (kind == "approval" || kind == "question" || kind == "settled")
             ? requestId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" : ""
-        let key = !request.isEmpty ? "sagax.r.\(thread).\(request)" : thread.isEmpty ? "sagax.\(kind)" : "sagax.t.\(thread)"
+        // #2697: a proactive proposal is its own banner (server `sagax.p.<id>`)
+        let proposal = proposalId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let key = !request.isEmpty ? "sagax.r.\(thread).\(request)"
+            : !proposal.isEmpty ? "sagax.p.\(proposal)"
+            : thread.isEmpty ? "sagax.\(kind)" : "sagax.t.\(thread)"
         if key.utf8.count <= 64 { return key }
         let digest = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
         return "sagax.h.\(digest.prefix(48))"

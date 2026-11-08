@@ -8,8 +8,12 @@
 // task over 50 ms (PerformanceObserver) and the cumulative layout shift.
 //
 //   node --experimental-strip-types scripts/capture/motion-perf.ts <out.json> [--scheme light|dark] [--rounds N] [--shots DIR] [--video DIR]
+//     [--channel chrome] [--dpr 2] [--extra-bots N] [--extra-threads N]
 //
-// Needs Playwright's Chromium (or SAGAX_CAPTURE_CHROME). No window opens.
+// Needs Playwright's Chromium (or SAGAX_CAPTURE_CHROME). `--channel chrome`
+// drives the installed Google Chrome instead (new headless mode, the real GPU
+// path) and `--dpr 2` a Retina pixel ratio, as on the reference Mac. The extra
+// bots and threads lengthen the sidebar lists. No window opens.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
@@ -25,6 +29,12 @@ const video = flag("--video");
 const only = flag("--only");
 const scheme = (flag("--scheme") ?? "light") as "light" | "dark";
 const turns = Number(flag("--turns") ?? 45);
+const channel = flag("--channel");
+const dpr = Number(flag("--dpr") ?? 1);
+const extraBots = Number(flag("--extra-bots") ?? 0);
+const extraThreads = Number(flag("--extra-threads") ?? 0);
+const reducedMotion = args.includes("--reduced-motion") ? (args.splice(args.indexOf("--reduced-motion"), 1), "reduce" as const) : undefined;
+const cpuProfile = flag("--cpu-profile");
 const out = resolve(args[0] ?? "motion-perf.json");
 
 interface Sample { frames: number; dropped: number; worstFrame: number; p95Frame: number; longTasks: number; longTaskMs: number; worstLongTask: number; cls: number }
@@ -63,14 +73,21 @@ for (let thread = 0; thread < 4; thread++) {
   const id = (await api("POST", `/api/bots/${long.id}/tasks`, { stream: true })).task.threadId as string;
   for (let turn = 0; turn < 6; turn++) await say(long.id, id, `thread ${thread} turn ${turn}: ${body}`);
 }
+// a long sidebar: quiet bots, and more threads on the first bot
+for (let index = 0; index < extraBots; index++) await cli("new-bot", "--name", `Herb ${index + 1}`);
+for (let thread = 0; thread < extraThreads; thread++) {
+  const id = (await api("POST", `/api/bots/${long.id}/tasks`, { stream: true })).task.threadId as string;
+  await say(long.id, id, `side thread ${thread}: ${body}`);
+}
 const terms = await api("GET", "/api/me/terms");
 if (terms?.current) await api("POST", "/api/me/terms", { version: terms.current });
 
 const ui = await mountPreview(fixture, { entry: "/scripts/testing/threads-preview.tsx", route: "/__motion-perf.html", title: "Motion perf", logLevel: "error" });
 const executablePath = process.env.SAGAX_CAPTURE_CHROME;
-const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
-const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, ...(video ? { recordVideo: { dir: video, size: { width: 1440, height: 900 } } } : {}) });
+const browser = await chromium.launch({ headless: true, ...(channel ? { channel } : executablePath ? { executablePath } : {}) });
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: dpr, colorScheme: scheme, ...(reducedMotion ? { reducedMotion } : {}), ...(video ? { recordVideo: { dir: video, size: { width: 1440, height: 900 } } } : {}) });
 const page = await context.newPage();
+page.on("pageerror", (error) => console.error(`pageerror: ${error.message}`));
 await page.addInitScript(() => {
   localStorage.setItem("omb-show-threads", "1");
   localStorage.setItem("omb-threads-location", "sidebar");
@@ -84,7 +101,7 @@ const noted = new Set<string>();
 const note = (what: string, value: number | string) => { if (!noted.has(what)) { noted.add(what); console.log(`${what}: ${value}`); } };
 try {
   await page.goto(ui.previewUrl, { waitUntil: "load" });
-  await page.waitForSelector("textarea", { timeout: 60_000 });
+  await page.waitForSelector("textarea", { timeout: 240_000 });
   await page.waitForTimeout(2_000);
   await dismissToasts(page);
   await installProbe(page);
@@ -117,6 +134,15 @@ try {
       await page.waitForTimeout(250);
       for (let step = 0; step < 30; step++) { await page.mouse.wheel(0, 240); await page.waitForTimeout(16); }
       await page.waitForTimeout(250);
+    }],
+    ["open-sidebar", async () => {
+      // collapse the sidebar to its rail and open it again (⌘B), twice
+      for (let time = 0; time < 2; time++) {
+        await page.keyboard.press("ControlOrMeta+b");
+        await page.waitForTimeout(450);
+        await page.keyboard.press("ControlOrMeta+b");
+        await page.waitForTimeout(450);
+      }
     }],
     ["settings", async () => {
       for (let time = 0; time < 2; time++) {
@@ -192,14 +218,40 @@ try {
     }, escape);
     const pill = page.locator("[data-chat-pill][aria-expanded]").first();
     await still("right-panel", () => pill.click({ timeout: 2_000 }).catch(() => {}), () => pill.click({ timeout: 2_000 }).catch(() => {}));
+    // #2791: the virtualized thread picker, Settings halfway through its
+    // close fade, and the Team map with its virtualized cards
+    await page.locator(`[data-sidebar-bot-row="${long.id}"]`).first().click();
+    await page.waitForTimeout(500);
+    await still("thread-picker", () => page.getByRole("button", { name: "All threads" }).first().click({ timeout: 2_000 }).catch(() => {}), escape);
+    await page.locator("[data-sidebar-account], [data-sidebar-account-pill]").first().click({ timeout: 2_000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    await page.getByRole("menuitem", { name: "Settings", exact: true }).first().click({ timeout: 2_000 }).catch(() => {});
+    await page.waitForTimeout(700);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(50);
+    await page.screenshot({ path: resolve(shots, "settings-closing.png") });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: resolve(shots, "settings-closed.png") });
+    await still("team-map", async () => {
+      await page.keyboard.press("ControlOrMeta+k");
+      await page.waitForTimeout(300);
+      await page.keyboard.type("Team map");
+      await page.waitForTimeout(300);
+      await page.keyboard.press("Enter");
+    }, async () => {
+      await page.locator(`[data-sidebar-bot-row="${long.id}"]`).first().click();
+    });
   }
 
   for (let round = 0; round < rounds; round++) {
     for (const [name, run] of journeys) {
       if (only && !only.split(",").includes(name)) continue;
       await page.waitForTimeout(300);
+      const cdp = cpuProfile && round === 0 ? await context.newCDPSession(page) : null;
+      if (cdp) { await cdp.send("Profiler.enable"); await cdp.send("Profiler.setSamplingInterval", { interval: 200 }); await cdp.send("Profiler.start"); }
       await page.evaluate(() => (window as any).__perf.start());
       await run();
+      if (cdp) { const { profile } = await cdp.send("Profiler.stop"); writeFileSync(resolve(cpuProfile!, `${name}.cpuprofile`), JSON.stringify(profile)); await cdp.detach(); }
       const sample = await page.evaluate(() => (window as any).__perf.stop()) as Sample;
       (results[name] ??= []).push(sample);
       if (shots && round === 0) {
@@ -210,7 +262,7 @@ try {
   }
   const summary = Object.fromEntries(Object.entries(results).map(([name, samples]) => [name, median(samples)]));
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), rounds, summary, samples: results }, null, 2));
+  writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), rounds, browser: channel ?? "chromium", dpr, extraBots, extraThreads, summary, samples: results }, null, 2));
   console.table(summary);
 } finally {
   await context.close().catch(() => {});

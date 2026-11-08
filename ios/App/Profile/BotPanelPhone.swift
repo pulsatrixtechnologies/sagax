@@ -1,4 +1,4 @@
-// The iPhone's bot panel (Grok Bot parity, #2127): full screen over the chat.
+// The iPhone's bot panel (reference app parity, #2127): full screen over the chat.
 //
 //   top bar  gear (opens the profile page) and X (close).
 //   header   centred mascot and name; Activity / Library pill tabs.

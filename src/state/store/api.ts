@@ -4,7 +4,7 @@ import type { BotVisibility } from "../../../shared/wire";
 import type { RuntimeEvent } from "../../../shared/runtime-events";
 import type { StepUpTarget } from "../../../shared/step-up";
 import { roleProfilePatch, type BotRole } from "@/lib/bot-roles";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { isNoRouteText } from "@/lib/no-route";
 import { readableError } from "@/lib/plain-error";
 import { forgetStepUp, recentStepUp, stepUp, stepUpApprovals } from "@/lib/step-up-client";
@@ -18,8 +18,15 @@ import type { BotUpdatePatch } from "../bot-patch-queue";
 
 export async function createBotWithRole(role?: BotRole, request: typeof api = api, visibility?: BotVisibility, section?: string, settings?: Record<string, unknown>): Promise<{ bot: Bot; profileError?: string }> {
   const restricted = visibility && visibility !== "everyone" ? { visibility } : {};
-  const fields = { ...(role ? { name: role.name, title: role.title, description: role.description } : {}), ...restricted,
-    ...(section !== undefined ? { section } : {}) };
+  // The chosen name rides the create itself: the server writes the greeting
+  // with the bot's name at creation, before any follow-up patch (#2802).
+  const chosenName = typeof settings?.name === "string" && settings.name.trim() ? settings.name.trim() : undefined;
+  const fields = { ...(role ? { name: role.name, title: role.title, description: role.description } : {}),
+    ...(chosenName ? { name: chosenName } : {}), ...restricted,
+    ...(section !== undefined ? { section } : {}),
+    // The greeting and intro card speak the app's language (#2803); English
+    // is the server default, so it is not sent.
+    ...(activeLocale().toLowerCase().startsWith("fr") ? { language: "fr" } : {}) };
   const { bot } = await request("/api/bots", {
     method: "POST",
     ...(Object.keys(fields).length ? { body: JSON.stringify(fields) } : {}),
@@ -53,7 +60,9 @@ export async function api<T = any>(path: string, init?: RequestInit & { timeoutM
   // caller signal so either can cancel. Omitted means no behavior change.
   const { timeoutMs, signal, stepUpTry, ...rest } = init ?? {};
   const res = await fetch(path, {
-    headers: { "content-type": "application/json", [PERSON_THREADS_HEADER]: "1" },
+    // The app's language rides every call: a person who saved none still
+    // gets server text (a greeting, a routine card) in it (#2803, #2805).
+    headers: { "content-type": "application/json", [PERSON_THREADS_HEADER]: "1", "x-sagax-locale": activeLocale() },
     ...rest,
     signal: timeoutMs === undefined
       ? signal

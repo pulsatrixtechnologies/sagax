@@ -13,9 +13,9 @@ const render = (mail: Parameters<typeof BotEmailAddressCard>[0]["mail"], onChang
 
 describe("Bot email address", () => {
   it("shows the address, a Copy button and the rule", () => {
-    const html = render({ available: true, address: "cryptic@bots.example.org", enabled: true });
+    const html = render({ available: true, address: "nimbus@bots.example.org", enabled: true });
     expect(html).toContain("Email address");
-    expect(html).toContain("cryptic@bots.example.org");
+    expect(html).toContain("nimbus@bots.example.org");
     expect(html).toContain('aria-label="Copy email address"');
     expect(html).toContain("Mail to this address wakes a Bot email trigger.");
     expect(html).toContain("tagged address");
@@ -26,14 +26,14 @@ describe("Bot email address", () => {
 
   it("lists tag routing rows without another bot's routines", () => {
     const html = renderToStaticMarkup(createElement(BotEmailAddressCard, {
-      mail: { available: true, address: "cryptic@bots.example.org", enabled: true },
+      mail: { available: true, address: "nimbus@bots.example.org", enabled: true },
       tags: [
-        { tag: "reports", address: "cryptic+reports@bots.example.org", routineId: "r1", routineName: "Reports", enabled: true },
-        { tag: "shop", address: "cryptic+shop@bots.example.org", routineId: "r2", routineName: "Shop", enabled: false },
+        { tag: "reports", address: "nimbus+reports@bots.example.org", routineId: "r1", routineName: "Reports", enabled: true },
+        { tag: "shop", address: "nimbus+shop@bots.example.org", routineId: "r2", routineName: "Shop", enabled: false },
       ],
     }));
     expect(html).toContain("data-bot-email-tags=");
-    expect(html).toContain("cryptic+reports@bots.example.org");
+    expect(html).toContain("nimbus+reports@bots.example.org");
     expect(html).toContain("Reports");
     expect(html).toContain("Shop");
     expect(html).toContain("paused");

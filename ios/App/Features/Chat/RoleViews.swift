@@ -117,7 +117,7 @@ struct RoleStepLine<Line: View>: View {
     }
 
     var body: some View {
-        // 2026-11-05 (JC): no role in the chat, the role lives on Flow routines only
+        // 2026-11-05 (the owner): no role in the chat, the role lives on Flow routines only
         line()
     }
 }

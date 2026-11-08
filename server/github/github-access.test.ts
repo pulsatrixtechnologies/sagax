@@ -108,6 +108,10 @@ describe("why GitHub refuses", () => {
     const person: GithubCredential = { token: "t", via: "person" };
     expect(githubAccessFailure({ status: 404, headers: headers() }, "acme/private", null)).toMatchObject({ code: "private_needs_token", fix: "connect_or_token" });
     expect(githubAccessFailure({ status: 404, headers: headers() }, "acme/private", person)).toMatchObject({ code: "not_found_or_no_access", fix: "check_access" });
+    // #2801: link and code first, a token only under Advanced.
+    const notFound = githubAccessFailure({ status: 404, headers: headers() }, "acme/private", person)!.message;
+    expect(notFound).toMatch(/connect GitHub with a link and a code/);
+    expect(notFound.indexOf("link and a code")).toBeLessThan(notFound.indexOf("token"));
     expect(githubAccessFailure({ status: 401, headers: headers() }, "acme/private", { token: "t", via: "marketplace" })).toMatchObject({ code: "bad_token", fix: "replace_token" });
     expect(githubAccessFailure({ status: 403, headers: headers({ "x-github-sso": "required; url=https://github.com/orgs/acme/sso?x=1" }) }, "acme/private", person))
       .toMatchObject({ code: "sso_required", fix: "authorize_sso", ssoUrl: "https://github.com/orgs/acme/sso?x=1" });
@@ -116,9 +120,9 @@ describe("why GitHub refuses", () => {
     expect(githubAccessFailure({ status: 403, headers: headers() }, "acme/private", person)).toMatchObject({ code: "forbidden", fix: "token_scope" });
     // The person's own token on another owner's repository: the organization is named.
     const fine: GithubCredential = { token: "github_pat_x", via: "person", login: "owner" };
-    const org = githubAccessFailure({ status: 404, headers: headers() }, "goxtechnologies/repo", fine);
-    expect(org).toMatchObject({ code: "org_not_covered", fix: "reconnect_with_orgs", organization: "goxtechnologies" });
-    expect(org!.message).toContain("does not cover the organization goxtechnologies");
+    const org = githubAccessFailure({ status: 404, headers: headers() }, "acmetechnologies/repo", fine);
+    expect(org).toMatchObject({ code: "org_not_covered", fix: "reconnect_with_orgs", organization: "acmetechnologies" });
+    expect(org!.message).toContain("does not cover the organization acmetechnologies");
     expect(org!.message).toContain("fine-grained");
     expect(org!.message).not.toContain("github_pat_x");
     expect(githubAccessFailure({ status: 403, headers: headers() }, "pulsatrixtechnologies/repo", { token: "gho_x", via: "person", login: "owner" }))

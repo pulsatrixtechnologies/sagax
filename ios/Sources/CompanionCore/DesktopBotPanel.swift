@@ -20,7 +20,7 @@ public enum DesktopPanelTab: String, CaseIterable, Hashable, Sendable {
     case computer
 
     /// The tabs the panel shows: Activity and Library. Computer is a card
-    /// inside Activity (Grok Bot parity, #2127); the persona editor holds
+    /// inside Activity (reference app parity, #2127); the persona editor holds
     /// everything else.
     public static func visible(gate: SurfaceGate, slack: Bool = false) -> [DesktopPanelTab] {
         [.activity, .library]
@@ -169,7 +169,7 @@ public enum DesktopPanelPlacement: Equatable, Sendable {
     case docked, overlay
 
     public static let dockMinWidth: Double = 1024
-    /// Bot panel opens at 308 like Grok Bot (`BOT_PANEL_BOUNDS`, #2141).
+    /// Bot panel opens at 308 like the reference app (`BOT_PANEL_BOUNDS`, #2141).
     public static let defaultWidth: Double = 308
     public static let minWidth: Double = 308
     public static let maxWidth: Double = 720
@@ -512,6 +512,7 @@ public enum WebhookPublicURL {
         "issue.updated": "Issue updated",
         "issue.status_changed": "Issue status changed",
         "issue.removed": "Issue removed",
+        "issue.labeled": "Issue labeled",
         "comment.created": "Comment added",
         "cycle.completed": "Cycle completed",
         "sms.received": "Text received",

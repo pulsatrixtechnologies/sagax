@@ -17,6 +17,13 @@ export const NOTIFY_PUSH_KINDS: Readonly<Record<string, PushKind>> = Object.free
   question: "approval",
   approval: "approval",
   takeover: "approval",
+  // a proactive or routine report with something for the person (#2697):
+  // wakes the phone at once, like an ask, without Allow / Deny
+  "needs-you": "approval",
+  // a proactive proposal card (#2697): a card-level push, so the person's
+  // daily budget and quiet hours (#2695) decide; Do it / Not now on the banner
+  proposal: "message",
+  wait: "message",
   "turn-failed": "message",
   incident: "message",
   "routine-failed": "routine",
@@ -39,6 +46,7 @@ export interface NotifyNote {
   routineName?: string;
   ask?: string;
   choices?: string[];
+  proposalId?: string;
 }
 
 export interface FramePushDeps {
@@ -80,12 +88,14 @@ export function pushesForFrame(payload: Record<string, unknown>, deps: FramePush
       ...(text(raw.routineRunId) ? { routineRunId: text(raw.routineRunId).slice(0, 128) } : {}),
       ...(text(raw.routineName) ? { routineName: text(raw.routineName).slice(0, 80) } : {}),
       ...(text(raw.ask).trim() ? { ask: text(raw.ask).trim() } : {}),
+      ...(text(raw.proposalId) ? { proposalId: text(raw.proposalId).slice(0, 128) } : {}),
       ...(Array.isArray(raw.choices) ? { choices: raw.choices.filter((choice): choice is string => typeof choice === "string" && choice.trim().length > 0) } : {}),
     };
     // an AI client's conversation over MCP never rings a phone or a watch
     if (raw.quietOnPhones === true) return [];
     // the bot wrote it with notify false: in the chat, never on a phone
-    if (raw.notify === false) return [];
+    // (#2695: one marked FYI still reaches the signal gate, which keeps it for the brief)
+    if (raw.notify === false && raw.level !== "fyi") return [];
     const people = note.audience ?? deps.notificationPeople(note);
     const unique = [...new Set(people.map((id) => id.trim().toLowerCase()).filter(Boolean))];
     const senderName = note.botName.trim();
@@ -111,6 +121,8 @@ export function pushesForFrame(payload: Record<string, unknown>, deps: FramePush
       ...(note.routineName ? { routineName: note.routineName } : {}),
       ...(note.ask && (note.kind === "approval" || note.kind === "question") ? { ask: note.ask } : {}),
       ...(note.kind === "question" && note.choices?.length ? { choices: note.choices } : {}),
+      ...(note.kind === "needs-you" && !note.requestId ? { needsYou: true } : {}),
+      ...(note.kind === "proposal" && note.proposalId ? { proposalId: note.proposalId } : {}),
       at,
     }));
   }

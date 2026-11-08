@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 /**
  * Headless screenshots of the GitHub connection's place (Playwright, no
- * window): Connect apps > Providers (engines and the person's servers
- * only), the GitHub plugin's page (Installed > GitHub, where the GitHub
- * connection is since 2026-10-29) with Connect GitHub opened, and Sources
- * (its GitHub connection row), for an organization member and an admin,
- * light and dark, on a server without a GitHub OAuth App.
+ * window): Connect apps > installed view, Sources (its GitHub connection
+ * row), the GitHub plugin's page (Sources > Open GitHub) and Connect GitHub
+ * clicked (the link and the code), for an organization member and an admin,
+ * light and dark, on a server without an organization GitHub OAuth App.
  * Usage: node scripts/capture/github-plugin.mjs --out DIR [--prefix before]
- *   [--root CHECKOUT] [--port N]
+ *   [--root CHECKOUT] [--port N] [--query "&device=fail" or "&code=XXXX-XXXX"]
  */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -20,6 +19,7 @@ const root = resolve(arg("--root") ?? here);
 const outDir = resolve(arg("--out") ?? join(here, "docs", "screenshots", "github-plugin"));
 const port = Number(arg("--port") ?? 5317);
 const prefix = arg("--prefix") ?? "after";
+const query = arg("--query") ?? "";
 const schemes = [{ skin: "pulsatrix-light", scheme: "light" }, { skin: "pulsatrix", scheme: "dark" }];
 
 async function waitForServer(url, ms = 120_000) {
@@ -49,32 +49,28 @@ try {
     for (const { skin, scheme } of schemes) {
       const page = await browser.newPage({ viewport: { width: 1200, height: 1400 }, deviceScaleFactor: 1, colorScheme: scheme });
       page.on("pageerror", (error) => console.error("page error:", error.stack));
-      await page.goto(`${base}?view=manage&skin=${skin}&lang=en&role=${role}&app=none`, { waitUntil: "networkidle" });
+      await page.goto(`${base}?view=manage&skin=${skin}&lang=en&role=${role}&app=none${query}`, { waitUntil: "networkidle" });
       await page.waitForSelector("[data-plugins-manage]", { timeout: 30_000 });
-      // the panel mounts again once the bots arrive: let it settle first
-      await page.waitForSelector("[data-plugins-scope-bar]", { timeout: 30_000 });
+      // the panel opens on Discover: its "N connected" count leads to the installed view
       await page.waitForTimeout(1000);
+      await page.getByText(/connected/).first().click();
+      await page.waitForSelector("[data-plugins-scope-bar]", { timeout: 30_000 });
+      await page.waitForTimeout(800);
       const shot = async (name) => {
         await page.waitForTimeout(800);
         await page.locator('[role="dialog"]').first().screenshot({ path: join(outDir, `${prefix}-${role}-${name}-${scheme}.png`) });
       };
-      await page.click('[data-plugins-tab="providers"]');
-      await page.waitForSelector('[data-plugins-manage="providers"]');
-      await shot("providers");
-      // the GitHub plugin's page, from its Installed row
-      await page.click('[data-plugins-tab="installed"]');
-      await page.locator("[data-installed-entry]", { hasText: "GitHub" }).first().locator("button").first().click();
-      await page.waitForSelector("[data-plugins-detail]");
+      await shot("installed");
+      // the GitHub plugin's page, from Sources > Open GitHub
+      await page.click('[data-plugins-view-link="sources"]');
+      await page.waitForSelector("[data-plugins-sources-github-open]");
+      await shot("sources");
+      await page.click("[data-plugins-sources-github-open]");
+      await page.waitForSelector("[data-github-connect]", { timeout: 15_000 });
       await shot("github-plugin");
-      // Connect GitHub with no OAuth App: the token form, for anyone
-      if (await page.locator("[data-github-connect]").count()) {
-        await page.click("[data-github-connect]");
-        await shot("github-plugin-connect");
-      }
-      if (await page.locator('[data-plugins-tab="sources"]').count()) {
-        await page.click('[data-plugins-tab="sources"]');
-        await shot("sources");
-      }
+      // Connect GitHub: the link and the code (or, with &device=fail, the refusal)
+      await page.click("[data-github-connect]");
+      await shot("github-plugin-connect");
       await page.close();
     }
   }

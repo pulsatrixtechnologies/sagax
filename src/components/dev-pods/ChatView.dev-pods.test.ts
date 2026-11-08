@@ -1,4 +1,4 @@
-// The dev pods live only in a coding window (#2149, JC 2026-11-06): the
+// The dev pods live only in a coding window (#2149, the owner 2026-11-06): the
 // normal chat is the same markup with the Experimental switch on or off.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -56,8 +56,9 @@ const bot = (threadId: string): Bot => ({
 
 /** The opening tags of the transcript's scroll pane and centered log. */
 function transcriptShell(markup: string): string[] {
-  const scroll = markup.match(/<div class="h-full overflow-x-hidden[^"]*"[^>]*>/)?.[0];
-  const log = markup.match(/<div class="mx-auto flex w-full max-w-\[960px\][^"]*"[^>]*role="log"[^>]*>/)?.[0];
+  // #2755: the pane carries data-virtual-root before its class
+  const scroll = markup.match(/<div[^>]*class="h-full overflow-x-hidden[^"]*"[^>]*>/)?.[0];
+  const log = markup.match(/<div[^>]*class="mx-auto flex w-full max-w-\[960px\][^"]*"[^>]*role="log"[^>]*>/)?.[0];
   expect(scroll, "scroll pane").toBeTruthy();
   expect(log, "transcript log").toBeTruthy();
   return [scroll!, log!];

@@ -23,6 +23,7 @@ import {
   questionAnswersByQuestion,
   type AskQuestion,
 } from "../../shared/ask-question";
+import { otherChoiceIndex } from "../../shared/other-choice";
 import { ASK_SMALL_PILL, returnFocusToComposer } from "./AskCard";
 import { ExpandableText } from "./ExpandableText";
 import {
@@ -271,18 +272,29 @@ export function QuestionCard({
     if (!answer) return;
     setSent(answer);
     setFailed(false);
+    // The composer reads the card, not this component: settle it now so its
+    // placeholder goes back to normal without waiting for the server.
+    const requestId = card.requestId;
+    dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: "answer", answeredText: answer } });
     returnFocusToComposer();
     onAnswered?.();
     const rememberId = rememberTarget && card.pageTargetChoice ? answer : "";
     const respond = () => dispatch({
       type: "decideRequest",
       threadId,
-      requestId: card.requestId!,
+      requestId,
       behavior: "answer",
       message: answer,
       // The answer never reached the bot, so the card must go back to
       // being answerable rather than sitting there looking settled.
-      onError: () => { setSent(null); setFailed(true); onAnswerFailed?.(); },
+      // Settled elsewhere (409): the store already wrote the server's real
+      // outcome on the card, so keep it and show no failure.
+      onError: (_message, settledElsewhere) => {
+        setSent(null);
+        if (settledElsewhere) return;
+        dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: undefined, answeredText: undefined } });
+        setFailed(true); onAnswerFailed?.();
+      },
     });
     if (rememberId && bot?.id) {
       void api(`/api/bots/${bot.id}`, {
@@ -301,11 +313,14 @@ export function QuestionCard({
   const title = questionIsTitle ? current.question : single && current.header ? current.header : named;
   const meta = !single ? t("question.progress", { answered: answeredCount, count: questions.length }) : undefined;
 
+  // a last option the bot wrote as "Other" / "Autre fuseau" becomes the
+  // card's own Other row, so the card never shows two of them (#2804)
+  const botOther = freeText ? otherChoiceIndex(current.options.map((option) => option.label)) : -1;
   const choices: SheetChoice[] = [
-    ...current.options,
+    ...current.options.map((option, index) => (index === botOther ? { ...option, id: OTHER_ROW } : option)),
     // an options-only question (an ACP engine answers with an option id,
     // never text) has no free-text answer it could send
-    ...(freeText && current.options.length ? [{ label: t("question.other"), id: OTHER_ROW }] : []),
+    ...(freeText && current.options.length && botOther < 0 ? [{ label: t("question.other"), id: OTHER_ROW }] : []),
   ];
   const picked = opened[currentIndex] && current.options.length ? [...draft.picked, OTHER_ROW] : draft.picked;
   // a send of its own only where one tap is not the answer: several picks,

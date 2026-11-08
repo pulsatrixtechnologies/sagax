@@ -5,12 +5,17 @@
 // reads and answers the same here as in the chat, with the same grants.
 // After an answer it says what happens next.
 import { ArrowUpRight, Check, Cloud, Globe, HardDrive, KeyRound, Laptop, Lock, MonitorSmartphone, Server, X } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import type { InboxApproval, InboxDestination } from "../../../shared/approvals-inbox";
 import { PendingApprovalActions, PendingApprovalPanel, pendingApprovals } from "@/components/PendingApproval";
+import { AttentionCard } from "@/components/AttentionCard";
 import { QuestionCard } from "@/components/QuestionCard";
-import { inboxWhere, withoutIds } from "@/lib/approvals-inbox";
+import { SuggestionFeedback } from "@/components/SuggestionFeedback";
+import { WakeFeedback, useOwnsBot } from "@/components/WakeFeedback";
+import { answerProactive, attentionOf, inboxWhere, markHandled, withoutIds } from "@/lib/approvals-inbox";
+import { readableError } from "@/lib/plain-error";
+import { api } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import type { Bot, Message } from "@/state/store";
@@ -136,6 +141,10 @@ export function ApprovalDetail({
                 : t("approvals.waitingOn", { name: entry.waitingOnName ?? entry.ownerName ?? t("approval.someone") })}
             </p>
           </div>
+        ) : entry.kind === "attention" && attentionOf(entry) ? (
+          <TodayAttention entry={entry} bot={bot} onDecided={onDecided} onDecideFailed={onDecideFailed} />
+        ) : entry.proactiveId && card ? (
+          <TodayProposal entry={entry} options={card.options} onDecided={onDecided} onDecideFailed={onDecideFailed} />
         ) : entry.kind === "question" && message ? (
           <div className="px-5 py-4" data-inbox-question="">
             <QuestionCard threadId={entry.threadId} bot={{ name: entry.botName }} message={message} onAnswered={() => onDecided("answer")} onAnswerFailed={onDecideFailed} />
@@ -163,6 +172,105 @@ export function ApprovalDetail({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** #2689: a bot's "needs you" card, answered in place (its words go into the
+ * thread the bot asked in, as in the conversation), or marked handled. */
+function TodayAttention({ entry, bot, onDecided, onDecideFailed }: {
+  entry: InboxApproval;
+  bot?: Bot;
+  onDecided: (decision: "allow" | "deny" | "answer") => void;
+  onDecideFailed: () => void;
+}) {
+  const card = attentionOf(entry)!;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const handled = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    onDecided("answer");
+    try {
+      await markHandled(entry);
+    } catch (failure) {
+      setError(readableError(failure));
+      onDecideFailed();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="px-5 py-4" data-inbox-attention="">
+      <AttentionCard
+        card={card}
+        bot={bot}
+        onReply={async (text) => {
+          await api(`/api/bots/${card.botId}/messages`, { method: "POST", body: JSON.stringify({ text, threadId: card.threadId, sendId: crypto.randomUUID() }) });
+          onDecided("answer");
+        }}
+      />
+      <div className="mt-3 flex items-center gap-2">
+        <button type="button" disabled={busy} onClick={() => void handled()} className="ui-button" data-testid="inbox-attention-handled">
+          <Check className="size-4" aria-hidden />{t("approvals.attention.handled")}
+        </button>
+        {error && <span className="text-[12.5px] text-danger">{error}</span>}
+      </div>
+      {/* #2694: less of this kind of wake, from Today as in the conversation */}
+      <WakeFeedback
+        className="mt-2"
+        botId={card.botId}
+        topic="attention"
+        value={card.feedback}
+        threadId={entry.threadId}
+        messageId={entry.requestId.startsWith("attention:") ? entry.requestId.slice("attention:".length) : undefined}
+      />
+    </div>
+  );
+}
+
+/** #2689: a proactive proposal (the bot offers to handle an event): its
+ * own yes and no, as on the card in the conversation. */
+function TodayProposal({ entry, options, onDecided, onDecideFailed }: {
+  entry: InboxApproval;
+  options: readonly string[];
+  onDecided: (decision: "allow" | "deny" | "answer") => void;
+  onDecideFailed: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const owns = useOwnsBot(entry.botId);
+  const answer = async (accept: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    onDecided(accept ? "allow" : "deny");
+    try {
+      await answerProactive(entry, accept);
+    } catch (failure) {
+      setError(readableError(failure));
+      onDecideFailed();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="px-5 py-4" data-inbox-proactive="">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={busy} onClick={() => void answer(true)} className="ui-button ui-button-primary">{options[0] ?? t("approvals.proactive.accept")}</button>
+        <button type="button" disabled={busy} onClick={() => void answer(false)} className="ui-button">{options[1] ?? t("approvals.proactive.decline")}</button>
+      </div>
+      {error && <p className="mt-2 text-[12.5px] text-danger">{error}</p>}
+      {/* #2694: thumbs and "Moins de ça" on the proposal, as on its card in the conversation */}
+      {entry.proactiveId && owns && (
+        <SuggestionFeedback
+          className="mt-2"
+          onPick={async (choice) => {
+            await api(`/api/bots/${encodeURIComponent(entry.botId)}/proactive/${encodeURIComponent(entry.proactiveId!)}/feedback`, { method: "POST", body: JSON.stringify({ choice }) });
+          }}
+        />
+      )}
     </div>
   );
 }

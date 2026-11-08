@@ -1,5 +1,5 @@
 // The phone's permissions and the one action behind each button (#2614),
-// the iOS side of electron/os-permissions.mjs. JC 2026-11-07: every missing
+// the iOS side of electron/os-permissions.mjs. the owner 2026-11-07: every missing
 // permission gets an action, never a sentence that says where to look:
 // - not asked yet: the system prompt, in place;
 // - refused or restricted: the app's page in the iOS Settings app (the

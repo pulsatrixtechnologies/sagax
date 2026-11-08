@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// 2026-11-03 (JC): the group panel reads like a bot's. Details carries the
+// 2026-11-03 (the owner): the group panel reads like a bot's. Details carries the
 // bot's sections for the group (its routines among them); Members lists the
 // people, the bots (the lead set on a bot's row) and Leave group, with every
 // other setting folded under Advanced; there is no Advanced tab.

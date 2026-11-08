@@ -5,7 +5,7 @@
  * ?lang=<code>&skin=<id>&view=editor|panel-editor|page|bot&trigger=clock|webhook&mode=view|edit&advanced=1
  * panel-editor: the routine panel in the side panel (400 px), as JC sees it;
  * mode=edit opens it editable (2026-11-03: view mode first), advanced=1 opens
- * Advanced. */
+ * Advanced. goal=1 gives the routine a goal in progress (#2696). */
 import { StrictMode, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { RoutineEditor } from "../components/RoutineCalendarPage";
@@ -74,6 +74,7 @@ const routine = {
   schedule: trigger === "webhook" ? { type: "webhook" } : { type: "cron", expression: params.get("cron") ?? "30 8,12,16 * * 1-5", timeZone: "America/Toronto" },
   postResults: true, attachments: trigger === "webhook" ? [] : [{ id: "a1", kind: "file", name: "clients.md", path: "/tmp/clients.md", size: 1200 }],
   durationMinutes: 30, timeoutMinutes: 30, nextRunAt: Date.now() + 3_600_000, createdAt: Date.now(), updatedAt: Date.now(),
+  ...(params.get("goal") === "1" ? { goal: { text: "Ramener la sauvegarde nocturne à 100 % sur tous les postes.", status: "active", deadline: Date.now() + 3 * 86_400_000, checks: 4, progress: "82 % (41 postes sur 50)", nextCheckAt: Date.now() + 3 * 3_600_000 } } : {}),
 } as unknown as Routine;
 let saved = routine;
 const webhooks = [

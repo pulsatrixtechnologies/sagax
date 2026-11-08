@@ -16,7 +16,7 @@ const SECTION_LABEL = {
   general: "settings.section.general",
   organization: "settings.section.organization",
   appearance: "settings.section.appearance",
-  experimental: "settings.section.experimental",
+  experimental: "settings.section.developer",
   developer: "settings.section.developer",
   // Integrations, Connected apps and Decision model are in Models
   // (2026-10-14, "Models and voice" until 2026-10-28, when Voice became a

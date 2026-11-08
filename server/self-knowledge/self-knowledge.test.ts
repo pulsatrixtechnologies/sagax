@@ -42,6 +42,8 @@ describe("sagax_help", () => {
     expect(member.text).toContain("api_list");
     expect(member.text.length).toBeLessThan(4000);
     expect(member.ids.length).toBeLessThanOrEqual(4);
+    // the header follows the running release (forkVersion), not the base's
+    expect(helpAnswer(index, "Où sont mes routines ?", { organization: false, release: "9.9.9" }).text).toContain(`Sagax 9.9.9 knowledge, ${index.base.generated}`);
     const solo = helpAnswer(index, "Où sont mes routines ?", { organization: false });
     expect(solo.text).toContain("a person's own Sagax (solo, no organization)");
     expect(solo.text).not.toContain("api_list");

@@ -13,6 +13,7 @@ import type { GithubConnectCard } from "./github-connect-card.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
+import type { DirectTriggers } from "./direct-triggers.ts";
 import type { FinishUntilLine } from "./finish-until-line.ts";
 import type { MeetingRequestCardData } from "./meeting-request.ts";
 import type { PhoneCallConsentCardData } from "./phone-call-consent.ts";
@@ -510,6 +511,10 @@ export interface WireBot {
    * webhook and acts at its approval level and rules. Absent reads as the
    * default "proactive" (proactiveModeFor). Never a Chief orchestrator. */
   proactiveMode?: ProactiveMode;
+  /** #2691: per channel direct triggers (email, calendar invitation, text)
+   * with declarative filters (shared/direct-triggers.ts). Absent channel:
+   * follows proactiveMode. */
+  directTriggers?: DirectTriggers;
   /** #2048: remembered publish target id (sagax_page, sagax_artifact,
    * claude_artifact, or a registered id). Absent: ask when several targets
    * are available. Null is not stored; clear by omitting the field. */
@@ -536,6 +541,10 @@ export interface WireBot {
   /** Whether this bot may write email draft cards. Absent/true = allowed;
    * false refuses ```email fences in the prompt and the send route. */
   emailDrafts?: boolean;
+  /** #2747: a bot on a Grok engine loads its xAI account's grok.com connectors (the
+   * managed MCP gateway) on the person's own sign-in. Absent/false = off:
+   * the bot sees only the tools Sagax mounts for it. */
+  grokAccountConnectors?: boolean;
   /** #2121: whether this bot may reply with memes (send_meme). Absent or
    * "auto" = the bot decides from the person's style; "off" hides the tool. */
   memeReplies?: "auto" | "off";
@@ -911,6 +920,10 @@ export interface WireMessage extends WaitLineField {
   signIn?: SignInRequestCardData;
   /** One idempotently updated status card for a routine run. */
   routineRun?: RoutineRunCardData;
+  /** #2694: the items of a background brief, each with the person's
+   * feedback, so the chat rates each point where it was said. `text` stays
+   * the readable fallback. */
+  briefItems?: Array<{ id: string; text: string; feedback?: "up" | "down" | "less" | "never" }>;
   /** 2026-11-05: what a bot's finished turn elsewhere (a hand-off, a
    * routine run, a thread another bot opened) left for the person, carried
    * into their own conversation with that bot (shared/person-attention.ts).
@@ -1107,6 +1120,9 @@ export interface WireMessage extends WaitLineField {
    * (send_prompt, sagax_send) into this bot's chat: not the person typing.
    * The chat folds it with the bot's answer into one exchange chip. */
   aiClient?: true;
+  /** #2808: a teammate's coordinate_bots reply relayed into the requester's
+   * chat as it is: who wrote it, shown above the bubble. */
+  relayedFrom?: { botId: string; name: string; color?: string };
   /** Auto: the model this delivered work ran on, and why (the delegation
    * card and the worker's activity row). Clients that do not know it ignore it. */
   autoModel?: AutoModelRecord;
@@ -1213,6 +1229,8 @@ export interface OptionCardData extends WaitCardField {
    * POST /api/bots/:id/proactive/:id (options[0] accepts, options[1]
    * declines), never as a typed message. */
   proactiveProposal?: { id: string };
+  /** #2694: the person's feedback on this proactive card. */
+  feedback?: "up" | "down" | "less" | "never";
   title: string;
   subtitle: string;
   options: string[];

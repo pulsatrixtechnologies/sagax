@@ -1,4 +1,5 @@
 import type { CalendarCallAttachment, CalendarCallInput } from "@/lib/calendar-calls";
+import { goalDraftOf, goalPayload, type RoutineGoalDraft } from "@/components/routines/RoutineGoalFields";
 import type { Routine, RoutineContextAttachment, RoutineInput } from "@/lib/routines";
 import { createAnswerErrorMessage, recoverCreatedRoutineAfterLostAnswer } from "@/lib/routine-save-recovery";
 import { intervalAnchorForSave, nextIntervalForSave } from "@/lib/routine-calendar";
@@ -71,6 +72,7 @@ export type EventEditorSaveCtx = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   roleCoverageAnswer: any;
   routineEffort: EffortLevel | "";
+  goalDraft: RoutineGoalDraft;
   watchAllowed: boolean;
   watchBuilt: { watch?: unknown; error?: string };
   existingWatch?: unknown;
@@ -99,7 +101,7 @@ export async function runEventEditorSave(ctx: EventEditorSaveCtx): Promise<void>
     lateMinutes, name, description, routineTarget, groupId, runOn, durationMinutes, timeoutMinutes,
     overlap, autoPauseAfter, requiredSkills, requiredMcp, requiresComputer, repeatsOnClock, continuity,
     onlyWhenPresent, postResults, deleteWhenFinished, mailAlias, routineModel, routineSubagentModel,
-    actAs, roleCoverageAnswer, routineEffort, watchAllowed, watchBuilt, existingWatch, attachments,
+    actAs, roleCoverageAnswer, routineEffort, goalDraft, watchAllowed, watchBuilt, existingWatch, attachments,
     runAs, runAsOptions, seed, editorRequest, dispatch, onSavedRoutine, existingCall, onSavedCall, onClose,
   } = ctx;
   if (attachmentPending) return;
@@ -168,6 +170,10 @@ export async function runEventEditorSave(ctx: EventEditorSaveCtx): Promise<void>
         // known, the minimal covering role (never over an explicit one).
         ...(() => { const role = routineTarget === "bot" ? actAsToSave(existingRoutine?.actAs, actAs, roleCoverageAnswer) : undefined; return role !== undefined ? { actAs: role } : {}; })(),
         effort: routineTarget === "bot" ? (routineEffort || null) : null,
+        // #2696: sent when it changed, so an unchanged goal keeps its progress.
+        ...(routineTarget === "bot"
+          ? (JSON.stringify(goalDraft) !== JSON.stringify(goalDraftOf(existingRoutine?.goal)) ? { goal: goalPayload(goalDraft) } : {})
+          : existingRoutine?.goal ? { goal: null } : {}),
         // Sent when on, or to remove a watch the routine had.
         ...(watchAllowed && watchBuilt.watch ? { precheck: watchBuilt.watch as RoutineInput["precheck"] } : existingWatch ? { precheck: null } : {}),
         attachments: routineTarget === "room-goal" ? [] : attachments as RoutineContextAttachment[],

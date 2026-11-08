@@ -86,7 +86,7 @@ describe("LocalLiveScreen", () => {
     expect(permAct).toHaveBeenLastCalledWith("screen", expect.objectContaining({ secondary: true }));
   });
 
-  // JC 2026-11-07 (capture 16:02): Sagax CHECKED in Screen & System Audio
+  // the owner 2026-11-07 (capture 16:02): Sagax CHECKED in Screen & System Audio
   // Recording, the window still said "Sagax is not allowed ... Allow Screen
   // Recording". Allowed + refused capture: Relaunch Sagax, never that text.
   it("allowed in System Settings but the capture is refused: Relaunch Sagax, not 'not allowed'", async () => {

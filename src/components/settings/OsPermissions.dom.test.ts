@@ -131,7 +131,7 @@ describe("in context", () => {
     expect(host.querySelector("[data-os-permission-banner]")).toBeNull();
   });
 
-  it("the Computer panel with no picture offers Relaunch Sagax when the switch is on (JC 2026-11-07)", async () => {
+  it("the Computer panel with no picture offers Relaunch Sagax when the switch is on (the owner 2026-11-07)", async () => {
     const permAll = vi.fn().mockResolvedValue(answer([{ id: "screen", status: "granted", action: { kind: "relaunch", secondary: { kind: "settings", url: SCREEN_PANE } } }]));
     const permAct = vi.fn().mockResolvedValue({ ok: true });
     (window as { ogb?: unknown }).ogb = { permAll, permAct };

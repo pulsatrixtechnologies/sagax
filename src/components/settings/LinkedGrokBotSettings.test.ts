@@ -14,14 +14,14 @@ const linked: GrokBridgeLinkView = {
   webhookUrl: "https://grok.example/hook",
   keySet: true,
   linkId: "link_abc",
-  bots: ["cryptic"],
+  bots: ["nimbus"],
   mayCallOwner: false,
   mayTextOwner: true,
   orgAllowed: true,
   stats: { sentToday: 2, receivedToday: 0, deadLetters: 0, circuitOpen: false },
 };
 
-describe("Linked Grok Bot settings", () => {
+describe("Linked the reference app settings", () => {
   it("draws the linked card with webhook, opt-ins and inbound path", () => {
     const html = renderToStaticMarkup(createElement(LinkedGrokBotSettings, { initial: linked }));
     expect(html).toContain('data-settings-card="providers.linkedGrokBot"');

@@ -248,7 +248,7 @@ struct PhoneBotCallVoiceCard: View {
         settings.language == "auto" ? String(localized: "Auto") : VoiceModeSettings.languageLabel(settings.language)
     }
 
-    /// First letter capital (`ara` -> `Ara`), as Grok Bot shows voice names.
+    /// First letter capital (`ara` -> `Ara`), as reference app shows voice names.
     static func capitalizedLabel(_ raw: String) -> String {
         guard let first = raw.first else { return raw }
         return String(first).uppercased() + raw.dropFirst()

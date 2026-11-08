@@ -47,7 +47,7 @@ const SANDBOXD_KEY = "d".repeat(64);
 const INSTANCE = "e2e-bridge";
 const ALICE: FakeOidcUser = { sub: "01J9S5ALICE00000000000000A", email: "alice@example.test", name: "Alice", preferred_username: "alice", role: "admin" };
 const BOB: FakeOidcUser = { sub: "01J9S5BOB000000000000000B", email: "bob@example.test", name: "Bob", preferred_username: "bob", role: "employee" };
-const README = "# Sagax\nthe cryptic system prompt lives here\n";
+const README = "# Sagax\nthe nimbus system prompt lives here\n";
 
 let PORT = 0;
 let BASE = "";
@@ -340,7 +340,7 @@ posixOnly("organization server: the desktop bridge", () => {
     expect(staged).toMatch(/^[0-9a-f]{8}-README\.md$/);
     expect(prompt).toContain(`/Users/alice/Library/Caches/Sagax/attachments/${staged}`);
     expect(prompt).not.toContain(file.path);
-    expect(prompt).toContain("the cryptic system prompt lives here");
+    expect(prompt).toContain("the nimbus system prompt lives here");
     expect(desktop.staged.get(staged)?.toString("utf8")).toBe(README);
     expect(desktop.opened).toContain("intranet.test:80");
     // nothing on the server
@@ -408,7 +408,9 @@ posixOnly("organization server: the desktop bridge", () => {
     expect(desktop.operations.length).toBe(before);
   }, 120_000);
 
-  it("Auto starts on her computer when the Sagax app is connected, the cloud one switch away, with one line in the thread", async () => {
+  it("Auto starts in her server environment even with the Sagax app connected, her computer one switch away, with one line in the thread", async () => {
+    // #2670 (ba15d16513): a person with a server environment starts there;
+    // her computer is reached only through computer_select or a pinned place.
     // 7f57263ac8 says the place once, then only when it changes. The
     // shared bot's setup ping already announced her computer, so exercise
     // the first notice and the following dedupe on a fresh conversation.
@@ -425,12 +427,12 @@ posixOnly("organization server: the desktop bridge", () => {
     // Auto may leave her computer mid-turn: the engine's traffic stays here
     expect(reply).toContain("proxy:none");
     expect(dump().servers).toEqual(expect.arrayContaining(["sagax-desktop", "sagax-environment", "sagax-computer"]));
-    expect(dump().calls.find((call) => call.tool === "read_file" && call.server === "sagax-desktop")).toMatchObject({ ok: true });
-    expect(dump().calls.find((call) => call.tool === "read_file" && call.server === "sagax-environment")).toMatchObject({ ok: false });
-    expect(desktop.operations.slice(before).map((operation) => operation.action)).toContain("read_file");
-    expect(lastPrompt()).toContain("This turn starts on their own computer");
+    expect(dump().calls.find((call) => call.tool === "read_file" && call.server === "sagax-environment")).toMatchObject({ ok: true });
+    expect(dump().calls.find((call) => call.tool === "read_file" && call.server === "sagax-desktop")).toMatchObject({ ok: false });
+    expect(desktop.operations.slice(before).map((operation) => operation.action)).not.toContain("read_file");
+    expect(lastPrompt()).toContain("This turn starts on the cloud (their server environment)");
     // one discreet line, said once while the place stays the same
-    expect((await lines()).slice(already)).toEqual(["notice: Workspace: On your computer"]);
+    expect((await lines()).slice(already)).toEqual(["notice: Workspace: In the cloud"]);
     await turn(alice, autoBot, "run it");
     expect((await lines()).length).toBe(already + 1);
   }, 120_000);
@@ -510,9 +512,9 @@ posixOnly("organization server: the desktop bridge", () => {
     const { servers, calls } = dump();
     expect(servers).toEqual(expect.arrayContaining(["sagax-computer", "sagax-environment", "sagax-desktop"]));
     const [toMac, envWhileMac, desktopRun, toCloud, desktopWhileCloud, envList] = calls;
-    // Auto already starts on her computer: asking for it is not a switch
+    // #2670: Auto starts in her server environment; her Mac is one switch away
     expect(toMac).toMatchObject({ server: "sagax-computer", tool: "computer_select", ok: true });
-    expect(toMac!.text).toContain("You already work on their own computer");
+    expect(toMac!.text).toContain("Now working on their own computer");
     expect(envWhileMac).toMatchObject({ server: "sagax-environment", ok: false });
     expect(envWhileMac!.text).toContain("computer_select with target cloud");
     expect(desktopRun).toMatchObject({ server: "sagax-desktop", ok: true, text: "desktop:run_command" });
@@ -525,6 +527,7 @@ posixOnly("organization server: the desktop bridge", () => {
     const activity = (await api("GET", "/api/admin-activity?what=computer", alice)).body.entries as Array<{ action: string; after: Record<string, unknown>; before: Record<string, unknown>; who: string; target: { id: string } }>;
     const switches = activity.filter((entry) => entry.action === "computer.switch" && entry.target.id === aliceBot.id).reverse();
     expect(switches.map((entry) => [entry.before.computer, entry.after.computer, entry.after.reason])).toEqual([
+      ["cloud", "this_computer", "her files are on her Mac"],
       ["this_computer", "cloud", "scraping"],
     ]);
     expect(switches[0]!.who).toBe("Alice");

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// #2272 (JC, 2026-11-06: "I asked to be able to open the details of a
+// #2272 (the owner, 2026-11-06: "I asked to be able to open the details of a
 // routine. It should open the equivalent of a bot to bot chat ... It not
 // doing anything when I click it. This is innacceptable."). Blocking: a click
 // on View run (the chat's card, the bot panel's runs, the routine list, the
@@ -73,7 +73,7 @@ describe("#2272 clicking a routine run opens its window", () => {
     expect(window).not.toBeNull();
     expect(window!.textContent).toContain("Project health watch");
     expect(window!.textContent).not.toMatch(/Open thread|Go to conversation|Continue in the conversation/);
-    // the routine run floats the bot chat's bar, pill and fades (JC 2026-11-06)
+    // the routine run floats the bot chat's bar, pill and fades (the owner 2026-11-06)
     const bar = window!.querySelector<HTMLElement>("[data-chat-header-bar]")!;
     expect(bar.className).toMatch(/absolute inset-x-0 top-0/);
     expect(bar.querySelector('[data-chat-edge-fade="top"]')).not.toBeNull();

@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 
-import { attachmentName, bridgeOperationError, commandEnvironment, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, validBridgeOperation } from "./desktop-bridge.mjs";
+import { attachmentName, botTmpDir, botTmpName, bridgeOperationError, commandEnvironment, commandNamesOtherBotTmp, createDesktopBridge, commandNamesAppData, createLocalVm, executeBridgeOperation, localPath, removeClosedTree, sandboxedCommandArgv, sweepBotTmpRoot, validBridgeOperation, vmCommandWithBotTmp } from "./desktop-bridge.mjs";
 import net from "node:net";
 import { zipArchive } from "../server/testing/archive-fixtures.mjs";
 
@@ -863,4 +863,171 @@ test("run_command refuses the app's own data folder, by any spelling", async () 
   assert.match(fine.content[0].text, /app-data-free/);
   assert.equal(commandNamesAppData("sqlite3 ~/.openmausbot/messages.db", [path.join(home, ".sagax")], home), path.join(home, ".openmausbot"));
   assert.equal(commandNamesAppData("grep -r sagax ~/work", [path.join(home, ".sagax")], home), null);
+});
+
+// #2828: the folder of them all is 0300 (nobody lists it), so a plain rm
+// cannot remove it: opened back then removed after the test, pass or fail.
+function botTmpRootFor(t) {
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), "omb-bot-tmp-"));
+  t.after(() => removeClosedTree(parent));
+  return path.join(parent, "sagax-bots");
+}
+
+// #2828: each bot its own temporary folder on this computer and in the Local VM.
+test("a bot's temporary folder is its own: TMPDIR set, another bot's refused", { skip: !posix }, async (t) => {
+  const home = sandboxHome();
+  const tmpRoot = botTmpRootFor(t);
+  const botTmpKey = Buffer.alloc(32, 7);
+  const d = { ...deps(home), botTmpRoot: tmpRoot, botTmpKey };
+  const ada = "a".repeat(16);
+  const bob = "b".repeat(16);
+  const adaDir = path.join(tmpRoot, botTmpName(ada, botTmpKey));
+  assert.equal(validBridgeOperation({ action: "run_command", command: "ls", tmp_scope: ada }), true);
+  assert.equal(validBridgeOperation({ action: "read_file", path: "~/x", tmp_scope: ada }), true);
+  assert.equal(validBridgeOperation({ action: "run_command", command: "ls", tmp_scope: "../x" }), false);
+  assert.equal(validBridgeOperation({ action: "fetch_url", url: "https://x.example", tmp_scope: ada }), false);
+
+  // The folder name is a keyed hash: not the scope, different per key.
+  assert.match(botTmpName(ada, botTmpKey), /^[a-f0-9]{32}$/);
+  assert.notEqual(botTmpName(ada, botTmpKey), botTmpName(ada, Buffer.alloc(32, 8)));
+  assert.ok(!botTmpName(ada, botTmpKey).includes(ada));
+  const own = await executeBridgeOperation({ action: "run_command", command: "printf %s \"$TMPDIR\" && echo secret > \"$TMPDIR/note.txt\"", tmp_scope: ada }, d, signal());
+  assert.ok(own.content[0].text.includes(botTmpName(ada, botTmpKey)), own.content[0].text);
+  assert.equal(fs.statSync(adaDir).mode & 0o777, 0o700);
+  // Nobody lists the folder of them all.
+  assert.equal(fs.statSync(tmpRoot).mode & 0o777, 0o300);
+  assert.throws(() => fs.readdirSync(tmpRoot), /EACCES|EPERM/);
+  const again = await executeBridgeOperation({ action: "read_file", path: path.join(adaDir, "note.txt"), tmp_scope: ada }, d, signal());
+  assert.match(again.content[0].text, /secret/);
+
+  // Bob reaches none of it: by file tool, as working folder, or by name in a command.
+  for (const op of [
+    { action: "read_file", path: path.join(adaDir, "note.txt") },
+    { action: "list_files", path: adaDir },
+    { action: "list_files", path: tmpRoot },
+    { action: "search_files", path: adaDir, pattern: "secret" },
+    { action: "write_file", path: path.join(adaDir, "x.txt"), content: "x" },
+    { action: "run_command", command: "ls", cwd: adaDir },
+  ]) await assert.rejects(executeBridgeOperation({ ...op, tmp_scope: bob }, d, signal()), /another bot's temporary folder/, `${op.action} ${op.path ?? ""}`);
+  await assert.rejects(executeBridgeOperation({ action: "run_command", command: `cat ${adaDir}/note.txt`, tmp_scope: bob }, d, signal()), /another bot's temporary folder/);
+  await assert.rejects(executeBridgeOperation({ action: "run_command", command: "ls \"$TMPDIR/..\"", tmp_scope: bob }, d, signal()), /another bot's temporary folder/);
+
+  // A symlink into it is refused.
+  fs.symlinkSync(adaDir, path.join(home, "work", "peek"));
+  await assert.rejects(executeBridgeOperation({ action: "read_file", path: "~/work/peek/note.txt", tmp_scope: bob }, d, signal()), /another bot's temporary folder/);
+  // The person (no scope) still reads everything on their own computer.
+  const person = await executeBridgeOperation({ action: "read_file", path: path.join(adaDir, "note.txt") }, d, signal());
+  assert.match(person.content[0].text, /secret/);
+});
+
+// #2828 follow-up: a detour the command text does not show (dirname, a glob,
+// a chmod back) still finds nothing of Ada's.
+test("a bot's command cannot reach another bot's temporary folder by a detour", { skip: !posix }, async (t) => {
+  const home = sandboxHome();
+  const tmpRoot = botTmpRootFor(t);
+  const d = { ...deps(home), botTmpRoot: tmpRoot, botTmpKey: Buffer.alloc(32, 3) };
+  const ada = "a".repeat(16);
+  const bob = "b".repeat(16);
+  await executeBridgeOperation({ action: "run_command", command: "echo adasecret > \"$TMPDIR/note.txt\"", tmp_scope: ada }, d, signal());
+  for (const command of [
+    "cat \"$(dirname \"$TMPDIR\")\"/*/note.txt",
+    "ls \"$(dirname \"$TMPDIR\")\"",
+    "p=\"$(dirname \"$TMPDIR\")\"; chmod 700 \"$p\"; cat \"$p\"/*/note.txt",
+    "find \"$(dirname \"$TMPDIR\")\" -name note.txt -exec cat {} +",
+  ]) {
+    const out = await executeBridgeOperation({ action: "run_command", command, tmp_scope: bob }, d, signal()).catch((error) => ({ content: [{ text: String(error) }] }));
+    assert.doesNotMatch(JSON.stringify(out.content), /adasecret/, command);
+  }
+  // Bob's own folder works as usual.
+  const mine = await executeBridgeOperation({ action: "run_command", command: "echo bob > \"$TMPDIR/b.txt\" && cat \"$TMPDIR/b.txt\"", tmp_scope: bob }, d, signal());
+  assert.match(mine.content[0].text, /bob/);
+});
+
+// #2828 follow-up: the key lives in memory only, so the bot folders of an
+// earlier run are unreachable: swept once per run, this run's kept.
+test("the bot folders of an earlier run are swept, closed ones included", { skip: !posix }, async (t) => {
+  const tmpRoot = botTmpRootFor(t);
+  const old = path.join(tmpRoot, "c".repeat(32));
+  const first = path.join(tmpRoot, "d".repeat(16));
+  fs.mkdirSync(path.join(old, "shut"), { recursive: true });
+  fs.writeFileSync(path.join(old, "shut", "f.txt"), "x");
+  fs.chmodSync(path.join(old, "shut"), 0o500);
+  fs.mkdirSync(first);
+  fs.writeFileSync(path.join(tmpRoot, "other.txt"), "kept");
+  // A link out of a bot folder is removed, never followed.
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "omb-bot-tmp-"));
+  t.after(() => removeClosedTree(outside));
+  fs.chmodSync(outside, 0o500);
+  fs.symlinkSync(outside, path.join(old, "out"));
+  fs.chmodSync(tmpRoot, 0o300);
+
+  await sweepBotTmpRoot({ root: tmpRoot, platform: "darwin" });
+  assert.equal(fs.statSync(tmpRoot).mode & 0o777, 0o300);
+  fs.chmodSync(tmpRoot, 0o700);
+  assert.deepEqual(fs.readdirSync(tmpRoot), ["other.txt"]);
+  assert.equal(fs.statSync(outside).mode & 0o777, 0o500);
+
+  // This run's folder is kept: the sweep of a fresh root spares it.
+  const fresh = botTmpRootFor(t);
+  const mine = await botTmpDir(fresh, "e".repeat(16), { key: Buffer.alloc(32, 9), platform: "darwin" });
+  fs.chmodSync(fresh, 0o700);
+  assert.deepEqual(fs.readdirSync(fresh), [path.basename(mine)]);
+  // No root yet: nothing to do.
+  await sweepBotTmpRoot({ root: path.join(fresh, "none"), platform: "darwin" });
+});
+
+test("a bot folder made while the start sweep lists the root is kept", { skip: !posix }, async (t) => {
+  const tmpRoot = botTmpRootFor(t);
+  fs.mkdirSync(path.join(tmpRoot, "c".repeat(32)), { recursive: true });
+  const fsp = fs.promises;
+  const readdir = fsp.readdir;
+  let making = null;
+  fsp.readdir = async function (target, ...rest) {
+    if (target === tmpRoot && !making) {
+      // The bot folder lands between the sweep's start and its listing.
+      making = botTmpDir(tmpRoot, "f".repeat(16), { key: Buffer.alloc(32, 7), platform: "darwin" });
+      const name = botTmpName("f".repeat(16), Buffer.alloc(32, 7));
+      for (let i = 0; i < 200 && !fs.existsSync(path.join(tmpRoot, name)); i += 1) await new Promise(r => setTimeout(r, 5));
+    }
+    return readdir.call(this, target, ...rest);
+  };
+  t.after(() => { fsp.readdir = readdir; });
+  await sweepBotTmpRoot({ root: tmpRoot, platform: "darwin" });
+  const mine = await making;
+  fsp.readdir = readdir;
+  fs.chmodSync(tmpRoot, 0o700);
+  assert.deepEqual(fs.readdirSync(tmpRoot), [path.basename(mine)]);
+});
+
+test("on macOS a bot's command runs under sandbox-exec, denied the other folders", () => {
+  const argv = sandboxedCommandArgv("ls", { root: "/r/sagax-bots", own: "/r/sagax-bots/abc", shell: "/bin/zsh" });
+  assert.equal(argv[0], "/usr/bin/sandbox-exec");
+  assert.equal(argv[1], "-p");
+  assert.deepEqual(argv.slice(3), ["/bin/zsh", "-lc", "ls"]);
+  assert.ok(argv[2].includes('(deny file-read* file-write* (subpath "/r/sagax-bots"))'), argv[2]);
+  assert.ok(argv[2].includes('(allow file-read* file-write* (subpath "/r/sagax-bots/abc"))'), argv[2]);
+  assert.ok(sandboxedCommandArgv("ls", { root: '/r/a"b', own: '/r/a"b/c', shell: "/bin/sh" })[2].includes('"/r/a\\"b"'));
+});
+
+test("the Local VM command gets the bot's own TMPDIR; another bot's is refused", async () => {
+  const ada = "a".repeat(16);
+  const bob = "b".repeat(16);
+  const key = Buffer.alloc(32, 5);
+  const adaName = botTmpName(ada, key);
+  assert.equal(commandNamesOtherBotTmp(`ls /tmp/sagax-bots/${adaName}`, adaName), null);
+  assert.equal(commandNamesOtherBotTmp(`ls /tmp/sagax-bots/${adaName}`, botTmpName(bob, key)), `sagax-bots/${adaName}`);
+  assert.equal(commandNamesOtherBotTmp("ls /tmp/sagax-bots", adaName), "sagax-bots");
+  assert.equal(commandNamesOtherBotTmp("ls \"$TMPDIR\" /tmp", adaName), null);
+  const command = vmCommandWithBotTmp("python3 -c 'print(1)'", adaName);
+  const dir = `/tmp/sagax-bots/${adaName}`;
+  assert.ok(command.startsWith("sudo -n install -d -o root -g root -m 0311 /tmp/sagax-bots && "), command);
+  assert.ok(command.includes(`-m 0700 ${dir} ||`), command);
+  assert.ok(command.includes(`\nexport TMPDIR=${dir} TMP=${dir} TEMP=${dir}\n`), command);
+  assert.ok(command.endsWith("\nexec setpriv --no-new-privs bash -lc 'python3 -c '\\''print(1)'\\'''"), command);
+  const seen = [];
+  const localVm = { exec: async (_container, cmd) => { seen.push(cmd); return { content: [{ type: "text", text: "ok" }] }; } };
+  const home = sandboxHome();
+  await executeBridgeOperation({ action: "vm_run_command", command: "ls", tmp_scope: ada }, { ...deps(home), localVm, botTmpKey: key }, signal());
+  assert.equal(seen.at(-1), vmCommandWithBotTmp("ls", adaName));
+  await assert.rejects(executeBridgeOperation({ action: "vm_run_command", command: `cat /tmp/sagax-bots/${adaName}/x`, tmp_scope: bob }, { ...deps(home), localVm, botTmpKey: key }, signal()), /another bot's temporary folder/);
 });

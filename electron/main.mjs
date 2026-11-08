@@ -109,7 +109,7 @@ import oidcSignInModule from "./oidc-system-sign-in.cjs";
 import localOriginModule from "./local-origin.cjs";
 import { buildApplicationMenu } from "./menu.mjs";
 import { createComputerSharing, validateSharedFolders } from "./computer-sharing.mjs";
-import { createDesktopBridge } from "./desktop-bridge.mjs";
+import { createDesktopBridge, sweepBotTmpRoot } from "./desktop-bridge.mjs";
 import { MAC_APP_IDS, macAppEnabled, macAppOfTool, macAppsStatus, macAppsStatusLive, requestMacAppAutomation, runMacAppCall, testMacApp, writeMacAppSettings } from "./mac-apps.mjs";
 import { applyAppIcon, createAppIconStore, parseAppIconRequest, windowIconImage } from "./app-icon.mjs";
 import { WINDOWS_APP_USER_MODEL_ID, shortcutFolders, updateShortcutIcons } from "./windows-shortcuts.mjs";
@@ -1811,6 +1811,8 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     // owner; fallback-port children must not race to replace the parent lease.
     ...desktopDataDirLease.utilityServerLeaseEnvironment(),
     SAGAX_DATA_DIR: dataDir,
+    // The app's language, for the first bot's greeting (#2803).
+    SAGAX_DESKTOP_LANGUAGE: recoveryLanguage(),
     // A packaged utility child must never fall back to a descriptor inherited
     // from the launching shell. It starts fail-closed until this exact main
     // process sends the private in-memory connection after spawn.
@@ -5623,6 +5625,9 @@ app.whenReady().then(async () => {
   // First thing once ready: no session but the app window's reaches the server.
   serverSessionGuard = { defaultSession: session.defaultSession, serverPort: () => SERVER_PORT };
   installSessionBlock(session.defaultSession, (line) => slog(`network: ${line}`));
+  // The bots' temporary folders of the previous run (#2828) are unreachable
+  // under this run's key: removed now, in the background.
+  void sweepBotTmpRoot().catch(() => {});
   // screen is only safe after ready; keep the secondary cursor in sync with layout changes.
   screen.on("display-added", resyncAgentCursorOverlay);
   screen.on("display-removed", resyncAgentCursorOverlay);

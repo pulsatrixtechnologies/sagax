@@ -276,7 +276,7 @@ describe("Bot > Model, rights and drafts", () => {
   });
 });
 
-// Hotfix 2026-11-06 (JC: "I can no longer select who pays for a shared
+// Hotfix 2026-11-06 (the owner: "I can no longer select who pays for a shared
 // bot"): who pays was tied to the automaticRecovery right. It is the
 // owner's or an admin's choice. It lives once, in its own "Who pays for
 // replies" card (BotPayerCard), under the Model section of the profile

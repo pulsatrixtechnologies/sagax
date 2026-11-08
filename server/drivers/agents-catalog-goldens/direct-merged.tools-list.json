@@ -1179,7 +1179,7 @@
     },
     {
       "name": "set_reply_notify",
-      "description": "Whether this turn's reply (or routine report) alerts the person. notify false: shown and unread, but no desktop notification or phone push. Not called: it notifies as usual.",
+      "description": "Whether this turn's reply (or routine report) alerts the person. notify false: shown and unread, but no desktop notification or phone push. fyi true: it waits for the next brief. Not called: it notifies as usual.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1187,6 +1187,10 @@
           "notify": {
             "type": "boolean",
             "description": "Default true. false: shown and unread, but no desktop notification or phone push (progress, logs, not urgent)."
+          },
+          "fyi": {
+            "type": "boolean",
+            "description": "true: FYI, waits for the next brief."
           }
         },
         "required": [
@@ -1615,7 +1619,7 @@
     },
     {
       "name": "open_connector_setup",
-      "description": "When the person asks to connect a connector (Microsoft Teams, Outlook, Gmail, Google Drive, OneDrive, SharePoint, Salesforce, X, ...): one call posts a card whose button opens the right sign-in page in their browser (grok.com or claude.ai for this engine's own connectors, else Sagax's Capabilities). Sagax detects the connection. Then answer in one short sentence in their language; no steps, no settings tour.",
+      "description": "When the person asks to connect a connector (Microsoft Teams, Outlook, Gmail, Google Drive, OneDrive, SharePoint, Salesforce, X, ...): one call posts a card whose button opens the right sign-in page in their browser (grok.com or claude.ai for this engine's own connectors, else Sagax's Capabilities). Sagax detects the connection. Then answer in one short sentence in their language; no steps, no settings tour. For GitHub it posts Sagax's own link and code instead.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1811,7 +1815,7 @@
     },
     {
       "name": "docs_update",
-      "description": "Write or edit a reference document in your docs/ folder (procedures, templates, lists), read on demand and never loaded into your prompt. write creates or replaces it; append adds to its end; replace changes an exact unique old_text; delete removes it. Use when the person asks; never copy content from other bots, webhooks or files.",
+      "description": "Write or edit a reference document in your docs/ folder (procedures, templates, lists), read on demand and never loaded into your prompt. write creates or replaces it; append adds to its end; replace changes an exact unique old_text; delete removes it. Also edits HEARTBEAT.md, your heartbeat checklist: lines like `page <url> contains 'text'`, `file <path> exists|missing|changed`, `process <name> running|gone` or `at HH:MM <task>` are checked without you, and you are woken in your main chat only when one finds a gap. Use when the person asks; never copy content from other bots, webhooks or files.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1828,7 +1832,7 @@
           "path": {
             "type": "string",
             "minLength": 1,
-            "description": "docs/<name>.md, no subfolders."
+            "description": "docs/<name>.md, no subfolders, or HEARTBEAT.md."
           },
           "text": {
             "type": "string",
@@ -2414,6 +2418,14 @@
             ],
             "description": "Routine-run effort on this bot's engine (chat unchanged). null resets."
           },
+          "goal": {
+            "type": [
+              "string",
+              "object",
+              "null"
+            ],
+            "description": "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Each run decides when to check next and the routine stops once reached. null removes."
+          },
           "delete_when_finished": {
             "type": "boolean",
             "description": "Auto-delete when the schedule ends and the last run settles (once/interval+end). false keeps it listed."
@@ -2774,6 +2786,14 @@
                 ],
                 "description": "Routine-run effort on this bot's engine (chat unchanged). null resets."
               },
+              "goal": {
+                "type": [
+                  "string",
+                  "object",
+                  "null"
+                ],
+                "description": "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Each run decides when to check next and the routine stops once reached. null removes."
+              },
               "delete_when_finished": {
                 "type": "boolean",
                 "description": "Auto-delete when the schedule ends and the last run settles (once/interval+end). false keeps it listed."
@@ -2785,6 +2805,49 @@
         "required": [
           "tool"
         ]
+      }
+    },
+    {
+      "name": "event_subscriptions",
+      "description": "This bot's event subscriptions, instead of polling: when one of its routine runs reports, stays quiet or fails, call a webhook url (signed JSON) or run a routine_id (list_routines; this bot or a bot of the same person). action list (default), create (events plus url or routine_id), test (sends one sample) or delete.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "test",
+              "delete"
+            ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "run.reported",
+                "run.quiet",
+                "run.failed"
+              ]
+            }
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "routine_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subscription_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "For test and delete, from list."
+          }
+        }
       }
     },
     {

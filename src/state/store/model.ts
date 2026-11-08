@@ -96,6 +96,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   secret?: SecretRequestCardData;
   /** Lifecycle mirror for a routine whose real work lives in a fresh task. */
   routineRun?: RoutineRunCardData;
+  /** #2694: a brief's points, each rated in place (shared/wire.ts). */
+  briefItems?: Array<{ id: string; text: string; feedback?: "up" | "down" | "less" | "never" }>;
   /** Durable lifecycle receipt for a goal-driven channel run. */
   goalRun?: GroupGoalRunCardData;
   /** call rows: one finished Live call (its id, times and length, and a
@@ -157,6 +159,9 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   /** #291: a line a person's AI client sent (send_prompt): not the person
    * typing. Folded with the bot's answer into one exchange chip. */
   aiClient?: true;
+  /** #2808: a teammate's coordinate_bots reply relayed into the requester's
+   * chat as it is: who wrote it, shown above the bubble. */
+  relayedFrom?: { botId: string; name: string; color?: MausColor };
   /** Auto: the model this delivered work ran on (the delegation card and the
    * worker's activity row). */
   autoModel?: AutoModelRecord;
@@ -532,6 +537,8 @@ export interface Bot {
   approvalApplied?: import("../../../shared/approval-mode").AppliedApprovalLevel;
   /** how autonomously this bot may act on its own (shared/proactive-mode.ts); "off" = never, absent = the default (proactiveModeFor) */
   proactiveMode?: ProactiveMode;
+  /** #2691: direct triggers per channel (shared/direct-triggers.ts). */
+  directTriggers?: import("../../../shared/direct-triggers").DirectTriggers;
   /** #2048: remembered publish target id (sagax_page, sagax_artifact, …). */
   pageTargetDefault?: string;
   /** tools this bot may always use without asking */
@@ -556,6 +563,8 @@ export interface Bot {
   collaboratorsCreateRoutines?: boolean;
   /** whether this bot may write email draft cards (on unless switched off) */
   emailDrafts?: boolean;
+  /** #2747: a bot on a Grok engine loads its account's grok.com connectors (off unless switched on) */
+  grokAccountConnectors?: boolean;
   /** whether this bot uses native memory (on unless switched off) */
   memoryEnabled?: boolean;
   /** whether this bot's turns use the loop guard (on unless switched off; workspace setting still applies) */
@@ -1681,8 +1690,11 @@ export type Action =
       /** 2026-10-26 (#1065): "folder" keeps the card's folder rule (every
        * file of the folder and its subfolders) instead of the exact path. */
       ruleScope?: "folder";
-      /** Local UI recovery hook for voice flows. Never sent to the server. */
-      onError?: (message: string) => void;
+      /** Local UI recovery hook for voice flows. Never sent to the server.
+       * `settled` is true when the request was already settled elsewhere
+       * (409): the card already shows the server's real outcome, so the
+       * caller must not roll it back. */
+      onError?: (message: string, settled?: boolean) => void;
     }
   | { type: "newTask"; botId: string; projectId?: string; cwd?: string; confidential?: boolean; /** "New topic" in the single stream */ stream?: boolean; onCreated?: () => void; onError?: (message: string) => void }
   /** One way only (src/lib/confidential-thread.ts): the server refuses any

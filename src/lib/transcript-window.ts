@@ -95,32 +95,3 @@ export function resolveTranscriptWindow<T>(
     endIndex: end,
   };
 }
-
-/** Rows a switch paints at once (#2595). Opening another bot or thread
- * renders its last rows only, inside the view transition, then the rest of the
- * window arrives in steps of the same size while the browser is idle. Measured
- * headless: a synchronous mount of a 90-row thread with tables and code took
- * a 60 ms long task and up to 8 dropped frames per switch. */
-export const FIRST_PAINT_ROWS = 24;
-
-/** The rows a switch shows while it is still painting: the last `rows` of the
- * window, or the whole window once painting is done (`rows` is Infinity). */
-export function paintedRows<T>(visible: T[], rows: number): T[] {
-  return rows >= visible.length ? visible : visible.slice(visible.length - rows);
-}
-
-/** The next step of a progressive paint: one more batch, or done (Infinity). */
-export function nextPaintRows(rows: number, total: number, step: number = FIRST_PAINT_ROWS): number {
-  return rows + step >= total ? Number.POSITIVE_INFINITY : rows + step;
-}
-
-/** Run `task` when the browser is idle (at most `timeout` ms later); returns
- * the cancel. Falls back to a timer where requestIdleCallback is missing. */
-export function whenIdle(task: () => void, timeout: number = 200): () => void {
-  if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
-    const handle = window.requestIdleCallback(task, { timeout });
-    return () => window.cancelIdleCallback(handle);
-  }
-  const handle = setTimeout(task, 16);
-  return () => clearTimeout(handle);
-}

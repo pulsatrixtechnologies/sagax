@@ -110,7 +110,7 @@ describe("Settings search", () => {
     expect(sectionMatches(section("security"), "approbations")).toBe(true);
     expect(sectionMatches(section("organization"), "approbations")).toBe(false);
     for (const query of ["sauvegarde", "restaurer"]) expect(sectionMatches(section("backups"), query), query).toBe(true);
-    // JC 2026-11-06: Grok Bot / primary-bot preference import left Backup; those words no longer open it
+    // the owner 2026-11-06: the reference app / primary-bot preference import left Backup; those words no longer open it
     for (const query of ["grok import", "import grok", "x.ai", "share link", "lien de partage"]) {
       expect(sectionMatches(section("backups"), query), query).toBe(false);
     }
@@ -124,7 +124,7 @@ describe("Settings search", () => {
     }
     // 2026-10-26: no Full access card any more
     expect(cardsMatching("accès complet")).not.toContain("organization.fullAccess");
-    // #2090: Grok Bot / preferences import card is gone; restore stays a section keyword.
+    // #2090: the reference app / preferences import card is gone; restore stays a section keyword.
     expect(cardsMatching("restaurer")).not.toContain("backups.import");
   });
 });

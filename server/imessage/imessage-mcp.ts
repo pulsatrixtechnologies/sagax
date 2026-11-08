@@ -22,6 +22,9 @@ import type { ImessageSender } from "./imessage-send.ts";
 import { MAC_APP_TOOLS, isMacAppTool, macAppOfTool, macAppOperation, macAppTarget, macAppToolWrites, type MacAppId, type MacAppToolResult } from "../../electron/mac-apps.mjs";
 
 const SEND_FILE_MAX_BYTES = 8_000_000;
+const MESSAGES_NEEDS_FULL_DISK = "Messages could not be read. Sagax needs Full Disk Access on this Mac.";
+/** What SQLite and the file system say when macOS refuses chat.db to this app. */
+const MESSAGES_ACCESS_REFUSED = /\bunable to open database file\b|\bauthori[sz]ation denied\b|\boperation not permitted\b|\bpermission denied\b|\bSQLITE_(?:CANTOPEN|AUTH|PERM)\b|\bEPERM\b|\bEACCES\b/i;
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 
@@ -172,14 +175,19 @@ function sendFile(deps: MessagesMcpDeps, raw: unknown): { path: string; name: st
 function withReader<T>(deps: MessagesMcpDeps, run: (reader: ReturnType<typeof openMessagesReader>["reader"]) => T): T | ToolResult {
   if (!deps.useMessages) return text("Messages is off. The person turns it on in Settings > Computer > Messages.", true);
   if (!messagesOnBotMac(deps.host).ok) return text("Messages runs only on the Mac where this Sagax app runs, not from a server and not through another Mac.", true);
-  if (!deps.dbDir || !messagesDbPresent(deps.dbDir)) return text("Messages could not be read. Sagax needs Full Disk Access on this Mac.", true);
-  const opened = openMessagesReader(deps.dbDir);
+  if (!deps.dbDir || !messagesDbPresent(deps.dbDir)) return text(MESSAGES_NEEDS_FULL_DISK, true);
+  let opened: ReturnType<typeof openMessagesReader> | null = null;
   try {
+    opened = openMessagesReader(deps.dbDir);
     return run(opened.reader);
   } catch (error) {
-    return text(error instanceof Error ? error.message : "Messages could not be read.", true);
+    // #2690: Full Disk Access revoked while chat.db still exists: SQLite
+    // refuses the open ("unable to open database file", "authorization
+    // denied"). Say the one sentence the reconnect card is raised on.
+    const said = error instanceof Error ? error.message : "";
+    return text(MESSAGES_ACCESS_REFUSED.test(said) ? MESSAGES_NEEDS_FULL_DISK : said || "Messages could not be read.", true);
   } finally {
-    opened.close();
+    opened?.close();
   }
 }
 

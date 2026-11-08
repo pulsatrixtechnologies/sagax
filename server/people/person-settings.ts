@@ -1,4 +1,4 @@
-// A person's own Settings > Experimental choices and browser profiles on an
+// A person's own Settings > Developer > Experimental choices and browser profiles on an
 // organization server (#1098, 2026-10-27, shared/person-settings.ts). One
 // file per person, `principals/<id>/person-settings.json` (mode 0600), read
 // and written only for that person (server/routes/person-settings.ts). A

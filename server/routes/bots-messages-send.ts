@@ -480,7 +480,15 @@ async function handleBotMessagePost(deps: BotsMessagesRouteDeps, ctx: RouteConte
     // check, which would refuse /feedback as an unknown command.
     if (feedback && !guarded && !pressed && !voiceCall) {
       const feedbackSendId = parseSendId(body.sendId);
-      const earlier = feedbackSendId ? store.messagesFor(threadId).find((m: any) => m.role === "user" && m.sendId === feedbackSendId) : undefined;
+      const sameSendId = feedbackSendId ? store.messagesFor(threadId).find((m: any) => m.role === "user" && m.sendId === feedbackSendId) : undefined;
+      // #2842: every bot passes here. Only a retry of the same text gets the
+      // earlier receipt; a different text under that sendId goes on to the
+      // send path's own conflict check (409), or is refused in the Feedback
+      // conversation itself, which never reaches that path.
+      if (sameSendId && sameSendId.text !== typed && bot.systemBot === "feedback") {
+        return json(res, 409, { error: "sendId already belongs to another message" });
+      }
+      const earlier = sameSendId && sameSendId.text === typed ? sameSendId : undefined;
       const handled = earlier ?? feedback.handleMessage({
         botId: bot.id, threadId, text: typed, principalId: actorPrincipalId(auth) || null,
         ...(feedbackSendId ? { sendId: feedbackSendId } : {}), sender: messageSender(auth),

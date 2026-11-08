@@ -152,11 +152,11 @@ describe("place rename in the screen picker", () => {
     const input = host.querySelector<HTMLInputElement>("[data-computer-rename-input]")!;
     expect(input).not.toBeNull();
     expect(input.value).toBe("JeanChrophesMBP.localdomain");
-    typeInto(input, "MacBook de JC");
+    typeInto(input, "MacBook de AB");
     act(() => {
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     });
-    expect(onRename).toHaveBeenCalledWith("desktop:d1", "MacBook de JC");
+    expect(onRename).toHaveBeenCalledWith("desktop:d1", "MacBook de AB");
     expect(onPick).not.toHaveBeenCalled();
   });
 

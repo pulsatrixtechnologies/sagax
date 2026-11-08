@@ -154,6 +154,57 @@ withdraws its notice and removes the source backlink. A late model review
 re-reads the live address and falls back to the original execution thread.
 Verification: `docs/verification/peer-approvals.md`.
 
+## Event subscriptions (#2700, 2026-11-08)
+
+`BotEventSubscriptions` (`server/bot-events/bot-event-subscriptions.ts`,
+shapes in `shared/bot-event-subscriptions.ts`) pushes a bot's settled routine
+runs (run.reported / run.quiet / run.failed, proactive wakes left out) to a
+URL or to one of the owner's routines, in place of polling. URL: POST signed
+`X-Sagax-Signature: v1=<hex HMAC-SHA256 of "<X-Sagax-Timestamp>.<body>">`,
+redirect manual, 10 s timeout, retries 0 / 5 s / 30 s (none on a 4xx other
+than 408/429). On the shared server (Perspicax) `checkMediaDestination` blocks
+private destinations. Routine: the target runs with webhookId `sub:<id>` and
+the event as fenced data; a `sub:` run never feeds another routine target
+(loop guard) and runs confined unless the bot is at Full. Isolation: a run
+with runAs only reaches subscriptions of that owner. Store:
+`DATA_DIR/bot-event-subscriptions.json` (0600), 20 per bot, the secret shown
+once at creation. Routes `/api/bots/:id/event-subscriptions` (GET, POST,
+DELETE /:subId, POST /:subId/test) need sees + seesAll; UI under Settings >
+Developer > Per bot, after Webhooks. MCP resources/subscribe is not done
+(per-turn tokens on the Perspicax client). Coverage:
+`server/bot-events/bot-event-subscriptions.test.ts`.
+
+## Proactive metrics (#2698, 2026-11-08)
+
+`ProactiveMetricsLedger` (`server/proactive/proactive-metrics.ts`, shapes in
+`shared/proactive-metrics.ts`) keeps one bucket per bot and day in
+`DATA_DIR/proactive-metrics.json` (0600, 400 days). A settled proactive wake
+counts once by run id (reported / quiet / failed, cost); ProactiveProposals
+events count proposed / accepted / declined / expired; a write step on a wake
+(noteWakeDryRun) counts a write. Precision = accepted / (accepted + declined +
+expired). Time saved is an estimate (10 min per report, 2 per write, 5 per
+accepted proposal) labelled as such. `GET /api/bots/:id/proactive-metrics?days=`
+needs the same sees + seesAll as bot analytics; the Proactivity group sits in
+the Analytics tab under Usage and is left out when the route answers 404 or
+the bot is not proactive with nothing recorded. No backfill: counts start at
+deploy. Coverage: `server/proactive/proactive-metrics.test.ts`.
+
+## Goal routines (#2696, 2026-11-08)
+
+`Routine.goal` (`shared/routine-goal.ts`) is an objective in the person's
+words with an optional deadline; the schedule becomes the fallback cadence.
+Each run gets a fenced `<goal>` block and ends with `GOAL_STATUS:` and
+`NEXT_CHECK:` lines that `settleGoal` strips from the report. `achieved`
+stops the routine (disabled, no next run); a passed deadline stops it as
+`expired` with a problem; `NEXT_CHECK` (clamped 5 min to 14 days, never past
+the deadline) overrides `nextRunAt` and re-arms a fired once schedule, but
+never a routine the person paused. `blocked`, or the same progress note on 3
+checks in a row, becomes a run problem and so a person-attention card. An
+update with the same text and deadline keeps the progress; a new wording
+starts fresh; null clears it. Not for room goals. The editor (Goal section),
+HTTP API, propose_routine, propose_routine_action and update_routine carry it.
+Coverage: `shared/routine-goal.test.ts`, `server/routines/routine-goal.test.ts`.
+
 ## Routine reasoning effort (#1999, 2026-11-04)
 
 `Routine.effort` and `RoutineRun.effort` follow the model override, using
@@ -2496,6 +2547,37 @@ respecté, et si je suis en bypass que ça ne le demande pas.").
   read passes, a send at Ask and Auto shows its card, Always allow is kept,
   Full sends with no card).
 
+## A bot's Grok sees only the MCP servers Sagax mounts (#2747, 2026-11-08)
+
+A Grok bot inherited every MCP connector of the person's own tools: the
+`[mcp_servers.*]` of `~/.grok/config.toml`, `~/.claude.json`,
+`~/.cursor/mcp.json`, the project `.grok/config.toml` and `.mcp.json`, and
+installed plugins' `.mcp.json` (production Perspicax tools on an operator's Mac).
+`GROK_CONFIG` overlays cannot remove MCP tables, so each turn runs on an
+isolated home (`server/drivers/acp/grok-mcp-isolation.ts`, from
+`applyTurnEnv`, solo and organization alike):
+- `<DATA_DIR>/engines/grok-isolated/<hash of the real home>/.grok` links every
+  entry of the real home (login, `sessions`, caches, skills, trusted folders)
+  except `config.toml`, `requirements.toml`, `installed-plugins`, `plugins`,
+  `marketplace-cache` and the MCP credentials. `sessions` is made in the real
+  home first, so a resume finds the session either way.
+- `config.toml` is the real one without any `mcp_servers`, `plugins`,
+  `marketplace` or `disabled_mcp_servers` table or key (models, effort and the
+  `[model.slug]` written by `resolveTurnModel` stay). `requirements.toml` puts
+  `enable_all_project_mcp_servers = false` ahead of the person's own policy.
+- `GROK_AUTH_PATH` names the real `auth.json`, so a token refresh never
+  forks the login; `GROK_CLAUDE_MCPS_ENABLED`, `GROK_CURSOR_MCPS_ENABLED` and
+  `GROK_CODEX_MCPS_ENABLED` are `false`. The managed connectors keep
+  `grokCloudConnectorEnv` (the person's own grok.com account only).
+- The approval gate no longer falls back to Grok's own auto mode when a config
+  declares MCP (`grokConfigDeclaresMcp` is gone): every MCP server of the turn
+  is one Sagax mounts.
+- Measured on grok 1.0.77 (2026-11-08), `_x.ai/mcp/list` after session/new
+  with `agents` only: real home = 10 servers (4 config, 2 Cursor, vercel
+  plugin, 2 managed, agents); isolated home with managed off = `agents` only.
+- Tests: `server/drivers/acp/grok-mcp-isolation.test.ts`, `acp.test.ts`
+  ("#2747: a bot's Grok never loads the person's own MCP servers").
+
 ## Bot content has a default theme (2026-10-28)
 
 Pages and widgets bots make draw in the app's look, sober as the reference design.
@@ -4590,7 +4672,7 @@ decrypted archive, the staging and the restored folder).
 `docs/superpowers/specs/2026-10-16-meetings-and-maintenance.md`). Rules,
 covered by `server/meetings/*.test.ts` and `server/routes/meetings.test.ts`:
 
-- Experimental, **off by default**: Settings > Experimental > Meeting
+- Experimental, **off by default**: Settings > Developer > Experimental > Meeting
   notetaker (Google Meet), config `features.meetingNotetaker`
   (`meetingNotetakerEnabled`, server/config.ts). The server enforces it:
   while off, `join_meeting` is not in the agents catalog (`SAGAX_MEETINGS`,
@@ -7608,10 +7690,12 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   stream), never on the host; without server environments it is refused.
 - A server-wide MCP command is never added (403 `org_host_command`) nor
   mounted (`withoutHostCommands`) on an organization server.
-- Connecter GitHub (`server/github/github-connect.ts`): the device flow of the
-  organization's GitHub OAuth App (`SAGAX_GITHUB_CLIENT_ID`, or
-  `organization.githubClientId` from Settings > Organization), else a pasted
-  token. The token goes into the person's environment for gh and git
+- Connecter GitHub (`server/github/github-connect.ts`): always the device
+  flow first (a link and a code, owner 2026-11-08), with Sagax's built-in OAuth
+  App (`server/github/builtin-client.ts`); `organization.githubClientId` from
+  Settings > Organization, then `SAGAX_GITHUB_CLIENT_ID`, override it. A
+  pasted token is a fallback only, under Advanced, offered by the bot only
+  when the person asks or the device flow fails. The token goes into the person's environment for gh and git
   (`githubSandboxArgv`, through `SAGAX_GH_TOKEN`, never the argv), into their
   personal servers with auth `github`, and into Sagax's own fetches for them
   (private skills, private marketplaces), and since 2026-10-28 into the
@@ -7800,8 +7884,9 @@ connectors and My MCP servers only.
   the Installed row and the server's page follow it, with "Open the
   GitHub plugin".
 - Connection (organization server): `MyGithubConnection`, one Connect
-  GitHub for everyone, with no admin step (device flow when the OAuth App
-  is set, else a token).
+  GitHub for everyone, with no admin step: the main button is always the
+  device flow (an error says so with Try again), the token only under
+  Advanced, collapsed.
 - A load that meets a proxy's bare 502/503/504 (Sagax restarting behind
   Caddy during a deploy) is asked again (`retryTransient`); a failure is one
   plain line (`readableError`), never the raw status.

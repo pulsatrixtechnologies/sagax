@@ -1,4 +1,4 @@
-// JC 2026-11-01: "the bots talk to each other, they do not answer me, I
+// the owner 2026-11-01: "the bots talk to each other, they do not answer me, I
 // have to relaunch them". A teammate's reply comes back to the conversation
 // that waits for it unless the person stopped that conversation.
 import { describe, expect, it } from "vitest";

@@ -50,7 +50,7 @@ vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capab
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: fixture.api,
-  useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [], bots: [] }, dispatch: fixture.dispatch }),
+  useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [], bots: [], groups: [] }, dispatch: fixture.dispatch }),
 }));
 vi.mock("@/lib/thread-preferences", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/thread-preferences")>();
@@ -376,7 +376,7 @@ describe("Settings → Appearance", () => {
     expect(html).toContain('<option value="appearance" selected="">Appearance</option>');
     // Pair devices is hidden since 2026-10-14
     expect(html).not.toContain('<option value="companion"');
-    // General (system, keys, Advanced mode) is about this desktop, so it stays (JC 2026-11-06)
+    // General (system, keys, Advanced mode) is about this desktop, so it stays (the owner 2026-11-06)
     expect(html).toContain('<option value="general">General</option>');
     expect(html).not.toContain('<option value="connections">');
     expect(html).not.toContain('<option value="engines">');
@@ -396,7 +396,7 @@ describe("Settings → Appearance", () => {
     // one card, two actions; each form opens in place (2026-10-14)
     expect(html).toContain('data-backup-action="export"');
     expect(html).toContain('data-backup-action="import"');
-    // JC 2026-11-06: Grok Bot import and primary-bot preference import are gone from Backup
+    // the owner 2026-11-06: the reference app import and primary-bot preference import are gone from Backup
     expect(html).not.toContain('data-settings-card="import"');
     expect(html).not.toContain('data-settings-card="backups.import.grok"');
     expect(html).not.toContain('data-settings-card="backups.import.prefs"');
@@ -500,11 +500,11 @@ describe("Settings → Notifications", () => {
     expect(html).toContain("On macOS, also choose Alerts in System Settings &gt; Notifications.");
   });
 
-  it("is laid out as Alerts plus Privacy, with nudges and blocked people folded (#2080)", () => {
+  it("is laid out as Signals, Alerts plus Privacy, with nudges and blocked people folded (#2080, #2695)", () => {
     fixture.section = "notifications";
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    expect(groups).toEqual(["notificationTypes", "alerts", "privacy"]);
+    expect(groups).toEqual(["notificationTypes", "signals", "alerts", "privacy"]);
     expect(html).toContain(">Alerts</h3>");
     expect(html).toContain(">Privacy</h3>");
     expect(html).toContain(">Nudges</div>");

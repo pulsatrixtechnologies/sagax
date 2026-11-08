@@ -156,7 +156,7 @@ final class DesktopBotPanelTests: XCTestCase {
     }
 
     func testWidthIsHeldToTheDesktopRange() {
-        // Bot panel 308 like Grok Bot (#2141 / BOT_PANEL_BOUNDS).
+        // Bot panel 308 like the reference app (#2141 / BOT_PANEL_BOUNDS).
         XCTAssertEqual(DesktopPanelPlacement.clampedWidth(nil), 308)
         XCTAssertEqual(DesktopPanelPlacement.clampedWidth(.nan), 308)
         XCTAssertEqual(DesktopPanelPlacement.clampedWidth(100), 308)

@@ -25,8 +25,9 @@ detached task; opening whichever task happens to be active is a failure.
 Desktop notifications are suppressed while the window already has focus. The
 iOS app can present live or replayed notifications while it is running and uses
 the same bot/task target when the notification is tapped. Waking a terminated
-iOS app still requires a future APNs relay; local network or VPN connectivity
-alone cannot provide closed-app delivery.
+iOS app needs APNs: a server with the key pushes directly, a server without it
+forwards through the APNs relay (`docs/ios-push.md`, #2697). Proactive cards
+that need the person (`needs-you`) push like an approval.
 
 ## Automated coverage
 

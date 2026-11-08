@@ -1,4 +1,4 @@
-// Bot profile page (Grok Bot panel A, #2127): banner, overlapping mascot,
+// Bot profile page (reference app panel A, #2127): banner, overlapping mascot,
 // the name with its title under it (never "Name · Title"), privacy line,
 // pill tabs General / Knowledge / Settings. Replaces the Edit bot root as
 // the destination of the panel's gear. In the iPad main column (desktop
@@ -146,7 +146,7 @@ struct BotProfilePage: View {
     // MARK: Header
 
     private var banner: some View {
-        // Quiet grey gradient like Grok Bot (`bot-profile-banner`, #2141),
+        // Quiet grey gradient like the reference app (`bot-profile-banner`, #2141),
         // not the mascot's colour.
         LinearGradient(
             colors: bannerColors,

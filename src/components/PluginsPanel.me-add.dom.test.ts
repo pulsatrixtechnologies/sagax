@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Plugins > Me on an organization server (JC, 2026-11-06): the person's own
+// Plugins > Me on an organization server (the owner, 2026-11-06): the person's own
 // MCP servers are rows of Installed, no "My MCP servers" card at the bottom,
 // and "+ Add" offers the same three entries as Organization (Add an MCP
 // server, Paste config, New skill), each one in the person's own scope.

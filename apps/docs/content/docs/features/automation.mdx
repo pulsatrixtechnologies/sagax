@@ -30,6 +30,19 @@ If your computer is often off when a routine is due, open the routine's **Advanc
 
 Right-click a folder or open its **…** menu, then choose **Mark folder as read**. This clears unread dots without opening each thread. It does not answer approvals, dismiss questions, or stop any running work.
 
+## Heartbeat checklist
+
+Each bot can keep a checklist in a file named `HEARTBEAT.md` at the root of its workspace. You can create and edit it in the bot's files (choose **New**, then **File**, and name it `HEARTBEAT.md` at the top level), and the bot can edit it too when you ask it, for example "add a check that the backup is running to your heartbeat".
+
+Every 30 minutes, Sagax checks the lines it understands on its own, without the model:
+
+- `page https://status.example.com contains "All systems operational"` (or `missing "<text>"`)
+- `file ~/inbox/report.csv exists` (or `missing`, or `changed`)
+- `process Backup running` (or `gone`)
+- `at 08:30 send the morning summary`, due once a day after that time
+
+The bot is woken only when one of these finds a gap, and it answers in its usual conversation with you, never in a separate thread. A gap wakes it once: a check that stays in gap does not wake it again until it recovers and fails again. Other lines are notes: they never wake the bot on their own, and the bot reads them only when a check wakes it. A checklist with only notes does nothing until you add a check; in a mixed checklist the notes come along with the gap that woke the bot. Add a line like `every: 15m` or `every: 2h` to change the interval (5 minutes at least, a day at most). An empty file, or no file, does nothing.
+
 ## Webhook triggers
 
 Webhooks start the same queued task executor from an external HTTP request. They are independent from schedules and use a dedicated receiver on `127.0.0.1:8800` by default.

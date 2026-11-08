@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -8,6 +8,7 @@ import { appleDate, fileInsideRoot, openMessagesReader } from "./imessage-db.ts"
 import { resetImessageSends } from "./imessage-cards.ts";
 import { handleMessagesMcp } from "./imessage-mcp.ts";
 import { appleScriptString, imessageSendScript } from "./imessage-send.ts";
+import { connectorReauthFailure, MAC_FULL_DISK_ACCESS_URL } from "../../shared/connector-setup.ts";
 import type { ImessageSend, ImessageSender } from "./imessage-send.ts";
 
 function fixtureDb(): string {
@@ -57,6 +58,36 @@ describe("Messages send", () => {
     expect(appleScriptString(`say "hi"`)).toBe(`"say \\"hi\\""`);
     expect(imessageSendScript({ to: "+15145551234", text: "hi", service: "iMessage" })).toContain("participant");
     expect(imessageSendScript({ to: "+15145551234", text: "hi", service: "iMessage" })).not.toContain("osascript");
+  });
+
+  it("#2690: Full Disk Access revoked while chat.db exists raises the reconnect Messages card", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-messages-"));
+    const file = join(dir, "chat.db");
+    const db = new DatabaseSync(file);
+    db.exec("CREATE TABLE chat (ROWID INTEGER PRIMARY KEY)");
+    db.close();
+    // macOS refuses the file to this app: here, no read permission at all
+    chmodSync(file, 0o000);
+    try {
+      const out = await handleMessagesMcp({ method: "tools/call", params: { name: "find_chats", arguments: {} } }, {
+        host: { platform: "darwin", identityKind: "solo" },
+        useMessages: true,
+        dbDir: dir,
+        sender: { send: async () => ({ service: "iMessage", via: "participant" }) },
+        botId: "bot",
+        threadId: "thread",
+        openCard: () => {},
+      });
+      const said = textOf(out);
+      expect(said).toBe("Messages could not be read. Sagax needs Full Disk Access on this Mac.");
+      expect(connectorReauthFailure("mcp__messages__find_chats", said)).toMatchObject({ label: "Messages", provider: "mac", url: MAC_FULL_DISK_ACCESS_URL });
+    } finally {
+      chmodSync(file, 0o600);
+    }
+    // the raw SQLite refusal, as an older build or another path says it
+    expect(connectorReauthFailure("mcp__messages__read_messages", "unable to open database file")).toMatchObject({ provider: "mac" });
+    expect(connectorReauthFailure("mcp__messages__read_messages", "authorization denied")).toMatchObject({ provider: "mac" });
+    expect(connectorReauthFailure("mcp__claude_ai_Linear__list", "unable to open database file")).toBeNull();
   });
 
   it("sends to an allowed recipient and cards everyone else, and never on an organization server", async () => {

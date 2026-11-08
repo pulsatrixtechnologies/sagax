@@ -396,7 +396,6 @@ describe("transcript viewport", () => {
   });
 
   it("mounts only the last window of a long thread and re-tails it when another thread opens", () => {
-    vi.useFakeTimers();
     const view = mount({ messages: rows(300) });
     expect(view.current.windowedMessages).toHaveLength(120);
     expect(view.current.hiddenCount).toBe(180);
@@ -409,14 +408,10 @@ describe("transcript viewport", () => {
     view.rerender({ threadId: "other", messages: [{ id: "ask", role: "user" }, ...rows(299, 1_001)] });
     expect(view.current.transcriptKey).toBe("bot:other");
     expect(view.current.hiddenCount).toBe(180);
-    // the switch paints the newest rows first (#2595), then the rest of the
-    // window when the browser is idle, so the click never blocks a frame
-    expect(view.current.windowedMessages).toHaveLength(24);
-    expect(view.current.windowedMessages[0]?.id).toBe("m1276");
-    for (let step = 0; step < 10; step++) view.act(() => vi.advanceTimersByTime(20));
+    // the whole window at once: its rows are virtualized (VirtualRow, #2755),
+    // no idle steps that re-render it after the switch
     expect(view.current.windowedMessages).toHaveLength(120);
     expect(view.current.windowedMessages[0]?.id).toBe("m1180");
-    vi.useRealTimers();
   });
 
   it("keeps the window bounded while the reader follows new rows", () => {

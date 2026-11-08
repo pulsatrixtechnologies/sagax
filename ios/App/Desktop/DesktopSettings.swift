@@ -22,6 +22,11 @@ final class DesktopSettingsModel: ObservableObject {
     @Published private(set) var loaded = false
     @Published var error: String?
     @Published private(set) var saving: Set<String> = []
+    /// `useServerFeature("memberPersonSettings")`: from the descriptor's
+    /// list, else from what a personal switch's save showed.
+    @Published private(set) var personalServed: ServerFeatureState = .unknown
+    private var listedFeatures: [String]?
+    private var personalEvidence: Bool?
 
     private weak var session: Session?
     var client: CompanionClient? { session?.settingsClient }
@@ -34,10 +39,18 @@ final class DesktopSettingsModel: ObservableObject {
         guard let client else { loaded = true; return }
         async let config = try? client.desktopSettingsConfig()
         async let usage = try? client.usage()
+        async let environment = try? client.environment()
         let loadedConfig = await config
         self.config = loadedConfig
         self.usage = await usage
+        listedFeatures = await environment?.capabilities?.features
+        notePersonal(nil)
         loaded = true
+    }
+
+    private func notePersonal(_ present: Bool?) {
+        if let present { personalEvidence = present }
+        personalServed = .of("memberPersonSettings", listed: listedFeatures, evidence: personalEvidence)
     }
 
     func reloadUsage() async {
@@ -55,8 +68,15 @@ final class DesktopSettingsModel: ObservableObject {
         do {
             config = try await client.updateDesktopSettings(change)
             DesktopSidebarFlags.shared.apply(config)
+            if case .myFeature = change { notePersonal(true) }
             return nil
         } catch {
+            // An older organization server has no /api/me/experimental: the
+            // switches go and the note says why (featureMissingOnServer).
+            if case .myFeature = change, ServerFeatureState.routeMissing(error) {
+                notePersonal(false)
+                return nil
+            }
             let message = error.localizedDescription
             self.error = message
             return message
@@ -160,6 +180,7 @@ extension DesktopSettingsSection {
         case .organization: "Organization"
         case .appearance: "Appearance"
         case .experimental: "Experimental"
+        case .developer: "Developer"
         case .connections: "API keys"
         case .myConnections: "My connections"
         case .decisionModel: "Decision model"
@@ -191,6 +212,7 @@ extension DesktopSettingsSection {
         case .organization: AppStrings.localized("Organization")
         case .appearance: AppStrings.localized("Appearance")
         case .experimental: AppStrings.localized("Experimental")
+        case .developer: AppStrings.localized("Developer")
         case .connections: AppStrings.localized("API keys")
         case .myConnections: AppStrings.localized("My connections")
         case .decisionModel: AppStrings.localized("Decision model")
@@ -231,6 +253,7 @@ extension DesktopSettingsSection {
         case .backups: "Save, restore and bring in your data."
         case .about: "This app's version, updates and help."
         case .experimental: "Features still being tried out."
+        case .developer: "Technical options: run details, timeouts, telemetry, logs and diagnostics."
         case .connections, .myConnections, .decisionModel, .myEngines, .companion,
              .people, .mail, .activity, .updates, .importBot:
             nil
@@ -243,6 +266,7 @@ extension DesktopSettingsSection {
         case .organization: .building2
         case .appearance: .palette
         case .experimental: .flaskConical
+        case .developer: .code2
         case .connections: .keyRound
         case .myConnections: .plug
         case .decisionModel: .zap
@@ -418,7 +442,8 @@ struct DesktopSettingsPage: View {
         case .general: AnyView(DesktopGeneralSettings())
         case .organization: AnyView(DesktopOrganizationSettings())
         case .appearance: AnyView(DesktopAppearanceSettings())
-        case .experimental: AnyView(DesktopExperimentalSettings())
+        // #2729: Developer as on the desktop, Experimental features one of its cards.
+        case .experimental, .developer: AnyView(DesktopDeveloperSettings())
         case .connections: AnyView(DesktopAPIKeysSettings())
         // 2026-10-27: GitHub and the person's MCP servers live in Connect
         // apps (Sources, Providers); this page links there
@@ -520,7 +545,8 @@ extension IPadParityScreen {
         case .settingsCloudAccount: (.settings, .general, nil)
         case .settingsOrganization: (.settings, .organization, nil)
         case .settingsAppearance: (.settings, .appearance, nil)
-        case .settingsExperimental: (.settings, .experimental, nil)
+        // #2729: Experimental features is a card of Developer.
+        case .settingsDeveloper, .settingsDeveloperScrolled: (.settings, .developer, nil)
         case .settingsConnections: (.settings, .connections, nil)
         case .settingsMyConnections: (.settings, .myConnections, nil)
         case .settingsDecisionModel: (.settings, .decisionModel, nil)
@@ -558,14 +584,14 @@ extension DesktopShellModel {
 }
 #endif
 
-/// settings-general-scrolled: the page scrolled to its end.
+/// settings-general-scrolled, settings-developer-scrolled: the page scrolled to its end.
 enum DesktopSettingsScroll {
     static let bottom = "desktop-settings.bottom"
     static let navBottom = "desktop-settings.nav-bottom"
 
     static var parityScrollsToEnd: Bool {
         #if DEBUG
-        ParityLaunch.current?.iPadScreen == .settingsGeneralScrolled
+        [.settingsGeneralScrolled, .settingsDeveloperScrolled].contains(ParityLaunch.current?.iPadScreen)
         #else
         false
         #endif

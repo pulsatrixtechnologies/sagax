@@ -1,4 +1,4 @@
-// Settings > Experimental > My Chrome: off by default. When on, bots set to
+// Settings > Computer > My Chrome: off by default. When on, bots set to
 // "My Chrome" work in the person's own Chrome, only on the sites listed here,
 // with an approval card for payments, sends and deletes, and Stop ends it at
 // once (server/browser/my-chrome/).

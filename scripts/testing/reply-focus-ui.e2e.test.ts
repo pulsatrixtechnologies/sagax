@@ -12,7 +12,7 @@ const binary = resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.e
 const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(binary);
 if (!enabled) console.info("skipping reply focus UI e2e: set SAGAX_UI_E2E=1 to install the pinned browser");
 
-// MOCA-263: choosing Reply showed "Replying to …" but left the caret outside
+// ticket 263: choosing Reply showed "Replying to …" but left the caret outside
 // the draft, so the reply could not be typed without clicking the box first.
 (enabled ? it : it.skip)("puts the caret in the draft when a message is chosen to reply to", async () => {
   let child: ChildProcess | undefined;

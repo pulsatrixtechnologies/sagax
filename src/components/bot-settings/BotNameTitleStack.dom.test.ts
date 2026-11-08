@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-// JC (2026-11-06, again 2026-11-07): a bot's title goes UNDER its name,
+// the owner (2026-11-06, again 2026-11-07): a bot's title goes UNDER its name,
 // never "Name · Title" on one line, even when the name was stored with the
-// title glued on (Grok Bot stores "Heron · Chief of Staff" as the name).
+// title glued on (the reference app stores "Heron · Chief of Staff" as the name).
 // And the profile banner never uses light-dark(): the build rewrites it
 // into variables the skins never define, so the banner went transparent.
 import { readFileSync } from "node:fs";

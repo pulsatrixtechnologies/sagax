@@ -339,6 +339,8 @@ let ownTexts: Array<{ ownerPrincipalId: string; sub: string; botId: string; from
 let contacts: Map<string, { number: string; label?: string; persona: string; language: "fr" | "en"; hideOwnerName: boolean; summarizeToOwner: boolean }> = new Map();
 let noticeUnknown = false;
 let ownerNotices: Array<{ ownerPrincipalId: string; botId: string; text: string }> = [];
+/** #2691: texts no trigger took, offered to the bot's direct text trigger. */
+let unhandled: Array<{ botId: string; ownerPrincipalId: string; key: string; from: string; label: string; text: string }> = [];
 const deps: TelephonyRouteDeps = {
   identity: () => identity,
   publicOrigin: () => ORIGIN,
@@ -362,6 +364,7 @@ const deps: TelephonyRouteDeps = {
   allowlistedContact: (_owner, from) => contacts.get(from) ?? null,
   noticeUnknown: () => noticeUnknown,
   ownerNotice: (input) => { ownerNotices.push(input); },
+  unhandled: (input) => { unhandled.push(input); },
   record: (row) => rows.push(row as unknown as Record<string, unknown>),
 };
 
@@ -401,6 +404,7 @@ beforeEach(() => {
   contacts = new Map();
   noticeUnknown = false;
   ownerNotices = [];
+  unhandled = [];
 });
 
 async function post(body: unknown, bearer?: string, raw?: string, method = "POST") {
@@ -645,6 +649,17 @@ describe("the person texting or speaking to their own bot (#2194)", () => {
       botId: "bot_abc",
       text: "SMS from Fournisseur: Livraison demain ?",
     }]);
+  });
+
+  it("#2691: a third-party text no trigger took goes to the direct text trigger; one a trigger took does not", async () => {
+    const got = await post(fresh("sms", { authenticated: false, person: undefined, sender: undefined, content: { trust: "caller", text: "Rappelle-moi" } }), token("u_123"));
+    expect(got.body).toMatchObject({ triggers: 0, reason: "no_trigger" });
+    expect(unhandled).toHaveLength(1);
+    expect(unhandled[0]).toMatchObject({ botId: "bot_abc", ownerPrincipalId: "pr_owner", text: "Rappelle-moi" });
+    expect(unhandled[0]!.key).toMatch(/^sms:/);
+    state.hooks.create(phoneTrigger());
+    await post(fresh("sms", { authenticated: false, person: undefined, sender: undefined, content: { trust: "caller", text: "Encore" } }), token("u_123"));
+    expect(unhandled).toHaveLength(1);
   });
 
   it("unknown SMS posts an owner notice when notice_unknown is on", async () => {

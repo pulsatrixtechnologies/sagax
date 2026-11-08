@@ -172,7 +172,7 @@ class DecodingTest {
         // busyBotId names only the member holding the turn. While the run
         // routes, or waits on a member busy elsewhere, the room is `working`
         // with no speaker; the desktop's Stop shows then, and so must the
-        // phone's (MOCA-148). `busy` keeps its old meaning.
+        // phone's (ticket 148). `busy` keeps its old meaning.
         val room = CompanionJson.decodeFromString<Room>(
             """{"id":"r","threadId":"rt","name":"Team","memberIds":["b1"],
               "defaultResponder":{"kind":"mentions"},"bulletin":"","unread":false,"createdAt":1,
@@ -218,7 +218,7 @@ class DecodingTest {
     fun anExpiredProposalIsNotPending() {
         // The shape the computer leaves when a routine, profile or team setup
         // proposal goes stale: no answer, no dismissal, no options. Counting it
-        // as pending left a "waiting on you" card with nothing to tap (MOCA-282).
+        // as pending left a "waiting on you" card with nothing to tap (ticket 282).
         val message = CompanionJson.decodeFromString<Message>(
             """{"id":"m2","role":"bot","kind":"options","at":1786742413762,
               "card":{"title":"Create routine?","subtitle":"Every morning at 8","options":[],"requestId":"req-2","tool":"create_routine",

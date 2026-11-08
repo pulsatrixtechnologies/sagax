@@ -45,15 +45,25 @@ export type TurnFacts = {
   senderUnproven: boolean;
   provenPerson: string | null;
   sharedServer: boolean;
+  /** #2701: whose credentials this turn's routine runs on (its bot's
+   * owner), when a routine or its lineage started the turn. */
+  routineOwner?: string | null;
 };
 
 export type TurnActor =
   | { kind: "none"; reason: "automation" | "guest" | "unproven" | "stale" | "shared" }
-  | { kind: "person"; personKey: string }
+  | { kind: "person"; personKey: string; routine?: true }
   | { kind: "operator" };
 
 export function actorForTurn(facts: TurnFacts): TurnActor {
-  if (facts.automation) return { kind: "none", reason: "automation" };
+  // #2701: a routine runs with its owner's credentials and acts in their
+  // name, in their own environment: the owner on an organization server,
+  // this computer's owner anywhere else.
+  if (facts.automation) {
+    if (!facts.sharedServer) return { kind: "operator" };
+    const owner = facts.routineOwner?.trim();
+    return owner ? { kind: "person", personKey: owner, routine: true } : { kind: "none", reason: "automation" };
+  }
   if (facts.guest) return { kind: "none", reason: "guest" };
   if (!facts.requestUsable) return { kind: "none", reason: "unproven" };
   if (facts.senderUnproven) return { kind: "none", reason: "stale" };

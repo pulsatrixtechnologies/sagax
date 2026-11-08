@@ -40,7 +40,7 @@ export interface BotsCoreStore {
   readonly groups: readonly GroupRecord[];
   readonly sections: readonly string[];
   bot(id: string): BotRecord | null | undefined;
-  createBot(input: Record<string, unknown>): BotRecord;
+  createBot(input: Record<string, unknown>, opts?: { language?: "fr" | "en" }): BotRecord;
   patchBot(id: string, patch: Record<string, unknown>): BotRecord | null | undefined;
   patchBotProfile(id: string, patch: Record<string, unknown>): BotRecord | null | undefined;
   deleteBot(id: string): void;

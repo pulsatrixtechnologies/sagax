@@ -1,4 +1,4 @@
-// Settings > Developer (#2636, JC 2026-11-07: « move every item that is
+// Settings > Developer (#2636, the owner 2026-11-07: « move every item that is
 // technical into the developer section »). One page of the App group, open
 // to every member in Simple and Advanced mode, holds the technical options
 // that were spread over Appearance, General, Usage, Experimental, About and
@@ -63,12 +63,12 @@ afterEach(() => {
 });
 
 describe("Settings > Developer (#2636)", () => {
-  it("is a page of the App group, between Experimental and About, with no admin gate", () => {
+  it("is a page of the App group, between Updates and About, with no admin gate", () => {
     const entry = SECTIONS.find((section) => section.id === "developer");
     expect(entry?.group).toBe("app");
     expect(entry?.introKey).toBe("settings.intro.developer");
     const app = SECTIONS.filter((section) => section.group === "app").map((section) => section.id);
-    expect(app).toEqual(["general", "updates", "experimental", "developer", "about"]);
+    expect(app).toEqual(["general", "updates", "developer", "about"]);
     const html = render();
     expect(html).toContain('<option value="developer" selected="">Developer</option>');
   });
@@ -109,7 +109,6 @@ describe("Settings > Developer (#2636)", () => {
       ["appearance", ['data-settings-group="conversationAdvanced"', 'data-settings-row="runCard"', "Inspector button", "Turn timing"]],
       ["general", ['data-settings-card="general.loopGuard"', 'data-settings-card="general.telemetry"', 'data-settings-card="organization.mcpCalls"']],
       ["usage", ['data-settings-card="general.usage"']],
-      ["experimental", ['data-settings-card="experimental.developer"', 'data-experimental-feature="devPods"']],
       ["about", ['data-settings-card="general.diagnostics"', 'data-settings-card="general.logs"']],
       ["backups", ['data-settings-card="general.threadCleanup"']],
     ];

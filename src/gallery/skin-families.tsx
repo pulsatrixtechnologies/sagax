@@ -58,7 +58,7 @@ function Cell({ skin, label }: { skin: SkinId; label: string }) {
           <p className="max-w-[90%] text-[12px] leading-[17px] text-ink">C'est fait : trois relances envoyées. <span className="text-accent-text">Voir les billets</span></p>
           <div className="rounded-lg bg-card p-2 text-[11px] text-ink-secondary ring-1 ring-hairline">Billet exemple · <span className="text-success">Résolu</span></div>
           <div className="mt-auto flex items-center gap-2 rounded-[18px] bg-composer px-3 py-1.5 ring-1 ring-hairline">
-            <span className="flex-1 text-[12px] text-ink-tertiary">Écrivez à votre bot</span>
+            <span className="flex-1 text-[12px] text-ink-tertiary">Écris à ton bot</span>
             <span className="flex size-[20px] items-center justify-center rounded-full bg-accent text-[11px] text-accent-ink">↑</span>
           </div>
         </section>

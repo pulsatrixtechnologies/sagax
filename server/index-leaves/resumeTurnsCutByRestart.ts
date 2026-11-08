@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** resumeTurnsCutByRestart (#1388). Pure move from server/index.ts. */
 import { failedTurnTool } from "../../shared/failed-turn.ts";
+import { TURN_CUT_BY_RESTART, TURN_RESUME_FAILED_PREFIX } from "../../shared/restart-words.ts";
 import { DATA_DIR } from "../config.ts";
 import { ROUTINE_RESTARTED, ROUTINE_RESUME_PROMPT } from "../routines/routines.ts";
 import { migrateLegacyHeldSteers, takeHeldSteersForThread, resumePromptWithHeld } from "../turns/held-steers.ts";
@@ -36,7 +37,7 @@ function resumeTurnsCutByRestart(): void {
   }
   const failed = (threadId: string, why: string) =>
     host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: failedTurnTool(why) });
-  for (const turn of cut.stale) if (host.store.taskByThread(turn.botId, turn.threadId)) failed(turn.threadId, "turn interrupted — Sagax restarted");
+  for (const turn of cut.stale) if (host.store.taskByThread(turn.botId, turn.threadId)) failed(turn.threadId, TURN_CUT_BY_RESTART);
   // #2602: the runtime resumes these itself; a turn that never comes back
   // says so in its conversation instead of leaving the promise standing.
   const promised = cut.resume.filter((turn) => turn.runtimeHeld && host.store.taskByThread(turn.botId, turn.threadId));
@@ -58,7 +59,7 @@ function resumeTurnsCutByRestart(): void {
     void host.startTurn(turn.botId, prompt, {
       threadId: turn.threadId, cardContinuation: true,
       ...(turn.speaker ? { speaker: turn.speaker as TurnSpeaker } : {})
-    }).catch((error) => failed(turn.threadId, `turn interrupted — Sagax restarted; resuming failed: ${error instanceof Error ? error.message : String(error)}`));
+    }).catch((error) => failed(turn.threadId, `${TURN_RESUME_FAILED_PREFIX}${error instanceof Error ? error.message : String(error)}`));
   }
   // Crash path (no interrupted-turns.json): held rows that no resume took
   // become one follow-up turn per thread, like busy lines draining together.

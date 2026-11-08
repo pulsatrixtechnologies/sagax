@@ -7,6 +7,13 @@ import type { InternalRouteContext } from "./internal-route.ts";
 import { createInternalSessionsRoutes, type InternalSessionsDeps } from "./internal-sessions.ts";
 import { PASS } from "./table.ts";
 
+// #2702: session_read reads real rows; here, one message per thread
+vi.mock("../messages/message-db.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../messages/message-db.ts")>()),
+  readMessageText: (threadId: string, messageId: string) => (messageId === "m1" ? { threadId, messageId, text: `report in ${threadId}`, at: 1, role: "bot" } : null),
+  readLatestMessageText: (threadId: string) => ({ threadId, messageId: "m-last", text: `latest in ${threadId}`, at: 2, role: "bot" }),
+}));
+
 const BOT = {
   id: "bot-1",
   name: "Ledger",
@@ -262,6 +269,22 @@ describe("createInternalSessionsRoutes", () => {
       query: "fromBotId=nope&threadId=t-1&messageId=m1",
     });
     expect(sent).toEqual([{ status: 403, body: { error: "unknown sender" } }]);
+  });
+
+  it("#2702: GET /session-read reads a room hit the search returned, and still hides a room the bot is not in", async () => {
+    const room = { id: "g1", name: "Ops", memberIds: [BOT.id], threadId: "t-room", tasks: [{ threadId: "t-room-task", title: "FS-01 pool guard" }] };
+    const route = createInternalSessionsRoutes(baseDeps({ groups: () => [room, { id: "g2", name: "Other", memberIds: ["bot-2"], threadId: "t-other" }] }));
+    const roomRead = await call(route, { path: "/api/internal/session-read", method: "GET", query: `fromBotId=${BOT.id}&threadId=t-room-task&messageId=m1` });
+    expect(roomRead.sent[0]).toMatchObject({ status: 200, body: { text: "report in t-room-task", task: "FS-01 pool guard", crossed: false } });
+    const latest = await call(route, { path: "/api/internal/session-read", method: "GET", query: `fromBotId=${BOT.id}&threadId=t-room` });
+    expect(latest.sent[0]).toMatchObject({ status: 200, body: { text: "latest in t-room" } });
+    const own = await call(route, { path: "/api/internal/session-read", method: "GET", query: `fromBotId=${BOT.id}&threadId=t-1&messageId=m1` });
+    expect(own.sent[0]).toMatchObject({ status: 200, body: { task: "Task one" } });
+    const other = await call(route, { path: "/api/internal/session-read", method: "GET", query: `fromBotId=${BOT.id}&threadId=t-other&messageId=m1` });
+    expect(other.sent).toEqual([{ status: 404, body: { error: "no such message in your conversations" } }]);
+    const narrow = createInternalSessionsRoutes(baseDeps({ groups: () => [room], roomFeedsBot: () => false }));
+    const hidden = await call(narrow, { path: "/api/internal/session-read", method: "GET", query: `fromBotId=${BOT.id}&threadId=t-room&messageId=m1` });
+    expect(hidden.sent[0]!.status).toBe(404);
   });
 
   it("GET /skills refuses a foreign source (403)", async () => {

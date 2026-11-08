@@ -217,7 +217,7 @@ describe("MemoryManagerPanel page", () => {
     expect(Array.from(host.querySelectorAll("[data-memory-views] button")).map((button) => button.textContent)).toEqual(["Notes", "Map", "Tags", "Quality"]);
     expect(host.querySelector("[data-memory-create]")?.textContent).toContain("New note");
     const body = host.querySelector("[data-memory-row] .content-card-body")!;
-    // JC 2026-11-03: the content first, the explorer on its right, as Automations' calendar rail.
+    // the owner 2026-11-03: the content first, the explorer on its right, as Automations' calendar rail.
     expect(body.children[0]!.tagName).toBe("SECTION");
     const rail = body.children[body.children.length - 1]!;
     expect(rail.hasAttribute("data-memory-sources")).toBe(true);
@@ -508,7 +508,7 @@ describe("MemoryManagerPanel page", () => {
     await act(async () => { (host.querySelector('[data-memory-nav="review"]') as HTMLButtonElement).click(); });
     expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(1);
   });
-  // 2026-11-03 (JC): "I need to be able to see if it's linked to a bot" and
+  // 2026-11-03 (the owner): "I need to be able to see if it's linked to a bot" and
   // delete a folder no bot is linked to; the stray "dr eggbot 0 · No folders yet" tier.
   it("says which folders a bot is linked to, and lets an unlinked one be deleted", async () => {
     (globalThis as { __memoryLinks?: boolean }).__memoryLinks = true;
@@ -569,7 +569,7 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-import-open]")).not.toBeNull();
   });
 
-  // JC 2026-11-03: a note takes the content's whole place, never over the rail.
+  // the owner 2026-11-03: a note takes the content's whole place, never over the rail.
   it("a note fills the content left of the rail, its bar in its header, and Escape or Back returns to the list where it was", async () => {
     await render();
     const scroller = host.querySelector("[data-memory-list-scroll]") as HTMLDivElement;
@@ -631,7 +631,7 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-list]")).not.toBeNull();
   });
 
-  // JC 2026-11-03: the rail on every tab, and its selection scopes each one.
+  // the owner 2026-11-03: the rail on every tab, and its selection scopes each one.
   it("keeps the rail on Notes, Map, Tags and Quality", async () => {
     await render();
     for (const label of ["Notes", "Map", "Tags", "Quality"]) {
@@ -683,7 +683,7 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-scope-chip]")).toBeNull();
     expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("5");
   });
-  // JC 2026-11-06: "Memory > Atlas" in the header, the parent segment brings back the whole memory.
+  // the owner 2026-11-06: "Memory > Atlas" in the header, the parent segment brings back the whole memory.
   it("the header crumb of a scoped memory is a link back to all the memory", async () => {
     await render();
     expect(host.querySelector("[data-memory-crumb]")).toBeNull();

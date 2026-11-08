@@ -10,6 +10,7 @@ import {
   connectorReauthText,
   connectorSetupText,
   isConnectorSetupUrl,
+  MAC_FULL_DISK_ACCESS_URL,
   resolveConnectorSetupTarget,
   type ConnectorSetupProof,
   type ConnectorSetupView,
@@ -56,7 +57,7 @@ describe("which connector the person named", () => {
 describe("where the person signs in", () => {
   const teams = resolveConnectorSetupTarget("Teams")!;
 
-  it("a Grok bot on the person's own xAI account: grok.com/connectors", () => {
+  it("a Grok-engine bot on the person's own xAI account: grok.com/connectors", () => {
     expect(chooseConnectorSetupRoute({ target: teams, engine: "grok", account: "own" })).toEqual({ route: "grok", url: GROK_CONNECTORS_URL });
   });
 
@@ -230,5 +231,29 @@ describe("a connector whose sign-in expired (#2749)", () => {
     expect(connectorReauthFailure("cursor__user-X-search_5fposts_5fall", "Managed MCP gateway tool call failed: 404 Not Found")).toBeNull();
     expect(connectorReauthFailure("grep", "exit 1")).toBeNull();
     expect(connectorReauthFailure("grep", undefined)).toBeNull();
+  });
+});
+
+describe("the other expired connections of the proactive report (#2690)", () => {
+  it("X client-not-enrolled is one reconnect card for X", () => {
+    const said = "Managed MCP gateway tool call failed: 403 Client Forbidden (client-not-enrolled)";
+    expect(connectorReauthFailure("cursor__user-X-search_5fposts_5fall", said)).toMatchObject({ label: "X", provider: "grok" });
+  });
+
+  it("GitHub's bare HTTP 400 is one for GitHub, never for another connector", () => {
+    expect(connectorReauthFailure("mcp__claude_ai_GitHub__create_issue", "GitHub API error: HTTP 400")).toMatchObject({ label: "GitHub", provider: "claude" });
+    expect(connectorReauthFailure("Create issue · GitHub", "Managed MCP gateway tool call failed: 400 Bad Request")).toMatchObject({ label: "GitHub", provider: "grok" });
+    expect(connectorReauthFailure("mcp__claude_ai_Linear__create_issue", "HTTP 400")).toBeNull();
+    expect(connectorReauthFailure("cursor__user-X-search_5fposts_5fall", "Managed MCP gateway tool call failed: HTTP 400")).toBeNull();
+  });
+
+  it("Messages without Full Disk Access opens this Mac's settings pane", () => {
+    const failure = connectorReauthFailure("mcp__messages__read_messages", "Messages could not be read. Sagax needs Full Disk Access on this Mac.");
+    expect(failure).toMatchObject({ label: "Messages", provider: "mac", url: MAC_FULL_DISK_ACCESS_URL });
+    expect(isConnectorSetupUrl(MAC_FULL_DISK_ACCESS_URL)).toBe(true);
+    expect(isConnectorSetupUrl("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")).toBe(false);
+    expect(connectorReauthText(failure!, "fr")).toContain("accès complet au disque");
+    expect(connectorReauthProblem(failure!)).toContain("Full Disk Access");
+    expect(connectorReauthFailure("mcp__messages__read_messages", "No chat matches")).toBeNull();
   });
 });

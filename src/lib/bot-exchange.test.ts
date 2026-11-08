@@ -32,6 +32,11 @@ function kinds(messages: Message[], options?: Parameters<typeof collapseBotExcha
 }
 
 describe("collapseBotExchanges", () => {
+  it("leaves a relayed teammate reply inline for the person (#2808)", () => {
+    const relayed = line("r", "bot", "Rome.", 2, { relayedFrom: quasar });
+    expect(kinds([line("u", "user", "capital?", 1), relayed], { selfBotId: "un" })).toEqual(["message", "message"]);
+  });
+
   it("collapses a peer line and leaves the person and a reply to the person inline", () => {
     const messages = [
       line("u", "user", "hello", 1),
@@ -185,11 +190,11 @@ describe("the open sheet", () => {
 
 describe("chipParty", () => {
   it("uses the single other bot, else the first bot that is not self", () => {
-    const crypticParty: ExchangeParty = { id: "cry", name: "Quasar" };
+    const nimbusParty: ExchangeParty = { id: "cry", name: "Quasar" };
     const unraidParty: ExchangeParty = { id: "un", name: "unRAID" };
-    expect(chipParty([crypticParty, crypticParty], "un").name).toBe("Quasar");
-    expect(chipParty([unraidParty, crypticParty], "un").name).toBe("Quasar");
-    expect(chipParty([crypticParty, unraidParty]).name).toBe("Quasar");
+    expect(chipParty([nimbusParty, nimbusParty], "un").name).toBe("Quasar");
+    expect(chipParty([unraidParty, nimbusParty], "un").name).toBe("Quasar");
+    expect(chipParty([nimbusParty, unraidParty]).name).toBe("Quasar");
   });
 });
 

@@ -1,11 +1,11 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { memoryReadersOf } from "../memory/memory-audience.ts";
 import { memoryMayShow } from "../memory/memory-audience.ts";
-import { BriefStore, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, readConnectedBrief, runBriefPass } from "./background-brief.ts";
+import { BriefStore, briefGist, localizedGist, suggestionAction, suggestionIdentity, toolWords, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, migrateBriefIdentities, readConnectedBrief, runBriefPass } from "./background-brief.ts";
 import { briefMessageText, briefNoticeLines, runScheduledBriefs, type BriefDelivery } from "./background-brief-schedule.ts";
 
 const piece = { piece: "Inbox, Monday note", asOf: "2026-10-26", text: "Three invoices arrived, 3 in all." };
@@ -33,6 +33,56 @@ describe("background brief", () => {
     expect(memoryReadersOf(line)).toEqual({ kind: "person" });
     expect(memoryMayShow({ kind: "person" }, { kind: "room", id: "garden" })).toBe(false);
     expect(line).toContain("readers person");
+  });
+
+  it("keeps a counted gist in the person's language (#2879)", () => {
+    const day = new Date(2026, 10, 8);
+    expect(keptMemoryLine("3 invoices", day, "fr")).toContain("3 factures");
+    expect(keptMemoryLine("3 invoices", day, "en")).toContain("3 invoices");
+    expect(keptMemoryLine("3 invoices", day)).toContain("3 invoices");
+    expect(keptMemoryLine("Répondre à Carla", day, "fr")).toContain("Répondre à Carla");
+  });
+
+  it("moves a pre-#2866 counted rejection to its app and day, drops one with no source (#2879)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-brief-"));
+    dirs.push(dir);
+    const file = join(dir, "background-brief.json");
+    const source = { piece: "Teams, list messages", asOf: "2026-11-01", text: "2026-11-01: 3 messages" };
+    const old = { id: "brief_a", text: "3 messages", sources: [source], costUsd: 0, model: "fast", status: "rejected", identity: "3 messages", at: 1 };
+    writeFileSync(file, JSON.stringify({ version: 1, bots: { "bot-1": { suggestions: [old], rejected: ["3 messages", "4 invoices", "relancer paul", "relancer paul"] } } }));
+    const store = new BriefStore(file, () => 1_000);
+    const scoped = "3 messages | teams | 2026-11-01";
+    expect(store.view("bot-1").suggestions[0]?.identity).toBe(scoped);
+    const saved = JSON.parse(readFileSync(file, "utf8"));
+    expect(saved.bots["bot-1"].rejected).toEqual([scoped, "relancer paul"]);
+    // the scoped key blocks that day's Teams count again, not Outlook's
+    const teams = runBriefPass({ tools: ["list_messages"], pieces: [source], costUsd: 0, fastModel: "fast" }, saved.bots["bot-1"].rejected);
+    expect(teams.ok && teams.suggestions).toEqual([]);
+    const outlook = runBriefPass({ tools: ["list_messages"], pieces: [{ ...source, piece: "Outlook, list messages" }], costUsd: 0, fastModel: "fast" }, saved.bots["bot-1"].rejected);
+    expect(outlook.ok && outlook.suggestions.length).toBe(1);
+    // a second load changes nothing
+    const row = saved.bots["bot-1"];
+    expect(migrateBriefIdentities(row)).toBe(false);
+  });
+
+  it("moves a counted rejection to every rejected suggestion of that text, not the first one (#2880)", () => {
+    const at = (piece: string, day: string) => ({ piece, asOf: day, text: `${day}: 3 messages` });
+    const item = (id: string, source: ReturnType<typeof at>, extra: Record<string, unknown>) => ({ id, text: "3 messages", sources: [source], costUsd: 0, model: "fast", identity: "3 messages", at: 1, ...extra });
+    const row = {
+      suggestions: [
+        item("brief_o", at("Outlook, list messages", "2026-11-01"), { status: "pending" }),
+        item("brief_t", at("Teams, list messages", "2026-11-01"), { status: "rejected" }),
+        item("brief_n", at("Teams, list messages", "2026-11-02"), { status: "pending", feedback: "never" }),
+      ],
+      rejected: ["3 messages"],
+    } as unknown as Parameters<typeof migrateBriefIdentities>[0];
+    expect(migrateBriefIdentities(row)).toBe(true);
+    expect(row.rejected).toEqual(["3 messages | teams | 2026-11-01", "3 messages | teams | 2026-11-02"]);
+    expect(migrateBriefIdentities(row)).toBe(false);
+    // with no rejected one, the first suggestion of that text stands in
+    const pending = { suggestions: [item("brief_o", at("Outlook, list messages", "2026-11-01"), { status: "pending" }), item("brief_x", at("Teams, list messages", "2026-11-03"), { status: "pending" })], rejected: ["3 messages"] } as unknown as Parameters<typeof migrateBriefIdentities>[0];
+    migrateBriefIdentities(pending);
+    expect(pending.rejected).toEqual(["3 messages | outlook | 2026-11-01"]);
   });
 
   it("stores the cadence the person chose and does not rewrite a rejection", () => {
@@ -68,9 +118,10 @@ describe("background brief", () => {
       },
     }, { costUsd: 0, fastModel: "fast-1" });
     expect(called).toEqual(["Inbox:list_messages"]);
-    expect(read.ok && read.suggestions[0]).toMatchObject({ sources: [{ piece: "Inbox / list_messages", asOf: "2026-10-26" }] });
+    expect(read.ok && read.suggestions[0]).toMatchObject({ sources: [{ piece: "Inbox, list messages", asOf: "2026-10-26" }] });
     expect(read.ok && read.suggestions[0]?.text).toContain("3");
-    expect(read.ok && read.suggestions[0]?.text).toContain("2026-10-26");
+    // #2845: what the answer counts, not its raw first line
+    expect(read.ok && read.suggestions[0]?.text).toBe("3 invoices");
   });
 
   it("runs at the person's time, once a day, in their time zone", () => {
@@ -98,7 +149,7 @@ describe("background brief", () => {
     expect(store.settings("primary")).toMatchObject({ enabled: false, at: "06:45" });
     const reopened = new BriefStore(join(dir, "background-brief.json"), () => 1_000, { defaultEnabled: () => true });
     expect(reopened.settings("primary").enabled).toBe(false);
-    expect(cleanBriefSettings({ at: "25:00", timeZone: "Nowhere/City" }, { enabled: true, everyHours: 4, subjects: [], at: "08:00", timeZone: "UTC" })).toMatchObject({ at: "08:00", timeZone: "UTC" });
+    expect(cleanBriefSettings({ at: "25:00", timeZone: "Nowhere/City" }, { enabled: true, everyHours: 4, subjects: [], at: "08:00", timeZone: "UTC", screenContext: false })).toMatchObject({ at: "08:00", timeZone: "UTC" });
   });
 
   it("the timer reads once at the person's time and delivers only what is new", async () => {
@@ -111,7 +162,7 @@ describe("background brief", () => {
     let reads = 0;
     const deps = {
       store,
-      bots: () => [{ id: "primary", name: "Cryptic", person: "pr_a" }, { id: "other", name: "Other", person: "pr_a" }, { id: "nobody", name: "Nobody", person: null }],
+      bots: () => [{ id: "primary", name: "Nimbus", person: "pr_a" }, { id: "other", name: "Other", person: "pr_a" }, { id: "nobody", name: "Nobody", person: null }],
       connected: () => ["Inbox"],
       fastModel: () => "fast-1",
       reads: async () => ({
@@ -135,7 +186,83 @@ describe("background brief", () => {
     expect(delivered).toHaveLength(1);
     const text = briefMessageText(delivered[0]!.suggestions, "fr");
     expect(text).toContain("Brief du jour");
-    expect(text).toContain("(Inbox / list_messages, 2026-10-26)");
+    // #2845: what the answer counts, as an action, never its raw first line
+    expect(text).toContain("- Passer en revue les 3 factures dans Inbox (2026-10-26)");
+    expect(text).not.toContain("Monday note");
     expect(briefNoticeLines(delivered[0]!.suggestions, "en").title).toBe("Today's brief: 1 point");
+  });
+
+  it("#2693: a full ISO timestamp dates the piece, and the point is human words, not the raw answer", () => {
+    expect(datedBriefPiece("Mail", "list_messages", "due 2026-11-08T14:00:00Z")?.asOf).toBe("2026-11-08");
+    expect(datedBriefPiece("Mail", "list_messages", "at 2026-11-08T14:00:00.000-05:00")?.asOf).toBe("2026-11-08");
+    expect(datedBriefPiece("Mail", "list", "ref 12026-11-08")).toBeNull();
+    expect(toolWords("listMessages")).toBe("list messages");
+    const raw = JSON.stringify({ value: [{ id: "AAMk42", subject: "Facture 1042 en retard", receivedDateTime: "2026-11-08T14:00:00Z" }] });
+    expect(briefGist(raw)).toBe("Facture 1042 en retard");
+    expect(briefGist('{"count": 3, "note": "x"} trailing')).not.toMatch(/[{}"]/);
+    const pass = runBriefPass({ tools: ["list_messages"], pieces: [datedBriefPiece("Outlook", "list_messages", raw)!], costUsd: 0, fastModel: "fast-1" });
+    if (!pass.ok) throw new Error(pass.error);
+    expect(pass.suggestions[0]?.text).toBe("Facture 1042 en retard");
+    expect(suggestionAction(pass.suggestions[0]!, "fr")).toBe("Faire le suivi de « Facture 1042 en retard » dans Outlook");
+    expect(suggestionAction(pass.suggestions[0]!, "en")).toBe('Follow up on "Facture 1042 en retard" in Outlook');
+  });
+
+  it("#2845: a text answer gives a concrete action in the person's language, or no suggestion at all", () => {
+    const point = (app: string, raw: string) => {
+      const pass = runBriefPass({ tools: ["list_messages"], pieces: [datedBriefPiece(app, "list_messages", raw)!], costUsd: 0, fastModel: "fast-1" });
+      if (!pass.ok) throw new Error(pass.error);
+      return pass.suggestions[0];
+    };
+    const found = point("Outlook", "Found 3 messages (2026-11-08)");
+    expect(found?.text).toBe("3 messages");
+    expect(suggestionAction(found!, "fr")).toBe("Passer en revue les 3 messages dans Outlook");
+    expect(suggestionAction(found!, "en")).toBe("Review the 3 messages in Outlook");
+    const one = point("Facturation", "2026-11-08 : 1 facture en retard");
+    expect(suggestionAction(one!, "fr")).toBe("Passer en revue 1 facture dans Facturation");
+    expect(suggestionAction(one!, "en")).toBe("Review 1 invoice in Facturation");
+    const subject = point("Outlook", "From: Carla\nSubject: Renouvellement du contrat\nDate: 2026-11-08");
+    expect(suggestionAction(subject!, "fr")).toBe("Faire le suivi de « Renouvellement du contrat » dans Outlook");
+    // nothing a person can act on: no suggestion
+    expect(point("Outlook", "OK 2026-11-08 status=200")).toBeUndefined();
+    expect(point("Outlook", "Found 0 messages 2026-11-08")).toBeUndefined();
+    expect(point("Outlook", '{"count": 3, "asOf": "2026-11-08"}')).toBeUndefined();
+    expect(briefGist("Found 3 messages")).not.toMatch(/Found/);
+    expect(briefGist("Found no messages")).toBe("");
+    expect(briefGist("Répondre à Carla avant midi")).toBe("Répondre à Carla avant midi");
+    // whole words only: a person's sentence starting like a tool word stays
+    for (const said of ["Totaliser les heures de Carla", "Sentinel signale un poste", "Okay pour la réunion", "Country manager attend la soumission", "Notre client attend", "Truc à régler demain"]) {
+      expect(briefGist(said)).toBe(said);
+    }
+    for (const report of ["OK done", "Total: 4", "Sent to Carla", "No results today", "Status ready"]) {
+      expect(briefGist(report)).toBe("");
+    }
+  });
+
+  it("#2693 review: a counted point keeps its app and day in its key, and reads in the person's language", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-brief-"));
+    dirs.push(dir);
+    const store = new BriefStore(join(dir, "background-brief.json"), () => 1_000);
+    const pass = (pieces: Array<[string, string]>) => {
+      const result = runBriefPass({ tools: ["list_messages"], pieces: pieces.map(([app, raw]) => datedBriefPiece(app, "list_messages", raw)!), costUsd: 0, fastModel: "fast-1" });
+      if (!result.ok) throw new Error(result.error);
+      return result;
+    };
+    // two apps counting alike in one pass: both kept
+    const first = store.recordPass("bot-1", pass([["Outlook", "Found 3 messages (2026-11-08)"], ["Teams", "Found 3 messages (2026-11-08)"]]));
+    expect(first.map((item) => item.sources[0]!.piece.split(",")[0])).toEqual(["Outlook", "Teams"]);
+    // the same app the same day: one; another day: a new point
+    expect(store.recordPass("bot-1", pass([["Outlook", "Found 3 messages (2026-11-08)"]]))).toEqual([]);
+    expect(store.recordPass("bot-1", pass([["Outlook", "Found 3 messages (2026-11-09)"]]))).toHaveLength(1);
+    // a rejection blocks that app's count that day, not every "3 messages"
+    store.reject("bot-1", first[0]!.id);
+    expect(store.recordPass("bot-1", pass([["Teams", "Found 3 messages (2026-11-10)"]]))).toHaveLength(1);
+    expect(suggestionIdentity("3 messages", { piece: "Outlook, list messages", asOf: "2026-11-08" })).not.toBe(suggestionIdentity("3 messages", { piece: "Teams, list messages", asOf: "2026-11-08" }));
+    // a person's words keep the plain key
+    expect(suggestionIdentity("Renouvellement du contrat", { piece: "Outlook, list messages", asOf: "2026-11-08" })).toBe("renouvellement du contrat");
+    // the stored gist in the person's language (memory lines, kept lines)
+    expect(localizedGist("3 invoices", "fr")).toBe("3 factures");
+    expect(localizedGist("1 invoices", "fr")).toBe("1 facture");
+    expect(localizedGist("3 invoices", "en")).toBe("3 invoices");
+    expect(localizedGist("Renouvellement du contrat", "fr")).toBe("Renouvellement du contrat");
   });
 });

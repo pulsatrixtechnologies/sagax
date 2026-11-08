@@ -151,7 +151,7 @@ test("the On/Off switch is one private file, off by default", () => {
 });
 
 // --- chat.db dates past 2^53 and read errors --------------------------------
-const NANOS = 815692699090360064n; // a real message.date from JC's chat.db
+const NANOS = 815692699090360064n; // a real message.date from AB's chat.db
 
 test("a nanosecond chat.db date past 2^53 converts without precision errors", () => {
   assert.equal(appleDate(NANOS), "2026-11-06T21:18:19.090Z");

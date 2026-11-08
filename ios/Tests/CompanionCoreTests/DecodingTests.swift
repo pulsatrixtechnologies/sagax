@@ -437,7 +437,7 @@ final class DecodingTests: XCTestCase {
         // The shape the computer leaves when a routine, profile or team
         // setup proposal goes stale: no answer, no dismissal, no options.
         // Counting it as pending left a "waiting on you" card with nothing
-        // to tap, stuck in the chat and in Needs you for good (MOCA-282).
+        // to tap, stuck in the chat and in Needs you for good (issue 282).
         let json = """
         {
           "id": "m2", "role": "bot", "kind": "options", "at": 1786742413762,

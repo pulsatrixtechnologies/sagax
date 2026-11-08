@@ -5,7 +5,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { runCommand, commandReceipt } from "./commands.ts";
+import { runCommand, commandReceipt, dropCommandReceipt, expireCommandReceipts, setCommandReceipt } from "./commands.ts";
 import { DATA_DIR } from "./config.ts";
 import { closeMessageDb, insertMessage, readThread } from "./messages/message-db.ts";
 import type { Message } from "./store.ts";
@@ -121,5 +121,28 @@ describe("runCommand nesting", () => {
     ).toThrow("late failure");
     expect(readThread("t9", "/nonexistent").messages.map((m) => m.text)).toEqual(["[digest] one"]);
     expect(commandReceipt("digest.append", "t9:turn-2")).toBeNull();
+  });
+});
+
+describe("receipts that change state (#2849)", () => {
+  beforeEach(() => {
+    closeMessageDb();
+    rmSync(DATA_DIR, { recursive: true, force: true });
+    mkdirSync(DATA_DIR, { recursive: true });
+  });
+
+  it("setCommandReceipt overwrites, dropCommandReceipt removes, expireCommandReceipts purges by age and kind", () => {
+    setCommandReceipt("agent.send_prompt", "k1", { pending: true }, () => 1_000);
+    setCommandReceipt("agent.send_prompt", "k1", { message_id: "m1" }, () => 2_000);
+    expect(commandReceipt("agent.send_prompt", "k1")).toMatchObject({ at: 2_000, result: { message_id: "m1" } });
+    dropCommandReceipt("agent.send_prompt", "k1");
+    expect(commandReceipt("agent.send_prompt", "k1")).toBeNull();
+    setCommandReceipt("agent.send_prompt", "old", { a: 1 }, () => 1_000);
+    setCommandReceipt("agent.send_prompt", "new", { a: 2 }, () => 9_000);
+    runCommand({ kind: "digest.append", key: "keep" }, () => ({ d: 1 }), () => 1_000);
+    expect(expireCommandReceipts("agent.send_prompt", 5_000, () => 10_000)).toBe(1);
+    expect(commandReceipt("agent.send_prompt", "old")).toBeNull();
+    expect(commandReceipt("agent.send_prompt", "new")).not.toBeNull();
+    expect(commandReceipt("digest.append", "keep")).not.toBeNull();
   });
 });

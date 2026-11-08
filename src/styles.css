@@ -3258,39 +3258,16 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   overflow-clip-margin: 2px;
 }
 
-/* View transitions between main views (src/lib/view-transitions.ts). Only
-   the main column is named, and only while a navigation plays, so the
-   sidebar and everything else just cross-fade quickly as the root. The old
-   view leaves at `fast`; the new one arrives over `moderate`, 8px from the
-   direction of travel. The pseudo-elements take no pointer events, and any
-   input skips the transition, so a click is never held. */
-html[data-nav="main"] .app-content-frame {
-  view-transition-name: main-view;
-}
+/* View transitions (the onboarding steps, src/components/onboarding). The
+   main views no longer use one (src/lib/view-transitions.ts, #2755, #2791:
+   the snapshot dropped a frame per navigation). The pseudo-elements take no
+   pointer events, so a click is never held. */
 ::view-transition {
   pointer-events: none;
 }
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: var(--transition-duration-fast);
-}
-::view-transition-old(main-view) {
-  animation: vt-fade-out var(--transition-duration-fast) var(--ease-exit) both;
-}
-::view-transition-new(main-view) {
-  animation: vt-in-forward var(--transition-duration-moderate) var(--ease-out-quint) both;
-}
-html[data-nav-direction="back"]::view-transition-new(main-view) {
-  animation-name: vt-in-back;
-}
-@keyframes vt-fade-out {
-  to { opacity: 0; }
-}
-@keyframes vt-in-forward {
-  from { opacity: 0; transform: translateX(8px); }
-}
-@keyframes vt-in-back {
-  from { opacity: 0; transform: translateX(-8px); }
 }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),

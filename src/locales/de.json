@@ -95,7 +95,6 @@
   "settings.close": "Einstellungen schließen",
   "settings.noMatch": "Nichts passt zu „{query}“",
   "settings.section.general": "Allgemein",
-  "settings.section.experimental": "Experimentell",
   "settings.section.usage": "Nutzung",
   "settings.profile.title": "Profil",
   "settings.profile.subtitle": "Wird in der Seitenleiste gezeigt. Wird beim Tippen gespeichert.",

@@ -22,16 +22,16 @@ afterEach(() => {
 describe("place labels client store", () => {
   it("persists a rename and shows it everywhere for that place key", () => {
     expect(placeLabel("desktop:d1", "JeanChrophesMBP.localdomain")).toBe("JeanChrophesMBP.localdomain");
-    savePlaceLabel("desktop:d1", "MacBook de JC");
-    expect(placeLabel("desktop:d1", "JeanChrophesMBP.localdomain")).toBe("MacBook de JC");
-    expect(localStorage.getItem(PLACE_LABELS_PREFERENCE)).toContain("MacBook de JC");
-    expect(getPlaceLabels()).toEqual({ "desktop:d1": "MacBook de JC" });
+    savePlaceLabel("desktop:d1", "MacBook de AB");
+    expect(placeLabel("desktop:d1", "JeanChrophesMBP.localdomain")).toBe("MacBook de AB");
+    expect(localStorage.getItem(PLACE_LABELS_PREFERENCE)).toContain("MacBook de AB");
+    expect(getPlaceLabels()).toEqual({ "desktop:d1": "MacBook de AB" });
   });
 
   it("isolates places: renaming one leaves others on their technical name", () => {
-    savePlaceLabel("desktop:d1", "MacBook de JC");
+    savePlaceLabel("desktop:d1", "MacBook de AB");
     savePlaceLabel("host:h_ab", "PC du lab");
-    expect(placeLabel("desktop:d1", "JeanChrophesMBP.localdomain")).toBe("MacBook de JC");
+    expect(placeLabel("desktop:d1", "JeanChrophesMBP.localdomain")).toBe("MacBook de AB");
     expect(placeLabel("host:h_ab", "PC-A.local")).toBe("PC du lab");
     expect(placeLabel("server", "Cloud")).toBe("Cloud");
     expect(placeLabel("browser", "Browser")).toBe("Browser");
@@ -39,7 +39,7 @@ describe("place labels client store", () => {
   });
 
   it("clears a label back to the technical name", () => {
-    savePlaceLabel("desktop:d1", "MacBook de JC");
+    savePlaceLabel("desktop:d1", "MacBook de AB");
     savePlaceLabel("desktop:d1", null);
     expect(placeLabel("desktop:d1", "JeanChrophesMBP.localdomain")).toBe("JeanChrophesMBP.localdomain");
     expect(getPlaceLabels()).toEqual({});

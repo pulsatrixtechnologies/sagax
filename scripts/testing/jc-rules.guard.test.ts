@@ -78,7 +78,7 @@ const readRoot = (file: string) => readFileSync(join(ROOT, file), "utf8");
 function runMessage(status: "running" | "completed", patch: Record<string, unknown> = {}): Message {
   return {
     id: "report", role: "bot", kind: "routine.run", at: 1, text: "Dispatch pass",
-    routineRun: { runId: "run-1", routineId: "routine-1", routineName: "dispatch-gox-pass", status, executionThreadId: "exec", ...patch },
+    routineRun: { runId: "run-1", routineId: "routine-1", routineName: "dispatch-acme-pass", status, executionThreadId: "exec", ...patch },
   } as Message;
 }
 
@@ -88,7 +88,7 @@ const attention: PersonAttentionCard = {
   createdAt: 1,
 } as PersonAttentionCard;
 
-// #2098 (the operator, 2026-11-05: "C'EST INNACEPTABLE"), then #2272 (JC,
+// #2098 (the operator, 2026-11-05: "C'EST INNACEPTABLE"), then #2272 (the owner,
 // 2026-11-06: "It not doing anything when I click it"): a run opens from
 // every entry point as its own window over the bot's chat column, shaped
 // like a bot-to-bot exchange (ExchangeSheet, X to close). Never a thread,
@@ -199,7 +199,7 @@ describe("#2096 Stop on the running card, not in a bottom bar", () => {
   it("the live card has a Stop that cancels the run", () => {
     const live = renderToStaticMarkup(createElement(RoutineRunCard, { message: runMessage("running", { startedAt: 1 }), onOpen: () => {}, onStop: () => {} }));
     expect(live).toContain("data-run-stop");
-    expect(live).toContain('aria-label="Stop the run of dispatch-gox-pass"');
+    expect(live).toContain('aria-label="Stop the run of dispatch-acme-pass"');
     expect(live).toContain("data-routine-run-open");
   });
 
@@ -512,6 +512,7 @@ const ADMIN_GATES_BY_DECISION: ReadonlyArray<{ file: string; why: string }> = [
   { file: "src/components/SettingsModal.tsx", why: "memberHidesSection: hides the organization-only sections (edit config, computers, backups) of the Settings nav" },
   { file: "src/components/settings/settings-nav.ts", why: "memberHidesSection: its definition" },
   { file: "src/components/settings/useSettingsModal.ts", why: "memberHidesSection: its one call" },
+  { file: "src/components/settings/DeveloperSettings.tsx", why: "memberHidesSection: the Experimental section keeps the server.experimental right the Experimental page had (AB 2026-11-08)" },
 ];
 
 describe("no admin gate on what stays in the person's own space (decided 2026-10-26)", () => {
@@ -583,7 +584,7 @@ function modelPickerOwnedFiles(): string[] {
   return files;
 }
 
-describe("JC unified chat guards (#2106)", () => {
+describe("the owner unified chat guards (#2106)", () => {
   const owned = modelPickerOwnedFiles();
 
   it("owned model-picker / composer surfaces keep no side-thread or run-continue copy", () => {

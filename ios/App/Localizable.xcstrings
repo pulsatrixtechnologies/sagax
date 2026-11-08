@@ -6762,6 +6762,22 @@
         }
       }
     },
+    "About Sagax": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À propos de Sagax"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sobre o Sagax"
+          }
+        }
+      }
+    },
     "AI": {
       "localizations": {
         "fr": {
@@ -10715,7 +10731,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autoriser cette commande"
+            "value": "Toujours permettre cette commande"
           }
         },
         "pt-BR": {
@@ -10753,7 +10769,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autoriser pour cette session"
+            "value": "Toujours permettre pour cette session"
           }
         },
         "pt-BR": {
@@ -10769,7 +10785,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autoriser cet outil"
+            "value": "Toujours permettre cet outil"
           }
         },
         "pt-BR": {
@@ -15960,6 +15976,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "CONFIDENTIEL"
+          }
+        }
+      }
+    },
+    "Context pods": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pods de contexte"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pods de contexto"
           }
         }
       }
@@ -21344,18 +21376,24 @@
         }
       }
     },
-    "Connect GitHub or a token: Plugins > Sources.": {
+    "Connect GitHub with a link and a code: Plugins > Sources.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connect GitHub or a token: Plugins > Sources."
+            "value": "Connect GitHub with a link and a code: Plugins > Sources."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connectez GitHub ou un jeton : Plugins > Sources."
+            "value": "Connectez GitHub avec un lien et un code : Plugins > Sources."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecte o GitHub com um link e um código: Plugins > Sources."
           }
         }
       }
@@ -27028,6 +27066,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Détection automatique du fuseau horaire"
+          }
+        }
+      }
+    },
+    "Developer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Developer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Développeur"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desenvolvedor"
           }
         }
       }
@@ -37830,10 +37890,16 @@
     },
     "Import an agent (Grok Bot, Claude Code)": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import an agent (Grok Bot, Claude Code, Hermes)"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Importer un agent (Grok Bot, Claude Code)"
+            "value": "Importer un agent (Grok Bot, Claude Code, Hermes)"
           }
         }
       }
@@ -50839,7 +50905,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune règle pour l'instant. Réponds à une carte avec Toujours autoriser ou Toujours refuser pour en ajouter une."
+            "value": "Aucune règle pour l'instant. Réponds à une carte avec Toujours permettre ou Toujours refuser pour en ajouter une."
           }
         }
       }
@@ -53482,6 +53548,121 @@
         }
       }
     },
+    "notification.needsYou.approve": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuver"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovar"
+          }
+        }
+      }
+    },
+    "notification.needsYou.approved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved from the notification. Go ahead."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuvé depuis la notification. Tu peux y aller."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovado pela notificação. Pode seguir."
+          }
+        }
+      }
+    },
+    "notification.needsYou.denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denied from the notification. Do not go ahead."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refusé depuis la notification. N'y va pas."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recusado pela notificação. Não siga."
+          }
+        }
+      }
+    },
+    "notification.proposal.doIt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do it"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fais-le"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faça"
+          }
+        }
+      }
+    },
+    "notification.proposal.notNow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not now"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas maintenant"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agora não"
+          }
+        }
+      }
+    },
     "Notifications": {
       "localizations": {
         "en": {
@@ -53660,6 +53841,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Client OAuth"
+          }
+        }
+      }
+    },
+    "Off by default. Shows Browse Bots in the sidebar menu, to find and add ready-made bots and teams.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé par défaut. Affiche Parcourir les bots dans le menu de la barre latérale, pour trouver et ajouter des bots et des équipes prêts à l'emploi."
           }
         }
       }
@@ -68336,6 +68527,22 @@
         }
       }
     },
+    "Routines, parallel threads, automatic recovery": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routines, fils parallèles, reprise automatique"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotinas, conversas paralelas, recuperação automática"
+          }
+        }
+      }
+    },
     "Routines: %@": {
       "localizations": {
         "fr": {
@@ -73743,7 +73950,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Afficher la liste des commandes shell qu'un bot a exécutées pour votre demande en cours."
+            "value": "Afficher la liste des commandes shell qu'un bot a exécutées pour ta demande en cours."
           }
         },
         "pt-BR": {
@@ -73765,7 +73972,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Affiche la liste des commandes shell qu'un bot a exécutées pour votre demande en cours. Désactivez-la pour masquer la carte et son raccourci pour enregistrer l'exécution comme compétence."
+            "value": "Affiche la liste des commandes shell qu'un bot a exécutées pour ta demande en cours. Désactive-la pour masquer la carte et son raccourci pour enregistrer l'exécution comme compétence."
           }
         },
         "pt-BR": {
@@ -74743,7 +74950,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Afficher les appels d'outils dans la conversation. Désactivé : la conversation montre les messages, les étapes d'un tour se replient. Le même interrupteur que sur votre ordinateur."
+            "value": "Afficher les appels d'outils dans la conversation. Désactivé : la conversation montre les messages, les étapes d'un tour se replient. Le même interrupteur que sur ton ordinateur."
           }
         }
       }
@@ -77964,6 +78171,28 @@
         }
       }
     },
+    "Still not working? Advanced, below, lets you paste a GitHub token instead.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still not working? Advanced, below, lets you paste a GitHub token instead."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours bloqué? Avancé, plus bas, permet de coller un jeton GitHub à la place."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ainda não funciona? Em Avançado, abaixo, você pode colar um token do GitHub."
+          }
+        }
+      }
+    },
     "Still on it.": {
       "localizations": {
         "fr": {
@@ -80129,6 +80358,28 @@
         }
       }
     },
+    "Technical options: run details, timeouts, telemetry, logs and diagnostics.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Technical options: run details, timeouts, telemetry, logs and diagnostics."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options techniques : détails d'exécution, délais, télémétrie, journaux et diagnostics."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opções técnicas: detalhes de execução, tempos limite, telemetria, registros e diagnósticos."
+          }
+        }
+      }
+    },
     "Telegram": {
       "localizations": {
         "en": {
@@ -81575,24 +81826,24 @@
         }
       }
     },
-    "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.": {
+    "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Developer → Experimental features and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server."
+            "value": "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Developer → Experimental features and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le moteur du navigateur n'est pas encore installé sur ce serveur. Activez les interrupteurs du navigateur dans Réglages → Expérimental et dans les réglages d'accès du bot, puis ouvrez Ordinateur du bot → Navigateur pour l'installer. Ou lancez `sagax browser install` sur le serveur."
+            "value": "Le moteur du navigateur n'est pas encore installé sur ce serveur. Activez les interrupteurs du navigateur dans Réglages → Développeur → Fonctionnalités expérimentales et dans les réglages d'accès du bot, puis ouvrez Ordinateur du bot → Navigateur pour l'installer. Ou lancez `sagax browser install` sur le serveur."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O mecanismo do navegador ainda não está instalado neste servidor. Ative as chaves do navegador em Ajustes → Experimental e nos ajustes de acesso do bot, depois abra Computador do bot → Navegador para instalá-lo. Ou rode `sagax browser install` no servidor."
+            "value": "O mecanismo do navegador ainda não está instalado neste servidor. Ative as chaves do navegador em Ajustes → Desenvolvedor → Recursos experimentais e nos ajustes de acesso do bot, depois abra Computador do bot → Navegador para instalá-lo. Ou rode `sagax browser install` no servidor."
           }
         }
       }
@@ -81641,24 +81892,24 @@
         }
       }
     },
-    "The built-in browser is switched off under App Settings → Experimental": {
+    "The built-in browser is switched off under App Settings → Developer → Experimental features": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The built-in browser is switched off under App Settings → Experimental"
+            "value": "The built-in browser is switched off under App Settings → Developer → Experimental features"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le navigateur intégré est désactivé dans Paramètres → Expérimental"
+            "value": "Le navigateur intégré est désactivé dans Réglages → Développeur → Fonctionnalités expérimentales"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O navegador integrado está desativado em Configurações → Experimental"
+            "value": "O navegador integrado está desativado em Configurações → Desenvolvedor → Recursos experimentais"
           }
         }
       }
@@ -84562,13 +84813,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The About window, guided tours, diagnostics, logs and feedback."
+            "value": "The About window, guided tours and feedback."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "La fenêtre À propos, les visites guidées, les diagnostics, les journaux et les commentaires."
+            "value": "La fenêtre À propos, les visites guidées et les commentaires."
           }
         }
       }
@@ -91171,28 +91422,6 @@
         }
       }
     },
-    "Use a token": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use a token"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Utiliser un jeton"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Usar um token"
-          }
-        }
-      }
-    },
     "Use another computer": {
       "localizations": {
         "fr": {
@@ -94022,7 +94251,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ce que tu as décidé avec Toujours autoriser ou Toujours refuser. Les règles sont à toi : elles s'appliquent à ce bot ou à tous tes bots, jamais à ceux d'une autre personne."
+            "value": "Ce que tu as décidé avec Toujours permettre ou Toujours refuser. Les règles sont à toi : elles s'appliquent à ce bot ou à tous tes bots, jamais à ceux d'une autre personne."
           }
         }
       }
@@ -97052,28 +97281,6 @@
         }
       }
     },
-    "Your administrator has not set up a GitHub OAuth App for this server (Settings > Organization). Paste a personal access token instead.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your administrator has not set up a GitHub OAuth App for this server (Settings > Organization). Paste a personal access token instead."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Votre administrateur n'a pas configuré d'application OAuth GitHub pour ce serveur (Réglages > Organisation). Collez plutôt un jeton d'accès personnel."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seu administrador não configurou um GitHub OAuth App para este servidor (Ajustes > Organização). Cole um token de acesso pessoal."
-          }
-        }
-      }
-    },
     "Your administrator lets you use shared bots only.": {
       "localizations": {
         "en": {
@@ -98828,7 +99035,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autorisé"
+            "value": "Toujours permis"
           }
         },
         "pt-BR": {
@@ -101634,7 +101841,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "En attente de vous"
+            "value": "En attente de toi"
           }
         }
       }
@@ -113907,6 +114114,442 @@
           "stringUnit": {
             "state": "translated",
             "value": "… %lld lignes inchangées"
+          }
+        }
+      }
+    },
+    "Question": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Question"
+          }
+        }
+      }
+    },
+    "Proposal": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proposition"
+          }
+        }
+      }
+    },
+    "Permission": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permission"
+          }
+        }
+      }
+    },
+    "Longest a bot may answer in a group. A conversation can set its own.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durée maximale d'une réponse de bot dans un groupe. Une conversation peut fixer la sienne."
+          }
+        }
+      }
+    },
+    "Enter a whole number from 1 to 1,440.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisis un nombre entier de 1 à 1 440."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Digite um número inteiro de 1 a 1.440."
+          }
+        }
+      }
+    },
+    "MCP calls": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appels MCP"
+          }
+        }
+      }
+    },
+    "Longest a bot's MCP tool call may run.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durée maximale d'un appel d'outil MCP par un bot."
+          }
+        }
+      }
+    },
+    "Enter a whole number from 1 to 60.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisis un nombre entier de 1 à 60."
+          }
+        }
+      }
+    },
+    "Steer, then stop, when a shell command keeps failing the same way.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oriente, puis arrête, quand une commande shell échoue toujours de la même façon."
+          }
+        }
+      }
+    },
+    "Turn the loop guard on or off for this installation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer ou désactiver le garde-fou de boucle pour cette installation"
+          }
+        }
+      }
+    },
+    "Delete event logs after": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer les journaux après"
+          }
+        }
+      }
+    },
+    "Finished conversations only, never the conversations themselves.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversations terminées seulement, jamais les conversations elles-mêmes."
+          }
+        }
+      }
+    },
+    "Enter a number of days between 1 and 3650.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisis un nombre de jours entre 1 et 3650."
+          }
+        }
+      }
+    },
+    "Trim each event log to": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limiter chaque journal à"
+          }
+        }
+      }
+    },
+    "MiB": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mio"
+          }
+        }
+      }
+    },
+    "Enter a size between 0.25 and 4096 MiB.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisis une taille entre 0,25 et 4096 Mio."
+          }
+        }
+      }
+    },
+    "Review after this many tool steps": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoir après ce nombre d'étapes d'outils"
+          }
+        }
+      }
+    },
+    "Enter a whole number from %@ to %@.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisis un nombre entier de %@ à %@."
+          }
+        }
+      }
+    },
+    "OpenTelemetry": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenTelemetry"
+          }
+        }
+      }
+    },
+    "Trace export": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export des traces"
+          }
+        }
+      }
+    },
+    "Sends the server's traces (bot turns, model calls with tokens and cost, tool and MCP calls, sub-agents, routines) to an OTLP/HTTP collector, following the OpenTelemetry GenAI conventions. Usage statistics keep working without a collector.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoie les traces du serveur (tours des bots, appels de modèle avec jetons et coût, appels d'outils et MCP, sous-agents, routines) à un collecteur OTLP/HTTP, selon les conventions GenAI d'OpenTelemetry. Les statistiques d'usage fonctionnent sans collecteur."
+          }
+        }
+      }
+    },
+    "Collector address": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adresse du collecteur"
+          }
+        }
+      }
+    },
+    "OTLP/HTTP base URL; /v1/traces is added.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL de base OTLP/HTTP ; /v1/traces est ajouté."
+          }
+        }
+      }
+    },
+    "Service name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom du service"
+          }
+        }
+      }
+    },
+    "service.name of the traces; sagax when empty.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "service.name des traces ; sagax si vide."
+          }
+        }
+      }
+    },
+    "Headers": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En-têtes"
+          }
+        }
+      }
+    },
+    "Header name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom de l'en-tête"
+          }
+        }
+      }
+    },
+    "Saved (type to replace)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrée (tape pour remplacer)"
+          }
+        }
+      }
+    },
+    "Header value": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valeur de l'en-tête"
+          }
+        }
+      }
+    },
+    "An API key or a token for the collector. Values are never shown again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une clé d'API ou un jeton pour le collecteur. Les valeurs ne sont jamais réaffichées."
+          }
+        }
+      }
+    },
+    "Add a header": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un en-tête"
+          }
+        }
+      }
+    },
+    "Send a test span": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer un span de test"
+          }
+        }
+      }
+    },
+    "Could not load the OpenTelemetry settings.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger les réglages OpenTelemetry."
+          }
+        }
+      }
+    },
+    "That did not work.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ça n'a pas fonctionné."
+          }
+        }
+      }
+    },
+    "Saved. Traces go to the collector within a few seconds.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistré. Les traces partent vers le collecteur d'ici quelques secondes."
+          }
+        }
+      }
+    },
+    "The collector accepted the test span.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le collecteur a accepté le span de test."
+          }
+        }
+      }
+    },
+    "Export is off.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'export est désactivé."
+          }
+        }
+      }
+    },
+    "Off: enter a collector address to send traces.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé : entrez l'adresse d'un collecteur pour envoyer les traces."
+          }
+        }
+      }
+    },
+    "Sending to %@: %@ spans sent, %@ not accepted": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi vers %@ : %@ spans envoyés, %@ refusés"
+          }
+        }
+      }
+    },
+    "Sending to %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi vers %@"
+          }
+        }
+      }
+    },
+    "Your bots draft and improve their own skills.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes bots écrivent et améliorent leurs propres skills."
+          }
+        }
+      }
+    },
+    "Opens tables and files in a separate window.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre les tableaux et fichiers dans une fenêtre à part."
+          }
+        }
+      }
+    },
+    "A model names your new threads.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un modèle nomme tes nouveaux fils."
           }
         }
       }

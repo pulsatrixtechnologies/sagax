@@ -8,9 +8,13 @@ async function interruptDirectThread(botId: string, threadId: string, options?: 
 
   // A parked turn has settled its provider but still owns a future resume.
   // Stop cancels that work too. The parking teardown itself preserves it.
-  if (!options?.preserveComputerResume && host.pendingComputerResumes.delete(threadId)
-      && host.store.taskByThread(botId, threadId)?.activity === "parked.computer") {
-    host.store.setTaskActivity(botId, threadId, "idle");
+  // The parked row clears even when the resume lives on the runtime root
+  // (#2526) rather than in pendingComputerResumes: Stop leaves the task idle.
+  if (!options?.preserveComputerResume) {
+    host.pendingComputerResumes.delete(threadId);
+    if (host.store.taskByThread(botId, threadId)?.activity === "parked.computer") {
+      host.store.setTaskActivity(botId, threadId, "idle");
+    }
   }
   const requestOwner = host.directRequestOwners.get(threadId);
   if (requestOwner) {

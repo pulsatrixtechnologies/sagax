@@ -33,6 +33,7 @@ public enum BotFieldRules {
         "autoApprove": "bots.approvalLevel",
         "acknowledgeLocalAuto": "bots.approvalLevel",
         "proactiveMode": "bots.approvalLevel",
+        "directTriggers": "bots.approvalLevel",
         // Standing grants: the owner's own (mirror of shared/permissions.ts, #1138).
         "alwaysAllow": "bots.approvalLevel",
         // #2048: remembered publish target (page / artifact surface).
@@ -42,6 +43,9 @@ public enum BotFieldRules {
         "memoryUpkeep": "bots.behaviour",
         "voiceNotes": "bots.behaviour",
         "memeReplies": "bots.behaviour",
+        "skillLearning": "bots.behaviour",
+        "builtinPlugins": "bots.behaviour",
+        "collaboratorsCreateRoutines": "bots.behaviour",
         "emailDrafts": "bots.behaviour",
         "fallback": "bots.behaviour",
         "parkDirectMessages": "bots.behaviour",
@@ -50,6 +54,7 @@ public enum BotFieldRules {
         "loopGuard": "bots.behaviour",
         "busySend": "bots.behaviour",
         "automaticRecovery": "bots.behaviour",
+        "grokAccountConnectors": "bots.behaviour",
         "computer": "bots.create",
         "browser": "bots.create",
         "cloudBackend": "bots.computer",

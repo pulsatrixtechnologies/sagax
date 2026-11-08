@@ -65,14 +65,42 @@ describe("Connect GitHub (#2109)", () => {
     expect($("input[type=password]")).not.toBeNull();
   });
 
-  it("without the organization's OAuth App, says so and Connect GitHub opens Advanced", () => {
+  // owner 2026-11-08: "every github connection should be done with a link and
+  // the code to enter. and personnal token should be alternative solution if
+  // needed but never presented first". With no OAuth App of the organization
+  // nor SAGAX_GITHUB_CLIENT_ID, the built-in one runs the device flow.
+  it("with no organization OAuth App, Connect GitHub still starts the link and code, and no default text names a token", async () => {
     const noApp: MyConnections = { ...none, github: { state: "none", deviceFlow: false } };
+    fixture.data = noApp;
     render(createElement(MyGithubConnection, { initial: noApp }));
-    expect($("[data-github-no-device-flow]")).not.toBeNull();
+    expect($("[data-github-connect]")!.getAttribute("data-github-connect")).toBe("device");
+    expect(host.textContent).not.toMatch(/personal access token|OAuth App/i);
+    expect($("[data-github-no-device-flow]")).toBeNull();
+    fixture.data = { ...none, github: { state: "pending", userCode: "WXYZ-5678", verificationUri: "https://github.com/login/device", expiresAt: Date.now() + 600_000, deviceFlow: true } };
     flushSync(() => $<HTMLButtonElement>("[data-github-connect]")!.click());
-    expect(fixture.startGithubDevice).not.toHaveBeenCalled();
-    expect($("[data-github-advanced-toggle]")!.getAttribute("aria-expanded")).toBe("true");
-    expect($("input[type=password]")).not.toBeNull();
+    expect(fixture.startGithubDevice).toHaveBeenCalledTimes(1);
+    expect($("[data-github-advanced-toggle]")!.getAttribute("aria-expanded")).toBe("false");
+    await vi.waitFor(() => expect($("[data-github-code]")?.textContent).toContain("WXYZ-5678"));
+  });
+
+  it("a device flow that fails says so with Try again, and the token stays the fallback under Advanced", async () => {
+    fixture.startGithubDevice.mockRejectedValueOnce(new Error("GitHub sign-in by link and code is not available on this server right now."));
+    render(createElement(MyGithubConnection, { initial: none }));
+    flushSync(() => $<HTMLButtonElement>("[data-github-connect]")!.click());
+    await vi.waitFor(() => expect($("[data-github-device-error]")?.textContent).toContain("not available"));
+    expect($("[data-github-connect]")!.textContent).toBe("Try again");
+    expect($("[data-github-fallback-hint]")).not.toBeNull();
+    expect($("[data-github-advanced-toggle]")!.getAttribute("aria-expanded")).toBe("false");
+    flushSync(() => $<HTMLButtonElement>("[data-github-connect]")!.click());
+    expect(fixture.startGithubDevice).toHaveBeenCalledTimes(2);
+  });
+
+  it("an expired or refused code offers Try again", () => {
+    const expired: MyConnections = { ...none, github: { state: "error", deviceFlow: true, error: "The code expired. Start again." } };
+    render(createElement(MyGithubConnection, { initial: expired }));
+    expect($("[data-github-auth-error]")!.textContent).toContain("expired");
+    expect($("[data-github-connect]")!.textContent).toBe("Try again");
+    expect($("[data-github-connect]")!.getAttribute("data-github-connect")).toBe("device");
   });
 
   it("the GitHub MCP preset uses the GitHub account, not a pasted token, even before it is connected", () => {

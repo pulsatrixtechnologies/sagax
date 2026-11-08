@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ComponentProps,
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
@@ -72,6 +73,7 @@ import { stateForBot } from "@/lib/mascot";
 import { mascotRowAnimated } from "@/lib/mascot-animate";
 import { useBotUnread } from "./unread-notice";
 import { cn } from "@/lib/cn";
+import { VirtualRow } from "./VirtualRow";
 import { SIDEBAR_CIRCLE_BUTTON } from "@/lib/circle-button";
 import { searchMatchesThreads, useSearchDisclosure } from "@/lib/search-disclosure";
 import { useHeldMenuMotion } from "./MenuMotion";
@@ -501,8 +503,10 @@ export function GroupThreadList({ group, selected, density = "comfortable", quer
   }), [groupId, dispatch]);
   const locale = activeLocale();
   return <div className="mb-2 space-y-0.5" role="group" aria-label={t("task.namedList", { name: group.name })}>
-    {visible.map((task) => <SidebarThreadRow key={task.threadId} task={task} ownerId={group.id} current={selected && task.threadId === group.threadId} compact={density === "compact"}
-      now={stampClock(threadRecency(task), now)} locale={locale} {...actions} />)}
+    {visible.map((task) => <VirtualRow key={task.threadId} rowKey={`thread:${density}:${task.threadId}`} initiallyShown eager={task.threadId === group.threadId} estimate={SIDEBAR_THREAD_ROW_ESTIMATE}>
+      <SidebarThreadRow task={task} ownerId={group.id} current={selected && task.threadId === group.threadId} compact={density === "compact"}
+        now={stampClock(threadRecency(task), now)} locale={locale} {...actions} />
+    </VirtualRow>)}
     {!query && !showAll && tasks.length > visible.length && <button type="button" onClick={() => setShowAll(true)} className="pl-6 pr-3 py-1.5 text-[11px] text-sidebar-ink-secondary hover:text-sidebar-ink">{t("task.showAll", { count: tasks.length })}</button>}
   </div>;
 }
@@ -1468,8 +1472,10 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
   useRevealedThreadRow(revealThread, selected ? openThreadId : null);
   const locale = activeLocale();
   const renderThread = (task: ThreadTreeTask) => {
-    return <SidebarThreadRow key={task.threadId} task={{ ...task, ...rowState?.(task) }} ownerId={ownerId} current={selected && task.threadId === openThreadId} compact={density === "compact"} folders={projects} activityLabel={task.threadId === openThreadId ? activeActivityLabel : undefined}
-      now={stampClock(threadRecency(task), now)} locale={locale} {...actions} />;
+    return <VirtualRow key={task.threadId} rowKey={`thread:${density}:${task.threadId}`} initiallyShown eager={task.threadId === openThreadId} estimate={SIDEBAR_THREAD_ROW_ESTIMATE}>
+      <SidebarThreadRow task={{ ...task, ...rowState?.(task) }} ownerId={ownerId} current={selected && task.threadId === openThreadId} compact={density === "compact"} folders={projects} activityLabel={task.threadId === openThreadId ? activeActivityLabel : undefined}
+        now={stampClock(threadRecency(task), now)} locale={locale} {...actions} />
+    </VirtualRow>;
   };
   const ungrouped = visibleTasks.filter((task) => !projects.some((project) => project.id === task.projectId));
   const projectIds = projects.map((project) => project.id);
@@ -2128,6 +2134,30 @@ export function BotListItem({
 
 const MemoBotListItem = memo(BotListItem, sameSidebarRow);
 
+/* Sidebar rows are virtualized (#2755): a bot, a room or a thread far from
+   the visible part of the list keeps its height and drops its content, so a
+   density change (the sidebar opening or closing) and every store update
+   re-render only the rows in sight. They draw on their first render, so the
+   list never paints an empty row; the open one always keeps its content. */
+const SIDEBAR_ROW_ESTIMATE = 44;
+const SIDEBAR_THREAD_ROW_ESTIMATE = 30;
+
+function VirtualBotListItem(props: ComponentProps<typeof BotListItem>) {
+  const selected = useStoreSelector((current) => current.selectedId === props.bot.id);
+  const { unread } = useBotUnread(props.bot);
+  return <VirtualRow rowKey={`bot:${props.density ?? "comfortable"}:${props.bot.id}`} initiallyShown eager={selected || Boolean(props.startRename) || Boolean(props.selection?.active)}
+    estimate={SIDEBAR_ROW_ESTIMATE} heldAttributes={{ "data-sidebar-bot-row": props.bot.id, "data-sidebar-unread": unread ? "" : undefined }}>
+    <MemoBotListItem {...props} />
+  </VirtualRow>;
+}
+
+function VirtualGroupListItem(props: ComponentProps<typeof GroupListItem>) {
+  const selected = useStoreSelector((current) => current.selectedId === props.group.id);
+  return <VirtualRow rowKey={`room:${props.density ?? "comfortable"}:${props.group.id}`} initiallyShown eager={selected} estimate={SIDEBAR_ROW_ESTIMATE}>
+    <MemoGroupListItem {...props} />
+  </VirtualRow>;
+}
+
 export function ArchivedBotRow({
   bot,
   restoring,
@@ -2582,6 +2612,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       <SidebarUnreadPillAbove density={density} count={unread.moreUnread.above} onJump={() => unread.jumpToUnread("above")} />
       {/* Bot list. GET /api/org 404 keeps this roster. */}
       <div ref={listFade.ref} onScroll={() => { listFade.onScroll(); unread.measureUnread(); }} style={listFade.style} className={cn("flex-1 overflow-y-auto overflow-x-hidden pb-6 pt-1", density === "icons" ? "px-2" : "pl-3 pr-[13px]")}
+        data-virtual-root=""
         data-sidebar-rail={density === "icons" ? "" : undefined}
         onKeyDown={density === "icons" ? moveRailFocus : undefined}
         onContextMenu={sections.orgMode ? (event) => { if (event.target === event.currentTarget || (event.target as HTMLElement).dataset?.sidebarEmpty !== undefined) sections.openOrgMenu(event, null, null); } : undefined}>
@@ -2626,8 +2657,8 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           setTeamMenu={sections.setTeamMenu}
           drag={dnd}
           hiddenRows={hiddenSidebarRows(sections.sidebarHidden.items, { bots: state.bots, groups: state.groups, viewerId: roster.viewerId, people: sections.sidebarPeople })}
-          renderBot={(props) => <MemoBotListItem {...props} />}
-          renderGroup={(props) => <MemoGroupListItem {...props} />}
+          renderBot={(props) => <VirtualBotListItem {...props} />}
+          renderGroup={(props) => <VirtualGroupListItem {...props} />}
         />
       </div>
       <SidebarUnreadPillBelow density={density} count={unread.moreUnread.below} onJump={() => unread.jumpToUnread("below")} />

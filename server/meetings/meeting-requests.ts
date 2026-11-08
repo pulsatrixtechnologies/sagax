@@ -62,7 +62,7 @@ export interface MeetingServiceDeps {
   summarize(botId: string, threadId: string, prompt: string): void;
   /** One audit line per state change that matters (requested, approved, ended). */
   audit?(event: { kind: string; botId: string; threadId: string; requestId: string; principalId?: string; detail?: string }): void;
-  /** Settings > Experimental > Meeting notetaker (off by default). While
+  /** Settings > Developer > Experimental > Meeting notetaker (off by default). While
    * off, nothing is staged, approved or left through this service. */
   enabled?: () => boolean;
   /** Test hook: the session factory. */

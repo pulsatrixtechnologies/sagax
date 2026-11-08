@@ -46,3 +46,13 @@ describe("time zones in plain words", () => {
     expect(plainClock("00:15")).toBe("0:15");
   });
 });
+
+describe("plainTimeZone in French (#2805)", () => {
+  it("says the zone in French, never Eastern time nor an abbreviation", () => {
+    expect(plainTimeZone("America/Toronto", "fr")).toBe("heure de l’Est");
+    expect(plainTimeZone("America/Los_Angeles", "fr-CA")).toBe("heure du Pacifique");
+    expect(plainTimeZone("Europe/Paris", "fr")).toBe("heure de l’Europe centrale");
+    expect(plainTimeZone("Europe/London", "fr")).toBe("heure (Royaume-Uni)");
+    expect(plainTimeZone("UTC", "fr")).toBe("UTC");
+  });
+});

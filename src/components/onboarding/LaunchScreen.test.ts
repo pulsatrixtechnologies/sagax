@@ -139,7 +139,7 @@ describe("launch screen", () => {
     expect((field.props as { placeholder?: string }).placeholder).toBe("https://…");
     const html = render().html;
     expect(html).toContain("Ask your administrator for this address");
-    expect(html).not.toMatch(/goxcloud|bot\.pulsatrix/);
+    expect(html).not.toMatch(/acmecloud|bot\.pulsatrix/);
   });
 
   it("proposes the organization server this computer already saved, never over a typed address", async () => {

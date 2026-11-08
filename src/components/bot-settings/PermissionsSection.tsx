@@ -30,6 +30,7 @@ import { viewerOwnTeamNames } from "@/lib/viewer-teams";
 import { api, useStore, type Bot } from "@/state/store";
 import { type ApprovalMode } from "../../../shared/approval-mode";
 import { AppliedLevelNote } from "./AppliedLevelNote";
+import { DirectTriggersRows } from "./DirectTriggersRows";
 import { proactiveModeFor, type ProactiveMode } from "../../../shared/proactive-mode";
 import { builtInPageTargets } from "../../../shared/page-targets";
 import { pageTargetKeys } from "@/lib/page-target-copy";
@@ -56,14 +57,14 @@ import { readableError } from "@/lib/plain-error";
 export type PermissionsPart = "all" | "approval" | "beforeActing" | "actsAlone" | "rules" | "advanced";
 type PermissionsPiece =
   | "approval" | "contact" | "ownerRules" | "proactive" | "pageTarget" | "recipients" | "drafts" | "memes"
-  | "customRules" | "primary" | "loopGuard" | "hooks" | "toolAccess" | "parallel" | "fold";
+  | "customRules" | "primary" | "loopGuard" | "grokConnectors" | "hooks" | "toolAccess" | "parallel" | "fold";
 /** Each piece of the section lives in exactly one V6 sub-page (one option, one place). */
 export const PERMISSIONS_PARTS: Readonly<Record<Exclude<PermissionsPart, "all">, readonly PermissionsPiece[]>> = {
   approval: ["approval"],
   beforeActing: ["approval", "ownerRules"],
   actsAlone: ["proactive", "pageTarget", "recipients", "drafts", "memes"],
   rules: ["customRules"],
-  advanced: ["primary", "contact", "loopGuard", "hooks", "toolAccess", "parallel", "fold"],
+  advanced: ["primary", "contact", "loopGuard", "grokConnectors", "hooks", "toolAccess", "parallel", "fold"],
 };
 
 export function PermissionsSection({
@@ -195,6 +196,12 @@ export function PermissionsSection({
   const showDrafts = inPart("drafts") && advanced && !draft && canEditBotField(state.config, bot, "emailDrafts");
   const showMemeReplies = inPart("memes") && advanced && !draft && canEditBotField(state.config, bot, "memeReplies");
   const showLoopGuard = inPart("loopGuard") && advanced && !draft && canEditBotField(state.config, bot, "loopGuard");
+  // #2747: grok.com connectors, only for a bot on the Grok CLI engine (the xAI
+  // API engine "grok" cannot load them) whose tools are not limited to a scope
+  // (a scoped turn never loads them)
+  const grokEngine = engine?.driverKind === "grokAgent";
+  const showGrokConnectors = inPart("grokConnectors") && advanced && !draft && grokEngine && bot.toolScope === undefined
+    && canEditBotField(state.config, bot, "grokAccountConnectors");
   const showHooks = inPart("hooks") && !draft && canEditBotField(state.config, bot, "allowedRecipients");
   // the owner always manages their own bot's permission mode and rules
   const ownsBot = !draft && viewerOwnsBot(state.config, bot);
@@ -209,7 +216,7 @@ export function PermissionsSection({
   const showProactive = showApproval && advanced && inPart("proactive");
   const showPageTarget = showApproval && advanced && inPart("pageTarget") && !draft && canEditBotField(state.config, bot, "pageTargetDefault");
   const showFold = !draft && advanced && inPart("fold") && (showApproval || showOutboundUi);
-  if (!showPrimaryUi && !showApprovalRow && !showProactive && !showPageTarget && !showFold && !showCustomRules && !showContactUi && !showRecipientsUi && !showDrafts && !showMemeReplies && !showLoopGuard && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
+  if (!showPrimaryUi && !showApprovalRow && !showProactive && !showPageTarget && !showFold && !showCustomRules && !showContactUi && !showRecipientsUi && !showDrafts && !showMemeReplies && !showLoopGuard && !showGrokConnectors && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
 
   const approvalSelector = showApproval && (
     <ApprovalModeSelector
@@ -228,7 +235,7 @@ export function PermissionsSection({
       onManageCommandAllowlist={advanced && !draft && ownerOrAdmin === true ? () => setCommandAllowlistTarget({ botId: bot.id, botName: bot.name }) : undefined}
     />
   );
-  const approvalRows = (showApprovalRow || showProactive || showPageTarget || showContactUi || showRecipientsUi || showHooks || showDrafts || showMemeReplies || showLoopGuard) ? (
+  const approvalRows = (showApprovalRow || showProactive || showPageTarget || showContactUi || showRecipientsUi || showHooks || showDrafts || showMemeReplies || showLoopGuard || showGrokConnectors) ? (
     <>
       {showApprovalRow && (
         <DescribedRow
@@ -278,6 +285,11 @@ export function PermissionsSection({
             onClick={() => setProactiveMode(proactiveMixed || proactiveMode === "off" ? "proactive" : "off")}
           />
         </DescribedRow>
+      )}
+      {/* #2691: direct email, calendar and text triggers with filters. Hidden
+          while drafting or editing several bots (one bot's own channels). */}
+      {showProactive && !draft && !bulk && (
+        <DirectTriggersRows bot={bot} proactiveOn={proactiveMode === "proactive"} patch={(value) => patch(value)} />
       )}
       {/* #2048: remembered publish target (page / artifact surface). */}
       {showPageTarget && (
@@ -370,6 +382,20 @@ export function PermissionsSection({
             checked={bot.loopGuard !== false}
             aria-label={t("botPanel.loopGuard")}
             onClick={() => patch({ loopGuard: bot.loopGuard === false })}
+          />
+        </DescribedRow>
+      )}
+      {showGrokConnectors && (
+        <DescribedRow
+          label={t("botPanel.grokAccountConnectors")}
+          help={t("botPanel.grokAccountConnectors.help")}
+          description={bot.grokAccountConnectors === true ? t("botPanel.grokAccountConnectors.on") : undefined}
+          rowId="grokAccountConnectors"
+        >
+          <Switch
+            checked={bot.grokAccountConnectors === true}
+            aria-label={t("botPanel.grokAccountConnectors")}
+            onClick={() => patch({ grokAccountConnectors: bot.grokAccountConnectors !== true })}
           />
         </DescribedRow>
       )}

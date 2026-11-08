@@ -62,7 +62,7 @@ describe("OpenAI speech to text (server/tts/openai-stt.ts)", () => {
     const events: TranscriptEvent[] = [];
     let done!: () => void;
     const finished = new Promise<void>((resolve) => { done = resolve; });
-    const stream = createOpenAiStt({ api, streamModel: "gpt-live-transcribe" }).openTranscription(KEY, { language: "fr", keyterms: ["Cryptic"] }, {
+    const stream = createOpenAiStt({ api, streamModel: "gpt-live-transcribe" }).openTranscription(KEY, { language: "fr", keyterms: ["Nimbus"] }, {
       onTranscript: (event) => { events.push(event); if (event.speechFinal) done(); },
       onError: () => {},
       onClose: () => {},
@@ -73,7 +73,7 @@ describe("OpenAI speech to text (server/tts/openai-stt.ts)", () => {
     await finished;
     stream.close();
     expect(seen[0]).toEqual({ url: "/v1/realtime?intent=transcription", authorization: `Bearer ${KEY}` });
-    expect(frames[0]).toEqual({ type: "session.update", session: { type: "transcription", audio: { input: { format: { type: "audio/pcm", rate: 24_000 }, transcription: { model: "gpt-live-transcribe", languages: ["fr"], keywords: ["Cryptic"] }, turn_detection: null } } } });
+    expect(frames[0]).toEqual({ type: "session.update", session: { type: "transcription", audio: { input: { format: { type: "audio/pcm", rate: 24_000 }, transcription: { model: "gpt-live-transcribe", languages: ["fr"], keywords: ["Nimbus"] }, turn_detection: null } } } });
     expect(frames[1].type).toBe("input_audio_buffer.append");
     expect(Buffer.from(frames[1].audio, "base64").byteLength).toBeGreaterThan(8);
     expect(events).toEqual([
@@ -226,16 +226,16 @@ describe("OpenAI speech to text (server/tts/openai-stt.ts)", () => {
     const server = createServer((req, res) => {
       let body = "";
       req.on("data", (chunk) => { body += String(chunk); });
-      req.on("end", () => { seen = `${req.url} ${req.headers.authorization}\n${body}`; res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ text: "Salut Cryptic" })); });
+      req.on("end", () => { seen = `${req.url} ${req.headers.authorization}\n${body}`; res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ text: "Salut Nimbus" })); });
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     closers.push(() => server.close());
     const stt = createOpenAiStt({ api: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, fileModel: "gpt-transcribe" });
-    expect(await stt.transcribe(new Uint8Array([82, 73, 70, 70]), "audio/wav", KEY, "fr", ["Cryptic"])).toEqual({ text: "Salut Cryptic" });
+    expect(await stt.transcribe(new Uint8Array([82, 73, 70, 70]), "audio/wav", KEY, "fr", ["Nimbus"])).toEqual({ text: "Salut Nimbus" });
     expect(seen).toContain(`/v1/audio/transcriptions Bearer ${KEY}`);
     expect(seen).toContain("gpt-transcribe");
     expect(seen).toContain('name="languages[]"');
-    expect(seen).toContain("Cryptic");
+    expect(seen).toContain("Nimbus");
     const ogg = await stt.transcribe(new Uint8Array([1]), "audio/ogg", KEY).then(() => null, (error: Error) => error);
     expect(ogg).toBeInstanceOf(Error);
   });

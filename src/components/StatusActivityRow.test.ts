@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// 2026-11-05 (JC): a limit notice in the chat can be closed, and stays closed.
+// 2026-11-05 (the owner): a limit notice in the chat can be closed, and stays closed.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";

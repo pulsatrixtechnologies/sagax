@@ -6,7 +6,7 @@
 // `plugins/MarketplacesSection.tsx`); the web Library is Files | Skills with
 // a link there. The bot's resolved capabilities list (`BotPanelCapabilities`
 // below) lives inside that Plugins sheet (Installed), not as its own Library
-// button: the bot panel stays Details, Library and Computer (JC, 2026-11-01).
+// button: the bot panel stays Details, Library and Computer (the owner, 2026-11-01).
 // The Plugins view mirrors that scope and needs a server pairing: the companion
 // sidecar does not list `/api/bots/:id/plugins`, so a sidecar pairing shows
 // Files and Skills only (`SurfaceFeature.botPlugins`).

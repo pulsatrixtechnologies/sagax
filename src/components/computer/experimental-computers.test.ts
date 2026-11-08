@@ -1,4 +1,4 @@
-// VPS Computer and Boat Computer are experimental (Settings > Experimental
+// VPS Computer and Boat Computer are experimental (Settings > Developer > Experimental
 // features), off by default: off hides their pickers and the Cloud place.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

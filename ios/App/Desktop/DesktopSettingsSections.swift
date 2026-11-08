@@ -119,7 +119,7 @@ private struct DesktopGeneralMainSettings: View {
                 DesktopTourButton(title: Text("Welcome tour"), identifier: "desktop-settings.welcome-tour", replay: .desktopReplayFirstRun)
             }
             if mode.advanced {
-                DesktopSubPageRowBare(title: Text("Advanced"), summary: Text("People's tool access, conversation cleanup, diagnostics"),
+                DesktopSubPageRowBare(title: Text("Advanced"), summary: Text("Routines, parallel threads, automatic recovery"),
                                       action: Text("Open"), identifier: "desktop-settings.advanced", open: openAdvanced)
             }
         }
@@ -214,23 +214,6 @@ private struct DesktopGeneralAdvancedSettings: View {
             }
         }
         DesktopSettingsCard(
-            Text("Group turns"),
-            summary: Text("\(config?.rooms?.turnTimeoutMinutes ?? 5) min per turn"),
-            subtitle: Text("Set one maximum duration for every bot turn in a group."),
-            open: false, identifier: "general.roomTurns"
-        ) {
-            DesktopNumberStepper(
-                label: Text("Maximum turn length"), unit: Text("minutes"),
-                value: config?.rooms?.turnTimeoutMinutes ?? 5, range: 1...1_440,
-                identifier: "desktop-settings.room-turns"
-            ) { minutes in
-                Task { _ = await model.apply(.roomTurnMinutes(minutes), key: "rooms") }
-            }
-            DesktopText("Applies to every bot turn in groups. Direct threads use the inactivity watchdog instead.",
-                        size: 12, line: 17, color: \.inkSecondary)
-                .padding(.top, 8)
-        }
-        DesktopSettingsCard(
             Text("Parallel threads"),
             summary: Text("\(config?.threads?.maxConcurrentPerBot ?? 3) per bot"),
             subtitle: Text("Choose how much each bot can work on at once."),
@@ -261,32 +244,6 @@ private struct DesktopGeneralAdvancedSettings: View {
                     DesktopText("The backup model is chosen in Sagax on the computer.", size: 12, line: 17, color: \.inkTertiary)
                 }
             }
-        }
-        DesktopSettingsCard(
-            Text("Event log cleanup"),
-            summary: config?.threads?.eventLogRetentionDays.map { Text("Delete after \($0) days") } ?? Text("Off"),
-            subtitle: Text("Trim the logs threads accumulate while they run."),
-            open: false, identifier: "general.threadCleanup"
-        ) {
-            let days = config?.threads?.eventLogRetentionDays
-            HStack(spacing: 12) {
-                DesktopText("Delete event logs of finished threads after", color: \.ink)
-                Spacer(minLength: 0)
-                DesktopSwitch(isOn: days != nil, label: Text("Delete event logs of finished threads"),
-                              identifier: "desktop-settings.cleanup", disabled: saving || config == nil) {
-                    Task { _ = await model.apply(.eventLogRetention(days == nil ? 30 : nil), key: "cleanup") }
-                }
-            }
-            if let days {
-                DesktopNumberStepper(label: Text("Days"), unit: Text("days"), value: days, range: 1...3_650,
-                                     identifier: "desktop-settings.cleanup-days") { value in
-                    Task { _ = await model.apply(.eventLogRetention(value), key: "cleanup") }
-                }
-                .padding(.top, 8)
-            }
-            DesktopText("When on, a daily sweep deletes the event-log files of threads that closed or were archived more than this many days ago. It only removes event-log files, never threads or transcripts.",
-                        size: 12, line: 17, color: \.inkSecondary)
-                .padding(.top, 8)
         }
     }
 }
@@ -570,65 +527,87 @@ struct DesktopNumberStepper: View {
 
 struct DesktopExperimentalSettings: View {
     @EnvironmentObject private var model: DesktopSettingsModel
-    /// Development context pods: this device only, off by default.
-    @AppStorage(DevPodsPrefs.enabled) private var devPods = false
 
+    /// ExperimentalSettings.tsx: the four switches, each with the desktop's
+    /// grey line. A switch this person may not flip (mayToggle) or this
+    /// server does not report is not shown, never greyed; a member with
+    /// personal settings flips their own (PATCH /api/me/experimental), and
+    /// on a server without that route reads only the update note.
     var body: some View {
         let config = model.config
-        let features = config?.features
         let busy = !model.saving.isEmpty || config == nil
-        let skills = features?.skillAuthoring != false
-        let browser = features?.browser == true
-        let engine = config?.browserEngine
-        let browserReady = engine?.kind != "unavailable"
-        let browserInstallable = engine?.installable == true
-        let decision = features?.decisionModel == true
-        let dataWindow = features?.dataWindow == true
-        let notetaker = features?.meetingNotetaker == true
-        let titles = features?.llmThreadTitles == true
-        let on = [skills, browser, decision, dataWindow, notetaker, devPods, titles].filter { $0 }.count
-        DesktopSettingsGroup(
-            Text("Experimental features"),
-            accessory: AnyView(DesktopText(verbatim: "· " + String(format: AppStrings.localized("%@ of %@ on"), "\(on)", "7"), color: \.inkSecondary).lineLimit(1)),
-            identifier: "experimental"
-        ) {
-            row("skillAuthoring", Text("Bots may write and improve their own skills"), aria: Text("Allow bots to draft skills"), on: skills, busy: busy, identifier: "desktop-settings.skill-authoring")
-            row("browser", Text("Built-in browser"), aria: Text("Enable the built-in browser"), on: browser, busy: busy,
-                unavailable: !browserReady && !browserInstallable,
-                reason: Text(verbatim: AppStrings.localized("The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")),
-                note: !browserReady && browserInstallable ? Text("Then install the engine from a bot's Computer > Browser.") : nil,
-                identifier: "desktop-settings.browser")
-            row("decisionModel", Text("Decision model"), aria: Text("Decision model"), on: decision, busy: busy, identifier: "desktop-settings.decision-model")
-            row("dataWindow", Text("Data window"), aria: Text("Turn on the Data window"), on: dataWindow, busy: busy,
-                unavailable: features?.dataWindow == nil,
-                reason: Text("Arrives with the next server update."),
-                identifier: "desktop-settings.data-window")
-            row("meetingNotetaker", Text("Meeting notetaker (Google Meet)"), aria: Text("Meeting notetaker (Google Meet)"), on: notetaker, busy: busy,
-                unavailable: features?.meetingNotetaker == nil,
-                reason: Text("This server does not offer the meeting notetaker yet."),
-                note: Text("A bot takes notes in your meetings. Not yet proven in a real meeting."),
-                identifier: "desktop-settings.meeting-notetaker")
-            row("llmThreadTitles", Text("Generated conversation titles"), aria: Text("Turn on generated conversation titles"), on: titles, busy: busy,
-                unavailable: features?.llmThreadTitles == nil,
-                reason: Text("Arrives with the next server update."),
-                identifier: "desktop-settings.thread-titles")
-            DesktopDescribedRow(Text("Context pods for development"), identifier: "devPods") {
-                DesktopSwitch(isOn: devPods, label: Text("Turn on context pods for development"), identifier: "desktop-settings.dev-pods") { devPods.toggle() }
+        let served = model.personalServed
+        let rows = ExperimentalFeatureRow.shown(config, served: served)
+        let on = rows.filter(\.on).count
+        if !rows.isEmpty {
+            DesktopSettingsGroup(
+                Text("Experimental features"),
+                accessory: AnyView(DesktopText(verbatim: "· " + String(format: AppStrings.localized("%@ of %@ on"), "\(on)", "\(rows.count)"), color: \.inkSecondary).lineLimit(1)),
+                identifier: "experimental"
+            ) {
+                ForEach(rows) { feature in
+                    DesktopDescribedRow(Text(verbatim: AppStrings.localized(feature.title)),
+                                        description: feature.note.map { Text(verbatim: AppStrings.localized($0)) },
+                                        identifier: feature.key) {
+                        DesktopSwitch(isOn: feature.on, label: Text(verbatim: AppStrings.localized(feature.aria)),
+                                      identifier: feature.identifier, disabled: busy) {
+                            guard let change = config?.experimentalChange(feature.key, !feature.on, served: served) else { return }
+                            Task { _ = await model.apply(change, key: feature.key) }
+                        }
+                    }
+                    if feature.key == "skillAuthoring", feature.on, config?.canSetSkillReview == true {
+                        DesktopSkillReviewRow()
+                    }
+                }
             }
+        }
+        if config?.personalMissing(served) == true {
+            DesktopText("Available after the server update.", color: \.inkSecondary)
+                .accessibilityIdentifier("desktop-settings.experimental.needsUpdate")
         }
     }
+}
 
-    /// `FeatureRow`: a feature the server cannot run keeps its row, greyed,
-    /// with "Needs a server update" and the reason behind the help.
-    private func row(_ feature: String, _ label: Text, aria: Text, on: Bool, busy: Bool, unavailable: Bool = false,
-                     reason: Text? = nil, note: Text? = nil, identifier: String) -> some View {
-        DesktopDescribedRow(label, description: unavailable ? Text("Needs a server update") : note, identifier: feature) {
-            if unavailable, let reason { DesktopHelpTip(help: reason) }
-            DesktopSwitch(isOn: on, label: aria, identifier: identifier, disabled: busy || (unavailable && !on)) {
-                Task { _ = await model.apply(.feature(feature, !on), key: feature) }
-            }
+/// One Experimental features switch, as the iPhone and the iPad draw it.
+struct ExperimentalFeatureRow: Identifiable {
+    let key: String
+    /// English source texts, looked up in the app's language when drawn.
+    let title: String
+    let aria: String
+    let note: String?
+    let on: Bool
+    let identifier: String
+    var id: String { key }
+
+    /// ExperimentalSettings.tsx's rows, in its order: skill writing, the Data
+    /// window, the meeting notetaker, generated titles. A feature the server
+    /// does not report, or one this person may not flip, is left out.
+    static func shown(_ config: DesktopSettingsConfig?, served: ServerFeatureState) -> [ExperimentalFeatureRow] {
+        guard let config else { return [] }
+        let features = config.features
+        var rows = [ExperimentalFeatureRow(
+            key: "skillAuthoring", title: "Bots may write and improve their own skills", aria: "Allow bots to draft skills",
+            note: "Your bots draft and improve their own skills.",
+            on: features?.skillAuthoring != false, identifier: "desktop-settings.skill-authoring")]
+        if let dataWindow = features?.dataWindow {
+            rows.append(ExperimentalFeatureRow(
+                key: "dataWindow", title: "Data window", aria: "Turn on the Data window",
+                note: "Opens tables and files in a separate window.",
+                on: dataWindow, identifier: "desktop-settings.data-window"))
         }
-        .opacity(unavailable ? 0.75 : 1)
+        if let notetaker = features?.meetingNotetaker {
+            rows.append(ExperimentalFeatureRow(
+                key: "meetingNotetaker", title: "Meeting notetaker (Google Meet)", aria: "Meeting notetaker (Google Meet)",
+                note: "A bot takes notes in your meetings. Not yet proven in a real meeting.",
+                on: notetaker, identifier: "desktop-settings.meeting-notetaker"))
+        }
+        if let titles = features?.llmThreadTitles {
+            rows.append(ExperimentalFeatureRow(
+                key: "llmThreadTitles", title: "Generated conversation titles", aria: "Turn on generated conversation titles",
+                note: "A model names your new threads.",
+                on: titles, identifier: "desktop-settings.thread-titles"))
+        }
+        return rows.filter { config.mayToggleExperimental($0.key, served: served) }
     }
 }
 

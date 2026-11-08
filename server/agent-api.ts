@@ -1,4 +1,5 @@
 import { parseRoutineEffort } from "../shared/routine-effort.ts";
+import { parseRoutineGoal } from "../shared/routine-goal.ts";
 import { parseRoutineModel } from "../shared/routine-model.ts";
 import type { EffortLevel } from "../shared/model-selection.ts";
 // The agent-to-agent API: tools that let one agent (a Sagax bot, or a
@@ -31,7 +32,7 @@ import type { EffortLevel } from "../shared/model-selection.ts";
 // drawn like a bot-to-bot one and silent for the person
 // (shared/agent-conversation.ts); the turn still runs as the person.
 import type { GuardDecision, GuardPolicy, GuardTarget, ToolGuardMode } from "./tools/tool-guard.ts";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { TEMP_AGENT_IDLE_HOURS_MAX } from "./temporary-agents.ts";
@@ -132,10 +133,17 @@ export const SEND_FILE_MAX_BYTES = 25 * 1024 * 1024;
  * for the bot's file tools (a read of its own workspace is the owner's card,
  * answered at the bot's level). Never "host file tools": an organization
  * server withholds them. */
+const FILES_NOTE = "\n\n[Files sent with this message, now in your Sagax workspace folder: ";
 export function agentPromptWithFiles(prompt: string, staged: readonly string[], workspaceRoot: string): string {
   if (!staged.length) return prompt;
   const full = staged.map((rel) => join(workspaceRoot, rel));
-  return `${prompt}\n\n[Files sent with this message, now in your Sagax workspace folder: ${staged.join(", ")}. Read them with workspace_read using those paths (relative to your workspace; it reads text), or with your file tools at the full paths: ${full.join(", ")}. If you work on a VM or cloud computer, they are not there until you copy them over (read here, then write them there).]`;
+  return `${prompt}${FILES_NOTE}${staged.join(", ")}. Read them with workspace_read using those paths (relative to your workspace; it reads text), or with your file tools at the full paths: ${full.join(", ")}. If you work on a VM or cloud computer, they are not there until you copy them over (read here, then write them there).]`;
+}
+/** sha256 of a prompt as it lands in the conversation, without the staged
+ * files note (#2858): what a pending send_prompt receipt is matched on. */
+export function promptHash(text: string): string {
+  const cut = text.lastIndexOf(FILES_NOTE);
+  return createHash("sha256").update((cut >= 0 ? text.slice(0, cut) : text).trim()).digest("hex");
 }
 export const TIMEOUT_MS_MIN = 1_000;
 export const TIMEOUT_MS_MAX = 600_000;
@@ -292,6 +300,8 @@ export interface AgentRoutinePatch {
   /** #2049: the model the run's sub-agents use (Claude). */
   subagentModel?: string | null;
   effort?: EffortLevel | null;
+  /** #2696: the goal its runs pursue; null removes it. */
+  goal?: { text: string; deadline?: number } | null;
   enabled?: boolean;
   name?: string;
   instructions?: string;
@@ -413,6 +423,13 @@ export interface AgentApiDeps {
    * Absent: bridge_thread_id is refused.
    */
   bridgeConversation?(caller: AgentCaller, agentId: string, bridgeThreadId: string, prompt: string): Promise<{ threadId: string; prompt: string } | Refusal>;
+  /** #2858: the prompts still waiting in this conversation's queue
+   * (chat_followups rows not yet settled), with the id a queued send's handle
+   * is anchored on. They survive a restart; a pending send_prompt receipt
+   * checks them as well as the transcript. queuedAt is when the item was
+   * queued (payload.queuedAt): only an item queued at or after the receipt's
+   * issued_at can be that send. */
+  queuedPrompts?(threadId: string): Array<{ id: string; text: string; queuedAt: number }>;
   /** Put the prompt (and the staged files) into the conversation and start or
    * queue its turn. messageId is the stored prompt's id, when known. */
   post(caller: AgentCaller, agentId: string, threadId: string, prompt: string, files: FileInput[], wake?: PriorityDelivery): Promise<{ messageId: string | null } | Refusal>;
@@ -435,11 +452,42 @@ export interface AgentApiDeps {
   /** The person who owns this agent, lowercased, or null (tool-guard.ts ownerScoped). */
   agentOwner?(agentId: string): string | null;
   guardMode?: ToolGuardMode;
+  /** #1265 (Perspicax): durable send_prompt receipts by idempotency key, so
+   * a resend after a lost answer (or a Sagax restart) returns the first send
+   * instead of a second turn. Absent: an in-memory map (tests). */
+  sendReceipts?: {
+    get(key: string): SendReceipt | null;
+    /** Writes or overwrites (a pending receipt, then the final one). */
+    put(key: string, receipt: SendReceipt): void;
+    delete(key: string): void;
+  };
   /** The HMAC key turn handles are signed with (at least 32 bytes). */
   secret: Buffer;
   now?(): number;
   sleep?(ms: number): Promise<void>;
 }
+
+/** What a send_prompt with an idempotency_key leaves behind (#1265). */
+export interface SendReceipt {
+  /** sha256 of the send's arguments: the same key with other ones is refused. */
+  fp: string;
+  agent_id: string;
+  thread_id: string;
+  message_id: string | null;
+  issued_at: number;
+  /** Written just before the post: a crash between the post and the final
+   * receipt leaves it, and the resend checks the transcript (#2849). */
+  pending?: boolean;
+  /** promptHash of the prompt as posted (after a bridge fence): a pending
+   * receipt is completed only by a line or a queued item with this text
+   * (#2858), never by another sender's line in the same conversation. */
+  ph?: string;
+}
+
+/** How long a send_prompt receipt (idempotency_key) holds: as long as the
+ * handle it replays. After that the key is free and a resend is a new send
+ * (#2849), never a handle that is already expired. */
+export const SEND_RECEIPT_TTL_MS = HANDLE_TTL_MS;
 
 /** One visible step of a turn (tool name or note), for still_working progress. */
 export interface TurnStep {
@@ -475,6 +523,7 @@ export interface TurnResult {
 
 type Args = Record<string, unknown>;
 const ID = /^[\w-]{1,128}$/;
+const IDEMPOTENCY_KEY = /^[\w.\-:]{1,128}$/;
 
 const objectArgs = (value: unknown): Args | null =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Args : value === undefined || value === null ? {} : null;
@@ -894,6 +943,8 @@ function createAgentApiHandlers(env: {
   deps: AgentApiDeps;
   now: () => number;
   startedBy: Map<string, { messageId: string; caller: string }>;
+  sendReceipts: { get(key: string): SendReceipt | null; put(key: string, receipt: SendReceipt): void; delete(key: string): void };
+  sendsInFlight: Map<string, Promise<unknown>>;
   ownsRunningTurn: (caller: AgentCaller, threadId: string) => boolean;
   ok: (body: Record<string, unknown>) => AgentApiAnswer;
   reachable: (caller: AgentCaller, agentId: string) => Promise<AgentSummary | Refusal>;
@@ -904,7 +955,7 @@ function createAgentApiHandlers(env: {
   "list_agents" | "find_agents" | "get_agent" | "delete_agent" | "create_agent" | "send_prompt" | "await_turn" |
   "read_transcript" | "read_transcript_page" | "read_latest_page" | "read_latest_page_with_threads" | "read_transcript_cold"
 > {
-  const { deps, now, startedBy, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest } = env;
+  const { deps, now, startedBy, sendReceipts, sendsInFlight, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest } = env;
   return {
     async list_agents(caller, args) {
       const bad = onlyKeys(args, []);
@@ -995,10 +1046,17 @@ function createAgentApiHandlers(env: {
     },
 
     async send_prompt(caller, args, signal) {
-      const bad = onlyKeys(args, ["agent_id", "prompt", "mode", "timeout_ms", "on_busy", "files", "priority", "thread_id", "bridge_thread_id"]);
+      const bad = onlyKeys(args, ["agent_id", "prompt", "mode", "timeout_ms", "on_busy", "files", "priority", "thread_id", "bridge_thread_id", "idempotency_key"]);
       if (bad) return bad;
       const agentId = agentIdArg(args);
       if (isRefusal(agentId)) return agentId;
+      const idemKey = args.idempotency_key === undefined || args.idempotency_key === null || args.idempotency_key === "" ? null : args.idempotency_key;
+      if (idemKey !== null && (typeof idemKey !== "string" || !IDEMPOTENCY_KEY.test(idemKey))) {
+        return refuse(400, "bad_request", "idempotency_key is 1 to 128 letters, digits, '.', '_', '-' or ':'.", {
+          retryable: false,
+          details: { reason: "invalid_idempotency_key" },
+        });
+      }
       const continued = args.thread_id === undefined || args.thread_id === null || args.thread_id === "" ? null : args.thread_id;
       if (continued !== null && (typeof continued !== "string" || !ID.test(continued))) {
         return refuse(400, "bad_request", "thread_id is a conversation id, as send_prompt or await_turn returned it.", {
@@ -1090,6 +1148,78 @@ function createAgentApiHandlers(env: {
       }
       const agent = await reachable(caller, agentId);
       if (isRefusal(agent)) return agent;
+      // #1265: a send with an idempotency_key is done once per caller, agent
+      // and key. A resend (the first answer was lost, Sagax restarted) gets
+      // the first send's handle and thread back, replayed: true, and starts
+      // no second turn. The same key with other arguments is refused.
+      const receiptKey = idemKey === null ? null : `${callerKey(caller)}|${agentId}|${idemKey}`;
+      const fp = idemKey === null ? "" : createHash("sha256").update(JSON.stringify([
+        prompt, continued, bridgeThreadId, fileInputs.map((file) => [file.path, file.content_base64 ? createHash("sha256").update(file.content_base64).digest("hex") : null]),
+      ])).digest("hex");
+      if (receiptKey !== null) {
+        for (let inFlight = sendsInFlight.get(receiptKey); inFlight; inFlight = sendsInFlight.get(receiptKey)) {
+          await inFlight.catch(() => undefined);
+        }
+        let prior = sendReceipts.get(receiptKey);
+        // #2849: a receipt lasts as long as the handle it would replay. An
+        // expired one frees the key: this send is a new one.
+        if (prior && now() - prior.issued_at > SEND_RECEIPT_TTL_MS) {
+          sendReceipts.delete(receiptKey);
+          prior = null;
+        }
+        // A pending receipt with no send in flight: Sagax stopped between the
+        // pending write and the final one. The prompt reached the
+        // conversation if a user line at or after issued_at carries its text,
+        // or if an item queued at or after issued_at still waits in the
+        // conversation's queue with that text (busyMode after: no line until
+        // its own turn, and the queue survives a restart);
+        // then the receipt is completed, else the key is free again (#2858).
+        if (prior?.pending) {
+          const issued = prior.issued_at;
+          const expected = prior.ph ?? promptHash(prompt);
+          const line = deps.messages(prior.thread_id).find((message) => message.role === "user" && message.at >= issued && promptHash(message.text ?? "") === expected);
+          const queued = line ? undefined : deps.queuedPrompts?.(prior.thread_id).find((item) => item.queuedAt >= issued && promptHash(item.text) === expected);
+          const anchor = line?.id ?? queued?.id;
+          if (anchor) {
+            prior = { fp: prior.fp, agent_id: prior.agent_id, thread_id: prior.thread_id, message_id: anchor, issued_at: issued };
+            sendReceipts.put(receiptKey, prior);
+          } else {
+            sendReceipts.delete(receiptKey);
+            prior = null;
+          }
+        }
+        if (prior) {
+          if (prior.fp !== fp) {
+            return refuse(409, "idempotency_key_reused", "This idempotency_key was already used for a different send_prompt (other prompt, thread or files).", {
+              retryable: false,
+              thread_id: prior.thread_id,
+              details: { reason: "idempotency_key_reused" },
+              hint: "Use a new idempotency_key for a new prompt; to see the first send, read_latest_page with this thread_id.",
+            });
+          }
+          const body: HandleBody = { a: agentId, t: prior.thread_id, m: prior.message_id, i: prior.issued_at, c: callerKey(caller) };
+          const handle = signHandle(deps.secret, body);
+          const replayed = {
+            handle, ...handleLifetime(prior.issued_at), label: turnLabel(agent.name, prompt), agent_id: agentId, thread_id: prior.thread_id, mode,
+            accepted: true, replayed: true, files: fileInputs.length,
+          };
+          if (mode !== "blocking") {
+            return ok({ ...replayed, finished: false, status: "accepted", next: "Already sent with this idempotency_key: no second turn. Call await_turn with this handle. Never send the prompt again." });
+          }
+          const waitMs = Math.min(timeoutMs as number, AWAIT_TIMEOUT_MS_MAX);
+          return ok({ ...replayed, ...resultBody(await waitTurn(body, handle, waitMs, signal)) });
+        }
+      }
+      // Held from here until the receipt is stored (or the send failed), so a
+      // concurrent resend with the same key reads the receipt, never posts.
+      let resolveInFlight: () => void = () => undefined;
+      const mine = receiptKey === null ? null : new Promise<void>((resolve) => { resolveInFlight = resolve; });
+      if (receiptKey !== null && mine) sendsInFlight.set(receiptKey, mine);
+      const releaseInFlight = () => {
+        if (receiptKey !== null && sendsInFlight.get(receiptKey) === mine) sendsInFlight.delete(receiptKey);
+        resolveInFlight();
+      };
+      try {
       // The conversation the caller's sends go to (deps.conversation), unless
       // it names one of its own conversations to continue. bridge_thread_id
       // (#2193) forces the person's unified chat and fences the prompt.
@@ -1153,12 +1283,28 @@ function createAgentApiHandlers(env: {
         : plan.queueFront
           ? { front: true, priorityNow: true }
           : undefined;
-      const posted = await deps.post(caller, agentId, threadId, prompt, fileInputs, wake);
+      // #2849: the receipt is written pending BEFORE the post, so a crash
+      // after the post never lets a resend start a second turn.
+      if (receiptKey !== null) {
+        sendReceipts.put(receiptKey, { fp, agent_id: agentId, thread_id: threadId, message_id: null, issued_at: issuedAt, pending: true, ph: promptHash(prompt) });
+      }
+      let posted: Awaited<ReturnType<typeof deps.post>>;
+      try {
+        posted = await deps.post(caller, agentId, threadId, prompt, fileInputs, wake);
+      } catch (error) {
+        if (receiptKey !== null) sendReceipts.delete(receiptKey);
+        throw error;
+      }
       if (isRefusal(posted)) {
+        if (receiptKey !== null) sendReceipts.delete(receiptKey);
         if (plan.reported === "now") releasePriorityNow(senderId);
         return posted;
       }
       if (posted.messageId) startedBy.set(threadId, { messageId: posted.messageId, caller: callerKey(caller) });
+      if (receiptKey !== null) {
+        sendReceipts.put(receiptKey, { fp, agent_id: agentId, thread_id: threadId, message_id: posted.messageId, issued_at: issuedAt });
+        releaseInFlight();
+      }
       const body: HandleBody = { a: agentId, t: threadId, m: posted.messageId, i: issuedAt, c: callerKey(caller) };
       const handle = signHandle(deps.secret, body);
       const accepted = {
@@ -1181,6 +1327,9 @@ function createAgentApiHandlers(env: {
       const waitMs = Math.min(timeoutMs as number, AWAIT_TIMEOUT_MS_MAX);
       const result = await waitTurn(body, handle, waitMs, signal);
       return ok({ ...accepted, ...resultBody(result) });
+      } finally {
+        releaseInFlight();
+      }
     },
 
     async await_turn(caller, args, signal) {
@@ -1408,7 +1557,7 @@ function createAgentApiConfigHandlers(env: {
     },
 
     async update_routine(caller, args) {
-      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer", "model", "subagent_model", "effort"]);
+      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer", "model", "subagent_model", "effort", "goal"]);
       if (bad) return bad;
       const routineId = typeof args.routine_id === "string" ? args.routine_id.trim() : "";
       if (!routineId || !ID.test(routineId)) {
@@ -1459,8 +1608,13 @@ function createAgentApiConfigHandlers(env: {
         if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
         patch.effort = parsed.effort ?? null;
       }
+      if (Object.hasOwn(args, "goal")) {
+        const parsed = parseRoutineGoal(args.goal);
+        if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
+        patch.goal = parsed.goal ? { text: parsed.goal.text, ...(parsed.goal.deadline ? { deadline: parsed.goal.deadline } : {}) } : null;
+      }
       if (!Object.keys(patch).length) {
-        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer, model, subagent_model, effort.");
+        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer, model, subagent_model, effort, goal.");
       }
       const updated = await deps.updateRoutine(caller, routineId, patch);
       if (isRefusal(updated)) return updated;
@@ -1478,6 +1632,20 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
    * bot's single chat the running turn may be the person's own or another
    * caller's: supersede stops only a turn this caller started. */
   const startedBy = new Map<string, { messageId: string; caller: string }>();
+  // #1265: receipts by idempotency key (durable through deps.sendReceipts),
+  // and the sends still in flight so a concurrent resend waits for the first.
+  const memoryReceipts = new Map<string, SendReceipt>();
+  const sendReceipts = deps.sendReceipts ?? {
+    get: (key: string) => memoryReceipts.get(key) ?? null,
+    put: (key: string, receipt: SendReceipt) => {
+      // #2849: expired receipts go, so the map stays bounded.
+      const cutoff = now() - SEND_RECEIPT_TTL_MS;
+      for (const [stale, held] of memoryReceipts) if (held.issued_at < cutoff) memoryReceipts.delete(stale);
+      memoryReceipts.set(key, receipt);
+    },
+    delete: (key: string) => void memoryReceipts.delete(key),
+  };
+  const sendsInFlight = new Map<string, Promise<unknown>>();
   const ownsRunningTurn = (caller: AgentCaller, threadId: string): boolean => {
     const mine = startedBy.get(threadId);
     if (!mine || mine.caller !== callerKey(caller)) return false;
@@ -1632,7 +1800,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
 
   const handlers: Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>> = {
     ...createAgentApiHandlers({
-      deps, now, startedBy, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest,
+      deps, now, startedBy, sendReceipts, sendsInFlight, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest,
     }),
     ...createAgentApiConfigHandlers({ deps, ok, reachable }),
   };

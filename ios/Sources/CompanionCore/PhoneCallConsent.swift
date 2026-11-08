@@ -1,6 +1,6 @@
 // One-time acceptable-use consent before a bot may place phone calls for
 // the person (`shared/phone-call-consent.ts`, PhoneCallConsentCard.tsx).
-// Sagax wording; never Grok Bot legal text. The answer is a fixed Accept /
+// Sagax wording; never reference app legal text. The answer is a fixed Accept /
 // Decline label the server maps to allow/deny.
 import Foundation
 

@@ -5100,7 +5100,7 @@ describe("auto-pause after failures in a row (2026-10-26)", () => {
   it("never auto-pauses a webhook or email trigger (#1891 phone webhooks stay on)", async () => {
     const h = harness(start);
     const voice = h.manager.create({
-      name: "Voice line requests from JC", prompt: "Handle the call request", botId: "maus-1",
+      name: "Voice line requests from AB", prompt: "Handle the call request", botId: "maus-1",
       schedule: { type: "webhook" }, enabled: true, autoPauseAfter: 1,
     });
     const texts = h.manager.create({
@@ -5529,7 +5529,7 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
   });
 });
 
-// JC 2026-11-01: "it saturates easily, queues really badly". Nothing waits
+// the owner 2026-11-01: "it saturates easily, queues really badly". Nothing waits
 // forever: a run behind a wait nobody answers takes its place, and a run
 // whose turn is gone ends, saying so.
 describe("no run waits forever (2026-11-01)", () => {

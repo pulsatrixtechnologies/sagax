@@ -1,5 +1,5 @@
 // The card of a phone call or a purchase a bot asks for (OutboundCard.tsx,
-// parité Grok Bot V4, 59, 83): who it calls and from which line, why, the
+// parité reference app V4, 59, 83): who it calls and from which line, why, the
 // exact words, the callback number, the disclosure and "I confirm the
 // number"; or what a purchase buys, from where, with which card. One answer
 // covers one action: Call or Cancel, Pay or Cancel. No Always

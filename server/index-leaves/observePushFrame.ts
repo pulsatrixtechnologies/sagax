@@ -11,7 +11,9 @@ function observePushFrame(payload: Record<string, unknown>) {
   // a conversation an AI client holds over MCP: never a phone or a watch
   if (kind === "notify" && (payload.notification as { quietOnPhones?: unknown } | undefined)?.quietOnPhones === true) return;
   // a message the bot wrote with notify false: in the chat, never a push
-  if (kind === "notify" && (payload.notification as { notify?: unknown } | undefined)?.notify === false) return;
+  // (#2695: one marked FYI is not pushed either, but its words wait for the brief)
+  const fyi = kind === "notify" && (payload.notification as { level?: unknown } | undefined)?.level === "fyi";
+  if (kind === "notify" && !fyi && (payload.notification as { notify?: unknown } | undefined)?.notify === false) return;
   try {
     const messages = host.pushesForFrame(payload, {
       notificationPeople: (note) => {
@@ -49,7 +51,11 @@ function observePushFrame(payload: Record<string, unknown>) {
     for (const message of messages) {
       // "Me joindre" (server/reach-me/): a card follows the person's choice
       // for its bot (push or not, their hours) and goes out by their other channels
-      if (!host.reachMeService || host.reachMeService.allowsPush(message)) host.pushHub.submit(message);
+      // #2695: the person's signal level, daily budget and quiet hours come first
+      // (an urgent card always goes); what waits is one line of the next brief
+      // a bot that marked its message FYI (set_reply_notify fyi) waits for the brief too
+      const signal = host.signalGate ? host.signalGate.decide(message, { fyi }) : "push";
+      if (signal === "push" && (!host.reachMeService || host.reachMeService.allowsPush(message))) host.pushHub.submit(message);
       host.reachMeService?.cardRaised(message);
     }
   } catch (error) {

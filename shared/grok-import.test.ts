@@ -287,7 +287,7 @@ describe("nearestBotColor", () => {
   });
 });
 
-describe("Grok Bot marketplace links", () => {
+describe("the reference app marketplace links", () => {
   it("reads the slug of an x.ai marketplace page, and nothing else", () => {
     expect(grokMarketplaceSlugFrom("https://x.ai/bot/marketplace/bots/overheard")).toBe("overheard");
     expect(grokMarketplaceSlugFrom("x.ai/bot/marketplace/bots/tradbot-2/")).toBe("tradbot-2");

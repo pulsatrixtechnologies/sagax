@@ -1,4 +1,4 @@
-// New chat sticks (JC 2026-11-02): an asked-for New chat stays the bot's
+// New chat sticks (the owner 2026-11-02): an asked-for New chat stays the bot's
 // current, empty conversation through a switch away and back, a return after
 // a while, a live frame or a hydration, until the person sends, Back, or opens
 // the covered topic by name.

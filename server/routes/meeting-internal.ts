@@ -22,7 +22,7 @@ export function createMeetingInternalRoutes(deps: {
   ownsThread(botId: string, threadId: string): boolean;
   /** Meetings join from a direct conversation only: a room has no one owner to consent. */
   isDirect(botId: string, threadId: string): boolean;
-  /** Settings > Experimental > Meeting notetaker. */
+  /** Settings > Developer > Experimental > Meeting notetaker. */
   enabled(): boolean;
 }): InternalRouteHandler {
   return async ({ res, path, method, json, capability, readBody }) => {

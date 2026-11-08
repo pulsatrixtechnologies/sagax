@@ -156,6 +156,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Speak replies | Bot editor > Voice | `sagax_settings` get, set `bot.speakReplies` | simple |
 | Voice notes | Bot editor > Voice | `sagax_settings` get, set `bot.voiceNotes` | simple |
 | Email drafts | Bot editor > Permissions > Email drafts | `sagax_settings` get, set `bot.emailDrafts` | simple |
+| Grok account connectors (grok.com) | Bot editor > Permissions > Grok account connectors | `sagax_settings` get, set `bot.grokAccountConnectors` | simple |
 | Meme replies | Bot editor > Permissions > Meme replies | `sagax_settings` get, set `bot.memeReplies` | simple |
 | Collaborators can create routines | Bot page > Routines > Collaborators can create routines | `sagax_settings` get, set `bot.collaboratorsCreateRoutines` | simple |
 | Notifications | Bot editor > Voice > Notifications | `sagax_settings` get, set `bot.notifications` | simple |
@@ -187,6 +188,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Allowed recipients (no card: bot:<id>, email:<address>, phone:+<digits>) | Bot editor > Permissions > Allowed recipients | `sagax_settings` get, set `bot.allowedRecipients` | élargit les droits |
 | Approval level (ask, edits, auto = Approve for me, full) | Bot editor > Permissions > Approval level | `sagax_settings` get, set `bot.approvalMode` | élargit les droits |
 | Proactive on/off (off = no wakes; proactive = wakes on email, calendar, failed run, bot mention or webhook and acts at its approval level and rules, with a dry run recorded before writes; absent = proactive) | Bot editor > Permissions > Proactive | `sagax_settings` get, set `bot.proactiveMode` | élargit les droits |
+| Direct triggers: { mail / calendar / sms: { on, filters } } (on wakes the bot even when proactive is off, off never wakes it; filters: from:*@client.com, -from:noreply@*, word, -word, comma separated); null = every channel follows proactive | Bot editor > Permissions > Proactive > Direct triggers | `sagax_settings` get, set `bot.directTriggers` | élargit les droits |
 | Primary Bot | Bot editor > Permissions > Primary Bot | `sagax_settings` get, set `bot.primary` | simple |
 | Parallel work, recovery and turn limits ({maxConcurrentThreads, maxParallelPerPerson, busySend, automaticRecovery, turnLimits}) | Bot editor > Behaviour > Parallel tasks | `sagax_settings` get, set `bot.runtime` | simple |
 | Who pays for replies (owner, speaker = each person, default) | Bot editor > Model > Who pays for replies | `sagax_settings` get, set `bot.turnPayer` | simple |
@@ -312,7 +314,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | What upkeep learned about you (get lists them; set with a fact's id removes it) | Settings > Account > About me | `sagax_settings` get, set `account.learned` | suppression |
 | Anonymous usage counts to this server | Settings > Account > Advanced > Usage meter | `sagax_settings` get, set `account.usageMeter` | simple |
 | Your monthly spend limit in USD (null removes; personal server) | Settings > Usage > Monthly limit | `sagax_settings` get, set `account.spendCap` | simple |
-| Your own experiments and tool calls shown ({features: {<key>: true/false/null}}) | Settings > Experimental; Settings > Appearance > Show tool calls | `sagax_settings` get, set `account.experimental` | simple |
+| Your own experiments and tool calls shown ({features: {<key>: true/false/null}}) | Settings > Developer > Experimental; Settings > Appearance > Show tool calls | `sagax_settings` get, set `account.experimental` | simple |
 
 ### Apparence
 
@@ -440,7 +442,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | New bot defaults | Settings > General > System > New bots | `sagax_settings` get, set `server.newBotDefaults` | simple; organisation : organisation |
 | Conversation cleanup | Settings > General > Advanced > Threads | `sagax_settings` get, set `server.threads` | simple; organisation : organisation |
 | Show tool calls | Settings > Appearance | `sagax_settings` get, set `server.showToolCalls` | simple; organisation : organisation |
-| Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles}) | Settings > Experimental | `sagax_settings` get, set `server.feature` | simple; organisation : organisation |
+| Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles}) | Settings > Developer > Experimental | `sagax_settings` get, set `server.feature` | simple; organisation : organisation |
 | Routines in conversation | Settings > Organization > Bots | `sagax_settings` get, set `server.routinesInConversation` | simple; organisation : organisation |
 | Room turn limit | Settings > Organization > Rooms | `sagax_settings` get, set `server.roomTurnTimeout` | simple; organisation : organisation |
 | MCP call time limit | Settings > Organization | `sagax_settings` get, set `server.mcpCallTimeout` | simple; organisation : organisation |
@@ -465,7 +467,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Plugin marketplaces | Capabilities > Sources > Organization sources and access | `sagax_settings` get, set `org.pluginMarketplaces` | organisation |
 | Public links for published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesLinkSharing` | organisation |
 | Reader comments on published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesReaderComments` | organisation |
-| Phone calls ({enabled, callbackNumber, addDoNotCall, removeDoNotCall}) | Settings > Experimental > Phone calls | `sagax_settings` get, set `org.phoneCalls` | organisation |
+| Phone calls ({enabled, callbackNumber, addDoNotCall, removeDoNotCall}) | Settings > Voice > Phone calls | `sagax_settings` get, set `org.phoneCalls` | organisation |
 | Organization bot secrets ({op: add, kind, label, value, injection, botIds} / {op: replace, id, value} / {op: assign, id, botIds} / {op: remove, id}; value a {$secret} reference; get lists names and ids, never a value) | Settings > Organization > Bots > Team secrets | `sagax_settings` get, set `org.botSecrets` | secret + organisation |
 | People's tool access (get lists it; set with a grant's id revokes it) | Settings > Account > Advanced > People's tool access | `sagax_settings` get, set `org.toolGrants` | autrui + suppression |
 | Reports (get lists them; set with a report's id resolves it) | Settings > Notifications > Privacy > Reports | `sagax_settings` get, set `org.reports` | autrui |

@@ -13,7 +13,7 @@ import CompanionCore
 // MARK: - Icons
 
 enum DesktopSettingsIcon: String, CaseIterable {
-    case user, building2, palette, flaskConical, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck, audioLines, info, bell, chevronRight, copy, fileUp, fingerprint, hardDrive
+    case user, building2, palette, flaskConical, code2, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck, audioLines, info, bell, chevronRight, copy, fileUp, fingerprint, hardDrive
 
     /// Path data in the 24 pt viewBox (lucide-react 0.539, ISC).
     var paths: [String] {
@@ -22,6 +22,7 @@ enum DesktopSettingsIcon: String, CaseIterable {
         case .building2: ["M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z","M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2","M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2","M10 6h4","M10 10h4","M10 14h4","M10 18h4"]
         case .palette: ["M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z","M13 6.5A.5 .5 0 1 0 14 6.5A.5 .5 0 1 0 13 6.5Z","M17 10.5A.5 .5 0 1 0 18 10.5A.5 .5 0 1 0 17 10.5Z","M6 12.5A.5 .5 0 1 0 7 12.5A.5 .5 0 1 0 6 12.5Z","M8 7.5A.5 .5 0 1 0 9 7.5A.5 .5 0 1 0 8 7.5Z"]
         case .flaskConical: ["M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2","M6.453 15h11.094","M8.5 2h7"]
+        case .code2: ["m18 16 4-4-4-4","m6 8-4 4 4 4","m14.5 4-5 16"]
         case .keyRound: ["M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z","M16 7.5A.5 .5 0 1 0 17 7.5A.5 .5 0 1 0 16 7.5Z"]
         case .zap: ["M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"]
         case .terminal: ["M12 19h8","m4 17 6-6-6-6"]
@@ -1176,5 +1177,65 @@ struct DesktopEngineBadge: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
+    }
+}
+
+/// `UnitField` (SettingsPrimitives.tsx): the inset well, `h-7 rounded-lg`,
+/// the number right-aligned in tabular digits (`w-14`) and the unit in
+/// ink-secondary; a 0.5 pt border that turns focus blue, or danger when the
+/// last value was refused. The value is committed on Return or when the
+/// field loses focus; the draft stays drawn until the saved value comes
+/// back, or for the person to fix when it was refused.
+struct DesktopUnitField: View {
+    @Environment(\.desktopTheme) private var theme
+    let value: String
+    var unit: Text? = nil
+    let label: Text
+    var decimal = false
+    var width: CGFloat = 56
+    var identifier: String = ""
+    var disabled = false
+    var invalid = false
+    var edit: () -> Void = {}
+    let commit: (String) -> Void
+    @State private var draft: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            TextField(text: Binding(get: { draft ?? value }, set: { draft = $0; edit() })) { label }
+                .font(theme.font(13).monospacedDigit())
+                .foregroundStyle(theme.ink)
+                .multilineTextAlignment(.trailing)
+                .keyboardType(decimal ? .decimalPad : .numberPad)
+                .focused($focused)
+                .submitLabel(.done)
+                .onSubmit(send)
+                .frame(width: width)
+                .accessibilityLabel(label)
+                .accessibilityIdentifier(identifier)
+            if let unit {
+                DesktopText(unit, color: \.inkSecondary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 10)
+        .frame(height: 28)
+        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(invalid ? theme.danger.opacity(0.6) : focused ? theme.focus : theme.border, lineWidth: 0.5)
+        )
+        .disabled(disabled)
+        .opacity(disabled ? 0.5 : 1)
+        .onChange(of: focused) { now in if !now { send() } }
+        .onChange(of: value) { _ in if !focused { draft = nil } }
+    }
+
+    private func send() {
+        // A taken value stays drawn until the saved one comes back.
+        guard let text = draft else { return }
+        commit(text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }

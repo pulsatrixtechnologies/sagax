@@ -113,7 +113,9 @@ function grokReachShows(view: ConnectorSetupView, reach: GrokReachFact | undefin
   return Boolean(reach && target?.grok && reach.at > view.createdAt && reach.connectors.includes(target.grok));
 }
 
-function check(view: ConnectorSetupView, proofs: readonly ConnectorSetupProof[], botId: string | undefined, claude: Array<{ name: string; status: string }> | null, now: number, grokReach?: GrokReachFact): ConnectorSetupView {
+function check(view: ConnectorSetupView, proofs: readonly ConnectorSetupProof[], botId: string | undefined, claude: Array<{ name: string; status: string }> | null, now: number, grokReach?: GrokReachFact, macAccess?: boolean): ConnectorSetupView {
+  // #2690: a Messages card is connected once this Mac reads Messages again
+  if (view.provider === "mac") return { ...view, status: macAccess ? "connected" : "pending", checkedAt: now };
   const target = resolveConnectorSetupTarget(view.label);
   // Grok: a call of the card's own person on the card's bot, or their Grok
   // catalog that carries it; Claude: that person's inventory only
@@ -205,6 +207,8 @@ export function createConnectorSetupRoutes(deps: Shared & {
   principalId(auth: RequestAuth): string | undefined;
   /** This person's claude.ai connectors read again (the cache refreshed), or null when unknown. */
   claudeConnectors(principalId: string): Promise<Array<{ name: string; status: string }> | null>;
+  /** #2690: whether this Mac gives Sagax Full Disk Access (Messages reads), live. */
+  macAccess?(): boolean;
 }): RouteHandler {
   const now = deps.now ?? Date.now;
   return async ({ req, res, path, method, auth, json, readBody }) => {
@@ -220,7 +224,8 @@ export function createConnectorSetupRoutes(deps: Shared & {
     if (!card || card.view.owner !== connectorSetupOwner(principalId)) return json(res, 404, { error: "gone" });
     if (card.view.status === "connected") return json(res, 200, { view: card.view });
     const claude = card.view.provider === "claude" ? await deps.claudeConnectors(principalId).catch(() => null) : null;
-    const view = check(card.view, deps.proofs().list(threadId), deps.botOf(threadId), claude, now(), card.view.provider === "grok" ? deps.grokReach?.(principalId) : undefined);
+    const view = check(card.view, deps.proofs().list(threadId), deps.botOf(threadId), claude, now(), card.view.provider === "grok" ? deps.grokReach?.(principalId) : undefined,
+      card.view.provider === "mac" ? Boolean(deps.macAccess?.()) : undefined);
     deps.patch(threadId, card.messageId, view);
     return json(res, 200, { view });
   };

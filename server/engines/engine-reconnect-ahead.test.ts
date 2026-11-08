@@ -27,12 +27,12 @@ describe("engineReconnectAhead", () => {
         { id: "r3", name: "Codex digest", botId: "codex-bot", enabled: true, nextRunAt: NOW + HOUR },
         { id: "r4", name: "Far away", botId: "claude-bot", enabled: true, nextRunAt: NOW + ENGINE_RECONNECT_AHEAD_MS + HOUR },
         { id: "r5", name: "Paused", botId: "claude-bot", enabled: false, nextRunAt: NOW + HOUR },
-        { id: "r6", name: "Grok ok", botId: "grok-bot", enabled: true, nextRunAt: NOW + HOUR },
+        { id: "r6", name: "Grok ok", botId: "bot-grok", enabled: true, nextRunAt: NOW + HOUR },
       ],
       botDriver: (botId) => {
         if (botId === "claude-bot") return "claudeAgent";
         if (botId === "codex-bot") return "codex";
-        if (botId === "grok-bot") return "grokAgent";
+        if (botId === "bot-grok") return "grokAgent";
         return null;
       },
       botPayer: () => "pr_alice",

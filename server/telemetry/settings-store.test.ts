@@ -25,15 +25,15 @@ describe("telemetry settings store", () => {
 
   it("seals the headers, shows only their names, and an empty value keeps the saved one", () => {
     const { dir, store } = make();
-    const view = store.save({ endpoint: "https://otel.example.test:4318/", headers: { authorization: "Bearer s3cret-value", "x-team": "ops" }, serviceName: "gox" });
-    expect(view).toEqual({ endpoint: "https://otel.example.test:4318", headerNames: ["authorization", "x-team"], serviceName: "gox", enabled: true });
+    const view = store.save({ endpoint: "https://otel.example.test:4318/", headers: { authorization: "Bearer s3cret-value", "x-team": "ops" }, serviceName: "acme" });
+    expect(view).toEqual({ endpoint: "https://otel.example.test:4318", headerNames: ["authorization", "x-team"], serviceName: "acme", enabled: true });
     expect(JSON.stringify(view)).not.toContain("s3cret");
     const file = join(dir, TELEMETRY_FILE);
     expect(readFileSync(file, "utf8")).not.toContain("s3cret");
     expect(statSync(file).mode & 0o777).toBe(0o600);
     // A fresh store (restart) reads it back.
     const again = createTelemetrySettingsStore(dir, () => ({ kind: "key", key: vault }));
-    expect(again.target()).toEqual({ endpoint: "https://otel.example.test:4318", headers: { authorization: "Bearer s3cret-value", "x-team": "ops" }, serviceName: "gox" });
+    expect(again.target()).toEqual({ endpoint: "https://otel.example.test:4318", headers: { authorization: "Bearer s3cret-value", "x-team": "ops" }, serviceName: "acme" });
     // "" keeps authorization; x-team left out goes.
     again.save({ endpoint: "https://otel.example.test:4318", headers: { authorization: "" } });
     expect(again.target()?.headers).toEqual({ authorization: "Bearer s3cret-value" });

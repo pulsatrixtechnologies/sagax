@@ -490,7 +490,7 @@ describe("thread control placement", () => {
     expect(renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }))).not.toContain("primary-bot-badge");
   });
 
-  // JC 2026-11-05: no Computer button in the chat header, in any mode.
+  // the owner 2026-11-05: no Computer button in the chat header, in any mode.
   it("draws no Computer button in the chat header", () => {
     try {
       for (const mode of [true, false]) {

@@ -58,7 +58,7 @@ final class SettingsAppearanceUITests: XCTestCase {
     /// The search field at the top of Settings.
     @MainActor
     private func search(_ text: String, _ app: XCUIApplication) -> XCUIElement {
-        // the round search button opens the field (Grok Bot's sheet, 2026-11-01)
+        // the round search button opens the field (reference app's sheet, 2026-11-01)
         let open = app.buttons["settings-search-open"]
         if open.waitForExistence(timeout: 5) { open.tap() }
         let field = app.textFields["settings-search"]

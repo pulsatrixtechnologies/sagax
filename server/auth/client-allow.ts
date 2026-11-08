@@ -33,6 +33,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["PUT"], path: /^\/api\/me\/bot-overrides\/[\w-]+$/ },
   // the desktop's look on a personal computer, for the phone's "Same as my computer"
   { methods: ["GET", "PUT"], path: /^\/api\/me\/appearance$/ },
+  // #2695: the person's own signal budget and quiet hours on a personal computer
+  { methods: ["GET", "PUT"], path: /^\/api\/me\/signals$/ },
   // own photo on an organization server (server/routes/me-avatar.ts): written
   // to Perspicax with the session person's own sign-in token, never anyone else's
   { methods: ["PUT", "DELETE"], path: /^\/api\/me\/avatar$/ },
@@ -238,7 +240,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/messages\/[\w-]+\/edit$/ },
   // 2026-10-30: a person's answer to a proactive proposal in their own
   // conversation (the handler checks they may write there)
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+(?:\/feedback)?$/ },
   // 2026-11-05 (visible roles, server/routes/perspicax-roles.ts): an "Agit
   // comme" card answered in the person's own thread, and the bot owner's
   // "Toujours ainsi" rules; the handlers check the thread and the owner
@@ -314,7 +316,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // The handler refuses anyone but the bot's person. Not an admin route.
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/background-brief$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/pass$/ },
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/[\w-]+\/(?:reject|keep)$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/[\w-]+\/(?:reject|keep|feedback)$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/artifacts\/art_[\w-]+\/refresh$/ },
   // claude.ai artifacts (server/routes/claude-artifacts.ts, #2018): every
   // call runs through the session person's own Claude account
@@ -351,6 +353,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // 2026-11-06: the bot's analytics (server/routes/bot-analytics.ts); the
   // handler narrows a plain member to their own turns.
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/analytics$/ },
+  // #2698: its proactivity metrics (server/routes/proactive-metrics.ts); the
+  // handler answers the owner, an edit grant or an admin only.
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/proactive-metrics$/ },
   // The rule sets (server/routes/bot-rules.ts): list, add, rename, switch,
   // reorder, save a set's text, delete. Same gate as the Soul edit, checked
   // in the handler.

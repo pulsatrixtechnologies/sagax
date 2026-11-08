@@ -23,6 +23,7 @@ import { SecretRequestCard } from "../SecretRequestCard";
 import { SignInRequestCard } from "../SignInRequestCard";
 import { GithubConnectCard } from "../GithubConnectCard";
 import { optionsCardRow } from "../OptionsCardRow";
+import { BriefItemsFeedback } from "../WakeFeedback";
 import { MessageBoundary, UnknownMessageCard, isUnknownMessageKind } from "../MessageBoundary";
 import { WidgetMessage } from "../widget/WidgetMessage";
 import { AppMessage } from "../AppMessage";
@@ -46,6 +47,15 @@ import { ActivityChip, AttentionRow, RoutineRunRow } from "./chips";
 import { Bubble } from "./Bubble";
 import { FailedTurnRow } from "./ErrorRows";
 import type { ListedItem } from "./types";
+import { VirtualRow } from "../VirtualRow";
+
+/** A transcript row's height before it was ever drawn (VirtualRow). */
+export const TRANSCRIPT_ROW_ESTIMATE = 160;
+
+/** The key a transcript row is virtualized (and remembered) by. */
+export function transcriptRowKey(item: ListedItem): string {
+  return `${item.kind}:${listedItemMessages(item)[0]?.id ?? (item.kind === "voiceCall" ? item.callId : "")}`;
+}
 
 export function listedItemMessages(item: ListedItem): readonly Message[] {
   return item.kind === "message" ? [item.message] : item.kind === "exchange" ? item.run.messages : item.messages;
@@ -91,7 +101,11 @@ export function MessagesListItem({
   getState,
   dispatch,
   latestPageVersionById,
+  eager,
 }: {
+  /** Draws its content at once: the visible tail, the focused and the
+   * unread rows. The others wait until the scroller brings them near. */
+  eager: boolean;
   item: ListedItem;
   index: number;
   items: ListedItem[];
@@ -146,11 +160,12 @@ export function MessagesListItem({
   }
   const first = edgeOf(item).first;
   const newDay = startsNewStretch(prev?.at, first.at);
+  const rowKey = transcriptRowKey(item);
   const rowClass = index >= items.length - DRAWN_TAIL_ROWS || listedItemMessages(item).some((row) => row.id === focusedId)
     ? "contents" : "transcript-row";
   if (item.kind === "gotoGroup") {
     return (
-      <div key={item.id} className={rowClass}>
+      <VirtualRow key={item.id} rowKey={rowKey} eager={eager} estimate={TRANSCRIPT_ROW_ESTIMATE} className={rowClass}>
         {newDay && <TranscriptDate at={first.at} />}
         {divider}
         <div className="contents" data-mid={item.messages.find((message) => message.id === focusedId)?.id ?? item.messages[0]?.id}>
@@ -175,12 +190,12 @@ export function MessagesListItem({
             }}
           />
         </div>
-      </div>
+      </VirtualRow>
     );
   }
   if (item.kind === "exchange") {
     return (
-      <div key={item.run.id} className={rowClass}>
+      <VirtualRow key={item.run.id} rowKey={rowKey} eager={eager} estimate={TRANSCRIPT_ROW_ESTIMATE} className={rowClass}>
         {newDay && <TranscriptDate at={first.at} />}
         {divider}
         <BotExchangeChip
@@ -198,13 +213,13 @@ export function MessagesListItem({
             return true;
           }}
         />
-      </div>
+      </VirtualRow>
     );
   }
   if (item.kind === "voiceCall") {
     const hit = item.messages.find((message) => message.id === focusedId);
     return (
-      <div key={`voice:${item.callId}`} className={rowClass}>
+      <VirtualRow key={`voice:${item.callId}`} rowKey={rowKey} eager={eager} estimate={TRANSCRIPT_ROW_ESTIMATE} className={rowClass}>
         {newDay && <TranscriptDate at={first.at} />}
         {divider}
         <div className="contents" data-mid={hit?.id ?? item.messages[0]?.id}>
@@ -216,7 +231,7 @@ export function MessagesListItem({
             forceOpen={Boolean(hit)}
           />
         </div>
-      </div>
+      </VirtualRow>
     );
   }
   if (item.kind === "run") {
@@ -226,7 +241,7 @@ export function MessagesListItem({
     // Hidden steps still carry the divider: the reply under them is new.
     if (!shown.length && !hasWidget) return divider && <div key={item.id} className="contents">{divider}</div>;
     return (
-      <div key={item.id} className={rowClass}>
+      <VirtualRow key={item.id} rowKey={rowKey} eager={eager} estimate={TRANSCRIPT_ROW_ESTIMATE} className={rowClass}>
         {newDay && <TranscriptDate at={first.at} />}
         {divider}
         <CwActivityWidgets messages={item.messages} threadId={threadId} botId={botId} />
@@ -260,7 +275,7 @@ export function MessagesListItem({
             />
           </StepBoundary>
         )}
-      </div>
+      </VirtualRow>
     );
   }
   const m = item.message;
@@ -291,7 +306,7 @@ export function MessagesListItem({
     }
     // 2026-11-05: what a bot's turn elsewhere left for the person (src/components/AttentionCard.tsx)
     if (m.attention && m.role === "bot" && m.kind === "text") {
-      return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} /></MessageBoundary>;
+      return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} threadId={threadId} /></MessageBoundary>;
     }
     // a bot's page proposal: its approval card (src/components/PublishedPages.tsx)
     if (m.pagePublish && m.role === "bot") {
@@ -331,7 +346,7 @@ export function MessagesListItem({
         // a bot-authored live HTML surface, drawn in the sandboxed app frame
         return <MessageBoundary fallbackText={m.text ?? ""}><AppMessage message={m} /></MessageBoundary>;
       case "routine.run":
-        return <RoutineRunRow message={m} botId={botId} />;
+        return <RoutineRunRow message={m} botId={botId} threadId={threadId} />;
       case "routines":
         return <ConversationRoutineToggle message={m} />;
       case "call":
@@ -426,6 +441,8 @@ export function MessagesListItem({
             replyTarget={lookups.replyTarget(m)}
             onReply={onReply}
           />
+          {/* #2694: each point of a brief, rated where it was said */}
+          {!user && m.briefItems?.length ? <BriefItemsFeedback message={m} botId={botId} threadId={threadId} /> : null}
           </>
         );
       }
@@ -433,13 +450,13 @@ export function MessagesListItem({
   })();
   if (!row) return divider && <div key={m.id} className="contents">{divider}</div>;
   return (
-    <div key={m.id} className={rowClass}>
+    <VirtualRow key={m.id} rowKey={rowKey} eager={eager} estimate={TRANSCRIPT_ROW_ESTIMATE} className={rowClass}>
       {newDay && <TranscriptDate at={m.at} />}
       {divider}
       <div className="contents" data-mid={m.id}>
         {row}
         {seen?.messageId === m.id && <SeenByRow faces={seen.faces} end time={formatTime} />}
       </div>
-    </div>
+    </VirtualRow>
   );
 }

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Plugins (#2104, 2026-11-06: Grok Bot's Connect Apps, look for look). The
+// Plugins (#2104, 2026-11-06: the reference app's Connect Apps, look for look). The
 // home is the catalogue (title, "N connected" opening Manage, the round
 // search, From Sagax, categories); Manage ("Manage plugins and skills")
 // lists what is installed, one line per installed thing with a "..." menu,
@@ -57,7 +57,7 @@ describe("Plugins tabs", () => {
     installed: createElement(InstalledView, props()), discover: "D", bots: "B", pages: "G", sources: "S",
   }));
 
-  it("the home: the title, \"N connected\" with its icons opening Manage, the search row and Bot templates (#2104, Grok Bot's Connect Apps)", () => {
+  it("the home: the title, \"N connected\" with its icons opening Manage, the search row and Bot templates (#2104, the reference app's Connect Apps)", () => {
     const entries = installedEntries(items);
     // GitHub (three rows folded into one) and Twilio Docs: two entries, as Manage shows them,
     // plus the three connectors of the providers, which Manage lists too

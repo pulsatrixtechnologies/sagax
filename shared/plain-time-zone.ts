@@ -20,11 +20,24 @@ function zoneName(zone: string, locale: string, style: "shortGeneric" | "longGen
 export function plainTimeZone(zone: string, locale = "en"): string {
   const english = locale.toLowerCase().startsWith("en");
   if (UNIVERSAL.test(zone.trim())) return "UTC";
+  if (locale.toLowerCase().startsWith("fr")) return frenchTimeZone(zone, locale);
   if (english && SAID[zone]) return SAID[zone]!;
   const name = zoneName(zone, locale, "shortGeneric") ?? zoneName(zone, locale, "longGeneric");
   if (name) return english ? name.replace(/ Time$/, " time") : name;
   const city = zone.split("/").at(-1)?.replaceAll("_", " ").trim();
   return city ? `${city} time` : zone;
+}
+
+/** French reads the long generic name ("heure de l’Est", "heure de l’Europe
+ * centrale"); a short one is an abbreviation ("HE") or "heure : France". A
+ * name still in the "heure : X" form is said "heure (X)" (#2805). */
+function frenchTimeZone(zone: string, locale: string): string {
+  // Plain "fr" says "heure de l’Est nord-américain"; Quebec French is the default.
+  const french = locale.toLowerCase() === "fr" ? "fr-CA" : locale;
+  const name = zoneName(zone, french, "longGeneric") ?? zoneName(zone, french, "shortGeneric");
+  if (name) return name.replace(/^heure\s*:\s*(.+)$/i, "heure ($1)");
+  const city = zone.split("/").at(-1)?.replaceAll("_", " ").trim();
+  return city ? `heure (${city})` : zone;
 }
 
 /** "09:00" as people write it: "9:00". */

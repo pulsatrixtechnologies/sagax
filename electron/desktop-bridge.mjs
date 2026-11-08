@@ -17,7 +17,7 @@ import fs from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -76,7 +76,7 @@ const FETCH_MAX = 256 * 1024;
 /** The server's largest upload (a video, server/attachments/attachments.ts). */
 const STAGE_MAX = 1024 * 1024 * 1024;
 const ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "fetch_url", "browse", "computer_tools", "computer_call", "vm_status", "vm_start", "vm_run_command", "vm_create", "vm_stop", "vm_pause", "vm_resume", "vm_setup", "vm_install", "vm_screenshot", "vm_computer_call", "stage_file", "extract_archive", "local_model", "terminal_open", "vm_terminal_open", "mac_app"]);
-const KEYS = new Set(["action", "path", "content", "encoding", "offset", "max_bytes", "command", "cwd", "timeout_seconds", "pattern", "glob", "url", "screenshot", "tool_name", "arguments", "container", "name", "final", "endpoint", "http_method", "http_path", "json", "env"]);
+const KEYS = new Set(["action", "path", "content", "encoding", "offset", "max_bytes", "command", "cwd", "timeout_seconds", "pattern", "glob", "url", "screenshot", "tool_name", "arguments", "container", "name", "final", "endpoint", "http_method", "http_path", "json", "env", "tmp_scope"]);
 /** Command variables (run_command, vm_run_command): API keys the person
  * exposed to this bot, by the names they chose. Names a shell or Sagax
  * needs never come from the server (server/vault/credential-command-env.ts). */
@@ -94,6 +94,191 @@ const uuid = value => typeof value === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-
 const text = value => ({ content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }] });
 const failure = message => ({ ...text(message), isError: true });
 
+/** #2828: each bot has its own temporary folder on this computer and in the
+ * Local VM. `tmp_scope` is a hash of the bot (never its id), sent with the
+ * operations that touch files or run a command.
+ *
+ * #2829 follow-up: every command of the person runs as the same account, so
+ * a folder check on the command text alone is not isolation. The folder is
+ * held three ways:
+ * - its name is an HMAC of the scope under a key that lives only in this
+ *   app's memory, so no bot can work out another bot's folder name;
+ * - the folder of them all cannot be listed (0300 on macOS and Linux, an ACL
+ *   with traverse and create but no list on Windows; root-owned 0311 in the
+ *   Local VM, where the bot's command also runs with no_new_privs so sudo
+ *   cannot lift it);
+ * - on macOS each bot command runs under sandbox-exec, which denies every
+ *   path of the folder of them all except the bot's own, whatever the
+ *   command spells (a chmod back, a glob, a link). */
+const TMP_SCOPE = /^[a-f0-9]{16}$/;
+const TMP_SCOPED_ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "vm_run_command"]);
+const BOT_TMP_FOLDER = "sagax-bots";
+/** The Local VM's folder for the bots' temporary folders. */
+export const VM_BOT_TMP_ROOT = `/tmp/${BOT_TMP_FOLDER}`;
+/** Named by an HMAC under a key of this run only (never on disk). */
+const BOT_TMP_KEY = randomBytes(32);
+const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
+
+/** The folder name of a bot's temporary folder: unguessable from the scope
+ * without this app's key. */
+export function botTmpName(scope, key = BOT_TMP_KEY) {
+  return createHmac("sha256", key).update(`sagax-bot-tmp:${scope}`).digest("hex").slice(0, 32);
+}
+
+const lockedRoots = new Map();
+/** The bot folder names made by this run, by root: kept by the sweep. */
+const madeThisRun = new Map();
+function keptBotTmpNames(root) {
+  if (!madeThisRun.has(root)) madeThisRun.set(root, new Set());
+  return madeThisRun.get(root);
+}
+const BOT_TMP_ENTRY = /^[a-f0-9]{16}(?:[a-f0-9]{16})?$/;
+
+/** Removes a folder a bot may have closed (a subfolder chmod 0500 or 0000):
+ * each folder is opened back to its owner first, links never followed. */
+export async function removeClosedTree(target) {
+  const open = async (current) => {
+    let info;
+    try { info = await fs.lstat(current); } catch { return; }
+    if (!info.isDirectory()) return;
+    await fs.chmod(current, 0o700).catch(() => {});
+    for (const name of await fs.readdir(current).catch(() => [])) await open(path.join(current, name));
+  };
+  await open(target);
+  await fs.rm(target, { recursive: true, force: true }).catch(() => {});
+}
+
+/** The folder of them all: owner can create and traverse, nobody lists it.
+ * Once per run it is swept: the bot folders of an earlier run (named under
+ * a key that died with it, so nobody reaches them again) and those of the
+ * first #2828 build (named by the scope itself) are removed. */
+async function lockBotTmpRoot(root, platform) {
+  if (!lockedRoots.has(root)) {
+    lockedRoots.set(root, (async () => {
+      try {
+        await fs.chmod(root, 0o700).catch(() => {});
+        // The live set of this run, read at each name: a bot folder made
+        // while the listing runs is never taken for an earlier run's.
+        const keep = keptBotTmpNames(root);
+        for (const name of await fs.readdir(root)) if (BOT_TMP_ENTRY.test(name) && !keep.has(name)) await removeClosedTree(path.join(root, name));
+      } catch { /* nothing to tidy */ }
+      if (platform === "win32") await lockWindowsRoot(root).catch(() => {});
+    })());
+  }
+  await lockedRoots.get(root);
+  if (platform !== "win32") await fs.chmod(root, 0o300).catch(() => {});
+}
+
+/** At app start: sweeps the folder of them all left by the previous run, so
+ * its bot folders do not wait for the first bot command to go. */
+export async function sweepBotTmpRoot({ root = path.join(os.tmpdir(), BOT_TMP_FOLDER), platform = process.platform } = {}) {
+  try { await fs.lstat(root); } catch { return; }
+  await lockBotTmpRoot(root, platform);
+}
+
+/** Windows: the person's account keeps traverse and create on the folder of
+ * them all, never list; full control is inherited by each bot's folder. */
+async function lockWindowsRoot(root) {
+  const sid = await new Promise(resolve => {
+    const child = spawn("whoami", ["/user", "/fo", "csv", "/nh"], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+    let out = ""; child.stdout.on("data", chunk => { out += chunk; });
+    child.once("error", () => resolve(null));
+    child.once("close", () => resolve(/"(S-1-[\d-]+)"/.exec(out)?.[1] ?? null));
+  });
+  if (!sid) return;
+  await new Promise(resolve => {
+    const child = spawn("icacls", [root, "/inheritance:r", "/grant:r", `*${sid}:(X,AD,WD,RA,REA,RC)`, "/grant", `*${sid}:(OI)(CI)(IO)(F)`], { windowsHide: true, stdio: "ignore" });
+    child.once("error", resolve); child.once("close", resolve);
+  });
+}
+
+/** This bot's own temporary folder on this computer, created private. */
+export async function botTmpDir(root, scope, { key = BOT_TMP_KEY, platform = process.platform } = {}) {
+  await fs.mkdir(root, { recursive: true, mode: 0o700 });
+  const name = botTmpName(scope, key);
+  keptBotTmpNames(root).add(name);
+  const dir = path.join(root, name);
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  await fs.chmod(dir, 0o700).catch(() => {});
+  await lockBotTmpRoot(root, platform);
+  return dir;
+}
+
+async function realIdentity(target) {
+  const info = await fs.stat(target);
+  return `${info.dev}:${info.ino}`;
+}
+
+/** True when `target` resolves inside the folder of them all but not inside
+ * `own` (by filesystem identity, so a link or another spelling counts). */
+export async function insideOtherBotTmp(root, own, target) {
+  let rootId; let ownId;
+  try { rootId = await realIdentity(root); } catch { return false; }
+  try { ownId = await realIdentity(own); } catch { ownId = null; }
+  let current = path.resolve(target);
+  for (;;) {
+    try { current = await fs.realpath(current); break; }
+    catch {
+      const parent = path.dirname(current);
+      if (parent === current) return false;
+      current = parent;
+    }
+  }
+  for (;;) {
+    let id = null;
+    try { id = await realIdentity(current); } catch { /* unreadable */ }
+    if (id !== null && id === ownId) return false;
+    if (id !== null && id === rootId) return true;
+    const parent = path.dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
+/** The other bot's temporary folder a command names, or null (#2828): a
+ * `sagax-bots/<name>` other than this bot's, the folder of them all, or a
+ * climb out of its own ($TMPDIR/..). A first refusal with a clear message;
+ * the sandbox and the folder rights hold what this misses. */
+export function commandNamesOtherBotTmp(command, ownName) {
+  if (typeof command !== "string" || !command) return null;
+  for (const match of command.matchAll(/sagax-bots(?:[/\\]+([A-Za-z0-9._-]*))?/g)) {
+    if (match[1] !== ownName) return match[0];
+  }
+  const climb = command.match(/\$\{?(?:TMPDIR|TMP|TEMP)\}?[/\\]+\.\.(?=$|[/\\\s'";|&)<>`])/);
+  return climb ? climb[0] : null;
+}
+
+const sbplString = value => `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+
+/** macOS: the command under sandbox-exec, every path of the folder of them
+ * all denied but this bot's own (the later rule wins). */
+export function sandboxedCommandArgv(command, { root, own, shell, sandboxExec = SANDBOX_EXEC }) {
+  const profile = [
+    "(version 1)",
+    "(allow default)",
+    `(deny file-read* file-write* (subpath ${sbplString(root)}))`,
+    `(allow file-read-metadata (literal ${sbplString(root)}))`,
+    `(allow file-read* file-write* (subpath ${sbplString(own)}))`,
+  ].join("");
+  return [sandboxExec, "-p", profile, shell, "-lc", command];
+}
+
+const shQuote = value => `'${String(value).replace(/'/g, "'\\''")}'`;
+
+/** The Local VM command run with this bot's own temporary folder: the
+ * folder of them all root-owned and unlistable, the bot's own 0700, and the
+ * command under no_new_privs so sudo cannot reach the others. */
+export function vmCommandWithBotTmp(command, name) {
+  const dir = `${VM_BOT_TMP_ROOT}/${name}`;
+  return [
+    `sudo -n install -d -o root -g root -m 0311 ${VM_BOT_TMP_ROOT} && sudo -n find ${VM_BOT_TMP_ROOT} -mindepth 1 -maxdepth 1 -regextype posix-extended -regex '.*/[a-f0-9]{16}' -exec rm -rf {} + && sudo -n install -d -o "$(id -u)" -g "$(id -g)" -m 0700 ${dir} || { echo "The bot's temporary folder of the Local VM could not be prepared." >&2; exit 1; }`,
+    `export TMPDIR=${dir} TMP=${dir} TEMP=${dir}`,
+    `exec setpriv --no-new-privs bash -lc ${shQuote(command)}`,
+  ].join("\n");
+}
+
+const otherBotTmpRefusal = named => `This command names ${named}, another bot's temporary folder: each bot has its own ($TMPDIR).`;
+
 /** The server's operation, checked for shape before anything looks at it. */
 export function validBridgeOperation(operation) {
   if (!operation || typeof operation !== "object" || Array.isArray(operation)) return false;
@@ -107,6 +292,7 @@ export function validBridgeOperation(operation) {
   }
   if (operation.arguments !== undefined && (!operation.arguments || typeof operation.arguments !== "object" || Array.isArray(operation.arguments))) return false;
   if (!validCommandVariables(operation.env) || (operation.env !== undefined && operation.action !== "run_command" && operation.action !== "vm_run_command")) return false;
+  if (operation.tmp_scope !== undefined && (typeof operation.tmp_scope !== "string" || !TMP_SCOPE.test(operation.tmp_scope) || !TMP_SCOPED_ACTIONS.has(operation.action))) return false;
   if (operation.endpoint !== undefined && (typeof operation.endpoint !== "string" || !/^desk[a-z0-9]{3,24}$/.test(operation.endpoint))) return false;
   if (operation.http_method !== undefined && operation.http_method !== "GET" && operation.http_method !== "POST") return false;
   if (operation.http_path !== undefined && operation.http_path !== "/models" && operation.http_path !== "/chat/completions" && operation.http_path !== "/messages") return false;
@@ -204,7 +390,7 @@ function globRegex(glob) {
 }
 
 /** File names matching a glob and/or lines matching a pattern, bounded. */
-export async function searchFiles(root, { pattern, glob, protectedRoots, signal }) {
+export async function searchFiles(root, { pattern, glob, protectedRoots, signal, exclude }) {
   const nameMatch = glob ? globRegex(glob) : null;
   let lineMatch = null;
   if (pattern) { try { lineMatch = new RegExp(pattern); } catch { throw new Error("pattern is not a valid regular expression"); } }
@@ -221,6 +407,7 @@ export async function searchFiles(root, { pattern, glob, protectedRoots, signal 
       const full = path.join(dir, entry.name);
       if (entry.isSymbolicLink()) continue;
       try { await assertOutsideProtected(protectedRoots, full); } catch { continue; }
+      if (exclude && await exclude(full)) continue;
       visited++;
       if (entry.isDirectory()) { if (!skip.has(entry.name)) pending.push(full); continue; }
       if (!entry.isFile()) continue;
@@ -285,19 +472,39 @@ export function commandNamesAppData(command, appDataPaths, home) {
  * the person's settings provide. */
 export async function executeBridgeOperation(operation, deps, signal) {
   const home = deps.home;
+  const scope = typeof operation.tmp_scope === "string" && TMP_SCOPE.test(operation.tmp_scope) ? operation.tmp_scope : null;
+  const tmpRoot = deps.botTmpRoot ?? path.join(os.tmpdir(), BOT_TMP_FOLDER);
+  const tmpKey = deps.botTmpKey ?? BOT_TMP_KEY;
+  const platform = deps.platform ?? process.platform;
+  const ownName = scope ? botTmpName(scope, tmpKey) : null;
+  const ownTmp = scope && operation.action !== "vm_run_command" ? await botTmpDir(tmpRoot, scope, { key: tmpKey, platform }) : null;
   const protectedRoots = await protectedIdentities(deps.protectedPaths);
+  // #2828: another bot's temporary folder is out of this bot's reach.
+  const outsideOtherBotTmp = async target => {
+    if (ownTmp && await insideOtherBotTmp(tmpRoot, ownTmp, target)) throw new Error("This path is another bot's temporary folder: each bot has its own ($TMPDIR).");
+  };
   switch (operation.action) {
     case "run_command": {
       const cwd = operation.cwd ? localPath(operation.cwd, home) : home;
+      const namedTmp = ownName ? commandNamesOtherBotTmp(operation.command, ownName) : null;
+      if (namedTmp) throw new Error(otherBotTmpRefusal(namedTmp));
       // #2773: the app's own data never passes through run_command either,
       // neither named in the command nor as its working directory.
       const named = commandNamesAppData(operation.command, deps.appDataPaths, home);
       if (named) throw new Error(`This command names ${named}, the Sagax app's own data on this computer: run_command does not reach it.`);
-      if (operation.cwd) await assertOutsideProtected(protectedRoots, cwd);
-      return runCommand(operation.command, { cwd, timeoutSeconds: operation.timeout_seconds ?? 120, signal, env: { ...commandEnvironment(), ...operation.env } });
+      if (operation.cwd) { await outsideOtherBotTmp(cwd); await assertOutsideProtected(protectedRoots, cwd); }
+      const env = { ...commandEnvironment(), ...operation.env, ...(ownTmp ? { TMPDIR: ownTmp, TMP: ownTmp, TEMP: ownTmp } : {}) };
+      // macOS: the operating system itself keeps the bot out of the others' folders.
+      const sandboxExec = deps.sandboxExec === undefined ? SANDBOX_EXEC : deps.sandboxExec;
+      const argv = ownTmp && platform === "darwin" && sandboxExec && await fs.access(sandboxExec).then(() => true, () => false)
+        ? sandboxedCommandArgv(operation.command, { root: await fs.realpath(tmpRoot), own: await fs.realpath(ownTmp), shell: process.env.SHELL && path.isAbsolute(process.env.SHELL) ? process.env.SHELL : "/bin/sh", sandboxExec })
+        : undefined;
+      if (argv && !operation.command.trim()) throw new Error("Give a command");
+      return runCommand(operation.command, { cwd, timeoutSeconds: operation.timeout_seconds ?? 120, signal, env, ...(argv ? { argv } : {}) });
     }
     case "read_file": {
       const target = localPath(operation.path, home);
+      await outsideOtherBotTmp(target);
       await assertOutsideProtected(protectedRoots, target);
       const handle = await fs.open(target, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
       try {
@@ -316,6 +523,7 @@ export async function executeBridgeOperation(operation, deps, signal) {
     }
     case "write_file": {
       const target = localPath(operation.path, home);
+      await outsideOtherBotTmp(target);
       await assertOutsideProtected(protectedRoots, target);
       const data = Buffer.from(operation.content ?? "", operation.encoding === "base64" ? "base64" : "utf8");
       if (data.length > WRITE_MAX) throw new Error("Files are limited to 1 MiB per write");
@@ -326,6 +534,7 @@ export async function executeBridgeOperation(operation, deps, signal) {
     }
     case "list_files": {
       const target = operation.path ? localPath(operation.path, home) : home;
+      await outsideOtherBotTmp(target);
       await assertOutsideProtected(protectedRoots, target);
       const entries = await fs.readdir(target, { withFileTypes: true });
       const shown = [];
@@ -339,8 +548,9 @@ export async function executeBridgeOperation(operation, deps, signal) {
     }
     case "search_files": {
       const root = operation.path ? localPath(operation.path, home) : home;
+      await outsideOtherBotTmp(root);
       await assertOutsideProtected(protectedRoots, root);
-      return searchFiles(root, { pattern: operation.pattern, glob: operation.glob, protectedRoots, signal });
+      return searchFiles(root, { pattern: operation.pattern, glob: operation.glob, protectedRoots, signal, ...(ownTmp ? { exclude: full => insideOtherBotTmp(tmpRoot, ownTmp, full) } : {}) });
     }
     case "fetch_url": {
       const url = new URL(operation.url);
@@ -380,7 +590,11 @@ export async function executeBridgeOperation(operation, deps, signal) {
     case "vm_computer_call":
       if (typeof deps.localVm.computer !== "function") throw new Error("This Sagax desktop app cannot control the Local VM screen. Update it.");
       return deps.localVm.computer(operation.tool_name, operation.arguments);
-    case "vm_run_command": return deps.localVm.exec(operation.container, operation.command, { timeoutSeconds: operation.timeout_seconds ?? 120, signal, ...(operation.env ? { env: operation.env } : {}) });
+    case "vm_run_command": {
+      const namedTmp = ownName ? commandNamesOtherBotTmp(operation.command, ownName) : null;
+      if (namedTmp) throw new Error(otherBotTmpRefusal(namedTmp));
+      return deps.localVm.exec(operation.container, ownName ? vmCommandWithBotTmp(operation.command, ownName) : operation.command, { timeoutSeconds: operation.timeout_seconds ?? 120, signal, ...(operation.env ? { env: operation.env } : {}) });
+    }
     case "vm_create": return deps.localVm.create({ spec: operation.arguments?.spec, signal, progress: deps.progress });
     case "stage_file": {
       const dir = deps.attachmentsDir;

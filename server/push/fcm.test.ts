@@ -57,9 +57,9 @@ describe("FCM message", () => {
     expect(verify.verify(keys.publicKey, Buffer.from(signature!, "base64url"))).toBe(true);
   });
   it("is data only, every value a string, with the keys a tap opens", () => {
-    const body = buildFcmMessage({ token: TOKEN, message: { kind: "approval", personId: "pr_a", title: "Cryptic", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", needsKey: true, at: 5 } }) as { message: { data: Record<string, string>; android: Record<string, unknown>; notification?: unknown } };
+    const body = buildFcmMessage({ token: TOKEN, message: { kind: "approval", personId: "pr_a", title: "Nimbus", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", needsKey: true, at: 5 } }) as { message: { data: Record<string, string>; android: Record<string, unknown>; notification?: unknown } };
     expect(body.message.notification).toBeUndefined();
-    expect(body.message.data).toEqual({ kind: "approval", title: "Cryptic", body: "Run a command?", botId: "b1", requestId: "r1", prompt: "approval", needsKey: "1", threadId: "t1", at: "5" });
+    expect(body.message.data).toEqual({ kind: "approval", title: "Nimbus", body: "Run a command?", botId: "b1", requestId: "r1", prompt: "approval", needsKey: "1", threadId: "t1", at: "5" });
     expect(body.message.android).toMatchObject({ priority: "HIGH", collapse_key: "t-t1" });
     for (const value of Object.values(body.message.data)) expect(typeof value).toBe("string");
   });
@@ -151,13 +151,13 @@ describe("push hub with Android phones", () => {
       log: { info() {}, warn() {} },
     });
     expect(hub.enabled).toBe(true);
-    hub.submit({ kind: "approval", personId: "pr_a", title: "Cryptic", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 });
+    hub.submit({ kind: "approval", personId: "pr_a", title: "Nimbus", body: "Run a command?", threadId: "t1", botId: "b1", requestId: "r1", prompt: "approval", at: 1 });
     await hub.drain();
     const sent = calls.filter((call) => call.url.includes("messages:send"));
     expect(sent).toHaveLength(1);
     expect(JSON.parse(sent[0]!.body).message).toMatchObject({ token: TOKEN, data: { kind: "approval", requestId: "r1" } });
     status = 404;
-    hub.submit({ kind: "approval", personId: "pr_a", title: "Cryptic", body: "Again?", threadId: "t2", botId: "b1", requestId: "r2", prompt: "approval", at: 2 });
+    hub.submit({ kind: "approval", personId: "pr_a", title: "Nimbus", body: "Again?", threadId: "t2", botId: "b1", requestId: "r2", prompt: "approval", at: 2 });
     await hub.drain();
     expect(android.list("pr_a")).toEqual([]);
   });

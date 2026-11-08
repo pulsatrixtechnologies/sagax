@@ -74,7 +74,7 @@ describe("bot task list against an older server", () => {
   });
 });
 
-// JC 2026-10-28: "if it cannot be loaded, do not show it." A list that cannot
+// the owner 2026-10-28: "if it cannot be loaded, do not show it." A list that cannot
 // be read hides the section like an empty list, with no red line; the cause
 // goes to the console; the section comes back when a read works.
 describe("bot task list that cannot be loaded", () => {
@@ -235,7 +235,7 @@ describe("bot task list stays live", () => {
   });
 });
 
-// JC: "I cannot even interact with the task." A task opens in place, its
+// the owner: "I cannot even interact with the task." A task opens in place, its
 // menu moves or removes it, Answer opens the conversation with the task
 // named in the composer, and all of it works from the keyboard.
 describe("bot task interaction", () => {

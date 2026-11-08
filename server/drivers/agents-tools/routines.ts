@@ -4,6 +4,7 @@
 
 import { TRIGGER_SOURCES } from "../../../shared/trigger-sources.ts";
 import { formatRoutinePage, type RoutinePage } from "../../../shared/routine-listing.ts";
+import { BOT_EVENT_TYPES } from "../../../shared/bot-event-subscriptions.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
 import {
@@ -36,6 +37,23 @@ export const DEF_RUN_ROUTINE = {
       additionalProperties: false,
       properties: { routine_id: { type: "string", minLength: 1, description: "Routine id from list_routines." }, action: { type: "string", enum: ["run", "check"], description: "check reads readiness without creating a run; its warnings list the paths the instructions cite that cannot be found (a warning never blocks a run). Omit to run." } },
       required: ["routine_id"],
+    },
+  };
+
+export const DEF_EVENT_SUBSCRIPTIONS = {
+    name: "event_subscriptions",
+    description:
+      "This bot's event subscriptions, instead of polling: when one of its routine runs reports, stays quiet or fails, call a webhook url (signed JSON) or run a routine_id (list_routines; this bot or a bot of the same person). action list (default), create (events plus url or routine_id), test (sends one sample) or delete.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        action: { type: "string", enum: ["list", "create", "test", "delete"] },
+        events: { type: "array", items: { type: "string", enum: [...BOT_EVENT_TYPES] } },
+        url: { type: "string", minLength: 1 },
+        routine_id: { type: "string", minLength: 1 },
+        subscription_id: { type: "string", minLength: 1, description: "For test and delete, from list." },
+      },
     },
   };
 
@@ -116,7 +134,7 @@ export const DEF_PROPOSE_ROUTINE_ACTION = {
     },
   };
 
-export const ROUTINES_TOOL_NAMES: ReadonlySet<string> = new Set(['list_routines', 'run_routine', 'propose_routine', 'propose_routine_action'] as const);
+export const ROUTINES_TOOL_NAMES: ReadonlySet<string> = new Set(['list_routines', 'run_routine', 'propose_routine', 'propose_routine_action', 'event_subscriptions'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callRoutinesTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -168,6 +186,16 @@ export async function callRoutinesTool(name: string, args: Json, context: ToolCa
     }
     const note = typeof r.message === "string" ? ` ${r.message}` : " It runs on its own.";
     return { text: `${r.alreadyRunning === true ? "Joined the run already under way" : "Started a run"} of routine ${routineId}${typeof r.runId === "string" ? ` (run ${r.runId})` : ""}.${note} Check list_routines for the result.` };
+  }
+  if (name === "event_subscriptions") {
+    const action = typeof args.action === "string" && args.action ? args.action : "list";
+    const body: Record<string, unknown> = { fromBotId: BOT_ID, fromThreadId: THREAD_ID, action };
+    if (Array.isArray(args.events)) body.events = args.events;
+    if (typeof args.url === "string") body.url = args.url;
+    if (typeof args.routine_id === "string") body.routineId = args.routine_id;
+    if (typeof args.subscription_id === "string") body.subscriptionId = args.subscription_id;
+    const r = await api("/api/internal/event-subscriptions", { method: "POST", body: JSON.stringify(body) });
+    return { text: JSON.stringify(r) };
   }
   if (name === "propose_routine") {
     const { fields: routine, error: scheduleError } = routineFields(args);

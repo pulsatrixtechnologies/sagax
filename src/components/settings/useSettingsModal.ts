@@ -48,8 +48,8 @@ export function useSettingsModal() {
   const dialogRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const [searchLabels, setSearchLabels] = useState<string[]>([]);
-  // Closing goes back out of Settings with a quick page cross-fade.
-  const closeSettings = () => navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page");
+  // Closing fades the dialog out, then goes back out of Settings (#2791).
+  const closeSettings = () => navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page", dialogRef.current);
   const openAbout = useCallback(() => {
     dispatch({ type: "toggleAppSettings", open: false });
     requestAbout();
@@ -206,7 +206,7 @@ export function useSettingsModal() {
         .some(child => child.getClientRects().length))) return;
       if (event.key === "Escape") {
         event.preventDefault();
-        navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page");
+        navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page", dialogRef.current);
         return;
       }
       if (event.key !== "Tab" || !dialog) return;

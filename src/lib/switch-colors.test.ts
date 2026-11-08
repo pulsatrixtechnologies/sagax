@@ -4,7 +4,7 @@
 // told apart). Every combination is measured here and fails below 3:1
 // (WCAG 1.4.11): the white thumb on the on and off tracks, and each track, or
 // its edge when it has one, on every surface a switch sits on. The on colour is one
-// value everywhere (Grok Bot's blue); no accent, brand or bot colour moves it.
+// value everywhere (the reference app's blue); no accent, brand or bot colour moves it.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -58,7 +58,7 @@ describe("switch contrast", () => {
     expect(readFileSync(join(ROOT, "src/styles.css"), "utf8")).toContain('@import "./styles/skin-switch.css";');
   });
 
-  it("holds 3:1 for the white thumb on both tracks (the thumb's position says on or off, Grok Bot's look)", () => {
+  it("holds 3:1 for the white thumb on both tracks (the thumb's position says on or off, the reference app's look)", () => {
     const css = readFileSync(join(ROOT, "src/styles/skin-switch.css"), "utf8");
     const problems: string[] = [];
     for (const c of contexts) {

@@ -39,6 +39,7 @@ import {
 import { ROUTINE_WATCH_LIMITS, type RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { parseMailAlias } from "../../shared/routine-mail-alias.ts";
 import { loadRoutineEffort, parseRoutineEffort } from "../../shared/routine-effort.ts";
+import { defaultNextCheck, expireGoal, goalPastDeadline, loadRoutineGoal, parseRoutineGoal, readGoalReport, routineGoalBlock, stepGoal, type RoutineGoal, type RoutineGoalInput } from "../../shared/routine-goal.ts";
 import { loadRoutineModel, parseRoutineModel } from "../../shared/routine-model.ts";
 import { loadRoutineActAs, parseRoutineActAs } from "../../shared/routine-act-as.ts";
 import { watchNoteBlock } from "./routine-watch.ts";
@@ -227,6 +228,9 @@ export interface Routine {
   actAs?: string;
   /** Reasoning effort for runs only; absent follows the bot. */
   effort?: EffortLevel;
+  /** #2696 (shared/routine-goal.ts): the objective the runs pursue; the bot
+   * picks when to check next and the routine stops once it is reached. */
+  goal?: RoutineGoal;
   /** Confined runs: read Gmail/Calendar and write reply drafts only. */
   access?: RoutineAccess;
   nextRunAt: number | null;
@@ -474,6 +478,9 @@ export interface RoutineInput {
   actAs?: string | null;
   /** null resets to the bot; omission preserves it on updates. */
   effort?: EffortLevel | null;
+  /** #2696: the goal (a sentence, or { text, deadline }); null removes it,
+   * omission preserves it on updates. */
+  goal?: RoutineGoalInput | RoutineGoal | string | null;
 }
 
 interface RoutineFile {
@@ -782,7 +789,7 @@ const WORK_FIELDS = ["prompt", "botId", "groupId", "target", "attachments", "pre
 const ROUTINE_DEFINITION_FIELDS = [
   "name", "prompt", "target", "botId", "groupId", "runOn", "schedule",
   "durationMinutes", "timeoutMinutes", "attachments", "continuity", "overlap",
-  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model", "subagentModel", "actAs", "effort",
+  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model", "subagentModel", "actAs", "effort", "goal",
 ] as const;
 
 /** A run still in flight: auto-delete waits until none of these remain. */
@@ -1024,6 +1031,14 @@ function fenceCarriedReport(output: string): string {
   return output.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
+/** An update's goal: the same words and deadline keep the stored progress. */
+function goalPatch(value: RoutineInput["goal"], previous: RoutineGoal | undefined): RoutineGoal | null {
+  if (value && typeof value === "object" && "status" in value) return loadRoutineGoal(value) ?? null;
+  const parsed = parseRoutineGoal(value, previous);
+  if (!parsed.ok) throw new RoutineInputError(parsed.error);
+  return parsed.goal ?? null;
+}
+
 /** The run's prompt, then the organization memory's note when it has one. */
 export function withMemoryNote(prompt: string, note: string): string {
   return note.trim() ? `${prompt}\n\n${note.trim()}` : prompt;
@@ -1035,8 +1050,11 @@ function composeExecutionPrompt(
   carry?: RoutineContinuityCarry | null,
   retried?: RoutineRetryCause,
   watchNote?: string,
+  goal?: string,
 ): string {
   const parts = [prompt, retried ? retryNote(retried) : ""];
+  // #2696: the goal and its two closing lines come right after the work.
+  if (goal) parts.push(goal);
   // What the watch saw change: data, fenced like a trigger's event.
   if (watchNote) parts.push(watchNoteBlock(watchNote));
   if (carry) {
@@ -1490,6 +1508,12 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   if (!actAs.ok) throw new RoutineInputError(actAs.error);
   if (actAs.actAs !== undefined && target === "room-goal") throw new RoutineInputError("A room goal's bots act with their own roles: choose \"Au nom de\" on a bot routine");
   if (input.access != null && input.access !== "read-and-draft") throw new Error("Choose read-and-draft access or none");
+  // A stored goal (it has a status) keeps its progress; anything else is new input.
+  const goal = input.goal && typeof input.goal === "object" && "status" in input.goal
+    ? { ok: true as const, goal: loadRoutineGoal(input.goal) }
+    : parseRoutineGoal(input.goal);
+  if (!goal.ok) throw new RoutineInputError(goal.error);
+  if (goal.goal && target === "room-goal") throw new RoutineInputError("A room goal already has its goal: set a goal on a bot routine");
   return {
     name,
     prompt,
@@ -1520,6 +1544,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(subagentModel.model ? { subagentModel: subagentModel.model } : {}),
     ...(actAs.actAs !== undefined ? { actAs: actAs.actAs } : {}),
     ...(effort.effort ? { effort: effort.effort } : {}),
+    ...(goal.goal ? { goal: goal.goal } : {}),
   };
 }
 
@@ -1651,7 +1676,9 @@ export class RoutineManager {
               subagentModel: loadRoutineModel(routine.subagentModel),
               actAs: loadRoutineActAs(routine.actAs),
               effort: loadRoutineEffort(routine.effort),
+              goal: loadRoutineGoal(routine.goal),
             };
+            if (loaded.goal === undefined) delete loaded.goal;
             if (loaded.model === undefined) delete loaded.model;
             if (loaded.subagentModel === undefined) delete loaded.subagentModel;
             if (loaded.actAs === undefined) delete loaded.actAs;
@@ -2241,6 +2268,8 @@ export class RoutineManager {
       // null clears the choice, "" is "Moi"; omission keeps it.
       actAs: Object.hasOwn(patch, "actAs") ? patch.actAs : routine.actAs,
       effort: Object.hasOwn(patch, "effort") ? patch.effort : routine.effort,
+      // Same words and deadline keep the goal's progress; new words start it over.
+      goal: Object.hasOwn(patch, "goal") ? goalPatch(patch.goal, routine.goal) : routine.goal,
     }, now);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     // Checked when it is chosen or the bot changes; a kept model whose
@@ -2332,6 +2361,7 @@ export class RoutineManager {
       if (!clean.subagentModel) delete routine.subagentModel;
       if (clean.actAs === undefined) delete routine.actAs;
       if (!clean.effort) delete routine.effort;
+      if (!clean.goal) delete routine.goal;
       foldersChanged = this.settleFolders(routine.botId);
       if (previousBotId !== routine.botId) this.settleFolders(previousBotId);
       // Turned back on (Resume on the notice, the switch, the editor): the
@@ -3219,6 +3249,7 @@ export class RoutineManager {
       this.prewakeUpcoming(now);
       this.prewarmUpcoming(now);
       this.checkEngineReconnectAhead(now);
+      this.closeExpiredGoals(now);
       // Only when I'm here (server/routines/routine-away.ts): skip a recurring
       // occurrence, or hold a one-time routine, while the person is away.
       const awaySkipped: Routine[] = [];
@@ -3537,7 +3568,7 @@ export class RoutineManager {
             await this.options.startTurn(
               run.botId,
               task.threadId,
-              withMemoryNote(composeExecutionPrompt(prompt, run.attachments, this.continuityCarry(run), run.retried, run.watchNote), memoryNote),
+              withMemoryNote(composeExecutionPrompt(prompt, run.attachments, this.continuityCarry(run), run.retried, run.watchNote, this.goalBlockFor(run)), memoryNote),
               run.runOn ?? "maus",
               triggerSource,
               (message) => this.failThread(task.threadId, message),
@@ -3871,7 +3902,87 @@ export class RoutineManager {
    * failing, an engine error the turn went past, or a teammate whose work
    * failed completes it with `problems` (never quiet, always told). True
    * when the run failed (already saved and emitted). */
+  /** #2696: the goal block of an active goal routine's run. */
+  private goalBlockFor(run: RoutineRun): string | undefined {
+    const goal = this.routines.find((candidate) => candidate.id === run.routineId)?.goal;
+    return goal?.status === "active" ? routineGoalBlock(goal, this.now()) : undefined;
+  }
+
+  /** #2696: past its deadline, an active goal never starts another run. The
+   * routine stops at once with a final report (a completed receipt with the
+   * deadline as its problem), instead of waiting for a run that would only
+   * notice it at its end. A run already at work settles it itself. */
+  private closeExpiredGoals(now: number): void {
+    const atWork = (run: RoutineRun) => run.status === "running" || run.status === "waiting" || (run.status === "queued" && run.manual);
+    const expired = this.routines.filter((routine) => routine.target === "bot" && goalPastDeadline(routine.goal, now) &&
+      !this.runs.some((run) => run.routineId === routine.id && atWork(run)));
+    if (expired.length === 0) return;
+    const closing: RoutineRun[] = [];
+    // A scheduled run still queued (its bot was busy) never starts past the deadline.
+    for (const run of this.runs) {
+      if (run.status !== "queued" || run.manual || !expired.some((routine) => routine.id === run.routineId)) continue;
+      run.status = "cancelled";
+      run.finishedAt = now;
+      run.error = "The goal's deadline passed before this run started";
+      closing.push(run);
+    }
+    const allocations: ResultsThreadAllocation[] = [];
+    this.commitMutation(() => {
+      for (const routine of expired) {
+        const closed = expireGoal(routine.goal!, now);
+        routine.goal = closed.goal;
+        routine.enabled = false;
+        routine.nextRunAt = null;
+        delete routine.nominalRunAt;
+        routine.updatedAt = Math.max(now, routine.updatedAt + 1);
+        const run = this.newRun(routine, now, false, allocations);
+        run.status = "completed";
+        run.finishedAt = now;
+        run.output = closed.report;
+        run.problems = closed.problem;
+        closing.push(run);
+      }
+    }, () => this.discardResultsThreads(allocations));
+    for (const routine of expired) this.emitRoutine(routine);
+    for (const run of closing) this.emitRun(run);
+  }
+
+  /** #2696: read the goal lines off a completed run and move the goal on:
+   * reached stops the routine, a chosen next check moves its next run,
+   * blocked, stalled or past its deadline is a problem the person hears. */
+  private settleGoal(run: RoutineRun): string | undefined {
+    const routine = this.routines.find((candidate) => candidate.id === run.routineId);
+    if (!routine?.goal || routine.goal.status !== "active") return undefined;
+    const now = this.now();
+    const report = readGoalReport(run.output, now);
+    run.output = report.report || undefined;
+    const step = stepGoal(routine.goal, report, now);
+    // A one-time routine (or one with no next occurrence) whose bot named no
+    // next check would stop silently with its goal still open: it looks
+    // again after the default delay, never past the deadline.
+    if (!step.stop && step.goal.nextCheckAt === undefined && (routine.schedule.type === "once" || routine.nextRunAt == null)) {
+      step.goal.nextCheckAt = defaultNextCheck(step.goal, now);
+    }
+    routine.goal = step.goal;
+    if (step.stop) {
+      routine.enabled = false;
+      routine.nextRunAt = null;
+      delete routine.nominalRunAt;
+      routine.updatedAt = Math.max(now, routine.updatedAt + 1);
+    } else if (step.goal.nextCheckAt !== undefined && !routine.suspended && !routine.autoPaused && (routine.enabled || routine.schedule.type === "once")) {
+      // The bot's choice wins over the fallback cadence, even on a one-time
+      // schedule that turned itself off when it fired. A routine the person
+      // paused stays paused.
+      routine.enabled = true;
+      routine.nextRunAt = step.goal.nextCheckAt;
+      delete routine.nominalRunAt;
+    }
+    this.emitRoutine(routine);
+    return step.problem;
+  }
+
   private settleCompleted(run: RoutineRun): boolean {
+    const goalProblem = this.settleGoal(run);
     const outcome = this.settleReport(run);
     const trouble = this.runTrouble.get(run.id);
     this.runTrouble.delete(run.id);
@@ -3905,6 +4016,7 @@ export class RoutineManager {
       return true;
     }
     const problems: string[] = [];
+    if (goalProblem) problems.push(goalProblem);
     if (outcome.declared?.status === "partial") problems.push(outcome.declared.reason);
     for (const teammate of handed?.failed ?? []) {
       problems.push(`${teammate.name}'s work ${teammate.outcome === "incomplete" ? "was not finished" : teammate.outcome === "expired" ? "expired before it ran" : teammate.outcome === "stopped" ? "was stopped" : "failed"}${teammate.detail ? `: ${teammate.detail}` : ""}`);

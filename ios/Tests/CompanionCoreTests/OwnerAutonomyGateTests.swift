@@ -315,11 +315,11 @@ final class MemberEnvironmentGateTests: XCTestCase {
         XCTAssertFalse(SurfaceGate(scope: .serverClient).allows(.myComputer))
     }
 
-    /// The routes these pages call stay in CLIENT_ALLOW (server/auth/request-auth.ts).
+    /// The routes these pages call stay in CLIENT_ALLOW (server/auth/client-allow.ts).
     func testTheServerLetsAClientSessionReachThem() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let text = try String(contentsOf: root.appendingPathComponent("server/auth/request-auth.ts"), encoding: .utf8)
+        let text = try String(contentsOf: root.appendingPathComponent("server/auth/client-allow.ts"), encoding: .utf8)
         for route in [
             #"{ methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/outbound$/ }"#,
             #"{ methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/avatar\/generate$/ }"#,

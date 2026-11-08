@@ -4,8 +4,8 @@
 // bots, and the GitHub plugin's MCP server (its token placeholder is that
 // account, server/github/github-mcp-token.ts). Sources lists marketplaces only.
 //
-//   - Connection: Connect GitHub (the device flow when the server has a
-//     GitHub OAuth App, else a token), the account connected and what it is
+//   - Connection: Connect GitHub (always GitHub's link and a code; a token
+//     only under Advanced), the account connected and what it is
 //     for. Organization server only (`connection`).
 //   - Other credentials, only where the account cannot reach: another
 //     GitHub organization, a group of repositories, another git host. The
@@ -16,7 +16,8 @@
 //     with the GitHub account.
 //
 // Connect GitHub is every person's, with no admin step (owner, 2026-10-28):
-// the device flow when the server has a GitHub OAuth App, else a token.
+// always the device flow (built-in OAuth App, owner 2026-11-08), a token only
+// under Advanced.
 // It is shown on the GitHub plugin's page (PluginsPanel, `openGithub`), not
 // in Providers (owner, 2026-10-29).
 import { useState, type ReactNode } from "react";

@@ -1,0 +1,364 @@
+// Per-bot heartbeat (#2692): HEARTBEAT.md at the root of a bot's workspace is
+// a checklist the person and the bot both edit. Every beat, the deterministic
+// probes run first (a page, a file, a process, a time of day: the same probes
+// as wait_until, server/waits/wait-probes.ts). The model is woken only when a
+// probe finds a gap, and the run lands in the bot's main chat (unified chat,
+// never a separate thread). An empty checklist does nothing. Notes (lines no
+// probe understands) never wake the model on their own: with only notes, a
+// beat costs nothing; in a mixed list they ride along as context when a probe
+// finds a gap (#2820).
+
+import { mkdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
+import { noteAtRestWrite, readAtRestTextSync } from "../encryption/content-at-rest.ts";
+import {
+  expandHome,
+  fetchPageText,
+  fileChanged,
+  fileStamp,
+  listProcesses,
+  pageSays,
+  processRunning,
+  type FileStamp,
+  type PageResult,
+  type ProcessEntry,
+} from "../waits/wait-probes.ts";
+
+export const HEARTBEAT_PATH = "HEARTBEAT.md";
+export const HEARTBEAT_DEFAULT_EVERY_MS = 30 * 60_000;
+export const HEARTBEAT_MIN_EVERY_MS = 5 * 60_000;
+export const HEARTBEAT_MAX_EVERY_MS = 24 * 60 * 60_000;
+/** A checklist past this many lines is cut: a beat stays cheap. */
+export const HEARTBEAT_MAX_ITEMS = 40;
+
+export type HeartbeatProbe =
+  | { kind: "page"; url: string; text: string; want: "contains" | "missing" }
+  | { kind: "file"; path: string; want: "exists" | "missing" | "changed" }
+  | { kind: "process"; name: string; want: "running" | "gone" }
+  | { kind: "at"; hour: number; minute: number; task: string };
+
+export interface HeartbeatItem {
+  /** The line as written, trimmed: the key the state remembers. */
+  line: string;
+  probe: HeartbeatProbe;
+}
+
+export interface HeartbeatChecklist {
+  everyMs: number;
+  items: HeartbeatItem[];
+  /** Lines no probe understands: context for the model, never probed. */
+  notes: string[];
+}
+
+const QUOTED = String.raw`"([^"]+)"|'([^']+)'|“([^”]+)”`;
+const PAGE = new RegExp(String.raw`^page\s+(\S+)\s+(contains|missing)\s+(?:${QUOTED})\s*$`, "i");
+const FILE = /^file\s+(.+?)\s+(exists|missing|changed)\s*$/i;
+const PROCESS = /^process\s+(.+?)\s+(running|gone)\s*$/i;
+const AT = /^at\s+([01]?\d|2[0-3])[:h]([0-5]\d)\s+(.+)$/i;
+const EVERY = /^every\s*:?\s*(\d+)\s*(m|min|minutes?|h|hours?)\s*$/i;
+
+function parseItem(body: string): HeartbeatProbe | null {
+  const page = PAGE.exec(body);
+  if (page) {
+    const text = page[3] ?? page[4] ?? page[5] ?? "";
+    if (/^https?:\/\//i.test(page[1]) && text.trim()) {
+      return { kind: "page", url: page[1], text: text.trim(), want: page[2].toLowerCase() as "contains" | "missing" };
+    }
+    return null;
+  }
+  const file = FILE.exec(body);
+  if (file) return { kind: "file", path: unquote(file[1]), want: file[2].toLowerCase() as "exists" | "missing" | "changed" };
+  const proc = PROCESS.exec(body);
+  if (proc) return { kind: "process", name: unquote(proc[1]), want: proc[2].toLowerCase() as "running" | "gone" };
+  const at = AT.exec(body);
+  if (at) return { kind: "at", hour: Number(at[1]), minute: Number(at[2]), task: at[3].trim() };
+  return null;
+}
+
+function unquote(value: string): string {
+  const trimmed = value.trim();
+  return /^(["'`]).*\1$/.test(trimmed) ? trimmed.slice(1, -1) : trimmed;
+}
+
+/** Pure: HEARTBEAT.md as text to a checklist. Headings, blank lines, HTML
+ * comments and checked boxes (`- [x]`) are skipped. */
+export function parseHeartbeat(text: string): HeartbeatChecklist {
+  const items: HeartbeatItem[] = [];
+  const notes: string[] = [];
+  let everyMs = HEARTBEAT_DEFAULT_EVERY_MS;
+  const stripped = text.replace(/<!--[\s\S]*?-->/g, "");
+  for (const raw of stripped.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#") || line.startsWith(">")) continue;
+    const every = EVERY.exec(line.replace(/^[-*]\s+/, ""));
+    if (every) {
+      const amount = Number(every[1]);
+      const ms = amount * (every[2].toLowerCase().startsWith("h") ? 3_600_000 : 60_000);
+      everyMs = Math.min(HEARTBEAT_MAX_EVERY_MS, Math.max(HEARTBEAT_MIN_EVERY_MS, ms));
+      continue;
+    }
+    const bullet = /^(?:[-*+]|\d+[.)])\s+(?:\[( |x|X)\]\s+)?(.*)$/.exec(line);
+    if (!bullet) continue;
+    if (bullet[1] === "x" || bullet[1] === "X") continue;
+    const body = bullet[2].trim();
+    if (!body) continue;
+    if (items.length + notes.length >= HEARTBEAT_MAX_ITEMS) break;
+    const probe = parseItem(body);
+    if (probe) items.push({ line: body, probe });
+    else notes.push(body);
+  }
+  return { everyMs, items, notes };
+}
+
+export function heartbeatEmpty(list: HeartbeatChecklist): boolean {
+  return list.items.length === 0 && list.notes.length === 0;
+}
+
+export interface HeartbeatBotState {
+  lastBeatAt: number;
+  /** Lines whose probe was in gap at the last beat: a gap wakes the model once, on its way in. */
+  gaps: string[];
+  stamps: Record<string, FileStamp | null>;
+  /** `at` lines: the local day (YYYY-MM-DD) each was last handed to the model. */
+  atDone: Record<string, string>;
+}
+
+export interface HeartbeatProbes {
+  page(url: string): Promise<PageResult>;
+  stamp(path: string): Promise<FileStamp | null>;
+  processes(): Promise<ProcessEntry[]>;
+}
+
+export interface HeartbeatGap {
+  line: string;
+  detail: string;
+}
+
+function localDay(at: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+}
+
+/** Runs every probe once and says which lines are in gap now, which gaps are
+ * new since the last beat (only those wake the model) and the next state. */
+export async function evaluateHeartbeat(
+  list: HeartbeatChecklist,
+  previous: HeartbeatBotState | undefined,
+  probes: HeartbeatProbes,
+  now: number,
+): Promise<{ fresh: HeartbeatGap[]; state: HeartbeatBotState }> {
+  const before = previous ?? { lastBeatAt: 0, gaps: [], stamps: {}, atDone: {} };
+  const state: HeartbeatBotState = { lastBeatAt: now, gaps: [], stamps: {}, atDone: {} };
+  const fresh: HeartbeatGap[] = [];
+  let processes: Promise<ProcessEntry[] | null> | undefined;
+  const readProcesses = () => (processes ??= probes.processes().catch(() => null));
+  const today = localDay(new Date(now));
+  for (const { line, probe } of list.items) {
+    let gap: string | null = null;
+    let event = false;
+    switch (probe.kind) {
+      case "page": {
+        const page = await probes.page(probe.url).catch((error: unknown): PageResult => ({ ok: false, error: String(error) }) as PageResult);
+        if (!page.ok) gap = `${probe.url} did not answer (${"error" in page ? page.error : "unreachable"})`;
+        else if (probe.want === "contains" && !pageSays(page.text, probe.text)) gap = `${probe.url} no longer says "${probe.text}"`;
+        else if (probe.want === "missing" && pageSays(page.text, probe.text)) gap = `${probe.url} now says "${probe.text}"`;
+        break;
+      }
+      case "file": {
+        const stamp = await probes.stamp(probe.path);
+        if (probe.want === "exists" && !stamp) gap = `${probe.path} is missing`;
+        else if (probe.want === "missing" && stamp) gap = `${probe.path} exists`;
+        else if (probe.want === "changed") {
+          state.stamps[line] = stamp;
+          event = true;
+          if (line in before.stamps && fileChanged(before.stamps[line] ?? null, stamp)) gap = `${probe.path} changed`;
+        }
+        break;
+      }
+      case "process": {
+        const entries = await readProcesses();
+        if (!entries) gap = "the process list could not be read";
+        else {
+          const running = processRunning(entries, probe.name);
+          if (probe.want === "running" && !running) gap = `${probe.name} is not running`;
+          else if (probe.want === "gone" && running) gap = `${probe.name} is still running`;
+        }
+        break;
+      }
+      case "at": {
+        event = true;
+        const due = new Date(now);
+        due.setHours(probe.hour, probe.minute, 0, 0);
+        const done = before.atDone[line];
+        if (done) state.atDone[line] = done;
+        if (now >= due.getTime() && done !== today) {
+          gap = `it is past ${String(probe.hour).padStart(2, "0")}:${String(probe.minute).padStart(2, "0")}: ${probe.task}`;
+          state.atDone[line] = today;
+        }
+        break;
+      }
+    }
+    if (!gap) continue;
+    if (event) {
+      fresh.push({ line, detail: gap });
+      continue;
+    }
+    state.gaps.push(line);
+    if (!before.gaps.includes(line)) fresh.push({ line, detail: gap });
+  }
+  return { fresh, state };
+}
+
+/** The prompt of a heartbeat run: the gaps first, the notes as context. */
+export function heartbeatPrompt(fresh: readonly HeartbeatGap[], notes: readonly string[]): string {
+  const lines = [
+    `[Heartbeat] Your ${HEARTBEAT_PATH} checklist found ${fresh.length === 1 ? "a gap" : `${fresh.length} gaps`}:`,
+    ...fresh.map((gap) => `- ${gap.detail} (checklist: ${gap.line})`),
+  ];
+  if (notes.length) lines.push("", "Notes from the checklist:", ...notes.map((note) => `- ${note}`));
+  lines.push(
+    "",
+    `Handle what you can now and tell the person in this chat what you did or what they need to do. Keep it short. You can edit ${HEARTBEAT_PATH} with docs_update when an item is done or no longer needed.`,
+  );
+  return lines.join("\n");
+}
+
+export interface HeartbeatEnqueue {
+  webhookId: string;
+  webhookName: string;
+  prompt: string;
+  botId: string;
+  runOn: "maus";
+  deliveryId: string;
+  receivedAt: number;
+  eventSource: "wait";
+  resultsThreadId: string;
+}
+
+export interface HeartbeatDeps {
+  /** Bots that can beat: visible, with a main chat. */
+  bots(): Array<{ id: string; name: string }>;
+  mainThread(botId: string): string | undefined;
+  /** HEARTBEAT.md as text, "" when the bot has none. */
+  read(botId: string): string;
+  enqueue(input: HeartbeatEnqueue): unknown;
+  /** #2694: the person said "never" to heartbeat wakes, or voted them down
+   * past the mute line (votes fade): the bot is not woken. */
+  muted?(botId: string): boolean;
+  probes?: Partial<HeartbeatProbes>;
+  file?: string;
+  now?: () => number;
+}
+
+export class HeartbeatManager {
+  private readonly deps: HeartbeatDeps;
+  private readonly file: string;
+  private readonly now: () => number;
+  private readonly probes: HeartbeatProbes;
+  private state: Record<string, HeartbeatBotState> = {};
+  private ticking = false;
+
+  constructor(deps: HeartbeatDeps) {
+    this.deps = deps;
+    this.file = deps.file ?? join(DATA_DIR, "heartbeat.json");
+    this.now = deps.now ?? Date.now;
+    this.probes = {
+      page: (url) => fetchPageText(url),
+      stamp: (path) => fileStamp(expandHome(path, homedir())),
+      processes: () => listProcesses(),
+      ...deps.probes,
+    };
+    try {
+      let raw: string;
+      try {
+        raw = readAtRestTextSync(this.file);
+      } catch {
+        raw = readFileSync(this.file, "utf8");
+      }
+      const parsed = JSON.parse(raw) as { version?: number; bots?: Record<string, HeartbeatBotState> };
+      if (parsed && parsed.version === 1 && parsed.bots && typeof parsed.bots === "object") this.state = parsed.bots;
+    } catch {
+      this.state = {};
+    }
+  }
+
+  stateOf(botId: string): HeartbeatBotState | undefined {
+    return this.state[botId];
+  }
+
+  /** One pass over every bot; a bot is probed only once its interval is up. Returns the bots that were woken. */
+  async tick(): Promise<string[]> {
+    if (this.ticking) return [];
+    this.ticking = true;
+    const woken: string[] = [];
+    let changed = false;
+    try {
+      const live = new Set<string>();
+      for (const bot of this.deps.bots()) {
+        live.add(bot.id);
+        let text = "";
+        try {
+          text = this.deps.read(bot.id);
+        } catch {
+          text = "";
+        }
+        const list = parseHeartbeat(text);
+        if (heartbeatEmpty(list)) {
+          if (this.state[bot.id]) {
+            delete this.state[bot.id];
+            changed = true;
+          }
+          continue;
+        }
+        const previous = this.state[bot.id];
+        const now = this.now();
+        if (previous && now - previous.lastBeatAt < list.everyMs) continue;
+        if (this.deps.muted?.(bot.id)) continue;
+        const threadId = this.deps.mainThread(bot.id);
+        if (!threadId) continue;
+        const { fresh, state } = await evaluateHeartbeat(list, previous, this.probes, now);
+        this.state[bot.id] = state;
+        changed = true;
+        // #2820: only a probe in gap wakes the model; notes are context, never a trigger
+        if (!fresh.length) continue;
+        const prompt = heartbeatPrompt(fresh, list.notes);
+        this.deps.enqueue({
+          webhookId: `heartbeat:${bot.id}`,
+          webhookName: `Heartbeat: ${bot.name}`,
+          prompt,
+          botId: bot.id,
+          runOn: "maus",
+          deliveryId: `heartbeat:${bot.id}:${now}`,
+          receivedAt: now,
+          eventSource: "wait",
+          resultsThreadId: threadId,
+        });
+        woken.push(bot.id);
+      }
+      for (const id of Object.keys(this.state)) {
+        if (!live.has(id)) {
+          delete this.state[id];
+          changed = true;
+        }
+      }
+    } finally {
+      if (changed) this.save();
+      this.ticking = false;
+    }
+    return woken;
+  }
+
+  private save(): void {
+    try {
+      mkdirSync(dirname(this.file), { recursive: true });
+      writeFileAtomic(this.file, JSON.stringify({ version: 1, bots: this.state }, null, 2), { mode: 0o600 });
+      noteAtRestWrite(this.file);
+    } catch {
+      // the next beat writes again
+    }
+  }
+}

@@ -288,19 +288,12 @@ struct DesktopAppearanceSettings: View {
     @ObservedObject private var mode = DesktopInterfaceMode.shared
     @AppStorage(PrefKey.desktopSidebarDensity) private var density = DesktopSidebarDensity.comfortable.rawValue
     @AppStorage(SidebarLogoPreference.key) private var showSidebarLogo = SidebarLogoPreference.defaultEnabled
-    @AppStorage(RunCardPreference.key) private var showRunCard = true
-    @AppStorage(DesktopInspectorButton.key) private var showInspector = false
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     @ObservedObject private var toolCalls = ToolCallsSetting.shared
 
     var body: some View {
         let advanced = mode.advanced
         DesktopSettingsGroup(Text("Interface"), identifier: "interface") {
-            DesktopDescribedRow(Text("Advanced mode"), description: Text("Show technical controls. Saved choices stay either way."), identifier: "advancedMode") {
-                DesktopSwitch(isOn: advanced, label: Text("Advanced mode"), identifier: "desktop-settings.advanced-mode") {
-                    mode.set(!advanced, session: session)
-                }
-            }
             DesktopCompactRow(Text("Interface font"), identifier: "font") {
                 let font = themes.effective.mode == .computer ? (themes.effective.computerFont ?? .skin) : themes.effective.font
                 DesktopPillSelect(
@@ -335,20 +328,6 @@ struct DesktopAppearanceSettings: View {
                     DesktopSwitch(isOn: toolCalls.showToolCalls, label: Text("Show tool calls in chat"), identifier: "desktop-settings.tool-calls", disabled: toolCalls.saving) {
                         let next = !toolCalls.showToolCalls
                         Task { await toolCalls.set(session, next) }
-                    }
-                }
-                DesktopCompactRow(Text("This run"), identifier: "runCard") {
-                    DesktopSwitch(isOn: showRunCard, label: Text("Show the run card"), identifier: "desktop-settings.run-card") {
-                        showRunCard.toggle()
-                    }
-                }
-                // a display preference: an organization member opens the
-                // Inspector on the bots they own (2026-10-26)
-                if session.surfaceGate.allows(.inspector) || session.surfaceGate.isOrgMemberSession {
-                    DesktopCompactRow(Text("Inspector button"), identifier: "inspectorButton") {
-                        DesktopSwitch(isOn: showInspector, label: Text("Show the Inspector button"), identifier: "desktop-settings.inspector-button") {
-                            showInspector.toggle()
-                        }
                     }
                 }
             }

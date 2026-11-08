@@ -1,4 +1,4 @@
-// The profile page's Share pill and its popover, Grok Bot style (2026-11-06):
+// The profile page's Share pill and its popover, the reference app style (2026-11-06):
 // the title with Copy link, the field that adds people or groups, "Who has
 // access" (the organization, the owner, each grant with its level and
 // "Remove access" last), no outline on any row, and the same rights as the

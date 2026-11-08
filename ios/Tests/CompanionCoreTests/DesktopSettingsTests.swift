@@ -16,7 +16,7 @@ final class DesktopSettingsTests: XCTestCase {
         // Organization; App (about) is the rail page that holds Updates.
         let expected: [DesktopSettingsSection] = [
             .general, .security, .vault, .appearance, .notifications, .providers, .engines, .voice, .usage,
-            .organization, .computer, .backups, .experimental, .about,
+            .organization, .computer, .backups, .developer, .about,
         ]
         XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin)), expected)
         // an organization server adds My engines (#1098) and My connections
@@ -24,6 +24,16 @@ final class DesktopSettingsTests: XCTestCase {
         var organization = expected
         organization.insert(contentsOf: [.myEngines, .myConnections], at: 7)
         XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin, organization: true)), organization)
+    }
+
+    func testExperimentalIsACardOfDeveloper() {
+        // #2729: no separate Experimental row; old links open Developer.
+        let admin = DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin))
+        XCTAssertFalse(admin.contains(.experimental))
+        XCTAssertTrue(admin.contains(.developer))
+        XCTAssertEqual(DesktopSettingsSection.experimental.host, .developer)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.experimental, available: admin, visible: admin), .developer)
+        XCTAssertTrue(DesktopSettingsSection.developer.matches("expérimental", label: "Developer"))
     }
 
     func testAClientOnAnOrganizationServerGetsMyConnections() {

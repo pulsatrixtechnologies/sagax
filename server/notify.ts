@@ -96,6 +96,7 @@ export function buildNotification(
     routineRunId?: string;
     routineName?: string;
     choices?: readonly string[];
+    proposalId?: string;
   },
 ): Notification | null {
   // The toggle means what it says: off is off, including for approvals.
@@ -131,6 +132,8 @@ export function buildNotification(
                     ? `${who}'s wait is done`
                   : kind === "needs-you"
                     ? `${who} needs you`
+                  : kind === "proposal"
+                    ? `${who} has a suggestion`
                   : kind === "takeover"
                     ? `${who} needs your hands`
                   : `${who} finished`;
@@ -146,6 +149,7 @@ export function buildNotification(
   if (extra?.needsKey) notification.needsKey = true;
   if (extra?.routineRunId) notification.routineRunId = extra.routineRunId.slice(0, 128);
   if (extra?.routineName) notification.routineName = summarize(extra.routineName, 80);
+  if (kind === "proposal" && extra?.proposalId) notification.proposalId = extra.proposalId.slice(0, 128);
   // the card's own question, in the person's words: first on the phone
   if ((kind === "approval" || kind === "question") && extra?.title) notification.ask = title;
   if (kind === "question" && extra?.choices?.length) {
@@ -209,6 +213,7 @@ export function deliverableNotification(
     routineRunId?: string;
     routineName?: string;
     choices?: readonly string[];
+    proposalId?: string;
   },
 ): Notification | null {
   return buildNotification(kind, { ...bot, notifications: undefined }, threadId, detail, extra);

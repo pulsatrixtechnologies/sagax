@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** noteTurnsCutByShutdown (#1388). Pure move from server/index.ts. */
 import { failedTurnTool } from "../../shared/failed-turn.ts";
+import { RESTART_RUN_NOTE, RESTART_TURN_NOTE, TURN_CUT_BY_RESTART } from "../../shared/restart-words.ts";
 import { DATA_DIR } from "../config.ts";
 import { saveInterruptedTurns } from "../turns/interrupted-turns.ts";
 export type Host = Record<string, any>;
@@ -19,7 +20,7 @@ function noteTurnsCutByShutdown(final = true): void {
       if (host.runtimeHoldsRoot(threadId)) {
         // #2602: written down too, so the next start checks the promise was kept.
         cut.push({ botId, threadId, at: Date.now(), runtimeHeld: true });
-        if (final) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Sagax restarted during this turn; it resumes when Sagax is back", ok: true } });
+        if (final) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: RESTART_TURN_NOTE, ok: true } });
       }
       continue;
     }
@@ -27,13 +28,13 @@ function noteTurnsCutByShutdown(final = true): void {
     // the engine that asked; it ends here with the cut line, as before.
     const held = host.threadWaitsOnPerson(threadId);
     if (host.routines?.isActiveThread(threadId) || held) {
-      if (final) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: held ? failedTurnTool("turn interrupted — Sagax restarted")
-        : { name: "Sagax restarted during this run; it resumes when Sagax is back", ok: true } });
+      if (final) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: held ? failedTurnTool(TURN_CUT_BY_RESTART)
+        : { name: RESTART_RUN_NOTE, ok: true } });
       continue;
     }
     const speaker = host.turnSpeakers.get(threadId);
     cut.push({ botId, threadId, at: Date.now(), ...(speaker ? { speaker: { ...speaker } } : {}) });
-    if (final) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Sagax restarted during this turn; it resumes when Sagax is back", ok: true } });
+    if (final) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: RESTART_TURN_NOTE, ok: true } });
   }
   try {
     saveInterruptedTurns(DATA_DIR, cut);
@@ -47,7 +48,7 @@ function noteTurnsCutByShutdown(final = true): void {
     for (const threadId of group.dm ? [group.threadId] : host.store.groupTasks(group.id).map((task) => task.threadId)) {
       if (!host.groupThreadIsWorking(group.id, threadId) || runtimeAccounts(threadId)) continue;
       const speaker = host.groupSpeakers.get(threadId);
-      host.store.appendMessage(threadId, { role: "bot", kind: "activity", ...(speaker ? { from: speaker } : {}), tool: failedTurnTool("turn interrupted — Sagax restarted") });
+      host.store.appendMessage(threadId, { role: "bot", kind: "activity", ...(speaker ? { from: speaker } : {}), tool: failedTurnTool(TURN_CUT_BY_RESTART) });
     }
   }
 }

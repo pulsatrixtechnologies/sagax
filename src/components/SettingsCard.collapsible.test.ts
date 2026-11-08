@@ -212,7 +212,7 @@ describe("skin picker", () => {
 });
 
 describe("Settings → Account and General, compact", () => {
-  it("keeps Account identity-only and About me as a row; cleanup lives on Backups and storage (JC 2026-11-06)", async () => {
+  it("keeps Account identity-only and About me as a row; cleanup lives on Backups and storage (the owner 2026-11-06)", async () => {
     device();
     const { SettingsModal } = await import("./SettingsModal");
     const { GeneralPage } = await import("./settings/AppPage");

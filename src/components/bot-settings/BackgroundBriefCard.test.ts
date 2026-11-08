@@ -17,3 +17,9 @@ describe("background brief screen", () => {
     expect(briefSchedulePatch({ enabled: false })).toMatchObject({ enabled: false });
   });
 });
+
+describe("screen context switch (#2699)", () => {
+  it("sends the person's choice with this device's time zone", () => {
+    expect(briefSchedulePatch({ screenContext: true })).toMatchObject({ screenContext: true });
+  });
+});

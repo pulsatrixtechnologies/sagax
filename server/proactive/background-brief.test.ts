@@ -98,7 +98,7 @@ describe("background brief", () => {
     expect(store.settings("primary")).toMatchObject({ enabled: false, at: "06:45" });
     const reopened = new BriefStore(join(dir, "background-brief.json"), () => 1_000, { defaultEnabled: () => true });
     expect(reopened.settings("primary").enabled).toBe(false);
-    expect(cleanBriefSettings({ at: "25:00", timeZone: "Nowhere/City" }, { enabled: true, everyHours: 4, subjects: [], at: "08:00", timeZone: "UTC" })).toMatchObject({ at: "08:00", timeZone: "UTC" });
+    expect(cleanBriefSettings({ at: "25:00", timeZone: "Nowhere/City" }, { enabled: true, everyHours: 4, subjects: [], at: "08:00", timeZone: "UTC", screenContext: false })).toMatchObject({ at: "08:00", timeZone: "UTC" });
   });
 
   it("the timer reads once at the person's time and delivers only what is new", async () => {

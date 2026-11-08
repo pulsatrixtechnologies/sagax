@@ -1,7 +1,10 @@
 // The person's background brief (server/proactive/background-brief.ts).
 //
 //   GET  /api/bots/:id/background-brief
-//   PUT  /api/bots/:id/background-brief   { enabled?, everyHours?, subjects?, at?, timeZone? }
+//   PUT  /api/bots/:id/background-brief   { enabled?, everyHours?, subjects?, at?, timeZone?, screenContext? }
+//        `screenContext` (#2699): the bot sees the front app and window
+//        title on this computer. GET says `screenContextAvailable` (the
+//        desktop app on macOS or Windows); elsewhere a PUT of it is ignored.
 //        `at` (HH:MM) in `timeZone` is when the brief runs on its own each
 //        day (server/proactive/background-brief-schedule.ts). On by default for a
 //        Primary Bot; `enabled: false` turns it off.
@@ -36,6 +39,8 @@ export interface BackgroundBriefRouteDeps {
   connected(botId: string): readonly string[];
   /** A read of those apps. No send, no change, no browser. */
   reads(botId: string): Promise<BriefAppCall>;
+  /** #2699: screen context works here (desktop app, macOS or Windows). */
+  screenContextAvailable?: () => boolean;
 }
 
 export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): RouteHandler {
@@ -50,7 +55,8 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
 
     if (!suggestionId && method === "GET") {
       const apps = deps.connected(botId).length;
-      return json(res, 200, { ...deps.store.view(botId), apps, ...(apps ? {} : { notice: "no_apps" as const }) });
+      const screenContextAvailable = deps.screenContextAvailable?.() === true;
+      return json(res, 200, { ...deps.store.view(botId), apps, screenContextAvailable, ...(apps ? {} : { notice: "no_apps" as const }) });
     }
     if (!suggestionId && method === "PUT") {
       const body = await readBody(req) as Partial<BriefSettings>;
@@ -61,6 +67,7 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
         ...(subjects ? { subjects } : {}),
         ...(typeof body.at === "string" ? { at: body.at } : {}),
         ...(typeof body.timeZone === "string" ? { timeZone: body.timeZone } : {}),
+        ...(typeof body.screenContext === "boolean" && deps.screenContextAvailable?.() === true ? { screenContext: body.screenContext } : {}),
       });
       return json(res, 200, { settings });
     }

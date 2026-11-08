@@ -417,6 +417,8 @@
   "brief.delivery": "Il arrive dans cette conversation et de la façon choisie dans Me joindre.",
   "brief.noApps": "Aucune app n'est branchée. La file reste vide.",
   "brief.queueEmpty": "La file est vide.",
+  "brief.screen": "Laisser le bot voir ce qui est à mon écran",
+  "brief.screenHint": "Seulement l'app au premier plan et le titre de sa fenêtre, une fois par minute, gardés en mémoire deux heures sur cet ordinateur. Le bot s'en sert pour proposer de l'aide au bon moment.",
   "brief.read": "Lire les connecteurs et les serveurs MCP",
   "brief.title": "Brief en arrière-plan",
   "botAccess.grants.noListing": "Aucun outil répertorié pour ce service pour le moment. Vous pouvez toujours autoriser tous les outils.",

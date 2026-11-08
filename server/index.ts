@@ -126,6 +126,7 @@ import { createBotEventSubscriptionRoutes } from "./routes/bot-event-subscriptio
 import { BotEventSubscriptions } from "./bot-events/bot-event-subscriptions.ts";
 import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
 import { ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
+import { frontMomentSampler, ScreenContextWatcher, screenContextAvailable, screenMomentKey } from "./proactive/screen-context.ts";
 import { ProactiveProposals, ProactiveWaker, proactivePrompt, PeerNoticeHops, ProactivePendingFile, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
 import { type BotActService, type PerformActor } from "./bots/bot-act.ts";
 import { askedBotChange, askedChange, createSettingsActions } from "./settings-actions.ts";
@@ -6728,6 +6729,7 @@ bindLeafHost({
   get offerProactive() { return offerProactive; },
   get offerRoomPostToBots() { return offerRoomPostToBots; },
   get PROACTIVE_RUN_NAMES() { return PROACTIVE_RUN_NAMES; },
+  get screenContextBlock() { return (botId: string) => screenContext?.blockFor(botId) ?? ""; },
   get startProactiveWake() { return startProactiveWake; },
   get answerRoleTransition() { return answerRoleTransition; },
   get answerProactiveProposal() { return answerProactiveProposal; },
@@ -19632,7 +19634,8 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
   peer: "teammate message",
   webhook: "webhook",
   sms: "text",
-  suggestion: "daily suggestion"
+  suggestion: "daily suggestion",
+  screen: "screen"
 };
 
 /** A proactive wake: background run at the bot's level, under the right
@@ -23705,6 +23708,21 @@ function postDailySuggestions(botId: string, threadId: string, suggestions: read
   }
   return picked.length;
 }
+// #2699: screen context, on the person's consent, on the desktop app only
+// (server/proactive/screen-context.ts). In memory, never on disk.
+const SCREEN_CONTEXT_AVAILABLE = screenContextAvailable({ desktop: DESKTOP_MANAGED, platform: process.platform });
+const screenSampler = SCREEN_CONTEXT_AVAILABLE ? frontMomentSampler(process.platform) : null;
+const screenContext: ScreenContextWatcher | null = screenSampler ? new ScreenContextWatcher({
+  bots: () => backgroundBriefs.screenContextBots().filter((botId) => Boolean(store.bot(botId))),
+  sample: screenSampler,
+  dwell: (botId, moment) => {
+    offerProactive({
+      botId, source: "screen", key: screenMomentKey(moment, Date.now()),
+      label: "Screen", detail: `${moment.app}${moment.title ? ` | ${moment.title}` : ""}`
+    });
+  }
+}) : null;
+if (screenContext && !process.env.VITEST) screenContext.start();
 if (!process.env.VITEST) {
   startBriefTimer({
     store: backgroundBriefs,
@@ -23741,7 +23759,8 @@ ROUTES.push(createBackgroundBriefRoutes({
   fastModel: (botId) => store.bot(botId)?.modelSelection.fast?.model ?? null,
   keep: (botId, line) => { updateMemory(botId, { action: "append", text: line }, { source: "background brief", readers: { kind: "person" } }); },
   connected: backgroundBriefConnected,
-  reads: backgroundBriefReads
+  reads: backgroundBriefReads,
+  screenContextAvailable: () => SCREEN_CONTEXT_AVAILABLE
 }));
 ROUTES.push(createCustomRuleRoutes({
   store: customRules,

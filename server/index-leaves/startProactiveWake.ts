@@ -22,7 +22,7 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   host.routines.enqueueProactive({
     botId: batch.botId,
     name: `Proactive: ${sources.map((source) => host.PROACTIVE_RUN_NAMES[source]).join(", ")}`,
-    prompt: proactiveWakePrompt(batch, { accepted }),
+    prompt: proactiveWakePrompt(batch, { accepted, screen: host.screenContextBlock?.(batch.botId) || undefined }),
     proactive: {
       mode: batch.mode,
       hops: batch.hops,

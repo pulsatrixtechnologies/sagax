@@ -55,6 +55,7 @@ import {
   type PaletteItem,
 } from "@/lib/palette-commands";
 import { OPEN_PALETTE_EVENT } from "@/lib/command-palette-open";
+import { openBotProfile } from "@/lib/open-bot-profile";
 
 export { OPEN_PALETTE_EVENT, openCommandPalette } from "@/lib/command-palette-open";
 
@@ -266,7 +267,7 @@ export function CommandPalette({
         dispatch({ type: "toggleAppSettings", open: true, ...(action.section ? { section: action.section } : {}) });
         return;
       case "botSettings":
-        dispatch({ type: "toggleSettings", open: true, botId: action.botId });
+        openBotProfile(dispatch, action.botId);
         return;
       case "botHistory":
         dispatch({ type: "toggleSettings", open: true, botId: action.botId });

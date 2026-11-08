@@ -21,6 +21,7 @@ import { PulsatrixMark } from "../PulsatrixMark";
 import { Win98Button, Win98Window } from "../retro-assistant/Win98";
 import { PixelIcon, type PixelIconName } from "./pixel-icons";
 import { decorateRetroSurfaces } from "./decorate";
+import { openBotProfile } from "@/lib/open-bot-profile";
 
 type MenuEntry =
   | { id: string; label: string; hint?: string; checked?: boolean; disabled?: boolean; run: () => void }
@@ -120,7 +121,7 @@ export function RetroTop({ onNewBot }: { onNewBot?: () => void }) {
           })),
           ...(visibleBots.length ? [{ id: "s1", separator: true as const }] : []),
           { id: "newBot", label: t("retro.cmd.newBot"), run: () => dispatch({ type: "openBotWizard" }) },
-          { id: "profile", label: t("retro.cmd.profile"), disabled: !bot, run: () => dispatch({ type: "toggleSettings", open: true }) },
+          { id: "profile", label: t("retro.cmd.profile"), disabled: !bot, run: () => bot && openBotProfile(dispatch, bot.id) },
         ],
       },
       {

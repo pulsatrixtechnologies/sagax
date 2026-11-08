@@ -78,7 +78,8 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         inspectorOpen: open ? false : state.inspectorOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
         memoryManagerOpen: open ? false : state.memoryManagerOpen,
-        // The bot's profile page is a right panel too: one at a time.
+        // The bot's profile page fills the main area (#2136): opening the
+        // bot panel gives the chat back.
         personaEditor: open ? null : state.personaEditor,
       };
     }

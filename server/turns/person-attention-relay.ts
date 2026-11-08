@@ -86,29 +86,38 @@ export function turnWords(messages: readonly WireMessage[], turnId: string | und
 
 /** #2915: the bot's words of exactly this turn. Never an earlier turn's:
  * a turn that said nothing has no words (turnWords falls back to the last
- * line, which a mirror would copy a second time). */
+ * line, which a mirror would copy a second time). Without a turn id, the
+ * words after the last line written to the bot (what it was asked), never
+ * an answer that came before that ask. */
 export function ownTurnWords(messages: readonly WireMessage[], turnId: string | undefined): { text: string; last?: WireMessage } {
-  if (!turnId) return turnWords(messages, undefined);
-  const rows = messages.filter((message) => message.role === "bot" && message.kind === "text" && !message.from && !message.attention
-    && typeof message.text === "string" && message.turnId === turnId);
+  const own = (message: WireMessage) => message.role === "bot" && message.kind === "text" && !message.from && !message.attention && typeof message.text === "string";
+  let rows: WireMessage[];
+  if (turnId) rows = messages.filter((message) => own(message) && message.turnId === turnId);
+  else {
+    const asked = messages.findLastIndex((message) => message.role === "user" || (message.role === "bot" && Boolean(message.from)));
+    rows = asked < 0 ? [] : messages.slice(asked + 1).filter(own);
+  }
   return { text: rows.map((message) => message.text ?? "").join("\n\n"), last: rows.at(-1) };
 }
 
-/** #2915: the longest text a mirrored background reply carries, and the
- * window in which a burst of replies folds into one row. */
+/** #2915: a card still waiting in this thread (a question the turn ended
+ * on, an approval): the relay shows it in the bot's chat, so the turn did
+ * not end "without a reply". */
+export function openCardIn(messages: readonly WireMessage[]): boolean {
+  return messages.some((message) => {
+    const card = message.card as { requestId?: unknown; answered?: unknown; dismissed?: unknown; expired?: unknown } | undefined;
+    return Boolean(card && card.requestId && !card.answered && !card.dismissed && !card.expired);
+  });
+}
+
+/** #2915: the longest row a burst of mirrored replies folds into (a single
+ * reply is copied whole, however long: nothing of it stays hidden), and the
+ * window in which a burst folds. */
 export const RELAY_TEXT_MAX = 4000;
 export const RELAY_ASK_MAX = 280;
 export const RELAY_GROUP_MS = 60_000;
 /** How many of the chat's newest rows the mirror reads (dedupe, burst). */
 export const RELAY_RECENT_ROWS = 50;
-
-/** Cut a long text at a line break near the limit, marked with "…". */
-export function capRelayText(text: string, max = RELAY_TEXT_MAX): string {
-  if (text.length <= max) return text;
-  const cut = text.lastIndexOf("\n", max - 1);
-  const head = (cut > max / 2 ? text.slice(0, cut) : text.slice(0, max - 1)).trimEnd();
-  return `${head}\n…`;
-}
 
 /** #2915: what was asked of the bot for this turn: the last line written to
  * it before the turn's first answer (an AI client's send_prompt, a
@@ -140,7 +149,9 @@ export function relayPersonAttention<B extends AttentionBot>(
   const { bot, threadId } = input;
   if (!input.ok || input.stopped || bot.hidden) return { posted: false, reason: "failed" };
   const task = deps.task(bot.id, threadId);
-  if (!task || task.archivedAt) return { posted: false, reason: "no-task" };
+  // #2915: an archived thread the owner (or a client) continues still
+  // reaches the person: its turn ran, its words need them
+  if (!task) return { posted: false, reason: "no-task" };
   if (task.confidential === true) return { posted: false, reason: "confidential" };
   if (deps.agentConversation(bot.id, threadId)) return { posted: false, reason: "agent" };
   const { text, last } = turnWords(deps.messages(threadId), input.turnId);
@@ -246,7 +257,8 @@ export function mirrorLateRunReply<B extends AttentionBot>(
  * #2915: an archived thread an AI client continues is mirrored too (its
  * label comes from relayVia). The label carries what was asked. A turn that
  * failed, was stopped or said nothing leaves one trace line, never an
- * earlier turn's words. A burst of replies folds into one capped row. Only
+ * earlier turn's words. A burst of short replies to one asker folds into one
+ * row; a reply is never cut. Only
  * the chat's newest rows are read. */
 export function mirrorBackgroundReply<B extends AttentionBot>(
   input: AttentionTurn<B>,
@@ -262,6 +274,9 @@ export function mirrorBackgroundReply<B extends AttentionBot>(
   const { text, last } = input.ok && !input.stopped ? ownTurnWords(source, input.turnId) : { text: "", last: undefined };
   const words = text.replace(/^\s*NOTHING_TO_REPORT\s*$/gim, "").trim();
   const ask = turnAsk(source, input.turnId, task.openedBy);
+  // a turn that ended on a waiting card (a question, an approval) said
+  // nothing, but the card itself is relayed into the chat: no trace
+  if (input.ok && !input.stopped && !words && openCardIn(source)) return false;
   const trace: WireMessage["relayTrace"] = !input.ok ? "failed" : input.stopped ? "stopped" : !words ? "silent" : undefined;
   // the dedupe key: the reply's own row, else this turn
   const key = !trace && last ? last.id : `turn:${threadId}:${input.turnId ?? source.at(-1)?.id ?? "none"}`;
@@ -275,13 +290,16 @@ export function mirrorBackgroundReply<B extends AttentionBot>(
   }
   const now = deps.now?.() ?? Date.now();
   const tail = recent.at(-1);
-  const chunk = ask && tail?.relayAsk?.text !== ask.text ? `> ${ask.text}\n\n${words}` : words;
+  // a burst folds only replies to the same asker: the row's label names who
+  // asked, and each folded reply quotes its own ask
+  const chunk = ask ? `> ${ask.text}\n\n${words}` : words;
   if (tail && tail.role === "bot" && tail.kind === "text" && tail.relayVia === via && !tail.relayTrace && tail.relayOf
+    && (tail.relayAsk?.by ?? "") === (ask?.by ?? "")
     && now - tail.at < RELAY_GROUP_MS && (tail.text ?? "").length + chunk.length + 2 <= RELAY_TEXT_MAX) {
     deps.patch(target, tail.id, { text: `${tail.text ?? ""}\n\n${chunk}`, relayGroup: [...(tail.relayGroup ?? []), key] });
     return true;
   }
-  deps.append(target, { role: "bot", kind: "text", text: capRelayText(words), relayVia: via, relayOf: key, ...(ask ? { relayAsk: ask } : {}) });
+  deps.append(target, { role: "bot", kind: "text", text: words, relayVia: via, relayOf: key, ...(ask ? { relayAsk: ask } : {}) });
   return true;
 }
 

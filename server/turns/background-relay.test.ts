@@ -2,7 +2,7 @@
 // label (pulled out of server/index.ts so the mapping is tested).
 import { describe, expect, it, vi } from "vitest";
 
-import { backgroundCardHome, backgroundCardPeople, relayViaOf, type BackgroundRelayDeps, type RelayBot, type RelayTask } from "./background-relay.ts";
+import { backgroundCardHome, backgroundCardPeople, backgroundRelayAllowed, mcpThreadAnswerer, relayViaOf, type BackgroundRelayDeps, type RelayBot, type RelayTask } from "./background-relay.ts";
 
 const BOT: RelayBot = { id: "bot" };
 
@@ -94,5 +94,42 @@ describe("backgroundCardHome (#2915)", () => {
     expect(backgroundCardHome(deps(TASKS, { conversationOrStart: () => "mcp" }), BOT, "mcp", undefined)).toBeUndefined();
     expect(backgroundCardHome(deps(TASKS), { id: "bot", hidden: true }, "mcp", undefined)).toBeUndefined();
     expect(backgroundCardHome(deps(TASKS), BOT, "mcp", undefined)).toBe("main");
+  });
+});
+
+describe("mcpThreadAnswerer (#2915: the member answers their own MCP card)", () => {
+  const tasks: Record<string, RelayTask> = { ...TASKS, mine: { hidden: true, ownerPrincipalId: "Alice@x" }, theirs: { openedBy: { botId: "nova", name: "Nova", kind: "work", at: 1 }, ownerPrincipalId: "alice@x" } };
+  it("is the member for their own MCP conversation, under private threads only", () => {
+    expect(mcpThreadAnswerer(deps(tasks, { privateThreads: () => true }), "bot", "mine")).toBe("alice@x");
+    expect(mcpThreadAnswerer(deps(tasks), "bot", "mine")).toBeUndefined();
+  });
+  it("leaves every other thread to the bot owner", () => {
+    const d = deps(tasks, { privateThreads: () => true });
+    expect(mcpThreadAnswerer(d, "bot", "theirs")).toBeUndefined();
+    expect(mcpThreadAnswerer(d, "bot", "mcp")).toBeUndefined();
+    expect(mcpThreadAnswerer(d, "bot", undefined)).toBeUndefined();
+  });
+});
+
+describe("backgroundRelayAllowed (#2915: mayRelay)", () => {
+  const priv = (more: Partial<BackgroundRelayDeps<RelayBot>> = {}) => deps(TASKS, { privateThreads: () => true, threadPerson: () => "member", answerer: () => "owner", ...more });
+  it("lets the thread's own person relay a member's MCP card to their own chat", () => {
+    const check = { readsSource: (p: string) => p === "member", ownsDestination: (p: string) => p === "member" };
+    expect(backgroundRelayAllowed(priv(), BOT, "mcp", undefined, check)).toBe(true);
+  });
+  it("never pairs one person reading the source with another owning the destination", () => {
+    const check = { readsSource: (p: string) => p === "member", ownsDestination: (p: string) => p === "owner" };
+    expect(backgroundRelayAllowed(priv(), BOT, "mcp", undefined, check)).toBe(false);
+  });
+  it("tries who answers first and looks no further when they may", () => {
+    const threadPerson = vi.fn(() => "member");
+    const check = { readsSource: () => true, ownsDestination: (p: string) => p === "owner" };
+    expect(backgroundRelayAllowed(priv({ threadPerson }), BOT, "mcp", undefined, check)).toBe(true);
+    expect(threadPerson).not.toHaveBeenCalled();
+  });
+  it("keeps a room's or a person's own thread with who answers", () => {
+    const check = { readsSource: (p: string) => p === "member", ownsDestination: (p: string) => p === "member" };
+    expect(backgroundRelayAllowed(priv(), BOT, "room", undefined, check)).toBe(false);
+    expect(backgroundRelayAllowed(priv(), BOT, "own", undefined, check)).toBe(false);
   });
 });

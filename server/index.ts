@@ -194,7 +194,7 @@ import { DATA_DOWNLOADS_DIR } from "./data/engine.ts";
 import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./computer/team-computers.ts";
 import { instructionsLead } from "../shared/instructions-lead.ts";
 import { type BotVisibility, type RelayVia, type ResolvedSender, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
-import { backgroundCardHome as backgroundCardHomeOf, backgroundCardPeople, relayViaOf as backgroundRelayVia, type BackgroundRelayDeps } from "./turns/background-relay.ts";
+import { backgroundCardHome as backgroundCardHomeOf, backgroundRelayAllowed, mcpThreadAnswerer, relayViaOf as backgroundRelayVia, type BackgroundRelayDeps } from "./turns/background-relay.ts";
 import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
 import { TURN_CUT_BY_RESTART } from "../shared/restart-words.ts";
 import { closeRowsLeftByRestart, endedToolOutput } from "./threads/subagent-cleanup.ts";
@@ -14052,21 +14052,21 @@ const originApprovals = createOriginApprovals({
     const sourceRoom = store.groupByThread(source);
     if (!sourceBot || sourceBot.hidden || (!sourceRoom && !store.taskByThread(sourceBot.id, source))) return false;
     // #2915: a background thread's card is also its own person's (a member's
-    // MCP conversation on a shared bot), not only its answerer's
-    const answerer = cardAnswererId(sourceBot, source, message.card);
-    const people = !sourceRoom && relayViaOf(sourceBot.id, source)
-      ? [...new Set([...backgroundCardPeople(backgroundRelayDeps, sourceBot, source, message.card), answerer])] : [answerer];
-    return people.some((person) => {
-      if (sourceRoom ? privateThreads() && !groupVisible(sourceRoom, person) : !botThreadReadable(sourceBot, source, person)) return false;
-      const room = store.groupByThread(destination);
-      if (room) return (!privateThreads() || groupVisible(room, person))
-        && (room.dm ? room.threadId === destination : Boolean(store.groupTaskByThread(room.id, destination)));
-      const destinationBot = store.botByThread(destination);
-      if (!destinationBot || destinationBot.hidden) return false;
-      const destinationTask = store.taskByThread(destinationBot.id, destination);
-      if (!destinationTask || destinationTask.archivedAt) return false;
-      return privateThreadOwner(destinationTask, effectiveBotOwner(destinationBot)) === person
-        && botThreadReadable(destinationBot, destination, person);
+    // MCP conversation on a shared bot), not only its answerer's; the same
+    // person reads the source and owns the destination
+    return backgroundRelayAllowed(backgroundRelayDeps, sourceBot, source, message.card, {
+      readsSource: (person) => sourceRoom ? !privateThreads() || groupVisible(sourceRoom, person) : botThreadReadable(sourceBot, source, person),
+      ownsDestination: (person) => {
+        const room = store.groupByThread(destination);
+        if (room) return (!privateThreads() || groupVisible(room, person))
+          && (room.dm ? room.threadId === destination : Boolean(store.groupTaskByThread(room.id, destination)));
+        const destinationBot = store.botByThread(destination);
+        if (!destinationBot || destinationBot.hidden) return false;
+        const destinationTask = store.taskByThread(destinationBot.id, destination);
+        if (!destinationTask || destinationTask.archivedAt) return false;
+        return privateThreadOwner(destinationTask, effectiveBotOwner(destinationBot)) === person
+          && botThreadReadable(destinationBot, destination, person);
+      },
     });
   },
   speaker: (threadId, message) => {
@@ -25438,7 +25438,10 @@ function mountedDestinationOf(bot: BotRecord, threadId: string, tool: string | u
  * that is not the bot's owner (destinationOfCall), else approvalOwnerId. */
 function cardAnswererId(bot: BotRecord, threadId: string | undefined, card: { destinationAnswerer?: unknown } | null | undefined): string {
   const answerer = typeof card?.destinationAnswerer === "string" ? card.destinationAnswerer.trim().toLowerCase() : "";
-  return answerer || approvalOwnerId(bot, threadId);
+  // #2915: a member's own MCP conversation on a shared bot: the card is
+  // shown in their chat and answered by them, never left to an owner who
+  // cannot read the thread
+  return answerer || mcpThreadAnswerer(backgroundRelayDeps, bot.id, threadId) || approvalOwnerId(bot, threadId);
 }
 /** The card of an approval notification or row, when it names one. */
 function noteCard(threadId: unknown, requestId: unknown): NonNullable<Message["card"]> | undefined {

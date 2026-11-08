@@ -3456,6 +3456,7 @@
   "model.back": "Retour",
   "model.showMore": "Afficher plus",
   "model.showLess": "Afficher moins",
+  "model.showMoreCount": "Afficher plus ({count})",
   "model.setupRequired": "Configuration requise",
   "model.signInRequired": "Connexion requise",
   "model.threadBusy": "Arrêtez le tour de ce fil avant de changer son modèle",

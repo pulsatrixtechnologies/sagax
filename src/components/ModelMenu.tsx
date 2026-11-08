@@ -436,6 +436,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
                   <ShowMoreRow
                     sectionKey={section.key}
                     expanded={Boolean(expandedProviders[section.key])}
+                    hidden={preview.hidden}
                     style={style}
                     onToggle={() => toggleProviderExpanded(section.key)}
                   />
@@ -556,9 +557,11 @@ function ProviderRow({ provider, id, style, active, expanded, onHover, onOpen }:
 }
 
 /** "Show more" / "Show less" under a provider's truncated model list (#2181). */
-function ShowMoreRow({ sectionKey, expanded, style, onToggle }: {
+function ShowMoreRow({ sectionKey, expanded, hidden, style, onToggle }: {
   sectionKey: string;
   expanded: boolean;
+  /** Models still folded away: "Show more (N)". */
+  hidden: number;
   style: Style;
   onToggle: () => void;
 }) {
@@ -575,7 +578,7 @@ function ShowMoreRow({ sectionKey, expanded, style, onToggle }: {
         style === STYLE.popover ? "hover:bg-popover-hover text-popover-ink-secondary" : "hover:bg-hover text-ink-secondary",
       )}
     >
-      {expanded ? t("model.showLess") : t("model.showMore")}
+      {expanded ? t("model.showLess") : hidden > 0 ? t("model.showMoreCount", { count: hidden }) : t("model.showMore")}
     </button>
   );
 }
@@ -665,7 +668,7 @@ function ModelSubmenu({ provider, placement, focus, style, disabled, favorites, 
           onHover={() => {}} onPick={() => onPick(row)} />
       ))}
       {(preview.hidden > 0 || expanded) && (
-        <ShowMoreRow sectionKey={section.key} expanded={expanded} style={style} onToggle={onToggleExpanded} />
+        <ShowMoreRow sectionKey={section.key} expanded={expanded} hidden={preview.hidden} style={style} onToggle={onToggleExpanded} />
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 import type { ModelSelection } from "../../shared/model-selection.ts";
 import type { BotPatchState, BotsMutateEnv } from "./bots-mutate-helpers.ts";
 import { requirePinnedClientThread } from "./bots-mutate-helpers.ts";
+import { normalizeDirectTriggers } from "../../shared/direct-triggers.ts";
 
 export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchState): Promise<boolean> {
   const { m, body } = state;
@@ -225,6 +226,15 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
       return true;
     }
     patch.proactiveMode = env.normalizeProactiveMode(raw);
+  }
+  // #2691: direct triggers per channel with filters; null clears them all.
+  if (body.directTriggers !== undefined) {
+    const parsed = normalizeDirectTriggers(body.directTriggers);
+    if (!parsed.ok) {
+      env.json(env.res, 400, { error: parsed.error });
+      return true;
+    }
+    patch.directTriggers = parsed.value ?? undefined;
   }
   // #2048: remembered publish target (Sagax page / artifact / Claude / …).
   if (body.pageTargetDefault !== undefined) {

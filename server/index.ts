@@ -118,6 +118,7 @@ import { approvalModeFor,
   type ApprovalMode,
   setDefaultApprovalMode } from "../shared/approval-mode.ts";
 import { isProactiveMode, normalizeProactiveMode, proactiveModeFor } from "../shared/proactive-mode.ts";
+import { mailIsCalendarInvite } from "../shared/direct-triggers.ts";
 import { parsePageTargetDefault } from "../shared/page-targets.ts";
 import { createProactiveProposalRoutes } from "./routes/proactive-proposals.ts";
 import { createProactiveMetricsRoutes } from "./routes/proactive-metrics.ts";
@@ -19589,7 +19590,8 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
   run: "failed run",
   bot: "bot post",
   peer: "teammate message",
-  webhook: "webhook"
+  webhook: "webhook",
+  sms: "text"
 };
 
 /** A proactive wake: background run at the bot's level, under the right
@@ -22843,9 +22845,12 @@ const inboundMail = createBotInboundMailRoute({
   unhandled: (botId, mail) => {
     const event = botmailEvent(mail);
     const domain = senderDomain(mail.from.address);
+    // 2026-11-08 (#2691): an invitation by email wakes the calendar trigger
+    const invite = mailIsCalendarInvite(mail.attachments);
     offerProactive({
-      botId, source: "mail", key: `mail:${mail.dedupeKey}`, confined: true,
-      label: `Email from ${domain || "an unknown domain"}`,
+      botId, source: invite ? "calendar" : "mail", key: `mail:${mail.dedupeKey}`, confined: true,
+      from: mail.from.address,
+      label: invite ? `Invitation from ${domain || "an unknown domain"}` : `Email from ${domain || "an unknown domain"}`,
       summary: `${mail.from.address}: ${mail.subject.trim() || "(no subject)"}`,
       detail: `Subject: ${mail.subject.trim() || "(no subject)"}\n${event.text ?? ""}`,
       hops: 0
@@ -22942,6 +22947,14 @@ const inboundTelephony = createBotInboundTelephonyRoute({
     return number ? phoneLineContacts.get(ownerPrincipalId, number) : null;
   },
   noticeUnknown: (ownerPrincipalId) => phoneLineContacts.settings(ownerPrincipalId).noticeUnknown,
+  // 2026-11-08 (#2691): a text no Bot phone trigger took wakes the bot
+  // through its direct text trigger, confined like a mail wake
+  unhandled: ({ botId, ownerPrincipalId, key, from, label, text }) => {
+    offerProactive({
+      botId, source: "sms", key, confined: true, from, runAs: ownerPrincipalId,
+      label, summary: text.slice(0, 140), detail: text, hops: 0
+    });
+  },
   ownerNotice: ({ ownerPrincipalId, botId, text }) => {
     try {
       const bot = store.bot(botId);

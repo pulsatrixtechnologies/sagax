@@ -14409,5 +14409,15 @@
   "routineEditor.goal.achieved": "Atteint",
   "routineEditor.goal.expired": "Échéance passée",
   "routineEditor.goal.checks": "{count} vérifications",
-  "routineEditor.goal.nextCheck": "Prochaine vérification"
+  "routineEditor.goal.nextCheck": "Prochaine vérification",
+  "botPanel.permissions.direct.mail": "Réveil par courriel",
+  "botPanel.permissions.direct.mail.hint": "Un nouveau courriel à l'adresse du bot le réveille.",
+  "botPanel.permissions.direct.calendar": "Réveil par invitation d'agenda",
+  "botPanel.permissions.direct.calendar.hint": "Une invitation, une mise à jour ou une annulation envoyée au bot le réveille.",
+  "botPanel.permissions.direct.sms": "Réveil par texto",
+  "botPanel.permissions.direct.sms.hint": "Un texto d'une autre personne sur votre ligne le réveille quand aucun déclencheur Bot phone ne le prend.",
+  "botPanel.permissions.direct.help": "Chaque canal peut réveiller ce bot de lui-même, même quand Proactif est désactivé, ou jamais. Tant que vous ne le changez pas, un canal suit Proactif. Filtres, séparés par des virgules : from:*@client.com (seulement cet expéditeur), -from:noreply@* (jamais cet expéditeur), un mot (seulement s'il apparaît), -mot (jamais s'il apparaît). Le réveil roule dans la conversation du bot à son niveau d'approbation, confiné comme une exécution par courriel.",
+  "botPanel.permissions.direct.keywords": "déclencheur direct filtre courriel agenda invitation texto sms",
+  "botPanel.permissions.direct.filters": "Filtres pour {channel}",
+  "botPanel.permissions.direct.filtersPlaceholder": "Filtres : from:*@client.com, -infolettre"
 }

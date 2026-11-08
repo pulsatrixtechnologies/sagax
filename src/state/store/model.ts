@@ -532,6 +532,8 @@ export interface Bot {
   approvalApplied?: import("../../../shared/approval-mode").AppliedApprovalLevel;
   /** how autonomously this bot may act on its own (shared/proactive-mode.ts); "off" = never, absent = the default (proactiveModeFor) */
   proactiveMode?: ProactiveMode;
+  /** #2691: direct triggers per channel (shared/direct-triggers.ts). */
+  directTriggers?: import("../../../shared/direct-triggers").DirectTriggers;
   /** #2048: remembered publish target id (sagax_page, sagax_artifact, …). */
   pageTargetDefault?: string;
   /** tools this bot may always use without asking */

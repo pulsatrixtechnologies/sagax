@@ -14409,5 +14409,15 @@
   "routineEditor.goal.achieved": "Reached",
   "routineEditor.goal.expired": "Deadline passed",
   "routineEditor.goal.checks": "{count} checks",
-  "routineEditor.goal.nextCheck": "Next check"
+  "routineEditor.goal.nextCheck": "Next check",
+  "botPanel.permissions.direct.mail": "Wake on email",
+  "botPanel.permissions.direct.mail.hint": "A new email to the bot's address wakes it.",
+  "botPanel.permissions.direct.calendar": "Wake on calendar invitation",
+  "botPanel.permissions.direct.calendar.hint": "An invitation, update or cancellation sent to the bot wakes it.",
+  "botPanel.permissions.direct.sms": "Wake on text",
+  "botPanel.permissions.direct.sms.hint": "A text from someone else on your phone line wakes it when no Bot phone trigger takes it.",
+  "botPanel.permissions.direct.help": "Each channel can wake this bot on its own, even when Proactive is off, or never. Until you change it, a channel follows Proactive. Filters, comma separated: from:*@client.com (only this sender), -from:noreply@* (never this sender), a word (only when it appears), -word (never when it appears). The wake runs in the bot's conversation at its approval level, confined like an email run.",
+  "botPanel.permissions.direct.keywords": "direct trigger filter email calendar invitation text sms",
+  "botPanel.permissions.direct.filters": "Filters for {channel}",
+  "botPanel.permissions.direct.filtersPlaceholder": "Filters: from:*@client.com, -newsletter"
 }

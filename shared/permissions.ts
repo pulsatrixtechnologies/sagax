@@ -518,6 +518,7 @@ export const BOT_FIELD_PERMISSIONS: Readonly<Record<string, PermissionKey>> = {
   autoApprove: "bots.approvalLevel",
   acknowledgeLocalAuto: "bots.approvalLevel",
   proactiveMode: "bots.approvalLevel",
+  directTriggers: "bots.approvalLevel",
   // #2048: remembered publish target is the owner's own choice on their bot.
   pageTargetDefault: "bots.behaviour",
   // 2026-10-26: the owner's own "Always allow" list on their own bot.

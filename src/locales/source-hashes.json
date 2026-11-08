@@ -18164,7 +18164,17 @@
       "approvals.todayTitle": "2b065c7c9ce466e5ebcad757987d5d660ee4c9ea708bc62c43444b53334738ba",
       "approvals.attention.handled": "2718422d499d13257585215ae849b646c79c43ea70d6ffeeaeda633883170101",
       "approvals.proactive.accept": "a61850c5c40a031118fa3c60e586115e1ae5b1f7c3a5bf56f722bee035d5d306",
-      "approvals.proactive.decline": "e1a09365a1f71702eae28bf5c48af8f9c0044717d922960917f53b004d277d41"
+      "approvals.proactive.decline": "e1a09365a1f71702eae28bf5c48af8f9c0044717d922960917f53b004d277d41",
+      "botPanel.permissions.direct.mail": "138f9cfc992ff939a1e85fb47291471ed7a78426fec7d90254098a4cceb1442e",
+      "botPanel.permissions.direct.mail.hint": "7e2a4b21350f016356f58ac47f470e584224b138a5ecfcb6ddb411da2c3e21f3",
+      "botPanel.permissions.direct.calendar": "7992e6ed0eb6f736a80810e5db9083691a777f3d47fa62f83ca4720f2f0a8218",
+      "botPanel.permissions.direct.calendar.hint": "a8fd8471d8cfde37a5db50e69ffaf56df3a242013b3999d25907f95463bc8db4",
+      "botPanel.permissions.direct.sms": "a4a5a3ab149e07042977df117588b1a80571912011f7ad7154426bba0f43b65e",
+      "botPanel.permissions.direct.sms.hint": "ba0d9fe2c7e9e89958d8e6484126426208b13b8349b610fb2f14bb5a94394c8c",
+      "botPanel.permissions.direct.help": "cf82aa019a0996ee2fefaedecb0d8db0ed1559d5552dd6f2cd04b1b65e6450d0",
+      "botPanel.permissions.direct.keywords": "7b6d1870e31c81e42cad2f157425723e19106298c78c26d90c7bfaa77723c13e",
+      "botPanel.permissions.direct.filters": "c78b175b77870401572599681db373b37699679206998f45626f73709ec86ff5",
+      "botPanel.permissions.direct.filtersPlaceholder": "24273232b7abbe3e2b9ee0f2b7f3d2a1a604191008cdd3b15e10714f168ca8ae"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

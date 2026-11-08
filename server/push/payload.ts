@@ -22,6 +22,12 @@ export const APPROVAL_KEY_CATEGORY = "SAGAX_APPROVAL_KEY";
 export const UPDATE_CATEGORY = "SAGAX_UPDATE";
 /** A question that names its request: the phone offers Reply with a text field. */
 export const QUESTION_CATEGORY = "SAGAX_QUESTION";
+/** #2697: a bot needs the person (a run's report, a proactive find) with no
+ * request behind it: Approve and Deny answer the bot in its conversation. */
+export const NEEDS_YOU_CATEGORY = "SAGAX_NEEDS_YOU";
+/** #2697: a proactive proposal card: Do it and Not now answer the proposal
+ * (POST /api/bots/:id/proactive/:proposalId). */
+export const PROPOSAL_CATEGORY = "SAGAX_PROPOSAL";
 
 export interface PushMessage {
   kind: PushKind;
@@ -53,6 +59,10 @@ export interface PushMessage {
   ask?: string;
   /** A question's choices: the phone offers them as the banner's buttons. */
   choices?: string[];
+  /** #2697: a bot needs the person with no request: Approve / Deny reply in its conversation. */
+  needsYou?: boolean;
+  /** #2697: the proactive proposal card this is about: Do it / Not now answer it. */
+  proposalId?: string;
   /** When it happened, milliseconds since 1970. */
   at: number;
   /** A string of the app's own catalog (ios/App/Localizable.xcstrings) the
@@ -155,7 +165,9 @@ export function notificationToneSound(choice: string | undefined): string {
  * gets Reply; an approval that names its request gets Allow and Deny;
  * ordinary news (and a takeover, which rides `kind: "approval"` with no
  * request) has no actions. Matches ios NotificationApproval.category. */
-export function pushCategory(message: Pick<PushMessage, "kind" | "prompt" | "needsKey" | "requestId">): string {
+export function pushCategory(message: Pick<PushMessage, "kind" | "prompt" | "needsKey" | "requestId" | "needsYou" | "proposalId">): string {
+  if (message.proposalId?.trim()) return PROPOSAL_CATEGORY;
+  if (message.kind === "approval" && message.needsYou && !message.requestId?.trim()) return NEEDS_YOU_CATEGORY;
   if (message.kind === "approval" && message.prompt === "question") {
     return message.requestId?.trim() ? QUESTION_CATEGORY : UPDATE_CATEGORY;
   }
@@ -203,10 +215,12 @@ export function communicationSenderName(message: Pick<PushMessage, "senderName">
  * next line of the conversation never replaces it (it would take its
  * buttons away), and it is updated or withdrawn in place by its id.
  * Mirrors `PushCollapse.identifier` on the phone. */
-export function collapseId(message: Pick<PushMessage, "kind" | "threadId"> & { requestId?: string }): string {
+export function collapseId(message: Pick<PushMessage, "kind" | "threadId"> & { requestId?: string; proposalId?: string }): string {
   const thread = message.threadId?.trim() ?? "";
   const request = message.kind === "approval" ? message.requestId?.trim() ?? "" : "";
-  const key = request ? `sagax.r.${thread}.${request}` : thread ? `sagax.t.${thread}` : `sagax.${message.kind}`;
+  // each proposal card keeps its own banner: three suggestions are three asks
+  const proposal = message.proposalId?.trim() ?? "";
+  const key = request ? `sagax.r.${thread}.${request}` : proposal ? `sagax.p.${proposal}` : thread ? `sagax.t.${thread}` : `sagax.${message.kind}`;
   if (Buffer.byteLength(key) <= COLLAPSE_MAX) return key;
   return `sagax.h.${createHash("sha256").update(key).digest("hex").slice(0, 48)}`;
 }
@@ -369,6 +383,8 @@ export function buildApnsRequest(input: {
   if (message.requestId) payload.requestId = message.requestId;
   if (message.prompt) payload.prompt = message.prompt;
   if (message.needsKey) payload.needsKey = true;
+  if (message.needsYou) payload.needsYou = true;
+  if (message.proposalId) payload.proposalId = message.proposalId;
   if (message.routineRunId) payload.routineRunId = message.routineRunId;
   if (message.routineName) payload.routineName = clip(message.routineName, 80);
   const choices = pushChoices(message);

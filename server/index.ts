@@ -755,7 +755,7 @@ import { BrowserNetworkDebug } from "./browser/browser-network-debug.ts";
 import { createScreenFrameSource } from "./computer/screen-frame-source.ts";
 import { screenFrameHash } from "./computer/screen-frame-gate.ts";
 import { RoutineRequestService } from "./routines/routine-requests.ts";
-import { directApply, UNDO_STALE } from "./direct-apply.ts";
+import { directApply, reviewedSkillNeedsCard, UNDO_STALE } from "./direct-apply.ts";
 import { createAgentCard } from "./widgets/chat-widgets.ts";
 import { buildBotOverview } from "./bots/bot-overview.ts";
 import { ProfileRequestService } from "./profiles/profile-requests.ts";
@@ -16400,7 +16400,9 @@ const skillReview = createSkillReview({
     // A new skill drawn from a finished task is a proposal (#2610): the
     // person keeps it in one click on the card, or turns it down. A fix to
     // a skill in use applies at once, with its receipt, Undo and history.
-    if (change.action === "create") {
+    // Under Full access the new skill applies too, with its receipt and Undo
+    // (2026-11-08: no card at Full for the bot's own work).
+    if (reviewedSkillNeedsCard(change.action, direct)) {
       appendSkillRequestCard({ botId, threadId, staged });
       return { ok: true };
     }
@@ -20158,6 +20160,7 @@ const approvalBus: ApprovalBus = { store, broadcast, notify, autoApply: fullAcce
 desktopBridges.setAskHook(async ({ device, context }) => {
   const bot = store.bot(context.botId);
   if (!bot) return false;
+  // approvalBus.autoApply (fullAccessForSource) answers it at Full; full-access: peer-contact
   return (await requestPeerApproval(approvalBus, bot, device, `Use ${device.name} for this turn`, "use_computer", context.threadId)) === "allow";
 });
 

@@ -11,7 +11,7 @@ import { PROFILE_REQUEST_FIELDS, type ProfileRequestCardData, type ProfileReques
 import { parseBotProfilePatch, type BotProfilePatchInput } from "../bots/bot-profile.ts";
 import { validateBotCwd } from "../bots/bot-cwd.ts";
 import { newId } from "../contracts.ts";
-import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
+import { UNDO_STALE, grantAfterQuote, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";
 import { recordProfileChange } from "./profile-versions.ts";
 import { redactSecretsInText } from "../redact.ts";
@@ -331,7 +331,7 @@ export class ProfileRequestService {
     };
 
     const copy = profileCardCopy({ name: targetName, crossBot }, snapshot, before, finalChanges, reason);
-    const grant = submitted && !args.quoteRefused ? (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null) : null;
+    const grant = submitted ? grantAfterQuote(args.quoteRefused ? (this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null) : (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null), args.quoteRefused) : null;
     // omb #3014: any grant applies with Undo, including a cwd change. The
     // person sees a receipt, not a second card on top of the level they chose.
     const automatic = grant !== null;

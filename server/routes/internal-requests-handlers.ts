@@ -541,8 +541,10 @@ export async function handleInternalRequestsEarly(deps: InternalRequestsDeps, ct
         proposal: proposedInput,
         from: owner.group ? { botId: from.id, name: from.name, color: from.color } : undefined,
         canCommit: () => deps.isActive(capability),
-        // a hold, or a quote that did not prove the ask (V4: a card, never an apply)
-        ...(routineSafety?.kind === "hold" || (body.quote !== undefined && typeof askedProof === "string") ? { explicitConfirm: true } : {}),
+        // a safety hold keeps its card; a quote that did not prove the ask
+        // loses its fast path but never Full access (grantAfterQuote, 2026-11-08)
+        ...(routineSafety?.kind === "hold" ? { explicitConfirm: true } : {}),
+        ...(body.quote !== undefined && typeof askedProof === "string" ? { quoteRefused: true } : {}),
       }),
     );
     if (routineSafety?.kind === "hold") {

@@ -123,6 +123,14 @@ describe("designs (#2717)", () => {
     expect(applyDesignSystem("<p>x</p>", BUILTIN_DESIGN_SYSTEMS[1]!)).toMatch(/^<style data-sagax-design-system="minimal"/);
   });
 
+  it("a screen is readable on any skin: the Sagax system reads the frame theme, headings take the screen's ink", () => {
+    const sagax = BUILTIN_DESIGN_SYSTEMS.find((system) => system.id === "sagax")!;
+    // the app's --color-* names are not defined in the page frame
+    expect(Object.values(sagax.tokens).join(" ")).not.toContain("--color-");
+    for (const [name, value] of Object.entries(sagax.tokens)) expect(value).not.toContain(`var(${name},`);
+    expect(DESIGN_CANVAS_CSS).toContain("--foreground:var(--fg,#111)");
+  });
+
   it("names an export after the title and the version, never an id", () => {
     expect(exportFilename("Onboarding : Notes app", 3)).toBe("onboarding-notes-app-v3.html");
     expect(exportFilename("???", 1)).toBe("page-v1.html");

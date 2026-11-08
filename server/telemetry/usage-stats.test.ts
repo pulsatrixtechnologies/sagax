@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { UsageRow } from "../usage/usage-ledger.ts";
 import { createTracer } from "./otel.ts";
-import { buildUsageStats, readToolSpans, type LocalSpan } from "./usage-stats.ts";
+import { buildUsageDays, buildUsageStats, readToolSpans, type LocalSpan } from "./usage-stats.ts";
 
 const row = (extra: Partial<UsageRow>): UsageRow => ({
   at: "2026-11-07T12:00:00.000Z",
@@ -79,5 +79,20 @@ describe("buildUsageStats", () => {
     expect(all.map((span) => span.toolName)).toEqual(["Bash", "mcp__cw__q"]);
     const november = readToolSpans(dir, { from: new Date(Date.UTC(2026, 10, 1)), to: new Date(Date.UTC(2026, 10, 30)) });
     expect(november).toEqual([{ traceId: "a".repeat(32), name: "execute_tool mcp__cw__q", startMs: Date.UTC(2026, 10, 2), endMs: Date.UTC(2026, 10, 2) + 7, ok: false, threadId: "t", toolName: "mcp__cw__q", toolKind: "mcp", mcpServer: "cw" }]);
+  });
+});
+
+describe("buildUsageDays", () => {
+  it("fills every day of the window, oldest first, and keys series like the groups", () => {
+    const dayOf = (at: number) => new Date(at).toISOString().slice(0, 10);
+    const days = buildUsageDays(
+      [row({ at: "2026-11-06T10:00:00.000Z" }), row({ at: "2026-11-06T11:00:00.000Z", costUsd: 2 })],
+      ["2026-11-05", "2026-11-06", "2026-11-07"],
+      dayOf,
+    );
+    expect(days.map((day) => day.day)).toEqual(["2026-11-05", "2026-11-06", "2026-11-07"]);
+    expect(days[0]!.total).toEqual({ costUsd: 0, tokens: 0 });
+    expect(days[1]!.total).toEqual({ costUsd: 3, tokens: 220 });
+    expect(Object.keys(days[1]!.bySource)).toEqual(["user"]);
   });
 });

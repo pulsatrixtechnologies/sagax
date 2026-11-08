@@ -37,12 +37,18 @@ function data(): BotUsageBreakdown {
     bySource: [group("user", "Person", 3, [6000, 0]), group("routine", "Routine", 1, [3000, 1000])],
     byPerson: [group(PERSON_ID, "", 3, [6000, 0]), group("owner", "Owner", 1, [3000, 1000])],
     tools: [{ tool: "send_mail", kind: "mcp", mcpServer: "mail", calls: 3, errors: 1, totalMs: 900 }],
+    offset: 0,
+    days: [
+      { day: "2026-11-05", total: { costUsd: 1, tokens: 3000 }, byAccount: {}, byModel: { opus: { costUsd: 1, tokens: 3000 } }, bySource: {}, byPerson: {} },
+      { day: "2026-11-06", total: { costUsd: 3, tokens: 7000 }, byAccount: {}, byModel: { opus: { costUsd: 3, tokens: 7000 } }, bySource: {}, byPerson: {} },
+    ],
   };
 }
 
 function render(props: Partial<ViewProps> = {}) {
   return renderToStaticMarkup(createElement(BotUsageBreakdownView, {
     data: data(),
+    initialDetails: true,
     period: 30,
     onPeriod: () => {},
     unit: "usd",
@@ -117,7 +123,7 @@ describe("bot usage breakdown (#2612)", () => {
     const html = render({ data: { ...data(), byModel: [group("big", "big", 99.6, [1000, 0]), group("tiny", "tiny", 0.4, [10, 0])] } });
     expect(html).not.toMatch(/background:\s*#/);
     expect(html).toContain("data-bot-usage-dot");
-    expect(html).toContain("&lt;1%");
+    expect(html).toContain("0.4%");
   });
 
   it("names the way an account is paid in words, tells same-name accounts apart and merges the same person", () => {
@@ -158,5 +164,16 @@ describe("bot usage breakdown (#2612)", () => {
     expect(formatShare(0.31, "en")).toBe("31%");
     expect(formatShare(0.31, "fr").replace(/\s/g, " ")).toBe("31 %");
     expect(formatShare(0, "en")).toBe("0%");
+    expect(formatShare(0.004, "en")).toBe("0.4%");
+    expect(formatShare(0.0004, "en")).toBe("<0.1%");
+  });
+
+  it("draws a stacked chart card with one tile per series and a total", () => {
+    const html = render({ initialDetails: false });
+    expect(html).toContain("data-usage-chart-card");
+    expect(html).toContain('data-usage-chart-day="2026-11-05"');
+    expect(html).toContain('data-usage-chart-tile="opus"');
+    expect(html).toContain("100%");
+    expect(html).not.toContain("data-bot-usage-row");
   });
 });

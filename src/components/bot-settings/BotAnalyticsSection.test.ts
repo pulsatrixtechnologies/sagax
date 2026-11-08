@@ -12,7 +12,7 @@ vi.mock("@/state/store", () => ({
   useStore: () => ({ state: { instances: [] }, dispatch: () => {} }),
 }));
 
-const { BotAnalyticsSection, BotAnalyticsView, chartPaths, initials, rangeLabel, sortTopUsers } = await import("./BotAnalyticsSection");
+const { BotAnalyticsSection, BotAnalyticsView, initials, rangeLabel, sortTopUsers } = await import("./BotAnalyticsSection");
 type ViewProps = Parameters<typeof BotAnalyticsView>[0];
 
 afterEach(() => setLocale("en"));
@@ -116,24 +116,14 @@ describe("BotAnalyticsView: the range", () => {
 });
 
 describe("BotAnalyticsView: the cards", () => {
-  it("shows the messages total and its area chart", () => {
+  it("shows the messages total and its daily histogram", () => {
     const card = slice(render(), 'data-bot-analytics-card="messages"', 'data-bot-analytics-card="hoursSaved"');
     expect(card).toContain(">Messages<");
     expect(card).toContain(">22<");
-    expect(card).toContain('class="text-accent"');
+    expect(card).toContain("text-accent");
     expect(card).toContain('aria-label="Messages per day"');
-    expect(card).toMatch(/<path d="M0 [\d.]+ C[^"]+ L300 96 L0 96 Z"/);
-    expect(card).toContain('vector-effect="non-scaling-stroke"');
+    expect(card).toContain("rounded-t-[4px]");
     expect(card).toContain("Nov 6 · 4");
-  });
-
-  it("draws a monotone line that stays on the floor for a zero day", () => {
-    const { line, area } = chartPaths([0, 4, 0]);
-    expect(line.startsWith("M0 92")).toBe(true);
-    expect(line.endsWith("300 92")).toBe(true);
-    expect(line).not.toMatch(/ 9[3-9](?:\.\d+)? /);
-    expect(area.endsWith("L300 96 L0 96 Z")).toBe(true);
-    expect(chartPaths([])).toEqual({ line: "", area: "" });
   });
 
   it("shows the hours saved with one decimal, or \"Still being estimated...\" without a basis", () => {

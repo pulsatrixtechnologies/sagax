@@ -9,7 +9,7 @@ import { modelSharesOf, triggerLabel, type UsageRow } from "../usage/usage-ledge
 import { containsUuid, isOpaqueId } from "../../shared/human-id.ts";
 import { personOf } from "./agent-spans.ts";
 import { spansFileFor } from "./otel.ts";
-import type { UsageStats, UsageStatsGroup, UsageToolStat } from "../../shared/telemetry.ts";
+import type { UsageDay, UsageDayValue, UsageStats, UsageStatsGroup, UsageToolStat } from "../../shared/telemetry.ts";
 
 /** What usage-stats needs of a local span line. */
 export interface LocalSpan {
@@ -185,4 +185,33 @@ export function buildUsageStats(rows: readonly UsageRow[], spans: readonly Local
     byPerson: finish(byPerson, true),
     tools: [...tools.values()].sort((a, b) => b.calls - a.calls || a.tool.localeCompare(b.tool)).slice(0, 50),
   };
+}
+
+/** The usage of each day of a window, split like the group rows (same keys):
+ * `dayKeys` are the days the series must carry, `dayOf` cuts an instant in
+ * the server zone. Rows outside the days are ignored. */
+export function buildUsageDays(rows: readonly UsageRow[], dayKeys: readonly string[], dayOf: (at: number) => string): UsageDay[] {
+  const days = new Map<string, UsageDay>(dayKeys.map((day) => [day, { day, total: { costUsd: 0, tokens: 0 }, byAccount: {}, byModel: {}, bySource: {}, byPerson: {} }]));
+  const bump = (into: Record<string, UsageDayValue>, key: string, cost: number, tokens: number) => {
+    const value = (into[key] ??= { costUsd: 0, tokens: 0 });
+    value.costUsd += cost;
+    value.tokens += tokens;
+  };
+  for (const row of rows) {
+    const day = days.get(dayOf(Date.parse(row.at)));
+    if (!day) continue;
+    const tokens = row.input + row.output;
+    const cost = row.costUsd ?? 0;
+    day.total.costUsd += cost;
+    day.total.tokens += tokens;
+    bump(day.byAccount, `${row.instanceId}${row.access ? `:${row.access}` : ""}`, cost, tokens);
+    bump(day.bySource, row.trigger.kind, cost, tokens);
+    bump(day.byPerson, personOf(row) ?? "owner", cost, tokens);
+    const shares = modelSharesOf(row) ?? [{ model: row.model, inputTokens: row.input - (row.cachedInput ?? 0), outputTokens: row.output, cachedInputTokens: row.cachedInput ?? 0, costUsd: row.costUsd }];
+    for (const share of shares) {
+      const cached = share.cachedInputTokens ?? 0;
+      bump(day.byModel, share.model, share.costUsd ?? 0, share.inputTokens + cached + (share.cacheWriteTokens ?? 0) + share.outputTokens);
+    }
+  }
+  return dayKeys.map((day) => days.get(day)!);
 }

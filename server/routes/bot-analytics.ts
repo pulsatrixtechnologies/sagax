@@ -34,9 +34,9 @@
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { PriceList } from "../usage/prices.ts";
 import { readUsage, usageRowsFor, type UsageViewer } from "../usage/usage-ledger.ts";
-import { aggregateBotAnalytics, analyticsRange, parseAnalyticsDays, parseUsagePeriod, usagePeriodRange, type BotAnalyticsRun } from "../../shared/bot-analytics.ts";
+import { aggregateBotAnalytics, analyticsRange, parseAnalyticsDays, parseUsageOffset, parseUsagePeriod, usagePeriodWindow, analyticsDayKey, type BotAnalyticsRun } from "../../shared/bot-analytics.ts";
 import type { BotUsageBreakdown } from "../../shared/telemetry.ts";
-import { buildUsageStats, readToolSpans } from "../telemetry/usage-stats.ts";
+import { buildUsageDays, buildUsageStats, readToolSpans } from "../telemetry/usage-stats.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const ROUTE = /^\/api\/bots\/([\w-]+)\/analytics$/;
@@ -76,12 +76,16 @@ export function createBotAnalyticsRoutes<B extends AnalyticsBot = AnalyticsBot>(
     const period = breakdown ? parseUsagePeriod(url.searchParams.get("period")) : null;
     if (breakdown && period === null) return json(res, 400, { error: "period must be 7, 30 or month" });
 
+    const offset = breakdown ? parseUsageOffset(url.searchParams.get("offset")) : 0;
+    if (offset === null) return json(res, 400, { error: "offset must be a whole number from 0 to 52" });
+
     const bot = deps.bot(match[1]!);
     if (!bot || !deps.sees(auth, bot)) return json(res, 404, { error: "no such bot" });
 
     const timeZone = deps.timeZone?.() ?? "UTC";
     if (breakdown && period !== null) {
-      const span = usagePeriodRange(period, deps.now?.() ?? Date.now(), timeZone);
+      const window = usagePeriodWindow(period, deps.now?.() ?? Date.now(), timeZone, offset);
+      const span = { from: window.from, to: window.to };
       const own = readUsage(deps.dataDir, span).filter((row) => row.botId === bot.id);
       const viewer = deps.viewer(auth);
       const rows = deps.seesAll(auth, bot) ? own : viewer.kind === "person" ? usageRowsFor(own, viewer) : [];
@@ -103,6 +107,8 @@ export function createBotAnalyticsRoutes<B extends AnalyticsBot = AnalyticsBot>(
         period,
         currency: deps.prices() ? deps.currency() : null,
         ...stats,
+        days: buildUsageDays(rows, window.dayKeys, (at) => analyticsDayKey(at, timeZone)),
+        offset,
       };
       res.setHeader("cache-control", "no-store");
       return json(res, 200, answer);

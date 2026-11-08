@@ -119,123 +119,33 @@ export function sortTopUsers(users: BotAnalyticsUser[], sort: BotAnalyticsSort):
 
 // ---------------------------------------------------------------- chart
 
-const CHART_W = 300;
-const CHART_H = 96;
-const CHART_PAD = 4;
-
-/** A smooth line through the points that never overshoots between two
- * days (Fritsch-Carlson monotone cubic), so a zero day stays on the floor. */
-export function chartPaths(values: number[]): { line: string; area: string } {
-  const count = values.length;
-  if (count === 0) return { line: "", area: "" };
-  const max = Math.max(0, ...values);
-  const y = (value: number) => {
-    const top = CHART_PAD;
-    const bottom = CHART_H - CHART_PAD;
-    return max > 0 ? bottom - (Math.max(0, value) / max) * (bottom - top) : bottom;
-  };
-  const round = (value: number) => Math.round(value * 100) / 100;
-  if (count === 1) {
-    const level = round(y(values[0]!));
-    const line = `M0 ${level} L${CHART_W} ${level}`;
-    return { line, area: `${line} L${CHART_W} ${CHART_H} L0 ${CHART_H} Z` };
-  }
-  const xs = values.map((_, index) => (index / (count - 1)) * CHART_W);
-  const ys = values.map(y);
-  const slopes = xs.slice(1).map((x, index) => (ys[index + 1]! - ys[index]!) / (x - xs[index]!));
-  const tangents = ys.map((_, index) => {
-    if (index === 0) return slopes[0]!;
-    if (index === count - 1) return slopes[count - 2]!;
-    const before = slopes[index - 1]!;
-    const after = slopes[index]!;
-    return before * after <= 0 ? 0 : (before + after) / 2;
-  });
-  for (let index = 0; index < count - 1; index += 1) {
-    const slope = slopes[index]!;
-    if (slope === 0) {
-      tangents[index] = 0;
-      tangents[index + 1] = 0;
-      continue;
-    }
-    const a = tangents[index]! / slope;
-    const b = tangents[index + 1]! / slope;
-    const length = a * a + b * b;
-    if (length > 9) {
-      const scale = 3 / Math.sqrt(length);
-      tangents[index] = scale * a * slope;
-      tangents[index + 1] = scale * b * slope;
-    }
-  }
-  let line = `M${round(xs[0]!)} ${round(ys[0]!)}`;
-  for (let index = 0; index < count - 1; index += 1) {
-    const step = (xs[index + 1]! - xs[index]!) / 3;
-    line += ` C${round(xs[index]! + step)} ${round(ys[index]! + tangents[index]! * step)} ${round(xs[index + 1]! - step)} ${round(ys[index + 1]! - tangents[index + 1]! * step)} ${round(xs[index + 1]!)} ${round(ys[index + 1]!)}`;
-  }
-  return { line, area: `${line} L${CHART_W} ${CHART_H} L0 ${CHART_H} Z` };
-}
-
-/** The labels under the chart: every day of a week, else first, middle and
- * last. Inside a week only the day number, plus the month on the 1st. */
-function axisLabels(dayKeys: string[]): Array<{ key: string; at: number; label: string }> {
+/** The labels under the chart: first, middle and last day. */
+function axisLabels(dayKeys: string[]): Array<{ key: string; label: string }> {
   const count = dayKeys.length;
   if (count === 0) return [];
-  const at = (index: number) => (count === 1 ? 0 : index / (count - 1));
-  if (count <= 7) {
-    return dayKeys.map((key, index) => {
-      const edge = index === 0 || index === count - 1 || key.endsWith("-01");
-      return { key, at: at(index), label: edge ? dayLabel(key) : dayLabel(key, { day: "numeric" }) };
-    });
-  }
-  const middle = Math.floor((count - 1) / 2);
-  return [0, middle, count - 1].map((index) => ({ key: dayKeys[index]!, at: at(index), label: dayLabel(dayKeys[index]!) }));
+  const picks = count === 1 ? [0] : count === 2 ? [0, 1] : [0, Math.floor((count - 1) / 2), count - 1];
+  return picks.map((index) => ({ key: dayKeys[index]!, label: dayLabel(dayKeys[index]!) }));
 }
 
 function AreaChart({ metric, dayKeys, values, format }: { metric: string; dayKeys: string[]; values: number[]; format: (value: number) => string }) {
-  const { line, area } = chartPaths(values);
   const labels = axisLabels(dayKeys);
-  const slot = values.length > 0 ? CHART_W / values.length : CHART_W;
+  const top = Math.max(0, ...values);
   return (
     <div className="mt-3 flex flex-col gap-1.5">
-      <div className="text-accent">
-        <svg
-          role="img"
-          aria-label={t("botProfile.analytics.perDay", { metric })}
-          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-          preserveAspectRatio="none"
-          className="block h-24 w-full overflow-visible"
-          data-bot-analytics-chart=""
-        >
-          <path d={area} fill="currentColor" fillOpacity={0.12} stroke="none" />
-          <path d={line} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          {values.map((value, index) => (
-            <rect
-              key={dayKeys[index] ?? index}
-              x={values.length === 1 ? 0 : Math.max(0, (index / (values.length - 1)) * CHART_W - slot / 2)}
-              y={0}
-              width={slot}
-              height={CHART_H}
-              fill="none"
-              pointerEvents="all"
-            >
-              <title>{`${dayKeys[index] ? dayLabel(dayKeys[index]) : ""} · ${format(value)}`}</title>
-            </rect>
-          ))}
-        </svg>
+      <div
+        role="img"
+        aria-label={t("botProfile.analytics.perDay", { metric })}
+        className="flex h-24 w-full items-end gap-[3px] border-b border-hairline text-accent"
+        data-bot-analytics-chart=""
+      >
+        {values.map((value, index) => (
+          <div key={dayKeys[index] ?? index} title={`${dayKeys[index] ? dayLabel(dayKeys[index]) : ""} · ${format(value)}`} className="flex h-full min-w-0 flex-1 items-end justify-center">
+            <div className="w-full max-w-[40px] rounded-t-[4px] bg-current" style={{ height: top > 0 ? `${Math.max(value > 0 ? 3 : 0, (value / top) * 100)}%` : "0%" }} />
+          </div>
+        ))}
       </div>
-      <div aria-hidden="true" className="relative h-4 text-[11px] leading-4 text-ink-tertiary">
-        {labels.map(({ key, at, label }, index) => {
-          const first = index === 0;
-          const last = index === labels.length - 1 && labels.length > 1;
-          return (
-            <span
-              key={key}
-              className={cn("absolute top-0 whitespace-nowrap tabular-nums", !first && !last && "-translate-x-1/2")}
-              style={last ? { right: 0 } : { left: `${at * 100}%` }}
-            >
-              {label}
-            </span>
-          );
-        })}
+      <div aria-hidden="true" className="flex h-4 justify-between text-[11px] leading-4 text-ink-tertiary">
+        {labels.map(({ key, label }) => <span key={key} className="whitespace-nowrap tabular-nums">{label}</span>)}
       </div>
     </div>
   );

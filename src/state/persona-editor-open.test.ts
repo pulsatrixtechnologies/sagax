@@ -56,6 +56,17 @@ describe("Persona editor state", () => {
     expect(landed.settingsOpen).toBe(true);
   });
 
+  it("a deep link into a section puts the panel back as it was, closed stays closed (#2271)", () => {
+    const closed = reducer(withBot, { type: "select", id: "pepper" });
+    expect(closed.settingsOpen).toBe(false);
+    const viaLink = reducer(closed, { type: "toggleSettings", open: true, botId: "pepper", section: "soul" as never });
+    expect(viaLink.personaEditor?.panel?.settingsOpen).toBe(false);
+    expect(reducer(viaLink, { type: "closePersonaEditor" }).settingsOpen).toBe(false);
+    const open = reducer(closed, { type: "toggleSettings", open: true });
+    const fromOpen = reducer(open, { type: "toggleSettings", open: true, botId: "pepper", section: "soul" as never });
+    expect(reducer(fromOpen, { type: "closePersonaEditor" }).settingsOpen).toBe(true);
+  });
+
   it("reroutes a settings deep link that used to land on More to the persona editor", () => {
     const open = (section: never) => reducer(withBot, { type: "toggleSettings", open: true, botId: "pepper", section });
     expect(open("access" as never).personaEditor).toMatchObject({ botId: "pepper", section: "access" });

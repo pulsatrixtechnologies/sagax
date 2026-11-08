@@ -370,6 +370,38 @@ export class BranchGit {
       throw new BranchActionError(firstLine(result.stderr) || "git could not delete the branch.", "delete_failed", 500);
     }
   }
+  /** Ignore (#2148): the job's branch goes away everywhere,
+   * with no confirmation card. The remote branch (when origin has it), then
+   * the branch's worktree folder (never the main checkout), then the local
+   * branch, forced. The default branch is never touched. Each step that
+   * fails is reported, the rest still run. */
+  async deleteEverywhere(githubRepoOnly?: string): Promise<{ remote: boolean; local: boolean; errors: string[] }> {
+    const state = await this.state();
+    if (!state.exists && !state.pushed) return { remote: false, local: false, errors: [] };
+    if (state.isDefault || PROTECTED_BRANCHES.has(this.place.branch)) throw new BranchActionError("The default branch is never deleted from here.", "default_branch");
+    await this.guard();
+    const errors: string[] = [];
+    let remote = false;
+    let local = false;
+    if (state.pushed) {
+      const target = githubRepoOnly ? `https://github.com/${githubRepoOnly}.git` : "origin";
+      const result = await this.git(["push", "--porcelain", "--", target, `:${this.ref}`], this.place.root, { timeoutMs: 120_000, env: this.pushEnv });
+      if (result.code === 0 || /remote ref does not exist/i.test(result.stderr)) {
+        remote = true;
+        await this.git(["update-ref", "-d", `refs/remotes/origin/${this.place.branch}`]);
+      } else errors.push(firstLine(result.stderr || result.stdout) || "git could not delete the remote branch.");
+    }
+    if (state.exists) {
+      if (state.worktree && state.worktree !== this.place.root) {
+        const removed = await this.git(["worktree", "remove", "--force", "--", state.worktree]);
+        if (removed.code !== 0) errors.push(firstLine(removed.stderr) || "git could not remove the branch's worktree.");
+      }
+      const result = await this.git(["branch", "-D", "--", this.place.branch]);
+      if (result.code === 0) local = true;
+      else errors.push(firstLine(result.stderr) || "git could not delete the branch.");
+    }
+    return { remote, local, errors };
+  }
 }
 
 /** The last folder of a path: what an organization server shows of it. */

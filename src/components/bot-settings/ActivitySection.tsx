@@ -65,7 +65,7 @@ import { ActivityListModal } from "./ActivityListModal";
 import { ActivityList, type CardActions } from "./ActivityList";
 import { useBotActivityFeed } from "@/lib/use-bot-activity-feed";
 import { GROUPED_CARD, GROUPED_ROW, PANEL_LABEL } from "@/lib/grouped-card";
-import { loadArchivedBranches, setBranchArchived } from "@/lib/code-branches";
+import { deleteJobBranches, loadArchivedBranches, setBranchArchived } from "@/lib/code-branches";
 import { CodeBranchList, type BranchListActions } from "./CodeBranchList";
 
 export { ActivityList, type CardActions };
@@ -327,11 +327,15 @@ export function useBotCodingPanel(bot: Bot) {
     loadArchivedBranches(bot.id).then((keys) => { if (live) setArchived(new Set(keys)); }).catch(() => {});
     return () => { live = false; };
   }, [bot.id]);
-  // Ignore: gone at once, kept gone on the server; nothing is deleted.
+  // Ignore: the row is gone at once and kept gone on the server, and the
+  // job's branch is deleted on the remote and locally (#2148, no card).
+  const items = feed.list?.items;
   const ignore = useCallback((key: string) => {
     setArchived((current) => new Set(current).add(key));
     setBranchArchived(bot.id, key, true).then((keys) => setArchived(new Set(keys))).catch(() => {});
-  }, [bot.id]);
+    const job = items?.find((item) => ignoredJobKey(item.id) === key);
+    if (job?.code?.branches?.length) void deleteJobBranches(bot.id, job.threadId, job.code.branches).then(() => feed.refresh());
+  }, [bot.id, items, feed]);
   const branchActions: BranchListActions = {
     botId: bot.id,
     botName: bot.name,

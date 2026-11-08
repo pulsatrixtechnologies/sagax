@@ -46,4 +46,12 @@ describe("the bot's own folder in the environment tools (2026-11-02)", () => {
     const listed = await handleUserSandboxMcp("tools/list", {}, fakeExec(), { folder: "/workspace/bots/helper" }) as { tools: Array<{ name: string; description: string }> };
     expect(listed.tools.find((tool) => tool.name === "read_file")!.description).toContain("/workspace/bots/helper");
   });
+  // #2775: the file tools write a relative tmp/ path inside the conversation.
+  it("hands a file tool's path to the conversation mapper first", async () => {
+    const exec = fakeExec();
+    exec.conversationPath = (path) => path.replace(/^tmp\//, "tmp/c-abc/");
+    await handleUserSandboxMcp("tools/call", { name: "read_file", arguments: { path: "tmp/mte.md" } }, exec, { folder: "/workspace/bots/helper" });
+    expect(JSON.stringify(exec.calls[0]!.argv)).toContain("tmp/c-abc/mte.md");
+    expect(JSON.stringify(exec.calls[0]!.argv)).not.toMatch(/"tmp\/mte\.md"|\/tmp\/mte\.md/);
+  });
 });

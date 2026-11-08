@@ -158,7 +158,28 @@ export class BotFolderRegistry {
 const IN_FOLDER_SH = 'd="$1"; shift; mkdir -p -- "$d/tmp" 2>/dev/null; if cd -- "$d" 2>/dev/null; then export TMPDIR="$d/tmp" SAGAX_BOT_DIR="$d"; else cd /workspace; fi; exec "$@"';
 /** #2739: the same, with TMPDIR in the conversation's own tmp/<conversation>/
  * folder, so one conversation never finds another's temporary files. */
-const IN_THREAD_SH = 'd="$1"; c="$2"; shift 2; mkdir -p -- "$d/tmp/$c" 2>/dev/null; if cd -- "$d" 2>/dev/null; then export TMPDIR="$d/tmp/$c" SAGAX_BOT_DIR="$d"; else cd /workspace; fi; exec "$@"';
+/** #2775: loose entries at the root of tmp/ untouched for this many minutes
+ * belong to no conversation still at work: each command moves them into
+ * tmp/c-earlier, so a conversation never lists them as its own. */
+export const BOT_TMP_LOOSE_MINUTES = 360;
+export const EARLIER_TMP_NAME = "c-earlier";
+const IN_THREAD_SH = `d="$1"; c="$2"; shift 2; mkdir -p -- "$d/tmp/$c" 2>/dev/null; if [ -d "$d/tmp" ] && [ ! -L "$d/tmp" ]; then find "$d/tmp" -mindepth 1 -maxdepth 1 ! -name 'c-*' ! -name '.*' -mmin +${BOT_TMP_LOOSE_MINUTES} -exec sh -c 'mkdir -p -- "$0/${EARLIER_TMP_NAME}" && mv -f -- "$@" "$0/${EARLIER_TMP_NAME}/"' "$d/tmp" {} + 2>/dev/null; fi; if cd -- "$d" 2>/dev/null; then export TMPDIR="$d/tmp/$c" SAGAX_BOT_DIR="$d"; else cd /workspace; fi; exec "$@"`;
+
+/** A file tool's path, with tmp/ in the conversation's own folder (#2775):
+ * `tmp/x`, `./tmp/x` and `<folder>/tmp/x` become `tmp/c-<conversation>/x`,
+ * so a relative tmp path never reaches another conversation's files.
+ * A path already in a tmp/c-* folder, or outside tmp/, stays as is. */
+export function conversationTmpPath(value: string, folder: string | null | undefined, threadId: string | null | undefined): string {
+  const conversation = conversationTmpName(threadId);
+  if (!conversation || !folder) return value;
+  const relative = value.replace(/^(?:\.\/)+/, "");
+  const base = relative === "tmp" || relative.startsWith("tmp/") ? ""
+    : value === `${folder}/tmp` || value.startsWith(`${folder}/tmp/`) ? `${folder}/` : null;
+  if (base === null) return value;
+  const rest = (base ? value.slice(folder.length + 1) : relative).slice(3).replace(/^\/+/, "");
+  if (/^c-[a-z0-9-]+(?:\/|$)/.test(rest)) return value;
+  return `${base}tmp/${conversation}${rest ? `/${rest}` : ""}`;
+}
 
 /** The folder name of a conversation under a bot's tmp/ (#2739): its id
  * reduced to letters, digits and dashes, never a path. Empty when unknown. */

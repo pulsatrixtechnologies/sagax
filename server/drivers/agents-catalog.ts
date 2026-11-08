@@ -518,6 +518,9 @@ const OFFERED_REFERENCES: ReadonlyArray<{ tool: string; missing: string; from: s
   { tool: "read_latest_page", missing: "await_turn", from: " Do not poll: use await_turn.", to: " Do not poll." },
   // #2806: GitHub is Sagax's own link and code, whichever tool the bot picks
   { tool: "open_connector_setup", missing: "connect_github", from: " GitHub is never this tool: call connect_github (Sagax's own link and code).", to: " For GitHub it posts Sagax's own link and code instead." },
+  // QA 0.8.67: Remote Access tools come with Perspicax only; without them the
+  // remote-access-unattended guide in sagax_help says what it needs
+  { tool: "sagax_help", missing: "remote_support_hosts", from: " Not for Sagax Remote Access (install, status, open a session): call remote_support_hosts directly instead.", to: "" },
 ];
 
 function withOfferedReferences<T extends { name: string; description: string; inputSchema?: unknown }>(tools: T[]): T[] {

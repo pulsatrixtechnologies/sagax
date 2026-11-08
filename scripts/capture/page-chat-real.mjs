@@ -32,9 +32,9 @@ const outDir = resolve(arg("--out", join(here, "docs", "screenshots", "grok-conv
 const port = Number(arg("--port", "5313"));
 const chrome = process.env.SAGAX_CHROMIUM || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
-const PREVIEW = (dark) => `<!doctype html><html><body style="font:16px/1.55 system-ui;margin:0;padding:72px 2rem 2rem;background:${dark ? "#0f1520" : "#fff"};color:${dark ? "#e8edf5" : "#111"}">
-<h1 style="margin:0 0 .5rem">Synthetic monthly report</h1><p>Closed tickets, response times and backlog for a synthetic team.</p>
-${Array.from({ length: 6 }, (_, i) => `<h2>Section ${i + 1}</h2><p>${"Synthetic figures and notes. ".repeat(18)}</p>`).join("")}</body></html>`;
+const PREVIEW = (dark, fr) => `<!doctype html><html lang="${fr ? "fr" : "en"}"><body style="font:16px/1.55 system-ui;margin:0;padding:72px 2rem 2rem;background:${dark ? "#0f1520" : "#fff"};color:${dark ? "#e8edf5" : "#111"}">
+<h1 style="margin:0 0 .5rem">${fr ? "Rapport mensuel synthétique" : "Synthetic monthly report"}</h1><p>${fr ? "Billets fermés, délais de réponse et arriéré d'une équipe synthétique." : "Closed tickets, response times and backlog for a synthetic team."}</p>
+${Array.from({ length: 6 }, (_, i) => `<h2>Section ${i + 1}</h2><p>${(fr ? "Chiffres et notes synthétiques. " : "Synthetic figures and notes. ").repeat(18)}</p>`).join("")}</body></html>`;
 
 // width x height: Grok's measured macOS window (1338 x 809), its 700 px
 // narrow state, and a 390 px phone.
@@ -78,7 +78,7 @@ try {
     const page = await browser.newPage({ viewport: { width: shot.width, height: shot.height }, deviceScaleFactor: 2 });
     const errors = [];
     page.on("pageerror", (error) => errors.push(String(error.message ?? error)));
-    await page.route("**/pages/preview/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: PREVIEW(shot.skin !== "daylight") }));
+    await page.route("**/pages/preview/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: PREVIEW(shot.skin !== "daylight", shot.lang === "fr") }));
     await page.goto(`${base}?skin=${shot.skin}&lang=${shot.lang ?? "en"}`, { waitUntil: "networkidle" });
     await page.waitForSelector("[data-gallery-page-chat-real] [data-composer-dock] textarea");
     // the first card is v1 (older trees have no data-page-card-version)

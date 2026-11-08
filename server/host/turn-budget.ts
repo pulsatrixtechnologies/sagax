@@ -135,7 +135,10 @@ function ceilingText(settings: TurnBudgetSettings, language: TurnBudgetLanguage)
 }
 
 /** Opened as `[Sagax: …]`, which model-written text cannot open. */
-export function wrapUpNote(input: { minutes: number; steps: number; ceiling: string }): string {
+export function wrapUpNote(input: { language?: TurnBudgetLanguage; minutes: number; steps: number; ceiling: string }): string {
+  if (input.language === "fr") {
+    return `[Sagax : ce tour roule depuis ${input.minutes} min et ${input.steps} étapes ; il s'arrête à ${input.ceiling}. Arrête d'explorer et réponds tout de suite à la personne avec ce que tu as, en français : ce que tu as trouvé, ce qui reste et la prochaine étape. Ne lance aucun nouveau script ni aucune chaîne d'outils.]`;
+  }
   return `[Sagax: this turn has run ${input.minutes} min and ${input.steps} steps; it is stopped at ${input.ceiling}. Stop exploring now and answer the person with what you have, in their language: what you found, what remains, and the one next step. Start no new script or tool chain.]`;
 }
 
@@ -154,7 +157,10 @@ export function partialRender(input: { language: TurnBudgetLanguage; minutes: nu
   return `${head}\n\n${body}\n\n${next}`;
 }
 
-export function stopCause(input: { minutes: number; steps: number; ceiling: string }): string {
+export function stopCause(input: { language?: TurnBudgetLanguage; minutes: number; steps: number; ceiling: string }): string {
+  if (input.language === "fr") {
+    return `le tour a atteint son plafond (${input.ceiling}) après ${input.minutes} min et ${input.steps} étapes ; il a été arrêté avec une réponse partielle`;
+  }
   return `the turn reached its ceiling (${input.ceiling}) after ${input.minutes} min and ${input.steps} steps - it was stopped with a partial answer`;
 }
 
@@ -199,7 +205,7 @@ export function createTurnBudget(deps: TurnBudgetDeps): TurnBudget {
     const facts = { minutes: wholeMinutes(elapsed(turn)), steps: turn.steps };
     let stopping: Promise<unknown>;
     try {
-      stopping = Promise.resolve(deps.interrupt(threadId, stopCause({ ...facts, ceiling: ceilingText(settings, "en") })));
+      stopping = Promise.resolve(deps.interrupt(threadId, stopCause({ language, ...facts, ceiling: ceilingText(settings, language) })));
     } catch {
       return log(`stop not sent: thread=${threadId}`);
     }
@@ -213,7 +219,8 @@ export function createTurnBudget(deps: TurnBudgetDeps): TurnBudget {
   const steer = (threadId: string, turn: TurnState, settings: TurnBudgetSettings) => {
     turn.steered = true;
     if (!deps.canSteer(threadId)) return;
-    const note = wrapUpNote({ minutes: wholeMinutes(elapsed(turn)), steps: turn.steps, ceiling: ceilingText(settings, "en") });
+    const language = deps.language(threadId);
+    const note = wrapUpNote({ language, minutes: wholeMinutes(elapsed(turn)), steps: turn.steps, ceiling: ceilingText(settings, language) });
     try {
       void Promise.resolve(deps.steer(threadId, note)).then(
         (outcome) => log(`wrap-up ${outcome}: thread=${threadId}`),

@@ -7,6 +7,7 @@ import {
   COMPUTER_SELECT_TOOL,
   MAX_AUTO_COMPUTER_SWITCHES,
   selectAutoComputer,
+  tooManyMovesText,
   type AutoComputerState,
 } from "../computer/auto-computer.ts";
 import { MY_CHROME_PROFILE, runMyChromeTool, toolName as browserToolName } from "../browser/my-chrome/pilot.ts";
@@ -367,9 +368,7 @@ async function handleComputerSelect(deps: InternalEnvironmentsDeps, ctx: Interna
     const workplace = deps.turnWorkplace(capability.threadId);
     const movedSoFar = workplace && workplace.generation === capability.generation ? workplace.auto?.switches ?? 0 : 0;
     if (movedSoFar >= MAX_AUTO_COMPUTER_SWITCHES) {
-      return json(res, 409, {
-        error: `You already moved ${movedSoFar} times for this request, the most a request may. Stay on the current computer and finish there; if it cannot do the step, tell the person why in their language and what they can do.`,
-      });
+      return json(res, 409, { error: tooManyMovesText(movedSoFar, workplace?.auto?.language) });
     }
     deps.setComputerSelected(capability.threadId, bot.id, option.surface);
     source!.moves = movedSoFar + 1;

@@ -47,6 +47,13 @@ describe("computer moves per request (#2763)", () => {
     expect(move(second.state, "cloud").answer.ok).toBe(false);
   });
 
+  it("refuses a third move in the person's language (#2762)", () => {
+    const fr = move({ ...freshTurn(), switches: 2, language: "fr" }, "this_computer");
+    expect(fr.answer.ok).toBe(false);
+    expect(fr.answer.text).toContain("Tu as déjà changé d'ordinateur 2 fois");
+    expect(fr.answer.text).not.toContain("You already moved");
+  });
+
   it("ignores a missing or bogus carried count", () => {
     const base = freshTurn();
     expect(carryAutoComputerMoves(base, undefined)).toBe(base);
@@ -92,7 +99,7 @@ describe("computer moves per request (#2763)", () => {
     switches = 2;
     const refused = await post();
     expect(refused.status).toBe(409);
-    expect(refused.body.error).toContain("You already moved 2 times for this request");
+    expect(refused.body.error).toContain("You already moved 2 times");
     expect(selected).toEqual(["local"]);
   });
 

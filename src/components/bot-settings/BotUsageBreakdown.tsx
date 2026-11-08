@@ -77,7 +77,8 @@ const dayText = (key: string, locale: string, withYear = false) => new Intl.Date
 /** Most weeks back the server answers (shared/bot-analytics parseUsageOffset). */
 const MAX_OFFSET = 52;
 
-const STAT_CARD = "flex min-w-0 flex-col rounded-2xl border border-hairline bg-card px-4 py-3";
+/** A plain card, as SettingsCard plain: filled, no outline (bot page column rule). */
+const STAT_CARD = "flex min-w-0 flex-col rounded-2xl bg-card px-4 py-3";
 
 const tokensOf = (group: Pick<UsageStatsGroup, "inputTokens" | "outputTokens">) => group.inputTokens + group.outputTokens;
 

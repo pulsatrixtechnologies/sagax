@@ -22,6 +22,7 @@ import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { roomThreadsWorkingElsewhere } from "@/lib/room-threads";
 import { useMenuMotion } from "./MenuMotion";
 import { AnchoredPopover } from "./AnchoredPopover";
+import { VirtualRow } from "./VirtualRow";
 import { t } from "@/lib/i18n";
 import { keepWarmLine } from "@/lib/cache-keepwarm";
 import { formatTaskTokens, headlineTokens, usageDetail } from "@/lib/usage";
@@ -57,6 +58,15 @@ export function taskPickerPointerIntent(
 /** Filter the task switcher. Prefix matches float first so a few letters
  * still find the right row in a long list; within a tier the caller's
  * order (newest first) is preserved. */
+/* The thread list of the header's picker is virtualized (#2791): a bot with
+   hundreds of threads draws only the rows near the visible part of the list.
+   The first rows draw on the first render, so the list never opens empty;
+   the open thread, the one being renamed and the one whose menu is open keep
+   their content. A held row keeps its thread mark for the queries that look
+   it up (a jump to a thread, the tests). */
+const PICKER_ROW_ESTIMATE = 52;
+const PICKER_FIRST_ROWS = 24;
+
 export function filterTasks<T extends { title: string }>(tasks: readonly T[], query: string): T[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [...tasks];
@@ -392,7 +402,7 @@ function ConversationTaskPicker({
               />
             </div>
           </div>
-          <div className="max-h-[320px] overflow-y-auto" role="group" aria-label={looking ? t("task.matching", { count: visible.length }) : t("task.list")}>
+          <div className="max-h-[320px] overflow-y-auto" data-virtual-root="" role="group" aria-label={looking ? t("task.matching", { count: visible.length }) : t("task.list")}>
             {visible.length === 0 ? (
               <div className="px-3 py-6 text-center text-[13px] text-popover-ink-secondary">
                 {t("task.noMatch", { query: looking })}
@@ -420,6 +430,8 @@ function ConversationTaskPicker({
                     onEdit={() => setRenamingFolder(heading.id)} onMove={(direction, onSaved) => folderActions.onMove(heading.id, direction, onSaved)}
                     onMarkRead={(onSaved) => folderActions.onMarkRead(heading.id, onSaved)} />}
                 </div> : null}
+                <VirtualRow rowKey={`picker:${task.threadId}`} estimate={PICKER_ROW_ESTIMATE} initiallyShown={index < PICKER_FIRST_ROWS}
+                  eager={active || renaming === task.threadId || rowMenu?.threadId === task.threadId} heldAttributes={{ "data-sidebar-thread-row": task.threadId }}>
                 <div
                   className={cn("group flex items-center gap-2 px-2.5 py-2", active ? "bg-popover-hover" : "hover:bg-popover-hover")}
                 >
@@ -505,6 +517,7 @@ function ConversationTaskPicker({
                     </button>
                   )}
                 </div>
+                </VirtualRow>
                 <ThreadMenu tone="popover" task={task} folders={folders} anchorRef={rowMenuAnchor} onClose={() => setRowMenu(null)}
                   position={rowMenu?.threadId === task.threadId ? { left: rowMenu.left, top: rowMenu.top } : null}
                   actions={pickerRowActions(task, {

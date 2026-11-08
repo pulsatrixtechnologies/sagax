@@ -6,6 +6,10 @@ import { t } from "@/lib/i18n";
 import type { TeamMapSection } from "@/lib/team-map";
 import { orderBots, type Point } from "@/lib/team-canvas";
 import { BotCard } from "./BotCard";
+import { VirtualRow } from "../VirtualRow";
+
+/** A bot card's fixed height (BotCard: h-[126px]). */
+const BOT_CARD_HEIGHT = 126;
 
 const iconButton = "flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-ink focus-visible:outline-2 focus-visible:outline-accent";
 const menuButton = "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] text-ink-secondary hover:bg-control hover:text-ink";
@@ -55,11 +59,15 @@ export function TeamSectionsLayer(props: {
         const dropping = computerDropKey === section.key || (dragged && dropKey === section.key && (dragged.bot.section?.trim() ?? "") !== section.key);
         const computer = Object.hasOwn(teamComputers, section.key) ? teamComputers[section.key] : undefined;
         const label = section.key ? section.name : t("sidebar.section.general");
-        const renderBot = (bot: Bot) => <div key={bot.id} className="relative">
+        // A card far from the visible part of the canvas keeps its box and
+        // drops its content (#2791); the open, dragged or moving one keeps it.
+        const renderBot = (bot: Bot) => <VirtualRow key={bot.id} rowKey={`team-card:${bot.id}`} className="relative w-[236px]" estimate={BOT_CARD_HEIGHT} initiallyShown
+          eager={(selectedId === bot.id && settingsOpen) || dragged?.bot.id === bot.id || moving === bot.id || insertion?.botId === bot.id}
+          heldAttributes={{ "data-bot-id": bot.id }}>
           {insertion?.botId === bot.id && <div className={cn("pointer-events-none absolute inset-x-1 h-0.5 rounded bg-accent", insertion.after ? "-bottom-[9px]" : "-top-[9px]")} />}
           <BotCard bot={bot} selected={selectedId === bot.id && settingsOpen} moving={dragged?.bot.id === bot.id || moving === bot.id}
             connected={connectedBotIds.includes(bot.id)} onComputer={onComputer} onArrange={arrangeBot} />
-        </div>;
+        </VirtualRow>;
         return <section key={section.key} data-team-key={section.key} aria-label={t("canvas.teamRegion", { name: label })}
           data-team-depth={section.depth ?? 0}
           className={cn("absolute rounded-2xl border bg-panel/90 shadow-sm has-[details[open]]:z-20 data-[computer-dropping=true]:border-accent data-[computer-dropping=true]:ring-2 data-[computer-dropping=true]:ring-accent/25", dropping ? "border-accent ring-2 ring-accent/25" : "border-hairline/50", section.parent && "border-l-[3px] border-l-accent/40")}

@@ -79,8 +79,12 @@ function watcherFor(root: Element | null): Watcher | null {
       }
     });
   };
-  const near = new IntersectionObserver((entries) => deliver(entries, "near"), { root, rootMargin: `${NEAR_MARGIN_PX}px 0px` });
-  const far = new IntersectionObserver((entries) => deliver(entries, "far"), { root, rootMargin: `${FAR_MARGIN_PX}px 0px` });
+  // A scroller that moves both ways (the Team map canvas pans) marks itself
+  // `data-virtual-root="both"`: its margins then reach sideways too.
+  const both = root?.getAttribute(VIRTUAL_ROOT_ATTRIBUTE) === "both";
+  const margin = (px: number) => both ? `${px}px` : `${px}px 0px`;
+  const near = new IntersectionObserver((entries) => deliver(entries, "near"), { root, rootMargin: margin(NEAR_MARGIN_PX) });
+  const far = new IntersectionObserver((entries) => deliver(entries, "far"), { root, rootMargin: margin(FAR_MARGIN_PX) });
   const watcher = { near, far, listeners };
   if (root) watchers.set(root, watcher);
   else viewportWatcher = watcher;
@@ -140,6 +144,12 @@ export function VirtualRow({ rowKey, eager = false, estimate, initiallyShown = f
   liveRef.current = live;
   const eagerRef = useRef(eager);
   eagerRef.current = eager;
+  // The key a height is remembered by can change without the row moving (the
+  // sidebar's density is part of it): the observers stay, only the key follows.
+  // Re-observing every row on a density change queued one intersection and one
+  // resize callback per row into the frame that opens the sidebar (#2791).
+  const keyRef = useRef(rowKey);
+  keyRef.current = rowKey;
   // An eager row keeps its content once it stops being eager (a tail row
   // that newer rows pushed up is still on screen); the scroller drops it later.
   useLayoutEffect(() => { if (eager) setShown(true); }, [eager]);
@@ -149,14 +159,14 @@ export function VirtualRow({ rowKey, eager = false, estimate, initiallyShown = f
     const watcher = watcherFor(element.parentElement?.closest(`[${VIRTUAL_ROOT_ATTRIBUTE}]`) ?? null);
     if (!watcher) return;
     watcher.listeners.set(element, (near, far, height) => {
-      if (liveRef.current) remember(element, rowKey, height);
+      if (liveRef.current) remember(element, keyRef.current, height);
       if (near) setShown(true);
       else if (far === false && !eagerRef.current) setShown(false);
     });
     watcher.near.observe(element);
     watcher.far.observe(element);
     const sizes = sizeWatcher();
-    liveHeights.set(element, (height) => { if (liveRef.current) remember(element, rowKey, height); });
+    liveHeights.set(element, (height) => { if (liveRef.current) remember(element, keyRef.current, height); });
     sizes?.observe(element);
     return () => {
       sizes?.unobserve(element);
@@ -165,7 +175,7 @@ export function VirtualRow({ rowKey, eager = false, estimate, initiallyShown = f
       watcher.near.unobserve(element);
       watcher.far.unobserve(element);
     };
-  }, [rowKey]);
+  }, []);
   const held = live ? undefined : rememberedRowHeight(rowKey) ?? estimate;
   return (
     <div

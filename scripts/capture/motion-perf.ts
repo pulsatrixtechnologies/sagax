@@ -218,6 +218,29 @@ try {
     }, escape);
     const pill = page.locator("[data-chat-pill][aria-expanded]").first();
     await still("right-panel", () => pill.click({ timeout: 2_000 }).catch(() => {}), () => pill.click({ timeout: 2_000 }).catch(() => {}));
+    // #2791: the virtualized thread picker, Settings halfway through its
+    // close fade, and the Team map with its virtualized cards
+    await page.locator(`[data-sidebar-bot-row="${long.id}"]`).first().click();
+    await page.waitForTimeout(500);
+    await still("thread-picker", () => page.getByRole("button", { name: "All threads" }).first().click({ timeout: 2_000 }).catch(() => {}), escape);
+    await page.locator("[data-sidebar-account], [data-sidebar-account-pill]").first().click({ timeout: 2_000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    await page.getByRole("menuitem", { name: "Settings", exact: true }).first().click({ timeout: 2_000 }).catch(() => {});
+    await page.waitForTimeout(700);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(50);
+    await page.screenshot({ path: resolve(shots, "settings-closing.png") });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: resolve(shots, "settings-closed.png") });
+    await still("team-map", async () => {
+      await page.keyboard.press("ControlOrMeta+k");
+      await page.waitForTimeout(300);
+      await page.keyboard.type("Team map");
+      await page.waitForTimeout(300);
+      await page.keyboard.press("Enter");
+    }, async () => {
+      await page.locator(`[data-sidebar-bot-row="${long.id}"]`).first().click();
+    });
   }
 
   for (let round = 0; round < rounds; round++) {

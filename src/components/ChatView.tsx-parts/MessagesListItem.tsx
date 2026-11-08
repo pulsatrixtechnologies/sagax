@@ -360,7 +360,7 @@ export function MessagesListItem({
       case "activity": {
         // a Data receipt first: its title is a person's words, never a status or error marker
         if (m.dataResult) return <DataResultChip message={m} />;
-        if (isStatusActivity(m)) return <StatusActivityRow message={m} />;
+        if (isStatusActivity(m)) return <StatusActivityRow message={m} transcript={transcript} busy={busy} />;
         // a failed turn is an error, not a tool run — render it as one.
         // bot⇄bot comm chips and opened-thread chips stay because they
         // link to another conversation.

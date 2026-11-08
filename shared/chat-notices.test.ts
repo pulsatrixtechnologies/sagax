@@ -25,7 +25,6 @@ describe("technical notices", () => {
       "notice: Waiting for a free Codex slot: 2 Codex runs are starting on this computer. This one starts on its own.",
       workspaceLineName({ target: "cloud" }),
       workspaceLineName({ target: "cloud", fallback: { wanted: "this_computer", reason: "offline" } }),
-      SANDBOX_WAKE_NOTICE,
       "recovery: Automatic recovery: Claude Code could not start. Trying Codex · gpt-5 once in this thread.",
     ]) expect(isTechnicalNoticeName(name), name).toBe(true);
   });
@@ -33,6 +32,8 @@ describe("technical notices", () => {
   it("keeps what asks something of the person, a usage limit, a stop, an error and a tool step", () => {
     for (const name of [
       ONE_PASSWORD_WAITING,
+      // QA 0.8.66 F1: a cold start is shown, never a silent chat
+      SANDBOX_WAKE_NOTICE,
       SANDBOX_WAKE_TIMEOUT_NOTICE,
       HOST_CONTROL_NOTICE,
       `recovery: ${limitFailoverText({ kind: "waiting", from: "Claude", resetsAt: 0 }, () => "2:05 PM")}`,

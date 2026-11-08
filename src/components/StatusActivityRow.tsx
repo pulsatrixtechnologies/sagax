@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Info, RefreshCw, X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { dismissNotice, noticeDismissed } from "@/lib/usage-notices";
-import { isHiddenStatusActivity, statusActivity } from "@/lib/activity-runs";
+import { isHiddenStatusActivity, sandboxWakeElapsed, statusActivity } from "@/lib/activity-runs";
 import type { Message } from "@/state/store";
 import { CancelledTurnRow } from "./CancelledTurnRow";
 
@@ -10,12 +10,23 @@ import { CancelledTurnRow } from "./CancelledTurnRow";
  * to another engine, or the engine runs another model than the one saved.
  * Always shown, whatever Settings → Tool calls says. A stopped turn is the
  * quiet line, not this bordered notice. */
-export function StatusActivityRow({ message }: { message: Message }) {
+export function StatusActivityRow({ message, transcript, busy = false }: { message: Message; transcript?: readonly Message[]; busy?: boolean }) {
   // 2026-11-05 (JC): the person can close the notice; it stays closed
   const key = `status-activity:${message.id}`;
   const [closed, setClosed] = useState(() => noticeDismissed(key));
+  // QA 0.8.66 F1: a cold start counts its seconds while the turn waits on it
+  const [now, setNow] = useState(() => Date.now());
+  const elapsed = transcript ? sandboxWakeElapsed(message, transcript, busy, now) : null;
+  const ticking = elapsed !== null;
+  useEffect(() => {
+    if (!ticking) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [ticking]);
   if (closed || isHiddenStatusActivity(message)) return null;
-  const status = statusActivity(message);
+  const status = elapsed !== null
+    ? { kind: "notice" as const, text: t("chat.sandboxWakingElapsed", { seconds: String(elapsed) }) }
+    : statusActivity(message);
   if (!status) return null;
   if (status.kind === "stopped") return <CancelledTurnRow />;
   const Icon = status.kind === "recovery" ? RefreshCw : Info;

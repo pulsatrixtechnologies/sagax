@@ -264,3 +264,22 @@ describe("page language", () => {
     expect(t("engines.local")).not.toBe("");
   });
 });
+
+describe("embeddingFrameLanguage (QA 0.8.66 F11)", () => {
+  it("reads the <html lang> of the same-origin page holding the frame", async () => {
+    const { embeddingFrameLanguage } = await import("./i18n");
+    const parent = { document: { documentElement: { lang: "fr" } } } as unknown as Window;
+    expect(embeddingFrameLanguage({ parent })).toBe("fr");
+  });
+  it("is undefined for a top-level page", async () => {
+    const { embeddingFrameLanguage } = await import("./i18n");
+    const win = {} as { parent: Window };
+    win.parent = win as unknown as Window;
+    expect(embeddingFrameLanguage(win)).toBeUndefined();
+  });
+  it("is undefined when the holder is of another origin", async () => {
+    const { embeddingFrameLanguage } = await import("./i18n");
+    const parent = { get document(): Document { throw new DOMException("Blocked a frame", "SecurityError"); } } as unknown as Window;
+    expect(embeddingFrameLanguage({ parent })).toBeUndefined();
+  });
+});

@@ -1,7 +1,9 @@
 /** Isolated gallery for headless screenshots of web work out of sight and of
  * a bot controlling this computer's own screen (2026-10-28,
  * shared/host-control.ts). Not shipped in the app.
- * ?lang=<code>&skin=<id>&view=web|screen&before=1
+ * ?lang=<code>&skin=<id>&view=web|screen|wake&before=1
+ * `view=wake` (QA 0.8.66 F1): a turn still waiting on a cold sandbox, the
+ * row counting its seconds; `before=1` shows the old silent row.
  * `before=1` draws the same conversation as an older build showed it: no
  * banner and no line while the bot drives the screen. */
 import { StrictMode } from "react";
@@ -14,6 +16,7 @@ import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, type Message } from "../state/store";
 import { HOST_CONTROL_NOTICE } from "../../shared/host-control";
+import { SANDBOX_WAKE_NOTICE } from "../../shared/sandbox-wake";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -22,7 +25,8 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 const lang = params.get("lang") ?? "fr";
 await loadLocale(lang);
 const before = params.get("before") === "1";
-const view = params.get("view") === "screen" ? "screen" : "web";
+const viewParam = params.get("view");
+const view = viewParam === "screen" || viewParam === "wake" ? viewParam : "web";
 const fr = lang === "fr";
 
 const BOT = { id: "bot-scout", name: "Scout", threadId: "thread-1" };
@@ -32,7 +36,18 @@ function UserBubble({ text }: { text: string }) {
   return <div className="ml-auto w-fit max-w-[80%] rounded-2xl bg-accent px-4 py-2 text-[14px] text-white">{text}</div>;
 }
 
+const wakeAsk = { id: "w0", role: "user", kind: "text", at: Date.now() - 15_000, text: "" } as Message;
+const wakeNotice = { id: "w1", role: "bot", kind: "activity", at: Date.now() - 14_000, tool: { name: SANDBOX_WAKE_NOTICE, ok: true } } as Message;
+
 function Conversation() {
+  if (view === "wake") {
+    return (
+      <>
+        <UserBubble text={fr ? "Fais le ménage dans mes fichiers de test." : "Clean up my test files."} />
+        <StatusActivityRow message={wakeNotice} transcript={before ? undefined : [wakeAsk, wakeNotice]} busy={!before} />
+      </>
+    );
+  }
   if (view === "web") {
     return (
       <>

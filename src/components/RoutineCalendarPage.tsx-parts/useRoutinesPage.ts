@@ -54,7 +54,7 @@ export function useRoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false,
   const [section, setSection] = useState<"calendar" | "logs" | "webhooks">(state.routinesFocus?.section === "logs" || state.routinesFocus?.section === "webhooks" ? state.routinesFocus.section : "calendar");
   const [scheduleView, setScheduleView] = useState<"calendar" | "list">(state.routinesFocus?.view ?? "calendar");
   // Mine, My teams or Everyone and the filters (src/lib/use-routine-scope.ts).
-  const scoped = useRoutineScope({ config: state.config, routines: state.routines, runs: state.routineRuns, ignoreStatus: section === "calendar" && scheduleView === "calendar" });
+  const scoped = useRoutineScope({ config: state.config, routines: state.routines ?? [], runs: state.routineRuns ?? [], ignoreStatus: section === "calendar" && scheduleView === "calendar" });
   const [viewDays, setViewDays] = useState<1 | 3 | 7>(7);
   const [anchor, setAnchor] = useState(() => startOfDay(Date.now()));
   const [botFilter, setBotFilterState] = useState(state.routinesFocus?.botId ?? scoped.prefs.botId ?? "all");

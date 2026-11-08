@@ -79,7 +79,8 @@ export interface ClusterWaitEvent {
 export class UserSandboxManager {
   private readonly pending = new Map<string, number>();
   /** person + bot -> last call that could wake the cluster (a bot's real
-   * use), for prewake. In memory: after a restart the first run is cold. */
+   * use), for prewake. Kept in the state file (QA 0.8.66 F1: after a roll the
+   * first turn waited 458 s on a cold environment), so a start prewarms. */
   private readonly recentUse = new Map<string, number>();
   /** One desktop open at a time per person (two at once raced on the VNC
    * password file and one failed), and the passwords of the live views
@@ -152,7 +153,7 @@ export class UserSandboxManager {
         }
       };
       await readyNow();
-      if (mode === "wake") this.recentUse.set(useKey(who.principalId, who.botId), this.now());
+      if (mode === "wake") this.noteUse(useKey(who.principalId, who.botId));
       const startedAt = this.now();
       let resent = false;
       for (;;) {
@@ -209,9 +210,12 @@ export class UserSandboxManager {
   private load(): void {
     if (!existsSync(this.options.stateFile)) return;
     try {
-      const parsed = JSON.parse(readFileSync(this.options.stateFile, "utf8")) as { version?: number; pending?: Record<string, number> };
+      const parsed = JSON.parse(readFileSync(this.options.stateFile, "utf8")) as { version?: number; pending?: Record<string, number>; recentUse?: Record<string, number> };
       for (const [principalId, dueAt] of Object.entries(parsed.pending ?? {})) {
         if (typeof dueAt === "number" && Number.isFinite(dueAt)) this.pending.set(principalId, dueAt);
+      }
+      for (const [key, usedAt] of Object.entries(parsed.recentUse ?? {})) {
+        if (typeof usedAt === "number" && Number.isFinite(usedAt) && key.includes("\n")) this.recentUse.set(key, usedAt);
       }
     } catch (error) {
       console.error(`user-sandbox: ${this.options.stateFile} is unreadable: ${error instanceof Error ? error.message : String(error)}`);
@@ -219,7 +223,40 @@ export class UserSandboxManager {
   }
 
   private persist(): void {
-    writeFileAtomic(this.options.stateFile, `${JSON.stringify({ version: 1, pending: Object.fromEntries(this.pending) }, null, 2)}\n`);
+    const since = this.now() - PREWAKE_RECENT_USE_MS;
+    const recentUse = Object.fromEntries([...this.recentUse].filter(([, usedAt]) => usedAt >= since));
+    writeFileAtomic(this.options.stateFile, `${JSON.stringify({ version: 1, pending: Object.fromEntries(this.pending), recentUse }, null, 2)}\n`);
+  }
+
+  /** A bot's real use of the environment. Written to the state file at most
+   * once per USE_PERSIST_MS per person and bot, not on every command. */
+  private noteUse(key: string): void {
+    const before = this.recentUse.get(key);
+    const at = this.now();
+    this.recentUse.set(key, at);
+    if (before !== undefined && at - before < USE_PERSIST_MS) return;
+    try { this.persist(); } catch (error) {
+      console.warn(`user-sandbox: could not save recent use: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** At the server start (a roll included): prewake the environment of every
+   * person whose bot used it within PREWAKE_RECENT_USE_MS, one person at a
+   * time, so their first turn does not wait minutes on a cold cluster and pod.
+   * Same bounds as prewake (Kubernetes with the wake only, never a person
+   * signed out). Best effort; the count of people asked. */
+  async prewarmRecent(): Promise<number> {
+    if (!this.options.kubernetes || !this.options.kubernetesWaker) return 0;
+    const people = new Map<string, string | undefined>();
+    for (const key of this.recentUse.keys()) {
+      const [principalId, botId] = key.split("\n");
+      if (principalId && !people.has(principalId)) people.set(principalId, botId || undefined);
+    }
+    let asked = 0;
+    for (const [principalId, botId] of people) {
+      if (await this.prewake(principalId, botId)) asked += 1;
+    }
+    return asked;
   }
 
   pendingDeletionAt(principalId: string): number | null {
@@ -630,6 +667,8 @@ export class UserSandboxManager {
     this.timer = setInterval(() => { void this.sweepDeletions().catch(reportBackgroundError); }, intervalMs);
     this.timer.unref?.();
     void this.sweepDeletions().catch(reportBackgroundError);
+    // QA 0.8.66 F1: warm the environments in use before the first turn needs them
+    void this.prewarmRecent().catch(reportBackgroundError);
   }
 
   stopTimers(): void {
@@ -643,6 +682,8 @@ export class UserSandboxManager {
 export const SANDBOX_CALL_BUDGET_MS = 9 * 60_000 + 30_000;
 /** prewake only for a bot that used the environment this recently. */
 export const PREWAKE_RECENT_USE_MS = 7 * 24 * 3600_000;
+/** How often a use is written to the state file for the same person and bot. */
+export const USE_PERSIST_MS = 60 * 60_000;
 
 function useKey(principalId: string, botId?: string): string {
   return `${principalId}\n${botId ?? ""}`;

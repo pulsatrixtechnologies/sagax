@@ -25,6 +25,20 @@ function discloseRecall(deps: InternalSessionsDeps, bot: InternalSessionsBot, ro
   });
 }
 
+
+/** The rooms a bot's recall reads, by thread (the room's and its tasks'):
+ * rooms it is a member of whose audience is not narrower than the bot's
+ * (bot-visibility.ts roomFeeds), so their lines reach nobody new. */
+function recallRooms(deps: InternalSessionsDeps, from: InternalSessionsBot): Map<string, InternalSessionsGroup> {
+  const roomByThread = new Map<string, InternalSessionsGroup>();
+  for (const group of deps.groups()) {
+    if (!group.memberIds.includes(from.id) || !deps.roomFeedsBot(group, from)) continue;
+    roomByThread.set(group.threadId, group);
+    for (const task of group.tasks ?? []) roomByThread.set(task.threadId, group);
+  }
+  return roomByThread;
+}
+
 export async function handleInternalSessionsRecall(
   deps: InternalSessionsDeps,
   ctx: InternalRouteContext,
@@ -111,14 +125,7 @@ export async function handleInternalSessionsRecall(
     // Own threads: the bot's main chat and tasks, and the rooms it is a
     // member of with their tasks — conversations it already saw in full.
     // Still own-bot: another bot's threads never enter this list.
-    const roomByThread = new Map<string, InternalSessionsGroup>();
-    for (const group of deps.groups()) {
-      // A room fewer people can see than this bot stays out of its recall
-      // (bot-visibility.ts roomFeeds): its lines would otherwise reach them.
-      if (!group.memberIds.includes(from.id) || !deps.roomFeedsBot(group, from)) continue;
-      roomByThread.set(group.threadId, group);
-      for (const task of group.tasks ?? []) roomByThread.set(task.threadId, group);
-    }
+    const roomByThread = recallRooms(deps, from);
     // Organization server: the person of this turn's own threads only.
     const recallAllow = deps.privateRecallFilter(from, fromThreadId);
     const ownThreads = [...new Set([from.threadId, ...(from.tasks ?? []).map((task) => task.threadId), ...roomByThread.keys()])].filter((id): id is string => Boolean(id))
@@ -178,12 +185,15 @@ export async function handleInternalSessionsRecall(
     // #2748: a thread alone reads its newest message
     if (!threadId) return json(res, 400, { error: "threadId is required" });
     const readAllow = deps.privateRecallFilter(from, fromThreadId);
-    const own = (threadId === from.threadId || Boolean(deps.taskByThread(from.id, threadId))) &&
+    // #2702: the same threads session_search reads, rooms included, so a
+    // hit from a room (a routine's report posted there) reads back whole
+    const readRoom = recallRooms(deps, from).get(threadId);
+    const own = (threadId === from.threadId || Boolean(deps.taskByThread(from.id, threadId)) || Boolean(readRoom)) &&
       (!readAllow || readAllow(threadId));
     const message = own ? (messageId ? readMessageText(threadId, messageId) : readLatestMessageText(threadId)) : null;
     if (!message) return json(res, 404, { error: "no such message in your conversations" });
     const readInRoom = Boolean(deps.groupByThread(fromThreadId));
-    const readCrossed = readInRoom && threadId !== fromThreadId;
+    const readCrossed = readInRoom && !readRoom && threadId !== fromThreadId;
     if (readCrossed) discloseRecall(deps, from, fromThreadId, [threadId]);
     // An outside app wrote a webhook line: read back with its note, never as the bot's own words.
     const readText = message.webhook ? webhookPostText(from.name, message.text) : message.text;
@@ -191,7 +201,9 @@ export async function handleInternalSessionsRecall(
       ...message,
       crossed: readCrossed,
       text: readText.length > SESSION_READ_MAX_CHARS ? `${readText.slice(0, SESSION_READ_MAX_CHARS)}…` : readText,
-      task: deps.taskByThread(from.id, threadId)?.title,
+      task: readRoom
+        ? (readRoom.tasks ?? []).find((task) => task.threadId === threadId)?.title
+        : deps.taskByThread(from.id, threadId)?.title,
     });
   }
   return PASS;

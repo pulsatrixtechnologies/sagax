@@ -192,6 +192,7 @@ export function createPrepareRoomMemberTools(host: GroupMemberTurnHost) {
       speaker: roomAccessSpeaker,
       taken: Object.keys(integrations.custom ?? {}),
       from: { botId: bot.id, name: bot.name, color: bot.color },
+      driverKind: instance.driverKind,
     };
   }
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** perspicaxTurnIntegration (#1388). Pure move from server/index.ts. */
+import { perspicaxToolIdsPrompt } from "../perspicax/perspicax-conventions.ts";
 import { perspicaxUnavailableRow, PERSPICAX_UNAVAILABLE_WHY } from "../perspicax/perspicax-mcp.ts";
 export type Host = Record<string, any>;
 
@@ -15,6 +16,8 @@ async function perspicaxTurnIntegration(input: {
   quiet?: boolean;
   /** When setup already started prepare+handshake in parallel, reuse it. */
   prepared?: ReturnType<typeof perspicaxTurnPrepare>;
+  /** The engine the turn runs on, so the prompt names tools by its exact ids. */
+  driverKind?: string;
 }): Promise<{ custom: Record<string, McpServerSpec>; prompt: string }> {
   const host = getHost();
 
@@ -61,7 +64,10 @@ async function perspicaxTurnIntegration(input: {
     }
   }
   // The calling conventions ride with the tools they are about (#1209).
-  const conventions = Object.keys(custom).length > 0 ? host.PERSPICAX_CONVENTIONS_PROMPT : "";
+  // QA 0.8.67 G8: and name the tools by the exact id this engine gives them.
+  const conventions = Object.keys(custom).length > 0
+    ? host.PERSPICAX_CONVENTIONS_PROMPT + perspicaxToolIdsPrompt(Object.keys(custom)[0], input.driverKind)
+    : "";
   if (!plan.unavailable.length) return { custom, prompt: conventions };
   const lines = plan.unavailable.map((entry) => entry.reason === "no_delegation"
     ? `Perspicax tools are not available in this routine run: ${PERSPICAX_UNAVAILABLE_WHY.no_delegation}.`

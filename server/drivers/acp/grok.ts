@@ -126,6 +126,9 @@ const GROK_INLINE_ARGUMENTS_HINT_TEXT =
 const GROK_NATIVE_TOOLS_HINT_TEXT =
   " search_tool and use_tool are your own tools: call search_tool directly as its own tool call, never as use_tool's tool_name" +
   " (use_tool only takes an MCP tool named <server>__<tool>)." +
+  // QA 0.8.67 G8: routine runs still sent use_tool "search_tool"; a routine's
+  // text or a skill saying "search for the tool" is no reason to wrap it.
+  " This holds in routines too, whatever a routine or skill text says: search_tool is never wrapped in use_tool, and when use_tool answers that a name \"is a native tool\", call that tool directly by its own name next, never use_tool again." +
   " When a tool call fails with an error that says how to call it instead, follow that error on the next call; never repeat the same failing call.";
 
 export const GROK_TOOL_REUSE_HINT =

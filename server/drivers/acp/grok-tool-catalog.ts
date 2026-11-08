@@ -391,13 +391,13 @@ export function grokCatalogSection(input: {
   // complete in either case.
   const header = !ready.length ? (gatewayGroups.length ? "Your MCP tools on this turn. Answer what connectors, tools or access you have from this, without calling a tool." : "")
     : truncated || connectable.length
-      ? "Your MCP tools on this turn, by server (use_tool takes <server>__<tool>); a server shown with a count has more, found with search_tool. Answer what connectors, tools or access you have from this, without calling a tool."
+      ? "Your MCP tools on this turn, by server (use_tool takes <server>__<tool>); a server shown with a count has more, found by calling search_tool directly (your own tool, never a use_tool target). Answer what connectors, tools or access you have from this, without calling a tool."
       : "Your MCP tools on this turn, by server (use_tool takes <server>__<tool>). This list is complete: answer what connectors, tools or access you have from it, without calling a tool.";
   let text = `${header}${rows.length ? `\n${rows.join("\n")}` : ""}${tail}`.trim();
   if (text.length > GROK_CATALOG_CHARS_MAX) {
     // Too many servers: the server names with their counts, cut at a whole
     // entry, and the bot's own tools (the tail) kept.
-    const intro = "Your MCP servers on this turn, with their tool counts (search_tool finds a tool; use_tool takes <server>__<tool>): ";
+    const intro = "Your MCP servers on this turn, with their tool counts (search_tool, called directly and never through use_tool, finds a tool; use_tool takes <server>__<tool>): ";
     const outro = ". Answer what connectors or access you have from this without calling a tool.";
     const keptTail = tail.length <= GROK_CATALOG_CHARS_MAX / 2 ? tail : "";
     const room = GROK_CATALOG_CHARS_MAX - intro.length - outro.length - keptTail.length - " and N more".length - 8;

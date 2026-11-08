@@ -317,12 +317,27 @@ export function troubleToolKey(title: string): string {
   return title.replace(/^mcp__/, "").replace(/_{2,}/g, "_");
 }
 
+/** Grok's refusal of `use_tool` naming one of its own native tools
+ * ("search_tool is a native tool, not an MCP integration tool"): a routing
+ * slip the bot recovers from by calling that native tool directly (#2970).
+ * Returns the native tool's key (lowercase, words joined by `_`), or
+ * undefined when the output is not such a refusal. */
+export function nativeToolMisroute(output: string): string | undefined {
+  const name = /\b`?(\w+)`? is a native tool\b/i.exec(output)?.[1];
+  return name ? nativeToolKey(name) : undefined;
+}
+
+/** A tool title as a native tool key: "Search tool" and "search_tool" match. */
+function nativeToolKey(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
 interface RunTrouble {
   /** Tool item id to its title, for the completion that follows. */
   tools: Map<string, string>;
   /** A tool (by title) whose last calls failed: how often in a row since its
    * last success, and the first line of the latest failure. */
-  unresolved: Map<string, { title: string; count: number; output: string }>;
+  unresolved: Map<string, { title: string; count: number; output: string; misrouted?: string }>;
   /** An engine error the turn went past. */
   engine?: string;
   /** Flow refused run init / unknown routine: first matching tool output. */
@@ -3825,11 +3840,20 @@ export class RoutineManager {
       // (`server__cw_psa_query`, mcp-tool-names.ts) succeeded with that
       // tool; the miss is not a failure that "never succeeded after".
       const key = troubleToolKey(title);
-      if (event.ok) trouble.unresolved.delete(key);
-      else {
+      if (event.ok) {
+        trouble.unresolved.delete(key);
+        // QA 0.8.67 (#2970): Grok refuses `use_tool` aimed at one of its
+        // native tools ("search_tool is a native tool, not an MCP
+        // integration tool"); the bot then calls it directly, under another
+        // title. Only a success of that same native tool settles the
+        // misroute; an unrelated success leaves it reported.
+        const native = nativeToolKey(title);
+        for (const [other, failure] of trouble.unresolved) if (failure.misrouted === native) trouble.unresolved.delete(other);
+      } else {
         const seen = trouble.unresolved.get(key);
+        const misrouted = nativeToolMisroute(output);
         // The first line with words: a JSON result's first line is a lone "{" (2026-11-03).
-        trouble.unresolved.set(key, { title: seen?.title ?? title, count: (seen?.count ?? 0) + 1, output: meaningfulLine(output).slice(0, 160) });
+        trouble.unresolved.set(key, { title: seen?.title ?? title, count: (seen?.count ?? 0) + 1, output: meaningfulLine(output).slice(0, 160), ...(misrouted ? { misrouted } : {}) });
       }
       return null;
     } else if (event.type === "turn.started") {

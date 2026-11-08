@@ -991,7 +991,7 @@
     },
     {
       "name": "wait_until",
-      "description": "Tell the person when something happens. No AI runs while you wait, only plain checks. Ends after hours (default 24, 1-168).",
+      "description": "Tell the person when something happens, or come back at a set time (time_reached: a check-back you promised). No AI runs while you wait, only plain checks. Ends after hours (default 24, 1-168).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1011,9 +1011,10 @@
               "file_changed",
               "process_running",
               "process_gone",
-              "bot_idle"
+              "bot_idle",
+              "time_reached"
             ],
-            "description": "url_*: the page at url has or lacks text. file_*: path exists, is gone or changes. process_*: process (name or pid) runs or stops. bot_idle: bot (name or id) finishes its work."
+            "description": "url_*: the page at url has or lacks text. file_*: path exists, is gone or changes. process_*: process (name or pid) runs or stops. bot_idle: bot (name or id) finishes its work. time_reached: the time at comes."
           },
           "url": {
             "type": "string"
@@ -1029,6 +1030,10 @@
           },
           "bot": {
             "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "description": "time_reached only: RFC3339 with offset, 1 minute to 168 hours ahead."
           },
           "follow_up": {
             "type": "string",
@@ -1916,6 +1921,35 @@
         },
         "required": [
           "text"
+        ]
+      }
+    },
+    {
+      "name": "skills_find",
+      "description": "Find the best skills and plugins for a task in every catalog: the person's marketplaces (Hermes Agent, OpenClaw, Anthropic), official catalogs not added yet, and ClawHub. Use before a job (coding included) or when asked. Returns ranked matches with the install step (act plugins install or addMarketplace); offer the best, install what the person picks.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "description": "The task, in a few words (e.g. typescript code review)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25,
+            "description": "Matches per source (10)."
+          },
+          "clawhub": {
+            "type": "boolean",
+            "description": "Also search ClawHub (true)."
+          }
+        },
+        "required": [
+          "query"
         ]
       }
     },

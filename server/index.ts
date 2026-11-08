@@ -81,6 +81,7 @@ import { alwaysDenyOffered } from "../shared/approval-rule-card.ts";
 import { isOpaqueId, quotedIdOr } from "../shared/human-id.ts";
 import { createRecallTopicInternalRoutes } from "./routes/recall-topic-internal.ts";
 import { createRouteMessageInternalRoutes } from "./routes/route-message-internal.ts";
+import { createSkillsFindInternalRoutes } from "./routes/skills-find-internal.ts";
 import { claudeSignedIn, resolveClaudeConfigDir, setSoloClaudeLinkedHandler } from "./drivers/claude.ts";
 import { claudeAccountLinked, soloClaudeAccountLinked, type SoloClaudeLinkCache } from "./engines/claude-account.ts";
 import { claudeActivityEvents, isClaudeComputerTool } from "./engines/claude-activity.ts";
@@ -21618,6 +21619,16 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const page = recallTopicPage(segmentHistory(bot, topicId).entries, (entry) => (entry.role === "user" ? userName : bot.name), before);
       return { ...page, text: redactSecretsInText(page.text) };
     }
+  }),
+  // skills_find (#2613, server/routes/skills-find-internal.ts): the marketplaces
+  // this bot's person sees, read only
+  createSkillsFindInternalRoutes({
+    listings: (botId) => {
+      const bot = store.bot(botId);
+      if (!bot) return [];
+      const viewer: MarketplaceViewer = IDENTITY.kind !== "perspicax" ? { seesAll: true } : { principal: effectiveBotOwner(bot) };
+      return botPlugins.listMarketplaces(botId, viewer);
+    },
   }),
   // route_message (server/routes/route-message-internal.ts, server/busy-routing.ts)
   createRouteMessageInternalRoutes({

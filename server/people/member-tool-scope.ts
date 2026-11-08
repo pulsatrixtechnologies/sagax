@@ -187,6 +187,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   make_video: "own-work",
   // a search with the person's own provider and key (server/web-search/)
   sagax_web_search: "read",
+  // #2613: the skill catalogs the person sees, and ClawHub (read only)
+  skills_find: "read",
   // an API key of the person, sent where they allowed (credential-http.ts)
   vault_http_request: "own-account",
   // the person's own iPhone, which asks for its own consent (phone-tools.ts)

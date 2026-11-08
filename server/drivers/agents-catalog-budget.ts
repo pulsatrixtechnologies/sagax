@@ -193,7 +193,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
       "ask_choice", "create_options_card", "task_list", "send_voice_note",
       "make_video", "remove_reaction",
       "connect_github", "sagax_web_search", "vault_http_request",
-      "group_memory_update",
+      "group_memory_update", "skills_find",
     ],
   },
   {

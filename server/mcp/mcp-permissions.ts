@@ -166,6 +166,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // own GitHub account (device flow).
   p("phone:tool", "own", "phone_tool"),
   p("github:connect", "own", "connect_github"),
+  // #2613: search the skill catalogs the person sees (read only)
+  p("skills:find", "own", "skills_find"),
   // a sign-in request card for the speaker in this conversation
   p("credentials:signin", "own", "request_sign_in"),
   p("computers:select", "own", "select_computer"),

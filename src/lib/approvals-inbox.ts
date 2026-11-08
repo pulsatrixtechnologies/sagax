@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { inboxKey, type InboxApproval, type InboxPayload } from "../../shared/approvals-inbox";
+import type { PersonAttentionCard } from "../../shared/person-attention";
 import { approvalAction } from "@/lib/approval-describe";
 import { t } from "@/lib/i18n";
 import { approvalChime } from "@/lib/notification-preferences";
@@ -34,6 +35,18 @@ export async function bulkAnswer(decision: "allow" | "deny", entries: readonly P
     method: "POST",
     body: JSON.stringify({ decision, items: entries.map((entry) => ({ threadId: entry.threadId, requestId: entry.requestId })), ...(always && decision === "allow" ? { rule: "allow" } : {}) }),
   });
+}
+
+/** #2689: a bot's "needs you" card leaves the Today box. */
+export async function markHandled(entry: Pick<InboxApproval, "botId" | "threadId" | "requestId">): Promise<void> {
+  const messageId = entry.requestId.startsWith("attention:") ? entry.requestId.slice("attention:".length) : "";
+  await api("/api/approvals/handled", { method: "POST", body: JSON.stringify({ botId: entry.botId, threadId: entry.threadId, messageId }) });
+}
+
+/** #2689: a proactive proposal answered from the Today box. */
+export async function answerProactive(entry: Pick<InboxApproval, "botId" | "proactiveId">, accept: boolean): Promise<void> {
+  if (!entry.proactiveId) return;
+  await api(`/api/bots/${encodeURIComponent(entry.botId)}/proactive/${encodeURIComponent(entry.proactiveId)}`, { method: "POST", body: JSON.stringify({ accept }) });
 }
 
 const POLL_MS = 6_000;
@@ -140,9 +153,19 @@ function cardOf(entry: InboxApproval): NonNullable<Message["card"]> | undefined 
   return (entry.message as Message | undefined)?.card ?? undefined;
 }
 
+/** A bot's "needs you" card on a Today row (#2689). */
+export function attentionOf(entry: InboxApproval): PersonAttentionCard | undefined {
+  return entry.kind === "attention" ? (entry.message as Message | undefined)?.attention ?? undefined : undefined;
+}
+
 /** The row's title: the question, the proposal's own title, or what the
  * bot wants to do, in the reader's language. */
 export function inboxTitle(entry: InboxApproval): string {
+  const attention = attentionOf(entry);
+  if (entry.kind === "attention") {
+    const first = attention?.items[0]?.text.replace(/\*\*|__|`/g, "") ?? "";
+    return first.trim() ? withoutIds(first).slice(0, 240) : t("approvals.kind.attention");
+  }
   const card = cardOf(entry);
   if (entry.kind === "question") {
     const question = card?.questionRequest?.questions?.[0]?.question ?? card?.title;
@@ -157,6 +180,10 @@ export function inboxTitle(entry: InboxApproval): string {
 
 /** One line under the title: the command, the choices, or the change. */
 export function inboxPreview(entry: InboxApproval): string {
+  if (entry.kind === "attention") {
+    const rest = attentionOf(entry)?.items.slice(1).map((item) => item.text.replace(/\*\*|__|`/g, "")) ?? [];
+    return withoutIds(rest.join(" · ")).slice(0, 240);
+  }
   const card = cardOf(entry);
   if (!card) return "";
   if (entry.kind === "question") {

@@ -13,6 +13,9 @@ struct UpdatesSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private var updates: [ChatUpdate] { session.state.updates }
+    /// The Today box (#2689): every bot's waiting cards, proposals and
+    /// questions, with their age, from the server's one list.
+    @State private var today: [TodayItem] = []
 
     var body: some View {
         ScrollView {
@@ -29,14 +32,16 @@ struct UpdatesSheet: View {
                 .padding(.top, 22)
                 .padding(.bottom, 6)
 
-                if updates.isEmpty {
+                todaySection
+
+                if updates.isEmpty && today.isEmpty {
                     EmptyStateView(
                         "Nothing needs you",
                         systemImage: "checkmark.circle",
                         description: Text("When a bot stops for an answer, is mid-task, or finishes something, it shows up here.")
                     )
                     .padding(.top, 24)
-                } else {
+                } else if !updates.isEmpty {
                     section("Needs you", tint: nil, kind: .needsYou)
                     section("Working", tint: nil, kind: .working)
                     section("To review", tint: nil, kind: .toReview)
@@ -45,9 +50,33 @@ struct UpdatesSheet: View {
             .padding(.bottom, 24)
         }
         .background(Theme.parity(Color(uiColor: .systemBackground), Theme.bg).ignoresSafeArea())
+        .task { await loadToday() }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .sheetChromeCompat()
+    }
+
+    private func loadToday() async {
+        guard let client = session.settingsClient else { return }
+        if let payload = try? await client.todayInbox() { today = TodayInbox.rows(payload) }
+    }
+
+    @ViewBuilder
+    private var todaySection: some View {
+        let rows = today.compactMap { item in session.state.bot(forThread: item.threadId).map { (item, Chat.bot($0)) } }
+        if !rows.isEmpty {
+            Text("Today")
+                .textCase(.uppercase)
+                .font(.system(size: 12, weight: .bold))
+                .tracking(0.5)
+                .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 2)
+            ForEach(rows, id: \.0.id) { item, chat in
+                TodayRow(item: item, chat: chat) { open(chat) }
+            }
+        }
     }
 
     @ViewBuilder
@@ -75,6 +104,50 @@ struct UpdatesSheet: View {
                 UpdateRow(update: update) { open(update.chat) }
             }
         }
+    }
+}
+
+/// One Today row: the bot, what it waits on, and for how long.
+private struct TodayRow: View {
+    let item: TodayItem
+    let chat: Chat
+    let open: () -> Void
+    @EnvironmentObject private var session: Session
+
+    private var what: String {
+        switch item.kind {
+        case "attention": String(localized: "Needs you")
+        case "question": String(localized: "Question")
+        case "proposal": String(localized: "Proposal")
+        default: String(localized: "Permission")
+        }
+    }
+
+    var body: some View {
+        Button(action: open) {
+            HStack(alignment: .top, spacing: 12) {
+                ChatAvatarView(chat: chat, size: 40, state: MausState.forChat(chat, in: session.state))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.botName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text([what, item.routineName ?? item.threadTitle].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 14))
+                        .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text(BotAdvancedWording.ago(item.at))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
+                    .padding(.top, 2)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("today-\(item.key)")
     }
 }
 

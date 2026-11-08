@@ -13,8 +13,11 @@ import type { ApprovalRisk } from "./approval-describe.ts";
 /** Whose card it is, from the viewer's side. */
 export type InboxScope = "mine" | "org" | "team";
 /** What the card asks for. A proposal (a routine, a skill, a profile, a
- * team setup, a model) is answered on its own card, never in bulk. */
-export type InboxKind = "permission" | "question" | "proposal";
+ * team setup, a model, a proactive offer) is answered on its own card,
+ * never in bulk. 2026-11-08 (#2689, the Today box): "attention" is a bot's
+ * "needs you" card (shared/person-attention.ts), answered by a reply in the
+ * conversation or marked handled. */
+export type InboxKind = "permission" | "question" | "proposal" | "attention";
 /** Where the action would run, in plain words on the client. */
 export type InboxDestination = "computer" | "vm" | "sandbox" | "server" | "cloud" | "browser";
 /** Why a card is left out of a bulk answer. */
@@ -36,6 +39,8 @@ export interface InboxApproval {
   routineName?: string;
   scope: InboxScope;
   kind: InboxKind;
+  /** #2689: a proactive proposal, answered by POST /api/bots/:botId/proactive/:proactiveId */
+  proactiveId?: string;
   /** when the card was raised (ms) */
   at: number;
   risk?: ApprovalRisk;
@@ -132,8 +137,9 @@ export function filterInbox(entries: readonly InboxApproval[], filters: InboxFil
   return entries.filter((entry) => {
     if (filters.scope !== "all" && entry.scope !== filters.scope) return false;
     if (filters.bot && entry.botId !== filters.bot) return false;
-    if (filters.kind === "question" && entry.kind !== "question") return false;
-    if (filters.kind === "permission" && entry.kind === "question") return false;
+    // a bot's "needs you" card is something it asks the person (#2689)
+    if (filters.kind === "question" && entry.kind !== "question" && entry.kind !== "attention") return false;
+    if (filters.kind === "permission" && (entry.kind === "question" || entry.kind === "attention")) return false;
     if (filters.risky && !inboxRisky(entry)) return false;
     return true;
   });

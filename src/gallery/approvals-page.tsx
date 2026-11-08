@@ -2,7 +2,7 @@
 // headless captures: the real ApprovalsPage over a fixture list served by a
 // local fetch stand-in. Served by Vite in dev at
 // /src/gallery/approvals-page.html; not part of the packaged app.
-// ?n=0|3|40&lang=fr|en&skin=<id>&scope=org (adds organization and team cards)
+// ?n=0|3|40&lang=fr|en&skin=<id>&scope=org (adds organization and team cards) &today=1 (a "needs you" card and a proactive proposal, #2689)
 // &routine=1 (2026-11-04: the oldest card is a routine run's, named by its routine)
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -21,6 +21,7 @@ applySkin((params.get("skin") ?? "pulsatrix") as SkinId);
 const COUNT = Number(params.get("n") ?? 3);
 const ORG = params.get("scope") === "org";
 const ROUTINE = params.get("routine") === "1";
+const TODAY = params.get("today") === "1";
 const NOW = Date.now();
 const MIN = 60_000;
 
@@ -88,6 +89,15 @@ function fixtures(n: number): InboxApproval[] {
     else if (kind === 3) out.push(permission(i, i, i * 3, "WebFetch", { url: "https://example.com/docs/guide" }, { risk: "read" }));
     else out.push(permission(i, i, i * 50, "mcp__github__list_issues", { repo: "example/app", state: "open" }, { risk: "read" }));
   }
+  if (TODAY) {
+    // #2689: a bot's "needs you" card and a proactive proposal in the same box
+    const attention = { id: "m-att", role: "bot", at: NOW - 38 * 60 * MIN,
+      attention: { kind: "needs", items: [{ text: "Approuver la facture de novembre" }, { text: "Le fournisseur attend une réponse avant vendredi" }], botId: "b-pixel", botName: "Pixel", threadId: "t-att", sourceMessageId: "src" } } as unknown as Message;
+    out.push({ key: "t-att:attention:m-att", threadId: "t-att", requestId: "attention:m-att", botId: "b-pixel", botName: "Pixel", threadTitle: "Factures", scope: "mine", kind: "attention", at: NOW - 38 * 60 * MIN, decidable: true, bulk: "question", message: attention });
+    const proposal = { id: "m-pro", role: "bot", kind: "options", at: NOW - 95 * MIN,
+      card: { title: "Nouveau courriel de Carla : « Contrat à signer »", subtitle: "Je peux le lire et préparer une réponse. On y va ?", options: ["Oui, vas-y", "Non merci"], proactiveProposal: { id: "pp1" } } } as unknown as Message;
+    out.push({ key: "t-pro:proactive:pp1", threadId: "t-pro", requestId: "proactive:pp1", botId: "b-echo", botName: "Echo", threadTitle: "Echo", scope: "mine", kind: "proposal", proactiveId: "pp1", at: NOW - 95 * MIN, decidable: true, bulk: "proposal", message: proposal });
+  }
   if (ROUTINE && n > 0) {
     out.push(permission(950, 3, 30 * 60, "WebFetch", { url: "https://example.com/rapports/matin" }, { risk: "read", routineName: "Revue du matin", threadTitle: "Revue du matin · 4 nov., 9 h 00", destination: "sandbox" }));
   }
@@ -125,6 +135,16 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (respond) {
     const body = JSON.parse(String(init?.body ?? "{}")) as { requestId: string };
     pending = pending.filter((entry) => !(entry.threadId === respond[1] && entry.requestId === body.requestId));
+    return reply(200, { ok: true });
+  }
+  if (url.pathname === "/api/approvals/handled") {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { messageId: string };
+    pending = pending.filter((entry) => entry.requestId !== `attention:${body.messageId}`);
+    return reply(200, { ok: true });
+  }
+  const proactive = /^\/api\/bots\/[\w-]+\/proactive\/([\w-]+)$/.exec(url.pathname);
+  if (proactive) {
+    pending = pending.filter((entry) => entry.proactiveId !== proactive[1]);
     return reply(200, { ok: true });
   }
   if (url.pathname.startsWith("/api/")) return reply(404, { error: "preview" });

@@ -2,7 +2,32 @@
 /** inboxPending (#1388). Pure move from server/index.ts. */
 import { describeApproval } from "../../shared/approval-describe.ts";
 import { inboxKey } from "../../shared/approvals-inbox.ts";
+import { todayRows, type TodayDeps } from "../approvals/today-rows.ts";
 export type Host = Record<string, any>;
+
+/** The Today rows' view of the host for one viewer (#2689): their own
+ * conversations only, as the conversation itself would show them. */
+export function todayDepsFor(host: Host, auth: RequestAuth, viewer: InboxViewer): TodayDeps {
+  const approvalViewer = host.viewerForApproval(auth);
+  const viewerId = host.channelFilterViewerId(auth);
+  return {
+    bots: () => host.store.bots,
+    bot: (id) => host.store.bot(id) ?? undefined,
+    threads: (botId) => {
+      const tasks = host.store.tasks(botId);
+      const main = host.store.bot(botId)?.threadId;
+      return main && !tasks.some((task) => task.threadId === main) ? [...tasks, { threadId: main }] : tasks;
+    },
+    messages: (threadId) => host.store.messagesFor(threadId),
+    isViewers: (bot, threadId) => {
+      if (viewerId && !host.botThreadReadable(bot, threadId, viewerId, "thread.read")) return false;
+      if (!host.sharedMembership()) return true;
+      return host.approvalOwnerId(bot, threadId) === viewer.principalId || host.threadStarters.get(threadId) === viewer.principalId;
+    },
+    proposals: () => host.proactiveProposals.open(),
+    project: (threadId, message) => host.projectMessages(threadId, [message], approvalViewer)[0],
+  };
+}
 
 export function createInboxPending(getHost: () => Host): any {
 function inboxPending(auth: RequestAuth, viewer: InboxViewer) {
@@ -112,6 +137,8 @@ function inboxPending(auth: RequestAuth, viewer: InboxViewer) {
       ...(shown ? { message: shown } : {})
     });
   }
+  // #2689: the bots' "needs you" cards and proactive proposals, in the same box
+  out.push(...todayRows(todayDepsFor(host, auth, viewer)));
   return out.sort((a, b) => a.at - b.at).slice(0, 500);
 
 }

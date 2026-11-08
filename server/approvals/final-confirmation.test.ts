@@ -21,6 +21,8 @@ describe("final blocking confirmations (#1984)", () => {
     "J’ai besoin de ta confirmation explicite avant de procéder.",
     "I need your explicit approval before I write the entries.",
     "Voici le lot.\n\nEst-ce que tu confirmes les écritures?",
+    "May I proceed with the batch or not?",
+    "Puis-je écrire les entrées, ou non?",
   ])("raises the bot's own final request: %s", (text) => {
     expect(finalConfirmation({ ...context, text })).toBe(text);
     expect(finalConfirmation({ ...context, routineRun: false, mcpStarted: true, text })).toBe(text);
@@ -36,6 +38,9 @@ describe("final blocking confirmations (#1984)", () => {
     "```text\nMay I proceed with the batch?\n```",
     '"May I proceed with the batch?"',
     "May I proceed with the batch?\n\nAlready answered: all writes completed.",
+    "Veux-tu que je refasse la collecte à neuf, ou qu'on avance directement avec ta validation sur les plages de nuit ?",
+    "Do you want me to collect again, or should we go ahead with the night blocks?",
+    "Puis-je écrire les entrées maintenant ou attendre lundi?",
   ])("does not turn a result or quoted material into a card: %s", (text) => {
     expect(finalConfirmation({ ...context, text })).toBeNull();
   });

@@ -23,7 +23,7 @@ import { classifyError } from "../retry.ts";
 import { GROK_TOOL_REUSE_HINT as HINT } from "./grok.ts";
 import { contextFullMessage, contextRenewedNotice } from "../../context/context-renewal.ts";
 import { createAcpDriver, DEFAULT_ACP_PROMPT_IDLE_MS, skipSubscriptionAuthForLocalInject, type AcpSupport } from "./core.ts";
-import { GrokAgentDriver, grokAcceptsUnadvertisedImages, grokCloudConnectorEnv, grokConfigDeclaresMcp, grokConnectableConnectors, grokPermissionMode } from "./grok.ts";
+import { GrokAgentDriver, grokAcceptsUnadvertisedImages, grokCloudConnectorEnv, grokConnectableConnectors, grokPermissionMode } from "./grok.ts";
 import { grokAccountReach } from "./grok-tool-catalog.ts";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "../../tools/agent-tool-policy.ts";
 import { GeminiAgentDriver } from "./gemini.ts";
@@ -1822,12 +1822,28 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       }
     });
 
-    it("keeps Grok's own auto mode on a solo turn whose Grok config declares MCP servers Sagax cannot gate", async () => {
-      await create(GrokAgentDriver);
+    it("#2747: a bot's Grok never loads the person's own MCP servers, so every Auto turn stays gated", async () => {
+      // the person's Grok declares production connectors, and so does the project
+      const realHome = mkdtempSync(join(tmpdir(), "grok-real-home-"));
+      const savedHome = process.env.GROK_HOME;
+      process.env.GROK_HOME = realHome;
+      onTestFinished(() => {
+        if (savedHome === undefined) delete process.env.GROK_HOME; else process.env.GROK_HOME = savedHome;
+        removeTempDir(realHome);
+      });
+      writeFileSync(join(realHome, "config.toml"), [
+        "[models]", "default = \"grok-4.5\"",
+        "[mcp_servers.pulsatrix_dispatch]", "url = \"https://prod.example/mcp\"",
+        "[[marketplace.sources]]", "name = \"x\"",
+        "[model.local]", "model = \"x\"",
+      ].join("\n"));
+      writeFileSync(join(realHome, "auth.json"), "{}");
+      mkdirSync(join(realHome, "installed-plugins"));
       const project = mkdtempSync(join(tmpdir(), "grok-project-"));
       onTestFinished(() => removeTempDir(project));
       mkdirSync(join(project, ".grok"));
       writeFileSync(join(project, ".grok", "config.toml"), "[mcp_servers.mine]\ncommand = \"node\"\n");
+      await create(GrokAgentDriver);
       for (const [index, withholdHostTools] of [false, true].entries()) {
         const dump = join(scratch, `gate-config-mcp-${index}.json`);
         process.env.FAKE_ACP_DUMP = dump;
@@ -1836,10 +1852,22 @@ createInterface({ input: process.stdin }).on("line", (line) => {
           withholdHostTools, integrations: { agents: server("agents") },
         });
         await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
-        const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[] };
-        const mode = seen.argv[seen.argv.indexOf("--permission-mode") + 1];
-        // an organization turn reaches those servers through use_tool only: still gated
-        expect(mode).toBe(withholdHostTools ? "default" : "auto");
+        const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[]; env: Record<string, string> };
+        expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe("default");
+        // the CLI runs on an isolated home, logged in through the real one
+        const home = seen.env.GROK_HOME!;
+        expect(home).not.toBe(realHome);
+        expect(seen.env.GROK_AUTH_PATH).toBe(join(realHome, "auth.json"));
+        expect(readFileSync(join(home, "auth.json"), "utf8")).toBe("{}");
+        const config = readFileSync(join(home, "config.toml"), "utf8");
+        expect(config).not.toMatch(/mcp_servers|marketplace|prod\.example/);
+        expect(config).toContain("[model.local]");
+        expect(readFileSync(join(home, "requirements.toml"), "utf8")).toMatch(/^enable_all_project_mcp_servers = false$/m);
+        expect(existsSync(join(home, "installed-plugins"))).toBe(false);
+        for (const name of ["GROK_CLAUDE_MCPS_ENABLED", "GROK_CURSOR_MCPS_ENABLED", "GROK_CODEX_MCPS_ENABLED"]) expect(seen.env[name]).toBe("false");
+        // the only MCP server the session gets is the one Sagax mounts
+        const session = JSON.parse(readFileSync(`${dump}.session.json`, "utf8")) as { mcpServers: Array<{ name: string }> };
+        expect(session.mcpServers.map((entry) => entry.name)).toEqual(["agents"]);
       }
     });
 
@@ -1906,7 +1934,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(seen.argv).not.toContain("--tools");
     expect(seen.argv).not.toContain("--disallowed-tools");
     expect(seen.env.HOME).toBe(homeA);
-    expect(seen.env.GROK_HOME).toBe(join(homeA, ".grok"));
+    // #2747: an isolated home over the person's own, logged in through theirs
+    expect(seen.env.GROK_AUTH_PATH).toBe(join(homeA, ".grok", "auth.json"));
+    expect(realpathSync(join(seen.env.GROK_HOME!, "sessions"))).toBe(realpathSync(join(homeA, ".grok", "sessions")));
     expect(seen.env.XAI_API_KEY).toBeUndefined();
     expect(seen.env.GROK_AGENT).toBe("grok-build");
     // the person's own grok.com connectors (Outlook, Teams) ride the managed
@@ -1950,8 +1980,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(loaded.msg.params._meta.agentProfile.disallowedTools).toContain("run_terminal_command");
     const seenB = JSON.parse(readFileSync(resumeDump, "utf8")) as { env: Record<string, string> };
     expect(seenB.env.HOME).toBe(homeB);
-    expect(seenB.env.GROK_HOME).toBe(join(homeB, ".grok"));
-    expect(seenB.env.GROK_HOME).not.toBe(join(homeA, ".grok"));
+    expect(seenB.env.GROK_AUTH_PATH).toBe(join(homeB, ".grok", "auth.json"));
+    expect(seenB.env.GROK_HOME).not.toBe(seen.env.GROK_HOME);
     expect(JSON.stringify(seenB)).not.toContain(homeA);
   });
 
@@ -4412,42 +4442,3 @@ describe("grokConnectableConnectors", () => {
   });
 });
 
-describe("grokConfigDeclaresMcp", () => {
-  it("finds an MCP server table in GROK_HOME's config or the project's, and nothing else", () => {
-    const home = mkdtempSync(join(tmpdir(), "grok-home-"));
-    const project = mkdtempSync(join(tmpdir(), "grok-cwd-"));
-    try {
-      const env = { GROK_HOME: home };
-      expect(grokConfigDeclaresMcp(env, project)).toBe(false);
-      writeFileSync(join(home, "config.toml"), "[models]\ndefault = \"grok-4.5\"\n[model.local]\nmodel = \"x\"\n# [mcp_servers.commented]\n");
-      expect(grokConfigDeclaresMcp(env, project)).toBe(false);
-      writeFileSync(join(home, "config.toml"), "[models]\n  [mcp_servers.pulsatrix_dispatch]\nurl = \"https://x\"\n");
-      expect(grokConfigDeclaresMcp(env, project)).toBe(true);
-      writeFileSync(join(home, "config.toml"), "[ \"mcp_servers\" . a ]\n");
-      expect(grokConfigDeclaresMcp(env, project)).toBe(true);
-      writeFileSync(join(home, "config.toml"), "");
-      mkdirSync(join(project, ".grok"));
-      writeFileSync(join(project, ".grok", "config.toml"), "[mcp_servers]\na = { command = \"node\" }\n");
-      expect(grokConfigDeclaresMcp(env, project)).toBe(true);
-      expect(grokConfigDeclaresMcp(env, undefined)).toBe(false);
-      // a parent folder's config counts, as Grok reads it
-      const sub = join(project, "a", "b");
-      mkdirSync(sub, { recursive: true });
-      expect(grokConfigDeclaresMcp(env, sub)).toBe(true);
-      // a dotted key or an assignment counts too
-      writeFileSync(join(project, ".grok", "config.toml"), "");
-      expect(grokConfigDeclaresMcp(env, sub)).toBe(false);
-      for (const text of ["mcp_servers.x.command = \"node\"\n", "mcp_servers = { x = { command = \"node\" } }\n"]) {
-        writeFileSync(join(project, ".grok", "config.toml"), text);
-        expect(grokConfigDeclaresMcp(env, sub)).toBe(true);
-      }
-      // a config override is never read here: it counts as declaring
-      writeFileSync(join(project, ".grok", "config.toml"), "");
-      expect(grokConfigDeclaresMcp({ ...env, GROK_CONFIG: "/elsewhere.toml" }, sub)).toBe(true);
-      expect(grokConfigDeclaresMcp({ ...env, GROK_CONFIG_PATH: "/elsewhere.toml" }, sub)).toBe(true);
-    } finally {
-      removeTempDir(home);
-      removeTempDir(project);
-    }
-  });
-});

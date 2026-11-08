@@ -2496,6 +2496,37 @@ respecté, et si je suis en bypass que ça ne le demande pas.").
   read passes, a send at Ask and Auto shows its card, Always allow is kept,
   Full sends with no card).
 
+## A bot's Grok sees only the MCP servers Sagax mounts (#2747, 2026-11-08)
+
+A Grok bot inherited every MCP connector of the person's own tools: the
+`[mcp_servers.*]` of `~/.grok/config.toml`, `~/.claude.json`,
+`~/.cursor/mcp.json`, the project `.grok/config.toml` and `.mcp.json`, and
+installed plugins' `.mcp.json` (production Perspicax tools on an operator's Mac).
+`GROK_CONFIG` overlays cannot remove MCP tables, so each turn runs on an
+isolated home (`server/drivers/acp/grok-mcp-isolation.ts`, from
+`applyTurnEnv`, solo and organization alike):
+- `<DATA_DIR>/engines/grok-isolated/<hash of the real home>/.grok` links every
+  entry of the real home (login, `sessions`, caches, skills, trusted folders)
+  except `config.toml`, `requirements.toml`, `installed-plugins`, `plugins`,
+  `marketplace-cache` and the MCP credentials. `sessions` is made in the real
+  home first, so a resume finds the session either way.
+- `config.toml` is the real one without any `mcp_servers`, `plugins`,
+  `marketplace` or `disabled_mcp_servers` table or key (models, effort and the
+  `[model.slug]` written by `resolveTurnModel` stay). `requirements.toml` puts
+  `enable_all_project_mcp_servers = false` ahead of the person's own policy.
+- `GROK_AUTH_PATH` names the real `auth.json`, so a token refresh never
+  forks the login; `GROK_CLAUDE_MCPS_ENABLED`, `GROK_CURSOR_MCPS_ENABLED` and
+  `GROK_CODEX_MCPS_ENABLED` are `false`. The managed connectors keep
+  `grokCloudConnectorEnv` (the person's own grok.com account only).
+- The approval gate no longer falls back to Grok's own auto mode when a config
+  declares MCP (`grokConfigDeclaresMcp` is gone): every MCP server of the turn
+  is one Sagax mounts.
+- Measured on grok 1.0.77 (2026-11-08), `_x.ai/mcp/list` after session/new
+  with `agents` only: real home = 10 servers (4 config, 2 Cursor, vercel
+  plugin, 2 managed, agents); isolated home with managed off = `agents` only.
+- Tests: `server/drivers/acp/grok-mcp-isolation.test.ts`, `acp.test.ts`
+  ("#2747: a bot's Grok never loads the person's own MCP servers").
+
 ## Bot content has a default theme (2026-10-28)
 
 Pages and widgets bots make draw in the app's look, sober as the reference design.

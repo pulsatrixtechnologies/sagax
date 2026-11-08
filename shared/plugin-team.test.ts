@@ -35,8 +35,8 @@ describe("pluginTeamToPackage (I1)", () => {
       agents: [{ file: "px-triage.md", text: TRIAGE }, { file: "px-architect.md", text: ARCHITECT }],
     });
     expect(built.agents).toEqual([
-      { key: "px-architect", name: "px-architect", model: "claude-fable-5-1", tools: ["Read", "Glob", "Grep", "Bash"] },
-      { key: "px-triage", name: "px-triage", model: "haiku", tools: ["Read", "Grep"] },
+      { key: "px-architect", name: "px-architect", model: "claude-fable-5-1", description: "Architect for complex problems only (Fable 5.1). One at a time, narrow brief, returns a design and a decision, not code.", tools: ["Read", "Glob", "Grep", "Bash"] },
+      { key: "px-triage", name: "px-triage", model: "haiku", description: "Sorts new issues.", tools: ["Read", "Grep"] },
     ]);
     const pkg = built.document.package;
     expect(pkg.team).toEqual({ name: "Pulsatrix Dev (coding team)" });

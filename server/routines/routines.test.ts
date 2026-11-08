@@ -19,6 +19,7 @@ import {
   routineRerunStartedBy,
   routineWaitingLine,
   troubleToolKey,
+  nativeToolMisroute,
   RoutineScheduleError,
   RoutineInputError,
   type RoutineAdmission,
@@ -5308,6 +5309,56 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(runOf(h).problems).toBeUndefined();
     expect(troubleToolKey("mcp__perspicax_profile__cw_psa__query")).toBe(troubleToolKey("perspicax_profile__cw_psa_query"));
     expect(troubleToolKey("perspicax_profile__api_lookup")).not.toBe(troubleToolKey("perspicax_profile__api_search"));
+  });
+
+  it("Grok's use_tool refusal of a native tool, then the native call, is a clean run (#2970)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const refusal = "Error: search_tool is a native tool, not an MCP integration tool. Call it directly.";
+    tool(h, "thread-1", "a", "use_tool", false, refusal);
+    tool(h, "thread-1", "b", "use_tool", false, refusal);
+    tool(h, "thread-1", "c", "search_tool", true);
+    say(h, "thread-1", "Three tickets are waiting.");
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("completed");
+    expect(runOf(h).problems).toBeUndefined();
+    expect(nativeToolMisroute(refusal)).toBe("search_tool");
+    expect(nativeToolMisroute("upstream_error: 400")).toBeUndefined();
+  });
+
+  it("a native-tool refusal with no success after it is still reported", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const refusal = "search_tool is a native tool, not an MCP integration tool";
+    tool(h, "thread-1", "a", "use_tool", false, refusal);
+    tool(h, "thread-1", "b", "use_tool", false, refusal);
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("failed 2 times");
+  });
+
+  it("a native-tool refusal stays reported when only an unrelated tool succeeds after it (#2970)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const refusal = "search_tool is a native tool, not an MCP integration tool";
+    tool(h, "thread-1", "a", "use_tool", false, refusal);
+    tool(h, "thread-1", "b", "use_tool", false, refusal);
+    tool(h, "thread-1", "c", "read_file", true);
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("failed 2 times");
+  });
+
+  it("a native-tool refusal is settled by the native call under its display title (#2970)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "use_tool", false, "search_tool is a native tool, not an MCP integration tool");
+    tool(h, "thread-1", "b", "Search tool", true);
+    say(h, "thread-1", "Done.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toBeUndefined();
   });
 
   it("a tool that kept failing under its alias still names the title it was first called by", async () => {

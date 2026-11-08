@@ -145,11 +145,7 @@ describe("query_result reads only the held result", () => {
   it("imports nothing that can reach a file, the network or a process", () => {
     const source = readFileSync(new URL("./mcp-shape.ts", import.meta.url), "utf8");
     const imports = [...source.matchAll(/^import\s.*?from\s+"([^"]+)"/gm)].map((match) => match[1]);
-    expect(imports.sort()).toEqual(["./jmespath-extended.ts", "./mcp-trim.ts"]);
-    // the extended JMESPath (QA 0.8.67 G8) imports only the library
-    const extended = readFileSync(new URL("./jmespath-extended.ts", import.meta.url), "utf8");
-    expect([...extended.matchAll(/^import\s.*?from\s+"([^"]+)"/gm)].map((match) => match[1])).toEqual(["jmespath"]);
-    expect(extended).not.toMatch(/\beval\s*\(|new Function\s*\(/);
+    expect(imports.sort()).toEqual(["./mcp-trim.ts", "jmespath"]);
     const trim = readFileSync(new URL("./mcp-trim.ts", import.meta.url), "utf8");
     expect(trim).not.toMatch(/^import\s/m);
     // the JMESPath library is one self-contained file: no require, no import, no eval
@@ -235,19 +231,5 @@ describe("query_result reads only the held result", () => {
     const handle = store.put("search_products", { products: Array.from({ length: 300 }, (_, i) => product(i)) });
     const answer = answerQuery(store, { result: handle, query: "@" }, 2_000).content[0]!.text;
     expect(answer.length).toBeLessThanOrEqual(2_000);
-  });
-});
-
-// QA 0.8.67 G8: a routine's query failed "undefined function split".
-describe("query_result string functions", () => {
-  it("answers a query that calls split and lower", () => {
-    const store = new ResultStore({ server: "files" });
-    const handle = store.put("tickets", { items: [{ id: 1, summary: "VPN - Client A", owner: "Alex" }, { id: 2, summary: "Printer - Client B", owner: "sam" }] });
-    const answer = answerQuery(store, { result: handle, query: "items[?lower(owner) == 'alex'].split(summary, ' - ')[1]" }, 4_000);
-    expect(answer.isError).toBeUndefined();
-    expect(JSON.parse(answer.content[0]!.text)).toEqual(["Client A"]);
-  });
-  it("the tool description names the added functions", () => {
-    expect(QUERY_TOOL.description).toContain("split(s, sep), lower(s), upper(s), trim(s) and replace(s, old, new)");
   });
 });

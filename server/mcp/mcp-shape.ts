@@ -6,7 +6,7 @@
 // a JMESPath query over the held value. JMESPath cannot run code, so nothing
 // here needs a sandbox, and every answer goes through the same budget as any
 // other result: there is no path that returns the whole payload.
-import { searchExtended } from "./jmespath-extended.ts";
+import jmespath from "jmespath";
 
 import { QUERY_TOOL_NAME, trimResultText } from "./mcp-trim.ts";
 
@@ -29,7 +29,7 @@ export const QUERY_TOOL = {
     "Fetch exactly the part you need of a tool result that was too big to show in full. "
     + "The shaped result names its handle (\"files:r3.k2x9\": the server that holds it, then the result) and its shape; pass that whole handle, to the query_result tool of that same server, and a JMESPath query that selects only "
     + "the fields and rows you need, e.g. items[?price < `200`].{name: name, price: price} | [0:30], length(items), "
-    + "sort_by(items, &price)[0:5].name, or items[?contains(name, `pizza`)].id. Beside the standard functions it has split(s, sep), lower(s), upper(s), trim(s) and replace(s, old, new). Big answers are cut too, so narrow "
+    + "sort_by(items, &price)[0:5].name, or items[?contains(name, `pizza`)].id. Big answers are cut too, so narrow "
     + "the query rather than asking for everything. A query that selects one long string (a document's text) comes back "
     + "as a window; pass from (the offset the window names) to read the next part. Read-only: it never calls the original tool again.",
   inputSchema: {
@@ -169,7 +169,7 @@ export function answerQuery(store: ResultStore, args: unknown, budget: number): 
   const example = exampleQuery(held.value);
   let selected: unknown;
   try {
-    selected = searchExtended(held.value, args.query);
+    selected = jmespath.search(held.value, args.query);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return text(`Invalid JMESPath query (${reason}). The held result "${args.result}" is ${shape}. Examples: ${example}; length(@).`, true);

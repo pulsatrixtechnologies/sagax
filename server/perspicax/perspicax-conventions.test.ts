@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { connectorConventionsPrompt, hasPerspicaxConventions, PERSPICAX_CONVENTIONS_PROMPT, perspicaxToolIdsPrompt } from "./perspicax-conventions.ts";
+import { DRIVER_KIND as CLAUDE_KIND } from "../drivers/claude/config.ts";
+import { readFileSync } from "node:fs";
+import { CLAUDE_DRIVER_KIND, connectorConventionsPrompt, GROK_DRIVER_KIND, hasPerspicaxConventions, PERSPICAX_CONVENTIONS_PROMPT, perspicaxToolIdsPrompt } from "./perspicax-conventions.ts";
 
 describe("Perspicax tool conventions (#1209)", () => {
   it("names each convention", () => {
@@ -36,9 +38,11 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/say so to the person in one line, by the role's name, never an id/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Lu avec le rôle");
   });
-  it("says JMESPath has no split, so a routine never calls an undefined function (QA 0.8.66 F5)", () => {
-    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/There is no split, regex/);
+  it("says api_result_query has no split, so a routine never calls an undefined function (QA 0.8.66 F5, QA 0.8.67 G8)", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/There is no split, regex, lower, upper, trim, replace or date function/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/functions are length, sum/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("count_by and sum_by");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/split\(s, sep\)/);
   });
   // #2912: the QA 0.8.66 ConnectWise rules of #2905, corrected and moved here.
   it("points a 403 to identity_switch without arguments, never to the record finder identity", () => {
@@ -111,13 +115,18 @@ describe("Perspicax tool conventions (#1209)", () => {
 
 // QA 0.8.67 G8: "No such tool available: Api search" in a routine run.
 describe("perspicaxToolIdsPrompt", () => {
+  it("matches the driver kinds the drivers really carry", () => {
+    expect(CLAUDE_DRIVER_KIND).toBe(CLAUDE_KIND);
+    expect(readFileSync(new URL("../drivers/acp/grok.ts", import.meta.url), "utf8")).toContain(`driverKind: "${GROK_DRIVER_KIND}"`);
+    expect(perspicaxToolIdsPrompt("perspicax", "claude")).toContain("exact id your tool list shows");
+  });
   it("names Claude Code's exact mcp__ ids and rules out titles", () => {
-    const text = perspicaxToolIdsPrompt("perspicax", "claude");
+    const text = perspicaxToolIdsPrompt("perspicax", CLAUDE_KIND);
     expect(text).toContain("`mcp__perspicax__api_search`");
     expect(text).toContain("never a display title such as \"Api search\"");
   });
   it("names Grok's use_tool ids and keeps search_tool native", () => {
-    const text = perspicaxToolIdsPrompt("perspicax", "grok");
+    const text = perspicaxToolIdsPrompt("perspicax", "grokAgent");
     expect(text).toContain("tool_name `perspicax__<tool>`");
     expect(text).toContain("search_tool is a native tool: call it directly, never through use_tool");
     expect(text).toContain("`perspicax__search_tools`");

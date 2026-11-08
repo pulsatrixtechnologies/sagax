@@ -1,3 +1,4 @@
+import { DRIVER_KIND as CLAUDE_CODE_DRIVER_KIND } from "../drivers/claude/config.ts";
 // How a model calls the Perspicax tools reliably (#1209). Small and local
 // models in particular get these wrong: they put fields beside `action`
 // instead of in `set`, write before checking, filter on names and statuses,
@@ -26,7 +27,7 @@ export const PERSPICAX_CONVENTIONS_PROMPT =
   + "\n- Run the write with `_dry_run: true` first and read what it would send; send it for real only once that is right."
   + "\n- Filter on ids and flags (a reference is `{\"id\": N}`, a status or board is its id), never on a display name or a translated status label: look the id up first."
   + "\n- Pass local times and dates without an offset (\"2026-10-26T09:30:00\"); the connector converts them. Results show local times with their offset."
-  + "\n- A result above the size limit comes back as a handle: read it in one projection with `api_result_query` (a JMESPath that keeps only the fields you need), never page through it or paste it whole. The query is plain JMESPath: its functions are length, sum, avg, min, max, min_by, max_by, sort_by, reverse, contains, starts_with, ends_with, join, keys, values, to_string, to_number, type and not_null. There is no split, regex, lower, upper, replace or date function: filter with contains or starts_with on the raw field, compare ISO dates as strings, and do any other transformation on the rows you read back."
+  + "\n- A result above the size limit comes back as a handle: read it in one projection with `api_result_query` (a JMESPath that keeps only the fields you need), never page through it or paste it whole. The query is plain JMESPath plus two aggregates: its functions are length, sum, avg, min, max, min_by, max_by, sort_by, reverse, contains, starts_with, ends_with, join, keys, values, to_string, to_number, type, not_null, count_by and sum_by. There is no split, regex, lower, upper, trim, replace or date function: filter with contains or starts_with on the raw field, compare ISO dates as strings, and do any other transformation on the rows you read back."
   + "\n- Totals, counts and sums come from an aggregate the tool computes, never from adding rows yourself.";
 
 /** Whether a prompt section already carries the conventions (the Perspicax
@@ -48,6 +49,11 @@ export function connectorConventionsPrompt(connectors: ReadonlyArray<{ name: str
   return `\n\nThe claude.ai connector${names.length > 1 ? "s" : ""} ${names.map((name) => `"${name}"`).join(", ")} reach${names.length > 1 ? "" : "es"} ConnectWise and the other Perspicax products: the conventions below apply to ${names.length > 1 ? "their" : "its"} tools (prefixed mcp__claude_ai_).${PERSPICAX_CONVENTIONS_PROMPT}`;
 }
 
+/** The driver kinds a turn's instance carries (server/drivers/claude/config.ts
+ * DRIVER_KIND, server/drivers/acp/grok.ts support.driverKind). */
+export const CLAUDE_DRIVER_KIND = CLAUDE_CODE_DRIVER_KIND;
+export const GROK_DRIVER_KIND = "grokAgent";
+
 /** QA 0.8.67 G8 ("No such tool available: Api search"): a routine named a
  * Perspicax tool by its title or bare name, and the engine had no tool by
  * that name. Each engine exposes the mount's tools under its own exact id;
@@ -57,10 +63,10 @@ export function connectorConventionsPrompt(connectors: ReadonlyArray<{ name: str
 export function perspicaxToolIdsPrompt(server: string, driverKind: string | undefined): string {
   const example = "api_search";
   const never = `never a display title such as "Api search" and never a name from a routine's text without its prefix`;
-  if (driverKind === "claude") {
+  if (driverKind === CLAUDE_DRIVER_KIND) {
     return `\n- Tool ids: this server's tools are named \`mcp__${server}__<tool>\` (\`mcp__${server}__${example}\`, \`mcp__${server}__api_result_query\`, \`mcp__${server}__call_tool\`). Call them by that exact id, ${never}.`;
   }
-  if (driverKind === "grok") {
+  if (driverKind === GROK_DRIVER_KIND) {
     return `\n- Tool ids: reach this server's tools with use_tool and tool_name \`${server}__<tool>\` (\`${server}__${example}\`, \`${server}__api_result_query\`), the exact id, ${never}. search_tool is a native tool: call it directly, never through use_tool. This server's own \`search_tools\` is a different tool, reached with use_tool as \`${server}__search_tools\`.`;
   }
   return `\n- Tool ids: call this server's tools by the exact id your tool list shows for them (the \`${server}\` server's \`${example}\`, with the prefix your tool list gives it), ${never}.`;

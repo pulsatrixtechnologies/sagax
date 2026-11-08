@@ -28,6 +28,7 @@ import { APPROVALS_TOOL_DEFINITIONS } from "./agents-approvals-tools.ts";
 import { WAIT_TOOL_DEFINITIONS, WAIT_TOOL_NAMES } from "./agents-wait-tools.ts";
 import { phoneToolDefinition, phoneToolsFromEnv } from "./agents-phone-tools.ts";
 import { videoToolDefinition } from "./agents-video.ts";
+import { imageToolDefinition } from "./agents-image.ts";
 import { WEB_SEARCH_TOOL_DEFINITION } from "./agents-web-search-tools.ts";
 import { isOpenApiTool, openApiToolDefinition, openApiToolsFromEnv } from "../mcp/openapi-tools.ts";
 import { VAULT_HTTP_TOOL } from "./agents-vault-http-tools.ts";
@@ -404,7 +405,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const COMPACT_CORE_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_bots", "ask_bot", "coordinate_bots", "send_to_bot", "route_message", "list_room_targets",
   "delegate_bot", "check_delegation", "wait_delegation",
-  "react_to_message", "send_meme", "show_widget", "update_widget", "check_widget", "attach_file", "select_computer", "request_credential",
+  "react_to_message", "send_meme", "make_image", "show_widget", "update_widget", "check_widget", "attach_file", "select_computer", "request_credential",
   "memory_update", "memory_log", "session_search", "tool_result_read", "answer_approval", "act",
   // #1989: same always-loaded rule as DEFERRED: every bot can list and check/run its routines
   "list_routines", "run_routine",
@@ -556,7 +557,10 @@ function catalogTools(profile: CatalogProfile) {
   const core = coreCatalogTools(profile);
   const base = [
     ...core,
-    // video on every engine, including a turn whose host shell is withheld
+    // image (#2954) and video on every engine, including a turn whose host
+    // shell is withheld; make_image is never deferred, so an edit request on
+    // an attached photo is one call, never a skill search
+    imageToolDefinition(),
     videoToolDefinition(),
     ...(profile.perspicax && !profile.externalRuntime ? PERSPICAX_TOOLS : []),
     // a call through the speaker's Twilio profile on Perspicax, on a card

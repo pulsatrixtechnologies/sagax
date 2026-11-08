@@ -230,6 +230,9 @@ export const Bubble = memo(function Bubble({
     // an edit still waiting for its server fork has no branch to switch to yet
     if (v && !busy && !v.id.startsWith("optimistic-")) dispatch({ type: "switchBranch", botId, threadId, messageId: v.id });
   };
+  const userGallery = (className: string) => attachments && (
+    <AttachmentGallery beneath align="end" images={attachments.images} files={attachments.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} className={className} />
+  );
   const togglePin = () =>
     dispatch({ type: "updateTask", botId, threadId, patch: { pinnedMessageId: pinned ? "" : message.id } });
 
@@ -245,6 +248,9 @@ export const Bubble = memo(function Bubble({
     >
       {peer && <PeerLabel peer={peer} autoModel={message.autoModel} />}
       {user && <OtherAuthorLabel message={message} />}
+      {/* #2954: the person's photo is a compact rounded thumbnail above their
+          words, never inside the colored bubble */}
+      {user && !attachmentsOnly && attachments && userGallery("mt-0 mb-1.5")}
       <div className={cn("flex w-full items-center gap-1.5", user ? "justify-end" : "justify-start")}>
         {user && (
           <MessageBar
@@ -339,7 +345,7 @@ export const Bubble = memo(function Bubble({
             </div>
           ) : user ? (
             <>
-              {attachments && <AttachmentGallery images={attachments.images} files={attachments.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} className={!visibleText ? "mb-0" : undefined} />}
+              {attachmentsOnly && attachments && userGallery("mt-0")}
               {visibleText && (
                 <div
                   className={cn("chat-text", collapsible && "max-h-40 overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]")}

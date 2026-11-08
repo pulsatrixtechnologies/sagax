@@ -190,6 +190,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   wait_until: "own-work",
   cancel_wait: "own-work",
   // points at the engine's own video tools; runs nothing (agents-video.ts)
+  make_image: "own-work",
   make_video: "own-work",
   // a search with the person's own provider and key (server/web-search/)
   sagax_web_search: "read",
@@ -248,7 +249,7 @@ export function builtinAgentToolName(name: string | undefined): string | null {
 export function unknownAgentToolRefusal(tool: string): string {
   const image = /image|imagine|picture|photo|draw|paint/i.test(tool);
   return `Sagax has no tool named "${tool}": nothing ran and no approval was asked. Use only the tools listed for this turn.`
-    + (image ? " To make an image, use your engine's own image tool (image_gen on Grok) when this turn offers it; otherwise tell the person that image generation is not available for this bot here." : "");
+    + (image ? " To make or edit an image, call make_image { prompt } directly: it edits the image attached to the person's message by default. Do not search for an image skill." : "");
 }
 
 /** The family of an agents tool a member's bot may run without an admin,

@@ -185,6 +185,9 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // baselines move to the measured wire.
 // 2026-11-07 (#2613): skills_find (best skills and plugins for a task across
 // every catalog) joins direct and room turns; baselines move to the measured wire.
+// 2026-11-08 (#2954): make_image (native image generation and editing, always
+// loaded on every engine) joins direct and room turns; baselines move to the
+// measured wire.
 const BUDGET_BASELINE: Record<string, number> = {
   // #2909: ask_choice says its answers must answer the question and takes
   // per-answer details (+266 bytes of ask_choice, measured).
@@ -194,30 +197,30 @@ const BUDGET_BASELINE: Record<string, number> = {
   // #2700: event_subscriptions (the bot manages its own run-event subscriptions;
   // non-chief direct profiles re-measured).
 
-  "direct": 103621,
-  "direct+voice": 104588,
-  "direct+shared": 105622,
-  "direct+shared+voice": 106589,
-  "direct+skills": 105243,
-  "direct+skills+voice": 106210,
-  "direct+skills+shared": 107244,
-  "direct+skills+shared+voice": 108211,
-  "room": 92250,
-  "room+voice": 93217,
-  "room+shared": 94251,
-  "room+shared+voice": 95218,
-  "room+skills": 93872,
-  "room+skills+voice": 94839,
-  "room+skills+shared": 95873,
-  "room+skills+shared+voice": 96840,
-  "room+own-thread": 94303,
-  "room+own-thread+voice": 95270,
-  "room+own-thread+shared": 96304,
-  "room+own-thread+shared+voice": 97271,
-  "room+own-thread+skills": 95925,
-  "room+own-thread+skills+voice": 96892,
-  "room+own-thread+skills+shared": 97926,
-  "room+own-thread+skills+shared+voice": 98893,
+  "direct": 106929,
+  "direct+voice": 107896,
+  "direct+shared": 108877,
+  "direct+shared+voice": 109844,
+  "direct+skills": 108497,
+  "direct+skills+voice": 109464,
+  "direct+skills+shared": 110445,
+  "direct+skills+shared+voice": 111412,
+  "room": 95109,
+  "room+voice": 96076,
+  "room+shared": 97057,
+  "room+shared+voice": 98024,
+  "room+skills": 96677,
+  "room+skills+voice": 97644,
+  "room+skills+shared": 98625,
+  "room+skills+shared+voice": 99592,
+  "room+own-thread": 97162,
+  "room+own-thread+voice": 98129,
+  "room+own-thread+shared": 99110,
+  "room+own-thread+shared+voice": 100077,
+  "room+own-thread+skills": 98730,
+  "room+own-thread+skills+voice": 99697,
+  "room+own-thread+skills+shared": 100678,
+  "room+own-thread+skills+shared+voice": 101645,
   // #2048: choose_page_target joins the catalog (measured wire).
   "direct+non-chief": 94200,
   "direct+voice+non-chief": 95167,
@@ -228,27 +231,27 @@ const BUDGET_BASELINE: Record<string, number> = {
   "direct+skills+shared+non-chief": 97716,
   "direct+skills+shared+voice+non-chief": 98683,
   // 2026-11-06 #2519 (#2204 port): assignment_status joins the room catalog (measured wire).
-  "room+non-chief": 81408,
-  "room+voice+non-chief": 82375,
-  "room+shared+non-chief": 83409,
-  "room+shared+voice+non-chief": 84376,
-  "room+skills+non-chief": 83030,
-  "room+skills+voice+non-chief": 83997,
-  "room+skills+shared+non-chief": 85031,
-  "room+skills+shared+voice+non-chief": 85998,
-  "room+own-thread+non-chief": 83461,
-  "room+own-thread+voice+non-chief": 84428,
-  "room+own-thread+shared+non-chief": 85462,
-  "room+own-thread+shared+voice+non-chief": 86429,
-  "room+own-thread+skills+non-chief": 85083,
-  "room+own-thread+skills+voice+non-chief": 86050,
-  "room+own-thread+skills+shared+non-chief": 87084,
-  "room+own-thread+skills+shared+voice+non-chief": 88051,
+  "room+non-chief": 83840,
+  "room+voice+non-chief": 84807,
+  "room+shared+non-chief": 85788,
+  "room+shared+voice+non-chief": 86755,
+  "room+skills+non-chief": 85408,
+  "room+skills+voice+non-chief": 86375,
+  "room+skills+shared+non-chief": 87356,
+  "room+skills+shared+voice+non-chief": 88323,
+  "room+own-thread+non-chief": 85893,
+  "room+own-thread+voice+non-chief": 86860,
+  "room+own-thread+shared+non-chief": 87841,
+  "room+own-thread+shared+voice+non-chief": 88808,
+  "room+own-thread+skills+non-chief": 87461,
+  "room+own-thread+skills+voice+non-chief": 88428,
+  "room+own-thread+skills+shared+non-chief": 89409,
+  "room+own-thread+skills+shared+voice+non-chief": 90376,
   // Annotations on check_delegation / wait_delegation (read-only policy).
   // External runtime does not mount send_meme (or the rest of the agents catalog).
   // 2026-11-06 #2519 (#2204 port): coordinate_bots and assignment_status on external (measured wire).
-  "external": 7293,
-  "external+everything": 7293,
+  "external": 8551,
+  "external+everything": 8551,
 };
 
 const RPC_PREFIX = '{"jsonrpc":"2.0","id":1,"result":';

@@ -1,6 +1,7 @@
 // @ts-nocheck
 // #1383: room-member launch, system prompt. Never imports server/index.ts.
 import { hideServerPathsInSections } from "../server-path-prompt.ts";
+import { IMAGE_PROMPT } from "../system-prompt.ts";
 import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
@@ -133,7 +134,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     readyGroup.bulletin.trim() && `Room bulletin (shared instructions for everyone):\n${readyGroup.bulletin.trim()}`,
     `Reply as yourself, briefly and conversationally. To bring a teammate in, mention them like @Name  -  they'll see the conversation and respond.`,
     outsideRoom.length > 0 && referenceText(roomPeerRosterSystemPrompt(outsideRoom)),
-    integrations.agents && referenceText(CREDENTIAL_PROMPT + REACTION_PROMPT + (bot.memeReplies !== "off" ? MEME_PROMPT : "") + (orchestration && !orchestration.roomHandoffId && !roomPeerHop ? THREADS_PROMPT : "")).trim(),
+    integrations.agents && referenceText(CREDENTIAL_PROMPT + REACTION_PROMPT + (bot.memeReplies !== "off" ? MEME_PROMPT : "") + IMAGE_PROMPT + (orchestration && !orchestration.roomHandoffId && !roomPeerHop ? THREADS_PROMPT : "")).trim(),
     integrations.agents && (!orchestration || orchestration.roomHandoffId) && "For actual Sagax teamwork, discover IDs with list_room_targets and use coordinate_bots for advice or work in this or another room. Do not substitute native coding helpers for these named bots. Consult only when needed to make a decision; no discussion step is mandatory. Give concrete responsibilities, exact accessible paths and acceptance checks. End your turn after assigning; busy teammates queue and results automatically resume you. When they return, finish the requested verification and give the user one final answer. Native helper names are not evidence that a Sagax teammate participated. Plain @mentions are only for conversational replies in this room.",
     integrations.agents && referenceText(ROUTINE_PROMPT).trim(),
     integrations.agents && referenceText(botProfilePrompt(bot)).trim(),

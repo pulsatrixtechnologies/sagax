@@ -30,7 +30,8 @@ describe("a Sagax tool that does not exist", () => {
     const text = unknownAgentToolRefusal("image_gen");
     expect(text).toContain('no tool named "image_gen"');
     expect(text).toContain("no approval was asked");
-    expect(text).toContain("image_gen on Grok");
+    expect(text).toContain("make_image");
+    expect(text).toContain("Do not search for an image skill");
     expect(unknownAgentToolRefusal("do_magic")).not.toContain("image");
   });
 });

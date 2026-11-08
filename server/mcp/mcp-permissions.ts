@@ -161,6 +161,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("openapi:call", "own", "openapi_*"),
   // Generates paid media in the person's conversation, on their own key
   // or the organization's existing explicit media grant.
+  p("image:make", "own", "make_image"),
   p("video:make", "own", "make_video"),
   // the person's task list for this bot (server/drivers/agents-task-tools.ts)
   p("tasks:update", "own", "task_list"),

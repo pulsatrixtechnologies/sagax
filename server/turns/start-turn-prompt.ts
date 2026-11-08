@@ -3,7 +3,7 @@
 // Never imports server/index.ts.
 import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import { turnTracePayloadHash } from "./turn-trace.ts";
-import { FEEDBACK_PROMPT } from "../system-prompt.ts";
+import { FEEDBACK_PROMPT, IMAGE_PROMPT } from "../system-prompt.ts";
 import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
@@ -209,6 +209,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       // own; never on a call (the tools are not shown there either)
       { id: "reactions", label: "Reactions", text: state.integrations.agents && !state.onCall ? REACTION_PROMPT : "" },
       { id: "memes", label: "Memes", text: state.integrations.agents && !state.onCall && (state.liveBot ?? state.bot).memeReplies !== "off" ? MEME_PROMPT : "" },
+      { id: "images", label: "Images", text: state.integrations.agents && !state.onCall ? IMAGE_PROMPT : "" },
       { id: "feedback", label: "Feedback", text: state.integrations.agents && !state.onCall && !state.opts?.automationSource && (state.liveBot ?? state.bot).systemBot !== "feedback" ? FEEDBACK_PROMPT : "" },
       { id: "recall", label: "Recall", text: state.recallPrompt },
       { id: "routine", label: "Routines", text: state.routinePrompt },

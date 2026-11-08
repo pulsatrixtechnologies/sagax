@@ -13,7 +13,7 @@ import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import { setupSystemPrompt, setupModeActive } from "../setup-mode.ts";
 import { skillDiscoveryAvailable } from "../skills/skill-discovery.ts";
 import { resolveSurface, surfacePrompt } from "../surface.ts";
-import { resolveComputerPromptKind, userProfileSystemPrompt, longCommandsPrompt, computerPrompt, customMcpPrompt, CREDENTIAL_PROMPT, REACTION_PROMPT, MEME_PROMPT, FEEDBACK_PROMPT, ROUTINE_PROMPT, richOutputPrompt, TEAM_MEMORY_PROMPT, teamAvailabilityPart, buildSystemPrompt, CLAUDE_REUSE_VOLATILE_SECTIONS } from "../system-prompt.ts";
+import { resolveComputerPromptKind, userProfileSystemPrompt, longCommandsPrompt, computerPrompt, customMcpPrompt, CREDENTIAL_PROMPT, REACTION_PROMPT, MEME_PROMPT, IMAGE_PROMPT, FEEDBACK_PROMPT, ROUTINE_PROMPT, richOutputPrompt, TEAM_MEMORY_PROMPT, teamAvailabilityPart, buildSystemPrompt, CLAUDE_REUSE_VOLATILE_SECTIONS } from "../system-prompt.ts";
 import { rulesSystemPrompt, docsIndexPrompt } from "../workspace/workspace-files.ts";
 import { supportsWorkspaceFiles, WITHHELD_HOST_TOOLS_PROMPT } from "../workspace/workspace.ts";
 export type Host = Record<string, any>;
@@ -85,6 +85,7 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
     { id: "credential", label: "Credentials", text: agentsMounted ? CREDENTIAL_PROMPT : "" },
     { id: "reactions", label: "Reactions", text: agentsMounted ? REACTION_PROMPT : "" },
     { id: "memes", label: "Memes", text: agentsMounted && bot.memeReplies !== "off" ? MEME_PROMPT : "" },
+    { id: "images", label: "Images", text: agentsMounted ? IMAGE_PROMPT : "" },
     { id: "feedback", label: "Feedback", text: agentsMounted && bot.systemBot !== "feedback" ? FEEDBACK_PROMPT : "" },
     { id: "routine", label: "Routines", text: agentsMounted ? ROUTINE_PROMPT : "" },
     { id: "profile", label: "Profile changes", text: agentsMounted ? host.botProfilePrompt(bot) : "" },

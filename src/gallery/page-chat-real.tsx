@@ -69,6 +69,17 @@ const messages: Message[] = [
     line("p2", "bot", title, 23, "ask2", { pagePublish: { pageId, version: 2, title } }),
   ] : []),
 ];
+// &image=1 (#2954): the person attaches a photo and asks for an edit; the bot
+// posts the edited image (make_image) and one short line.
+if (params.get("image") === "1") {
+  const photo = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.png";
+  const edited = "1b2c3d4e-5f60-4b7c-9d8e-0f1a2b3c4d5e.png";
+  messages.push(
+    line("img-ask", "user", `${fr ? "Mets cette personne à Paris." : "Put this person in Paris."}\n\n<attached-image path="${photo}" name="photo.png" />`, 24, messages.at(-1)!.id),
+    line("img-out", "bot", "", 25, "img-ask", { attachments: [{ kind: "image", path: edited, mime: "image/png", name: "Edited image.png" }] }),
+    line("img-done", "bot", fr ? "Voilà, à Paris." : "Here you go, in Paris.", 25, "img-out"),
+  );
+}
 if (params.get("ask") === "1") messages.push(line("ask3", "user", fr ? "Sors les billets ouverts de la semaine." : "Pull the open tickets for the week.", 24, messages.at(-1)!.id));
 const wait = params.get("wait") === "1";
 if (wait) messages.push({

@@ -4,7 +4,7 @@ import type { BotVisibility } from "../../../shared/wire";
 import type { RuntimeEvent } from "../../../shared/runtime-events";
 import type { StepUpTarget } from "../../../shared/step-up";
 import { roleProfilePatch, type BotRole } from "@/lib/bot-roles";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { isNoRouteText } from "@/lib/no-route";
 import { readableError } from "@/lib/plain-error";
 import { forgetStepUp, recentStepUp, stepUp, stepUpApprovals } from "@/lib/step-up-client";
@@ -23,7 +23,10 @@ export async function createBotWithRole(role?: BotRole, request: typeof api = ap
   const chosenName = typeof settings?.name === "string" && settings.name.trim() ? settings.name.trim() : undefined;
   const fields = { ...(role ? { name: role.name, title: role.title, description: role.description } : {}),
     ...(chosenName ? { name: chosenName } : {}), ...restricted,
-    ...(section !== undefined ? { section } : {}) };
+    ...(section !== undefined ? { section } : {}),
+    // The greeting and intro card speak the app's language (#2803); English
+    // is the server default, so it is not sent.
+    ...(activeLocale().toLowerCase().startsWith("fr") ? { language: "fr" } : {}) };
   const { bot } = await request("/api/bots", {
     method: "POST",
     ...(Object.keys(fields).length ? { body: JSON.stringify(fields) } : {}),

@@ -25385,7 +25385,9 @@ function newBotGreetingLanguage(ownerUserId: string | undefined): "fr" | "en" {
   try {
     if (IDENTITY.kind === "perspicax" && ownerUserId) person = userPreferenceStore.get(ownerUserId).preferences["omb-language"] ?? "";
   } catch { /* no preference of their own */ }
-  return greetingLanguage([person, cfg.language]);
+  // The desktop app passes its own language to its server (#2803): the
+  // first-run bot greets in it when no other choice exists.
+  return greetingLanguage([person, cfg.language, process.env.SAGAX_DESKTOP_LANGUAGE ?? ""]);
 }
 function newBotApprovalMode(): "ask" | "auto" | "full" {
   // omb #2808 / PRO-RÈGLE: solo bots start on Full access. Organization

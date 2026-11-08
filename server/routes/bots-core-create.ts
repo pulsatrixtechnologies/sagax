@@ -201,7 +201,9 @@ export function createBotsCoreCreateRoutes(deps: BotsCoreRouteDeps): RouteHandle
         ownerUserId: creatingBotOwnerId(auth),
         toolScope: settings.toolScope ?? undefined,
         ...(temporary ? { temporary } : {}),
-        ...(created?.ok ? { visibility: created.visibility } : {}) });
+        ...(created?.ok ? { visibility: created.visibility } : {}) },
+        // The greeting speaks the language the person's app shows (#2803).
+        body.language === "fr" || body.language === "en" ? { language: body.language } : {});
       const createdRoutines: Array<{ id: string; enabled: boolean }> = [];
       try {
         const { chiefOfStaff: _chief, managedSections: _managed, toolScope: _toolScope, ...ordinary } = settings;

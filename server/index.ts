@@ -715,6 +715,7 @@ import { LocalVmSeatPool, type LocalVmSeatHolder } from "./computer/local-vm-sea
 import { TurnReplyRepeats } from "./turns/turn-reply-repeats.ts";
 import { dispatchLoopStop, makeLoopStopSubscriber } from "./safety/loop-detector.ts";
 import { wireLoopGuard, loopGuardSettingsFrom, toolErrorCorrectiveRoundsFor, subscribeLoopGuard } from "./host/loop-guard-wiring.ts";
+import { createTurnBudget, turnBudgetSettings } from "./host/turn-budget.ts";
 import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
 import { createDelegatedLevel } from "./host/delegated-level.ts";
 import { createLiveApprovalMode } from "./host/live-approval.ts";
@@ -15976,6 +15977,7 @@ const watchdog = new TurnWatchdog({
     const stalledVmTarget = localVmThreadTargets.get(turn.threadId);
     revokeInternalCapabilitiesForThread(turn.threadId);
     shellLoopGuard.settle(turn.threadId);
+    directTurnBudget.settle(turn.threadId);
     const bot = botForThread(turn.botId, turn.threadId);
     const routineRun = activeRoutineRunForThread(turn.threadId);
     // The stopped process can never answer the approvals it raised: close
@@ -19398,6 +19400,41 @@ const shellLoopGuard = wireLoopGuard({
   }
 });
 subscribeLoopGuard(shellLoopGuard, (listener) => bus.subscribe(listener), shouldIgnoreProviderEvent);
+// #2737: a direct turn has a settable ceiling of active minutes and steps,
+// and ends with a partial answer in the person's language, never silently.
+const directTurnBudget = createTurnBudget({
+  settings: (threadId) => turnBudgetSettings(cfg, process.env, store.botByThread(threadId)?.id),
+  live: (threadId) => {
+    const bot = store.botByThread(threadId);
+    return Boolean(bot && threadBusy(bot.id, threadId));
+  },
+  canSteer: (threadId) => {
+    const bot = store.botByThread(threadId);
+    return Boolean(bot && threadBusy(bot.id, threadId));
+  },
+  steer: async (threadId, note) => {
+    const bot = store.botByThread(threadId);
+    if (!bot) return "refused";
+    const instance = registry.get(bot.modelSelection.instanceId);
+    return (await instance?.adapter.steer?.(threadId, note).catch((): "refused" => "refused")) ?? "refused";
+  },
+  interrupt: async (threadId, _cause) => {
+    const bot = store.botByThread(threadId);
+    if (bot) await stopDirectThread(bot.id, threadId);
+  },
+  post: (threadId, text) => {
+    const bot = store.botByThread(threadId);
+    store.appendMessage(threadId, { role: "bot", kind: "text", text, ...(bot ? { from: { botId: bot.id, name: bot.name, color: bot.color } } : {}) });
+  },
+  language: (threadId) => {
+    const bot = store.botByThread(threadId);
+    const owner = bot ? recordedBotOwner(bot) : undefined;
+    return languageOfPerson(owner ?? undefined).toLowerCase().startsWith("fr") ? "fr" : "en";
+  },
+});
+bus.subscribe((event) => {
+  if (!shouldIgnoreProviderEvent(event)) directTurnBudget.onEvent(event);
+});
 const publishRuntime = bus.publish.bind(bus);
 savedSteps = createSavedSteps({
   enabled: () => savedStepsEnabled(cfg),

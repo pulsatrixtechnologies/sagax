@@ -283,6 +283,8 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.text(answer)).toContain("STOP: this read was refused (403)");
     expect(f.text(answer)).toContain("no other role you hold can be tried");
     expect(f.text(answer)).toContain("not missing data");
+    // #2912: the clause #2905 added to readStop, in its negative form.
+    expect(f.text(answer)).toContain("Tell the person the read is blocked and which permission the account needs; never say it needs an admin or that nothing can be done.");
   });
 
   it("turns a JSON-RPC 403 error into a STOP block the model reads", async () => {

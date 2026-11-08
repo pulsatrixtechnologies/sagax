@@ -40,4 +40,24 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/There is no split, regex/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/functions are length, sum/);
   });
+  // #2912: the QA 0.8.66 ConnectWise rules of #2905, corrected and moved here.
+  it("points a 403 to identity_switch without arguments, never to the record finder identity", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A 403 under a limited role \(Dispatch Agent included\) is not the end while a held role is untried/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("`identity_switch` without arguments lists the roles you hold");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/\(identity, then identity_switch/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/`identity`[^_]/);
+  });
+  it("forbids the admin wall in the negative form, so an inverted rule fails", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/Never answer "it needs an admin", "our rules forbid that role" or "it cannot be changed" before that/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/(?<!Never answer )(?<!Never answer "[^"]*", )"it needs an admin"/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("name the exact missing permission");
+  });
+  it("counts tickets on the board's id and never per board from a page cut by limit", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("owner/id=<member id>, board/id=<board id>, closedFlag=false");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("a board name is never a filter");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("board/name");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A count per board is one call per board read for its own `total`, or an aggregate over every matching ticket, never grouped from a result cut by `limit`/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("group by board from that one result");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("15 au total, voici les 10 premiers");
+  });
 });

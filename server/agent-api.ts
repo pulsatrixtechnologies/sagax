@@ -32,7 +32,7 @@ import type { EffortLevel } from "../shared/model-selection.ts";
 // drawn like a bot-to-bot one and silent for the person
 // (shared/agent-conversation.ts); the turn still runs as the person.
 import type { GuardDecision, GuardPolicy, GuardTarget, ToolGuardMode } from "./tools/tool-guard.ts";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { TEMP_AGENT_IDLE_HOURS_MAX } from "./temporary-agents.ts";
@@ -438,10 +438,27 @@ export interface AgentApiDeps {
   /** The person who owns this agent, lowercased, or null (tool-guard.ts ownerScoped). */
   agentOwner?(agentId: string): string | null;
   guardMode?: ToolGuardMode;
+  /** #1265 (Perspicax): durable send_prompt receipts by idempotency key, so
+   * a resend after a lost answer (or a Sagax restart) returns the first send
+   * instead of a second turn. Absent: an in-memory map (tests). */
+  sendReceipts?: {
+    get(key: string): SendReceipt | null;
+    put(key: string, receipt: SendReceipt): void;
+  };
   /** The HMAC key turn handles are signed with (at least 32 bytes). */
   secret: Buffer;
   now?(): number;
   sleep?(ms: number): Promise<void>;
+}
+
+/** What a send_prompt with an idempotency_key leaves behind (#1265). */
+export interface SendReceipt {
+  /** sha256 of the send's arguments: the same key with other ones is refused. */
+  fp: string;
+  agent_id: string;
+  thread_id: string;
+  message_id: string | null;
+  issued_at: number;
 }
 
 /** One visible step of a turn (tool name or note), for still_working progress. */
@@ -478,6 +495,7 @@ export interface TurnResult {
 
 type Args = Record<string, unknown>;
 const ID = /^[\w-]{1,128}$/;
+const IDEMPOTENCY_KEY = /^[\w.\-:]{1,128}$/;
 
 const objectArgs = (value: unknown): Args | null =>
   value && typeof value === "object" && !Array.isArray(value) ? value as Args : value === undefined || value === null ? {} : null;
@@ -897,6 +915,8 @@ function createAgentApiHandlers(env: {
   deps: AgentApiDeps;
   now: () => number;
   startedBy: Map<string, { messageId: string; caller: string }>;
+  sendReceipts: { get(key: string): SendReceipt | null; put(key: string, receipt: SendReceipt): void };
+  sendsInFlight: Map<string, Promise<unknown>>;
   ownsRunningTurn: (caller: AgentCaller, threadId: string) => boolean;
   ok: (body: Record<string, unknown>) => AgentApiAnswer;
   reachable: (caller: AgentCaller, agentId: string) => Promise<AgentSummary | Refusal>;
@@ -907,7 +927,7 @@ function createAgentApiHandlers(env: {
   "list_agents" | "find_agents" | "get_agent" | "delete_agent" | "create_agent" | "send_prompt" | "await_turn" |
   "read_transcript" | "read_transcript_page" | "read_latest_page" | "read_latest_page_with_threads" | "read_transcript_cold"
 > {
-  const { deps, now, startedBy, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest } = env;
+  const { deps, now, startedBy, sendReceipts, sendsInFlight, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest } = env;
   return {
     async list_agents(caller, args) {
       const bad = onlyKeys(args, []);
@@ -998,10 +1018,17 @@ function createAgentApiHandlers(env: {
     },
 
     async send_prompt(caller, args, signal) {
-      const bad = onlyKeys(args, ["agent_id", "prompt", "mode", "timeout_ms", "on_busy", "files", "priority", "thread_id", "bridge_thread_id"]);
+      const bad = onlyKeys(args, ["agent_id", "prompt", "mode", "timeout_ms", "on_busy", "files", "priority", "thread_id", "bridge_thread_id", "idempotency_key"]);
       if (bad) return bad;
       const agentId = agentIdArg(args);
       if (isRefusal(agentId)) return agentId;
+      const idemKey = args.idempotency_key === undefined || args.idempotency_key === null || args.idempotency_key === "" ? null : args.idempotency_key;
+      if (idemKey !== null && (typeof idemKey !== "string" || !IDEMPOTENCY_KEY.test(idemKey))) {
+        return refuse(400, "bad_request", "idempotency_key is 1 to 128 letters, digits, '.', '_', '-' or ':'.", {
+          retryable: false,
+          details: { reason: "invalid_idempotency_key" },
+        });
+      }
       const continued = args.thread_id === undefined || args.thread_id === null || args.thread_id === "" ? null : args.thread_id;
       if (continued !== null && (typeof continued !== "string" || !ID.test(continued))) {
         return refuse(400, "bad_request", "thread_id is a conversation id, as send_prompt or await_turn returned it.", {
@@ -1093,6 +1120,51 @@ function createAgentApiHandlers(env: {
       }
       const agent = await reachable(caller, agentId);
       if (isRefusal(agent)) return agent;
+      // #1265: a send with an idempotency_key is done once per caller, agent
+      // and key. A resend (the first answer was lost, Sagax restarted) gets
+      // the first send's handle and thread back, replayed: true, and starts
+      // no second turn. The same key with other arguments is refused.
+      const receiptKey = idemKey === null ? null : `${callerKey(caller)}|${agentId}|${idemKey}`;
+      const fp = idemKey === null ? "" : createHash("sha256").update(JSON.stringify([
+        prompt, continued, bridgeThreadId, fileInputs.map((file) => [file.path, file.content_base64 ? createHash("sha256").update(file.content_base64).digest("hex") : null]),
+      ])).digest("hex");
+      if (receiptKey !== null) {
+        for (let inFlight = sendsInFlight.get(receiptKey); inFlight; inFlight = sendsInFlight.get(receiptKey)) {
+          await inFlight.catch(() => undefined);
+        }
+        const prior = sendReceipts.get(receiptKey);
+        if (prior) {
+          if (prior.fp !== fp) {
+            return refuse(409, "idempotency_key_reused", "This idempotency_key was already used for a different send_prompt (other prompt, thread or files).", {
+              retryable: false,
+              thread_id: prior.thread_id,
+              details: { reason: "idempotency_key_reused" },
+              hint: "Use a new idempotency_key for a new prompt; to see the first send, read_latest_page with this thread_id.",
+            });
+          }
+          const body: HandleBody = { a: agentId, t: prior.thread_id, m: prior.message_id, i: prior.issued_at, c: callerKey(caller) };
+          const handle = signHandle(deps.secret, body);
+          const replayed = {
+            handle, ...handleLifetime(prior.issued_at), label: turnLabel(agent.name, prompt), agent_id: agentId, thread_id: prior.thread_id, mode,
+            accepted: true, replayed: true, files: fileInputs.length,
+          };
+          if (mode !== "blocking") {
+            return ok({ ...replayed, finished: false, status: "accepted", next: "Already sent with this idempotency_key: no second turn. Call await_turn with this handle. Never send the prompt again." });
+          }
+          const waitMs = Math.min(timeoutMs as number, AWAIT_TIMEOUT_MS_MAX);
+          return ok({ ...replayed, ...resultBody(await waitTurn(body, handle, waitMs, signal)) });
+        }
+      }
+      // Held from here until the receipt is stored (or the send failed), so a
+      // concurrent resend with the same key reads the receipt, never posts.
+      let resolveInFlight: () => void = () => undefined;
+      const mine = receiptKey === null ? null : new Promise<void>((resolve) => { resolveInFlight = resolve; });
+      if (receiptKey !== null && mine) sendsInFlight.set(receiptKey, mine);
+      const releaseInFlight = () => {
+        if (receiptKey !== null && sendsInFlight.get(receiptKey) === mine) sendsInFlight.delete(receiptKey);
+        resolveInFlight();
+      };
+      try {
       // The conversation the caller's sends go to (deps.conversation), unless
       // it names one of its own conversations to continue. bridge_thread_id
       // (#2193) forces the person's unified chat and fences the prompt.
@@ -1162,6 +1234,10 @@ function createAgentApiHandlers(env: {
         return posted;
       }
       if (posted.messageId) startedBy.set(threadId, { messageId: posted.messageId, caller: callerKey(caller) });
+      if (receiptKey !== null) {
+        sendReceipts.put(receiptKey, { fp, agent_id: agentId, thread_id: threadId, message_id: posted.messageId, issued_at: issuedAt });
+        releaseInFlight();
+      }
       const body: HandleBody = { a: agentId, t: threadId, m: posted.messageId, i: issuedAt, c: callerKey(caller) };
       const handle = signHandle(deps.secret, body);
       const accepted = {
@@ -1184,6 +1260,9 @@ function createAgentApiHandlers(env: {
       const waitMs = Math.min(timeoutMs as number, AWAIT_TIMEOUT_MS_MAX);
       const result = await waitTurn(body, handle, waitMs, signal);
       return ok({ ...accepted, ...resultBody(result) });
+      } finally {
+        releaseInFlight();
+      }
     },
 
     async await_turn(caller, args, signal) {
@@ -1486,6 +1565,14 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
    * bot's single chat the running turn may be the person's own or another
    * caller's: supersede stops only a turn this caller started. */
   const startedBy = new Map<string, { messageId: string; caller: string }>();
+  // #1265: receipts by idempotency key (durable through deps.sendReceipts),
+  // and the sends still in flight so a concurrent resend waits for the first.
+  const memoryReceipts = new Map<string, SendReceipt>();
+  const sendReceipts = deps.sendReceipts ?? {
+    get: (key: string) => memoryReceipts.get(key) ?? null,
+    put: (key: string, receipt: SendReceipt) => void memoryReceipts.set(key, receipt),
+  };
+  const sendsInFlight = new Map<string, Promise<unknown>>();
   const ownsRunningTurn = (caller: AgentCaller, threadId: string): boolean => {
     const mine = startedBy.get(threadId);
     if (!mine || mine.caller !== callerKey(caller)) return false;
@@ -1640,7 +1727,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
 
   const handlers: Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>> = {
     ...createAgentApiHandlers({
-      deps, now, startedBy, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest,
+      deps, now, startedBy, sendReceipts, sendsInFlight, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest,
     }),
     ...createAgentApiConfigHandlers({ deps, ok, reachable }),
   };

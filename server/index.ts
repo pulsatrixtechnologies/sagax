@@ -160,7 +160,7 @@ import type { CommandAllowlistCandidate } from "../shared/command-allowlist.ts";
 import { claudeAccountInfo } from "./engines/claude-accounts.ts";
 import { BrowserCleanupCoordinator, BrowserSweep, browserIdleMs, engineBrowsers } from "./browser/browser-lifecycle-cleanup.ts";
 import * as checkpoints from "./checkpoints.ts";
-import { commandReceipt } from "./commands.ts";
+import { commandReceipt, runCommand } from "./commands.ts";
 import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import { pendingApprovalExpiresAt } from "./approvals/pending-approval-expiry.ts";
 import { retireOpenQuestions } from "./approvals/retire-open-questions.ts";
@@ -1269,7 +1269,7 @@ import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
 import { activeCount as temporaryActiveCount, archiveMark, capInstructions, defaultIdleHours, mayDelete as mayDeleteTemporary, profileSections, quotaKey as temporaryQuotaKey, TEMP_AGENT_QUOTA, TEMP_AGENT_SWEEP_MS, temporaryOwner, type TemporaryAgent, type TemporaryCreator } from "./temporary-agents.ts";
 import { createTemporaryAgentRoutes } from "./routes/temporary-agents.ts";
 import { botCreationOffered } from "./bots/bot-creation.ts";
-import { agentPromptWithFiles, createAgentApi, formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, type AgentCaller } from "./agent-api.ts";
+import { agentPromptWithFiles, createAgentApi, formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, refuse as agentRefuse, resolveEngineInstance, type AgentCaller, type SendReceipt } from "./agent-api.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
 import { backgroundIdleMs, planBackgroundSweep, RESERVED_RUN_PREFIX } from "./threads/background-sweep.ts";
 import { MemberLiveText } from "./people/member-live-text.ts";
@@ -29698,6 +29698,11 @@ const agentApi = createAgentApi({
   guard: (caller, policy, target) => guardDecision(policy, { kind: caller.kind === "bot" ? "bot" : "user", id: caller.id },
     caller.kind === "bot" && caller.speakerPrincipalId ? { kind: "user", id: caller.speakerPrincipalId } : null, toolGrants, target),
   agentOwner: agentOwnerPrincipal,
+  // #1265 (Perspicax): send_prompt receipts by idempotency key outlive a restart.
+  sendReceipts: {
+    get: (key) => commandReceipt<SendReceipt>("agent.send_prompt", key)?.result ?? null,
+    put: (key, receipt) => void runCommand({ kind: "agent.send_prompt", key }, () => receipt),
+  },
   secret: agentApiSecret(),
   audit: agentApiAudit,
   async agents(caller) {

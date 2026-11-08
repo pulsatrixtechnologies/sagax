@@ -40,6 +40,8 @@
 //   DELETE /api/pages/:id
 // Lot R8 (the reference design parity: edit, comments, annotation, Presentation):
 //   GET    /api/pages/:id/versions/:n/source   { version, content } the person's editor
+//   GET    /api/pages/:id/versions/:n/export?theme=light|dark   { filename, html }
+//          a self-contained file of that version (Export, #2717)
 //   POST   /api/pages/:id/versions          { kind, content, title? } the person's
 //          own edit: a new proposed version, published only by Publish
 //   GET    /api/pages/:id/comments          { comments }
@@ -48,6 +50,8 @@
 //   GET    /pages/preview/<id>/<n>?annotate=1  the preview in annotation mode:
 //          its frame (?a=1) runs ANNOTATE_SOURCE, which only posts to the app
 //   GET    /api/pages/policy                { linkSharing } any person
+//   GET    /api/pages/design-systems        { systems } built-in and the person's own (#2717)
+//   DELETE /api/pages/design-systems/:id    forget one of the person's own
 //   GET    /api/pages/look                  { look } the person's own look
 //   PUT    /api/pages/look                  { light?, dark?, skin?, botAccent? }
 //          (2026-10-29) the person's app: the tokens of their skin, light and
@@ -85,6 +89,7 @@
 //          makes one key read-only, or writable again
 //   GET    /api/pages/:id/live             (2026-10-28) an event stream: who has
 //          the page open (presence) and "threads changed" (server/pages/page-live.ts)
+import { applyDesignSystem, findDesignSystem } from "../../src/lib/design-systems.ts";
 import { randomBytes } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -933,9 +938,19 @@ export function createPublishedPageRoutes(deps: PublishedPageRouteDeps): RouteHa
       const look = deps.pages.setLook(deps.owner(auth), await readBody(req));
       return look ? json(res, 200, { look }) : json(res, 400, { error: "Send { light?, dark?, skin?, botAccent? } with the app's tokens.", code: "bad_body" });
     }
+    // design systems (#2717): the built-in ones and the person's own (taken
+    // from their code by a bot); their own, no admin
+    if (path === "/api/pages/design-systems" && method === "GET") {
+      return json(res, 200, { systems: deps.pages.designSystems(deps.owner(auth)).map((system) => ({ ...system, own: system.id.startsWith("own-") })) });
+    }
+    const designSystemMatch = method === "DELETE" ? /^\/api\/pages\/design-systems\/(own-[a-z0-9-]+)$/.exec(path) : null;
+    if (designSystemMatch) {
+      return deps.pages.deleteDesignSystem(deps.owner(auth), designSystemMatch[1]!) ? json(res, 200, { ok: true }) : json(res, 404, { error: "No design system of yours has that id.", code: "not_found" });
+    }
     // one route per line with its method, so the tool policy sees each one
     const extra: Extra | null =
       (method === "GET" && /^\/api\/pages\/([\w-]+)\/versions\/(\d+)\/source$/.exec(path) && { route: "source", match: /^\/api\/pages\/([\w-]+)\/versions\/(\d+)\/source$/.exec(path)! })
+      || (method === "GET" && /^\/api\/pages\/([\w-]+)\/versions\/(\d+)\/export$/.exec(path) && { route: "export", match: /^\/api\/pages\/([\w-]+)\/versions\/(\d+)\/export$/.exec(path)! })
       || (method === "POST" && /^\/api\/pages\/([\w-]+)\/versions$/.exec(path) && { route: "edit", match: /^\/api\/pages\/([\w-]+)\/versions$/.exec(path)! })
       || (method === "GET" && /^\/api\/pages\/([\w-]+)\/comments$/.exec(path) && { route: "comments", match: /^\/api\/pages\/([\w-]+)\/comments$/.exec(path)! })
       || (method === "POST" && /^\/api\/pages\/([\w-]+)\/comments$/.exec(path) && { route: "comment", match: /^\/api\/pages\/([\w-]+)\/comments$/.exec(path)! })
@@ -1056,7 +1071,13 @@ export function createPublishedPageRoutes(deps: PublishedPageRouteDeps): RouteHa
 }
 
 type ExtrasContext = Pick<Parameters<RouteHandler>[0], "req" | "res" | "method" | "auth" | "json" | "readBody">;
-type Extra = { route: "source" | "edit" | "comments" | "comment" | "uncomment" | "readerComments" | "readerApprove" | "readerRemove" | "share" | "place" | "invite"; match: RegExpExecArray };
+/** The file name of an exported version: the title as a slug, and its number. */
+export function exportFilename(title: string, version: number): string {
+  const slug = title.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  return `${slug || "page"}-v${version}.html`;
+}
+
+type Extra = { route: "source" | "export" | "edit" | "comments" | "comment" | "uncomment" | "readerComments" | "readerApprove" | "readerRemove" | "share" | "place" | "invite"; match: RegExpExecArray };
 
 /** Lot R8: the person's editor (source and own edit), their comments, and
  * the moderation of readers' comments. The same rules as the routes above: a
@@ -1075,7 +1096,7 @@ async function pageExtras(deps: PublishedPageRouteDeps, ctx: ExtrasContext, extr
     : { computerOwner: true as const });
   const owned = Boolean(page && pageOwnedBy(page, viewer));
   const mayEdit = Boolean(page && pageMayEdit(page, viewer));
-  const editorOnly = mayEdit && !owned && (route === "edit" || route === "source");
+  const editorOnly = mayEdit && !owned && (route === "edit" || route === "source" || route === "export");
   if (!page || (!owned && !editorOnly)) {
     return json(res, 404, { error: "This page does not exist.", code: "not_found" });
   }
@@ -1125,12 +1146,31 @@ async function pageExtras(deps: PublishedPageRouteDeps, ctx: ExtrasContext, extr
     if (!version || content === null) return json(res, 404, { error: "This version does not exist.", code: "no_version" });
     return json(res, 200, { version: { n: version.n, kind: version.kind, title: version.title }, content });
   }
+  if (route === "export") {
+    // a self-contained file of one version (#2717): the same document a
+    // reader gets, with its theme, Geist and, for a design, its canvas and
+    // design system, so it opens and prints (one screen per sheet) anywhere
+    const version = page.versions.find((entry) => entry.n === Number(match[2]));
+    const content = version ? deps.pages.content(page.id, version.n) : null;
+    if (!version || content === null) return json(res, 404, { error: "This version does not exist.", code: "no_version" });
+    const asked = new URL(req.url ?? "/", "http://local").searchParams.get("theme");
+    const theme: PageTheme = asked === "dark" ? "dark" : "light";
+    const title = page.title ?? version.title;
+    const html = pageDocument({ kind: version.kind, title, content }, { meta: true, theme, font: geistFace() });
+    return json(res, 200, { filename: exportFilename(title, version.n), html });
+  }
   if (route === "edit") {
     const body = await readBody(req) as Record<string, unknown> | null;
     const kind = body?.kind;
-    if (!PAGE_KINDS.includes(kind as PageKind)) return json(res, 400, { error: "kind: html, markdown or presentation.", code: "bad_kind" });
-    const content = body!.content;
-    if (typeof content !== "string" || !content.trim()) return json(res, 400, { error: "content: the page's full text is required.", code: "bad_content" });
+    if (!PAGE_KINDS.includes(kind as PageKind)) return json(res, 400, { error: "kind: html, markdown, presentation or design.", code: "bad_kind" });
+    if (typeof body!.content !== "string" || !body!.content.trim()) return json(res, 400, { error: "content: the page's full text is required.", code: "bad_content" });
+    let content: string = body!.content;
+    // a design drawn again with the design system the person picked (#2717)
+    if (kind === "design" && typeof body!.designSystem === "string") {
+      const system = findDesignSystem(deps.pages.designSystems(page.ownerId), body!.designSystem);
+      if (!system) return json(res, 400, { error: "designSystem: unknown design system.", code: "bad_design_system" });
+      content = applyDesignSystem(content, system);
+    }
     if (Buffer.byteLength(content) > PAGE_LIMITS.contentBytes) return json(res, 400, { error: `content: at most ${PAGE_LIMITS.contentBytes / 1024} KB.`, code: "too_large" });
     let title: string | undefined;
     if (body!.title !== undefined) {

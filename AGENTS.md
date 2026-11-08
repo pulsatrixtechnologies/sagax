@@ -10686,6 +10686,38 @@ refresh) are a different object and are not changed here.
 
 Covered by `shared/page-audience.test.ts` and `server/page-share.test.ts`.
 
+## Designs: kind design of the published pages (#2717, 2026-11-08)
+
+Claude Design and nexu-io/open-design, the same way as the pages: no parallel
+system. A design is a page of kind `design` (`shared/published-pages.ts`,
+`PAGE_KINDS`), proposed by the same bot tool `propose_page` (kind design,
+optional `design_system`, `design_tokens`), stored and versioned by
+`PublishedPages`, shown in the same surface (`PageViewer`), shared the same way.
+
+- Format: one HTML document; each `<section data-screen="Name"
+  data-device="phone|tablet|desktop">` is a screen. `DESIGN_CANVAS_CSS`
+  (`src/lib/design-systems.ts`, in the page theme layer) draws the canvas and
+  the artboards without a script (`body:has(>section[data-screen])`); print
+  puts one screen per sheet. `pageIsHtml(kind)` routes design like html
+  (render, CSP, state).
+- Design system: one `<style data-sagax-design-system="id">:root{...}</style>`
+  block inside the design, so each version keeps its tokens and an export is
+  self-contained. Schema: open-design's tokens (--bg, --surface, --fg, --muted,
+  --border, --accent, --accent-on, --font-*, --text-*, --space-*, --radius-*).
+  Built in: `sagax` (the person's look through --color-*, the default) and four
+  neutral systems vendored from open-design (Apache-2.0,
+  `third_party/open-design/LICENSE`, `src/lib/design-systems-vendored.ts`,
+  tokens only). A person's own (from their code: `design_tokens`) live in
+  `published-pages-design-systems.json` per owner (`own-<slug>`, max 20).
+- Routes: `GET /api/pages/design-systems`, `DELETE /api/pages/design-systems/own-*`,
+  `POST /api/pages/:id/versions` with `designSystem` (the person's pick),
+  `GET /api/pages/:id/versions/:n/export?theme=` (`{ filename, html }`, any kind).
+- Viewer: « ⋯ » > Design system (side panel, swatches, the person's own
+  removable) and Export (HTML). Iteration stays in the same conversation
+  (`proposePageCard` appends to the thread): never a new thread.
+- Bot knowledge: guide `designs` (scripts/self-knowledge/guides.ts) and one
+  line in `PAGE_TARGET_PROMPT` (a design skips choose_page_target).
+
 ## Voice notes, microphone choice, logs and feedback (2026-10-16)
 
 - Voice notes (+ > Record a voice note, `src/components/useVoiceNoteRecorder.ts`,

@@ -24,6 +24,7 @@ import { COMPACT_DIRECTORY_TOOLS } from "./prepare-constants.ts";
 import { CLAUDE_HOST_TOOLS } from "../host-tools.ts";
 import { ARTIFACT_TOOLS } from "../../../shared/claude-chat-blocks.ts";
 import { claudeToolSearchSetting } from "./claude-tool-search.ts";
+import { withDesignRedirectHook } from "./design-redirect.ts";
 import { DWEB_PROXY_PATH, HOOK_HELPER_PATH, NODE_ENV_FLAG, PERM_PROXY_PATH } from "./helpers.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
 
@@ -337,6 +338,9 @@ const settings: Record<string, unknown> = {
 // directories when the bot workspace lives below HOME. Keep project memory.
 if (isolated) settings.claudeMdExcludes = [join(homedir(), ".claude", "CLAUDE.md")];
 if (hooks) settings.hooks = claudeHookSettings(HOOK_HELPER_PATH);
+// #2717: a design quickstart on the native Artifact tool goes to propose_page
+// kind design instead (design-redirect.ts); every other Artifact call is kept.
+if (!turn.guestConfined) settings.hooks = withDesignRedirectHook(settings.hooks, process.execPath);
 if (turn.guestConfined) settings.permissions = GUEST_CLAUDE_PERMISSIONS;
 else {
   const allow = instanceClaudeAllowRules();

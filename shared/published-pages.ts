@@ -19,11 +19,17 @@
 // connection) once; WebKit pre-connects TCP on a target=_blank click.
 
 /** html: one complete document; markdown: text; presentation: Markdown
- * slides separated by a line of three dashes, read as a slideshow. */
+ * slides separated by a line of three dashes, read as a slideshow; design
+ * (#2717): one HTML document whose <section data-screen> blocks are drawn as
+ * screens on a canvas, with a design system (src/lib/design-systems.ts). */
 import type { PageAudience } from "./page-audience.ts";
 
-export type PageKind = "html" | "markdown" | "presentation";
-export const PAGE_KINDS: readonly PageKind[] = ["html", "markdown", "presentation"];
+export type PageKind = "html" | "markdown" | "presentation" | "design";
+export const PAGE_KINDS: readonly PageKind[] = ["html", "markdown", "presentation", "design"];
+/** A kind written as an HTML document that runs its own scripts. */
+export function pageIsHtml(kind: PageKind): boolean {
+  return kind === "html" || kind === "design";
+}
 export type PageAccess = "private" | "org" | "link";
 export type PageStatus = "draft" | "published" | "revoked";
 export type PageVersionState = "proposed" | "published" | "declined";
@@ -268,10 +274,10 @@ export function parsePageOpenMessage(data: unknown): string | null {
 export function pageCsp(kind: PageKind, options: { meta?: boolean; frameAncestors?: string; annotateNonce?: string } = {}): string {
   // Our own scripts on Markdown/presentation: open-link bridge (#1799),
   // annotation, place-keeping. An HTML page already runs inline scripts.
-  const nonce = kind !== "html" && options.annotateNonce ? options.annotateNonce : null;
+  const nonce = !pageIsHtml(kind) && options.annotateNonce ? options.annotateNonce : null;
   const directives = [
     "default-src 'none'",
-    kind === "html" ? "script-src 'unsafe-inline'" : nonce ? `script-src 'nonce-${nonce}'` : "script-src 'none'",
+    pageIsHtml(kind) ? "script-src 'unsafe-inline'" : nonce ? `script-src 'nonce-${nonce}'` : "script-src 'none'",
     "style-src 'unsafe-inline'",
     "img-src data: blob:",
     "media-src data: blob:",
@@ -421,7 +427,7 @@ export interface PagePublishRef {
 }
 
 export type PageProposalInput =
-  | { ok: true; value: { title: string; kind: PageKind; content: string; pageId?: string } }
+  | { ok: true; value: { title: string; kind: PageKind; content: string; pageId?: string; designSystem?: string; designTokens?: unknown } }
   | { ok: false; error: string };
 
 function byteLength(text: string): number {
@@ -436,7 +442,7 @@ export function parsePageProposal(input: unknown): PageProposalInput {
   if (!title) return { ok: false, error: "title: a short title is required." };
   if (title.length > PAGE_LIMITS.title) return { ok: false, error: `title: at most ${PAGE_LIMITS.title} characters.` };
   const kind = record.kind;
-  if (!PAGE_KINDS.includes(kind as PageKind)) return { ok: false, error: "kind: must be html, markdown or presentation." };
+  if (!PAGE_KINDS.includes(kind as PageKind)) return { ok: false, error: "kind: must be html, markdown, presentation or design." };
   const content = record.content;
   if (typeof content !== "string" || !content.trim()) return { ok: false, error: "content: the page's full text is required." };
   if (byteLength(content) > PAGE_LIMITS.contentBytes) return { ok: false, error: `content: at most ${PAGE_LIMITS.contentBytes / 1024} KB.` };
@@ -444,7 +450,23 @@ export function parsePageProposal(input: unknown): PageProposalInput {
   if (pageId !== undefined && pageId !== null && (typeof pageId !== "string" || !/^[A-Za-z0-9_-]{8,40}$/.test(pageId))) {
     return { ok: false, error: "page_id: the id an earlier propose_page returned, or leave it out." };
   }
-  return { ok: true, value: { title, kind: kind as PageKind, content, ...(typeof pageId === "string" ? { pageId } : {}) } };
+  const system = record.design_system;
+  if (system !== undefined && system !== null && (typeof system !== "string" || !system.trim() || system.length > 60)) {
+    return { ok: false, error: "design_system: a design system's id or name (sagax, minimal, editorial, clean, modern, or one saved for this person), or leave it out." };
+  }
+  const tokens = record.design_tokens;
+  if (tokens !== undefined && tokens !== null && (typeof tokens === "string" ? tokens.length > 32_000 : typeof tokens !== "object" || Array.isArray(tokens))) {
+    return { ok: false, error: "design_tokens: the CSS text of a :root block with custom properties (--accent: #4f46e5;), at most 32 KB." };
+  }
+  if ((typeof system === "string" || (tokens !== undefined && tokens !== null)) && kind !== "design") {
+    return { ok: false, error: "design_system and design_tokens go with kind design only." };
+  }
+  return { ok: true, value: {
+    title, kind: kind as PageKind, content,
+    ...(typeof pageId === "string" ? { pageId } : {}),
+    ...(typeof system === "string" ? { designSystem: system.trim() } : {}),
+    ...(tokens !== undefined && tokens !== null ? { designTokens: tokens } : {}),
+  } };
 }
 
 /** A title the person typed (rename): one line, required, capped. Pure. */

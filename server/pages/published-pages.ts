@@ -33,6 +33,7 @@ import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { sanitizePageLook, type PageLook } from "../../src/lib/page-look.ts";
+import { applyDesignSystem, BUILTIN_DESIGN_SYSTEMS, DEFAULT_DESIGN_SYSTEM, DESIGN_SYSTEM_LIMITS, findDesignSystem, ownDesignSystemId, parseDesignTokens, type DesignSystem } from "../../src/lib/design-systems.ts";
 import { threadOwner } from "../threads/thread-privacy.ts";
 import { pageAudienceOf, samePageAudience, type PageAudience } from "../../shared/page-audience.ts";
 import { ANON_STATE_LIMITS, anonymousBy, STATE_LIMITS, stateRulesOf, stateValueJson, type PageStateEntry, type StateRules } from "../../shared/page-state.ts";
@@ -41,6 +42,7 @@ import {
   DEFAULT_PAGES_POLICY,
   PAGE_FRAME_TICKET_MS,
   PAGE_LIMITS,
+  pageIsHtml,
   PAGE_VIEW_PREFIX,
   type PageAccess,
   type PageAnchor,
@@ -164,6 +166,8 @@ export class PublishedPages {
   /** Each person's look (src/lib/page-look.ts), kept apart from the index. */
   private readonly looksFile: string;
   private looksCache: Record<string, PageLook> | null = null;
+  /** Each person's own design systems (#2717), kept apart like the looks. */
+  private readonly designSystemsFile: string;
   private indexUnreadable = false;
   private looksUnreadable = false;
 
@@ -173,6 +177,7 @@ export class PublishedPages {
     this.file = join(dataDir, "published-pages.json");
     this.contentDir = join(dataDir, "published-pages");
     this.looksFile = join(dataDir, "published-pages-looks.json");
+    this.designSystemsFile = join(dataDir, "published-pages-design-systems.json");
     const keyFile = join(dataDir, "published-pages.key");
     if (!existsSync(keyFile)) writeFileSync(keyFile, randomBytes(32), { mode: 0o600 });
     this.key = readFileSync(keyFile);
@@ -304,6 +309,84 @@ export class PublishedPages {
     return look;
   }
 
+  /** A person's own design systems (#2717), newest first. An unreadable
+   * file reads as none: they are rebuilt by the bot from the person's code. */
+  ownDesignSystems(owner: string | undefined): DesignSystem[] {
+    return this.allDesignSystems()[(owner ?? "").toLowerCase()] ?? [];
+  }
+
+  /** The built-in systems, then the person's own. */
+  designSystems(owner: string | undefined): DesignSystem[] {
+    return [...BUILTIN_DESIGN_SYSTEMS, ...this.ownDesignSystems(owner)];
+  }
+
+  /** Keep a person's own system (taken from their code): same name, same
+   * id, replaced. Null when no token is usable. */
+  saveDesignSystem(owner: string | undefined, name: string, tokens: unknown): DesignSystem | null {
+    const clean = parseDesignTokens(tokens);
+    const label = name.replace(/\s+/g, " ").trim().slice(0, DESIGN_SYSTEM_LIMITS.name);
+    if (!clean || !label) return null;
+    const system: DesignSystem = { id: ownDesignSystemId(label), name: label, tokens: clean };
+    const key = (owner ?? "").toLowerCase();
+    const all = { ...this.allDesignSystems() };
+    all[key] = [system, ...(all[key] ?? []).filter((entry) => entry.id !== system.id)].slice(0, DESIGN_SYSTEM_LIMITS.systemsPerOwner);
+    writeFileAtomic(this.designSystemsFile, JSON.stringify({ version: 1, systems: all }), { mode: 0o600 });
+    return system;
+  }
+
+  /** Forget one of the person's own systems. */
+  deleteDesignSystem(owner: string | undefined, id: string): boolean {
+    const key = (owner ?? "").toLowerCase();
+    const all = { ...this.allDesignSystems() };
+    const before = all[key] ?? [];
+    const after = before.filter((entry) => entry.id !== id);
+    if (after.length === before.length) return false;
+    all[key] = after;
+    writeFileAtomic(this.designSystemsFile, JSON.stringify({ version: 1, systems: all }), { mode: 0o600 });
+    return true;
+  }
+
+  private allDesignSystems(): Record<string, DesignSystem[]> {
+    try {
+      const raw = JSON.parse(readFileSync(this.designSystemsFile, "utf8")) as unknown;
+      if (!isRecord(raw) || raw.version !== 1 || !isRecord(raw.systems)) return {};
+      const out: Record<string, DesignSystem[]> = {};
+      for (const [key, list] of Object.entries(raw.systems)) {
+        if (!Array.isArray(list)) continue;
+        out[key] = list.flatMap((entry) => {
+          if (!isRecord(entry) || typeof entry.id !== "string" || typeof entry.name !== "string") return [];
+          const tokens = parseDesignTokens(entry.tokens);
+          return tokens ? [{ id: entry.id, name: entry.name, tokens }] : [];
+        });
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  /** A design's content with its system: the one named, else the person's
+   * tokens saved under that name (or "My design system"), else the one it
+   * already carries, else Sagax. */
+  private designContent(owner: string | undefined, content: string, designSystem?: string, designTokens?: unknown): { ok: true; content: string } | PageError {
+    let system: DesignSystem | undefined;
+    if (designTokens !== undefined) {
+      system = this.saveDesignSystem(owner, designSystem ?? "My design system", designTokens) ?? undefined;
+      if (!system) return refuse(400, "bad_tokens", "design_tokens: no usable CSS custom property (--name: value) was found.");
+    } else if (designSystem) {
+      system = findDesignSystem(this.designSystems(owner), designSystem);
+      if (!system) {
+        const known = this.designSystems(owner).map((entry) => entry.id).join(", ");
+        return refuse(400, "unknown_design_system", `design_system: unknown. Known: ${known}. Send design_tokens to add one from the person's code.`);
+      }
+    } else if (/data-sagax-design-system=/i.test(content)) {
+      return { ok: true, content };
+    } else {
+      system = findDesignSystem(BUILTIN_DESIGN_SYSTEMS, DEFAULT_DESIGN_SYSTEM)!;
+    }
+    return { ok: true, content: applyDesignSystem(content, system) };
+  }
+
   /** The organization's switch for public links (on by default). */
   policy(): PagesPolicy {
     this.load();
@@ -408,8 +491,14 @@ export class PublishedPages {
   /** A bot's proposal: a new page, or a new version of one of this
    * conversation's pages (or of this bot's page for the same person). Never
    * published here. */
-  propose(input: { pageId?: string; ownerId?: string; botId: string; threadId: string; title: string; kind: PageKind; content: string; author?: "person"; by?: string }):
+  propose(input: { pageId?: string; ownerId?: string; botId: string; threadId: string; title: string; kind: PageKind; content: string; author?: "person"; by?: string; designSystem?: string; designTokens?: unknown }):
     { ok: true; page: PageRecord; version: PageVersionRecord } | PageError {
+    if (input.kind === "design" && !input.author) {
+      const owner = input.pageId ? this.get(input.pageId)?.ownerId ?? input.ownerId : input.ownerId;
+      const designed = this.designContent(owner, input.content, input.designSystem, input.designTokens);
+      if (!designed.ok) return designed;
+      input = { ...input, content: designed.content };
+    }
     const pages = this.snapshot();
     const now = this.clock();
     const bytes = Buffer.byteLength(input.content);
@@ -618,7 +707,7 @@ export class PublishedPages {
     const page = this.get(id);
     if (!page || page.currentVersion === null) return {};
     const version = page.versions.find((entry) => entry.n === page.currentVersion);
-    if (!version || version.kind !== "html") return {};
+    if (!version || !pageIsHtml(version.kind)) return {};
     const content = this.content(id, version.n);
     return content === null ? {} : stateRulesOf(content);
   }

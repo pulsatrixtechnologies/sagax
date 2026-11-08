@@ -148,10 +148,13 @@ async function column(view: View): Promise<HTMLElement> {
 const scope = (node: HTMLElement, view: View) =>
   node.querySelector<HTMLElement>("tab" in view ? `[data-bot-profile-panel="${view.tab}"]` : `[data-bot-profile-subpage="${view.page}"]`)!;
 
-/** The hero's appearance block (mascot preview, moves, Reset/Randomize) is
- * the other branch's scope (fix/bot-appearance-scope); HelpTip and menu
- * popovers are closed surfaces, not cards of the column. */
-const OUT_OF_SCOPE = "[data-mascot-hero], [aria-label][data-bot-profile-appearance], [data-bot-profile-appearance-toggle], [data-mascot-play], [data-mascot-move-list], .popover-surface, [role='dialog'], [role='menu'], [role='listbox']";
+/** The mascot editor (preview, moves, character grid, Reset/Randomize),
+ * now the Appearance tab, keeps its own chips and fields (the editor's
+ * scope, fix/bot-appearance-scope); HelpTip and menu popovers are closed
+ * surfaces, not cards of the column. Before/after captures of the
+ * profile (tabs, bare mascot, condensed bar):
+ * docs/screenshots/bot-profile-tabs (#2969). */
+const OUT_OF_SCOPE = "[data-mascot-hero], [data-bot-profile-section='appearance'], [aria-label][data-bot-profile-appearance], [data-bot-profile-appearance-toggle], [data-mascot-play], [data-mascot-move-list], .popover-surface, [role='dialog'], [role='menu'], [role='listbox']";
 const inScope = (node: Element) => !node.closest(OUT_OF_SCOPE) && !node.matches(OUT_OF_SCOPE);
 
 const describeNode = (node: Element) => {

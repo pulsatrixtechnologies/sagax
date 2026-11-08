@@ -15,17 +15,15 @@ import { sectionLabel, TAB_LABEL } from "./cards";
  * tab opens and hides its rows that do not match; the tabs of the others
  * stay plain, the rest dim. Command-F or a slash opens it from anywhere on
  * the page. */
-export function useBotProfileSearch({ rootRef, pages, tabOf, view, appearanceOpen, onOpenCategory, onOpenAppearance }: {
+export function useBotProfileSearch({ rootRef, pages, tabOf, view, onOpenCategory }: {
   rootRef: RefObject<HTMLElement | null>;
   pages: readonly PersonaCategory[];
   tabOf: (id: PersonaCategory) => BotProfileTab;
   /** What is on screen (the tab and its open sub-page): the hit is marked again when it changes. */
   view: string;
-  appearanceOpen: boolean;
   /** Opens the tab and the sub-page that hold a section (V6, #2612); with
    * the query, the sub-page that holds the matched option (#2623). */
   onOpenCategory: (id: PersonaCategory, query?: string) => void;
-  onOpenAppearance: () => void;
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const [searching, setSearching] = useState(false);
@@ -34,15 +32,14 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, appearanceOpe
 
   const results = useMemo(() => personaPagesMatching(pages, q, sectionLabel), [pages, q]);
   const searchHit = q ? results[0] ?? null : null;
-  const matching = new Set(results.filter((id) => id !== "appearance").map(tabOf));
+  const matching = new Set(results.map(tabOf));
   const changeQuery = (value: string) => {
     setQuery(value);
     const next = settingsQuery(value);
     if (!next) return;
     const first = personaPagesMatching(pages, next, sectionLabel)[0];
     if (!first) return;
-    if (first === "appearance") onOpenAppearance();
-    else onOpenCategory(first, next);
+    onOpenCategory(first, next);
   };
   useLayoutEffect(() => {
     const root = searchHit ? rootRef.current?.querySelector<HTMLElement>(`[data-bot-profile-section="${searchHit}"]`) : null;
@@ -60,7 +57,7 @@ export function useBotProfileSearch({ rootRef, pages, tabOf, view, appearanceOpe
       observer.disconnect();
       clearSettingsSearch(root);
     };
-  }, [q, searchHit, view, appearanceOpen]);
+  }, [q, searchHit, view]);
 
   const focusSearch = () =>
     requestAnimationFrame(() => {

@@ -1,15 +1,19 @@
 // The bot's profile page, V6 (#2612, the "Épuré Grok Bot" canvas; before
 // it #2126, #2173, #2271): the surface that edits one bot, filling the main
 // panel in place of the chat. Its top is the bot's appearance, edited in
-// place: a banner in the mascot's colour with the mascot over its lower
-// edge, the name with its title under it in plain grey, who sees it and the
-// owner, the description and an Appearance pill that unfolds the full
-// appearance pane under them. Then three pill tabs:
+// place: a banner in the mascot's colour with the mascot large over its
+// lower edge, no card around it (Grok Bot, JC 2026-11-08), the name with its
+// title under it, centred, who sees it and the owner, the description. The
+// top bar floats over the banner and, once the name scrolls under it, turns
+// into a blurred bar with the small mascot and the name. Then pill tabs:
 //
 // - General: rows under grey labels. Settings (Personality, Model, Before
 //   it acts), Channels (Channels, Shared with), Bot accounts (What it can
 //   use), More (Rules, When it acts alone, Voice, Advanced settings,
 //   Versions).
+// - Appearance: the whole mascot editor (character, shape, colour, style,
+//   moves, Play a move, Randomize); the character picked previews in the
+//   hero.
 // - Knowledge: Its work (Routines, Skills, Folder and memory).
 // - Stats: the bot's usage over 7, 30 or 90 days.
 //
@@ -65,7 +69,7 @@ import { botSectionLock, useBotSectionAvailability, useBotSectionContent } from 
 import { AccountsCard, Block, CardRow, ChannelsCard, Note, ProfileCard, sectionLabel, type Channel } from "./BotProfilePage.tsx-parts/cards";
 import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
 import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
-import { BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
+import { BotProfileInsetStrip, BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
 import { GROUP_LABEL, SUBPAGE_META, SubPage, SubPageRow, SubPageSaveBar } from "./BotProfilePage.tsx-parts/subpages";
 import { SubPageDraftStore, useSubPageDraft } from "./BotProfilePage.tsx-parts/subPageDraft";
 import { discardConfirmRequest, useConfirm } from "../ConfirmProvider";
@@ -137,7 +141,8 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
 
   // A tab with nothing to show this viewer (Stats in Simple mode) is not
   // listed; a link to it lands on General.
-  const tabShown = (id: BotProfileTab) => (id === "stats" ? shown("usage") : botProfileTabPages(id).some(subPageShown));
+  const tabShown = (id: BotProfileTab) =>
+    id === "stats" ? shown("usage") : id === "appearance" ? shown("appearance") : botProfileTabPages(id).some(subPageShown);
   const resolveTab = (next: BotProfileTab): BotProfileTab => (tabShown(next) ? next : "general");
   const tabOf = (id: PersonaCategory): BotProfileTab => resolveTab(botProfileTabOf(resolve(id)) ?? "general");
   const pageOf = (id: PersonaCategory): BotProfileSubPage | null => resolvePage(botProfileSubPageOf(resolve(id)));
@@ -147,9 +152,6 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
     const first = resolvePage(botProfileSubPageFor(section));
     return first ? botProfileTabOfPage(first) : resolveTab(botProfileTabFor(section));
   });
-  // The appearance pane under the header, unfolded by its pill, the mascot
-  // or a link to Appearance.
-  const [appearanceOpen, setAppearanceOpen] = useState(() => personaCategoryForSection(section) === "appearance");
   const [channel, setChannel] = useState<Channel | null>(() => (personaCategoryForSection(section) === "slack" ? "slack" : null));
   const scrollTo = useRef<string | null>(null);
   // The Share popover of the top bar (Grok Bot): the one place the people
@@ -183,13 +185,12 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
     if (from) scrollTo.current = `[data-bot-profile-row="page-${from}"]`;
   };
 
-  // Where a section lives: the header (identity, appearance), a channel
-  // row, or a block on its sub-page.
+  // Where a section lives: the header (identity), the Appearance tab, a
+  // channel row, or a block on its sub-page.
   const placeOf = (target: BotSettingsSection): { category: PersonaCategory | null; selector: string | null } => {
     const category = personaCategoryForSection(target);
     if (!category) return { category, selector: null };
     if (category === "overview") return { category, selector: "[data-bot-profile-title]" };
-    if (category === "appearance") return { category, selector: '[data-bot-profile-section="appearance"]' };
     const id = resolve(category);
     return { category: id, selector: id === "slack" ? '[data-bot-profile-row="slack"]' : `[data-bot-profile-section="${id}"]` };
   };
@@ -207,8 +208,7 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
     if (target === "routines") { openPage("routines"); return; }
     const { category, selector } = placeOf(target);
     if (!category) return;
-    if (category === "appearance") setAppearanceOpen(true);
-    else if (category !== "overview") openCategory(category);
+    if (category !== "overview") openCategory(category);
     scrollTo.current = selector;
   };
 
@@ -424,9 +424,7 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
     pages,
     tabOf,
     view: `${tab}/${page ?? ""}`,
-    appearanceOpen,
     onOpenCategory: openCategory,
-    onOpenAppearance: () => setAppearanceOpen(true),
   });
 
   const tabs: readonly BotProfileTab[] = BOT_PROFILE_TABS.filter(tabShown);
@@ -458,20 +456,28 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
   const privateBot = personaSharingSummary(bot) === t("botSettings.sharing.empty");
   // The banner is a wash of the mascot's colour (#2173, back after #2313):
   // its hex goes to the stylesheet as a variable; a neutral mascot keeps a
-  // visible grey there. The top bar carries the wash's top colour so the
-  // bar and the banner read as one coloured header.
+  // visible grey there. The banner scrolls with the page under the clear
+  // top bar, so nothing cuts it.
   const bannerColor = MAUS_COLORS[bot.color] ?? MAUS_COLORS.green;
   const bannerStyle = { "--bot-profile-banner-color": bannerColor } as CSSProperties;
   const bannerPalette = mascotColorGroup(bot.color);
 
-  const { heroSlot, hero } = useBotProfileHero({
-    bot,
-    derived,
-    appearanceShown: shown("appearance"),
-    appearanceLocked: lockOf("appearance") !== null,
-    appearanceOpen,
-    onToggleAppearance: () => setAppearanceOpen((prev) => !prev),
-  });
+  const { heroSlot, hero } = useBotProfileHero({ bot, derived });
+
+  // Once the name scrolls under the top bar, the bar turns opaque (blurred)
+  // and shows the small mascot and the name: the content scrolls under it,
+  // never cut by a coloured band (JC 2026-11-08).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [condensed, setCondensed] = useState(false);
+  const onScroll = () => {
+    const scroller = scrollRef.current;
+    const title = scroller?.querySelector<HTMLElement>("[data-bot-profile-title]");
+    if (!scroller || !title) return;
+    const bar = scroller.querySelector<HTMLElement>("[data-bot-profile-topbar]")?.offsetHeight ?? 56;
+    const titleTop = title.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    const next = titleTop < bar;
+    setCondensed((prev) => (prev === next ? prev : next));
+  };
 
   return (
     <MascotHeroSlotContext.Provider value={heroSlot}>
@@ -497,34 +503,31 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
       }}
       className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-app text-ink outline-none"
     >
-      <BotProfileTopBar
-        bot={bot}
-        onClose={onClose}
-        privateBot={privateBot}
-        shareShown={shown("sharing")}
-        shareOpen={shareOpen}
-        onShareOpenChange={setShareOpen}
-        bannerStyle={bannerStyle}
-        bannerPalette={bannerPalette}
-      />
-      <div data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        {/* Banner in the mascot's colour under the bar, the hero card over its lower edge. */}
+      <BotProfileInsetStrip />
+      <div ref={scrollRef} onScroll={onScroll} data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        {/* The bar floats over the banner (sticky, no height of its own in
+            the flow) and the banner scrolls away under it with the page. */}
+        <BotProfileTopBar
+          bot={bot}
+          onClose={onClose}
+          privateBot={privateBot}
+          shareShown={shown("sharing")}
+          shareOpen={shareOpen}
+          onShareOpenChange={setShareOpen}
+          condensed={condensed}
+        />
+        {/* Banner in the mascot's colour from the very top, the mascot over its lower edge. */}
         <div
           aria-hidden="true"
           data-bot-profile-banner=""
           data-bot-profile-banner-palette={bannerPalette}
           style={bannerStyle}
-          className="bot-profile-banner h-[96px] w-full shrink-0"
+          className="bot-profile-banner h-[150px] w-full shrink-0"
         />
         {/* One centred column, a comfortable reading width (Grok Bot), a
             16px gutter on a phone. */}
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[760px] flex-col px-4 pb-10 sm:px-6">
-          <BotProfileHeader
-            bot={bot}
-            derived={derived}
-            hero={hero}
-            appearance={appearanceOpen && shown("appearance") ? body("appearance") : null}
-          />
+          <BotProfileHeader bot={bot} derived={derived} hero={hero} />
 
           {(!page || search.searching) && <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} />}
 
@@ -559,7 +562,9 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
                       {block("usage")}
                     </>
                   )
-                : BOT_PROFILE_TAB_GROUPS[tab].map((group) => {
+                : tab === "appearance"
+                  ? block("appearance")
+                  : BOT_PROFILE_TAB_GROUPS[tab].map((group) => {
                     const rows = group.pages.filter(subPageShown);
                     if (rows.length === 0) return null;
                     return (

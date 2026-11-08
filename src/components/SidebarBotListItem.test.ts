@@ -219,7 +219,7 @@ describe("BotListItem", () => {
     const markup = renderRow(bot({ title: "ConnectWise Ops & MS 365" }));
     const pill = markup.match(/<span data-bot-role-tag=""[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? "";
     expect(pill).toContain(">ConnectWise Ops &amp; MS 365<");
-    for (const token of ["rounded-[4px]", "border-[0.5px]", "text-[11px]", "leading-4", "px-1", "py-px", "basis-[2em]", "max-w-fit", "text-sidebar-ink-secondary"]) {
+    for (const token of ["rounded-[4px]", "border-[0.5px]", "text-[11px]", "leading-[14px]", "px-1.5", "py-0.5", "justify-center", "self-center", "max-w-fit", "text-sidebar-ink-secondary"]) {
       expect(pill.split(/[\s"]/)).toContain(token);
     }
     expect(markup.indexOf("data-bot-role-tag")).toBeGreaterThan(markup.indexOf(">Atlas<"));

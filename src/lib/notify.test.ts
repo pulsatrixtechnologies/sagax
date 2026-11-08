@@ -263,7 +263,7 @@ describe("notifications that stay", () => {
     const context = "Deux copies du rapport diffèrent.\n\nCopie : Locale · Date : 7 nov.\nCopie : Serveur · Date : 8 nov.\n\n• Locale : Garde tes changements d'hier\n• Serveur : Reprend la version du serveur, plus récente de 2 Ko";
     const onOpen = vi.fn();
     showNotification(
-      { ...frame, kind: "question", title: "Katarina : Je garde la copie locale ou celle du serveur ?", body: "Je garde la copie locale ou celle du serveur ?", requestId: "q-1", cardId: "m-q", context },
+      { ...frame, kind: "question", title: "Nova : Je garde la copie locale ou celle du serveur ?", body: "Je garde la copie locale ou celle du serveur ?", requestId: "q-1", cardId: "m-q", context },
       onOpen,
     );
     expect(sent).toHaveLength(1);

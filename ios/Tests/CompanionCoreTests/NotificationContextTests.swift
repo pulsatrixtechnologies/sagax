@@ -37,7 +37,7 @@ final class NotificationContextTests: XCTestCase {
 
     func testTheCaptureReplayOffersOpenOnlyAndOpensTheCard() throws {
         let userInfo: [AnyHashable: Any] = [
-            "aps": ["alert": ["title": "Ember", "body": "Le billet #297048 a 3 entrées de temps sans note.\nMembre : JC · Heures : 2,5"], "category": "SAGAX_OPEN"],
+            "aps": ["alert": ["title": "Ember", "body": "Le billet #41872 a 3 entrées de temps sans note.\nMembre : Alex · Heures : 2,5"], "category": "SAGAX_OPEN"],
             "kind": "approval", "threadId": "t-ember", "botId": "b-ember", "needsYou": true, "cardId": "m-card",
         ]
         let payload = try XCTUnwrap(PushPayload(userInfo: userInfo))

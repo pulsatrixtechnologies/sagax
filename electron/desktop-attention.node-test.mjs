@@ -63,7 +63,7 @@ test("a request is trimmed, capped, and needs a title", () => {
 
 test("#2909: a decision's context keeps its lines and its card target", () => {
   const request = normalizeAttentionRequest({
-    title: "Katarina",
+    title: "Nova",
     body: "Deux copies diffèrent.\n\n\n\nCopie : Locale   · Date : 7 nov.\r\n• Locale : Garde tes changements",
     target: { botId: "b", threadId: "t", requestId: "q-1", cardId: "m-q", extra: "no" },
   });

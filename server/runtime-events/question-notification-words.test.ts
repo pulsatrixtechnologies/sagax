@@ -13,7 +13,7 @@ const deps: FramePushDeps = {
   achievementName: () => undefined,
   now: () => 42,
 };
-const BOT = { id: "b-ember", name: "Ember", threadId: "t-ember" };
+const BOT = { id: "b-atlas", name: "Atlas", threadId: "t-atlas" };
 
 /** The notify frame all the way to the APNs payload the phone reads. */
 function phonePayload(note: ReturnType<typeof deliverableNotification>): Record<string, unknown> {
@@ -26,25 +26,25 @@ function phonePayload(note: ReturnType<typeof deliverableNotification>): Record<
 
 describe("question and needs-you notifications carry their context (#2909)", () => {
   it("replays the capture: a routine's needs-you with three long answers shows the context and Open only, never cut buttons", () => {
-    // the capture: Ember's routine stopped on a decision whose answers are sentences
+    // the capture: Atlas's routine stopped on a decision whose answers are sentences
     const card = {
       kind: "question" as const,
-      items: [{ text: "Le billet #297048 a 3 entrées de temps sans note.\n\n| Membre | Heures |\n|---|---|\n| JC | 2,5 |\n| Zach | 1,0 |\n\nJe fais quoi avec ces entrées ?" }],
+      items: [{ text: "Le billet #41872 a 3 entrées de temps sans note.\n\n| Membre | Heures |\n|---|---|\n| Alex | 2,5 |\n| Sam | 1,0 |\n\nJe fais quoi avec ces entrées ?" }],
       choices: [
         "Ajouter une note générique à chaque entrée et les soumettre",
         "Laisser les entrées telles quelles et te les envoyer pour révision",
         "Supprimer les entrées et les recréer à partir de l'agenda",
       ],
     };
-    const words = needsYouNotificationWords(card, "Temps CW", "Ember");
-    const note = deliverableNotification("needs-you", BOT, "t-ember", words.line, {
+    const words = needsYouNotificationWords(card, "Temps CW", "Atlas");
+    const note = deliverableNotification("needs-you", BOT, "t-atlas", words.line, {
       routineName: "Temps CW", title: words.title, context: words.context, choices: words.choices, cardId: "m-card",
     })!;
     expect(note.choices).toEqual(card.choices);
     expect(note.choiceLabels).toBeUndefined();
     expect(note.cardId).toBe("m-card");
     // the context is readable: the table as text, the answers whole
-    expect(note.context).toContain("Membre : JC · Heures : 2,5");
+    expect(note.context).toContain("Membre : Alex · Heures : 2,5");
     expect(note.context).toContain("Laisser les entrées telles quelles et te les envoyer pour révision");
     expect(note.context).not.toContain("|---|");
 
@@ -53,14 +53,14 @@ describe("question and needs-you notifications carry their context (#2909)", () 
     expect(aps.category).toBe(OPEN_CATEGORY);
     expect(payload.choices).toBeUndefined();
     expect(payload.cardId).toBe("m-card");
-    expect(aps.alert.body).toContain("Le billet #297048 a 3 entrées de temps sans note.");
-    expect(aps.alert.body).toContain("Membre : Zach · Heures : 1,0");
+    expect(aps.alert.body).toContain("Le billet #41872 a 3 entrées de temps sans note.");
+    expect(aps.alert.body).toContain("Membre : Sam · Heures : 1,0");
     expect(aps.alert.body).not.toMatch(/…$/);
   });
 
   it("legible answers become whole buttons, each labelled within the limit", () => {
-    const words = needsYouNotificationWords({ kind: "question", items: [{ text: "Le disque est plein à 95 %. Je fais quoi ?" }], choices: ["Purger : vider la cache des builds du mois", "Attendre"] }, undefined, "Ember");
-    const note = deliverableNotification("needs-you", BOT, "t-ember", words.line, { title: words.title, context: words.context, choices: words.choices })!;
+    const words = needsYouNotificationWords({ kind: "question", items: [{ text: "Le disque est plein à 95 %. Je fais quoi ?" }], choices: ["Purger : vider la cache des builds du mois", "Attendre"] }, undefined, "Atlas");
+    const note = deliverableNotification("needs-you", BOT, "t-atlas", words.line, { title: words.title, context: words.context, choices: words.choices })!;
     expect(note.choiceLabels).toEqual(["Purger", "Attendre"]);
     const payload = phonePayload(note);
     expect((payload.aps as { category: string }).category).toBe(NEEDS_YOU_CATEGORY);
@@ -71,14 +71,14 @@ describe("question and needs-you notifications carry their context (#2909)", () 
   it("a question names the bot that asked, says what each answer does and opens on its card", () => {
     const words = questionNotificationWords({
       permission: false,
-      asker: "Katarina",
-      routed: "Ember",
+      asker: "Nova",
+      routed: "Atlas",
       summary: "Deux copies du rapport diffèrent. Je garde la copie locale ou celle du serveur ?",
       questions: [{ question: "Je garde la copie locale ou celle du serveur ?", options: [{ label: "Locale", description: "Garde tes changements d'hier" }, { label: "Serveur" }] }],
       options: ["Locale", "Serveur"],
     });
-    expect(words.title).toBe("Katarina : Je garde la copie locale ou celle du serveur ?");
-    const note = deliverableNotification("question", BOT, "t-ember", words.line, {
+    expect(words.title).toBe("Nova : Je garde la copie locale ou celle du serveur ?");
+    const note = deliverableNotification("question", BOT, "t-atlas", words.line, {
       title: words.title, requestId: "q-1", choices: ["Locale", "Serveur"], choiceLabels: words.choiceLabels, choiceDetails: words.choiceDetails, context: words.context, cardId: "m-q",
     })!;
     expect(note.context).toContain("• Locale : Garde tes changements d'hier");

@@ -720,6 +720,7 @@ import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
 import { createDelegatedLevel } from "./host/delegated-level.ts";
 import { createLiveApprovalMode } from "./host/live-approval.ts";
 import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./waits/wait-host.ts";
+import { HEARTBEAT_PATH, HeartbeatManager } from "./heartbeat/heartbeat.ts";
 import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits.ts";
 import { createReadAndDraft } from "./read-and-draft.ts";
 import { createSavedSteps, savedStepsEnabled } from "./saved-steps/saved-steps.ts";
@@ -19409,6 +19410,14 @@ const waitsBoot = createWaitsBootstrap({
   cloudHome: false
 });
 const botWaits = waitsBoot.waits;
+// #2692: HEARTBEAT.md, probes first, the model only on a gap, in the bot's main chat.
+const heartbeat = new HeartbeatManager({
+  bots: () => store.bots.filter((bot) => !bot.hidden && !archivedAgent(bot)).map((bot) => ({ id: bot.id, name: bot.name })),
+  mainThread: (botId) => botMainThread(botId),
+  read: (botId) => readMemoryDoc(botId, HEARTBEAT_PATH).text,
+  enqueue: (input) => routines!.enqueueWebhook(input),
+});
+setInterval(() => { void heartbeat.tick().catch(reportBackgroundError); }, 60_000).unref?.();
 store.onChange((change) => {
   if (change.type === "bot" && store.bot(change.botId)?.busy) botWaits.noteBotBusy(change.botId);
 });

@@ -266,7 +266,7 @@ export interface WorkspaceEntry {
   budget?: WorkspaceBudget;
 }
 
-const EDITABLE = [/^MEMORY\.md$/, /^RULES\.md$/, /^rules\/[^/]+\.md$/, /^memory\/[^/]+\.md$/, /^memory\/log\/[^/]+\.md$/, /^docs\/[^/]+\.md$/];
+const EDITABLE = [/^MEMORY\.md$/, /^RULES\.md$/, /^HEARTBEAT\.md$/, /^rules\/[^/]+\.md$/, /^memory\/[^/]+\.md$/, /^memory\/log\/[^/]+\.md$/, /^docs\/[^/]+\.md$/];
 
 /** Where a path sits in the load order. MEMORY.md loads every turn only
  * while memory is on. */

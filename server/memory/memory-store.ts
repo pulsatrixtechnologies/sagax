@@ -38,11 +38,13 @@ export const MEMORY_INDEX = "MEMORY.md";
  * store too, so the editor, the journal and its revert treat them exactly
  * like memory files: same containment, scrub, modes and conflict check. */
 export const RULES_PATH = "RULES.md";
+/** The heartbeat checklist (server/heartbeat/heartbeat.ts): the person and the bot both edit it. */
+export const HEARTBEAT_FILE = "HEARTBEAT.md";
 /** The folder of the extra rule sets (server/rules/rule-sets.ts): one markdown
  * file per set, `rules/<id>.md`. RULES.md stays the first set's file. */
 export const RULE_SETS_DIR = "rules";
 
-export type MemoryDocKind = "index" | "topic" | "log" | "dream" | "rules" | "ruleset" | "doc";
+export type MemoryDocKind = "index" | "topic" | "log" | "dream" | "rules" | "ruleset" | "doc" | "heartbeat";
 
 export interface MemoryDocRef {
   /** The workspace-relative path as the API spells it. */
@@ -90,6 +92,7 @@ export function parseMemoryPath(path: string): MemoryDocRef {
   if (typeof path !== "string" || !path) throw pathError(path);
   if (path === MEMORY_INDEX) return { path, kind: "index", name: MEMORY_INDEX };
   if (path === RULES_PATH) return { path, kind: "rules", name: RULES_PATH };
+  if (path === HEARTBEAT_FILE) return { path, kind: "heartbeat", name: HEARTBEAT_FILE };
   const parts = path.split("/");
   if (parts.length === 2 && parts[0] === DOCS_DIR && isMemoryTopicName(parts[1])) {
     return { path, kind: "doc", name: parts[1] };
@@ -116,6 +119,7 @@ function assertBotId(botId: string): void {
 function relativeSegments(ref: MemoryDocRef): string[] {
   if (ref.kind === "index") return [MEMORY_INDEX];
   if (ref.kind === "rules") return [RULES_PATH];
+  if (ref.kind === "heartbeat") return [HEARTBEAT_FILE];
   if (ref.kind === "doc") return [DOCS_DIR, ref.name];
   if (ref.kind === "ruleset") return [RULE_SETS_DIR, ref.name];
   if (ref.kind === "topic") return ["memory", ref.name];
@@ -276,6 +280,11 @@ export function workspaceDocPaths(botId: string): string[] {
     if (lstatSync(join(root, RULES_PATH)).isFile()) paths.push(RULES_PATH);
   } catch {
     // no rules file: nothing to watch
+  }
+  try {
+    if (lstatSync(join(root, HEARTBEAT_FILE)).isFile()) paths.push(HEARTBEAT_FILE);
+  } catch {
+    // no heartbeat checklist: nothing to watch
   }
   return [
     ...paths,

@@ -18201,7 +18201,15 @@
       "botEvents.routineHint": "45468fdd0297f890c61ec46873886153d9d3f9ace36bb510c8285f1bc1285aef",
       "botEvents.secretOnce": "791b156fd247483cc997e5cbf98ddc78ecbd6ae8be4fab070a72803835dd29b9",
       "botEvents.copySecret": "9b80d4b38e70c8c562dffec5cfb07d5de158e8c00998306582e2ded2ebd09ee0",
-      "botEvents.secretDone": "11a6767d5674c7e45f7e00dc525762275b3a48491ad6045427d2609cc496c516"
+      "botEvents.secretDone": "11a6767d5674c7e45f7e00dc525762275b3a48491ad6045427d2609cc496c516",
+      "settings.group.signals": "31433674e848cae23cf48e6b6758e069b4c8008d0d2f1dafbc32b453a3fe4055",
+      "settings.signals.budget.title": "7b0a1f03fc02d5fc1940e3d55c594002150a8924dc6c3f87566f980d579a48a7",
+      "settings.signals.budget.description": "48d43606a3972ff743555e45580402792304fa792064378cec98a46cd1fd4d28",
+      "settings.signals.budget.perDay": "3e5c349bc2ed886b3ad948abb5082f7562ce4a78a93ab3776104ade3aa762321",
+      "settings.signals.quiet.title": "bf0671dd69c663bf66f170765d97a0b43a2140a68c0e5aea2abadc3af63d0a39",
+      "settings.signals.quiet.description": "b8f1c6ff63713fb36f15b5a216851fb2824bae3cdef7d1b23def1f1a6f22ca2f",
+      "settings.signals.quiet.off": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "settings.signals.quiet.range": "c72e51fdcb01a6213c788a9ca09ff2747acff350f40634bd0e56feb477e1b1e8"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

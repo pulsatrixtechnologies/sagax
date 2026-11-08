@@ -49,7 +49,10 @@ function observePushFrame(payload: Record<string, unknown>) {
     for (const message of messages) {
       // "Me joindre" (server/reach-me/): a card follows the person's choice
       // for its bot (push or not, their hours) and goes out by their other channels
-      if (!host.reachMeService || host.reachMeService.allowsPush(message)) host.pushHub.submit(message);
+      // #2695: the person's signal level, daily budget and quiet hours come first
+      // (an urgent card always goes); what waits is one line of the next brief
+      const signal = host.signalGate ? host.signalGate.decide(message) : "push";
+      if (signal === "push" && (!host.reachMeService || host.reachMeService.allowsPush(message))) host.pushHub.submit(message);
       host.reachMeService?.cardRaised(message);
     }
   } catch (error) {

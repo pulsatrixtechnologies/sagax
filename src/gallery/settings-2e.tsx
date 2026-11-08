@@ -3,9 +3,11 @@
  * other computers with Rename and Remove. &skin=<id>, &lang=<code>. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { StoreProvider } from "../state/store";
 import { AccessibilityGroup } from "../components/settings/AppearanceSettings";
 import { BotWorkplaceSettings } from "../components/settings/BotWorkplaceSettings";
 import { TimeZoneRows } from "../components/settings/TimeZoneSettings";
+import { SignalSettings } from "@/components/settings/SignalSettings";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { SettingsGroup } from "../components/SettingsPrimitives";
 import type { DesktopBridgeStatus } from "../lib/desktop-bridge";
@@ -49,6 +51,7 @@ function Gallery() {
         <SettingsGroup title={t("settings.group.appearance")} groupId="appearance">
           <TimeZoneRows />
         </SettingsGroup>
+        <SignalSettings />
         <NotificationSettings />
         <SettingsGroup title={t("settings.section.computer")} groupId="computer">
           <BotWorkplaceSettings status={status} />
@@ -58,4 +61,4 @@ function Gallery() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<StrictMode><Gallery /></StrictMode>);
+createRoot(document.getElementById("root")!).render(<StrictMode><StoreProvider><Gallery /></StoreProvider></StrictMode>);

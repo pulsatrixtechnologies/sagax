@@ -8,7 +8,7 @@ import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { DesktopCapabilitiesProvider } from "@/components/DesktopCapabilities";
 import { OptionCard } from "@/components/OptionCard";
-import { RelayViaLabel } from "@/components/RelayViaLabel";
+import { RelayTraceLine, RelayViaLabel } from "@/components/RelayViaLabel";
 import { loadLocale } from "@/lib/i18n";
 import { applySkin, type SkinId } from "@/lib/skins";
 import { CHAT_BUBBLE_WIDTH_CLASS } from "@/lib/chat-bubble-width";
@@ -58,6 +58,18 @@ function Preview() {
         <Row id="proactive">
           <RelayViaLabel message={wake} />
           <OptionCard botId="preview-bot" threadId="t" message={wake} />
+        </Row>
+        <Row id="mcp-ask">
+          <RelayViaLabel message={{ relayVia: "mcp", relayAsk: { text: "Ferme les billets en double du client et lie-les au billet maître, puis dis-moi combien il en reste ouverts.", by: "Claude Code" } }} />
+          <Bubble>J'ai fermé les 3 billets en double. Il en reste 2 ouverts.</Bubble>
+        </Row>
+        <Row id="trace-failed">
+          <RelayViaLabel message={{ relayVia: "mcp", relayAsk: { text: "Résume les billets de la semaine", by: "Claude Code" } }} />
+          <RelayTraceLine message={{ relayTrace: "failed", text: "" }} />
+        </Row>
+        <Row id="trace-silent">
+          <RelayViaLabel message={{ relayVia: "routine" }} />
+          <RelayTraceLine message={{ relayTrace: "silent", text: "" }} />
         </Row>
         <Row id="teammate">
           <RelayViaLabel message={{ relayVia: "teammate" }} />

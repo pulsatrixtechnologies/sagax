@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { BriefStore, TOPIC_HALF_LIFE_MS } from "../proactive/background-brief.ts";
 
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
-import { mirrorBackgroundReply, mirrorLateRunReply, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
+import { mirrorBackgroundReply, mirrorLateRunReply, RELAY_GROUP_MS, RELAY_RECENT_ROWS, RELAY_TEXT_MAX, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
 
 const ATLAS: AttentionBot = { id: "bot-atlas", name: "Atlas" };
 const REPORT = "- [HUMAIN] **100201** (board 1) : decide which client it belongs to.\n- [HUMAIN] **100202** : set it to Completed by hand.\n\nNo writes.";
@@ -246,5 +246,84 @@ describe("mirrorBackgroundReply (#2901: nothing invisible)", () => {
     secret.deps.task = (_botId, threadId) => ({ threadId, title: "x", confidential: true }) as never;
     secret.say("work", "Secret.");
     expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, secret.deps)).toBe(false);
+  });
+});
+
+describe("mirrorBackgroundReply (#2915)", () => {
+  const mcp = () => {
+    const w = world();
+    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "mcp" : undefined;
+    return w;
+  };
+  const ask = (w: ReturnType<typeof world>, text: string) => {
+    const list = w.threads.get("work") ?? [];
+    list.push({ id: `ask-${list.length}`, at: list.length, role: "user", kind: "text", text, sender: { name: "Claude Code" } } as unknown as WireMessage);
+    w.threads.set("work", list);
+  };
+  const copies = (w: ReturnType<typeof world>) => (w.threads.get("main") ?? []).filter((row) => row.relayOf);
+
+  it.each([
+    ["failed", { ok: false }],
+    ["stopped", { ok: true, stopped: true }],
+    ["silent", { ok: true }],
+  ] as const)("leaves one trace line for a %s turn, never an earlier turn's words", (trace, outcome) => {
+    const w = mcp();
+    w.say("work", "Earlier answer.", "turn-0");
+    ask(w, "Do the thing");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-9", ...outcome }, w.deps)).toBe(true);
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-9", ...outcome }, w.deps)).toBe(false);
+    const rows = copies(w);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ relayTrace: trace, relayVia: "mcp", relayAsk: { text: "Do the thing", by: "Claude Code" } });
+    expect(rows[0]!.text).not.toContain("Earlier answer.");
+  });
+
+  it("labels the copy with what was asked and by whom", () => {
+    const w = mcp();
+    ask(w, "Close the duplicates");
+    w.say("work", "Done, 3 closed.");
+    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps);
+    expect(copies(w)[0]).toMatchObject({ text: "Done, 3 closed.", relayAsk: { text: "Close the duplicates", by: "Claude Code" } });
+  });
+
+  it("folds a burst into one row and caps a long reply", () => {
+    const w = mcp();
+    let clock = 1_000;
+    w.deps.now = () => clock;
+    ask(w, "First");
+    w.say("work", "One.", "turn-1");
+    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps);
+    const first = copies(w)[0]!;
+    clock = first.at + 1;
+    ask(w, "Second");
+    w.say("work", "Two.", "turn-2");
+    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-2", ok: true }, w.deps);
+    expect(copies(w)).toHaveLength(1);
+    expect(copies(w)[0]!.text).toContain("> Second");
+    expect(copies(w)[0]!.relayGroup).toHaveLength(1);
+    // the second turn is not copied again
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-2", ok: true }, w.deps)).toBe(false);
+    clock += RELAY_GROUP_MS * 2;
+    w.say("work", "x".repeat(RELAY_TEXT_MAX * 2), "turn-3");
+    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-3", ok: true }, w.deps);
+    expect(copies(w)).toHaveLength(2);
+    expect(copies(w)[1]!.text!.length).toBeLessThanOrEqual(RELAY_TEXT_MAX + 2);
+  });
+
+  it("reads only the chat's newest rows for the dedupe", () => {
+    const w = mcp();
+    const asked: number[] = [];
+    w.deps.messages = ((threadId: string) => { if (threadId === "main") throw new Error("whole chat read"); return w.threads.get(threadId) ?? []; }) as never;
+    w.deps.recent = (threadId, limit) => { asked.push(limit); return (w.threads.get(threadId) ?? []).slice(-limit); };
+    w.say("work", "Fini.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
+    expect(asked).toEqual([RELAY_RECENT_ROWS]);
+  });
+
+  it("mirrors an archived thread an AI client continues", () => {
+    const w = mcp();
+    w.deps.task = (_botId, threadId) => ({ threadId, title: "x", archivedAt: 5 }) as never;
+    w.say("work", "Still here.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
   });
 });

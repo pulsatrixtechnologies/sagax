@@ -31,7 +31,7 @@ import { ConversationRoutineToggle } from "../RoutineToggleLine";
 import { CallRecordRow } from "../CallRecordRow";
 import { DataResultChip } from "../DataResultChip";
 import { ParallelResultLabel, ParallelTaskCard } from "../ParallelTaskCard";
-import { RelayViaLabel } from "../RelayViaLabel";
+import { RelayTraceLine, RelayViaLabel } from "../RelayViaLabel";
 import { CompactionChip, DigestChip } from "../DigestChip";
 import { ScreenFrame } from "../ScreenFrame";
 import { VideoPlayerWidget } from "../video/VideoPlayerWidget";
@@ -427,6 +427,8 @@ export function MessagesListItem({
         if (!user && isPureLeakedSystemHarnessMessage(m.text) && !m.attachments?.length) {
           return null;
         }
+        // #2915: a background turn that left nothing to copy: one trace line
+        if (!user && m.relayVia && m.relayTrace) return <><RelayViaLabel message={m} /><RelayTraceLine message={m} /></>;
         return (
           <>
           {m.parallelTask?.role === "result" && <ParallelResultLabel message={m} />}

@@ -243,6 +243,16 @@ describe("background questions land in the bot's chat (#2901)", () => {
     expect(f.store.messagesFor("human")[0]!.card).toMatchObject({ answered: "answer", answeredText: question.options[1] });
   });
 
+  it("asks for the provenance once per card (#2915)", () => {
+    const f = fixture();
+    f.deps.rootFor = threadId => threadId === "mcp-hidden" ? "human" : undefined;
+    let calls = 0;
+    f.deps.via = threadId => { calls += 1; return threadId === "mcp-hidden" ? "mcp" : undefined; };
+    f.store.appendMessage("mcp-hidden", { role: "bot", kind: "options", card: { title: "Q", subtitle: "A, ou B ?", options: ["A", "B"], requestId: "ask-choice-3" } });
+    expect(f.store.messagesFor("human")[0]).toMatchObject({ relayVia: "mcp" });
+    expect(calls).toBe(1);
+  });
+
   it("never copies a confidential conversation", () => {
     const f = fixture();
     f.deps.rootFor = () => "human";

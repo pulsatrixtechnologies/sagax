@@ -68,7 +68,7 @@ export type { RoutineRunCardData } from "../../../shared/routine-run";
 export type { OptionCardData, SecretRequestCardData } from "./model-cards";
 import type { OptionCardData, SecretRequestCardData } from "./model-cards";
 
-export interface Message extends Pick<import("../../../shared/wire").WireMessage, "widget" | "app" | "routineToggle" | "pagePublish" | "requested" | "outbound" | "dataContext" | "roster" | "signIn" | "relayVia" | "relayOf"> {
+export interface Message extends Pick<import("../../../shared/wire").WireMessage, "widget" | "app" | "routineToggle" | "pagePublish" | "requested" | "outbound" | "dataContext" | "roster" | "signIn" | "relayVia" | "relayOf" | "relayTrace" | "relayAsk" | "relayGroup"> {
   id: string;
   role: "bot" | "user";
   kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";

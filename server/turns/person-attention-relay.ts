@@ -57,6 +57,10 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
    * routine, proactive wake, teammate work); undefined for their own,
    * confidential or parallel threads. */
   relayVia?(botId: string, threadId: string): WireMessage["relayVia"];
+  /** #2915: the thread's newest rows (at most `limit`), oldest first: the
+   * mirror's dedupe and burst read only these, never the whole chat. */
+  recent?(threadId: string, limit: number): readonly WireMessage[];
+  now?(): number;
 }
 
 const ACTIVE_RUN = new Set(["queued", "running", "waiting"]);
@@ -78,6 +82,50 @@ export function turnWords(messages: readonly WireMessage[], turnId: string | und
   const rows = turnId ? own.filter((message) => message.turnId === turnId) : own.slice(-1);
   const picked = rows.length ? rows : own.slice(-1);
   return { text: picked.map((message) => message.text ?? "").join("\n\n"), last: picked.at(-1) };
+}
+
+/** #2915: the bot's words of exactly this turn. Never an earlier turn's:
+ * a turn that said nothing has no words (turnWords falls back to the last
+ * line, which a mirror would copy a second time). */
+export function ownTurnWords(messages: readonly WireMessage[], turnId: string | undefined): { text: string; last?: WireMessage } {
+  if (!turnId) return turnWords(messages, undefined);
+  const rows = messages.filter((message) => message.role === "bot" && message.kind === "text" && !message.from && !message.attention
+    && typeof message.text === "string" && message.turnId === turnId);
+  return { text: rows.map((message) => message.text ?? "").join("\n\n"), last: rows.at(-1) };
+}
+
+/** #2915: the longest text a mirrored background reply carries, and the
+ * window in which a burst of replies folds into one row. */
+export const RELAY_TEXT_MAX = 4000;
+export const RELAY_ASK_MAX = 280;
+export const RELAY_GROUP_MS = 60_000;
+/** How many of the chat's newest rows the mirror reads (dedupe, burst). */
+export const RELAY_RECENT_ROWS = 50;
+
+/** Cut a long text at a line break near the limit, marked with "…". */
+export function capRelayText(text: string, max = RELAY_TEXT_MAX): string {
+  if (text.length <= max) return text;
+  const cut = text.lastIndexOf("\n", max - 1);
+  const head = (cut > max / 2 ? text.slice(0, cut) : text.slice(0, max - 1)).trimEnd();
+  return `${head}\n…`;
+}
+
+/** #2915: what was asked of the bot for this turn: the last line written to
+ * it before the turn's first answer (an AI client's send_prompt, a
+ * teammate's ask), and who asked. */
+export function turnAsk(messages: readonly WireMessage[], turnId: string | undefined, opener?: { name?: string }): WireMessage["relayAsk"] {
+  const first = turnId ? messages.findIndex((message) => message.turnId === turnId) : -1;
+  for (let index = (first >= 0 ? first : messages.length) - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    // an earlier turn's answer: what came before it was asked of that turn
+    if (message.role === "bot" && message.kind === "text" && !message.from && message.turnId && message.turnId !== turnId) return undefined;
+    const asked = message.role === "user" || (message.role === "bot" && Boolean(message.from));
+    const text = asked && typeof message.text === "string" ? message.text.replace(/\s+/g, " ").trim() : "";
+    if (!text) continue;
+    const by = (message.from?.name || message.sender?.name || opener?.name || "").trim();
+    return { text: text.length > RELAY_ASK_MAX ? `${text.slice(0, RELAY_ASK_MAX - 1).trimEnd()}…` : text, ...(by ? { by } : {}) };
+  }
+  return undefined;
 }
 
 /** What happened (for tests and the log): the card's thread, or why not. */
@@ -193,23 +241,53 @@ export function mirrorLateRunReply<B extends AttentionBot>(
  * teammate's work, a thread a bot opened) is copied once into the bot's chat
  * with a discreet provenance label. Quiet: no ring, no unread; the person
  * reads it there, nothing stays hidden. Routine runs report through their
- * own card. Confidential and parallel threads never leave their thread. */
+ * own card. Confidential and parallel threads never leave their thread.
+ *
+ * #2915: an archived thread an AI client continues is mirrored too (its
+ * label comes from relayVia). The label carries what was asked. A turn that
+ * failed, was stopped or said nothing leaves one trace line, never an
+ * earlier turn's words. A burst of replies folds into one capped row. Only
+ * the chat's newest rows are read. */
 export function mirrorBackgroundReply<B extends AttentionBot>(
   input: AttentionTurn<B>,
   deps: AttentionRelayDeps<B>,
 ): boolean {
   const { bot, threadId } = input;
-  if (!input.ok || input.stopped || bot.hidden || input.runTurn || deps.routineRun(threadId)) return false;
+  if (bot.hidden || input.runTurn || deps.routineRun(threadId)) return false;
   const via = deps.relayVia?.(bot.id, threadId);
   if (!via || via === "routine" || via === "proactive") return false;
   const task = deps.task(bot.id, threadId);
   if (!task || task.confidential === true) return false;
-  const { text, last } = turnWords(deps.messages(threadId), input.turnId);
+  const source = deps.messages(threadId);
+  const { text, last } = input.ok && !input.stopped ? ownTurnWords(source, input.turnId) : { text: "", last: undefined };
   const words = text.replace(/^\s*NOTHING_TO_REPORT\s*$/gim, "").trim();
-  if (!last || !words) return false;
+  const ask = turnAsk(source, input.turnId, task.openedBy);
+  const trace: WireMessage["relayTrace"] = !input.ok ? "failed" : input.stopped ? "stopped" : !words ? "silent" : undefined;
+  // the dedupe key: the reply's own row, else this turn
+  const key = !trace && last ? last.id : `turn:${threadId}:${input.turnId ?? source.at(-1)?.id ?? "none"}`;
   const target = deps.conversation(bot, threadId);
   if (!target || target === threadId) return false;
-  if (deps.messages(target).some((message) => message.relayOf === last.id || message.attention?.sourceMessageId === last.id)) return false;
-  deps.append(target, { role: "bot", kind: "text", text: words, relayVia: via, relayOf: last.id });
+  const recent = deps.recent?.(target, RELAY_RECENT_ROWS) ?? deps.messages(target).slice(-RELAY_RECENT_ROWS);
+  if (recent.some((message) => message.relayOf === key || message.relayGroup?.includes(key) || message.attention?.sourceMessageId === key)) return false;
+  if (trace) {
+    deps.append(target, { role: "bot", kind: "text", text: RELAY_TRACE_TEXT[trace], relayVia: via, relayOf: key, relayTrace: trace, ...(ask ? { relayAsk: ask } : {}) });
+    return true;
+  }
+  const now = deps.now?.() ?? Date.now();
+  const tail = recent.at(-1);
+  const chunk = ask && tail?.relayAsk?.text !== ask.text ? `> ${ask.text}\n\n${words}` : words;
+  if (tail && tail.role === "bot" && tail.kind === "text" && tail.relayVia === via && !tail.relayTrace && tail.relayOf
+    && now - tail.at < RELAY_GROUP_MS && (tail.text ?? "").length + chunk.length + 2 <= RELAY_TEXT_MAX) {
+    deps.patch(target, tail.id, { text: `${tail.text ?? ""}\n\n${chunk}`, relayGroup: [...(tail.relayGroup ?? []), key] });
+    return true;
+  }
+  deps.append(target, { role: "bot", kind: "text", text: capRelayText(words), relayVia: via, relayOf: key, ...(ask ? { relayAsk: ask } : {}) });
   return true;
 }
+
+/** #2915: the plain text of a trace line (the app shows it localized). */
+export const RELAY_TRACE_TEXT: Record<NonNullable<WireMessage["relayTrace"]>, string> = {
+  failed: "This request did not finish (error).",
+  stopped: "This request was stopped before an answer.",
+  silent: "This request finished without a reply.",
+};

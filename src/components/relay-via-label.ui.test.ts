@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/state/store", () => ({ api: vi.fn() }));
 
-import { RelayViaLabel } from "./RelayViaLabel";
+import { RelayTraceLine, RelayViaLabel } from "./RelayViaLabel";
 import { withoutMirrored } from "./parallel-approvals";
 
 describe("RelayViaLabel (#2901)", () => {
@@ -16,6 +16,19 @@ describe("RelayViaLabel (#2901)", () => {
     const html = renderToStaticMarkup(createElement(RelayViaLabel, { message: { relayVia: via } }));
     expect(html).toContain(`data-relay-via="${via}"`);
     expect(html).toContain("text-ink-secondary");
+    expect(html).not.toContain("chat.relayVia");
+  });
+
+  it("names who asked and what, the full ask in its tooltip (#2915)", () => {
+    const html = renderToStaticMarkup(createElement(RelayViaLabel, { message: { relayVia: "mcp", relayAsk: { text: "Close the duplicate tickets", by: "Claude Code" } } }));
+    expect(html).toContain("Claude Code");
+    expect(html).toContain('title="Close the duplicate tickets"');
+    expect(html).toContain("data-relay-ask");
+  });
+
+  it.each(["failed", "stopped", "silent"] as const)("draws one trace line for a %s turn (#2915)", (trace) => {
+    const html = renderToStaticMarkup(createElement(RelayTraceLine, { message: { relayTrace: trace, text: "" } }));
+    expect(html).toContain(`data-relay-trace="${trace}"`);
     expect(html).not.toContain("chat.relayVia");
   });
 
@@ -29,6 +42,11 @@ describe("withoutMirrored (#2901)", () => {
   it("drops a source card whose copy sits in the bot's chat", () => {
     const kept = pending({ requestId: "a", tool: "ask", options: ["A", "B"] });
     const mirrored = pending({ requestId: "b", tool: "ask", options: ["A", "B"], approvalDestination: { threadId: "main", messageId: "x" } });
-    expect(withoutMirrored([kept, mirrored])).toEqual([kept]);
+    expect(withoutMirrored([kept, mirrored], ["main"])).toEqual([kept]);
+  });
+
+  it("keeps a source card whose copy sits in another conversation (#2915)", () => {
+    const mirrored = pending({ requestId: "b", tool: "ask", options: ["A", "B"], approvalDestination: { threadId: "other", messageId: "x" } });
+    expect(withoutMirrored([mirrored], ["main", undefined])).toEqual([mirrored]);
   });
 });

@@ -79,9 +79,21 @@ export function approvalSources(bot: Pick<Bot, "tasks" | "threadId" | "waitingAp
 }
 
 /** #2901: drop the source cards whose answerable copy already sits in the
- * bot's chat (server/approvals/origin-approvals.ts). */
-export function withoutMirrored(pendings: Pending[]): Pending[] {
-  return pendings.filter((pending) => !pending.message.card?.approvalDestination);
+ * bot's chat (server/approvals/origin-approvals.ts). #2915: only a copy in
+ * the conversation on screen (`shown`: the open thread, or every segment of
+ * the one stream): a copy in another conversation leaves its source here. */
+export function withoutMirrored(pendings: Pending[], shown: Iterable<string | undefined>): Pending[] {
+  const here = new Set([...shown].filter((threadId): threadId is string => Boolean(threadId)));
+  return pendings.filter((pending) => {
+    const copy = pending.message.card?.approvalDestination?.threadId;
+    return !copy || !here.has(copy);
+  });
+}
+
+/** #2915: the threads on screen with the open conversation. */
+export function shownThreads(bot: Pick<Bot, "tasks" | "threadId"> | undefined, stream = false): string[] {
+  if (!bot?.threadId) return [];
+  return stream ? [bot.threadId, ...(bot.tasks ?? []).filter((task) => isStreamSegment(task)).map((task) => task.threadId)] : [bot.threadId];
 }
 
 export function useParallelApprovals(bot: Bot | undefined, stream = false): Pending[] {
@@ -92,10 +104,10 @@ export function useParallelApprovals(bot: Bot | undefined, stream = false): Pend
  * (approvalSources). Never their questions (#2082). */
 export function useParallelCards(bot: Bot | undefined, stream = false): { pendings: Pending[] } {
   const waiting = approvalSources(bot, stream);
-  const key = waiting.map((task) => `${task.threadId}:${task.stamp}`).join("|");
+  const key = `${shownThreads(bot, stream).join(",")}#${waiting.map((task) => `${task.threadId}:${task.stamp}`).join("|")}`;
   const [found, setFound] = useState<{ key: string; pendings: Pending[] }>({ key: "", pendings: [] });
   useEffect(() => {
-    if (!key) return;
+    if (!waiting.length) return;
     let live = true;
     // one conversation that cannot be read never hides the others' cards
     void Promise.allSettled(waiting.map(async (task) => {
@@ -107,7 +119,7 @@ export function useParallelCards(bot: Bot | undefined, stream = false): { pendin
       const done = lists.flatMap((list) => list.status === "fulfilled" ? [list.value] : []);
       // #2901: a card already mirrored into the bot's chat (approvalDestination)
       // is answered there; listing its source too would ask twice.
-      if (live) setFound({ key, pendings: withoutMirrored(done.flat()) });
+      if (live) setFound({ key, pendings: withoutMirrored(done.flat(), shownThreads(bot, stream)) });
     }).catch(() => {});
     return () => {
       live = false;
@@ -115,5 +127,5 @@ export function useParallelCards(bot: Bot | undefined, stream = false): { pendin
     // `waiting` is derived from `key`'s inputs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
-  return key && found.key === key ? { pendings: found.pendings } : { pendings: [] };
+  return waiting.length && found.key === key ? { pendings: found.pendings } : { pendings: [] };
 }

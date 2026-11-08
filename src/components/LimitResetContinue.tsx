@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { Hourglass, X } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { limitLine, nearLimit, resetTime, useEngineLimits } from "@/lib/limit-resets";
 import type { Routine } from "@/lib/routines";
-import { dismissNotice, noticeDismissed } from "@/lib/usage-notices";
 import { api, useStore } from "@/state/store";
+import { useWeeklyLimit } from "./ChatUsageNotices";
 
 /** The stopped turn's "Continue at 3:40 PM when your limit resets": one click sets up a one-time automation in this
  * conversation that picks up where it stopped. Undefined when there is nothing to offer. */
@@ -31,17 +30,12 @@ export function useLimitResetContinue(botId: string | undefined, threadId: strin
   };
 }
 
-/** Dismissal key for one engine limit event. A new resetsAt (or a newly blocked
- * window) is a new event, so the banner comes back after a prior dismiss. */
-export function engineLimitNoticeKey(limit: { engine: string; blocked: boolean; resetsAt: number | null }): string {
-  return `engine-limit:${limit.engine}:${limit.blocked ? "blocked" : "near"}:${limit.resetsAt ?? "-"}`;
-}
-
-/** Full-width dismissible banner above the conversation when this bot's engine
- * is near its usage limit. Same shell as the other chat banners. At the limit
- * the composer's own line says it (with Continue at and Switch engine), so the
- * banner stays out: one message, never two (JC 2026-11-06). */
-export function EngineLimitNotice({
+/** The quiet limit indicator beside the model picker (JC 2026-11-08: no banner
+ * above the chat, ever). A small dot, warning near the limit and danger at it,
+ * with the usage line as its tooltip; a click opens a small menu holding the
+ * line, the weekly window and "Continue at ...". Nothing renders when the
+ * engine is nowhere near its limit. */
+export function EngineLimitIndicator({
   engine,
   botId,
   threadId,
@@ -50,51 +44,55 @@ export function EngineLimitNotice({
   botId?: string;
   threadId?: string;
 }) {
+  const { dispatch } = useStore();
   const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
+  const weekly = useWeeklyLimit();
   const continueAt = useLimitResetContinue(botId, threadId, limit?.resetsAt ?? undefined);
-  const [dismissed, setDismissed] = useState<string | null>(null);
-  if (!limit || !nearLimit(limit) || limit.blocked) return null;
-  const key = engineLimitNoticeKey(limit);
-  if (dismissed === key || noticeDismissed(key)) return null;
+  const [open, setOpen] = useState(false);
+  const near = Boolean(limit && nearLimit(limit));
+  if (!near && !weekly) return null;
+  const line = near && limit ? limitLine(limit) : t(weekly!.percent >= 100 ? "chat.notice.weekly.reached" : "chat.notice.weekly", { percent: weekly!.percent, name: weekly!.name });
+  const hard = Boolean(limit?.blocked) || (!near && (weekly?.percent ?? 0) >= 100);
   return (
-    <div className="w-full px-5">
-      <div
-        role="status"
-        data-testid="engine-limit-notice"
-        data-notice="engine-limit"
-        title={t("limits.chatHint")}
-        className="mb-2 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[13px] text-warning"
-      >
-        <Hourglass size={15} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
-        <div className="min-w-0 flex-1 break-words">
-          <span className="tabular-nums text-ink">{limitLine(limit)}</span>
-          {continueAt && (
-            <>
-              {" "}
-              <button
-                type="button"
-                data-testid="engine-limit-continue"
-                onClick={continueAt.onClick}
-                className="underline hover:no-underline"
-              >
-                {continueAt.label}
-              </button>
-            </>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            dismissNotice(key);
-            setDismissed(key);
-          }}
-          aria-label={t("limits.dismiss")}
-          title={t("limits.dismiss")}
-          className="shrink-0 rounded p-0.5 hover:bg-warning/15"
+    <span data-limit-indicator="" className="absolute -right-0.5 -top-0.5 z-10">
+      <button
+        type="button"
+        data-testid="engine-limit-indicator"
+        aria-label={line}
+        aria-expanded={open}
+        title={line}
+        onClick={() => setOpen((value) => !value)}
+        className={`block size-2.5 rounded-full ring-2 ring-app ${hard ? "bg-danger" : "bg-warning"}`}
+      />
+      {open && (
+        <div
+          role="menu"
+          data-testid="engine-limit-menu"
+          className="absolute bottom-full right-0 mb-1.5 w-max max-w-[280px] rounded-xl border border-popover-hairline bg-popover p-2 text-[13px] text-popover-ink shadow-2xl shadow-black/50"
         >
-          <X size={13} />
-        </button>
-      </div>
-    </div>
+          <p className="px-1 py-0.5 tabular-nums">{line}</p>
+          {near && weekly && <p className="px-1 py-0.5 text-ink-secondary">{t(weekly.percent >= 100 ? "chat.notice.weekly.reached" : "chat.notice.weekly", { percent: weekly.percent, name: weekly.name })}</p>}
+          {near && continueAt && (
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="engine-limit-continue"
+              onClick={() => { continueAt.onClick(); setOpen(false); }}
+              className="mt-1 w-full rounded-lg px-1 py-1 text-left hover:bg-raised"
+            >
+              {continueAt.label}
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setOpen(false); dispatch({ type: "toggleAppSettings", open: true, section: "usage" }); }}
+            className="w-full rounded-lg px-1 py-1 text-left text-ink-secondary hover:bg-raised"
+          >
+            {t("chat.notice.weekly.more")}
+          </button>
+        </div>
+      )}
+    </span>
   );
 }

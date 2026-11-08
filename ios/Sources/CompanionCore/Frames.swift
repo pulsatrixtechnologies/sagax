@@ -37,11 +37,23 @@ public struct NotificationFrame: Codable, Hashable, Sendable {
     public var notify: Bool? = nil
     /// A proactive proposal card: Do it and Not now answer it (#2697).
     public var proposalId: String? = nil
+    /// #2909: one short label per choice, shown whole on the buttons; absent
+    /// while `choices` is set: Open only (shared/notification.ts).
+    public var choiceLabels: [String]? = nil
+    /// #2909: the whole context, multi-line (what happened, why the bot
+    /// waits, what each answer does): the banner's body.
+    public var context: String? = nil
+    /// #2909: the chat message holding the card: the tap opens it.
+    public var cardId: String? = nil
 
     /// What the banner says under the bot's name: the question first, then
-    /// the detail, never the question twice. A banner draws no Markdown: both
-    /// read as plain words (PlainText).
+    /// the detail, never the question twice. A decision says it all (#2909).
+    /// A banner draws no Markdown: both read as plain words (PlainText).
     public var bannerBody: String {
+        if kind == "approval" || kind == "question" || kind == "needs-you",
+           let context = context?.trimmingCharacters(in: .whitespacesAndNewlines), !context.isEmpty {
+            return context
+        }
         let detail = PlainText.from(markdown: body, dropCode: true)
         let ask = PlainText.from(markdown: self.ask ?? "", dropCode: true)
         guard kind == "approval", !ask.isEmpty, ask != detail else { return detail }

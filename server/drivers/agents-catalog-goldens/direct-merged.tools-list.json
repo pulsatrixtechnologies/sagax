@@ -11,7 +11,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 1000,
-            "description": "The question, with enough context to answer at a glance."
+            "description": "The question, with what happened and why you wait: enough context to answer from a notification at a glance."
           },
           "title": {
             "type": "string",
@@ -29,7 +29,16 @@
               "minLength": 1,
               "maxLength": 120
             },
-            "description": "2-6 short answers, the recommended one first."
+            "description": "2-6 answers to the question, a few words each, the recommended one first. \"A or B?\" takes A and B, never Yes / No."
+          },
+          "details": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "description": "Optional, same order: what each answer does."
           }
         },
         "required": [

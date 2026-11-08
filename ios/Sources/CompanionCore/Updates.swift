@@ -35,6 +35,40 @@ public struct ChatUpdate: Identifiable, Hashable, Codable {
         Self.answerOptions(kind: kind, card: card)
     }
 
+    /// #2909: one short label per answer, each shown whole on its pill; nil
+    /// while `answerOptions` is set means they cannot all be shown whole:
+    /// the surface offers Open only, which goes to the card.
+    public var answerLabels: [String]? {
+        let options = answerOptions
+        return options.isEmpty ? nil : NotificationChoiceLabels.labels(for: options)
+    }
+
+    /// #2909: what the row says before anyone picks: the question, then
+    /// what happened (a markdown table as readable lines), multi-line.
+    public var context: String {
+        guard kind == .needsYou, let card else { return line }
+        let ask = NeedsYouText(update: self)
+        let question = NotificationContextLines.plain(ask.question)
+        let detail = NotificationContextLines.plain(ask.detail ?? "")
+        let parts = [question, Self.answerLines(card: card), detail].filter { !$0.isEmpty }
+        let text = parts.joined(separator: "\n")
+        return text.isEmpty ? line : text
+    }
+
+    /// #2909: a question's answers, each with what it does ("• Locale:
+    /// garde la copie du Mac"), so the row says what each pick means
+    /// before anyone picks. Two or more answers only; a permission's
+    /// Allow / Deny need no gloss.
+    public static func answerLines(card: OptionCard) -> String {
+        guard !card.isPermission, card.options.count >= 2 else { return "" }
+        let described = card.questionRequest?.questions.first?.options ?? []
+        return card.options.map { option -> String in
+            let detail = described.first { $0.label == option }?.detail?
+                .split(whereSeparator: \.isWhitespace).joined(separator: " ") ?? ""
+            return detail.isEmpty || detail == option ? "• \(option)" : "• \(option): \(detail)"
+        }.joined(separator: "\n")
+    }
+
     /// The rule behind `answerOptions`, in the form a snapshot row can also
     /// reach: it sees the kind and the card, nothing else.
     public static func answerOptions(kind: Kind, card: OptionCard?) -> [String] {
@@ -134,5 +168,88 @@ extension CompanionState {
         case .compaction: return last.compaction?.chipText ?? last.text ?? ""
         case .routineRun: return last.routineRun?.previewLine ?? last.text ?? ""
         }
+    }
+}
+
+/// #2909: a bot's markdown as readable plain lines (shared/notification-context.ts
+/// `notificationContextText`): a table row becomes "Header: value · …",
+/// bold, links and code keep their words, a bullet becomes "• ".
+public enum NotificationContextLines {
+    public static func plain(_ markdown: String) -> String {
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        var out: [String] = []
+        var header: [String]?
+        for (position, raw) in lines.enumerated() {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") { continue }
+            if isRule(trimmed) { continue }
+            // a table row: outer pipes, or (#2909) none, inside a table or
+            // as a header whose next line is the |---| rule
+            let next = position + 1 < lines.count ? lines[position + 1].trimmingCharacters(in: .whitespaces) : ""
+            let tableRow = trimmed.contains("|")
+                && (trimmed.hasPrefix("|") || trimmed.hasSuffix("|") || header != nil || (isRule(next) && next.contains("|")))
+            if tableRow {
+                let cells = cellsOf(trimmed).map { inline($0) }
+                if let names = header {
+                    let row = cells.enumerated().compactMap { index, cell -> String? in
+                        guard !cell.isEmpty else { return nil }
+                        let name = index < names.count ? names[index] : ""
+                        return !name.isEmpty && name != cell ? "\(name): \(cell)" : cell
+                    }
+                    if !row.isEmpty { out.append(row.joined(separator: " · ")) }
+                } else {
+                    header = cells
+                }
+                continue
+            }
+            header = nil
+            var line = trimmed
+            // a heading ("## Résumé"), never a number ("#4187")
+            if let range = line.range(of: "^#{1,6}\\s+", options: .regularExpression) { line.removeSubrange(range) }
+            if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") { line = "• " + line.dropFirst(2) }
+            let clean = inline(line)
+            if clean.isEmpty {
+                if let last = out.last, !last.isEmpty { out.append("") }
+            } else {
+                out.append(clean)
+            }
+        }
+        while out.last == "" { out.removeLast() }
+        return out.joined(separator: "\n")
+    }
+
+    /// A row's cells: split on pipes outside inline code, `\\|` kept.
+    private static func cellsOf(_ row: String) -> [String] {
+        var body = Substring(row)
+        if body.hasPrefix("|") { body = body.dropFirst() }
+        if body.hasSuffix("|"), !body.hasSuffix("\\|") { body = body.dropLast() }
+        var cells: [String] = []
+        var cell = ""
+        var code = false
+        var previous: Character?
+        for char in body {
+            defer { previous = char }
+            if char == "`" { code.toggle() }
+            if char == "|", previous == "\\" { cell.removeLast(); cell.append(char); continue }
+            if char == "|", !code { cells.append(cell); cell = ""; continue }
+            cell.append(char)
+        }
+        cells.append(cell)
+        return cells
+    }
+
+    private static func isRule(_ line: String) -> Bool {
+        guard line.contains("-") else { return false }
+        return line.allSatisfy { "|-: ".contains($0) } && line.filter({ $0 == "-" }).count >= 2
+    }
+
+    private static func inline(_ text: String) -> String {
+        var value = text
+        // links keep their words
+        if let regex = try? NSRegularExpression(pattern: "!?\\[([^\\]]*)\\]\\([^)]*\\)") {
+            value = regex.stringByReplacingMatches(in: value, range: NSRange(value.startIndex..., in: value), withTemplate: "$1")
+        }
+        for mark in ["**", "__", "~~", "`"] { value = value.replacingOccurrences(of: mark, with: "") }
+        return value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 }

@@ -226,6 +226,13 @@ public struct PushPayload: Equatable, Sendable {
     public var routineName: String?
     /// A question's choices, the banner's buttons.
     public var choices: [String]
+    /// #2909: one short label per choice, what the buttons show whole (the
+    /// full choice is the answer sent). Absent: the banner offers Open only.
+    public var choiceLabels: [String]
+    /// #2909: the chat message holding the card: the tap opens it.
+    public var cardId: String?
+    /// #2697: a needs-you with no request (its answer is a line in the chat).
+    public var needsYou: Bool
     /// Milliseconds since 1970.
     public var at: Double?
 
@@ -275,6 +282,9 @@ public struct PushPayload: Equatable, Sendable {
         routineRunId = string("routineRunId")
         routineName = string("routineName")
         choices = NotificationChoices.choices(from: userInfo["choices"])
+        choiceLabels = NotificationChoices.labels(from: userInfo["choiceLabels"])
+        cardId = string("cardId")
+        needsYou = (userInfo["needsYou"] as? Bool) == true || (userInfo["needsYou"] as? NSNumber)?.boolValue == true
         at = (userInfo["at"] as? NSNumber)?.doubleValue
     }
 
@@ -296,7 +306,7 @@ public struct PushPayload: Equatable, Sendable {
     /// A routine run's push names `routineRunId` so the tap opens the run's
     /// detail, not only its report thread (#1700).
     public var target: NotificationTarget? {
-        NotificationTarget(botId: botId ?? groupId, threadId: threadId, routineRunId: routineRunId)
+        NotificationTarget(botId: botId ?? groupId, threadId: threadId, routineRunId: routineRunId, cardId: cardId)
     }
 
     /// The id this push's banner has on the phone (its `apns-collapse-id`).
@@ -304,10 +314,13 @@ public struct PushPayload: Equatable, Sendable {
         PushCollapse.identifier(threadId: threadId, kind: kind == .approval ? "approval" : kind.rawValue, requestId: requestId)
     }
 
-    /// The category this push needs: a question's choices get their own.
+    /// The category this push needs: a question's (or a needs-you's)
+    /// choices get their own, titled with their short labels (#2909). Only
+    /// labels a button shows whole: otherwise the server sent Open.
     public var questionChoicesLayout: NotificationChoices.Layout? {
-        guard kind == .approval, prompt == "question", requestId != nil, !choices.isEmpty else { return nil }
-        return NotificationChoices.layout(choices)
+        guard kind == .approval, !choices.isEmpty else { return nil }
+        guard (prompt == "question" && requestId != nil) || (needsYou && requestId == nil) else { return nil }
+        return NotificationChoices.buttons(choices: choices, labels: choiceLabels)
     }
 
     /// The same nudge from the live stream and from APNs share this key, so

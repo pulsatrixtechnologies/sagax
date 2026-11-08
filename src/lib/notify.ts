@@ -14,7 +14,30 @@ import { notificationSoundPlan, playNotificationSound, toneReady } from "./notif
 
 export type NotifyFrame = Notification;
 
-export type NotificationTarget = Pick<NotifyFrame, "botId" | "threadId" | "routineRunId"> & { groupId?: string };
+export type NotificationTarget = Pick<NotifyFrame, "botId" | "threadId" | "routineRunId"> & {
+  groupId?: string;
+  /** #2909: the approval or question the banner is about. */
+  requestId?: string;
+  /** #2909: the chat message holding the card: a click scrolls to it. */
+  cardId?: string;
+};
+
+/** #2909: the kinds that wait on a choice; their banner shows the whole context. */
+const DECISION_KINDS: ReadonlySet<NotifyFrame["kind"]> = new Set(["approval", "question", "needs-you"]);
+/** The longest context a desktop banner carries (the expanded view shows it). */
+export const DESKTOP_CONTEXT_MAX = 1200;
+
+/** #2909: what a decision's banner says. The context (what happened, why the
+ * bot waits, what each choice does), multi-line, never a cut-off one-liner.
+ * Undefined for other kinds, or when the frame carries no context. */
+export function decisionBannerBody(frame: Pick<NotifyFrame, "kind" | "context" | "ask">): string | undefined {
+  if (!DECISION_KINDS.has(frame.kind)) return undefined;
+  const context = (frame.context ?? "").replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  if (!context) return undefined;
+  const ask = (frame.ask ?? "").trim();
+  const text = ask && !context.startsWith(ask) ? `${ask}\n\n${context}` : context;
+  return text.length > DESKTOP_CONTEXT_MAX ? `${text.slice(0, DESKTOP_CONTEXT_MAX - 1).trimEnd()}…` : text;
+}
 
 /** Ask while handling the settings click. Browsers may reject permission
  * requests that are triggered later by an incoming SSE frame. */
@@ -70,6 +93,8 @@ function targetFromShell(raw: unknown): NotificationTarget | null {
   const target: NotificationTarget = { botId: text("botId"), threadId: text("threadId") };
   if (text("groupId")) target.groupId = text("groupId");
   if (text("routineRunId")) target.routineRunId = text("routineRunId");
+  if (text("requestId")) target.requestId = text("requestId");
+  if (text("cardId")) target.cardId = text("cardId");
   return target.threadId || target.routineRunId || target.botId ? target : null;
 }
 
@@ -335,7 +360,12 @@ export function showNotification(
     threadId: frame.threadId,
     ...(frame.groupId ? { groupId: frame.groupId } : {}),
     ...(frame.routineRunId ? { routineRunId: frame.routineRunId } : {}),
+    ...(frame.requestId ? { requestId: frame.requestId } : {}),
+    ...(frame.cardId ? { cardId: frame.cardId } : {}),
   };
+  // #2909: a decision's banner carries its whole context, line breaks kept,
+  // never the one-line preview cut at the preview cap
+  const decisionBody = decisionBannerBody(frame);
   pendingCounts.set(groupKey, payload.count);
   const spend = frame.kind === "spend";
   const icon = shellIconPath(avatarUrl ?? frame.avatarUrl);
@@ -344,7 +374,7 @@ export function showNotification(
     ...(frame.requestId && frame.threadId ? { withdrawKey: approvalWithdrawKey(frame.threadId, frame.requestId) } : {}),
     title: payload.title,
     subtitle: payload.subtitle,
-    body: payload.body,
+    body: decisionBody ?? payload.body,
     replaceId: payload.replaceId,
     groupKey: payload.groupKey,
     hasReply: payload.hasReply,

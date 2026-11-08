@@ -2,6 +2,7 @@
 // audience rules as alert pushes (./frames.ts): a person's own bots only.
 import type { LiveActivityUpdate } from "./activity-hub.ts";
 import type { NotifyNote } from "./frames.ts";
+import { ACTIVITY_CHOICES_MAX } from "../../shared/notification-context.ts";
 
 export interface ActivityFrameDeps {
   /** Who should see this bot's Live Activity (person isolation). */
@@ -38,7 +39,11 @@ export function liveActivityUpdatesForFrame(
       ...(text(raw.requestId) ? { requestId: text(raw.requestId) } : {}),
       ...(text(raw.ask).trim() ? { ask: text(raw.ask).trim() } : {}),
       ...(Array.isArray(raw.choices) ? { choices: raw.choices.filter((c): c is string => typeof c === "string" && c.trim().length > 0) } : {}),
+      ...(Array.isArray(raw.choiceLabels) ? { choiceLabels: raw.choiceLabels.filter((c): c is string => typeof c === "string" && c.trim().length > 0) } : {}),
     };
+    // #2909: a question's answers ride as buttons only with labels shown
+    // whole; else none, and the tap opens the card in the chat
+    const legible = Boolean(note.choices?.length && note.choiceLabels?.length === note.choices.length && note.choices.length <= ACTIVITY_CHOICES_MAX);
     let phase: LiveActivityUpdate["phase"] | null = null;
     if (noteKind === "approval" || noteKind === "question") phase = "needsYou";
     else if (noteKind === "done") phase = "done";
@@ -53,7 +58,7 @@ export function liveActivityUpdatesForFrame(
       ...(threadId ? { threadId } : {}),
       ...(phase === "needsYou" && note.requestId ? { requestId: note.requestId } : {}),
       ...(phase === "needsYou" && noteKind === "approval" ? { options: note.choices?.length ? note.choices : ["Allow", "Deny"], isPermission: true } : {}),
-      ...(phase === "needsYou" && noteKind === "question" && note.choices?.length ? { options: note.choices, isPermission: false } : {}),
+      ...(phase === "needsYou" && noteKind === "question" && legible ? { options: note.choices, optionLabels: note.choiceLabels, isPermission: false } : {}),
       sinceMs: at,
     }));
   }

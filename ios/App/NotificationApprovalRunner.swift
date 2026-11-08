@@ -68,6 +68,15 @@ enum NotificationApprovalRunner {
                     _ = try await client.send(text: text, toBot: botId, threadId: threadId)
                 }
             }
+        case let .needsYouAnswer(botId, threadId, groupId, text):
+            // #2909: the answer picked on the banner, its full words, in the bot's conversation
+            return await perform(key: "needs\u{0}\(threadId)\u{0}\(text)") { client in
+                if let groupId {
+                    _ = try await client.send(text: text, toRoom: groupId, threadId: threadId)
+                } else {
+                    _ = try await client.send(text: text, toBot: botId, threadId: threadId)
+                }
+            }
         case let .proposal(botId, proposalId, accept):
             // #2697: the proposal card's own answer (409: already answered elsewhere)
             return await perform(key: "proposal\u{0}\(proposalId)") { client in

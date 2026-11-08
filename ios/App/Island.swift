@@ -159,9 +159,13 @@ struct NeedsYouIsland: View {
                 dismiss()
             }
         } else {
-            let layout = NotificationChoices.layout(card.options)
-            let buttons = layout.shown.map { option in
-                pill(option, refusal: CardStyle.isRefusal(option), color: chat.color) {
+            // #2909: each answer titled whole with its short label; when
+            // they cannot all be, Open only (the card has them in full)
+            let answers = NotificationChoiceLabels.answers(for: card.options) ?? []
+            let openOnly = answers.isEmpty
+            let buttons = answers.map { answer in
+                let option = answer.choice
+                return pill(answer.title, refusal: CardStyle.isRefusal(option), color: chat.color) {
                     Haptics.selection()
                     answering = true
                     Task {
@@ -173,12 +177,12 @@ struct NeedsYouIsland: View {
                 .disabled(answering)
             }
             Group {
-                if layout.shown.count <= 2 && !layout.overflow {
+                if answers.count <= 2 && !openOnly {
                     HStack(spacing: 8) { ForEach(Array(buttons.enumerated()), id: \.offset) { $0.element } }
                 } else {
                     VStack(spacing: 8) {
                         ForEach(Array(buttons.enumerated()), id: \.offset) { $0.element }
-                        if layout.overflow {
+                        if openOnly {
                             pill(String(localized: "Open"), refusal: true, color: chat.color) {
                                 open(chat)
                                 dismiss()

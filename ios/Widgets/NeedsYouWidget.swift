@@ -193,14 +193,20 @@ struct AnswerPills: View {
     private var pills: some View {
         HStack(spacing: 6) {
             if let card = row.card, answerable {
-                ForEach(Array(row.answerOptions.prefix(3)), id: \.self) { option in
+                // #2909: each answer titled whole with its short label;
+                // none when they cannot all be (the row opens the chat)
+                let answers = NotificationChoiceLabels.answers(
+                    for: row.answerOptions, limit: NotificationChoiceLabels.compactMax
+                ) ?? []
+                ForEach(answers, id: \.self) { answer in
+                    let option = answer.choice
                     Button(intent: WidgetAnswerIntent(
                         threadId: row.chat.threadId,
                         requestId: card.requestId ?? "",
                         choice: option,
                         isPermission: card.isPermission
                     )) {
-                        Text(option)
+                        Text(answer.title)
                             .font(.system(size: compact ? 11 : 13, weight: .semibold))
                             .foregroundStyle(OptionCard.isRefusal(option) ? Color.primary : .white)
                             .lineLimit(1)

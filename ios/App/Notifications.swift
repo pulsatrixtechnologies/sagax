@@ -42,7 +42,8 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
             placeholder: String(localized: "Type your answer"),
             approve: String(localized: "notification.needsYou.approve", defaultValue: "Approve"),
             doIt: String(localized: "notification.proposal.doIt", defaultValue: "Do it"),
-            notNow: String(localized: "notification.proposal.notNow", defaultValue: "Not now")
+            notNow: String(localized: "notification.proposal.notNow", defaultValue: "Not now"),
+            open: String(localized: "Open")
         )
     }
 
@@ -70,9 +71,10 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         content.sound = sound(for: notification.kind)
         let needsKey = notification.needsKey == true
         let choices = confidential ? [] : (notification.choices ?? [])
+        let choiceLabels = confidential ? [] : (notification.choiceLabels ?? [])
         content.categoryIdentifier = NotificationApproval.category(
             kind: notification.kind, requestId: notification.requestId, needsKey: needsKey, choices: choices,
-            proposalId: notification.proposalId
+            choiceLabels: choiceLabels, proposalId: notification.proposalId
         )
         content.threadIdentifier = notification.threadId
         var info: [String: String] = [
@@ -85,9 +87,11 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         if let requestId = notification.requestId, !requestId.isEmpty { info["requestId"] = requestId }
         if needsKey { info["needsKey"] = "1" }
         if let proposalId = notification.proposalId, !proposalId.isEmpty { info["proposalId"] = proposalId }
-        if notification.kind == "question", !choices.isEmpty {
+        if notification.kind == "question" || notification.kind == "needs-you", !choices.isEmpty {
             info["choices"] = NotificationChoices.layout(choices, limit: 10).shown.joined(separator: "\u{1F}")
         }
+        // #2909: the tap opens the bot's chat on the card
+        if let cardId = notification.cardId, !cardId.isEmpty { info["cardId"] = cardId }
         if let routineRunId = notification.routineRunId, !routineRunId.isEmpty { info["routineRunId"] = routineRunId }
         if let routineName = notification.routineName, !routineName.isEmpty {
             info["routineName"] = routineName
@@ -105,7 +109,8 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
             threadId: notification.threadId, kind: notification.kind, requestId: notification.requestId, proposalId: notification.proposalId
         )
         let choicesCategory: UNNotificationCategory? = NotificationChoices.isChoicesCategory(content.categoryIdentifier)
-            ? NotificationCategories.choices(NotificationChoices.layout(choices), openTitle: String(localized: "Open"))
+            ? NotificationChoices.buttons(choices: choices, labels: choiceLabels)
+                .map { NotificationCategories.choices($0, openTitle: String(localized: "Open")) }
             : nil
         // the bot's mascot as the banner's face, like a push (MascotAvatarRenderer)
         let botId = notification.botId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -244,7 +249,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         case let .open(target):
             responseHandler?(target)
             completionHandler()
-        case .allow, .deny, .confirmKey, .reply, .needsYou, .proposal:
+        case .allow, .deny, .confirmKey, .reply, .needsYou, .needsYouAnswer, .proposal:
             if case .confirmKey = decision, let target = NotificationTarget(payload: strings) {
                 responseHandler?(target)
             }

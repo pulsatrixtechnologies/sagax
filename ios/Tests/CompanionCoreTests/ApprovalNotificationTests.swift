@@ -60,7 +60,8 @@ final class ApprovalNotificationTests: XCTestCase {
             "choices": ["Red", "Blue", "Green", "Black", "White"],
         ]))
         XCTAssertEqual(push.choices, ["Red", "Blue", "Green", "Black", "White"])
-        XCTAssertEqual(push.questionChoicesLayout, .init(shown: ["Red", "Blue", "Green"], overflow: true))
+        // #2909: more answers than buttons: Open only, never a partial set
+        XCTAssertNil(push.questionChoicesLayout)
         // an approval never takes choices as buttons
         let approval = try XCTUnwrap(PushPayload(userInfo: ["aps": [:], "kind": "approval", "prompt": "approval", "requestId": "r1", "choices": ["A"]]))
         XCTAssertNil(approval.questionChoicesLayout)
@@ -167,7 +168,7 @@ final class ApprovalNotificationTests: XCTestCase {
     func testChoiceButtonsAreAddedNextToTheFixedOnesAndStayBounded() {
         let titles = NotificationCategories.Titles(allowOnce: "Allow once", deny: "Deny", reply: "Reply", send: "Send", placeholder: "Type")
         let fixed = NotificationCategories.fixed(titles)
-        XCTAssertEqual(Set(fixed.map(\.identifier)), [NotificationApproval.category, NotificationApproval.keyCategory, NotificationApproval.updateCategory, NotificationApproval.questionCategory, NotificationApproval.needsYouCategory, NotificationApproval.proposalCategory])
+        XCTAssertEqual(Set(fixed.map(\.identifier)), [NotificationApproval.category, NotificationApproval.keyCategory, NotificationApproval.updateCategory, NotificationApproval.questionCategory, NotificationApproval.needsYouCategory, NotificationApproval.proposalCategory, NotificationApproval.openCategory])
         let approval = try? XCTUnwrap(fixed.first { $0.identifier == NotificationApproval.category })
         XCTAssertEqual(approval?.actions.map(\.identifier), [NotificationApproval.allowAction, NotificationApproval.denyAction])
 

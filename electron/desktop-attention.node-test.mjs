@@ -52,13 +52,23 @@ function fakeApp() {
 test("a request is trimmed, capped, and needs a title", () => {
   assert.equal(normalizeAttentionRequest(null), null);
   assert.equal(normalizeAttentionRequest({ title: "   " }), null);
-  const long = normalizeAttentionRequest({ title: "Alice", body: "x".repeat(1000), id: "nudge:1" });
-  assert.equal(long.body.length, 400);
+  const long = normalizeAttentionRequest({ title: "Alice", body: "x".repeat(2000), id: "nudge:1" });
+  assert.equal(long.body.length, 1200);
   assert.equal(long.sound, true);
   assert.equal(long.persistent, true);
   assert.equal(long.bounce, null);
   assert.equal(normalizeAttentionRequest({ title: "A", bounce: "loud" }).bounce, null);
   assert.equal(normalizeAttentionRequest({ title: "A", id: "x".repeat(500) }).id, "");
+});
+
+test("#2909: a decision's context keeps its lines and its card target", () => {
+  const request = normalizeAttentionRequest({
+    title: "Nova",
+    body: "Deux copies diffèrent.\n\n\n\nCopie : Locale   · Date : 7 nov.\r\n• Locale : Garde tes changements",
+    target: { botId: "b", threadId: "t", requestId: "q-1", cardId: "m-q", extra: "no" },
+  });
+  assert.equal(request.body, "Deux copies diffèrent.\n\nCopie : Locale · Date : 7 nov.\n• Locale : Garde tes changements");
+  assert.deepEqual(request.target, { botId: "b", threadId: "t", requestId: "q-1", cardId: "m-q" });
 });
 
 test("a persistent notification never times out, plays its sound, and a click opens the window then the thread", () => {

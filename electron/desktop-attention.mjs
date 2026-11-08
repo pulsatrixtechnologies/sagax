@@ -23,7 +23,9 @@
 // lists (getHistory) and quietly posts again what the quit removed.
 
 const MAX_TITLE = 120;
-const MAX_BODY = 400;
+/** #2909: a decision's context (question, approval, needs-you) keeps its
+ * lines and reads whole in the expanded banner. */
+const MAX_CONTEXT_BODY = 1200;
 const MAX_ID = 200;
 // Held notification objects: Electron takes a notification out of
 // Notification Center when its object is garbage collected, so this is how
@@ -39,6 +41,20 @@ function clip(value, max) {
   if (typeof value !== "string") return "";
   const text = value.replace(/\s+/g, " ").trim();
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/** A body that keeps its line breaks (a decision's context, a table turned
+ * into one line per row): spaces collapse inside each line, blank runs to one. */
+function clipLines(value, max) {
+  if (typeof value !== "string") return "";
+  const text = value
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t\f\v]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 }
 
 /** The request the page sent, reduced to what a notification may carry.
@@ -64,7 +80,7 @@ export function normalizeAttentionRequest(value) {
     id,
     title,
     subtitle: clip(value.subtitle, MAX_TITLE),
-    body: clip(value.body, MAX_BODY),
+    body: clipLines(value.body, MAX_CONTEXT_BODY),
     sound: value.sound !== false,
     persistent: value.persistent !== false,
     bounce,
@@ -89,7 +105,7 @@ export function normalizeAttentionRequest(value) {
 export function normalizeTarget(value) {
   if (!value || typeof value !== "object") return null;
   const out = {};
-  for (const key of ["botId", "threadId", "groupId", "routineRunId"]) {
+  for (const key of ["botId", "threadId", "groupId", "routineRunId", "requestId", "cardId"]) {
     const field = value[key];
     if (typeof field === "string" && field.length <= MAX_ID) out[key] = field;
   }
@@ -165,7 +181,7 @@ export function createDesktopAttention(deps) {
           target: normalizeTarget(rec.target),
           title,
           subtitle: clip(rec.subtitle, MAX_TITLE),
-          body: clip(rec.body, MAX_BODY),
+          body: clipLines(rec.body, MAX_CONTEXT_BODY),
           groupId: typeof rec.groupId === "string" && rec.groupId.length <= MAX_ID * 2 ? rec.groupId : "",
           withdrawKey: typeof rec.withdrawKey === "string" && rec.withdrawKey.length <= MAX_ID * 3 ? rec.withdrawKey : "",
           origin: typeof rec.origin === "string" && rec.origin.length <= 500 ? rec.origin : "",

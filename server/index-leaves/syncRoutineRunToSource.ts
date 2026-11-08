@@ -2,6 +2,7 @@
 /** syncRoutineRunToSource (#1388). Pure move from server/index.ts. */
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
 import type { RoutineRun } from "../routines/routines.ts";
+import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
 export type Host = Record<string, any>;
 
 /** #2694: the person's feedback on this run's attention cards (thumbs-down,
@@ -78,6 +79,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
       `run:${run.id}`, attentionFound, { id: run.id, routineName: run.routineName }, { ticketUrl: host.attentionTicketUrl })
     : undefined;
   const attentionNew = Boolean(attention && !existing?.attention);
+  let cardId: string | undefined = existing?.id;
   if (existing) {
     host.store.patchMessage(sourceThreadId, existing.id, { text, routineRun: card, ...(attention ? { attention } : {}) });
   } else {
@@ -91,7 +93,7 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     if (source.group) {
       message.from = { botId: source.bot.id, name: source.bot.name, color: source.bot.color };
     }
-    host.store.appendMessage(sourceThreadId, message);
+    cardId = host.store.appendMessage(sourceThreadId, message)?.id;
   }
   // Something for the person turns the conversation unread, once per state.
   if (reportableUnread && (statusChanged || (attentionNew && attentionRings))) {
@@ -100,9 +102,15 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   }
   // Items only the person can do ring once, whatever postResults says.
   if (attention && attentionNew && attentionRings && runBotRecord) {
-    host.notify(host.deliverableNotification("needs-you", runBotRecord, sourceThreadId,
-      attention.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"),
-      { avatarUrl: runBotRecord.avatarUrl, routineRunId: run.id, routineName: run.routineName }));
+    // #2909: the person reads what happened and what each answer does
+    // before choosing; the tap opens the chat on this card.
+    const words = needsYouNotificationWords(attention);
+    host.notify(host.deliverableNotification("needs-you", runBotRecord, sourceThreadId, words.line, {
+      avatarUrl: runBotRecord.avatarUrl, routineRunId: run.id, routineName: run.routineName,
+      ...(words.question ? { question: words.question } : {}), context: words.context,
+      ...(words.choices.length ? { choices: words.choices } : {}),
+      ...(cardId ? { cardId } : {}),
+    }));
   }
   return sourceThreadId;
 

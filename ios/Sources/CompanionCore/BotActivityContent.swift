@@ -12,6 +12,9 @@ public struct BotActivityContent: Codable, Hashable, Sendable {
     public var threadId: String?
     public var requestId: String?
     public var options: [String]
+    /// #2909: the short label of each option, in order, when the server
+    /// sent them (optional: older servers and local frames have none).
+    public var optionLabels: [String]?
     public var isPermission: Bool
     public var since: Date
 
@@ -33,15 +36,24 @@ public struct BotActivityContent: Codable, Hashable, Sendable {
         // Compact surfaces cannot show the reviewed SKILL.md. Keep the
         // alert, but require opening chat before answering a skill request.
         self.options = card?.isPending == true && card?.skillRequest == nil ? (card?.options ?? []) : []
+        self.optionLabels = nil
         self.isPermission = card?.isPermission ?? false
         self.since = since
+    }
+
+    /// #2909: the buttons the activity shows, each titled whole, or none
+    /// (Open only) when the options cannot all be shown whole.
+    public var answerButtons: [NotificationChoiceLabels.Answer] {
+        NotificationChoiceLabels.answers(
+            for: options, given: optionLabels, limit: NotificationChoiceLabels.compactMax
+        ) ?? []
     }
 
     /// The widget and intent handler use the same exact request target.
     /// Legacy content can remain visible, but cannot offer approval buttons.
     public var approvalThreadId: String? {
         guard kind == "needsYou", let threadId, !threadId.isEmpty,
-              let requestId, !requestId.isEmpty, !options.isEmpty else { return nil }
+              let requestId, !requestId.isEmpty, !answerButtons.isEmpty else { return nil }
         return threadId
     }
 

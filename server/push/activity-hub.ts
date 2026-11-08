@@ -38,6 +38,8 @@ export interface LiveActivityUpdate {
   threadId?: string;
   requestId?: string;
   options?: string[];
+  /** #2909: what each option's button shows whole (same order). */
+  optionLabels?: string[];
   isPermission?: boolean;
   confidential?: boolean;
   sinceMs?: number;
@@ -163,6 +165,7 @@ export class LiveActivityHub {
         threadId: update.threadId,
         requestId: update.requestId,
         options: update.options,
+        optionLabels: update.optionLabels,
         isPermission: update.isPermission,
         confidential: update.confidential,
         sinceMs: update.sinceMs,

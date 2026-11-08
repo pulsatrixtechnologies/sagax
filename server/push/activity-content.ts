@@ -19,6 +19,9 @@ export interface LiveActivityContentState {
   threadId?: string;
   requestId?: string;
   options: string[];
+  /** #2909: one short label per option, what the button shows whole; the
+   * option itself is the answer sent. Absent: the option is its own label. */
+  optionLabels?: string[];
   isPermission: boolean;
   /** Seconds since 2001-01-01 UTC (Swift default Date JSON). */
   since: number;
@@ -34,7 +37,8 @@ export function cocoaSince(unixMs: number): number {
 const LINE_MAX = 240;
 const HEADLINE_MAX = 120;
 const OPTIONS_MAX = 10;
-const OPTION_MAX = 60;
+const OPTION_MAX = 120;
+const OPTION_LABEL_MAX = 24;
 
 function clip(text: string, max: number): string {
   const clean = text.replace(/\s+/g, " ").trim();
@@ -50,6 +54,7 @@ export interface LiveActivityContentInput {
   threadId?: string;
   requestId?: string;
   options?: string[];
+  optionLabels?: string[];
   isPermission?: boolean;
   /** When this phase began (unix ms). Default: now. */
   sinceMs?: number;
@@ -82,14 +87,19 @@ export function buildLiveActivityContentState(
       : phase === "answered" ? `${name}: answered`
         : `${name} is done`;
   const options: string[] = [];
+  const optionLabels: string[] = [];
   if (phase === "needsYou" && input.options?.length) {
-    for (const raw of input.options) {
+    for (const [index, raw] of input.options.entries()) {
       const choice = clip(raw, OPTION_MAX);
       if (!choice || options.includes(choice)) continue;
       options.push(choice);
+      const label = input.optionLabels?.[index] ? clip(input.optionLabels[index]!, OPTION_LABEL_MAX + 1) : "";
+      optionLabels.push(label);
       if (options.length >= OPTIONS_MAX) break;
     }
   }
+  // #2909: labels only when every one is there and shown whole
+  const labelled = optionLabels.length > 0 && optionLabels.every((label) => label && label.length <= OPTION_LABEL_MAX);
   const state: LiveActivityContentState = {
     face,
     kind: phase,
@@ -99,6 +109,7 @@ export function buildLiveActivityContentState(
     isPermission: phase === "needsYou" ? input.isPermission === true : false,
     since: cocoaSince(input.sinceMs ?? nowMs),
   };
+  if (phase === "needsYou" && labelled) state.optionLabels = optionLabels;
   if (input.threadId?.trim()) state.threadId = input.threadId.trim();
   if (phase === "needsYou" && input.requestId?.trim()) state.requestId = input.requestId.trim().slice(0, 128);
   return state;

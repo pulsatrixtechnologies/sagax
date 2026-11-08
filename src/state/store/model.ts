@@ -1954,7 +1954,8 @@ export function openNotificationTarget(
   // the run's message in the bot's chat, never a view beside the chat.
   // openThread asks for the thread itself. #2120 keeps native banners in the
   // conversation; the former run sheet is gone.
-  if (options.runDetail !== false) {
+  // #2909: a decision's card sits in the bot's chat: it opens there, on the card.
+  if (options.runDetail !== false && !target.cardId) {
     const runId = target.routineRunId ?? routineRunOfThread(state, target.threadId);
     if (runId && (!state.routineRuns || state.routineRuns.some((run) => run.id === runId))) {
       openRoutineRun(dispatch, { runId });
@@ -1976,6 +1977,7 @@ export function openNotificationTarget(
     if (target.threadId && group.threadId !== target.threadId && (group.tasks ?? []).some((task) => task.threadId === target.threadId)) {
       dispatch({ type: "switchGroupTask", groupId: group.id, threadId: target.threadId });
     }
+    focusNotificationCard(dispatch, target, group.threadId);
     return;
   }
   const bot = state.bots.find((candidate) =>
@@ -1993,6 +1995,15 @@ export function openNotificationTarget(
   // notification always opens the topic it is about, never a fresh one.
   if (known && target.threadId) openBotThread(dispatch, bot, target.threadId, threadsShown);
   else openBot(dispatch, bot, threadsShown, { landing: false });
+  focusNotificationCard(dispatch, target, known ? undefined : bot.threadId);
+}
+
+/** #2909: a question, approval or needs-you notification opens the chat ON
+ * its card: the conversation scrolls to the message that holds it. */
+function focusNotificationCard(dispatch: (action: Action) => void, target: NotificationTarget, fallbackThreadId?: string): void {
+  const threadId = target.threadId || fallbackThreadId;
+  if (!target.cardId || !threadId) return;
+  dispatch({ type: "focusMessage", threadId, messageId: target.cardId });
 }
 
 /** Threads hidden: whether `threadId` opens beside the one conversation

@@ -1,3 +1,5 @@
+import { CHOICE_LABEL_MAX, choiceQuestionMismatch } from "./notification-context.ts";
+
 /** The one bot allowed to create passive choice cards for the Watcher flow. */
 export const WATCHER_OPTIONS_CARD_BOT_ID = "f08dd8e3-f942-4eb4-8783-df32b26b88a4";
 
@@ -19,7 +21,14 @@ export interface OptionsCardInput {
   title: string;
   subtitle: string;
   options: string[];
+  /** #2909 ask_choice `{label, detail}`: what each option does, same order
+   * (undefined where none). The label is the answer sent; the detail rides
+   * in the notification's context and the question's option description. */
+  details?: (string | undefined)[];
 }
+
+/** #2909: the longest `detail` of an ask_choice option. */
+export const ASK_CHOICE_DETAIL_MAX = 300;
 
 export type ParsedOptionsCardInput =
   | { ok: true; value: OptionsCardInput }
@@ -74,5 +83,40 @@ export function parseAskChoiceInput(value: unknown): ParsedOptionsCardInput {
     if (typeof given !== "string") return { ok: false, error: given.error };
     title = given;
   }
-  return parseOptionsCardInput({ title, subtitle: question, options: value.options });
+  // #2909: an option is a short answer, or {label, detail}: the label is the
+  // button and the answer, the detail says what it does
+  if (!Array.isArray(value.options)) return { ok: false, error: "options must be an array of strings or {label, detail} objects." };
+  const labels: unknown[] = [];
+  const details: (string | undefined)[] = [];
+  // the wire form: a parallel `details` array (the object form also works)
+  const given = Array.isArray(value.details) ? value.details : [];
+  for (let index = 0; index < value.options.length; index += 1) {
+    const option = value.options[index];
+    if (!record(option)) {
+      labels.push(option);
+      const said = given[index];
+      if (typeof said === "string" && said.trim()) {
+        const detail = boundedText(said, `details[${index}]`, ASK_CHOICE_DETAIL_MAX);
+        if (typeof detail !== "string") return { ok: false, error: detail.error };
+        details.push(detail);
+      } else details.push(undefined);
+      continue;
+    }
+    const label = boundedText(option.label, `options[${index}].label`, CHOICE_LABEL_MAX);
+    if (typeof label !== "string") return { ok: false, error: `${label.error} Keep the label short (the button) and put the rest in detail.` };
+    labels.push(label);
+    if (option.detail === undefined) {
+      details.push(undefined);
+      continue;
+    }
+    const detail = boundedText(option.detail, `options[${index}].detail`, ASK_CHOICE_DETAIL_MAX);
+    if (typeof detail !== "string") return { ok: false, error: detail.error };
+    details.push(detail);
+  }
+  const parsed = parseOptionsCardInput({ title, subtitle: question, options: labels });
+  if (!parsed.ok) return parsed;
+  // #2909: "A or B?" answered with Yes / No cannot be answered at all
+  const mismatch = choiceQuestionMismatch(question, parsed.value.options);
+  if (mismatch) return { ok: false, error: mismatch };
+  return details.some(Boolean) ? { ok: true, value: { ...parsed.value, details } } : parsed;
 }

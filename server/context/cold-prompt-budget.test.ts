@@ -49,6 +49,11 @@ describe("cold prompt section budgets", () => {
     expect(Buffer.byteLength(parts[0]!.text, "utf8")).toBeLessThanOrEqual(COLD_PROMPT_SECTION_BUDGETS["rich-output"]!);
   });
 
+  it("keeps the output-style rule on routine runs, without the old table default (#2949)", () => {
+    expect(COLD_RICH_OUTPUT_PROMPT).toContain("never a label and sentence or status table");
+    expect(COLD_RICH_OUTPUT_PROMPT).not.toContain("A Markdown table for records is fine");
+  });
+
   it("drops zero-budget sections and keeps a truncation notice on oversized ones", () => {
     const parts = applyColdPromptBudgets([
       { id: "threads", label: "Threads", text: " start_thread ".repeat(200) },

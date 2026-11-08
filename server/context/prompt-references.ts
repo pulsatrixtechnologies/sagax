@@ -11,6 +11,7 @@ import {
   PROFILE_CREATOR_PROMPT, LEARN_PROMPT, type PromptPart,
   ROUTINE_EXECUTION_PROMPT, CREDENTIAL_PROMPT, WIDGET_PROMPT, WIDGET_APPROVAL_PROMPT,
 } from "../system-prompt.ts";
+import { OUTPUT_STYLE_RULE_SHORT } from "../../shared/output-style.ts";
 
 export function promptReferencesAvailable(agents: boolean, scope: unknown): boolean {
   return agents && allowsTool(scope, { kind: "mcp", server: "agents", name: "sagax_help" });
@@ -22,7 +23,8 @@ function references(): Array<{ id: string; full: string; brief: string }> {
   const output = (drafts: boolean) => ({
     id: drafts ? "rich-output" : "rich-output-no-email", full: richOutputPrompt(drafts),
     brief: " Replies use GitHub-flavored Markdown, math, Mermaid, tables, task lists, footnotes and callouts. Put labeled choices on separate lines."
-      + " Views (chart, widget, csv, cw, show_widget, video) only when asked in this message or essential to answer; otherwise use text or Markdown tables."
+      + " Views (chart, widget, csv, cw, show_widget, video) only when asked in this message or essential to answer; otherwise use text."
+      + OUTPUT_STYLE_RULE_SHORT
       + (drafts ? " Emails use an email fence with applicable To/Cc/Bcc/Subject headers, blank line, Markdown body; drafts send nothing." : " Email drafts are off: no email fence; say so and give the text in chat.")
       + " Before creating rich output, a hosted page, or attaching media, load its formats, theme kit, examples and mandatory widget self-check:"
       + read(drafts ? "rich-output" : "rich-output-no-email"),

@@ -2,6 +2,7 @@
 // real turn and for the "what the model sees" preview alike. It is pure:
 // it orders the parts it is handed, drops the empty ones, inserts the soul
 // block directly after the persona, and measures each section.
+import { OUTPUT_STYLE_RULE } from "../shared/output-style.ts";
 import { describe, expect, it } from "vitest";
 
 import { CW_FAMILIES, CW_REQUIRED_FIELDS, CW_VIEWS, cwOrList } from "../shared/cw-widgets/schema.ts";
@@ -415,6 +416,14 @@ describe("RICH_OUTPUT_PROMPT", () => {
     expect(richOutputPrompt(false)).not.toContain("put it in one ```email fence");
     expect(RICH_OUTPUT_PROMPT).toContain("Never add a view on your own initiative.");
     expect(RICH_OUTPUT_PROMPT).toContain("To show an image, a video file or a document, attach it or link its absolute path");
+  });
+
+  it("defaults to prose or short lists and never to a key/sentence table (#2949)", () => {
+    expect(RICH_OUTPUT_PROMPT).toContain(OUTPUT_STYLE_RULE);
+    expect(richOutputPrompt(false)).toContain(OUTPUT_STYLE_RULE);
+    expect(RICH_OUTPUT_PROMPT).not.toContain("with a Markdown table for records and comparisons");
+    expect(RICH_OUTPUT_PROMPT).not.toContain("ConnectWise records go in a Markdown table by default");
+    expect(RICH_OUTPUT_PROMPT).toContain("one or two records read as a short list");
   });
 });
 

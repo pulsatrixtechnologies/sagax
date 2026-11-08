@@ -5,6 +5,12 @@
 // reply text after the fact, like voice-dashes.ts. Fenced code, inline code
 // and markdown links are kept as they are: an id the person asked for goes in
 // code.
+//
+// #2949: a two-column table whose second column is sentences ("Piece |
+// State", one sentence per row) becomes a bulleted list with bold labels
+// (shared/output-style.ts).
+
+import { rewriteKeySentenceTables } from "./output-style.ts";
 
 const PROTECTED = /```[\s\S]*?(?:```|$)|`[^`\n]+`|\[[^\]\n]*\]\([^)\s]+\)/g;
 const HOLD = (index: number) => `${index}`;
@@ -26,7 +32,7 @@ const ID_PREFIX = /\b(cartes?|cards?|approbations?|approvals?|fils?|threads?|tâ
 export function cleanReplyStyle(text: string): string {
   if (!text || ONLY_EMOJI.test(text)) return text;
   const held: string[] = [];
-  let out = text.replace(PROTECTED, (piece) => HOLD(held.push(piece) - 1));
+  let out = rewriteKeySentenceTables(text).replace(PROTECTED, (piece) => HOLD(held.push(piece) - 1));
   const report = /\n/.test(out.trim());
   out = out.replace(CW_TICKET_URL, (_url, id: string) => `billet #${id}`);
   // "Billet #297048 (billet #297048)": the number once

@@ -25,6 +25,11 @@ describe("on-demand system references (#1997)", () => {
     expect(splitPromptReference("prompt:shell")).toBeNull();
     expect(splitPromptReference("How do routines work?")).toBeNull();
   });
+  it("keeps the output-style rule in the short rich-output brief (#2949)", () => {
+    const brief = onDemandPromptText(richOutputPrompt(), true);
+    expect(brief).toContain("never a label and sentence or status table");
+    expect(brief).not.toContain("otherwise use text or Markdown tables");
+  });
   it("requires the actual help tool, respecting allow/deny and invalid scopes", () => {
     expect(promptReferencesAvailable(true, undefined)).toBe(true);
     expect(promptReferencesAvailable(false, undefined)).toBe(false);

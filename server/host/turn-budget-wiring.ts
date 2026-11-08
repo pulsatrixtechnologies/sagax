@@ -11,6 +11,7 @@ import {
   type TurnBudgetConfig,
 } from "./turn-budget.ts";
 import { lastPersonText, turnLanguage } from "../turns/turn-language.ts";
+import { browserGuardSettings, createBrowserFailureGuard } from "./browser-failure-guard.ts";
 
 export interface TurnBudgetBot {
   id: string;
@@ -45,35 +46,59 @@ export function wireTurnBudget(host: TurnBudgetHost): TurnBudget {
     const bot = host.botByThread(threadId);
     return Boolean(bot && host.threadBusy(bot.id, threadId));
   };
+  const language = (threadId: string) => turnLanguage(lastPersonText(host.messages(threadId)), host.preferredLanguage(threadId, host.botByThread(threadId) ?? null));
+  const steer = async (threadId: string, note: string): Promise<SteerOutcome> => {
+    const bot = host.botByThread(threadId);
+    const send = bot ? host.steerer(bot.modelSelection.instanceId) : undefined;
+    if (!send) return "refused";
+    return send(threadId, note).catch((): "refused" => "refused");
+  };
+  const interrupt = async (threadId: string) => {
+    const bot = host.botByThread(threadId);
+    if (bot) await host.stopDirectThread(bot.id, threadId);
+  };
+  const post = (threadId: string, text: string) => {
+    const bot = host.botByThread(threadId);
+    host.appendMessage(threadId, {
+      role: "bot", kind: "text", text,
+      ...(bot ? { from: { botId: bot.id, name: bot.name, color: bot.color } } : {}),
+    });
+  };
   const budget = createTurnBudget({
     settings: (threadId) => turnBudgetSettings(host.config(), host.env ?? process.env, host.botByThread(threadId)?.id),
     live: busy,
     canSteer: busy,
-    steer: async (threadId, note) => {
-      const bot = host.botByThread(threadId);
-      const steer = bot ? host.steerer(bot.modelSelection.instanceId) : undefined;
-      if (!steer) return "refused";
-      return steer(threadId, note).catch((): "refused" => "refused");
-    },
-    interrupt: async (threadId) => {
-      const bot = host.botByThread(threadId);
-      if (bot) await host.stopDirectThread(bot.id, threadId);
-    },
-    post: (threadId, text) => {
-      const bot = host.botByThread(threadId);
-      host.appendMessage(threadId, {
-        role: "bot", kind: "text", text,
-        ...(bot ? { from: { botId: bot.id, name: bot.name, color: bot.color } } : {}),
-      });
-    },
-    language: (threadId) => turnLanguage(lastPersonText(host.messages(threadId)), host.preferredLanguage(threadId, host.botByThread(threadId) ?? null)),
+    steer,
+    interrupt,
+    post,
+    language,
     ...(host.log ? { log: host.log } : {}),
     ...(host.now ? { now: host.now } : {}),
     ...(host.setTimer ? { setTimer: host.setTimer } : {}),
     ...(host.clearTimer ? { clearTimer: host.clearTimer } : {}),
   });
-  host.subscribe((event) => {
-    if (!host.ignore?.(event)) budget.onEvent(event);
+  // QA 0.8.67 G4: the same direct conversations get the browser failure
+  // guard, which ends a loop of failed web page calls well before the ceiling.
+  const browser = createBrowserFailureGuard({
+    settings: () => browserGuardSettings(host.env ?? process.env),
+    live: busy,
+    canSteer: busy,
+    steer,
+    interrupt,
+    post,
+    language,
+    ...(host.log ? { log: host.log } : {}),
   });
-  return budget;
+  host.subscribe((event) => {
+    if (host.ignore?.(event)) return;
+    budget.onEvent(event);
+    browser.onEvent(event);
+  });
+  return {
+    ...budget,
+    settle: (threadId) => {
+      budget.settle(threadId);
+      browser.settle(threadId);
+    },
+  };
 }

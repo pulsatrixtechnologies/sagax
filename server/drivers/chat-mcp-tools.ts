@@ -71,7 +71,7 @@ export interface ChatToolSession {
 type Server = { command: string; args: string[]; env: Record<string, string> };
 type RegisteredTool = { client: ChatMcpClient; server: string; launch: string; builtInBrowser: boolean; agents: boolean; data: boolean; name: string; schema: ValidateFunction; searched: boolean };
 /** A provider-safe tool name: the server's name and the tool's, joined. */
-function chatToolName(server: string, tool: string): string {
+export function chatToolName(server: string, tool: string): string {
   return `${server}_${tool}`.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "mcp_tool";
 }
 const STARTUP_MS = 8_000;

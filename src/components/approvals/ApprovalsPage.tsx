@@ -408,8 +408,8 @@ export function ApprovalsPage() {
     <main data-approvals-page="" className="relative flex h-full min-w-0 flex-1 flex-col bg-app">
       <WindowDragStrip />
       <header className="flex flex-wrap items-center gap-3 px-5 pb-2 pt-12">
-        <h1 className="text-[20px] font-semibold tracking-tight text-ink">{t("approvals.title")}</h1>
-        <div role="tablist" aria-label={t("approvals.title")} className="flex rounded-full bg-control/70 p-0.5">
+        <h1 className="text-[20px] font-semibold tracking-tight text-ink">{t("approvals.todayTitle")}</h1>
+        <div role="tablist" aria-label={t("approvals.todayTitle")} className="flex rounded-full bg-control/70 p-0.5">
           {(["pending", "history", "journal"] as const).map((tab) => (
             <button
               key={tab}

@@ -737,6 +737,12 @@ export class ProactiveProposals {
     return item;
   }
 
+  /** #2689: the proposals still waiting for an answer (the Today box). */
+  open(): ProactiveProposal[] {
+    this.prune();
+    return this.items.filter((item) => !item.answered);
+  }
+
   forgetBot(botId: string): void {
     const before = this.items.length;
     this.items = this.items.filter((item) => item.botId !== botId);

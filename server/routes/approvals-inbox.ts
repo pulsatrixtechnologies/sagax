@@ -6,6 +6,8 @@
 //   GET  /api/approvals/journal  ?days=7|30: the Journal, every action of
 //                                this person's own bots with what decided it
 //                                (2026-10-26, shared/action-journal.ts)
+//   POST /api/approvals/handled { botId, threadId, messageId }: a bot's
+//                                "needs you" card marked handled (#2689)
 //   POST /api/approvals/journal/test { rule: { id?, when, behavior, botId, riskScope } }:
 //                                that rule replayed on the last 7 days
 //
@@ -59,6 +61,9 @@ export interface ApprovalsInboxDeps {
   /** A rule (saved or a draft) replayed on the Journal's last 7 days with
    * the real matcher; a string is a refusal (400). */
   testRule?(auth: RequestAuth, viewer: InboxViewer, draft: RuleTestDraft): RuleTestResult | { error: string; status: number };
+  /** #2689: mark one of the viewer's "needs you" cards handled; false when
+   * it is not one of their open cards. */
+  handled?(auth: RequestAuth, viewer: InboxViewer, item: { botId: string; threadId: string; messageId: string }): boolean;
 }
 
 /** A rule test's body, or why not. Nothing is saved. */
@@ -126,6 +131,17 @@ export function createApprovalsInboxRoutes(deps: ApprovalsInboxDeps): RouteHandl
       const payload = deps.journal(auth, viewer, journalDays(url.searchParams.get("days")));
       if (url.searchParams.get("export") === "1") return json(res, 200, deps.sealedJournal?.() ?? { version: 1 as const, genesis: "0".repeat(64), entries: [] });
       return json(res, 200, payload);
+    }
+    if (method === "POST" && path === "/api/approvals/handled") {
+      const viewer = deps.viewer(auth);
+      if (!viewer || !deps.handled) return json(res, 403, { error: "Sign in to mark a card handled.", code: "no_person" });
+      const body = await readBody(req) as Record<string, unknown> | null;
+      const botId = body?.botId, threadId = body?.threadId, messageId = body?.messageId;
+      if (typeof botId !== "string" || !ID.test(botId) || typeof threadId !== "string" || !ID.test(threadId) || typeof messageId !== "string" || !ID.test(messageId)) {
+        return json(res, 400, { error: "botId, threadId and messageId are required" });
+      }
+      if (!deps.handled(auth, viewer, { botId, threadId, messageId })) return json(res, 404, { error: "no such card", code: "gone" });
+      return json(res, 200, { ok: true });
     }
     if (method === "POST" && path === "/api/approvals/journal/test") {
       const viewer = deps.viewer(auth);

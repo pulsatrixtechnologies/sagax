@@ -39,7 +39,7 @@ export function KindPill({ entry }: { entry: Pick<InboxApproval, "kind" | "risk"
       data-kind={entry.kind}
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[10.5px] font-medium",
-        entry.kind === "question"
+        entry.kind === "question" || entry.kind === "attention"
           ? "border-accent/35 text-accent-text"
           : risky ? "border-danger/35 text-danger" : "border-hairline/60 text-ink-secondary",
       )}

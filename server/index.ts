@@ -1430,7 +1430,8 @@ import { createCompactConversation } from "./index-leaves/compactConversation.ts
 import { createBindTurnComputer } from "./index-leaves/bindTurnComputer.ts";
 import { createStartDuplexCallTurn } from "./index-leaves/startDuplexCallTurn.ts";
 import { createSseFrameFor } from "./index-leaves/sseFrameFor.ts";
-import { createInboxPending } from "./index-leaves/inboxPending.ts";
+import { createInboxPending, todayDepsFor } from "./index-leaves/inboxPending.ts";
+import { markAttentionHandled } from "./approvals/today-rows.ts";
 import { createProvideSecretFromPhone } from "./index-leaves/provideSecretFromPhone.ts";
 import { createReportIncident } from "./index-leaves/reportIncident.ts";
 import { createRespondToCard } from "./index-leaves/respondToCard.ts";
@@ -24196,7 +24197,11 @@ ROUTES.push(createApprovalsInboxRoutes({
     org: IDENTITY.kind === "perspicax",
     team: managedTeamIds(viewer.principalId).size > 0
   }),
-  answer: (auth, item, decision, rule) => answerInboxCard(auth, item.threadId, item.requestId, decision, rule)
+  answer: (auth, item, decision, rule) => answerInboxCard(auth, item.threadId, item.requestId, decision, rule),
+  handled: (auth, viewer, item) => markAttentionHandled({
+    ...todayDepsFor(getLeafHost(), auth, viewer),
+    patch: (threadId, messageId, attention) => { store.patchMessage(threadId, messageId, { attention }); }
+  }, item.botId, item.threadId, item.messageId)
 }));
 
 ROUTES.push(createCodeRoutes({

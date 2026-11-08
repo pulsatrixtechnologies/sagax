@@ -1827,8 +1827,13 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       const realHome = mkdtempSync(join(tmpdir(), "grok-real-home-"));
       const savedHome = process.env.GROK_HOME;
       process.env.GROK_HOME = realHome;
+      // QA of #2816: a server that inherited the managed gateway switch on
+      // never hands it to a bot's turn
+      const savedManaged = process.env.GROK_MANAGED_MCPS_ENABLED;
+      process.env.GROK_MANAGED_MCPS_ENABLED = "true";
       onTestFinished(() => {
         if (savedHome === undefined) delete process.env.GROK_HOME; else process.env.GROK_HOME = savedHome;
+        if (savedManaged === undefined) delete process.env.GROK_MANAGED_MCPS_ENABLED; else process.env.GROK_MANAGED_MCPS_ENABLED = savedManaged;
         removeTempDir(realHome);
       });
       writeFileSync(join(realHome, "config.toml"), [
@@ -1865,6 +1870,15 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         expect(readFileSync(join(home, "requirements.toml"), "utf8")).toMatch(/^enable_all_project_mcp_servers = false$/m);
         expect(existsSync(join(home, "installed-plugins"))).toBe(false);
         for (const name of ["GROK_CLAUDE_MCPS_ENABLED", "GROK_CURSOR_MCPS_ENABLED", "GROK_CODEX_MCPS_ENABLED"]) expect(seen.env[name]).toBe("false");
+        // QA of #2816: the account's managed gateway (`managed_gateway:cursor`
+        // carried the operator's own connector) and the compat plugins' skills
+        // and hooks stay out of a bot's turn, as the dispatch now builds it
+        expect(seen.env.GROK_MANAGED_MCPS_ENABLED).toBe("false");
+        expect(seen.env.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED).toBe("false");
+        for (const source of ["CLAUDE", "CURSOR", "CODEX"]) {
+          expect(seen.env[`GROK_${source}_SKILLS_ENABLED`], source).toBe("false");
+          expect(seen.env[`GROK_${source}_HOOKS_ENABLED`], source).toBe("false");
+        }
         // the only MCP server the session gets is the one Sagax mounts
         const session = JSON.parse(readFileSync(`${dump}.session.json`, "utf8")) as { mcpServers: Array<{ name: string }> };
         expect(session.mcpServers.map((entry) => entry.name)).toEqual(["agents"]);

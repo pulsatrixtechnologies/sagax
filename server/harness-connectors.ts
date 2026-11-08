@@ -122,7 +122,15 @@ export function claudeAiConnectorsForTurn(input: ClaudeAiTurnInput): boolean {
  * driver adds no tool selection (grokCloudConnectorEnv) and keeps a card on
  * every write (grok.ts spawnArgs: never Grok's own auto or bypass mode). */
 export function grokCloudConnectorsForTurn(input: ClaudeAiTurnInput): boolean {
-  return GROK_DRIVERS.has(input.driver) && accountConnectorsForTurn(input) === "own";
+  // #2747 (QA of #2816): xAI's managed gateway serves every connector of the
+  // grok.com account, the account's own third-party MCP connectors included
+  // (`managed_gateway:cursor` carried the operator's "Pulsatrix Sagax"
+  // connector, remote_support_host_code and the rest, into a bot's turn). A
+  // bot sees only the tools Sagax mounts for it, so no bot turn loads the
+  // account's managed MCP until a bot setting asks for its account connectors
+  // explicitly. The driver path (turn.grokCloudConnectors) stays the opt-in.
+  void input;
+  return false;
 }
 
 /** The system note for a turn that keeps them: what they are and whose. */

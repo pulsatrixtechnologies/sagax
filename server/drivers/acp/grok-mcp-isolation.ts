@@ -37,11 +37,20 @@ const NOT_LINKED = new Set([
  * what grok writes there (sessions Sagax resumes) stays in the real home. */
 const SHARED_DIRECTORIES = ["sessions"];
 
-/** The env switches of grok's compat sources (Claude, Cursor, Codex MCP). */
+/** The env switches of grok's compat sources (Claude, Cursor, Codex): their
+ * MCP servers, and (QA of #2816) their skills and hooks, which are the
+ * person's own plugins and scripts, never the bot's. Names read from the
+ * grok 1.0.77 binary. */
 export const GROK_COMPAT_MCP_OFF: Readonly<Record<string, string>> = {
   GROK_CLAUDE_MCPS_ENABLED: "false",
   GROK_CURSOR_MCPS_ENABLED: "false",
   GROK_CODEX_MCPS_ENABLED: "false",
+  GROK_CLAUDE_SKILLS_ENABLED: "false",
+  GROK_CURSOR_SKILLS_ENABLED: "false",
+  GROK_CODEX_SKILLS_ENABLED: "false",
+  GROK_CLAUDE_HOOKS_ENABLED: "false",
+  GROK_CURSOR_HOOKS_ENABLED: "false",
+  GROK_CODEX_HOOKS_ENABLED: "false",
 };
 
 const TABLE = /^\s*\[\[?\s*([^\]]+?)\s*\]\]?\s*(?:#.*)?$/;

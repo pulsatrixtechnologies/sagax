@@ -85,7 +85,8 @@ describe("whose account connectors a turn reaches (review of #943, point 5)", ()
       const input = { ...base, driver, via: "subscription" as const, payerPrincipalId: BOB, speaker: { origin: "person" as const, principalId: BOB } };
       expect(accountConnectorsForTurn(input), driver).toBe("own");
     }
-    expect(grokCloudConnectorsForTurn({ ...base, driver: "grokAgent", via: "subscription", payerPrincipalId: BOB, speaker: { origin: "person", principalId: BOB } })).toBe(true);
+    // #2747 (QA of #2816): own or not, no bot turn loads the managed gateway
+    expect(grokCloudConnectorsForTurn({ ...base, driver: "grokAgent", via: "subscription", payerPrincipalId: BOB, speaker: { origin: "person", principalId: BOB } })).toBe(false);
   });
   it("someone else's sign-in pays: foreign, nothing offered", () => {
     for (const driver of ["claudeAgent", "grokAgent"]) {
@@ -115,7 +116,9 @@ describe("whose account connectors a turn reaches (review of #943, point 5)", ()
       expect(accountConnectorsForTurn({ ...base, identity: "solo", driver, speaker: { origin: "operator" } }), driver).toBe("own");
       expect(accountConnectorsForTurn({ ...base, identity: "solo", driver, speaker: { origin: "person", principalId: BOB } }), driver).toBe("foreign");
     }
-    expect(grokCloudConnectorsForTurn({ ...base, identity: "solo", driver: "grokAgent", speaker: { origin: "operator" } })).toBe(true);
+    // #2747 (QA of #2816): the operator's solo bot never sees the account's connectors
+    expect(grokCloudConnectorsForTurn({ ...base, identity: "solo", driver: "grokAgent", speaker: { origin: "operator" } })).toBe(false);
+    expect(grokCloudConnectorsForTurn({ ...base, identity: "solo", driver: "grok", speaker: { origin: "operator" } })).toBe(false);
     expect(grokCloudConnectorsForTurn({ ...base, identity: "solo", driver: "grokAgent", speaker: { origin: "person", principalId: BOB } })).toBe(false);
   });
   it("tells a foreign turn the connectors belong to someone else and offers nothing", () => {
@@ -393,7 +396,7 @@ describe("2026-10-28: a part run on another engine (run_with_engine)", () => {
   // the sub-turn's speaker: the same bot, for the person of the source turn (index.ts peerSpeaker)
   const relaySpeaker = { origin: "peer" as const, fromBotId: "bot-self", principalId: BOB };
 
-  it("a Grok part runs on the person's own Grok sign-in, so their Grok connectors (Teams, Outlook) are in that turn", () => {
+  it("a Grok part runs on the person's own Grok sign-in, but no bot turn loads its managed gateway (#2747)", () => {
     const plan = resolveEngineAccess({
       identity: "perspicax", speaker: relaySpeaker, owner: { principalId: BOB },
       instance: { instanceId: "grok", driver: "grokAgent", installed: true },
@@ -403,7 +406,7 @@ describe("2026-10-28: a part run on another engine (run_with_engine)", () => {
     expect(plan).toMatchObject({ ok: true, via: "subscription", payerPrincipalId: BOB });
     const input = { ...base, driver: "grokAgent", via: "subscription" as const, payerPrincipalId: plan.ok ? plan.payerPrincipalId! : "", speaker: relaySpeaker };
     expect(accountConnectorsForTurn(input)).toBe("own");
-    expect(grokCloudConnectorsForTurn(input)).toBe(true);
+    expect(grokCloudConnectorsForTurn(input)).toBe(false);
   });
 
   it("a part keeps a routine's lineage and payer: no sign-in of the person is borrowed by a routine", () => {

@@ -30,7 +30,10 @@ const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
 const TEAM_LIST = join(SERVER_DIR, "testing", "grok-gateway-team-mcp-list.json");
 const PERSONAL_LIST = join(SERVER_DIR, "testing", "grok-gateway-mcp-list.json");
-const posixOnly = describe.skipIf(process.platform === "win32");
+// #2747 (QA of #2816): no bot turn loads the account's managed gateway any
+// more (harness-connectors.ts grokCloudConnectorsForTurn), so this flow waits
+// for the explicit bot setting that opts a bot into its account connectors.
+const posixOnly = describe.skip;
 
 const READ = "outlook__search";
 const SEND = "outlook__send_message";

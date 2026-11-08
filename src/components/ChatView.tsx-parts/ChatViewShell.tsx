@@ -137,6 +137,7 @@ export function ChatViewShell(m: Record<string, any>) {
       <BackgroundEffectLayer paneRef={scrollRef} effect={backgroundEffect} />
       <div
         ref={scrollRef}
+        data-virtual-root=""
         className={cn("h-full overflow-x-hidden overflow-y-auto overscroll-y-contain px-5 [overflow-anchor:none]", backgroundEffect && "relative")}
         {...scrollHandlers}
       >

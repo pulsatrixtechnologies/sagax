@@ -1,10 +1,12 @@
 /**
- * Main view changes with a View Transition (document.startViewTransition):
- * opening a conversation or a thread, going to the previous one, closing
- * Settings. The browser snapshots the old frame, the update is flushed
- * synchronously inside the transition, then the main column cross-fades and
- * slides a few pixels in the direction of travel (styles.css "View
- * transitions"). Kept deliberately small:
+ * Main view changes: opening a conversation or a thread, going to the
+ * previous one, closing Settings. A page change (`page`, Settings closing)
+ * is a View Transition (document.startViewTransition): the browser
+ * snapshots the old frame, the update is flushed synchronously inside the
+ * transition, then it cross-fades (styles.css "View transitions"). A main
+ * column swap (`main`) draws the new view at once and slides only it in, a
+ * few pixels from the direction of travel (swapMain below). Kept
+ * deliberately small:
  *
  * - Input is never held: the pseudo-elements take no pointer events, and a
  *   pointer, wheel or key press during the transition skips straight to the
@@ -55,10 +57,47 @@ export function swapStandsStill(before: FrameShape | null, after: FrameShape | n
   return before.room || after.room || before.width !== after.width || before.height !== after.height;
 }
 
+/* A main column swap (a bot, a thread, a room) plays without a view
+   transition (#2755): a transition stops the page's rendering while it
+   snapshots the old view, which cost one dropped frame on every switch. The
+   new view is drawn at once and only it moves in (the same fade and 8px
+   slide as `vt-in-forward`), on the compositor, while the old one is simply
+   gone. Input is never held: the column takes clicks while it fades in. */
+const ENTER_MS = 200;
+const ENTER_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+let entering: Animation | null = null;
+
+function swapMain(doc: Document, update: () => void, direction: NavDirection): void {
+  const before = frameShape(doc);
+  entering?.cancel();
+  entering = null;
+  running?.skipTransition();
+  flushSync(update);
+  const after = frameShape(doc);
+  if (swapStandsStill(before, after)) return;
+  const frame = typeof doc.querySelector === "function" ? doc.querySelector<HTMLElement>(FRAME) : null;
+  if (!frame || typeof frame.animate !== "function") return;
+  const offset = direction === "back" ? -8 : 8;
+  const animation = frame.animate(
+    [{ opacity: 0, transform: `translateX(${offset}px)` }, { opacity: 1, transform: "none" }],
+    { duration: ENTER_MS, easing: ENTER_EASE },
+  );
+  entering = animation;
+  void animation.finished.catch(() => {}).finally(() => { if (entering === animation) entering = null; });
+}
+
 /** Run `update` (a store dispatch, a state change) as a view transition. */
 export function navigate(update: () => void, direction: NavDirection = "forward", scope: NavScope = "main"): void {
   const doc = typeof document === "undefined" ? null : document;
-  if (!doc || typeof doc.startViewTransition !== "function" || prefersReducedMotion() || doc.visibilityState === "hidden") {
+  if (!doc || prefersReducedMotion() || doc.visibilityState === "hidden") {
+    update();
+    return;
+  }
+  if (scope === "main") {
+    swapMain(doc, update, direction);
+    return;
+  }
+  if (typeof doc.startViewTransition !== "function") {
     update();
     return;
   }

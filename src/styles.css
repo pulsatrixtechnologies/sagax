@@ -3258,7 +3258,10 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   overflow-clip-margin: 2px;
 }
 
-/* View transitions between main views (src/lib/view-transitions.ts). Only
+/* View transitions between main views (src/lib/view-transitions.ts). A
+   main column swap no longer uses one (#2755: the snapshot dropped a frame
+   per switch); it slides in through the same keyframes' values in script.
+   A page change (Settings closing) still does. Only
    the main column is named, and only while a navigation plays, so the
    sidebar and everything else just cross-fade quickly as the root. The old
    view leaves at `fast`; the new one arrives over `moderate`, 8px from the

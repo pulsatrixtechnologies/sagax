@@ -3,7 +3,6 @@
 // prepended. ChatView and GroupView both use this one copy, so a viewport fix
 // lands once.
 import {
-  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -19,16 +18,12 @@ import { BOTTOM_FOLLOW_THRESHOLD, shouldResumeBottomFollow, useBottomFollowResiz
 import { useFocusMessage } from "@/lib/focus-message";
 import { scrollMotion } from "@/lib/motion";
 import {
-  FIRST_PAINT_ROWS,
   TRANSCRIPT_WINDOW_SIZE,
   expandWindowStart,
   focusWindowRange,
   followWindowStart,
-  nextPaintRows,
-  paintedRows,
   resolveTranscriptWindow,
   tailWindowStart,
-  whenIdle,
 } from "@/lib/transcript-window";
 import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 
@@ -143,37 +138,11 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     () => resolveTranscriptWindow(messages, transcriptWindow.start, TRANSCRIPT_WINDOW_SIZE, transcriptWindow.end),
     [messages, transcriptWindow.start, transcriptWindow.end],
   );
-  // Progressive paint (#2595): a switch to another bot or thread mounts its
-  // last FIRST_PAINT_ROWS rows only, so the view transition's synchronous
-  // render stays short; the rest of the window arrives in idle steps, as a
-  // low-priority transition, while the pane stays pinned to the bottom (or
-  // holds the row being read). The first mount paints everything, and a
-  // search-focus window (a finite end) is never capped.
-  const [paint, setPaint] = useState<{ key: string; rows: number }>(() => ({ key: transcriptKey, rows: Number.POSITIVE_INFINITY }));
-  const paintRows = transcriptWindow.end !== null ? Number.POSITIVE_INFINITY : paint.key === transcriptKey ? paint.rows : FIRST_PAINT_ROWS;
-  const windowedMessages = useMemo(() => paintedRows(fullWindow, paintRows), [fullWindow, paintRows]);
-  const windowCount = fullWindow.length;
-  const paintHeight = useRef<number | null>(null);
-  useEffect(() => {
-    if (paintRows === Number.POSITIVE_INFINITY) return;
-    if (paintRows >= windowCount) {
-      setPaint({ key: transcriptKey, rows: Number.POSITIVE_INFINITY });
-      return;
-    }
-    return whenIdle(() => {
-      paintHeight.current = scrollRef.current?.scrollHeight ?? null;
-      startTransition(() => setPaint({ key: transcriptKey, rows: nextPaintRows(paintRows, windowCount) }));
-    });
-  }, [transcriptKey, paintRows, windowCount]);
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    const height = paintHeight.current;
-    paintHeight.current = null;
-    if (!el || height === null) return;
-    if (followRef.current) el.scrollTop = el.scrollHeight;
-    else el.scrollTop += el.scrollHeight - height;
-    previousScrollTop.current = el.scrollTop;
-  }, [paintRows]);
+  // Every row of the window mounts at once: the rows themselves are
+  // virtualized (VirtualRow, #2755), so a switch draws only the tail that
+  // fills the pane. (#2595's progressive paint re-rendered the window in idle
+  // steps of 24 rows, each step a long frame: it is gone.)
+  const windowedMessages = fullWindow;
 
   const setBottomFollow = useCallback((next: boolean) => {
     followRef.current = next;

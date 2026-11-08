@@ -21,7 +21,8 @@ import type { EffectivePlace } from "@/lib/place";
 import type { TranscriptLookups } from "@/lib/transcript-derivations";
 import type { SeenFace } from "../SeenBy";
 import { useChatRows, type ListedItem } from "./types";
-import { listedItemMessages, MessagesListItem } from "./MessagesListItem";
+import { listedItemMessages, MessagesListItem, TRANSCRIPT_ROW_ESTIMATE, transcriptRowKey } from "./MessagesListItem";
+import { eagerTailStart } from "../VirtualRow";
 
 export const MessagesList = memo(function MessagesList({
   messages,
@@ -167,6 +168,11 @@ export const MessagesList = memo(function MessagesList({
   const dividerIndex = useMemo(() => unreadIds
     ? items.findIndex((item) => listedItemMessages(item).some((row) => unreadIds.has(row.id)))
     : -1, [items, unreadIds]);
+  // Virtualized rows (#2755): the tail that fills the pane and a half draws
+  // in the first frame of a switch (remembered heights make the count exact
+  // for a conversation seen before); the rows above draw as the reader
+  // scrolls toward them, and drop again far away.
+  const eagerFrom = eagerTailStart(items.map(transcriptRowKey), (typeof window === "undefined" ? 900 : window.innerHeight) * 1.5, TRANSCRIPT_ROW_ESTIMATE);
   const dividerAbove = (index: number) => index === dividerIndex ? <NewMessagesDivider fading={unreadDividerFading} /> : null;
   // "Cloud agents (N)" under the row that launched them (code/CloudAgentsCard.tsx).
   const cloudAgents = useThreadCloudAgents(botId, threadId);
@@ -227,6 +233,7 @@ export const MessagesList = memo(function MessagesList({
         <MessagesListItem
           item={item}
           index={i}
+          eager={i >= eagerFrom || i === dividerIndex || (focusedId !== null && listedItemMessages(item).some((row) => row.id === focusedId))}
           items={items}
           windowIds={windowIds}
           focusedId={focusedId}

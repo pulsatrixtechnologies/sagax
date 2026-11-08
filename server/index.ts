@@ -17701,6 +17701,7 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   },
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
+  feedback: (botId, topic) => backgroundBriefs.wakeLevel(botId, topic),
 };
 /** 2026-11-05 (visible roles, #2032): the role a Perspicax turn starts under.
  * Only a Pulsatrix Flow routine's "Au nom de" (the run's snapshot, else the

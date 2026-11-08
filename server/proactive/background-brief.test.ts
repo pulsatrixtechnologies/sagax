@@ -70,7 +70,8 @@ describe("background brief", () => {
     expect(called).toEqual(["Inbox:list_messages"]);
     expect(read.ok && read.suggestions[0]).toMatchObject({ sources: [{ piece: "Inbox, list messages", asOf: "2026-10-26" }] });
     expect(read.ok && read.suggestions[0]?.text).toContain("3");
-    expect(read.ok && read.suggestions[0]?.text).toContain("2026-10-26");
+    // #2845: what the answer counts, not its raw first line
+    expect(read.ok && read.suggestions[0]?.text).toBe("3 invoices");
   });
 
   it("runs at the person's time, once a day, in their time zone", () => {
@@ -135,7 +136,9 @@ describe("background brief", () => {
     expect(delivered).toHaveLength(1);
     const text = briefMessageText(delivered[0]!.suggestions, "fr");
     expect(text).toContain("Brief du jour");
-    expect(text).toContain("- Faire le suivi de « Monday note 2026-10-26: 3 invoices arrived » dans Inbox (2026-10-26)");
+    // #2845: what the answer counts, as an action, never its raw first line
+    expect(text).toContain("- Passer en revue les 3 factures dans Inbox (2026-10-26)");
+    expect(text).not.toContain("Monday note");
     expect(briefNoticeLines(delivered[0]!.suggestions, "en").title).toBe("Today's brief: 1 point");
   });
 
@@ -152,5 +155,29 @@ describe("background brief", () => {
     expect(pass.suggestions[0]?.text).toBe("Facture 1042 en retard");
     expect(suggestionAction(pass.suggestions[0]!, "fr")).toBe("Faire le suivi de « Facture 1042 en retard » dans Outlook");
     expect(suggestionAction(pass.suggestions[0]!, "en")).toBe('Follow up on "Facture 1042 en retard" in Outlook');
+  });
+
+  it("#2845: a text answer gives a concrete action in the person's language, or no suggestion at all", () => {
+    const point = (app: string, raw: string) => {
+      const pass = runBriefPass({ tools: ["list_messages"], pieces: [datedBriefPiece(app, "list_messages", raw)!], costUsd: 0, fastModel: "fast-1" });
+      if (!pass.ok) throw new Error(pass.error);
+      return pass.suggestions[0];
+    };
+    const found = point("Outlook", "Found 3 messages (2026-11-08)");
+    expect(found?.text).toBe("3 messages");
+    expect(suggestionAction(found!, "fr")).toBe("Passer en revue les 3 messages dans Outlook");
+    expect(suggestionAction(found!, "en")).toBe("Review the 3 messages in Outlook");
+    const one = point("Facturation", "2026-11-08 : 1 facture en retard");
+    expect(suggestionAction(one!, "fr")).toBe("Passer en revue 1 facture dans Facturation");
+    expect(suggestionAction(one!, "en")).toBe("Review 1 invoice in Facturation");
+    const subject = point("Outlook", "From: Carla\nSubject: Renouvellement du contrat\nDate: 2026-11-08");
+    expect(suggestionAction(subject!, "fr")).toBe("Faire le suivi de « Renouvellement du contrat » dans Outlook");
+    // nothing a person can act on: no suggestion
+    expect(point("Outlook", "OK 2026-11-08 status=200")).toBeUndefined();
+    expect(point("Outlook", "Found 0 messages 2026-11-08")).toBeUndefined();
+    expect(point("Outlook", '{"count": 3, "asOf": "2026-11-08"}')).toBeUndefined();
+    expect(briefGist("Found 3 messages")).not.toMatch(/Found/);
+    expect(briefGist("Found no messages")).toBe("");
+    expect(briefGist("Répondre à Carla avant midi")).toBe("Répondre à Carla avant midi");
   });
 });

@@ -20,9 +20,13 @@ await loadLocale(params.get("lang") ?? "en");
 // conversation runs at Ask (an engine change asked again there), with
 // Proactive on
 const mismatch = params.get("level") === "mismatch";
+// ?direct=1 (#2691): Proactive on, mail narrowed by filters, texts off, the
+// calendar following the switch
+const direct = params.get("direct") === "1";
 const bot = {
   id: "cryptic", name: "Cryptic", approvalMode: "ask", approvePeerComms: true, emailDrafts: true, allowedRecipients: [], threadId: "t1",
   ...(mismatch ? { approvalSetting: "full", approvalApplied: { mode: "ask", reason: "engine" }, proactiveMode: "proactive" } : {}),
+  ...(direct ? { proactiveMode: "proactive", directTriggers: { mail: { on: true, filters: "from:*@client.example, -infolettre" }, sms: { on: false } } } : {}),
 } as unknown as Bot;
 const derived = {
   patch: () => {}, engine: undefined, canCoordinate: true, approvalMode: mismatch ? "full" : "ask",

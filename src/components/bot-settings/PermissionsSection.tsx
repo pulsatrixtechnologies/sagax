@@ -30,6 +30,7 @@ import { viewerOwnTeamNames } from "@/lib/viewer-teams";
 import { api, useStore, type Bot } from "@/state/store";
 import { type ApprovalMode } from "../../../shared/approval-mode";
 import { AppliedLevelNote } from "./AppliedLevelNote";
+import { DirectTriggersRows } from "./DirectTriggersRows";
 import { proactiveModeFor, type ProactiveMode } from "../../../shared/proactive-mode";
 import { builtInPageTargets } from "../../../shared/page-targets";
 import { pageTargetKeys } from "@/lib/page-target-copy";
@@ -278,6 +279,11 @@ export function PermissionsSection({
             onClick={() => setProactiveMode(proactiveMixed || proactiveMode === "off" ? "proactive" : "off")}
           />
         </DescribedRow>
+      )}
+      {/* #2691: direct email, calendar and text triggers with filters. Hidden
+          while drafting or editing several bots (one bot's own channels). */}
+      {showProactive && !draft && !bulk && (
+        <DirectTriggersRows bot={bot} proactiveOn={proactiveMode === "proactive"} patch={(value) => patch(value)} />
       )}
       {/* #2048: remembered publish target (page / artifact surface). */}
       {showPageTarget && (

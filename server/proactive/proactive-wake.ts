@@ -48,8 +48,11 @@ import { ROUTINE_REPORT_CONTRACT } from "../routines/routine-report.ts";
 import { ROUTINE_RESTARTED } from "../routines/routines.ts";
 import { BOTMAIL_RUN_RULES, defang } from "../triggers/webhooks.ts";
 import { proactiveModeFor, type ProactiveMode } from "../../shared/proactive-mode.ts";
+import { directWakeVerdict, type DirectTriggers } from "../../shared/direct-triggers.ts";
 
-export type ProactiveSource = "mail" | "calendar" | "run" | "bot" | "peer" | "webhook";
+/** 2026-11-08 (#2691): "sms" is a text on the bot's phone line from someone
+ * else than its owner, when no Bot phone trigger took it. */
+export type ProactiveSource = "mail" | "calendar" | "run" | "bot" | "peer" | "webhook" | "sms";
 
 export interface ProactiveEvent {
   botId: string;
@@ -90,6 +93,12 @@ export interface ProactiveEvent {
   /** How to rebuild this event after a restart (ProactivePendingFile):
    * ids only, never the words, which stay sealed where they live. */
   replay?: ProactiveReplayRef;
+  /** 2026-11-08 (#2691): the sender (address or number), matched by the
+   * bot's direct trigger filters. Never shown, never in the prompt. */
+  from?: string;
+  /** Set by offer: the channel's own direct trigger let it in, so it wakes
+   * the bot even when the proactive switch is off. */
+  direct?: boolean;
 }
 
 /** 2026-11-02: what a gathered event keeps on disk until its wake starts. */
@@ -130,7 +139,7 @@ export const PROACTIVE_FAILURE_BACKOFF_MS = 5 * 60_000;
  * one starts a new streak (told to the person again). */
 export const PROACTIVE_FAILURE_BACKOFF_MAX_MS = 2 * 60 * 60_000;
 
-export type ProactiveOfferVerdict = "off" | "gone" | "own" | "hops" | "irrelevant" | "duplicate" | "gathered" | "auth";
+export type ProactiveOfferVerdict = "off" | "gone" | "own" | "hops" | "irrelevant" | "duplicate" | "gathered" | "auth" | "filtered";
 
 /** 2026-11-02 (peer inbox, second pass): the verdicts that mean no wake will
  * ever run for an event. A teammate's notice is never dropped on them: the
@@ -159,6 +168,8 @@ export function proactiveRelevance(event: ProactiveEvent): string | null {
     case "peer":
       // a teammate addressed this bot directly: it always concerns it
       return "a teammate sent it a message";
+    case "sms":
+      return "text on the bot's phone line";
   }
 }
 
@@ -271,7 +282,7 @@ export interface ProactiveWakeBatch {
 
 export interface ProactiveWakerDeps {
   /** The stored bot, undefined if gone. */
-  bot(botId: string): { proactiveMode?: unknown } | undefined;
+  bot(botId: string): { proactiveMode?: unknown; directTriggers?: DirectTriggers | null } | undefined;
   /** 2026-11-03 (audit S-2): the person an event without runAs runs as (the
    * bot owner). Events gather per (bot, person). */
   owner?: (botId: string) => string | undefined;
@@ -364,7 +375,12 @@ export class ProactiveWaker {
   offer(event: ProactiveEvent): ProactiveOfferVerdict {
     const bot = this.deps.bot(event.botId);
     if (!bot) return "gone";
-    if (proactiveModeFor(bot) === "off") return "off";
+    // 2026-11-08 (#2691): a direct channel (mail, calendar, text) follows its
+    // own trigger first, with its filters; the others follow the switch.
+    const switchOn = proactiveModeFor(bot) !== "off";
+    const verdict = directWakeVerdict(bot, switchOn, event.source, { from: event.from, text: `${event.label}\n${event.summary ?? ""}\n${event.detail}` });
+    if (verdict !== "wake") return verdict;
+    if (!switchOn) event.direct = true;
     // no loop: never on its own proactive work, never past the hop limit
     if (event.ownWake) return "own";
     if ((event.hops ?? 0) >= PROACTIVE_MAX_HOPS) return "hops";
@@ -462,13 +478,22 @@ export class ProactiveWaker {
     if (pending.timer !== null) this.clearTimer(pending.timer);
     const bot = this.deps.bot(botId);
     if (!bot) return null;
-    const mode = proactiveModeFor(bot);
+    const switchMode = proactiveModeFor(bot);
     // turned off while the events gathered: no wake (a teammate's notice
-    // is still shown to the person, deps.dropped)
-    if (mode === "off") {
-      this.drop(botId, pending.events);
-      return null;
+    // is still shown to the person, deps.dropped). A direct trigger turned
+    // on for its channel (#2691) still wakes for its own events.
+    if (switchMode === "off") {
+      const kept = pending.events.filter((event) => event.direct === true && directWakeVerdict(bot, false, event.source, { from: event.from, text: `${event.label}\n${event.summary ?? ""}\n${event.detail}` }) === "wake");
+      if (!kept.length) {
+        this.drop(botId, pending.events);
+        return null;
+      }
+      const left = pending.events.filter((event) => !kept.includes(event));
+      if (left.length) this.drop(botId, left);
+      pending.events = kept;
+      pending.more = 0;
     }
+    const mode: ProactiveMode = "proactive";
     if (!this.budget.mayInitiate(botId)) {
       this.deps.log(botId, `Proactive wake skipped: ${pending.events.length + pending.more} events within the hour's limit of wakes. ${eventLabels(pending.events, pending.more)}`);
       this.drop(botId, pending.events);

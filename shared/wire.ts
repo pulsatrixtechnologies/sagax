@@ -13,6 +13,7 @@ import type { GithubConnectCard } from "./github-connect-card.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
+import type { DirectTriggers } from "./direct-triggers.ts";
 import type { FinishUntilLine } from "./finish-until-line.ts";
 import type { MeetingRequestCardData } from "./meeting-request.ts";
 import type { PhoneCallConsentCardData } from "./phone-call-consent.ts";
@@ -510,6 +511,10 @@ export interface WireBot {
    * webhook and acts at its approval level and rules. Absent reads as the
    * default "proactive" (proactiveModeFor). Never a Chief orchestrator. */
   proactiveMode?: ProactiveMode;
+  /** #2691: per channel direct triggers (email, calendar invitation, text)
+   * with declarative filters (shared/direct-triggers.ts). Absent channel:
+   * follows proactiveMode. */
+  directTriggers?: DirectTriggers;
   /** #2048: remembered publish target id (sagax_page, sagax_artifact,
    * claude_artifact, or a registered id). Absent: ask when several targets
    * are available. Null is not stored; clear by omitting the field. */

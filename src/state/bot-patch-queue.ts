@@ -32,6 +32,7 @@ type BotPatchBody = {
   autoApprove: boolean;
   approvalMode: ApprovalMode;
   proactiveMode: ProactiveMode;
+  directTriggers: import("../../shared/direct-triggers").DirectTriggers;
   outbound: { policy: "ask" | "allow"; dailyCap: number };
   fallback: Array<{ instanceId: string; model: string }>;
   speakReplies: boolean;

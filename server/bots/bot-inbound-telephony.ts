@@ -340,6 +340,10 @@ export interface TelephonyRouteDeps {
   /** Whether the owner wants a chat notice for SMS that are not their own
    * and have no allowlisted contact persona. */
   noticeUnknown?(ownerPrincipalId: string): boolean;
+  /** 2026-11-08 (#2691): a text from someone else than the owner that no Bot
+   * phone trigger took wakes the bot through its direct text trigger (the
+   * proactive wake, confined). The sender is kept for the filters only. */
+  unhandled?(input: { botId: string; ownerPrincipalId: string; key: string; from: string; label: string; text: string }): void;
   /** WebhookManager.ingest: throws an Error with `status` on a refusal. */
   ingest(triggerId: string, event: NormalizedTriggerEvent, dedupeKey: string): WebhookReceiveResult | null;
   record(row: TelephonyDeliveryRow): void;
@@ -569,6 +573,23 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
       }
       // Not remembered: Perspicax may try again once the rate allows it.
       if (triggers.length && rateLimited === triggers.length) return send(res, 429, { error: "rate_limited" });
+    }
+    if (event.event === "sms" && !triggers.length && event.sender !== "owner_mobile" && deps.unhandled) {
+      const smsText = event.content?.text?.trim() ?? "";
+      if (smsText) {
+        try {
+          deps.unhandled({
+            botId: bot.id,
+            ownerPrincipalId: owner.principalId,
+            key: `sms:${event.eventId}`,
+            from: event.from,
+            label: contact?.label ? `Text from ${contact.label}` : "Text from a phone number",
+            text: smsText,
+          });
+        } catch {
+          // the wake is extra: the delivery row and the notice go on
+        }
+      }
     }
     if (event.event === "sms" && deps.ownerNotice) {
       const smsText = event.content?.text?.trim() ?? "";

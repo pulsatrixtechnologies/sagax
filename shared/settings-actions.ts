@@ -269,6 +269,10 @@ add({
 botField("bot.proactiveMode", "proactiveMode", "enum:off|proactive",
   "Proactive on/off (off = no wakes; proactive = wakes on email, calendar, failed run, bot mention or webhook and acts at its approval level and rules, with a dry run recorded before writes; absent = proactive)",
   "Bot editor > Permissions > Proactive", always("rule-change"));
+// 2026-11-08 (#2691): direct triggers per channel (shared/direct-triggers.ts)
+botField("bot.directTriggers", "directTriggers", "object",
+  "Direct triggers: { mail | calendar | sms: { on, filters } } (on wakes the bot even when proactive is off, off never wakes it; filters: from:*@client.com, -from:noreply@*, word, -word, comma separated); null = every channel follows proactive",
+  "Bot editor > Permissions > Proactive > Direct triggers", always("rule-change"));
 add({
   key: "bot.primary", family: "bot", target: "bot", value: "boolean", label: "Primary Bot", where: "Bot editor > Permissions > Primary Bot",
   read: botRead("chiefOfStaff"),

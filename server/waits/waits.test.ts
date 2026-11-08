@@ -282,6 +282,33 @@ describe("WaitManager", () => {
     expect([h.posts.length, h.manager.nextWakeAt()]).toEqual([1, null]);
   });
 
+  it("keeps a promised check-back: fires at its time in its chat, runs the follow-up, wakes a sleeping home on time (#2645)", async () => {
+    const h = harness();
+    const at = T0 + 2 * 3_600_000;
+    const created = await h.create({ kind: "time_reached", at }, { label: "the qc1 tunnel", followUp: "check qc1 and report", hours: 1 });
+    expect(created.state).toBe("created");
+    if (created.state !== "created") return;
+    expect(created.wait.expiresAt).toBe(at + 3_600_000);
+    expect(h.manager.nextWakeAt()).toBe(T0 + WAIT_WAKE_MS);
+    h.advanceTo(at - 60_000);
+    expect(h.manager.nextWakeAt()).toBe(at);
+    await h.manager.tick();
+    expect(h.posts).toEqual([]);
+    h.advanceTo(at); await h.manager.tick();
+    expect(h.posts).toEqual([{ status: "fired", text: `the qc1 tunnel: done. It is ${new Date(at).toISOString()}, the time you set to come back to it.` }]);
+    expect(h.followUp).toHaveBeenCalledTimes(1);
+    expect(h.manager.nextWakeAt()).toBeNull();
+    expect(describeCondition({ kind: "time_reached", at })).toBe(`${new Date(at).toISOString()} comes`);
+  });
+
+  it("survives a restart with a time wait and still fires it", async () => {
+    const h = harness();
+    await h.create({ kind: "time_reached", at: T0 + 10 * 60_000 });
+    h.reload();
+    h.advance(10 * 60_000); await h.manager.tick();
+    expect(h.posts.map((p) => p.status)).toEqual(["fired"]);
+  });
+
   it("never fetches two pages at once, even for concurrent creates", async () => {
     const h = harness();
     h.page = { ok: true, text: "building" };

@@ -19,7 +19,7 @@ export const WAIT_TOOL_DEFINITIONS = [
     // Short on purpose: it rides every turn. Its result says when the condition already holds, when this computer cannot
     // check files or programs, and when a sleeping home can delay the message.
     description:
-      `Tell the person when something happens. No AI runs while you wait, only plain checks. Ends after hours (default ${WAIT_HOURS.default}, 1-${WAIT_HOURS.max}).`,
+      `Tell the person when something happens, or come back at a set time (time_reached: a check-back you promised). No AI runs while you wait, only plain checks. Ends after hours (default ${WAIT_HOURS.default}, 1-${WAIT_HOURS.max}).`,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -28,13 +28,14 @@ export const WAIT_TOOL_DEFINITIONS = [
         kind: {
           type: "string",
           enum: [...WAIT_KINDS],
-          description: "url_*: the page at url has or lacks text. file_*: path exists, is gone or changes. process_*: process (name or pid) runs or stops. bot_idle: bot (name or id) finishes its work.",
+          description: "url_*: the page at url has or lacks text. file_*: path exists, is gone or changes. process_*: process (name or pid) runs or stops. bot_idle: bot (name or id) finishes its work. time_reached: the time at comes.",
         },
         url: { type: "string" },
         text: { type: "string" },
         path: { type: "string" },
         process: { type: "string" },
         bot: { type: "string" },
+        at: { type: "string", description: "time_reached only: RFC3339 with offset, 1 minute to 168 hours ahead." },
         follow_up: {
           type: "string",
           maxLength: 2000,

@@ -1053,7 +1053,7 @@
     },
     {
       "name": "wait_until",
-      "description": "Tell the person when something happens. No AI runs while you wait, only plain checks. Ends after hours (default 24, 1-168).",
+      "description": "Tell the person when something happens, or come back at a set time (time_reached: a check-back you promised). No AI runs while you wait, only plain checks. Ends after hours (default 24, 1-168).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1073,9 +1073,10 @@
               "file_changed",
               "process_running",
               "process_gone",
-              "bot_idle"
+              "bot_idle",
+              "time_reached"
             ],
-            "description": "url_*: the page at url has or lacks text. file_*: path exists, is gone or changes. process_*: process (name or pid) runs or stops. bot_idle: bot (name or id) finishes its work."
+            "description": "url_*: the page at url has or lacks text. file_*: path exists, is gone or changes. process_*: process (name or pid) runs or stops. bot_idle: bot (name or id) finishes its work. time_reached: the time at comes."
           },
           "url": {
             "type": "string"
@@ -1091,6 +1092,10 @@
           },
           "bot": {
             "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "description": "time_reached only: RFC3339 with offset, 1 minute to 168 hours ahead."
           },
           "follow_up": {
             "type": "string",
@@ -2634,14 +2639,93 @@
           "trigger": {
             "type": "object",
             "additionalProperties": false,
-            "description": "Instead of schedule. type is webhook or email. The routine starts active unless enabled is false, and the owner copies its key in the app.",
+            "description": "Instead of schedule. type is webhook, email or github. github runs on GitHub events (issue opened or labeled, PR opened, review requested...): events lists the kinds (omit for every kind) and filters narrows them, e.g. { repo: [\"org/repo\"], label: [\"ready\"] }. The routine starts active unless enabled is false, and the owner copies its key (for github: the webhook URL and secret to paste in the repository settings) in the app.",
             "properties": {
               "type": {
                 "type": "string",
                 "enum": [
                   "webhook",
-                  "email"
+                  "email",
+                  "github"
                 ]
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "pr.opened",
+                    "pr.updated",
+                    "pr.merged",
+                    "pr.closed",
+                    "pr.review_requested",
+                    "pr.review_submitted",
+                    "pr.review_approved",
+                    "pr.review_changes_requested",
+                    "pr.review_commented",
+                    "pr.comment",
+                    "pr.review_comment",
+                    "pr.thread_resolved",
+                    "pr.thread_reopened",
+                    "ci.failed",
+                    "ci.succeeded",
+                    "issue.opened",
+                    "issue.labeled",
+                    "issue.assigned",
+                    "push",
+                    "release.published"
+                  ]
+                },
+                "description": "github only: the GitHub event kinds that start the routine."
+              },
+              "filters": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "github only: each key keeps an event only when one of its values matches.",
+                "properties": {
+                  "repo": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "branch": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "label": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "sender": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "reviewer": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "assignee": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "keyword": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             },
             "required": [
@@ -2694,7 +2778,7 @@
               "delete",
               "rotate_webhook_key"
             ],
-            "description": "The requested action. Supply changes only for update. rotate_webhook_key replaces the key of a webhook or email trigger."
+            "description": "The requested action. Supply changes only for update. rotate_webhook_key replaces the key of a webhook, email or GitHub trigger."
           },
           "changes": {
             "type": "object",

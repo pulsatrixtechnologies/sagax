@@ -521,7 +521,7 @@ async function handleSandboxMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
     const result = await deps.handleUserSandboxMcp(rpcMethod, frame?.params, {
       exec: (input) => {
         const placed = deps.withCommandVariables(input as never, deps.commandVariablesFor(capability.botId, capability.threadId, ownerId)) as SandboxExecInput;
-        return deps.userSandboxExec(ownerId, folder ? inBotFolder(placed, folder) : placed, capability.botId) as never;
+        return deps.userSandboxExec(ownerId, folder ? inBotFolder(placed, folder, capability.threadId) : placed, capability.botId) as never;
       },
       overQuota: async () => await deps.userSandboxOverQuota(ownerId, capability.botId),
       commandRefusal: (command) => deps.enginePluginCommandRefusal(command)

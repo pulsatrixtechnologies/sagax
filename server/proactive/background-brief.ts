@@ -251,6 +251,16 @@ export function briefIdentity(text: string): string {
   return text.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase().replace(/\.$/, "");
 }
 
+/** The dedupe key of one suggestion. A counted gist ("3 messages") says
+ * nothing of where or when, so its key keeps the app and the day: Teams'
+ * "3 messages" is not Outlook's, nor yesterday's (#2693 review). */
+export function suggestionIdentity(text: string, source?: Pick<BriefPiece, "piece" | "asOf">): string {
+  const identity = briefIdentity(text);
+  if (!identity || !COUNT_GIST.test(text.trim()) || !source) return identity;
+  const app = briefIdentity(source.piece.split(",")[0] ?? "");
+  return `${identity} | ${app} | ${source.asOf}`;
+}
+
 function cited(text: string, sources: readonly BriefPiece[]): boolean {
   if (!sources.length || sources.some((source) => !source.piece.trim() || !DAY.test(source.asOf))) return false;
   const numbers = text.match(NUMBER) ?? [];
@@ -347,12 +357,25 @@ export function briefGist(raw: string): string {
 }
 
 /** A tool's own report: "Found 3 messages", "OK", "status=200", "200 OK",
- * "No results", keys and braces. */
-const TOOL_REPORT = /^(?:found|returned|retrieved|fetched|showing|listed|loaded|results?|ok|success|succeeded|done|error|failed|status|total|count|no\s|none|null|undefined|true|false|sent|\d)/i;
+ * "No results", keys and braces. Whole words only: "Totaliser les heures",
+ * "Sentinel signale", "Okay pour la réunion" are a person's words. */
+const TOOL_REPORT = /^(?:(?:found|returned|retrieved|fetched|showing|listed|loaded|results?|ok|success|succeeded|done|error|failed|status|total|count|no|none|null|undefined|true|false|sent)(?![\p{L}\p{N}_])|\d)/iu;
 
 function humanSentence(text: string): boolean {
   if (!text || TOOL_REPORT.test(text) || /[=<>{}[\]|\\"]|\w+:\/\//.test(text)) return false;
   return (text.match(/\p{L}{2,}/gu) ?? []).length >= 2;
+}
+
+/** A stored gist in the person's language: a counted one ("3 invoices",
+ * kept in English for the dedupe key) reads "3 factures" in French. Any
+ * other gist is the person's or the app's own words, returned as is. */
+export function localizedGist(text: string, language: "fr" | "en"): string {
+  const counted = text.trim().replace(/[.\s]+$/, "").match(COUNT_GIST);
+  const thing = counted ? countedThing(counted[2]!) : undefined;
+  if (!counted || !thing) return text;
+  const count = Number(counted[1]);
+  const names = language === "fr" ? thing.fr : thing.en;
+  return `${count} ${count === 1 ? names[0] : names[1]}`;
 }
 
 /** #2693, #2845: a suggestion as one concrete action the person can say yes
@@ -438,7 +461,7 @@ export function runBriefPass(input: BriefPassInput, rejected: readonly string[] 
     // #2693: the point is what the read says, not the tool's raw answer
     const text = briefGist(piece.text);
     if (!text || !cited(text, [piece])) return [];
-    const identity = briefIdentity(text);
+    const identity = suggestionIdentity(text, piece);
     if (!identity || blocked.has(identity)) return [];
     return [{ text, sources: [{ piece: piece.piece.trim().slice(0, 200), asOf: piece.asOf, text: piece.text.slice(0, 2_000) }], costUsd: input.costUsd, model, identity }];
   });

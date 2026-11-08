@@ -10731,7 +10731,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autoriser cette commande"
+            "value": "Toujours permettre cette commande"
           }
         },
         "pt-BR": {
@@ -10769,7 +10769,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autoriser pour cette session"
+            "value": "Toujours permettre pour cette session"
           }
         },
         "pt-BR": {
@@ -10785,7 +10785,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autoriser cet outil"
+            "value": "Toujours permettre cet outil"
           }
         },
         "pt-BR": {
@@ -50905,7 +50905,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune règle pour l'instant. Réponds à une carte avec Toujours autoriser ou Toujours refuser pour en ajouter une."
+            "value": "Aucune règle pour l'instant. Réponds à une carte avec Toujours permettre ou Toujours refuser pour en ajouter une."
           }
         }
       }
@@ -94251,7 +94251,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ce que tu as décidé avec Toujours autoriser ou Toujours refuser. Les règles sont à toi : elles s'appliquent à ce bot ou à tous tes bots, jamais à ceux d'une autre personne."
+            "value": "Ce que tu as décidé avec Toujours permettre ou Toujours refuser. Les règles sont à toi : elles s'appliquent à ce bot ou à tous tes bots, jamais à ceux d'une autre personne."
           }
         }
       }

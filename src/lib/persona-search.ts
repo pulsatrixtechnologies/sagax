@@ -23,7 +23,7 @@ export const PERSONA_SEARCH_WORDS: Record<PersonaCategory, readonly string[]> = 
   files: ["dossier", "dossier du bot", "fichiers", "files", "mémoire", "memoire", "memory", "documents", "notes", "souvenirs", "modèles de documents", "templates", "markdown"],
   model: ["modèle", "modele", "moteur", "moteurs", "engine", "fournisseur", "provider", "effort", "raisonnement", "reasoning", "contexte", "context", "vitesse", "fast", "claude", "codex", "grok", "auto", "clé api", "api key"],
   worksOn: ["zone de travail", "espace de travail", "workspace", "ordinateur", "computer", "machine virtuelle", "vm", "navigateur", "browser", "nuage", "cloud", "où il travaille", "where it works"],
-  access: ["accès", "acces", "access", "mcp", "outils", "tools", "webhooks", "crochets", "autoriser", "toujours autoriser", "allow", "exclure", "exclude", "navigateur", "browser", "dossier de travail", "horaire", "planifié", "schedule"],
+  access: ["accès", "acces", "access", "mcp", "outils", "tools", "webhooks", "crochets", "autoriser", "toujours permettre", "toujours autoriser", "allow", "exclure", "exclude", "navigateur", "browser", "dossier de travail", "horaire", "planifié", "schedule"],
   slack: ["slack", "messages directs", "direct messages", "mentions", "canal", "channel"],
   permissions: ["permissions", "approbation", "approbations", "approuver", "approval", "approve", "mode auto", "auto mode", "révision", "revision", "review", "pairs", "peers", "contacter", "contact", "coordination", "demander d'abord", "refuser", "ask first", "deny", "horaire", "routines", "schedule"],
   voice: ["voix", "voice", "parler", "speak", "alertes", "alerts", "notifications", "son", "sound", "horaire", "heures calmes", "ne pas déranger", "quiet hours", "do not disturb", "schedule"],

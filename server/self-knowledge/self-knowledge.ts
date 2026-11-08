@@ -236,6 +236,10 @@ export interface HelpContext {
   role?: "admin" | "member" | null;
   /** Perspicax tools (api_list, ...) may be in this turn's catalog. */
   perspicaxTools?: boolean;
+  /** The running Sagax release (environment.ts releaseVersion, package.json
+   * forkVersion), so the header follows the build, never a base generated
+   * for an older one (QA: "Sagax 0.8.62 knowledge" on 0.8.65). */
+  release?: string;
 }
 
 export function helpAnswer(index: KnowledgeIndex, question: string, context: HelpContext, limit = HELP_DEFAULT_RESULTS): { text: string; ids: string[] } {
@@ -244,7 +248,7 @@ export function helpAnswer(index: KnowledgeIndex, question: string, context: Hel
     ? `organization server (Perspicax)${context.role ? `, the person speaking is ${context.role === "admin" ? "an admin" : "a member"}` : ""}`
     : "a person's own Sagax (solo, no organization)";
   const head = [
-    `Sagax ${base.version} knowledge, ${base.generated}${base.perspicax && context.organization ? `; Perspicax console ${base.perspicax.version} (this organization's may be older)` : ""}. This server: ${where}.`,
+    `Sagax ${context.release?.trim() || base.version} knowledge, ${base.generated}${base.perspicax && context.organization ? `; Perspicax console ${base.perspicax.version} (this organization's may be older)` : ""}. This server: ${where}.`,
   ];
   const found = searchKnowledge(index, question, limit, context);
   // A guide that matches best is the whole answer: its full text, alone (#2734).

@@ -92,6 +92,13 @@ describe("opening a routine run", () => {
     expect(actions).toEqual([{ type: "openRoutineRunWindow", runId: "run-1" }]);
   });
 
+  it("#2909: a decision's notification opens the bot's chat on its card, even from a run", () => {
+    const actions: Action[] = [];
+    openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "main-chat", routineRunId: "run-1", cardId: "m-card" }, state, false);
+    expect(actions.some((action) => action.type === "openRoutineRunWindow")).toBe(false);
+    expect(actions[actions.length - 1]).toEqual({ type: "focusMessage", threadId: "main-chat", messageId: "m-card" });
+  });
+
   it("a run this client does not know keeps opening its thread", () => {
     const actions: Action[] = [];
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "main-chat", routineRunId: "run-gone" }, state, false);

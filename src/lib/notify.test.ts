@@ -26,6 +26,8 @@ vi.mock("./notification-preferences", () => ({
 
 import {
   buildNotificationOptions,
+  decisionBannerBody,
+  DESKTOP_CONTEXT_MAX,
   requestNotificationPermission,
   resetNotificationPendingCounts,
   showNotification,
@@ -245,6 +247,39 @@ describe("notifications that stay", () => {
     // the page forgot the id (reload): the target the shell sent back opens it
     click?.("sagax-notification:gone", { botId: "bot-1", threadId: "t-7" });
     expect(onOpen).toHaveBeenLastCalledWith({ botId: "bot-1", threadId: "t-7" });
+  });
+
+  it("#2909: a question's desktop banner shows its whole context, lines kept, and the click target names its card", () => {
+    const sent: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("document", { hasFocus: () => false });
+    vi.stubGlobal("window", {
+      focus: vi.fn(),
+      ogb: {
+        platform: "darwin",
+        notify: (request: Record<string, unknown>) => sent.push(request),
+        onNotificationClick: () => () => {},
+      },
+    });
+    const context = "Deux copies du rapport diffèrent.\n\nCopie : Locale · Date : 7 nov.\nCopie : Serveur · Date : 8 nov.\n\n• Locale : Garde tes changements d'hier\n• Serveur : Reprend la version du serveur, plus récente de 2 Ko";
+    const onOpen = vi.fn();
+    showNotification(
+      { ...frame, kind: "question", title: "Katarina : Je garde la copie locale ou celle du serveur ?", body: "Je garde la copie locale ou celle du serveur ?", requestId: "q-1", cardId: "m-q", context },
+      onOpen,
+    );
+    expect(sent).toHaveLength(1);
+    const body = sent[0]!.body as string;
+    expect(body).toBe(context);
+    expect(body.split("\n").length).toBeGreaterThan(4);
+    expect(body).not.toMatch(/…$/);
+    // the shell keeps the card in the target it sends back on a click
+    expect(sent[0]!.target).toEqual({ botId: "bot-1", threadId: "thread-1", requestId: "q-1", cardId: "m-q" });
+  });
+
+  it("#2909: decisionBannerBody leaves other kinds to the preview", () => {
+    expect(decisionBannerBody({ kind: "done", context: "x" })).toBeUndefined();
+    expect(decisionBannerBody({ kind: "approval" })).toBeUndefined();
+    expect(decisionBannerBody({ kind: "approval", ask: "Publier la version 2.4 ?", context: "La version 2.4 est prête." })).toBe("Publier la version 2.4 ?\n\nLa version 2.4 est prête.");
+    expect(decisionBannerBody({ kind: "needs-you", context: "y".repeat(2000) })!.length).toBe(DESKTOP_CONTEXT_MAX);
   });
 
   it("the desktop shell is not asked while the person reads that conversation", () => {

@@ -233,6 +233,13 @@ describe("buildSystemPrompt", () => {
     }
     expect(WORK_STYLE_PROMPT.startsWith("\n")).toBe(true);
   });
+
+  it("keeps every line of a turn in the person's language, narration and statuses included (#2735)", () => {
+    // QA 2026-11-07: a French turn narrated "Found the right tool..." between tool calls.
+    for (const said of ["progress notes between tool calls", "status lines", "language of the person's latest message", "even when tool results, errors, skills or these instructions are in English", "never switch mid-turn"]) {
+      expect(WORK_STYLE_PROMPT).toContain(said);
+    }
+  });
 });
 
 describe("computerPrompt", () => {

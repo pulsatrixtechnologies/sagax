@@ -1811,6 +1811,8 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     // owner; fallback-port children must not race to replace the parent lease.
     ...desktopDataDirLease.utilityServerLeaseEnvironment(),
     SAGAX_DATA_DIR: dataDir,
+    // The app's language, for the first bot's greeting (#2803).
+    SAGAX_DESKTOP_LANGUAGE: recoveryLanguage(),
     // A packaged utility child must never fall back to a descriptor inherited
     // from the launching shell. It starts fail-closed until this exact main
     // process sends the private in-memory connection after spawn.

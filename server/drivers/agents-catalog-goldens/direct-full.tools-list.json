@@ -2627,7 +2627,7 @@
               "maus",
               "box"
             ],
-            "description": "maus (default): bot model+computer. box: bot cloud computer."
+            "description": "maus (default): bot model+computer (incl. VPS). box: bot cloud computer."
           },
           "timeout_minutes": {
             "type": "integer",
@@ -3013,7 +3013,7 @@
                   "maus",
                   "box"
                 ],
-                "description": "maus (default): bot model+computer. box: bot cloud computer."
+                "description": "maus (default): bot model+computer (incl. VPS). box: bot cloud computer."
               },
               "timeout_minutes": {
                 "type": "integer",

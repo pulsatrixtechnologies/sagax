@@ -142,7 +142,7 @@ export const ROUTINE_FIELDS_SCHEMA = {
     type: "string",
     // "box" is Boat's historical run_on destination id (agents wire contract).
     enum: ["maus", "box"],
-    description: "maus (default): bot model+computer. box: bot cloud computer.",
+    description: "maus (default): bot model+computer (incl. VPS). box: bot cloud computer.",
   },
   timeout_minutes: {
     type: "integer",

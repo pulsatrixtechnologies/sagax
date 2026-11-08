@@ -15,6 +15,28 @@ export const UNATTENDED_HOST_ID = /^h_[0-9a-f]{32}$/;
 export const UNATTENDED_HOST_SCOPES = ["full-control", "view-only", "shell-only"] as const;
 export type UnattendedHostScope = typeof UNATTENDED_HOST_SCOPES[number];
 
+/** What bots may do with an enrolled host, per person (#2723): the same
+ * three choices as the person's own devices (src/lib/desktop-bridge.ts).
+ * "always" is the default and is not stored. */
+export const UNATTENDED_HOST_ACCESS = ["always", "ask", "never"] as const;
+export type UnattendedHostAccess = typeof UNATTENDED_HOST_ACCESS[number];
+
+export function parseUnattendedHostAccess(value: unknown): UnattendedHostAccess | null {
+  return UNATTENDED_HOST_ACCESS.find((access) => access === value) ?? null;
+}
+
+/** The OS a host reported, when Perspicax passes one (#2723). */
+export type UnattendedHostOs = "macos" | "windows" | "linux";
+
+function osOf(value: unknown): UnattendedHostOs | null {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!text) return null;
+  if (text === "macos" || text === "darwin" || text === "mac") return "macos";
+  if (text.startsWith("win")) return "windows";
+  if (text === "linux") return "linux";
+  return null;
+}
+
 /** enrolled: usable; expired: past expires_at; revoked: revoked_at set. */
 export type UnattendedHostState = "enrolled" | "expired" | "revoked";
 
@@ -37,6 +59,10 @@ export interface UnattendedHostRow {
   lastSeenAt: string | null;
   revokedAt: string | null;
   state: UnattendedHostState;
+  /** The OS the host reported, when Perspicax passes one. */
+  os?: UnattendedHostOs;
+  /** What bots may do with this host, for the person asking (#2723). */
+  access?: UnattendedHostAccess;
 }
 
 const MAX_HOSTS = 500;
@@ -89,6 +115,7 @@ export function parseUnattendedHost(raw: unknown, now: number): UnattendedHostRo
     lastSeenAt: iso(raw.last_seen_at),
     revokedAt,
     state,
+    ...(osOf(raw.os ?? raw.platform) ? { os: osOf(raw.os ?? raw.platform)! } : {}),
   };
 }
 
@@ -160,4 +187,6 @@ export interface RemoteHostCard {
   lastSeenAt: string | null;
   online: boolean;
   section: string | null;
+  os?: UnattendedHostOs;
+  access?: UnattendedHostAccess;
 }

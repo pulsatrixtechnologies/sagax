@@ -28,6 +28,9 @@ export async function guardRemoteSupportOpen(input: {
   remoteHosts: string[] | null | undefined;
   /** True when hostId is enrolled and owned by this person. */
   ownsHost(hostId: string): Promise<boolean>;
+  /** The person's bot access for an owned host (#2723): null lets the open
+   * through, a string is the refusal (Never allow, or a declined Ask card). */
+  hostAccess?(hostId: string): Promise<string | null>;
   local: RemoteSupportContext | null;
   post: (tool: string, args: Record<string, unknown>) => Promise<{ status: number; body: Record<string, unknown> }>;
 }): Promise<{ text: string; isError?: boolean }> {
@@ -49,6 +52,8 @@ export async function guardRemoteSupportOpen(input: {
     if (!(await input.ownsHost(modelHost))) {
       return { text: REMOTE_SUPPORT_OPEN_REFUSED, isError: true };
     }
+    const denied = await input.hostAccess?.(modelHost);
+    if (denied) return { text: denied, isError: true };
     const out = await openUnattendedSession({
       hostId: modelHost,
       args: safeArgs,

@@ -30,6 +30,7 @@ import {
 } from "../../shared/remote-unattended-host.ts";
 import { handleRemoteSupportCall, openUnattendedSession, type RemoteSupportContext } from "./remote-support-local.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { hostInstallCommand, hostInstallCommands } from "../../shared/remote-host-install.ts";
 
 /** Perspicax tools this page calls (names frozen with Perspicax, contract
  * docs/inscription-hote.md). A server without them reads as "not available". */
@@ -74,7 +75,7 @@ export type HostOpenOutcome =
   | { ok: true; code: string; botId: string; threadId: string }
   | { ok: false; error: "invalid" | "unavailable" | "refused" | "not_found"; message: string };
 export type HostCodeOutcome =
-  | { ok: true; code: string; enrollUrl: string | null; org: string; scope: UnattendedHostScope; expiresAt: string | null; installCommand: string }
+  | { ok: true; code: string; enrollUrl: string | null; org: string; scope: UnattendedHostScope; expiresAt: string | null; installCommand: string; installCommands: { macos: string; linux: string; windows: string } }
   | { ok: false; error: "unavailable" | "refused"; message: string };
 export type HostRevokeOutcome = { ok: true } | { ok: false; error: "invalid" | "unavailable" | "refused"; message: string };
 
@@ -108,24 +109,7 @@ export function cleanReason(raw: unknown): string {
   return raw.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, REVOKE_REASON_MAX);
 }
 
-/** A shell-safe double-quoted argument (no control characters). */
-function quoted(value: string): string {
-  // eslint-disable-next-line no-control-regex
-  return `"${value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/["\\$`]/g, "\\$&")}"`;
-}
-
-/** The command the person runs on the computer to install the host
- * (sagax-remote-access docs: install --unattended). Consent is recorded by
- * Perspicax at enrollment; the flag names the person who set it up. */
-export function hostInstallCommand(input: { org: string; code: string; scope: UnattendedHostScope; recordedBy: string }): string {
-  return [
-    "sagax-remote-access install --unattended",
-    `--org ${quoted(input.org)}`,
-    `--code ${quoted(input.code)}`,
-    `--scope ${input.scope}`,
-    `--consent-recorded-by ${quoted(input.recordedBy || "Sagax")}`,
-  ].join(" ");
-}
+export { hostInstallCommand };
 
 /** A status answer that means the session is done (or never coming). */
 function finished(text: string): "connected" | "over" | null {
@@ -298,6 +282,7 @@ export function createUnattendedHosts(deps: {
         scope: answeredScope,
         expiresAt: expires,
         installCommand: hostInstallCommand({ org: answeredOrg, code, scope: answeredScope, recordedBy: local.technicianName ?? "" }),
+        installCommands: hostInstallCommands({ org: answeredOrg, code, scope: answeredScope, recordedBy: local.technicianName ?? "" }),
       };
     },
 

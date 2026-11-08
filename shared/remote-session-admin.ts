@@ -50,8 +50,10 @@ export interface RemoteSessionAdminRow {
   /** The bot that initiated the session: human label, with the id for a tooltip. */
   botId: string;
   botLabel: string;
-  /** The person who opened or approved the session. */
+  /** The person who opened or approved the session: their name (#2723). */
   openedBy?: string;
+  /** Their principal id, for the tooltip only. */
+  openedById?: string;
   reachable: boolean;
   /** Unattended (a persistent "Sagax Remote Control" service is installed on
    * this host with active install-time consent). */
@@ -85,7 +87,10 @@ function statusOf(input: AdminSessionInput): RemoteSessionAdminStatus {
   return "ended";
 }
 
-export function toAdminRow(input: AdminSessionInput, deps: { botLabel: string; consent?: UnattendedConsent | null; now: number }): RemoteSessionAdminRow {
+export function toAdminRow(input: AdminSessionInput, deps: { botLabel: string; consent?: UnattendedConsent | null; now: number; personLabel?: (principalId: string) => string | null | undefined }): RemoteSessionAdminRow {
+  // The raw principal id (publicText would strip a GUID out of it).
+  const openedById = typeof input.openedBy === "string" && input.openedBy.trim() ? input.openedBy.trim().slice(0, 200) : undefined;
+  const openedByName = openedById ? publicText(deps.personLabel?.(openedById) ?? undefined) : undefined;
   const host = publicText(input.hostname) ?? input.code;
   const unattended = isUnattendedActive(deps.consent, deps.now);
   return {
@@ -101,7 +106,7 @@ export function toAdminRow(input: AdminSessionInput, deps: { botLabel: string; c
     elevated: input.elevated,
     botId: input.botId,
     botLabel: publicText(deps.botLabel) ?? input.botId,
-    ...(publicText(input.openedBy) ? { openedBy: publicText(input.openedBy) } : {}),
+    ...(openedById ? { openedBy: openedByName ?? publicText(openedById) ?? openedById, openedById } : {}),
     reachable: input.reachable,
     unattended,
     ...(unattended && deps.consent ? {

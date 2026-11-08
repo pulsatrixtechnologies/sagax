@@ -6,6 +6,7 @@
 import type { PerspicaxMcp } from "../perspicax/perspicax-mcp.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
+import { parseUnattendedHostId } from "../../shared/remote-unattended-host.ts";
 
 export interface PerspicaxToolInternalDeps {
   /** The tool names the route forwards; anything else is refused. */
@@ -26,6 +27,10 @@ export interface PerspicaxToolInternalDeps {
    * server, before Perspicax is called, so a call for someone else's session
    * never reaches Perspicax and never touches its folder. */
   ownsSupportCode?(code: string, owner: { principalId: string; botId: string } | null): boolean;
+  /** remote_support_open on an enrolled host (host_id): the person's bot
+   * access for that host (#2723). Null lets it through; a string is the
+   * refusal (Never allow, or an Ask card the person declined). */
+  hostAccess?(capability: InternalCapabilityView, owner: { principalId: string; botId: string } | null, hostId: string): Promise<string | null>;
 }
 
 const REMOTE_SUPPORT_OWNED = new Set(["remote_support_status", "remote_support_close"]);
@@ -80,6 +85,13 @@ export function createPerspicaxToolInternalRoutes(deps: PerspicaxToolInternalDep
       const code = typeof args.code === "string" ? args.code : "";
       if (!deps.ownsSupportCode(code, owner)) {
         return json(res, 200, { text: "That support code was opened by someone else on this computer. Open a new session with remote_support_open.", isError: true });
+      }
+    }
+    if (tool === "remote_support_open" && deps.hostAccess) {
+      const hostId = parseUnattendedHostId(args.host_id);
+      if (hostId) {
+        const denied = await deps.hostAccess(capability, owner, hostId);
+        if (denied) return json(res, 200, { text: denied, isError: true });
       }
     }
     const answer = await mcp.callTool({ threadId: capability.threadId, generation: capability.generation, botId: capability.botId, name: tool, args });

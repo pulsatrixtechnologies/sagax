@@ -6,7 +6,6 @@ import { formatEndLabel, type RemoteSessionView } from "../../../shared/remote-s
 import type { AdminRowFilters, RemoteSessionAdminRow, RemoteSessionLogEntry } from "../../../shared/remote-session-admin";
 import { cn } from "@/lib/cn";
 import { useCaptionChrome } from "@/components/DesktopCapabilities";
-import { CanvasComputers } from "@/components/CanvasComputers";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PAGE_ACTION_BUTTON, PAGE_COLUMN, PAGE_HEADER_BUTTON, PAGE_SCROLL, PageEmpty, PageHeader, PageSearch, PageSection, PageToggle, PageTopStrip } from "@/components/content-page";
 import { DetailPanel } from "@/components/DetailPanel";
@@ -19,6 +18,7 @@ import {
   useRemoteSessionsAdmin,
   useUnattendedHosts,
 } from "./use-remote-sessions-admin";
+import { AddComputerDialog } from "./AddComputerDialog";
 import { UnattendedHostsSection } from "./UnattendedHostsSection";
 
 /** A minimal chat-safe view, so the live-screen overlay can be reused from the
@@ -100,7 +100,6 @@ function UnattendedChips({ row, admin, onRevoke }: { row: RemoteSessionAdminRow;
   );
 }
 
-const ignore = () => {};
 
 const CHIP = "inline-flex h-6 items-center gap-1 rounded-full border border-hairline/50 bg-raised/40 px-2 text-ink-secondary";
 const ROW_BUTTON = "inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-2.5 text-[12px] text-ink-secondary transition-colors hover:bg-raised hover:text-ink";
@@ -142,7 +141,7 @@ function SessionCard({ row, admin, endAsk, onControl, onLogs, onEnd, onRevoke }:
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-secondary">
             <Bot size={12} aria-hidden="true" /><span className="text-ink" title={row.botId}>{row.botLabel}</span>
             <span aria-hidden="true">·</span>
-            <span>{t("remoteSessionsAdmin.col.openedBy")}: {row.openedBy ?? "-"}</span>
+            <span>{t("remoteSessionsAdmin.col.openedBy")}: <span title={row.openedById}>{row.openedBy ?? "-"}</span></span>
           </p>
           <UnattendedChips row={row} admin={admin} onRevoke={onRevoke} />
         </div>
@@ -171,10 +170,8 @@ export function RemoteSessionsAdminPage() {
   const [controlling, setControlling] = useState<RemoteSessionAdminRow | null>(null);
   const [confirmEnd, setConfirmEnd] = useState<string | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<RemoteSessionAdminRow | null>(null);
-  // "Add computer": the Computers panel of Team map, opened on its setup
-  // (the Unattended Remote Control enrolment), not a copy of it.
-  const [computersOpen, setComputersOpen] = useState(false);
-  const [addRequest, setAddRequest] = useState(0);
+  // "Add computer": a modal (OS, then mode, then the command), #2723.
+  const [adding, setAdding] = useState(false);
   const hosts = useUnattendedHosts();
   // every device of the person, this one first (the Computer menu reads the same list)
   const devices = myDevices(useDesktopBridgeStatus());
@@ -190,7 +187,10 @@ export function RemoteSessionsAdminPage() {
   }, [awaiting, rows]);
 
   const toggle = (key: "activeOnly" | "unattendedOnly") => setFilters((f) => ({ ...f, [key]: !f[key] }));
-  const addComputer = () => { setComputersOpen(true); setAddRequest((value) => value + 1); };
+  const addComputer = () => setAdding(true);
+  // The OS a past session read on each computer, by hostname: Perspicax does
+  // not report it for an enrolled host.
+  const osByHost = useMemo(() => new Map(rows.filter((row) => row.host).map((row) => [row.host.toLowerCase(), row.os] as const)), [rows]);
   const refresh = () => { reload(); hosts.reload(); };
 
   useEffect(() => {
@@ -250,7 +250,7 @@ export function RemoteSessionsAdminPage() {
       <div className="content-card-body flex min-h-0 flex-1">
         <div className={PAGE_SCROLL}>
           <div className={PAGE_COLUMN}>
-            <UnattendedHostsSection state={hosts} devices={devices} onAdd={addComputer} onOpened={(opened) => { setAwaiting(opened); reload(); }} />
+            <UnattendedHostsSection state={hosts} devices={devices} osByHost={osByHost} onAdd={addComputer} onOpened={(opened) => { setAwaiting(opened); reload(); }} />
             <PageSection title={t("remoteSessionsAdmin.sessionsTitle")} count={rows.length || undefined} data-remote-admin-sessions="">
               {rows.length === 0 && (
                 <div data-remote-admin-empty="" data-loading={loading ? "" : undefined}>
@@ -273,10 +273,9 @@ export function RemoteSessionsAdminPage() {
             </PageSection>
           </div>
         </div>
-        {computersOpen && <CanvasComputers open createRequest={addRequest} drop={null} sections={[]}
-          onClose={() => { setComputersOpen(false); hosts.reload(); }} onDropHandled={ignore} onChange={ignore} />}
       </div>
 
+      {adding && <AddComputerDialog available={hosts.available} onIssued={hosts.reload} onClose={() => { setAdding(false); hosts.reload(); }} />}
       {logsFor && <LogsPanel row={logsFor} onClose={() => setLogsFor(null)} />}
       {controlling && <RemoteTakeover botId={controlling.botId} view={viewFromRow(controlling)} state="running" onClose={() => setControlling(null)} />}
       {confirmRevoke && (

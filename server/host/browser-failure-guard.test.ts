@@ -11,6 +11,9 @@ import {
 } from "./browser-failure-guard.ts";
 import { wireTurnBudget } from "./turn-budget-wiring.ts";
 import { WORK_STYLE_PROMPT } from "../system-prompt.ts";
+import { chatToolName } from "../drivers/chat-mcp-tools.ts";
+import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
+import { AUTO_COMPUTER_MCP_NAME } from "../computer/auto-computer.ts";
 
 const at = "2026-11-08T00:00:00.000Z";
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -63,6 +66,39 @@ describe("browser failure guard (QA 0.8.67 G4)", () => {
     for (const title of ["mcp__computer-use__computer", "mcp__files__find", "navigate", "mcp__agents__sagax_help", "mcp__browser-search__web_search"]) {
       expect(isWebPageTool(title), title).toBe(false);
     }
+  });
+
+  it("names the page tools in the titles the chat engine emits (Grok, every chat-completions engine)", () => {
+    // chatToolName joins server and tool with ONE underscore: sagax_environment_browse.
+    for (const [server, tool] of [
+      [USER_SANDBOX_MCP_NAME, "browse"], [AUTO_COMPUTER_MCP_NAME, "fetch_url"], [AUTO_COMPUTER_MCP_NAME, "browse"],
+      ["browser", "agent_browser_tab_new"], ["browser", "agent_browser_tab_switch"], ["browser", "agent_browser_wait_ms"],
+      ["browser", "agent_browser_wait_for_load"], ["claude-in-chrome", "navigate"], ["claude-in-chrome", "tabs_create_mcp"],
+      ["playwright", "browser_navigate"],
+    ] as const) {
+      const title = chatToolName(server, tool);
+      expect(isWebPageTool(title), title).toBe(true);
+    }
+    expect(chatToolName(USER_SANDBOX_MCP_NAME, "browse")).toBe("sagax_environment_browse");
+    for (const [server, tool] of [
+      [USER_SANDBOX_MCP_NAME, "run_command"], [AUTO_COMPUTER_MCP_NAME, "computer_use"], [AUTO_COMPUTER_MCP_NAME, "read_file"],
+      ["git", "fetch"], ["agents", "sagax_help"], ["agents", "remote_support_hosts"], ["browser-search", "web_search"], ["connectwise", "cw_psa_query"],
+    ] as const) {
+      const title = chatToolName(server, tool);
+      expect(isWebPageTool(title), title).toBe(false);
+    }
+  });
+
+  it("replays the G4 turn with the chat engine titles: the note at 2, the stop at 4", async () => {
+    const h = harness();
+    h.call(chatToolName(USER_SANDBOX_MCP_NAME, "browse"), false);
+    h.call(chatToolName(AUTO_COMPUTER_MCP_NAME, "fetch_url"), false);
+    expect(h.steers).toHaveLength(1);
+    h.call(chatToolName("browser", "agent_browser_tab_new"), false);
+    h.call(chatToolName("browser", "agent_browser_wait_ms"), false);
+    await flush();
+    expect(h.stops).toHaveLength(1);
+    expect(h.posts[0]).toContain("sagax_environment_browse, sagax_computer_fetch_url, browser_agent_browser_tab_new");
   });
 
   it("replays the G4 turn: a note at the 2nd failure in a row, a stop with a clear message at the 4th, not 8 tries", async () => {

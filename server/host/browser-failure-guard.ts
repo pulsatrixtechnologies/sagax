@@ -57,12 +57,24 @@ function splitToolName(title: string | undefined): { server: string; name: strin
   return { server: first.slice(0, cut).toLowerCase(), name: first.slice(cut + width).toLowerCase() };
 }
 
-/** A call that opens, reads or drives a web page: browse, fetch_url, the browser's tab and page tools, any tool of a browser MCP server (claude-in-chrome, playwright, puppeteer). */
+/** Page tools the chat engine still names when it joins the server with one `_`
+ * (chatToolName: `sagax_environment_browse`, `sagax_computer_fetch_url`).
+ * Generic words (fetch) stay exact names only: `git_fetch` is no page call. */
+const WEB_PAGE_SUFFIXES = ["browse", "fetch_url", "web_fetch", "read_page", "web_extract", "open_url", "open_page"].map((tool) => `_${tool}`);
+
+/** A call that opens, reads or drives a web page: browse, fetch_url, the browser's tab and page tools, any tool of a browser MCP server (claude-in-chrome, playwright, puppeteer).
+ * Titles come as a bare name, `mcp__server__tool` (Claude, Codex), `server.tool`, or the chat engine's
+ * `server_tool` with one underscore (Grok and every chat-completions engine). */
 export function isWebPageTool(title: string | undefined): boolean {
   const { server, name } = splitToolName(title);
   if (!name) return false;
-  if (WEB_PAGE_TOOLS.has(name) || name.startsWith("tab_") || name.startsWith("tabs_") || name.startsWith("agent_browser_") || name.startsWith("browser_")) return true;
-  return !name.includes("search") && BROWSER_SERVER.test(server.replace(/^mcp__/, ""));
+  if (WEB_PAGE_TOOLS.has(name)) return true;
+  // Web search is the fallback, whatever server serves it (`browser_search_web_search`).
+  if (name.includes("search")) return false;
+  if (name.startsWith("tab_") || name.startsWith("tabs_") || name.startsWith("browser_") || name.includes("agent_browser_")) return true;
+  if (WEB_PAGE_SUFFIXES.some((suffix) => name.endsWith(suffix))) return true;
+  // No server cut: a chat engine title carries its server inside the name (`claude_in_chrome_navigate`).
+  return BROWSER_SERVER.test(server ? server.replace(/^mcp__/, "") : name);
 }
 
 /** Opened as `[Sagax: …]`, which model-written text cannot open. */

@@ -429,13 +429,13 @@ export function browsableUrl(value: unknown): string {
   return url.href;
 }
 
-// QA 0.8.67 G4: every browse call shared one profile, /tmp/sagax-chromium.
-// Two calls at once (a bot reading two pages side by side), or a call killed
-// at its time limit, left Chromium's profile lock held, so every later call
-// failed at once and the sandbox browser looked crashed for the rest of the
-// turn. Each call now gets its own profile and screenshot folder, removed on
-// exit; folders a killed call left behind (and the old shared one) are swept
-// first. `--timeout` makes Chromium give up on a page that never finishes
+// Hardening seen while looking at QA 0.8.67 G4 (not its proven cause: that
+// turn also failed fetch_url on the computer and the built-in browser's tabs).
+// Every browse call shared one profile, /tmp/sagax-chromium: two calls at
+// once, or a call killed at its time limit, can leave Chromium's profile lock
+// held and fail the calls after it. Each call now gets its own profile and
+// screenshot folder, removed on exit; folders a killed call left behind (and
+// the old shared one) are swept first. `--timeout` makes Chromium give up on a page that never finishes
 // loading and dump what it has, well before the exec limit kills it.
 const CHROMIUM_FLAGS = "--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --hide-scrollbars --no-default-browser-check";
 /** Page load ceiling inside Chromium, then the exec limit with room to spare. */
@@ -617,6 +617,7 @@ export async function callUserSandboxTool(name: string, args: Record<string, unk
       if (refused) return text(refused, true);
       if (args.screenshot === true) {
         const result = await exec.exec({ argv: ["sh", "-c", BROWSE_SCRIPT, "sh", url, "shot"], timeoutSec: BROWSE_EXEC_TIMEOUT_SEC, maxOutputBytes: 1024 * 1024 });
+        if (result.timedOut || result.exitCode === 124) return text(`The page did not answer within ${BROWSE_EXEC_TIMEOUT_SEC} s.`, true);
         const data = result.stdout.trim();
         if (result.exitCode !== 0 || !data || result.truncated) return text("The page could not be captured.", true);
         return { content: [{ type: "image", data, mimeType: "image/png" }, { type: "text", text: `screenshot of ${url}` }] };

@@ -41,10 +41,10 @@ export function PersonLabelTag({ principalId, ...rest }: { principalId: string |
 }
 
 /** A bot's role beside its name in a sidebar row or under its pinned tile,
- * measured on the reference design's title tag: 11/16 text, 1px by 4px padding, a 0.5px
- * outline, 4px corners, a faint fill of the rail's ink. In a row it takes the
- * room the name leaves (at least 2em, never wider than its text); the name
- * gives way first. */
+ * measured on the reference design's title tag: 11/14 text, 2px by 6px padding, text centred both ways, a 0.5px
+ * outline, 4px corners, a faint fill of the rail's ink. In a row it hugs its text
+ * (never wider, so the padding stays equal) and is centred on the name's line;
+ * both give way by truncating. */
 export function BotRoleTag({ text, tile = false, className }: { text: string | null | undefined; tile?: boolean; className?: string }) {
   const label = text?.trim();
   if (!label) return null;
@@ -52,8 +52,8 @@ export function BotRoleTag({ text, tile = false, className }: { text: string | n
     <span
       data-bot-role-tag=""
       className={cn(
-        "inline-flex min-w-0 items-center overflow-hidden rounded-[4px] border-[0.5px] border-sidebar-ink/[0.1] bg-sidebar-ink/[0.022] py-px text-[11px] font-normal leading-4 tracking-[0.005em] text-sidebar-ink-secondary",
-        tile ? "max-w-full px-px" : "max-w-fit shrink-0 grow basis-[2em] px-1",
+        "inline-flex min-w-0 items-center justify-center self-center overflow-hidden rounded-[4px] border-[0.5px] border-sidebar-ink/[0.1] bg-sidebar-ink/[0.022] py-0.5 text-center text-[11px] font-normal leading-[14px] tracking-[0.005em] text-sidebar-ink-secondary",
+        tile ? "max-w-full px-0.5" : "max-w-fit shrink basis-auto px-1.5",
         className,
       )}
     >

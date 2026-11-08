@@ -59,6 +59,8 @@ import { misusePathRefusal, misuseRefusal, misuseToolFrameText, setMisuseAlert, 
 import { unwrapAgentsBridge } from "../shared/searched-tool-call.ts";
 import { safetyArm, safetyHttpRefusal, safetyPermissionEffect, safetyToolHold, setSafetyConfirm, setSafetyFullAccess } from "./safety/safety-review.ts";
 import { writeFileAtomic } from "./atomic.ts";
+import { createSignalSettingsRoutes } from "./routes/signal-settings.ts";
+import { signalGateFileStorage } from "./proactive/signal-gate-store.ts";
 import { hideServerPathsInSections } from "./server-path-prompt.ts";
 import { rm as removeDirectory } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -1493,7 +1495,7 @@ import { createTemporaryAgentSetting } from "./index-leaves/temporaryAgentSettin
 import { createAnswerInboxCard } from "./index-leaves/answerInboxCard.ts";
 import { createPublishedPageOptions } from "./index-leaves/publishedPageOptions.ts";
 import { createObservePushFrame } from "./index-leaves/observePushFrame.ts";
-import { heldSignalsLine, PersonSignalGate, QUIET_HOURS_KEY, readQuietHours, readSignalBudget, SIGNAL_BUDGET_KEY } from "../shared/signal-levels.ts";
+import { heldSignalsSection, PersonSignalGate, QUIET_HOURS_KEY, readQuietHours, readSignalBudget, SIGNAL_BUDGET_KEY } from "../shared/signal-levels.ts";
 import { createConfirmHeldCard } from "./index-leaves/confirmHeldCard.ts";
 import { createResumeTurnsCutByRestart } from "./index-leaves/resumeTurnsCutByRestart.ts";
 import { createDispatchComputerResume } from "./index-leaves/dispatchComputerResume.ts";
@@ -8646,7 +8648,7 @@ const signalGate = new PersonSignalGate((person) => {
   let prefs: Record<string, string> = {};
   try { prefs = userPreferenceStore.get(person).preferences ?? {}; } catch { /* the defaults */ }
   return { budget: readSignalBudget(prefs[SIGNAL_BUDGET_KEY]), quiet: readQuietHours(prefs[QUIET_HOURS_KEY]) };
-});
+}, Date.now, signalGateFileStorage(join(DATA_DIR, "signal-gate.json")));
 /** "Me joindre" (server/reach-me/): set once its channels exist, further down. */
 let reachMeService: ReachMe | null = null;
 let reachMeTeams: ReachTeams | null = null;
@@ -15833,6 +15835,8 @@ const quietTurnThreads = new Set<string>();
  * anyone (set_reply_notify, send_to_bot `notify` false): read and cleared
  * when that turn completes (runtime-events/turn-completed.ts). */
 const silentReplyThreads = new Set<string>();
+/** #2695: threads whose next reply the bot marked FYI (set_reply_notify fyi). */
+const fyiReplyThreads = new Set<string>();
 const QUIET_TURN_NEWS: ReadonlySet<Notification["kind"]> = new Set(["done", "turn-failed", "incident"]);
 
 /** Put a notification on the wire. Clients decide what to do with it — a
@@ -17345,6 +17349,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get publicGroupState() { return publicGroupState; },
   get quietTurnThreads() { return quietTurnThreads; },
   get silentReplyThreads() { return silentReplyThreads; },
+  get fyiReplyThreads() { return fyiReplyThreads; },
   get raiseHarnessQuestion() { return raiseHarnessQuestion; },
   get reachMeTeams() { return reachMeTeams; },
   get readAndDraft() { return readAndDraft; },
@@ -22199,7 +22204,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     voiceCallActive: (threadId) => Boolean(voiceCalls.active(threadId)),
     botReaction,
     recordPlacedReaction: (threadId, botId, info) => { placedBotReactions.set(`${threadId}:${botId}`, info); },
-    setReplyNotify: (threadId, alert) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); },
+    setReplyNotify: (threadId, alert, fyi) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); if (fyi) fyiReplyThreads.add(threadId); else fyiReplyThreads.delete(threadId); },
     roomFeedsBot,
     turnSpeaker: (threadId) => turnSpeakerPrincipals.get(threadId),
     localPrincipalId,
@@ -22612,7 +22617,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       title: `${poster.name} in ${room.name}`, body: summarize(text),
       ...(typeof poster.avatarUrl === "string" && poster.avatarUrl ? { avatarUrl: poster.avatarUrl } : {}),
     } satisfies Notification, alert)),
-    setReplyNotify: (threadId, alert) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); },
+    setReplyNotify: (threadId, alert, fyi) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); if (fyi) fyiReplyThreads.add(threadId); else fyiReplyThreads.delete(threadId); },
     proactiveHopsFromThread,
     pollOnlyCaller: (capability) => pollOnlyCaller(capability as InternalCapability),
     peerSpeaker: (fromBotId, fromThreadId) => peerSpeaker(fromBotId, fromThreadId),
@@ -23188,6 +23193,14 @@ ROUTES.push(createDesktopBridgeRoutes({
 }));
 // A personal computer hands its look to the paired phone (shared/desktop-appearance.ts).
 ROUTES.push(createDesktopAppearanceRoutes({ store: createDesktopAppearanceStore(DATA_DIR), organization: () => IDENTITY.kind === "perspicax" }));
+// #2695: budget and quiet hours on a personal computer (no preference sync)
+ROUTES.push(createSignalSettingsRoutes({
+  store: {
+    get: () => userPreferenceStore.get(localPrincipalId()).preferences ?? {},
+    merge: (set, remove) => { userPreferenceStore.merge(localPrincipalId(), set, remove); }
+  },
+  organization: () => IDENTITY.kind === "perspicax"
+}));
 // The bot-memory panel's routes (MEMORY.md, memory/ topics, journal); the
 // store lookups — the 404 precheck and journal thread titles — stay explicit.
 // Memory manager catalog (local bots + team + Perspicax availability).
@@ -23763,12 +23776,15 @@ if (!process.env.VITEST) {
       const language = reachMeLanguage(person);
       const threadId = backgroundBriefThread(bot, person);
       if (threadId && !store.isConfidentialThread(threadId)) {
-        // #2695: what waited (daily budget, quiet hours, FYI) is one line of the brief
-        const held = heldSignalsLine(signalGate.takeHeld(person), language);
+        // #2695: what waited (daily budget, quiet hours, FYI) arrives in the brief, in its own words
+        const held = heldSignalsSection(signalGate.takeHeld(person), language);
         store.appendMessage(threadId, { role: "bot", kind: "text", text: held ? `${briefMessageText(suggestions, language)}\n\n${held}` : briefMessageText(suggestions, language) });
         // #2693: the primary bot turns up to 3 points a day into one-gesture cards
         if (bot.chiefOfStaff === true) postDailySuggestions(bot.id, threadId, suggestions, language);
       }
+      // #2695: the brief's "Me joindre" notice is a card like any other: quiet
+      // hours and the day's budget first (the brief itself is already in the chat)
+      if (!reachMeService || !signalGate.admit(person)) return;
       const { title, lines } = briefNoticeLines(suggestions, language);
       reachMeService?.notice({ id: `brief-${botId}-${suggestions[0]!.id}`, person, botId, botName, threadId: threadId ?? "", title, lines });
     },

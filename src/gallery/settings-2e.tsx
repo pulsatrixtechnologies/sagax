@@ -7,7 +7,6 @@ import { StoreProvider } from "../state/store";
 import { AccessibilityGroup } from "../components/settings/AppearanceSettings";
 import { BotWorkplaceSettings } from "../components/settings/BotWorkplaceSettings";
 import { TimeZoneRows } from "../components/settings/TimeZoneSettings";
-import { SignalSettings } from "@/components/settings/SignalSettings";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { SettingsGroup } from "../components/SettingsPrimitives";
 import type { DesktopBridgeStatus } from "../lib/desktop-bridge";
@@ -39,6 +38,7 @@ window.fetch = async (input, init) => {
   if (url.includes("/api/settings/bot")) {
     return new Response(JSON.stringify({ settings: { autoReviewDefault: false, timeZone: "America/Toronto", timeZoneAuto: params.get("auto") === "1" }, scope: "person", hostTimeZone: "UTC", effectiveTimeZone: "America/Toronto" }), { headers: { "content-type": "application/json" } });
   }
+  if (url.includes("/api/me/signals")) return new Response(JSON.stringify({ budget: "10", quiet: JSON.stringify({ start: "22:00", end: "07:00", timeZone: "America/Toronto" }) }), { headers: { "content-type": "application/json" } });
   if (url.includes("/api/me/desktop-bridge/computers/")) return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
   return original(input, init);
 };
@@ -51,7 +51,6 @@ function Gallery() {
         <SettingsGroup title={t("settings.group.appearance")} groupId="appearance">
           <TimeZoneRows />
         </SettingsGroup>
-        <SignalSettings />
         <NotificationSettings />
         <SettingsGroup title={t("settings.section.computer")} groupId="computer">
           <BotWorkplaceSettings status={status} />

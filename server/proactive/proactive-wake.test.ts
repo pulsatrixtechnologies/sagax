@@ -342,6 +342,9 @@ describe("which failed runs wake the bot (2026-11-01)", () => {
   it("a run that failed on its own work does; a restart's cut, a missed occurrence or a wake of the bot's own does not", () => {
     expect(runFailureWakesBot({ status: "failed", error: "401 Unauthorized from the CRM" })).toBe(true);
     expect(runFailureWakesBot({ status: "failed", error: ROUTINE_RESTARTED })).toBe(false);
+    // #2695: a provider limit never wakes the bot
+    expect(runFailureWakesBot({ status: "failed", error: "429 Too Many Requests" })).toBe(false);
+    expect(runFailureWakesBot({ status: "failed", error: "insufficient credit balance" })).toBe(false);
     expect(runFailureWakesBot({ status: "missed", error: "This computer was offline for more than 12 hours after the scheduled time" })).toBe(false);
     expect(runFailureWakesBot({ status: "failed", error: "x", proactive: { hops: 0 } })).toBe(false);
   });

@@ -37,6 +37,7 @@
 // - trace: one line in the conversation's Events tab per wake, with its
 //   reason and the events' labels, never their content.
 
+import { runFailureIsProviderLimit } from "../peers/ops-incidents.ts";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -669,6 +670,9 @@ export function runFailureWakesBot(run: { status: string; error?: string; attent
   if (run.status !== "failed" || run.error === ROUTINE_RESTARTED || run.proactive) return false;
   if (isEngineReconnectCondition(run.error) || isEngineReconnectCondition(run.attention)) return false;
   if (run.readiness?.some((check) => !check.ok) || isDeterministicRunBlock(run.error)) return false;
+  // #2695: a provider limit (429, quota) is not the routine's fault; a wake
+  // would hit the same limit. The run-failed notice is the one notification.
+  if (runFailureIsProviderLimit(run.error ?? "") || runFailureIsProviderLimit(run.attention ?? "")) return false;
   return true;
 }
 

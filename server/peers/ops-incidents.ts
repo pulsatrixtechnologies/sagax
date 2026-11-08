@@ -8,7 +8,20 @@ import { OPS_INCIDENT_REASONS } from "../../shared/signal-levels.ts";
 import { isEngineEmptyFailure, type IncidentKind } from "./incidents.ts";
 
 export function incidentIsOps(kind: IncidentKind, detail: string): boolean {
-  if (kind === "routine-failed") return false;
-  if (OPS_INCIDENT_REASONS.has(problemReason(kind, detail))) return true;
+  const reason = problemReason(kind, detail);
+  // #2695: a routine stopped by a provider limit (429, quota) is not a
+  // business incident; its run-failed notice is the only notification.
+  if (kind === "routine-failed") return isProviderLimitReason(reason);
+  if (OPS_INCIDENT_REASONS.has(reason)) return true;
   return isEngineEmptyFailure(detail) || isEngineReconnectCondition(detail);
+}
+
+/** #2695: a provider limit (429, quota), not a fault of the routine itself. */
+export function isProviderLimitReason(reason: string): boolean {
+  return reason === "rate_limited" || reason === "quota";
+}
+
+/** True when a run failure only hit a provider limit (429, quota). */
+export function runFailureIsProviderLimit(detail: string): boolean {
+  return isProviderLimitReason(problemReason("routine-failed", detail));
 }

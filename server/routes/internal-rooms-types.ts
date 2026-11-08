@@ -119,7 +119,7 @@ export interface InternalRoomsDeps {
    * when the bot chose to post without alerting anyone. */
   notifyRoomPost?(room: InternalRoomsGroup, poster: InternalRoomsBot, text: string, notify: boolean): void;
   /** send_to_bot with notify false: the teammate's reply in that thread settles without a notification. */
-  setReplyNotify?(threadId: string, notify: boolean): void;
+  setReplyNotify?(threadId: string, notify: boolean, fyi?: boolean): void;
   pollOnlyCaller(capability: InternalCapabilityView): boolean;
   peerSpeaker(fromBotId: string, fromThreadId?: string): unknown;
   cloudGuestDriven(threadId: string): boolean;

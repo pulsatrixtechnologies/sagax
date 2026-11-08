@@ -2,9 +2,11 @@
 // (shared/signal-levels.ts). An approval or a question a run waits on, and a
 // message from a person, always reach them; other pushes count against the
 // daily budget and wait outside quiet hours, then show as one line of the
-// next brief. Kept per person on the organization server (USER_PREFERENCE_KEYS),
-// so the rows only show there.
-import { useSyncExternalStore } from "react";
+// next brief. Kept per person on the organization server (USER_PREFERENCE_KEYS,
+// synced by the app); on a personal computer the rows save the same two keys
+// through /api/me/signals (server/routes/signal-settings.ts).
+import { useEffect, useSyncExternalStore } from "react";
+import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { localChoice } from "@/lib/local-choice";
 import { QUIET_HOURS_KEY, SIGNAL_BUDGET_CHOICES, SIGNAL_BUDGET_DEFAULT, SIGNAL_BUDGET_KEY } from "../../../shared/signal-levels";
@@ -69,7 +71,23 @@ function writeQuiet(value: string | null): void {
   for (const listener of quietListeners) listener();
 }
 
-export function SignalSettings() {
+/** Personal computer: what the server holds, and a save after each change. */
+const SIGNALS_PATH = "/api/me/signals";
+function saveSolo(input: { budget?: string | null; quiet?: string | null }): void {
+  void api(SIGNALS_PATH, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(input) }).catch(() => { /* kept on this computer; saved at the next change */ });
+}
+
+export function SignalSettings({ organization = false }: { organization?: boolean }) {
+  useEffect(() => {
+    if (organization) return;
+    let live = true;
+    void api<{ budget: string | null; quiet: string | null }>(SIGNALS_PATH).then((stored) => {
+      if (!live || !stored) return;
+      if (stored.budget && (BUDGET_VALUES as string[]).includes(stored.budget)) signalBudget.set(stored.budget as BudgetChoice);
+      if (stored.quiet !== readQuietRaw()) writeQuiet(stored.quiet);
+    }).catch(() => { /* this computer's values stay */ });
+    return () => { live = false; };
+  }, [organization]);
   const budget = signalBudget.use();
   const quiet = quietPresetOf(useSyncExternalStore(subscribeQuiet, readQuietRaw, () => null));
   return (
@@ -78,7 +96,10 @@ export function SignalSettings() {
         <PillSelect
           value={budget}
           ariaLabel={t("settings.signals.budget.title")}
-          onChange={(next) => signalBudget.set(next)}
+          onChange={(next) => {
+            signalBudget.set(next);
+            if (!organization) saveSolo({ budget: next });
+          }}
           options={BUDGET_VALUES.map((value) => ({ value, label: t("settings.signals.budget.perDay", { count: value }) }))}
         />
       </DescribedRow>
@@ -87,7 +108,9 @@ export function SignalSettings() {
           value={quiet}
           ariaLabel={t("settings.signals.quiet.title")}
           onChange={(next) => {
-            writeQuiet(quietValueOf(next as QuietPreset));
+            const value = quietValueOf(next as QuietPreset);
+            writeQuiet(value);
+            if (!organization) saveSolo({ quiet: value });
           }}
           options={[
             { value: "off", label: t("settings.signals.quiet.off") },

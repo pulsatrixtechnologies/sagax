@@ -33,6 +33,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["PUT"], path: /^\/api\/me\/bot-overrides\/[\w-]+$/ },
   // the desktop's look on a personal computer, for the phone's "Same as my computer"
   { methods: ["GET", "PUT"], path: /^\/api\/me\/appearance$/ },
+  // #2695: the person's own signal budget and quiet hours on a personal computer
+  { methods: ["GET", "PUT"], path: /^\/api\/me\/signals$/ },
   // own photo on an organization server (server/routes/me-avatar.ts): written
   // to Perspicax with the session person's own sign-in token, never anyone else's
   { methods: ["PUT", "DELETE"], path: /^\/api\/me\/avatar$/ },

@@ -132,6 +132,12 @@ describe("NotificationSettings (#2080)", () => {
     expect(host.querySelector('[data-settings-card="notifications.reports"]')).toBeNull();
   });
 
+  it("shows the daily budget and quiet hours in solo too (#2695)", () => {
+    mount(false);
+    expect(host.textContent).toContain("Daily budget");
+    expect(host.textContent).toContain("Quiet hours");
+  });
+
   it("opens blocked people under Manage", () => {
     fixture.blocked = [{ id: "p1", name: "Alex" }];
     mount();

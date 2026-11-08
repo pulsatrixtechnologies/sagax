@@ -12,13 +12,12 @@ import { localClock, validTimeZone } from "./reach-me.ts";
 
 export type SignalLevel = "fyi" | "card" | "urgent";
 
-/** Pushes a person gets in any 24 hours before cards wait for the brief. */
+/** Cards a person gets in their local day before cards wait for the brief. */
 export const SIGNAL_BUDGET_KEY = "sagax.notifyBudget.v1";
 /** Quiet hours, JSON { start: "HH:MM", end: "HH:MM", timeZone }; absent is none. */
 export const QUIET_HOURS_KEY = "sagax.quietHours.v1";
 export const SIGNAL_BUDGET_DEFAULT = 20;
 export const SIGNAL_BUDGET_CHOICES = [5, 10, 20, 50] as const;
-export const SIGNAL_WINDOW_MS = 24 * 60 * 60_000;
 
 export interface QuietHours {
   start: string;
@@ -74,57 +73,178 @@ export function signalLevelOfPush(message: { kind: string; fromId?: string; grou
 
 export type SignalDecision = "push" | "hold";
 
-/** The per-person gate: a rolling 24 hour count of cards pushed, and what
- * was held for the next brief. In memory: a restart starts a fresh day. */
-export class PersonSignalGate {
-  private readonly sent = new Map<string, number[]>();
-  private readonly held = new Map<string, number>();
+/** One push that waited for the brief: its words, so the brief carries the
+ * content itself, not only a count. */
+export interface HeldSignal {
+  at: number;
+  title: string;
+  body: string;
+  botId?: string;
+  threadId?: string;
+}
 
-  private readonly prefs: (person: string) => { budget: number; quiet: QuietHours | null };
-  private readonly now: () => number;
+/** A person's count for their local day, and what waits for the brief. */
+export interface PersonSignalState {
+  day: string;
+  sent: number;
+  held: HeldSignal[];
+}
 
-  constructor(prefs: (person: string) => { budget: number; quiet: QuietHours | null }, now: () => number = Date.now) {
-    this.prefs = prefs;
-    this.now = now;
-  }
+/** Where the gate keeps its state across restarts (the server passes a JSON
+ * file under DATA_DIR; tests and the client pass nothing). */
+export interface SignalGateStorage {
+  load(): Record<string, PersonSignalState> | null;
+  save(state: Record<string, PersonSignalState>): void;
+}
 
-  decide(message: { personId: string; kind: string; fromId?: string; groupId?: string }): SignalDecision {
-    const level = signalLevelOfPush(message);
-    if (level === "urgent") return "push";
-    const person = message.personId;
-    if (level === "fyi") return this.hold(person);
-    const at = this.now();
-    const { budget, quiet } = this.prefs(person);
-    if (withinQuietHours(quiet, at)) return this.hold(person);
-    const recent = (this.sent.get(person) ?? []).filter((stamp) => stamp > at - SIGNAL_WINDOW_MS);
-    if (recent.length >= budget) {
-      this.sent.set(person, recent);
-      return this.hold(person);
-    }
-    recent.push(at);
-    this.sent.set(person, recent);
-    return "push";
-  }
+export interface SignalPrefs {
+  budget: number;
+  quiet: QuietHours | null;
+  /** The person's time zone: the budget day starts at their local midnight. */
+  timeZone?: string;
+}
 
-  /** How many signals waited since the last brief, and resets the count. */
-  takeHeld(person: string): number {
-    const count = this.held.get(person) ?? 0;
-    this.held.delete(person);
-    return count;
-  }
+/** What a brief can carry, newest kept. */
+export const SIGNAL_HELD_MAX = 30;
+const HELD_TEXT_MAX = 280;
 
-  private hold(person: string): SignalDecision {
-    if (this.held.size > 5_000 && !this.held.has(person)) this.held.delete(this.held.keys().next().value!);
-    this.held.set(person, (this.held.get(person) ?? 0) + 1);
-    return "hold";
+function systemTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
   }
 }
 
-/** The brief's FYI line for what waited, in the person's language. */
-export function heldSignalsLine(count: number, language: "fr" | "en"): string | null {
-  if (count <= 0) return null;
-  if (language === "fr") return count === 1 ? "1 notification a attendu ce résumé (budget du jour ou heures calmes)." : `${count} notifications ont attendu ce résumé (budget du jour ou heures calmes).`;
-  return count === 1 ? "1 notification waited for this brief (daily budget or quiet hours)." : `${count} notifications waited for this brief (daily budget or quiet hours).`;
+/** The calendar day ("2026-11-08") of `atMs` in `timeZone`. */
+export function localDayKey(atMs: number, timeZone: string): string {
+  const zone = validTimeZone(timeZone) ? timeZone : "UTC";
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(atMs));
+  const read = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${read("year")}-${read("month")}-${read("day")}`;
+}
+
+function clip(text: unknown): string {
+  const value = typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
+  return value.length > HELD_TEXT_MAX ? `${value.slice(0, HELD_TEXT_MAX - 3)}...` : value;
+}
+
+/** The per-person gate: the cards pushed on the person's local day (their
+ * budget), and what waited for the next brief, word for word. Kept through
+ * `storage`, so a restart neither resets the day nor loses what waited. */
+export class PersonSignalGate {
+  private readonly state = new Map<string, PersonSignalState>();
+  private readonly prefs: (person: string) => SignalPrefs;
+  private readonly now: () => number;
+  private readonly storage: SignalGateStorage | undefined;
+
+  constructor(prefs: (person: string) => SignalPrefs, now: () => number = Date.now, storage?: SignalGateStorage) {
+    this.prefs = prefs;
+    this.now = now;
+    this.storage = storage;
+    let loaded: Record<string, PersonSignalState> | null = null;
+    try { loaded = storage?.load() ?? null; } catch { loaded = null; }
+    for (const [person, row] of Object.entries(loaded ?? {})) {
+      if (!row || typeof row.day !== "string" || typeof row.sent !== "number") continue;
+      const held = Array.isArray(row.held) ? row.held.filter((item) => item && typeof item.title === "string" && typeof item.body === "string").slice(-SIGNAL_HELD_MAX) : [];
+      this.state.set(person, { day: row.day, sent: Math.max(0, Math.floor(row.sent)), held });
+    }
+  }
+
+  /** A push: urgent always goes; FYI waits; a card goes inside the budget
+   * of the person's local day and outside quiet hours, else waits. */
+  decide(message: { personId: string; kind: string; title?: string; body?: string; botId?: string; threadId?: string; fromId?: string; groupId?: string }, options: { fyi?: boolean } = {}): SignalDecision {
+    const level = options.fyi && signalLevelOfPush(message) !== "urgent" ? "fyi" : signalLevelOfPush(message);
+    if (level === "urgent") return "push";
+    if (level === "fyi") return this.hold(message);
+    return this.admit(message.personId) ? "push" : this.hold(message);
+  }
+
+  /** Whether one more card may reach the person now (quiet hours, the
+   * day's budget); counts it when it may. Nothing is kept when it may not:
+   * for a notice whose content is already in the chat (the brief's own). */
+  admit(person: string): boolean {
+    const at = this.now();
+    const prefs = this.prefs(person);
+    if (withinQuietHours(prefs.quiet, at)) return false;
+    const row = this.today(person, at, prefs);
+    if (row.sent >= prefs.budget) return false;
+    row.sent += 1;
+    this.persist();
+    return true;
+  }
+
+  /** What waited since the last brief, oldest first, and clears it. */
+  takeHeld(person: string): HeldSignal[] {
+    const row = this.state.get(person);
+    if (!row || row.held.length === 0) return [];
+    const held = row.held;
+    row.held = [];
+    this.persist();
+    return held;
+  }
+
+  /** The cards pushed today, for a test or a status line. */
+  sentToday(person: string): number {
+    const at = this.now();
+    return this.today(person, at, this.prefs(person)).sent;
+  }
+
+  private today(person: string, at: number, prefs: SignalPrefs): PersonSignalState {
+    const day = localDayKey(at, prefs.timeZone ?? prefs.quiet?.timeZone ?? systemTimeZone());
+    let row = this.state.get(person);
+    if (!row) {
+      if (this.state.size > 5_000) this.state.delete(this.state.keys().next().value!);
+      row = { day, sent: 0, held: [] };
+      this.state.set(person, row);
+    } else if (row.day !== day) {
+      row.day = day;
+      row.sent = 0;
+    }
+    return row;
+  }
+
+  private hold(message: { personId: string; title?: string; body?: string; botId?: string; threadId?: string }): SignalDecision {
+    const at = this.now();
+    const row = this.today(message.personId, at, this.prefs(message.personId));
+    row.held.push({
+      at,
+      title: clip(message.title),
+      body: clip(message.body),
+      ...(message.botId ? { botId: message.botId } : {}),
+      ...(message.threadId ? { threadId: message.threadId } : {})
+    });
+    if (row.held.length > SIGNAL_HELD_MAX) row.held.splice(0, row.held.length - SIGNAL_HELD_MAX);
+    this.persist();
+    return "hold";
+  }
+
+  private persist(): void {
+    if (!this.storage) return;
+    try {
+      this.storage.save(Object.fromEntries(this.state));
+    } catch { /* the next change tries again */ }
+  }
+}
+
+/** How many held signals the brief spells out; the rest is one count. */
+export const HELD_IN_BRIEF = 8;
+
+/** The brief's section for what waited, in the person's language: a header,
+ * then each one in its own words. Null when nothing waited. */
+export function heldSignalsSection(held: readonly HeldSignal[], language: "fr" | "en"): string | null {
+  if (held.length === 0) return null;
+  const count = held.length;
+  const header = language === "fr"
+    ? (count === 1 ? "1 notification a attendu ce résumé (budget du jour, heures calmes ou FYI) :" : `${count} notifications ont attendu ce résumé (budget du jour, heures calmes ou FYI) :`)
+    : (count === 1 ? "1 notification waited for this brief (daily budget, quiet hours or FYI):" : `${count} notifications waited for this brief (daily budget, quiet hours or FYI):`);
+  const lines = held.slice(-HELD_IN_BRIEF).map((item) => {
+    const text = item.title && item.body && item.body !== item.title ? `${item.title}${language === "fr" ? " : " : ": "}${item.body}` : item.title || item.body;
+    return `- ${text || (language === "fr" ? "(sans texte)" : "(no text)")}`;
+  });
+  const rest = count - lines.length;
+  if (rest > 0) lines.unshift(language === "fr" ? `- et ${rest} plus anciennes` : `- and ${rest} older`);
+  return [header, ...lines].join("\n");
 }
 
 /** Reason codes (server/org/org-problem-log.ts) that are the engine's or the

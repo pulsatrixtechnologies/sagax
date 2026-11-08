@@ -93,8 +93,8 @@ function NudgesRow() {
   );
 }
 
-/** `privacy` is the organization server's Privacy section; the per-person
- * daily budget and quiet hours (#2695) live on that server too. */
+/** `privacy` is the organization server's Privacy section. The per-person
+ * daily budget and quiet hours (#2695) show everywhere (solo: /api/me/signals). */
 export function NotificationSettings({ privacy = false }: { privacy?: boolean }) {
   const persistent = useLocalSwitch(persistentNotifications);
   const badge = useLocalSwitch(dockBadge);
@@ -125,7 +125,7 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
           <Switch checked={routines} aria-label={t("settings.notifications.types.routines")} onClick={() => notifyRoutines.set(!routines)} />
         </CompactRow>
       </SettingsGroup>
-      {privacy && <SignalSettings />}
+      <SignalSettings organization={privacy} />
       <SettingsGroup title={t("settings.group.alerts")} groupId="alerts">
         <NotificationInvite />
         <NativeNotificationStatusRow />

@@ -205,7 +205,7 @@ GET /api/org/admin/bots?status=active&q=atl&limit=50
     "access": "org-key", "mcpProfiles": [], "grants": [], "sections": [], "routines": 1,
     "createdAt": 1791500000000, "lastActivityAt": 1791500100000,
     "status": "active", "label": null, "threads": 3,
-    "look": { "kind": "mascot", "character": "shiba", "family": "animals", "color": "orange", "colorHex": "#E78531", "skin": "sesame", "shape": null, "expression": null, "image": null },
+    "look": { "kind": "mascot", "character": "shiba", "family": "animals", "color": "orange", "colorHex": "#E78531", "skin": "sesame", "shape": null, "avatarDef": null, "expression": null, "image": null },
     "persona": { "displayName": "Atlas", "title": "Sales assistant", "description": "Prepares the weekly sales digest." }
   }],
   "next": null
@@ -404,7 +404,7 @@ console draws the character itself from it.
   "kind": "image",
   "character": "owl", "family": "classics",
   "color": "blue", "colorHex": "#377FE6",
-  "skin": "galaxy", "shape": null, "expression": "happy",
+  "skin": "galaxy", "shape": null, "avatarDef": null, "expression": "happy",
   "image": { "crop": "circle", "zoom": 1.4, "focusX": 0.5, "focusY": 0.35, "version": "9f2c41d07ab3e655", "type": "image/png" }
 }
 ```
@@ -430,7 +430,11 @@ console draws the character itself from it.
 - `shape`: the shape character's shape, one of `MASCOT_SHAPES`
   (shared/mascot-look.ts: `circle`, `bean` the pebble, `squircle`, `pill`
   the capsule, `pick` the triangle, `hexagon`, `cloud`, `drop` the teardrop,
-  `pumpkin` and the others of the set), else null.
+  `pumpkin` and the others of the set, the object silhouettes `pad`, `cup`,
+  `bulb`, `say`, `sprout`, `tin`, `tome`, `ship` included), else null.
+- `avatarDef`: the shape character's own drawing when the owner made one
+  (`shared/shape-avatar-def.ts`: body, parts), else null. A console draws it
+  instead of `shape`, the same as the bot list.
 - `expression`: the owl's resting face when the owner picked one, else null.
 - `image`: null unless `kind` is `image`. `crop` is `circle`, `rounded`
   (22 % radius) or `square`; `zoom` 1 to 3 over a cover fit; `focusX` and

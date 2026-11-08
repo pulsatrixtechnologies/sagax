@@ -5295,6 +5295,19 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(problems).not.toMatch(/__|5f/);
   });
 
+  it("a connector whose sign-in expired is said plainly with its link, from one refusal (#2749)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const refused = "Managed MCP gateway tool call failed: Cursor connector needs re-authentication in Cursor: X won't turn on API access";
+    tool(h, "thread-1", "a", "cursor__user-X-search_5fposts_5fall", false, refused);
+    done(h, "thread-1");
+    const problems = runOf(h).problems ?? "";
+    expect(problems).toContain("needs a new sign-in");
+    expect(problems).toContain("https://grok.com/connectors");
+    expect(problems).not.toContain("failed 1 times");
+  });
+
   it("one failed call the bot moved past (a search with no match, say) is not a problem: only a tool that kept failing is", async () => {
     // Engines that title a call by its command (ACP) give each command its
     // own title, so one miss would otherwise mark nearly every run.

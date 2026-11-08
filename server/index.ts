@@ -872,7 +872,8 @@ import { DEVICE_REQUEST_KEYS, isSyncedPreference } from "../shared/settings-acti
 import { installResourceUsage } from "./resource-usage/install.ts";
 import { grokAccountReach, grokReachConnectorNames } from "./drivers/acp/grok-tool-catalog.ts";
 import { GROK_CLOUD_CONNECTORS } from "../shared/grok-cloud-connectors.ts";
-import { createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes } from "./routes/connector-setup.ts";
+import { connectorSetupOwner, createConnectorSetupInternalRoutes, createConnectorSetupProofs, createConnectorSetupRoutes } from "./routes/connector-setup.ts";
+import { connectorReauthFailure, connectorReauthText, type ConnectorSetupView } from "../shared/connector-setup.ts";
 import { streamTerminalAttachment } from "./terminal-resources/adapters/personal.ts";
 import { parseTerminalDestinationPick } from "../shared/terminal-request.ts";
 import { DesktopTerminals } from "./desktop/desktop-terminal.ts";
@@ -17155,6 +17156,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get computerSelectionTurns() { return computerSelectionTurns; },
   get connectorSetupProofs() { return connectorSetupProofs; },
   get connectorSetupSpeaker() { return connectorSetupSpeaker; },
+  get noteConnectorReauth() { return noteConnectorReauth; },
   get continueComputerSelection() { return continueComputerSelection; },
   get conversationOrStart() { return conversationOrStart; },
   get customRules() { return customRules; },
@@ -27684,6 +27686,35 @@ ROUTES.push(createConnectorSetupRoutes({
   }
 }));
 /** The person a sign-in card is for: the one speaking, never a routine or a peer. */
+/** #2749: a connector call refused because its sign-in expired posts the
+ * Connect card (the sign-in link) in that conversation, for the person whose
+ * turn it is or, in a routine, the bot's owner: said plainly, never only a
+ * buried "failed 2 times". One open card per connector and person. */
+function noteConnectorReauth(threadId: string, toolName: string, output: string | undefined): void {
+  const failure = connectorReauthFailure(toolName, output);
+  if (!failure) return;
+  const bot = store.bots.find((candidate) => candidate.threadId === threadId) ?? store.bots.find((candidate) => store.taskByThread(candidate.id, threadId));
+  if (!bot) return;
+  const principalId = (connectorSetupSpeaker(threadId) || effectiveBotOwner(bot) || (IDENTITY.kind === "solo" ? localPrincipalId() : "")).trim().toLowerCase();
+  if (!principalId) return;
+  const owner = connectorSetupOwner(principalId);
+  const open = connectorSetupStore().cards(threadId).some(({ view }: { view: ConnectorSetupView }) =>
+    view.owner === owner && view.provider === failure.provider && view.connector === failure.connector && view.status !== "connected");
+  if (open) return;
+  const view: ConnectorSetupView = {
+    id: `cs_${randomBytes(9).toString("hex")}`,
+    connector: failure.connector,
+    label: failure.label,
+    provider: failure.provider,
+    url: failure.url,
+    status: "waiting",
+    owner,
+    createdAt: Date.now(),
+  };
+  const language = languageOfPerson(principalId).toLowerCase().startsWith("fr") ? "fr" : "en";
+  store.appendMessage(threadId, { role: "bot", kind: "text", text: connectorReauthText(failure, language), from: { botId: bot.id, name: bot.name, color: bot.color }, connectorSetup: view });
+}
+
 function connectorSetupSpeaker(threadId: string): string | undefined {
   const speaker = turnSpeakers.get(threadId);
   if (!speaker || (speaker.origin !== "person" && speaker.origin !== "operator")) return undefined;

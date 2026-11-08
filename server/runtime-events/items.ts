@@ -59,6 +59,8 @@ export function handleItemEvents(event: any, ctx: any, host: any): void {
           // a "Connect Microsoft Teams" card's proof: whose turn made this call, on which bot
           host.connectorSetupProofs.record({ threadId: event.threadId, botId: bot?.id, principalId: host.connectorSetupSpeaker(event.threadId), name: toolName, input: existing?.input, ok: event.ok === true, at: Date.now() });
           // a part run on another engine (run_with_engine) proves the card of the conversation it came from
+          // #2749: a connector whose sign-in expired posts its Connect card, said plainly
+          if (event.ok !== true) host.noteConnectorReauth?.(event.threadId, toolName, typeof event.output === "string" ? event.output : event.resultText);
           const relayParent = host.relayParentThreads.get(event.threadId);
           if (relayParent) host.connectorSetupProofs.record({ threadId: relayParent, botId: bot?.id, principalId: host.connectorSetupSpeaker(relayParent), name: toolName, input: existing?.input, ok: event.ok === true, at: Date.now() });
           const appPiece = event.resultText ? host.noteAppRead(toolName, event.resultText) : null;

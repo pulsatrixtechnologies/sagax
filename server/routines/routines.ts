@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { turnTrace } from "../turns/turn-trace.ts";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 import { humanizeToolIds } from "../../shared/tool-display-name.ts";
+import { connectorReauthFailure, connectorReauthProblem } from "../../shared/connector-setup.ts";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -3910,6 +3911,13 @@ export class RoutineManager {
     }
     for (const failure of trouble?.unresolved.values() ?? []) {
       const title = failure.title;
+      // #2749: an expired connector sign-in is said plainly with its link, from the first refusal
+      const reauth = connectorReauthFailure(title, failure.output);
+      if (reauth) {
+        const line = connectorReauthProblem(reauth);
+        if (!problems.includes(line)) problems.push(line);
+        continue;
+      }
       // Kept failing: one miss the bot moved past (a search with no match)
       // is ordinary work, and engines that title a call by its command give
       // each command its own title. A single real failure is the bot's to

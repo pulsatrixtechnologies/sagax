@@ -546,35 +546,32 @@ describe("work style blocks and house style", () => {
   });
 });
 
-describe("work style: ConnectWise reads, 403 and drafts (QA 0.8.66 F2 F3 F10)", () => {
-  it("reads open tickets in one filtered service.tickets call and says when a list is partial", () => {
-    expect(WORK_STYLE_PROMPT).toContain("ONE filtered service.tickets call");
-    expect(WORK_STYLE_PROMPT).toContain("owner/id=<member id> and closedFlag=false");
-    expect(WORK_STYLE_PROMPT).toContain("with fields and limit, then read total");
-    expect(WORK_STYLE_PROMPT).toContain("never conclude a board does not exist from service.boards");
-    expect(WORK_STYLE_PROMPT).toContain("say it is partial");
-  });
-
-  it("treats a 403 of the limited role as a search for a role that may read, never as an admin wall", () => {
-    expect(WORK_STYLE_PROMPT).toContain("A 403 from your limited role is not the end");
-    expect(WORK_STYLE_PROMPT).toContain("Read once as <role>");
-    expect(WORK_STYLE_PROMPT).toContain("it needs an admin");
-  });
-
-  it("writes drafts in the person's first person with their real signature", () => {
-    expect(WORK_STYLE_PROMPT).toContain("is in the first person as the person");
-    expect(WORK_STYLE_PROMPT).toContain("their real signature");
-    expect(WORK_STYLE_PROMPT).toContain("not to such drafts");
-  });
-});
-
-describe("work style: inline arithmetic and no admin wall (QA 0.8.66 F12 F10)", () => {
+// #2912: the QA 0.8.66 rules of #2905, corrected. The ConnectWise ones
+// moved to PERSPICAX_CONVENTIONS_PROMPT (tested there); what stays here is
+// read by every turn of every bot, so its size is bounded.
+describe("work style: arithmetic and drafts (QA 0.8.66 F9 F12, #2912)", () => {
   it("computes simple arithmetic inline and keeps the shell for a real need", () => {
-    expect(WORK_STYLE_PROMPT).toContain("Do arithmetic and simple conversions inline");
-    expect(WORK_STYLE_PROMPT).toContain("start a shell (run_command) only for a real need");
+    expect(WORK_STYLE_PROMPT).toContain("Do arithmetic inline");
+    expect(WORK_STYLE_PROMPT).toContain("Start a shell (run_command) only for files, processes or bulk computation");
+    // review of #2912: a total of records is never added by hand, on any turn
+    expect(WORK_STYLE_PROMPT).toContain("a total of records comes from the tool's own total or aggregate, never your addition");
+    expect(WORK_STYLE_PROMPT).not.toMatch(/Do arithmetic inline \([^)]*a total/);
   });
-  it("never tells a limited role it needs an admin, names the missing permission", () => {
-    expect(WORK_STYLE_PROMPT).toContain("Under Dispatch Agent or any limited role");
-    expect(WORK_STYLE_PROMPT).toContain("name the exact missing permission");
+
+  it("signs only what goes out to the client and never stops the work to ask for the signature", () => {
+    expect(WORK_STYLE_PROMPT).toMatch(/A draft that goes out in the person's name \(email, client message, reply\) is in their first person/);
+    expect(WORK_STYLE_PROMPT).toContain("ends with their real signature");
+    expect(WORK_STYLE_PROMPT).toContain("write the draft anyway and ask for it in the same answer");
+    expect(WORK_STYLE_PROMPT).toContain("A ticket note, internal note or time entry takes no signature.");
+    expect(WORK_STYLE_PROMPT).not.toMatch(/\(email, ticket note/);
+    expect(WORK_STYLE_PROMPT).not.toContain("ask for it once");
+  });
+
+  it("keeps the ConnectWise-only rules out of the prompt every turn reads", () => {
+    for (const cw of ["service.tickets", "board/name", "Dispatch Agent", "closedFlag", "identity_switch", "Read once as"]) {
+      expect(WORK_STYLE_PROMPT).not.toContain(cw);
+    }
+    // 0.8.66 shipped 2005 characters; #2905 added about 2040. Stay under half of that surplus.
+    expect(WORK_STYLE_PROMPT.length).toBeLessThan(2005 + 1020);
   });
 });

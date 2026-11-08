@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PERSPICAX_CONVENTIONS_PROMPT } from "./perspicax-conventions.ts";
+import { connectorConventionsPrompt, hasPerspicaxConventions, PERSPICAX_CONVENTIONS_PROMPT } from "./perspicax-conventions.ts";
 
 describe("Perspicax tool conventions (#1209)", () => {
   it("names each convention", () => {
@@ -39,5 +39,50 @@ describe("Perspicax tool conventions (#1209)", () => {
   it("says JMESPath has no split, so a routine never calls an undefined function (QA 0.8.66 F5)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/There is no split, regex/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/functions are length, sum/);
+  });
+  // #2912: the QA 0.8.66 ConnectWise rules of #2905, corrected and moved here.
+  it("points a 403 to identity_switch without arguments, never to the record finder identity", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A read refused with 403 under a limited role \(Dispatch Agent included\): when Sagax's note names a held role, follow it/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("When no Sagax note came with the 403, `identity_switch` without arguments lists the roles you hold");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/\(identity, then identity_switch/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/`identity`[^_]/);
+  });
+  it("forbids the admin wall in the negative form, so an inverted rule fails", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/Never answer "it needs an admin", "our rules forbid that role" or "it cannot be changed": name the exact missing permission instead/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("before that");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/(?<!Never answer )(?<!Never answer "[^"]*", )"it needs an admin"/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("name the exact missing permission");
+  });
+  // Review of #2912: the relay's STOP note (readStop) means no held role is
+  // left; the 403 point must not send the bot back to identity_switch then,
+  // and a refused write stays a block, as the Roles point says.
+  it("stops at a Sagax STOP note and on a refused write, without a role search", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A Sagax note starting with STOP means no held role is left, the person chose to stay in that role or the turn's switch is spent: no `identity_switch`, name the exact missing permission at once/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A refused write follows the Roles point above: no other role, name the exact missing permission/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/if it names none, `identity_switch`/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("is not the end while a held role is untried");
+  });
+  it("counts tickets on the board's id and never per board from a page cut by limit", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("owner/id=<member id>, board/id=<board id>, closedFlag=false");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("a board name is never a filter");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("board/name");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A count per board is one call per board read for its own `total`, or an aggregate over every matching ticket, never grouped from a result cut by `limit`/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("group by board from that one result");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("15 au total, voici les 10 premiers");
+  });
+  // Review of #2912: ConnectWise reached through a claude.ai connector, with
+  // no Perspicax mount, still gets the conventions, once.
+  it("brings the conventions to a turn that reaches ConnectWise through a claude.ai connector", () => {
+    const rows = [{ name: "claude.ai Microsoft 365", status: "connected" }, { name: "claude.ai Pulsatrix Perspicax", status: "connected" }];
+    const text = connectorConventionsPrompt(rows, false);
+    expect(text).toContain("\"claude.ai Pulsatrix Perspicax\" reaches ConnectWise");
+    expect(text).not.toContain("Microsoft 365");
+    expect(hasPerspicaxConventions(text)).toBe(true);
+    expect(text).toContain("board/id=<board id>");
+    expect(connectorConventionsPrompt(rows, true)).toBe("");
+    expect(connectorConventionsPrompt([{ name: "claude.ai ConnectWise PSA", status: "needs_auth" }], false)).toBe("");
+    expect(connectorConventionsPrompt([{ name: "claude.ai Gmail", status: "connected" }], false)).toBe("");
+    expect(connectorConventionsPrompt(undefined, false)).toBe("");
+    expect(hasPerspicaxConventions("")).toBe(false);
   });
 });

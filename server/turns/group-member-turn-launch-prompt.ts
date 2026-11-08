@@ -1,6 +1,7 @@
 // @ts-nocheck
 // #1383: room-member launch, system prompt. Never imports server/index.ts.
 import { hideServerPathsInSections } from "../server-path-prompt.ts";
+import { hasPerspicaxConventions } from "../perspicax/perspicax-conventions.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
@@ -258,7 +259,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
     { id: "shell", label: "Long-running commands", text: workspace ? longCommandsPrompt(roomComputerPromptKind) : "" },
     { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(integrations.custom ?? {}), mcpServersOff(bot)) + githubWithheldPrompt(roomGithubWithheld) },
     { id: "perspicax", label: "Perspicax", text: roomPerspicaxPrompt },
-    { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(readyBot, instance, roomSpeakerId ? { origin: "person", principalId: roomSpeakerId, groupId } : roomRoutineSpeaker(threadId) ?? { origin: "operator" }, { level: roomPromptLevel }) },
+    { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(readyBot, instance, roomSpeakerId ? { origin: "person", principalId: roomSpeakerId, groupId } : roomRoutineSpeaker(threadId) ?? { origin: "operator" }, { level: roomPromptLevel, perspicaxConventions: hasPerspicaxConventions(roomPerspicaxPrompt) }) },
     { id: "approval-level", label: "Approval level", text: approvalLevelPrompt(roomPromptLevel) },
     // #1819: effective ask-before-contact (Full skips the Sagax peer card)
     { id: "peer-contact", label: "Peer contact", text: peerContactPrompt({

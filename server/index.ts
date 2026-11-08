@@ -13801,6 +13801,11 @@ const coordinator: Coordinator = createCoordinator({
         notify(deliverableNotification("delegation-settled", bot, node.threadId, `Results in from ${who}`, { avatarUrl: bot.avatarUrl }));
       }
       store.patchTask(bot.id, node.threadId, { unread: true });
+      // #2808: a parallel task that waited on these teammates answers in the
+      // conversation it came from with what they said.
+      if (pendingParallelTask(node.threadId)) {
+        settleParallelTask(node.threadId, { ok: true, final: true, reply: texts.map(text => stripRequesterAddress(text, bot.name)).join("\n\n") });
+      }
       return true;
     },
     run: async (node, resumed, signal, composed: ComposedTurn) => {

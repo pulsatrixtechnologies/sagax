@@ -18,6 +18,9 @@ const MERGED: Partial<Record<AppSettingsSection, { section: AppSettingsSection; 
   memory: { section: "organization", cardId: "organization.memory" },
   // #2080 (L0): Import is a card of Backups and import.
   import: { section: "backups", cardId: "backups.import" },
+  // #2729 (JC 2026-11-08): Experimental is a card of Developer; an old link,
+  // deep link or saved section opens Developer on that card.
+  experimental: { section: "developer", cardId: "experimental.features" },
   // 2026-10-26 to 2026-10-28 Security keys and the vault were cards of
   // Account; since 2026-10-28 Security ("security") and Vault
   // ("credentials") are pages again (CARD_HOME below sends the old links).
@@ -81,6 +84,9 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   "general.diagnostics": "developer",
   "general.logs": "developer",
   "experimental.developer": "developer",
+  // #2729: the Experimental features card is on Developer
+  "experimental.features": "developer",
+  "experimental.needsServerUpdate": "developer",
   "developer.conversation": "developer",
   "developer.diagnostics": "developer",
   "developer.devPods": "developer",

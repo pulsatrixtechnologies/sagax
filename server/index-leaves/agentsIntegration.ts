@@ -97,7 +97,7 @@ function agentsIntegration(
       // connect_github: any chat (#2109); the device flow has a built-in
       // client id (server/github/builtin-client.ts). The route re-checks.
       SAGAX_GITHUB_CONNECT: host.githubConnect.deviceFlowAvailable() ? "1" : "0",
-      // join_meeting: Settings > Experimental > Meeting notetaker, direct
+      // join_meeting: Settings > Developer > Experimental > Meeting notetaker, direct
       // conversations only. The internal route re-checks both.
       SAGAX_MEETINGS: meetingNotetakerEnabled(host.cfg) && !host.store.groupByThread(threadId) ? "1" : "0",
       // phone_tool: the person speaking, in a 1:1 turn of their own words

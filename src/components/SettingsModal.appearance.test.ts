@@ -50,7 +50,7 @@ vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capab
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: fixture.api,
-  useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [], bots: [] }, dispatch: fixture.dispatch }),
+  useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [], bots: [], groups: [] }, dispatch: fixture.dispatch }),
 }));
 vi.mock("@/lib/thread-preferences", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/thread-preferences")>();

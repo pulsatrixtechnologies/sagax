@@ -109,9 +109,9 @@ describe("Settings search keywords", () => {
     expect(twice).toEqual([]);
   });
 
-  it("draws the pages of the final rail (General, Updates, Experimental, About), no Grok Import card", async () => {
+  it("draws the pages of the final rail (General, Updates, Developer, About), no Grok Import card", async () => {
     const { SECTIONS, CARD_KEYWORDS } = await import("./settings-nav");
-    expect(SECTIONS).toHaveLength(18); // #2614 Permissions, #2636 Developer
+    expect(SECTIONS).toHaveLength(17); // #2614 Permissions, #2636 Developer, 2026-11-08 Experimental is a section of Developer
     // #2090 Updates; 2026-11-06 General (system) and About (id about, JC 2026-11-07); every page has its intro line
     expect(SECTIONS.every((entry) => entry.introKey === `settings.intro.${entry.id}`)).toBe(true);
     expect(SECTIONS.find((entry) => entry.id === "about")?.introKey).toBe("settings.intro.about");

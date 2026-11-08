@@ -23,7 +23,7 @@ export function placeOffered(place: Place, config: FeatureFlagConfig | null | un
   return true;
 }
 
-/** A Boat or a VPS computer may be chosen (Settings > Experimental features). */
+/** A Boat or a VPS computer may be chosen (Settings > Developer > Experimental features). */
 export function cloudComputersOffered(config: FeatureFlagConfig | null | undefined): boolean {
   return boatComputerEnabled(config) || vpsComputerEnabled(config);
 }

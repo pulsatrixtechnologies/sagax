@@ -1,4 +1,4 @@
-// The Data window (experimental, Settings > Experimental features): a bot's
+// The Data window (experimental, Settings > Developer > Experimental features): a bot's
 // Data results (src/components/data) in a window of their own, opened from
 // the chat header's Data button or a result's "Open in Data".
 //

@@ -28,7 +28,7 @@ describe("the server.experimental right", () => {
 });
 
 describe("the experimental feature set", () => {
-  it("names the Settings > Experimental switches and never a host-reaching one", () => {
+  it("names the Settings > Developer > Experimental switches and never a host-reaching one", () => {
     expect([...EXPERIMENTAL_FEATURE_KEYS].sort()).toEqual(
       ["browser", "connectedApps", "dataWindow", "decisionModel", "meetingNotetaker", "skillAuthoring"],
     );

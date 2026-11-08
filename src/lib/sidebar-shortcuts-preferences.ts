@@ -10,7 +10,7 @@ export const SIDEBAR_SHORTCUTS_KEY = "sagax-sidebar-shortcuts";
 // account row below drops the title and points line, for lack of room.
 //
 // Before this setting the Browse Bots row followed an installation switch in
-// Settings > Experimental features (Browse Bots under `features.templates`). A
+// Settings > Developer > Experimental features (Browse Bots under `features.templates`). A
 // person with no stored choice keeps what they saw: on when that switch was on
 // (`legacySidebarShortcuts`), and `migrateSidebarShortcuts` writes that value
 // once, so it stays theirs.

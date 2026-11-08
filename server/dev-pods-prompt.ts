@@ -1,4 +1,4 @@
-// The coding view (the desktop's dev context pods, Settings > Experimental)
+// The coding view (the desktop's dev context pods, Settings > Developer > Experimental)
 // is a switch on the person's device: the server never stores it. A send
 // from a device where it is on carries `devPods: "on"`; the bot is then told
 // the view exists and opens by itself, so it never answers that it cannot

@@ -4621,7 +4621,7 @@ decrypted archive, the staging and the restored folder).
 `docs/superpowers/specs/2026-10-16-meetings-and-maintenance.md`). Rules,
 covered by `server/meetings/*.test.ts` and `server/routes/meetings.test.ts`:
 
-- Experimental, **off by default**: Settings > Experimental > Meeting
+- Experimental, **off by default**: Settings > Developer > Experimental > Meeting
   notetaker (Google Meet), config `features.meetingNotetaker`
   (`meetingNotetakerEnabled`, server/config.ts). The server enforces it:
   while off, `join_meeting` is not in the agents catalog (`SAGAX_MEETINGS`,

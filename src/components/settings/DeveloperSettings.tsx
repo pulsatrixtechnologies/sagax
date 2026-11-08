@@ -2,7 +2,9 @@
  * Settings > Developer (#2636, JC 2026-11-07: « move every item that is
  * technical into the developer section »). One page of the App group holds
  * every technical option that was spread over Appearance, General, Usage,
- * Experimental, About and Backups. Each option lives here only, under a
+ * Experimental, About and Backups. #2729 (JC 2026-11-08): the Experimental
+ * page itself is a card here now (Experimental features), shown to whoever may
+ * flip a switch of it (server.experimental, or their own on an organization). Each option lives here only, under a
  * heading of its own; the origin pages keep one discreet link (DeveloperLink).
  * Open to every member, in Simple and Advanced mode: nothing folds here, it
  * is the technical page. The installation's options (timeouts, loop guard,
@@ -27,7 +29,8 @@ import { ThreadCleanupSettings } from "../ThreadCleanupSettings";
 import { DiagnosticsRow, DownloadLogsRow, generalAdvancedShown, LoopGuardRow } from "./AdvancedSettings";
 import { InterfaceModeRow } from "./AppearanceSettings";
 import { DeveloperBotCard } from "./DeveloperBotCard";
-import { canEditConfig } from "@/lib/viewer";
+import { canEditConfig, canManageExperimental } from "@/lib/viewer";
+import { ExperimentalSettings } from "./ExperimentalSettings";
 import { OrgGrokBridgePolicy } from "./OrgGrokBridgePolicy";
 import { OrgGithubApp } from "./OrgGithubApp";
 import { ComputerCareSettings } from "./ComputerCareSettings";
@@ -55,6 +58,8 @@ export function DeveloperSettings({ remoteActive, openAbout }: { remoteActive: b
   const organization = usePerspicaxOrg();
   // Diagnostics and logs: this computer's, or the server's when the config allows it (as About did).
   const showDiagnostics = !remoteActive || generalAdvancedShown(state.config);
+  // #2729: the former Experimental page, for those who saw it (same rule as memberHidesSection).
+  const showExperimental = canManageExperimental(state.config) || state.config?.personalSettings === true;
   return (
     <div className="flex flex-col gap-6">
       {/* Conversation: what the chat shows of a run (was Appearance > Advanced and Usage > Advanced) */}
@@ -137,6 +142,8 @@ export function DeveloperSettings({ remoteActive, openAbout }: { remoteActive: b
           </SettingsGroup>
         </div>
       )}
+      {/* Experimental features (#2729, was the Experimental page): same switches, same count */}
+      {showExperimental && <ExperimentalSettings />}
       {/* Context pods (was Experimental > Developer) */}
       <div data-settings-card="developer.devPods">
         <SettingsGroup title={t("settings.developer.devPods")} groupId="developerDevPods">

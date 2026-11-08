@@ -312,7 +312,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | What upkeep learned about you (get lists them; set with a fact's id removes it) | Settings > Account > About me | `sagax_settings` get, set `account.learned` | suppression |
 | Anonymous usage counts to this server | Settings > Account > Advanced > Usage meter | `sagax_settings` get, set `account.usageMeter` | simple |
 | Your monthly spend limit in USD (null removes; personal server) | Settings > Usage > Monthly limit | `sagax_settings` get, set `account.spendCap` | simple |
-| Your own experiments and tool calls shown ({features: {<key>: true/false/null}}) | Settings > Experimental; Settings > Appearance > Show tool calls | `sagax_settings` get, set `account.experimental` | simple |
+| Your own experiments and tool calls shown ({features: {<key>: true/false/null}}) | Settings > Developer > Experimental; Settings > Appearance > Show tool calls | `sagax_settings` get, set `account.experimental` | simple |
 
 ### Apparence
 
@@ -440,7 +440,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | New bot defaults | Settings > General > System > New bots | `sagax_settings` get, set `server.newBotDefaults` | simple; organisation : organisation |
 | Conversation cleanup | Settings > General > Advanced > Threads | `sagax_settings` get, set `server.threads` | simple; organisation : organisation |
 | Show tool calls | Settings > Appearance | `sagax_settings` get, set `server.showToolCalls` | simple; organisation : organisation |
-| Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles}) | Settings > Experimental | `sagax_settings` get, set `server.feature` | simple; organisation : organisation |
+| Experimental features ({skillAuthoring, browser, connectedApps, decisionModel, dataWindow, meetingNotetaker, llmThreadTitles}) | Settings > Developer > Experimental | `sagax_settings` get, set `server.feature` | simple; organisation : organisation |
 | Routines in conversation | Settings > Organization > Bots | `sagax_settings` get, set `server.routinesInConversation` | simple; organisation : organisation |
 | Room turn limit | Settings > Organization > Rooms | `sagax_settings` get, set `server.roomTurnTimeout` | simple; organisation : organisation |
 | MCP call time limit | Settings > Organization | `sagax_settings` get, set `server.mcpCallTimeout` | simple; organisation : organisation |
@@ -465,7 +465,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Plugin marketplaces | Capabilities > Sources > Organization sources and access | `sagax_settings` get, set `org.pluginMarketplaces` | organisation |
 | Public links for published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesLinkSharing` | organisation |
 | Reader comments on published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesReaderComments` | organisation |
-| Phone calls ({enabled, callbackNumber, addDoNotCall, removeDoNotCall}) | Settings > Experimental > Phone calls | `sagax_settings` get, set `org.phoneCalls` | organisation |
+| Phone calls ({enabled, callbackNumber, addDoNotCall, removeDoNotCall}) | Settings > Voice > Phone calls | `sagax_settings` get, set `org.phoneCalls` | organisation |
 | Organization bot secrets ({op: add, kind, label, value, injection, botIds} / {op: replace, id, value} / {op: assign, id, botIds} / {op: remove, id}; value a {$secret} reference; get lists names and ids, never a value) | Settings > Organization > Bots > Team secrets | `sagax_settings` get, set `org.botSecrets` | secret + organisation |
 | People's tool access (get lists it; set with a grant's id revokes it) | Settings > Account > Advanced > People's tool access | `sagax_settings` get, set `org.toolGrants` | autrui + suppression |
 | Reports (get lists them; set with a report's id resolves it) | Settings > Notifications > Privacy > Reports | `sagax_settings` get, set `org.reports` | autrui |

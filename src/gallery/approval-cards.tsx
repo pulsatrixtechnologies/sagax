@@ -50,7 +50,12 @@ const MESSAGES = [
   card("c", "mcp__claude_ai_Acme_Desk__acme_desk__query", { resource: "service/tickets", conditions: "status/name='Nouveau'", pageSize: 25 }),
 ];
 const settledCard = card("d", "mcp__perspicax_example_flow__acme_desk_action", { action: "delete", resource: "time/entries", id: 991 });
-const SETTLED = [{ ...settledCard, card: { ...settledCard.card!, answered: "allow" } } as Message];
+const ruleCard = card("e", "mcp__perspicax_example_flow__acme_desk_query", { resource: "company/companies", pageSize: 25 });
+// Receipt of an "Always allow" answer: its details read « Toujours permis » in French
+const SETTLED = [
+  { ...settledCard, card: { ...settledCard.card!, answered: "allow" } } as Message,
+  { ...ruleCard, card: { ...ruleCard.card!, answered: "allow", ruleSaved: { id: "rule_1", behavior: "allow", description: "View companies in Acme Desk (companies)" } } } as Message,
+];
 
 function Preview() {
   const approvals = pendingApprovals(MESSAGES);

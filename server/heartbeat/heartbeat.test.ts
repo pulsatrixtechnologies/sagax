@@ -159,10 +159,26 @@ describe("HeartbeatManager", () => {
     expect(h.runs[0].prompt).toContain("/data/report.csv changed");
   });
 
-  it("checks notes alone every beat, since no probe covers them", async () => {
+  it("never wakes the model for notes alone (#2820)", async () => {
     const h = harness("- look at the shared calendar", {});
     await h.manager.tick();
+    h.advance(31 * 60_000);
+    await h.manager.tick();
+    expect(h.runs).toHaveLength(0);
+  });
+
+  it("mixed list: notes stay quiet while the probes are fine, then ride along with a gap (#2820)", async () => {
+    let running = true;
+    const h = harness("- process Backup running\n- look at the shared calendar", {
+      processes: async () => (running ? [{ pid: 1, name: "Backup" }] : []),
+    });
+    await h.manager.tick();
+    expect(h.runs).toHaveLength(0);
+    running = false;
+    h.advance(31 * 60_000);
+    await h.manager.tick();
     expect(h.runs).toHaveLength(1);
+    expect(h.runs[0].prompt).toContain("Backup is not running");
     expect(h.runs[0].prompt).toContain("look at the shared calendar");
   });
 

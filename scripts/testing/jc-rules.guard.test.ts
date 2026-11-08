@@ -631,7 +631,6 @@ const UNIFIED_THREAD_KEYS = [
  * owns the product fix. Prefer a showThreads / onOpenThread gate over a new row. */
 const UNIFIED_THREAD_KEY_ALLOWLIST: ReadonlyArray<{ file: string; why: string }> = [
   // gated: optional onOpenThread; ChatView only passes it when showThreads
-  { file: "src/components/AttentionCard.tsx", why: "renders needsYou.openThread only when onOpenThread is passed (ChatView gates it)" },
   { file: "src/components/ThreadChip.tsx", why: "returns null when !useShowThreads()" },
   { file: "src/components/ThreadRefs.tsx", why: "openThread(..., showThreads) and chat.openThread titles on a threads-shown ref chip" },
   { file: "src/components/bot-settings/RolePermissionsSection.tsx", why: "passes onOpenThread only when showThreads" },

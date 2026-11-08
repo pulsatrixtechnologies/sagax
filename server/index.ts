@@ -29169,7 +29169,8 @@ const orgRoutinesDeps: RoutinesDeps = {
   scheduleLabel: (routine) => routineScheduleLabel(routine.schedule),
   usageRows: (range) => readUsage(DATA_DIR, range),
   inFlight: routineRunInFlight,
-  runNow: (routineId) => routines?.runNow(routineId) ?? null,
+  // #2939: an admin's Run now is a person's run (no duplicate check).
+  runNow: (routineId) => routines?.runNow(routineId, undefined, "person") ?? null,
   // No writer meta: an admin pausing a routine does not make it run as them.
   setEnabled: (routineId, enabled) => routines?.update(routineId, { enabled }) ?? null,
   create: async (input) => {

@@ -110,6 +110,71 @@ describe("a routine run's question card reaches its person", () => {
     expect(raised).toHaveLength(1);
   });
 
+  // #2939: the host card used to be raised after the goal and the report
+  // were settled and the turn's trouble dropped; the answer's turn then
+  // settled again. The goal is now stepped once per run, and the first
+  // turn's trouble still reaches the run's problems.
+  it("settles a goal and the first turn's trouble once, on the turn that ends the run", async () => {
+    let drawn = false;
+    const h = harness({ awaitsPerson: () => null, cardRaisedSince: () => drawn,
+      raiseClaimedCard: () => { drawn = true; return "Waiting for your answer: Continuer?"; } });
+    const routine = h.manager.create({ name: "Goal", prompt: "Watch.", botId: "scout", enabled: false,
+      schedule: { type: "cron", expression: "30 18 * * 1-5", timeZone: "America/Toronto" }, goal: { text: "Reach 100%" } });
+    h.manager.runNow(routine.id);
+    await h.manager.tick();
+    const run = h.manager.listRuns()[0]!;
+    h.event(run.threadId!, { type: "turn.started" });
+    for (const id of ["t1", "t2"]) {
+      h.event(run.threadId!, { type: "item.started", itemType: "tool", itemId: id, title: "cw_psa_query" });
+      h.event(run.threadId!, { type: "item.completed", itemType: "tool", itemId: id, ok: false, output: "500 server error" });
+    }
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "À 40 %. J'ai affiché une carte pour continuer.\nGOAL_STATUS: in_progress: 40%" });
+    h.event(run.threadId!, { type: "turn.completed", ok: true });
+    expect(h.manager.listRuns()[0]!.status).toBe("waiting");
+    expect(h.manager.listRoutines()[0]!.goal?.checks ?? 0).toBe(0);
+    h.event(run.threadId!, { type: "turn.started" });
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "Fait, 50 %.\nGOAL_STATUS: in_progress: 50%" });
+    h.event(run.threadId!, { type: "turn.completed", ok: true });
+    const done = h.manager.listRuns()[0]!;
+    expect(done.status).toBe("completed");
+    expect(h.manager.listRoutines()[0]!.goal).toMatchObject({ checks: 1, progress: "50%" });
+    expect(done.problems).toContain("failed 2 times");
+  });
+
+  // #2939: the card the host drew for a first claim no longer hides a second
+  // false claim later in the same run.
+  it("draws a card again for a second false claim after the host's first card", async () => {
+    const cards: number[] = [];
+    const clock = Date.parse("2026-11-08T17:00:00Z");
+    const h = harness({
+      now: () => clock,
+      awaitsPerson: () => null,
+      cardRaisedSince: (_threadId, since) => cards.some((at) => at >= since),
+      raiseClaimedCard: () => { cards.push(clock); return "Waiting for your answer: Continuer?"; },
+    });
+    const run = await startedRun(h);
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "La carte est affichée : continuer ou arrêter?" });
+    h.event(run.threadId!, { type: "turn.completed", ok: true });
+    expect(cards).toHaveLength(1);
+    h.event(run.threadId!, { type: "turn.started" });
+    h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "Voici la carte de confirmation, elle t'attend." });
+    h.event(run.threadId!, { type: "turn.completed", ok: true });
+    expect(cards).toHaveLength(2);
+    expect(h.manager.listRuns()[0]!.status).toBe("waiting");
+  });
+
+  // #2939: a summary list of what the bot did is never the card's choices.
+  it("never offers a summary list as the card's choices", () => {
+    const summary = "Résumé:\n- Ticket 1234 fermé\n- Ticket 5678 en attente\n- Facture 99 envoyée\nJ'ai affiché une carte pour confirmer l'envoi.";
+    expect(routineClaimedCardChoice(summary)).toEqual({
+      title: "Your bot has a question",
+      question: "Résumé: - Ticket 1234 fermé - Ticket 5678 en attente - Facture 99 envoyée J'ai affiché une carte pour confirmer l'envoi.",
+      options: ["Continuer", "Arrêter ici"],
+    });
+    // the choices offered after the account still win
+    expect(routineClaimedCardChoice("Fait :\n- Billet 1 fermé\n- Billet 2 fermé\nLa carte est affichée, lequel j'envoie?\n1. Rapport A\n2. Rapport B").options).toEqual(["Rapport A", "Rapport B"]);
+  });
+
   it("words the drawn card with the bot's own choices, else go on or stop in its language", () => {
     expect(routineClaimedCardChoice("Voici la carte, choisis :\n1. Lot A\n2. **Lot B**")).toEqual({
       title: "Your bot has a question", question: "Voici la carte, choisis :", options: ["Lot A", "Lot B"],

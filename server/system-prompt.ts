@@ -11,6 +11,7 @@ import { soulSystemPrompt } from "./bots/bot-folder.ts";
 import { teammateAvailabilityPrompt, type RosterMember } from "./peers/peer-roster.ts";
 import { ROUTINE_REPORT_CONTRACT } from "./routines/routine-report.ts";
 import { CW_FAMILIES, CW_REQUIRED_FIELDS, CW_VIEWS, CW_WIDGET_EXAMPLE, cwOrList } from "../shared/cw-widgets/schema.ts";
+import { OUTPUT_STYLE_RULE } from "../shared/output-style.ts";
 
 export type PromptPart = { id: string; label: string; text: string };
 export type PromptSection = PromptPart & { bytes: number };
@@ -277,7 +278,7 @@ const BUILTIN_PROMPT: Record<BuiltinPluginId, string> = {
  * (shared/cw-widgets/schema.ts) so it never names a family, a view or a
  * field the chat would refuse. */
 const CW_FENCE_PROMPT =
-  ` ConnectWise records go in a Markdown table by default. Only when the person explicitly asks for an interactive view (an interactive table, a card or a widget), use one \`\`\`cw fence holding a JSON object with family, view and records: family is ${cwOrList(CW_FAMILIES)} (nothing else draws); view is ${cwOrList(CW_VIEWS)} (card for one record); each record needs ${CW_FAMILIES.map((family) => `${family}: ${CW_REQUIRED_FIELDS[family].join(", ")}`).join("; ")} (other fields such as status, company or owner are optional).`
+  ` Several ConnectWise records with comparable fields (id, date, hours, status) go in a Markdown table; one or two records read as a short list. Only when the person explicitly asks for an interactive view (an interactive table, a card or a widget), use one \`\`\`cw fence holding a JSON object with family, view and records: family is ${cwOrList(CW_FAMILIES)} (nothing else draws); view is ${cwOrList(CW_VIEWS)} (card for one record); each record needs ${CW_FAMILIES.map((family) => `${family}: ${CW_REQUIRED_FIELDS[family].join(", ")}`).join("; ")} (other fields such as status, company or owner are optional).`
   + ` Example: ${CW_WIDGET_EXAMPLE}. A change from that card waits for the person's approval; do not write to ConnectWise from the fence yourself.`;
 
 /** The shadcn/ui kit every ```widget document carries (src/lib/widget-kit.ts):
@@ -311,7 +312,8 @@ export const PAGE_TARGET_PROMPT =
 export const RICH_OUTPUT_PROMPT =
   " Your replies render as GitHub-flavored Markdown with KaTeX math, Mermaid diagrams (```mermaid), tables (sortable, copyable), task lists, footnotes and callouts (a blockquote opening with [!NOTE], [!TIP], [!IMPORTANT], [!WARNING] or [!CAUTION])."
   + " When you offer several labeled choices or options (A, B, C or 1, 2, 3), put each on its own line or in a list, never one after another in the same sentence."
-  + " Views only on request: draw a chart, a widget, a ```csv table, a ```cw view, a show_widget card or a video only when the person asked for one in this message (\"make me a chart\", \"show it as an interactive table\", \"play the video\") or the request cannot be answered without one; otherwise answer in text, with a Markdown table for records and comparisons. Never add a view on your own initiative."
+  + " Views only on request: draw a chart, a widget, a ```csv table, a ```cw view, a show_widget card or a video only when the person asked for one in this message (\"make me a chart\", \"show it as an interactive table\", \"play the video\") or the request cannot be answered without one; otherwise answer in text. Never add a view on your own initiative."
+  + OUTPUT_STYLE_RULE
   + EMAIL_DRAFT_ON
   + " For a chart the person asks for, use a ```chart fence holding JSON such as {\"type\":\"bar\",\"title\":\"Tickets\",\"labels\":[\"Mon\",\"Tue\"],\"series\":[{\"name\":\"Opened\",\"data\":[4,7]}]} (type bar, line, area or pie) or CSV with a header row; when the person asks for a table they can sort or filter, a ```csv fence becomes one."
   + " For an interactive tool the person asks for (calculator, simulator, small form or visualization), use a ```widget fence with self-contained HTML, CSS and inline JavaScript; it runs in a sandbox with no network access, so inline all data and never load external scripts, fonts or images."

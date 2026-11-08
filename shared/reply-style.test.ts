@@ -36,4 +36,10 @@ describe("cleanReplyStyle", () => {
     expect(cleanReplyStyle("L'id est `c16f208c`.")).toBe("L'id est `c16f208c`.");
     expect(cleanReplyStyle("Carte deadbeef? non, carte cafe et facture 2026")).toBe("Carte deadbeef? non, carte cafe et facture 2026");
   });
+  it("rewrites a key/sentence table as a bulleted list (#2949)", () => {
+    const table = "Où on en est :\n\n| Piece | State |\n|---|---|\n| Rules | Live. Messages to you stay clear and short. |\n| Fleet memory | Still the earlier card, waiting for your pick. |";
+    expect(cleanReplyStyle(table)).toBe("Où on en est :\n\n- **Rules**: Live. Messages to you stay clear and short.\n- **Fleet memory**: Still the earlier card, waiting for your pick.");
+    const data = "| Billet | Date | Heures |\n|---|---|---|\n| #297048 | 2026-11-02 | 1,5 |";
+    expect(cleanReplyStyle(data)).toBe(data);
+  });
 });

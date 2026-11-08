@@ -8,6 +8,7 @@
 // automation turns, replaces oversized blocks with a short summary that
 // points at on-demand tools, and bounds email-watch event payloads.
 import { SIGN_IN_PROMPT, type PromptPart } from "../system-prompt.ts";
+import { OUTPUT_STYLE_RULE_SHORT } from "../../shared/output-style.ts";
 
 /** Soft ceiling for the whole system prompt of one cold / automation turn. */
 export const COLD_PROMPT_TOTAL_BUDGET = 40_000;
@@ -71,12 +72,13 @@ export const COLD_PROMPT_SECTION_BUDGETS: Readonly<Record<string, number>> = {
   "automation-reply": 600,
 };
 
-/** Short rich-output for automation: Markdown and tables only, no chart /
+/** Short rich-output for automation: Markdown, short lists and real tables only (#2949), no chart /
  * widget / cw kit (those alone are ~6 KB on an interactive turn). */
 export const COLD_RICH_OUTPUT_PROMPT =
   " Your replies render as GitHub-flavored Markdown. Prefer a short report:"
-  + " answer first, then only what the person needs to act. A Markdown table"
-  + " for records is fine; do not open a chart, widget, ```cw view or"
+  + " answer first, then only what the person needs to act."
+  + OUTPUT_STYLE_RULE_SHORT
+  + " Do not open a chart, widget, ```cw view or"
   + " show_widget card on a routine run unless the routine instructions ask"
   + " for one.";
 

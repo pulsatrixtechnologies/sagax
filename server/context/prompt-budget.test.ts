@@ -90,9 +90,14 @@ describe("prompt size by engine and turn kind (#1997)", () => {
       // prompt now measures 13922 bytes (files engines) and 13697 (others)
       // after the QA 0.8.66 prompt rules (#2905, #2920, sagax_help prefetch
       // #2919); the 60 % cap leaves about 100 bytes of margin on each.
+      // Raised again (routine 23400 to 23900 and 23000 to 23500, #2949): the
+      // output-style rule (shared/output-style.ts) replaces the old 'Markdown
+      // table for records' line; the routine prompt measures 14206 bytes
+      // (files engines), the 60 % cap leaves about 130 bytes of margin. Room 53500
+      // to 53700 and 48100 to 48300 for the same rule in RICH_OUTPUT_PROMPT.
       const before = engineWorksInFiles(engine)
-        ? { chat: 62102, routine: 23400, room: 53500, "sub-agent": 59893 }
-        : { chat: 56278, routine: 23000, room: 48100, "sub-agent": 54069 };
+        ? { chat: 62102, routine: 23900, room: 53700, "sub-agent": 59893 }
+        : { chat: 56278, routine: 23500, room: 48300, "sub-agent": 54069 };
       expect(bytes).toBeLessThanOrEqual(before[kind] * 0.6);
       const oldSkills = engineWorksInFiles(engine) ? 30306 : 25249;
       expect(skills.index.bytes).toBeLessThanOrEqual(oldSkills * 0.6);

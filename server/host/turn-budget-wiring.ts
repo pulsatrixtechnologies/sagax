@@ -9,8 +9,8 @@ import {
   turnBudgetSettings,
   type TurnBudget,
   type TurnBudgetConfig,
-  type TurnBudgetLanguage,
 } from "./turn-budget.ts";
+import { lastPersonText, turnLanguage } from "../turns/turn-language.ts";
 
 export interface TurnBudgetBot {
   id: string;
@@ -28,7 +28,10 @@ export interface TurnBudgetHost {
   steerer(instanceId: string): ((threadId: string, note: string) => Promise<SteerOutcome>) | undefined;
   stopDirectThread(botId: string, threadId: string): Promise<unknown>;
   appendMessage(threadId: string, message: { role: "bot"; kind: "text"; text: string; from?: { botId: string; name: string; color: string } }): void;
-  language(threadId: string, bot: TurnBudgetBot | null): TurnBudgetLanguage;
+  /** The conversation as it reads now (the person's last message sets the language, #2762). */
+  messages(threadId: string): readonly { role?: string; kind?: string; text?: string }[];
+  /** The person's own language setting, used when their last message is too short to tell. */
+  preferredLanguage(threadId: string, bot: TurnBudgetBot | null): string | null | undefined;
   subscribe(listener: (event: RuntimeEvent) => void): unknown;
   ignore?(event: RuntimeEvent): boolean;
   log?(line: string): void;
@@ -63,7 +66,7 @@ export function wireTurnBudget(host: TurnBudgetHost): TurnBudget {
         ...(bot ? { from: { botId: bot.id, name: bot.name, color: bot.color } } : {}),
       });
     },
-    language: (threadId) => host.language(threadId, host.botByThread(threadId) ?? null),
+    language: (threadId) => turnLanguage(lastPersonText(host.messages(threadId)), host.preferredLanguage(threadId, host.botByThread(threadId) ?? null)),
     ...(host.log ? { log: host.log } : {}),
     ...(host.now ? { now: host.now } : {}),
     ...(host.setTimer ? { setTimer: host.setTimer } : {}),

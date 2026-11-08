@@ -19452,9 +19452,10 @@ const directTurnBudget = wireTurnBudget({
   },
   stopDirectThread,
   appendMessage: (threadId, message) => store.appendMessage(threadId, message),
-  language: (_threadId, bot) => {
+  messages: (threadId) => store.activePath(threadId),
+  preferredLanguage: (_threadId, bot) => {
     const owner = bot ? recordedBotOwner(bot as BotRecord) : undefined;
-    return languageOfPerson(owner ?? undefined).toLowerCase().startsWith("fr") ? "fr" : "en";
+    return languageOfPerson(owner ?? undefined);
   },
   subscribe: (listener) => bus.subscribe(listener),
   ignore: shouldIgnoreProviderEvent,

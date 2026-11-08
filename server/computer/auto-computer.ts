@@ -54,12 +54,22 @@ export interface AutoComputerState {
   browserAvailable?: boolean;
   /** Places this turn already moved to with computer_select (absent: none). */
   switches?: number;
+  /** #2762: the language of the person's message; refusals speak it. */
+  language?: "fr" | "en";
 }
 
 /** #2736 (QA 2026-11-07): a turn bounced between the server environment,
  * the cloud computer and the person's Mac. One step elsewhere and back is
  * two moves; a third is refused, so the bot finishes where it is. */
 export const MAX_AUTO_COMPUTER_SWITCHES = 2;
+
+/** #2736, #2762: the refusal of a third move, in the person's language. */
+export function tooManyMovesText(moves: number, language: "fr" | "en" | undefined, now?: string): string {
+  if (language === "fr") {
+    return `Tu as déjà changé d'ordinateur ${moves} fois pour cette demande, le maximum permis. Reste ${now ? `sur ${now}` : "sur l'ordinateur actuel"} et termine l'étape là avec ses outils ; s'il ne peut pas la faire, dis à la personne pourquoi, en français, et ce qu'elle peut faire, au lieu de changer encore.`;
+  }
+  return `You already moved ${moves} times in this turn, the most a turn may. Stay on ${now ?? "the current computer"} and finish the step there with its tools; if it cannot do the step, tell the person why in their language and what they can do, instead of moving again.`;
+}
 
 /** #2763: one request is one budget of moves. A select_computer switch ends
  * the turn and a continuation turn goes on with the same request: it starts
@@ -170,7 +180,7 @@ export function selectAutoComputer(
     : "Use the sagax-desktop tools.";
   if (state.selected === target) return { ok: true, text: `You already work on ${autoComputerLabel(target)}. ${tools}`, target, from: target, changed: false };
   if ((state.switches ?? 0) >= MAX_AUTO_COMPUTER_SWITCHES) {
-    return { ok: false, text: `You already moved ${state.switches} times in this turn, the most a turn may. Stay on ${now} and finish the step there with its tools; if it cannot do the step, tell the person why in their language and what they can do, instead of moving again.` };
+    return { ok: false, text: tooManyMovesText(state.switches ?? 0, state.language, now) };
   }
   return { ok: true, text: `Now working on ${autoComputerLabel(target)}. ${tools}`, target, from: state.selected, changed: true };
 }

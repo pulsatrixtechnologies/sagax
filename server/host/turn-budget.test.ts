@@ -63,7 +63,7 @@ describe("turn budget (#2737)", () => {
     for (let n = 1; n <= 6; n += 1) h.budget.onEvent(tool(n));
     h.budget.onEvent(tool(6));
     expect(h.steers).toHaveLength(1);
-    expect(h.steers[0]).toContain("answer the person with what you have, in their language");
+    expect(h.steers[0]).toContain("réponds tout de suite à la personne avec ce que tu as");
     h.budget.onEvent(tool(7));
     expect(h.steers).toHaveLength(1);
     expect(h.stops).toHaveLength(0);

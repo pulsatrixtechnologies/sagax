@@ -23,7 +23,7 @@ function session(over: Partial<AdminSessionInput> = {}): AdminSessionInput {
     createdAt: NOW - 60_000,
     hostname: "PC-RECEPTION",
     user: "marie",
-    ownerId: "tech@gox",
+    ownerId: "tech@acme",
     botId: "bot-7",
     reachable: true,
     ...over,
@@ -32,12 +32,12 @@ function session(over: Partial<AdminSessionInput> = {}): AdminSessionInput {
 
 describe("toAdminRow", () => {
   it("maps a connected session with the bot label and the opener", () => {
-    const row = toAdminRow(session({ openedBy: "tech@gox" }), { botLabel: "Atlas", now: NOW });
+    const row = toAdminRow(session({ openedBy: "tech@acme" }), { botLabel: "Atlas", now: NOW });
     expect(row.host).toBe("PC-RECEPTION");
     expect(row.status).toBe("connected");
     expect(row.botLabel).toBe("Atlas");
     expect(row.botId).toBe("bot-7");
-    expect(row.openedBy).toBe("tech@gox");
+    expect(row.openedBy).toBe("tech@acme");
     expect(row.unattended).toBe(false);
   });
 
@@ -49,7 +49,7 @@ describe("toAdminRow", () => {
   });
 
   it("surfaces unattended consent (since, expiry, banner, signed)", () => {
-    const consent = parseUnattendedConsent({ hostKey: "sn-9", org: "GOX", installedBy: "admin@gox", bannerVisible: false, signed: true, expiresAt: defaultUnattendedExpiry(NOW, 60) }, NOW)!;
+    const consent = parseUnattendedConsent({ hostKey: "sn-9", org: "ACME", installedBy: "admin@acme", bannerVisible: false, signed: true, expiresAt: defaultUnattendedExpiry(NOW, 60) }, NOW)!;
     const row = toAdminRow(session(), { botLabel: "Atlas", consent, now: NOW });
     expect(row.unattended).toBe(true);
     expect(row.bannerVisible).toBe(false);
@@ -58,7 +58,7 @@ describe("toAdminRow", () => {
   });
 
   it("drops a revoked or expired consent", () => {
-    const expired = parseUnattendedConsent({ hostKey: "sn-9", org: "GOX", installedBy: "a", installedAt: new Date(NOW - 10 * 86400000).toISOString(), expiresAt: new Date(NOW - 86400000).toISOString() }, NOW - 10 * 86400000)!;
+    const expired = parseUnattendedConsent({ hostKey: "sn-9", org: "ACME", installedBy: "a", installedAt: new Date(NOW - 10 * 86400000).toISOString(), expiresAt: new Date(NOW - 86400000).toISOString() }, NOW - 10 * 86400000)!;
     expect(toAdminRow(session(), { botLabel: "A", consent: expired, now: NOW }).unattended).toBe(false);
   });
 });

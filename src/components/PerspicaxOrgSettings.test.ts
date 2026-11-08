@@ -46,7 +46,7 @@ describe("Settings > Organization without Sharing in the organization", () => {
         // a count not loaded yet draws no row, never its label twice
         expect(html, `${locale} ${role}`).not.toContain('data-settings-row="teamSecrets"');
         expect(html, `${locale} ${role}`).not.toContain('data-settings-row="orgPages"');
-        // JC 2026-11-06: Manage opens the org console in the browser for everyone
+        // the owner 2026-11-06: Manage opens the org console in the browser for everyone
         expect(html, `${locale} ${role}`).toContain("data-external-link-pill");
         expect(html, `${locale} ${role}`).toContain('href="https://px.example.test/console/"');
         expect(html, `${locale} ${role}`).toContain('target="_blank"');

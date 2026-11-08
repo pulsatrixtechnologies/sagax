@@ -125,7 +125,7 @@ describe("usage formatting", () => {
   });
 
   it("labels a fresh-token total as new tokens and states the whole amount beside it", () => {
-    // MOCA-256: ~0.5B tokens through the model, nearly all of it the thread
+    // ticket 256: ~0.5B tokens through the model, nearly all of it the thread
     // re-read from the prompt cache. The headline counts 2.1M; the note must
     // not claim that figure is everything, and must give the 500M total.
     const total = sumUsage([

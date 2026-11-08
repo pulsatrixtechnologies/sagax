@@ -1,4 +1,4 @@
-// The dev pods live only in a coding window (#2149, JC 2026-11-06): the
+// The dev pods live only in a coding window (#2149, the owner 2026-11-06): the
 // normal chat is the same markup with the Experimental switch on or off.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

@@ -252,7 +252,7 @@ describe("Settings → Engines → setup cards", () => {
     expect(renderToStaticMarkup(createElement(EngineRows))).not.toContain("Sign in with Google");
   });
 
-  // MOCA-292: a key engine has no CLI, so it used to drop off this page the
+  // ticket 292: a key engine has no CLI, so it used to drop off this page the
   // moment its key was saved, even a mistyped one, with no way back to it.
   it("keeps an API-key engine listed after its key is saved and links to changing the key", () => {
     vi.stubGlobal("window", {});

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Plugins (Capabilities before #2104), regressions kept through the Grok Bot
+// Plugins (Capabilities before #2104), regressions kept through the the reference app
 // Connect Apps redesign (2026-11-06):
 //   - the install scope sits under Manage's title, once, beside + Add (it
 //     vanished on Providers before); on Pages it shows turned off, with the

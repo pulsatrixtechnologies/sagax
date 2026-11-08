@@ -39,13 +39,13 @@ describe("RoutineRunCard", () => {
     expect(same).not.toMatch(/<time[^>]*title=/);
   });
   // 2026-10-22 (owner): one concise message, the bot's report only.
-  // 2026-11-04 (JC): a card again: the routine's name as its title, a
+  // 2026-11-04 (the owner): a card again: the routine's name as its title, a
   // Done pill, and a View run button.
   // 2026-11-05 (the operator, #2081): a finished report is the bot's message, not a
   // card: a provenance line (Routine · name · Done pill · time · View run) above
   // the bot's own bubble with the report as markdown. No border, no card chrome.
-  // 2026-11-06 (JC, #2272 follow-up): a routine's run in the chat is only
-  // its RESULT, a plain bot message like Grok Bot's. No card, no badge, no
+  // 2026-11-06 (the owner, #2272 follow-up): a routine's run in the chat is only
+  // its RESULT, a plain bot message like the reference app's. No card, no badge, no
   // "Proactive: ..." title, no "Routine · date", no "View run"; the run's
   // detail one discreet "Details" away.
   it("reads a finished report as the bot's message under a quiet line, never as a card", () => {

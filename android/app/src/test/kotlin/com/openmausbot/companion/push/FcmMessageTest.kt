@@ -9,12 +9,12 @@ class FcmMessageTest {
     @Test
     fun approvalAndQuestionKeepTheirKind() {
         val approval = SagaxMessagingService.frameOf(
-            mapOf("kind" to "approval", "prompt" to "approval", "title" to "Cryptic", "body" to "Run a command?", "botId" to "b1", "threadId" to "t1", "senderName" to "Cryptic"),
+            mapOf("kind" to "approval", "prompt" to "approval", "title" to "Nimbus", "body" to "Run a command?", "botId" to "b1", "threadId" to "t1", "senderName" to "Nimbus"),
         )!!
         assertEquals("approval", approval.kind)
         assertEquals("t1", approval.threadId)
         assertEquals("b1", approval.botId)
-        val question = SagaxMessagingService.frameOf(mapOf("kind" to "approval", "prompt" to "question", "title" to "Cryptic", "body" to "Which day?"))!!
+        val question = SagaxMessagingService.frameOf(mapOf("kind" to "approval", "prompt" to "question", "title" to "Nimbus", "body" to "Which day?"))!!
         assertEquals("question", question.kind)
     }
 

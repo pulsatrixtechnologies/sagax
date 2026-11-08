@@ -520,7 +520,7 @@ describe("pickVoiceModel", () => {
   // 2026-11-02 (the maintainer's call on a Grok 4.7 Fast bot): models.dev has no row for
   // "grok-4.7-build-fast", so the own engine looked fast-less and the call
   // went to Codex, whose ChatGPT usage limit came back as the bot's error.
-  it("keeps a Grok bot on its own fast model even when the catalogue does not list it", () => {
+  it("keeps a Grok-engine bot on its own fast model even when the catalogue does not list it", () => {
     const grokCli: AutoEngine = {
       instanceId: "grok", driverKind: "grokAgent", displayName: "Grok", effortLevels: ["low", "medium", "high"],
       models: { default: "grok-4.7", options: [{ id: "grok-4.7", label: "Grok 4.7" }, { id: "grok-4.7-build-fast", label: "Grok 4.7 Fast" }] },

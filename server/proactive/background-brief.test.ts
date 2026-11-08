@@ -111,7 +111,7 @@ describe("background brief", () => {
     let reads = 0;
     const deps = {
       store,
-      bots: () => [{ id: "primary", name: "Cryptic", person: "pr_a" }, { id: "other", name: "Other", person: "pr_a" }, { id: "nobody", name: "Nobody", person: null }],
+      bots: () => [{ id: "primary", name: "Nimbus", person: "pr_a" }, { id: "other", name: "Other", person: "pr_a" }, { id: "nobody", name: "Nobody", person: null }],
       connected: () => ["Inbox"],
       fastModel: () => "fast-1",
       reads: async () => ({

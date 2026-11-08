@@ -161,7 +161,7 @@ describe("Details > Permissions", () => {
     expect(host.querySelector("[data-missing-label]")?.textContent).toBe("Vous ne pouvez pas modifier les billets");
   });
 
-  describe("Settings > Appearance > Show permissions (JC 2026-11-07)", () => {
+  describe("Settings > Appearance > Show permissions (the owner 2026-11-07)", () => {
     const render = async () => {
       apiMock.mockResolvedValue({ ...body, missing: body.missing.map((entry) => ({ ...entry, lastAt: Date.now() })) });
       flushSync(() => root.render(createElement(RolePermissionsSection, { botId: "nova" })));

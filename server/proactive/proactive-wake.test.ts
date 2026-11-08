@@ -392,7 +392,7 @@ describe("a yes whose wake cannot start (2026-11-01)", () => {
 describe("teammates' messages (peer inbox, 2026-11-02)", () => {
   const notice = (receiverId: string, n: number, extra: Partial<Parameters<typeof peerNoticeEvent>[0]> = {}) => peerNoticeEvent({
     receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Northwind write ${n}`, status: "completed",
-    text: `Dry run done for write ${n}; GO needed.`, result: `Checked write ${n}; it needs JC's GO.`,
+    text: `Dry run done for write ${n}; GO needed.`, result: `Checked write ${n}; it needs AB's GO.`,
     senderId: "osprey", senderName: "Osprey", ...extra,
   });
 
@@ -418,7 +418,7 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
     const prompt = proactiveWakePrompt(h.woken[0]!);
     for (const n of [1, 2, 3]) {
       expect(prompt).toContain(`Dry run done for write ${n}; GO needed.`);
-      expect(prompt).toContain(`Checked write ${n}; it needs JC's GO.`);
+      expect(prompt).toContain(`Checked write ${n}; it needs AB's GO.`);
     }
     // one card for all of them, and no acknowledgement ping-pong
     expect(prompt).toContain(PEER_WAKE_RULES);

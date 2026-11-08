@@ -178,7 +178,7 @@ describe("the row's state word (2026-10-28)", () => {
     expect(line.getAttribute("aria-label")).toBe("Running: Morning");
     expect(row("r2").querySelector("[data-routine-running]")).toBeNull();
     act(() => { (line.closest("button") as HTMLButtonElement).click(); });
-    // Same action running or not (JC 2026-11-06): the routine opens, never the run.
+    // Same action running or not (the owner 2026-11-06): the routine opens, never the run.
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "r1" }));
     expect(fixture.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "openRoutineRunWindow" }));
   });

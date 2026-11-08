@@ -952,7 +952,7 @@ describe("composerShouldRefocus", () => {
   });
 });
 
-// MOCA-263: clicking Reply left the caret outside the draft, so the reply
+// ticket 263: clicking Reply left the caret outside the draft, so the reply
 // could not be typed without clicking the box first.
 describe("replyTargetTakesFocus", () => {
   it("focuses the draft when a message is chosen to reply to, or the target changes", () => {

@@ -39,7 +39,7 @@ describe("permissionAction", () => {
     expect(permissionAction("screen", "darwin", "granted", { captureFailed: true })).toMatchObject({ kind: "relaunch" });
   });
 
-  it("JC 2026-11-07: Sagax checked in Screen Recording but no picture is never text alone", () => {
+  it("the owner 2026-11-07: Sagax checked in Screen Recording but no picture is never text alone", () => {
     // Allowed, capture fails: Relaunch Sagax first.
     expect(permissionAction("screen", "darwin", "granted", { captureFailed: true })).toMatchObject({ kind: "relaunch", secondary: { kind: "settings" } });
     // Still failing after that relaunch: a stale entry, reset it.

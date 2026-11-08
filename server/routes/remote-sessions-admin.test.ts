@@ -140,7 +140,7 @@ describe("enrolled hosts routes", () => {
     const routes = [createRemoteSessionsAdminRoutes({ admin, hosts: hosts as never, principalId: (auth) => (auth.kind === "session" ? (auth.session as { principalId?: string }).principalId : undefined), orgAdmin: () => false })];
     const server = createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", "http://localhost");
-      if (!await dispatchRoutes(routes, { req, res, url, path: url.pathname, method: req.method ?? "GET", auth: person("viewer@gox"), json, readBody })) json(res, 404, {});
+      if (!await dispatchRoutes(routes, { req, res, url, path: url.pathname, method: req.method ?? "GET", auth: person("viewer@acme"), json, readBody })) json(res, 404, {});
     });
     servers.push(server);
     await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
@@ -153,7 +153,7 @@ describe("enrolled hosts routes", () => {
     const listed = await (await fetch(`${base}/api/admin/remote-sessions/hosts`)).json() as { available: boolean; openEnabled?: boolean };
     expect(listed).toMatchObject({ available: true });
     expect(listed.openEnabled).toBeUndefined();
-    expect(hosts.list).toHaveBeenCalledWith({ principalId: "viewer@gox" });
+    expect(hosts.list).toHaveBeenCalledWith({ principalId: "viewer@acme" });
   });
 
   it("opens for a non-admin (no admin approval, always on)", async () => {
@@ -161,7 +161,7 @@ describe("enrolled hosts routes", () => {
     const opened = await post(`${base}/api/admin/remote-sessions/hosts/${HOST}/open`, { scope: "view-only" });
     expect(opened.status).toBe(200);
     expect(await opened.json()).toEqual({ code: "K7QMNP", botId: "bot-7", threadId: "t" });
-    expect(hosts.open).toHaveBeenCalledWith({ principalId: "viewer@gox" }, HOST, { scope: "view-only" });
+    expect(hosts.open).toHaveBeenCalledWith({ principalId: "viewer@acme" }, HOST, { scope: "view-only" });
   });
 
   it("the open route surfaces an ownership refusal from hosts.open", async () => {
@@ -176,7 +176,7 @@ describe("enrolled hosts routes", () => {
     const routes = [createRemoteSessionsAdminRoutes({ admin, hosts: hosts as never, principalId: (auth) => (auth.kind === "session" ? (auth.session as { principalId?: string }).principalId : undefined), orgAdmin: () => false })];
     const server = createServer(async (req, res) => {
       const url = new URL(req.url ?? "/", "http://localhost");
-      if (!await dispatchRoutes(routes, { req, res, url, path: url.pathname, method: req.method ?? "GET", auth: person("viewer@gox"), json, readBody })) json(res, 404, {});
+      if (!await dispatchRoutes(routes, { req, res, url, path: url.pathname, method: req.method ?? "GET", auth: person("viewer@acme"), json, readBody })) json(res, 404, {});
     });
     servers.push(server);
     await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
@@ -184,17 +184,17 @@ describe("enrolled hosts routes", () => {
     const opened = await post(`${base}/api/admin/remote-sessions/hosts/${HOST}/open`);
     expect(opened.status).toBe(404);
     expect(await opened.json()).toMatchObject({ code: "not_found", error: "That computer is not one of your enrolled hosts." });
-    expect(hosts.open).toHaveBeenCalledWith({ principalId: "viewer@gox" }, HOST, {});
+    expect(hosts.open).toHaveBeenCalledWith({ principalId: "viewer@acme" }, HOST, {});
   });
 
   it("revokes with an optional reason", async () => {
     const { base, hosts } = await serveHosts();
     const revoked = await post(`${base}/api/admin/remote-sessions/hosts/${HOST}/revoke`);
     expect(revoked.status).toBe(200);
-    expect(hosts.revoke).toHaveBeenCalledWith({ principalId: "viewer@gox" }, HOST, "");
+    expect(hosts.revoke).toHaveBeenCalledWith({ principalId: "viewer@acme" }, HOST, "");
     const withReason = await post(`${base}/api/admin/remote-sessions/hosts/${HOST}/revoke`, { reason: "poste remplacé" });
     expect(withReason.status).toBe(200);
-    expect(hosts.revoke).toHaveBeenLastCalledWith({ principalId: "viewer@gox" }, HOST, "poste remplacé");
+    expect(hosts.revoke).toHaveBeenLastCalledWith({ principalId: "viewer@acme" }, HOST, "poste remplacé");
     expect((await post(`${base}/api/admin/remote-sessions/hosts/${HOST}/revoke`, { reason: "x".repeat(300) })).status).toBe(400);
   });
 

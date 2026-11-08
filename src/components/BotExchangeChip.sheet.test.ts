@@ -116,7 +116,7 @@ describe("BotExchangeChip sheet", () => {
     expect(host.querySelector("[data-testid=bot-exchange-sheet]")).toBeNull();
   });
 
-  it("floats the bot chat's bar and fades: the 40px pill centered, the transcript under it (JC 2026-11-06)", async () => {
+  it("floats the bot chat's bar and fades: the 40px pill centered, the transcript under it (the owner 2026-11-06)", async () => {
     await act(async () => {
       root.render(createElement(BotExchangeChip, { run: run(), onGo: () => false }));
     });

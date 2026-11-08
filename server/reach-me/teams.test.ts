@@ -41,7 +41,7 @@ function setup() {
     failed: () => {},
     now: () => now,
   });
-  const out: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Cryptic", code: code.code, kind: "approval", title: "Run a command?", line: "", confidential: false, needsKey: false, language: "en" };
+  const out: ReachOutbound = { person: "pr_a", botId: "b1", botName: "Nimbus", code: code.code, kind: "approval", title: "Run a command?", line: "", confidential: false, needsKey: false, language: "en" };
   return { teams, codes, code, runs, replies, out, setNow: (next: number) => { now = next; } };
 }
 

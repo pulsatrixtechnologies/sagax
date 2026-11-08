@@ -33,7 +33,7 @@ describe("Plugins panel views", () => {
     discover: createElement(DiscoverView, discoverProps), installed: "INSTALLED", pages: "PAGES", sources: "SOURCES", ...overrides,
   }));
 
-  it("Grok Bot's Connect Apps: the home (title, N connected, the sticky search row), then Manage, Bots and the views behind a back bar (#2104)", () => {
+  it("the reference app's Connect Apps: the home (title, N connected, the sticky search row), then Manage, Bots and the views behind a back bar (#2104)", () => {
     const html = page({ connected: { count: 2, icons: [] } });
     expect(html).toMatch(/id="plugins-title"[^>]*>Plugins<\/h2>/);
     expect(html).toMatch(/data-plugins-connected="2"[\s\S]*?2 connected/);
@@ -82,7 +82,7 @@ describe("Plugins panel views", () => {
     expect(html).not.toContain("Browse Bots");
     const chips = [...html.matchAll(/data-plugins-chip="([^"]+)"/g)].map((match) => match[1]);
     expect(chips[0]).toBe("all");
-    // the categories past the row wait behind More (Grok Bot's More chip)
+    // the categories past the row wait behind More (the reference app's More chip)
     expect(html).toContain("data-plugins-more-chips");
     expect(html).toContain('data-plugins-section="recommended"');
     expect(html).toContain("Recommended for you");
@@ -132,7 +132,7 @@ describe("Plugins panel views", () => {
       details: [{ label: "Source", value: "Added manually" }, { label: "Transport", value: "HTTP" }],
     }));
     expect(html).toContain('aria-label="Back to Plugins"');
-    // Turned on beside the name; Uninstall is Grok Bot's gray pill under the page,
+    // Turned on beside the name; Uninstall is the reference app's gray pill under the page,
     // and with no Update, Test or Edit there is no "..." menu
     expect(html).toMatch(/data-plugin-enabled[^>]*>Turned on<button[^>]*aria-label="Turn glitcho off"/);
     expect(html).toMatch(/data-plugin-action="uninstall"[^>]*>Uninstall</);

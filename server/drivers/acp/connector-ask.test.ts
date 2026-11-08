@@ -48,7 +48,7 @@ describe("an engine connector call in an ACP ask (review of #943)", () => {
 
   it("reads tool_input sent as JSON text, and an empty one as no arguments (#1931)", () => {
     const id = "cursor__user-pulsatrix-connectwise-profile_5fuse___23";
-    const ask = connectorAsk(useTool(id, JSON.stringify({ profile: "gox" })), mounted);
+    const ask = connectorAsk(useTool(id, JSON.stringify({ profile: "acme" })), mounted);
     expect(ask).toMatchObject({ target: id, engineConnector: true });
     expect(ask.input).toContain('"profile"');
     expect(connectorAsk(useTool(id, {}), mounted).input).toBe("{}");

@@ -106,7 +106,7 @@ describe("the Appearance pane", () => {
     expect(host.innerHTML).not.toContain('aria-label="Zoom avatar"');
   });
 
-  it("regression (JC 2026-11-06): on the profile page, colours only in the Color tab, Mascot / Generate / Upload in the Mascot tab, Reset and Randomize in the tab row", async () => {
+  it("regression (the owner 2026-11-06): on the profile page, colours only in the Color tab, Mascot / Generate / Upload in the Mascot tab, Reset and Randomize in the tab row", async () => {
     await mountPane(makeBot(), true);
     // open on Mascot: no colour dot anywhere, the sources beside the search, Reset and Randomize at the right of the tabs
     expect(host.querySelector('[data-appearance-tab="mascot"]')?.getAttribute("aria-selected")).toBe("true");

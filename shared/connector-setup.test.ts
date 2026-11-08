@@ -57,7 +57,7 @@ describe("which connector the person named", () => {
 describe("where the person signs in", () => {
   const teams = resolveConnectorSetupTarget("Teams")!;
 
-  it("a Grok bot on the person's own xAI account: grok.com/connectors", () => {
+  it("a Grok-engine bot on the person's own xAI account: grok.com/connectors", () => {
     expect(chooseConnectorSetupRoute({ target: teams, engine: "grok", account: "own" })).toEqual({ route: "grok", url: GROK_CONNECTORS_URL });
   });
 

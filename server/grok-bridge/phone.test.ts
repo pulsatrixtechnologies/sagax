@@ -13,7 +13,7 @@ function storeWith(optIn: { mayCallOwner?: boolean; mayTextOwner?: boolean }) {
   store.setLink("pr_owner", {
     webhookUrl: "https://grok.example/hook",
     enabled: true,
-    bots: ["cryptic"],
+    bots: ["nimbus"],
     mayCallOwner: optIn.mayCallOwner === true,
     mayTextOwner: optIn.mayTextOwner === true,
   });
@@ -24,14 +24,14 @@ describe("bridge phone tasks", () => {
   it("third-party call always needs a card when no placeCall is wired", async () => {
     const store = storeWith({ mayCallOwner: true, mayTextOwner: true });
     const envelope = buildBridgeEnvelope({
-      fromBot: "cryptic",
+      fromBot: "nimbus",
       toBot: "atlas",
       task: "phone.call_third_party",
       threadId: "th-1",
       requestedBy: "bot",
       payload: { to: "+15145550199", purpose: "status" },
     });
-    envelope.from = { kind: "grok", bot: "cryptic" };
+    envelope.from = { kind: "grok", bot: "nimbus" };
     envelope.to = { kind: "sagax", bot: "atlas" };
     const result = await handleBridgePhone({
       personId: "pr_owner",
@@ -46,14 +46,14 @@ describe("bridge phone tasks", () => {
   it("owner call with opt-in returns accepted without a card when placeCall is absent", async () => {
     const store = storeWith({ mayCallOwner: true });
     const envelope = buildBridgeEnvelope({
-      fromBot: "cryptic",
+      fromBot: "nimbus",
       toBot: "atlas",
       task: "phone.call_owner",
       threadId: "th-2",
       requestedBy: "bot",
       payload: { purpose: "check in" },
     });
-    envelope.from = { kind: "grok", bot: "cryptic" };
+    envelope.from = { kind: "grok", bot: "nimbus" };
     envelope.to = { kind: "sagax", bot: "atlas" };
     const result = await handleBridgePhone({
       personId: "pr_owner",
@@ -69,14 +69,14 @@ describe("bridge phone tasks", () => {
   it("owner sms without opt-in needs a card", async () => {
     const store = storeWith({ mayTextOwner: false });
     const envelope = buildBridgeEnvelope({
-      fromBot: "cryptic",
+      fromBot: "nimbus",
       toBot: "atlas",
       task: "phone.sms_owner",
       threadId: "th-3",
       requestedBy: "bot",
       payload: { text: "hello" },
     });
-    envelope.from = { kind: "grok", bot: "cryptic" };
+    envelope.from = { kind: "grok", bot: "nimbus" };
     envelope.to = { kind: "sagax", bot: "atlas" };
     const result = await handleBridgePhone({
       personId: "pr_owner",

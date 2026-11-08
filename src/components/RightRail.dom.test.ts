@@ -10,7 +10,7 @@ import { MemorySidebar } from "./memory-manager/MemorySidebar";
 import { CalendarSidebar } from "./routines/CalendarSidebar";
 import { RIGHT_RAIL_OPEN_FROM, RightRailStrip, rightRailStartsOpen } from "./RightRail";
 
-// JC 2026-11-03: the Memory explorer is Automations' calendar rail, the same
+// the owner 2026-11-03: the Memory explorer is Automations' calendar rail, the same
 // component, so their side, width, border, fold and breakpoint cannot drift.
 const rail = (html: string) => {
   const host = document.createElement("div");

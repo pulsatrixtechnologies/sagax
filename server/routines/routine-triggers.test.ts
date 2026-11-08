@@ -439,7 +439,7 @@ describe("routine webhook and email triggers", () => {
 
   it("keeps an enabled phone/webhook trigger on across syncOwned and a reload (#1891)", async () => {
     const { service, routines, webhooks } = harness();
-    const { settled } = await confirmCreate(service, { type: "webhook" }, "Voice line requests from JC", "Handle the request.", true);
+    const { settled } = await confirmCreate(service, { type: "webhook" }, "Voice line requests from AB", "Handle the request.", true);
     if (settled.state !== "applied") throw new Error("expected applied");
     const routine = routines.routineById(settled.resultId)!;
     expect(routine.enabled).toBe(true);

@@ -213,11 +213,11 @@ describe("no UUID on screen", () => {
   });
 
   it("the bot email address row and the trigger's address line show the address, never the bot's id (B21)", () => {
-    const mail = { available: true, address: "cryptic@bots.example.org", enabled: false };
+    const mail = { available: true, address: "nimbus@bots.example.org", enabled: false };
     for (const element of [createElement(BotEmailAddressCard, { mail }), createElement(BotMailAddressLine, { mail })]) {
       const text = visibleText(element);
       expectNoUuid(text);
-      expect(text).toContain("cryptic@bots.example.org");
+      expect(text).toContain("nimbus@bots.example.org");
       expect(text).not.toContain(BOT_ID);
     }
   });

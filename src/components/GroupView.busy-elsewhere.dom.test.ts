@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// JC 2026-11-06: "<Bot> is finishing another conversation" is never a bot
+// the owner 2026-11-06: "<Bot> is finishing another conversation" is never a bot
 // message in the transcript (no avatar, name or chevron). The room says it
 // with the same working line as "Thinking it over", just above the composer,
 // and the bot's reply replaces it. Tool details are on here: that is when

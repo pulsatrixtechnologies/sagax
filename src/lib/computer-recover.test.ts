@@ -12,7 +12,7 @@ describe("computer recover (parity R7, system 6)", () => {
     expect(needsRecover({ configured: true, state: "exploded" })).toBe(true);
   });
 
-  it("leaves a computer that sleeps or wakes on purpose alone (GOX off hours)", () => {
+  it("leaves a computer that sleeps or wakes on purpose alone (ACME off hours)", () => {
     for (const state of ["stopped", "paused", "missing"]) expect(needsRecover({ configured: true, state })).toBe(false);
     expect(needsRecover({ configured: true, state: "stopped", waking: { since: 1, elapsedMs: 2 } })).toBe(false);
   });

@@ -1,4 +1,4 @@
-// The bot panel's Upcoming card (#2125 / #2174, as Grok Bot): a clock before
+// The bot panel's Upcoming card (#2125 / #2174, as the reference app): a clock before
 // each routine, the folder as a `[Category]` title prefix, a paused one says
 // only "Paused" (its switch off, the schedule in the tooltip), and "Show more"
 // after five rows.

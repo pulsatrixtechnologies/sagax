@@ -33,7 +33,7 @@ describe("schedule model and cron", () => {
     expect(cronOf(back)).toBe(expression);
   });
 
-  it("reads JC's weekday routine as weekdays at three times", () => {
+  it("reads the owner's weekday routine as weekdays at three times", () => {
     expect(cronToScheduleModel("30 8,12,16 * * 1-5")).toMatchObject({ frequency: "weekdays", times: ["08:30", "12:30", "16:30"] });
     expect(cronToScheduleModel("0 9 * * MON-FRI")).toMatchObject({ frequency: "weekdays", times: ["09:00"] });
     expect(cronToScheduleModel("0 9 * * 0-6")).toMatchObject({ frequency: "daily" });

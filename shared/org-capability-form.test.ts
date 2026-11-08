@@ -22,7 +22,7 @@ describe("org capability form", () => {
     });
     draft.mountName = "pulsatrix-flow";
     expect(validateDraft(draft).mountName).toMatchObject({ key: "orgCapabilities.error.flow" });
-    expect(isFlowMount("pulsatrix-flow-gox")).toBe(true);
+    expect(isFlowMount("pulsatrix-flow-acme")).toBe(true);
     expect(validMountName("shipping-tools")).toBe(true);
     expect(validMountName("-bad")).toBe(false);
   });

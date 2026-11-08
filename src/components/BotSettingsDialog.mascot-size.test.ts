@@ -1,4 +1,4 @@
-// #2196: the bot panel mascot must stay Grok Bot sized (~60px visible form).
+// #2196: the bot panel mascot must stay the reference app sized (~60px visible form).
 // A shape paints at ~65% of its box; BOT_PANEL_AVATAR_SIZE 92 locks that, and
 // BotProfileAvatarCard must keep the jump pad (pt-5) at that size.
 import { readFileSync } from "node:fs";
@@ -25,7 +25,7 @@ describe("bot panel mascot size (#2196)", () => {
     expect(BOT_PANEL_AVATAR_SIZE).toBeGreaterThanOrEqual(80);
   });
 
-  it("keeps Grok Bot header spacing under the mascot", () => {
+  it("keeps the reference app header spacing under the mascot", () => {
     // the name 20px under the mascot, 17px medium; the title stacked under it
     expect(panelSource).toMatch(/<BotNameTitleStack/);
     expect(headingSource).toMatch(/mt-5 flex w-full min-w-0 max-w-full flex-col items-center/);

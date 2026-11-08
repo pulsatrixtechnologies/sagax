@@ -84,7 +84,7 @@ describe("the single stream in the main chat", () => {
   it("draws the earlier topic above the live one as soon as the live one is read back: one timeline, no fold", () => {
     preferences.setShowThreads(false);
     const markup = render(bot);
-    // Clear chat (a fresh topic) lives in the "..." menu, no button of its own (JC 2026-11-06)
+    // Clear chat (a fresh topic) lives in the "..." menu, no button of its own (the owner 2026-11-06)
     expect(markup).toContain('data-clear-chat-menu="bot"');
     expect(markup).not.toContain("data-new-topic");
     // never a fold: no "Earlier topics" line, the history is just there

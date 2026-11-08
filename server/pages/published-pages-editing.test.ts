@@ -1,4 +1,4 @@
-// Pages, lot R8 (Grok Bot parity, chat rows 31 to 34): rename, the person's
+// Pages, lot R8 (the reference app parity, chat rows 31 to 34): rename, the person's
 // own edit as a new version, comments, the annotation mode of the app's
 // preview, the Presentation kind, and the organization's switch for public
 // links. The isolation rules of #646 hold for every new path.

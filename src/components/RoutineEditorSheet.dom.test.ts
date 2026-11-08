@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The routine panel (2026-11-03, JC: Grok Bot's routine panel). An existing
+// The routine panel (2026-11-03, the owner: the reference app's routine panel). An existing
 // routine opens in view mode: < its name ×, "Instruction" and the prompt as
 // text, "When to run" with the trigger's icon and its details (a webhook's
 // POST to, key and header rows with reveal and copy; a schedule's times and
@@ -106,7 +106,7 @@ afterEach(() => {
 });
 
 describe("the routine panel, view mode", () => {
-  it("opens read-only like Grok Bot: < name ×, Instruction as text, When to run with its icon and rows, [Pause] [Edit] [trash]", () => {
+  it("opens read-only like the reference app: < name ×, Instruction as text, When to run with its icon and rows, [Pause] [Edit] [trash]", () => {
     mount(routine({ type: "cron", expression: "30 8,12,16 * * 1-5", timeZone: "America/Toronto" }), vi.fn(), { presentation: "panel" });
     expect(host.querySelector("[data-editor-back]")).not.toBeNull();
     expect(host.querySelector("[data-editor-close]")).not.toBeNull();
@@ -484,7 +484,7 @@ describe("the routine panel, edit mode", () => {
   });
 });
 
-describe("the routine panel page layout (2026-11-06, JC)", () => {
+describe("the routine panel page layout (2026-11-06, the owner)", () => {
   const pageSlots = () => ({
     status: createElement("div", { "data-test-status": "" }),
     runs: createElement("section", { "data-routine-runs": "" }),

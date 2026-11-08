@@ -1005,7 +1005,7 @@ describe("handedOutOutcome", () => {
   });
 });
 
-// JC 2026-11-01: "the bots talk to each other, they do not answer me, I
+// the owner 2026-11-01: "the bots talk to each other, they do not answer me, I
 // have to relaunch them". A turn cut short that is not the person's Stop (a
 // safe-point cut to read their new words, a turn parked on a busy computer,
 // an engine change) ends not ok while its teammate still works: the

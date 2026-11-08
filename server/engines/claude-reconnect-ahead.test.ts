@@ -17,7 +17,7 @@ describe("claudeReconnectAhead", () => {
       routines: [
         { id: "r1", name: "Morning brief", botId: "claude-bot", enabled: true, nextRunAt: NOW + 2 * HOUR },
         { id: "r2", name: "Inbox", botId: "claude-bot", enabled: true, nextRunAt: NOW + 3 * HOUR },
-        { id: "r3", name: "Grok digest", botId: "grok-bot", enabled: true, nextRunAt: NOW + HOUR },
+        { id: "r3", name: "Grok digest", botId: "bot-grok", enabled: true, nextRunAt: NOW + HOUR },
         { id: "r4", name: "Far away", botId: "claude-bot", enabled: true, nextRunAt: NOW + CLAUDE_RECONNECT_AHEAD_MS + HOUR },
         { id: "r5", name: "Paused", botId: "claude-bot", enabled: false, nextRunAt: NOW + HOUR },
       ],

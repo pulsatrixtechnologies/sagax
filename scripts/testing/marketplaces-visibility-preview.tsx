@@ -12,8 +12,8 @@ const marketplaces: MarketplaceSummary[] = [
     plugins: [{ name: "px-flow-devjc", installed: true }, { name: "homelab", installed: false }],
   },
   {
-    name: "gox", source: "goxtechnologies/marketplace", visibility: "org", mine: true,
-    plugins: [{ name: "pulsatrix-flow-gox", installed: true }],
+    name: "acme", source: "acmetechnologies/marketplace", visibility: "org", mine: true,
+    plugins: [{ name: "pulsatrix-flow-acme", installed: true }],
   },
   {
     name: "pulsatrix", source: "pulsatrixtechnologies/marketplace", visibility: "org", mine: false,

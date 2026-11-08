@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// New chat sticks (JC 2026-11-02), the real store and the real chat: click
+// New chat sticks (the owner 2026-11-02), the real store and the real chat: click
 // New chat, type, the chat stays empty; switch to another bot and back, it is
 // still empty; a reload keeps it; the first message creates the new topic on
 // the server and goes there, the earlier topic stays in the bot's threads and
@@ -126,7 +126,7 @@ beforeEach(() => {
 afterEach(() => resetFreshTopicMemory());
 afterAll(() => vi.unstubAllGlobals());
 
-describe("Clear chat in the ... menu (JC 2026-11-06)", () => {
+describe("Clear chat in the ... menu (the owner 2026-11-06)", () => {
   it("is an entry of the conversation menu, never a button of its own, and starts the fresh topic", async () => {
     await launch();
     expect(host.querySelector("[data-new-topic]")).toBeNull();

@@ -1160,7 +1160,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(recorder.events.at(-1)).toMatchObject({ type: "turn.completed", ok: false, stopReason });
   });
 
-  // JC 2026-10-29 (0.8.16): "Autocompact is thrashing … use /clear to start
+  // the owner 2026-10-29 (0.8.16): "Autocompact is thrashing … use /clear to start
   // fresh" reached the chat in the middle of a tool-heavy turn. The turn goes
   // on in a fresh session instead, and the person never reads those words.
   it("goes on in a fresh session when Claude's context keeps refilling, without the CLI's words", async () => {

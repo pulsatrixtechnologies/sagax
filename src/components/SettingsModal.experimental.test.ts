@@ -91,7 +91,7 @@ describe("Settings > Developer > Experimental", () => {
     // feature: its config has no dataWindow, and it refuses to save one.
     fixture.section = "developer";
     const html = await render();
-    // JC 2026-11-08: an option the server cannot serve is not rendered at all
+    // the owner 2026-11-08: an option the server cannot serve is not rendered at all
     expect(html).not.toContain('data-experimental-feature="dataWindow"');
     expect(html).not.toContain("Arrives with the next server update.");
     expect(switchNamed("Turn on the Data window")).toBeUndefined();

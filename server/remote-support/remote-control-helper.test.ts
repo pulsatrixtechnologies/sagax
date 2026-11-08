@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { controlHelperCommand, controlSupported, windowsControlScript } from "./remote-control-helper.ts";
 import { decodeWindowsScript } from "./remote-session-probe.ts";
 
-const OPTS = { fps: 6, quality: 60, maxSeconds: 3600, sessionId: "0123456789ab", technician: "Jean, GOX" };
+const OPTS = { fps: 6, quality: 60, maxSeconds: 3600, sessionId: "0123456789ab", technician: "Jean, ACME" };
 
 describe("controlSupported", () => {
   it("is Windows only for now", () => {
@@ -63,7 +63,7 @@ describe("windowsControlScript", () => {
     expect(script).not.toContain("New-Service");
     expect(script).not.toContain("schtasks");
     expect(script).toContain("TopMost = $true");
-    expect(script).toContain("Contrôle à distance en cours : Jean, GOX");
+    expect(script).toContain("Contrôle à distance en cours : Jean, ACME");
     expect(script).toContain("AddSeconds(3600)");
     expect(script).toContain("px-assist-0123456789ab\\stop");
     expect(script).toContain("[PxInput]::Stop");

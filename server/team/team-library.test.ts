@@ -141,7 +141,7 @@ const grokPage = (name: string) => readFileSync(join(import.meta.dirname, "..", 
 const html = (body: string, status = 200, headers: Record<string, string> = {}) =>
   new Response(body, { status, headers: { "content-type": "text/html", ...headers } });
 
-describe("Grok Bot share cards", () => {
+describe("the reference app share cards", () => {
   it("reads the page's embedded record: name, creator, full description and colour", async () => {
     const fetcher = vi.fn(async () => html(grokPage("grok-share-page.html"))) as unknown as typeof fetch;
     const card = await fetchGrokTemplateCard(`https://www.x.ai/bot/${GROK_ID}/?ref=share`, fetcher);

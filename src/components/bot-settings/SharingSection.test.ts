@@ -204,7 +204,7 @@ describe("Settings > Organization on a Perspicax server", () => {
     const markup = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org, onChanged: () => {} }));
     // #584: link state and role on one grey line under the organization's name
     expect(markup).toContain("Linked to Pulsatrix · Admin");
-    // JC 2026-11-06: Manage opens the org console in the browser
+    // the owner 2026-11-06: Manage opens the org console in the browser
     expect(markup).toContain("Manage in Perspicax");
     expect(markup).toContain("data-external-link-pill");
     expect(markup).toContain('href="https://px.example.test/console/"');

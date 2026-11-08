@@ -47,7 +47,7 @@ const SANDBOXD_KEY = "d".repeat(64);
 const INSTANCE = "e2e-bridge";
 const ALICE: FakeOidcUser = { sub: "01J9S5ALICE00000000000000A", email: "alice@example.test", name: "Alice", preferred_username: "alice", role: "admin" };
 const BOB: FakeOidcUser = { sub: "01J9S5BOB000000000000000B", email: "bob@example.test", name: "Bob", preferred_username: "bob", role: "employee" };
-const README = "# Sagax\nthe cryptic system prompt lives here\n";
+const README = "# Sagax\nthe nimbus system prompt lives here\n";
 
 let PORT = 0;
 let BASE = "";
@@ -340,7 +340,7 @@ posixOnly("organization server: the desktop bridge", () => {
     expect(staged).toMatch(/^[0-9a-f]{8}-README\.md$/);
     expect(prompt).toContain(`/Users/alice/Library/Caches/Sagax/attachments/${staged}`);
     expect(prompt).not.toContain(file.path);
-    expect(prompt).toContain("the cryptic system prompt lives here");
+    expect(prompt).toContain("the nimbus system prompt lives here");
     expect(desktop.staged.get(staged)?.toString("utf8")).toBe(README);
     expect(desktop.opened).toContain("intranet.test:80");
     // nothing on the server

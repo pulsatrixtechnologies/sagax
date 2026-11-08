@@ -70,7 +70,7 @@ describe("chat header bot pill", () => {
     expect(botPillActions(true)).toEqual([{ type: "rememberBotPanel" }, { type: "toggleSettings", open: false }, { type: "toggleComputer", open: false }]);
   });
 
-  // #2149 (JC 2026-11-06): one click closes the panel, a second reopens
+  // #2149 (the owner 2026-11-06): one click closes the panel, a second reopens
   // exactly the panel it closed: same tab, same content.
   describe("toggle back to the same panel", () => {
     it("reopens on the Library tab it closed on", () => {
@@ -125,7 +125,7 @@ describe("chat header bot pill", () => {
   });
 });
 
-describe("bot chat header, like Grok Bot (#2141)", () => {
+describe("bot chat header, like the reference app (#2141)", () => {
   function header(props: Partial<Parameters<typeof BotChatHeader>[0]> = {}): string {
     return renderToStaticMarkup(createElement(BotChatHeader, {
       name: "Pepper",
@@ -137,7 +137,7 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     }));
   }
 
-  it("shows only the name pill: no sharing pill, no gear (JC 2026-11-06)", () => {
+  it("shows only the name pill: no sharing pill, no gear (the owner 2026-11-06)", () => {
     const html = header();
     expect(html).toContain("data-bot-header-pill");
     expect(html).not.toContain("data-bot-header-audience");
@@ -150,7 +150,7 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     expect(html).not.toContain("data-bot-header-chevron");
   });
 
-  it("stacks the title UNDER the name, smaller and grey, never \"Name · Title\" (JC 2026-11-06)", () => {
+  it("stacks the title UNDER the name, smaller and grey, never \"Name · Title\" (the owner 2026-11-06)", () => {
     const html = header();
     expect(html).toMatch(/<span data-bot-header-text="" title="Pepper\nResearch" class="[^"]*flex-col[^"]*"><span data-bot-header-name="" class="[^"]*text-\[15px\][^"]*text-ink[^"]*">Pepper<\/span><span data-bot-header-label="" class="[^"]*text-\[12px\][^"]*text-ink-secondary[^"]*">Research<\/span><\/span>/);
     expect(html).not.toContain("·");
@@ -170,7 +170,7 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     expect(html).not.toContain("·");
   });
 
-  it("a long group name ends in an ellipsis on one line, the chevron stays, the full name on hover (JC 2026-11-06)", () => {
+  it("a long group name ends in an ellipsis on one line, the chevron stays, the full name on hover (the owner 2026-11-06)", () => {
     const name = "Ada Lovelace, Bob Martin, Cléo Tremblay et Atlas";
     const html = renderToStaticMarkup(createElement(BotHeaderPill, {
       name,

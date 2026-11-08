@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Guard (JC 2026-11-06): in the unified chat, the default, nothing in the bot's
+// Guard (the owner 2026-11-06): in the unified chat, the default, nothing in the bot's
 // chat sends the person elsewhere. No "Go to conversation", no "Open thread",
 // no thread sheet: a "Sent work to Wren · Done" card had a "Go to
 // conversation Wren" line under it. Everything stays in the bot's chat.

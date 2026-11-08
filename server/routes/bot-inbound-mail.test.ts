@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 const MAIL: Record<string, BotInboundMail> = {
-  bot_abc: { available: true, address: "cryptic@bots.example.org", enabled: true },
+  bot_abc: { available: true, address: "nimbus@bots.example.org", enabled: true },
   bot_off: { available: true, address: "ember@bots.example.org", enabled: false },
 };
 
@@ -57,7 +57,7 @@ describe("GET /api/bots/:id/inbound-mail", () => {
     const on = await fetch(`${base}/api/bots/bot_abc/inbound-mail`);
     expect(on.status).toBe(200);
     expect(on.headers.get("cache-control")).toBe("no-store");
-    expect(await on.json()).toEqual({ available: true, address: "cryptic@bots.example.org", enabled: true, canChange: true });
+    expect(await on.json()).toEqual({ available: true, address: "nimbus@bots.example.org", enabled: true, canChange: true });
     expect(await (await fetch(`${base}/api/bots/bot_off/inbound-mail`)).json()).toEqual({ available: true, address: "ember@bots.example.org", enabled: false, canChange: true });
   });
 

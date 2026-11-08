@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { readFeaturedCache, writeFeaturedCache } from "./featured-cache";
 
-describe("featured catalog cache (Plugins first render, JC 2026-11-06)", () => {
+describe("featured catalog cache (Plugins first render, the owner 2026-11-06)", () => {
   beforeEach(() => window.localStorage.clear());
   it("is empty on the first open", () => {
     expect(readFeaturedCache()).toBeNull();

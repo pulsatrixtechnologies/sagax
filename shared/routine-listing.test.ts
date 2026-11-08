@@ -64,7 +64,7 @@ describe("routine pages (a bot read back 3 of its 23 routines, 2026-10-29)", () 
   it("keeps an owned webhook id on the short row so list_routines can load by either id (#1891)", () => {
     const page = pageRoutines([{
       id: "voice-routine",
-      name: "Voice line requests from JC",
+      name: "Voice line requests from AB",
       prompt: "Handle the request",
       enabled: false,
       schedule: { type: "webhook" },

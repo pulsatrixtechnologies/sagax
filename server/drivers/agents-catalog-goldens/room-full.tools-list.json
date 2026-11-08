@@ -2832,6 +2832,49 @@
       }
     },
     {
+      "name": "event_subscriptions",
+      "description": "This bot's event subscriptions, instead of polling: when one of its routine runs reports, stays quiet or fails, call a webhook url (signed JSON) or run a routine_id (list_routines; this bot or a bot of the same person). action list (default), create (events plus url or routine_id), test (sends one sample) or delete.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "test",
+              "delete"
+            ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "run.reported",
+                "run.quiet",
+                "run.failed"
+              ]
+            }
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "routine_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subscription_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "For test and delete, from list."
+          }
+        }
+      }
+    },
+    {
       "name": "propose_profile",
       "description": "Submit user-requested changes to your own name, title, description, standing instructions (SOUL.md), working folder (cwd), or your alert and voice toggles (notifications, speakReplies). Keep SOUL.md short — who you are and the rules you never break; put step-by-step procedure into a skill instead. A Primary Bot may pass for_bot_id (from list_bots) for a requested change to any bot of its person. Result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result. This does not elevate another bot's execution permissions.",
       "inputSchema": {

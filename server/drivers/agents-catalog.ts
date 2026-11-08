@@ -267,6 +267,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   routinesTools.DEF_RUN_ROUTINE,
   routinesTools.DEF_PROPOSE_ROUTINE,
   routinesTools.DEF_PROPOSE_ROUTINE_ACTION,
+  routinesTools.DEF_EVENT_SUBSCRIPTIONS,
   teamTools.DEF_PROPOSE_PROFILE,
   teamTools.DEF_PROPOSE_MODEL,
   teamTools.DEF_PROPOSE_RULE,
@@ -371,7 +372,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // #1989: list_routines and run_routine stay always loaded (and listed by
   // name, not only inside the merged routines family) so every bot that owns
   // a routine can check or run it without a ToolSearch step that may miss them.
-  "propose_routine", "propose_routine_action",
+  "propose_routine", "propose_routine_action", "event_subscriptions",
   "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule", "propose_bot_deletion", "import_plugin_team", "archive_bot",
   "propose_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
   "add_mcp_server", "skill_manage", "skills_find", "rules_update", "docs_update",

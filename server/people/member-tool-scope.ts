@@ -134,6 +134,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   skill_manage: "own-setup",
   propose_routine: "own-setup",
   propose_routine_action: "own-setup",
+  // #2700: the bot's own event subscriptions (owner-checked route)
+  event_subscriptions: "own-setup",
   propose_profile: "own-setup",
   propose_model: "own-setup",
   // Personal review rules only; the route keeps person and org Ask/Deny

@@ -109,7 +109,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
     id: "routines",
     title: "Routines, schedules and waits",
     // list_routines / run_routine stay core (#1989): never grouped.
-    tools: ["propose_routine", "propose_routine_action", "update_routine", "wait_until", "list_waits", "cancel_wait"],
+    tools: ["propose_routine", "propose_routine_action", "event_subscriptions", "update_routine", "wait_until", "list_waits", "cancel_wait"],
   },
   {
     id: "team",

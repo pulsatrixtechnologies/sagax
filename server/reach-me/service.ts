@@ -123,6 +123,11 @@ export function fenceReachReply(channel: ReachChannelId, text: string): string {
 
 const cardKey = (threadId: string, requestId: string) => `${threadId}\u0000${requestId}`;
 
+/** #2645: a card still open this long after it was raised reaches the phone again, once per step. In prod a card sat
+ * 38 hours in a proactive conversation nobody opened. */
+export const CARD_REMINDER_AFTER_MS = [2 * 3_600_000, 24 * 3_600_000] as const;
+const REMINDER_PREFIX = { fr: "Toujours en attente", en: "Still waiting" } as const;
+
 export class ReachMe {
   private readonly deps: ReachMeDeps;
   private readonly now: () => number;
@@ -137,6 +142,8 @@ export class ReachMe {
   private readonly deferredNotices = new Map<string, ReachNotice>();
   /** Notices already sent (one send per id). */
   private readonly noticed = new Set<string>();
+  /** Open cards and how many reminders each got (#2645). In memory: a restart starts their clocks again. */
+  private readonly open = new Map<string, { message: PushMessage; raisedAt: number; reminded: number }>();
 
   constructor(deps: ReachMeDeps) {
     this.deps = deps;
@@ -169,6 +176,11 @@ export class ReachMe {
   cardRaised(message: PushMessage): void {
     try {
       if (message.kind !== "approval" || !message.botId || !message.threadId || !message.requestId) return;
+      const openKey = `${message.personId}\u0000${cardKey(message.threadId, message.requestId)}`;
+      if (!this.open.has(openKey)) {
+        if (this.open.size > 2_000) this.open.delete(this.open.keys().next().value!);
+        this.open.set(openKey, { message, raisedAt: this.now(), reminded: 0 });
+      }
       const settings = this.deps.settings.get(message.personId, message.botId);
       if (!settings) return;
       if (!withinReachHours(settings.hours, this.now())) {
@@ -244,8 +256,9 @@ export class ReachMe {
     }
   }
 
-  /** Every minute: cards held for the person's hours go out once a range opens. */
+  /** Every minute: cards held for the person's hours go out once a range opens, and a card left open is recalled. */
   tick(): void {
+    this.remind();
     for (const [id, notice] of this.deferredNotices) {
       const settings = this.deps.settings.get(notice.person, notice.botId) ?? DEFAULT_REACH_ME;
       if (!withinReachHours(settings.hours, this.now())) continue;
@@ -266,8 +279,45 @@ export class ReachMe {
     }
   }
 
+  /** #2645: a card still open after each CARD_REMINDER_AFTER_MS step goes to the phone once more, within the person's
+   * hours and only where a push is their choice for that bot. The tap opens the card's own conversation. */
+  private remind(): void {
+    const now = this.now();
+    for (const [key, entry] of this.open) {
+      const { message } = entry;
+      if (!this.deps.card(message.threadId!, message.requestId!)) {
+        this.open.delete(key);
+        continue;
+      }
+      const due = CARD_REMINDER_AFTER_MS[entry.reminded];
+      if (due === undefined) {
+        this.open.delete(key);
+        continue;
+      }
+      if (now - entry.raisedAt < due) continue;
+      const settings = this.deps.settings.get(message.personId, message.botId ?? "") ?? DEFAULT_REACH_ME;
+      if (!withinReachHours(settings.hours, now)) continue;
+      entry.reminded += 1;
+      if (!reachesBy(settings, "push")) continue;
+      const hours = Math.floor((now - entry.raisedAt) / 3_600_000);
+      const prefix = REMINDER_PREFIX[this.deps.language(message.personId)];
+      this.deps.push({
+        ...message,
+        title: `${prefix} (${hours} h) · ${message.title}`.slice(0, 120),
+        id: `${message.id ?? key}:reminder${entry.reminded}`,
+        at: now,
+      });
+    }
+  }
+
+  /** Open cards being followed for a reminder (tests). */
+  openCardCount(): number {
+    return this.open.size;
+  }
+
   /** A card was answered (anywhere), dismissed or expired: its code goes. */
   cardSettled(threadId: string, requestId?: string): void {
+    for (const key of this.open.keys()) if (key.includes(`\u0000${threadId}\u0000`) && (!requestId || key.endsWith(`\u0000${requestId}`))) this.open.delete(key);
     if (requestId) {
       this.deferred.delete(cardKey(threadId, requestId));
       this.deps.codes.dropCard(threadId, requestId);

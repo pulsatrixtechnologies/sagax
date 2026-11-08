@@ -11,7 +11,7 @@ import type { ReachMeSettings } from "../../shared/reach-me.ts";
 import type { PushMessage } from "../push/payload.ts";
 import type { ReachChannel, ReachOutbound } from "./channel.ts";
 import { composeReachText } from "./channel.ts";
-import { ReachMe, type ReachAuditRow, type ReachCard, type ReachRespondBody } from "./service.ts";
+import { CARD_REMINDER_AFTER_MS, ReachMe, type ReachAuditRow, type ReachCard, type ReachRespondBody } from "./service.ts";
 import { createReachCodeStore, createReachMeStore } from "./store.ts";
 
 const dirs: string[] = [];
@@ -58,6 +58,43 @@ function setup(settings: ReachMeSettings | null, options: { card?: ReachCard | n
 }
 
 const SMS_AND_TELEGRAM: ReachMeSettings = { channels: ["sms", "telegram"], smsNumber: "+15145550123", hours: { always: true } };
+
+describe("Reach me: a card left open is recalled (#2645)", () => {
+  it("pushes again at 2 h and 24 h while the card is open, never more, and stops once it is answered", () => {
+    const { reach, pushed, setNow, setCard } = setup(null, { now: 1_000 });
+    reach.cardRaised(PUSH);
+    reach.cardRaised(PUSH);
+    setNow(1_000 + CARD_REMINDER_AFTER_MS[0] - 1); reach.tick();
+    expect(pushed).toEqual([]);
+    setNow(1_000 + CARD_REMINDER_AFTER_MS[0]); reach.tick(); reach.tick();
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]).toMatchObject({ kind: "approval", threadId: "t1", requestId: "r1", title: "Toujours en attente (2 h) · Cryptic", id: "pr_a\u0000t1\u0000r1:reminder1" });
+    setNow(1_000 + CARD_REMINDER_AFTER_MS[1]); reach.tick();
+    setNow(1_000 + 3 * CARD_REMINDER_AFTER_MS[1]); reach.tick();
+    expect(pushed.map((p) => p.title)).toEqual(["Toujours en attente (2 h) · Cryptic", "Toujours en attente (24 h) · Cryptic"]);
+    expect(reach.openCardCount()).toBe(0);
+    reach.cardRaised({ ...PUSH, requestId: "r2" });
+    setCard(null);
+    setNow(1_000 + 10 * CARD_REMINDER_AFTER_MS[1]); reach.tick();
+    expect([pushed.length, reach.openCardCount()]).toEqual([2, 0]);
+  });
+
+  it("an answered card is forgotten; outside the hours it waits; push off for that bot sends nothing", () => {
+    const night: ReachMeSettings = { channels: ["push"], hours: { always: false, timeZone: "UTC", ranges: [{ days: [0, 1, 2, 3, 4, 5, 6], start: "09:00", end: "10:00" }] } } as ReachMeSettings;
+    const a = setup(null, { now: 1_000 });
+    a.reach.cardRaised(PUSH);
+    a.reach.cardSettled("t1", "r1");
+    expect(a.reach.openCardCount()).toBe(0);
+    const b = setup(SMS_AND_TELEGRAM, { now: 1_000 });
+    b.reach.cardRaised(PUSH);
+    b.setNow(1_000 + CARD_REMINDER_AFTER_MS[0]); b.reach.tick();
+    expect(b.pushed).toEqual([]);
+    const c = setup(night, { now: Date.parse("2026-11-07T03:00:00Z") });
+    c.reach.cardRaised(PUSH);
+    c.setNow(Date.parse("2026-11-07T06:00:00Z")); c.reach.tick();
+    expect(c.pushed.filter((p) => p.title.startsWith("Toujours"))).toEqual([]);
+  });
+});
 
 describe("Reach me: out", () => {
   it("no choice saved: push as before, nothing else", async () => {

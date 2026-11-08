@@ -2,7 +2,7 @@ import type { ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
 
-import { WAIT_HOURS, WAIT_KINDS, type WaitKind } from "../../shared/waits.ts";
+import { WAIT_HOURS, WAIT_KINDS, WAIT_TIME, type WaitKind } from "../../shared/waits.ts";
 import type { Surface } from "../../shared/wire.ts";
 import type { json as sendJson } from "../harness/http.ts";
 import { expandHome } from "../waits/wait-probes.ts";
@@ -25,7 +25,7 @@ export const WAIT_MESSAGES = {
 } as const;
 
 export interface WaitRequest {
-  label: string; kind: WaitKind; url?: string; text?: string; path?: string; process?: string; bot?: string; followUp?: string; hours: number;
+  label: string; kind: WaitKind; url?: string; text?: string; path?: string; process?: string; bot?: string; at?: number; followUp?: string; hours: number;
 }
 
 const FIELD_KINDS = {
@@ -34,6 +34,7 @@ const FIELD_KINDS = {
   path: ["file_exists", "file_missing", "file_changed"],
   process: ["process_running", "process_gone"],
   bot: ["bot_idle"],
+  at: ["time_reached"],
 } as const satisfies Record<string, readonly WaitKind[]>;
 type WaitField = keyof typeof FIELD_KINDS;
 const FIELDS = Object.keys(FIELD_KINDS) as WaitField[];
@@ -55,7 +56,7 @@ const absent = (value: unknown) => value === undefined || value === null;
 const joinWords = (words: readonly string[]) => (words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`);
 const iso = (ms: number) => new Date(ms).toISOString();
 
-export function parseWaitRequest(body: unknown, home: string): { ok: true; request: WaitRequest } | { ok: false; error: string } {
+export function parseWaitRequest(body: unknown, home: string, now: number = Date.now()): { ok: true; request: WaitRequest } | { ok: false; error: string } {
   const fail = (error: string) => ({ ok: false, error }) as const;
   if (!isRecord(body)) return fail("Send a JSON object.");
   const label = typeof body.label === "string" ? body.label.trim() : "";
@@ -104,6 +105,15 @@ export function parseWaitRequest(body: unknown, home: string): { ok: true; reque
     const bot = size("bot", 128, true);
     if (bot === null) return lengthError("bot", 128);
     request.bot = bot;
+  }
+  if (needed.includes("at")) {
+    // An explicit offset (or Z): a bare local time would be read in the server's zone, not the person's.
+    const raw = typeof body.at === "string" ? body.at.trim() : "";
+    const at = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? Date.parse(raw) : NaN;
+    if (!Number.isFinite(at)) return fail("at: an RFC3339 time with its offset, e.g. 2026-11-08T09:30:00-05:00 (use list_routines or the current time you were given).");
+    if (at < now + WAIT_TIME.minAheadMs) return fail("at must be at least a minute from now: for something due now, just do it.");
+    if (at > now + WAIT_HOURS.max * 3_600_000) return fail(`at must be within ${WAIT_HOURS.max} hours; for later, propose a one-time routine (propose_routine).`);
+    request.at = at;
   }
   if (!absent(body.follow_up)) {
     const followUp = size("follow_up", 2000, true);
@@ -210,6 +220,8 @@ export function createWaitRoutes(deps: { waits: Pick<WaitManager, "create" | "li
       condition = { kind: "bot_idle", botId: peer.id, botName: peer.name };
     } else if (request.kind === "url_contains" || request.kind === "url_missing") {
       condition = { kind: request.kind, url: request.url!, text: request.text! };
+    } else if (request.kind === "time_reached") {
+      condition = { kind: "time_reached", at: request.at! };
     } else if (request.kind === "process_running" || request.kind === "process_gone") {
       condition = { kind: request.kind, process: request.process! };
     } else {
@@ -230,7 +242,9 @@ export function createWaitRoutes(deps: { waits: Pick<WaitManager, "create" | "li
     const then = request.followUp ? `, and you will then do what you wrote in follow_up${deps.cloudHome ? " in a run that reports in its own results chat, not this one" : ""}` : "";
     const every = WAIT_WAKE_MS / 60_000;
     const sleeps = deps.sleeps ? ` While the home sleeps it wakes to check every ${every} minutes, so the message can come up to ${every} minutes late: tell the person that too.` : "";
-    const text = `Waiting for ${wait.label} (wait id ${wait.id}): plain checks, no AI, until ${iso(wait.expiresAt)}. When it happens a message lands in this chat${then}.${sleeps} Tell the person in one sentence; do not keep checking yourself.`;
+    const text = condition.kind === "time_reached"
+      ? `Set: at ${iso(condition.at)} a message lands in this chat about ${wait.label} (wait id ${wait.id})${then}. Tell the person in one sentence when you will come back; do not keep checking yourself.`
+      : `Waiting for ${wait.label} (wait id ${wait.id}): plain checks, no AI, until ${iso(wait.expiresAt)}. When it happens a message lands in this chat${then}.${sleeps} Tell the person in one sentence; do not keep checking yourself.`;
     return void json(res, 201, { text: note ? `${text}\n\n${note}` : text });
   };
 }

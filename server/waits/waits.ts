@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-import { WAIT_HOURS, type WaitKind } from "../../shared/waits.ts";
+import { WAIT_HOURS, WAIT_TIME, type WaitKind } from "../../shared/waits.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { noteAtRestWrite, readAtRestTextSync } from "../encryption/content-at-rest.ts";
 import { DATA_DIR } from "../config.ts";
@@ -31,7 +31,9 @@ export type NewWaitCondition =
   | { kind: "url_contains" | "url_missing"; url: string; text: string }
   | { kind: "file_exists" | "file_missing" | "file_changed"; path: string }
   | { kind: "process_running" | "process_gone"; process: string }
-  | { kind: "bot_idle"; botId: string; botName: string };
+  | { kind: "bot_idle"; botId: string; botName: string }
+  /** #2645: a promised check-back. `at` is epoch ms; it fires in the chat it was made in. */
+  | { kind: "time_reached"; at: number };
 export type WaitCondition =
   | { kind: "url_contains"; url: string; text: string }
   /** `sawText`: a check found the text, so its going counts (a page its scripts draw reads bare from the start). */
@@ -39,7 +41,8 @@ export type WaitCondition =
   | { kind: "file_exists" | "file_missing"; path: string }
   | { kind: "file_changed"; path: string; before: FileStamp | null }
   | { kind: "process_running" | "process_gone"; process: string }
-  | { kind: "bot_idle"; botId: string; botName: string; sawBusy: boolean };
+  | { kind: "bot_idle"; botId: string; botName: string; sawBusy: boolean }
+  | { kind: "time_reached"; at: number };
 export interface WaitNotice { status: "fired" | "expired" | "stopped"; text: string }
 export interface WaitRecord {
   id: string; botId: string; threadId: string; label: string; condition: WaitCondition; followUp?: string;
@@ -73,6 +76,7 @@ const conditionSchema = z.union([
   z.object({ kind: z.literal("file_changed"), path: z.string(), before: stampSchema.nullable() }),
   z.object({ kind: z.enum(["process_running", "process_gone"]), process: z.string() }),
   z.object({ kind: z.literal("bot_idle"), botId: z.string(), botName: z.string(), sawBusy: z.boolean() }),
+  z.object({ kind: z.literal("time_reached"), at: z.number() }),
 ]);
 const recordSchema = z.object({
   id: z.string(),
@@ -90,6 +94,8 @@ const recordSchema = z.object({
 });
 const fileSchema = z.object({ version: z.literal(1), waits: z.array(z.unknown()) });
 
+const iso = (ms: number) => new Date(ms).toISOString();
+
 export function describeCondition(condition: NewWaitCondition | WaitCondition): string {
   switch (condition.kind) {
     case "url_contains": return `${condition.url} says “${condition.text}”`;
@@ -100,6 +106,7 @@ export function describeCondition(condition: NewWaitCondition | WaitCondition): 
     case "process_running": return `${condition.process} is running`;
     case "process_gone": return `${condition.process} has stopped`;
     case "bot_idle": return `${condition.botName} finishes its work`;
+    case "time_reached": return `${iso(condition.at)} comes`;
   }
 }
 
@@ -113,10 +120,9 @@ function firedDetail(condition: WaitCondition): string {
     case "process_running": return `${condition.process} is running.`;
     case "process_gone": return `${condition.process} stopped.`;
     case "bot_idle": return `${condition.botName} finished.`;
+    case "time_reached": return `It is ${iso(condition.at)}, the time you set to come back to it.`;
   }
 }
-
-const iso = (ms: number) => new Date(ms).toISOString();
 
 export function waitList(waits: readonly WaitRecord[]): string {
   return waits
@@ -199,7 +205,10 @@ export class WaitManager {
       condition,
       ...(input.followUp ? { followUp: input.followUp } : {}),
       createdAt: now,
-      expiresAt: now + (input.hours ?? WAIT_HOURS.default) * 3_600_000,
+      // A time wait stays open past its time (a busy chat posts it later), whatever `hours` says.
+      expiresAt: condition.kind === "time_reached"
+        ? Math.max(condition.at + WAIT_TIME.graceMs, now + (input.hours ?? WAIT_HOURS.default) * 3_600_000)
+        : now + (input.hours ?? WAIT_HOURS.default) * 3_600_000,
       nextCheckAt: now + interval(condition.kind, 0),
       errors: 0,
     };
@@ -270,7 +279,12 @@ export class WaitManager {
   /** When a sleeping Cloud should wake to check: WAIT_WAKE_MS on while a wait is open, never a page's next minute (the
    * home would never sleep), null with none open. */
   nextWakeAt(): number | null {
-    return this.waits.some((w) => !w.ending) ? this.now() + WAIT_WAKE_MS : null;
+    const open = this.waits.filter((w) => !w.ending);
+    if (!open.length) return null;
+    const regular = this.now() + WAIT_WAKE_MS;
+    // A promised time wakes the home on time, never up to WAIT_WAKE_MS late (#2645).
+    const times = open.flatMap((w) => (w.condition.kind === "time_reached" ? [Math.max(w.condition.at, this.now())] : []));
+    return Math.min(regular, ...times);
   }
 
   removeForBot(botId: string): number {
@@ -415,6 +429,7 @@ export class WaitManager {
           return { met: false, unlisted: true };
         }
       }
+      case "time_reached": return { met: this.now() >= condition.at };
       case "bot_idle": {
         const busy = this.options.botBusy(condition.botId);
         if (busy === undefined) return { met: false, gone: true };

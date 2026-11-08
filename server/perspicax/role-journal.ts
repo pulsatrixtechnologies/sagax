@@ -16,7 +16,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { writeFileAtomic } from "../atomic.ts";
 import type { BotRoleRule, CwPermission, RoleReason, ToolRole } from "../../shared/perspicax-roles.ts";
-import { matchingRoleRule } from "../../shared/perspicax-roles.ts";
+import { matchingRoleRule, permissionPathKey } from "../../shared/perspicax-roles.ts";
 import { toolNameKeys } from "../approvals/tool-auto-approval.ts";
 
 export interface RoleRefusalEntry {
@@ -189,7 +189,7 @@ export class RoleJournal {
     record.sentAt = this.now();
     // the same permission logged again counts as sent too
     for (const other of this.refusals) {
-      if (other.principalId === principalId && other.role.slug === record.role.slug && other.permission.path === record.permission.path && other.permission.operation === record.permission.operation) other.sentAt = record.sentAt;
+      if (other.principalId === principalId && other.role.slug === record.role.slug && permissionPathKey(other.permission.path) === permissionPathKey(record.permission.path) && other.permission.operation === record.permission.operation) other.sentAt = record.sentAt;
     }
     this.save();
     return record;
@@ -256,9 +256,10 @@ export class RoleJournal {
   /** #2581: this role was already refused this read path for this person
    * and bot (the journal), so it is not offered for it again. */
   refusedRead(input: { principalId: string; botId: string; slug: string; path: string }): boolean {
-    const p = input.path.toLowerCase();
+    // #2960: entries saved under a dotted path ("service.tickets") still match
+    const p = permissionPathKey(input.path);
     return this.refusals.some((r) => r.kind === "read" && r.principalId === input.principalId && r.botId === input.botId && r.role.slug === input.slug
-      && (r.permission.path ?? "").toLowerCase() === p);
+      && permissionPathKey(r.permission.path) === p);
   }
 
   stay(threadId: string, slug: string): void {

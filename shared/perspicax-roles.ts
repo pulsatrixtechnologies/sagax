@@ -285,7 +285,10 @@ export function cwPermissionFor(tool: string, args: unknown, read: boolean): CwP
   if (!name.startsWith("cw_psa")) return { path: "", module: "", func: tool, operation: read ? "Inquire" : operationOf(a.action, false) };
   // cw_psa_query / cw_psa_action / cw_psa_write: the path is an argument
   const given = [a.resource, a.path, a.endpoint, a.entity, a.collection].find((value): value is string => typeof value === "string" && value.trim().length > 0);
-  let path = given ? given.trim().replace(/^\/+/, "").replace(/\/\d+.*$/, "").replace(/\{[^}]*\}.*$/, "").replace(/\/+$/, "") : "";
+  // #2960: "service.tickets" (the dotted resource the conventions name) and
+  // "service/tickets" are one permission path: one key for tries, declines,
+  // rules and notes
+  let path = given ? given.trim().replace(/\./g, "/").replace(/^\/+/, "").replace(/\/\d+.*$/, "").replace(/\{[^}]*\}.*$/, "").replace(/\/+$/, "") : "";
   if (!path) {
     // cw_psa_<group>_<entity>_write → group/entity
     const middle = name.replace(/^cw_psa_/, "").replace(/_(write|query|action)$/, "");
@@ -442,9 +445,18 @@ export interface BotRoleRule {
   createdAt: number;
 }
 
+/** #2960: the comparison key of a CW permission path. "service.tickets"
+ * (saved before 2026-11-08 by a dotted resource) and "service/tickets" are
+ * one path, so rules and journal entries saved under either still match. */
+export function permissionPathKey(path: string | undefined): string {
+  return (path ?? "").trim().toLowerCase().replace(/\./g, "/").replace(/^\/+|\/+$/g, "");
+}
+
 /** The rule (if any) that answers a read refused under `from` on `path`. */
 export function matchingRoleRule(rules: readonly BotRoleRule[] | undefined, ownerId: string, from: string, path: string): BotRoleRule | undefined {
-  const p = path.toLowerCase();
-  return rules?.find((rule) => rule.ownerId === ownerId && rule.from.slug === from
-    && (!rule.path || p === rule.path.toLowerCase() || p.startsWith(`${rule.path.toLowerCase()}/`)));
+  const p = permissionPathKey(path);
+  return rules?.find((rule) => {
+    const own = permissionPathKey(rule.path);
+    return rule.ownerId === ownerId && rule.from.slug === from && (!own || p === own || p.startsWith(`${own}/`));
+  });
 }

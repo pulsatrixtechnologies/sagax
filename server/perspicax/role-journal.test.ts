@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readSwitchFingerprints } from "./role-events.ts";
 import { RoleJournal } from "./role-journal.ts";
 
 describe("role journal", () => {
@@ -72,5 +73,20 @@ describe("role journal", () => {
     expect(journal.refusedRead({ principalId: "owner", botId: "bot", slug: "service-desk", path: "time/entries" })).toBe(true);
     expect(journal.refusedRead({ principalId: "owner", botId: "bot", slug: "full-access", path: "time/entries" })).toBe(false);
     expect(journal.refusedRead({ principalId: "alice", botId: "bot", slug: "service-desk", path: "time/entries" })).toBe(false);
+  });
+
+  // #2960: rules, journal entries and kept cards saved under a dotted path
+  // (before 2026-11-08) still match the slashed path Sagax names now
+  it("matches rules, refusals and kept cards saved under the older dotted path", () => {
+    const journal = new RoleJournal(null);
+    journal.addRule("bot", { from: { slug: "", name: "" }, to: { slug: "full-access", name: "Full Access" }, path: "service.tickets", ownerId: "owner" });
+    const base = { threadId: "t", botId: "bot", principalId: "owner", ownerId: "owner", from: "" };
+    expect(journal.fallbackFor({ ...base, path: "service/tickets", to: "full-access" })).toBe("rule");
+    expect(journal.fallbackFor({ ...base, path: "service/tickets/notes", to: "full-access" })).toBe("rule");
+    journal.logRefusal({ principalId: "owner", botId: "bot", threadId: "t", role: { slug: "service-desk", name: "Service Desk" }, tool: "cw_psa_query", kind: "read", permission: { module: "Service Desk", func: "Service Tickets", path: "service.tickets", operation: "Inquire" } });
+    expect(journal.refusedRead({ principalId: "owner", botId: "bot", slug: "service-desk", path: "service/tickets" })).toBe(true);
+    expect(journal.refusedRead({ principalId: "owner", botId: "bot", slug: "service-desk", path: "Service.Tickets" })).toBe(true);
+    expect(readSwitchFingerprints("", "full-access", "service/tickets")).toEqual(["role-read-switch::full-access:service/tickets", "role-read-switch::full-access:service.tickets"]);
+    expect(readSwitchFingerprints("", "full-access", "")).toEqual(["role-read-switch::full-access:"]);
   });
 });

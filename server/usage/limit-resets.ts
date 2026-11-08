@@ -37,6 +37,16 @@ export function engineLimitFromUsage(row: PlanProviderRow): EngineLimit | null {
   return { ...base, window: fullest.window, usedPercent: fullest.used, resetsAt: fullest.resetsAt, blocked: false };
 }
 
+/** One limit per engine instance the row stands for (#0867): an instance folded on the same login (a second Claude
+ * without its own config dir, the ChatGPT plan on the Codex login) reads that login's windows, so a bot on it sees the
+ * same dot, the same "Continue at ..." and the same reset. */
+export function engineLimitsFromUsage(row: PlanProviderRow): EngineLimit[] {
+  const limit = engineLimitFromUsage(row);
+  if (!limit) return [];
+  const others = (row.instanceIds ?? []).filter((id, index, ids) => id && id !== row.id && ids.indexOf(id) === index);
+  return [limit, ...others.map((engine) => ({ ...limit, engine }))];
+}
+
 const PRODUCT_NAMES: Record<string, string> = { claudeAgent: "Claude", codex: "Codex", grokAgent: "Grok" };
 
 /** "Claude", "Codex", or the name the person gave that engine. */
@@ -154,8 +164,7 @@ export class LimitResetClock {
   noteUsage(report: PlanUsageReport): void {
     const next = new Map<string, EngineLimit>();
     for (const row of report.providers) {
-      const limit = engineLimitFromUsage(row);
-      if (limit) next.set(limit.engine, limit);
+      for (const limit of engineLimitsFromUsage(row)) next.set(limit.engine, limit);
     }
     this.usage = next;
     this.checkedAt = this.now();

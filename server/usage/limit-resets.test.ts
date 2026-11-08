@@ -106,6 +106,18 @@ describe("LimitResetClock", () => {
     expect(changed).toHaveBeenCalledTimes(2);
   });
 
+  it("#0867: an instance folded on the same login gets that login's limit, reset and hold", () => {
+    const { instance } = clock();
+    const shared = { ...claude([95, NOW + 2 * HOUR], [40, NOW + 90 * HOUR]), instanceIds: ["claude", "claude-opus"] };
+    const chatgpt = { ...codex([10, NOW + 3 * HOUR], [100, NOW + 50 * HOUR]), instanceIds: ["codex", "chatgpt"] };
+    instance.noteUsage(report(shared, chatgpt));
+    expect(instance.limit("claude-opus")).toMatchObject({ engine: "claude-opus", name: "Claude", usedPercent: 95, resetsAt: NOW + 2 * HOUR, blocked: false });
+    expect(instance.resetAt("claude-opus")).toBe(NOW + 2 * HOUR);
+    expect(instance.limit("chatgpt")).toMatchObject({ engine: "chatgpt", driver: "codex", blocked: true, resetsAt: NOW + 50 * HOUR });
+    expect(instance.blockedUntil("chatgpt")).toBe(NOW + 50 * HOUR);
+    expect(instance.report().engines.map((limit) => limit.engine).toSorted()).toEqual(["chatgpt", "claude", "claude-opus", "codex"]);
+  });
+
   it("trusts a refusal's own reset over the fullest window, unless usage shows a later window at its limit", () => {
     const { instance, at } = clock();
     instance.noteUsage(report(claude([80, NOW + 4 * HOUR], [60, NOW + 90 * HOUR])));

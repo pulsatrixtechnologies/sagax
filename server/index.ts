@@ -208,7 +208,7 @@ import { prepareSemanticRecall, setSemanticIndex } from "./recall/semantic-recal
 import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./engines/retire-every-claude.ts";
 import { LocalSemanticIndex, semanticIndexFile } from "./recall/semantic-index.ts";
 import { withoutWiderAudience } from "./memory/memory-audience.ts";
-import { BriefStore, feedbackMemoryText, suggestionAction, type BriefFeedback, type BriefSuggestion } from "./proactive/background-brief.ts";
+import { BriefStore, feedbackMemoryText, localizedGist, suggestionAction, type BriefFeedback, type BriefSuggestion } from "./proactive/background-brief.ts";
 import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.ts";
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
@@ -19688,7 +19688,7 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
 function rememberBriefFeedback(botId: string, choice: BriefFeedback, text: string, topic: string): void {
   const bot = store.bot(botId);
   const language = reachMeLanguage(reachMePerson(bot ? effectiveBotOwner(bot) || localPrincipalId() : localPrincipalId()) || null);
-  updateMemory(botId, { action: "append", text: feedbackMemoryText(choice, text, topic, language) }, { source: "proactive feedback", readers: { kind: "person" } });
+  updateMemory(botId, { action: "append", text: feedbackMemoryText(choice, localizedGist(text, language), topic, language) }, { source: "proactive feedback", readers: { kind: "person" } });
 }
 /** #2694: feedback on a suggestion card lands on its brief item (next pass)
  * and on the card itself, so every surface shows the choice. */
@@ -23880,7 +23880,11 @@ ROUTES.push(createBackgroundBriefRoutes({
     return Boolean(me && botsOwnedBy(me).some((bot) => bot.id === botId));
   },
   fastModel: (botId) => store.bot(botId)?.modelSelection.fast?.model ?? null,
-  keep: (botId, line) => { updateMemory(botId, { action: "append", text: line }, { source: "background brief", readers: { kind: "person" } }); },
+  keep: (botId, line) => {
+    const bot = store.bot(botId);
+    const language = reachMeLanguage(reachMePerson(bot ? effectiveBotOwner(bot) || localPrincipalId() : localPrincipalId()) || null);
+    updateMemory(botId, { action: "append", text: localizedGist(line, language) }, { source: "background brief", readers: { kind: "person" } });
+  },
   remember: rememberBriefFeedback,
   wakeFeedback: feedbackOnWake,
   itemShown: (botId, suggestionId, choice, where) => {

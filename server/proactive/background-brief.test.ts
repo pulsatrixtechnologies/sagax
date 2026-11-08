@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { memoryReadersOf } from "../memory/memory-audience.ts";
 import { memoryMayShow } from "../memory/memory-audience.ts";
-import { BriefStore, briefGist, suggestionAction, toolWords, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, readConnectedBrief, runBriefPass } from "./background-brief.ts";
+import { BriefStore, briefGist, localizedGist, suggestionAction, suggestionIdentity, toolWords, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, readConnectedBrief, runBriefPass } from "./background-brief.ts";
 import { briefMessageText, briefNoticeLines, runScheduledBriefs, type BriefDelivery } from "./background-brief-schedule.ts";
 
 const piece = { piece: "Inbox, Monday note", asOf: "2026-10-26", text: "Three invoices arrived, 3 in all." };
@@ -179,5 +179,40 @@ describe("background brief", () => {
     expect(briefGist("Found 3 messages")).not.toMatch(/Found/);
     expect(briefGist("Found no messages")).toBe("");
     expect(briefGist("Répondre à Carla avant midi")).toBe("Répondre à Carla avant midi");
+    // whole words only: a person's sentence starting like a tool word stays
+    for (const said of ["Totaliser les heures de Carla", "Sentinel signale un poste", "Okay pour la réunion", "Country manager attend la soumission", "Notre client attend", "Truc à régler demain"]) {
+      expect(briefGist(said)).toBe(said);
+    }
+    for (const report of ["OK done", "Total: 4", "Sent to Carla", "No results today", "Status ready"]) {
+      expect(briefGist(report)).toBe("");
+    }
+  });
+
+  it("#2693 review: a counted point keeps its app and day in its key, and reads in the person's language", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-brief-"));
+    dirs.push(dir);
+    const store = new BriefStore(join(dir, "background-brief.json"), () => 1_000);
+    const pass = (pieces: Array<[string, string]>) => {
+      const result = runBriefPass({ tools: ["list_messages"], pieces: pieces.map(([app, raw]) => datedBriefPiece(app, "list_messages", raw)!), costUsd: 0, fastModel: "fast-1" });
+      if (!result.ok) throw new Error(result.error);
+      return result;
+    };
+    // two apps counting alike in one pass: both kept
+    const first = store.recordPass("bot-1", pass([["Outlook", "Found 3 messages (2026-11-08)"], ["Teams", "Found 3 messages (2026-11-08)"]]));
+    expect(first.map((item) => item.sources[0]!.piece.split(",")[0])).toEqual(["Outlook", "Teams"]);
+    // the same app the same day: one; another day: a new point
+    expect(store.recordPass("bot-1", pass([["Outlook", "Found 3 messages (2026-11-08)"]]))).toEqual([]);
+    expect(store.recordPass("bot-1", pass([["Outlook", "Found 3 messages (2026-11-09)"]]))).toHaveLength(1);
+    // a rejection blocks that app's count that day, not every "3 messages"
+    store.reject("bot-1", first[0]!.id);
+    expect(store.recordPass("bot-1", pass([["Teams", "Found 3 messages (2026-11-10)"]]))).toHaveLength(1);
+    expect(suggestionIdentity("3 messages", { piece: "Outlook, list messages", asOf: "2026-11-08" })).not.toBe(suggestionIdentity("3 messages", { piece: "Teams, list messages", asOf: "2026-11-08" }));
+    // a person's words keep the plain key
+    expect(suggestionIdentity("Renouvellement du contrat", { piece: "Outlook, list messages", asOf: "2026-11-08" })).toBe("renouvellement du contrat");
+    // the stored gist in the person's language (memory lines, kept lines)
+    expect(localizedGist("3 invoices", "fr")).toBe("3 factures");
+    expect(localizedGist("1 invoices", "fr")).toBe("1 facture");
+    expect(localizedGist("3 invoices", "en")).toBe("3 invoices");
+    expect(localizedGist("Renouvellement du contrat", "fr")).toBe("Renouvellement du contrat");
   });
 });

@@ -1,6 +1,15 @@
 // @ts-nocheck
 /** syncRoutineRunToSource (#1388). Pure move from server/index.ts. */
+import { wakeTopicOf } from "../routines/routine-run-card.ts";
+import type { RoutineRun } from "../routines/routines.ts";
 export type Host = Record<string, any>;
+
+/** #2694: the person's feedback on this run's attention cards (thumbs-down,
+ * "less", "never"), read as on the relayed card: muted, quiet or normal. */
+export function routineAttentionLevel(host: Host, run: Pick<RoutineRun, "botId" | "webhookId" | "proactive">): "muted" | "quiet" | "normal" {
+  const level = host.backgroundBriefs?.wakeLevel?.(run.botId, wakeTopicOf(run) ?? "attention");
+  return level === "muted" || level === "quiet" ? level : "normal";
+}
 
 export function createSyncRoutineRunToSource(getHost: () => Host): any {
 function syncRoutineRunToSource(run: RoutineRun): string | null{
@@ -9,8 +18,15 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   const known = host.routineSourceOwner(run);
   // 2026-11-05: a completed report with items only the person can do
   // ([HUMAIN], needs_human, a question) always posts, as a card with them.
-  const attentionFound = run.status === "completed" && !run.quiet ? host.personAttention(host.routineFullReport(run) ?? run.output) : undefined;
-  const reportable = host.routineRunReportable({ ...run, needsPerson: run.status === "waiting" && host.routineRunNeedsPerson(run), postResults: host.routineEffectivePostResults(run), attention: Boolean(attentionFound) });
+  const attentionLevel = run.status === "completed" && !run.quiet ? routineAttentionLevel(host, run) : "normal";
+  // #2694: "never" (or votes under the mute line) on these cards: none at all.
+  const attentionFound = run.status === "completed" && !run.quiet && attentionLevel !== "muted" ? host.personAttention(host.routineFullReport(run) ?? run.output) : undefined;
+  // Thumbs-down or "less": the card still comes, without ringing or unread.
+  const attentionRings = attentionLevel === "normal";
+  const reportableRun = { ...run, needsPerson: run.status === "waiting" && host.routineRunNeedsPerson(run), postResults: host.routineEffectivePostResults(run) };
+  const reportable = host.routineRunReportable({ ...reportableRun, attention: Boolean(attentionFound) });
+  // A card posted only for quieted attention items: in the chat, never unread.
+  const reportableUnread = attentionRings ? reportable : host.routineRunReportable({ ...reportableRun, attention: false });
   // A bot run's task stays hidden (Automations, Open run) from its start.
   // 2026-10-28: a webhook's run too (it used to take the bot's live chat;
   // now it runs in its own task and reports into the one conversation).
@@ -75,12 +91,12 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     host.store.appendMessage(sourceThreadId, message);
   }
   // Something for the person turns the conversation unread, once per state.
-  if (reportable && (statusChanged || attentionNew)) {
+  if (reportableUnread && (statusChanged || (attentionNew && attentionRings))) {
     if (source.group) host.store.patchGroup(source.group.id, { unread: true });
     else host.store.patchTask(source.bot.id, sourceThreadId, { unread: true });
   }
   // Items only the person can do ring once, whatever postResults says.
-  if (attention && attentionNew && runBotRecord) {
+  if (attention && attentionNew && attentionRings && runBotRecord) {
     host.notify(host.deliverableNotification("needs-you", runBotRecord, sourceThreadId,
       attention.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"),
       { avatarUrl: runBotRecord.avatarUrl, routineRunId: run.id, routineName: run.routineName }));

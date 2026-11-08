@@ -186,3 +186,33 @@ describe("a run with [HUMAIN] items gives one card, not two", () => {
     expect(w.notified).toHaveLength(1);
   });
 });
+
+describe("#2694: feedback on a run's card, relayed", () => {
+  const runCardRow = (wakeTopic?: string) => ({ id: "run-card", at: 1, role: "bot", kind: "routine.run", text: "Mail", routineRun: { runId: "run-1", routineId: "r1", routineName: "Mail", status: "completed", ...(wakeTopic ? { wakeTopic } : {}) } } as unknown as WireMessage);
+
+  it("puts the items on the run's card quietly after a thumbs-down: no ring, not unread", () => {
+    const w = world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } });
+    const asked: string[] = [];
+    w.deps.feedback = (_botId, topic) => { asked.push(topic); return "quiet"; };
+    w.threads.set("main", [runCardRow()]);
+    w.say("run", REPORT, "turn-late");
+    const outcome = relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-late", ok: true }, w.deps);
+    expect(outcome).toMatchObject({ posted: true, onRunCard: true });
+    expect(w.threads.get("main")![0]!.attention).toBeTruthy();
+    expect(w.notified).toEqual([]);
+    expect(w.unread).toEqual([]);
+    expect(asked).toEqual(["attention"]);
+  });
+
+  it("reads the wake's own kind on a proactive run's card, and a muted kind gives nothing", () => {
+    const w = world({ run: { id: "run-1", routineName: "Mail", status: "completed" } });
+    const asked: string[] = [];
+    w.deps.feedback = (_botId, topic) => { asked.push(topic); return topic === "mail" ? "muted" : "normal"; };
+    w.threads.set("main", [runCardRow("mail")]);
+    w.say("run", REPORT, "turn-late");
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-late", ok: true }, w.deps)).toEqual({ posted: false, reason: "muted" });
+    expect(asked).toEqual(["mail"]);
+    expect(w.threads.get("main")![0]!.attention).toBeUndefined();
+    expect(w.notified).toEqual([]);
+  });
+});

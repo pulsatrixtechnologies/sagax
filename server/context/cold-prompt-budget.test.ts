@@ -13,9 +13,11 @@ import {
   isEmailWatchSource,
   lightenColdPrompt,
   measureColdPrompt,
+  COLD_TOOL_SURFACE_SECTIONS,
   syntheticColdPromptParts,
   truncateSectionText,
 } from "./cold-prompt-budget.ts";
+import { PERSPICAX_CONVENTIONS_PROMPT } from "../perspicax/perspicax-conventions.ts";
 import { buildSystemPrompt } from "../system-prompt.ts";
 
 describe("cold prompt section budgets", () => {
@@ -62,12 +64,11 @@ describe("cold prompt section budgets", () => {
 
   it("enforces the total ceiling after per-section caps", () => {
     const fat = Array.from({ length: 20 }, (_, i) => ({
-      id: "perspicax",
+      id: "computer",
       label: `P${i}`,
       text: `\nblock ${i}\n${"y".repeat(3_000)}`,
     }));
-    // perspicax budget is 1500; after section caps still many copies can sum high
-    // if we used unique ids under the total trim list:
+    // computer budget is 1200; after section caps the copies still sum high:
     const parts = [
       { id: "memory", label: "Memory", text: `\n${"m".repeat(20_000)}` },
       { id: "skills", label: "Skills", text: `\n${"s".repeat(10_000)}` },
@@ -93,6 +94,21 @@ describe("cold prompt section budgets", () => {
       if (allowance === null) continue;
       expect(section.bytes, section.id).toBeLessThanOrEqual(allowance);
     }
+  });
+
+  it("keeps the tool surface of a routine identical to the chat turn of the same bot (QA 0.8.66 F5)", () => {
+    // Chat turn parts: the same sections a routine of this bot gets, plus a
+    // heavy cold prompt so the total trim runs.
+    const surface = COLD_TOOL_SURFACE_SECTIONS.map((id) => ({
+      id, label: id, text: id === "perspicax" ? PERSPICAX_CONVENTIONS_PROMPT : `\n${id} tools:\n${"use_tool search_tool ".repeat(400)}`,
+    }));
+    const chat = [...syntheticColdPromptParts().filter((part) => !COLD_TOOL_SURFACE_SECTIONS.includes(part.id)), ...surface];
+    const routine = lightenColdPrompt(chat);
+    for (const part of surface) {
+      expect(routine.find((row) => row.id === part.id)?.text, part.id).toBe(part.text);
+    }
+    expect(routine.map((part) => part.text).join("")).toContain("vendor API operations only");
+    expect(COLD_PROMPT_SECTION_BUDGETS.perspicax).toBeUndefined();
   });
 
   it("cuts on a UTF-8 boundary and leaves a notice", () => {

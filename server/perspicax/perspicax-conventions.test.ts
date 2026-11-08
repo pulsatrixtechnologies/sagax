@@ -36,4 +36,8 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/say so to the person in one line, by the role's name, never an id/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Lu avec le rôle");
   });
+  it("says JMESPath has no split, so a routine never calls an undefined function (QA 0.8.66 F5)", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/There is no split, regex/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/functions are length, sum/);
+  });
 });

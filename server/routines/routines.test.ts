@@ -4326,17 +4326,33 @@ describe("the organization memory before a run (2026-10-11)", () => {
     return { ...h, manager, asked, file };
   }
 
-  it("keeps the hint on the run and gives the bot its note after the prompt", async () => {
+  it("keeps the hint on a scheduled run and gives the bot its note after the prompt", async () => {
     const h = withMemory(async () => ({ hint, note: "Note from the organization memory" }));
     const routine = h.manager.create(input, undefined, { actorPrincipalId: "pr_alice" });
-    h.manager.runNow(routine.id);
+    h.setNow(routine.nextRunAt!);
     await h.manager.tick();
+    if (!h.started.length) await h.manager.tick();
     expect(h.asked).toEqual([{ runAs: "pr_alice", prompt: "Triage the new tickets" }]);
     expect(h.started).toHaveLength(1);
     expect(h.started[0]!.prompt).toBe("Triage the new tickets\n\nNote from the organization memory");
     expect(h.manager.listRuns()[0]?.memoryHint).toEqual(hint);
     // kept across a restart
     expect(new RoutineManager({ ...h.options, file: h.file }).listRuns()[0]?.memoryHint).toEqual(hint);
+  });
+
+  // 2026-11-08 (QA 0.8.66 F4): "Overdue invoices report" run by hand got the
+  // duplicate note of its own past runs, took itself for a duplicate and
+  // failed. A run the person started never asks the duplicate detector.
+  it("never asks the duplicate detector for a run the person started", async () => {
+    for (const startedBy of [undefined, "person"] as const) {
+      const h = withMemory(async () => ({ hint, note: "Note from the organization memory" }));
+      const routine = h.manager.create(input, undefined, { actorPrincipalId: "pr_alice" });
+      h.manager.runNow(routine.id, undefined, startedBy);
+      await h.manager.tick();
+      expect(h.asked).toEqual([]);
+      expect(h.started.map((turn) => turn.prompt)).toEqual(["Triage the new tickets"]);
+      expect(h.manager.listRuns()[0]?.memoryHint).toBeUndefined();
+    }
   });
 
   it("starts the run as if not asked when the memory fails, finds nothing or is slow", async () => {
@@ -4350,7 +4366,7 @@ describe("the organization memory before a run (2026-10-11)", () => {
       ] satisfies Array<NonNullable<RoutineManagerOptions["memoryHint"]>>) {
         const h = withMemory(memoryHint);
         const routine = h.manager.create(input);
-        h.manager.runNow(routine.id);
+        h.setNow(routine.nextRunAt!);
         const ticking = h.manager.tick();
         await vi.advanceTimersByTimeAsync(2_500);
         await ticking;

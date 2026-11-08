@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { BriefStore, TOPIC_HALF_LIFE_MS } from "../proactive/background-brief.ts";
 
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
-import { mirrorLateRunReply, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
+import { mirrorBackgroundReply, mirrorLateRunReply, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
 
 const ATLAS: AttentionBot = { id: "bot-atlas", name: "Atlas" };
 const REPORT = "- [HUMAIN] **100201** (board 1) : decide which client it belongs to.\n- [HUMAIN] **100202** : set it to Completed by hand.\n\nNo writes.";
@@ -214,5 +214,37 @@ describe("#2694: feedback on a run's card, relayed", () => {
     expect(asked).toEqual(["mail"]);
     expect(w.threads.get("main")![0]!.attention).toBeUndefined();
     expect(w.notified).toEqual([]);
+  });
+});
+
+describe("mirrorBackgroundReply (#2901: nothing invisible)", () => {
+  it("copies an MCP send_prompt answer into the bot's chat once, labelled, without ringing", () => {
+    const w = world();
+    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "mcp" : undefined;
+    w.say("work", "Le lot est prêt.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
+    const copies = (w.threads.get("main") ?? []).filter((row) => row.relayOf);
+    expect(copies).toHaveLength(1);
+    expect(copies[0]).toMatchObject({ role: "bot", kind: "text", text: "Le lot est prêt.", relayVia: "mcp" });
+    expect(w.notified).toHaveLength(0);
+    expect(w.unread).toHaveLength(0);
+  });
+
+  it("labels a teammate's work and leaves the person's own, confidential and routine threads alone", () => {
+    const w = world({ run: { id: "run-1", routineName: "Hourly pass", status: "succeeded" } });
+    w.deps.relayVia = (_botId, threadId) => threadId === "work" ? "teammate" : threadId === "run" ? "routine" : undefined;
+    w.say("work", "Fini.");
+    w.say("main", "Bonjour.");
+    w.say("run", "Rapport.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
+    expect(w.threads.get("main")!.at(-1)).toMatchObject({ relayVia: "teammate", text: "Fini." });
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "main", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
+    const secret = world();
+    secret.deps.relayVia = () => "mcp";
+    secret.deps.task = (_botId, threadId) => ({ threadId, title: "x", confidential: true }) as never;
+    secret.say("work", "Secret.");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, secret.deps)).toBe(false);
   });
 });

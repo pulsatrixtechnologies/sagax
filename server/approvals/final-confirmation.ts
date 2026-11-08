@@ -39,3 +39,53 @@ export function finalConfirmation(input: {
   const request = sentences.find((sentence) => !MISSING_FACT.test(sentence) && !ALTERNATIVE.test(sentence) && ((ASK.test(sentence) && CONSENT.test(sentence)) || WAIT.test(sentence)));
   return request ? input.text.trim().slice(-4_000) : null;
 }
+
+const LEAD = /^(?:(?:so|then|alors|donc)\s*,?\s*)?(?:(?:do|would)\s+you\s+(?:want|like|prefer)\s+(?:me|us)?\s*(?:to\s+)?|(?:shall|should)\s+(?:i|we)\s+|(?:veux|voulez|souhaites|souhaitez|pr[eé]f[eè]res|pr[eé]f[eé]rez)-(?:tu|vous)\s+|est-ce que\s+(?:tu|vous)\s+(?:veux|voulez|pr[eé]f[eè]res|pr[eé]f[eé]rez)\s+)/i;
+const ALTERNATIVE_LABEL_MAX = 80;
+
+function label(clause: string): string {
+  const text = clause.replace(/^[\s,;:]+|[\s,;:?!.]+$/g, "").replace(/\s+/g, " ");
+  return text ? text.charAt(0).toLocaleUpperCase() + text.slice(1) : "";
+}
+
+/** "A, or B?" -> ["A", "B"] (#2901): an either/or question is answered by
+ * one of its two paths, never by Yes/No. Null when the sentence is not a
+ * clean two-way choice or a path is too long to be a button. */
+export function alternativeChoices(question: string): [string, string] | null {
+  const sentences = question.trim().split(/(?<=[.!?])\s+/).filter(Boolean);
+  const sentence = sentences.reverse().find((line) => /\?\s*$/.test(line) && ALTERNATIVE.test(line));
+  if (!sentence || MISSING_FACT.test(sentence)) return null;
+  const match = ALTERNATIVE.exec(sentence);
+  if (!match) return null;
+  const head = sentence.slice(0, match.index);
+  const split = match.index + match[0].search(/(?:ou|or)\s/i) ;
+  const tail = sentence.slice(split).replace(/^(?:ou|or)\s+(?:bien\s+|plut[oô]t\s+|rather\s+|else\s+)?/i, "");
+  const first = label(head.replace(LEAD, ""));
+  const second = label(tail);
+  if (!first || !second || first === second) return null;
+  if (first.length > ALTERNATIVE_LABEL_MAX || second.length > ALTERNATIVE_LABEL_MAX) return null;
+  if (ALTERNATIVE.test(` ${second}`) && /\s(?:ou|or)\s/i.test(second)) return null;
+  return [first, second];
+}
+
+/** A routine or MCP turn that ends on "A, or B?" (#2901): the question
+ * card offers the two paths instead of staying silent or showing Yes/No. */
+export function finalAlternative(input: Parameters<typeof finalConfirmation>[0]): { question: string; options: [string, string] } | null {
+  if (!input.ok || input.stopped || input.hasCard || (!input.routineRun && !input.mcpStarted)) return null;
+  const own = input.text.replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)/g, "")
+    .split(/\r?\n/).filter((line) => !/^\s*>/.test(line)).join("\n").trim();
+  const tail = own.split(/\n\s*\n/).at(-1)?.trim().slice(-4_000).replace(/^[*_]+|[*_]+$/g, "") ?? "";
+  const last = tail.split(/(?<=[.!?])\s+/).at(-1) ?? "";
+  if (!ASK.test(last) && !LEAD.test(last)) return null;
+  const options = alternativeChoices(last);
+  return options ? { question: input.text.trim().slice(-4_000), options } : null;
+}
+
+const YES_NO = /^(?:oui|non|yes|no)$/i;
+
+/** ask_choice with Yes/No on an "A, or B?" question (#2901): the two paths
+ * become the options so the card answers the question it asks. */
+export function choiceOptionsFor(question: string, options: string[]): string[] {
+  if (options.length !== 2 || !options.every((option) => YES_NO.test(option.trim().replace(/[.!]$/, "")))) return options;
+  return alternativeChoices(question) ?? options;
+}

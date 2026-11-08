@@ -128,18 +128,21 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
       ? host.store.messagesFor(event.threadId).find((line) => line.id === request.messageId)
       : host.lastPersonMessage(event.threadId);
     const text = host.lastReply.get(event.threadId) ?? "";
-    const confirmation = host.finalConfirmation({
+    const finalInput = {
       text,
       routineRun: host.routineRunThread(event.threadId),
       mcpStarted: host.isAgentConversation(task) || host.notificationInHiddenThread(event.threadId) || personLine?.aiClient === true,
       ok: event.ok,
       stopped: host.stoppedTurns.has(event.threadId) || request?.stopped === true || event.stopReason === "interrupted" || event.stopReason === "cancelled",
       hasCard: Boolean(host.openPersonCard(event.threadId)),
-    });
-    if (confirmation && threadBot && task && !host.store.groupByThread(event.threadId)) {
+    };
+    const confirmation = host.finalConfirmation(finalInput);
+    // #2901: "A, or B?" offers its two paths, never Yes/No.
+    const alternative = confirmation ? null : host.finalAlternative(finalInput);
+    if ((confirmation || alternative) && threadBot && task && !host.store.groupByThread(event.threadId)) {
       host.raiseHarnessQuestion(event.threadId, {
-        title: "Your bot has a question", question: confirmation,
-        options: host.finalConfirmationOptions(host.languageOfPerson(task.ownerPrincipalId ?? host.recordedBotOwner(threadBot))),
+        title: "Your bot has a question", question: confirmation ?? alternative!.question,
+        options: alternative?.options ?? host.finalConfirmationOptions(host.languageOfPerson(task.ownerPrincipalId ?? host.recordedBotOwner(threadBot))),
       }, "output");
     }
   }

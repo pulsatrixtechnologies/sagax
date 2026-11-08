@@ -163,3 +163,29 @@ struct ParallelResultLabel: View {
             .padding(.leading, 2)
     }
 }
+
+/// #2901 (« rien d'invisible »): provenance of a line or card the server
+/// copied into the bot's chat from a background conversation, in the same
+/// style as the parallel task's result line (desktop RelayViaLabel.tsx).
+struct RelayViaLabel: View {
+    let via: String
+
+    var body: some View {
+        if let label = Self.label(via) {
+            Label(label.title, systemImage: label.icon)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textSecondary)
+                .padding(.leading, 2)
+        }
+    }
+
+    static func label(_ via: String) -> (title: LocalizedStringKey, icon: String)? {
+        switch via {
+        case "mcp": return ("Via MCP", "powerplug")
+        case "routine": return ("Routine", "repeat")
+        case "proactive": return ("Proactive", "bell.badge")
+        case "teammate": return ("Teammate", "person.2")
+        default: return nil
+        }
+    }
+}

@@ -18,6 +18,7 @@ import { createOptionsCard } from "./options-card.ts";
 import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../../shared/options-card.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fullAccessChoiceAnswer } from "../approvals/full-access-gate.ts";
+import { choiceOptionsFor } from "../approvals/final-confirmation.ts";
 import { isSecretName, mask, redactSecretsInText } from "../redact.ts";
 import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 import { CHOOSE_PAGE_TARGET_TOOL } from "../drivers/agents-artifact-tools.ts";
@@ -213,6 +214,8 @@ export function createAgentCard(args: {
 function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Record<string, unknown>): AgentCardResult {
   const parsed = parseAskChoiceInput(input);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  // #2901: Yes/No on "A, or B?" answers neither path; offer the two paths.
+  parsed.value.options = choiceOptionsFor(parsed.value.subtitle, parsed.value.options);
   const from = args.store.groupByThread(args.threadId) ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
   const answered = fullAccessChoiceAnswer(args.approvalLevel, { title: parsed.value.title, question: parsed.value.subtitle, options: parsed.value.options });
   if (answered) {

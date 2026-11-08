@@ -96,10 +96,13 @@ describe.skipIf(process.platform === "win32")("final confirmations reach their p
       expect(row.card).toMatchObject({ requestId: expect.stringMatching(/^ask-choice-/), subtitle: QUESTION, options: ["Yes", "No"],
         questionRequest: { origin: "output" } });
       const requestId = row.card.requestId as string;
+      // #2901: the question is mirrored into the bot's chat and the push points at the mirror.
+      const mirrorId = `origin:${row.id}`;
+      await expect.poll(async () => (await messages(bot.threadId)).some((line) => line.card?.requestId === mirrorId)).toBe(true);
       expect((await messages(bot.threadId)).find((line) => line.routineRun?.runId === run.id)?.routineRun).toMatchObject({ status: "waiting", executionThreadId: threadId });
       expect((await api("GET", "/api/approvals")).pending.find((card: any) => card.requestId === requestId)).toMatchObject({ kind: "question", decidable: true });
-      await expect.poll(() => own.frames.some((frame: any) => frame.kind === "notify" && frame.notification?.requestId === requestId)).toBe(true);
-      const notice = own.frames.find((frame: any) => frame.kind === "notify" && frame.notification?.requestId === requestId) as any;
+      await expect.poll(() => own.frames.some((frame: any) => frame.kind === "notify" && frame.notification?.requestId === mirrorId)).toBe(true);
+      const notice = own.frames.find((frame: any) => frame.kind === "notify" && frame.notification?.requestId === mirrorId) as any;
       expect(notice.notification).toMatchObject({ kind: "question", choices: ["Yes", "No"] });
       expect(notice.notification.quietOnPhones).not.toBe(true);
       expect(JSON.stringify(other.frames)).not.toContain(requestId);
@@ -123,18 +126,21 @@ describe.skipIf(process.platform === "win32")("final confirmations reach their p
       const row = await questionCard(threadId);
       const requestId = row.card.requestId as string;
       expect(row.card.questionRequest.origin).toBe("output");
+      // #2901: the question is mirrored into the bot's chat and the push points at the mirror.
+      const mirrorId = `origin:${row.id}`;
+      await expect.poll(async () => (await messages(bot.threadId)).some((line) => line.card?.requestId === mirrorId)).toBe(true);
       const listed = await member("approvals?status=pending", undefined, WREN, "GET");
       expect(listed.body.approvals.find((card: any) => card.id === requestId)).toMatchObject({ threadId, canAnswer: true });
       expect(JSON.stringify((await member("approvals?status=pending", undefined, OSPREY, "GET")).body)).not.toContain(requestId);
       expect((await fixture.api("GET", `/api/threads/${threadId}/messages`, osprey)).status).toBe(404);
       expect((await member(`approvals/${requestId}`, { threadId, option: "Yes" }, OSPREY)).status).toBe(403);
-      await expect.poll(() => own.frames.some((frame: any) => frame.kind === "notify" && frame.notification?.requestId === requestId)).toBe(true);
-      const notice = own.frames.find((frame: any) => frame.kind === "notify" && frame.notification?.requestId === requestId) as any;
+      await expect.poll(() => own.frames.some((frame: any) => frame.kind === "notify" && frame.notification?.requestId === mirrorId)).toBe(true);
+      const notice = own.frames.find((frame: any) => frame.kind === "notify" && frame.notification?.requestId === mirrorId) as any;
       expect(notice.notification.quietOnPhones).not.toBe(true);
       expect(pushesForFrame(notice, {
         notificationPeople: () => ["fixture-owner"], muted: () => false,
         achievementNotifications: () => false, achievementName: () => undefined, now: () => 42,
-      })).toMatchObject([{ kind: "approval", prompt: "question", threadId, requestId, choices: ["Yes", "No"] }]);
+      })).toMatchObject([{ kind: "approval", prompt: "question", threadId: bot.threadId, requestId: mirrorId, choices: ["Yes", "No"] }]);
       expect(JSON.stringify(other.frames)).not.toContain(requestId);
       await expect.poll(() => taskState(bot.id, threadId)).toMatchObject({ activity: "waiting-on-you", busy: false });
       own.close(); other.close();

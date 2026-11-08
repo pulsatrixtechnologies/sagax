@@ -363,7 +363,10 @@ function settleTurnTask(event: any, ctx: any, host: any, turn: any): void {
     try {
       const attentionInput = { bot, threadId: event.threadId, turnId: completedTurnId, ok: event.ok, stopped, runTurn: Boolean(routineRun) };
       const relayed = host.relayPersonAttention(attentionInput, host.personAttentionDeps);
-      if (!relayed.posted && relayed.reason !== "muted") host.mirrorLateRunReply(attentionInput, host.personAttentionDeps);
+      if (!relayed.posted && relayed.reason !== "muted" && !host.mirrorLateRunReply(attentionInput, host.personAttentionDeps)) {
+        // #2901: an MCP or teammate conversation never stays invisible.
+        if (!incidentsCopied) host.mirrorBackgroundReply(attentionInput, host.personAttentionDeps);
+      }
     } catch (error) {
       console.error(`[attention] not relayed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
     }

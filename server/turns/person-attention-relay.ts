@@ -53,6 +53,10 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
    * run card's wake kind): "muted" posts nothing, "quiet" posts the card
    * without ringing or marking unread. Absent: "normal". */
   feedback?(botId: string, topic: string): "muted" | "quiet" | "normal";
+  /** #2901: why this thread is out of the person's sight (MCP send_prompt,
+   * routine, proactive wake, teammate work); undefined for their own,
+   * confidential or parallel threads. */
+  relayVia?(botId: string, threadId: string): WireMessage["relayVia"];
 }
 
 const ACTIVE_RUN = new Set(["queued", "running", "waiting"]);
@@ -181,5 +185,31 @@ export function mirrorLateRunReply<B extends AttentionBot>(
   });
   deps.markUnread(bot.id, target);
   deps.notify(bot, target, `${bot.name}: ${run.routineName}`, words.slice(0, 300));
+  return true;
+}
+
+/** #2901 (2026-11-08, « rien d'invisible »): what a bot says in a background
+ * conversation outside routines (an AI client's send_prompt over MCP, a
+ * teammate's work, a thread a bot opened) is copied once into the bot's chat
+ * with a discreet provenance label. Quiet: no ring, no unread; the person
+ * reads it there, nothing stays hidden. Routine runs report through their
+ * own card. Confidential and parallel threads never leave their thread. */
+export function mirrorBackgroundReply<B extends AttentionBot>(
+  input: AttentionTurn<B>,
+  deps: AttentionRelayDeps<B>,
+): boolean {
+  const { bot, threadId } = input;
+  if (!input.ok || input.stopped || bot.hidden || input.runTurn || deps.routineRun(threadId)) return false;
+  const via = deps.relayVia?.(bot.id, threadId);
+  if (!via || via === "routine" || via === "proactive") return false;
+  const task = deps.task(bot.id, threadId);
+  if (!task || task.confidential === true) return false;
+  const { text, last } = turnWords(deps.messages(threadId), input.turnId);
+  const words = text.replace(/^\s*NOTHING_TO_REPORT\s*$/gim, "").trim();
+  if (!last || !words) return false;
+  const target = deps.conversation(bot, threadId);
+  if (!target || target === threadId) return false;
+  if (deps.messages(target).some((message) => message.relayOf === last.id || message.attention?.sourceMessageId === last.id)) return false;
+  deps.append(target, { role: "bot", kind: "text", text: words, relayVia: via, relayOf: last.id });
   return true;
 }

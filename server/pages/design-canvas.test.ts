@@ -1,6 +1,7 @@
 // Designs, kind "design" of the published pages (#2717). Blocking: the
 // design tool is exposed to the bot, it produces a Design page rendered in
 // the pages surface, and it lands in the same conversation (no new thread).
+import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import type { Message } from "../store.ts";
 import { PublishedPages } from "./published-pages.ts";
 import { pageDocument } from "./published-pages-render.ts";
 import { exportFilename } from "../routes/published-pages.ts";
+import { withDesignRedirectHook } from "../drivers/claude/design-redirect.ts";
 import { pageIsHtml, parsePageProposal } from "../../shared/published-pages.ts";
 import { applyDesignSystem, BUILTIN_DESIGN_SYSTEMS, DESIGN_CANVAS_CSS, designScreens, designSystemOf, parseDesignTokens } from "../../src/lib/design-systems.ts";
 
@@ -124,5 +126,17 @@ describe("designs (#2717)", () => {
   it("names an export after the title and the version, never an id", () => {
     expect(exportFilename("Onboarding : Notes app", 3)).toBe("onboarding-notes-app-v3.html");
     expect(exportFilename("???", 1)).toBe("page-v1.html");
+  });
+  it("sends the native Artifact design quickstart to propose_page, keeps every other Artifact call", () => {
+    const hooks = withDesignRedirectHook({ PreToolUse: [{ matcher: "", hooks: [] }] }, process.execPath) as { PreToolUse: Array<{ matcher: string; hooks: Array<{ command: string }> }> };
+    expect(hooks.PreToolUse).toHaveLength(2);
+    const entry = hooks.PreToolUse[1]!;
+    expect(entry.matcher).toBe("Artifact");
+    const run = (input: unknown) => execSync(entry.hooks[0]!.command, { input: JSON.stringify({ tool_input: input }), encoding: "utf8" });
+    const denied = JSON.parse(run({ action: "quickstart", intent: "design" })) as { hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string } };
+    expect(denied.hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(denied.hookSpecificOutput.permissionDecisionReason).toMatch(/propose_page with kind design/);
+    expect(run({ action: "quickstart", intent: "slides" })).toBe("");
+    expect(run({ action: "publish", file_path: "x.html" })).toBe("");
   });
 });

@@ -117,6 +117,9 @@ const CONTROL_PLANE_FIXTURE = {
 /** The launch wording of the volatile half in a new process's first message (claude.ts withVolatileNote). */
 const LAUNCH_NOTE = /^<system-reminder>\nThis part of your instructions changes from turn to turn/;
 
+// #2717: every launch carries the design redirect hook on the native Artifact tool.
+const DESIGN_REDIRECT_HOOKS = { PreToolUse: [expect.objectContaining({ matcher: "Artifact" })] };
+
 describe("instanceClaudeAllowRules", () => {
   it("reads a JSON list or one rule per line, trimmed and deduplicated", () => {
     expect(instanceClaudeAllowRules({ SAGAX_CLAUDE_ALLOW: '["Bash(claude plugin marketplace add a/b)", "Read"]' }))
@@ -2759,7 +2762,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await instance.adapter.sendTurn({ threadId: "t-auth-settings", text: "hi" });
     await recorder.until((e) => e.type === "turn.completed");
     const seen = JSON.parse(readFileSync(dump, "utf8"));
-    expect(seen.settings).toEqual({ claudeMdExcludes: [join(homedir(), ".claude", "CLAUDE.md")], apiKeyHelper: settings.apiKeyHelper, env: { ANTHROPIC_BASE_URL: settings.env.ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN: "synthetic-token", ENABLE_TOOL_SEARCH: "true" }, permissions: { deny: remoteSupportDenyRules() } });
+    expect(seen.settings).toEqual({ claudeMdExcludes: [join(homedir(), ".claude", "CLAUDE.md")], apiKeyHelper: settings.apiKeyHelper, env: { ANTHROPIC_BASE_URL: settings.env.ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN: "synthetic-token", ENABLE_TOOL_SEARCH: "true" }, permissions: { deny: remoteSupportDenyRules() }, hooks: DESIGN_REDIRECT_HOOKS });
     expect(seen.argv[seen.argv.indexOf("--setting-sources") + 1]).toBe("project");
     expect(JSON.stringify(seen.argv)).not.toContain("synthetic");
     const settingsPath = seen.argv[seen.argv.indexOf("--settings") + 1];
@@ -2859,7 +2862,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await instance.adapter.sendTurn({ threadId: "t-auth-explicit", text: "hi" });
     await recorder.until((e) => e.type === "turn.completed");
     const seen = JSON.parse(readFileSync(dump, "utf8"));
-    expect(seen.settings).toEqual({ claudeMdExcludes: [join(homedir(), ".claude", "CLAUDE.md")], env: { ENABLE_TOOL_SEARCH: "true" }, permissions: { deny: remoteSupportDenyRules() } });
+    expect(seen.settings).toEqual({ claudeMdExcludes: [join(homedir(), ".claude", "CLAUDE.md")], env: { ENABLE_TOOL_SEARCH: "true" }, permissions: { deny: remoteSupportDenyRules() }, hooks: DESIGN_REDIRECT_HOOKS });
     expect(seen.env.ANTHROPIC_API_KEY).toBe("workspace-key");
     expect(seen.env.ANTHROPIC_BASE_URL).toBeUndefined();
     expect(readClaudeAuthSettings({ HOME: scratch, CLAUDE_CONFIG_DIR: join(scratch, "other-account") })).toEqual({});

@@ -12,7 +12,7 @@ import { StrictMode, useCallback, useMemo, useReducer, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { ChatView } from "../components/ChatView";
-import { loadLocale } from "../lib/i18n";
+import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, initialState, reducer, type Action, type AppState, type Bot, type InstanceInfo, type Message } from "../state/store";
 import "../styles.css";
@@ -25,6 +25,9 @@ await loadLocale(lang);
 
 const pageId = "galleryRealPage01";
 const fr = lang === "fr";
+// the page preview frame sends no referrer: tell the gallery's preview stub
+// (vite.gallery.config.ts) the language through a cookie
+document.cookie = `sagax-gallery-lang=${fr ? "fr" : "en"}; path=/; SameSite=Lax`;
 const title = fr ? "Rapport mensuel synthétique" : "Synthetic monthly report";
 const at = Date.UTC(2026, 9, 31, 13, 0);
 const versions = Number(params.get("versions") ?? "2");
@@ -85,7 +88,7 @@ const wait = params.get("wait") === "1";
 if (wait) messages.push({
   id: "wait", role: "bot", kind: "activity", at: at + 25 * 60_000, parentId: messages.at(-1)!.id,
   from: { botId: "scout", name: "Scout", color: "green" },
-  tool: { name: "Scout is finishing another conversation \u2014 will reply here when free", spoken: "Scout is finishing another conversation" },
+  tool: { name: t("chat.presence.busyElsewhere", { name: "Scout" }), spoken: t("chat.presence.busyElsewhere", { name: "Scout" }) },
 } as Message);
 const scout: Bot = {
   id: "scout", threadId: "scout-thread", name: "Scout", title: "", description: "", color: "green",
@@ -100,7 +103,7 @@ const start: AppState = {
   ...(wait ? { config: { features: { showToolCalls: true } } as AppState["config"] } : {}),
   selectedId: "scout",
   bots: [scout],
-  instances: [{ instanceId: "gallery", driverKind: "codex", displayName: "Gallery", snapshot: { state: "available" }, models: { options: [{ id: "m", label: "Gallery model" }] } } as unknown as InstanceInfo],
+  instances: [{ instanceId: "gallery", driverKind: "codex", displayName: "Gallery", snapshot: { state: "available" }, models: { options: [{ id: "m", label: fr ? "Modèle de la galerie" : "Gallery model" }] } } as unknown as InstanceInfo],
 };
 
 // The real reducer, minus actions this server-less fixture cannot satisfy

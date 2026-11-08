@@ -9,7 +9,11 @@
 // #2949: a two-column table whose second column is sentences ("Piece |
 // State", one sentence per row) becomes a bulleted list with bold labels
 // (shared/output-style.ts).
+//
+// QA 0.8.67 G9: "8 to 14 novembre" becomes "du 8 au 14 novembre"
+// (shared/french-dates.ts).
 
+import { frenchDateRanges } from "./french-dates.ts";
 import { rewriteKeySentenceTables } from "./output-style.ts";
 
 const PROTECTED = /```[\s\S]*?(?:```|$)|`[^`\n]+`|\[[^\]\n]*\]\([^)\s]+\)/g;
@@ -39,6 +43,7 @@ export function cleanReplyStyle(text: string): string {
   out = out.replace(/(#(\d+))\s*\(billet #\2\)/gi, "$1");
   out = out.replace(/\(\s*\)/g, "");
   out = out.replace(UUID, "");
+  out = frenchDateRanges(out);
   out = out.replace(ID_PREFIX, "$1");
   if (report) out = out.replace(HEART, "");
   out = out.replace(TRAILING_EMOJI, "");

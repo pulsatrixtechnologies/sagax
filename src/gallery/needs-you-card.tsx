@@ -4,13 +4,14 @@
  * with that bot through the chat's own rows and the real store: the card
  * from a hand-off that reached no card, a hand-off's question with its answers,
  * and a routine run's own card with its items.
- * Neutral fictional bots, clients and tickets. Not shipped in the app.
+ * Neutral fictional bots, clients and tickets, in the language asked (QA
+ * 0.8.67 G10: lang=fr showed English data). Not shipped in the app.
  * ?width=<px>&height=<px>&skin=<id>&lang=<en|fr> */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
 import { AttentionRow, RoutineRunRow } from "../components/ChatView";
-import { loadLocale } from "../lib/i18n";
+import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot, type Message } from "../state/store";
 import type { PersonAttentionCard } from "../../shared/person-attention";
@@ -19,16 +20,19 @@ import "../styles.css";
 const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
-await loadLocale(params.get("lang") === "fr" ? "fr" : "en");
+const fr = params.get("lang") === "fr";
+await loadLocale(fr ? "fr" : "en");
 const width = Number(params.get("width") ?? 900);
 const height = Number(params.get("height") ?? 1200);
 
 const NOW = Date.now();
 const M = 60_000;
+const workTitle = fr ? "@Nova · travail" : "@Nova · work";
+const routineName = fr ? "Nouveaux billets aux heures" : "Hourly new tickets";
 const makeBot = (id: string, name: string, color: string) => ({
   id, threadId: `${id}-thread`, mainThreadId: `${id}-thread`, name, title: "", description: "", color, notifications: true, unread: false, busy: false, messages: [],
   modelSelection: { instanceId: "test", model: "test" },
-  tasks: [{ threadId: `${id}-thread`, title: "Main", createdAt: NOW - 48 * 60 * M }, { threadId: `${id}-work`, title: "@Nova · work", createdAt: NOW - 20 * M, openedBy: { botId: "nova", name: "Nova", kind: "work" } }],
+  tasks: [{ threadId: `${id}-thread`, title: fr ? "Principal" : "Main", createdAt: NOW - 48 * 60 * M }, { threadId: `${id}-work`, title: workTitle, createdAt: NOW - 20 * M, openedBy: { botId: "nova", name: "Nova", kind: "work" } }],
 }) as unknown as Bot;
 const atlas = makeBot("atlas", "Atlas", "blue");
 const nova = makeBot("nova", "Nova", "pink");
@@ -38,36 +42,46 @@ const link = (id: number) => `https://cw.example.com/v4_6_release/services/syste
 // hand-off Nova gave Atlas, which reached no card in the person's chat, and
 // a routine run whose own card carries its items.
 const handoff: PersonAttentionCard = {
-  kind: "human", botId: "atlas", botName: "Atlas", threadId: "atlas-work", threadTitle: "@Nova · work", sourceMessageId: "src-1",
+  kind: "human", botId: "atlas", botName: "Atlas", threadId: "atlas-work", threadTitle: workTitle, sourceMessageId: "src-1",
   openedBy: { botId: "nova", name: "Nova" },
   items: [
-    { text: "**100305** (board 24, Initech) : the client asks for an on-site visit this week. Pick the day; no technician is free before Thursday.", ticketId: 100305, ticketUrl: link(100305) },
+    { text: fr
+      ? "**100305** (tableau 24, Initech) : le client demande une visite sur place cette semaine. Choisis le jour ; aucun technicien n'est libre avant jeudi."
+      : "**100305** (board 24, Initech) : the client asks for an on-site visit this week. Pick the day; no technician is free before Thursday.", ticketId: 100305, ticketUrl: link(100305) },
   ],
 };
 // 2026-11-06: the question a hand-off left, with its answers in brackets
 const question: PersonAttentionCard = {
-  kind: "question", botId: "atlas", botName: "Atlas", threadId: "atlas-work", threadTitle: "@Nova · work", sourceMessageId: "src-2",
+  kind: "question", botId: "atlas", botName: "Atlas", threadId: "atlas-work", threadTitle: workTitle, sourceMessageId: "src-2",
   openedBy: { botId: "nova", name: "Nova" },
   items: [
-    { text: "Do we open the ConnectWise ticket to document the Initech firewall audit (create, archive only, or nothing for now)?" },
+    { text: fr
+      ? "On ouvre le billet ConnectWise pour documenter l'audit du pare-feu d'Initech (créer, archiver seulement, ou rien pour l'instant) ?"
+      : "Do we open the ConnectWise ticket to document the Initech firewall audit (create, archive only, or nothing for now)?" },
   ],
 };
 const runCard: PersonAttentionCard = {
-  kind: "human", botId: "atlas", botName: "Atlas", sourceMessageId: "run:r1", routineRunId: "run-1", routineName: "Hourly new tickets", threadId: "atlas-run", threadTitle: "Hourly new tickets",
+  kind: "human", botId: "atlas", botName: "Atlas", sourceMessageId: "run:r1", routineRunId: "run-1", routineName, threadId: "atlas-run", threadTitle: routineName,
   items: [
-    { text: "**100201** (board 1, Acme) : security notice forwarded by a teammate, still New and held \"To sort\". Decide which client it belongs to and whether patching is needed.", ticketId: 100201, ticketUrl: link(100201) },
-    { text: "**100202** (board 1, Globex) : third advertising reminder. The close was refused without a reason, so set it to Completed by hand.", ticketId: 100202, ticketUrl: link(100202) },
+    { text: fr
+      ? "**100201** (tableau 1, Acme) : avis de sécurité transféré par un collègue, encore Nouveau et retenu « À trier ». Décide à quel client il appartient et s'il faut appliquer un correctif."
+      : "**100201** (board 1, Acme) : security notice forwarded by a teammate, still New and held \"To sort\". Decide which client it belongs to and whether patching is needed.", ticketId: 100201, ticketUrl: link(100201) },
+    { text: fr
+      ? "**100202** (tableau 1, Globex) : troisième rappel publicitaire. La fermeture a été refusée sans raison, alors passe-le à Terminé à la main."
+      : "**100202** (board 1, Globex) : third advertising reminder. The close was refused without a reason, so set it to Completed by hand.", ticketId: 100202, ticketUrl: link(100202) },
   ],
 };
 
 const messages: Message[] = [
-  { id: "ask", role: "user", kind: "text", at: NOW - 30 * M, text: "Import the dispatch routines." } as Message,
-  { id: "card", role: "bot", kind: "text", at: NOW - 2 * M, text: "Atlas needs you", attention: handoff, threadRef: { botId: "atlas", threadId: "atlas-work", title: "@Nova · work" } } as unknown as Message,
-  { id: "question", role: "bot", kind: "text", at: NOW - 90_000, text: "Atlas has a question for you", attention: question, threadRef: { botId: "atlas", threadId: "atlas-work", title: "@Nova · work" } } as unknown as Message,
+  { id: "ask", role: "user", kind: "text", at: NOW - 30 * M, text: fr ? "Importe les routines de répartition." : "Import the dispatch routines." } as Message,
+  { id: "card", role: "bot", kind: "text", at: NOW - 2 * M, text: t("needsYou.title", { bot: "Atlas" }), attention: handoff, threadRef: { botId: "atlas", threadId: "atlas-work", title: workTitle } } as unknown as Message,
+  { id: "question", role: "bot", kind: "text", at: NOW - 90_000, text: t("needsYou.titleQuestion", { bot: "Atlas" }), attention: question, threadRef: { botId: "atlas", threadId: "atlas-work", title: workTitle } } as unknown as Message,
   {
     id: "run", role: "bot", kind: "routine.run", at: NOW - M, from: { botId: "atlas" }, attention: runCard,
-    routineRun: { runId: "run-1", routineId: "r1", routineName: "Hourly new tickets", status: "completed", scheduledFor: NOW - M,
-      summary: "Board 1: two tickets need you (below). Board 24 had no New ticket. No ConnectWise writes; the run is closed." },
+    routineRun: { runId: "run-1", routineId: "r1", routineName, status: "completed", scheduledFor: NOW - M,
+      summary: fr
+        ? "Tableau 1 : deux billets ont besoin de toi (ci-dessous). Le tableau 24 n'avait aucun nouveau billet. Aucune écriture ConnectWise ; l'exécution est terminée."
+        : "Board 1: two tickets need you (below). Board 24 had no New ticket. No ConnectWise writes; the run is closed." },
   } as unknown as Message,
 ];
 

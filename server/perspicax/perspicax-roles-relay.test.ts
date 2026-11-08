@@ -52,6 +52,10 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     if (name === "cw_psa_find_project_tickets" && options.projectReadableBy !== undefined && role !== options.projectReadableBy) {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
     }
+    // #2988: the generic query refused on project tickets only
+    if (name === "cw_psa_query" && String(args.resource ?? "").startsWith("project") && options.projectReadableBy !== undefined && role !== options.projectReadableBy) {
+      return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
+    }
     if (name === "cw_psa_find_time_entries" && options.meRefused === "result") {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
     }
@@ -316,6 +320,24 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_project_tickets"]);
     // the hours still read under the person's own access
     expect(f.text(await f.relay("cw_psa_find_time_entries", { conditions: "member/id=168" }))).toContain('"ok":true');
+  });
+
+  // #2988: the offer is for one read path; the same generic tool on another
+  // path (the bot skipped the refused detail) is a plain read, not the card
+  it("never turns a read of another path with the same generic tool into the offered card", async () => {
+    const f = fixture({ projectReadableBy: "full-access", explicitFull: true, roleSwitch: "allow" });
+    await f.prepare();
+    await f.init();
+    const titles = await f.relay("cw_psa_query", { resource: "project.tickets" });
+    expect(f.text(titles)).toContain("REFUSED: this read was refused (403)");
+    const companies = await f.relay("cw_psa_query", { resource: "company.companies" });
+    expect(f.switchAsked).toEqual([]);
+    expect(f.text(companies)).toContain('"as":"me"');
+    expect(f.calls.filter((call) => call.name === "cw_psa_query").map((call) => call.acting)).toEqual(["", ""]);
+    // the refused read itself, sent again, still gets its one card
+    const again = await f.relay("cw_psa_query", { resource: "project.tickets" });
+    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_query"]);
+    expect(f.text(again)).toContain("with the person's approval");
   });
 
   it("blocks with the permission when no other held role can be tried", async () => {

@@ -1391,7 +1391,9 @@ export class PerspicaxMcp {
     const read = perspicaxReplayable(frame, entry.readOnlyTools);
     // #2581: the offered read sent again: the person decides with a card
     const offered = entry.roleOffer;
-    if (read && offered && offered.tool === name && offered.from === before) {
+    // #2988: the same tool on another path (cw_psa_query on another resource,
+    // the refused detail skipped) is a plain read, never the offered card
+    if (read && offered && offered.tool === name && offered.from === before && cwPermissionFor(name, args, true).path === offered.path) {
       entry.roleOffer = undefined;
       return this.switchOnceWithCard(entry, frame, id, name, offered);
     }

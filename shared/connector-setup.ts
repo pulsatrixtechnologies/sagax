@@ -119,7 +119,7 @@ export function chooseConnectorSetupRoute(input: {
   };
   const route = (provider: ConnectorSetupProvider): ConnectorSetupRoute =>
     ({ route: provider, url: provider === "grok" ? GROK_CONNECTORS_URL : CLAUDE_AI_CONNECTORS_URL });
-  if (input.prefer && own[input.prefer]) return route(input.prefer);
+  if (input.prefer && input.prefer !== "mac" && own[input.prefer]) return route(input.prefer);
   // the bot's own engine first, when it runs on the person's own account
   if (input.account === "own" && (input.engine === "grok" || input.engine === "claude") && own[input.engine]) return route(input.engine);
   if (own.grok) return route("grok");

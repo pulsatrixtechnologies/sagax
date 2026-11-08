@@ -6,6 +6,7 @@ import { DATA_DIR } from "../config.ts";
 import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir } from "../turn-settings.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
 import { roomSubagentModel } from "./group-member-turn-room-model.ts";
+import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 
 export function createGuardRoomMemberDispatch(host: GroupMemberTurnHost) {
   const {
@@ -321,7 +322,7 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
     guardTurnDispatch(withDesktopModelPerson(roomDeskPerson, () => runAsBotEngine(readyBot.id, () => Promise.resolve().then(() => {
       const selectedModel = instance.instanceId === roomTurnSelection(readyBot).instanceId ? roomTurnSelection(readyBot).model : instance.models.default;
       if (IDENTITY.kind === "perspicax") desktopLocalModels.assertAvailable(roomDeskPerson, selectedModel, instance.driverKind);
-      return IDENTITY.kind === "perspicax" ? orgTurnAccess(threadId, readyBot, instance, roomSpeaker, selectedModel).then(sendRoomTurn) : sendRoomTurn(undefined);
+      return IDENTITY.kind === "perspicax" ? orgTurnAccess(threadId, readyBot, instance, roomSpeaker, selectedModel).then(sendRoomTurn) : sendRoomTurn(soloPiTurnAccess(instance));
     }))), () => abandoned || Boolean(isCancelled?.()), async () => {
         // Stop may have landed while the adapter was authenticating, before
         // it had an active process for the first interrupt to reach. Now that

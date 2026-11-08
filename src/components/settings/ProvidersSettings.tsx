@@ -57,6 +57,7 @@ import { WebSearchSettings } from "./WebSearchSettings";
 import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, PRIMARY_PILL, SettingsFoldSection, SettingsGroup, SettingsIconTile, Switch, requestSettingsCard } from "../SettingsPrimitives";
 import { ExternalLinkPill, SettingsEmpty, StatusText } from "./SettingsPatterns";
 import { LocalModelsSettings } from "./LocalModelsSettings";
+import { PiModelServers } from "./PiModelServers";
 import { LinkedGrokBotSettings } from "./LinkedGrokBotSettings";
 
 const PAYER_KEY = { me: "providers.payer.me", org: "providers.payer.org", computer: "providers.payer.computer" } as const satisfies Record<ProviderRow["payer"], LocaleKey>;
@@ -572,6 +573,8 @@ export function ProvidersSettings() {
             )}
         </SettingsGroup>
       </div>
+      {/* #2983: the person's own model servers for pi (shown only with the pi engine) */}
+      <PiModelServers />
       {/* Other services (from Models, 2026-11-05): web search (the person's own key) and image generation */}
       <div data-settings-card="providers.services">
         <SettingsGroup title={t("providers.services.title")} groupId="providers-services">

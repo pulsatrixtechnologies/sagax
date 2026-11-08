@@ -26,7 +26,8 @@ async function instancesForViewer(person: string | null) {
       const account = host.personalProviderInstances.get(instance.instanceId);
       return account ? { ...instance, access: "api" as const, providerAccount: { provider: account.provider, serverId: account.serverId } } : instance;
     });
-  if (host.IDENTITY.kind !== "perspicax") return instances;
+  // #2983: solo, pi lists the server's own model servers
+  if (host.IDENTITY.kind !== "perspicax") return host.overlayModelServers(instances, await host.piModelServersForViewer(null).catch(() => []));
   // #2024: pi lists the viewer's Perspicax model servers with their thinking levels
   const served = host.overlayModelServers(host.orgOfferedEngines(instances, person), await host.piModelServersForViewer(person).catch(() => []));
   return host.desktopLocalModels.overlay(served, person);

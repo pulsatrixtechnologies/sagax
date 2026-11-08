@@ -9,6 +9,7 @@ import { deferConnectorsPatch } from "./defer-connectors-patch.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 import { warmCachePrime } from "./warm-cache-prime.ts";
+import { soloPiTurnAccess } from "../pi-own-model-servers-access.ts";
 
 export function createDispatchStartTurn(host: StartTurnHost) {
   const {
@@ -81,8 +82,9 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       noteBotRead(state.bot.id, state.threadId, carriedIds.some((id) => textIds.has(id)) ? carriedIds : state.contextOrder.filter((id: any) => textIds.has(id)));
     }
     // Slice 4: this turn's credentials (an owner key is read now).
-    // (solo mode takes no extra await: its dispatch timing is unchanged)
-    const turnAccess = IDENTITY.kind === "perspicax" ? await orgTurnAccess(state.threadId, state.bot, state.instance, state.speaker, state.routineModel ?? state.bot.modelSelection.model) : undefined;
+    // (solo mode takes no extra await: its dispatch timing is unchanged; a
+    // solo pi turn carries the person's own model servers, #2983)
+    const turnAccess = IDENTITY.kind === "perspicax" ? await orgTurnAccess(state.threadId, state.bot, state.instance, state.speaker, state.routineModel ?? state.bot.modelSelection.model) : soloPiTurnAccess(state.instance);
     if (!state.warmOnly) turnTrace(state.threadId, "access");
     // An engine slash command typed by a person (or set in a routine)
     // reaches the engine verbatim (server/harness-commands.ts); a peer hop

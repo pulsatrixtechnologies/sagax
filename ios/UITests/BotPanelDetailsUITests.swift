@@ -329,8 +329,13 @@ final class BotPanelDetailsUITests: XCTestCase {
         try api("PATCH", "/api/bots/\(id)", ["voiceNotes": true])
         defer { _ = try? api("PATCH", "/api/bots/\(id)", ["voiceNotes": true]) }
         let app = launchProfile()
-        // the gear opens the profile with Settings unfolded (#2157): Usage
+        // the gear opens the profile (#2157): Usage under Advanced
         openSettings(in: app)
+        // Usage sits in Advanced, closed by default
+        let advanced = element("bot-profile-settings-toggle", in: app)
+        for _ in 0..<10 where !(advanced.exists && advanced.isHittable) { app.swipeUp() }
+        XCTAssertTrue(advanced.waitForExistence(timeout: 10))
+        advanced.tap()
         let usage = element("bot-profile-settings.usage", in: app)
         for _ in 0..<10 where !(usage.exists && usage.isHittable) { app.swipeUp() }
         XCTAssertTrue(usage.waitForExistence(timeout: 10))

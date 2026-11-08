@@ -25,7 +25,7 @@ describe("todayRows (#2689)", () => {
   it("lists an open attention card with its age and keeps it out of bulk answers", () => {
     const rows = todayRows(deps({ conv: [{ id: "m1", at: 100, role: "bot", attention: card() }] }));
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ kind: "attention", requestId: "attention:m1", at: 100, bulk: "question", decidable: true, scope: "mine" });
+    expect(rows[0]).toMatchObject({ kind: "attention", requestId: "attention:m1", messageId: "m1", at: 100, bulk: "question", decidable: true, scope: "mine" });
   });
 
   it("drops a card the person replied after, or marked handled", () => {

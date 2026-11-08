@@ -278,4 +278,31 @@ describe("ApprovalsPage", () => {
     await render();
     expect(rows()[0]?.textContent ?? host.textContent).toContain("Routine : Morning sweep");
   });
+
+  // #2936: unified chat, never a thread: the header opens the bot's chat on the card
+  it("opens the bot's chat on the card itself, never a thread", async () => {
+    await render();
+    const open = host.querySelector("[data-approval-open-chat]");
+    expect(open?.textContent).toContain("Open Pixel's chat");
+    expect(host.textContent).not.toMatch(/open (the )?(conversation|thread)/i);
+    await click(open);
+    expect(fixture.dispatch).toContainEqual(expect.objectContaining({ type: "focusMessage", threadId: "t-c", messageId: "m-c" }));
+    setLocale("fr");
+    await render();
+    expect(host.querySelector("[data-approval-open-chat]")?.textContent).toContain("Ouvrir le chat de Pixel");
+  });
+
+  // #2936: a row's preview is prose in the text font; mono only for a real command
+  it("draws previews in the text font, a command excerpt in mono", async () => {
+    const run = permission("x", "b1", "Nova", 1, "pnpm build");
+    (run.message as { card: Record<string, unknown> }).card.commandAllowlist = { command: "pnpm build", cwd: "~/app", providerInstanceId: "claude" };
+    fixture.payload = { ...fixture.payload, pending: [question("q"), run] };
+    await render();
+    const preview = (key: string) => host.querySelector(`[data-key='${key}'] [data-approval-preview]`);
+    expect(preview("t-q:req-q")?.getAttribute("data-approval-preview")).toBe("text");
+    expect(preview("t-q:req-q")?.className).not.toContain("font-mono");
+    expect(preview("t-q:req-q")?.textContent).toBe("Staging · Production");
+    expect(preview("t-x:req-x")?.getAttribute("data-approval-preview")).toBe("code");
+    expect(preview("t-x:req-x")?.className).toContain("font-mono");
+  });
 });

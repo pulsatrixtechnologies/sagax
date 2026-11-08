@@ -12260,7 +12260,6 @@
       "approvals.waitingAdmin": "7378a3708ed740f9486032ae75fa31d920066760c3d9bc4b8cac3aae877b5d6e",
       "approvals.waitingOn": "05373817926504e92d8f2adbcdd9e20dc4dee1b975c6617d5e3834f0f85bd937",
       "approvals.ownedBy": "7cbb7f7c83729d22c19e8779cbae9f69d401964947e11f820295f18f92f2c208",
-      "approvals.openThread": "938751c5ba29e5a4157b1996ffe4a95e6dffdff4e4c7e7a31a430cd1c83b009b",
       "approvals.runsOn": "c5101b976550575aeb05eb822761607a38a910d0cdb69f6b096b60e3eb78e991",
       "approvals.destination.computer": "dced8f39fb9ddf78dbdcbb7e3ffe2a9a3bcad1bdf6f90d965b0532a782e10f80",
       "approvals.destination.vm": "1be219876550f0076cde9a5f8e05588d7c3a2f0e3e1c39f364af7099449098ce",
@@ -15013,7 +15012,6 @@
       "approvals.journal.ranFailed": "7fe56d446118406bd3a5ec0e6f832be50e408c8ea57a7f5b97b112848a6185d9",
       "approvals.journal.reason": "ae08e67fc5e93752cda6ba0b53ae40a6097e3136dc5bb48a4c330eaa13df28fb",
       "approvals.journal.matchedRule": "ccb8c97bd4d780a86905e38b5a6be1bdf33b75fb26e806197092a5f931fe5706",
-      "approvals.journal.openThread": "938751c5ba29e5a4157b1996ffe4a95e6dffdff4e4c7e7a31a430cd1c83b009b",
       "approvals.journal.window": "6e795d4d3cc21c5ca8349ab5e917482197aa612d1a218f9e9411467db73242bb",
       "approvals.journal.days": "901bac8a657292dd38ae3392c90dc4f2296a58349da2ea7d4c6be30f0f2681ce",
       "approvals.journal.search": "0eab133d52adf3c73f6ed5b9dc3a3003b8d576276a305b72f786a4f88083c622",
@@ -18240,7 +18238,10 @@
       "chat.relayVia.ask": "342cf31141114a45af1b4859fa335f1d181293ca1998cfcac37ec5faff7d93d7",
       "chat.relayVia.trace.failed": "04c1c4b2216fbe494080338a605668592ba8d5e79a3c866be5092ae8601c5f29",
       "chat.relayVia.trace.stopped": "2e3feaa7d0e9c2ecad6a02056826e5f2bca7849125ff6059212962254f6ca2be",
-      "chat.relayVia.trace.silent": "5ee5a40f9c7cda5a65b8f2238d8bec461c10cc5e49488d91ace7d88e70223cf4"
+      "chat.relayVia.trace.silent": "5ee5a40f9c7cda5a65b8f2238d8bec461c10cc5e49488d91ace7d88e70223cf4",
+      "approvals.openThread": "938751c5ba29e5a4157b1996ffe4a95e6dffdff4e4c7e7a31a430cd1c83b009b",
+      "approvals.openChat": "16a8c2b6a394b33fbd89b8de638c86f8ca17cb23f83cf9fc20fdd17305825511",
+      "approvals.journal.openChat": "16a8c2b6a394b33fbd89b8de638c86f8ca17cb23f83cf9fc20fdd17305825511"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

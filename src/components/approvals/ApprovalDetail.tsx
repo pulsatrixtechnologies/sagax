@@ -107,9 +107,10 @@ export function ApprovalDetail({
         <button
           type="button"
           onClick={onOpenThread}
+          data-approval-open-chat=""
           className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] text-ink-secondary hover:bg-control hover:text-ink"
         >
-          {t("approvals.openThread")}
+          {t("approvals.openChat", { bot: entry.botName })}
           <ArrowUpRight size={13} aria-hidden="true" />
         </button>
       </header>
@@ -168,7 +169,7 @@ export function ApprovalDetail({
         ) : (
           <div className="px-5 py-6">
             <p className="text-[13.5px] text-ink-secondary">{t("approvals.answerInThread")}</p>
-            <button type="button" onClick={onOpenThread} className="ui-button ui-button-primary mt-3">{t("approvals.openThread")}</button>
+            <button type="button" onClick={onOpenThread} className="ui-button ui-button-primary mt-3">{t("approvals.openChat", { bot: entry.botName })}</button>
           </div>
         )}
       </div>

@@ -68,6 +68,10 @@ export interface InboxApproval {
   alwaysKind?: string;
   confidential?: boolean;
   destination?: InboxDestination;
+  /** #2936: the chat message holding the card, so "Open {bot}'s chat"
+   * lands on it (the same as a notification's cardId), even on a row the
+   * viewer cannot decide (no `message` then). */
+  messageId?: string;
   /** The card's message, exactly as the conversation shows it to the
    * viewer, so the screen draws it with the conversation's own
    * components. Only on cards the viewer may decide. */

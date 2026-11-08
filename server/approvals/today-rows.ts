@@ -72,6 +72,7 @@ export function todayRows(deps: TodayDeps): InboxApproval[] {
           key: inboxKey(task.threadId, `${ATTENTION_PREFIX}${message.id}`),
           threadId: task.threadId,
           requestId: `${ATTENTION_PREFIX}${message.id}`,
+          messageId: message.id,
           botId: bot.id,
           botName: bot.name,
           ...(card.threadTitle ? { threadTitle: card.threadTitle.slice(0, 200) } : task.title ? { threadTitle: task.title.slice(0, 200) } : {}),
@@ -98,6 +99,7 @@ export function todayRows(deps: TodayDeps): InboxApproval[] {
       key: inboxKey(proposal.threadId, `${PROACTIVE_PREFIX}${proposal.id}`),
       threadId: proposal.threadId,
       requestId: `${PROACTIVE_PREFIX}${proposal.id}`,
+      messageId: message.id,
       botId: bot.id,
       botName: bot.name,
       // the bot's own conversation carries its name: "Echo · Echo" says nothing

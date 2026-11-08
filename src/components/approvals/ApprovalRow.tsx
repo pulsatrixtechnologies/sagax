@@ -139,11 +139,15 @@ export const ApprovalRow = memo(function ApprovalRow({
           <span className="min-w-0 truncate text-[13.5px] leading-5 text-ink">{title}</span>
           <KindPill entry={entry} />
         </div>
-        {(preview || !entry.decidable) && (
-          <div className="mt-0.5 truncate font-mono text-[11.5px] leading-4 text-ink-secondary">
+        {/* #2936: the text font; mono only for a real command excerpt */}
+        {(preview.text || !entry.decidable) && (
+          <div
+            data-approval-preview={!entry.decidable ? "waiting" : preview.code ? "code" : "text"}
+            className={cn("mt-0.5 truncate text-[12px] leading-4 text-ink-secondary", entry.decidable && preview.code && "font-mono text-[11.5px]")}
+          >
             {!entry.decidable
-              ? <span className="font-sans">{entry.waitingOn === "admin" ? t("approvals.waitingAdmin") : t("approvals.waitingOn", { name: entry.waitingOnName ?? entry.ownerName ?? t("approval.someone") })}</span>
-              : preview}
+              ? entry.waitingOn === "admin" ? t("approvals.waitingAdmin") : t("approvals.waitingOn", { name: entry.waitingOnName ?? entry.ownerName ?? t("approval.someone") })
+              : preview.text}
           </div>
         )}
       </div>

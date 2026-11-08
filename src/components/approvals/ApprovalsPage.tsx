@@ -22,7 +22,7 @@ import {
 } from "../../../shared/approvals-inbox";
 import { WindowDragStrip } from "../DesktopCapabilities";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { bulkAnswer, inboxTitle, useInbox } from "@/lib/approvals-inbox";
+import { bulkAnswer, inboxChatTarget, inboxTitle, useInbox } from "@/lib/approvals-inbox";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableErrorMessage } from "@/lib/readable-error";
@@ -302,7 +302,8 @@ export function ApprovalsPage() {
   // the task; a bot's topic opens where the single stream shows it
   const showThreads = useShowThreads();
   const openThread = useCallback((entry: InboxApproval) => {
-    openNotificationTarget(dispatch, { botId: entry.botId, threadId: entry.threadId }, state, showThreads);
+    // #2936: the bot's chat, on the card itself (never a thread beside it)
+    openNotificationTarget(dispatch, inboxChatTarget(entry), state, showThreads);
   }, [dispatch, state, showThreads]);
   const openJournalThread = useCallback((entry: JournalEntry) => {
     openNotificationTarget(dispatch, { botId: entry.botId, threadId: entry.threadId }, state, showThreads);

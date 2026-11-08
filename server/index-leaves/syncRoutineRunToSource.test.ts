@@ -6,14 +6,16 @@ type Row = { id: string; kind: string; routineRun?: { runId: string; wakeTopic?:
 
 /** #2694 review: the attention a finished routine puts on its own card reads
  * the person's feedback (thumbs-down, "less", "never") like a relayed card. */
-function world(level: "normal" | "quiet" | "muted", run: Record<string, unknown> = {}) {
+function world(level: "normal" | "quiet" | "muted", run: Record<string, unknown> = {}, guest = false) {
   const rows: Row[] = [];
   const asked: string[] = [];
   const unread: string[] = [];
   const rang: string[] = [];
-  const bot = { id: "bot-atlas", name: "Atlas" };
+  const promoted: string[] = [];
+  // A Cloud guest's run: no source conversation, a hidden bot, its own task.
+  const bot = { id: "bot-atlas", name: "Atlas", ...(guest ? { hidden: true } : {}) };
   const host = {
-    routineSourceOwner: () => ({ bot, group: undefined, threadId: "main" }),
+    routineSourceOwner: () => guest ? null : ({ bot, group: undefined, threadId: "main" }),
     personAttention: (text: string) => text.includes("[HUMAIN]") ? { kind: "action", items: [{ text: "decide" }] } : undefined,
     routineFullReport: (r: { output: string }) => r.output,
     routineRunReportable: (r: { attention: boolean; postResults: boolean }) => r.attention || r.postResults,
@@ -21,9 +23,12 @@ function world(level: "normal" | "quiet" | "muted", run: Record<string, unknown>
     routineEffectivePostResults: () => false,
     backgroundBriefs: { wakeLevel: (_botId: string, topic: string) => { asked.push(topic); return level; } },
     store: {
-      taskByThread: () => null,
+      taskByThread: (_botId: string, threadId: string) => guest && threadId === "run" ? { threadId: "run", routineRunId: "run-1" } : null,
       messagesFor: () => rows,
-      patchTask: (_botId: string, threadId: string, patch: { unread?: boolean }) => { if (patch.unread) unread.push(threadId); },
+      patchTask: (_botId: string, threadId: string, patch: { unread?: boolean; routineRunId?: string }) => {
+        if (patch.unread) unread.push(threadId);
+        if ("routineRunId" in patch && patch.routineRunId === undefined) promoted.push(threadId);
+      },
       patchGroup: () => {},
       bot: () => bot,
       patchMessage: (_t: string, id: string, patch: Partial<Row>) => { const at = rows.findIndex((row) => row.id === id); rows[at] = { ...rows[at]!, ...patch }; },
@@ -38,7 +43,7 @@ function world(level: "normal" | "quiet" | "muted", run: Record<string, unknown>
   };
   const sync = createSyncRoutineRunToSource(() => host);
   const theRun = { id: "run-1", botId: bot.id, routineName: "Hourly pass", status: "completed", target: "bot", threadId: "run", output: "- [HUMAIN] **100201** : decide.", ...run };
-  return { rows, asked, unread, rang, sync: () => sync(theRun) };
+  return { rows, asked, unread, rang, promoted, sync: () => sync(theRun) };
 }
 
 describe("syncRoutineRunToSource and the person's feedback (#2694)", () => {
@@ -72,5 +77,27 @@ describe("syncRoutineRunToSource and the person's feedback (#2694)", () => {
     w.sync();
     expect(w.asked).toEqual(["mail"]);
     expect(w.rang).toEqual([]);
+  });
+
+  it("a Cloud guest's run (no source conversation): its task surfaces unread", () => {
+    const w = world("normal", {}, true);
+    w.sync();
+    expect(w.promoted).toEqual(["run"]);
+    expect(w.unread).toEqual(["run"]);
+    expect(w.rows).toEqual([]);
+  });
+
+  it("a Cloud guest's run after thumbs-down or less: its task surfaces, never unread", () => {
+    const w = world("quiet", {}, true);
+    w.sync();
+    expect(w.promoted).toEqual(["run"]);
+    expect(w.unread).toEqual([]);
+  });
+
+  it("a Cloud guest's run muted with nothing else: its task stays in Automations", () => {
+    const w = world("muted", {}, true);
+    w.sync();
+    expect(w.promoted).toEqual([]);
+    expect(w.unread).toEqual([]);
   });
 });

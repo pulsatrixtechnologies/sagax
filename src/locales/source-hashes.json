@@ -18221,7 +18221,15 @@
       "botPanel.grokAccountConnectors": "4199f5c9a3e498ced3556bea8a9c4828aafb15803a16ac242d64b7f91a2359c8",
       "botPanel.grokAccountConnectors.help": "d3c82dc7424f6136972fd78a01a1fd6a75ae7b2b66b51ac3b725e9a0e8738ae8",
       "botPanel.grokAccountConnectors.on": "45583d4cb1c65f35e4640cd4f2661b677bc53cff20f38758f15c8930cd9397c4",
-      "triggers.event.issue_labeled": "c48acae32402b0a19d4a38160c8336c8450ea154e6b9b21121cb125d41657f3d"
+      "triggers.event.issue_labeled": "c48acae32402b0a19d4a38160c8336c8450ea154e6b9b21121cb125d41657f3d",
+      "chat.restart.cut": "41614ba37975b679a9e646609517e4155da04a3b9b9235df52feb851f20fdb81",
+      "chat.restart.resumeFailed": "95002dfd397f98f0c558344d1610b644a752a863f635c97db34279cf1a1fe99c",
+      "chat.restart.notResumed": "bd0f87071ac55ecf7eb461fbff3fce5ad3009f15638499001e1677699a1547bb",
+      "chat.restart.notResumedNewer": "305cf2cf940a1b2119d42ed94c5fa56af2c90d3ee99935068b34711169fa37bd",
+      "chat.restart.turnNote": "c0330a1c09399987407f258223d3c7676c88dc4d5180800c8fdd58d1f66a282c",
+      "chat.restart.runNote": "ce603b4ebdab19935204d56c25977fb3535f06249e838cda346b00d2050b50d0",
+      "chat.parallel.notStarted": "aa214fe1232842e7f1b0dc667b9f40f49d444318d5aeb1b291ebb1511c8571a3",
+      "chat.answer.notDelivered": "0b0588d8dfea7d147b0059f62a3a255e5e46f0d319dcb1f850db3dd6db18babc"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -29,7 +29,11 @@ function settleParallelTask(threadId: string, outcome: { ok: boolean; reply: str
   host.store.appendMessage(link.threadId, {
     role: "bot",
     kind: "text",
-    text: host.redactSecretsInText(parallelResultText({ state, reply: outcome.reply, why: outcome.why })),
+    text: host.redactSecretsInText(parallelResultText({
+      state, reply: outcome.reply, why: outcome.why,
+      // #2888: the person it answers reads it in their language, not English
+      language: host.languageOfPerson(task.ownerPrincipalId ?? host.effectiveBotOwner(bot) ?? undefined)
+    })),
     ...(request?.kind === "text" ? { replyToId: request.id } : {}),
     parallelTask: ref
   });

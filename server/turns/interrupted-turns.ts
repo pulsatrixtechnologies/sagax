@@ -24,8 +24,7 @@ export interface InterruptedTurn {
 
 /** How long after a start a turn the runtime promised to resume may stay silent. */
 export const RUNTIME_RESUME_GRACE_MS = 2 * 60_000;
-export const TURN_NOT_RESUMED = "turn interrupted — Sagax restarted and this turn did not resume; send your request again";
-export const TURN_NOT_RESUMED_NEWER = "turn interrupted — Sagax restarted; a newer request took this conversation, so the cut turn was not resumed. Send it again if it is still needed";
+export { TURN_NOT_RESUMED, TURN_NOT_RESUMED_NEWER } from "../../shared/restart-words.ts";
 
 /** #2602: whether a turn cut at `cutAt` came back: a bot answer (not an
  * activity line) after the cut and before the person's next message. */

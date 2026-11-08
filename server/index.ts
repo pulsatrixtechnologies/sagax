@@ -195,6 +195,7 @@ import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./com
 import { instructionsLead } from "../shared/instructions-lead.ts";
 import { type BotVisibility, type ResolvedSender, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
 import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
+import { TURN_CUT_BY_RESTART } from "../shared/restart-words.ts";
 import { closeRowsLeftByRestart, endedToolOutput } from "./threads/subagent-cleanup.ts";
 import { reapOrphanEngineGroups } from "./engines/engine-groups.ts";
 import { BOT_ACTIVITY_WINDOW_MS as SUBAGENT_SWEEP_WINDOW_MS } from "../shared/bot-activity.ts";
@@ -14026,7 +14027,7 @@ const coordinator: Coordinator = createCoordinator({
     outward: node => {
       const followup = node.parentId || node.groupId ? undefined : followupAtBoot(node.threadId);
       if (followup) {
-        followupEndedRoots.set(node.id, followup === "pending" ? "turn interrupted — Sagax restarted" : undefined);
+        followupEndedRoots.set(node.id, followup === "pending" ? TURN_CUT_BY_RESTART : undefined);
         return [followup === "pending" ? "queued follow-up waiting" : "queued follow-up dispatched"];
       }
       return outwardActions(turnRows(node));

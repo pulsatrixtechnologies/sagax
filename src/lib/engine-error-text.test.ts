@@ -8,6 +8,7 @@ import {
   NO_ENGINE_PERSON,
 } from "../../shared/bot-engine-error";
 import { MODEL_ACCESS_DISABLED_MESSAGE } from "../../shared/model-access-disabled";
+import { PARALLEL_NOT_STARTED, TURN_CUT_BY_RESTART, TURN_RESUME_FAILED_PREFIX } from "../../shared/restart-words";
 import { engineErrorMessage, localizedEngineCause } from "./engine-error-text";
 
 afterEach(() => setLocale("en"));
@@ -49,5 +50,18 @@ describe("#1450 a model turned off on the paying account, in the app's language"
     setLocale("fr");
     expect(localizedEngineCause(MODEL_ACCESS_DISABLED_MESSAGE)).toContain("Choisissez un autre modèle");
     expect(localizedEngineCause("Internal error: Upstream request failed: Model access is disabled")).toBeNull();
+  });
+});
+
+describe("the lines a restart leaves, in the app's language", () => {
+  it("says them in French", () => {
+    setLocale("fr");
+    expect(localizedEngineCause(TURN_CUT_BY_RESTART)).toBe("Tour interrompu : Sagax a redémarré");
+    expect(localizedEngineCause(`${TURN_RESUME_FAILED_PREFIX}boom`)).toContain("boom");
+    expect(localizedEngineCause(PARALLEL_NOT_STARTED)).not.toBe(PARALLEL_NOT_STARTED);
+  });
+  it("keeps the English words equal to the server's", () => {
+    setLocale("en");
+    expect(localizedEngineCause(TURN_CUT_BY_RESTART)).toBe(en["chat.restart.cut"]);
   });
 });

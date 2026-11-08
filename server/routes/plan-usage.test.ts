@@ -107,3 +107,35 @@ describe("GET /api/plan-usage", () => {
     expect((await h.call("/api/usage", admin)).out).toBe(PASS);
   });
 });
+
+describe("GET /api/plan-usage/history (#2757)", () => {
+  const history = { updatedAt: "2026-11-01T00:00:00.000Z", accounts: [], periods: [] };
+  it("records each report as a snapshot and reads the server's history for an admin", async () => {
+    const record = vi.fn();
+    const read = vi.fn(() => history);
+    const h = harness({ planHistory: { record, read } });
+    await h.call("/api/plan-usage", admin);
+    expect(record).toHaveBeenCalledWith(emptyReport, "server");
+    const { sent } = await h.call("/api/plan-usage/history", admin, "?days=30");
+    expect(sent).toEqual({ status: 200, body: history });
+    expect(read).toHaveBeenCalledWith("server", 30);
+  });
+
+  it("refuses a non-admin on a solo server", async () => {
+    const h = harness({ planHistory: { record: vi.fn(), read: vi.fn(() => history) } });
+    const { sent } = await h.call("/api/plan-usage/history", member);
+    expect(sent).toEqual({ status: 403, body: { error: "admin only" } });
+  });
+
+  it("reads only the asking person's history on an organization server", async () => {
+    const read = vi.fn(() => history);
+    const h = harness({
+      isOrganization: () => true,
+      engineLogins: () => ({ loginDir: () => "/tmp/login", signedIn: () => false }),
+      planHistory: { record: vi.fn(), read },
+    });
+    const { sent } = await h.call("/api/plan-usage/history", member);
+    expect(sent?.status).toBe(200);
+    expect(read).toHaveBeenCalledWith(ADA, 90);
+  });
+});

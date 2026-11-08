@@ -14342,5 +14342,22 @@
   "step.hostVm.rebuild": "Reconstruction de l'ordinateur isolé",
   "step.hostVm.delete": "Suppression de l'ordinateur isolé",
   "step.hostVm.status": "Vérification de l'ordinateur isolé",
-  "step.hostVm.mode": "Choix de l'usage de l'ordinateur"
+  "step.hostVm.mode": "Choix de l'usage de l'ordinateur",
+  "planHistory.title": "Historique d'utilisation du forfait",
+  "planHistory.summary": "Part de chaque limite du forfait utilisée, période par période",
+  "planHistory.byWeek": "Limite hebdomadaire, la plus récente d'abord. Ouvrez une semaine pour ses sessions de 5 heures.",
+  "planHistory.byDay": "Sessions de 5 heures par jour, la plus récente d'abord.",
+  "planHistory.account": "Compte",
+  "planHistory.range": "{from} au {to}",
+  "planHistory.session": "{from} à {to}",
+  "planHistory.ofLimit": "de la limite utilisée",
+  "planHistory.percent": "{value} %",
+  "planHistory.current": "En cours",
+  "planHistory.sessions": "{count} sessions de 5 heures",
+  "planHistory.noSessions": "Aucune session de 5 heures enregistrée cette semaine.",
+  "planHistory.more": "Afficher {count} de plus",
+  "planHistory.rowTitle": "Pic de {peak} de la limite · {sessions} sessions de 5 heures",
+  "planHistory.sessionTitle": "Pic de {peak} de la limite · {samples} relevés",
+  "planHistory.empty": "Aucun historique pour l'instant. Sagax garde désormais chaque relevé des fenêtres de votre forfait, et les périodes passées s'affichent ici.",
+  "planHistory.failed": "L'historique d'utilisation du forfait n'a pas pu être lu."
 }

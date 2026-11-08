@@ -1401,6 +1401,7 @@ import { createComputersRoutes } from "./routes/computers.ts";
 import { createBotsContentRoutes } from "./routes/bots-content.ts";
 import { createBrowserEngineRoutes } from "./routes/browser-engine.ts";
 import { createPlanUsageRoutes } from "./routes/plan-usage.ts";
+import { createPlanHistoryStore } from "./usage/plan-history.ts";
 import { createKeysTestRoutes } from "./routes/keys-test.ts";
 import { createDecisionsRoutes } from "./routes/decisions.ts";
 import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
@@ -31448,7 +31449,8 @@ ROUTES.push(createPlanUsageRoutes({
   perspicaxDirectory: () => perspicaxDirectory,
   identityIssuer: () => (IDENTITY.kind === "perspicax" ? IDENTITY.issuer : ""),
   localPrincipalId,
-  announcePlanThresholds
+  announcePlanThresholds,
+  planHistory: createPlanHistoryStore(DATA_DIR, reportBackgroundError)
 }));
 ROUTES.push(createKeysTestRoutes({ cfg: () => cfg }));
 ROUTES.push(createDecisionsRoutes({ dataDir: DATA_DIR }));

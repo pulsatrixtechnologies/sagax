@@ -32,6 +32,7 @@ import {
   type PersonalUsageSummary,
 } from "@/lib/usage-personal";
 import { headlineMeter, PlanUsageView, usePlanUsage, type PlanMeter } from "./PlanUsage";
+import { PlanUsageHistoryView, usePlanHistory } from "./PlanUsageHistory";
 import { SettingsSubPageRow } from "./SettingsSubPage";
 import { ConfirmPill, DescribedRow, FIELD, FoldRow, PILL, PillSelect, PRIMARY_PILL, SettingsGroup } from "./SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
@@ -174,7 +175,10 @@ export function UsageSection() {
     );
     return () => { alive = false; };
   }, [cycle, usage]);
-  const plan = usePlanUsage(planUsageShown({ organization: org !== null, viewUsage: canViewUsage(state.config) }));
+  const planShown = planUsageShown({ organization: org !== null, viewUsage: canViewUsage(state.config) });
+  const plan = usePlanUsage(planShown);
+  // #2757: the history follows each reading of the windows above.
+  const planHistory = usePlanHistory(planShown, plan.report?.fetchedAt ? Date.parse(plan.report.fetchedAt) || 0 : 0);
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <UsageHeadline
@@ -194,6 +198,7 @@ export function UsageSection() {
         detail={detail?.cycle === cycle ? detail.data : null}
         planCount={plan.unavailable ? 0 : planRows(plan.report).length}
         plan={<PlanUsageView {...plan} bare />}
+        planHistory={planShown && !plan.unavailable ? <PlanUsageHistoryView history={planHistory.history} failed={planHistory.failed} now={plan.now} /> : null}
         onOpenTraces={() => dispatch({ type: "toggleAppSettings", open: true, section: "usage", subPage: "usage.traces" })}
       />
     </div>
@@ -366,7 +371,7 @@ export function SpendCapRow({ data, write = writeSpendCap, onChange, defaultEdit
 /** Detail: every row folds. The breakdown (cycle, this month's figure and
  * trend, the 30-day line, by bot, by model, by source), the plan's every
  * window, and the per-job traces on their own sub-page. */
-export function UsageDetail({ usage, cycle = "current", onCycle, detail = null, plan = null, planCount = 0, onOpenTraces }: {
+export function UsageDetail({ usage, cycle = "current", onCycle, detail = null, plan = null, planCount = 0, planHistory = null, onOpenTraces }: {
   usage: PersonalUsage | null;
   cycle?: UsageCycle;
   onCycle?: (next: UsageCycle) => void;
@@ -374,6 +379,8 @@ export function UsageDetail({ usage, cycle = "current", onCycle, detail = null, 
   detail?: CycleDetail | null;
   plan?: React.ReactNode;
   planCount?: number;
+  /** #2757: past plan windows, "% of limit used" per period. */
+  planHistory?: React.ReactNode;
   onOpenTraces?: () => void;
 }) {
   return (
@@ -383,6 +390,11 @@ export function UsageDetail({ usage, cycle = "current", onCycle, detail = null, 
         {plan && (
           <FoldRow cardId="usage.planDetail" label={t("usage.plan.title")} count={planCount || undefined}>
             {plan}
+          </FoldRow>
+        )}
+        {planHistory && (
+          <FoldRow cardId="usage.planHistory" label={t("planHistory.title")} description={t("planHistory.summary")}>
+            {planHistory}
           </FoldRow>
         )}
         {onOpenTraces && (

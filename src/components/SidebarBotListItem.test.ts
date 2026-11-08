@@ -235,6 +235,12 @@ describe("BotListItem", () => {
     expect(markup).toContain(">Team Maintainer<");
     expect(markup).toContain(`>${longTitle}<`);
     expect(markup).toMatch(/class="flex min-w-0 shrink items-center gap-1 text-\[14px\] font-medium leading-5 text-sidebar-ink"/);
+    // #2992: a pill wider than the name must give way first (down to 2em),
+    // or a short name like "Feedback" is crushed to "Fee...".
+    const pill = markup.match(/<span data-bot-role-tag="" class="([^"]*)"/)?.[1].split(/\s+/) ?? [];
+    expect(pill).toContain("shrink-[100000]");
+    expect(pill).toContain("min-w-[2em]");
+    expect(pill).not.toContain("shrink");
   });
 
   it("previews the last reply as plain text, without its markdown", () => {

@@ -238,7 +238,7 @@ const X_NOT_ENROLLED = /\bclient[-_]not[-_]enrolled\b/i;
 const HTTP_400 = /\bHTTP\s*(?:status\s*)?400\b|\b400\s+Bad\s+Request\b|\bstatus(?:\s+code)?[:\s]+400\b/i;
 /** The Messages tools (shared/imessage.ts MESSAGES_MCP_SERVER) and what they say without this Mac's permission. */
 const MESSAGES_TOOL = /(?:^|__|\b)(?:messages|imessage)__|^(?:mcp__)?(?:messages|imessage)\b/i;
-const MESSAGES_ACCESS_FAILURE = /\bneeds\s+Full\s+Disk\s+Access\b|\bFull\s+Disk\s+Access\b.*\b(?:denied|missing|required|needed)\b|\bnot\s+(?:authori[sz]ed|allowed)\s+to\s+send\s+Apple\s+events\b|\berror\s+-1743\b/i;
+const MESSAGES_ACCESS_FAILURE = /\bneeds\s+Full\s+Disk\s+Access\b|\bFull\s+Disk\s+Access\b.*\b(?:denied|missing|required|needed)\b|\bnot\s+(?:authori[sz]ed|allowed)\s+to\s+send\s+Apple\s+events\b|\berror\s+-1743\b|\bunable\s+to\s+open\s+database\s+file\b|\bauthori[sz]ation\s+denied\b|\boperation\s+not\s+permitted\b/i;
 /** A grok.com connector call goes through Grok's managed gateway. */
 const GATEWAY_FAILURE = /\bmanaged\s+mcp\s+gateway\b|\bmanaged_gateway:/i;
 

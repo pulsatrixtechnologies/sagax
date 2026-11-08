@@ -54,7 +54,10 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
     // for the person becomes a conversation of its own; a quiet one stays
     // in Automations.
     const own = run.threadId ? host.store.taskByThread(run.botId, run.threadId) : null;
-    if (reportable && own?.routineRunId === run.id) host.store.patchTask(run.botId, own.threadId, { routineRunId: undefined, unread: true });
+    // Thumbs-down or "less" (quiet): it still surfaces, never unread.
+    if (reportable && own?.routineRunId === run.id) {
+      host.store.patchTask(run.botId, own.threadId, { routineRunId: undefined, ...(reportableUnread ? { unread: true } : {}) });
+    }
     return null;
   }
   const source = target;

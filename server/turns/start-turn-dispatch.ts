@@ -8,6 +8,7 @@ import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir
 import { deferConnectorsPatch } from "./defer-connectors-patch.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
+import { warmCachePrime } from "./warm-cache-prime.ts";
 
 export function createDispatchStartTurn(host: StartTurnHost) {
   const {
@@ -166,7 +167,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       // on a live call the engine process stays warm from turn to turn.
       // A warm uses the same flag so the first spoken turn's contract matches.
       ...(state.onCall ? { keepWarm: true } : {}),
-      ...(state.warmOnly ? { warmOnly: true, ...(state.onCall ? { cachePrime: true } : {}), ...(state.opts?.warmSignal ? { warmSignal: state.opts.warmSignal } : {}) } : {}),
+      ...(state.warmOnly ? { warmOnly: true, ...warmCachePrime(Boolean(state.onCall), state.opts?.primeCache === true), ...(state.opts?.warmSignal ? { warmSignal: state.opts.warmSignal } : {}) } : {}),
       startupRecovery: !state.warmOnly &&
         (state.opts?.automaticRecoveryIndex ?? 0) < botRecoveryBackups(state.liveBot ?? state.bot, cfg).length,
       text: state.warmOnly ? "" : (engineCommand ? engineCommand.engineText : withRecalled(state.recalled, state.dispatchContext.turnText)),

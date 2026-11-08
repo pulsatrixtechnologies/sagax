@@ -62,6 +62,8 @@ type Job = {
   setup: Promise<void>;
   /** Who started this warm (cancel-others on thread switch, #1975). */
   person: string;
+  /** The provider cache was asked to fill for this warm (primeOnce). */
+  primed?: boolean;
 };
 
 export interface ThreadPrewarmOptions {
@@ -163,6 +165,15 @@ export class ThreadPrewarm {
       if (this.cancel(threadId)) n += 1;
     }
     return n;
+  }
+
+  /** The first ask on a live warm gets its signal, to prime the provider
+   * cache once on that warm (typing, QA 0.8.66); later asks get null. */
+  primeOnce(threadId: string): AbortSignal | null {
+    const job = this.jobs.get(threadId);
+    if (!job || job.primed || job.controller.signal.aborted) return null;
+    job.primed = true;
+    return job.controller.signal;
   }
 
   has(threadId: string): boolean {

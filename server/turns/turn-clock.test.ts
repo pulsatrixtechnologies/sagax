@@ -15,6 +15,8 @@ describe("turn clock", () => {
     expect(note.startsWith(TURN_CLOCK_MARKER)).toBe(true);
     expect(note).toContain("Sunday, October 11, 2026 at 9:40 PM, America/Toronto (UTC-04:00)");
     expect(note).toContain("convert UTC");
+    // QA 0.8.66: a time question ran three tools before answering.
+    expect(note).toContain("This clock is exact: answer the date, the time or a conversion between zones from it, without a tool.");
   });
 
   it("picks the speaker's zone, then the owner's, then the server's; none set means no note", () => {

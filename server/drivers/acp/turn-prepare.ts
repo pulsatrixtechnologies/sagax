@@ -376,6 +376,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
           // cancelled, or the call ended: the spoken turn pays the prefill
         });
         primed.cachePrime = prime;
+        primed.cachePrimeJoinMs = turn.cachePrimeJoinMs;
         signal?.addEventListener("abort", () => {
           if (!primed.cachePrimed && primed.sessionId) {
             primed.acp.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: primed.sessionId } });

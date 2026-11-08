@@ -32,6 +32,8 @@ const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g
 const LONG_HEX = /\b[0-9a-f]{16,}\b/gi;
 /** A word of 12+ letters and digits mixed: a record id, a session key. */
 const MIXED_ID = /\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{12,}\b/g;
+/** The date and hour of an ISO timestamp (2026-11-07T23): a log line's time, not an id. */
+const TIMESTAMP_HEAD = /^\d{4}-\d{2}-\d{2}T\d{2}$/;
 const MAC_HOME = /(\/Users\/)(?!Shared\/|\[user\])[^/\s]+/g;
 const LINUX_HOME = /(\/home\/)(?!\[user\])[^/\s]+/g;
 const WIN_HOME = /([A-Za-z]:\\Users\\)(?!Public\\|\[user\])[^\\\s]+/gi;
@@ -63,7 +65,7 @@ export function anonymize(text: string, names: AnonymizeNames): string {
     const lower = host.toLowerCase();
     return ALLOWED_HOSTS.has(lower) || [...ALLOWED_HOSTS].some((allowed) => lower.endsWith(`.${allowed}`)) ? host : "[domain]";
   });
-  out = out.replace(LONG_HEX, "[id]").replace(MIXED_ID, (match) => (match.startsWith("[") ? match : "[id]"));
+  out = out.replace(LONG_HEX, "[id]").replace(MIXED_ID, (match) => (match.startsWith("[") || TIMESTAMP_HEAD.test(match) ? match : "[id]"));
   out = nameReplacer(names.people, "[person]")(out);
   out = nameReplacer(names.orgs, "[org]")(out);
   out = nameReplacer(names.bots, "[bot]")(out);

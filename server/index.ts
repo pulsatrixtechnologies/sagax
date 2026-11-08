@@ -30473,7 +30473,7 @@ const feedbackService = createFeedbackService({
   serverLines: () => serverLog.read({ level: "warn", limit: 40 }).lines.reverse().map((line) => `${new Date(line.at).toISOString()} ${line.level} ${line.message}`),
   spans: () => readToolSpans(DATA_DIR, { from: new Date(Date.now() - 15 * 60_000), to: new Date() })
     .slice(-20).map((span) => ({ name: span.toolName ? `${span.name} ${span.toolName}` : span.name, ms: span.endMs - span.startMs, ok: span.ok })),
-  serverVersion: () => serverVersion(),
+  serverVersion: () => releaseVersion(),
 });
 try {
   feedbackService.ensureBot();

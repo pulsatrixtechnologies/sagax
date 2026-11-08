@@ -45,6 +45,8 @@ export interface FeedbackStore {
   patchBot(id: string, patch: { systemBot?: "feedback" }): BotLike | null;
   activePath(threadId: string): StoredMessage[];
   appendMessage(threadId: string, message: Omit<StoredMessage, "id" | "at">): StoredMessage;
+  /** Marks a card answered (the server store's patchMessage). */
+  patchMessage?(threadId: string, messageId: string, patch: { card: FlowCard }): unknown;
 }
 
 export interface FeedbackDeps {
@@ -109,7 +111,7 @@ const WORDS = {
     offerTitle: "On dirait que quelque chose ne marche pas.",
     offerSubtitle: (summary: string) => `Je peux envoyer un signalement à l'équipe avec ce message, la version et les journaux récents, anonymisés :\n\n« ${summary} »`,
     cancelled: "Annulé : rien n'a été envoyé.",
-    queuedNoToken: "Signalement prêt et gardé ici : l'envoi à l'équipe n'est pas encore configuré sur ce serveur. Je réessaie toutes les 5 minutes.",
+    queuedNoToken: "En file d'attente : signalement prêt et gardé ici : l'envoi à l'équipe n'est pas encore configuré sur ce serveur. Je réessaie toutes les 5 minutes.",
     queuedError: "L'envoi n'a pas passé pour l'instant; le signalement est gardé ici et je réessaie automatiquement.",
     sent: (link: string) => `Envoyé à l'équipe : ${link}. Je vous tiens au courant ici.`,
     duplicate: (link: string) => `Un signalement semblable est déjà ouvert (${link}) : j'y ai ajouté le vôtre.`,
@@ -125,7 +127,7 @@ const WORDS = {
     offerTitle: "Looks like something isn't working.",
     offerSubtitle: (summary: string) => `I can send a report to the team with this message, the version and recent logs, anonymized:\n\n"${summary}"`,
     cancelled: "Cancelled: nothing was sent.",
-    queuedNoToken: "Report ready and kept here: sending to the team is not set up on this server yet. I retry every 5 minutes.",
+    queuedNoToken: "Queued: report ready and kept here: sending to the team is not set up on this server yet. I retry every 5 minutes.",
     queuedError: "Sending did not go through for now; the report is kept here and I retry on my own.",
     sent: (link: string) => `Sent to the team: ${link}. I'll keep you posted here.`,
     duplicate: (link: string) => `A similar report is already open (${link}): I added yours to it.`,
@@ -187,7 +189,41 @@ export function createFeedbackService(deps: FeedbackDeps) {
   }
 
   function post(threadId: string, marker: FeedbackMarker | undefined, message: { kind: "text"; text: string } | { kind: "options"; card: FlowCard }) {
-    return store.appendMessage(threadId, { role: "bot", ...message, ...(marker ? { feedback: marker } : {}) });
+    // An options card is a real question card (requestId): the app, the
+    // approvals queue and the MCP (sagax_approve) all answer it the same way.
+    const shaped = message.kind === "options" && marker
+      ? { ...message, card: { ...message.card, requestId: `fb-${marker.reportId}-${marker.step}-${now().toString(36)}`, requestType: "question" as const } }
+      : message;
+    return store.appendMessage(threadId, { role: "bot", ...shaped, ...(marker ? { feedback: marker } : {}) });
+  }
+
+  /** The person answered in words or on a card: close the open cards. */
+  function settleCards(threadId: string, text: string): void {
+    if (!store.patchMessage) return;
+    for (const message of store.activePath(threadId)) {
+      const card = message.card;
+      if (message.role === "bot" && message.feedback && card?.requestId && !card.answered && !card.dismissed) {
+        store.patchMessage(threadId, message.id, { card: { ...card, answered: "answer", answeredText: text } });
+      }
+    }
+  }
+
+  /** A feedback card answered through the respond route (app click or MCP
+   * sagax_approve): same path as typing the option. Null when the card is not
+   * the Feedback flow's. */
+  function answerCard(threadId: string, requestId: string, text: string, principalId: string | null): { ok: boolean; status: number; error?: string } | null {
+    const message = store.activePath(threadId).find((row) => row.card?.requestId === requestId);
+    const marker = message?.feedback;
+    if (!message || !marker || message.role !== "bot") return null;
+    if (message.card?.answered || message.card?.dismissed) return { ok: false, status: 409, error: "This card was already answered." };
+    const record = byId(marker.reportId);
+    const bot = record ? store.bot(record.botId) : store.bots.find((entry) => entry.threadId === threadId);
+    if (!bot) return { ok: false, status: 404, error: "The Feedback bot is gone." };
+    const options = message.card?.options ?? [];
+    const picked = options.find((option) => option.toLowerCase() === text.trim().toLowerCase());
+    if (!picked && !text.trim()) return { ok: false, status: 400, error: `Pick one of: ${options.join(", ")}.` };
+    handleMessage({ botId: bot.id, threadId, text: picked ?? text.trim(), principalId });
+    return { ok: true, status: 200 };
   }
 
   function draft(input: { owner: string | null; botId: string; threadId: string; lang: FeedbackLanguage; source: FeedbackSource; preset?: Partial<FeedbackAnswers>; context?: Partial<ReportContext>; offer?: boolean }): FeedbackRecord {
@@ -319,9 +355,9 @@ export function createFeedbackService(deps: FeedbackDeps) {
     if (!bot) return null;
     const text = input.text.trim();
     const messages = store.activePath(input.threadId);
-    const userMessage = () => store.appendMessage(input.threadId, {
+    const userMessage = () => (settleCards(input.threadId, text), store.appendMessage(input.threadId, {
       role: "user", kind: "text", text, ...(input.sendId ? { sendId: input.sendId } : {}), ...(input.sender ? { sender: input.sender } : {}),
-    });
+    }));
 
     // an offer card answered, even after the bot went on talking
     if (isSendOption(text) || isCancelOption(text)) {
@@ -370,8 +406,8 @@ export function createFeedbackService(deps: FeedbackDeps) {
 
     const stored = userMessage();
     if (marker?.step === "preview") {
-      if (isSendOption(text)) submit(record);
-      else if (isCancelOption(text)) cancel(record);
+      if (isSendOption(text, true)) submit(record);
+      else if (isCancelOption(text, true)) cancel(record);
       else advance(record);
       return stored;
     }
@@ -493,6 +529,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     ensureBot,
     start,
     handleMessage,
+    answerCard,
     maybeOffer,
     tick,
     list,

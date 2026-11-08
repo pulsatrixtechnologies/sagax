@@ -32,6 +32,10 @@ function fakeStore(): FeedbackStore & { threads: Map<string, StoredMessage[]>; b
       threads.set(threadId, list);
       return full;
     },
+    patchMessage: (threadId, messageId, patch) => {
+      const msg = (threads.get(threadId) ?? []).find((entry) => entry.id === messageId);
+      if (msg) Object.assign(msg, patch);
+    },
   };
 }
 
@@ -110,6 +114,30 @@ describe("feedback service (#2618)", () => {
     expect(service.list("p1")[0]?.status).toBe("queued");
     expect(store.threads.get(started.threadId)!.at(-1)?.text).toMatch(/gardé ici/);
     expect(existsSync(join(dataDir, "feedback", "reports.json"))).toBe(true);
+  });
+
+  it("exposes the Send card as an answerable question card and settles it", async () => {
+    const { service, store } = setup();
+    const started = service.start("p1", { source: "menu", platform: "web", locale: "fr" });
+    for (const answer of ["Une question", "Comment partager un bot avec mon équipe au complet?"]) say(service, started.botId, started.threadId, answer);
+    const card = store.threads.get(started.threadId)!.at(-1)!;
+    expect(card.card?.requestId).toMatch(/^fb-/);
+    expect(card.card?.requestType).toBe("question");
+    const done = service.answerCard(started.threadId, card.card!.requestId!, "Envoyer", "p1");
+    expect(done?.ok).toBe(true);
+    await service.flush();
+    expect(card.card?.answered).toBe("answer");
+    expect(service.list("p1")[0]?.status).toBe("queued");
+    expect(service.answerCard(started.threadId, "pas-un-fb", "Envoyer", "p1")).toBeNull();
+  });
+
+  it("recognizes a free confirmation at the preview step and says the report is queued", async () => {
+    const { service, store } = setup();
+    const started = service.start("p1", { source: "menu", platform: "web", locale: "fr" });
+    for (const answer of ["Une question", "Comment partager un bot avec mon équipe au complet?", "Oui, envoie-le"]) say(service, started.botId, started.threadId, answer);
+    await service.flush();
+    expect(service.list("p1")[0]?.status).toBe("queued");
+    expect(store.threads.get(started.threadId)!.at(-1)?.text).toMatch(/En file d'attente/);
   });
 
   it("runs /feedback inline in another bot's chat and leaves ordinary messages alone", () => {

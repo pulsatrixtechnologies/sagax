@@ -293,10 +293,35 @@ function clipGist(text: string): string {
   return flat.length > GIST_MAX ? `${flat.slice(0, GIST_MAX - 1).trimEnd()}…` : flat;
 }
 
-/** #2693: what a read says, in the person's words rather than the tool's
- * output: the subject or title of the first record of a JSON answer, else
- * the first sentence of a text answer, without braces, quotes or keys. Never
- * calls a model. "" when nothing readable is left. */
+/** #2693, #2845: the things a text answer can count, by any of their names
+ * (EN or FR), with how the person reads them. */
+const COUNTED: ReadonlyArray<{ names: RegExp; en: [string, string]; fr: [string, string] }> = [
+  { names: /^(?:e-?mails?|mails?|courriels?)$/i, en: ["email", "emails"], fr: ["courriel", "courriels"] },
+  { names: /^messages?$/i, en: ["message", "messages"], fr: ["message", "messages"] },
+  { names: /^(?:invoices?|factures?)$/i, en: ["invoice", "invoices"], fr: ["facture", "factures"] },
+  { names: /^(?:events?|[ée]v[ée]nements?)$/i, en: ["event", "events"], fr: ["événement", "événements"] },
+  { names: /^(?:meetings?|r[ée]unions?)$/i, en: ["meeting", "meetings"], fr: ["réunion", "réunions"] },
+  { names: /^(?:tasks?|t[âa]ches?)$/i, en: ["task", "tasks"], fr: ["tâche", "tâches"] },
+  { names: /^(?:tickets?|billets?)$/i, en: ["ticket", "tickets"], fr: ["billet", "billets"] },
+  { names: /^(?:alerts?|alertes?)$/i, en: ["alert", "alerts"], fr: ["alerte", "alertes"] },
+  { names: /^(?:files?|fichiers?|documents?)$/i, en: ["file", "files"], fr: ["fichier", "fichiers"] },
+  { names: /^(?:approvals?|approbations?)$/i, en: ["approval", "approvals"], fr: ["approbation", "approbations"] },
+];
+const COUNT_IN_TEXT = /(?<![\w.,])(\d{1,4})\s+(?:(?:new|unread|pending|overdue|nouveaux|nouvelles|nouveau|nouvelle|non lus?|en attente|en retard)\s+)?([A-Za-zÀ-ÿ-]+)/gi;
+const SUBJECT_LINE = /\b(?:subject|objet|title|titre)\s*:\s*(.+?)(?=\s+(?:from|de|to|à|date|cc|sent|envoyé|received|reçu)\s*:|\n|$)/i;
+/** The gist of a counted answer: "3 invoices" (English nouns, read back by
+ * suggestionAction in the person's language). */
+const COUNT_GIST = /^(\d{1,4}) ([a-z]+)$/;
+
+function countedThing(word: string): (typeof COUNTED)[number] | undefined {
+  return COUNTED.find((thing) => thing.names.test(word));
+}
+
+/** #2693, #2845: what a read says, in the person's words rather than the
+ * tool's output: the subject or title of the first record of a JSON answer;
+ * for a text answer, its subject line, else what it counts ("3 invoices").
+ * Never the raw first line ("Found 3 messages"). Never calls a model. ""
+ * when no human sense comes out: no suggestion then. */
 export function briefGist(raw: string): string {
   const body = raw.trim();
   if (/^[[{]/.test(body)) {
@@ -304,24 +329,49 @@ export function briefGist(raw: string): string {
       const record = firstRecord(JSON.parse(body));
       const field = record ? GIST_FIELDS.find((key) => typeof record[key] === "string" && (record[key] as string).trim()) : undefined;
       if (record && field) return clipGist(String(record[field]));
+      return "";
     } catch {
       // not JSON after all: read it as text below
     }
   }
-  const text = body
-    .replace(/"[A-Za-z_][\w.-]*"\s*:/g, " ")
-    .replace(/[{}[\]"]+/g, " ")
-    .replace(/\s*,\s*(?=,|$)/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const sentence = text.split(/(?<=[.!?])\s+|\n/)[0] ?? "";
-  return clipGist(sentence.replace(/^[,:;\s]+|[,:;\s]+$/g, ""));
+  const subject = body.match(SUBJECT_LINE)?.[1]?.replace(/[{}[\]"]+/g, " ").trim();
+  if (subject && /\p{L}{3,}/u.test(subject)) return clipGist(subject);
+  for (const match of body.matchAll(COUNT_IN_TEXT)) {
+    const count = Number(match[1]);
+    const thing = countedThing(match[2] ?? "");
+    if (thing && count > 0) return `${count} ${thing.en[1]}`;
+  }
+  // a sentence a person wrote ("Répondre à Carla"), never a tool's report
+  const sentence = (body.split(/(?<=[.!?])\s+|\n/)[0] ?? "").replace(/^[,:;\s]+|[,:;\s]+$/g, "");
+  return humanSentence(sentence) ? clipGist(sentence) : "";
 }
 
-/** #2693: a suggestion as one concrete action the person can say yes to. */
+/** A tool's own report: "Found 3 messages", "OK", "status=200", "200 OK",
+ * "No results", keys and braces. */
+const TOOL_REPORT = /^(?:found|returned|retrieved|fetched|showing|listed|loaded|results?|ok|success|succeeded|done|error|failed|status|total|count|no\s|none|null|undefined|true|false|sent|\d)/i;
+
+function humanSentence(text: string): boolean {
+  if (!text || TOOL_REPORT.test(text) || /[=<>{}[\]|\\"]|\w+:\/\//.test(text)) return false;
+  return (text.match(/\p{L}{2,}/gu) ?? []).length >= 2;
+}
+
+/** #2693, #2845: a suggestion as one concrete action the person can say yes
+ * to, verb first, in their language: "Passer en revue les 3 factures dans
+ * Outlook", "Faire le suivi de « Facture 1042 en retard » dans Outlook". */
 export function suggestionAction(item: Pick<BriefSuggestion, "text" | "sources">, language: "fr" | "en"): string {
   const gist = item.text.replace(/[.\s]+$/, "");
   const app = item.sources[0]?.piece.split(",")[0]?.trim();
+  const counted = gist.match(COUNT_GIST);
+  const thing = counted ? countedThing(counted[2]!) : undefined;
+  if (counted && thing) {
+    const count = Number(counted[1]);
+    if (language === "fr") {
+      const what = count === 1 ? `1 ${thing.fr[0]}` : `les ${count} ${thing.fr[1]}`;
+      return app ? `Passer en revue ${what} dans ${app}` : `Passer en revue ${what}`;
+    }
+    const what = count === 1 ? `1 ${thing.en[0]}` : `the ${count} ${thing.en[1]}`;
+    return app ? `Review ${what} in ${app}` : `Review ${what}`;
+  }
   if (language === "fr") return app ? `Faire le suivi de « ${gist} » dans ${app}` : `Faire le suivi de « ${gist} »`;
   return app ? `Follow up on "${gist}" in ${app}` : `Follow up on "${gist}"`;
 }
@@ -607,6 +657,17 @@ export class BriefStore {
     const row = this.data.bots[botId];
     if (!row?.topics) return false;
     return topicMuted(row.topics[`wake:${topic.trim().toLowerCase().slice(0, 60)}`], this.now());
+  }
+
+  /** The person's feedback on a wake kind now: "muted" (never, or voted
+   * down past the mute line), "quiet" (a thumbs-down or "less" still
+   * weighing: show it, do not ring), else "normal". Votes fade like
+   * wakeMuted. A Today attention card reads its kind ("attention") here. */
+  wakeLevel(botId: string, topic: string): "muted" | "quiet" | "normal" {
+    const row = this.data.bots[botId]?.topics?.[`wake:${topic.trim().toLowerCase().slice(0, 60)}`];
+    if (!row) return "normal";
+    if (topicMuted(row, this.now())) return "muted";
+    return topicScore(row, this.now()) <= -LESS_ACTIVE_AT ? "quiet" : "normal";
   }
 
   takePending(botId: string, id: string): BriefSuggestion | null {

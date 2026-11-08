@@ -1975,7 +1975,7 @@ import { createOwnEnvironmentOrigin } from "./index-leaves/ownEnvironmentOrigin.
 import { createOrgRefusalOf } from "./index-leaves/orgRefusalOf.ts";
 import { createOrgBotReach } from "./index-leaves/orgBotReach.ts";
 import { createOnePasswordReaderFor } from "./index-leaves/onePasswordReaderFor.ts";
-import { createNotePlanLimits } from "./index-leaves/notePlanLimits.ts";
+import { createNotePlanLimits, createPlanWorked } from "./index-leaves/notePlanLimits.ts";
 import { createMemoryPromptFor } from "./index-leaves/memoryPromptFor.ts";
 import { createMemberHostToolPlace } from "./index-leaves/memberHostToolPlace.ts";
 import { createMayRunRoutineNow } from "./index-leaves/mayRunRoutineNow.ts";
@@ -5751,6 +5751,7 @@ bindLeafHost({
   get installationCapabilityStore() { return installationCapabilityStore; },
   get spentPlans() { return spentPlans; },
   get planUsedPercents() { return planUsedPercents; },
+  get planSiblings() { return planSiblings; },
   get spentPlanUntil() { return spentPlanUntil; },
   get planUsedPercent() { return planUsedPercent; },
   get pendingExpiryDeps() { return pendingExpiryDeps; },
@@ -7706,6 +7707,7 @@ const closeOpenApprovals = createCloseOpenApprovals(getLeafHost);
 const limitFailoverRow = createLimitFailoverRow(getLeafHost);
 const limitResumeText = createLimitResumeText(getLeafHost);
 const notePlanLimits = createNotePlanLimits(getLeafHost);
+const planWorked = createPlanWorked(getLeafHost);
 const limitCandidatesNow = createLimitCandidatesNow(getLeafHost);
 const resendUserMessage = createResendUserMessage(getLeafHost);
 const limitBackupRefusedInThread = createLimitBackupRefusedInThread(getLeafHost);
@@ -15503,6 +15505,8 @@ const limitFailoverStore = new LimitFailoverStore({ file: join(DATA_DIR, "limit-
 const spentPlans = new Map<string, number>();
 /** #2192: fullest window used-percent per payer and engine, from the last report. */
 const planUsedPercents = new Map<string, number>();
+/** #0867: per payer and engine, every instance folded on the same login, from the last report. */
+const planSiblings = new Map<string, string[]>();
 function planLimitUntil(payer: string, instanceId: string): number | null {
   const until = spentPlans.get(`${payer}\u0000${instanceId}`);
   return until !== undefined && until > Date.now() ? until : null;
@@ -15542,10 +15546,8 @@ const limitFailover = createLimitFailoverHost({
   planLimitUntil: (payer, instanceId) => planLimitUntil(payer, instanceId),
   // #2192: used percent for silent same-provider rotation before the limit.
   planUsedPercent: (payer, instanceId) => planUsedPercentOf(payer, instanceId),
-  planWorked: (payer, instanceId) => {
-    spentPlans.delete(`${payer}\u0000${instanceId}`);
-    planUsedPercents.delete(`${payer}\u0000${instanceId}`);
-  },
+  // #0867: the instances folded on the same login share the plan, so all of them are cleared.
+  planWorked: (payer, instanceId) => planWorked(payer, instanceId),
   preferred: (botId, threadId) => {
     const bot = threadId ? store.projectBotForTask(botId, threadId) : store.bot(botId);
     const orgDefault = cfg.newBotDefaults?.profile.modelSelection ?? cfg.defaultModelSelection;

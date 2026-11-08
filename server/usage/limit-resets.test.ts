@@ -118,6 +118,37 @@ describe("LimitResetClock", () => {
     expect(instance.report().engines.map((limit) => limit.engine).toSorted()).toEqual(["chatgpt", "claude", "claude-opus", "codex"]);
   });
 
+  it("#0867: a turn that works on one folded instance unblocks every instance of that login", () => {
+    const changed = vi.fn();
+    const { instance } = clock({ onChange: changed });
+    const shared = { ...claude([100, NOW + 2 * HOUR], [40, NOW + 90 * HOUR]), instanceIds: ["claude", "claude-opus"] };
+    const chatgpt = { ...codex([10, NOW + 3 * HOUR], [100, NOW + 50 * HOUR]), instanceIds: ["codex", "chatgpt"] };
+    instance.noteUsage(report(shared, chatgpt));
+    expect(instance.blockedUntil("claude-opus")).toBe(NOW + 2 * HOUR);
+    instance.noteSuccess("claude");
+    expect(instance.blockedUntil("claude")).toBeNull();
+    expect(instance.blockedUntil("claude-opus")).toBeNull();
+    expect(instance.limit("claude-opus")).toMatchObject({ blocked: false });
+    // Another login keeps its hold.
+    expect(instance.blockedUntil("chatgpt")).toBe(NOW + 50 * HOUR);
+    instance.noteSuccess("chatgpt");
+    expect(instance.blockedUntil("codex")).toBeNull();
+    expect(changed).toHaveBeenCalledTimes(3);
+  });
+
+  it("#0867: a refusal on one folded instance holds every instance of that login, and a success clears them all", () => {
+    const { instance } = clock();
+    const shared = { ...claude([60, NOW + 2 * HOUR], [40, NOW + 90 * HOUR]), instanceIds: ["claude", "claude-opus"] };
+    instance.noteUsage(report(shared, codex([10, NOW + 3 * HOUR], [10, NOW + 50 * HOUR])));
+    instance.noteRefusal("claude-opus", NOW + HOUR);
+    expect(instance.blockedUntil("claude")).toBe(NOW + HOUR);
+    expect(instance.blockedUntil("claude-opus")).toBe(NOW + HOUR);
+    expect(instance.blockedUntil("codex")).toBeNull();
+    instance.noteSuccess("claude");
+    expect(instance.blockedUntil("claude-opus")).toBeNull();
+    expect(instance.resetAt("claude-opus")).toBe(NOW + 2 * HOUR);
+  });
+
   it("trusts a refusal's own reset over the fullest window, unless usage shows a later window at its limit", () => {
     const { instance, at } = clock();
     instance.noteUsage(report(claude([80, NOW + 4 * HOUR], [60, NOW + 90 * HOUR])));

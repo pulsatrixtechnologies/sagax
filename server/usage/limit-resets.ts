@@ -93,6 +93,8 @@ export class LimitResetClock {
   private readonly options: LimitClockOptions;
   private readonly now: () => number;
   private usage = new Map<string, EngineLimit>();
+  /** #0867: per instance, every instance folded on the same login, from the last usage read. */
+  private siblings = new Map<string, string[]>();
   private readonly refusals = new Map<string, number>();
   private checkedAt = 0;
   private loading: Promise<void> | null = null;
@@ -136,10 +138,22 @@ export class LimitResetClock {
     return { checkedAt: this.checkedAt, engines: [...engines.values()] };
   }
 
-  /** A turn on this engine was refused by its usage limit; `resetsAt` is when the engine said it resets. */
+  /** This engine and every instance folded on its login (#0867): they share one plan, so one refuses when the other does. */
+  private sameLogin(engine: string): string[] {
+    return [...new Set([engine, ...(this.siblings.get(engine) ?? [])])];
+  }
+
+  /** A turn on this engine was refused by its usage limit; `resetsAt` is when the engine said it resets. The instances
+   * folded on the same login are refused with it. */
   noteRefusal(engine: string | undefined, resetsAt: number | undefined): void {
-    if (!engine || resetsAt === undefined || !Number.isFinite(resetsAt) || resetsAt <= this.now() || this.refusals.get(engine) === resetsAt) return;
-    this.refusals.set(engine, resetsAt);
+    if (!engine || resetsAt === undefined || !Number.isFinite(resetsAt) || resetsAt <= this.now()) return;
+    let changed = false;
+    for (const id of this.sameLogin(engine)) {
+      if (this.refusals.get(id) === resetsAt) continue;
+      this.refusals.set(id, resetsAt);
+      changed = true;
+    }
+    if (!changed) return;
     this.options.onChange?.();
     this.refreshSoon();
   }
@@ -151,22 +165,32 @@ export class LimitResetClock {
   }
 
   /** A turn on this engine just succeeded on this clock's account, so that account is not refusing work now: a
-   * refusal kept for it is over, and a usage reading at its limit is out of date until the next reading. */
+   * refusal kept for it is over, and a usage reading at its limit is out of date until the next reading. The same holds
+   * for every instance folded on that login (#0867). */
   noteSuccess(engine: string | undefined): void {
     if (!engine) return;
-    const refused = this.refusals.delete(engine);
-    const usage = this.usage.get(engine);
-    const stale = usage?.blocked === true;
-    if (stale) this.usage.set(engine, { ...usage, blocked: false });
-    if (refused || stale) this.options.onChange?.();
+    let changed = false;
+    for (const id of this.sameLogin(engine)) {
+      if (this.refusals.delete(id)) changed = true;
+      const usage = this.usage.get(id);
+      if (usage?.blocked === true) {
+        this.usage.set(id, { ...usage, blocked: false });
+        changed = true;
+      }
+    }
+    if (changed) this.options.onChange?.();
   }
 
   noteUsage(report: PlanUsageReport): void {
     const next = new Map<string, EngineLimit>();
+    const siblings = new Map<string, string[]>();
     for (const row of report.providers) {
-      for (const limit of engineLimitsFromUsage(row)) next.set(limit.engine, limit);
+      const limits = engineLimitsFromUsage(row);
+      for (const limit of limits) next.set(limit.engine, limit);
+      if (limits.length > 1) for (const limit of limits) siblings.set(limit.engine, limits.map((one) => one.engine));
     }
     this.usage = next;
+    this.siblings = siblings;
     this.checkedAt = this.now();
     this.options.onChange?.();
   }

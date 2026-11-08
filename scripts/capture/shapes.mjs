@@ -18,6 +18,7 @@
  */
 import { execFileSync, spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { stripVTControlCharacters } from "node:util";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -129,11 +130,16 @@ const CHECK = `(() => {
   return report;
 })()`;
 
+let viteExit = null;
+
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
   while (Date.now() - start < ms) {
+    // Our own Vite died (port busy under --strictPort): never capture another tree's server.
+    if (viteExit !== null) throw new Error(`gallery Vite exited (${viteExit}) before serving ${url}; is the port in use?`);
     try {
-      if ((await fetch(url)).status < 500) return;
+      // Only trust the port once our own Vite printed its URL (another tree may hold the port).
+      if (stripVTControlCharacters(log).includes(`:${port}/`) && (await fetch(url)).status < 500) return;
     } catch {
       /* retry */
     }
@@ -202,6 +208,9 @@ const vite = spawn("pnpm", ["exec", "vite", "--config", "vite.gallery.config.ts"
   stdio: ["ignore", "pipe", "pipe"],
   env: { ...process.env, NODE_ENV: "development" },
   detached: true,
+});
+vite.on("exit", (code) => {
+  viteExit = code ?? "signal";
 });
 let log = "";
 vite.stdout?.on("data", (chunk) => {

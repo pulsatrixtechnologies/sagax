@@ -102,8 +102,14 @@ visage.
 
 ## Ajouter la forme au jeu
 
-1. Desktop : ajouter la définition dans `shared/shape-avatar-presets.ts`
-   (à côté de `pad`, `cup`...), l'ajouter à `OBJECT_SHAPE_PRESETS`, puis
+1. Géométrie : ajouter le chemin (`path`) et les yeux (`eyes`: `anchor`,
+   `w`, `h`) de la forme dans `shared/mascot-geometry.json`, la seule source
+   lue par le desktop et par iOS. Le chemin doit rester étoilé autour du
+   centre (50,50) avec de la marge : pas de col étroit, pas de queue en
+   lame, sinon les tranches du volume sortent de la face
+   (`src/components/shape-set.regression.test.ts` le vérifie).
+   Desktop : ajouter `objectDef("<id>", "<Nom>")` dans
+   `shared/shape-avatar-presets.ts`, l'ajouter à `OBJECT_SHAPE_PRESETS`, puis
    l'identifiant à `MASCOT_SHAPES` et `OBJECT_MASCOT_SHAPES` dans
    `shared/mascot-look.ts`. Ajouter les mots-clés dans `HINTS`
    (`shared/shape-avatar-generate.ts`) et le libellé `mascot.shape.<id>` dans
@@ -115,7 +121,8 @@ visage.
    `UPDATE_IOS_MASCOT=1 pnpm vitest run src/components/ios-mascot-export.test.ts`
    (réécrit `ShapeGeometryData.swift`, ne pas l'éditer à la main). Ajouter le cas
    à `MascotShape` et à `ShapeAvatarPresets.objectIds` côté Swift
-   (`ios/Sources/CompanionCore/`) avec sa définition.
+   (`ios/Sources/CompanionCore/`) avec `objectDef(.<id>, name:)`, qui lit le
+   corps dans `ShapeGeometryData.objectBodies` (jamais un chemin recopié).
 4. Si l'outil bot est remis : regénérer `node scripts/tool-policy/generate.ts`,
    les goldens (`UPDATE_AGENTS_CATALOG_GOLDENS=1 npx vitest run
    server/drivers/agents-proxy.test.ts`), la liste épinglée de

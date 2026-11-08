@@ -23,7 +23,7 @@ export interface RelayBot {
   hidden?: boolean;
 }
 
-export type RelayTask = Pick<WireTask, "confidential" | "parallelOf" | "routineRunId" | "routineResults" | "hidden" | "openedBy"> & { askedAt?: unknown };
+export type RelayTask = Pick<WireTask, "confidential" | "parallelOf" | "routineRunId" | "routineResults" | "hidden" | "openedBy" | "ownerPrincipalId"> & { askedAt?: unknown };
 
 export interface BackgroundRelayDeps<B extends RelayBot> {
   /** A room's thread (never relayed from). */
@@ -88,4 +88,35 @@ export function backgroundCardHome<B extends RelayBot>(deps: BackgroundRelayDeps
   // the next patch of the card would start yet another one
   const home = found ?? (deps.confidentialByDefault() ? undefined : deps.conversationOrStart(bot, person));
   return home && home !== threadId ? home : undefined;
+}
+
+/** #2915: who answers a card raised in a person's own MCP conversation
+ * (an AI client's send_prompt, private threads): that person. Their turn
+ * runs as them, and the card is shown in their chat, so it is theirs to
+ * answer (from the app or from their client's sagax_approve). Undefined
+ * for any other thread: the bot owner answers as before. */
+export function mcpThreadAnswerer<B extends RelayBot>(deps: Pick<BackgroundRelayDeps<B>, "inRoom" | "task" | "run" | "privateThreads">, botId: string, threadId: string | undefined): string | undefined {
+  if (!threadId || !deps.privateThreads()) return undefined;
+  const owner = deps.task(botId, threadId)?.ownerPrincipalId?.trim().toLowerCase();
+  if (!owner || relayViaOf(deps, botId, threadId) !== "mcp") return undefined;
+  return owner;
+}
+
+/** #2915: whether a background card may be copied into a destination: one
+ * same person must both read the source and own the destination (never one
+ * person for each). Who answers it is tried first (the common case, no
+ * extra lookup); then, for a background thread, the other people of
+ * backgroundCardPeople. A room's card stays with its answerer. */
+export function backgroundRelayAllowed<B extends RelayBot>(
+  deps: BackgroundRelayDeps<B>,
+  bot: B,
+  source: string,
+  card: { destinationAnswerer?: unknown } | null | undefined,
+  check: { readsSource(person: string): boolean; ownsDestination(person: string): boolean },
+): boolean {
+  const allowed = (person: string) => Boolean(person) && check.readsSource(person) && check.ownsDestination(person);
+  const answerer = deps.answerer(bot, source, card)?.trim().toLowerCase() ?? "";
+  if (allowed(answerer)) return true;
+  if (deps.inRoom(source) || !relayViaOf(deps, bot.id, source)) return false;
+  return backgroundCardPeople(deps, bot, source, card).some((person) => person !== answerer && allowed(person));
 }

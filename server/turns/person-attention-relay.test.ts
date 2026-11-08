@@ -52,6 +52,16 @@ function world(opts: { run?: { id: string; routineName: string; status: string }
 }
 
 describe("relayPersonAttention", () => {
+  it("#2915: an archived teammate thread the owner continues still rings the person", () => {
+    const w = world();
+    const work = w.deps.task("atlas", "work") as Partial<WireTask>;
+    w.deps.task = (_botId, threadId) => (threadId === "work" ? { ...work, archivedAt: 5 } : { threadId, title: "Atlas" }) as never;
+    w.say("work", REPORT);
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toMatchObject({ posted: true, threadId: "main" });
+    expect(w.notified).toHaveLength(1);
+    expect(w.unread).toEqual(["main"]);
+  });
+
   it("#2694: the feedback given on an attention card quiets or stops the next cards of that kind", () => {
     const dir = mkdtempSync(join(tmpdir(), "sagax-attention-"));
     try {
@@ -286,7 +296,7 @@ describe("mirrorBackgroundReply (#2915)", () => {
     expect(copies(w)[0]).toMatchObject({ text: "Done, 3 closed.", relayAsk: { text: "Close the duplicates", by: "Claude Code" } });
   });
 
-  it("folds a burst into one row and caps a long reply", () => {
+  it("folds a burst into one row and copies a long reply whole", () => {
     const w = mcp();
     let clock = 1_000;
     w.deps.now = () => clock;
@@ -307,7 +317,60 @@ describe("mirrorBackgroundReply (#2915)", () => {
     w.say("work", "x".repeat(RELAY_TEXT_MAX * 2), "turn-3");
     mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-3", ok: true }, w.deps);
     expect(copies(w)).toHaveLength(2);
-    expect(copies(w)[1]!.text!.length).toBeLessThanOrEqual(RELAY_TEXT_MAX + 2);
+    // nothing of a long reply stays hidden: it is copied whole
+    expect(copies(w)[1]!.text).toBe("x".repeat(RELAY_TEXT_MAX * 2));
+  });
+
+  it("never folds a reply to another asker under the first one's label", () => {
+    const w = mcp();
+    let clock = 1_000;
+    w.deps.now = () => clock;
+    ask(w, "First");
+    w.say("work", "One.", "turn-1");
+    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps);
+    clock = copies(w)[0]!.at + 1;
+    const list = w.threads.get("work")!;
+    list.push({ id: "ask-other", at: list.length, role: "bot", kind: "text", text: "Your part?", from: { botId: "orion", name: "Orion" } } as unknown as WireMessage);
+    w.say("work", "Two.", "turn-2");
+    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-2", ok: true }, w.deps);
+    expect(copies(w)).toHaveLength(2);
+    expect(copies(w)[1]).toMatchObject({ text: "Two.", relayAsk: { text: "Your part?", by: "Orion" } });
+  });
+
+  it("quotes each folded reply's own ask, even when it repeats the first", () => {
+    const w = mcp();
+    let clock = 1_000;
+    w.deps.now = () => clock;
+    ask(w, "Status?");
+    w.say("work", "One.", "turn-1");
+    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps);
+    clock = copies(w)[0]!.at + 1;
+    ask(w, "Status?");
+    w.say("work", "Two.", "turn-2");
+    mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-2", ok: true }, w.deps);
+    expect(copies(w)).toHaveLength(1);
+    expect(copies(w)[0]!.text).toContain("> Status?\n\nTwo.");
+  });
+
+  it("leaves no silent trace when the turn ended on a waiting card", () => {
+    const w = mcp();
+    ask(w, "Delete them?");
+    const list = w.threads.get("work")!;
+    list.push({ id: "q", at: list.length, role: "bot", kind: "options", text: "Confirm?", turnId: "turn-1", card: { requestId: "r1" } } as unknown as WireMessage);
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(false);
+    expect(copies(w)).toHaveLength(0);
+    (list.at(-1)!.card as { answered?: string }).answered = "yes";
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
+    expect(copies(w)[0]).toMatchObject({ relayTrace: "silent" });
+  });
+
+  it("without a turn id, never copies an answer given before the last ask", () => {
+    const w = mcp();
+    w.say("work", "Earlier answer.", "turn-0");
+    ask(w, "Again");
+    expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", ok: true }, w.deps)).toBe(true);
+    expect(copies(w)[0]).toMatchObject({ relayTrace: "silent" });
+    expect(copies(w)[0]!.text).not.toContain("Earlier answer.");
   });
 
   it("reads only the chat's newest rows for the dedupe", () => {

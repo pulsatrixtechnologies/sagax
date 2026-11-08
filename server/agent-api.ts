@@ -329,6 +329,18 @@ export interface StoredMessage {
   /** A send that waited in the server queue: the id its 202 answered
    * (the handle's anchor), stored on the line when its own turn starts. */
   queueId?: string;
+  /** #2922: a person's line that answers a card (the card message's id):
+   * part of the turn it unblocked, not a new prompt. */
+  replyToId?: string;
+}
+
+/** #2922: the cards a conversation (and the threads it handed work to)
+ * waits on, as the caller may see them. approvals: open cards for a person,
+ * oldest first, each with its own threadId (answer it there). reviewing:
+ * a card a model reviewer is still deciding (not for the person yet). */
+export interface PendingApproval {
+  approvals: Array<Record<string, unknown> & { id: string; threadId: string }>;
+  reviewing: boolean;
 }
 
 export interface TranscriptEntry {
@@ -411,6 +423,9 @@ export interface AgentApiDeps {
   messages(threadId: string): StoredMessage[];
   /** The live state of one conversation. */
   turnState(agentId: string, threadId: string): TurnState;
+  /** #2922: the cards the turn waits on (child threads included), filtered
+   * for this caller. Absent: await_turn reads turnState only. */
+  pendingApproval?(caller: AgentCaller, agentId: string, threadId: string): PendingApproval | null;
   /** Where a send that names no thread goes. A bot caller: the agent's
    * single chat with the person it works for (#1170). A person's AI client:
    * a fresh conversation of its own with the agent on every send (#2575,
@@ -498,6 +513,8 @@ export interface TurnStep {
 }
 
 export interface TurnProgress {
+  /** #2922: approval_under_review: a reviewer still decides a card of this turn. */
+  phase?: "approval_under_review";
   summary: string;
   turn_state: TurnState;
   steps: TurnStep[];
@@ -517,7 +534,14 @@ export interface TurnResult {
   /** Pass as cursor on the next await_turn so steps are not repeated. */
   wait_cursor?: string | null;
   recommended_wait_ms?: number;
+  /** #2922: waiting_for_approval: the oldest card to answer, with its
+   * threadId (a teammate's thread when the card is down the handoff). */
+  approval?: Record<string, unknown> & { id: string; threadId: string };
+  approvals?: Array<Record<string, unknown> & { id: string; threadId: string }>;
 }
+
+/** #2922: a card under model review: wait this long before looking again. */
+export const AWAIT_REVIEW_WAIT_MS = 3_000;
 
 // ── validation ────────────────────────────────────────────────────────
 
@@ -833,7 +857,14 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
   let run: string[] = [];
   let lastRun: string[] = [];
   for (const message of messages.slice(start + 1)) {
-    if (message.role === "user" && (message.kind ?? "text") === "text") break;
+    if (message.role === "user" && (message.kind ?? "text") === "text") {
+      // #2922: the person's answer to a card is part of this turn: the reply
+      // is the words after it, never the ones before the card.
+      if (!message.replyToId) break;
+      if (run.length) lastRun = run;
+      run = [];
+      continue;
+    }
     if (message.role !== "bot") continue;
     const kind = message.kind ?? "text";
     if (kind === "activity") {
@@ -858,7 +889,10 @@ function turnSteps(
   if (start < 0) return [];
   const steps: TurnStep[] = [];
   for (const message of messages.slice(start + 1)) {
-    if (message.role === "user" && (message.kind ?? "text") === "text") break;
+    if (message.role === "user" && (message.kind ?? "text") === "text") {
+      if (!message.replyToId) break;
+      continue;
+    }
     const entry = toEntry(threadId, message);
     if (!entry || (entry.kind !== "tool" && entry.kind !== "note" && !(entry.kind === "text" && entry.role === "agent"))) continue;
     const key = keyOf(entry);
@@ -948,7 +982,7 @@ function createAgentApiHandlers(env: {
   ownsRunningTurn: (caller: AgentCaller, threadId: string) => boolean;
   ok: (body: Record<string, unknown>) => AgentApiAnswer;
   reachable: (caller: AgentCaller, agentId: string) => Promise<AgentSummary | Refusal>;
-  waitTurn: (body: HandleBody, handle: string, timeoutMs: number, signal?: AbortSignal, after?: CursorKey | null) => Promise<TurnResult>;
+  waitTurn: (body: HandleBody, handle: string, timeoutMs: number, signal?: AbortSignal, after?: CursorKey | null, caller?: AgentCaller) => Promise<TurnResult>;
   resultBody: (result: TurnResult) => Record<string, unknown>;
   latest: (caller: AgentCaller, args: Args, withThreads: boolean) => Promise<AgentApiAnswer | Refusal>;
 }): Pick<Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>>,
@@ -1207,7 +1241,7 @@ function createAgentApiHandlers(env: {
             return ok({ ...replayed, finished: false, status: "accepted", next: "Already sent with this idempotency_key: no second turn. Call await_turn with this handle. Never send the prompt again." });
           }
           const waitMs = Math.min(timeoutMs as number, AWAIT_TIMEOUT_MS_MAX);
-          return ok({ ...replayed, ...resultBody(await waitTurn(body, handle, waitMs, signal)) });
+          return ok({ ...replayed, ...resultBody(await waitTurn(body, handle, waitMs, signal, null, caller)) });
         }
       }
       // Held from here until the receipt is stored (or the send failed), so a
@@ -1316,7 +1350,7 @@ function createAgentApiHandlers(env: {
         if (deps.notify) {
           const notify = deps.notify;
           // Watch in the background; the caller is told when the turn ends.
-          void waitTurn(body, handle, TIMEOUT_MS_MAX * 6).then((result) => {
+          void waitTurn(body, handle, TIMEOUT_MS_MAX * 6, undefined, null, caller).then((result) => {
             if (result.finished || result.status === "waiting_for_approval") notify(caller, agent, result);
           }).catch(() => undefined);
         }
@@ -1325,7 +1359,7 @@ function createAgentApiHandlers(env: {
       // Cap the blocking wait under engine/gateway ceilings so the answer
       // (handle + still_working) reaches the caller; resume with await_turn.
       const waitMs = Math.min(timeoutMs as number, AWAIT_TIMEOUT_MS_MAX);
-      const result = await waitTurn(body, handle, waitMs, signal);
+      const result = await waitTurn(body, handle, waitMs, signal, null, caller);
       return ok({ ...accepted, ...resultBody(result) });
       } finally {
         releaseInFlight();
@@ -1361,7 +1395,7 @@ function createAgentApiHandlers(env: {
           return own ? badHandleRefusal("other_agent", body.t, body.a) : badHandleRefusal("other_agent");
         }
         const reason: BadHandleReason | null = !verified.ok ? "age" : body.c !== callerKey(caller) ? "other_caller" : null;
-        if (!reason) return ok({ ...resultBody(await waitTurn(body, args.handle, timeoutMs!, signal, after)), ...handleLifetime(body.i) });
+        if (!reason) return ok({ ...resultBody(await waitTurn(body, args.handle, timeoutMs!, signal, after, caller)), ...handleLifetime(body.i) });
         // The caller key is the person's principal id (or the bot id), never
         // the MCP session or AI client: a person who reconnects after an idle
         // gap (new session, same person) matches and lands above (#1896).
@@ -1372,7 +1406,7 @@ function createAgentApiHandlers(env: {
         // Expired, or issued to another session of a caller who may read the
         // conversation: answer that turn as read_latest_page would, without a
         // handle (a new one would anchor at the wrong time).
-        const result = await waitTurn(body, "", timeoutMs!, signal, after);
+        const result = await waitTurn(body, "", timeoutMs!, signal, after, caller);
         return ok({
           ...resultBody(result),
           handle: null,
@@ -1393,7 +1427,7 @@ function createAgentApiHandlers(env: {
         const last = [...entries].reverse().find((entry) => entry.thread_id === threadId && entry.role === "agent" && entry.kind === "text");
         return ok({ handle, ...handleLifetime(body.i), agent_id: agentId, thread_id: threadId, finished: true, status: "idle", reply: last?.text ?? "" });
       }
-      return ok({ ...resultBody(await waitTurn(body, handle, timeoutMs!, signal, after)), ...handleLifetime(body.i) });
+      return ok({ ...resultBody(await waitTurn(body, handle, timeoutMs!, signal, after, caller)), ...handleLifetime(body.i) });
     },
 
     async read_transcript(caller, args) {
@@ -1709,6 +1743,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     timeoutMs: number,
     signal?: AbortSignal,
     after: CursorKey | null = null,
+    caller?: AgentCaller,
   ): Promise<TurnResult> => {
     const deadline = now() + timeoutMs;
     let idleLooks = 0;
@@ -1716,9 +1751,24 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const state = deps.turnState(body.a, body.t);
       const messages = deps.messages(body.t);
       const read = turnReply(messages, { id: body.m, at: body.i });
-      if (state === "idle" && read.sawAnchor) {
+      // #2922: a card the person must answer, here or down the handoff, is
+      // the answer, before any "finished": the turn is blocked on it.
+      const pending = caller && deps.pendingApproval ? deps.pendingApproval(caller, body.a, body.t) : null;
+      if (pending?.approvals.length) {
+        const result = unfinished(body, handle, "waiting", read.reply, after, "waiting_for_approval");
+        return { ...result, approval: pending.approvals[0]!, approvals: pending.approvals };
+      }
+      const reviewing = pending?.reviewing === true;
+      if (state === "idle" && read.sawAnchor && reviewing) {
+        // a reviewer still decides a card of this turn: not finished
+        idleLooks = 0;
+      } else if (state === "idle" && read.sawAnchor) {
         idleLooks += 1;
-        if (read.reply || idleLooks >= IDLE_LOOKS_DONE) {
+        // #2922: a reply needs a second idle look: a question card the bot
+        // raises right after its words lands between two polls. With no
+        // time left for that look (timeout_ms 0), the reply is the answer.
+        const lastLook = Boolean(signal?.aborted) || now() + POLL_MS > deadline;
+        if ((read.reply && (idleLooks >= 2 || lastLook)) || idleLooks >= IDLE_LOOKS_DONE) {
           // the reply is collected: an AI client's conversation leaves the
           // person's list (server/threads/background-sweep.ts)
           deps.collected?.(body.a, body.t);
@@ -1732,7 +1782,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         }
       } else {
         idleLooks = 0;
-        if (state === "waiting") {
+        if (state === "waiting" && !reviewing) {
           // A card waits for a person: waiting longer only burns the timeout.
           return unfinished(body, handle, state, read.reply, after, "waiting_for_approval");
         }
@@ -1740,7 +1790,11 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       // Return still_working before the caller's (or gateway) ceiling so the
       // answer is a structured resume, never a killed tool call.
       if (signal?.aborted || now() >= deadline) {
-        return unfinished(body, handle, state === "idle" ? "queued" : state, read.reply, after, "still_working");
+        const result = unfinished(body, handle, state === "idle" ? (reviewing ? "running" : "queued") : state, read.reply, after, "still_working");
+        if (reviewing && result.progress) {
+          return { ...result, progress: { ...result.progress, phase: "approval_under_review" }, recommended_wait_ms: AWAIT_REVIEW_WAIT_MS };
+        }
+        return result;
       }
       await sleep(Math.min(POLL_MS, Math.max(0, deadline - now())));
     }
@@ -1754,7 +1808,11 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     ...(result.finished
       ? (result.reply ? {} : { note: "The turn finished without text." })
       : {
-          next: result.status === "waiting_for_approval"
+          next: result.status === "waiting_for_approval" && result.approval
+            ? (result.approval.answerWith === "option"
+              ? `Ask the person, then call sagax_approve with thread_id ${result.approval.threadId}, approval_id ${result.approval.id} and option (one of approval.choices, by id or label); then call await_turn again with this handle.`
+              : `Ask the person, then call sagax_approve with thread_id ${result.approval.threadId}, approval_id ${result.approval.id} and decision allow or deny; then call await_turn again with this handle.`)
+            : result.status === "waiting_for_approval"
             ? "An approval waits in that conversation: a person answers it (in Sagax, or from an AI client with sagax_approve); then call await_turn with this handle and wait_cursor as cursor."
             : timeoutNote,
         }),

@@ -17,7 +17,12 @@ export function handleRequestResolved(event: any, ctx: any, host: any): void {
       if (event.requestId) host.settleWaitingOnPersonChips(event.threadId, event.requestId, { behavior: event.behavior, source: event.source });
       // answered (by whoever): the turn is working again, unless it settled
       const waiting = bot ?? (speaker ? host.store.bot(speaker.botId) : undefined);
-      if (bot && host.store.taskByThread(bot.id, event.threadId)?.activity === "waiting-on-you") {
+      // 2026-11-08 (#2922): another card of this thread still waits on the
+      // person, so the turn stays waiting-on-you (badge, await_turn)
+      const stillOpen = Boolean(host.openPersonCard?.(event.threadId, event.requestId));
+      if (stillOpen) {
+        // nothing: the remaining card keeps the thread waiting
+      } else if (bot && host.store.taskByThread(bot.id, event.threadId)?.activity === "waiting-on-you") {
         host.store.setTaskActivity(bot.id, event.threadId, "working");
       } else if (!bot && waiting?.activity === "waiting-on-you") host.store.setActivity(waiting.id, "working");
       const messageId = event.requestId ? host.askMessageByRequest.get(`${event.threadId}:${event.requestId}`) : null;

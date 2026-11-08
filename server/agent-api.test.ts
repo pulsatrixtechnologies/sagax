@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createHmac } from "node:crypto";
 
 import {
-  AGENT_SETTINGS_FIELDS, AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, AWAIT_RECOMMENDED_WAIT_MS, AWAIT_TIMEOUT_MS_DEFAULT, AWAIT_TIMEOUT_MS_MAX, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
+  AGENT_SETTINGS_FIELDS, AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, AWAIT_RECOMMENDED_WAIT_MS, AWAIT_REVIEW_WAIT_MS, AWAIT_TIMEOUT_MS_DEFAULT, AWAIT_TIMEOUT_MS_MAX, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
   HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, SEND_RECEIPT_TTL_MS, signHandle, signTurnHandle, turnLabel, verifyHandle,
   formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, resolveEngineInstance,
   type AgentApiDeps, type AgentCaller, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type SendReceipt, type StoredMessage, type TurnState,
@@ -1610,5 +1610,82 @@ describe("fleet tools (#1944)", () => {
     expect((await w.api.call(person("pr_1", ["agents.read"]), "list_agent_models", {
       agent_id: "bot-a",
     })).status).toBe(200);
+  });
+});
+
+describe("await_turn and a pending card (#2922)", () => {
+  const card = (threadId: string, id = "perm-1", answerWith: "decision" | "option" = "decision") =>
+    ({ id, threadId, kind: answerWith === "option" ? "question" : "permission", answerWith, choices: [{ id: "1", label: "allow" }, { id: "2", label: "deny" }] });
+
+  it("a permission card two levels down while the root still runs: waiting_for_approval with that card and its threadId", async () => {
+    const w = world({ replyAfterPolls: 50 });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "do it", mode: "async" });
+    w.deps.pendingApproval = () => ({ approvals: [card("child-2")], reviewing: false });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 2_000 });
+    expect(r.body).toMatchObject({ finished: false, status: "waiting_for_approval", thread_id: sent.body.thread_id, approval: { id: "perm-1", threadId: "child-2" } });
+    expect(r.body.approvals).toHaveLength(1);
+    expect(String(r.body.next)).toContain("thread_id child-2");
+    expect(String(r.body.next)).toContain("approval_id perm-1");
+  });
+
+  it("the card wins over a turn that looks finished", async () => {
+    const w = world({ replyAfterPolls: 1 });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "hi", mode: "async" });
+    await w.settle();
+    w.deps.pendingApproval = () => ({ approvals: [card(String(sent.body.thread_id), "q-1", "option")], reviewing: false });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 2_000 });
+    expect(r.body).toMatchObject({ status: "waiting_for_approval", approval: { id: "q-1" } });
+    expect(String(r.body.next)).toContain("option");
+  });
+
+  it("a card under model review keeps the turn going: still_working, phase approval_under_review, short wait", async () => {
+    const w = world({ replyAfterPolls: 1 });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "hi", mode: "async" });
+    w.deps.pendingApproval = () => ({ approvals: [], reviewing: true });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 2_000 });
+    expect(r.body).toMatchObject({ finished: false, status: "still_working", recommended_wait_ms: AWAIT_REVIEW_WAIT_MS, progress: { phase: "approval_under_review" } });
+  });
+
+  it("a question raised right after the words is not read as finished (confirmation look)", async () => {
+    const w = world({ replyAfterPolls: 1 });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "hi", mode: "async" });
+    let looks = 0;
+    w.deps.pendingApproval = () => {
+      looks += 1;
+      // the reply is there at the first look; the card lands on the next poll
+      return { approvals: looks >= 2 ? [card(String(sent.body.thread_id), "q-2", "option")] : [], reviewing: false };
+    };
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ status: "waiting_for_approval", approval: { id: "q-2" } });
+  });
+
+  it("without a card, a finished turn still answers finished", async () => {
+    const w = world({ replyAfterPolls: 1 });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "hi", mode: "async" });
+    w.deps.pendingApproval = () => ({ approvals: [], reviewing: false });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "finished", reply: "echo: hi" });
+  });
+
+  it("the person's answer to a card (replyToId) is part of the turn: the reply is the words after it; a plain line still cuts", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "pick", mode: "async" });
+    const threadId = String(sent.body.thread_id);
+    w.add(threadId, { role: "bot", kind: "text", text: "Which one?" });
+    const cardRow = w.add(threadId, { role: "bot", kind: "options", text: "" });
+    w.add(threadId, { role: "user", kind: "text", text: "B", replyToId: cardRow.id });
+    w.add(threadId, { role: "bot", kind: "text", text: "Done with B." });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, reply: "Done with B." });
+    w.add(threadId, { role: "user", kind: "text", text: "another prompt" });
+    w.add(threadId, { role: "bot", kind: "text", text: "Not this turn." });
+    const again = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(again.body).toMatchObject({ finished: true, reply: "Done with B." });
   });
 });

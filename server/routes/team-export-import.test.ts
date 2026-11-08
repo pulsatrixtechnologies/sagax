@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { BotRecord } from "../store.ts";
-import { createTeamExportImportRoutes, type TeamExportImportRouteDeps } from "./team-export-import.ts";
+import { createPluginTeamImporter, createTeamExportImportRoutes, type TeamExportImportRouteDeps } from "./team-export-import.ts";
 import { PASS, type RouteContext } from "./table.ts";
 
 // I1: the plugin import's package and options, seen where the importer gets them.
@@ -220,7 +220,50 @@ describe("createTeamExportImportRoutes", () => {
       expect(call.document.package.team).toEqual({ name: "Pulsatrix Dev" });
       expect(call.document.package.agents.map((agent: { key: string }) => agent.key)).toEqual(["px-architect"]);
       expect(call.options).toMatchObject({ mode: "add", trust: "file", models: { "px-architect": { instanceId: "claude", model: "claude-fable-5-1" } } });
-      expect(sent[0]).toMatchObject({ status: 201, body: { name: "Pulsatrix Dev", skipped: [{ part: "plugin", reason: "agent huge.md (too big)" }] } });
+      expect(sent[0]).toMatchObject({ status: 201, body: { name: "Pulsatrix Dev", skipped: [{ part: "plugin", reason: "agent huge.md (too big)" }, { part: "plugin", reason: expect.stringContaining("Read, Grep stay a guideline") }] } });
+    });
+
+    // #2669: the Teams dialog and the bot tool preview before importing.
+    it("#2669: previews the bots, their model and tools without importing", async () => {
+      const before = imports.calls.length;
+      const route = createTeamExportImportRoutes(deps({
+        readPlugin: async () => ({ plan: { agents: [{ file: "px-architect.md", text: AGENT }], skipped: [] }, manifest: { displayName: "Pulsatrix Dev" } }),
+        engines: async () => ({ instances: [claude] }),
+        packageImportDeps: () => ({ __capture: true }) as never,
+      }));
+      const { context, sent } = ctx("/api/teams/import-plugin", "POST", { marketplace: "pulsatrix", plugin: "pulsatrix-dev", team: "Architects", preview: true }, member);
+      await route(context);
+      expect(imports.calls.length).toBe(before);
+      expect(sent[0]).toMatchObject({ status: 200, body: { team: "Architects", bots: [{ name: "px-architect", modelAsked: "claude-fable-5-1", model: "claude-fable-5-1", tools: ["Read", "Grep"], toolsEnforced: false }] } });
+      expect(JSON.stringify(sent[0]!.body)).not.toContain("claude/");
+    });
+
+    it("#2669: frontmatter tools become the bot's tool selection on Pi", async () => {
+      const pi = { instanceId: "pi", driverKind: "piAgent", snapshot: { status: "ready", installed: true, auth: { status: "authenticated" } }, models: { default: "m", options: [{ id: "m" }] } } as never;
+      const route = createTeamExportImportRoutes(deps({
+        readPlugin: async () => ({ plan: { agents: [{ file: "px-architect.md", text: AGENT.replace("model: claude-fable-5-1\n", "") }], skipped: [] }, manifest: {} }),
+        engines: async () => ({ instances: [pi] }),
+        defaultSelection: async () => ({ instanceId: "pi", model: "m" }),
+        packageImportDeps: () => ({ __capture: true }) as never,
+      }));
+      const { context } = ctx("/api/teams/import-plugin", "POST", { marketplace: "pulsatrix", plugin: "pulsatrix-dev", team: "Ops" }, member);
+      await route(context);
+      const call = imports.calls.at(-1)!;
+      expect(call.document.package.team).toEqual({ name: "Ops" });
+      expect(call.options.toolScopes["px-architect"].allow).toEqual(expect.arrayContaining(["native:read", "native:grep", "mcp:agents:*"]));
+    });
+
+    it("#2669: a member imports on behalf of the Primary Bot without the bot-creation gate", async () => {
+      const route = createPluginTeamImporter(deps({
+        readPlugin: async () => ({ plan: { agents: [{ file: "px-architect.md", text: AGENT }], skipped: [] }, manifest: {} }),
+        engines: async () => ({ instances: [claude] }),
+        botCreationAllowed: () => false,
+        packageImportDeps: () => ({ __capture: true }) as never,
+      }));
+      const refused = await route(member, { marketplace: "pulsatrix", plugin: "pulsatrix-dev" });
+      expect(refused.status).toBe(403);
+      const done = await route(member, { marketplace: "pulsatrix", plugin: "pulsatrix-dev" }, { ownerPrincipalId: "p1" });
+      expect(done.status).toBe(201);
     });
   });
 });

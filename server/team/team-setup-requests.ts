@@ -38,8 +38,8 @@ const planSchema = z.object({
 
 /** A plan a bot that is not a Primary Bot may ask for: one new bot in its own
  * team, and nothing else. */
-function creatorPlan(bot: BotRecord, request: Pick<TeamSetupRequest, "operations" | "newTeams" | "deletion" | "suggestion">): boolean {
-  if (request.deletion || request.suggestion || request.newTeams.length || request.operations.length !== 1) return false;
+function creatorPlan(bot: BotRecord, request: Pick<TeamSetupRequest, "operations" | "newTeams" | "deletion" | "suggestion" | "pluginImport">): boolean {
+  if (request.deletion || request.pluginImport || request.suggestion || request.newTeams.length || request.operations.length !== 1) return false;
   const [operation] = request.operations;
   return operation.action === "create" && operation.fields.chiefOfStaff === undefined &&
     section(operation.fields.section) === section(bot.section);
@@ -54,7 +54,7 @@ function creatorPlan(bot: BotRecord, request: Pick<TeamSetupRequest, "operations
  * an organization server (a structure the organization shares) keep the
  * card; so does every other level. */
 export function teamSetupDirectApply(input: {
-  request: Pick<TeamSetupRequest, "operations" | "newTeams" | "deletion" | "suggestion">;
+  request: Pick<TeamSetupRequest, "operations" | "newTeams" | "deletion" | "suggestion" | "pluginImport">;
   fullAccess: boolean;
   /** a guest-driven or mail-confined turn, or a conversation no longer the bot's */
   blocked: boolean;
@@ -70,7 +70,8 @@ export function teamSetupDirectApply(input: {
   if (input.request.suggestion) return null;
   if (input.fullAccess) return "full-access";
   if (input.blocked || input.mode !== "auto" || !input.ownerTurn) return null;
-  if (input.orgServer && (input.request.newTeams.length || !input.requesterOwner)) return null;
+  // an imported plugin is a new team too (#2669)
+  if (input.orgServer && (input.request.newTeams.length || input.request.pluginImport || !input.requesterOwner)) return null;
   const targets = [
     ...input.request.operations.filter((operation) => operation.action === "update").map((operation) => operation.botId),
     ...(input.request.deletion ? [input.request.deletion.botId] : []),
@@ -159,19 +160,23 @@ interface Options {
   mayCreateBots?(bot: BotRecord): boolean;
   ownsThread(botId: string, threadId: string): boolean;
   deleteBot(botId: string, revalidate: () => void, request: TeamSetupRequest): Promise<void>;
+  /** #2669: import the plugin as a new team for the requesting bot's owner. */
+  importPlugin?(request: TeamSetupRequest): Promise<TeamSetupResult>;
 }
 
 type RequestFrom = { botId: string; name: string; color: string };
 
 /** #2091: what Always allow keeps on a team-setup card: this kind of
  * change (set up, suggested specialist, deletion) for this bot. */
-export function teamSetupRuleCandidate(request: Pick<TeamSetupRequest, "deletion" | "suggestion">): { tool: string; scope: Record<string, string>; description: string } {
+export function teamSetupRuleCandidate(request: Pick<TeamSetupRequest, "deletion" | "suggestion" | "pluginImport">): { tool: string; scope: Record<string, string>; description: string } {
+  if (request.pluginImport) return { tool: "sagax:team_setup", scope: { action: "import_plugin" }, description: "Import plugins as teams" };
   if (request.deletion) return { tool: "sagax:delete_bot", scope: { action: "delete" }, description: "Delete bots of the team" };
   if (request.suggestion) return { tool: "sagax:team_setup", scope: { action: "suggest" }, description: "Add the specialists it suggests" };
   return { tool: "sagax:team_setup", scope: { action: "setup" }, description: "Set up and change the team" };
 }
 type SetupArgs = { botId: string; threadId: string; plan: unknown; from?: RequestFrom; suggestion?: boolean };
 type DeletionArgs = { botId: string; threadId: string; targetBotId: string; reason: string; from?: RequestFrom };
+type PluginImportArgs = { botId: string; threadId: string; reason: string; plugin: NonNullable<TeamSetupRequest["pluginImport"]>; from?: RequestFrom };
 /** Server-only invocation lease. Never saved on a request or approval card. */
 type SubmitAuthority = { canCommit?: () => boolean };
 
@@ -191,7 +196,7 @@ export class TeamSetupRequestService {
    * more (no new team, no Primary Bot role, no suggestion, no deletion).
    * `shape: "any"` is the early check before the plan is built; validate
    * judges the built plan. */
-  private requester(botId: string, request: Pick<TeamSetupRequest, "operations" | "newTeams" | "deletion" | "suggestion"> | "any"): BotRecord {
+  private requester(botId: string, request: Pick<TeamSetupRequest, "operations" | "newTeams" | "deletion" | "suggestion" | "pluginImport"> | "any"): BotRecord {
     const bot = this.options.store.bot(botId);
     if (bot && !bot.hidden && bot.chiefOfStaff) return bot;
     if (bot && !bot.hidden && this.options.mayCreateBots?.(bot) && (request === "any" || creatorPlan(bot, request))) return bot;
@@ -205,7 +210,7 @@ export class TeamSetupRequestService {
    * re-checked fresh at confirm time either way.
    */
   private requesterScope(request: TeamSetupRequest): TeamSetupFields | undefined {
-    if (request.deletion) return undefined;
+    if (request.deletion || request.pluginImport) return undefined;
     const scope: TeamSetupFields = {};
     for (const operation of request.operations) if (operation.botId === request.botId) Object.assign(scope, operation.fields);
     return scope;
@@ -239,12 +244,16 @@ export class TeamSetupRequestService {
     return result;
   }
 
-  private validate(request: TeamSetupRequest, confirming: boolean, immediate = false): void {
+  private validate(request: TeamSetupRequest, confirming: boolean, immediate = false, byRule = false): void {
     const chief = this.requester(request.botId, request);
     if (!this.options.ownsThread(request.botId, request.threadId)) throw new TeamSetupError("The requesting conversation no longer exists", 409);
-    if (immediate && (request.suggestion || !this.options.autoApply?.(request.botId, request.threadId, request))) throw new TeamSetupError("This conversation's approval level no longer applies this setup directly", 409);
+    // #2669: a kept Always allow rule is its own authority, at any approval level.
+    if (immediate && (request.suggestion || (!byRule && !this.options.autoApply?.(request.botId, request.threadId, request)))) throw new TeamSetupError("This conversation's approval level no longer applies this setup directly", 409);
     if (confirming && !immediate && !this.options.store.messagesFor(request.threadId).some((message) => message.card?.requestId === request.requestId && !message.card.answered && !message.card.dismissed)) throw new TeamSetupError("This setup card is no longer pending", 409);
     if (confirming && teamSetupRevision(chief, this.requesterScope(request)) !== request.requesterRevision) throw new TeamSetupError("The Primary Bot's settings changed. This setup was cancelled; review a new proposal.", 409);
+    // #2669: an import adds new bots only; the importer checks the plugin,
+    // the owner's right to create bots and the models when it runs.
+    if (request.pluginImport) return;
     // #2045: "exists" means this Primary Bot's person already has that team.
     // Another person's same display name must not block the proposal.
     const ownerOf = (bot: BotRecord) => this.options.store.botOwnerKey?.(bot) ?? (bot.ownerUserId?.trim().toLowerCase() || "");
@@ -341,6 +350,30 @@ export class TeamSetupRequestService {
     return request;
   }
 
+  private preparePluginImport(args: PluginImportArgs) {
+    const chief = this.requester(args.botId, "any");
+    if (!chief.chiefOfStaff) throw new TeamSetupError("Only an active Primary Bot can import a plugin as a team", 403);
+    if (!this.options.importPlugin) throw new TeamSetupError("This server cannot import plugins as teams", 404);
+    const reason = args.reason.trim() || `Import ${args.plugin.plugin} as a team`;
+    if (reason.length > 500) throw new TeamSetupError("A reason of at most 500 characters is required");
+    if (this.options.store.bots.length + args.plugin.bots.length > this.options.maxBots) throw new TeamSetupError("This import exceeds the workspace bot limit", 409);
+    const request: TeamSetupRequest = { version: 1, requestId: newId(), botId: args.botId, threadId: args.threadId,
+      reason: redactSecretsInText(reason), createdAt: Date.now(), requesterRevision: teamSetupRevision(chief), newTeams: [], operations: [],
+      pluginImport: args.plugin };
+    this.validate(request, false);
+    return request;
+  }
+
+  /** #2669 import_plugin_team: the same card, kept rule and direct apply as
+   * the other team tools. */
+  async submitPluginImport(args: PluginImportArgs & SubmitAuthority) {
+    const request = this.preparePluginImport(args);
+    if (this.options.autoApply?.(args.botId, args.threadId, request)) return this.applyImmediately(request, args.from, args.canCommit);
+    const kept = this.options.keptRule?.(args.botId, args.threadId, teamSetupRuleCandidate(request));
+    if (kept?.behavior === "allow") return this.applyImmediately(request, args.from, args.canCommit, kept);
+    return { ...this.card(request, args.from), applied: false, state: "pending" as const };
+  }
+
   propose(args: SetupArgs) { return this.card(this.prepare(args), args.from); }
   proposeDeletion(args: DeletionArgs) { return this.card(this.prepareDeletion(args), args.from); }
 
@@ -383,6 +416,16 @@ export class TeamSetupRequestService {
     const chief = this.requester(request.botId, request);
     const lines = [`Why: ${request.reason}`];
     if (request.suggestion) lines.push(`@${chief.name} is suggesting this. You did not ask for it.`);
+    if (request.pluginImport) {
+      const imported = request.pluginImport;
+      lines.push(`Import the plugin ${imported.plugin} (${imported.marketplace}) as the new team ${JSON.stringify(imported.team)}.`);
+      for (const bot of imported.bots) {
+        lines.push(`\nCreate @${bot.name} (new bot)`, `Model: ${bot.model ?? "the team's default model"}`);
+        if (bot.tools?.length) lines.push(`Tools: ${bot.tools.join(", ")}`);
+      }
+      for (const note of imported.skipped ?? []) lines.push(`Note: ${note}`);
+      lines.push("\nNew bots stay owner-owned after creation: connected apps off, approvals at Ask, a private workspace by default.");
+    }
     if (request.deletion) lines.push(`Delete @${request.deletion.name} (${request.deletion.botId}).`, "Permanently removes this bot, all its conversations, memory, instructions, skills, and any computer owned only by it. Generated project files and shared team computers remain. Active work or an unavailable provider can block deletion safely.");
     if (request.newTeams.length) {
       lines.push(`Create teams: ${request.newTeams.map((name) => JSON.stringify(name)).join(", ")}.`);
@@ -422,7 +465,7 @@ export class TeamSetupRequestService {
         }
       }
     }
-    if (!request.deletion) {
+    if (!request.deletion && !request.pluginImport) {
       lines.push("\nThe new model applies across this bot's conversations. Existing permissions stay unchanged.");
       // Informed consent: creation locks the new bot down, and the owner
       // signs off on that whole state, not just the two facts named before.
@@ -433,12 +476,13 @@ export class TeamSetupRequestService {
     }
     lines.push(immediate ? "This conversation's approval level applies this request in the current turn without another confirmation." : `After this decision ${chief.chiefOfStaff ? "the Primary Bot" : `@${chief.name}`} continues once with the result.`);
     const title = request.deletion ? `Delete @${request.deletion.name}?`
+      : request.pluginImport ? `Import ${request.pluginImport.plugin} as the team ${request.pluginImport.team}?`
       : request.suggestion ? `Add @${request.operations[0]?.fields.name} to the team?`
         : `Apply setup for ${request.operations.length} ${request.operations.length === 1 ? "bot" : "bots"}?`;
     const detail = lines.join("\n");
     return {
-      title, subtitle: detail, options: request.deletion ? ["Delete bot", "Cancel"] : request.suggestion ? ["Add bot", "Not now"] : ["Apply setup", "Cancel"], requestId: request.requestId,
-      tool: request.deletion ? "delete_bot" : "set_up_team", teamSetupRequest: request,
+      title, subtitle: detail, options: request.deletion ? ["Delete bot", "Cancel"] : request.pluginImport ? ["Import team", "Cancel"] : request.suggestion ? ["Add bot", "Not now"] : ["Apply setup", "Cancel"], requestId: request.requestId,
+      tool: request.deletion ? "delete_bot" : request.pluginImport ? "import_plugin_team" : "set_up_team", teamSetupRequest: request,
       // #2091: what Always allow keeps on this card
       ownerRule: teamSetupRuleCandidate(request),
     };
@@ -452,7 +496,7 @@ export class TeamSetupRequestService {
     return { requestId: request.requestId, messageId: message.id, title, summary: title, detail };
   }
 
-  private async apply(request: TeamSetupRequest, immediate = false, canCommit?: () => boolean): Promise<TeamSetupResult> {
+  private async apply(request: TeamSetupRequest, immediate = false, canCommit?: () => boolean, byRule = false): Promise<TeamSetupResult> {
     const receipt = this.options.store.bot(request.botId)?.lastTeamSetupReceipt;
     if (receipt?.requestId === request.requestId) return receipt.result;
     try {
@@ -460,9 +504,13 @@ export class TeamSetupRequestService {
         // Deletion awaits inventory and teardown. A still-Full conversation
         // is not authority for an invocation that Stop/replacement revoked.
         if (immediate && canCommit && !canCommit()) throw new TeamSetupError("The requesting turn has expired; this setup was cancelled", 409);
-        this.validate(request, true, immediate);
+        this.validate(request, true, immediate, byRule);
       };
       revalidate();
+      if (request.pluginImport) {
+        if (!this.options.importPlugin) throw new TeamSetupError("This server cannot import plugins as teams", 404);
+        return await this.options.importPlugin(request);
+      }
       if (!request.deletion) return this.options.store.applyTeamSetup(request);
       await this.options.deleteBot(request.deletion.botId, revalidate, request);
       return { state: "applied", bots: [{ id: request.deletion.botId, name: request.deletion.name, action: "deleted" }], newTeams: [] };
@@ -479,8 +527,8 @@ export class TeamSetupRequestService {
     // Capture the before/after description before applying. Only a settled
     // receipt is published, so no interactive card or second turn can start.
     const card = this.cardData(request, true);
-    let result = await this.apply(request, true, canCommit);
-    const title = result.state === "applied" ? (request.deletion ? `Deleted @${request.deletion.name}` : "Team setup applied") : "Team setup not applied";
+    let result = await this.apply(request, true, canCommit, Boolean(byRule));
+    const title = result.state === "applied" ? (request.deletion ? `Deleted @${request.deletion.name}` : request.pluginImport ? `Imported ${request.pluginImport.team}` : "Team setup applied") : "Team setup not applied";
     let messageId: string | undefined;
     try {
       // the settled receipt of an applied or expired proposal; full-access: exempt

@@ -1406,6 +1406,38 @@
       }
     },
     {
+      "name": "import_plugin_team",
+      "description": "Primary Bot only: import an installed plugin's agents as a new team for the person (one bot per agent, each on the model its frontmatter names, tools restricted where the engine allows). Pass the marketplace and plugin names as the person sees them in Plugins; team is the new team's name (default: the plugin's). The person reviews one card listing every bot, model and tool limit. Read the result: granted Full Access may apply the change immediately. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success from the permission mode alone; report failed or cancelled results honestly. This does not elevate another bot's execution permissions.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "marketplace": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "plugin": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "team": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "marketplace",
+          "plugin"
+        ]
+      }
+    },
+    {
       "name": "archive_bot",
       "description": "Primary Bot only: archive one of the person's bots (kept, restorable) or restore it. Already archived: nothing changes, said so. A temporary agent (create_agent) archived is gone for good. With quote it applies at once, else a card.",
       "inputSchema": {
@@ -2350,14 +2382,93 @@
                 "type": "string",
                 "enum": [
                   "webhook",
-                  "email"
+                  "email",
+                  "github"
                 ]
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "pr.opened",
+                    "pr.updated",
+                    "pr.merged",
+                    "pr.closed",
+                    "pr.review_requested",
+                    "pr.review_submitted",
+                    "pr.review_approved",
+                    "pr.review_changes_requested",
+                    "pr.review_commented",
+                    "pr.comment",
+                    "pr.review_comment",
+                    "pr.thread_resolved",
+                    "pr.thread_reopened",
+                    "ci.failed",
+                    "ci.succeeded",
+                    "issue.opened",
+                    "issue.labeled",
+                    "issue.assigned",
+                    "push",
+                    "release.published"
+                  ]
+                },
+                "description": "github only: the GitHub event kinds that start the routine."
+              },
+              "filters": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "github only: each key keeps an event only when one of its values matches.",
+                "properties": {
+                  "repo": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "branch": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "label": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "sender": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "reviewer": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "assignee": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "keyword": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             },
             "required": [
               "type"
             ],
-            "description": "Instead of schedule. type is webhook or email. The routine starts active unless enabled is false, and the owner copies its key in the app."
+            "description": "Instead of schedule. type is webhook, email or github. github runs on GitHub events (issue opened or labeled, PR opened, review requested...): events lists the kinds (omit for every kind) and filters narrows them, e.g. { repo: [\"org/repo\"], label: [\"ready\"] }. The routine starts active unless enabled is false, and the owner copies its key (for github: the webhook URL and secret to paste in the repository settings) in the app."
           },
           "enabled": {
             "type": "boolean",
@@ -2387,7 +2498,7 @@
               "delete",
               "rotate_webhook_key"
             ],
-            "description": "The requested action. Supply changes only for update. rotate_webhook_key replaces the key of a webhook or email trigger."
+            "description": "The requested action. Supply changes only for update. rotate_webhook_key replaces the key of a webhook, email or GitHub trigger."
           },
           "changes": {
             "type": "object",

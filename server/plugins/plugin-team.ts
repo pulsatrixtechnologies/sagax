@@ -6,6 +6,9 @@
  * value or a model no engine offers keeps the team's default model. */
 import type { ModelSelection } from "../../shared/wire.ts";
 import { readyToRun, type SelectableInstance } from "../models/default-model-selection.ts";
+import type { PluginTeamAgent } from "../../shared/plugin-team.ts";
+import { pluginAgentToolScope } from "../../shared/plugin-team-tools.ts";
+import type { ToolScope } from "../../shared/tool-scope.ts";
 
 const CLAUDE_DRIVER = "claudeAgent";
 const ALIASES = new Set(["sonnet", "opus", "haiku", "fable"]);
@@ -46,4 +49,49 @@ export function resolvePluginTeamModels(
     else if (agent.model && agent.model.trim().toLowerCase() !== "inherit") unmatched.push(`model ${agent.model} of ${agent.name} (no engine offers it; the team's model is used)`);
   }
   return { models, unmatched };
+}
+
+/** One bot of a plugin team as the import preview shows it (#2669). */
+export interface PluginTeamPreviewBot {
+  name: string;
+  description?: string;
+  /** The frontmatter `model`, as written. */
+  modelAsked?: string;
+  /** The model id the bot will run on (the team default when the frontmatter names none). */
+  model?: string;
+  tools: string[];
+  /** True when the tool list is a real restriction on the bot's engine. */
+  toolsEnforced: boolean;
+  notes: string[];
+}
+
+/** #2669: each agent's model and tool selection, and the preview rows. The
+ * engine of an agent is its resolved model's, else the default model's. */
+export function planPluginTeam(
+  agents: ReadonlyArray<PluginTeamAgent>,
+  instances: readonly SelectableInstance[],
+  refusal: ((instance: SelectableInstance) => string | undefined) | undefined,
+  fallback: ModelSelection | null | undefined,
+): { models: Record<string, ModelSelection>; toolScopes: Record<string, ToolScope>; unmatched: string[]; bots: PluginTeamPreviewBot[] } {
+  const { models, unmatched } = resolvePluginTeamModels(agents, instances, refusal);
+  const toolScopes: Record<string, ToolScope> = {};
+  const driverOf = (selection: ModelSelection | null | undefined) =>
+    selection ? instances.find((instance) => instance.instanceId === selection.instanceId)?.driverKind : undefined;
+  const bots = agents.map((agent): PluginTeamPreviewBot => {
+    const selection = models[agent.key] ?? fallback ?? undefined;
+    const mapped = pluginAgentToolScope(agent.tools, driverOf(selection));
+    if (mapped.scope) toolScopes[agent.key] = mapped.scope;
+    const native = mapped.scope?.allow?.some((selector) => selector.startsWith("native:") && selector !== "native:*") ?? false;
+    return {
+      name: agent.name,
+      ...(agent.description ? { description: agent.description } : {}),
+      ...(agent.model ? { modelAsked: agent.model } : {}),
+      ...(selection ? { model: selection.model } : {}),
+      tools: agent.tools,
+      toolsEnforced: Boolean(mapped.scope) && (native || agent.tools.every((tool) => tool.startsWith("mcp__"))),
+      notes: mapped.notes,
+    };
+  });
+  for (const note of bots.flatMap((bot) => bot.notes.map((line) => `tools of ${bot.name}: ${line}`))) unmatched.push(note);
+  return { models, toolScopes, unmatched, bots };
 }

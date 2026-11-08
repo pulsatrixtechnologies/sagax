@@ -145,6 +145,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // 2026-10-19 (member admin audit, docs/member-admin-audit.md): the
   // person's own data or destinations, never an admin's.
   p("teamsetup:propose", "own", "propose_team_setup"),
+  p("teamsetup:importplugin", "own", "import_plugin_team"),
   p("rules:update", "own", "rules_update"),
   // a Confirm card to add, change or remove one of the speaker's own review rules (server/rules/rule-requests.ts)
   p("rules:propose", "own", "propose_rule"),

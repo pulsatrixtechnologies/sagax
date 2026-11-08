@@ -35,6 +35,7 @@ import { importedMemberProfile, type ParsedTeamManifest, type TeamManifestMember
 import { takeImportName } from "../../shared/import-name.ts";
 import { decodeBase64, type PackageAgent, type PackageDocument, type PackageTrust } from "../../shared/package-format.ts";
 import type { BotVisibility, ModelSelection } from "../../shared/wire.ts";
+import type { ToolScope } from "../../shared/tool-scope.ts";
 
 export const NO_BOTS_MESSAGE = "This package has no bots. Add it from your organization's shelf, or update Sagax.";
 /** A file with skills only: a file never adds a skill without a bot or a preset to hold it. */
@@ -113,6 +114,9 @@ export interface PackageImportOptions {
    * already resolved against the server's providers by the caller. A bot that
    * gets one keeps it when its team's default model changes. */
   models?: Readonly<Record<string, ModelSelection>>;
+  /** #2669: each agent's frontmatter `tools` as its tool selection (by
+   * package agent key), already checked against the bot's engine. */
+  toolScopes?: Readonly<Record<string, ToolScope>>;
 }
 
 /** What an organization install created, for DATA_DIR/org-library/state.json
@@ -390,6 +394,7 @@ function runImport(source: ImportSource, options: PackageImportOptions, deps: Pa
         ...(installed ? { installedPackage: installed } : {}),
         ...(agent?.connections ? { mcpServers: agent.connections.flatMap((key) => serverForKey.has(key) ? [serverForKey.get(key)!] : []) } : {}),
         ...(options.models?.[member.key] ? { teamOverrides: ["model" as const] } : {}),
+        ...(options.toolScopes?.[member.key] ? { toolScope: options.toolScopes[member.key] } : {}),
         ...avatar,
       });
       for (const skillName of agent?.skills ?? []) {

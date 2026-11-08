@@ -39,6 +39,9 @@ export interface TeamSetupRequest {
   operations: TeamSetupOperation[];
   newTeams: string[];
   deletion?: { botId: string; name: string; expectedRevision: string };
+  /** #2669: import a marketplace plugin as a new team (import_plugin_team).
+   * `bots` is the preview the card shows: each agent and its model. */
+  pluginImport?: { marketplace: string; plugin: string; team: string; bots: Array<{ name: string; model?: string; tools?: string[] }>; skipped?: string[] };
   /** The Chief suggested this bot without being asked. It always waits on
    * the card, and a "Not now" answer is remembered in its conversation. */
   suggestion?: true;

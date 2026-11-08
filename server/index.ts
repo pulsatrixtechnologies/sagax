@@ -763,7 +763,7 @@ import { ProfileRequestService } from "./profiles/profile-requests.ts";
 import { ModelRequestService } from "./models/model-requests.ts";
 import { RuleRequestService } from "./rules/rule-requests.ts";
 import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from "./team/team-setup-requests.ts";
-import type { TeamSetupRequest } from "../shared/team-setup.ts";
+import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts";
 import { profileRevision, profileSnapshot } from "./profiles/profile-revision.ts";
 import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profiles/profile-versions.ts";
 import { BOT_PACKAGE_MAX_SKILLS, isBotPackage, packageSummary, parsePackageDocument } from "./bots/bot-package.ts";
@@ -1368,7 +1368,7 @@ import { createInternalIntegrationsRoutes } from "./routes/internal-integrations
 // IMPORT-ANCHOR:team-map
 import { createTeamMapRoutes } from "./routes/team-map.ts";
 import { createTeamLibraryRoutes } from "./routes/team-library.ts";
-import { createTeamExportImportRoutes } from "./routes/team-export-import.ts";
+import { createPluginTeamImporter, createTeamExportImportRoutes, type TeamExportImportRouteDeps } from "./routes/team-export-import.ts";
 import { createTeamMemoryHttpRoutes } from "./routes/team-memory-http.ts";
 import { createSectionContextRoutes } from "./routes/section-context.ts";
 import { createTeamDefaultsRoutes } from "./routes/team-defaults.ts";
@@ -19853,8 +19853,70 @@ const teamSetupRequests = new TeamSetupRequestService({
   deleteBot: async (botId, revalidate, request) => {
     const result = await deleteBotWithLifecycle(botId, revalidate, request);
     if (result.status >= 400) throw new TeamSetupError(result.body.error ?? "The bot could not be deleted", result.status);
-  }
+  },
+  // #2669 import_plugin_team: the same import as POST /api/teams/import-plugin,
+  // run as the requesting bot's person.
+  importPlugin: (request) => importPluginTeamForBot(request)
 });
+
+/** #2669: the request auth of a bot's person (their screen would carry it),
+ * never persisted: the operator on a solo server, else a member session. */
+function botOwnerImportAuth(bot: BotRecord): { auth: RequestAuth; owner: string } {
+  const owner = effectiveBotOwner(bot).trim().toLowerCase();
+  if (IDENTITY.kind !== "perspicax" || !owner || owner === localPrincipalId().trim().toLowerCase()) {
+    return { auth: { kind: "loopback", scopes: ["admin", "client"] }, owner: "" };
+  }
+  const scopes: Scope[] = ["client"];
+  return {
+    owner,
+    auth: {
+      kind: "session",
+      via: "bearer",
+      scopes,
+      session: { id: "primary-bot", tokenHash: "0".repeat(64), label: `${bot.name} (on behalf)`, scopes: [...scopes], createdAt: 0, lastSeenAt: 0, expiresAt: Number.MAX_SAFE_INTEGER, principalId: owner },
+    },
+  };
+}
+
+/** #2669 import_plugin_team: read the plugin as the bot's person (preview,
+ * nothing created), then the team-setup card with its bots and models. */
+async function submitPluginTeamImport(input: Record<string, unknown>) {
+  const bot = store.bot(String(input.botId ?? ""));
+  if (!bot) return { status: 404, error: "That bot no longer exists" };
+  const { auth, owner } = botOwnerImportAuth(bot);
+  const preview = await importPluginTeam(auth, { marketplace: input.marketplace, plugin: input.plugin, team: input.team, preview: true }, owner ? { ownerPrincipalId: owner } : undefined);
+  const body = preview.body as { error?: string; team?: string; bots?: Array<{ name: string; model?: string; tools?: string[] }>; skipped?: string[] };
+  if (preview.status >= 400 || !body.team) return { status: preview.status >= 400 ? preview.status : 422, error: body.error ?? "The plugin could not be read" };
+  try {
+    return await teamSetupRequests.submitPluginImport({
+      botId: bot.id,
+      threadId: String(input.threadId ?? ""),
+      reason: String(input.reason ?? ""),
+      plugin: {
+        marketplace: String(input.marketplace), plugin: String(input.plugin), team: body.team,
+        bots: (body.bots ?? []).map((row) => ({ name: row.name, ...(row.model ? { model: row.model } : {}), ...(row.tools?.length ? { tools: row.tools } : {}) })),
+        ...(body.skipped?.length ? { skipped: body.skipped } : {}),
+      },
+      ...(input.from ? { from: input.from as { botId: string; name: string; color: string } } : {}),
+      ...(typeof input.canCommit === "function" ? { canCommit: input.canCommit as () => boolean } : {}),
+    });
+  } catch (error) {
+    if (error instanceof TeamSetupError) return { status: error.status, error: error.message };
+    throw error;
+  }
+}
+
+async function importPluginTeamForBot(request: TeamSetupRequest): Promise<TeamSetupResult> {
+  const bot = store.bot(request.botId);
+  const imported = request.pluginImport;
+  if (!bot || !imported) throw new TeamSetupError("This import no longer has a requesting bot", 409);
+  const { auth, owner } = botOwnerImportAuth(bot);
+  const outcome = await importPluginTeam(auth, { marketplace: imported.marketplace, plugin: imported.plugin, team: imported.team }, owner ? { ownerPrincipalId: owner } : undefined);
+  const body = outcome.body as { error?: string; section?: string; bots?: Array<{ id: string; name: string; section?: string; modelSelection?: ModelSelection }> };
+  if (outcome.status >= 400) throw new TeamSetupError(body.error ?? "The plugin could not be imported", outcome.status);
+  const bots = (body.bots ?? []).map((created) => ({ id: created.id, name: created.name, action: "created" as const, ...(created.section ? { section: created.section } : {}), ...(created.modelSelection ? { modelSelection: created.modelSelection } : {}) }));
+  return { state: "applied", bots, newTeams: body.section ? [body.section] : [imported.team] };
+}
 
 type TeamSetupResumeEntry = { request: TeamSetupRequest; messageId: string; generation: number };
 const pendingTeamSetupResumes = new Map<string, TeamSetupResumeEntry>();
@@ -22231,6 +22293,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     botsReadOnlyBody: { error: "org_bots_read_only", message: "Your administrator lets you use shared bots only." },
     submitTeamSetup: (input) => teamSetupRequests.submit(input as unknown as Parameters<typeof teamSetupRequests.submit>[0]),
     submitBotDeletion: (input) => teamSetupRequests.submitDeletion(input as unknown as Parameters<typeof teamSetupRequests.submitDeletion>[0]),
+    submitPluginImport: (input) => submitPluginTeamImport(input),
     fullAccessForSource,
     broadcastBot: (bot) => broadcast({ kind: "bot", bot: wireBot(bot as unknown as BotRecord) })
   }),
@@ -30187,7 +30250,7 @@ ROUTES.push(createTeamMapRoutes({
   delegationWatchEntries: () => delegationWatch.entries(),
   liveHandoffEdges: () => coordinator.liveEdges()
 }));
-ROUTES.push(createTeamExportImportRoutes({
+const teamExportImportDeps: TeamExportImportRouteDeps = {
   profileName: () => cfg.profile?.name,
   bots: () => store.bots,
   groups: () => store.groups,
@@ -30240,7 +30303,10 @@ ROUTES.push(createTeamExportImportRoutes({
     instances: selectableInstances(await registry.describe()),
     refusal: selectionContextFor(sessionPrincipal(auth)).refusal
   })
-}));
+};
+ROUTES.push(createTeamExportImportRoutes(teamExportImportDeps));
+// #2669: the bot tool import_plugin_team runs the same import as the route.
+const importPluginTeam = createPluginTeamImporter(teamExportImportDeps);
 ROUTES.push(createTeamLibraryRoutes());
 ROUTES.push(createSidebarSectionsRoutes({
   sections: () => store.sections,

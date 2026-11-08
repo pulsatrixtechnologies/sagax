@@ -96,6 +96,21 @@ export const DEF_PROPOSE_TEAM_SETUP = {
     },
   };
 
+export const DEF_IMPORT_PLUGIN_TEAM = {
+    name: "import_plugin_team",
+    description: "Primary Bot only: import an installed plugin's agents as a new team for the person (one bot per agent, each on the model its frontmatter names, tools restricted where the engine allows). Pass the marketplace and plugin names as the person sees them in Plugins; team is the new team's name (default: the plugin's). The person reviews one card listing every bot, model and tool limit." + PROPOSAL_OUTCOME,
+    inputSchema: {
+      type: "object", additionalProperties: false,
+      properties: {
+        marketplace: { type: "string", minLength: 1, maxLength: 200 },
+        plugin: { type: "string", minLength: 1, maxLength: 200 },
+        team: { type: "string", maxLength: 60 },
+        reason: { type: "string", maxLength: 500 },
+      },
+      required: ["marketplace", "plugin"],
+    },
+  };
+
 export const DEF_PROPOSE_BOT_DELETION = {
     name: "propose_bot_deletion",
     description: "Primary Bot only: when the user explicitly asks to delete a named teammate, submit a separate deletion request for that exact bot. Deletion removes its conversations, memory, instructions, skills, and any computer owned only by it; generated project files and shared team computers remain. Running work or an unavailable computer provider can block deletion safely. Never delete yourself, substitute an archive, or put deletion into a setup batch. If review is pending, the decision and result resume you once." + PROPOSAL_OUTCOME,
@@ -318,7 +333,7 @@ export const DEF_NUDGE_PERSON = {
     },
   };
 
-export const TEAM_TOOL_NAMES: ReadonlySet<string> = new Set(['start_thread', 'create_bot', 'list_team_setup', 'propose_team_setup', 'propose_bot_deletion', 'archive_bot', 'create_room', 'manage_room', 'retry_thread', 'propose_profile', 'propose_model', 'propose_rule', 'propose_team_memory', 'nudge_person'] as const);
+export const TEAM_TOOL_NAMES: ReadonlySet<string> = new Set(['start_thread', 'create_bot', 'list_team_setup', 'propose_team_setup', 'propose_bot_deletion', 'import_plugin_team', 'archive_bot', 'create_room', 'manage_room', 'retry_thread', 'propose_profile', 'propose_model', 'propose_rule', 'propose_team_memory', 'nudge_person'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callTeamTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -404,6 +419,19 @@ export async function callTeamTool(name: string, args: Json, context: ToolCallCo
     const text = String(body.text ?? body.error ?? "").slice(0, 4000);
     if (status >= 400 || body.error) return { text: text || "The change was refused.", isError: true };
     return { text: text || "Done." };
+  }
+  if (name === "import_plugin_team") {
+    const result = await api("/api/internal/plugin-team-import-requests", {
+      method: "POST", body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID,
+        marketplace: args.marketplace, plugin: args.plugin,
+        ...(typeof args.team === "string" && args.team.trim() ? { team: args.team.trim() } : {}),
+        ...(typeof args.reason === "string" ? { reason: args.reason } : {}),
+      }),
+    });
+    if (result.error) return { text: String(result.error), isError: true };
+    const completed = completedProposalResult(result, "the plugin team import");
+    if (completed) return completed;
+    return { text: `One review card is visible: ${String(result.title)}. Nothing has been imported yet. End this turn; the decision and structured result resume you automatically once. Do not ask again, poll, or repeat this request.` };
   }
   if (name === "propose_team_setup" || name === "propose_bot_deletion") {
     const deleting = name === "propose_bot_deletion";

@@ -91,7 +91,7 @@ export function approvalCardOutcome(card: OptionCardData): string | undefined {
   if (card.undone === true) return t("approval.status.undone");
   const isProposal = Boolean(card.routineRequest || card.skillRequest || card.profileRequest || card.modelRequest || card.ruleRequest || card.teamSetupRequest);
   if (card.answered !== "allow") return card.teamSetupRequest?.suggestion ? t("approval.status.notNow") : isProposal ? t("approval.status.cancelled") : t("approval.status.denied");
-  if (card.teamSetupRequest) return card.teamSetupRequest.deletion ? "Bot deleted" : "Team setup applied";
+  if (card.teamSetupRequest) return card.teamSetupRequest.deletion ? "Bot deleted" : card.teamSetupRequest.pluginImport ? t("approval.status.teamImported") : "Team setup applied";
   const routineAction = card.routineRequest?.operation.action;
   if (routineAction === "rotate_webhook_key") return t("approval.status.routineUpdated");
   if (routineAction) return t(ROUTINE_SETTLED_LABEL[routineAction]);

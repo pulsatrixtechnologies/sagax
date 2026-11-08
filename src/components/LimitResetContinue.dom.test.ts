@@ -113,7 +113,7 @@ describe("EngineLimitIndicator (no banner above the chat, the owner 2026-11-08)"
     });
     fixture.api.mockImplementation(async (path: unknown) =>
       String(path) === "/api/plan-usage"
-        ? { providers: [plan("claude", "claude", "Claude", 95, ["claude", "claude-opus"]), plan("codex", "codex", "Codex", 12, ["codex", "chatgpt"])] }
+        ? { providers: [plan("claude", "claude", "Claude", 95, ["claude", "claude-opus"]), plan("codex", "codex", "Codex", 100, ["codex", "chatgpt"]), plan("grok", "grok", "Grok", 99, ["grok"])] }
         : { checkedAt: NOW, engines: [] });
     limits.rememberLimits({ checkedAt: NOW, engines: [] });
     const opus = remount(createElement(EngineLimitIndicator, { engine: "claude-opus", botId: "scout", threadId: "t-1" }));
@@ -121,11 +121,18 @@ describe("EngineLimitIndicator (no banner above the chat, the owner 2026-11-08)"
     await settle();
     expect(opus.querySelector('[data-testid="engine-limit-indicator"]')?.getAttribute("title")).toContain("Claude");
     expect(opus.querySelector('[data-testid="engine-limit-indicator"]')?.getAttribute("title")).toContain("95");
-    // the ChatGPT plan instance on the Codex login stays quiet at 12 %
+    // the ChatGPT plan instance folded on the Codex login reads the Codex row at its limit
     const chatgpt = remount(createElement(EngineLimitIndicator, { engine: "chatgpt", botId: "scout", threadId: "t-1" }));
     await settle();
     await settle();
-    expect(chatgpt.innerHTML).toBe("");
+    const dot = chatgpt.querySelector('[data-testid="engine-limit-indicator"]');
+    expect(dot?.getAttribute("title")).toContain("Codex");
+    expect(dot?.className).toContain("bg-danger");
+    // an instance no row lists stays quiet, even beside rows over the threshold
+    const other = remount(createElement(EngineLimitIndicator, { engine: "claude-haiku", botId: "scout", threadId: "t-1" }));
+    await settle();
+    await settle();
+    expect(other.innerHTML).toBe("");
   });
 
   it("stays quiet for another engine", () => {

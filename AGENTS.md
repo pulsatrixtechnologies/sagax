@@ -11139,8 +11139,9 @@ around a 403, and said "no Datto alerts" for a product that is not served.
   says a 403 or an unserved product is a blocker, not a failure to route
   around, and carries the style rules (no anglicisms, no signature emoji,
   ticket by number, no id or UUID: cards by bot and subject).
-- Relay (`relayFrame`, `server/perspicax/perspicax-mcp.ts`): one role switch
-  per turn (`switches`). A read 403 is a permission block, never "no data"
+- Relay (`relayFrame`, `server/perspicax/perspicax-mcp.ts`): role switches
+  go back and forth in a turn, one per call (#2960, QA 0.8.67 G6; the old
+  one-switch-per-turn limit is gone). A read 403 is a permission block, never "no data"
   (`blockWith`, which also turns a JSON-RPC 403 error into a tool error the
   model reads).
 - #2581 rework (decided 2026-11-07: the bot's limited role is wanted, the 403 is
@@ -11152,13 +11153,21 @@ around a 403, and said "no Datto alerts" for a product that is not served.
   card's "Toujours permettre", fingerprint
   `role-read-switch:<from>:<to>:<path>`) runs it once as that role with no
   card. Otherwise the answer carries a `REFUSED:` offer (`roleOffer`): the
-  bot switches itself (`identity_switch` to that role, allowed past the
-  one-switch limit) when the person already allowed it in the conversation
-  or a saved instruction, and `oneCall` puts the role back after the next
-  call; or it sends the same read again and `askRoleSwitch` shows the card
-  (`readSwitchSummary`). A decline, or a read refused again, sets
-  `readRefused` with a `STOP:` note and refuses any later switch. One
-  switch per path per turn (`switchedPaths`): no loop.
+  bot switches itself (`identity_switch` to that role) when the person
+  already allowed it or named that role, and `oneCall` puts the role back
+  after the next call; or it sends the same read again and `askRoleSwitch`
+  shows the card (`readSwitchSummary`).
+- #2960 (QA 0.8.67 G1/G2/G6): `tryHeldRoles` walks every held role that may
+  read the path (`triedRoles` per path per turn, so no loop): a refused
+  role leads to the next one, and only when none is left does the answer
+  carry `STOP:`, naming each role and its API member (`refusedBy`, from
+  `roleMembers` filled by the identity listing). A declined card records
+  `declinedPaths`: that read is never sent under another role in the turn,
+  but other switches stay free. `visibilityNote` tells the model, once per
+  path per turn, that a ticket list read under one role covers only that
+  role's boards and names the wider held roles, so a partial count is never
+  given as complete. The prompt carries the week-time fast path (one
+  time.entries read on member and week, server total, titles optional).
 - Rendering: `cleanReplyStyle` (`shared/reply-style.ts`), before
   `dashFreeReply` in `runtime-events/preamble.ts`, drops a trailing signature
   emoji and hearts in a multi-line report, turns a bare ConnectWise ticket

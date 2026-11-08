@@ -236,7 +236,7 @@ describe("visible roles in the Perspicax relay", () => {
     expect(lastTickets(f)).toBe("");
   });
 
-  it("reports the read not done when the person declines, and refuses a switch after it", async () => {
+  it("reports the read not done when the person declines, and never reads it under another role after", async () => {
     const f = fixture({ readableBy: "full-access", explicitFull: true, roleSwitch: "deny" });
     await f.prepare();
     await f.init();
@@ -245,9 +245,12 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.text(answer)).toContain("did not approve reading it once as Full Access");
     expect(f.text(answer)).toContain("not missing data");
     expect(reads(f)).toEqual([""]);
-    const escape = await f.relay("identity_switch", { profile: "full-access" });
-    expect(f.text(escape)).toContain("its one role switch is spent");
-    expect(f.calls.some((call) => call.name === "identity_switch" && call.args.profile === "full-access")).toBe(false);
+    // #2960: the switch itself is free, the declined read stays declined
+    const go = await f.relay("identity_switch", { profile: "full-access" });
+    expect(f.text(go)).not.toContain("Refused by Sagax");
+    const escape = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(escape)).toContain("The person declined reading this (time/entries)");
+    expect(reads(f)).toEqual([""]);
   });
 
   it("switches by itself for one call when a rule allows it: no card", async () => {
@@ -262,17 +265,24 @@ describe("visible roles in the Perspicax relay", () => {
     expect(lastTickets(f)).toBe("");
   });
 
-  it("never loops: a read refused again under the offered role is a final block", async () => {
+  it("tries each held role once, then a final block naming every role refused (no loop)", async () => {
     const f = fixture({ readableBy: "nobody", explicitFull: true, roleSwitch: "allow" });
     await f.prepare();
     await f.init();
     await f.relay("cw_psa_find_time_entries");
+    // #2960 (QA 0.8.67 G2): Full Access refused too: the next held role is offered
     const again = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(again)).toContain("refused again as Full Access");
+    expect(f.text(again)).toContain("Another role you hold, Service Desk");
     const third = await f.relay("cw_psa_find_time_entries");
     expect(f.text(third)).toContain("STOP: this read was refused (403)");
-    expect(f.switchAsked).toHaveLength(1);
-    expect(reads(f)).toEqual(["", "full-access", ""]);
+    expect(f.text(third)).toContain("Full Access (API member nova)");
+    expect(f.text(third)).toContain("Service Desk (API member nova)");
+    expect(f.text(third)).toContain("which API member and role refused it");
+    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_time_entries", "me>service-desk:cw_psa_find_time_entries"]);
+    expect(reads(f)).toEqual(["", "full-access", "service-desk"]);
+    const fourth = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(fourth)).toContain("no other role you hold can be tried");
+    expect(f.switchAsked).toHaveLength(2);
   });
 
   it("blocks with the permission when no other held role can be tried", async () => {
@@ -284,7 +294,7 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.text(answer)).toContain("no other role you hold can be tried");
     expect(f.text(answer)).toContain("not missing data");
     // #2912: the clause #2905 added to readStop, in its negative form.
-    expect(f.text(answer)).toContain("Tell the person the read is blocked and which permission the account needs; never say it needs an admin or that nothing can be done.");
+    expect(f.text(answer)).toContain("Tell the person the read is blocked, which API member and role refused it and which permission the account needs; never say it needs an admin or that nothing can be done.");
   });
 
   it("turns a JSON-RPC 403 error into a STOP block the model reads", async () => {
@@ -298,27 +308,66 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.text(answer)).toContain("You do not have security permission");
   });
 
-  it("marks a read still refused after the one fallback as a STOP block", async () => {
+  it("after Moi is refused too under a role, offers the next held role instead of stopping", async () => {
     const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, meRefused: "result" });
     await f.prepare();
     await f.init();
     const answer = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(answer)).toContain("STOP: this read was refused (403)");
+    expect(f.text(answer)).toContain("REFUSED: this read was refused (403) under Service Desk (API member nova), the person's own account");
+    expect(f.text(answer)).toContain("Another role you hold, Full Access");
     expect(f.calls.filter((call) => call.name === "cw_psa_find_time_entries")).toHaveLength(2);
   });
 
-  it("allows one identity switch per turn, then blocks the loop", async () => {
+  it("marks a read refused under every held role as a STOP block", async () => {
+    const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, meRefused: "result", fallback: "rule" });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(answer)).toContain("STOP: this read was refused (403)");
+    expect(reads(f)).toEqual(["service-desk", "", "full-access"]);
+  });
+
+  // QA 0.8.67 G6 (#2960): switches go back and forth in a turn.
+  it("allows several identity switches back and forth in one turn", async () => {
     const f = fixture();
     await f.prepare();
     await f.init();
     await f.relay("identity_switch", { profile: "service-desk" });
     const again = await f.relay("identity_switch", { profile: "full-access" });
-    expect(f.text(again)).toContain("one role switch per turn");
-    expect(f.calls.filter((call) => call.name === "identity_switch" && call.args.profile === "full-access")).toHaveLength(0);
-    // a new turn starts fresh
+    expect(f.text(again)).not.toContain("Refused by Sagax");
+    const back = await f.relay("identity_switch", { clear: true });
+    expect(f.text(back)).not.toContain("Refused by Sagax");
+    await f.relay("cw_psa_find_time_entries");
+    expect(reads(f)).toEqual([""]);
+    await f.relay("identity_switch", { profile: "full-access" });
+    await f.relay("cw_psa_find_time_entries");
+    expect(reads(f)).toEqual(["", "full-access"]);
+  });
+
+  // QA 0.8.67 G1 (#2960): a ticket list under one role is not the whole picture.
+  it("notes once per turn that a ticket list read under one role may miss boards", async () => {
+    const f = fixture({ turnRole: { slug: "service-desk", reason: "routine" }, routine: true });
     await f.prepare();
     await f.init();
-    const next = await f.relay("identity_switch", { profile: "full-access" });
-    expect(f.text(next)).not.toContain("Refused by Sagax");
+    const first = await f.relay("cw_psa_find_tickets");
+    expect(f.text(first)).toContain("this list was read under Service Desk (API member nova)");
+    expect(f.text(first)).toContain("Full Access (profile \\\"full-access\\\")");
+    expect(f.text(first)).toContain("never present this as complete");
+    const second = await f.relay("cw_psa_find_tickets");
+    expect(f.text(second)).not.toContain("this list was read under");
+  });
+
+  it("names only explicit-only roles as wider than the person's own access", async () => {
+    const plain = fixture();
+    await plain.prepare();
+    await plain.init();
+    expect(plain.text(await plain.relay("cw_psa_find_tickets"))).not.toContain("this list was read under");
+    const wider = fixture({ explicitFull: true });
+    await wider.prepare();
+    await wider.init();
+    const answer = wider.text(await wider.relay("cw_psa_find_tickets"));
+    expect(answer).toContain("this list was read under the person's own account");
+    expect(answer).toContain("Full Access");
+    expect(answer).not.toContain("Service Desk");
   });
 });

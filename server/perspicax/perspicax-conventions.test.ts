@@ -19,9 +19,9 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/Flow .* is for a routine or a multi-step procedure only/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("n'est pas servi ici");
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/a missing source is not a source with nothing in it/);
-    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/one held role that may read it: if the person already allowed it .*, identity_switch to it for that one call/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/tries each held role that may read it in turn: .* names the next role: if the person already allowed it .*, identity_switch to it for that one call/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/Sagax asks with a card/);
-    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A read still refused, a declined card or a refused write is a block/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A read refused under every held role, a declined card or a refused write is a block: report the API member and role that refused it/);
   });
   // QA c2 D3/S8/D7 (#2670): the Flow entry skill says "catalog --index
   // before any answer or action, including a clarifying question" and "Let
@@ -57,7 +57,7 @@ describe("Perspicax tool conventions (#1209)", () => {
   // left; the 403 point must not send the bot back to identity_switch then,
   // and a refused write stays a block, as the Roles point says.
   it("stops at a Sagax STOP note and on a refused write, without a role search", () => {
-    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A Sagax note starting with STOP means no held role is left, the person chose to stay in that role or the turn's switch is spent: no `identity_switch`, name the exact missing permission at once/);
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A Sagax note starting with STOP means no held role is left for that read, the person declined it or chose to stay in that role: no `identity_switch` for that read, name the API member and role that refused it and the exact missing permission at once/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).toMatch(/A refused write follows the Roles point above: no other role, name the exact missing permission/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).not.toMatch(/if it names none, `identity_switch`/);
     expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("is not the end while a held role is untried");
@@ -84,5 +84,25 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(connectorConventionsPrompt([{ name: "claude.ai Gmail", status: "connected" }], false)).toBe("");
     expect(connectorConventionsPrompt(undefined, false)).toBe("");
     expect(hasPerspicaxConventions("")).toBe(false);
+  });
+
+  // QA 0.8.67 G1, G2, G3, G6 (#2960).
+  it("lets the bot switch back and forth and take a named role as the person's GO", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).not.toContain("Switch at most once");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("switches go back and forth in a turn, one per call when needed");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("When the person names a role to use");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("never refuse before trying it");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Sagax tries each held role that may read it in turn");
+  });
+
+  it("never gives a count read under one role as complete", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("A list read under one role covers only the boards that role sees");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("never present the count as complete");
+  });
+
+  it("reads a week's time in one time.entries call with the server's total", () => {
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("one time.entries read filtered on member/id=<member id>");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Ticket or project titles are optional");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("A 403 on project or service tickets never blocks the hours");
   });
 });

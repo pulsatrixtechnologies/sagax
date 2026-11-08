@@ -18,7 +18,7 @@ import {
   type BotComputerVmEngine,
   type BotComputerVmView,
 } from "../../shared/bot-computer-host.ts";
-import { hostOwnedByPerson, type UnattendedHostRow } from "../../shared/remote-unattended-host.ts";
+import { hostUsableByPerson, type UnattendedHostRow } from "../../shared/remote-unattended-host.ts";
 import { isReadOnlyCommand, runCommandOf } from "../../shared/read-only-command.ts";
 import { builtinAgentToolName } from "../people/member-tool-scope.ts";
 import type { HostComputerStore } from "./host-computer-store.ts";
@@ -122,7 +122,7 @@ export function createHostComputerRouter(deps: {
     const listed = await deps.hosts.list({ principalId });
     if (!listed.available) return { rows: [], error: listed.reason };
     const sub = deps.ownerSub?.(principalId) ?? null;
-    return { rows: listed.hosts.filter((row) => row.state === "enrolled" && hostOwnedByPerson(row, sub)) };
+    return { rows: listed.hosts.filter((row) => row.state === "enrolled" && hostUsableByPerson(row, sub)) };
   };
 
   const accessOf = (principalId: string, hostId: string, row: UnattendedHostRow | null): BotComputerHostAccess => {

@@ -275,7 +275,7 @@ export function RemoteSessionsAdminPage() {
         </div>
       </div>
 
-      {adding && <AddComputerDialog available={hosts.available} onIssued={hosts.reload} onClose={() => { setAdding(false); hosts.reload(); }} />}
+      {adding && <AddComputerDialog available={hosts.available} hosts={hosts.hosts} onIssued={hosts.reload} onClose={() => { setAdding(false); hosts.reload(); }} />}
       {logsFor && <LogsPanel row={logsFor} onClose={() => setLogsFor(null)} />}
       {controlling && <RemoteTakeover botId={controlling.botId} view={viewFromRow(controlling)} state="running" onClose={() => setControlling(null)} />}
       {confirmRevoke && (

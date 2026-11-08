@@ -897,6 +897,7 @@ import { createHostComputerInternalRoutes, createHostComputersRoutes } from "./r
 import { createRemoteHostsRoutes } from "./routes/remote-hosts.ts";
 import { RemoteHostTeams } from "./remote-support/remote-host-teams.ts";
 import { RemoteHostAccess, hostAccessGate } from "./remote-support/remote-host-access.ts";
+import { RemoteHostSharing } from "./remote-support/remote-host-sharing.ts";
 import { createRemoteControlRoutes, isRemoteControlPath } from "./routes/remote-control.ts";
 import { BOT_ACT_ROUTE_HEADER, createRemoteSessionFileRoutes, remoteCallerIsAgent } from "./routes/remote-session-files.ts";
 import { createDeviceSettingsBroker } from "./device-settings.ts";
@@ -11386,6 +11387,10 @@ const teamComputers = new TeamComputers(join(DATA_DIR, "team-computers.json"), E
 const remoteHostTeams = new RemoteHostTeams(join(DATA_DIR, "remote-host-teams.json"));
 // What bots may do with each enrolled host, per person (#2723).
 const remoteHostAccess = new RemoteHostAccess(join(DATA_DIR, "remote-host-access.json"));
+// Which bots may use an enrolled host, and who it is shared with (#2957).
+const remoteHostSharing = new RemoteHostSharing(join(DATA_DIR, "remote-host-sharing.json"));
+/** The person's teams, for shares made with a team (#2957). */
+const teamIdsOf = (principalId: string): string[] => (principals.byId(principalId)?.teams ?? []).map((team) => team.id);
 /** A bot's hosts: those attached in its Computer tab, then those its owner
  * placed on its team from the Computers panel (person isolation). */
 function effectiveRemoteHosts(bot: { remoteHosts?: string[]; section?: string; sectionId?: string } & Parameters<typeof effectiveBotOwner>[0]): string[] {
@@ -14770,6 +14775,13 @@ const unattendedHosts = createUnattendedHosts({
       : null;
   },
   defaultOrg: () => process.env.SAGAX_ORG_ID?.trim() || process.env.SAGAX_ORG_NAME?.trim() || undefined,
+  // Shares and bot scopes (#2957): a shared host lists and opens through its owner's seat.
+  sharing: {
+    sharedWith: (principalId) => remoteHostSharing.sharedWith(principalId, teamIdsOf(principalId)),
+    ownerName: (principalId) => personDisplayName(principals.byId(principalId)) || "a colleague",
+    botAllowed: (principalId, hostId, botId) => remoteHostSharing.botAllowed(principalId, hostId, botId),
+    botName: (_principalId, botId) => store.bot(botId)?.name?.trim() || "This bot",
+  },
   audit: (event) => remoteSessionActionsAudit.write({
     at: event.at,
     sessionId: "",
@@ -20564,9 +20576,15 @@ desktopBridges.setAskHook(async ({ device, context }) => {
 // a device (Always allow remembered per bot and host), Always allow passes.
 async function remoteHostBotGate(input: { botId: string; threadId: string; principalId: string; hostId: string }): Promise<string | null> {
   const access = remoteHostAccess.get(input.principalId, input.hostId);
-  if (access === "always") return null;
+  // Bot scope (#2957): a bot the person left out of this computer is refused first.
+  const scoped = remoteHostSharing.botAllowed(input.principalId, input.hostId, input.botId);
+  if (access === "always" && scoped) return null;
   const row = await remoteBotHosts.assertOwnHost(input.principalId, input.hostId).catch(() => null);
   const hostName = (row && "hostId" in row && row.hostname) || "this computer";
+  if (!scoped) {
+    const botName = store.bot(input.botId)?.name?.trim() || "This bot";
+    return `Refused by Sagax: ${botName} is not allowed on ${hostName}. The person chooses which bots may use it in Remote sessions.`;
+  }
   return hostAccessGate({
     access,
     hostName,
@@ -30700,7 +30718,33 @@ ROUTES.push(createRemoteControlRoutes({
   upgrade: (req) => desktopViewer.upgradeOf(req)
 }));
 ROUTES.push(createRemoteSessionFileRoutes({ sessions: remoteSessions, principalId: terminalPrincipalId }));
-ROUTES.push(createRemoteSessionsAdminRoutes({ admin: remoteSessionsAdmin, hosts: unattendedHosts, principalId: terminalPrincipalId, orgAdmin: orgAdminCaller, hostAccess: (principalId) => remoteHostAccess.forPrincipal(principalId) }));
+ROUTES.push(createRemoteSessionsAdminRoutes({
+  admin: remoteSessionsAdmin,
+  hosts: unattendedHosts,
+  principalId: terminalPrincipalId,
+  orgAdmin: orgAdminCaller,
+  hostAccess: (principalId) => remoteHostAccess.forPrincipal(principalId),
+  // Bot scope and sharing (#2957). Solo: every bot is the person's.
+  hostSharing: {
+    botScopes: (principalId) => remoteHostSharing.botScopes(principalId),
+    setBotScope: (principalId, hostId, botIds) => remoteHostSharing.setBotScope(principalId, hostId, botIds),
+    ownsBot: (principalId, botId) => {
+      const bot = store.bot(botId);
+      if (!bot || bot.temporary) return false;
+      if (IDENTITY.kind !== "perspicax") return true;
+      return effectiveBotOwner(bot).trim().toLowerCase() === principalId.trim().toLowerCase();
+    },
+    sharesByOwner: (principalId) => remoteHostSharing.sharesByOwner(principalId),
+    share: (principalId, hostId, target) => remoteHostSharing.share(principalId, hostId, target),
+    unshare: (principalId, hostId, target) => remoteHostSharing.unshare(principalId, hostId, target),
+    forget: (principalId, hostId) => remoteHostSharing.forget(principalId, hostId),
+    targetName: (target) => {
+      if (target.kind === "team") return orgTeams.name(target.id) ?? (principals.membersOfTeam(target.id).length ? target.id : null);
+      const person = principals.byId(target.id);
+      return person ? personDisplayName(person) || target.id : null;
+    },
+  },
+}));
 ROUTES.push(createRemoteBotHostsRoutes({ hosts: remoteBotHosts, principalId: terminalPrincipalId }));
 ROUTES.push(createHostComputersRoutes({
   router: hostComputers,

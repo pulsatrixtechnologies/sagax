@@ -8,7 +8,7 @@ import {
   detachRemoteHost,
 } from "../../shared/remote-bot-hosts.ts";
 import {
-  hostOwnedByPerson,
+  hostUsableByPerson,
   parseUnattendedHostId,
   type UnattendedHostRow,
 } from "../../shared/remote-unattended-host.ts";
@@ -34,7 +34,7 @@ export function createRemoteBotHosts(deps: {
 }) {
   function mine(principalId: string, hosts: UnattendedHostRow[]): UnattendedHostRow[] {
     const sub = deps.ownerSub?.(principalId) ?? null;
-    return hosts.filter((row) => hostOwnedByPerson(row, sub));
+    return hosts.filter((row) => hostUsableByPerson(row, sub));
   }
 
   async function available(principalId: string): Promise<{ available: boolean; hosts: UnattendedHostRow[]; reason?: string }> {

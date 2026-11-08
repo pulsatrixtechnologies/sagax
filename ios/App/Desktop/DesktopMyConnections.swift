@@ -4,7 +4,7 @@
 // accounts (the large layout keeps these cards there, with the token field
 // and Add an MCP server). Settings > My connections only links there
 // (`DesktopMyConnectionsLinks`). What they hold: the person's own GitHub account (a code to
-// type at GitHub, or a token) and their own MCP servers (an address with no
+// type at GitHub, a token only under Advanced) and their own MCP servers (an address with no
 // sign-in, a token, OAuth, or their GitHub account; or a command that runs
 // in their server environment). When an admin manages them, the section is
 // read-only under a short notice. A pending GitHub code or sign-in is asked
@@ -107,7 +107,7 @@ struct DesktopMyConnectionsLinks: View {
         VStack(alignment: .leading, spacing: 16) {
             DesktopText(Text("Your own accounts and MCP servers. Only your conversations and your routines use them; nobody else's turn ever gets them."),
                         line: 21, color: \.inkSecondary)
-            link(Text("GitHub"), Text("Connect GitHub or a token: Plugins > Sources."), tab: .sources, identifier: "desktop-my-connections.github")
+            link(Text("GitHub"), Text("Connect GitHub with a link and a code: Plugins > Sources."), tab: .sources, identifier: "desktop-my-connections.github")
             link(Text("My MCP servers"), Text("Add, sign in, turn on or off: Plugins > Providers."), tab: .installed, identifier: "desktop-my-connections.servers")
         }
         .sheet(item: $opening) { tab in
@@ -187,22 +187,43 @@ private struct MyConnectionsGitHubCard: View {
                 DesktopText(Text("Waiting for GitHub…"), size: 12, line: 17, color: \.inkSecondary)
             }
         default:
+            // owner 2026-11-08 (#2801, as the web #2800): every GitHub
+            // connection is GitHub's link plus a code, whatever the server
+            // has (its built-in OAuth App); a token is never first, only
+            // under a folded "Advanced".
             VStack(alignment: .leading, spacing: 10) {
                 if github.state == "error", let error = github.error {
                     DesktopText(verbatim: error, size: 12, line: 17, color: \.danger)
-                }
-                HStack(spacing: 8) {
-                    if github.deviceFlow {
-                        pill("Connect GitHub", primary: true) { Task { await model.run("gh-device") { try await $0.startGithubDevice() } } }
-                    }
-                    pill("Use a token") { tokenOpen.toggle() }
-                }
-                if !github.deviceFlow {
-                    DesktopText(Text("Your administrator has not set up a GitHub OAuth App for this server (Settings > Organization). Paste a personal access token instead."),
+                    DesktopText(Text("Still not working? Advanced, below, lets you paste a GitHub token instead."),
                                 size: 12, line: 19.5, color: \.inkSecondary)
                 }
-                if tokenOpen { AnyView(tokenForm) }
+                pill(github.state == "error" ? "Try again" : "Connect GitHub", primary: true) {
+                    Task { await model.run("gh-device") { try await $0.startGithubDevice() } }
+                }
+                .accessibilityIdentifier("myConnections.github.connect")
+                advanced
             }
+        }
+    }
+
+    /// Web `data-github-advanced`: a quiet 12 pt toggle, folded by default.
+    private var advanced: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { tokenOpen.toggle() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .rotationEffect(.degrees(tokenOpen ? 90 : 0))
+                    Text("Advanced")
+                }
+                .font(theme.font(12))
+                .foregroundStyle(theme.inkSecondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(tokenOpen ? [.isSelected, .isButton] : .isButton)
+            .accessibilityIdentifier("myConnections.github.advanced")
+            if tokenOpen { AnyView(tokenForm) }
         }
     }
 

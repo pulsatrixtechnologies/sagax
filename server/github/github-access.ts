@@ -118,7 +118,7 @@ export function githubAccessFailure(
     }
     return {
       code: "not_found_or_no_access", status: 422, fix: "check_access",
-      message: `GitHub answered 404 for ${repo} with ${VIA_TEXT[credential.via]}: the address is wrong, or this token cannot read the repository. Check the address, or use a token with read access to it (Contents: read).`,
+      message: `GitHub answered 404 for ${repo} with ${VIA_TEXT[credential.via]}: the address is wrong, or it cannot read the repository. Check the address, or connect GitHub with a link and a code (the GitHub plugin's page (Capabilities > Sources > GitHub connection)) with an account that can read it; a token with Contents: read goes under Advanced there.`,
     };
   }
   if (status === 403) {

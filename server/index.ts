@@ -29833,6 +29833,7 @@ const agentApi = createAgentApi({
     if (patch.model !== undefined) body.model = patch.model;
     if (patch.subagentModel !== undefined) body.subagentModel = patch.subagentModel;
     if (patch.effort !== undefined) body.effort = patch.effort;
+    if (patch.goal !== undefined) body.goal = patch.goal;
     const patched = await performAsMember(memberForAgentCaller(caller), {
       method: "PATCH",
       path: `/api/routines/${encodeURIComponent(routineId)}`,

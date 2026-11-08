@@ -1,4 +1,5 @@
 import type { EffortLevel } from "./model-selection.ts";
+import type { RoutineGoal } from "./routine-goal.ts";
 import type { RoutineRequirements, RoutineReadinessCheck } from "./routine-readiness.ts";
 /** Routine wire shapes — the routine and run records as they ride the REST
  * snapshot and the `routine` / `routine.run` live frames. Moved verbatim
@@ -217,6 +218,8 @@ export interface Routine {
   actAs?: string;
   /** Reasoning effort for runs only; absent follows the bot. */
   effort?: EffortLevel;
+  /** #2696: the goal its runs pursue, with its progress. */
+  goal?: RoutineGoal;
   nextRunAt: number | null;
   /** Scheduled slot a flexible routine advances from. Absent for exact timing. */
   nominalRunAt?: number;
@@ -391,6 +394,8 @@ export interface RoutineInput {
   actAs?: string | null;
   /** null resets to the bot; omission preserves it on updates. */
   effort?: EffortLevel | null;
+  /** #2696: a goal (text or { text, deadline }); null removes it, omission preserves it. */
+  goal?: string | { text: string; deadline?: number | string | null } | null;
 }
 
 /** True when the schedule has a known last occurrence: a one-time run, or

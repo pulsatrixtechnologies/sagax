@@ -1,4 +1,5 @@
 import { parseRoutineEffort } from "../shared/routine-effort.ts";
+import { parseRoutineGoal } from "../shared/routine-goal.ts";
 import { parseRoutineModel } from "../shared/routine-model.ts";
 import type { EffortLevel } from "../shared/model-selection.ts";
 // The agent-to-agent API: tools that let one agent (a Sagax bot, or a
@@ -292,6 +293,8 @@ export interface AgentRoutinePatch {
   /** #2049: the model the run's sub-agents use (Claude). */
   subagentModel?: string | null;
   effort?: EffortLevel | null;
+  /** #2696: the goal its runs pursue; null removes it. */
+  goal?: { text: string; deadline?: number } | null;
   enabled?: boolean;
   name?: string;
   instructions?: string;
@@ -1408,7 +1411,7 @@ function createAgentApiConfigHandlers(env: {
     },
 
     async update_routine(caller, args) {
-      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer", "model", "subagent_model", "effort"]);
+      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer", "model", "subagent_model", "effort", "goal"]);
       if (bad) return bad;
       const routineId = typeof args.routine_id === "string" ? args.routine_id.trim() : "";
       if (!routineId || !ID.test(routineId)) {
@@ -1459,8 +1462,13 @@ function createAgentApiConfigHandlers(env: {
         if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
         patch.effort = parsed.effort ?? null;
       }
+      if (Object.hasOwn(args, "goal")) {
+        const parsed = parseRoutineGoal(args.goal);
+        if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
+        patch.goal = parsed.goal ? { text: parsed.goal.text, ...(parsed.goal.deadline ? { deadline: parsed.goal.deadline } : {}) } : null;
+      }
       if (!Object.keys(patch).length) {
-        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer, model, subagent_model, effort.");
+        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer, model, subagent_model, effort, goal.");
       }
       const updated = await deps.updateRoutine(caller, routineId, patch);
       if (isRefusal(updated)) return updated;

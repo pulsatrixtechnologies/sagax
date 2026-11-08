@@ -14387,5 +14387,15 @@
   "planHistory.rowTitle": "Peak {peak} of the limit · {sessions} sessions of 5 hours",
   "planHistory.sessionTitle": "Peak {peak} of the limit · {samples} readings",
   "planHistory.empty": "No history yet. Sagax keeps each reading of your plan windows from now on, and past periods show here.",
-  "planHistory.failed": "The plan usage history could not be read."
+  "planHistory.failed": "The plan usage history could not be read.",
+  "routineEditor.goal.label": "Goal",
+  "routineEditor.goal.placeholder": "Optional: what this routine should reach. The bot picks when to check.",
+  "routineEditor.goal.deadline": "Deadline",
+  "routineEditor.goal.deadlineHint": "Optional. Past it, the routine stops.",
+  "routineEditor.goal.status": "Status",
+  "routineEditor.goal.active": "In progress",
+  "routineEditor.goal.achieved": "Reached",
+  "routineEditor.goal.expired": "Deadline passed",
+  "routineEditor.goal.checks": "{count} checks",
+  "routineEditor.goal.nextCheck": "Next check"
 }

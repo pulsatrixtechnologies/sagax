@@ -154,6 +154,22 @@ withdraws its notice and removes the source backlink. A late model review
 re-reads the live address and falls back to the original execution thread.
 Verification: `docs/verification/peer-approvals.md`.
 
+## Goal routines (#2696, 2026-11-08)
+
+`Routine.goal` (`shared/routine-goal.ts`) is an objective in the person's
+words with an optional deadline; the schedule becomes the fallback cadence.
+Each run gets a fenced `<goal>` block and ends with `GOAL_STATUS:` and
+`NEXT_CHECK:` lines that `settleGoal` strips from the report. `achieved`
+stops the routine (disabled, no next run); a passed deadline stops it as
+`expired` with a problem; `NEXT_CHECK` (clamped 5 min to 14 days, never past
+the deadline) overrides `nextRunAt` and re-arms a fired once schedule, but
+never a routine the person paused. `blocked`, or the same progress note on 3
+checks in a row, becomes a run problem and so a person-attention card. An
+update with the same text and deadline keeps the progress; a new wording
+starts fresh; null clears it. Not for room goals. The editor (Goal section),
+HTTP API, propose_routine, propose_routine_action and update_routine carry it.
+Coverage: `shared/routine-goal.test.ts`, `server/routines/routine-goal.test.ts`.
+
 ## Routine reasoning effort (#1999, 2026-11-04)
 
 `Routine.effort` and `RoutineRun.effort` follow the model override, using

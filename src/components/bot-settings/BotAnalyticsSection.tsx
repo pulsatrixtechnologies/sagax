@@ -8,7 +8,7 @@
 //
 // It replaces the old Usage section of the profile page; its "All bots"
 // pill still opens the app-wide Usage settings.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
@@ -17,6 +17,7 @@ import type { LocaleKey } from "@/locales";
 import { api, useStore, type Bot } from "@/state/store";
 import { analyticsRange, BOT_ANALYTICS_DAYS, type BotAnalytics, type BotAnalyticsDays, type BotAnalyticsUser } from "../../../shared/bot-analytics";
 import { CompactRow, DescribedRow, HelpTip, PILL, SettingsGroup } from "../SettingsPrimitives";
+import { BotProactiveMetricsGroup } from "./BotProactiveMetricsGroup";
 
 export type BotAnalyticsSort = "messages" | "hoursSaved";
 type Billing = "metered" | "subscription" | undefined;
@@ -180,9 +181,11 @@ export interface BotAnalyticsViewProps {
   neverUsed?: boolean;
   /** The clock the loading range label reads (tests pin it). */
   now?: number;
+  /** #2698: the Proactivity group, drawn under Usage (BotProactiveMetricsGroup). */
+  proactive?: ReactNode;
 }
 
-export function BotAnalyticsView({ data, days, onDays, sort, onSort, loading = false, error = null, onRetry, onAllBots, billing, neverUsed = false, now = Date.now() }: BotAnalyticsViewProps) {
+export function BotAnalyticsView({ data, days, onDays, sort, onSort, loading = false, error = null, onRetry, onAllBots, billing, neverUsed = false, now = Date.now(), proactive = null }: BotAnalyticsViewProps) {
   const dayKeys = rangeDays(data, days, now);
   const totals = data?.totals ?? null;
   const estimated = data ? data.hoursSavedBasis !== null : false;
@@ -290,6 +293,8 @@ export function BotAnalyticsView({ data, days, onDays, sort, onSort, loading = f
         )}
       </SettingsGroup>
 
+      {proactive}
+
       <SettingsGroup
         title={t("botProfile.analytics.topUsers")}
         groupId="botTopUsers"
@@ -390,6 +395,7 @@ export function BotAnalyticsSection({ bot }: { bot: Bot }) {
       onAllBots={() => dispatch({ type: "toggleAppSettings", open: true, section: "usage" })}
       billing={instance?.snapshot.billing}
       neverUsed={botUsage(bot).turns === 0}
+      proactive={<BotProactiveMetricsGroup bot={bot} days={days} />}
     />
   );
 }

@@ -120,6 +120,8 @@ import { approvalModeFor,
 import { isProactiveMode, normalizeProactiveMode, proactiveModeFor } from "../shared/proactive-mode.ts";
 import { parsePageTargetDefault } from "../shared/page-targets.ts";
 import { createProactiveProposalRoutes } from "./routes/proactive-proposals.ts";
+import { createProactiveMetricsRoutes } from "./routes/proactive-metrics.ts";
+import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
 import { ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
 import { ProactiveProposals, ProactiveWaker, proactivePrompt, PeerNoticeHops, ProactivePendingFile, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
 import { type BotActService, type PerformActor } from "./bots/bot-act.ts";
@@ -6696,6 +6698,7 @@ bindLeafHost({
   get routineWatchDeps() { return routineWatchDeps; },
   get routineWatchEvaluator() { return routineWatchEvaluator; },
   get proactiveProposals() { return proactiveProposals; },
+  get proactiveMetrics() { return proactiveMetrics; },
   get proactiveEngine() { return proactiveEngine; },
   get proactivePending() { return proactivePending; },
   get proactiveWaker() { return proactiveWaker; },
@@ -14209,6 +14212,8 @@ store.onChange((change) => {
       catch { console.error("[bot-plugins] Could not remove deleted bot's plugins."); }
       // its own approval rules and its permission mode (all-bots rules stay)
       ownerApprovals.forgetBot(change.botId);
+      // #2698: its proactivity metrics (a deletion during startup may come first)
+      try { proactiveMetrics.forgetBot(change.botId); } catch { /* not ready yet */ }
       try { artifactStore.removeBot(change.botId); }
       catch { console.error("[artifacts] Could not remove deleted bot's artifacts."); }
       try { botTaskStore.removeBot(change.botId); }
@@ -18728,6 +18733,13 @@ const routineWatchEvaluator = createRoutineWatchEvaluator(routineWatchDeps);
 // Recovery can synchronously offer failed-run events from the constructor.
 // Keep the waker ready so those events join its usual batch.
 const proactiveProposals = new ProactiveProposals(process.env.VITEST ? null : join(DATA_DIR, "proactive-proposals.json"));
+/** #2698: per-bot proactivity metrics (wakes, proposals, writes, cost). */
+const proactiveMetrics = new ProactiveMetricsLedger({
+  file: process.env.VITEST ? null : join(DATA_DIR, "proactive-metrics.json"),
+  timeZone: () => routineTimeZone()
+});
+proactiveProposals.observe((event) => proactiveMetrics.count(event.botId, event.kind));
+if (!process.env.VITEST) process.once("exit", () => proactiveMetrics.flush());
 /** Control layer for each wake step: classify, dry-run writes, defer to
  * ordinary approval. Wired from tool starts on an active wake. */
 const proactiveEngine = new ProactiveEngine({
@@ -19228,6 +19240,7 @@ routines = new RoutineManager({
   onRunChanged: (run) => {
     syncRoutineRunToSource(run);
     if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId);
+    if (run.proactive) proactiveMetrics.noteRun(run);
     if (run.webhookId === REACH_TEAMS_WEBHOOK) void reachMeTeams?.runChanged(run);
   },
   onRunRequeued: (run) => {
@@ -19591,6 +19604,12 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
  * accept runs the wake at the bot's level; decline closes the card. */
 
 ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal }));
+ROUTES.push(createProactiveMetricsRoutes<BotRecord>({
+  bot: (id) => store.bot(id) ?? undefined,
+  sees: (auth, bot) => auth.kind === "loopback" || listedBotVisible(bot, auth.session.principalId),
+  seesAll: (auth, bot) => ownerOrAdminOf(auth, bot),
+  read: (botId, days) => proactiveMetrics.read(botId, days)
+}));
 /** 2026-11-05 (visible roles, batch 3): the composer's role picker. The
  * signed-in person's own held roles, live; the principal is the one a turn
  * of theirs would carry (orgSpeakerPrincipal), so a pick matches its turn. */

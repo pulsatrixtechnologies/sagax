@@ -321,6 +321,22 @@ const memory = {
 
 const workspaceEntry = (path: string, bytes: number, extra: Record<string, unknown> = {}) => ({ path, kind: "file", bytes, load: "always", editable: true, markdown: true, forgotten: false, ...extra });
 
+/** #2698: the Proactivity group of the Analytics tab. */
+function proactiveMetrics(days: number) {
+  const scale = days / 7;
+  const totals = {
+    wakes: Math.round(42 * scale), reported: Math.round(18 * scale), quiet: Math.round(22 * scale), failed: Math.round(2 * scale),
+    proposed: Math.round(15 * scale), accepted: Math.round(9 * scale), declined: Math.round(3 * scale), expired: Math.round(2 * scale),
+    writes: Math.round(27 * scale), cost: Math.round(3.84 * scale * 100) / 100, costRuns: Math.round(40 * scale),
+  };
+  const judged = totals.accepted + totals.declined + totals.expired;
+  return {
+    botId: BOT_ID, days, from: "", to: "", series: [],
+    totals: { ...totals, precision: judged ? totals.accepted / judged : null, minutesSaved: totals.reported * 10 + totals.writes * 2 + totals.accepted * 5 },
+    minutesPerReport: 10, minutesPerWrite: 2, minutesPerAccepted: 5,
+  };
+}
+
 function answer(method: string, path: string, search: URLSearchParams, body: unknown): Response | null {
   const bots = `/api/bots/${BOT_ID}`;
   if (path === "/api/config") return json({ viewer: { operator: false, principalId: "pr_alex", name: "Alex Example", role: "admin", permissions: [] }, profile: { name: "Alex Example" }, features: {}, onboarding: { completedAt: 1, launchMode: "solo" } });
@@ -336,6 +352,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === `${bots}/overview`) return json(overview);
   if (path === `${bots}/history`) return json({ rows: HISTORY, revision: HISTORY.length });
   if (path === `${bots}/analytics` && search.get("view") === "breakdown") return json(breakdown(search.get("period") ?? "30", Number(search.get("offset") ?? "0")));
+  if (path === `${bots}/proactive-metrics`) return json(proactiveMetrics([7, 30, 90].includes(Number(search.get("days"))) ? Number(search.get("days")) : 7));
   if (path === `${bots}/analytics`) return json(analytics([7, 30, 90].includes(Number(search.get("days"))) ? Number(search.get("days")) : 30));
   if (path === `${bots}/skills`) return json({ skills, staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices." }], library: [{ name: "invoice-review", description: "Reviews an invoice line by line." }, { name: "status-digest", description: "Digests a long thread into five lines." }], assignedSkills: ["meeting-notes"] });
   if (path === "/api/org-library/skills") return json({ organization: { name: "Northwind Studio" }, skills: [

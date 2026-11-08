@@ -167,6 +167,11 @@ const BASE64_DECODE_IN_COMMAND = new RegExp(
   "g",
 );
 
+/** What may follow a decoder that reads the blob: the end of the line, a
+ * pipe, a list operator, a closing paren or backtick, or an output
+ * redirection. Anything else is an operand or an input it reads instead. */
+const DECODER_ENDS = /^\s*(?:$|[|;&)`]|\d*>)/;
+
 /** True when the options of a matched decoder ask to decode: `base64`
  * with `-d`, `-D`, `--decode` or a short cluster holding d/D; `openssl`
  * with `-d` and a base64 mode (`base64`, or `enc` with `-base64`/`-a`). */
@@ -184,12 +189,38 @@ function decodes(decoder: string): boolean {
 }
 
 /** `b64decode('<blob>')` in a `python -c` program (also `base64.`,
- * `standard_`, `__import__('base64').` and a bytes blob). */
+ * `standard_`, `__import__('base64').`, a bytes blob and, #2823 follow-up,
+ * the names an `import base64 as B` or `from base64 import b64decode as d`
+ * gives them). A call reached through any other attribute (`x.b64decode`)
+ * is not ours to rewrite: its prefix would be left in front of the literal
+ * and break the program. */
 const PYTHON_C = /\bpython(?:\d+(?:\.\d+)*)?\s+(?:-[A-Za-z]+\s+)*-c\s/;
-const PYTHON_B64DECODE = new RegExp(
-  String.raw`(?:__import__\(\s*(['"])base64\1\s*\)\.|\bbase64\.|\b)(?:standard_)?b64decode\(\s*b?(['"])${BLOB}\2\s*\)`,
-  "g",
-);
+const PY_NAME = String.raw`[A-Za-z_][A-Za-z0-9_]*`;
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** The regex of the decode calls of one `python -c` line: module aliases
+ * from `import base64 as X`, function aliases from `from base64 import
+ * b64decode as d`. Every call must start a name (no `.` or word before). */
+function pythonB64Decode(line: string): RegExp {
+  const modules = new Set(["base64"]);
+  for (const m of line.matchAll(new RegExp(String.raw`\bimport\s+[^;\n]*?\bbase64\s+as\s+(${PY_NAME})`, "g"))) modules.add(m[1]!);
+  const functions = new Set(["b64decode", "standard_b64decode"]);
+  for (const m of line.matchAll(new RegExp(String.raw`\bfrom\s+base64\s+import\s+([^;\n]*)`, "g"))) {
+    for (const part of m[1]!.replace(/[()]/g, " ").split(",")) {
+      const alias = /^\s*((?:standard_)?b64decode)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(part);
+      if (alias) functions.add(alias[2]!);
+    }
+  }
+  const moduleAlt = [...modules].map(escapeRegExp).join("|");
+  const fnAlt = [...functions].map(escapeRegExp).join("|");
+  return new RegExp(
+    String.raw`(?<![\w.])(?:__import__\(\s*(['"])base64\1\s*\)\.(?:standard_)?b64decode|(?:${moduleAlt})\.(?:standard_)?b64decode|(?:${fnAlt}))\(\s*b?(['"])${BLOB}\2\s*\)`,
+    "g",
+  );
+}
 
 /** A Python string literal of `text`, delimited by `quote`, that holds no
  * quote, `$`, backtick or backslash other than its escapes, so it sits
@@ -217,14 +248,18 @@ export function plainTextCommand(command: string): string {
   if (command.includes("\n")) return command;
   let line = command;
   if (PYTHON_C.test(line)) {
-    line = line.replace(PYTHON_B64DECODE, (match, _q1, quote, blob) => {
+    line = line.replace(pythonB64Decode(line), (match, _q1, quote, blob) => {
       const decoded = base64Text(String(blob));
       return decoded === null ? match : `${pythonLiteral(decoded, String(quote))}.encode()`;
     });
   }
   const bodies: string[] = [];
-  const rewritten = line.replace(BASE64_DECODE_IN_COMMAND, (match, _q1, _q2, piped, pipedDecoder, hereDecoder, _q6, herestring) => {
+  const rewritten = line.replace(BASE64_DECODE_IN_COMMAND, (match, _q1, _q2, piped, pipedDecoder, hereDecoder, _q6, herestring, offset: number) => {
     if (!decodes(String(pipedDecoder ?? hereDecoder ?? ""))) return match;
+    // An operand after the decoder (`-i file` on macOS, `-w 0`, a file
+    // name, `< file`) changes what it reads: only a decoder that ends its
+    // command reads the blob, so only that one becomes a heredoc.
+    if (!DECODER_ENDS.test(line.slice(offset + match.length))) return match;
     const decoded = base64Text(String(piped ?? herestring ?? ""));
     if (decoded === null || decoded.includes("\r")) return match;
     let tag = `SAGAX_PLAIN_${bodies.length + 1}`;

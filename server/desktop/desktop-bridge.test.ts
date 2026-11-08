@@ -441,6 +441,54 @@ describe("run_command base64 scripts", () => {
       .toBe(`python3 -c "import base64;open('b','wb').write(base64.b64decode('${binary}'))"`);
   });
 
+  // #2823 follow-up: aliases of base64, and a decoder that reads something else.
+  it("rewrites b64decode reached through an import alias, and keeps the program valid", () => {
+    const b = Buffer.from("print('hi')\n", "utf8").toString("base64");
+    expect(plainTextCommand(`python3 -c "import base64 as B;exec(B.b64decode('${b}'))"`))
+      .toBe(`python3 -c "import base64 as B;exec('print(\\u0027hi\\u0027)\\n'.encode())"`);
+    expect(plainTextCommand(`python3 -c "import os, base64 as B;exec(B.standard_b64decode(b'${b}'))"`)).toContain("exec('print(\\u0027hi\\u0027)\\n'.encode())");
+    expect(plainTextCommand(`python3 -c "from base64 import b64decode as d;exec(d('${b}'))"`)).toContain("exec('print(\\u0027hi\\u0027)\\n'.encode())");
+  });
+
+  it("leaves b64decode reached through an unknown attribute as it is", () => {
+    const b = Buffer.from("print('hi')\n", "utf8").toString("base64");
+    for (const command of [
+      `python3 -c "import codecs as B;exec(B.b64decode('${b}'))"`,
+      `python3 -c "exec(x.base64.b64decode('${b}'))"`,
+      `python3 -c "exec(my_b64decode('${b}'))"`,
+    ]) {
+      const out = plainTextCommand(command);
+      expect(out, command).toBe(command);
+      expect(out, command).not.toMatch(/\.'|\w'print/);
+    }
+  });
+
+  it("leaves a decoder that reads a file or takes an operand as it is", () => {
+    for (const command of [
+      `echo ${blob} | base64 -d -i other.b64 > s.py`,
+      `echo ${blob} | base64 -D -i payload.txt`,
+      `echo ${blob} | base64 -d payload.txt`,
+      `echo ${blob} | base64 -d < payload.txt`,
+      `echo ${blob} | base64 -d -w 0 > s.py`,
+      `base64 -d -i other.b64 <<< '${blob}'`,
+      `echo ${blob} | openssl base64 -d -in other.b64`,
+    ]) expect(plainTextCommand(command), command).toBe(command);
+  });
+
+  it("still rewrites a decoder followed by a pipe, a list operator or an output redirection", () => {
+    for (const command of [
+      `echo ${blob} | base64 -d | python3 -`,
+      `echo ${blob} | base64 -d; ls`,
+      `echo ${blob} | base64 -d 2>/dev/null > s.py`,
+      `(echo ${blob} | base64 -d) > s.py`,
+      `echo ${blob} | base64 -d`,
+    ]) {
+      const out = plainTextCommand(command);
+      expect(out, command).not.toContain(blob);
+      expect(out, command).toContain(script);
+    }
+  });
+
   it("rewrites the command of local_vm run too", () => {
     const op = desktopToolOperation("local_vm", { action: "run", command: `echo ${blob} | base64 -d > s.py` }) as { command: string };
     expect(op.command).toContain(script);

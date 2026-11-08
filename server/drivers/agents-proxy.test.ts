@@ -893,6 +893,18 @@ describe("agents-proxy MCP surface", () => {
     expect(computerRequests).toHaveLength(1);
   });
 
+  it("select_computer points a refused move at computer_select, but not a refused listing", async () => {
+    computerStatus = 403;
+    computerResponse = { error: "Computer selection is only available once per direct user request, with computer access enabled." };
+    const moved = await callTool("select_computer", { surface: "local" });
+    expect(moved.result.isError).toBe(true);
+    expect(moved.result.content[0].text).toContain("Computer selection is only available once");
+    expect(moved.result.content[0].text).toContain("call computer_select with target this_computer");
+    const listed = await callTool("select_computer", {});
+    expect(listed.result.isError).toBe(true);
+    expect(listed.result.content[0].text).not.toContain("computer_select");
+  });
+
   it("advertises read annotations only for the reviewed built-in reads", async () => {
     const list = await rpc("tools/list");
     const readNames = [

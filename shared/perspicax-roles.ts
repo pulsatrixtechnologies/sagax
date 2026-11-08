@@ -445,9 +445,18 @@ export interface BotRoleRule {
   createdAt: number;
 }
 
+/** #2960: the comparison key of a CW permission path. "service.tickets"
+ * (saved before 2026-11-08 by a dotted resource) and "service/tickets" are
+ * one path, so rules and journal entries saved under either still match. */
+export function permissionPathKey(path: string | undefined): string {
+  return (path ?? "").trim().toLowerCase().replace(/\./g, "/").replace(/^\/+|\/+$/g, "");
+}
+
 /** The rule (if any) that answers a read refused under `from` on `path`. */
 export function matchingRoleRule(rules: readonly BotRoleRule[] | undefined, ownerId: string, from: string, path: string): BotRoleRule | undefined {
-  const p = path.toLowerCase();
-  return rules?.find((rule) => rule.ownerId === ownerId && rule.from.slug === from
-    && (!rule.path || p === rule.path.toLowerCase() || p.startsWith(`${rule.path.toLowerCase()}/`)));
+  const p = permissionPathKey(path);
+  return rules?.find((rule) => {
+    const own = permissionPathKey(rule.path);
+    return rule.ownerId === ownerId && rule.from.slug === from && (!own || p === own || p.startsWith(`${own}/`));
+  });
 }

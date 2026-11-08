@@ -92,6 +92,7 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("switches go back and forth in a turn, one per call when needed");
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("When the person names a role to use");
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("never refuse before trying it");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("a STOP holds for its own turn only");
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Sagax tries each held role that may read it in turn");
   });
 
@@ -104,5 +105,6 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("one time.entries read filtered on member/id=<member id>");
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Ticket or project titles are optional");
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("A 403 on project or service tickets never blocks the hours");
+    expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("on a 403 for a title, take the note's skip option (no switch, no card)");
   });
 });

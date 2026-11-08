@@ -461,7 +461,7 @@ import { createCustomRulesModelReviewer } from "./rules/custom-rules-model.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes } from "./approvals/tool-auto-approval.ts";
 import { RoleJournal } from "./perspicax/role-journal.ts";
-import { createRoleEvents, meWriteSummary, missingRoleMessage, readSwitchFingerprint, readSwitchSummary } from "./perspicax/role-events.ts";
+import { createRoleEvents, meWriteSummary, missingRoleMessage, readSwitchFingerprint, readSwitchFingerprints, readSwitchSummary } from "./perspicax/role-events.ts";
 import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
 import { createHeldRolesRoute } from "./routes/perspicax-held-roles.ts";
 import { routineRoleCoverageRoute } from "./routes/routine-role-coverage.ts";
@@ -28459,7 +28459,8 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
       const bot = store.bot(botId);
       const decision = roleJournal.fallbackFor({ threadId, botId, principalId, ...(bot ? { ownerId: effectiveBotOwner(bot) } : {}), from, path, ...(to !== undefined ? { to } : {}) });
       // #2581: "Toujours permettre" on the read switch card is a rule too
-      if (decision === "fallback" && bot && to && keptCardRule(bot, threadId, { tool: "safety:perspicax-role", scope: { action: readSwitchFingerprint(from, to, path) }, description: "" })) return "rule";
+      // (#2960: a rule kept under the older dotted path still answers)
+      if (decision === "fallback" && bot && to && readSwitchFingerprints(from, to, path).some((action) => keptCardRule(bot, threadId, { tool: "safety:perspicax-role", scope: { action }, description: "" }))) return "rule";
       return decision;
     },
     // #2581 (decided 2026-11-07): a read refused (403) under the bot's role, run

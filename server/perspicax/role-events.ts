@@ -86,6 +86,14 @@ export function readSwitchFingerprint(from: string, to: string, path: string): s
   return `role-read-switch:${from}:${to}:${path}`;
 }
 
+/** #2960: every key a kept "Toujours permettre" of this switch may carry:
+ * the path as Sagax names it now ("service/tickets") and the dotted form a
+ * card saved before 2026-11-08 used ("service.tickets"). */
+export function readSwitchFingerprints(from: string, to: string, path: string): string[] {
+  const dotted = path.replace(/\//g, ".");
+  return dotted === path ? [readSwitchFingerprint(from, to, path)] : [readSwitchFingerprint(from, to, path), readSwitchFingerprint(from, to, dotted)];
+}
+
 /** "Envoyer à l'admin" (Roles tab): the message an organization admin reads,
  * in the admin's language. Times in Eastern time (America/New_York). */
 export function missingRoleMessage(language: string, input: { person: string; bot: string; missing: MissingPermission }): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatDefaultRoles, cwPermissionFor, heldRolesOf, minimalRole, roleCoverage, roleRefusalOf, routineDefaultRole, routineMandateOf, matchingRoleRule, actingAsOf } from "./perspicax-roles.ts";
+import { chatDefaultRoles, cwPermissionFor, heldRolesOf, minimalRole, roleCoverage, roleRefusalOf, routineDefaultRole, routineMandateOf, matchingRoleRule, actingAsOf, permissionPathKey } from "./perspicax-roles.ts";
 
 const listing = {
   acting_as: { slug: "service-desk", name: "Service Desk", token: { scope: "profile:p-1", expires_at: "2026-11-05T12:00:00Z" } },
@@ -41,6 +41,15 @@ describe("perspicax roles", () => {
     expect(cwPermissionFor("cw_psa_query", { resource: "service.tickets" }, true)).toEqual(cwPermissionFor("cw_psa_query", { resource: "service/tickets" }, true));
     expect(cwPermissionFor("cw_psa_query", { resource: "service.tickets" }, true)).toMatchObject({ path: "service/tickets", module: "Service Desk", func: "Service Tickets" });
     expect(cwPermissionFor("cw_psa_write", { resource: "service.tickets.notes", action: "create" }, false)).toMatchObject({ path: "service/tickets/notes", operation: "Add" });
+  });
+
+  // #2960: a rule saved under the dotted path answers the slashed one
+  it("matches a rule saved under a dotted path", () => {
+    const rule = { id: "r", from: { slug: "", name: "" }, to: { slug: "full-access", name: "Full Access" }, path: "service.tickets", ownerId: "owner", createdAt: 0 };
+    expect(matchingRoleRule([rule], "owner", "", "service/tickets")).toBe(rule);
+    expect(matchingRoleRule([rule], "owner", "", "service/tickets/notes")).toBe(rule);
+    expect(matchingRoleRule([rule], "owner", "", "service/boards")).toBeUndefined();
+    expect(permissionPathKey(" /Service.Tickets/ ")).toBe("service/tickets");
   });
 
   it("computes a routine role's coverage and picks the minimal role", () => {

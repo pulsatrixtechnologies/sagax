@@ -24,6 +24,7 @@
  * so a handoff cycle cannot loop.
  */
 import { describeMemberApproval } from "../org/org-member-routes.ts";
+import { safetyHoldOpen } from "../safety/safety-review.ts";
 
 export type Host = Record<string, any>;
 
@@ -41,6 +42,18 @@ export interface PendingApprovalOptions {
   except?: string;
   /** The root thread only, no handoff walk. */
   rootOnly?: boolean;
+  /** QA 0.8.67 G5: the awaited prompt's message id. A root card that sits
+   * before it in the thread belongs to an earlier turn, whatever its time. */
+  anchorId?: string;
+}
+
+/** QA 0.8.67 G5: a held card (confirmHeldCard, ownerRule from "hold") or its
+ * mirror whose hold is no longer open: the turn that raised it ended, timed
+ * out or the server restarted; nothing waits on its answer. */
+export function deadHoldCard(card: any, holdOpen: (requestId: string) => boolean = safetyHoldOpen): boolean {
+  if (card?.ownerRule?.from !== "hold") return false;
+  const requestId = card.approvalOrigin?.requestId ?? card.requestId;
+  return typeof requestId === "string" && !holdOpen(requestId);
 }
 
 const MAX_DEPTH = 3;
@@ -124,11 +137,18 @@ export function createAgentPendingApproval(getHost: () => Host): any {
       visited.add(threadId);
       if (depth > 0 && host.store.isConfidentialThread?.(threadId)) continue;
       let live: boolean | null = null;
-      for (const message of host.store.messagesFor(threadId) ?? []) {
+      const messages = host.store.messagesFor(threadId) ?? [];
+      // The awaited prompt's place in the root thread: what comes before it is
+      // an earlier turn's (when the prompt is not in the thread yet, the time
+      // alone decides).
+      const anchorAt = depth === 0 && opts.anchorId ? messages.findIndex((message: any) => message?.id === opts.anchorId) : -1;
+      for (const [index, message] of messages.entries()) {
         const card = message?.kind === "options" ? message.card : undefined;
         if (!card?.requestId || card.answered || card.dismissed || card.expired || card.answeredBy) continue;
         if (depth === 0 && opts.except && card.requestId === opts.except) continue;
         if (typeof message.at === "number" && message.at < since) continue;
+        if (index < anchorAt) continue;
+        if (deadHoldCard(card, host.safetyHoldOpen ?? safetyHoldOpen)) continue;
         if (depth > 0 && (card.routineRequest || card.skillRequest || host.isPersistentQuestionCard?.(card))) {
           // a card that outlives its turn: only while that thread still runs
           if (live === null) live = threadLive(host, botId, threadId);
@@ -160,9 +180,12 @@ export function createAgentPendingApproval(getHost: () => Host): any {
  *   the turn waits on someone else, it is still running for this caller.
  * - engineBusy: the conversation still runs (engine, queue, teammates). */
 export function createAgentPendingForCaller(getHost: () => Host): any {
-  return function agentPendingForCaller(caller: { kind: string; id: string }, agentId: string, threadId: string, since?: number) {
+  return function agentPendingForCaller(caller: { kind: string; id: string }, agentId: string, threadId: string, since?: number, anchorId?: string) {
     const host = getHost();
-    const { open, reviewing } = host.agentPendingApproval(agentId, threadId, typeof since === "number" ? { since } : {});
+    const { open, reviewing } = host.agentPendingApproval(agentId, threadId, {
+      ...(typeof since === "number" ? { since } : {}),
+      ...(typeof anchorId === "string" && anchorId ? { anchorId } : {}),
+    });
     const callerId = String(caller?.id ?? "").trim().toLowerCase();
     const mine = (row: PendingApprovalRow) => {
       if (row.threadId === threadId) return true;

@@ -26,7 +26,9 @@ async function confirmHeldCard(request: { threadId?: string; botId?: string; too
     appendDecision(DATA_DIR, { threadId, requestId: `safety-rule-${randomUUID()}`, botId: bot.id, botName: bot.name, tool: request.tool ?? "action", summary, decision: "auto-approved", source: "owner-rule", rule: kept.id });
     return "allow";
   }
-  const held = openSafetyHold();
+  // QA 0.8.67 G5: the hold belongs to this conversation's turn; when the
+  // turn ends (turn.completed) it is retired and the card marked expired.
+  const held = openSafetyHold(undefined, { threadId, ...(bot?.id ? { botId: bot.id } : {}) });
   // never reached at Full (safety-review.ts reads the turn's level);
   // full-access: safety-confirm
   const message = host.store.appendMessage(threadId, {

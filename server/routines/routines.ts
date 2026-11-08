@@ -395,7 +395,8 @@ export interface RoutineRunStanding {
   status: RoutineRunStatus;
   /** 1 is next. Only while queued. */
   position?: number;
-  /** Queued runs waiting for this bot, this one included. */
+  /** Queued runs really waiting in this bot's line (same lane, not parked
+   * until a later time), this one included. */
   queuedForBot?: number;
   reason?: string;
 }
@@ -2149,8 +2150,18 @@ export class RoutineManager {
     const run = this.runs.find((candidate) => candidate.id === runId);
     if (!run) return null;
     if (run.status !== "queued") return { status: run.status, ...(run.attention ? { reason: run.attention } : {}) };
-    const queued = this.runs.filter((candidate) => candidate.status === "queued" && candidate.botId === run.botId);
     const now = this.now();
+    // QA 0.8.67 G7: "number N of N runs waiting" counted every queued run of
+    // the bot, the ones that wait for nothing in this line too. Only runs
+    // really waiting in the same line count: same bot, same lane (a
+    // proactive wake and a room goal have their own), and not parked until
+    // a later time (a retry or an admission delay waits for its hour, not
+    // for this bot). The run itself always counts.
+    const lane = (candidate: RoutineRun) => candidate.proactive || candidate.triggerSource === "proactive" ? "proactive" : candidate.target === "room-goal" ? "room-goal" : "bot";
+    const parked = (candidate: RoutineRun) => (candidate.retryAt !== undefined && candidate.retryAt > now) ||
+      (candidate.admitAfter !== undefined && candidate.admitAfter > now);
+    const queued = this.runs.filter((candidate) => candidate === run || (
+      candidate.status === "queued" && candidate.botId === run.botId && lane(candidate) === lane(run) && !parked(candidate)));
     const later = run.retryAt !== undefined && run.retryAt > now ? run.retryAt : run.admitAfter !== undefined && run.admitAfter > now ? run.admitAfter : undefined;
     return {
       status: "queued",

@@ -429,6 +429,17 @@ describe("threads, approvals and nudges", () => {
     expect(refused.body).toMatchObject({ code: "run_in_flight", runId: "run_0", message: expect.stringContaining("no second run was started") });
   });
 
+  it("a run keeps one threadId from queued to running (QA 0.8.67 G7)", async () => {
+    people.get("bob")!.permissions.push("clients.routinesRun");
+    respond = () => ({ status: 201, body: { run: { id: "run_q", routineId: "r1", status: "queued", botId: "b1", resultsThreadId: "t_report" } } });
+    const queued = (await call("POST", "routines/r1/run", token("bob"), {})).body.run;
+    expect(queued.threadId).toBe("t_report");
+    expect(queued.executionThreadId).toBeUndefined();
+    respond = () => ({ status: 200, body: { runs: [{ id: "run_q", routineId: "r1", status: "running", resultsThreadId: "t_report", threadId: "t_task", startedAt: 1 }] } });
+    const running = (await call("GET", "routines/runs/run_q", token("bob"))).body.run;
+    expect(running).toMatchObject({ threadId: "t_report", executionThreadId: "t_task" });
+  });
+
   it("a run that completed with problems never reads as a plain success", async () => {
     people.get("bob")!.permissions.push("clients.routinesRun");
     respond = () => ({ status: 200, body: { runs: [{ id: "run_9", routineId: "r1", status: "completed", problems: "crm_login failed 2 times", startedAt: 1, finishedAt: 2 }] } });

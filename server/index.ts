@@ -30313,8 +30313,8 @@ const agentApi = createAgentApi({
   // #2922: the cards an awaited turn (since its handle's time) is blocked
   // on, its handed-off threads included, filtered for this caller
   // (server/index-leaves/agentPendingApproval.ts, isolation between persons).
-  pendingApproval(caller, agentId, threadId, since) {
-    return agentPendingForCaller(caller, agentId, threadId, since);
+  pendingApproval(caller, agentId, threadId, since, anchorId) {
+    return agentPendingForCaller(caller, agentId, threadId, since, anchorId);
   },
   // #1170 (2026-10-26): one chat per bot, like the reference design. A prompt from a
   // person's AI client or from another bot lands in the bot's single

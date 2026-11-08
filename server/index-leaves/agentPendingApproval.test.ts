@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cardAnswerIds, createAgentPendingApproval, createAgentPendingForCaller, turnStartAt } from "./agentPendingApproval.ts";
+import { cardAnswerIds, createAgentPendingApproval, createAgentPendingForCaller, deadHoldCard, turnStartAt } from "./agentPendingApproval.ts";
+import { openSafetyHold, retireSafetyHolds, safetyHoldOpen } from "../safety/safety-review.ts";
 import { createAgentTurnState } from "./agentTurnState.ts";
 
 type Msg = { id: string; kind: string; role?: string; at: number; replyToId?: string; card?: Record<string, unknown> };
@@ -186,5 +187,48 @@ describe("agentTurnState with an open card (#2922)", () => {
   it("an idle thread with only its turn's persistent question waits; a plain leftover reads idle", () => {
     expect(createAgentTurnState(() => base(undefined, false, [{ threadId: "t1", card: { question: true }, message: {} }]))("b1", "t1")).toBe("waiting");
     expect(createAgentTurnState(() => base(undefined, false, [{ threadId: "t1", card: {}, message: {} }]))("b1", "t1")).toBe("idle");
+  });
+});
+
+// QA 0.8.67 G5: the role-switch card of K2 (a held card) came back in the
+// await of K3. A card of a finished turn is never the current turn's.
+describe("cards of a finished turn (QA 0.8.67 G5)", () => {
+  const held = (requestId: string, extra: Record<string, unknown> = {}) => card(requestId, { tool: "perspicax-role", heldCode: "approval.held.native", ownerRule: { tool: "safety:perspicax-role", from: "hold" }, ...extra });
+
+  it("a root card that sits before the awaited prompt is an earlier turn's, whatever its time", () => {
+    // the earlier card's time is inside the anchor slack (or a clock skew)
+    const host = hostWith({ root: [prompt("p2", 10), msg("m2", 50, card("req_k2")), prompt("p3", 40), msg("m3", 60, card("req_k3"))] });
+    const pending = createAgentPendingApproval(() => host);
+    expect(ids(pending("b1", "root", { since: 39, anchorId: "p3" }).open)).toEqual(["req_k3"]);
+    // the prompt not in the thread yet: the time alone decides
+    expect(ids(pending("b1", "root", { since: 39, anchorId: "p_missing" }).open)).toEqual(["req_k3", "req_k2"]);
+  });
+
+  it("a held card whose hold is no longer open is left out, its mirror too", () => {
+    const live = new Set(["req_live"]);
+    const host = { ...hostWith({ root: [
+      prompt("p", 1),
+      msg("m1", 2, held("req_dead")),
+      msg("m2", 3, held("req_live")),
+      msg("m3", 4, held("origin:mx", { approvalOrigin: { threadId: "c1", messageId: "mx", requestId: "req_dead_child" } })),
+      msg("m4", 5, card("req_native", { heldCode: "approval.held.native" })),
+    ] }), safetyHoldOpen: (id: string) => live.has(id) };
+    expect(ids(createAgentPendingApproval(() => host)("b1", "root", { since: 0 }).open)).toEqual(["req_native", "req_live"]);
+    expect(deadHoldCard(held("x"), () => true)).toBe(false);
+    expect(deadHoldCard(card("y"), () => false)).toBe(false);
+  });
+
+  it("the end of a turn retires its holds (that bot, that conversation only) as a timeout", async () => {
+    const mine = openSafetyHold(60_000, { threadId: "t1", botId: "b1" });
+    const otherBot = openSafetyHold(60_000, { threadId: "t1", botId: "b2" });
+    const otherThread = openSafetyHold(60_000, { threadId: "t2", botId: "b1" });
+    expect(retireSafetyHolds("t1", "b1")).toEqual([mine.requestId]);
+    await expect(mine.answer).resolves.toBe("timeout");
+    expect(safetyHoldOpen(mine.requestId)).toBe(false);
+    expect(safetyHoldOpen(otherBot.requestId)).toBe(true);
+    expect(safetyHoldOpen(otherThread.requestId)).toBe(true);
+    retireSafetyHolds("t1");
+    retireSafetyHolds("t2");
+    expect(safetyHoldOpen(otherBot.requestId) || safetyHoldOpen(otherThread.requestId)).toBe(false);
   });
 });

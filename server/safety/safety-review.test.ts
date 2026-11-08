@@ -6,6 +6,8 @@ import { flushAdminActivity } from "../activity/admin-activity.ts";
 import {
   openSafetyHold,
   resetSafetyReviewForTests,
+  retireSafetyHolds,
+  safetyHoldOpen,
   safetyHttpRefusal,
   safetyPermissionEffect,
   safetyToolHold,
@@ -270,5 +272,21 @@ describe("false holds in shadow (#1098)", () => {
     expect(await safetyRows()).toEqual([]);
     await safetyToolHold({ text: "cat /data/.openmausbot/workspaces/b2/memory/notes.md", surface: "shell", tool: "run_command", known: true, botId: "b1", threadId: "t1" });
     expect((await safetyRows()).map((row) => row.after.code)).toEqual(["misuse"]);
+  });
+});
+
+describe("held cards end with their turn (QA 0.8.67 G5)", () => {
+  it("retires only the holds of the finished conversation and bot", async () => {
+    const mine = openSafetyHold(60_000, { threadId: "t1", botId: "b1" });
+    const roommate = openSafetyHold(60_000, { threadId: "t1", botId: "b2" });
+    const other = openSafetyHold(60_000, { threadId: "t2", botId: "b1" });
+    expect(retireSafetyHolds("t1", "b1")).toEqual([mine.requestId]);
+    expect(await mine.answer).toBe("timeout");
+    expect(safetyHoldOpen(mine.requestId)).toBe(false);
+    expect(settleSafetyHold(mine.requestId, "allow")).toBe(false);
+    expect(safetyHoldOpen(roommate.requestId)).toBe(true);
+    expect(safetyHoldOpen(other.requestId)).toBe(true);
+    settleSafetyHold(roommate.requestId, "deny");
+    settleSafetyHold(other.requestId, "deny");
   });
 });

@@ -61,13 +61,13 @@ export interface BotWorkspaceRouteDeps {
 
 const FORBIDDEN = { error: "forbidden: only this bot's owner or an admin can change its rules and documents", code: "bot_documents_owner_only" };
 
-/** RULES.md, rules/<set>.md or docs/<name>.md, nothing else: this route is reachable by a
+/** RULES.md, rules/<set>.md, docs/<name>.md or HEARTBEAT.md, nothing else: this route is reachable by a
  * member, and memory files stay an admin's. */
 function rulesOrDoc(path: string | null): string | null {
   if (!path) return null;
   try {
     const ref = parseMemoryPath(path);
-    return ref.kind === "rules" || ref.kind === "ruleset" || ref.kind === "doc" ? path : null;
+    return ref.kind === "rules" || ref.kind === "ruleset" || ref.kind === "doc" || ref.kind === "heartbeat" ? path : null;
   } catch {
     return null;
   }

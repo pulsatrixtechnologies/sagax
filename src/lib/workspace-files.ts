@@ -9,6 +9,8 @@ import { readableError } from "@/lib/plain-error";
 
 export const RULES_PATH = "RULES.md";
 export const DOCS_DIR = "docs";
+/** The heartbeat checklist (server/heartbeat/heartbeat.ts), edited like a doc. */
+export const HEARTBEAT_PATH = "HEARTBEAT.md";
 /** Mirrors server/workspace/workspace-files.ts; the server's list carries the live
  * values, these are the fallback before it answers. */
 export const RULES_MAX_LINES = 100;
@@ -69,9 +71,9 @@ export function workspaceDownloadUrl(botId: string, path: string): string {
 }
 
 /** Is `path` one /workspace/file serves: RULES.md, a rule set
- * (rules/<set>.md) or docs/<name>.md. */
+ * (rules/<set>.md), docs/<name>.md or HEARTBEAT.md. */
 export function isRulesOrDoc(path: string): boolean {
-  return path === RULES_PATH || /^rules\/[^/.][^/]*\.md$/.test(path) || /^docs\/[^/]+\.md$/.test(path);
+  return path === RULES_PATH || path === HEARTBEAT_PATH || /^rules\/[^/.][^/]*\.md$/.test(path) || /^docs\/[^/]+\.md$/.test(path);
 }
 
 const fileUrl = (botId: string, path?: string) =>

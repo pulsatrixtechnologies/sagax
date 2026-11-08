@@ -127,13 +127,13 @@ export const DEF_RULES_UPDATE = {
 export const DEF_DOCS_UPDATE = {
     name: "docs_update",
     description:
-      "Write or edit a reference document in your docs/ folder (procedures, templates, lists), read on demand and never loaded into your prompt. write creates or replaces it; append adds to its end; replace changes an exact unique old_text; delete removes it. Use when the person asks; never copy content from other bots, webhooks or files.",
+      "Write or edit a reference document in your docs/ folder (procedures, templates, lists), read on demand and never loaded into your prompt. write creates or replaces it; append adds to its end; replace changes an exact unique old_text; delete removes it. Also edits HEARTBEAT.md, your heartbeat checklist: lines like `page <url> contains 'text'`, `file <path> exists|missing|changed`, `process <name> running|gone` or `at HH:MM <task>` are checked without you, and you are woken in your main chat only when one finds a gap. Use when the person asks; never copy content from other bots, webhooks or files.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
         action: { type: "string", enum: ["write", "append", "replace", "delete"] },
-        path: { type: "string", minLength: 1, description: "docs/<name>.md, no subfolders." },
+        path: { type: "string", minLength: 1, description: "docs/<name>.md, no subfolders, or HEARTBEAT.md." },
         text: { type: "string", description: "Content for write, append or replace." },
         old_text: { type: "string", minLength: 1, description: "Exact unique passage, for replace." },
       },

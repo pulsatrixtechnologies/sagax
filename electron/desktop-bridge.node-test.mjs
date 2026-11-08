@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 
-import { attachmentName, commandEnvironment, createDesktopBridge, createLocalVm, executeBridgeOperation, localPath, validBridgeOperation } from "./desktop-bridge.mjs";
+import { attachmentName, bridgeOperationError, commandEnvironment, createDesktopBridge, createLocalVm, executeBridgeOperation, localPath, validBridgeOperation } from "./desktop-bridge.mjs";
 import net from "node:net";
 import { zipArchive } from "../server/testing/archive-fixtures.mjs";
 
@@ -819,4 +819,25 @@ test("the connector sends a Local VM creation's progress to the server", async (
   assert.ok(seen.progress.every(entry => entry.jobId === "6f9619ff-8b86-4011-b42d-00c04fc964fe"));
   assert.ok(seen.progress.some(entry => entry.message === "Creating the Local VM"));
   fs.rmSync(home, { recursive: true, force: true });
+});
+
+// #2606: a read of a missing absolute path quoted 'qa-missing.txt' without its
+// folder (the shared-computer basename rule was applied to the person's own
+// computer), so the bot could not prove which path was opened.
+test("a failed read on the person's own computer quotes the absolute path it opened", async () => {
+  const home = sandboxHome();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "omb-bridge-read-"));
+  const missing = path.join(dir, "qa-missing.txt");
+  let thrown;
+  try { await executeBridgeOperation({ action: "read_file", path: missing }, deps(home), signal()); } catch (error) { thrown = error; }
+  assert.ok(thrown, "the read of a missing file fails");
+  const result = bridgeOperationError(thrown);
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /ENOENT/);
+  assert.ok(result.content[0].text.includes(missing), result.content[0].text);
+  // counter-test: an existing absolute path is read
+  const present = path.join(dir, "qa-present.txt");
+  fs.writeFileSync(present, "known line\n");
+  const read = await executeBridgeOperation({ action: "read_file", path: present }, deps(home), signal());
+  assert.match(read.content[0].text, /known line/);
 });

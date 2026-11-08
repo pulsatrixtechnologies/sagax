@@ -433,7 +433,21 @@ describe("threads, approvals and nudges", () => {
     people.get("bob")!.permissions.push("clients.routinesRun");
     respond = () => ({ status: 200, body: { runs: [{ id: "run_9", routineId: "r1", status: "completed", problems: "crm_login failed 2 times", startedAt: 1, finishedAt: 2 }] } });
     const got = await call("GET", "routines/runs/run_9", token("bob"));
-    expect(got.body.run).toMatchObject({ id: "run_9", status: "completed", problems: "crm_login failed 2 times" });
+    expect(got.body.run).toMatchObject({ id: "run_9", status: "completed", problems: "crm_login failed 2 times",
+      outcome: "completed_with_problems", hasProblems: true });
+  });
+
+  // #2605: a run off its cron days must say what started it.
+  it("a run says what started it, when it was due and why it was retried", async () => {
+    people.get("bob")!.permissions.push("clients.routinesRun");
+    respond = () => ({ status: 200, body: { runs: [
+      { id: "run_s", routineId: "r1", status: "completed", triggerSource: "startup", startedAt: 1, finishedAt: 2 },
+      { id: "run_r", routineId: "r1", status: "running", scheduledFor: 900, retried: "restarted", startedAt: 3 },
+      { id: "run_m", routineId: "r1", status: "failed", manual: true, startedAt: 4, finishedAt: 5 },
+    ] } });
+    expect((await call("GET", "routines/runs/run_s", token("bob"))).body.run).toMatchObject({ trigger: "startup", outcome: "completed", hasProblems: false });
+    expect((await call("GET", "routines/runs/run_r", token("bob"))).body.run).toMatchObject({ trigger: "schedule", scheduledFor: 900, retried: "restarted", outcome: "running" });
+    expect((await call("GET", "routines/runs/run_m", token("bob"))).body.run).toMatchObject({ trigger: "manual", outcome: "failed" });
   });
 });
 
@@ -863,7 +877,7 @@ describe("owner-scoped routine and bot reads", () => {
     expect(listed.body.routines[0]).toEqual({
       id: "r_bob", name: "Morning", botId: "b1", enabled: true, suspended: { reason: "paused", at: 4 },
       schedule: { type: "webhook", hour: 9 }, nextRunAt: 50,
-      lastRun: { id: "run_new", status: "failed", startedAt: 30, endedAt: 40 },
+      lastRun: { id: "run_new", status: "failed", startedAt: 30, endedAt: 40, trigger: "schedule", outcome: "failed", hasProblems: false },
     });
     expect(JSON.stringify(listed.body)).not.toContain("instructions");
     expect(JSON.stringify(listed.body)).not.toContain("ANN PROMPT");
@@ -879,7 +893,7 @@ describe("owner-scoped routine and bot reads", () => {
     expect(detail.body.routine.instructions).not.toContain(PLANTED_KEY);
     expect(detail.body.routine.instructions).not.toContain(PLANTED_WEBHOOK);
     expect(detail.body.routine.schedule).toEqual({ type: "webhook", hour: 9 });
-    expect(detail.body.routine.lastRun).toEqual({ id: "run_new", status: "failed", startedAt: 30, endedAt: 40 });
+    expect(detail.body.routine.lastRun).toEqual({ id: "run_new", status: "failed", startedAt: 30, endedAt: 40, trigger: "schedule", outcome: "failed", hasProblems: false });
     expect(JSON.stringify(detail.body)).not.toContain("output");
     expect(JSON.stringify(detail.body)).not.toContain("signingSecret");
     expect(recorded).toEqual([]);

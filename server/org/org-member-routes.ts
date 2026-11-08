@@ -313,6 +313,22 @@ function docPath(path: string): string | null {
   }
 }
 
+/** What started a run, when it was due, why it was retried, and its outcome:
+ * a completed run with problems is "completed_with_problems", never a plain
+ * success (#2603, #2605). */
+function runFacts(run: Record<string, unknown>) {
+  const status = str(run.status);
+  const hasProblems = typeof run.problems === "string" && run.problems.trim() !== "";
+  const trigger = str(run.triggerSource) ?? (run.manual === true ? "manual" : "schedule");
+  return {
+    trigger,
+    ...(typeof run.scheduledFor === "number" ? { scheduledFor: run.scheduledFor } : {}),
+    ...(typeof run.retried === "string" && run.retried ? { retried: run.retried } : {}),
+    outcome: status === "completed" && hasProblems ? "completed_with_problems" : status,
+    hasProblems,
+  };
+}
+
 function lastRunOf(runs: readonly Record<string, unknown>[], routineId: string) {
   const mine = runs.filter((run) => run.routineId === routineId);
   // A run that has not started yet (queued) is the newest too (2026-11-01).
@@ -325,6 +341,7 @@ function lastRunOf(runs: readonly Record<string, unknown>[], routineId: string) 
     status: str(run.status),
     startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
     endedAt: typeof run.finishedAt === "number" ? run.finishedAt : typeof run.endedAt === "number" ? run.endedAt : null,
+    ...runFacts(run),
     ...(typeof run.problems === "string" && run.problems ? { problems: readableRoutineProblems(scrubText(run.problems)).slice(0, 1_000) } : {}),
   };
 }
@@ -841,6 +858,7 @@ function wireRun(run: Record<string, unknown> | null | undefined, detail = false
     threadId: str(run.threadId) ?? str(run.resultsThreadId) ?? str(run.executionThreadId),
     startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
     endedAt: typeof run.finishedAt === "number" ? run.finishedAt : null,
+    ...runFacts(run),
     // 2026-11-01: completed, but not all of it went right: never a plain success.
     ...(typeof run.problems === "string" && run.problems ? { problems: readableRoutineProblems(scrubText(run.problems)).slice(0, 1_000) } : {}),
     ...(detail ? { attention: cut(run.attention, 500), error: cut(run.error, 500), output: cut(run.output, MEMBER_REPLY_MAX) } : {}),

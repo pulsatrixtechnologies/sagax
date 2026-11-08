@@ -241,6 +241,15 @@ export async function searchFiles(root, { pattern, glob, protectedRoots, signal 
   return text(results.length ? `${results.join("\n")}${results.length >= 200 || visited >= 20_000 ? "\n[more results not shown]" : ""}` : "No matches.");
 }
 
+/** A failed operation as the person's own bot reads it (#2606). Unlike a
+ * shared computer's (shared-computer-access.mjs sharedComputerError, which
+ * collapses absolute paths for another workspace), this is the person's own
+ * computer and the bot named the path: the error keeps the exact path that
+ * was opened, so "ENOENT ... open '/tmp/x.txt'" never reads as 'x.txt'. */
+export function bridgeOperationError(error) {
+  return { ...text(String(error?.message || "Computer action failed")), isError: true };
+}
+
 /** Run one operation on this computer. `deps` holds what only Electron or
  * the person's settings provide. */
 export async function executeBridgeOperation(operation, deps, signal) {
@@ -670,7 +679,7 @@ export function createDesktopBridge({
                 } : null,
               }, jobSignal);
             } catch (error) {
-              result = sharedComputerError(error);
+              result = bridgeOperationError(error);
               if (["computer_tools", "computer_call"].includes(operation.action)) { cua?.close(); cua = null; }
             } finally {
               clearInterval(heartbeat);

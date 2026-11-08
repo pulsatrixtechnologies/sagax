@@ -1,6 +1,8 @@
 // Settings > Providers > Advanced > Link with Grok Bot (#2193; in Advanced since #2295): the person's own webhook URL
 // and sealed key. Their Sagax bots reach only this link. Never shows the key
 // after save. Test sends a signed envelope. Phone opt-ins for owner call/text.
+// Drawn like its neighbour Web search (#2682): FieldRow fields, notes as
+// SettingsTextRow, Save as the primary pill, the inbound address copied only.
 import { useCallback, useEffect, useState } from "react";
 
 import { t } from "@/lib/i18n";
@@ -12,10 +14,11 @@ import {
   testGrokBridge,
   type GrokBridgeLinkView,
 } from "@/lib/grok-bridge";
-import { DescribedRow, FIELD, PILL, SettingsGroup, Switch } from "../SettingsPrimitives";
-import { cn } from "@/lib/cn";
+import { Check, Copy } from "lucide-react";
 
-const inputClass = cn(FIELD, "w-full max-w-md");
+import { useCopyFeedback } from "@/lib/copy-text";
+import { DescribedRow, FIELD, FieldRow, PILL, PRIMARY_PILL, SettingsGroup, SettingsTextRow, Switch } from "../SettingsPrimitives";
+import { cn } from "@/lib/cn";
 
 export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkView }) {
   const [view, setView] = useState<GrokBridgeLinkView | null>(initial ?? null);
@@ -78,7 +81,7 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
     setTestNote(null);
     try {
       const result = await testGrokBridge();
-      if ("ok" in result && result.ok) setTestNote(t("grokBridge.test.queued", { id: result.jobId }));
+      if ("ok" in result && result.ok) setTestNote(t("grokBridge.test.queued"));
       else setError("error" in result ? result.error : t("grokBridge.test.failed"));
     } catch (failure) {
       setError(readableError(failure));
@@ -107,20 +110,19 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
     return (
       <div data-settings-card="providers.linkedGrokBot">
         <SettingsGroup title={t("grokBridge.title")} groupId="linkedGrokBot">
-          <p role={error ? "alert" : "status"} className={cn("px-3.5 py-2.5 text-[12px]", error ? "text-danger" : "text-ink-secondary")}>{error ?? t("grokBridge.loading")}</p>
+          <SettingsTextRow tone={error ? "danger" : "neutral"} live>{error ?? t("grokBridge.loading")}</SettingsTextRow>
         </SettingsGroup>
       </div>
     );
   }
 
   const orgBlocked = view.orgAllowed === false;
+  const inboundPath = view.linkId ? `/api/bridge/grok/${view.linkId}` : null;
 
   return (
     <div data-settings-card="providers.linkedGrokBot" data-grok-bridge={view.linked ? (view.enabled ? "on" : "off") : "none"}>
       <SettingsGroup title={t("grokBridge.title")} groupId="linkedGrokBot">
-        <p className="px-3.5 pt-2.5 pb-1 text-[12px] leading-4 text-ink-secondary">{orgBlocked ? t("grokBridge.orgDisabled") : t("grokBridge.intro")}</p>
-        {error && <p role="alert" className="px-3.5 pb-1 text-[12px] text-danger">{error}</p>}
-        {testNote && <p role="status" className="px-3.5 pb-1 text-[12px] text-ink-secondary">{testNote}</p>}
+        <SettingsTextRow tone={orgBlocked ? "warning" : "neutral"}>{orgBlocked ? t("grokBridge.orgDisabled") : t("grokBridge.intro")}</SettingsTextRow>
 
         <DescribedRow
           label={t("grokBridge.enabled")}
@@ -135,48 +137,46 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
           />
         </DescribedRow>
 
-        <DescribedRow label={t("grokBridge.webhook")} rowId="grokBridgeWebhook" description={t("grokBridge.webhookHelp")}>
+        <FieldRow label={t("grokBridge.webhook")} rowId="grokBridgeWebhook" hint={t("grokBridge.webhookHelp")}>
           <input
-            className={inputClass}
+            className={FIELD}
+            type="url"
+            inputMode="url"
             dir="ltr"
+            spellCheck={false}
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
             placeholder={t("grokBridge.urlPlaceholder")}
-            aria-label={t("grokBridge.webhook")}
             autoComplete="off"
             disabled={busy || orgBlocked}
           />
-        </DescribedRow>
+        </FieldRow>
 
-        <DescribedRow
-          label={t("grokBridge.key")}
-          rowId="grokBridgeKey"
-          description={view.keySet ? t("grokBridge.keySet") : t("grokBridge.keyHelp")}
-        >
+        <FieldRow label={t("grokBridge.key")} rowId="grokBridgeKey" hint={view.keySet ? t("grokBridge.keySet") : t("grokBridge.keyHelp")}>
           <input
-            className={inputClass}
+            className={FIELD}
             dir="ltr"
             type="password"
+            spellCheck={false}
             value={key}
             onChange={(e) => setKey(e.target.value)}
             placeholder={view.keySet ? t("grokBridge.keyReplace") : t("grokBridge.keyPlaceholder")}
-            aria-label={t("grokBridge.key")}
             autoComplete="off"
             disabled={busy || orgBlocked}
           />
-        </DescribedRow>
+        </FieldRow>
 
-        <DescribedRow label={t("grokBridge.bots")} rowId="grokBridgeBots" description={t("grokBridge.botsHelp")}>
+        <FieldRow label={t("grokBridge.bots")} rowId="grokBridgeBots" hint={t("grokBridge.botsHelp")}>
           <input
-            className={inputClass}
+            className={FIELD}
+            spellCheck={false}
             value={botsText}
             onChange={(e) => setBotsText(e.target.value)}
             placeholder={t("grokBridge.botsPlaceholder")}
-            aria-label={t("grokBridge.bots")}
             autoComplete="off"
             disabled={busy || orgBlocked}
           />
-        </DescribedRow>
+        </FieldRow>
 
         <DescribedRow label={t("grokBridge.mayCall")} rowId="grokBridgeMayCall" description={t("grokBridge.mayCallHelp")}>
           <Switch
@@ -196,35 +196,52 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
           />
         </DescribedRow>
 
-        {view.stats && (
-          <p className="px-3.5 pt-1 text-[12px] text-ink-secondary" data-grok-bridge-stats="">
-            {t("grokBridge.stats", {
-              sent: String(view.stats.sentToday),
-              dead: String(view.stats.deadLetters),
-              circuit: view.stats.circuitOpen ? t("grokBridge.circuitOpen") : t("grokBridge.circuitClosed"),
-            })}
-          </p>
+        {inboundPath && (
+          <DescribedRow label={t("grokBridge.inbound")} rowId="grokBridgeInbound" description={t("grokBridge.inboundHint")}>
+            <CopyAddress path={inboundPath} />
+          </DescribedRow>
         )}
 
-        <div className="flex flex-wrap gap-2 px-3.5 py-2.5">
-          <button type="button" className={PILL} disabled={busy || orgBlocked || !webhookUrl.trim()} onClick={onSaveLink}>
+        {view.stats && (
+          <div data-grok-bridge-stats="">
+            <SettingsTextRow>
+              {t("grokBridge.stats", {
+                sent: String(view.stats.sentToday),
+                dead: String(view.stats.deadLetters),
+                circuit: view.stats.circuitOpen ? t("grokBridge.circuitOpen") : t("grokBridge.circuitClosed"),
+              })}
+            </SettingsTextRow>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 px-3.5 py-2.5">
+          <button type="button" className={PRIMARY_PILL} disabled={busy || orgBlocked || !webhookUrl.trim()} onClick={onSaveLink}>
             {t("grokBridge.save")}
           </button>
           <button type="button" className={PILL} disabled={busy || orgBlocked || !view.linked || !view.keySet || !view.enabled} onClick={() => void onTest()}>
             {t("grokBridge.test")}
           </button>
           {view.linked && (
-            <button type="button" className={PILL} disabled={busy} onClick={() => void onClear()}>
+            <button type="button" className={cn(PILL, "text-danger")} disabled={busy} onClick={() => void onClear()}>
               {t("grokBridge.clear")}
             </button>
           )}
         </div>
-        {view.linkId && (
-          <p className="px-3.5 pb-2 text-[12px] text-ink-secondary" data-grok-bridge-link-id="">
-            {t("grokBridge.inboundHint", { path: `/api/bridge/grok/${view.linkId}` })}
-          </p>
+        {(error || testNote) && (
+          <SettingsTextRow tone={error ? "danger" : "neutral"} live>{error ?? testNote}</SettingsTextRow>
         )}
       </SettingsGroup>
     </div>
+  );
+}
+
+/** The address Grok Bot posts to: copied, never drawn (its link id is opaque). */
+function CopyAddress({ path }: { path: string }) {
+  const { state, copy } = useCopyFeedback(path);
+  return (
+    <button type="button" className={PILL} title={path} data-grok-bridge-inbound="" onClick={copy}>
+      {state === "copied" ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+      {state === "copied" ? t("providers.copied") : t("grokBridge.copyInbound")}
+    </button>
   );
 }

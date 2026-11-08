@@ -54,6 +54,7 @@ import { ephemeralWorkspaceTokenPath } from "../backup/workspace-backup-policy.t
 import * as procs from "../procs.ts";
 import * as localInject from "./local-inject.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { preSendRefusalKind } from "../../shared/presend-refusal.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "testing", "fake-claude-cli.ts");
 /** The process that played the latest turn a FAKE_CLAUDE_DUMP recorded. */
@@ -1001,6 +1002,22 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await expect.poll(() => {
       try { process.kill(pid, 0); return false; } catch { return true; }
     }, { timeout: 7_000 }).toBe(true);
+  });
+
+  it("shows an injected model's refused key as a chat row, never as Claude's sign-in (Ursa, 2026-11-08)", async () => {
+    // A computer's local model relayed by the org server answers a bad grant
+    // with 403; read as an expired sign-in it became a pre-send refusal the
+    // chat never drew, and the person saw only "Seen by".
+    await create("not-logged-in");
+    await instance.adapter.sendTurn({ threadId: "t-auth-injected", text: "hi", model: "unsloth::fixture-model" });
+    await recorder.until((e) => e.type === "turn.completed");
+    const failure = recorder.events.find((e: any) => e.type === "runtime.error") as any;
+    expect(failure.message).toMatch(/^The server of this bot's local model refused the turn/);
+    expect(failure.message).not.toContain("sign-in has expired");
+    expect(failure.setup).toBeUndefined();
+    expect(preSendRefusalKind(failure.message, { setup: failure.setup })).toBeNull();
+    expect(recorder.events.at(-1)).toMatchObject({ type: "turn.completed", ok: false });
+    expect((recorder.events.at(-1) as any).stopReason).not.toBe("auth_required");
   });
 
   it("reports a synthetic sign-out refusal for recovery only after its process has stopped", async () => {

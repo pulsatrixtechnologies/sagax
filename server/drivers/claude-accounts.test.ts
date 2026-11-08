@@ -157,6 +157,23 @@ describe("Claude account configuration", () => {
     });
   });
 
+  it("keeps an injected model's key on a subscription turn (Ursa, 2026-11-08)", async () => {
+    const dir = account("subscription-injected");
+    const provider = await create(dir, { UNSLOTH_STUDIO_AUTH_TOKEN: "fixture-local-key" });
+    const recorder = recordEvents(provider.adapter);
+    await provider.adapter.sendTurn({
+      threadId: "subscription-injected", text: "hello", model: "unsloth::fixture-model",
+      access: { via: "subscription", identity: "fixture-person", claudeConfigDir: dir },
+    });
+    await recorder.until(event => event.type === "turn.completed");
+    recorder.stop();
+    expect(calls(dir).at(-1)?.env).toEqual({
+      ANTHROPIC_BASE_URL: "http://127.0.0.1:8888",
+      ANTHROPIC_AUTH_TOKEN: "fixture-local-key",
+      ANTHROPIC_API_KEY: "fixture-local-key",
+    });
+  });
+
   it("publishes only bounded display identity from a successful auth status", async () => {
     const dir = account("identity", {
       loggedIn: true, email: " person@example.test ", orgName: " Team ",

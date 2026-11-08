@@ -8,8 +8,12 @@
 // Revoke, Copy the id). Organization, scope and dates sit behind Details.
 // Unattended access is always enabled (2026-11-01). No host id on screen:
 // the readable name, the id only in a tooltip and the Copy action.
+// #2957: the row also says which bots may use the host ("All bots" or their
+// names) and, for a colleague's computer, "Shared by <name>"; the menu adds
+// "Bots…" and "Share…" on the person's own hosts (Share only inside an
+// organization: an impossible option is hidden, never greyed).
 import { useState } from "react";
-import { ChevronDown, Copy, KeyRound, Monitor, Plus, ShieldOff } from "lucide-react";
+import { Bot as BotIcon, ChevronDown, Copy, KeyRound, Monitor, Plus, Share2, ShieldOff } from "lucide-react";
 
 import {
   canOpenUnattendedHost,
@@ -29,7 +33,9 @@ import type { MyDevice } from "@/lib/desktop-bridge";
 import { relativeTime } from "@/lib/memory";
 import { DeviceCardRow } from "./DeviceCardRow";
 import { DeviceRow, deviceRowKey } from "./MyDevicesList";
-import { setRemoteHostAccess } from "./remote-hosts-client";
+import { setRemoteHostAccess, type UnattendedHostShare } from "./remote-hosts-client";
+import { HostBotsDialog, HostShareDialog, hostBotsLabel, useHostBotChoices } from "./HostSharingControls";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { HostBotComputerMenuItems, HostBotComputerTags } from "./HostBotComputerControls";
 import { useHostComputers } from "@/lib/host-computers";
 import {
@@ -102,6 +108,14 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
   const [editingTags, setEditingTags] = useState(false);
   const [access, setAccess] = useState<UnattendedHostAccess>(row.access ?? "always");
   const [saving, setSaving] = useState(false);
+  // #2957: which bots may use it, and who it is shared with (own hosts only).
+  const botChoices = useHostBotChoices();
+  const [bots, setBots] = useState<string[] | null>(row.bots && row.bots.length ? [...row.bots] : null);
+  const [shares, setShares] = useState<UnattendedHostShare[]>(row.shares ?? []);
+  const [editingBots, setEditingBots] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const mine = !row.sharedBy;
+  const inOrg = usePerspicaxOrg() !== null;
   const choose = (next: UnattendedHostAccess) => {
     const previous = access;
     setAccess(next);
@@ -119,7 +133,7 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
   ];
   return (
     <DeviceCardRow kind="unattended-host" icon={Monitor} online={unattendedHostOnline(row)} line={hostLine(row, os)}
-      rowData={{ "data-unattended-host": "", "data-state": row.state }}
+      rowData={{ "data-unattended-host": "", "data-state": row.state, ...(row.sharedBy ? { "data-shared": "" } : {}) }}
       title={(
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-[13.5px] font-semibold text-ink" title={row.hostId}>{label}</span>
@@ -136,8 +150,15 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
           {usable && (
             <PageMenuItem icon={KeyRound} data-unattended-host-open="" aria-disabled={busy || undefined} onClick={() => { if (busy) return; close(); onOpen(row); }}>{t("remoteSessionsAdmin.hosts.open")}</PageMenuItem>
           )}
-          {canRevokeUnattendedHost(row) && (
+          {mine && canRevokeUnattendedHost(row) && (
             <PageMenuItem icon={ShieldOff} data-unattended-host-revoke="" aria-disabled={busy || undefined} onClick={() => { if (busy) return; close(); onRevoke(row); }}>{t("remoteSessionsAdmin.hosts.revoke")}</PageMenuItem>
+          )}
+          {mine && row.state === "enrolled" && (
+            <PageMenuItem icon={BotIcon} data-unattended-host-bots-edit="" onClick={() => { close(); setEditingBots(true); }}>{t("remoteSessionsAdmin.hosts.bots.menu")}</PageMenuItem>
+          )}
+          {mine && inOrg && row.state === "enrolled" && (
+            <PageMenuItem icon={Share2} data-unattended-host-share="" trailing={shares.length > 0 ? String(shares.length) : undefined}
+              onClick={() => { close(); setSharing(true); }}>{t("remoteSessionsAdmin.hosts.share.menu")}</PageMenuItem>
           )}
           {row.state === "enrolled" && (
             <HostBotComputerMenuItems hostId={row.hostId} host={botComputer} close={close}
@@ -146,8 +167,22 @@ function HostRow({ row, os, busy, onOpen, onRevoke, onError, botComputer, onBotC
           <PageMenuItem icon={Copy} data-unattended-host-copy="" title={row.hostId} onClick={() => { close(); void copyText(row.hostId); }}>{t("remoteSessionsAdmin.hosts.copyId")}</PageMenuItem>
         </>,
       }}>
+      {row.state === "enrolled" && (
+        <p className="ml-12 flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] leading-[18px] text-ink-secondary">
+          {row.sharedBy ? (
+            <span data-unattended-host-shared-by="" className="inline-flex items-center gap-1"><Share2 size={12} aria-hidden="true" />{t("remoteSessionsAdmin.hosts.share.sharedBy", { name: row.sharedBy })}</span>
+          ) : (
+            <span data-unattended-host-bots="" className="inline-flex min-w-0 items-center gap-1"><BotIcon size={12} aria-hidden="true" className="shrink-0" /><span className="truncate">{hostBotsLabel(bots, botChoices)}</span></span>
+          )}
+          {mine && shares.length > 0 && (
+            <span data-unattended-host-shares="">· {t("remoteSessionsAdmin.hosts.share.count", { count: String(shares.length) })}</span>
+          )}
+        </p>
+      )}
       <HostBotComputerTags hostId={row.hostId} host={botComputer} editing={editingTags}
         onDone={() => setEditingTags(false)} onChanged={onBotComputerChanged} />
+      {editingBots && <HostBotsDialog hostId={row.hostId} host={label} value={bots} onSaved={setBots} onClose={() => setEditingBots(false)} />}
+      {sharing && <HostShareDialog hostId={row.hostId} host={label} shares={shares} onChanged={setShares} onClose={() => setSharing(false)} />}
       {details && (
         <dl data-unattended-host-facts="" className="ml-12 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px] leading-[18px]">
           {facts.filter(([, value]) => value).map(([name, value]) => (

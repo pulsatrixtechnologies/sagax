@@ -4,12 +4,12 @@
 // shows in the person's enrolled hosts. The code, the install command, the
 // install link and the expiry each stay on screen with their Copy action.
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, ExternalLink, KeyRound, Loader2, MonitorSmartphone } from "lucide-react";
+import { ExternalLink, KeyRound, Loader2, MonitorSmartphone } from "lucide-react";
 
 import { UNATTENDED_HOST_SCOPES, type UnattendedHostScope } from "../../../shared/remote-unattended-host";
-import { copyText } from "@/lib/copy-text";
 import { activeLocale, t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
+import { CopyBlock } from "./CopyBlock";
 import { createHostInstallCode, type HostInstallCode } from "./remote-hosts-client";
 
 const control = "rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-40";
@@ -23,18 +23,7 @@ export function timeLabel(iso: string | null): string {
 }
 
 export function CopyRow({ label, value, mono, name }: { label: string; value: string; mono?: boolean; name: string }) {
-  const [copied, setCopied] = useState(false);
-  return <div className="space-y-1">
-    <p className="text-[11px] text-ink-secondary">{label}</p>
-    <div className="flex items-start gap-1.5">
-      <code data-unattended-value={name} className={`min-w-0 flex-1 break-all rounded-lg border border-hairline/50 bg-inset px-2.5 py-1.5 text-[12px] text-ink ${mono ? "font-mono" : "font-mono text-[14px] font-semibold tracking-wider"}`}>{value}</code>
-      <button type="button" data-unattended-copy={name} aria-label={`${t("canvasComputers.unattended.copy")} · ${label}`} title={t("canvasComputers.unattended.copy")}
-        onClick={() => { void copyText(value).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }); }}
-        className="rounded-lg border border-hairline/50 p-1.5 text-ink-secondary hover:bg-raised hover:text-ink">
-        {copied ? <Check size={13} /> : <Copy size={13} />}
-      </button>
-    </div>
-  </div>;
+  return <CopyBlock name={name} label={label} value={value} variant={mono ? "command" : "code"} />;
 }
 
 /** The add flow. `startRequest` above zero opens the form (e.g. the team

@@ -12,7 +12,7 @@ import { setLocale } from "@/lib/i18n";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const saved = vi.hoisted(() => ({ calls: [] as Array<[string, string]>, fail: false }));
+const saved = vi.hoisted(() => ({ calls: [] as Array<[string, string]>, fail: false, bots: [] as unknown[], shares: [] as unknown[] }));
 vi.mock("./remote-hosts-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./remote-hosts-client")>()),
   setRemoteHostAccess: async (hostId: string, access: string) => {
@@ -20,6 +20,27 @@ vi.mock("./remote-hosts-client", async (importOriginal) => ({
     if (saved.fail) throw new Error("not_found");
     return access;
   },
+  setRemoteHostBots: async (hostId: string, botIds: string[] | null) => { saved.bots.push([hostId, botIds]); return { bots: botIds }; },
+  shareRemoteHost: async (hostId: string, target: { kind: string; id: string }) => {
+    saved.shares.push([hostId, target]);
+    return { shares: [{ ...target, name: target.kind === "team" ? "Support" : "Marie Tremblay" }] };
+  },
+}));
+// #2957: the person's bots for the row label, the organization for Share….
+vi.mock("@/state/store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/state/store")>()),
+  useStoreOptional: () => ({ state: { bots: [{ id: "bot-atlas", name: "Atlas", hidden: false }, { id: "bot-nova", name: "Nova", hidden: false }, { id: "bot-tmp", name: "Tmp", hidden: true }], config: {} } }),
+}));
+vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/perspicax-org")>()),
+  usePerspicaxOrg: () => ({ connected: true }),
+}));
+vi.mock("@/components/GroupPeoplePicker", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/GroupPeoplePicker")>()),
+  useOrgDirectory: () => ({
+    people: [{ principalId: "marie@acme", name: "Marie Tremblay", login: "marie", email: "marie@acme.example", role: "member", disabled: false }],
+    teams: [{ id: "team-support", name: "Support", managers: [], members: ["marie@acme"] }],
+  }),
 }));
 const { hostLine, sortDeviceEntries, UnattendedHostsSection } = await import("./UnattendedHostsSection");
 
@@ -41,7 +62,7 @@ const ipad: MyDevice = { key: "k3", name: "iPad", kind: "phone", platform: "ios"
 
 let root: Root;
 let el: HTMLDivElement;
-beforeEach(() => { setLocale("en"); saved.calls.length = 0; saved.fail = false; el = document.createElement("div"); document.body.append(el); root = createRoot(el); });
+beforeEach(() => { setLocale("en"); saved.calls.length = 0; saved.bots.length = 0; saved.shares.length = 0; saved.fail = false; el = document.createElement("div"); document.body.append(el); root = createRoot(el); });
 afterEach(() => { act(() => root.unmount()); el.remove(); });
 const mount = async (hosts: UnattendedHostRow[], devices: MyDevice[] = []) => {
   await act(async () => {
@@ -97,5 +118,71 @@ describe("enrolled hosts as device rows", () => {
     await choose("Never allow");
     expect(el.querySelector("[data-unattended-host-access]")?.getAttribute("data-unattended-host-access")).toBe("ask");
     expect(el.querySelector('[data-unattended-hosts-notice="access"]')).not.toBeNull();
+  });
+});
+
+describe("bot scope and sharing on a host row (#2957)", () => {
+  const SHARED = `h_${"ef".repeat(16)}`;
+  const scoped = host({ bots: ["bot-nova"], shares: [{ kind: "team", id: "team-support", name: "Support" }] });
+  const shared = host({ hostId: SHARED, hostname: "srv-marie", sharedBy: "Marie Tremblay" });
+  const rowOf = (hostname: string) => [...el.querySelectorAll("[data-unattended-host]")].find((row) => row.textContent?.includes(hostname)) ?? null;
+  const menuOf = async (hostname: string) => { await click(rowOf(hostname)?.querySelector("[data-unattended-host-more]")); };
+
+  it("says which bots may use it, or who shared it", async () => {
+    await mount([linux, scoped, shared].map((row, index) => ({ ...row, hostId: index === 0 ? `h_${"11".repeat(16)}` : row.hostId })));
+    const labels = [...el.querySelectorAll("[data-unattended-host-bots]")].map((span) => span.textContent);
+    expect(labels).toEqual(["All bots", "Nova"]);
+    expect(el.querySelector("[data-unattended-host-shares]")?.textContent).toContain("1");
+    expect(rowOf("srv-marie")?.querySelector("[data-unattended-host-shared-by]")?.textContent).toContain("Marie Tremblay");
+    expect(rowOf("srv-marie")?.querySelector("[data-unattended-host-bots]")).toBeNull();
+    expect(el.textContent).not.toContain("Tmp");
+  });
+
+  it("keeps Bots… and Share… for the owner only", async () => {
+    await mount([shared]);
+    await menuOf("srv-marie");
+    expect(document.querySelector("[data-unattended-host-bots-edit]")).toBeNull();
+    expect(document.querySelector("[data-unattended-host-share]")).toBeNull();
+    expect(document.querySelector("[data-unattended-host-revoke]")).toBeNull();
+    await mount([linux]);
+    await menuOf("srv-linux");
+    expect(document.querySelector("[data-unattended-host-bots-edit]")).not.toBeNull();
+    expect(document.querySelector("[data-unattended-host-share]")).not.toBeNull();
+  });
+
+  it("limits a host to chosen bots from Bots…", async () => {
+    await mount([linux]);
+    await menuOf("srv-linux");
+    await click(document.querySelector("[data-unattended-host-bots-edit]"));
+    const dialog = document.querySelector("[data-host-bots-dialog]")!;
+    expect(dialog).not.toBeNull();
+    expect((dialog.querySelector("[data-host-bots-all]") as HTMLInputElement).checked).toBe(true);
+    await click(dialog.querySelector('[data-host-bot="bot-atlas"]'));
+    expect((dialog.querySelector("[data-host-bots-all]") as HTMLInputElement).checked).toBe(false);
+    await click(dialog.querySelector("[data-host-bots-save]"));
+    expect(saved.bots).toEqual([[LINUX, ["bot-atlas"]]]);
+    expect(document.querySelector("[data-host-bots-dialog]")).toBeNull();
+    expect(el.querySelector("[data-unattended-host-bots]")?.textContent).toBe("Atlas");
+  });
+
+  it("shares a host with a person of the organization from Share…", async () => {
+    await mount([linux]);
+    await menuOf("srv-linux");
+    await click(document.querySelector("[data-unattended-host-share]"));
+    const dialog = document.querySelector("[data-host-share-dialog]")!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.querySelector("[data-host-share-empty]")).not.toBeNull();
+    await act(async () => {
+      const input = dialog.querySelector<HTMLInputElement>("[data-host-share-search]")!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "mar");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(dialog.querySelector('[data-host-share-add="person:marie@acme"]')).not.toBeNull();
+    expect(dialog.querySelector('[data-host-share-add="team:team-support"]')).toBeNull();
+    await click(dialog.querySelector('[data-host-share-add="person:marie@acme"]'));
+    expect(saved.shares).toEqual([[LINUX, { kind: "person", id: "marie@acme" }]]);
+    expect(dialog.querySelector('[data-host-share="person:marie@acme"]')?.textContent).toContain("Marie Tremblay");
+    await click(dialog.querySelector("[data-host-share-done]"));
+    expect(el.querySelector("[data-unattended-host-shares]")?.textContent).toContain("1");
   });
 });

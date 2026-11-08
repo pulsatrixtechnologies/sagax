@@ -22,6 +22,7 @@
 // non-disableable audit, expiry, revoke.
 import {
   hostOwnedByPerson,
+  hostUsableByPerson,
   parseUnattendedHostId,
   parseUnattendedHosts,
   UNATTENDED_HOST_SCOPES,
@@ -140,6 +141,15 @@ export function createUnattendedHosts(deps: {
   ownerSub?(principalId: string): string | null;
   /** The organization an install code enrolls into (defaults to the local org name). */
   defaultOrg?(): string | undefined;
+  /** Hosts other people shared with this person and bot scopes (#2957).
+   * A shared host is listed from the owner's seat and opened through the
+   * owner's Primary Bot; the viewer stays the actor of the audit. */
+  sharing?: {
+    sharedWith(principalId: string): { hostId: string; owner: string }[];
+    ownerName(principalId: string): string;
+    botAllowed(principalId: string, hostId: string, botId: string | null | undefined): boolean;
+    botName?(principalId: string, botId: string): string;
+  };
   /** How often and how long the page's open waits for the host's beat. The
    * host polls every `poll_every` (10 s by default), so a minute and a half
    * covers a few missed beats. */
@@ -184,15 +194,47 @@ export function createUnattendedHosts(deps: {
     }
   }
 
-  async function list(viewer: UnattendedHostsViewer): Promise<HostsListOutcome> {
-    const out = await withSeat(viewer.principalId, async (seat) => {
+  async function listOwn(principalId: string): Promise<UnattendedHostRow[] | { error: string } | null> {
+    return withSeat(principalId, async (seat) => {
       const posted = await seat.call(HOSTS_LIST_TOOL, {});
       if (refusal(posted)) return null;
       return parseUnattendedHosts(answerObject(posted.body.text), now());
     });
+  }
+
+  /** Rows of hosts shared with the viewer (#2957), one owner seat per owner.
+   * An owner whose seat fails contributes nothing (their hosts are simply
+   * absent this time); an owner's row is kept only when it is really theirs. */
+  async function listShared(viewer: UnattendedHostsViewer): Promise<UnattendedHostRow[]> {
+    const refs = deps.sharing?.sharedWith(viewer.principalId) ?? [];
+    if (!refs.length) return [];
+    const byOwner = new Map<string, Set<string>>();
+    for (const ref of refs) {
+      const set = byOwner.get(ref.owner) ?? new Set<string>();
+      set.add(ref.hostId);
+      byOwner.set(ref.owner, set);
+    }
+    const rows: UnattendedHostRow[] = [];
+    for (const [owner, hostIds] of byOwner) {
+      const listed = await listOwn(owner).catch(() => null);
+      if (!listed || "error" in listed) continue;
+      const sub = deps.ownerSub?.(owner) ?? null;
+      const name = deps.sharing?.ownerName(owner) ?? owner;
+      for (const row of listed) {
+        if (!hostIds.has(row.hostId) || row.state !== "enrolled" || !hostOwnedByPerson(row, sub)) continue;
+        rows.push({ ...row, sharedBy: name, shares: undefined, bots: undefined });
+      }
+    }
+    return rows;
+  }
+
+  async function list(viewer: UnattendedHostsViewer): Promise<HostsListOutcome> {
+    const out = await listOwn(viewer.principalId);
     if (out && "error" in out) return { available: false, hosts: [], reason: out.error };
     if (!out) return { available: false, hosts: [], reason: NOT_AVAILABLE };
-    return { available: true, hosts: out };
+    const shared = await listShared(viewer);
+    const own = new Set(out.map((row) => row.hostId));
+    return { available: true, hosts: [...out, ...shared.filter((row) => !own.has(row.hostId))] };
   }
 
   return {
@@ -235,15 +277,30 @@ export function createUnattendedHosts(deps: {
       }
       const row = listed.hosts.find((host) => host.hostId === hostId);
       const sub = deps.ownerSub?.(viewer.principalId) ?? null;
-      if (!row || row.state !== "enrolled" || !hostOwnedByPerson(row, sub)) {
+      if (!row || row.state !== "enrolled" || !hostUsableByPerson(row, sub)) {
         auditOpen(false);
         return { ok: false, error: "not_found", message: "That computer is not one of your enrolled hosts." };
+      }
+      // Bot scope (#2957): when a bot opens, it must be one the person allowed on this host.
+      const botId = options.seatFor?.botId;
+      if (botId && deps.sharing && !deps.sharing.botAllowed(viewer.principalId, hostId, botId)) {
+        auditOpen(false, botId);
+        const hostName = row.hostname ?? "this computer";
+        const botName = deps.sharing.botName?.(viewer.principalId, botId) ?? "This bot";
+        return { ok: false, error: "refused", message: `Refused by Sagax: ${botName} is not allowed on ${hostName}. The person chooses which bots may use it in Remote sessions.` };
       }
       const base = deps.local(viewer.principalId);
       const local: RemoteSupportContext = options.onSession
         ? { ...base, sessionId: () => { const id = (base.sessionId ?? newSessionId)(); options.onSession?.(id); return id; } }
         : base;
-      const seat = await deps.seat(viewer.principalId, options.seatFor).catch(() => ({ error: NO_SEAT }));
+      // A shared host (#2957) is opened through its owner's seat: Perspicax
+      // only knows the owner. The viewer stays the technician and the actor.
+      const owner = row.sharedBy
+        ? deps.sharing?.sharedWith(viewer.principalId).find((ref) => ref.hostId === hostId)?.owner ?? null
+        : null;
+      const seat = owner
+        ? await deps.seat(owner).catch(() => ({ error: NO_SEAT }))
+        : await deps.seat(viewer.principalId, options.seatFor).catch(() => ({ error: NO_SEAT }));
       if ("error" in seat) {
         auditOpen(false);
         return { ok: false, error: "unavailable", message: seat.error };

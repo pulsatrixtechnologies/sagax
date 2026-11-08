@@ -37,42 +37,53 @@ const run: TailcatRun = async (args) => {
 
 type Answer = { status: number; body: Record<string, unknown> };
 
+type Sharing = NonNullable<Parameters<typeof createUnattendedHosts>[0]["sharing"]>;
+
 function make(opts: {
-  answers?: Record<string, (args: Record<string, unknown>) => Answer>;
+  /** The answer may look at the seat's principal (owner seats of shared hosts, #2957). */
+  answers?: Record<string, (args: Record<string, unknown>, principal: string) => Answer>;
   noSeat?: boolean;
   ownerSub?: string | null;
+  /** Per-person subs; falls back to ownerSub for the viewer. */
+  subs?: Record<string, string>;
+  sharing?: Sharing;
 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-hosts-"));
   dirs.push(dir);
-  const calls: Array<{ tool: string; args: Record<string, unknown> }> = [];
+  const calls: Array<{ tool: string; args: Record<string, unknown>; principal: string }> = [];
+  const seats: Array<{ principalId: string; seatFor?: unknown }> = [];
   const ended = vi.fn(async () => {});
-  const defaults: Record<string, (args: Record<string, unknown>) => Answer> = {
+  const defaults: Record<string, (args: Record<string, unknown>, principal: string) => Answer> = {
     [HOSTS_LIST_TOOL]: () => ok({ hosts: [hostRow()] }),
   };
-  const seat: PerspicaxSeat = {
+  const seatOf = (principal: string): PerspicaxSeat => ({
     botId: "bot-1",
     threadId: "thread-1",
     call: async (tool, args) => {
-      calls.push({ tool, args });
+      calls.push({ tool, args, principal });
       const answer = opts.answers?.[tool] ?? defaults[tool];
-      return answer ? answer(args) : { status: 200, body: { text: "unknown tool", isError: true } };
+      return answer ? answer(args, principal) : { status: 200, body: { text: "unknown tool", isError: true } };
     },
     end: ended,
-  };
+  });
   const audit = vi.fn();
   const closeById = vi.fn(async () => true);
   const hosts = createUnattendedHosts({
-    seat: async () => (opts.noSeat ? { error: "no link" } : seat),
+    seat: async (principalId, seatFor) => {
+      seats.push({ principalId, ...(seatFor ? { seatFor } : {}) });
+      return opts.noSeat ? { error: "no link" } : seatOf(principalId);
+    },
     local: () => ({ dir, technicianName: "Ada", orgName: "Acme", now: () => NOW, run, sessionId: () => "0123456789ab" }),
     closeById,
     audit,
-    ownerSub: () => (opts.ownerSub === undefined ? TECH_SUB : opts.ownerSub),
+    ownerSub: (principalId) => opts.subs?.[principalId] ?? (opts.ownerSub === undefined ? TECH_SUB : opts.ownerSub),
+    ...(opts.sharing ? { sharing: opts.sharing } : {}),
     statusEveryMs: 0,
     statusTries: 3,
     sleep: async () => {},
     now: () => NOW.getTime(),
   });
-  return { hosts, calls, ended, audit, closeById, dir };
+  return { hosts, calls, seats, ended, audit, closeById, dir };
 }
 
 const ok = (value: unknown): Answer => ({ status: 200, body: { text: JSON.stringify(value), isError: false, owner: OWNER } });
@@ -86,7 +97,7 @@ describe("enrolled hosts at Perspicax", () => {
     const out = await hosts.list(viewer);
     expect(out.available).toBe(true);
     expect(out.hosts.map((h) => [h.hostname, h.state, h.scope, h.installedBy])).toEqual([["PC-A", "enrolled", "view-only", TECH_SUB]]);
-    expect(calls).toEqual([{ tool: HOSTS_LIST_TOOL, args: {} }]);
+    expect(calls.map(({ tool, args }) => ({ tool, args }))).toEqual([{ tool: HOSTS_LIST_TOOL, args: {} }]);
     expect(ended).toHaveBeenCalledTimes(1);
   });
 
@@ -222,5 +233,71 @@ describe("install code (Computers panel, 2026-11-06)", () => {
   it("quotes every value of the install command", () => {
     expect(hostInstallCommand({ org: "Exemple inc.", code: "AB-12", scope: "shell-only", recordedBy: "" }))
       .toBe('sagax-remote-access install --unattended --org "Exemple inc." --code "AB-12" --scope shell-only --consent-recorded-by "Sagax"');
+  });
+});
+
+describe("shared hosts and bot scope (#2957)", () => {
+  const MARIE = "marie@example.org";
+  const MARIE_SUB = "sub-marie";
+  const sharing = (over: Partial<Sharing> = {}): Sharing => ({
+    sharedWith: (principalId) => (principalId === viewer.principalId ? [{ hostId: OTHER, owner: MARIE }] : []),
+    ownerName: (principalId) => (principalId === MARIE ? "Marie Tremblay" : principalId),
+    botAllowed: () => true,
+    botName: () => "Nova",
+    ...over,
+  });
+  // Each seat lists its own hosts: the viewer's PC-A, Marie's SRV-B.
+  const listByPrincipal = (_args: Record<string, unknown>, principal: string) => ok({
+    hosts: principal === MARIE
+      ? [hostRow({ host_id: OTHER, hostname: "SRV-B", installed_by: MARIE_SUB })]
+      : [hostRow()],
+  });
+
+  it("lists a host shared with the viewer from its owner's seat, marked Shared by", async () => {
+    const { hosts, seats } = make({ answers: { [HOSTS_LIST_TOOL]: listByPrincipal }, subs: { [MARIE]: MARIE_SUB }, sharing: sharing() });
+    const out = await hosts.list(viewer);
+    expect(out.available).toBe(true);
+    expect(out.hosts.map((row) => [row.hostId, row.hostname, row.sharedBy ?? null])).toEqual([
+      [HOST, "PC-A", null],
+      [OTHER, "SRV-B", "Marie Tremblay"],
+    ]);
+    expect(seats.map((seat) => seat.principalId)).toEqual([viewer.principalId, MARIE]);
+    // a stranger (no share) sees only their own
+    const alone = make({ answers: { [HOSTS_LIST_TOOL]: listByPrincipal }, sharing: sharing({ sharedWith: () => [] }) });
+    expect((await alone.hosts.list({ principalId: "bob@example.org" })).hosts.map((row) => row.hostId)).toEqual([HOST]);
+  });
+
+  it("opens a shared host through the owner's seat; the viewer stays the actor", async () => {
+    const { hosts, calls, seats, audit } = make({
+      answers: {
+        [HOSTS_LIST_TOOL]: listByPrincipal,
+        remote_support_open: () => ok({ code: "K7QMNP", state: "connected", client: "app" }),
+        remote_support_status: () => ok({ state: "connected", client: "app" }),
+      },
+      subs: { [MARIE]: MARIE_SUB },
+      sharing: sharing(),
+    });
+    const out = await hosts.open(viewer, OTHER, { scope: "view-only" });
+    expect(out).toMatchObject({ ok: true, code: "K7QMNP" });
+    const open = calls.find((c) => c.tool === "remote_support_open")!;
+    expect(open.principal).toBe(MARIE);
+    expect(open.args).toMatchObject({ host_id: OTHER, scope: "view-only" });
+    expect(seats.at(-1)).toEqual({ principalId: MARIE });
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ kind: "unattended.open", actor: viewer.principalId, hostId: OTHER, ok: true }));
+  });
+
+  it("refuses a bot outside the host's bot scope before any Perspicax call", async () => {
+    const { hosts, calls, audit } = make({
+      answers: { remote_support_open: () => ok({ code: "K7QMNP" }) },
+      sharing: sharing({ botAllowed: (_who, hostId, botId) => !(hostId === HOST && botId === "bot-nova") }),
+    });
+    const refused = await hosts.open(viewer, HOST, { seatFor: { botId: "bot-nova", threadId: "t-1" } });
+    expect(refused).toMatchObject({ ok: false, error: "refused" });
+    expect((refused as { message: string }).message).toContain("Refused by Sagax: Nova is not allowed on PC-A");
+    expect(calls.filter((c) => c.tool === "remote_support_open")).toEqual([]);
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ kind: "unattended.open", hostId: HOST, ok: false, botId: "bot-nova" }));
+    // an allowed bot (or the page itself, no bot) goes through
+    const allowed = await hosts.open(viewer, HOST, { seatFor: { botId: "bot-atlas", threadId: "t-1" } });
+    expect(allowed).toMatchObject({ ok: true, code: "K7QMNP" });
   });
 });

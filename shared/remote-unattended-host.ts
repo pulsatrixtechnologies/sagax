@@ -63,6 +63,22 @@ export interface UnattendedHostRow {
   os?: UnattendedHostOs;
   /** What bots may do with this host, for the person asking (#2723). */
   access?: UnattendedHostAccess;
+  /** Which of the person's bots may use this host (#2957): null or absent =
+   * all bots; otherwise the ids of the allowed bots. */
+  bots?: string[] | null;
+  /** Display name of the owner when this host reaches the viewer through a
+   * share (#2957); null or absent for the owner's own hosts. */
+  sharedBy?: string | null;
+  /** Who the owner shared this host with (#2957); only on the owner's rows. */
+  shares?: UnattendedHostShare[];
+}
+
+/** One share of an enrolled host with a person or a team of the org (#2957). */
+export interface UnattendedHostShare {
+  kind: "person" | "team";
+  /** Principal id or team id; shown only through its name. */
+  id: string;
+  name: string;
 }
 
 const MAX_HOSTS = 500;
@@ -156,6 +172,15 @@ export function hostOwnedByPerson(
   const installed = row.installedBy?.trim() ?? "";
   if (!installed) return false;
   return installed === sub;
+}
+
+/** True when the person may use this host: their own, or one shared with them (#2957). */
+export function hostUsableByPerson(
+  row: Pick<UnattendedHostRow, "installedBy" | "sharedBy">,
+  ownerSub: string | null | undefined,
+): boolean {
+  if (row.sharedBy) return true;
+  return hostOwnedByPerson(row, ownerSub);
 }
 
 /** Revoke stays offered for any host not yet revoked, whatever the flag (M2). */

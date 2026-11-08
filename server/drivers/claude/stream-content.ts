@@ -16,7 +16,8 @@ import { filesField, writtenFilesFromToolInput } from "../../threads/thread-file
 import { commandSummary, cwToolResult, inputPreviewMax, toolDetailPreview, toolFailurePreview } from "../../tools/tool-summary.ts";
 import { withAbsolutePaths } from "../permission-command.ts";
 import { claudeAuthFailure } from "../claude-auth-recovery.ts";
-import { claudeSignInExpired as claudeSignInExpiredImport } from "../claude-errors.ts";
+import { claudeInjectedModelRefused, claudeSignInExpired as claudeSignInExpiredImport } from "../claude-errors.ts";
+import { decodeInjectId } from "../local-inject.ts";
 import {
   claudeApiErrorMessage,
   claudeContextFull,
@@ -142,6 +143,11 @@ case "assistant": {
   // command this app has no terminal to run, so relaying it as a
   // reply strands the user. Every other engine reports this as a
   // setup error; that is what routes them to the sign-in card.
+  if (claudeAuthFailure(o, text) && session.turn && decodeInjectId(session.turn.input.model)) {
+    session.turn.explained = true;
+    emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: claudeInjectedModelRefused(text) });
+    break;
+  }
   if (claudeAuthFailure(o, text)) {
     const authMessage = claudeSignInExpired(text);
     if (session.turn) {

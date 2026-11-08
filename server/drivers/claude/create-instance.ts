@@ -13,6 +13,7 @@ import type {
   TurnAccessInput,
 } from "../../contracts.ts";
 import { newEventId } from "../../contracts.ts";
+import { decodeInjectId } from "../local-inject.ts";
 import { openStartupModelCatalog, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
 import { cliVersionReader, execCli, killCliTree } from "../../procs.ts";
 import {
@@ -83,7 +84,10 @@ export async function createClaudeInstance(
     const instanceEnvironment = access?.environment ? { ...input.environment, ...access.environment } : input.environment;
     const configDir = access?.via === "subscription" && access.claudeConfigDir ? access.claudeConfigDir : config.configDir;
     const env = claudeEnvironment(config.managed ? undefined : model, { ...process.env, ...instanceEnvironment }, configDir, instanceEnvironment);
-    if (access?.via === "subscription") {
+    // An injected model (a local server, or a computer's model relayed by
+    // the org server) carries its own key in these two variables: it never
+    // reaches Anthropic, so the subscription must not strip it (Ursa, 2026-11-08).
+    if (access?.via === "subscription" && (config.managed || !decodeInjectId(model))) {
       delete env.ANTHROPIC_API_KEY;
       delete env.ANTHROPIC_AUTH_TOKEN;
     }

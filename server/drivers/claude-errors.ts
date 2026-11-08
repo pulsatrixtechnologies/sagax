@@ -18,6 +18,15 @@ export function claudeSignInExpired(raw: string): string {
   return said ? `${CLAUDE_SIGN_IN_EXPIRED} Claude said: ${said}` : CLAUDE_SIGN_IN_EXPIRED;
 }
 
+/** An injected model's own server (a local one, or a computer's model
+ * relayed by the org server) refused the turn's key: not Claude's sign-in,
+ * so no reconnect card, and a row the chat shows. */
+export function claudeInjectedModelRefused(raw: string): string {
+  const said = raw.trim().slice(0, 300);
+  const lead = "The server of this bot's local model refused the turn, so no reply came back. Check that the computer serving the model is on and shares it with you.";
+  return said ? `${lead} It said: ${said}` : lead;
+}
+
 /** Extra-usage credits for this model are used up (plan windows still work). */
 export function claudeCreditsExhausted(message: string): boolean {
   return CREDITS_EXHAUSTED.test(message);

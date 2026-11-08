@@ -136,7 +136,7 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
           <div className="flex shrink-0 items-center gap-2">{time}{toggle}</div>
         </div>
         {screenToggle && (
-          <div className="mt-2 flex min-h-[44px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="mt-3 flex min-h-[44px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex min-w-0 flex-1 basis-[200px] items-center gap-3">
               <Monitor aria-hidden="true" className="size-5 shrink-0 text-ink-secondary" />
               <div className="min-w-0">
@@ -147,7 +147,7 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
             <div className="flex shrink-0 items-center gap-2">{screenToggle}</div>
           </div>
         )}
-        <div className="mt-2 flex flex-col gap-1 text-[12px] leading-4 text-ink-secondary">
+        <div className="mt-4 flex flex-col gap-1 text-[12px] leading-4 text-ink-secondary">
           {note && <p role="status" data-brief-empty="">{note}</p>}
           {!note && pending.length === 0 && <p>{t("brief.queueEmpty")}</p>}
           {pending.length > 0 && (

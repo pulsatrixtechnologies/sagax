@@ -180,15 +180,17 @@ export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
       >
         {slackUrl && open === "slack" ? <SlackSection managementUrl={slackUrl} /> : null}
       </CardRow>
-      <CardRow
-        rowId="email"
-        icon={<Mail />}
-        label={t("botProfile.channel.email")}
-        state={mail === null ? null : !mail.available ? t("botProfile.state.notOffered") : mail.address ?? t("botProfile.state.noAddress")}
-        action={mail?.available && mail.address ? pill("email", true) : undefined}
-      >
-        {open === "email" && mail?.address ? <BotEmailAddress botId={bot.id} /> : null}
-      </CardRow>
+      {(mail === null || mail.available) && (
+        <CardRow
+          rowId="email"
+          icon={<Mail />}
+          label={t("botProfile.channel.email")}
+          state={mail === null ? null : !mail.available ? t("botProfile.state.notOffered") : mail.address ?? t("botProfile.state.noAddress")}
+          action={mail?.available && mail.address ? pill("email", true) : undefined}
+        >
+          {open === "email" && mail?.address ? <BotEmailAddress botId={bot.id} /> : null}
+        </CardRow>
+      )}
       <CardRow
         rowId="reachMe"
         icon={<BellRing />}
@@ -198,25 +200,28 @@ export function ChannelsCard({ bot, slackUrl, open, onOpen }: {
       >
         {open === "reachMe" ? <BotReachMe botId={bot.id} /> : null}
       </CardRow>
-      <CardRow
-        rowId="messages"
-        icon={<MessageCircle />}
-        label={t("botProfile.channel.messages")}
-        state={messages === undefined ? null : !messagesHere ? t("botProfile.state.unavailable") : messages!.useMessages ? t("botProfile.state.on") : t("botProfile.state.notConnected")}
-        action={messagesHere ? (
-          <button
-            type="button"
-            data-bot-profile-action="messages"
-            onClick={() => {
-              dispatch({ type: "togglePlugins", open: true, surface: "apps" });
-              window.dispatchEvent(new CustomEvent("sagax:open-mac-messages"));
-            }}
-            className={cn(PILL, "shrink-0")}
-          >
-            {messages!.useMessages ? t("botProfile.manage") : t("botProfile.connect")}
-          </button>
-        ) : undefined}
-      />
+      {/* an option the context makes impossible is not rendered (hiddenWhenUnavailable) */}
+      {(messages === undefined || messagesHere) && (
+        <CardRow
+          rowId="messages"
+          icon={<MessageCircle />}
+          label={t("botProfile.channel.messages")}
+          state={messages === undefined ? null : !messagesHere ? t("botProfile.state.unavailable") : messages!.useMessages ? t("botProfile.state.on") : t("botProfile.state.notConnected")}
+          action={messagesHere ? (
+            <button
+              type="button"
+              data-bot-profile-action="messages"
+              onClick={() => {
+                dispatch({ type: "togglePlugins", open: true, surface: "apps" });
+                window.dispatchEvent(new CustomEvent("sagax:open-mac-messages"));
+              }}
+              className={cn(PILL, "shrink-0")}
+            >
+              {messages!.useMessages ? t("botProfile.manage") : t("botProfile.connect")}
+            </button>
+          ) : undefined}
+        />
+      )}
     </ProfileCard>
   );
 }

@@ -8,11 +8,10 @@ import { localeChoices } from "@/locales";
 import { t } from "@/lib/i18n";
 import { APP_NAME, appVersion } from "@/lib/app-links";
 import { brand } from "@/lib/brand";
-import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
-import { CompactRow, LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
+import { CompactRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
 import { AboutPage, GeneralPage } from "./settings/AppPage";
 import { DeveloperLink } from "./settings/DeveloperLink";
@@ -446,16 +445,6 @@ export function SettingsModal() {
                     <AutoInstallAwayRow />
                   </SettingsGroup>
                 </div>
-                <div data-settings-card="updates.links">
-                  <SettingsGroup groupId="updatesLinks">
-                    <LinkRow
-                      rowId="releaseNotes"
-                      label={t("settings.updates.links.releaseNotes")}
-                      onClick={() => requestReleaseNotes("browse")}
-                    />
-                    <LinkRow rowId="aboutFromUpdates" label={t("settings.updates.links.about")} onClick={openAbout} />
-                  </SettingsGroup>
-                </div>
               </>
             )}
 
@@ -476,7 +465,7 @@ export function SettingsModal() {
             {section === "experimental" && <ExperimentalSettings />}
 
             {/* Developer (#2636, JC 2026-11-07): every technical option, for every member. */}
-            {section === "developer" && <DeveloperSettings remoteActive={remoteActive} />}
+            {section === "developer" && <DeveloperSettings remoteActive={remoteActive} openAbout={openAbout} />}
 
             {/* Providers (2026-10-30) */}
             {section === "providers" && (

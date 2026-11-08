@@ -12,8 +12,6 @@ import { api } from "@/state/store";
 import { DescribedRow, ExternalLinkPill, OrgBand, SettingsGroup } from "./SettingsPrimitives";
 import { InterimPeople } from "./settings/InterimPeople";
 import { OrganizationBotRows } from "./settings/OrganizationBotRules";
-import { OrgGrokBridgePolicy } from "./settings/OrgGrokBridgePolicy";
-import { OrgGithubApp } from "./settings/OrgGithubApp";
 import { OrgRulesReadOnly } from "./settings/OrgRulesReadOnly";
 
 interface PendingAdminApproval {
@@ -112,17 +110,9 @@ export function PerspicaxOrgSettings({ org, onChanged }: {
         </SettingsGroup>
       )}
       <OrgRulesReadOnly org={org} />
-      {admin && <OrgGrokBridgePolicy initial={org.settings.allowGrokBridge !== false} onChanged={onChanged} />}
       <SettingsGroup advanced title={t("organization.group.botRules")} groupId="organizationBots">
         <OrganizationBotRows />
       </SettingsGroup>
-      {/* The GitHub OAuth App's client id is a server setting behind
-          Connect GitHub for everyone, so it stays here for admins. */}
-      {admin && (
-        <SettingsGroup advanced title={t("organization.github.title")} groupId="organizationGithub">
-          <OrgGithubApp initial={org.settings} />
-        </SettingsGroup>
-      )}
     </>
   );
 }

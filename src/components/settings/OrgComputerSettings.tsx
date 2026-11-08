@@ -59,7 +59,7 @@ export function OrgComputerSettings({ bridge, initialLocal = null, initialServer
         <ComputerMacControlRow />
       </SettingsGroup>
       <SettingsGroup title={t("computer.group.bots")} groupId="botsComputer">
-        <ServerEnvironmentCard initial={initialServer} confirm={confirm} />
+        <ServerEnvironmentCard initial={initialServer} confirm={confirm} withReset={false} />
         <LocalVmCard bridge={bridge} initial={initialLocal} confirm={confirm} allowed={localVmAllowed} />
         {botsExtra}
       </SettingsGroup>
@@ -182,7 +182,7 @@ function StateDot({ tone }: { tone: "ok" | "bad" | "idle" }) {
 /** The person's server environment, as two rows of "Bots' computer":
  * its state and resources with its screen on demand, then Reset (a red
  * pill, after a confirmation), as the reference design's Update and Reset rows. */
-export function ServerEnvironmentCard({ initial = null, confirm = defaultConfirm }: { initial?: ServerEnvironmentStatus | null; confirm?: LooseConfirm }) {
+export function ServerEnvironmentCard({ initial = null, confirm = defaultConfirm, withReset = true, resetOnly = false }: { initial?: ServerEnvironmentStatus | null; confirm?: LooseConfirm; withReset?: boolean; resetOnly?: boolean }) {
   const [status, setStatus] = useState<ServerEnvironmentStatus | null>(initial);
   const [showScreen, setShowScreen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -204,6 +204,28 @@ export function ServerEnvironmentCard({ initial = null, confirm = defaultConfirm
   const limits = status?.limits;
   const usable = Boolean(status?.configured) && !status?.pendingDeletionAt && status?.state !== "unavailable";
   const state = serverEnvironmentStateText(status);
+  if (resetOnly) {
+    if (!status?.configured) return null;
+    return (
+      <div data-settings-card="developer.serverEnvironmentReset">
+        <SettingsGroup title={t("serverEnvironment.sectionTitle")} groupId="developerServerEnvironment">
+      {status?.configured && (
+        <DescribedRow
+          label={t("serverEnvironment.resetTitle")}
+          description={t("serverEnvironment.resetHint")}
+          rowId="serverEnvironmentReset"
+          below={error && <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p>}
+        >
+          <button type="button" disabled={busy || !usable} onClick={() => void reset()} data-server-environment-reset="" className={cn(DANGER_PILL, "min-h-[44px] md:min-h-0")}>
+            {busy && <Loader2 size={13} aria-hidden="true" className="animate-spin" />}
+            {t("serverEnvironment.reset")}
+          </button>
+        </DescribedRow>
+      )}
+        </SettingsGroup>
+      </div>
+    );
+  }
   return (
     <div data-settings-card="computer.orgServerEnvironment" data-server-environment={status?.state ?? (status ? "off" : "loading")}>
       <DescribedRow
@@ -229,7 +251,7 @@ export function ServerEnvironmentCard({ initial = null, confirm = defaultConfirm
           </button>
         )}
       </DescribedRow>
-      {status?.configured && (
+      {withReset && status?.configured && (
         <DescribedRow
           label={t("serverEnvironment.resetTitle")}
           description={t("serverEnvironment.resetHint")}

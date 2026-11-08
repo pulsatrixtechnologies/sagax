@@ -267,10 +267,10 @@ export function UsageHeadline({ usage, error, plan = null, planLoading = false, 
         ) : (
           <div className="flex flex-col gap-3 px-3.5 pb-3 pt-2" data-usage-headline>
             <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <span className="text-[22px] font-semibold leading-7 tabular-nums text-ink" data-usage-cost>
+              <span className="text-[13px] font-normal leading-[18px] tabular-nums text-ink" data-usage-cost>
                 {usage ? t("usage.headline.thisMonth", { cost: formatCost(costOf(usage.month)) }) : plan ? `${plan.provider.name} · ${plan.meter.label}` : null}
               </span>
-              <span className="text-[12.5px] text-ink-secondary" data-usage-renews>
+              <span className="text-[13px] leading-[18px] text-ink-secondary" data-usage-renews>
                 {usage ? t("usage.headline.renews", { date: renewalDay(new Date(now)) }) : resets ? t("planUsage.resetsIn", { when: resets }) : null}
               </span>
             </div>

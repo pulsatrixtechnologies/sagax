@@ -43,7 +43,7 @@ import { engineOffer } from "../../../shared/offered-engines";
 import { AnchoredPopover, enclosingWindowBounds, useAnchoredDismissRoot } from "../AnchoredPopover";
 import { ModelPicker, type ComposerModelMenuControl } from "../ModelPicker";
 import { DefaultBotSettings, newBotDefaultsSummary } from "../NewBotDialog";
-import { DescribedRow, DialogFrame, DialogLayer, HelpTip, PILL, PillSelect, SettingsGroup, TABLE_CELL_CONTROL } from "../SettingsPrimitives";
+import { DescribedRow, DialogFrame, DialogLayer, HelpTip, PILL, PRIMARY_PILL, PillSelect, SettingsGroup, TABLE_CELL_CONTROL } from "../SettingsPrimitives";
 import { SelectionBar } from "./SettingsPatterns";
 
 // One grid for the column headers, the section headers and every row, so
@@ -281,7 +281,7 @@ function BulkBackupChoice({
 
 /** "Defaults for new bots": set in Perspicax in an organization (read-only
  * here with the current choice), editable solo. */
-function NewBotDefaultsCard() {
+export function NewBotDefaultsCard() {
   const { state } = useStore();
   const org = usePerspicaxOrg();
   const title = t("botModels.defaults.title");
@@ -375,11 +375,12 @@ export function BotModelsSettings() {
         title={title}
         groupId="bot-models-table"
         accessory={
-          <span className="flex items-center gap-2">
+          <>
+            <HelpTip label={t("settings.moreAbout", { title })}>{t("botModels.help")}</HelpTip>
             {groups.length > 0 && (
               <button
                 type="button"
-                className={PILL}
+                className={cn(editing ? PRIMARY_PILL : PILL, "ml-auto")}
                 aria-pressed={editing}
                 data-bot-models-edit-several=""
                 onClick={() => (editing ? stopEditing() : setEditing(true))}
@@ -387,8 +388,7 @@ export function BotModelsSettings() {
                 {editing ? t("settings.selection.done") : t("botModels.editSeveral")}
               </button>
             )}
-            <HelpTip label={t("settings.moreAbout", { title })}>{t("botModels.help")}</HelpTip>
-          </span>
+          </>
         }
       >
         {groups.length === 0 ? (
@@ -552,7 +552,6 @@ export function BotModelsSettings() {
         />
       )}
 
-      <NewBotDefaultsCard />
 
       {pickingBackup && (
         <BulkBackupChoice

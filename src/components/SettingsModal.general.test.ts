@@ -181,7 +181,10 @@ describe("Settings search after the move", () => {
       expect(sectionMatches(section("about"), query), query).toBe(false);
       expect(sectionMatches(section("general"), query), query).toBe(false);
     }
-    for (const query of ["open at login", "hotkey", "send key", "spellcheck", "advanced mode", "hardware acceleration", "app icon"]) {
+    // JC 2026-11-08: Advanced mode moved to Developer
+    expect(sectionMatches(section("developer"), "advanced mode")).toBe(true);
+    expect(sectionMatches(section("general"), "advanced mode")).toBe(false);
+    for (const query of ["open at login", "hotkey", "send key", "spellcheck", "hardware acceleration", "app icon"]) {
       expect(sectionMatches(section("general"), query), query).toBe(true);
       expect(sectionMatches(section("about"), query), query).toBe(false);
     }

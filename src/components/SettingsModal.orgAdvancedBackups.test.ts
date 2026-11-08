@@ -48,9 +48,9 @@ describe("Settings > Organization (Perspicax)", () => {
     expect(html).toContain("On by default");
     expect(html).toContain("Blocked");
     expect(html).not.toContain('data-settings-card="organization.fullAccess"');
-    // the GitHub OAuth App's client id, a server setting, under advanced for the admin
-    expect(html).toContain('data-settings-group="organizationGithub"');
-    expect(html).toContain('data-settings-card="organization.githubApp"');
+    // the GitHub OAuth App's client id moved to Settings > Developer
+    expect(html).not.toContain('data-settings-group="organizationGithub"');
+    expect(html).not.toContain('data-settings-card="organization.githubApp"');
     expect(html).not.toContain('data-settings-card="organization.teamSecrets"');
     // bot rules stay under advanced for who may edit the installation
     expect(html).toContain('data-settings-group="organizationBots"');

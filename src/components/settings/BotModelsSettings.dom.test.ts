@@ -192,9 +192,8 @@ describe("BotModelsSettings page", () => {
     expect(container.querySelector("[data-bot-models-select]")).toBeNull();
     expect(container.querySelector('[data-bot-models-row="bot-scout"]')?.getAttribute("data-bot-models-section-of")).toBe("Clients");
     expect(container.querySelector('[data-bot-models-row="bot-lab"]')?.getAttribute("data-bot-models-section-of")).toBe("unassigned");
-    // Solo: the Defaults card is editable (no admin gate), no Perspicax link.
-    expect(container.querySelector("[data-defaults-stub]")).not.toBeNull();
-    expect(container.querySelector('[data-perspicax-link="newBotDefaults"]')).toBeNull();
+    // Defaults for new bots left the page for Settings > Developer.
+    expect(container.querySelector("[data-defaults-stub]")).toBeNull();
     expect(container.textContent).toContain("Bot models");
     // One Model · effort cell per row (chip, or the read-only label when
     // edit is denied); no separate effort or payer columns.
@@ -282,13 +281,9 @@ describe("BotModelsSettings page", () => {
     act(() => root.render(createElement(BotModelsSettings)));
     await flush();
     expect(container.querySelector("[data-defaults-stub]"), "no editable defaults form").toBeNull();
-    const row = container.querySelector('[data-settings-row="models.newBotDefaults"]');
-    expect(row).not.toBeNull();
-    expect(row?.textContent).toContain("Chosen in Perspicax");
-    expect(row?.querySelector('[data-perspicax-link="newBotDefaults"]')).toBeNull();
-    expect(row?.querySelector("a")).toBeNull();
-    // read-only in an organization: the card is an Advanced one (folded in Simple mode)
-    expect(container.querySelector('[data-settings-group="bot-models-defaults"]')?.hasAttribute("data-settings-advanced")).toBe(true);
+    // the defaults card now lives in Settings > Developer, not on this page
+    expect(container.querySelector('[data-settings-row="models.newBotDefaults"]')).toBeNull();
+    expect(container.querySelector('[data-settings-group="bot-models-defaults"]')).toBeNull();
     // the table itself stays the person's: rows and Edit several are there
     expect(container.querySelector('[data-bot-models-row="bot-scout"]')).not.toBeNull();
     expect(container.querySelector("[data-bot-models-edit-several]")).not.toBeNull();

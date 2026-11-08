@@ -128,12 +128,12 @@ describe("Settings search keywords", () => {
     const { SECTIONS, sectionMatches } = await import("./settings-nav");
     const { CARD_HOME } = await import("@/lib/settings-sections");
     const home: Record<string, string[]> = {
-      general: ["open at login", "app icon", "hotkey", "hardware acceleration", "send key", "spellcheck", "advanced mode"],
+      general: ["open at login", "app icon", "hotkey", "hardware acceleration", "send key", "spellcheck"],
       about: ["licence", "release notes", "tours", "send feedback"],
       backups: ["stockage"],
       security: ["people's tool access"],
       // #2636: every technical option is on Developer
-      developer: ["loop guard", "diagnostics", "download logs", "cleanup", "retention", "event log", "usage meter",
+      developer: ["advanced mode", "scheduled update", "loop guard", "diagnostics", "download logs", "cleanup", "retention", "event log", "usage meter",
         // #2658: the bot page's technical cards and the Claude Code switches
         "webhooks", "export zip", "embeddings", "skills folder", "always allowed", "daily logs"],
     };

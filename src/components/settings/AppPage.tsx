@@ -23,7 +23,6 @@ import {
   AppIconRow,
   BotHotkeysRows,
   HardwareAccelerationRow,
-  InterfaceModeRow,
   SendKeyRow,
   SpellcheckRow,
 } from "./AppearanceSettings";
@@ -92,12 +91,6 @@ export function GeneralPage({ remoteActive = false }: { remoteActive?: boolean }
         <SettingsGroup title={t("settings.general.keyboard")} groupId="generalKeyboard">
           <SendKeyRow />
           <SpellcheckRow />
-        </SettingsGroup>
-      </div>
-
-      <div data-settings-card="general.interface">
-        <SettingsGroup title={t("settings.general.interface")} groupId="generalInterface">
-          <InterfaceModeRow />
         </SettingsGroup>
       </div>
 

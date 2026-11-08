@@ -47,3 +47,21 @@ export function connectorConventionsPrompt(connectors: ReadonlyArray<{ name: str
   if (!names.length) return "";
   return `\n\nThe claude.ai connector${names.length > 1 ? "s" : ""} ${names.map((name) => `"${name}"`).join(", ")} reach${names.length > 1 ? "" : "es"} ConnectWise and the other Perspicax products: the conventions below apply to ${names.length > 1 ? "their" : "its"} tools (prefixed mcp__claude_ai_).${PERSPICAX_CONVENTIONS_PROMPT}`;
 }
+
+/** QA 0.8.67 G8 ("No such tool available: Api search"): a routine named a
+ * Perspicax tool by its title or bare name, and the engine had no tool by
+ * that name. Each engine exposes the mount's tools under its own exact id;
+ * this names that id form for the engine the turn runs on, so the model
+ * calls `mcp__perspicax__api_search` (Claude Code) or use_tool with
+ * `perspicax__api_search` (Grok), never "Api search" or a bare `api_search`. */
+export function perspicaxToolIdsPrompt(server: string, driverKind: string | undefined): string {
+  const example = "api_search";
+  const never = `never a display title such as "Api search" and never a name from a routine's text without its prefix`;
+  if (driverKind === "claude") {
+    return `\n- Tool ids: this server's tools are named \`mcp__${server}__<tool>\` (\`mcp__${server}__${example}\`, \`mcp__${server}__api_result_query\`, \`mcp__${server}__call_tool\`). Call them by that exact id, ${never}.`;
+  }
+  if (driverKind === "grok") {
+    return `\n- Tool ids: reach this server's tools with use_tool and tool_name \`${server}__<tool>\` (\`${server}__${example}\`, \`${server}__api_result_query\`), the exact id, ${never}. search_tool is a native tool: call it directly, never through use_tool. This server's own \`search_tools\` is a different tool, reached with use_tool as \`${server}__search_tools\`.`;
+  }
+  return `\n- Tool ids: call this server's tools by the exact id your tool list shows for them (the \`${server}\` server's \`${example}\`, with the prefix your tool list gives it), ${never}.`;
+}

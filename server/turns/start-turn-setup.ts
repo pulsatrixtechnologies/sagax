@@ -435,6 +435,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
         taken: Object.keys(state.integrations.custom ?? {}),
         ...(state.warmOnly ? { quiet: true } : {}),
         ...(perspicaxPrepared ? { prepared: perspicaxPrepared } : {}),
+        driverKind: state.instance.driverKind,
       });
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
         throw new DirectTurnSetupCancelled("turn stopped during Perspicax setup");

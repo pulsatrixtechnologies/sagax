@@ -2,6 +2,18 @@
 /** actTurnFacts (#1388). Pure move from server/index.ts. */
 export type Host = Record<string, any>;
 
+/** The person a routine or webhook turn acts for: the payer recorded for its
+ * lineage, else the bot's owner. A routine always runs with its owner's
+ * identity and credentials, so it never lands without someone to act for. */
+export function routineOwnerFor(host: Host, threadId: string): string | null {
+  const payer = host.turnRoutineLineage?.has(threadId) ? host.turnRoutinePayers?.get(threadId)?.trim() : "";
+  if (payer) return payer;
+  const bot = host.store?.botByThread?.(threadId);
+  if (!bot) return null;
+  const owner = typeof host.effectiveBotOwner === "function" ? String(host.effectiveBotOwner(bot) ?? "").trim() : "";
+  return owner || null;
+}
+
 export function createActTurnFacts(getHost: () => Host): any {
 function actTurnFacts(threadId: string, generation: string) {
   const host = getHost();
@@ -23,7 +35,7 @@ function actTurnFacts(threadId: string, generation: string) {
     senderUnproven: Boolean(rawSender) && provenPerson === null,
     provenPerson,
     // #2701: a routine acts for the owner whose credentials it runs on
-    routineOwner: request?.automation && host.turnRoutineLineage.has(threadId) ? host.turnRoutinePayers.get(threadId)?.trim() || null : null,
+    routineOwner: request?.automation ? routineOwnerFor(host, threadId) : null,
     sharedServer: host.LOOPBACK.trust === "service" || host.IDENTITY.kind === "perspicax" || host.HOSTED_WORKSPACE
   };
 

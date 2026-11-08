@@ -99,3 +99,12 @@ describe("grok use_tool argument form", () => {
     expect(GROK_TOOL_REUSE_HINT).toMatch(/never repeat the same failing call/);
   });
 });
+
+// QA 0.8.67 G8: routine runs still ended with "use_tool failed, search_tool is a native tool".
+describe("grok native search_tool in routines", () => {
+  it("the standing hint covers routines and the native-tool refusal", () => {
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/This holds in routines too/);
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/search_tool is never wrapped in use_tool/);
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/"is a native tool", call that tool directly by its own name next/);
+  });
+});

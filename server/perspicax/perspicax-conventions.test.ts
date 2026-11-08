@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectorConventionsPrompt, hasPerspicaxConventions, PERSPICAX_CONVENTIONS_PROMPT } from "./perspicax-conventions.ts";
+import { connectorConventionsPrompt, hasPerspicaxConventions, PERSPICAX_CONVENTIONS_PROMPT, perspicaxToolIdsPrompt } from "./perspicax-conventions.ts";
 
 describe("Perspicax tool conventions (#1209)", () => {
   it("names each convention", () => {
@@ -106,5 +106,26 @@ describe("Perspicax tool conventions (#1209)", () => {
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("Ticket or project titles are optional");
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("A 403 on project or service tickets never blocks the hours");
     expect(PERSPICAX_CONVENTIONS_PROMPT).toContain("on a 403 for a title, take the note's skip option (no switch, no card)");
+  });
+});
+
+// QA 0.8.67 G8: "No such tool available: Api search" in a routine run.
+describe("perspicaxToolIdsPrompt", () => {
+  it("names Claude Code's exact mcp__ ids and rules out titles", () => {
+    const text = perspicaxToolIdsPrompt("perspicax", "claude");
+    expect(text).toContain("`mcp__perspicax__api_search`");
+    expect(text).toContain("never a display title such as \"Api search\"");
+  });
+  it("names Grok's use_tool ids and keeps search_tool native", () => {
+    const text = perspicaxToolIdsPrompt("perspicax", "grok");
+    expect(text).toContain("tool_name `perspicax__<tool>`");
+    expect(text).toContain("search_tool is a native tool: call it directly, never through use_tool");
+    expect(text).toContain("`perspicax__search_tools`");
+    expect(text).not.toContain("mcp__");
+  });
+  it("other engines are told to use the id from their tool list", () => {
+    const text = perspicaxToolIdsPrompt("perspicax", "codex");
+    expect(text).toContain("exact id your tool list shows");
+    expect(text).not.toContain("mcp__perspicax__");
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { bundledKnowledgeIndex, indexKnowledge, type KnowledgeBase } from "./self-knowledge.ts";
+import { bundledKnowledgeIndex, indexKnowledge } from "./self-knowledge.ts";
+import type { KnowledgeBase } from "./self-knowledge-types.ts";
 import { HELP_PREFETCH_HEADER, namedTerms, wantsHelpPrefetch, withHelpPrefetch } from "./help-prefetch.ts";
 
 const base = {

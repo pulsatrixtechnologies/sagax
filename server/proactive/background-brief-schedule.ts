@@ -15,7 +15,7 @@
 //     their hours (held until the next range otherwise).
 // A pass with nothing new sends nothing. The brief is on by default for a
 // Primary Bot; the person turns it off or moves its time on the bot page.
-import { readConnectedBrief, type BriefAppCall, type BriefStore, type BriefSuggestion } from "./background-brief.ts";
+import { readConnectedBrief, suggestionAction, type BriefAppCall, type BriefStore, type BriefSuggestion } from "./background-brief.ts";
 import { reportBackgroundError } from "../background-error.ts";
 
 export interface ScheduledBriefBot {
@@ -49,7 +49,7 @@ export function briefMessageText(suggestions: readonly BriefSuggestion[], langua
   const lines = [fr ? "**Brief du jour**" : "**Today's brief**", ""];
   for (const item of suggestions.slice(0, 12)) {
     const source = item.sources[0];
-    lines.push(`- ${item.text}${source ? ` (${source.piece}, ${source.asOf})` : ""}`);
+    lines.push(`- ${suggestionAction(item, language)}${source ? ` (${source.asOf})` : ""}`);
   }
   lines.push("", fr
     ? "Garde ou rejette chaque point dans les réglages du bot, section Brief en arrière-plan."
@@ -64,7 +64,7 @@ export function briefNoticeLines(suggestions: readonly BriefSuggestion[], langua
   const title = fr
     ? `Brief du jour : ${count} point${count > 1 ? "s" : ""}`
     : `Today's brief: ${count} point${count > 1 ? "s" : ""}`;
-  return { title, lines: suggestions.slice(0, 3).map((item) => item.text) };
+  return { title, lines: suggestions.slice(0, 3).map((item) => suggestionAction(item, language)) };
 }
 
 /** One minute's round. Never throws; returns the bots whose brief was delivered. */

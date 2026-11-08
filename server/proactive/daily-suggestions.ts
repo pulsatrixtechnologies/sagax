@@ -7,7 +7,7 @@
  * proactive wake, outside the wake budget), "Pas maintenant" leaves it.
  * Picking and posting a suggestion never calls a model and never counts
  * toward any usage: only the work the person asks for runs on the engine. */
-import type { BriefSuggestion } from "./background-brief.ts";
+import { suggestionAction, type BriefSuggestion } from "./background-brief.ts";
 import type { ProactiveEvent } from "./proactive-wake.ts";
 
 /** At most this many suggestion cards per bot in any 24 hours. */
@@ -51,7 +51,8 @@ export function dailySuggestionCard(item: BriefSuggestion, language: "fr" | "en"
   const source = item.sources[0];
   const from = source ? (fr ? ` D'après ${source.piece}, ${source.asOf}.` : ` From ${source.piece}, ${source.asOf}.`) : "";
   return {
-    title: clip(item.text, TITLE_MAX),
+    // #2693: a concrete action in the person's words, never the tool's raw answer
+    title: clip(suggestionAction(item, language), TITLE_MAX),
     subtitle: fr
       ? `Suggestion du jour, gratuite.${from} Je m'en occupe ?`
       : `Today's suggestion, free.${from} Shall I handle it?`,
@@ -69,8 +70,8 @@ export function dailySuggestionEvent(botId: string, item: BriefSuggestion): Proa
     source: "suggestion",
     key: `suggestion:${item.id}`,
     label: "Daily suggestion",
-    detail: [`Suggestion: ${item.text}`, ...(sources.length ? ["Sources:", ...sources] : [])].join("\n"),
-    summary: clip(item.text, TITLE_MAX),
+    detail: [`Suggestion: ${suggestionAction(item, "en")}`, ...(sources.length ? ["Sources:", ...sources] : [])].join("\n"),
+    summary: clip(suggestionAction(item, "en"), TITLE_MAX),
     hops: 0,
     confined: true
   };

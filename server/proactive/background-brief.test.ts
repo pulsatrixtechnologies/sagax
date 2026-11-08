@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { memoryReadersOf } from "../memory/memory-audience.ts";
 import { memoryMayShow } from "../memory/memory-audience.ts";
-import { BriefStore, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, readConnectedBrief, runBriefPass } from "./background-brief.ts";
+import { BriefStore, briefGist, suggestionAction, toolWords, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, readConnectedBrief, runBriefPass } from "./background-brief.ts";
 import { briefMessageText, briefNoticeLines, runScheduledBriefs, type BriefDelivery } from "./background-brief-schedule.ts";
 
 const piece = { piece: "Inbox, Monday note", asOf: "2026-10-26", text: "Three invoices arrived, 3 in all." };
@@ -68,7 +68,7 @@ describe("background brief", () => {
       },
     }, { costUsd: 0, fastModel: "fast-1" });
     expect(called).toEqual(["Inbox:list_messages"]);
-    expect(read.ok && read.suggestions[0]).toMatchObject({ sources: [{ piece: "Inbox / list_messages", asOf: "2026-10-26" }] });
+    expect(read.ok && read.suggestions[0]).toMatchObject({ sources: [{ piece: "Inbox, list messages", asOf: "2026-10-26" }] });
     expect(read.ok && read.suggestions[0]?.text).toContain("3");
     expect(read.ok && read.suggestions[0]?.text).toContain("2026-10-26");
   });
@@ -135,7 +135,22 @@ describe("background brief", () => {
     expect(delivered).toHaveLength(1);
     const text = briefMessageText(delivered[0]!.suggestions, "fr");
     expect(text).toContain("Brief du jour");
-    expect(text).toContain("(Inbox / list_messages, 2026-10-26)");
+    expect(text).toContain("- Faire le suivi de « Monday note 2026-10-26: 3 invoices arrived » dans Inbox (2026-10-26)");
     expect(briefNoticeLines(delivered[0]!.suggestions, "en").title).toBe("Today's brief: 1 point");
+  });
+
+  it("#2693: a full ISO timestamp dates the piece, and the point is human words, not the raw answer", () => {
+    expect(datedBriefPiece("Mail", "list_messages", "due 2026-11-08T14:00:00Z")?.asOf).toBe("2026-11-08");
+    expect(datedBriefPiece("Mail", "list_messages", "at 2026-11-08T14:00:00.000-05:00")?.asOf).toBe("2026-11-08");
+    expect(datedBriefPiece("Mail", "list", "ref 12026-11-08")).toBeNull();
+    expect(toolWords("listMessages")).toBe("list messages");
+    const raw = JSON.stringify({ value: [{ id: "AAMk42", subject: "Facture 1042 en retard", receivedDateTime: "2026-11-08T14:00:00Z" }] });
+    expect(briefGist(raw)).toBe("Facture 1042 en retard");
+    expect(briefGist('{"count": 3, "note": "x"} trailing')).not.toMatch(/[{}"]/);
+    const pass = runBriefPass({ tools: ["list_messages"], pieces: [datedBriefPiece("Outlook", "list_messages", raw)!], costUsd: 0, fastModel: "fast-1" });
+    if (!pass.ok) throw new Error(pass.error);
+    expect(pass.suggestions[0]?.text).toBe("Facture 1042 en retard");
+    expect(suggestionAction(pass.suggestions[0]!, "fr")).toBe("Faire le suivi de « Facture 1042 en retard » dans Outlook");
+    expect(suggestionAction(pass.suggestions[0]!, "en")).toBe('Follow up on "Facture 1042 en retard" in Outlook');
   });
 });

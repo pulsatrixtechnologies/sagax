@@ -105,6 +105,9 @@ export function buildNotification(
     choiceDetails?: readonly (string | undefined)[];
     /** #2909: the full detail behind the one-line body (markdown welcome). */
     context?: string;
+    /** #2909: the question the person answers, when the title is the kind's
+     * own (a needs-you card): it leads the context. */
+    question?: string;
     /** #2909: the chat message holding the card. */
     cardId?: string;
     proposalId?: string;
@@ -166,7 +169,8 @@ export function buildNotification(
   const asks = kind === "approval" || kind === "question" || kind === "needs-you";
   if ((kind === "question" || kind === "needs-you") && extra?.choices?.length) {
     const choices = notificationChoices(extra.choices);
-    if (choices.length) {
+    // one answer is not a choice: the card in the chat holds it
+    if (choices.length >= 2) {
       notification.choices = choices;
       // #2909: short labels the buttons show whole, else Open only
       const labels = notificationChoiceLabels(choices, extra.choiceLabels ?? []);
@@ -176,7 +180,7 @@ export function buildNotification(
   // #2909: never a choice without its context
   if (asks) {
     const context = buildNotificationContext({
-      question: extra?.title ?? "",
+      question: extra?.question ?? extra?.title ?? "",
       detail: extra?.context?.trim() ? extra.context : detail,
       choices: (notification.choices ?? []).map((answer, index) => ({
         answer,
@@ -252,6 +256,9 @@ export function deliverableNotification(
     choiceDetails?: readonly (string | undefined)[];
     /** #2909: the full detail behind the one-line body (markdown welcome). */
     context?: string;
+    /** #2909: the question the person answers, when the title is the kind's
+     * own (a needs-you card): it leads the context. */
+    question?: string;
     /** #2909: the chat message holding the card. */
     cardId?: string;
     proposalId?: string;

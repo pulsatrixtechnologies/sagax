@@ -252,8 +252,26 @@ public enum NotificationChoices {
 public enum NotificationChoiceLabels {
     /// The longest label shown whole (shared `CHOICE_LABEL_MAX`).
     public static let labelMax = 24
-    /// Past this many answers: Open only (shared `CHOICE_BUTTONS_MAX`).
-    public static let buttonsMax = 3
+    /// Past this many answers: Open only (shared `CHOICE_BUTTONS_MAX`,
+    /// the banner's `NotificationChoices.limit`).
+    public static let buttonsMax = 4
+    /// Live Activity, island pills and widget: narrower, so fewer
+    /// (shared `ACTIVITY_CHOICES_MAX`).
+    public static let compactMax = 3
+
+    /// One answer button: the choice sent back, the short title shown.
+    public struct Answer: Hashable, Sendable {
+        public var choice: String
+        public var title: String
+    }
+
+    /// #2909: the answer buttons a surface shows, each titled whole with its
+    /// short label, or nil: the answers cannot all be shown whole (too many,
+    /// a label missing or too long, two alike), so the surface offers Open.
+    public static func answers(for choices: [String], given: [String]? = nil, limit: Int = buttonsMax) -> [Answer]? {
+        guard let titles = labels(for: choices, given: given ?? [], limit: limit) else { return nil }
+        return zip(choices, titles).map { Answer(choice: $0, title: $1) }
+    }
 
     private static let separators = [" : ", ": ", " - ", " — ", " – ", " (", " ; ", "; ", ", ", " pour ", " to ", " so "]
 

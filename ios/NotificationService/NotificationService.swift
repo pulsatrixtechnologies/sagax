@@ -22,10 +22,17 @@ final class NotificationService: UNNotificationServiceExtension {
         // a lock screen draws no Markdown: a body an older server sent with
         // its table or bold still reads as plain words (PlainText)
         content.body = PlainText.bannerLines(content.body)
+        let payload = PushPayload(userInfo: content.userInfo)
+        // #2909: a pick with choices shows Open until its own buttons are
+        // registered, so a banner sent at the time limit never offers
+        // buttons that do not exist or cut-off answers.
+        if let payload, payload.kind == .approval, !payload.choices.isEmpty,
+           (payload.prompt == "question" && payload.requestId != nil) || (payload.needsYou && payload.requestId == nil) {
+            content.categoryIdentifier = NotificationApproval.openCategory
+        }
         bestAttemptContent = content
         Task {
             let center = UNUserNotificationCenter.current()
-            let payload = PushPayload(userInfo: content.userInfo)
             // Answered elsewhere, or expired: the approval's banner leaves this
             // phone and the watch, and this push shows nothing of its own.
             if let payload, payload.kind == .settled {

@@ -198,6 +198,8 @@ const CHOICE_MAX = 80;
 const CHOICES_MAX = 8;
 /** "(create, archive only, or nothing for now) ?" closing the question. */
 const CLOSING_PARENS = /\(([^()]{3,400})\)\s*[?\uFF1F]\s*[*_]*\s*$/;
+/** "...? (yes / no)" after the question mark (#2909). */
+const AFTER_QUESTION_PARENS = /[?\uFF1F]\s*\(([^()]{3,400})\)\s*[.!]?\s*[*_]*\s*$/;
 /** "...: create, archive only or nothing?" closing the question. */
 const CLOSING_COLON = /:\s*([^:]{3,400}?)\s*[?\uFF1F]\s*[*_]*\s*$/;
 const SEPARATOR = /\s*[,;/|]\s*(?:(?:ou|or)\s+)?|\s+(?:ou|or)\s+/i;
@@ -231,7 +233,7 @@ export function attentionChoices(card: Pick<PersonAttention, "items" | "choices"
   if (given.length) return given.slice(0, CHOICES_MAX);
   if (card.items.length !== 1) return [];
   const text = card.items[0]!.text.trim();
-  const inParens = CLOSING_PARENS.exec(text);
+  const inParens = CLOSING_PARENS.exec(text) ?? AFTER_QUESTION_PARENS.exec(text);
   if (inParens) {
     const found = splitChoices(inParens[1]!, false);
     if (found.length) return found;

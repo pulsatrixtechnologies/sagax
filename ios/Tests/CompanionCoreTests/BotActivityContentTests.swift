@@ -82,4 +82,28 @@ final class BotActivityContentTests: XCTestCase {
         XCTAssertNil(content(threadId: "").approvalThreadId)
         XCTAssertNil(content(card: card("")).approvalThreadId)
     }
+
+    // #2909: long answers on the activity show their short label, whole;
+    // answers with no short form show no buttons (Open only), never cut.
+    func testActivityButtonsShowShortLabelsOrNone() throws {
+        let long = OptionCard(
+            title: "Which one?", subtitle: "",
+            options: ["Garder la copie locale: elle a les derniers changements", "Prendre la distante: celle du serveur"],
+            requestId: "question", tool: nil
+        )
+        var state = content(card: long)
+        XCTAssertEqual(state.answerButtons.map(\.title), ["Garder la copie locale", "Prendre la distante"])
+        XCTAssertEqual(state.answerButtons.map(\.choice), long.options)
+        state.optionLabels = ["Locale", "Distante"]
+        XCTAssertEqual(state.answerButtons.map(\.title), ["Locale", "Distante"])
+
+        let unlabelled = OptionCard(
+            title: "Which one?", subtitle: "",
+            options: ["Une réponse beaucoup trop longue sans séparateur utile", "Une autre réponse beaucoup trop longue aussi"],
+            requestId: "question", tool: nil
+        )
+        let none = content(card: unlabelled)
+        XCTAssertTrue(none.answerButtons.isEmpty)
+        XCTAssertNil(none.approvalThreadId, "No buttons shown: nothing to answer from the activity")
+    }
 }

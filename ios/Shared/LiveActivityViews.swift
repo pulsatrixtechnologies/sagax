@@ -231,7 +231,7 @@ struct BotActivityWatchCard: View {
             .lineLimit(state.approvalThreadId == nil ? 3 : 2)
             .minimumScaleFactor(0.85)
             if let threadId = state.approvalThreadId, let requestId = state.requestId,
-               state.options.count <= 2 {
+               state.answerButtons.count <= 2 {
                 ActivityAnswerButtons(attributes: attributes, state: state, threadId: threadId, requestId: requestId, height: 26, fontSize: 13)
             }
         }
@@ -269,10 +269,12 @@ struct ActivityAnswerButtons: View {
     @available(iOS 17.0, *)
     @ViewBuilder
     private var buttons: some View {
-        // Up to three side by side; past that the activity opens the chat.
-        let layout = NotificationChoices.layout(state.options, limit: 3)
+        // #2909: up to three side by side, each titled whole with its short
+        // label; when they cannot all be shown whole, none: the activity
+        // opens the chat, where the question and its answers are.
         HStack(spacing: 8) {
-            ForEach(layout.overflow ? [] : layout.shown, id: \.self) { option in
+            ForEach(state.answerButtons, id: \.self) { answer in
+                let option = answer.choice
                 Button(intent: AnswerApprovalIntent(
                     threadId: threadId,
                     requestId: requestId,
@@ -280,7 +282,7 @@ struct ActivityAnswerButtons: View {
                     isPermission: state.isPermission
                 )) {
                     let refusal = option.caseInsensitiveCompare("Deny") == .orderedSame
-                    Text(option)
+                    Text(answer.title)
                         .font(.system(size: fontSize, weight: .semibold))
                         .foregroundStyle(refusal ? refusalInk : .white)
                         .lineLimit(1)
@@ -297,7 +299,7 @@ struct ActivityAnswerButtons: View {
                 }
                 .buttonStyle(.plain)
             }
-            if layout.overflow {
+            if state.answerButtons.isEmpty {
                 Text("Open Sagax to answer")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(hintInk)

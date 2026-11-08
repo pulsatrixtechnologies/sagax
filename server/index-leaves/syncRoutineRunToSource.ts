@@ -104,10 +104,10 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   if (attention && attentionNew && attentionRings && runBotRecord) {
     // #2909: the person reads what happened and what each answer does
     // before choosing; the tap opens the chat on this card.
-    const words = needsYouNotificationWords(attention, run.routineName, runBotRecord.name);
+    const words = needsYouNotificationWords(attention);
     host.notify(host.deliverableNotification("needs-you", runBotRecord, sourceThreadId, words.line, {
       avatarUrl: runBotRecord.avatarUrl, routineRunId: run.id, routineName: run.routineName,
-      title: words.title, context: words.context,
+      ...(words.question ? { question: words.question } : {}), context: words.context,
       ...(words.choices.length ? { choices: words.choices } : {}),
       ...(cardId ? { cardId } : {}),
     }));

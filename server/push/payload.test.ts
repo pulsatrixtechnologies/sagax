@@ -263,12 +263,15 @@ describe("an approval push", () => {
     for (const extra of [
       { choices: ["Red", "x".repeat(200)] },
       { choices: ["Red", "Blue"], choiceLabels: ["Red", "A label far too long for a button"] },
-      { choices: ["A", "B", "C", "D"], choiceLabels: ["A", "B", "C", "D"] },
+      { choices: ["A", "B", "C", "D", "E"], choiceLabels: ["A", "B", "C", "D", "E"] },
     ]) {
       const open = JSON.parse(buildApnsRequest({ message: message({ kind: "approval", prompt: "question", requestId: "q1", body: "Which?", ...extra }), bundleId: "x", nowMs: 0 }).body);
       expect(open.choices).toBeUndefined();
       expect(open.aps.category).toBe("SAGAX_OPEN");
     }
+    // four answers fit the four buttons iOS shows (NotificationChoices.limit)
+    const four = JSON.parse(buildApnsRequest({ message: message({ kind: "approval", prompt: "question", requestId: "q1", body: "Which?", choices: ["A", "B", "C", "D"], choiceLabels: ["A", "B", "C", "D"] }), bundleId: "x", nowMs: 0 }).body);
+    expect(four.choiceLabels).toEqual(["A", "B", "C", "D"]);
     // an approval never carries choices
     const approval = JSON.parse(buildApnsRequest({ message: message({ kind: "approval", prompt: "approval", requestId: "r", choices: ["A"] }), bundleId: "x", nowMs: 0 }).body);
     expect(approval.choices).toBeUndefined();

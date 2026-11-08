@@ -2,6 +2,7 @@
 // audience rules as alert pushes (./frames.ts): a person's own bots only.
 import type { LiveActivityUpdate } from "./activity-hub.ts";
 import type { NotifyNote } from "./frames.ts";
+import { ACTIVITY_CHOICES_MAX } from "../../shared/notification-context.ts";
 
 export interface ActivityFrameDeps {
   /** Who should see this bot's Live Activity (person isolation). */
@@ -42,7 +43,7 @@ export function liveActivityUpdatesForFrame(
     };
     // #2909: a question's answers ride as buttons only with labels shown
     // whole; else none, and the tap opens the card in the chat
-    const legible = Boolean(note.choices?.length && note.choiceLabels?.length === note.choices.length && note.choices.length <= 3);
+    const legible = Boolean(note.choices?.length && note.choiceLabels?.length === note.choices.length && note.choices.length <= ACTIVITY_CHOICES_MAX);
     let phase: LiveActivityUpdate["phase"] | null = null;
     if (noteKind === "approval" || noteKind === "question") phase = "needsYou";
     else if (noteKind === "done") phase = "done";

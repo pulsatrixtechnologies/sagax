@@ -1,7 +1,7 @@
 // #2909: what a question or an approval notification says, from the card
 // the person will open: the question itself as the title, the asker named
 // when another bot routes the banner, each answer with what it does.
-import { notificationLine } from "../../shared/notification-context.ts";
+import { CHOICE_LABEL_MAX, choiceQuestionMismatch, notificationContextText, notificationLine } from "../../shared/notification-context.ts";
 import { attentionChoices, type PersonAttention } from "../../shared/person-attention.ts";
 
 export interface QuestionWordsInput {
@@ -31,7 +31,7 @@ export interface QuestionWords {
 export function questionNotificationWords(input: QuestionWordsInput): QuestionWords {
   const summary = String(input.summary ?? "");
   const otherAsker = input.asker && input.routed && input.asker !== input.routed ? input.asker : undefined;
-  const lead = otherAsker ? `${otherAsker} : ` : "";
+  const lead = otherAsker ? `${otherAsker}: ` : "";
   if (input.permission) {
     const line = input.plain ? input.plain.line : summary;
     // the detail keeps the bot's words whole; the plain line is the headline
@@ -46,7 +46,7 @@ export function questionNotificationWords(input: QuestionWordsInput): QuestionWo
   const choiceLabels = choices.length
     ? choices.map((choice) => {
       const own = options.find((option) => option.label === choice)?.label;
-      return own && own.length <= 24 ? own : undefined;
+      return own && own.length <= CHOICE_LABEL_MAX ? own : undefined;
     })
     : undefined;
   const choiceDetails = choices.length
@@ -64,26 +64,43 @@ export function questionNotificationWords(input: QuestionWordsInput): QuestionWo
   };
 }
 
-/** A needs-you card (shared/person-attention.ts) as notification words:
- * the title says what kind of wait it is, the context holds every item whole
- * (tables as text), the choices are the card's own one-tap answers. */
+/** The last sentence that asks something, in plain words, or "". */
+function lastQuestion(text: string): string {
+  const lines = notificationContextText(text, 8000).split("\n").map((line) => line.trim()).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]!;
+    const at = line.lastIndexOf("?");
+    if (at < 0) continue;
+    const head = line.slice(0, at + 1);
+    const sentence = head.split(/(?<=[.!])\s+/).filter(Boolean).pop() ?? head;
+    const tail = line.slice(at + 1).trim();
+    return notificationLine(tail.startsWith("(") ? `${sentence} ${tail}` : sentence, 300);
+  }
+  return "";
+}
+
+/** A trailing "(oui / non)" the answers would contradict. */
+const TRAILING_CHOICES = /\s*\(([^()]{2,80})\)\s*[.!]?\s*$/;
+
+/** A needs-you card (shared/person-attention.ts) as notification words.
+ * The title is the notification kind's own (`deliverableNotification`), the
+ * line and the context lead with the question the bot asks (its last
+ * question, not the first words of a long summary), then what each answer
+ * does, then every item (tables as text). The choices are the card's own
+ * one-tap answers; a Yes / No that cannot answer an "A or B?" question
+ * gives no buttons (Open), and its "(oui / non)" leaves the words. */
 export function needsYouNotificationWords(
   card: Pick<PersonAttention, "kind" | "items" | "choices">,
-  routineName?: string,
-  botName = "",
-): { title: string; line: string; context: string; choices: string[] } {
-  const where = routineName ? ` (${routineName})` : "";
-  const who = botName || "Your bot";
-  const title = card.kind === "question"
-    ? `${who} has a question${where}`
-    : card.kind === "failure" ? `${who} needs a decision${where}` : `${who} needs you${where}`;
+): { question: string; line: string; context: string; choices: string[] } {
   const items = card.items.map((entry) => entry.text.trim()).filter(Boolean);
-  const context = items.length > 1 ? items.map((item) => `- ${item}`).join("\n") : items[0] ?? "";
+  let choices = attentionChoices(card);
+  let question = card.kind === "question" || choices.length ? lastQuestion(items.join("\n\n")) : "";
+  let context = items.length > 1 ? items.map((item) => `- ${item}`).join("\n") : items[0] ?? "";
+  if (choices.length && choiceQuestionMismatch(question, choices)) {
+    choices = [];
+    question = question.replace(TRAILING_CHOICES, "");
+    context = context.replace(/(\?)\s*\(([^()]{2,80})\)\s*$/, "$1");
+  }
   const first = items[0] ? notificationLine(items[0], 240) : "";
-  return {
-    title: card.kind === "question" && items.length === 1 ? notificationLine(items[0]!, 120) : title,
-    line: first,
-    context,
-    choices: attentionChoices(card),
-  };
+  return { question, line: question || first, context, choices };
 }

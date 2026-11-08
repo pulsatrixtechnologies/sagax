@@ -129,7 +129,7 @@ export function createOriginApprovals(deps: OriginApprovalsDeps) {
     observe,
     /** Re-read after asynchronous review: a deleted/revoked view must never
      * receive a late notification, and the original remains the fallback. */
-    notificationFor(threadId: string, messageId: string): { threadId: string; requestId: string } | undefined {
+    notificationFor(threadId: string, messageId: string): { threadId: string; requestId: string; messageId: string } | undefined {
       const source = store.messagesFor(threadId).find(row => row.id === messageId);
       if (!source || !open(source.card)) return undefined;
       const destination = source.card!.approvalDestination;
@@ -137,8 +137,8 @@ export function createOriginApprovals(deps: OriginApprovalsDeps) {
       return destination && mirror?.card?.requestId && open(mirror.card)
         && mirror.card.approvalOrigin?.threadId === threadId && mirror.card.approvalOrigin.messageId === messageId
         && allowed(threadId, destination.threadId, source)
-        ? { threadId: destination.threadId, requestId: mirror.card.requestId }
-        : { threadId, requestId: source.card!.requestId! };
+        ? { threadId: destination.threadId, requestId: mirror.card.requestId, messageId: mirror.id }
+        : { threadId, requestId: source.card!.requestId!, messageId };
     },
     /** null: ordinary card; false: stale/revoked view; otherwise the exact
      * execution address, before the existing respond pipeline runs. */

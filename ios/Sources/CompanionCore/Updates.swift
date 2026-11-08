@@ -48,9 +48,25 @@ public struct ChatUpdate: Identifiable, Hashable, Codable {
     public var context: String {
         guard kind == .needsYou, let card else { return line }
         let ask = NeedsYouText(update: self)
-        let parts = [ask.question, ask.detail ?? ""].map { NotificationContextLines.plain($0) }.filter { !$0.isEmpty }
+        let question = NotificationContextLines.plain(ask.question)
+        let detail = NotificationContextLines.plain(ask.detail ?? "")
+        let parts = [question, Self.answerLines(card: card), detail].filter { !$0.isEmpty }
         let text = parts.joined(separator: "\n")
         return text.isEmpty ? line : text
+    }
+
+    /// #2909: a question's answers, each with what it does ("• Locale:
+    /// garde la copie du Mac"), so the row says what each pick means
+    /// before anyone picks. Two or more answers only; a permission's
+    /// Allow / Deny need no gloss.
+    public static func answerLines(card: OptionCard) -> String {
+        guard !card.isPermission, card.options.count >= 2 else { return "" }
+        let described = card.questionRequest?.questions.first?.options ?? []
+        return card.options.map { option -> String in
+            let detail = described.first { $0.label == option }?.detail?
+                .split(whereSeparator: \.isWhitespace).joined(separator: " ") ?? ""
+            return detail.isEmpty || detail == option ? "• \(option)" : "• \(option): \(detail)"
+        }.joined(separator: "\n")
     }
 
     /// The rule behind `answerOptions`, in the form a snapshot row can also
@@ -156,24 +172,29 @@ extension CompanionState {
 }
 
 /// #2909: a bot's markdown as readable plain lines (shared/notification-context.ts
-/// `notificationContextText`): a table row becomes "Header : value · …",
+/// `notificationContextText`): a table row becomes "Header: value · …",
 /// bold, links and code keep their words, a bullet becomes "• ".
 public enum NotificationContextLines {
     public static func plain(_ markdown: String) -> String {
         let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
         var out: [String] = []
         var header: [String]?
-        for raw in lines {
+        for (position, raw) in lines.enumerated() {
             let trimmed = raw.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix("```") { continue }
             if isRule(trimmed) { continue }
-            if trimmed.contains("|"), trimmed.hasPrefix("|") || trimmed.hasSuffix("|") {
-                let cells = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "|")).components(separatedBy: "|").map { inline($0) }
+            // a table row: outer pipes, or (#2909) none, inside a table or
+            // as a header whose next line is the |---| rule
+            let next = position + 1 < lines.count ? lines[position + 1].trimmingCharacters(in: .whitespaces) : ""
+            let tableRow = trimmed.contains("|")
+                && (trimmed.hasPrefix("|") || trimmed.hasSuffix("|") || header != nil || (isRule(next) && next.contains("|")))
+            if tableRow {
+                let cells = cellsOf(trimmed).map { inline($0) }
                 if let names = header {
                     let row = cells.enumerated().compactMap { index, cell -> String? in
                         guard !cell.isEmpty else { return nil }
                         let name = index < names.count ? names[index] : ""
-                        return !name.isEmpty && name != cell ? "\(name) : \(cell)" : cell
+                        return !name.isEmpty && name != cell ? "\(name): \(cell)" : cell
                     }
                     if !row.isEmpty { out.append(row.joined(separator: " · ")) }
                 } else {
@@ -183,7 +204,8 @@ public enum NotificationContextLines {
             }
             header = nil
             var line = trimmed
-            while line.hasPrefix("#") { line.removeFirst() }
+            // a heading ("## Résumé"), never a number ("#4187")
+            if let range = line.range(of: "^#{1,6}\\s+", options: .regularExpression) { line.removeSubrange(range) }
             if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") { line = "• " + line.dropFirst(2) }
             let clean = inline(line)
             if clean.isEmpty {
@@ -194,6 +216,26 @@ public enum NotificationContextLines {
         }
         while out.last == "" { out.removeLast() }
         return out.joined(separator: "\n")
+    }
+
+    /// A row's cells: split on pipes outside inline code, `\\|` kept.
+    private static func cellsOf(_ row: String) -> [String] {
+        var body = Substring(row)
+        if body.hasPrefix("|") { body = body.dropFirst() }
+        if body.hasSuffix("|"), !body.hasSuffix("\\|") { body = body.dropLast() }
+        var cells: [String] = []
+        var cell = ""
+        var code = false
+        var previous: Character?
+        for char in body {
+            defer { previous = char }
+            if char == "`" { code.toggle() }
+            if char == "|", previous == "\\" { cell.removeLast(); cell.append(char); continue }
+            if char == "|", !code { cells.append(cell); cell = ""; continue }
+            cell.append(char)
+        }
+        cells.append(cell)
+        return cells
     }
 
     private static func isRule(_ line: String) -> Bool {

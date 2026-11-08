@@ -1152,8 +1152,8 @@ describe("list_pending_approvals gives each card its context (#2909)", () => {
     const approval = describeMemberApproval("t1", { at: 1 }, card);
     expect(approval.choices).toEqual([{ id: "1", label: "Locale", description: "Garde tes changements" }, { id: "2", label: "Serveur" }]);
     expect(approval.context).toContain("Je garde la copie locale ou celle du serveur ?");
-    expect(approval.context).toContain("Copie : Locale · Date : 7 nov.");
-    expect(approval.context).toContain("• Locale : Garde tes changements");
+    expect(approval.context).toContain("Copie: Locale · Date: 7 nov.");
+    expect(approval.context).toContain("• Locale: Garde tes changements");
     expect(approval.context).not.toContain("|");
   });
 });

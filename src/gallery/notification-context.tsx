@@ -37,7 +37,7 @@ const capture: Sample = {
   color: "#3b82f6",
   subtitle: "Routine Temps",
   question: "Je fais quoi avec ces entrées ?",
-  detail: "Le billet #41872 a 3 entrées de temps sans note.\n\n| Membre | Heures |\n|---|---|\n| Alex | 2,5 |\n| Sam | 1,0 |",
+  detail: "Le dossier #4187 a 3 entrées sans note.\n\n| Membre | Heures |\n|---|---|\n| Alex | 2,5 |\n| Sam | 1,0 |",
   choices: [
     { answer: "Ajouter une note générique à chaque entrée et les soumettre" },
     { answer: "Laisser les entrées telles quelles et te les envoyer pour révision" },

@@ -16,7 +16,9 @@ final class NotificationContextTests: XCTestCase {
         XCTAssertEqual(NotificationChoiceLabels.shortLabel("Créer le billet : un billet neuf au tableau Service"), "Créer le billet")
         XCTAssertNil(NotificationChoiceLabels.shortLabel("Archiver seulement les anciens billets fermés depuis plus de 90 jours"))
         XCTAssertEqual(NotificationChoiceLabels.labels(for: ["Oui", "Non"]), ["Oui", "Non"])
-        XCTAssertNil(NotificationChoiceLabels.labels(for: ["A", "B", "C", "D"]))
+        XCTAssertEqual(NotificationChoiceLabels.labels(for: ["A", "B", "C", "D"]), ["A", "B", "C", "D"], "Four buttons, like the banner")
+        XCTAssertNil(NotificationChoiceLabels.labels(for: ["A", "B", "C", "D", "E"]))
+        XCTAssertNil(NotificationChoiceLabels.labels(for: ["A", "B", "C", "D"], limit: NotificationChoiceLabels.compactMax))
         XCTAssertNil(NotificationChoiceLabels.labels(for: longChoices))
         XCTAssertEqual(NotificationChoiceLabels.labels(for: ["Purger : vider la cache des builds du mois", "Attendre"]), ["Purger", "Attendre"])
     }
@@ -30,14 +32,15 @@ final class NotificationContextTests: XCTestCase {
         XCTAssertEqual(NotificationChoices.buttons(choices: ["A", "B"], labels: ["Un libellé beaucoup trop long pour un bouton", "B"])?.shown, ["A", "B"])
         // an older server sends no labels: derived by the same rule
         XCTAssertEqual(NotificationChoices.buttons(choices: ["Red", "Blue"], labels: [])?.shown, ["Red", "Blue"])
-        XCTAssertNil(NotificationChoices.buttons(choices: ["A", "B", "C", "D"], labels: ["A", "B", "C", "D"]))
+        XCTAssertEqual(NotificationChoices.buttons(choices: ["A", "B", "C", "D"], labels: ["A", "B", "C", "D"])?.shown.count, NotificationChoices.limit)
+        XCTAssertNil(NotificationChoices.buttons(choices: ["A", "B", "C", "D", "E"], labels: ["A", "B", "C", "D", "E"]))
     }
 
     // MARK: - Capture replay: long answers mean Open only
 
     func testTheCaptureReplayOffersOpenOnlyAndOpensTheCard() throws {
         let userInfo: [AnyHashable: Any] = [
-            "aps": ["alert": ["title": "Ember", "body": "Le billet #41872 a 3 entrées de temps sans note.\nMembre : Alex · Heures : 2,5"], "category": "SAGAX_OPEN"],
+            "aps": ["alert": ["title": "Ember", "body": "Le dossier #4187 a 3 entrées sans note.\nMembre: Alex · Heures: 2,5"], "category": "SAGAX_OPEN"],
             "kind": "approval", "threadId": "t-ember", "botId": "b-ember", "needsYou": true, "cardId": "m-card",
         ]
         let payload = try XCTUnwrap(PushPayload(userInfo: userInfo))
@@ -102,6 +105,33 @@ final class NotificationContextTests: XCTestCase {
 
     func testMarkdownTablesBecomeReadableLines() {
         let text = NotificationContextLines.plain("Deux copies :\n\n| Copie | Date |\n|---|---|\n| **Locale** | 7 nov. |\n| Serveur | 8 nov. |")
-        XCTAssertEqual(text, "Deux copies :\n\nCopie : Locale · Date : 7 nov.\nCopie : Serveur · Date : 8 nov.")
+        XCTAssertEqual(text, "Deux copies :\n\nCopie: Locale · Date: 7 nov.\nCopie: Serveur · Date: 8 nov.")
+    }
+
+    // #2909 review: a number is not a heading, a table may lack outer pipes,
+    // and a pipe inside code or escaped stays in its cell.
+    func testNumbersTablesWithoutPipesAndPipesInCode() {
+        XCTAssertEqual(NotificationContextLines.plain("## Résumé\n#4187 reste ouvert"), "Résumé\n#4187 reste ouvert")
+        XCTAssertEqual(
+            NotificationContextLines.plain("Copie | Date\n--- | ---\nLocale | 7 nov.\nServeur | 8 nov."),
+            "Copie: Locale · Date: 7 nov.\nCopie: Serveur · Date: 8 nov."
+        )
+        XCTAssertEqual(
+            NotificationContextLines.plain("| Commande | Effet |\n|---|---|\n| `a | b` | filtre \\| tri |"),
+            "Commande: a | b · Effet: filtre | tri"
+        )
+        XCTAssertEqual(NotificationContextLines.plain("Chemin C:\\Temp\\x"), "Chemin C:\\Temp\\x")
+    }
+
+    // #2909 review: the Updates row says what each answer does before the pick.
+    func testTheUpdatesRowCarriesEachAnswerAndWhatItDoes() throws {
+        let card = try JSONDecoder().decode(OptionCard.self, from: Data("""
+        {"title":"Je garde laquelle ?","subtitle":"Deux copies diffèrent.","options":["Locale","Serveur"],"requestId":"q1",
+         "questionRequest":{"version":1,"questions":[{"question":"Je garde laquelle ?","options":[
+           {"label":"Locale","description":"la copie du Mac, plus récente"},{"label":"Serveur"}]}]}}
+        """.utf8))
+        XCTAssertEqual(ChatUpdate.answerLines(card: card), "• Locale: la copie du Mac, plus récente\n• Serveur")
+        let permission = OptionCard(title: "Run shell?", subtitle: "echo", options: ["Allow", "Deny"], requestId: "p", tool: "shell")
+        XCTAssertEqual(ChatUpdate.answerLines(card: permission), "")
     }
 }

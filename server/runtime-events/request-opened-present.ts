@@ -10,6 +10,7 @@ import {
 } from "../approvals/auto-approve.ts";
 import { appendDecision, decisionCall } from "../decision-log.ts";
 import { deliverableNotification } from "../notify.ts";
+import { choiceQuestionMismatch } from "../../shared/notification-context.ts";
 import { questionNotificationWords } from "./question-notification-words.ts";
 import {
   customRuleCandidate,
@@ -141,6 +142,30 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
               tool: event.tool, summary: line, decision: "auto-approved", source: "full-access",
             });
           })().catch(() => console.error("[approval] Could not record a question Full access answered."));
+          return;
+        }
+      }
+      // #2909: a Yes / No on "A or B?" (or on an open question) from the
+      // engine's own question tool cannot be answered by a tap: the same
+      // rule as ask_choice (shared/options-card.ts). The engine gets the
+      // reason back and asks again with the alternatives as options; the
+      // chat shows that it happened (nothing invisible).
+      const mismatch = nativeChoiceMismatch(event, questions, permission);
+      if (mismatch && asker && event.requestId && !guestDriven && !event.harnessAsk) {
+        const instance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId);
+        if (instance) {
+          const requestId = event.requestId;
+          void (async () => {
+            const outcome = await instance.adapter
+              .respondToRequest(event.threadId, requestId, { behavior: "answer", message: `Sagax: not asked. ${mismatch}` })
+              .catch(() => "unavailable" as const);
+            pushMessage({
+              role: "bot", kind: "activity",
+              tool: outcome === "answered"
+                ? { name: "Question sent back: its options did not match it (Yes / No on a pick between alternatives).", ok: true }
+                : { name: "A question with options that did not match it could not be sent back to the engine.", ok: false },
+            });
+          })().catch(() => console.error("[approval] Could not send back a mismatched question."));
           return;
         }
       }
@@ -317,8 +342,9 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
                 ...(words.choiceLabels ? { choiceLabels: words.choiceLabels } : {}),
                 ...(words.choiceDetails ? { choiceDetails: words.choiceDetails } : {}),
                 context: words.context,
-                // the tap opens the chat on this card (when it is in that chat)
-                ...(notificationThread === event.threadId ? { cardId: message.id } : {}),
+                // the tap opens the chat on this card: the card itself, or its
+                // view in the chat the banner opens (a peer or a routine's owner)
+                ...(notification.messageId ? { cardId: notification.messageId } : {}),
               },
             ));
           };
@@ -350,4 +376,19 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
           }
         }
       }
+}
+
+/** #2909: why an engine's single question cannot be answered by its own
+ * options (Yes / No on "A or B?"), or undefined. A permission, a form of
+ * several questions and a multi-select are never sent back. */
+export function nativeChoiceMismatch(event: any, questions: any[] | undefined, permission: boolean): string | undefined {
+  if (permission) return undefined;
+  if (questions) {
+    if (questions.length !== 1 || questions[0]?.multiSelect === true) return undefined;
+    const single = questions[0];
+    const options = (single.options ?? []).map((option: any) => String(option?.label ?? "")).filter(Boolean);
+    return options.length >= 2 ? choiceQuestionMismatch(String(single.question ?? ""), options) : undefined;
+  }
+  const choices = Array.isArray(event.choices) ? event.choices.map(String).filter(Boolean) : [];
+  return choices.length >= 2 ? choiceQuestionMismatch(String(event.summary ?? ""), choices) : undefined;
 }

@@ -168,14 +168,14 @@ describe("approvals in the human initiating chat", () => {
     f.ask();
     const original = f.store.messagesFor("work")[0]!;
     const viewRequest = f.request();
-    expect(f.relay.notificationFor("work", original.id)).toEqual({ threadId: "human", requestId: viewRequest });
+    expect(f.relay.notificationFor("work", original.id)).toEqual({ threadId: "human", requestId: viewRequest, messageId: f.store.messagesFor("human")[0]!.id });
     f.revoke(); // The deleted chat is no longer a readable destination.
     f.deleteThread("human");
     expect(f.withdraw).toHaveBeenCalledExactlyOnceWith("human", viewRequest);
     const source = f.store.messagesFor("work")[0]!;
     expect(source.card?.approvalDestination).toBeUndefined();
     expect(source.card?.answered).toBeUndefined();
-    expect(f.relay.notificationFor("work", original.id)).toEqual({ threadId: "work", requestId: "request-1" });
+    expect(f.relay.notificationFor("work", original.id)).toEqual({ threadId: "work", requestId: "request-1", messageId: original.id });
     f.store.patchMessage("work", source.id, { card: { ...source.card!, answered: "deny" } });
     expect(f.store.messagesFor("human")).toEqual([]);
     expect(f.relay.notificationFor("work", original.id)).toBeUndefined();
@@ -185,7 +185,7 @@ describe("approvals in the human initiating chat", () => {
     const f = fixture();
     const source = f.ask();
     f.revoke();
-    expect(f.relay.notificationFor("work", source.id)).toEqual({ threadId: "work", requestId: "request-1" });
+    expect(f.relay.notificationFor("work", source.id)).toEqual({ threadId: "work", requestId: "request-1", messageId: source.id });
     f.store.patchMessage("work", source.id, { card: { ...f.store.messagesFor("work")[0]!.card!, answered: "allow" } });
     expect(f.relay.notificationFor("work", source.id)).toBeUndefined();
   });
@@ -200,7 +200,7 @@ describe("approvals in the human initiating chat", () => {
     restarted.observe({ type: "message.patch", threadId: "work", message: f.store.messagesFor("work")[0]! });
     expect(f.withdraw).toHaveBeenCalledExactlyOnceWith("human", requestId);
     expect(f.store.messagesFor("work")[0]!.card?.approvalDestination).toBeUndefined();
-    expect(restarted.notificationFor("work", source.id)).toEqual({ threadId: "work", requestId: "request-1" });
+    expect(restarted.notificationFor("work", source.id)).toEqual({ threadId: "work", requestId: "request-1", messageId: source.id });
   });
 
   it("distinguishes identical provider request ids on simultaneous peer threads", () => {
@@ -237,7 +237,8 @@ describe("background questions land in the bot's chat (#2901)", () => {
     const live = f.store.messagesFor("mcp-hidden")[0]!;
     expect(f.store.messagesFor("human")).toHaveLength(1);
     expect(f.relay.sourceFor("human", mirror.card!.requestId!)).toEqual({ threadId: "mcp-hidden", requestId: "ask-choice-1" });
-    expect(f.relay.notificationFor("mcp-hidden", live.id)).toEqual({ threadId: "human", requestId: mirror.card!.requestId });
+    // #2909: the banner's tap opens the view card in the chat it lands in
+    expect(f.relay.notificationFor("mcp-hidden", live.id)).toEqual({ threadId: "human", requestId: mirror.card!.requestId, messageId: mirror.id });
     // Answered from Updates or a push: the chat card settles too.
     f.store.patchMessage("mcp-hidden", live.id, { card: { ...live.card!, answered: "answer", answeredText: question.options[1] } });
     expect(f.store.messagesFor("human")[0]!.card).toMatchObject({ answered: "answer", answeredText: question.options[1] });

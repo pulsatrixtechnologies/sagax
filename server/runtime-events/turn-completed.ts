@@ -3,6 +3,7 @@
 import { INCIDENTS_THREAD_TITLE } from "../peers/incidents.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import { withBotNotify } from "../../shared/notification.ts";
+import { retireSafetyHolds } from "../safety/safety-review.ts";
 export function handleTurnCompleted(event: any, ctx: any, host: any): void {
   const { deleteAttachment, endedToolOutput } = host;
   const {
@@ -21,6 +22,10 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       host.turnReplyRepeats.settle(event.threadId, event.turnId);
       host.autoApprovals.clear(event.threadId);
       host.roleJournal.endTurn(event.threadId);
+      // QA 0.8.67 G5: a held card (a role switch, a safety hold) of this
+      // turn can no longer be answered for it: retired with the turn, its
+      // card marked expired, so the next turn's await never surfaces it.
+      retireSafetyHolds(event.threadId, bot?.id);
       host.appPiecesByThread.delete(event.threadId);
       host.settleWaitingOnPersonChips(event.threadId);
       // A peer-started turn settles as coordination, not as news. What keeps

@@ -429,7 +429,7 @@ export interface AgentApiDeps {
   turnState(agentId: string, threadId: string): TurnState;
   /** #2922: the cards the turn waits on (child threads included), filtered
    * for this caller. Absent: await_turn reads turnState only. */
-  pendingApproval?(caller: AgentCaller, agentId: string, threadId: string, since?: number): PendingApproval | null;
+  pendingApproval?(caller: AgentCaller, agentId: string, threadId: string, since?: number, anchorId?: string): PendingApproval | null;
   /** Where a send that names no thread goes. A bot caller: the agent's
    * single chat with the person it works for (#1170). A person's AI client:
    * a fresh conversation of its own with the agent on every send (#2575,
@@ -1762,7 +1762,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       // #2922: a card of THIS turn (created after the handle's time) the
       // caller must answer, here or down the handoff, is the answer, before
       // any "finished": the turn is blocked on it.
-      const pending = caller && deps.pendingApproval ? deps.pendingApproval(caller, body.a, body.t, body.i - ANCHOR_SLACK_MS) : null;
+      const pending = caller && deps.pendingApproval ? deps.pendingApproval(caller, body.a, body.t, body.i - ANCHOR_SLACK_MS, body.m ?? undefined) : null;
       // A waiting conversation with no card of this turn for this caller: the
       // card is someone else's (a teammate's thread another person answers,
       // or any card down the handoff for a bot caller), or one an earlier

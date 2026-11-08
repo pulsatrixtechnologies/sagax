@@ -5622,6 +5622,19 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     const held = h.manager.listRuns().find(run => run.routineId === routine.id && run.status === "queued")!;
     expect(held.attention).toBe("Waits for the previous run of this routine to finish");
   });
+
+  it("counts only the runs really waiting in the bot's line (QA 0.8.67 G7)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.setBot("busy");
+    // A proactive wake has its own lane: it never stands in front of a Run now.
+    h.manager.enqueueProactive({ botId: "maus-1", name: "Proactive: email", prompt: "Handle mail",
+      proactive: { mode: "proactive", hops: 0, sources: ["mail"] } });
+    const only = h.manager.runNow(routine.id, undefined, "person")!;
+    await h.manager.tick();
+    const standing = h.manager.runStanding(only.id)!;
+    expect(standing).toMatchObject({ status: "queued", position: 1, queuedForBot: 1 });
+  });
 });
 
 // the owner 2026-11-01: "it saturates easily, queues really badly". Nothing waits

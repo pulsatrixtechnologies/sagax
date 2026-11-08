@@ -79,6 +79,8 @@ const armed = new Map<string, Armed>();
 interface Hold {
   resolve: (answer: SafetyAnswer) => void;
   timer: ReturnType<typeof setTimeout>;
+  /** The conversation (and bot) whose turn raised the held card. */
+  owner?: { threadId: string; botId?: string };
 }
 const holds = new Map<string, Hold>();
 const notes = new Map<string, string>();
@@ -359,7 +361,7 @@ export function takeSafetyNote(requestId: string): string | undefined {
 }
 
 /** A card for a tool the engine will not ask about itself. */
-export function openSafetyHold(timeoutMs = 9 * 60_000): { requestId: string; answer: Promise<SafetyAnswer> } {
+export function openSafetyHold(timeoutMs = 9 * 60_000, owner?: { threadId: string; botId?: string }): { requestId: string; answer: Promise<SafetyAnswer> } {
   const requestId = randomUUID();
   let resolve!: (answer: SafetyAnswer) => void;
   const answer = new Promise<SafetyAnswer>((res) => { resolve = res; });
@@ -368,8 +370,32 @@ export function openSafetyHold(timeoutMs = 9 * 60_000): { requestId: string; ans
     resolve("timeout");
   }, timeoutMs);
   timer.unref?.();
-  holds.set(requestId, { resolve, timer });
+  holds.set(requestId, { resolve, timer, ...(owner ? { owner } : {}) });
   return { requestId, answer };
+}
+
+/** QA 0.8.67 G5: whether a held card can still be answered (its hold is
+ * open in this process). A hold that timed out, was settled or retired, or
+ * did not survive a restart leaves a card nobody waits on. */
+export function safetyHoldOpen(requestId: string): boolean {
+  return holds.has(requestId);
+}
+
+/** QA 0.8.67 G5: the turn that raised these held cards has ended, so nothing
+ * waits on them any more. Each hold of that conversation (and bot, when
+ * given: a room thread holds other bots' turns too) ends as a timeout, which
+ * marks its card expired (confirmHeldCard). Returns the retired ids. */
+export function retireSafetyHolds(threadId: string, botId?: string): string[] {
+  const retired: string[] = [];
+  for (const [requestId, hold] of holds) {
+    if (hold.owner?.threadId !== threadId) continue;
+    if (botId && hold.owner.botId && hold.owner.botId !== botId) continue;
+    holds.delete(requestId);
+    clearTimeout(hold.timer);
+    hold.resolve("timeout");
+    retired.push(requestId);
+  }
+  return retired;
 }
 
 export function settleSafetyHold(requestId: string, behavior: "allow" | "deny"): boolean {

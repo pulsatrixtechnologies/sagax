@@ -883,6 +883,7 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
 /** A run as an AI client reads it; `detail` adds the output and the error. */
 function wireRun(run: Record<string, unknown> | null | undefined, detail = false) {
   if (!run || typeof run.id !== "string") return null;
+  const task = str(run.threadId) ?? str(run.executionThreadId);
   const cut = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
   return {
     id: run.id,
@@ -890,7 +891,13 @@ function wireRun(run: Record<string, unknown> | null | undefined, detail = false
     routineName: str(run.routineName),
     botId: str(run.botId),
     status: str(run.status),
-    threadId: str(run.threadId) ?? str(run.resultsThreadId) ?? str(run.executionThreadId),
+    // QA 0.8.67 G7: one threadId from the moment the run is queued. It was
+    // the results conversation while queued and the run's own task once
+    // running (two ids for one run). It is now the conversation the run
+    // reports into, queued or running; the task it works in is
+    // executionThreadId once it has one.
+    threadId: str(run.resultsThreadId) ?? task,
+    ...(task ? { executionThreadId: task } : {}),
     startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
     endedAt: typeof run.finishedAt === "number" ? run.finishedAt : null,
     ...runFacts(run),

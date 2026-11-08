@@ -75,7 +75,7 @@ export const DEF_REMOVE_REACTION = {
 export const DEF_CONNECT_GITHUB = {
     name: "connect_github",
     description:
-      "Asked to connect GitHub: always this tool, never an engine connector page on claude.ai or grok.com. Connect the person's GitHub account to Sagax the way gh auth login does (GitHub's device flow), with access to their organizations. Posts a card in this chat with a short code (Copy code) and a github.com link (Open link); they enter the code there and authorize, and the card turns into GitHub connected as @login. Works from any chat. One GitHub connection per person, used by gh and git in their cloud computer, Coding, cloud agents and integrations. Call it when gh or git is not signed in, or a repository of an organization answers 404 or 403. Never ask for a token or for gh auth login. With reconnect true it starts over even when connected (to add organizations).",
+      "Asked to connect GitHub: always this tool, never an engine connector page on claude.ai or grok.com. Connect the person's GitHub account to Sagax the way gh auth login does (GitHub's device flow), with access to their organizations. Posts a card in this chat with a short code (Copy code) and a github.com link (Open link); they enter the code there and authorize, and the card turns into GitHub connected as @login. Works from any chat. One connection per person, used by gh and git everywhere in Sagax. Call it when gh or git is not signed in, or a repository of an organization answers 404 or 403. Never ask for a token or for gh auth login. With reconnect true it starts over even when connected (to add organizations).",
     inputSchema: {
       type: "object",
       properties: {

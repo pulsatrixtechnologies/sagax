@@ -60,7 +60,7 @@ export const DEF_EVENT_SUBSCRIPTIONS = {
 export const DEF_PROPOSE_ROUTINE = {
     name: "propose_routine",
     description:
-      "Prepare a new routine after the user explicitly asks to schedule recurring or future work. A new routine starts active; pass enabled false to create it paused. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times (authoritative current time and timezone). Convert calendar requests (monthly dates, last days, nth weekdays) into a validated five-field cron schedule with an explicit IANA timeZone; keep elapsed every-N-minutes work as interval. Never approximate unsupported requests with a different schedule or an AI date-check routine; explain the limitation. Resolve ambiguous dates, times, timezone, destination or instructions with the user first, and give one-time schedules an explicit RFC3339 offset. To run as ANOTHER bot in your section, call list_bots and pass its id as for_bot_id; each run keeps that bot's own permissions." + SELF_CHANGE_OUTCOME,
+      "Prepare a new routine after the user explicitly asks to schedule recurring or future work. It starts active; enabled false creates it paused. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times (current time and timezone). Convert calendar requests (monthly dates, last days, nth weekdays) into a five-field cron schedule with an explicit IANA timeZone; keep every-N-minutes work as interval. Never approximate an unsupported request with another schedule or an AI date-check routine; explain the limit. Resolve ambiguity with the user first; one-time schedules need an RFC3339 offset. To run as ANOTHER bot in your section, pass its id (list_bots) as for_bot_id; runs keep that bot's permissions." + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -70,7 +70,7 @@ export const DEF_PROPOSE_ROUTINE = {
           type: "object",
           additionalProperties: false,
           description:
-            "Instead of schedule. type is webhook, email or github. github runs on GitHub events (issue opened or labeled, PR opened, review requested...): events lists the kinds (omit for every kind) and filters narrows them, e.g. { repo: [\"org/repo\"], label: [\"ready\"] }. The routine starts active unless enabled is false, and the owner copies its key (for github: the webhook URL and secret to paste in the repository settings) in the app.",
+            "Instead of schedule. type is webhook, email or github. github runs on GitHub events: events lists the kinds (omit for all) and filters narrows them, e.g. { repo: [\"org/repo\"], label: [\"ready\"] }. The owner copies its key (for github: webhook URL and secret) in the app.",
           properties: {
             type: { type: "string", enum: ["webhook", "email", "github"] },
             events: {
@@ -90,12 +90,12 @@ export const DEF_PROPOSE_ROUTINE = {
         enabled: {
           type: "boolean",
           description:
-            "true starts it on its schedule. false creates it paused. Omit for the server default, which starts it active. Pause and resume of an existing routine are propose_routine_action.",
+            "true starts it on its schedule; false creates it paused. Omit for active. Pause and resume are propose_routine_action.",
         },
         for_bot_id: {
           type: "string",
           description:
-            "Only when the user asks to schedule this routine for ANOTHER bot in your section: that bot's id from list_bots. Omit to schedule it for yourself. The routine then belongs to that bot and each run uses its engine and permissions.",
+            "Only to schedule for ANOTHER bot in your section: its id from list_bots. Omit for yourself. The routine then belongs to that bot.",
         },
         quote: PERSON_QUOTE,
       },
@@ -106,7 +106,7 @@ export const DEF_PROPOSE_ROUTINE = {
 export const DEF_PROPOSE_ROUTINE_ACTION = {
     name: "propose_routine_action",
     description:
-      "Prepare a user-requested change to one of this bot's existing routines (pause, resume, update name/instructions/schedule, delete, rotate webhook key). Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client (Perspicax member API) edits without a proposal card via sagax_routine_update. If the user asks to change ANOTHER bot's routine and that bot is in your section, call list_bots and pass that bot's id as for_bot_id; the routine keeps its owner and every run keeps that bot's engine and permissions." + SELF_CHANGE_OUTCOME,
+      "Prepare a user-requested change to one of this bot's existing routines (pause, resume, update name/instructions/schedule, delete, rotate webhook key). Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client edits without a card via sagax_routine_update. For ANOTHER bot's routine in your section, pass its id (list_bots) as for_bot_id; the routine keeps its owner." + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -115,7 +115,7 @@ export const DEF_PROPOSE_ROUTINE_ACTION = {
         for_bot_id: {
           type: "string",
           description:
-            "Only when the requested change targets ANOTHER bot's routine and that bot is in your section: that bot's id from list_bots. Learn the routine id from that bot's own routines (it can run list_routines). Omit to change one of your own routines.",
+            "Only for ANOTHER bot's routine in your section: its id from list_bots (that bot's list_routines gives the routine id). Omit for your own.",
         },
         action: {
           type: "string",

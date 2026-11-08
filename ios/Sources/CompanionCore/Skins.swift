@@ -398,7 +398,7 @@ public enum DesktopSkins {
         "pulsatrix": [
             "code-scheme": "dark", "app": "#121212", "panel": "#161616", "raised": "#1f1f1f",
             "raised-hover": "#2c2c2c", "card": "#1f1f1f", "menu": "#1f1f1f", "inset": "#1b1b1b", "control": "#282828",
-            "hairline": "#353535", "ink": "#e4e4e7", "ink-secondary": "#9e9ea3", "ink-tertiary": "#f5f5f58a",
+            "hairline": "#353535", "ink": "#f5f5f5", "ink-secondary": "#f5f5f5a8", "ink-tertiary": "#f5f5f58a",
             "accent": "#3c76f4", "accent-border": "#4f86f7", "accent-text": "#c8e4ff", "focus": "#4f86f7",
             "accent-ink": "#121212", "bubble-user": "#3b3b3b", "bubble-user-ink": "#e4e4e7", "success": "#38d591",
             "danger": "#fb6364", "danger-ink": "#121212", "success-ink": "#121212", "warning": "#ff9800",
@@ -407,7 +407,7 @@ public enum DesktopSkins {
         "pulsatrix-light": [
             "code-scheme": "light", "app": "#eef2f8", "panel": "#f6f8fb", "raised": "#ffffff",
             "raised-hover": "#e6ebf4", "card": "#ffffff", "menu": "#ffffff", "inset": "#dfe6f2", "control": "#bfcade",
-            "hairline": "#b8c3d9", "ink": "#0b1526", "ink-secondary": "#4f5868", "ink-tertiary": "#4f5868",
+            "hairline": "#b8c3d9", "ink": "#1c1c1c", "ink-secondary": "#1c1c1cad", "ink-tertiary": "#1c1c1cad",
             "accent": "#2f62dd", "accent-border": "#3c76f4", "accent-text": "#2652bd", "focus": "#2652bd",
             "accent-ink": "#f6f8fc", "bubble-user": "#dceafe", "bubble-user-ink": "#0b1526", "success": "#0f5132",
             "danger": "#c02936", "danger-ink": "#ffffff", "success-ink": "#ffffff", "warning": "#7d4d09",
@@ -425,7 +425,7 @@ public enum DesktopSkins {
         "atelier": [
             "code-scheme": "light", "app": "#f5f1eb", "panel": "#fbf8f2", "raised": "#ffffff",
             "raised-hover": "#f2e9dc", "card": "#ffffff", "menu": "#ffffff", "inset": "#f5f1eb", "control": "#ece4d6",
-            "hairline": "#c8bda8", "ink": "#1a1a18", "ink-secondary": "#5c564d", "ink-tertiary": "#5c564d",
+            "hairline": "#c8bda8", "ink": "#1c1c1c", "ink-secondary": "#1c1c1cad", "ink-tertiary": "#1c1c1cad",
             "accent": "#a05f25", "accent-border": "#b06a2c", "accent-text": "#96551f", "focus": "#96551f",
             "accent-ink": "#ffffff", "bubble-user": "#f2e9dc", "bubble-user-ink": "#1a1a18", "success": "#3f6b47",
             "danger": "#a33a32", "danger-ink": "#ffffff", "success-ink": "#ffffff", "warning": "#7a5f31",
@@ -434,7 +434,7 @@ public enum DesktopSkins {
         "foundry": [
             "code-scheme": "dark", "app": "#100e0b", "panel": "#171410", "raised": "#262019",
             "raised-hover": "#322b21", "card": "#1e1a14", "menu": "#1e1a14", "inset": "#0b0a08", "control": "#262019",
-            "hairline": "#3d3529", "ink": "#f4efe4", "ink-secondary": "#b0a696", "ink-tertiary": "#a59c8f",
+            "hairline": "#3d3529", "ink": "#f5f5f5", "ink-secondary": "#f5f5f5a8", "ink-tertiary": "#f5f5f58a",
             "accent": "#d99a3e", "accent-border": "#e8b25e", "accent-text": "#e0a44c", "focus": "#e0a44c",
             "accent-ink": "#1c150c", "bubble-user": "#2a2318", "bubble-user-ink": "#f4efe4", "success": "#57b078",
             "danger": "#e27168", "danger-ink": "#1c0d0b", "success-ink": "#1c150c", "warning": "#dfa441",
@@ -479,7 +479,7 @@ public enum DesktopSkins {
         "daylight": [
             "code-scheme": "light", "app": "#fcfcfc", "panel": "#f7f7f7", "raised": "#e1e1e1",
             "raised-hover": "#d7d7d7", "card": "#eeeeee", "menu": "#fcfcfc", "inset": "#e6e6e6", "control": "#dedede",
-            "hairline": "#d0d0d0", "ink": "#0d0d0d", "ink-secondary": "#575757", "ink-tertiary": "#575757",
+            "hairline": "#d0d0d0", "ink": "#1c1c1c", "ink-secondary": "#1c1c1cad", "ink-tertiary": "#1c1c1cad",
             "accent": "#2a2a2a", "accent-border": "#3a3a3a", "accent-text": "#2a2a2a", "focus": "#2a2a2a",
             "accent-ink": "#fcfcfc", "bubble-user": "#070707", "bubble-user-ink": "#fcfcfc", "success": "#1a6943",
             "danger": "#af2834", "danger-ink": "#ffffff", "success-ink": "#ffffff", "warning": "#825400",

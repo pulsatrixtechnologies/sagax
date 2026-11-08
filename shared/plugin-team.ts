@@ -4,8 +4,9 @@
  * its frontmatter `name` and `description` come across as they are, the body
  * becomes the bot's soul, and `model` is kept as the model the bot asks for
  * (resolved against the server's engines by the caller, see
- * server/plugins/plugin-team.ts). Sagax has no per-bot tool allowlist, so
- * the frontmatter `tools` are written at the top of the soul. */
+ * server/plugins/plugin-team.ts). The frontmatter `tools` become a real
+ * per-bot tool selection where the engine allows it
+ * (shared/plugin-team-tools.ts) and stay written at the top of the soul. */
 import { BOT_PROFILE_LIMITS } from "./bot-profile.ts";
 import { frontmatter } from "./claude-code-import.ts";
 import { nearestBotColor } from "./grok-import.ts";
@@ -33,11 +34,15 @@ export interface PluginTeamAgent {
   name: string;
   /** The frontmatter `model`, as written (sonnet, opus, claude-fable-5-1...). */
   model?: string;
+  /** The frontmatter `description`, one line (the import preview). */
+  description?: string;
   tools: string[];
 }
 
 export interface PluginTeamPackage {
   document: PackageDocument;
+  /** The team's name as it will show in Teams. */
+  teamName: string;
   agents: PluginTeamAgent[];
   /** What did not come over, in plain words. */
   skipped: string[];
@@ -109,7 +114,7 @@ export function pluginTeamToPackage(input: PluginTeamInput): PluginTeamPackage {
       soul,
       appearance: { color: nearestBotColor(COLORS[packageAgents.length % COLORS.length]) },
     } as PackageDocument["package"]["agents"][number]);
-    agents.push({ key, name, ...(model ? { model } : {}), tools });
+    agents.push({ key, name, ...(model ? { model } : {}), ...(description ? { description: clip(description, 240) } : {}), tools });
   }
   if (!packageAgents.length) throw new PluginTeamError("This plugin has no agents (agents/*.md) to bring in as a team.");
   const shown = oneLine(input.manifest?.displayName || input.manifest?.name || input.plugin) || input.plugin;
@@ -138,7 +143,7 @@ export function pluginTeamToPackage(input: PluginTeamInput): PluginTeamPackage {
   const { document, redacted } = redactPackageSecrets(draft);
   if (redacted.length) skipped.push(`text that looked like a key or password was replaced in ${redacted.join(", ")}`);
   try {
-    return { document: parsePackageDocument(document, { trust: "file" }), agents, skipped };
+    return { document: parsePackageDocument(document, { trust: "file" }), teamName, agents, skipped };
   } catch (error) {
     throw new PluginTeamError(`This plugin's agents could not be turned into a team: ${error instanceof Error ? error.message : String(error)}`);
   }

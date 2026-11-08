@@ -222,6 +222,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   teamTools.DEF_LIST_TEAM_SETUP,
   teamTools.DEF_PROPOSE_TEAM_SETUP,
   teamTools.DEF_PROPOSE_BOT_DELETION,
+  teamTools.DEF_IMPORT_PLUGIN_TEAM,
   teamTools.DEF_ARCHIVE_BOT,
   teamTools.DEF_CREATE_ROOM,
   teamTools.DEF_MANAGE_ROOM,
@@ -308,7 +309,7 @@ const GITHUB_CONNECT_TOOL_NAMES = new Set(["connect_github"]);
 // propose_profile or propose_model. (A routine's for_bot_id is open to any
 // bot that can reach that peer, so it stays.)
 const CHIEF_ONLY_TOOL_NAMES = new Set([
-  "create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "archive_bot", "create_room", "manage_room", "retry_thread",
+  "create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "import_plugin_team", "archive_bot", "create_room", "manage_room", "retry_thread",
 ]);
 // sagax_approvals is offered to every owned bot (2026-10-27). The server
 // gate still requires the person's own message; settings stay the Primary Bot's.
@@ -369,7 +370,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // name, not only inside the merged routines family) so every bot that owns
   // a routine can check or run it without a ToolSearch step that may miss them.
   "propose_routine", "propose_routine_action",
-  "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule", "propose_bot_deletion", "archive_bot",
+  "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule", "propose_bot_deletion", "import_plugin_team", "archive_bot",
   "propose_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
   "add_mcp_server", "skill_manage", "rules_update", "docs_update",
   "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",

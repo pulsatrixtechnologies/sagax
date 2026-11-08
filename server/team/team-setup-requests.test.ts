@@ -3,12 +3,12 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from "./team-setup-requests.ts";
+import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply, teamSetupRuleCandidate } from "./team-setup-requests.ts";
 import { canAccessTeam } from "../peers/peer-roster.ts";
 import type { BotRecord, OptionCardData } from "../store.ts";
 import type { TeamSetupRequest, TeamSetupResult } from "../../shared/team-setup.ts";
 
-function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean }>) {
+function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean }>, extra: Record<string, unknown> = {}) {
   const bots: BotRecord[] = [];
   const messages: Array<{ id: string; card?: OptionCardData }> = [];
   const teams = ["", "Work", "Engineering", "Private"];
@@ -51,6 +51,7 @@ function harness(caps?: Record<string, { driverKind: string; agentsMcp: boolean 
       return current?.approvalMode === "full" && selection.instanceId !== current.modelSelection.instanceId ? "Existing permissions are incompatible" : null;
     },
     ...(caps ? { driverCapabilities: (instanceId: string) => caps[instanceId] } : {}),
+    ...extra,
   });
   const propose = (operations: unknown[], newTeams: string[] = []) => service.propose({ botId: chief.id, threadId: chief.threadId, plan: { reason: "Requested specialist setup", operations, newTeams } });
   const submit = (operations: unknown[], newTeams: string[] = []) => service.submit({ botId: chief.id, threadId: chief.threadId, plan: { reason: "Requested specialist setup", operations, newTeams } });
@@ -739,5 +740,39 @@ describe("team setup on Approve for me (2026-10-26, the person's own environment
     expect(other).toMatchObject({ applied: false, state: "pending" });
     const suggested = await h.service.submit({ botId: h.chief.id, threadId: h.chief.threadId, suggestion: true, plan: { reason: "Maybe", operations: [specialist("Theo", "Work")] } });
     expect(suggested).toMatchObject({ applied: false, state: "pending" });
+  });
+});
+
+// #2669: the Primary Bot imports a plugin as a team for its person.
+describe("import_plugin_team", () => {
+  const plugin = { marketplace: "pulsatrix", plugin: "pulsatrix-dev", team: "Architects", bots: [{ name: "px-architect", model: "claude-fable-5-1", tools: ["Read", "Grep"] }] };
+  const importPlugin = vi.fn(async (request: TeamSetupRequest): Promise<TeamSetupResult> => ({ state: "applied", newTeams: [request.pluginImport!.team], bots: [{ id: "new-1", name: "px-architect", action: "created" }] }));
+
+  it("waits on one card with the bots, their model and tools, and an Always allow rule", async () => {
+    const h = harness(undefined, { importPlugin });
+    const response = await h.service.submitPluginImport({ botId: h.chief.id, threadId: h.chief.threadId, reason: "", plugin });
+    expect(response).toMatchObject({ applied: false, state: "pending" });
+    const card = h.messages[0]!.card!;
+    expect(card.title).toBe("Import pulsatrix-dev as the team Architects?");
+    expect(card.options).toEqual(["Import team", "Cancel"]);
+    expect(JSON.stringify(card)).toContain("claude-fable-5-1");
+    expect(card.ownerRule).toBeTruthy();
+    expect(teamSetupRuleCandidate({ pluginImport: plugin })).toMatchObject({ tool: "sagax:team_setup", scope: { action: "import_plugin" } });
+    expect(importPlugin).not.toHaveBeenCalled();
+    expect((await h.resolve(response.requestId))?.result).toMatchObject({ state: "applied", newTeams: ["Architects"] });
+    expect(importPlugin).toHaveBeenCalledTimes(1);
+  });
+
+  it("imports at once under a kept Always allow rule", async () => {
+    const h = harness(undefined, { importPlugin, keptRule: () => ({ id: "rule-1", behavior: "allow", description: "Import plugin teams" }) });
+    importPlugin.mockClear();
+    const response = await h.service.submitPluginImport({ botId: h.chief.id, threadId: h.chief.threadId, reason: "", plugin });
+    expect(response).toMatchObject({ applied: true, state: "applied" });
+    expect(importPlugin).toHaveBeenCalledTimes(1);
+  });
+
+  it("is the Primary Bot's tool only", async () => {
+    const h = harness(undefined, { importPlugin });
+    await expect(h.service.submitPluginImport({ botId: h.peer.id, threadId: h.peer.threadId, reason: "", plugin })).rejects.toThrow(/Primary Bot/);
   });
 });

@@ -109,7 +109,7 @@ function profiles(): Record<string, Profile> {
 
 const PROFILES = profiles();
 /** Refused by the server to every bot that is not a Primary Bot. */
-const CHIEF_ONLY_TOOLS = ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "archive_bot", "create_room", "manage_room", "retry_thread"];
+const CHIEF_ONLY_TOOLS = ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "import_plugin_team", "archive_bot", "create_room", "manage_room", "retry_thread"];
 /** Their for_bot_id, changing another bot, is a Primary Bot's alone. */
 const CHIEF_TARGET_TOOLS = ["propose_profile", "propose_model"];
 const CHIEF_PROFILE_TARGET = " A Primary Bot may pass for_bot_id (from list_bots) for a requested change to any bot of its person.";

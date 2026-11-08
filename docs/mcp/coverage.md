@@ -141,6 +141,7 @@ Reading the table:
 | rooms:create | sagax | `create_room` | `rooms:create` | covered |
 | rooms:manage | sagax | `manage_room` | `rooms:manage` | covered |
 | teamsetup:propose | sagax | `propose_team_setup` | `teamsetup:propose` | covered |
+| teamsetup:importplugin | sagax | `import_plugin_team` | `teamsetup:importplugin` | covered |
 | teammemory:propose | sagax | `propose_team_memory` | `teammemory:propose` | covered |
 | rules:update | sagax | `rules_update` | `rules:update` | covered |
 | rules:propose | sagax | `propose_rule` | `rules:propose` | covered |

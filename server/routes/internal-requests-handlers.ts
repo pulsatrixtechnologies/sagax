@@ -249,6 +249,9 @@ export interface InternalRequestsDeps {
   botsReadOnlyBody: { error: string; message: string };
   submitTeamSetup(input: Record<string, unknown>): Promise<InternalRequestsProposed> | InternalRequestsProposed;
   submitBotDeletion(input: Record<string, unknown>): Promise<InternalRequestsProposed> | InternalRequestsProposed;
+  /** #2669 import_plugin_team: preview the plugin as the bot's person, then
+   * the team-setup card (or its kept rule / direct apply). */
+  submitPluginImport?(input: Record<string, unknown>): Promise<InternalRequestsProposed | { status: number; error: string }>;
   fullAccessForSource(botId: string, threadId: string): boolean;
   broadcastBot(bot: InternalRequestsBot): void;
 }
@@ -353,7 +356,8 @@ export function requestsLatePath(method: string, path: string): boolean {
     || (method === "POST" && path === "/api/internal/rule-requests")
     || (method === "GET" && path === "/api/internal/team-setup-catalog")
     || (method === "POST" && path === "/api/internal/team-setup-requests")
-    || (method === "POST" && path === "/api/internal/bot-deletion-requests");
+    || (method === "POST" && path === "/api/internal/bot-deletion-requests")
+    || (method === "POST" && path === "/api/internal/plugin-team-import-requests");
 }
 
 export async function handleInternalRequestsEarly(deps: InternalRequestsDeps, ctx: InternalRouteContext): RequestsAnswer {
@@ -958,6 +962,49 @@ export async function handleInternalRequestsLate(deps: InternalRequestsDeps, ctx
         requestId: proposed.requestId,
         botId: chief.id,
         tool: "delete_bot",
+        summary: proposed.detail,
+        decision: proposed.state === "applied" ? "auto-approved" : "card-shown",
+        source: proposed.state === "pending" ? "profile" : deps.fullAccessForSource(chief.id, capability.threadId) ? "full-access" : "owner-auto",
+      });
+    }
+    return json(res, 201, proposed);
+  }
+
+  if (method === "POST" && path === "/api/internal/plugin-team-import-requests") {
+    // #2669: the Primary Bot imports a marketplace plugin as a new team for
+    // its person, behind the same card as the other team tools.
+    if (!deps.submitPluginImport) return json(res, 404, { error: "Not found" });
+    const parsed = z.object({
+      fromBotId: z.string().optional(),
+      fromThreadId: z.string().optional(),
+      marketplace: z.string().trim().min(1).max(200),
+      plugin: z.string().trim().min(1).max(200),
+      team: z.string().trim().max(60).optional(),
+      reason: z.string().trim().max(500).optional(),
+    }).strict().safeParse(await readBody());
+    if (!parsed.success) return json(res, 400, { error: "Name the marketplace and the plugin" });
+    const chief = deps.bot(capability.botId);
+    if (!chief) return json(res, 401, { error: "unauthorized" });
+    if (deps.ownerBotsReadOnly(chief)) return json(res, 403, deps.botsReadOnlyBody);
+    const owner = deps.ownsThread(chief.id, capability.threadId);
+    if (!owner) return json(res, 403, { error: "Source conversation no longer belongs to the Primary Bot" });
+    const proposed = await deps.submitPluginImport({
+      botId: chief.id,
+      threadId: capability.threadId,
+      marketplace: parsed.data.marketplace,
+      plugin: parsed.data.plugin,
+      ...(parsed.data.team ? { team: parsed.data.team } : {}),
+      reason: parsed.data.reason ?? "",
+      canCommit: () => deps.isActive(capability),
+      ...(owner.group ? { from: { botId: chief.id, name: chief.name, color: chief.color } } : {}),
+    });
+    if (!("requestId" in proposed)) return json(res, proposed.status, { error: proposed.error });
+    if (proposed.state === "applied" || proposed.state === "pending") {
+      deps.appendDecision({
+        threadId: capability.threadId,
+        requestId: proposed.requestId,
+        botId: chief.id,
+        tool: "import_plugin_team",
         summary: proposed.detail,
         decision: proposed.state === "applied" ? "auto-approved" : "card-shown",
         source: proposed.state === "pending" ? "profile" : deps.fullAccessForSource(chief.id, capability.threadId) ? "full-access" : "owner-auto",

@@ -53,21 +53,23 @@ describe("Mes connexions", () => {
     expect(html).toContain('data-github-state="none"');
     expect(html).toContain("Connect GitHub");
     expect(html).not.toContain("Use a token");
-    expect(html).toContain("Advanced: use a personal access token");
+    expect(html).toContain(">Advanced<");
+    expect(html).not.toMatch(/personal access token/i);
     expect(html).toContain("Add an MCP server");
     // 2026-11-06: no card of its own any more, the servers are Installed rows
     expect(html).not.toContain("No MCP server of your own yet.");
     expect(html).not.toContain("My MCP servers");
   });
 
-  // 2026-10-28: one Connect GitHub whatever the server has; without its
-  // OAuth App it asks for a token. No admin step (#1550): each person
+  // 2026-11-08: one Connect GitHub whatever the server has, always the link
+  // and the code (built-in OAuth App). No admin step (#1550): each person
   // manages their own accounts.
-  it("one Connect GitHub (a token) when the server has no GitHub OAuth App, in French", () => {
+  it("one Connect GitHub (link and code) even when the server reports no OAuth App, in French", () => {
     setLocale("fr");
     const html = renderToStaticMarkup(createElement(MyConnectionsSettings, { initial: { ...base, github: { state: "none", deviceFlow: false } } }));
-    expect(html).toContain('data-github-connect="token"');
+    expect(html).toContain('data-github-connect="device"');
     expect(html).toContain("Connecter GitHub</button>");
+    expect(html).not.toMatch(/personal access token|OAuth App/i);
     expect(html).not.toContain("Utiliser un jeton");
     expect(html).not.toContain("admin");
     expect(html).toContain("Ajouter un serveur MCP");

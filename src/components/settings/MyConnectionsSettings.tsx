@@ -64,8 +64,8 @@ function Loading({ error }: { error: string | null }) {
 
 /** the GitHub plugin's page in Connect apps: the person's own GitHub connection,
  * inside GithubAccountSection. Connect GitHub is everyone's, with no admin
- * step (owner, 2026-10-28): the device flow when the server has a GitHub
- * OAuth App, else a token the person pastes. */
+ * step (owner, 2026-10-28): always GitHub's link plus a code (owner 2026-11-08),
+ * a pasted token only under Advanced. */
 export function MyGithubConnection({ initial }: { initial?: MyConnections }) {
   const { data, error, refresh } = useMyConnections(initial, (value) => value.github.state === "pending");
   if (!data) return <Loading error={error} />;
@@ -93,16 +93,20 @@ function GithubCard({ data, onChanged }: { data: MyConnections; onChanged: () =>
   const github = data.github;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // the device flow that could not start (disabled, refused, unreachable):
+  // said above Try again, the token under Advanced as the fallback
+  const [deviceError, setDeviceError] = useState<string | null>(null);
   const [tokenOpen, setTokenOpen] = useState(false);
   const [token, setToken] = useState("");
-  const run = async (work: () => Promise<unknown>) => {
+  const run = async (work: () => Promise<unknown>, device = false) => {
     setBusy(true);
     setError(null);
+    setDeviceError(null);
     try {
       await work();
       await onChanged();
     } catch (failure) {
-      setError(message(failure));
+      (device ? setDeviceError : setError)(message(failure));
     } finally {
       setBusy(false);
     }
@@ -138,15 +142,20 @@ function GithubCard({ data, onChanged }: { data: MyConnections; onChanged: () =>
             {github.state === "error" && github.login && (
               <p className="text-[12px] text-ink-secondary" data-github-reconnect-hint>{t("myConnections.github.reconnectHint", { login: github.login })}</p>
             )}
-            {!github.deviceFlow && (
-              <p className="text-[12px] leading-relaxed text-ink-secondary" data-github-no-device-flow>{t("myConnections.github.noDeviceFlow")}</p>
+            {deviceError && <p role="alert" className="text-[12px] text-danger" data-github-device-error>{deviceError}</p>}
+            {(deviceError || (github.state === "error" && !github.login)) && (
+              <p className="text-[12px] leading-relaxed text-ink-secondary" data-github-fallback-hint>{t("myConnections.github.fallbackHint")}</p>
             )}
             <div className="flex flex-wrap gap-2">
-              {/* #2109: Connect GitHub is GitHub's link plus a pairing code;
-                  a token is the last resort, under Advanced. */}
-              <button type="button" className="ui-button ui-button-primary" disabled={busy} data-github-connect={github.deviceFlow ? "device" : "token"}
-                onClick={() => (github.deviceFlow ? void run(startGithubDevice) : setTokenOpen(true))}>
-                {github.state === "error" && github.login ? t("myConnections.github.reconnect") : t("myConnections.github.connect")}
+              {/* owner 2026-11-08: every GitHub connection is GitHub's link plus
+                  a code, whatever the server has (Sagax's built-in OAuth App,
+                  server/github/builtin-client.ts); a token is never first,
+                  only under Advanced. */}
+              <button type="button" className="ui-button ui-button-primary" disabled={busy} data-github-connect="device"
+                onClick={() => void run(startGithubDevice, true)}>
+                {github.state === "error" && github.login
+                  ? t("myConnections.github.reconnect")
+                  : deviceError || github.state === "error" ? t("myConnections.github.retry") : t("myConnections.github.connect")}
               </button>
               {github.state === "error" && github.login && (
                 <button type="button" className="ui-button" disabled={busy} data-github-disconnect-dead onClick={() => void run(disconnectGithub)}>{t("myConnections.github.disconnect")}</button>

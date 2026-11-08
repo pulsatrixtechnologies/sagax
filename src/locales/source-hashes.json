@@ -7078,7 +7078,7 @@
       "organization.confidentialDefault.short": "d676a4e698c1fd9d08ddb8ec3896dca1a48ec40a575dd9f3e36ceeca20a8d884",
       "organization.github.clientId": "8726db013948f0703807f17d23ca6c9903dc27f5d70c5a453604bb465c50864a",
       "organization.github.fromEnvironment": "5c322b623a57aa5ccc0700a1f422059a5683863d62921f4dd38e25217851ee5d",
-      "organization.github.hint": "017311c3b8ac2ab39fe69c478271be3cb744cb653557717e78208ebd818978e0",
+      "organization.github.hint": "620a3fd1980c56dc09c2ad99d40752d804d0806ab204a6fc3fe32637c5471bbf",
       "organization.github.title": "b198b550cb8b0a01216d344f5b8eeb2fa8bd89e282fe9f9e362f3916f3125cff",
       "organization.githubTokens.add": "91b90670613febc4f8434f8298188a8a99823038a371478f41ae720825a44591",
       "organization.githubTokens.cancel": "19766ed6ccb2f4a32778eed80d1928d2c87a18d7c275ccb163ec6709d3eb2e27",
@@ -17624,8 +17624,7 @@
       "chat.githubConnect.steps": "9180691543417aa27a568accf63b5a4c9b461fdf029c12e29c6a331fa47a1764",
       "chat.githubConnect.title": "4027e5b24418520f3efe49fa4bb5381fda41aa2eee28f43e018f971ced6acd2b",
       "myConnections.add.githubHint": "f56060ce45cd83c2ac3844d97f838f720f1ac39f8140386ae1465e6b7165980c",
-      "myConnections.github.advanced": "a9d156df9f4ea2bce29baa488e906cbb8571937b57c72b82fa7d049fb93ff814",
-      "myConnections.github.noDeviceFlow": "375a640807c32c2e867c4a819e67a0479b7b65067a0d3a6e97c6691e9784d9ac",
+      "myConnections.github.advanced": "9f088dbebd6c3c70a5ddbc2c943b11e4ca9acea5757b0b4f2b32479f0dbb747e",
       "sources.github.advanced": "26c62de690eb0e65a490517ce2538df54bddd32b2f755147fdbe67f86d8e13ef",
       "computer.advanced.summary": "a0b30a1281b762a23629a4d5c747b0217b863abdcae37b7dfa94ca53cde4e546",
       "computer.group.browser": "d31de1a5c5c8ba2a210a167cf0d0dc2425c57ea7525f4b73a4b7ab934af79dfc",
@@ -18138,7 +18137,9 @@
       "connectApps.plugin.converted.agentSettings": "569cde6433572e00bc38cadcfe4a49f78ce8be333514073a51dbff42b163e653",
       "connectApps.plugin.converted.mcpValues": "32a6cb6666325dd94b43aea8f68ed42dd4df039881425f40e41ad79dbbdfa736",
       "connectApps.plugin.converted.hooks": "d65ffac1392889263e7d0f9537e0ad3790032b003539eaa854856a894d3caa30",
-      "connectApps.plugin.converted.automations": "951cc9b3f8611e9de351ff5490ca7f05a0eb7ce3033c929fe4860ec19e7599d5"
+      "connectApps.plugin.converted.automations": "951cc9b3f8611e9de351ff5490ca7f05a0eb7ce3033c929fe4860ec19e7599d5",
+      "myConnections.github.retry": "d8b8392e2c542950ca64867168e4ef87d4ad606882d5898f826b51c6d553988f",
+      "myConnections.github.fallbackHint": "8c9259426839715b630acd6a759cd2b6a59c5fb20fbd76244cf436235cfd8efb"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

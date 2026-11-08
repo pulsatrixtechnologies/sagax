@@ -1,11 +1,12 @@
 // A person's own GitHub account on an organization server ("Connecter
 // GitHub"). Two ways in, both per person:
 //
-//   - the device flow of the organization's GitHub OAuth App
-//     (SAGAX_GITHUB_CLIENT_ID, or Settings > Organization): Sagax asks
-//     github.com for a code, the person types it at github.com/login/device,
-//     Sagax polls until GitHub hands the token over;
-//   - a token they paste (a fine-grained or classic personal access token).
+//   - the device flow, always the main way (owner, 2026-11-08): Sagax asks
+//     github.com for a code with its built-in OAuth App (or the
+//     organization's override, see builtin-client.ts), the person types it at
+//     github.com/login/device, Sagax polls until GitHub hands the token over;
+//   - a fallback only, under Advanced: a token they paste (a fine-grained or
+//     classic personal access token).
 //
 // The token lands in the person's encrypted connections file
 // (server/people/person-connections.ts), never in config.json, never in another
@@ -233,7 +234,7 @@ export class GithubConnect {
   async startDeviceFlow(principalId: string): Promise<DeviceFlowStart> {
     const clientId = this.options.clientId()?.trim();
     if (!clientId) {
-      throw new GithubConnectError("Your administrator has not set up a GitHub OAuth App for this server. Paste a GitHub token instead.", "device_flow_unavailable", 409);
+      throw new GithubConnectError("GitHub sign-in with a link and a code is not available on this server right now. Try again later.", "device_flow_unavailable", 409);
     }
     this.cancel(principalId);
     this.errors.delete(principalId);

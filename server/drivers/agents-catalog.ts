@@ -91,8 +91,8 @@ export interface CatalogProfile {
   /** This turn's thread is on a live phone call. `end_call` is shown only
    * then. Absent is off, so the wire goldens stay as they are. */
   voiceCall?: boolean;
-  /** A person's 1:1 turn on a server with a GitHub OAuth App (device flow):
-   * connect_github is offered. Absent is off, so the wire goldens stay. */
+  /** A person's turn on a server with a GitHub client id for the device flow
+   * (built in since 2026-11-08, so every server): connect_github is offered. Absent is off, so the wire goldens stay. */
   githubConnect?: boolean;
   /** The server is a Cloud home (server/cloud-home.ts): no "this computer"
    * of the person's and no Local VM to offer. */

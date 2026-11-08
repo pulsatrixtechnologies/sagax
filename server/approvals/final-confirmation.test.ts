@@ -73,6 +73,27 @@ describe("either/or questions offer their two paths (#2901)", () => {
     expect(choiceOptionsFor(exact, ["Refaire", "Avancer"])).toEqual(["Refaire", "Avancer"]);
     expect(choiceOptionsFor("May I proceed with the batch?", ["Yes", "No"])).toEqual(["Yes", "No"]);
   });
+  it("reads the alternative from the final question only (#2911)", () => {
+    const quoted = "Le client demande : voulez-vous qu'on remplace le poste, ou qu'on le répare? Dois-je créer la soumission?";
+    expect(alternativeChoices(quoted)).toBeNull();
+    expect(choiceOptionsFor(quoted, ["Oui", "Non"])).toEqual(["Oui", "Non"]);
+    expect(choiceOptionsFor("Voulez-vous qu'on remplace le poste, ou qu'on le répare? Dois-je créer la soumission?", ["Yes", "No"])).toEqual(["Yes", "No"]);
+    expect(alternativeChoices("Should I close it, or wait? The report is attached.")).toBeNull();
+    expect(finalAlternative({ ...context, text: quoted })).toBeNull();
+  });
+  it.each([
+    ["Puis-je fermer le billet, ou attendre le client?", ["Fermer le billet", "Attendre le client"]],
+    ["Dois-je fermer le billet, ou attendre le client?", ["Fermer le billet", "Attendre le client"]],
+    ["Est-ce que je peux fermer le billet, ou attendre le client?", ["Fermer le billet", "Attendre le client"]],
+    ["Can I close the ticket, or wait for the client?", ["Close the ticket", "Wait for the client"]],
+    ["Could I close the ticket, or wait for the client?", ["Close the ticket", "Wait for the client"]],
+    ["May I close the ticket, or wait for the client?", ["Close the ticket", "Wait for the client"]],
+    ["Puis-je écrire les entrées maintenant ou attendre lundi?", ["Écrire les entrées maintenant", "Attendre lundi"]],
+  ])("drops the may-I lead from the first path (#2911): %s", (question, paths) => {
+    expect(alternativeChoices(question)).toEqual(paths);
+    expect(choiceOptionsFor(question, ["Oui", "Non"])).toEqual(paths);
+    expect(finalAlternative({ ...context, text: question })?.options).toEqual(paths);
+  });
   it("keeps Yes/No for a yes-or-no question", () => {
     expect(alternativeChoices("May I proceed with the batch or not?")).toBeNull();
     expect(alternativeChoices("Puis-je écrire les entrées, ou non?")).toBeNull();

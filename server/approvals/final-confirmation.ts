@@ -40,7 +40,9 @@ export function finalConfirmation(input: {
   return request ? input.text.trim().slice(-4_000) : null;
 }
 
-const LEAD = /^(?:(?:so|then|alors|donc)\s*,?\s*)?(?:(?:do|would)\s+you\s+(?:want|like|prefer)\s+(?:me|us)?\s*(?:to\s+)?|(?:shall|should)\s+(?:i|we)\s+|(?:veux|voulez|souhaites|souhaitez|pr[eé]f[eè]res|pr[eé]f[eé]rez)-(?:tu|vous)\s+|est-ce que\s+(?:tu|vous)\s+(?:veux|voulez|pr[eé]f[eè]res|pr[eé]f[eé]rez)\s+)/i;
+// #2911: the may-I forms ASK accepts ("Puis-je", "Dois-je", "Can/Could/May
+// I") are stripped too, so the first path reads as an instruction.
+const LEAD = /^(?:(?:so|then|alors|donc)\s*,?\s*)?(?:(?:do|would)\s+you\s+(?:want|like|prefer)\s+(?:me|us)?\s*(?:to\s+)?|(?:shall|should|can|could|may)\s+(?:i|we)\s+|(?:puis|dois)-je\s+|(?:pouvons|devons)-nous\s+|est-ce que\s+(?:je|j['’]|on|nous)\s*(?:peux|dois|peut|doit|pouvons|devons)\s+|(?:veux|voulez|souhaites|souhaitez|pr[eé]f[eè]res|pr[eé]f[eé]rez)-(?:tu|vous)\s+|est-ce que\s+(?:tu|vous)\s+(?:veux|voulez|pr[eé]f[eè]res|pr[eé]f[eé]rez)\s+)/i;
 const ALTERNATIVE_LABEL_MAX = 80;
 
 function label(clause: string): string {
@@ -52,9 +54,11 @@ function label(clause: string): string {
  * one of its two paths, never by Yes/No. Null when the sentence is not a
  * clean two-way choice or a path is too long to be a button. */
 export function alternativeChoices(question: string): [string, string] | null {
-  const sentences = question.trim().split(/(?<=[.!?])\s+/).filter(Boolean);
-  const sentence = sentences.reverse().find((line) => /\?\s*$/.test(line) && ALTERNATIVE.test(line));
-  if (!sentence || MISSING_FACT.test(sentence)) return null;
+  // #2911: only the question itself, the final sentence. An earlier "A, or
+  // B?" (a quoted client question, a passing remark) never stands in for a
+  // final "Shall I create the quote?" that has no alternative.
+  const sentence = question.trim().split(/(?<=[.!?])\s+/).filter(Boolean).at(-1);
+  if (!sentence || !/\?\s*$/.test(sentence) || !ALTERNATIVE.test(sentence) || MISSING_FACT.test(sentence)) return null;
   const match = ALTERNATIVE.exec(sentence);
   if (!match) return null;
   const head = sentence.slice(0, match.index);

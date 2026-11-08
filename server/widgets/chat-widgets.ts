@@ -215,9 +215,13 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   const parsed = parseAskChoiceInput(input);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
   // #2901: Yes/No on "A, or B?" answers neither path; offer the two paths.
-  parsed.value.options = choiceOptionsFor(parsed.value.subtitle, parsed.value.options);
+  const given = parsed.value.options;
+  parsed.value.options = choiceOptionsFor(parsed.value.subtitle, given);
+  // #2911: two paths are a real decision, never a may-I, so Full access
+  // keeps the card instead of taking the first path for the person.
+  const twoPaths = parsed.value.options !== given;
   const from = args.store.groupByThread(args.threadId) ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
-  const answered = fullAccessChoiceAnswer(args.approvalLevel, { title: parsed.value.title, question: parsed.value.subtitle, options: parsed.value.options });
+  const answered = twoPaths ? null : fullAccessChoiceAnswer(args.approvalLevel, { title: parsed.value.title, question: parsed.value.subtitle, options: parsed.value.options });
   if (answered) {
     // full-access: ask-choice
     const settled = args.store.appendMessage(args.threadId, {

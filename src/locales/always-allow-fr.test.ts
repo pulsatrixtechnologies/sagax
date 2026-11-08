@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 
 import fr from "./fr.json";
 
-// JC's rule: the French button and every mention of it reads
+// Product rule: the French button and every mention of it reads
 // « Toujours permettre », never « Toujours autoriser ».
 // Android's own USB debugging prompt keeps its system label.
 const SYSTEM_LABELS = new Set(["computer.android.step3b", "computer.android.unauthorized"]);

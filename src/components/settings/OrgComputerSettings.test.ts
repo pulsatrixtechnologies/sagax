@@ -71,13 +71,12 @@ describe("Settings > Computer, the reference design's layout", () => {
     expect(html).not.toContain("JeanMBP");
   });
 
-  it("puts the server environment and its Reset (a red pill) under Bots' computer", () => {
+  it("keeps the server environment under Bots' computer; its Reset moved to Developer", () => {
     const html = render(bridge());
     const bots = html.slice(html.indexOf('data-settings-group="botsComputer"'));
     expect(bots).toContain('data-settings-row="serverEnvironment"');
     expect(bots).toContain("Show the screen");
-    expect(bots).toContain('data-settings-row="serverEnvironmentReset"');
-    expect(bots).toMatch(/class="ui-button bg-danger/);
+    expect(bots).not.toContain('data-settings-row="serverEnvironmentReset"');
     expect(bots).toContain('data-settings-row="localVm"');
   });
 
@@ -87,7 +86,6 @@ describe("Settings > Computer, the reference design's layout", () => {
     expect(html).toContain(">Votre ordinateur</h3>");
     expect(html).toContain(">Ordinateur des bots</h3>");
     expect(html).toContain("Mes appareils");
-    expect(html).toContain("Réinitialiser l&#x27;environnement serveur");
     expect(html).not.toMatch(/[–—]/);
   });
 });

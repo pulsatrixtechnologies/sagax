@@ -85,7 +85,7 @@ afterEach(() => {
 });
 
 describe("Settings > Models and voice", () => {
-  it.each(["integrations", "Intégrations", "modèle auto"])("is found by searching for %s", async (typed) => {
+  it.each(["integrations", "Intégrations", "modèle de décision"])("is found by searching for %s", async (typed) => {
     const { SECTIONS, sectionMatches } = await import("./SettingsModal");
     const page = SECTIONS.find((entry) => entry.id === "engines")!;
     // the modal lowercases and trims what was typed before matching
@@ -113,7 +113,9 @@ describe("Settings > Models and voice", () => {
     const models = SECTIONS.find((entry) => entry.id === "engines")!;
     const voice = SECTIONS.find((entry) => entry.id === "voice")!;
     const usage = SECTIONS.find((entry) => entry.id === "usage")!;
-    expect(sectionMatches(models, "modèle auto")).toBe(true);
+    // Auto's explainer, Defaults and Keep warm moved to Developer (JC 2026-11-08)
+    expect(sectionMatches(models, "modèle auto")).toBe(false);
+    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "developer")!, "modèle auto")).toBe(true);
     // #2080 (L0): image and web search providers are found on Providers only
     for (const typed of ["fournisseur d'images", "recherche web"]) {
       expect(sectionMatches(SECTIONS.find((entry) => entry.id === "providers")!, typed), typed).toBe(true);
@@ -159,7 +161,7 @@ describe("Settings > Models and voice", () => {
     // 2026-11-05 (option B): Auto's explainer sits in the Advanced fold; the
     // link to Providers and image generation left the page (Providers > Other services)
     expect(models).toContain('data-settings-card="models.advanced"');
-    expect(models).toContain("data-auto-model-explainer");
+    expect(models).not.toContain("data-auto-model-explainer");
     // #2080 (L1): "No long dashes" changes every reply: Models > Advanced, not Voice
     expect(models).toContain('data-settings-row="voiceNoDashes"');
     expect(models).not.toContain("data-open-providers");

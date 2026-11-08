@@ -141,7 +141,7 @@ describe("Settings keep one card level (#2175)", () => {
     // its groups are sections of their own, at the page's level
     const groups = [...advanced!.querySelectorAll("[data-settings-group]")].map((group) => group.getAttribute("data-settings-group"));
     expect(groups).toContain("models-replies");
-    expect(groups).toContain("models-auto");
+    expect(groups).not.toContain("models-auto");
     for (const group of advanced!.querySelectorAll("[data-settings-surface]")) {
       expect(group.parentElement?.closest("[data-settings-surface]")).toBeNull();
     }

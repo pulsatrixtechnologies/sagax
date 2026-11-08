@@ -13866,7 +13866,7 @@
   "providers.advanced.title": "Avancé",
   "providers.advanced.help": "Vos clés pour les agents de code infonuagiques et vos connecteurs claude.ai.",
   "models.advanced.title": "Avancé",
-  "models.advanced.help": "Modèles actifs, ce qu'Auto choisirait maintenant, le cache de prompt et les tirets longs dans les réponses.",
+  "models.advanced.help": "Modèles actifs et tirets longs dans les réponses.",
   "models.replies.title": "Réponses",
   "botModel.ifFails.title": "En cas d'échec",
   "botModel.paidBy": "Payé par : {value}",

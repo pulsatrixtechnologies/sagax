@@ -39,7 +39,8 @@ export function MyChromeSettings() {
     }
   };
 
-  if (!status) return null;
+  // not offered here (an organization server): the row is not rendered at all
+  if (!status || !status.offered) return null;
   const inputClass = "min-w-0 flex-1 rounded-md border border-hairline/40 bg-inset px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-accent disabled:opacity-50";
   const buttonClass = "shrink-0 rounded-md bg-control px-2.5 py-1.5 text-[12px] text-ink hover:bg-raised-hover disabled:opacity-50";
   const driving = status.driving.filter((client) => client.tabs.length > 0 || client.botName);

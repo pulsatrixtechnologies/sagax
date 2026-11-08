@@ -90,10 +90,12 @@ describe("Settings > My Chrome", () => {
     expect(container.querySelector("[data-my-chrome-sites]")?.textContent).not.toContain("https://shop.example");
   });
 
-  it("says it is not available on an organization server", async () => {
+  it("does not render My Chrome at all on an organization server", async () => {
     fixture.api.mockResolvedValue({ ...base, offered: false, enabled: false });
     act(() => root.render(createElement(MyChromeSettings)));
     await flush();
-    expect(container.textContent).toContain("Not available on an organization server.");
+    expect(container.querySelector("[data-my-chrome]")).toBeNull();
+    expect(container.textContent).not.toContain("My Chrome");
+    expect(container.textContent).not.toContain("Not available on an organization server.");
   });
 });

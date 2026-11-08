@@ -1134,3 +1134,12 @@ export function ConfirmPill({ label, confirmLabel, ariaLabel, title, onConfirm, 
 // #2080 (L0): the shared Settings patterns, one import for every page.
 export { ExternalLinkPill, StatusText, OrgBand, FilterChips, SelectionBar, SettingsEmpty } from "./settings/SettingsPatterns";
 export type { FilterChip } from "./settings/SettingsPatterns";
+
+/** Hide-when-unavailable (JC 2026-11-08: "If option are not available hide them
+ * visually"). An option the context makes impossible (organization server, OS,
+ * platform, missing feature) is not rendered, never shown as a disabled row with
+ * a "Not available" line. Not for a prerequisite the person has yet to fill in:
+ * that stays visible and disabled. */
+export function Available({ when, children }: { when: boolean; children: React.ReactNode }) {
+  return when ? <>{children}</> : null;
+}

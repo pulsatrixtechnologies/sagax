@@ -146,7 +146,7 @@ describe("Settings nav groups", () => {
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "engines")!, "microphone")).toBe(false);
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "voice")!, "microphone")).toBe(true);
     const general = SECTIONS.find((entry) => entry.id === "general")!;
-    for (const query of ["open at login", "hotkey", "send key", "advanced mode"]) {
+    for (const query of ["open at login", "hotkey", "send key"]) {
       expect(sectionMatches(general, query), query).toBe(true);
       expect(sectionMatches(app, query), query).toBe(false);
     }
@@ -181,9 +181,9 @@ describe("Settings nav groups", () => {
     fixture.section = "updates";
     const html = render();
     expect(html).toContain('data-settings-card="updates"');
-    expect(html).toContain('data-settings-card="updates.links"');
+    // JC 2026-11-08: the Release notes / About rows moved to Developer
+    expect(html).not.toContain('data-settings-card="updates.links"');
     expect(html).not.toMatch(/<h3[^>]*>This app<\/h3>/);
-    expect(html).toContain("Release notes");
     expect(html).not.toContain("data-about-section");
     fixture.section = "about";
     const app = render();

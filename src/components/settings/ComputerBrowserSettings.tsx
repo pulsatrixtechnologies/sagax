@@ -74,6 +74,8 @@ export function ComputerBrowserSettings() {
   };
 
   const unavailable = !desktopBrowser && !browserInstallable;
+  // impossible on this platform and not on: nothing to show (hiddenWhenUnavailable)
+  if (unavailable && !browser) return null;
   return (
     <SettingsGroup title={t("computer.group.browser")} groupId="computerBrowser">
       <div data-settings-card="computer.browser" data-unavailable={unavailable ? "" : undefined} className={cn(unavailable && "[&_[id]]:text-ink-secondary")}>

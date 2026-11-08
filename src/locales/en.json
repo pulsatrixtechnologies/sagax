@@ -13226,7 +13226,7 @@
   "providers.advanced.title": "Advanced",
   "providers.advanced.help": "Your keys for cloud coding agents and your claude.ai connectors.",
   "models.advanced.title": "Advanced",
-  "models.advanced.help": "Active models, what Auto would choose now, the prompt cache, and long dashes in replies.",
+  "models.advanced.help": "Active models and long dashes in replies.",
   "models.replies.title": "Replies",
   "botModel.ifFails.title": "If it fails",
   "botModel.paidBy": "Paid by: {value}",

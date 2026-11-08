@@ -91,10 +91,9 @@ describe("Settings > Experimental", () => {
     // feature: its config has no dataWindow, and it refuses to save one.
     fixture.section = "experimental";
     const html = await render();
-    expect(html).toContain('data-experimental-feature="dataWindow"');
-    expect(html).toContain('data-settings-card="experimental.needsServerUpdate"');
-    expect(html).toContain("Arrives with the next server update.");
-    expect(html).toContain('data-unavailable=""');
+    // JC 2026-11-08: an option the server cannot serve is not rendered at all
+    expect(html).not.toContain('data-experimental-feature="dataWindow"');
+    expect(html).not.toContain("Arrives with the next server update.");
     expect(switchNamed("Turn on the Data window")).toBeUndefined();
   });
 
@@ -126,10 +125,8 @@ describe("Settings > Experimental", () => {
   it("lists an unserved feature under Needs a server update, with the reason on demand", async () => {
     fixture.section = "experimental";
     const html = await render();
-    expect(html).toContain('data-experimental-feature="dataWindow"');
-    expect(html).toContain('data-unavailable=""');
-    expect(html).toContain("Needs a server update");
-    expect(html).toContain('aria-label="More about Data window"');
+    expect(html).not.toContain('data-experimental-feature="dataWindow"');
+    expect(html).not.toContain('data-unavailable=""');
   });
 
   it("saves each switch as its own server feature", async () => {

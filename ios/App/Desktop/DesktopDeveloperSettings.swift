@@ -1,11 +1,13 @@
 import SwiftUI
 
 /// Settings > Developer on iPad (#2729), in DeveloperSettings.tsx's order:
-/// Conversation, Bots, event log cleanup, Interface, the release links,
-/// Experimental features, Context pods. What the desktop offers there and
-/// iOS cannot do (turn timing, usage meter, MCP timeout, loop guard,
-/// telemetry, logs and diagnostics, Claude Code, the Grok bridge, the GitHub
-/// app) is left out rather than greyed.
+/// Conversation, Bots (group turns, MCP calls), Loop guard, OpenTelemetry,
+/// Event log cleanup, Interface, the release links, Experimental features,
+/// Context pods. The server rows show only to someone who may edit the
+/// config (canEditConfig), the experimental card to someone who may flip at
+/// least one switch; what a person may not change is hidden, never greyed.
+/// What iOS cannot do (turn timing, usage meter, logs and diagnostics,
+/// Claude Code, the Grok bridge, the GitHub app) is left out.
 struct DesktopDeveloperSettings: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var shell: DesktopShellModel
@@ -32,11 +34,11 @@ struct DesktopDeveloperSettings: View {
                 }
             }
         }
-        if model.config != nil {
-            DesktopSettingsGroup(Text("Bots"), plain: true, identifier: "developerBots") {
-                DesktopGroupTurnsCard()
-            }
-            DesktopEventLogCleanupCard()
+        if model.config?.canEditConfig == true {
+            DesktopDeveloperBotsGroup()
+            DesktopLoopGuardGroup()
+            DesktopTelemetryGroup()
+            DesktopEventLogCleanupGroup()
         }
         DesktopSettingsGroup(Text("Interface"), identifier: "generalInterface") {
             DesktopDescribedRow(Text("Advanced mode"), description: Text("Show technical controls. Saved choices stay either way."), identifier: "advancedMode") {

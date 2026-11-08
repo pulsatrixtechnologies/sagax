@@ -526,7 +526,7 @@ extension IPadParityScreen {
         case .settingsOrganization: (.settings, .organization, nil)
         case .settingsAppearance: (.settings, .appearance, nil)
         // #2729: Experimental features is a card of Developer.
-        case .settingsDeveloper: (.settings, .developer, nil)
+        case .settingsDeveloper, .settingsDeveloperScrolled: (.settings, .developer, nil)
         case .settingsConnections: (.settings, .connections, nil)
         case .settingsMyConnections: (.settings, .myConnections, nil)
         case .settingsDecisionModel: (.settings, .decisionModel, nil)
@@ -564,14 +564,14 @@ extension DesktopShellModel {
 }
 #endif
 
-/// settings-general-scrolled: the page scrolled to its end.
+/// settings-general-scrolled, settings-developer-scrolled: the page scrolled to its end.
 enum DesktopSettingsScroll {
     static let bottom = "desktop-settings.bottom"
     static let navBottom = "desktop-settings.nav-bottom"
 
     static var parityScrollsToEnd: Bool {
         #if DEBUG
-        ParityLaunch.current?.iPadScreen == .settingsGeneralScrolled
+        [.settingsGeneralScrolled, .settingsDeveloperScrolled].contains(ParityLaunch.current?.iPadScreen)
         #else
         false
         #endif

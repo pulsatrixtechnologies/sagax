@@ -199,6 +199,7 @@ enum IPadParityScreen: String, CaseIterable {
     case settingsBackups = "settings-backups"
     case settingsWorkspaces = "settings-workspaces"
     case settingsGeneralScrolled = "settings-general-scrolled"
+    case settingsDeveloperScrolled = "settings-developer-scrolled"
     case settingsMyConnections = "settings-myConnections"
     case personaOverview = "persona-overview"
     case personaAppearance = "persona-appearance"

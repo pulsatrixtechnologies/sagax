@@ -443,7 +443,9 @@ export interface AgentApiDeps {
    * instead of a second turn. Absent: an in-memory map (tests). */
   sendReceipts?: {
     get(key: string): SendReceipt | null;
+    /** Writes or overwrites (a pending receipt, then the final one). */
     put(key: string, receipt: SendReceipt): void;
+    delete(key: string): void;
   };
   /** The HMAC key turn handles are signed with (at least 32 bytes). */
   secret: Buffer;
@@ -459,7 +461,15 @@ export interface SendReceipt {
   thread_id: string;
   message_id: string | null;
   issued_at: number;
+  /** Written just before the post: a crash between the post and the final
+   * receipt leaves it, and the resend checks the transcript (#2849). */
+  pending?: boolean;
 }
+
+/** How long a send_prompt receipt (idempotency_key) holds: as long as the
+ * handle it replays. After that the key is free and a resend is a new send
+ * (#2849), never a handle that is already expired. */
+export const SEND_RECEIPT_TTL_MS = HANDLE_TTL_MS;
 
 /** One visible step of a turn (tool name or note), for still_working progress. */
 export interface TurnStep {
@@ -915,7 +925,7 @@ function createAgentApiHandlers(env: {
   deps: AgentApiDeps;
   now: () => number;
   startedBy: Map<string, { messageId: string; caller: string }>;
-  sendReceipts: { get(key: string): SendReceipt | null; put(key: string, receipt: SendReceipt): void };
+  sendReceipts: { get(key: string): SendReceipt | null; put(key: string, receipt: SendReceipt): void; delete(key: string): void };
   sendsInFlight: Map<string, Promise<unknown>>;
   ownsRunningTurn: (caller: AgentCaller, threadId: string) => boolean;
   ok: (body: Record<string, unknown>) => AgentApiAnswer;
@@ -1132,7 +1142,28 @@ function createAgentApiHandlers(env: {
         for (let inFlight = sendsInFlight.get(receiptKey); inFlight; inFlight = sendsInFlight.get(receiptKey)) {
           await inFlight.catch(() => undefined);
         }
-        const prior = sendReceipts.get(receiptKey);
+        let prior = sendReceipts.get(receiptKey);
+        // #2849: a receipt lasts as long as the handle it would replay. An
+        // expired one frees the key: this send is a new one.
+        if (prior && now() - prior.issued_at > SEND_RECEIPT_TTL_MS) {
+          sendReceipts.delete(receiptKey);
+          prior = null;
+        }
+        // A pending receipt with no send in flight: Sagax stopped between the
+        // pending write and the final one. The prompt reached the
+        // conversation if a user line at or after issued_at is there; then
+        // the receipt is completed, else the key is free again.
+        if (prior?.pending) {
+          const issued = prior.issued_at;
+          const line = deps.messages(prior.thread_id).find((message) => message.role === "user" && message.at >= issued);
+          if (line) {
+            prior = { fp: prior.fp, agent_id: prior.agent_id, thread_id: prior.thread_id, message_id: line.id, issued_at: issued };
+            sendReceipts.put(receiptKey, prior);
+          } else {
+            sendReceipts.delete(receiptKey);
+            prior = null;
+          }
+        }
         if (prior) {
           if (prior.fp !== fp) {
             return refuse(409, "idempotency_key_reused", "This idempotency_key was already used for a different send_prompt (other prompt, thread or files).", {
@@ -1228,8 +1259,20 @@ function createAgentApiHandlers(env: {
         : plan.queueFront
           ? { front: true, priorityNow: true }
           : undefined;
-      const posted = await deps.post(caller, agentId, threadId, prompt, fileInputs, wake);
+      // #2849: the receipt is written pending BEFORE the post, so a crash
+      // after the post never lets a resend start a second turn.
+      if (receiptKey !== null) {
+        sendReceipts.put(receiptKey, { fp, agent_id: agentId, thread_id: threadId, message_id: null, issued_at: issuedAt, pending: true });
+      }
+      let posted: Awaited<ReturnType<typeof deps.post>>;
+      try {
+        posted = await deps.post(caller, agentId, threadId, prompt, fileInputs, wake);
+      } catch (error) {
+        if (receiptKey !== null) sendReceipts.delete(receiptKey);
+        throw error;
+      }
       if (isRefusal(posted)) {
+        if (receiptKey !== null) sendReceipts.delete(receiptKey);
         if (plan.reported === "now") releasePriorityNow(senderId);
         return posted;
       }
@@ -1570,7 +1613,13 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
   const memoryReceipts = new Map<string, SendReceipt>();
   const sendReceipts = deps.sendReceipts ?? {
     get: (key: string) => memoryReceipts.get(key) ?? null,
-    put: (key: string, receipt: SendReceipt) => void memoryReceipts.set(key, receipt),
+    put: (key: string, receipt: SendReceipt) => {
+      // #2849: expired receipts go, so the map stays bounded.
+      const cutoff = now() - SEND_RECEIPT_TTL_MS;
+      for (const [stale, held] of memoryReceipts) if (held.issued_at < cutoff) memoryReceipts.delete(stale);
+      memoryReceipts.set(key, receipt);
+    },
+    delete: (key: string) => void memoryReceipts.delete(key),
   };
   const sendsInFlight = new Map<string, Promise<unknown>>();
   const ownsRunningTurn = (caller: AgentCaller, threadId: string): boolean => {

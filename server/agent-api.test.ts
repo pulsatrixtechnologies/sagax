@@ -7,9 +7,9 @@ import { createHmac } from "node:crypto";
 
 import {
   AGENT_SETTINGS_FIELDS, AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, AWAIT_RECOMMENDED_WAIT_MS, AWAIT_TIMEOUT_MS_DEFAULT, AWAIT_TIMEOUT_MS_MAX, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
-  HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, signHandle, signTurnHandle, turnLabel, verifyHandle,
+  HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, SEND_RECEIPT_TTL_MS, signHandle, signTurnHandle, turnLabel, verifyHandle,
   formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, resolveEngineInstance,
-  type AgentApiDeps, type AgentCaller, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type StoredMessage, type TurnState,
+  type AgentApiDeps, type AgentCaller, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type SendReceipt, type StoredMessage, type TurnState,
 } from "./agent-api.ts";
 import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./proactive/priority-wake.ts";
 
@@ -641,6 +641,64 @@ describe("send_prompt / await_turn", () => {
     expect(w.posted).toHaveLength(2);
     const bad = await w.api.call(person("p1"), "send_prompt", { ...args, idempotency_key: "has space" });
     expect(bad.body).toMatchObject({ code: "bad_request", details: { reason: "invalid_idempotency_key" } });
+  });
+
+  it("an idempotency_key lasts the handle's lifetime: after it, a resend is a new send with a valid handle (#2849)", async () => {
+    const w = world();
+    const args = { agent_id: "bot-a", prompt: "ship the report", mode: "async", idempotency_key: "run-7:step.1" };
+    const first = await w.api.call(person("p1"), "send_prompt", args);
+    await w.settle();
+    w.advance(SEND_RECEIPT_TTL_MS - 60_000);
+    const within = await w.api.call(person("p1"), "send_prompt", args);
+    expect(within.body).toMatchObject({ replayed: true, thread_id: first.body.thread_id, expires_at: first.body.expires_at });
+    expect(w.posted).toHaveLength(1);
+    w.advance(120_000);
+    const after = await w.api.call(person("p1"), "send_prompt", args);
+    expect(after.body.replayed).toBeUndefined();
+    expect(after.body).toMatchObject({ accepted: true });
+    expect(w.posted).toHaveLength(2);
+    const waited = await w.api.call(person("p1"), "await_turn", { agent_id: "bot-a", handle: after.body.handle, timeout_ms: 30_000 });
+    expect(waited.status).toBe(200);
+    expect(waited.body).toMatchObject({ finished: true, reply: "echo: ship the report" });
+    // Within the new lifetime the key replays the new send.
+    const again = await w.api.call(person("p1"), "send_prompt", args);
+    expect(again.body).toMatchObject({ replayed: true, thread_id: after.body.thread_id });
+    expect(w.posted).toHaveLength(2);
+  });
+
+  it("an idempotency_key receipt is pending before the post: a crash after the post replays, a crash before it sends anew (#2849)", async () => {
+    const receipts = new Map<string, SendReceipt>();
+    const writes: Array<{ key: string; pending: boolean }> = [];
+    const store = {
+      get: (key: string) => receipts.get(key) ?? null,
+      put: (key: string, receipt: SendReceipt) => { writes.push({ key, pending: receipt.pending === true }); receipts.set(key, receipt); },
+      delete: (key: string) => void receipts.delete(key),
+    };
+    const w = world();
+    const api = createAgentApi({ ...w.deps, sendReceipts: store });
+    const args = { agent_id: "bot-a", prompt: "ship the report", mode: "async", idempotency_key: "run-9:step.1" };
+    const first = await api.call(person("p1"), "send_prompt", args);
+    expect(writes.map((write) => write.pending)).toEqual([true, false]);
+    // Simulate a crash after the post, before the final receipt.
+    const key = writes[0]!.key;
+    receipts.set(key, { ...receipts.get(key)!, message_id: null, pending: true });
+    const restarted = createAgentApi({ ...w.deps, sendReceipts: store });
+    const replay = await restarted.call(person("p1"), "send_prompt", args);
+    expect(replay.body).toMatchObject({ replayed: true, thread_id: first.body.thread_id });
+    expect(w.posted).toHaveLength(1);
+    expect(receipts.get(key)?.pending).toBeUndefined();
+    // A crash before the post: no user line after issued_at, the key is free.
+    await w.settle();
+    w.advance(60_000);
+    receipts.set(key, { ...receipts.get(key)!, message_id: null, issued_at: w.deps.now!(), pending: true });
+    const resend = await restarted.call(person("p1"), "send_prompt", args);
+    expect(resend.body.replayed).toBeUndefined();
+    expect(w.posted).toHaveLength(2);
+    // A refused post leaves no receipt behind.
+    const refusing = createAgentApi({ ...w.deps, sendReceipts: store, post: async () => ({ status: 503, code: "unavailable", message: "down" }) });
+    const refused = await refusing.call(person("p1"), "send_prompt", { ...args, idempotency_key: "run-9:step.2" });
+    expect(refused.status).toBe(503);
+    expect([...receipts.keys()].some((stored) => stored.endsWith("run-9:step.2"))).toBe(false);
   });
 
   it("blocking waits for the reply; empty reply with finished=true means no text", async () => {

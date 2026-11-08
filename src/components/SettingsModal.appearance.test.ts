@@ -500,11 +500,11 @@ describe("Settings → Notifications", () => {
     expect(html).toContain("On macOS, also choose Alerts in System Settings &gt; Notifications.");
   });
 
-  it("is laid out as Alerts plus Privacy, with nudges and blocked people folded (#2080)", () => {
+  it("is laid out as Signals, Alerts plus Privacy, with nudges and blocked people folded (#2080, #2695)", () => {
     fixture.section = "notifications";
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    expect(groups).toEqual(["notificationTypes", "alerts", "privacy"]);
+    expect(groups).toEqual(["notificationTypes", "signals", "alerts", "privacy"]);
     expect(html).toContain(">Alerts</h3>");
     expect(html).toContain(">Privacy</h3>");
     expect(html).toContain(">Nudges</div>");

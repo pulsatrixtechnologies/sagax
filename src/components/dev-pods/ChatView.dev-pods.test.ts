@@ -56,8 +56,9 @@ const bot = (threadId: string): Bot => ({
 
 /** The opening tags of the transcript's scroll pane and centered log. */
 function transcriptShell(markup: string): string[] {
-  const scroll = markup.match(/<div class="h-full overflow-x-hidden[^"]*"[^>]*>/)?.[0];
-  const log = markup.match(/<div class="mx-auto flex w-full max-w-\[960px\][^"]*"[^>]*role="log"[^>]*>/)?.[0];
+  // #2755: the pane carries data-virtual-root before its class
+  const scroll = markup.match(/<div[^>]*class="h-full overflow-x-hidden[^"]*"[^>]*>/)?.[0];
+  const log = markup.match(/<div[^>]*class="mx-auto flex w-full max-w-\[960px\][^"]*"[^>]*role="log"[^>]*>/)?.[0];
   expect(scroll, "scroll pane").toBeTruthy();
   expect(log, "transcript log").toBeTruthy();
   return [scroll!, log!];

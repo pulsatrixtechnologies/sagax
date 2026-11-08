@@ -274,7 +274,8 @@ describe("the routine panel, edit mode", () => {
     edit();
     expect(host.querySelector<HTMLInputElement>("[data-routine-editor-name]")?.value).toBe("Weekly digest");
     const sections = [...host.querySelectorAll("[data-routine-editor-section]")].map((section) => section.getAttribute("data-routine-editor-section"));
-    expect(sections).toEqual(["what", "when"]);
+    // #2696: the goal field (optional, empty here) sits between the prompt and When to run
+    expect(sections).toEqual(["what", "goal", "when"]);
     const when = host.querySelector("[data-routine-editor-section=when]")!;
     expect(when.querySelector("[data-routine-when-sentence]")?.textContent).toBe("Weekdays, at 8:30 AM, 12:30 PM and 4:30 PM (Toronto time)");
     // The picker stays closed on an existing routine until the row is clicked.

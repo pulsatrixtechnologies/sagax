@@ -179,7 +179,7 @@ struct DesktopCommandPalette: View {
                     HStack(spacing: 12) {
                         DesktopIconView(icon: Self.icon(item), size: 16).foregroundStyle(theme.inkSecondary)
                         if item.group == .bots, let detail = item.detail, !recent {
-                            // a bot's title UNDER its name (JC 2026-11-06)
+                            // a bot's title UNDER its name (the owner 2026-11-06)
                             VStack(alignment: .leading, spacing: 0) {
                                 Text(verbatim: item.label)
                                     .font(theme.font(14)).foregroundStyle(theme.ink).lineLimit(1)

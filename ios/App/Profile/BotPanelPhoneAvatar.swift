@@ -1,5 +1,5 @@
 // The character editor the panel's mascot opens (`Edit avatar`). Lot 9:
-// Back + Done like Grok Bot (Back cancels the look draft; Done saves), a
+// Back + Done like the reference app (Back cancels the look draft; Done saves), a
 // plain preview without the gradient card, and Mascot / Shape / Color /
 // Skin as scrolling sections (no secondary segmented control). Top tabs
 // stay Character / Generate / Upload. Sagax mascots stay ours.

@@ -55,7 +55,7 @@ enum DesktopShellRules {
     static let sidebarWidth: CGFloat = 280
     /// The collapsed sidebar: the icon rail (SIDEBAR_RAIL_WIDTH).
     static let railWidth: CGFloat = 80
-    /// Bot panel like Grok Bot (`BOT_PANEL_BOUNDS` fallback 308, #2141).
+    /// Bot panel like the reference app (`BOT_PANEL_BOUNDS` fallback 308, #2141).
     static let panelWidth: CGFloat = 308
     /// The desktop's title band: the top inset of the sidebar and the panel.
     static let topBand: CGFloat = 36

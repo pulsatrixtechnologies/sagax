@@ -146,5 +146,11 @@
     "files": "^scripts/[\\w-]+\\.test\\.mjs$",
     "context": "gox-image-gate\\.yml|gox-deploy\\.mjs",
     "reason": "Names of real files in the repository (.github/workflows) that the image gate tests read or check against."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^ios/(?:App|Sources|parity)/",
+    "context": "Import (?:a|from) Grok Bot|Bring a (?:shared Grok Bot|bot you use in Grok Bot) into|Grok Bot link|Grok Bot\\'s reply|your own Grok Bot\\.|to your Grok Bot|From Grok Bot|Depuis Grok Bot|Import(?:er)? (?:an|un) agent \\(Grok Bot, Claude Code|Importer (?:un|depuis|de) Grok Bot|Grok Bot (?:or|ou) Claude Code|Paste a Grok Bot link|or a Grok Bot marketplace page|Collez un lien de Grok Bot|marketplace Grok Bot\\.|Faites entrer un Grok Bot|Lien du Grok Bot|ponse du Grok Bot|votre (?:propre )?Grok Bot|dans Grok Bot\\. Il arrive|started from the Grok Bot \\\\\"",
+    "reason": "iOS wording of the bot import (the same strings as the desktop locales above): the screen names the product the person imports a bot from; the import reads x.ai share links (shared/grok-import.ts)."
   }
 ]

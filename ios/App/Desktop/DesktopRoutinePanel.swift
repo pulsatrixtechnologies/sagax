@@ -1,5 +1,5 @@
 // iPad lot 5 (2026-11-03): the routine side panel of the desktop's
-// Automations page, drawn to the new Grok Bot design (feat/routine-panel-grok,
+// Automations page, drawn to the new reference app design (feat/routine-panel-grok,
 // the coordinator's brief):
 // - header "‹ <name>" and the panel toggle;
 // - Trigger (a row that opens the schedule editor), Runs as (the bot),

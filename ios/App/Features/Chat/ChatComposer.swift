@@ -157,7 +157,7 @@ extension ChatView {
         }
     }
 
-    /// One glass capsule, as in Grok Bot (2026-11-01): the + at its leading
+    /// One glass capsule, as in the reference app (2026-11-01): the + at its leading
     /// end, the field, then dictation and the white voice / send capsule.
     var composer: some View {
         VStack(spacing: 6) {

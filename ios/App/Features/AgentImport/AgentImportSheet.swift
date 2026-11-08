@@ -1,4 +1,4 @@
-// Import an agent from Grok Bot on iOS (desktop AgentImport.tsx,
+// Import an agent from x.ai bot on iOS (desktop AgentImport.tsx,
 // docs/import-agent.md): copy the export prompt, send it to your own bot on
 // x.ai, paste its reply. The server makes the package and stages it; the
 // preview says what will be created (inert: skills off, routines paused, no

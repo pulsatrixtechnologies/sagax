@@ -1,4 +1,4 @@
-// The Settings pages drawn from SettingsTree (2026-10-26, the Grok Bot
+// The Settings pages drawn from SettingsTree (2026-10-26, the reference app
 // layout): the root's cards, Bots, Privacy and security, and About. Each
 // row keeps the identifier it had before the layout changed.
 import CompanionCore
@@ -45,7 +45,7 @@ struct SettingsTreeCards: View {
         }
     }
 
-    /// The few labels the pages keep: the root's "Bot", as Grok Bot's sheet.
+    /// The few labels the pages keep: the root's "Bot", as reference app's sheet.
     private static func label(_ page: SettingsPageID, _ card: [SettingsItem]) -> LocalizedStringKey? {
         switch (page, card.first) {
         case (.root, .bots?): "Bot"
@@ -90,7 +90,7 @@ struct SettingsTreeRow: View {
             SettingsRow(title: "Permissions and bot settings", subtitle: "Auto-review, time zone, computer and more", accessory: .chevron,
                         identifier: "settings-bots", textTop: 13.4) { navigator.push(.bots) }
         case .connectApps:
-            // Grok Bot's "Connect apps" (2026-11-01): plugins, with the tools
+            // The reference app's "Connect apps" (2026-11-01): plugins, with the tools
             // and skills they resolve to
             SettingsRow(title: "Connect apps", subtitle: "Plugins, tools and skills", accessory: .chevron,
                         identifier: "settings-plugins", textTop: 13.4) { navigator.push(.plugins) }

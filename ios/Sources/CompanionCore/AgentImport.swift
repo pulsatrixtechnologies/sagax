@@ -1,6 +1,6 @@
 import Foundation
 
-// Import an agent from Grok Bot on the phone (desktop AgentImport.tsx,
+// Import an agent from x.ai bot on the phone (desktop AgentImport.tsx,
 // docs/import-agent.md). The phone has no copy of the converter: it sends the
 // reply the person's own bot on x.ai wrote to the export prompt, the server
 // makes it a Sagax package and stages it like an uploaded file

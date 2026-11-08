@@ -43,7 +43,7 @@ final class SettingsUITests: XCTestCase {
     }
 
     /// Settings > Bots (auto-review, time zone): one level in since the
-    /// Grok Bot layout (2026-10-26).
+    /// The reference app layout (2026-10-26).
     @MainActor
     private func launchBotCard() -> XCUIApplication {
         let app = launch()

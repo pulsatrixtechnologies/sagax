@@ -21,7 +21,7 @@ extension ChatView {
 
                 // Every action fits on a tall phone; on a shorter one (or with
                 // larger text) the list scrolls instead of leaving the screen.
-                // Grok Bot's composer menu (2026-11-01): a compact glass
+                // The reference app's composer menu (2026-11-01): a compact glass
                 // popover over the +, one line per action; what each does is
                 // its VoiceOver hint.
                 ViewThatFits(in: .vertical) {

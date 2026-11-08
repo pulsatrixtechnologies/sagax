@@ -77,7 +77,7 @@ struct WizardIdentityStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Grok Bot's layout: the avatar beside the name and the role
+            // The reference app's layout: the avatar beside the name and the role
             HStack(alignment: .center, spacing: 16) {
                 MascotCharacterView(look: look.complete, color: look.color, skin: look.skin, size: 96, animated: true)
                     .frame(width: 96, height: 96)

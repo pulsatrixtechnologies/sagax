@@ -288,7 +288,7 @@ struct DesktopSidebarRow: View {
             }
             if selecting { selectMark(chosen) }
         }
-        // the rail's row: Grok Bot's 54 pt square (`h-[54px] w-[54px]
+        // the rail's row: reference app's 54 pt square (`h-[54px] w-[54px]
         // p-[9px]`, rounded 10), centred in the rail
         .frame(width: density == .icons ? 54 : nil)
         // Unfolded, the selected thread below carries the one highlight

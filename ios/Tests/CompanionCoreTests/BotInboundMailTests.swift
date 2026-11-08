@@ -10,8 +10,8 @@ final class BotInboundMailTests: XCTestCase {
     }
 
     func testAvailableAddressGivesARow() throws {
-        let answer = try decode(#"{"available":true,"address":"cryptic@bots.example.org","enabled":true}"#)
-        XCTAssertEqual(BotInboundMailRules.row(answer), BotInboundMailRow(address: "cryptic@bots.example.org", waitingForAdmin: false))
+        let answer = try decode(#"{"available":true,"address":"nimbus@bots.example.org","enabled":true}"#)
+        XCTAssertEqual(BotInboundMailRules.row(answer), BotInboundMailRow(address: "nimbus@bots.example.org", waitingForAdmin: false))
     }
 
     func testAnAddressWaitingForTheAdminIsShownWithItsState() throws {

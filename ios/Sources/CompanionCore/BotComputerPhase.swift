@@ -1,6 +1,6 @@
 import Foundation
 
-/// The bot panel's Computer tab, as Grok Bot shows it (2026-11-01): the
+/// The bot panel's Computer tab, as reference app shows it (2026-11-01): the
 /// computer asleep (generic muted bot glyph with zzz), waking up, or running
 /// (the live screen alone). Off when the bot works without a computer.
 public enum BotComputerPhase: String, Equatable, Sendable {

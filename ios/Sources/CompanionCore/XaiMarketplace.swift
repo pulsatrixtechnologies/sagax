@@ -87,7 +87,7 @@ public extension CompanionClient {
     }
 }
 
-/// A Grok Bot link (shared/grok-import.ts): a share link
+/// A x.ai bot link (shared/grok-import.ts): a share link
 /// (https://x.ai/bot/<id>) or a marketplace page
 /// (https://x.ai/bot/marketplace/bots/<slug>).
 public enum GrokLink {

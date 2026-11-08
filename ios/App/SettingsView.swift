@@ -1,6 +1,6 @@
 // Settings (iOS parity 12 and 14): the card sheet the account menu opens.
 //
-// The Grok Bot layout (2026-10-26): one short list of grouped cards drawn
+// The reference app layout (2026-10-26): one short list of grouped cards drawn
 // from SettingsTree: the profile with Usage, then Bots, Connect apps and
 // Published pages, this phone's Notifications, Appearance, Language and
 // Haptics, Privacy and security, Help, About and Sign Out. The detail sits
@@ -15,7 +15,7 @@ import MessageUI
 /// The sheet's pages.
 enum SettingsRoute: String, Hashable {
     case account, usage, plugins, rules, approvalGrants, actionJournal, timeZone, botComputer, pages, appearance, language, haptics, general, experimental, notifications, privacy, vault, securityKeys
-    // The Grok Bot layout's pages (SettingsTree)
+    // The reference app layout's pages (SettingsTree)
     case bots, privacySecurity, about
     // Settings > Bots > Reach me (#1187)
     case reachMe
@@ -143,7 +143,7 @@ private struct SettingsRootPage: View {
             contentTop: SettingsMetrics.headerClearance + 37,
             trailingFills: searching,
             trailing: {
-                // Grok Bot's sheet has the X alone (2026-11-01): search waits
+                // The reference app's sheet has the X alone (2026-11-01): search waits
                 // behind a round button at the other corner, then takes the row.
                 if searching {
                     SettingsSearchField(prompt: "Search", text: $query, identifier: "settings-search",

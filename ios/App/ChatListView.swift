@@ -1503,7 +1503,7 @@ extension ChatListView {
         }
     }
 
-    /// The Grok Bot home (2026-11-01): the photo at the leading corner and
+    /// The reference app home (2026-11-01): the photo at the leading corner and
     /// the + at the trailing one; search joins the + only when "Search at
     /// top" is on. The iPad keeps the avatar at its trailing corner and
     /// everything else at the bottom.
@@ -1545,7 +1545,7 @@ extension ChatListView {
         }
     }
 
-    /// The bottom bar, as in Grok Bot: the apps button, then the Search
+    /// The bottom bar, as in the reference app: the apps button, then the Search
     /// pill within thumb's reach. With the "Updates button" switch on, the
     /// large Updates pill takes the middle and search shrinks to its circle;
     /// "Search at top" moves search only. The iPad keeps search and + here.
@@ -1577,7 +1577,7 @@ extension ChatListView {
             }
             .padding(.leading, HomeMetrics.bottomInset)
             .padding(.trailing, HomeMetrics.bottomInset)
-            // Grok Bot sits the row 28 pt off the screen's bottom edge, a
+            // The reference app sits the row 28 pt off the screen's bottom edge, a
             // little into the home indicator's band
             .padding(.bottom, avatarAtTrailingCorner ? 8 : 1)
             .offset(y: avatarAtTrailingCorner ? 0 : 6)

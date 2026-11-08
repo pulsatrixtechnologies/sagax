@@ -104,14 +104,14 @@ describe("cron wording in French and English", () => {
   it.each(TABLE)("%s", (expression, en, fr) => {
     const schedule = { type: "cron" as const, expression, timeZone: "America/Toronto" };
     expect(cronScheduleLabel(schedule, "en")).toBe(`${en} Eastern time`);
-    expect(cronScheduleLabel(schedule, "fr")).toBe(`${fr} Eastern time`);
+    expect(cronScheduleLabel(schedule, "fr")).toBe(`${fr} heure de l’Est`);
   });
 
   it("follows the app language in the task and list labels", () => {
     const schedule = { type: "cron" as const, expression: "0,17,20,40 8-18 * * 1-5", timeZone: "America/Toronto" };
     try {
       setLocale("fr-CA");
-      expect(scheduleLabel(schedule)).toBe("Du lundi au vendredi, de 8 h à 18 h, à :00, :17, :20 et :40 Eastern time");
+      expect(scheduleLabel(schedule)).toBe("Du lundi au vendredi, de 8 h à 18 h, à :00, :17, :20 et :40 heure de l’Est");
       setLocale("en");
       expect(scheduleLabel(schedule)).toBe("Weekdays, 8 AM to 6 PM, at :00, :17, :20 and :40 Eastern time");
     } finally {

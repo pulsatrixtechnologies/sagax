@@ -2384,6 +2384,15 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(true);
   });
 
+  it("a clean exit after the streamed answer settles the turn without an error step (#2632)", async () => {
+    await create(GrokAgentDriver, "reply-then-exit-0");
+    await instance.adapter.sendTurn({ threadId: "t-exit0", text: "go" });
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: true, stopReason: "end_turn" });
+    expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
+    expect(JSON.stringify(recorder.events)).toContain("On continue sans créneau.");
+  });
+
   it("does not expire an agent while a person is answering an approval", async () => {
     process.env.SAGAX_ACP_PROMPT_IDLE_TIMEOUT_MS = "150";
     await create(GrokAgentDriver, "permission");

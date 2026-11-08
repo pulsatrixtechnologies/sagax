@@ -336,6 +336,14 @@ export function createOpenSession(deps: OpenSessionDeps) {
       const current = session.current;
       // Cancel-timeout owns settle (cancelled or stop_failed) after it awaits the kill.
       if (current?.state.cancelling) return;
+      // #2632: a clean exit (code 0) after the agent already streamed its
+      // answer is the end of that turn, not a crash: the reply stands and
+      // no error step is added. A clean exit with nothing shown still fails
+      // below (and endTurn refuses an empty success anyway).
+      if (current && code === 0 && (current.state.text.trim() || current.state.producedItem)) {
+        settle(threadId, session, true, "end_turn");
+        return;
+      }
       if (current) {
         emit({
           ...base(threadId, current.turnId),

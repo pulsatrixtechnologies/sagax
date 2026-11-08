@@ -52,6 +52,19 @@ describe("browser failure guard (QA 0.8.67 G4)", () => {
     expect(bareToolName("mcp__sagax-environment__browse")).toBe("browse");
   });
 
+  it("names the tools of a browser MCP server (claude-in-chrome, playwright), never a non-browser server's generic names", () => {
+    for (const title of [
+      "mcp__claude-in-chrome__navigate", "mcp__claude-in-chrome__computer", "mcp__claude-in-chrome__read_page",
+      "mcp__claude-in-chrome__tabs_create_mcp", "mcp__claude-in-chrome__get_page_text", "mcp__claude-in-chrome__find",
+      "mcp__playwright__browser_navigate", "mcp__playwright__navigate", "mcp__browser__agent_browser_tab_new", "puppeteer.navigate",
+    ]) {
+      expect(isWebPageTool(title), title).toBe(true);
+    }
+    for (const title of ["mcp__computer-use__computer", "mcp__files__find", "navigate", "mcp__agents__sagax_help", "mcp__browser-search__web_search"]) {
+      expect(isWebPageTool(title), title).toBe(false);
+    }
+  });
+
   it("replays the G4 turn: a note at the 2nd failure in a row, a stop with a clear message at the 4th, not 8 tries", async () => {
     const h = harness();
     h.call("browse", false);
@@ -85,22 +98,20 @@ describe("browser failure guard (QA 0.8.67 G4)", () => {
     expect(h.posts[0]).toContain("> Tailscale is a mesh VPN");
   });
 
-  it("a page call that works resets the run; failures apart still stop the turn at 6", async () => {
+  it("a page call that works resets the run; failures apart never stop the turn", async () => {
     const h = harness();
     for (let round = 0; round < 3; round += 1) {
       h.call("browse", false);
       h.call("browse", round === 2 ? false : true);
     }
-    // failures: 1, reset, 1, reset, 1, 2 => note once, total 4, no stop yet
+    // failures: 1, reset, 1, reset, 1, 2 => note once, no stop
     expect(h.steers).toHaveLength(1);
     expect(h.stops).toEqual([]);
-    h.call("browse", true);
-    h.call("fetch_url", false);
-    h.call("browse", true);
-    h.call("fetch_url", false);
+    // a research turn: 30 pages, 6 dead links spread out, keeps going
+    for (let n = 0; n < 30; n += 1) h.call(n % 2 ? "fetch_url" : "browse", n % 5 !== 0);
     await flush();
-    expect(h.stops).toHaveLength(1);
-    expect(h.stops[0]).toContain("6 fois");
+    expect(h.stops).toEqual([]);
+    expect(h.posts).toEqual([]);
   });
 
   it("starts over on each turn, and stays silent when off or idle", () => {
@@ -128,7 +139,7 @@ describe("browser failure guard (QA 0.8.67 G4)", () => {
 
   it("is wired on every direct conversation with the turn budget, and posts its message in the chat", async () => {
     const store = new Store((): ModelSelection => ({ instanceId: "grok", model: "grok-4.6" }));
-    const bot = store.createBot({ name: "Melonie" }, { seedMessages: false });
+    const bot = store.createBot({ name: "Osprey" }, { seedMessages: false });
     const threadId = bot.threadId;
     let listener: ((event: RuntimeEvent) => void) | undefined;
     const busy = new Set([threadId]);
@@ -161,8 +172,8 @@ describe("browser failure guard (QA 0.8.67 G4)", () => {
     expect(last?.text).toContain("I stopped this turn: the browser failed 4 times");
   });
 
-  it("tells every bot to answer general knowledge without a tool and to stop after two browser failures", () => {
-    expect(WORK_STYLE_PROMPT).toContain("General knowledge (compare products, explain a concept) is answered from what you know, no tool.");
-    expect(WORK_STYLE_PROMPT).toContain("Two failed browse or page calls in a row: stop browsing");
+  it("tells every bot once to answer general knowledge without a tool; the two-failures rule stays a runtime note", () => {
+    expect(WORK_STYLE_PROMPT).toContain("General knowledge needs no tool: answer from what you know.");
+    expect(WORK_STYLE_PROMPT).not.toContain("failed browse");
   });
 });

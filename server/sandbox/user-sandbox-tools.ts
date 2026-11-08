@@ -56,7 +56,7 @@ export const USER_SANDBOX_TOOLS = [
   },
   {
     name: "browse",
-    description: "Open a public web page in a headless browser in your server environment and return its rendered HTML, or a PNG screenshot. Not for general knowledge, which you answer without a tool; after two failed calls in a row, stop and answer with what you have.",
+    description: "Open a public web page in a headless browser in your server environment and return its rendered HTML, or a PNG screenshot.",
     inputSchema: {
       type: "object",
       properties: { url: { type: "string" }, screenshot: { type: "boolean" } },
@@ -429,7 +429,28 @@ export function browsableUrl(value: unknown): string {
   return url.href;
 }
 
-const CHROMIUM = ["chromium", "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--no-first-run", "--hide-scrollbars", "--user-data-dir=/tmp/sagax-chromium"];
+// QA 0.8.67 G4: every browse call shared one profile, /tmp/sagax-chromium.
+// Two calls at once (a bot reading two pages side by side), or a call killed
+// at its time limit, left Chromium's profile lock held, so every later call
+// failed at once and the sandbox browser looked crashed for the rest of the
+// turn. Each call now gets its own profile and screenshot folder, removed on
+// exit; folders a killed call left behind (and the old shared one) are swept
+// first. `--timeout` makes Chromium give up on a page that never finishes
+// loading and dump what it has, well before the exec limit kills it.
+const CHROMIUM_FLAGS = "--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --hide-scrollbars --no-default-browser-check";
+/** Page load ceiling inside Chromium, then the exec limit with room to spare. */
+export const BROWSE_PAGE_TIMEOUT_MS = 30_000;
+const BROWSE_EXEC_TIMEOUT_SEC = 60;
+const BROWSE_PROFILE_PREFIX = "/tmp/sagax-chromium";
+/** sh script: $1 is the URL, $2 is "dom" or "shot". The URL never enters the script text. */
+export const BROWSE_SCRIPT = [
+  `find /tmp -maxdepth 1 -name 'sagax-chromium*' -mmin +3 -exec rm -rf {} + 2>/dev/null`,
+  `d=$(mktemp -d ${BROWSE_PROFILE_PREFIX}.XXXXXX) || exit 70`,
+  `trap 'rm -rf "$d"' EXIT`,
+  `trap 'exit 124' INT TERM`,
+  `if [ "$2" = shot ]; then chromium ${CHROMIUM_FLAGS} --user-data-dir="$d" --disk-cache-dir="$d/cache" --timeout=${BROWSE_PAGE_TIMEOUT_MS} --window-size=1280,900 --screenshot="$d/shot.png" "$1" >/dev/null 2>&1; [ -s "$d/shot.png" ] || exit 1; base64 -w0 "$d/shot.png"; exit $?; fi`,
+  `chromium ${CHROMIUM_FLAGS} --user-data-dir="$d" --disk-cache-dir="$d/cache" --timeout=${BROWSE_PAGE_TIMEOUT_MS} --dump-dom "$1"`,
+].join("\n");
 
 const BUTTONS: Record<string, string> = { left: "1", middle: "2", right: "3" };
 const SCROLL_BUTTONS: Record<string, string> = { up: "4", down: "5", left: "6", right: "7" };
@@ -595,17 +616,13 @@ export async function callUserSandboxTool(name: string, args: Record<string, unk
       const refused = exec.textRefusal?.(url);
       if (refused) return text(refused, true);
       if (args.screenshot === true) {
-        const result = await exec.exec({
-          argv: ["sh", "-c", `${CHROMIUM.join(" ")} --window-size=1280,900 --screenshot=/tmp/sagax-shot.png "$SAGAX_URL" >/dev/null 2>&1; base64 -w0 /tmp/sagax-shot.png; rm -f /tmp/sagax-shot.png`],
-          env: { SAGAX_URL: url },
-          timeoutSec: 90,
-          maxOutputBytes: 1024 * 1024,
-        });
+        const result = await exec.exec({ argv: ["sh", "-c", BROWSE_SCRIPT, "sh", url, "shot"], timeoutSec: BROWSE_EXEC_TIMEOUT_SEC, maxOutputBytes: 1024 * 1024 });
         const data = result.stdout.trim();
         if (result.exitCode !== 0 || !data || result.truncated) return text("The page could not be captured.", true);
         return { content: [{ type: "image", data, mimeType: "image/png" }, { type: "text", text: `screenshot of ${url}` }] };
       }
-      const result = await exec.exec({ argv: [...CHROMIUM, "--dump-dom", url], timeoutSec: 90, maxOutputBytes: 512 * 1024 });
+      const result = await exec.exec({ argv: ["sh", "-c", BROWSE_SCRIPT, "sh", url, "dom"], timeoutSec: BROWSE_EXEC_TIMEOUT_SEC, maxOutputBytes: 512 * 1024 });
+      if (result.timedOut || result.exitCode === 124) return text(`The page did not answer within ${BROWSE_EXEC_TIMEOUT_SEC} s.`, true);
       if (result.exitCode !== 0) return text(`The page could not be opened.${result.stderr ? `\n${result.stderr.slice(0, 2000)}` : ""}`, true);
       return text(wrapUntrusted("page", `${result.stdout}${result.truncated ? "\n[page shortened]" : ""}`));
     }

@@ -81,7 +81,7 @@ export const DESKTOP_BRIDGE_TOOLS = [
   },
   {
     name: "browse",
-    description: `Open a web page in a browser on the person's computer (their network) and return its rendered HTML, or a PNG screenshot. It runs out of sight: no window opens on their screen. Use it, fetch_url or web search for a lookup, then show the result in the chat; a general-knowledge question needs no tool. After two failed calls in a row, stop and answer with what you have.`,
+    description: `Open a web page in a browser on the person's computer (their network) and return its rendered HTML, or a PNG screenshot. It runs out of sight: no window opens on their screen. Use it, fetch_url or web search for any lookup, then show the result in the chat.`,
     inputSchema: { type: "object", properties: { url: { type: "string" }, screenshot: { type: "boolean" } }, required: ["url"], additionalProperties: false },
   },
   {

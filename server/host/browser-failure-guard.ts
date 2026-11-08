@@ -6,8 +6,9 @@
 // of any kind in a row in one turn. At 2 it steers one note: stop the
 // browser, answer with what you have (from memory for general knowledge), or
 // make one web search at most. At the ceiling it stops the turn and posts a
-// clear message in the person's language. A web page call that works resets
-// the count; other tools leave it as is.
+// clear message in the person's language. Only failures in a row count: a
+// web page call that works resets the count (a research turn with a few dead
+// links among many good pages is never stopped); other tools leave it as is.
 //
 // SAGAX_BROWSER_GUARD=0 turns it off. SAGAX_BROWSER_GUARD_STOP_AT sets the
 // ceiling (at least 3; 0 never stops, the note still goes out).
@@ -18,8 +19,6 @@ import { reportBackgroundError } from "../background-error.ts";
 export const BROWSER_STEER_AT = 2;
 /** Failed web page calls in a row before the turn is stopped. */
 export const BROWSER_STOP_AT = 4;
-/** Failed web page calls in one turn, in a row or not, before the turn is stopped. */
-export const BROWSER_TURN_FAILURES_MAX = 6;
 
 export type BrowserGuardLanguage = "fr" | "en";
 
@@ -42,19 +41,28 @@ export function browserGuardSettings(env: NodeJS.ProcessEnv = process.env): Brow
 const WEB_PAGE_TOOLS = new Set([
   "browse", "fetch_url", "web_fetch", "webfetch", "fetch", "read_page", "web_extract", "open_url", "open_page",
 ]);
+/** Generic names (navigate, computer, find…) are page calls only under a browser server prefix. */
+const BROWSER_SERVER = /(^|[_-])(chrome|chromium|browser|playwright|puppeteer)([_-]|$)/;
 
 /** The tool a step names, without an MCP server prefix (`mcp__server__tool`, `server__tool`) or call arguments. */
 export function bareToolName(title: string | undefined): string {
-  const first = (title ?? "").trim().split(/[\s(:]/, 1)[0] ?? "";
-  const name = first.includes("__") ? first.slice(first.lastIndexOf("__") + 2) : first.includes(".") ? first.slice(first.lastIndexOf(".") + 1) : first;
-  return name.toLowerCase();
+  return splitToolName(title).name;
 }
 
-/** A call that opens, reads or drives a web page: browse, fetch_url, the browser's tab and page tools. */
+function splitToolName(title: string | undefined): { server: string; name: string } {
+  const first = (title ?? "").trim().split(/[\s(:]/, 1)[0] ?? "";
+  const cut = first.includes("__") ? first.lastIndexOf("__") : first.includes(".") ? first.lastIndexOf(".") : -1;
+  if (cut < 0) return { server: "", name: first.toLowerCase() };
+  const width = first.startsWith("__", cut) ? 2 : 1;
+  return { server: first.slice(0, cut).toLowerCase(), name: first.slice(cut + width).toLowerCase() };
+}
+
+/** A call that opens, reads or drives a web page: browse, fetch_url, the browser's tab and page tools, any tool of a browser MCP server (claude-in-chrome, playwright, puppeteer). */
 export function isWebPageTool(title: string | undefined): boolean {
-  const name = bareToolName(title);
+  const { server, name } = splitToolName(title);
   if (!name) return false;
-  return WEB_PAGE_TOOLS.has(name) || name.startsWith("tab_") || name.startsWith("agent_browser_") || name.startsWith("browser_");
+  if (WEB_PAGE_TOOLS.has(name) || name.startsWith("tab_") || name.startsWith("tabs_") || name.startsWith("agent_browser_") || name.startsWith("browser_")) return true;
+  return !name.includes("search") && BROWSER_SERVER.test(server.replace(/^mcp__/, ""));
 }
 
 /** Opened as `[Sagax: …]`, which model-written text cannot open. */
@@ -115,7 +123,6 @@ interface TurnState {
   /** Running web page calls, by item id, with their bare tool name. */
   items: Map<string, string>;
   inRow: number;
-  total: number;
   failedTools: string[];
   notes: string[];
   steered: boolean;
@@ -132,7 +139,7 @@ export function createBrowserFailureGuard(deps: BrowserGuardDeps): BrowserGuard 
 
   const fresh = (turnId?: string): TurnState => ({
     ...(turnId === undefined ? {} : { turnId }),
-    items: new Map(), inRow: 0, total: 0, failedTools: [], notes: [], steered: false, stopped: false,
+    items: new Map(), inRow: 0, failedTools: [], notes: [], steered: false, stopped: false,
   });
 
   const steer = (threadId: string, turn: TurnState) => {
@@ -203,13 +210,10 @@ export function createBrowserFailureGuard(deps: BrowserGuardDeps): BrowserGuard 
       return;
     }
     turn.inRow += 1;
-    turn.total += 1;
     if (!turn.failedTools.includes(tool) && turn.failedTools.length < TOOLS_NAMED) turn.failedTools.push(tool);
     const settings = deps.settings(threadId);
     if (!settings.enabled || !deps.live(threadId)) return;
-    const overRow = settings.stopAt !== undefined && turn.inRow >= settings.stopAt;
-    const overTurn = settings.stopAt !== undefined && turn.total >= Math.max(settings.stopAt, BROWSER_TURN_FAILURES_MAX);
-    if (overRow || overTurn) return stop(threadId, turn, overRow ? turn.inRow : turn.total);
+    if (settings.stopAt !== undefined && turn.inRow >= settings.stopAt) return stop(threadId, turn, turn.inRow);
     if (!turn.steered && turn.inRow >= BROWSER_STEER_AT) steer(threadId, turn);
   };
 

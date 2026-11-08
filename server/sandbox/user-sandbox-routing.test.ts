@@ -10,7 +10,7 @@ import type { UserSandboxManager } from "./user-sandbox-manager.ts";
 import { restorePrefixedEnvironment, userSandboxProxyRequest } from "../user-sandbox-proxy.ts";
 import { createUserSandboxRoutes } from "./user-sandbox-routes.ts";
 import { remoteComputerForTurn, resolveExecutionTarget, sandboxPrincipalForTurn, screenVisibleToPrincipal, USER_SANDBOX_MCP_NAME } from "./user-sandbox-routing.ts";
-import { browsableUrl, callUserSandboxTool, handleUserSandboxMcp, type ToolExec } from "./user-sandbox-tools.ts";
+import { browsableUrl, BROWSE_PAGE_TIMEOUT_MS, BROWSE_SCRIPT, callUserSandboxTool, handleUserSandboxMcp, type ToolExec } from "./user-sandbox-tools.ts";
 
 describe("resolveExecutionTarget", () => {
   it("keeps a solo server on its own host", () => {
@@ -173,8 +173,34 @@ describe("environment tools", () => {
     expect(() => browsableUrl("https://u:p@example.com")).toThrow();
     const { calls, exec } = recorder();
     await callUserSandboxTool("browse", { url: "https://example.com" }, exec);
-    expect(calls[0]!.argv[0]).toBe("chromium");
-    expect(calls[0]!.argv).toContain("--dump-dom");
+    expect(calls[0]!.argv.slice(0, 2)).toEqual(["sh", "-c"]);
+    expect(calls[0]!.argv.slice(3)).toEqual(["sh", "https://example.com/", "dom"]);
+    expect(calls[0]!.argv[2]).toContain("--dump-dom");
+  });
+
+  it("gives every browse call its own Chromium profile, swept on exit (QA 0.8.67 G4)", async () => {
+    // A shared /tmp/sagax-chromium profile stayed locked after two calls at
+    // once or a timed-out one, and every later browse failed.
+    expect(BROWSE_SCRIPT).not.toMatch(/--user-data-dir=\/tmp\/sagax-chromium(\s|$)/);
+    expect(BROWSE_SCRIPT).toContain("mktemp -d /tmp/sagax-chromium.XXXXXX");
+    expect(BROWSE_SCRIPT).toContain(`--user-data-dir="$d"`);
+    expect(BROWSE_SCRIPT).toContain(`trap 'rm -rf "$d"' EXIT`);
+    expect(BROWSE_SCRIPT).toContain(`--timeout=${BROWSE_PAGE_TIMEOUT_MS}`);
+    expect(BROWSE_SCRIPT).not.toContain("/tmp/sagax-shot.png");
+    const { calls, exec } = recorder();
+    await callUserSandboxTool("browse", { url: "https://example.com/a?b=$(id)", screenshot: true }, exec);
+    // the URL is an argument, never part of the script text
+    expect(calls[0]!.argv[2]).toBe(BROWSE_SCRIPT);
+    expect(calls[0]!.argv.slice(3)).toEqual(["sh", "https://example.com/a?b=$(id)", "shot"]);
+    expect(calls[0]!.env).toBeUndefined();
+    expect(calls[0]!.timeoutSec! * 1000).toBeGreaterThan(BROWSE_PAGE_TIMEOUT_MS);
+  });
+
+  it("names a page that never answered as a timeout", async () => {
+    const { exec } = recorder({ exitCode: 124, stdout: "", timedOut: true });
+    const result = await callUserSandboxTool("browse", { url: "https://example.com" }, exec);
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("did not answer");
   });
 });
 

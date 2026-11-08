@@ -105,7 +105,6 @@
   "settings.noMatch": "Нічого не відповідає «{query}»",
   "settings.section.general": "Загальні",
   "settings.section.appearance": "Вигляд",
-  "settings.section.experimental": "Експериментальні",
   "settings.section.usage": "Використання",
   "settings.section.people": "Люди",
   "settings.profile.title": "Профіль",

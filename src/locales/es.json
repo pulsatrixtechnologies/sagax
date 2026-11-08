@@ -15,7 +15,6 @@
   "settings.close": "Cerrar los ajustes",
   "settings.noMatch": "Nada coincide con «{query}»",
   "settings.section.general": "General",
-  "settings.section.experimental": "Experimental",
   "settings.section.usage": "Uso",
   "settings.profile.title": "Perfil",
   "settings.profile.subtitle": "Se muestra en la barra lateral. Se guarda mientras escribes.",

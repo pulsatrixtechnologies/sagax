@@ -15,7 +15,7 @@ export function browserAvailable(config: FeatureFlagConfig | null | undefined): 
 export function browserUnavailableReason(config: FeatureFlagConfig | null | undefined): string {
   const engine = config?.browserEngine;
   if (engine?.kind === "unavailable" && engine.installable) {
-    return t("browser.notInstalled", { settings: t("settings.section.experimental") });
+    return t("browser.notInstalled", { settings: t("settings.section.developer") });
   }
   if (engine?.kind === "unavailable" && engine.reason) return engine.reason;
   return t("browser.noEngine");
@@ -121,10 +121,10 @@ export function decisionModelEnabled(config: FeatureFlagConfig | null | undefine
 
 /** The Data window: the chat header's Data button opens a bot's Data
  * results in a window of their own. Experimental: off until switched on in
- * Settings > Experimental features; mirrors the server's dataWindowEnabled.
+ * Settings > Developer > Experimental features; mirrors the server's dataWindowEnabled.
  * While off there is no Data button and the window refuses to open. */
 /** The meeting notetaker (a bot joins a Google Meet and takes notes).
- * Experimental, off until switched on in Settings > Experimental features;
+ * Experimental, off until switched on in Settings > Developer > Experimental features;
  * mirrors the server's meetingNotetakerEnabled, which enforces it. */
 export function meetingNotetakerEnabled(config: FeatureFlagConfig | null | undefined): boolean {
   return config?.features?.meetingNotetaker === true;

@@ -79,7 +79,7 @@ export interface CatalogProfile {
   voiceNotes: boolean;
   /** #2121: meme replies allowed for this bot (absent/true = auto). */
   memeReplies?: boolean;
-  /** Settings > Experimental > Meeting notetaker is on, in a direct
+  /** Settings > Developer > Experimental > Meeting notetaker is on, in a direct
    * conversation: join_meeting is offered. */
   meetings?: boolean;
   /** A person's turn in a single-stream segment (thread mode off,

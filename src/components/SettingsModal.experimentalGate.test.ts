@@ -1,4 +1,4 @@
-// Settings > Experimental is gated on server.experimental (2026-10-22, the owner):
+// Settings > Developer > Experimental is gated on server.experimental (2026-10-22, the owner):
 // an organization member who lacks the right never sees the section; one an
 // admin gave it (or server.settings, which implies it) does. The switches
 // write features only; the deeper browser-profile controls stay with a
@@ -19,7 +19,7 @@ type Viewer = {
 };
 
 const fixture = vi.hoisted(() => ({
-  section: "experimental" as AppSettingsSection,
+  section: "developer" as AppSettingsSection,
   org: null as null | { org: { name: string; identity: { kind: "perspicax"; issuer: string } } },
   features: { dataWindow: false, meetingNotetaker: false } as Record<string, boolean>,
   viewer: undefined as Viewer | undefined,
@@ -51,7 +51,7 @@ vi.mock("./settings/MyChromeSettings", () => ({ MyChromeSettings: () => "MY_CHRO
 const ORG = { org: { name: "Example", identity: { kind: "perspicax" as const, issuer: "https://px.example.test" } } };
 
 beforeEach(() => {
-  fixture.section = "experimental";
+  fixture.section = "developer";
   fixture.org = ORG;
   fixture.features = { dataWindow: false, meetingNotetaker: false, browser: true };
   fixture.viewer = undefined;
@@ -66,16 +66,16 @@ afterEach(() => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
-  const { ExperimentalSettings } = await import("./lazy-settings-sections");
-  await ExperimentalSettings.preload();
+  const { DeveloperSettings } = await import("./lazy-settings-sections");
+  await DeveloperSettings.preload();
   return renderToStaticMarkup(createElement(SettingsModal));
 };
 
-describe("Settings > Experimental gated on server.experimental", () => {
+describe("Settings > Developer > Experimental gated on server.experimental", () => {
   it("hides the section from a member who lacks the right", async () => {
     fixture.viewer = { role: "member", operator: false, permissions: [] };
     const html = await render();
-    expect(html).not.toContain(">Experimental<");
+    expect(html).not.toContain("Experimental features");
     expect(html).not.toContain('data-settings-card="experimental.features"');
     expect(html).not.toContain('<option value="experimental"');
   });
@@ -85,14 +85,14 @@ describe("Settings > Experimental gated on server.experimental", () => {
     // even with editConfig, does not reveal Experimental.
     fixture.viewer = { role: "member", operator: false, permissions: ["server.settings"], capabilities: { editConfig: true, manageKeys: true, manageComputers: true, viewUsage: true, manageBackups: true, pairDevices: true } };
     const html = await render();
-    expect(html).not.toContain(">Experimental<");
+    expect(html).not.toContain("Experimental features");
     expect(html).not.toContain('data-settings-card="experimental.features"');
   });
 
   it("shows the section to a member an admin gave the right", async () => {
     fixture.viewer = { role: "member", operator: false, permissions: ["server.experimental"] };
     const html = await render();
-    expect(html).toContain(">Experimental<");
+    expect(html).toContain("Experimental features");
     expect(html).toContain('data-settings-card="experimental.features"');
     // the feature switches are there
     expect(html).toContain('data-experimental-feature="dataWindow"');
@@ -117,7 +117,7 @@ describe("Settings > Experimental gated on server.experimental", () => {
   it("keeps the section for an admin", async () => {
     fixture.viewer = { role: "admin", operator: false };
     const html = await render();
-    expect(html).toContain(">Experimental<");
+    expect(html).toContain("Experimental features");
     expect(html).toContain('data-settings-card="experimental.features"');
   });
 });

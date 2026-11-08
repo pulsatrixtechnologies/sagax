@@ -22,7 +22,6 @@ import {
   CredentialsSettings,
   DecisionModelSettings,
   EnginesSettings,
-  ExperimentalSettings,
   LocalComputerSection,
   NotificationSettings,
   OrganizationSettings,
@@ -462,7 +461,6 @@ export function SettingsModal() {
               </>
             )}
 
-            {section === "experimental" && <ExperimentalSettings />}
 
             {/* Developer (#2636, JC 2026-11-07): every technical option, for every member. */}
             {section === "developer" && <DeveloperSettings remoteActive={remoteActive} openAbout={openAbout} />}

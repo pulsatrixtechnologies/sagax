@@ -90,7 +90,7 @@ export function createConfigHttpRoutes(deps: ConfigHttpDeps): RouteHandler {
       }
       // 2026-10-22 the config write now opens to server.experimental
       // (request-auth.ts). A delegate who holds only that key, not
-      // server.settings, may flip the experiments of Settings > Experimental
+      // server.settings, may flip the experiments of Settings > Developer > Experimental
       // and nothing else: refuse any other field here (defense in depth; the
       // client hides those controls from them too).
       if (!deps.callerCan(auth, "server.settings")) {

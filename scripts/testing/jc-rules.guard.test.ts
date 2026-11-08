@@ -512,6 +512,7 @@ const ADMIN_GATES_BY_DECISION: ReadonlyArray<{ file: string; why: string }> = [
   { file: "src/components/SettingsModal.tsx", why: "memberHidesSection: hides the organization-only sections (edit config, computers, backups) of the Settings nav" },
   { file: "src/components/settings/settings-nav.ts", why: "memberHidesSection: its definition" },
   { file: "src/components/settings/useSettingsModal.ts", why: "memberHidesSection: its one call" },
+  { file: "src/components/settings/DeveloperSettings.tsx", why: "memberHidesSection: the Experimental section keeps the server.experimental right the Experimental page had (JC 2026-11-08)" },
 ];
 
 describe("no admin gate on what stays in the person's own space (decided 2026-10-26)", () => {

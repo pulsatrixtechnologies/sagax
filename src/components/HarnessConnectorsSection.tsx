@@ -1,6 +1,6 @@
 // Connected apps > "Provided by Claude (your account)": the claude.ai
 // connectors of the caller's own Claude account (server/harness-connectors.ts).
-// While Connected apps is switched off (Settings > Experimental), the same
+// While Connected apps is switched off (Settings > Developer > Experimental), the same
 // read-only status shows in Settings > Model providers instead.
 // Read-only here: people add, sign in to and remove them on claude.ai.
 import { useCallback, useEffect, useRef, useState } from "react";

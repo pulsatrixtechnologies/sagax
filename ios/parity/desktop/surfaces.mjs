@@ -375,8 +375,8 @@ add({ id: "team-map", phase: "main", note: "Team map page", settleMs: 600,
   open: async (ctx) => { await ctx.dispatch({ type: "showTeamMap" }); await ctx.sleep(1200); } });
 add({ id: "templates", phase: "main", note: "Templates (team library) panel",
   open: async (ctx) => {
-    // an experimental place since the sidebar redesign (Settings > Experimental features)
-    if (!(await ctx.exists('[data-sidebar-place="templates"]'))) return { skip: "Templates is experimental and off in the default fixture (Settings > Experimental features)" };
+    // an experimental place since the sidebar redesign (Settings > Developer > Experimental features)
+    if (!(await ctx.exists('[data-sidebar-place="templates"]'))) return { skip: "Templates is experimental and off in the default fixture (Settings > Developer > Experimental features)" };
     await ctx.click('[data-sidebar-place="templates"]'); await ctx.sleep(800);
   } });
 

@@ -43,7 +43,7 @@ describe("POST /api/internal/meetings/join", () => {
 
   it("refuses a stray call while the notetaker is off, before anything else", async () => {
     const { sent, calls } = await call({ enabled: false, owns: false });
-    expect(sent).toEqual([{ status: 403, body: { code: "meetings_disabled", error: "The meeting notetaker is off. Turn it on in Settings > Experimental." } }]);
+    expect(sent).toEqual([{ status: 403, body: { code: "meetings_disabled", error: "The meeting notetaker is off. Turn it on in Settings > Developer > Experimental." } }]);
     expect(calls).toEqual([]);
   });
 

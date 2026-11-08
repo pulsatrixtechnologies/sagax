@@ -47,7 +47,7 @@ describe("Settings Simple and Advanced", () => {
     expect(dev).toContain('aria-label="Advanced mode"');
     expect(dev).toContain('aria-checked="true"');
     fixture.section = "general";
-    for (const id of ["engines", "usage", "computer", "experimental"]) {
+    for (const id of ["engines", "usage", "computer", "developer"]) {
       expect(html, id).toContain(`<option value="${id}"`);
     }
   });
@@ -63,7 +63,7 @@ describe("Settings Simple and Advanced", () => {
     expect(html).not.toContain("data-settings-scope");
     expect(html).toContain('<option value="account"');
     expect(html).toContain('<option value="appearance"');
-    for (const id of ["connections", "connectedApps", "experimental"]) {
+    for (const id of ["connections", "connectedApps"]) {
       expect(html, id).not.toContain(`<option value="${id}"`);
     }
     for (const id of ["engines", "computer", "providers", "voice"]) {
@@ -85,7 +85,7 @@ describe("Settings Simple and Advanced", () => {
     expect(dev).toContain('aria-label="Advanced mode"');
     expect(dev).toContain('aria-checked="true"');
     fixture.section = "general";
-    for (const id of ["engines", "usage", "computer", "experimental"]) {
+    for (const id of ["engines", "usage", "computer", "developer"]) {
       expect(html, id).toContain(`<option value="${id}"`);
     }
     // Integrations is no longer an entry: it is part of Models and voice.

@@ -50,7 +50,7 @@ const CONDITIONS: Array<{ when: string; profile: Partial<CatalogProfile> }> = [
   { when: "when a Perspicax profile is mounted for the person speaking", profile: { claims: true } },
   { when: "when the bot has a voice configured", profile: { voiceNotes: true } },
   { when: "during a live phone call", profile: { voiceCall: true } },
-  { when: "when Settings > Experimental > Meeting notetaker is on", profile: { meetings: true } },
+  { when: "when Settings > Developer > Experimental > Meeting notetaker is on", profile: { meetings: true } },
   { when: "when computer sharing is on", profile: { sharedComputers: true } },
   { when: "when skill authoring is on", profile: { skillAuthoring: true } },
   { when: "with the agent-to-agent API (direct turns)", profile: { agentApi: true } },

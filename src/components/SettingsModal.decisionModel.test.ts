@@ -30,6 +30,8 @@ vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvance
 vi.mock("@/lib/analytics", () => ({
   analyticsEnabled: () => false,
   setAnalyticsEnabled: () => {},
+  usageMeterEnabled: () => false,
+  setUsageMeterEnabled: () => Promise.resolve(false),
 }));
 
 beforeEach(() => {
@@ -46,11 +48,11 @@ beforeEach(() => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
-  const { DecisionModelSettings, EnginesSettings, ExperimentalSettings } = await import("./lazy-settings-sections");
+  const { DecisionModelSettings, DeveloperSettings, EnginesSettings } = await import("./lazy-settings-sections");
   await Promise.all([
     DecisionModelSettings.preload(),
     EnginesSettings.preload(),
-    ExperimentalSettings.preload(),
+    DeveloperSettings.preload(),
   ]);
   return renderToStaticMarkup(createElement(SettingsModal));
 };
@@ -72,7 +74,7 @@ describe("Settings → Decision model", () => {
   });
 
   it("leaves Experimental without Decision model or browser (on Models / Computer); VPS and Boat stay gone", async () => {
-    fixture.section = "experimental";
+    fixture.section = "developer";
     const html = await render();
     expect(html).not.toContain('data-experimental-feature="decisionModel"');
     expect(html).not.toContain(">Decision model<");

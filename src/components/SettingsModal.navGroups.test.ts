@@ -55,7 +55,7 @@ describe("Settings nav groups", () => {
       "account", "appearance", "notifications", "security", "credentials",
       "providers", "engines", "voice", "usage",
       "organization", "computer", "permissions", "backups",
-      "general", "updates", "experimental", "developer", "about",
+      "general", "updates", "developer", "about",
     ]);
   });
 
@@ -71,8 +71,8 @@ describe("Settings nav groups", () => {
     for (const page of ["Account", "Security", "Vault", "Appearance", "Notifications"]) expect(you, page).toContain(`>${page}</button>`);
     expect(rail).not.toContain("data-settings-automations");
     const app = rail.slice(rail.indexOf('data-settings-nav-group="app"'));
-    // JC 2026-11-07: the Apple order, General, Updates (desktop), Experimental, About last
-    const order = [">General</button>", ">Updates</button>", ">Experimental</button>", ">About</button>"].map((label) => app.indexOf(label));
+    // JC 2026-11-07: the Apple order, General, Updates (desktop), Developer, About last
+    const order = [">General</button>", ">Updates</button>", ">Developer</button>", ">About</button>"].map((label) => app.indexOf(label));
     expect(order.every((value) => value >= 0)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
     expect(app).not.toContain(">App</button>");
@@ -156,7 +156,7 @@ describe("Settings nav groups", () => {
     const html = render();
     expect(html).toContain('<optgroup label="Personal"><option value="account" selected="">Account</option>');
     expect(html).toContain('<optgroup label="App"><option value="general">General</option><option value="updates">Updates</option>');
-    expect(html).toContain('<option value="experimental">Experimental</option><option value="developer">Developer</option><option value="about">About</option>');
+    expect(html).toContain('<option value="updates">Updates</option><option value="developer">Developer</option><option value="about">About</option>');
     expect(html).not.toContain(">App</option>");
   });
 

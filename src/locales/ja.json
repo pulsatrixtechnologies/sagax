@@ -15,7 +15,6 @@
   "settings.close": "設定を閉じる",
   "settings.noMatch": "「{query}」に一致するものはありません",
   "settings.section.general": "一般",
-  "settings.section.experimental": "実験的機能",
   "settings.section.usage": "使用状況",
   "settings.profile.title": "プロフィール",
   "settings.profile.subtitle": "サイドバーに表示されます。入力するそばから保存されます。",

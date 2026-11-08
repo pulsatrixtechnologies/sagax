@@ -70,7 +70,7 @@ export function canViewUsage(config: ConfigStatus | null | undefined): boolean {
   return viewerCapability(config, "viewUsage");
 }
 
-/** Settings > Experimental: who sees the section and may flip its early
+/** Settings > Developer > Experimental: who sees the section and may flip its early
  * features. The dedicated right (server.experimental), implied by
  * server.settings, so anyone who may edit the installation keeps it. An
  * older server sends no permission list: it falls back to editConfig, the

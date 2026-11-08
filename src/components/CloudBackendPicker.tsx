@@ -24,7 +24,7 @@ export function CloudBackendPicker({
   /** An organization server: a bot works in its owner's server environment,
    * so the per-bot VPS computer is not offered. */
   organization?: boolean;
-  /** Boat Computer and VPS Computer (Settings > Experimental features):
+  /** Boat Computer and VPS Computer (Settings > Developer > Experimental features):
    * a backend switched off is not offered. */
   boat?: boolean;
   vps?: boolean;

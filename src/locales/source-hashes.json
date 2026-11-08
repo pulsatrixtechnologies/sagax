@@ -18120,7 +18120,14 @@
       "planHistory.rowTitle": "493299bfe540bc2049f4af10baeb6e269ffc9e62bc61d72ba30768b1ab0163d3",
       "planHistory.sessionTitle": "e465fe4b17e188f2914c686c7d73d85d7e71ccc294ecaf5fcd6002aad63e76e5",
       "planHistory.empty": "39c6c8a9de5ca6ec2c44ebb47c26a51e9b7f7873edb1f7dab9e59072f1a8fe15",
-      "planHistory.failed": "c5f9bcf695300665aa751ac788313b67ad9c382a0934fbdd5351dceb41455515"
+      "planHistory.failed": "c5f9bcf695300665aa751ac788313b67ad9c382a0934fbdd5351dceb41455515",
+      "pages.kind.design": "0072e6b934945d5ba08f9729e00847391922f2f6026a435e704634fb93bf4502",
+      "pages.designSystem": "4a866105af1512b34b92e2a5d6aa8ad5ec376029bf0fc4a1b95540c74450091b",
+      "pages.designSystem.intro": "8d89db616f49464c2377cfeb1c4c973badec335a8a0c04f5a50feb51c3eabf36",
+      "pages.designSystem.own": "54b26f7d3d0ddc663e4c70e3b258a424af7930131b8c43384b0e9086f2a8b32a",
+      "pages.designSystem.remove": "7bcbab6f4c593d65d2660c838acac84a545af6cfcb288f1ffb16cdff715765f3",
+      "pages.export": "ec24e6845724f062994d7b53ff4f5b911842f4ab6212e05f3ebe9b4d43d2445c",
+      "pages.editor.designHint": "8f3052cc11a3d91b26a49ac6067623c8067454d59764c9df3acc830e293ed7f4"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

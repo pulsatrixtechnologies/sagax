@@ -235,6 +235,14 @@ export const GUIDES: Guide[] = [
     refs: ["tool:propose_page"],
   },
   {
+    id: "designs",
+    title: "Make a design: screens, a mockup or a prototype",
+    where: "bot tool propose_page with kind design; the page's « ⋯ » menu > Design system and Export (HTML)",
+    keywords: "design maquette mockup prototype ecran screen onboarding wireframe ui ux app mobile design system tokens couleurs typo charte claude design open-design exporter export",
+    text: "Design versus artifact versus page: a design is screens to look at (an app flow, a landing page mockup, a dashboard prototype); a page is a document or a site to read and share; an artifact is a reusable file or widget kept in the Library. For a design, call propose_page with kind design and one HTML document: one <section data-screen=\"Name\" data-device=\"phone|tablet|desktop\"> per screen, styled only with the design-system tokens (var(--bg), var(--surface), var(--fg), var(--muted), var(--border), var(--accent), var(--accent-on), var(--font-display), var(--font-body), var(--text-sm..3xl), var(--space-1..12), var(--radius-sm|md|lg|pill)). Sagax draws each screen as an artboard on a canvas, in the same page surface, with versions, comments, annotations and Share. Design systems: design_system names one (sagax, the person's own Sagax look, by default; minimal, editorial, clean, modern; or one of theirs); \"use our design system\" from their code means read their CSS variables or theme file and pass them as design_tokens (a :root block), which saves it as theirs and applies it. An iteration (\"make the CTA bigger\") is a new propose_page with page_id, the whole design again, in the same conversation, never a new thread. The person can switch the design system or export a self-contained HTML file (prints one screen per sheet as PDF) from the page's « ⋯ » menu.",
+    refs: ["tool:propose_page"],
+  },
+  {
     id: "mobile",
     title: "Use Sagax on an iPhone or iPad",
     keywords: "iphone ipad ios telephone phone mobile cellulaire application app store testflight appairer pair",

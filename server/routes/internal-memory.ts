@@ -73,7 +73,7 @@ export interface InternalMemoryDeps {
     threadId: string;
     body: unknown;
     authored: (messageId: string) => void;
-    proposePage: (proposal: { pageId?: string; title: string; kind: string; content: string }) =>
+    proposePage: (proposal: { pageId?: string; title: string; kind: string; content: string; designSystem?: string; designTokens?: unknown }) =>
       { ok: true; pageId: string; version: number } | { ok: false; status: 400 | 404 | 409; error: string };
   }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number; answered?: { choice: string; question: string }; waitsForPerson?: true } | { ok: false; status: number; error: string };
   authored(threadId: string, generation: string, messageId: string): void;
@@ -85,6 +85,8 @@ export interface InternalMemoryDeps {
     botId: string;
     threadId: string;
     ownerId?: string;
+    designSystem?: string;
+    designTokens?: unknown;
   }): { ok: true; page: { id: string }; version: { n: number } } | { ok: false; status: 400 | 404 | 409; error: string };
   getPage(id: string): InternalMemoryPage | null | undefined;
   replyPage(pageId: string, threadId: string, input: { by: string; text: string }): { ok: true } | { ok: false; status: number; error: string };

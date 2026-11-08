@@ -18,7 +18,7 @@ import { READER_ACTIONS_ID, READER_BOOT_ID, READER_MASCOT_ID, readerByline, type
 import { readerBarThemeCss, type PageLook } from "../../src/lib/page-look.ts";
 import { STATE_ASK_MESSAGE, STATE_MESSAGE, STATE_RESULT_MESSAGE, STATE_SET_MESSAGE } from "../../shared/page-state.ts";
 import { ANNOTATE_FOCUS_MESSAGE, ANNOTATE_FOUND_MESSAGE, ANNOTATE_MARKS_MESSAGE, ANNOTATE_MODE_MESSAGE, ANNOTATE_SELECT_MESSAGE, THREAD_LIMITS } from "../../shared/page-threads.ts";
-import { PAGE_ANNOTATION_MESSAGE, PAGE_BANNER_NAME_MAX, PAGE_HEIGHT_MAX, PAGE_LIMITS, PAGE_OPEN_MESSAGE, PAGE_SCROLL_MAX, PAGE_SCROLL_MESSAGE, PAGE_SIZE_ASK, PAGE_SIZE_MESSAGE, pageCsp, pageFrameSandbox, type PageKind, type PageTheme, type ReaderComment } from "../../shared/published-pages.ts";
+import { PAGE_ANNOTATION_MESSAGE, PAGE_BANNER_NAME_MAX, PAGE_HEIGHT_MAX, PAGE_LIMITS, PAGE_OPEN_MESSAGE, PAGE_SCROLL_MAX, PAGE_SCROLL_MESSAGE, PAGE_SIZE_ASK, PAGE_SIZE_MESSAGE, pageCsp, pageFrameSandbox, pageIsHtml, type PageKind, type PageTheme, type ReaderComment } from "../../shared/published-pages.ts";
 
 /** Server side, before every HTML version is served: no element that can
  * reach the network outside CSP. `<link>` (hints such as prerender, which
@@ -438,7 +438,7 @@ export function pageDocument(input: { kind: PageKind; title: string; content: st
   // annotation and place-keeping on the app's preview only. Markdown and
   // presentation run them by nonce; HTML runs them inline after the prelude.
   const nonce = options.annotateNonce ?? options.nonce;
-  const own = (source: string) => input.kind === "html" ? `<script>${source}</script>`
+  const own = (source: string) => pageIsHtml(input.kind) ? `<script>${source}</script>`
     : nonce !== undefined ? `<script nonce="${escapeHtml(nonce)}">${source}</script>` : "";
   const openBridge = own(OPEN_BRIDGE_SOURCE);
   const annotate = options.annotateNonce === undefined ? "" : own(ANNOTATE_SOURCE);

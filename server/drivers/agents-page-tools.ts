@@ -7,15 +7,17 @@ export const PAGE_TOOL_DEFINITIONS = [
   {
     name: "propose_page",
     description:
-      "Propose a web page to share outside Sagax through a link: a report, a one-page site or a small self-contained app the person reviews, then publishes with who can see it (only them, their organization, anyone with the link). For a live widget they keep for themselves inside Sagax, use save_artifact instead. kind html is one complete document with inline CSS and JS; kind markdown is text; kind presentation is Markdown slides split by --- lines. It already has Sagax's theme (the person's skin, Geist, the widget kit): use it, no hard-coded colors or fonts; your own CSS still wins. The page runs sandboxed with no network: inline everything (data: URIs). It never publishes itself. To revise a page, call with its page_id. Shared votes in html: window.sagax.page (ready, get, set(key, v) (null clears), subscribe, entry, me(), canWrite(key)); writers per key: <script type=application/sagax-state+json>{\"vote:*\":\"anyone\"}</script>: anyone (public link), signed_in (default), editors, owner. Not available in rooms.",
+      "Propose a web page to share outside Sagax through a link: a report, a one-page site or a small self-contained app the person reviews, then publishes with who can see it (only them, their organization, anyone with the link). For a live widget they keep for themselves inside Sagax, use save_artifact instead. kind html is one complete document with inline CSS and JS; kind markdown is text; kind presentation is Markdown slides split by --- lines; kind design is a visual design (mockups, app or site screens, a prototype): one HTML document whose <section data-screen=\"Name\" data-device=\"phone|tablet|desktop\"> blocks are drawn as screens on a canvas, styled with the design system tokens var(--bg) var(--surface) var(--fg) var(--muted) var(--border) var(--accent) var(--accent-on) var(--font-display) var(--font-body) var(--text-*) var(--space-*) var(--radius-*). It already has Sagax's theme (the person's skin, Geist, the widget kit): use it, no hard-coded colors or fonts; your own CSS still wins. The page runs sandboxed with no network: inline everything (data: URIs). It never publishes itself. To revise a page, call with its page_id. Shared votes in html: window.sagax.page (ready, get, set(key, v) (null clears), subscribe, entry, me(), canWrite(key)); writers per key: <script type=application/sagax-state+json>{\"vote:*\":\"anyone\"}</script>: anyone (public link), signed_in (default), editors, owner. Not available in rooms.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
         title: { type: "string", maxLength: 120 },
-        kind: { type: "string", enum: ["html", "markdown", "presentation"] },
+        kind: { type: "string", enum: ["html", "markdown", "presentation", "design"] },
         content: { type: "string", description: "The whole page, at most 512 KB." },
         page_id: { type: "string", description: "A page this conversation already has, for a new version." },
+        design_system: { type: "string", maxLength: 60, description: "kind design: sagax (default, the person's look), minimal, editorial, clean, modern, or a name saved from their code. With design_tokens, the name to save them under." },
+        design_tokens: { type: "string", description: "kind design: the person's own design system from their code, as CSS custom properties (a :root block), mapped to the token names above. Saved for the person and applied." },
       },
       required: ["title", "kind", "content"],
     },

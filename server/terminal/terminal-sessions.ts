@@ -26,12 +26,30 @@ interface LiveSession {
   attachment?: TerminalAttachment;
   status: TerminalSessionPublic["status"];
   endedReason?: TerminalSessionPublic["endedReason"];
+  /** The raw end of the output, for the ended card (record). */
+  tail: string;
 }
+
+/** What an ended session hands to whoever keeps its chat card. */
+export interface TerminalSessionEnded extends TerminalSessionPublic {
+  principalId: string;
+  botId: string;
+  threadId: string;
+  endedAt: number;
+  /** Raw output tail (escape sequences included). */
+  output: string;
+}
+
+/** Raw output kept per session: a few screens past the plain-text cap, since
+ * escape sequences go away when it becomes text. */
+const RAW_TAIL_MAX = 96_000;
 
 export interface TerminalSessionManagerDeps {
   registry: TerminalResourceRegistry;
   now: () => number;
   audit: { write: (event: TerminalAuditEvent) => void };
+  /** A session ended (exit, close, idle): its chat card folds and keeps the output. */
+  onEnded?: (ended: TerminalSessionEnded) => void;
 }
 
 export function createTerminalSessionManager(deps: TerminalSessionManagerDeps) {
@@ -67,6 +85,17 @@ export function createTerminalSessionManager(deps: TerminalSessionManagerDeps) {
       at: deps.now(), kind: "session.ended", principalId: session.principalId, sessionId: session.id, reason: reason ?? "closed",
       resourceId: `${session.provider}:${session.resourceId}`, provider: session.provider, botId: session.botId, threadId: session.threadId,
     });
+    try {
+      deps.onEnded?.({
+        ...publicView(session),
+        principalId: session.principalId,
+        botId: session.botId,
+        threadId: session.threadId,
+        endedAt: deps.now(),
+        output: session.tail,
+      });
+    } catch { /* the card keeps its last state */ }
+    session.tail = "";
   }
 
   function sweepIdle() {
@@ -128,6 +157,7 @@ export function createTerminalSessionManager(deps: TerminalSessionManagerDeps) {
         lastActivityAt: deps.now(),
         botInputAllowed: false,
         status: "connecting",
+        tail: "",
       };
       sessions.set(id, session);
       let set = byPerson.get(input.principalId);
@@ -190,6 +220,13 @@ export function createTerminalSessionManager(deps: TerminalSessionManagerDeps) {
       if (session.status !== "live" || !session.attachment) return null;
       touch(session);
       return session.attachment;
+    },
+    /** Output the widget was sent, kept (the end only) for the ended card. */
+    record(sessionId: string, chunk: Buffer | string) {
+      const session = sessions.get(sessionId);
+      if (!session || session.status !== "live") return;
+      const next = session.tail + (typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+      session.tail = next.length > RAW_TAIL_MAX ? next.slice(next.length - RAW_TAIL_MAX) : next;
     },
     noteActivity(sessionId: string, principalId: string) {
       const session = sessions.get(sessionId);

@@ -50,6 +50,29 @@ export function createBotsCoreCardsRoutes(deps: BotsCoreRouteDeps): RouteHandler
       return json(res, 200, { message: patched });
     }
 
+    // a terminal card folds to one row and opens again; the choice stays on
+    // the message, so a reload shows the card the way it was left
+    m = path.match(/^\/api\/bots\/([\w-]+)\/terminal-embeds\/([\w-]+)$/);
+    if (m && method === "PATCH") {
+      const body = await readBody(req);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return json(res, 400, { error: "body must be a JSON object" });
+      }
+      if (Object.keys(body).some((key) => key !== "collapsed" && key !== "threadId")) {
+        return json(res, 400, { error: "only collapsed may be changed" });
+      }
+      if (typeof body.collapsed !== "boolean") return json(res, 400, { error: "collapsed must be true or false" });
+      const bot = requestedTaskBot(m[1], body.threadId);
+      const notYours = cloudThreadRefusal(auth, bot.threadId);
+      if (notYours) return json(res, 403, { error: notYours });
+      const existing = store.messagesFor(bot.threadId).find((msg) => msg.id === m![2]);
+      if (!existing?.terminalEmbed) return json(res, 404, { error: "no such terminal" });
+      const patched = store.patchMessage(bot.threadId, m[2], {
+        terminalEmbed: { ...existing.terminalEmbed, collapsed: body.collapsed },
+      });
+      return json(res, 200, { message: patched });
+    }
+
     m = path.match(/^\/api\/bots\/([\w-]+)\/active-branch$/);
     if (m && method === "POST") {
       const body = await readBody(req);

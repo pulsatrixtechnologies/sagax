@@ -8,7 +8,9 @@ import { testTerminalAdapter } from "../terminal-resources/adapters/test.ts";
 import { createSshAliasAdapter, type SshAliasTerminalHost } from "../terminal-resources/adapters/ssh-alias.ts";
 import { createPersonalTerminalAdapter, type PersonalTerminalDeps } from "../terminal-resources/adapters/personal.ts";
 import type { TerminalAccess } from "../terminal-resources/types.ts";
-import { createTerminalSessionManager } from "./terminal-sessions.ts";
+import { createTerminalSessionManager, type TerminalSessionEnded } from "./terminal-sessions.ts";
+import { redactSecretsInText } from "../redact.ts";
+import { terminalTranscriptText } from "../../shared/terminal-resources.ts";
 import { createTerminalRequestService, type TerminalWorkPlace } from "./terminal-requests.ts";
 import { createTerminalRoutes } from "../routes/terminal.ts";
 import { createTerminalInternalRoutes } from "../routes/terminal-internal.ts";
@@ -80,6 +82,27 @@ export function configuredHosts(cfg: AppConfig): { ssh: SshAliasTerminalHost[]; 
   return { ssh, unraid };
 }
 
+/** The session's chat card when it ends: marked ended, folded to one row,
+ * with how long it lasted and the end of its output (secrets redacted), so a
+ * reload shows the same folded row and reopening it still reads the output. */
+export function foldEndedTerminalCard(store: Pick<Store, "messagesFor" | "patchMessage">, ended: TerminalSessionEnded) {
+  const message = store.messagesFor(ended.threadId).find((m) => m.terminalEmbed?.sessionId === ended.id);
+  const embed = message?.terminalEmbed;
+  if (!message || !embed) return;
+  const transcript = redactSecretsInText(terminalTranscriptText(ended.output));
+  store.patchMessage(ended.threadId, message.id, {
+    terminalEmbed: {
+      ...embed,
+      status: "ended",
+      ...(ended.endedReason ? { endedReason: ended.endedReason } : {}),
+      openedAt: embed.openedAt ?? ended.openedAt,
+      endedAt: ended.endedAt,
+      collapsed: true,
+      ...(transcript ? { transcript } : {}),
+    },
+  });
+}
+
 export function installTerminalFeature(deps: {
   dataDir: string;
   store: Store;
@@ -120,7 +143,12 @@ export function installTerminalFeature(deps: {
     if (personal) registry.register(createPersonalTerminalAdapter(kind, personal));
   }
 
-  const sessions = createTerminalSessionManager({ registry, audit, now });
+  const sessions = createTerminalSessionManager({
+    registry,
+    audit,
+    now,
+    onEnded: (ended) => foldEndedTerminalCard(deps.store, ended),
+  });
   const requests = createTerminalRequestService({
     store: deps.store,
     registry,

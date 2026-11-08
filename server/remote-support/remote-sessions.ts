@@ -756,6 +756,7 @@ function createRemoteSessionOps(env: RemoteSessionEnv) {
             hostLabel: hostLabel(session),
             label: "Session à distance",
             status: opened.status,
+            openedAt: opened.openedAt,
           },
         });
         return { hostLabel: hostLabel(session), messageId: message.id };

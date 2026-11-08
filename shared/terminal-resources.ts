@@ -98,6 +98,55 @@ export interface TerminalEmbed {
   label: string;
   status: TerminalSessionPublic["status"] | "ended";
   endedReason?: TerminalSessionPublic["endedReason"];
+  /** When the shell opened and ended, for the folded row's duration. */
+  openedAt?: number;
+  endedAt?: number;
+  /** The card is folded to one row (the person's choice, or the session
+   * ended on its own). Kept on the message, so a reload keeps it. */
+  collapsed?: boolean;
+  /** The end of the shell's output, plain text, kept when the session ends so
+   * the folded card can be reopened and read after a reload. */
+  transcript?: string;
+}
+
+/** How much of the output an ended card keeps. */
+export const TERMINAL_TRANSCRIPT_MAX_CHARS = 32_000;
+
+/** Terminal output as plain text: escape sequences out, carriage returns
+ * resolved, the end kept (TERMINAL_TRANSCRIPT_MAX_CHARS). */
+export function terminalTranscriptText(raw: string, max = TERMINAL_TRANSCRIPT_MAX_CHARS): string {
+  const plain = raw
+    // OSC (title, links) then CSI and the other ESC sequences
+    // eslint-disable-next-line no-control-regex -- escape sequences are what this strips.
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
+    // eslint-disable-next-line no-control-regex -- escape sequences are what this strips.
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    // eslint-disable-next-line no-control-regex -- escape sequences are what this strips.
+    .replace(/\u001b[@-Z\\-_]/g, "")
+    .replace(/\r+\n/g, "\n")
+    .split("\n")
+    .map((line) => {
+      const cut = line.lastIndexOf("\r");
+      return cut === -1 ? line : line.slice(cut + 1);
+    })
+    .join("\n")
+    // other control characters (bell, backspace) but tabs and newlines
+    // eslint-disable-next-line no-control-regex -- escape sequences are what this strips.
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
+  const trimmed = plain.replace(/\s+$/, "");
+  return trimmed.length > max ? trimmed.slice(trimmed.length - max) : trimmed;
+}
+
+/** "4 min", "1 h 12 min", "35 s": how long a session lasted, or "". */
+export function terminalDurationLabel(openedAt: number | undefined, endedAt: number | undefined): string {
+  if (!openedAt || !endedAt || endedAt < openedAt) return "";
+  const seconds = Math.round((endedAt - openedAt) / 1000);
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
 }
 
 export function terminalResourceKey(provider: TerminalProviderKind, id: string): string {

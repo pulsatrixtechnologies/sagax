@@ -204,6 +204,11 @@ export const Bubble = memo(function Bubble({
   const attachmentsOnly = !webhookView && !replyTarget && !visibleText.trim() &&
     (user ? hasAttachments : generatedPaths.length + linkedFiles.length > 0);
   const remoteCard = !user && Boolean(message.remoteSession || message.resourceUsage || message.connectorSetup);
+  // A remote computer's card and its terminal sit one above the other: both
+  // take the transcript column and, without text, no bubble padding, so they
+  // line up on the same edges and reflow with the chat's width.
+  const terminalCard = !user && Boolean(message.terminalEmbed);
+  const columnCard = terminalCard || (!user && Boolean(message.remoteSession));
   const collapsible =
     user && !webhookView && !expanded && (visibleText.length > USER_COLLAPSE_CHARS || visibleText.split("\n").length > USER_COLLAPSE_LINES);
   useEffect(() => {
@@ -284,10 +289,10 @@ export const Bubble = memo(function Bubble({
             "text-[13px] leading-5",
             emerging && "turn-answer",
             "rounded-[18px]",
-            bubbleWidths[chatBubbleWidth({ terminal: !user && Boolean(message.terminalEmbed), wide: wideBubble || remoteCard })],
+            bubbleWidths[chatBubbleWidth({ terminal: columnCard, wide: wideBubble || remoteCard })],
             user && webhookView
               ? "overflow-hidden border border-accent/25 bg-card text-ink shadow-[0_10px_30px_rgba(0,0,0,0.18)]"
-              : remoteCard && !visibleText.trim()
+              : (remoteCard || terminalCard) && !visibleText.trim()
                 ? "text-ink"
                 : remoteCard
                   ? "bg-card px-3 py-[7px] text-ink"
@@ -392,7 +397,7 @@ export const Bubble = memo(function Bubble({
               {message.remoteSession && <RemoteSessionCard botId={botId} threadId={threadId} view={message.remoteSession} />}
               {!user && message.resourceUsage && <ResourceUsageCard view={message.resourceUsage} />}
               {!user && message.connectorSetup && <ConnectorSetupCard threadId={threadId} view={message.connectorSetup} />}
-              {message.terminalEmbed && <TerminalChatEmbed embed={message.terminalEmbed} />}
+              {message.terminalEmbed && <TerminalChatEmbed embed={message.terminalEmbed} owner={{ botId, threadId, messageId: message.id }} />}
               {!group && <AttachmentGallery images={generatedPaths} files={linkedFiles} message={{ threadId, messageId: message.id }} className={text ? undefined : "mb-0"} eager={eagerAttachments} />}
               {viewRaw && text ? (
                 <div data-citation-source={message.id} data-citation-owner-type="bot" data-citation-owner={botId} data-citation-thread={threadId}><RawMarkdownView text={text} /></div>

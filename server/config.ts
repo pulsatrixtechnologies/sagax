@@ -18,6 +18,7 @@ import { withoutComputerEngine } from "./computer/computer-engine-removal.ts";
 import { newBotDefaultsSchema, type NewBotDefaults } from "./bots/new-bot-defaults.ts";
 import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./safety/loop-detector.ts";
 import { loopGuardConfigSchema, type LoopGuardConfig } from "./host/loop-guard.ts";
+import { turnBudgetConfigSchema, type TurnBudgetConfig } from "./host/turn-budget.ts";
 import { EFFORT_LEVELS, type LiveSettings } from "../shared/wire.ts";
 import { isModelVariant, type InstanceConfigMap, type McpServerSpec, type ModelSelection } from "./contracts.ts";
 import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts";
@@ -762,6 +763,7 @@ const appConfigSchema = z.object({
    * from loopDetector (identical-call loops). Off unless enabled or
    * SAGAX_LOOP_GUARD=1. */
   loopGuard: loopGuardConfigSchema.optional(),
+  turnBudget: turnBudgetConfigSchema.optional(),
   /** Memory upkeep timing, for bots with Memory upkeep switched on. */
   memory: z.object({
     /** Quiet time after a turn before its facts are captured (ms). */
@@ -930,6 +932,7 @@ export interface AppConfig extends HelperConfig {
   context?: { rebuildBytes?: number; compactAt?: number; autoCompact?: boolean; autoCompactOffBots?: string[]; roomCompactAt?: number; staleSessionHours?: number; staleSessionBytes?: number; staleSessionColdMinutes?: number };
   loopDetector?: LoopDetectorConfig;
   loopGuard?: LoopGuardConfig;
+  turnBudget?: TurnBudgetConfig;
   memory?: { captureQuietMs?: number; tidyHour?: number; semanticRecall?: boolean; embeddingsUrl?: string; embeddingsModel?: string };
   routines?: { newPaused?: boolean };
   /** Shared preserves the historical singleton. Per-bot gives every bot a
@@ -1994,7 +1997,7 @@ export function saveConfig(
   // back after we have successfully recognized the legacy list.
   const storedProfiles = storedBrowserProfilesSchema.safeParse(disk.browserProfiles);
   if (storedProfiles.success) disk.browserProfiles = storedProfiles.data;
-  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "meta", "deepseek", "openai", "openrouter", "openaiCompat", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "routines", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine"] as const) {
+  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "meta", "deepseek", "openai", "openrouter", "openaiCompat", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "routines", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "turnBudget", "onboarding", "browserEngine"] as const) {
     const section = checkedPatch[key];
     if (!section) continue;
     const current = jsonObjectSchema.safeParse(disk[key]);

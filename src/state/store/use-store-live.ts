@@ -82,6 +82,10 @@ export function useStoreLive(args: UseStoreLiveArgs): void {
         key: "instances",
         request: async () => {
           const { instances } = await api("/api/instances");
+          // Keep the last usable list if a proxy returns an empty/non-JSON
+          // 200, as refreshInstances does: a list of undefined crashes every
+          // chat view's engine read (#2719).
+          if (!Array.isArray(instances)) throw new Error("GET /api/instances answered without a list");
           return () => rawDispatch({ type: "instances", instances });
         },
       },

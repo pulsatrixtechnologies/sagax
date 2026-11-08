@@ -658,7 +658,7 @@ outils de configuration sont des outils comme les autres pour
   propriétaire (`allow`, `ask`, `deny`) avec leur portée (`scope` : par
   exemple `resource: telephony.hours`, ou `to` pour un numéro).
 - La carte offre les mêmes réponses qu'aujourd'hui : Autoriser une fois,
-  Toujours autoriser (règle `allow` avec la portée proposée par
+  Toujours permettre (règle `allow` avec la portée proposée par
   `ruleCandidateFor`, modifiable par le propriétaire), Refuser, Toujours
   refuser.
 - L'accès aux outils par bot de #546 (`BotToolAccess` : Domaine, Accès,

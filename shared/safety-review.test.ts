@@ -167,6 +167,19 @@ describe("safety review", () => {
     expect(reviewSafety(own({ text: "edr status" })).action).toBe("confirm");
   });
 
+  // #2738: a desktop bridge write or command on the person's own computer
+  // that names a local harness database is theirs; the server sandbox still
+  // refuses it, and escapes stay blocked on the computer.
+  it("runs a script that names messages.db on the person's own computer", () => {
+    const script = "import sqlite3\nDB = '~/Library/Application Support/chat-app/messages.db'\nLOGS = '~/.sagax/logs'";
+    const desk = (text: string, tool: string) => call({ text: `${tool}\n${JSON.stringify({ path: "/Users/alice/c.py", content: text })}`, tool, ownEnvironment: true, ownComputer: true });
+    expect(reviewSafety(desk(script, "write_file")).action).toBe("allow");
+    expect(reviewSafety(call({ text: "python3 ~/c.py --db ~/.sagax/messages.db", tool: "run_command", ownEnvironment: true, ownComputer: true })).action).toBe("allow");
+    expect(reviewSafety(call({ text: script, tool: "write_file", ownEnvironment: true })).code).toBe("misuse");
+    expect(reviewSafety(call({ text: "nsenter -t 1 -m bash", tool: "run_command", ownEnvironment: true, ownComputer: true })).code).toBe("misuse");
+    expect(reviewSafety(call({ text: script, tool: "write_file", ownComputer: true })).code).toBe("misuse");
+  });
+
   it("lets the model block a call in the person's own environment, not send it back for a card", () => {
     const write = reviewSafety(call({ text: "mkdir out", tool: "run_command", ownEnvironment: true }));
     expect(tightenSafety(write, '{"action":"confirm"}')).toBe(write);

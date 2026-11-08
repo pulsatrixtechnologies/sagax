@@ -26,7 +26,7 @@ export interface MisuseContext {
   /** `shell` is a tool in the speaker's own environment: their server
    * sandbox (the capability names it) or their own computer through the
    * desktop bridge (Local VM included). A lent computer is `terminal`. */
-  surface: "message" | "shell" | "file" | "terminal" | "mcp" | "flow";
+  surface: "message" | "shell" | "file" | "terminal" | "mcp" | "flow" | "desktop";
   botId?: string;
   threadId?: string;
   tool?: string;
@@ -152,9 +152,11 @@ function refusalFor(verdict: MisuseVerdict, locked: boolean): MisuseRefusal {
 }
 
 /** The classifier scope of a surface: a chat message runs nothing, and the
- * `shell` surface is the speaker's own environment. */
+ * `shell` surface is the speaker's own environment, the `desktop` surface
+ * their own computer through the desktop bridge (#2738). */
 export function misuseScopeFor(surface: MisuseContext["surface"]): MisuseScope {
   if (surface === "message") return "message";
+  if (surface === "desktop") return "own_computer";
   if (surface === "shell") return "own_environment";
   return "default";
 }

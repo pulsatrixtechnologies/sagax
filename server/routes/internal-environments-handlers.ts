@@ -176,7 +176,7 @@ export interface InternalEnvironmentsDeps {
   misuseTextRefusal(
     text: string,
     speakerId: string | undefined,
-    surface: "flow" | "mcp" | "shell" | "terminal" | "file",
+    surface: "flow" | "mcp" | "shell" | "terminal" | "file" | "desktop",
     meta?: { botId: string; threadId: string; tool?: string },
   ): string | null;
   misusePathRefusal(path: string, meta: { triage: boolean; principalId?: string; botId: string; threadId: string; tool: string; cwd?: string }): { message: string } | null;
@@ -199,6 +199,7 @@ export interface InternalEnvironmentsDeps {
     botId: string;
     review?: (prompt: string, signal?: AbortSignal) => Promise<string>;
     ownEnvironment?: boolean;
+    ownComputer?: boolean;
   }): Promise<string | null>;
   // index casts SafetySurface; keep surface as string here to avoid coupling.
   samePerson(a: string | null | undefined, b: string | null | undefined): boolean;
@@ -709,6 +710,9 @@ async function handleDesktopMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
         botId: capability.botId,
         review: deps.safetyReviewer(capability.botId),
         ownEnvironment: deps.samePerson(who.principalId ?? person, person),
+        // #2738: the desktop bridge runs on the person's computer, never on
+        // the Sagax server: the server's own file rules do not apply there.
+        ownComputer: true,
       });
       if (desktopHeld) return json(res, 200, { result: { content: [{ type: "text", text: desktopHeld }], isError: true } });
       await deps.stagePendingAttachments(capability.threadId, capability.generation);
@@ -766,12 +770,12 @@ async function handleDesktopMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
     }, {
       commandRefusal: (command) => deps.enginePluginCommandRefusal(command)
         ?? enginePluginCommandRefusal(command)
-        ?? deps.misuseTextRefusal(command, person, "shell", {
+        ?? deps.misuseTextRefusal(command, person, "desktop", {
           botId: capability.botId,
           threadId: capability.threadId,
           tool: "run_command",
         }),
-      payloadRefusal: (value) => deps.misuseTextRefusal(value, person, "shell", {
+      payloadRefusal: (value) => deps.misuseTextRefusal(value, person, "desktop", {
         botId: capability.botId,
         threadId: capability.threadId,
         tool: "desktop",

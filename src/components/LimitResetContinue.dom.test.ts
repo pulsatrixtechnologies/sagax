@@ -82,6 +82,29 @@ describe("EngineLimitIndicator (no banner above the chat, the owner 2026-11-08)"
     expect(menu.querySelector('[data-testid="engine-limit-continue"]')?.textContent).toMatch(/Continue at/);
   });
 
+  it("#2902: bot on Claude, Codex weekly limit reached, no dot, no menu, no bubble", async () => {
+    const plan = (id: string, driver: string, name: string, used: number) => ({
+      id, name, driver, ok: true, error: null, state: "windows", access: "subscription", instanceId: id,
+      fiveHour: { available: false, remainingPercent: null, usedPercent: null, resetsAt: null },
+      weekly: { available: true, remainingPercent: 100 - used, usedPercent: used, resetsAt: "2026-11-12T00:00:00Z" },
+    });
+    fixture.api.mockImplementation(async (path: unknown) =>
+      String(path) === "/api/plan-usage"
+        ? { providers: [plan("claude", "claude", "Claude", 12), plan("codex", "codex", "Codex", 100)] }
+        : { checkedAt: NOW, engines: [claude(10)] });
+    limits.rememberLimits({ checkedAt: NOW, engines: [claude(10)] });
+    const container = remount(createElement(EngineLimitIndicator, { engine: "claude", botId: "scout", threadId: "t-1" }));
+    await settle();
+    await settle();
+    expect(fixture.api).toHaveBeenCalledWith("/api/plan-usage");
+    expect(container.innerHTML).toBe("");
+    // the same report still shows for the engine that is actually at its limit
+    const codex = remount(createElement(EngineLimitIndicator, { engine: "codex", botId: "scout", threadId: "t-1" }));
+    await settle();
+    await settle();
+    expect(codex.querySelector('[data-testid="engine-limit-indicator"]')?.getAttribute("title")).toContain("weekly Codex limit");
+  });
+
   it("stays quiet for another engine", () => {
     expect(remount(createElement(EngineLimitIndicator, { engine: "codex" })).innerHTML).toBe("");
   });

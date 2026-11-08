@@ -391,6 +391,7 @@ export function ModelPicker({
       menuAt={menuAt}
       containedBusy={Boolean(bot.busy && !contained)}
       active={active}
+      limitEngine={autoInstance?.instanceId ?? selection.instanceId}
       busyUpdatesBotDefault={busyUpdatesBotDefault}
       menuSections={menuSections}
       onRow={onRow}
@@ -433,6 +434,7 @@ function ModelPickerShell({
   menuAt,
   containedBusy,
   active,
+  limitEngine,
   busyUpdatesBotDefault,
   menuSections,
   onRow,
@@ -471,6 +473,8 @@ function ModelPickerShell({
   menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
   containedBusy: boolean;
   active: ReturnType<typeof useStore>["state"]["instances"][number] | undefined;
+  /** The engine this bot really runs on (Auto resolved): the only one whose limit shows. */
+  limitEngine: string | undefined;
   busyUpdatesBotDefault: boolean;
   menuSections: Parameters<typeof ModelPickerMenu>[0]["menuSections"];
   onRow: (row: ModelMenuRow) => void;
@@ -510,7 +514,7 @@ function ModelPickerShell({
       ) : (
         <>
           {trigger}
-          <EngineLimitIndicator engine={bot.modelSelection?.instanceId} botId={bot.id} threadId={threadId ?? bot.threadId} />
+          <EngineLimitIndicator engine={limitEngine} botId={bot.id} threadId={threadId ?? bot.threadId} />
         </>
       )}
 

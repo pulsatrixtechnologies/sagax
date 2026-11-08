@@ -37,16 +37,18 @@ export function useLimitResetContinue(botId: string | undefined, threadId: strin
  * engine is nowhere near its limit. */
 export function EngineLimitIndicator({
   engine,
+  driver,
   botId,
   threadId,
 }: {
   engine: string | undefined;
+  driver?: string;
   botId?: string;
   threadId?: string;
 }) {
   const { dispatch } = useStore();
   const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
-  const weekly = useWeeklyLimit();
+  const weekly = useWeeklyLimit(engine, driver ?? limit?.driver);
   const continueAt = useLimitResetContinue(botId, threadId, limit?.resetsAt ?? undefined);
   const [open, setOpen] = useState(false);
   const near = Boolean(limit && nearLimit(limit));

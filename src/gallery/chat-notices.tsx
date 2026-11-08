@@ -27,6 +27,14 @@ const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   if (url.includes("/api/plan-usage")) {
+    if (params.get("view") === "other-provider-limit") {
+      // #2902: the bot runs on Claude (12 % used); Codex is at its weekly limit.
+      const weekly = (n: number) => ({ available: true, usedPercent: n, remainingPercent: 100 - n, resetsAt: "2026-11-12T00:00:00Z" });
+      return json({ providers: [
+        { id: "claude", name: "Claude", driver: "claude", ok: true, error: null, state: "windows", access: "subscription", instanceId: "claude", weekly: weekly(12) },
+        { id: "codex", name: "Codex", driver: "codex", ok: true, error: null, state: "windows", access: "subscription", instanceId: "codex", weekly: weekly(100) },
+      ] });
+    }
     return json({ providers: [{ id: "claude", name: "Claude", driver: "claude", ok: true, error: null, state: "windows", access: "subscription", weekly: { available: true, usedPercent: used, remainingPercent: 100 - used, resetsAt: "2026-10-25T00:00:00Z" } }] });
   }
   if (url.includes("/api/limit-resets")) {
@@ -48,7 +56,10 @@ window.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
-rememberLimits({
+rememberLimits(params.get("view") === "other-provider-limit" ? {
+  checkedAt: Date.now(),
+  engines: [{ engine: "claude", name: "Claude", driver: "claude", window: "5-hour", usedPercent: 10, resetsAt: resetAt, blocked: false }],
+} : {
   checkedAt: Date.now(),
   engines: [{
     engine: "grok",
@@ -86,6 +97,18 @@ function Gallery() {
             </div>
           </div>
         ))}
+      </div>
+    );
+  }
+  if (view === "other-provider-limit") {
+    return (
+      <div data-gallery className="min-h-screen bg-app text-ink">
+        <div className="relative mx-auto flex min-h-[200px] max-w-[760px] flex-col justify-end px-5 pb-6">
+          <div className="relative w-fit rounded-lg border border-hairline/40 bg-panel px-3 py-1.5 text-[13px]" data-gallery-model-chip>
+            Claude Sonnet 5
+            <EngineLimitIndicator engine="claude" botId="scout" threadId="t-scout" />
+          </div>
+        </div>
       </div>
     );
   }

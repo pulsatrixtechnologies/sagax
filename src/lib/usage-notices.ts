@@ -32,6 +32,19 @@ export function weeklyLimitNotice(rows: PlanRow[], from = WEEKLY_NOTICE_FROM): W
   return { name: worst.row.name, percent, band, key: `weekly:${worst.row.id}:${(worst.row.weekly.resetsAt ?? "-").slice(0, 10)}:${band}` };
 }
 
+/** The plan rows a bot on this engine instance reads its limits from (#2902,
+ * #0867). A row stands for every instance folded into it on the same login,
+ * so a second Claude instance sharing the first one's sign-in still sees the
+ * shared weekly window. A server that sends no instance ids falls back to
+ * the driver. Another provider's row never matches. */
+export function rowsForEngine(rows: PlanRow[], engine?: string, driver?: string): PlanRow[] {
+  return rows.filter((row) => {
+    const ids = row.instanceIds?.length ? row.instanceIds : row.instanceId ? [row.instanceId] : [];
+    if (ids.length) return Boolean(engine) && ids.includes(engine!);
+    return Boolean(driver) && row.driver === driver;
+  });
+}
+
 /** Group threads: more than one bot answering. A direct bot-to-bot channel
  * and a person-to-person conversation are not billed that way. */
 export function showsGroupCostNotice(group: { dm?: boolean; peopleDm?: boolean; memberIds: string[] }): boolean {

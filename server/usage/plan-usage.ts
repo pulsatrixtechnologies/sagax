@@ -78,6 +78,12 @@ export interface PlanProviderRow {
   access: "subscription" | "api-key";
   /** The engine instance whose Connect signs this provider in. */
   instanceId: string | null;
+  /** Every engine instance this row stands for: `instanceId` first, then the
+   * instances folded into it because they read the same login (a second
+   * Claude without its own config dir, the ChatGPT plan on the Codex login).
+   * A bot on any of them shows this row's limits. Always set by baseRow;
+   * optional for rows built elsewhere (tests, older history). */
+  instanceIds?: string[];
   /** state error: why, for the renderer's own words. */
   failure: PlanFailure | null;
   fiveHour: PlanWindow;
@@ -99,6 +105,8 @@ export interface PlanAccount {
   configDir?: string;
   /** The engine instance this row signs in through (Connect). */
   instanceId?: string;
+  /** Instances folded into this row (same login), `instanceId` first. */
+  instanceIds?: string[];
   /** api-key: a key row, nothing is read or fetched. Default subscription. */
   access?: "subscription" | "api-key";
   /** Organization server: the person has no sign-in marker for this
@@ -242,6 +250,7 @@ function apiKeyRow(entry: PlanInstance): PlanAccount {
     driver: entry.driver,
     environment: {},
     instanceId: entry.id,
+    instanceIds: [entry.id],
     access: "api-key",
   };
 }
@@ -251,7 +260,7 @@ function apiKeyRow(entry: PlanInstance): PlanAccount {
  * key that is configured. */
 export function planAccountsFromInstances(instances: InstanceConfigMap, options: PlanInstanceOptions = {}): PlanAccount[] {
   const accounts: PlanAccount[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, PlanAccount>();
   const keys: PlanAccount[] = [];
   for (const entry of planInstances(instances)) {
     if (entry.apiKey) {
@@ -259,16 +268,21 @@ export function planAccountsFromInstances(instances: InstanceConfigMap, options:
       continue;
     }
     const source = credentialSource(entry);
-    if (seen.has(source)) continue;
-    seen.add(source);
-    accounts.push({
+    const folded = seen.get(source);
+    // Same login, same plan: one row, but it still answers for this
+    // instance, so a bot running on it sees its own weekly limit.
+    if (folded) { folded.instanceIds!.push(entry.id); continue; }
+    const account: PlanAccount = {
       id: entry.id,
       name: entry.chatgptPlan || !entry.displayName ? PRODUCT_NAME[entry.driver] : entry.displayName,
       driver: entry.driver,
       environment: entry.environment,
       instanceId: entry.id,
+      instanceIds: [entry.id],
       ...(entry.configDir ? { configDir: entry.configDir } : {}),
-    });
+    };
+    seen.set(source, account);
+    accounts.push(account);
   }
   return [...accounts, ...keys];
 }
@@ -290,33 +304,39 @@ export interface OrgPlanOptions {
 export function orgPlanAccounts(instances: InstanceConfigMap, options: OrgPlanOptions): PlanAccount[] {
   const accounts: PlanAccount[] = [];
   const keys: PlanAccount[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, PlanAccount>();
   const drivers = new Set<PlanDriver>();
   for (const entry of planInstances(instances)) {
     if (entry.apiKey) {
-      if (options.apiKeyConfigured?.(entry.driver, entry.id) && !keys.some((key) => key.driver === entry.driver)) keys.push(apiKeyRow(entry));
+      if (!options.apiKeyConfigured?.(entry.driver, entry.id)) continue;
+      const key = keys.find((candidate) => candidate.driver === entry.driver);
+      if (key) key.instanceIds!.push(entry.id);
+      else keys.push(apiKeyRow(entry));
       continue;
     }
     const login = LOGIN_DRIVER[entry.driver];
     const dir = options.loginDir(login, entry.id);
-    if (seen.has(dir)) continue;
-    seen.add(dir);
+    const folded = seen.get(dir);
+    if (folded) { folded.instanceIds!.push(entry.id); continue; }
     const first = !drivers.has(entry.driver);
     drivers.add(entry.driver);
     const environment: Record<string, string | undefined> =
       entry.driver === "claude" ? { HOME: dir, CLAUDE_CONFIG_DIR: dir }
         : entry.driver === "codex" ? { HOME: dir, CODEX_HOME: dir }
           : { HOME: dir, GROK_HOME: join(dir, ".grok") };
-    accounts.push({
+    const account: PlanAccount = {
       id: first ? entry.driver : entry.id,
       name: first ? PRODUCT_NAME[entry.driver] : entry.displayName?.trim() || PRODUCT_NAME[entry.driver],
       driver: entry.driver,
       environment,
       instanceId: entry.id,
+      instanceIds: [entry.id],
       isolated: true,
       ...(entry.driver === "claude" ? { configDir: dir } : {}),
       ...(options.signedIn(login, entry.id) ? {} : { signedOut: true }),
-    });
+    };
+    seen.set(dir, account);
+    accounts.push(account);
   }
   return [...accounts, ...keys];
 }
@@ -822,7 +842,7 @@ function planUsageCacheKey(accounts: PlanAccount[]): string {
       .join("\n");
     return [
       account.id, account.driver, account.name, account.configDir ?? "", environment,
-      account.access ?? "subscription", account.instanceId ?? "", account.signedOut ? "out" : "", account.isolated ? "isolated" : "",
+      account.access ?? "subscription", account.instanceId ?? "", (account.instanceIds ?? []).join(","), account.signedOut ? "out" : "", account.isolated ? "isolated" : "",
     ].join("\u0000");
   }).join("\n");
 }
@@ -988,6 +1008,7 @@ function baseRow(account: PlanAccount): Omit<PlanProviderRow, "ok" | "error" | "
     driver: account.driver,
     access: account.access ?? "subscription",
     instanceId: account.instanceId ?? null,
+    instanceIds: account.instanceIds ?? (account.instanceId ? [account.instanceId] : []),
     fiveHour: closedWindow(),
     weekly: closedWindow(),
     extra: [],

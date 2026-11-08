@@ -6,7 +6,7 @@ import type { PlanRow, PlanWindow } from "./plan-usage";
 const closed: PlanWindow = { available: false, remainingPercent: null, usedPercent: null, resetsAt: null };
 const open = (used: number, resetsAt: string | null = null): PlanWindow => ({ available: true, remainingPercent: 100 - used, usedPercent: used, resetsAt });
 const row = (patch: Partial<PlanRow>): PlanRow => ({
-  id: "claude", name: "Claude", driver: "claude", plan: "Max", state: "windows", access: "subscription", instanceId: null,
+  id: "claude", name: "Claude", driver: "claude", plan: "Max", state: "windows", access: "subscription", instanceId: null, instanceIds: [],
   message: null, fiveHour: closed, weekly: closed, extra: [], models: [], ...patch,
 });
 const labels = { weekly: "Weekly", fiveHour: "5-hour", used: (n: number) => `${n}% used`, resetsIn: (when: string) => `resets in ${when}` };

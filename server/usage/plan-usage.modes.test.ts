@@ -174,6 +174,22 @@ describe("one row per provider", () => {
   });
 });
 
+describe("#0867: instances sharing a login answer through one row", () => {
+  it("organization: a second instance on the person's same login directory folds into the first row", () => {
+    signIn(ALICE, "claudeAgent", null);
+    const rows = orgAccounts(ALICE, { claudeApi: true, claudeApi2: true }, {
+      claude: { driver: "claudeAgent" },
+      "claude-opus": { driver: "claudeAgent", displayName: "Opus" },
+      claudeApi: { driver: "claudeAgent", access: "api", config: { requireApiKey: true } },
+      claudeApi2: { driver: "claudeAgent", access: "api", config: { requireApiKey: true } },
+    });
+    expect(rows.map((row) => [row.id, row.access ?? "subscription", row.instanceIds])).toEqual([
+      ["claude", "subscription", ["claude", "claude-opus"]],
+      ["claudeApi", "api-key", ["claudeApi", "claudeApi2"]],
+    ]);
+  });
+});
+
 describe("#2373: an added account has its own usage row", () => {
   it("reads each added account from its own folder, signed in or not on its own", () => {
     const added = "claude-22222222-2222-4222-8222-222222222222";

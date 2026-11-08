@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { expandAllPaths, isJsonName, jsonChildren, parseJsonText, ROOT_PATH } from "./json-tree";
 import type { PlanRow } from "./plan-usage";
-import { showsGroupCostNotice, weeklyLimitNotice } from "./usage-notices";
+import { rowsForEngine, showsGroupCostNotice, weeklyLimitNotice } from "./usage-notices";
 
 const window = (used: number | null) => ({ available: used !== null, remainingPercent: used === null ? null : 100 - used, usedPercent: used, resetsAt: "2026-10-25T00:00:00Z" });
 const row = (id: string, used: number | null, access: PlanRow["access"] = "subscription"): PlanRow => ({
-  id, name: id, driver: id, plan: null, state: "windows", access, instanceId: null, message: null,
+  id, name: id, driver: id, plan: null, state: "windows", access, instanceId: null, instanceIds: [], message: null,
   fiveHour: window(null), weekly: window(used), extra: [], models: [],
 });
 
@@ -21,6 +21,28 @@ describe("weeklyLimitNotice", () => {
   });
   it("a new band is a new key, so a dismissal does not hide it", () => {
     expect(weeklyLimitNotice([row("Claude", 85)])!.key).not.toBe(weeklyLimitNotice([row("Claude", 95)])!.key);
+  });
+});
+
+describe("rowsForEngine (#2902, #0867)", () => {
+  const plan = (id: string, driver: string, used: number, instanceIds: string[]): PlanRow => ({ ...row(id, used), driver, instanceId: instanceIds[0] ?? null, instanceIds });
+  const rows = [plan("Claude", "claude", 95, ["claude", "claude-opus"]), plan("Codex", "codex", 100, ["codex", "chatgpt"])];
+  it("an instance folded on a shared login still gets the shared weekly window", () => {
+    expect(weeklyLimitNotice(rowsForEngine(rows, "claude-opus"))).toMatchObject({ name: "Claude", percent: 95 });
+    expect(weeklyLimitNotice(rowsForEngine(rows, "chatgpt"))).toMatchObject({ name: "Codex", percent: 100 });
+  });
+  it("never another provider's row", () => {
+    expect(rowsForEngine(rows, "claude").map((r) => r.id)).toEqual(["Claude"]);
+    expect(rowsForEngine(rows, "grok")).toEqual([]);
+    expect(rowsForEngine(rows, undefined, "claude")).toEqual([]);
+  });
+  it("a server without instance ids falls back to the driver", () => {
+    const old = [plan("Claude", "claude", 90, []), plan("Codex", "codex", 99, [])];
+    expect(rowsForEngine(old, "claude-opus", "claude").map((r) => r.id)).toEqual(["Claude"]);
+    expect(rowsForEngine(old, "claude-opus")).toEqual([]);
+  });
+  it("an older server row with only instanceId still matches it", () => {
+    expect(rowsForEngine([{ ...plan("Claude", "claude", 90, []), instanceId: "claude" }], "claude").map((r) => r.id)).toEqual(["Claude"]);
   });
 });
 

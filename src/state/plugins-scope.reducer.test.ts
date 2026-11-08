@@ -19,10 +19,11 @@ describe("Connect apps opened from a bot", () => {
 });
 
 describe("a routine line in the conversation opens the routine", () => {
-  it("opens its bot's panel on Routines and asks for that routine's page once", () => {
+  it("opens its bot page on the Routines sub-page and asks for that routine's page once", () => {
     const state = { ...initialState, bots: [{ id: "maya", name: "Maya", hidden: false }] } as unknown as typeof initialState;
     const opened = reducer(state, { type: "openRoutine", botId: "maya", routineId: "r1" });
-    expect(opened).toMatchObject({ settingsOpen: true, selectedId: "maya", routineFocus: { botId: "maya", routineId: "r1" } });
+    // #2624: routines live on the bot page's Routines sub-page, not the side panel.
+    expect(opened).toMatchObject({ personaEditor: { botId: "maya", section: "routines" }, settingsOpen: false, routineFocus: { botId: "maya", routineId: "r1" } });
     expect(reducer(opened, { type: "routineFocused" }).routineFocus).toBeNull();
     // a bot the person does not have opens nothing
     expect(reducer(state, { type: "openRoutine", botId: "ghost", routineId: "r1" })).toBe(state);

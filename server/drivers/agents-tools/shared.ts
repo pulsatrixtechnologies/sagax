@@ -37,17 +37,17 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
     type: {
       type: "string",
       enum: ["once", "weekly", "daily", "interval", "cron", "limit_reset"],
-      description: "once | weekly | daily | interval | cron | limit_reset.",
+      description: "Schedule kind.",
     },
     expression: {
       type: "string",
       maxLength: 256,
-      description: "Cron only: five fields (min hour dom month dow). Examples: 0 9 1 * *, 0 9 L * *, 0 9 * * MON#2. No seconds/year/@macros.",
+      description: "Cron only: five fields (min hour dom month dow), e.g. 0 9 L * *, 0 9 * * MON#2. No seconds/year/@macros.",
     },
     timeZone: {
       type: "string",
       maxLength: 128,
-      description: "Cron only: IANA timezone (e.g. Asia/Kolkata, UTC). No numeric offset.",
+      description: "Cron only: IANA timezone, no numeric offset.",
     },
     at: {
       type: "string",
@@ -55,7 +55,7 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
     },
     engine: {
       type: "string",
-      description: "limit_reset only: engine id (claude, codex). Omit for your own.",
+      description: "limit_reset only: engine id. Omit for your own.",
     },
     repeat: {
       type: "string",
@@ -79,15 +79,15 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
     },
     starts_at: {
       type: "string",
-      description: "interval: optional RFC3339 cadence anchor. Omit to start one interval after apply.",
+      description: "interval: optional RFC3339 cadence anchor.",
     },
     window_start: {
       type: "string",
-      description: "interval: local HH:MM window start (inclusive), with window_end.",
+      description: "interval: local HH:MM window start, with window_end.",
     },
     window_end: {
       type: "string",
-      description: "interval: local HH:MM window end (exclusive), same day as window_start.",
+      description: "interval: local HH:MM window end, same day.",
     },
     ends_at: {
       type: "string",
@@ -95,15 +95,15 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
     },
     every_day: {
       type: "boolean",
-      description: "interval update: true clears weekday filter.",
+      description: "update: true clears the weekday filter.",
     },
     all_day: {
       type: "boolean",
-      description: "interval update: true clears time window.",
+      description: "update: true clears the time window.",
     },
     never_ends: {
       type: "boolean",
-      description: "interval update: true clears ends_at.",
+      description: "update: true clears ends_at.",
     },
     timing: {
       type: "string",
@@ -113,12 +113,12 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
     window_early_minutes: {
       type: "integer",
       minimum: 0,
-      description: "flexible: minutes early (default 15; capped with late at half the gap).",
+      description: "flexible: minutes early (default 15).",
     },
     window_late_minutes: {
       type: "integer",
       minimum: 0,
-      description: "flexible: minutes late (default 15; 0 = ready by scheduled time).",
+      description: "flexible: minutes late (default 15; 0 = on time).",
     },
   },
   required: ["type"],
@@ -142,7 +142,7 @@ export const ROUTINE_FIELDS_SCHEMA = {
     type: "string",
     // "box" is Boat's historical run_on destination id (agents wire contract).
     enum: ["maus", "box"],
-    description: "maus (default): bot model+computer (incl. VPS). box: bot cloud computer. Legacy cloud=box.",
+    description: "maus (default): bot model+computer (incl. VPS). box: bot cloud computer.",
   },
   timeout_minutes: {
     type: "integer",
@@ -156,44 +156,44 @@ export const ROUTINE_FIELDS_SCHEMA = {
   },
   continuity: {
     type: "boolean",
-    description: "true: feed latest completed run report into the next run. false starts fresh.",
+    description: "true: feed the last run report into the next run. false starts fresh.",
   },
   run_on_startup: {
     type: "boolean",
-    description: "true: also run once each time Sagax starts (repeating schedules only). false stops it.",
+    description: "true: also run each time Sagax starts (repeating schedules). false stops it.",
   },
   overlap: {
     type: "string",
     enum: ["skip", "queue"],
-    description: "skip (default) or queue one while a run is still working. Manual/webhook stay separate.",
+    description: "skip (default) or queue one while a run is working.",
   },
   watch: {
     type: ["object", "null"],
-    description: "Wake only on change/match (no model turn until then). {kind:\"watch\", source: files|command|tool, condition?, wakeOn?, track?, firstRun?, whenAsleep?}. Repeating schedule; null clears.",
+    description: "Wake only on change/match. {kind:\"watch\", source: files|command|tool, condition?, wakeOn?, track?, firstRun?, whenAsleep?}. Repeating schedule; null clears.",
   },
   folder: {
     type: ["string", "null"],
     maxLength: 60,
-    description: "Routines list folder (new or existing). null removes. Do not put the folder in the name.",
+    description: "Routines list folder. null removes. Not in the name.",
   },
   model: {
     type: ["string", "null"],
     maxLength: 200,
-    description: "Model id for runs on this bot's engine; chat unchanged. null resets. Claude sub-agents follow subagent_model, else this, else the bot's fast model.",
+    description: "Model id for runs on this bot's engine; chat unchanged. null resets.",
   },
   subagent_model: {
     type: ["string", "null"],
     maxLength: 200,
-    description: "Claude sub-agent model (Agent tool / Flow workers) on this bot's engine; main model unchanged. null clears (falls back to model or the bot's fast model).",
+    description: "Claude sub-agent model (Agent tool, Flow workers); main model unchanged. null clears (falls back to model, then the fast model).",
   },
   act_as: {
     type: ["string", "null"],
     maxLength: 120,
-    description: "Perspicax role slug for runs (\"Au nom de\"); \"\" = own access; null resets.",
+    description: "Perspicax role slug for runs; \"\" = own access; null resets.",
   },
   requires_computer: {
     type: "boolean",
-    description: "true: wait for the bot's computer online before run; false: drop that need. Skills/MCP stay.",
+    description: "true: wait for the bot's computer online before a run; false drops that need.",
   },
   effort: {
     type: ["string", "null"],
@@ -202,11 +202,11 @@ export const ROUTINE_FIELDS_SCHEMA = {
   },
   goal: {
     type: ["string", "object", "null"],
-    description: "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Each run decides when to check next and the routine stops once reached. null removes.",
+    description: "Goal routine: the objective in words, or {text, deadline (RFC 3339)}. Stops once reached. null removes.",
   },
   delete_when_finished: {
     type: "boolean",
-    description: "Auto-delete when the schedule ends and the last run settles (once/interval+end). false keeps it listed.",
+    description: "Auto-delete when the schedule ends and the last run settles. false keeps it.",
   },
 } as const;
 
@@ -219,10 +219,10 @@ export const PERSON_QUOTE = {
   type: "string", maxLength: 600,
   description: "Primary Bot: the person's own words asking this now (bot named); applies at once.",
 } as const;
-export const PROPOSAL_OUTCOME = " Read the result: granted Full Access may apply the change immediately. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success from the permission mode alone. This does not elevate another bot's execution permissions.";
+export const PROPOSAL_OUTCOME = " Read the result: Full Access may apply the change at once. If applied, carry on; only a pending result ends the turn. Never claim success from the permission mode alone.";
 /** Routines, skills, profile and model: a bot's change to itself applies at
  * any level (server/direct-apply.ts). */
-export const SELF_CHANGE_OUTCOME = " Result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result. This does not elevate another bot's execution permissions.";
+export const SELF_CHANGE_OUTCOME = " Your own routines, skills, profile or model change at once (the person sees an Undo); another bot's change may wait for confirmation. If applied, carry on; only a pending result ends the turn. Never claim success without an applied result.";
 
 /** Every tool, in the order it is listed. Four peer tools are worded
  * differently for an external runtime, which may poll inside one process. */

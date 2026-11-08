@@ -580,16 +580,15 @@ describe("agents-proxy MCP surface", () => {
       // Team setup applies only at Full access; a bot's own routines,
       // skills and profile apply at any level.
       if (tool === "propose_team_setup" || tool === "propose_bot_deletion") {
-        expect(description).toContain("granted Full Access may apply the change immediately");
+        expect(description).toContain("Full Access may apply the change at once");
         expect(description).toContain("Never claim success from the permission mode alone");
       } else {
-        expect(description).toContain("a change to your own routines, skills, profile or model applies immediately");
-        expect(description).toContain("a change for another bot may wait for the person's confirmation");
+        expect(description).toContain("Your own routines, skills, profile or model change at once");
+        expect(description).toContain("another bot's change may wait for confirmation");
         expect(description).toContain("Never claim success without an applied result");
       }
-      expect(description).toContain("If applied, continue the requested work without another confirmation");
-      expect(description).toContain("Only a pending result requires ending the turn");
-      expect(description).toContain("does not elevate another bot's execution permissions");
+      expect(description).toContain("If applied, carry on");
+      expect(description).toContain("only a pending result ends the turn");
     }
     const credential = list.result.tools.find((entry: { name: string }) => entry.name === "request_credential");
     expect(credential.description).toContain("resume when they save or decline");
@@ -868,9 +867,9 @@ describe("agents-proxy MCP surface", () => {
     expect(tool.inputSchema).toMatchObject({ type: "object", additionalProperties: false,
       properties: { surface: { type: "string", enum: ["auto", "cloud", "vm", "local", "browser"] } } });
     expect(tool.inputSchema.required ?? []).not.toContain("surface");
-    expect(tool.description).toContain("end this turn immediately");
-    expect(tool.description).toContain("with a configured provider it can start or provision one when needed");
-    expect(tool.description).toContain("Do not provision for ordinary chat or just to inspect availability");
+    expect(tool.description).toContain("end this turn at once");
+    expect(tool.description).toContain("or provisions one with a configured provider when needed");
+    expect(tool.description).toContain("not for ordinary chat or just to inspect");
     expect(tool.annotations?.readOnlyHint).not.toBe(true);
   });
 
@@ -967,7 +966,7 @@ describe("agents-proxy MCP surface", () => {
     expect(schedule.properties.expression.description).toContain("0 9 L * *");
     expect(schedule.properties.expression.description).toContain("MON#2");
     expect(schedule.properties.timeZone.description).toContain("IANA");
-    expect(create.description).toContain("Never approximate unsupported requests");
+    expect(create.description).toContain("Never approximate an unsupported request");
     expect(schedule.properties.weekdays.items.enum).toEqual([
       "monday",
       "tuesday",
@@ -979,7 +978,7 @@ describe("agents-proxy MCP surface", () => {
     ]);
     expect(create.inputSchema.properties.enabled).toMatchObject({ type: "boolean" });
     // #1138: a new routine starts active; enabled false creates it paused
-    expect(create.description).toContain("A new routine starts active; pass enabled false to create it paused.");
+    expect(create.description).toContain("It starts active; enabled false creates it paused.");
     const action = list.result.tools.find((t: { name: string }) => t.name === "propose_routine_action");
     expect(action.inputSchema.properties.action.enum).toContain("rotate_webhook_key");
     expect(action.inputSchema.properties.changes.properties).not.toHaveProperty("enabled");
@@ -995,7 +994,7 @@ describe("agents-proxy MCP surface", () => {
     expect(schedule.properties.every_day.type).toBe("boolean");
     expect(schedule.properties.all_day.type).toBe("boolean");
     expect(schedule.properties.never_ends.type).toBe("boolean");
-    expect(create.description).toContain("Only a pending result requires ending the turn");
+    expect(create.description).toContain("only a pending result ends the turn");
   });
 
   it("list_bots renders the roster and authenticates with the shared token", async () => {
@@ -1328,8 +1327,8 @@ describe("agents-proxy MCP surface", () => {
     expect(start.inputSchema.required).toEqual(["title", "message"]);
     expect(Object.keys(start.inputSchema.properties)).toEqual(["title", "message", "bot_id", "folder", "report_back", "workspace", "read_only", "thread_id"]);
     expect(start.description).toContain("Leave bot_id out to open it on yourself");
-    expect(start.description).toContain("Do not use it for a question you need answered right now");
-    expect(start.description).toContain("do not retry it");
+    expect(start.description).toContain("Not for a question you need answered now");
+    expect(start.description).toContain("do not retry");
   });
 
   it("start_thread on yourself forwards the sender and says whether it runs or waits in line", async () => {

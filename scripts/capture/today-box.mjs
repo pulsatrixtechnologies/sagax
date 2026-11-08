@@ -3,6 +3,8 @@
  * Headless screenshots of the Today box (src/gallery/today-box.html), light and
  * dark, fr and en. Exits 1 on any pageerror or console error. Synthetic data
  * only. Headless Chrome: no window opens.
+ * Reference set: docs/screenshots/today-box (cited here so the #1386
+ * docs-media guard keeps the PNGs on the product branch).
  * Usage: node scripts/capture/today-box.mjs [--out DIR] [--port N]
  */
 import { spawn } from "node:child_process";
@@ -12,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
-const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "today-box"));
+const outDir = resolve(arg("--out") ?? join(root, "docs/screenshots/today-box"));
 const port = Number(arg("--port") ?? 5190);
 const skins = [{ id: "daylight", label: "light" }, { id: "pulsatrix", label: "dark" }];
 
@@ -42,6 +44,11 @@ try {
   const page = await browser.newPage({ viewport: { width: 900, height: 760 }, deviceScaleFactor: 2 });
   const errors = [];
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() !== "error") return;
+    const where = message.location()?.url;
+    errors.push(`console error: ${message.text()}${where ? ` (${where})` : ""}`);
+  });
   for (const { id, label } of skins) {
     for (const lang of ["fr", "en"]) {
       await page.goto(`${base}?${new URLSearchParams({ skin: id, lang })}`, { waitUntil: "load" });
@@ -52,7 +59,7 @@ try {
     }
   }
   if (errors.length) throw new Error(errors.join("\n"));
-  console.log(`screenshots in ${outDir}, no pageerror`);
+  console.log(`screenshots in ${outDir}, no pageerror or console error`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   if (log) console.error(log.slice(-2000));

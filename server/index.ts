@@ -20321,6 +20321,7 @@ async function remoteHostBotGate(input: { botId: string; threadId: string; princ
       const bot = store.bot(input.botId);
       if (!bot) return false;
       const target = { id: `host:${input.hostId}`, name: hostName };
+      // approvalBus.autoApply (fullAccessForSource) answers it at Full; full-access: peer-contact
       return (await requestPeerApproval(approvalBus, bot, target, `Use ${hostName} for this turn`, "use_computer", input.threadId)) === "allow";
     },
   });

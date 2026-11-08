@@ -5118,7 +5118,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
   it("declares the effort levels the CLI accepts", async () => {
     await create();
     expect(instance.adapter.capabilities.effortLevels).toEqual([
-      "low", "medium", "high", "xhigh", "max",
+      "low", "medium", "high", "xhigh", "max", "ultracode",
     ]);
   });
 });

@@ -92,7 +92,7 @@ final class DesktopSettingsNavGroupTests: XCTestCase {
         // #2080 (L0): Usage under AI; App holds Updates as a card.
         XCTAssertEqual(grouped.first { $0.group == .ai }?.sections.suffix(2), [.voice, .usage])
         XCTAssertEqual(grouped.first { $0.group == .installation }?.sections, [.organization, .computer, .backups])
-        XCTAssertEqual(grouped.last?.sections, [.experimental, .about])
+        XCTAssertEqual(grouped.last?.sections, [.developer, .about])
     }
 
     func testMemberSections() {

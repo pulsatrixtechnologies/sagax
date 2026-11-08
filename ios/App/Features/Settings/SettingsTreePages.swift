@@ -171,7 +171,7 @@ struct SettingsTreeRow: View {
         case .callVoice:
             SettingsRow(title: "Call voice", accessory: .chevron, height: 43.67, identifier: "settings-walkie-voice") { navigator.sheet = .walkieVoice }
         case .experimental:
-            SettingsRow(title: "Experimental", accessory: .chevron, height: 44.33, identifier: "settings-experimental") { navigator.push(.experimental) }
+            SettingsRow(title: "Developer", accessory: .chevron, height: 44.33, identifier: "settings-experimental") { navigator.push(.experimental) }
         // Privacy and security
         case .securityKeys:
             SettingsRow(title: "Security keys", accessory: .chevron, height: 44, identifier: "settings-security-keys") { navigator.push(.securityKeys) }

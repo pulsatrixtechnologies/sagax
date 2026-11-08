@@ -595,7 +595,7 @@ struct DesktopExperimentalSettings: View {
             row("skillAuthoring", Text("Bots may write and improve their own skills"), aria: Text("Allow bots to draft skills"), on: skills, busy: busy, identifier: "desktop-settings.skill-authoring")
             row("browser", Text("Built-in browser"), aria: Text("Enable the built-in browser"), on: browser, busy: busy,
                 unavailable: !browserReady && !browserInstallable,
-                reason: Text(verbatim: AppStrings.localized("The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")),
+                reason: Text(verbatim: AppStrings.localized("The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Developer → Experimental features and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")),
                 note: !browserReady && browserInstallable ? Text("Then install the engine from a bot's Computer > Browser.") : nil,
                 identifier: "desktop-settings.browser")
             row("decisionModel", Text("Decision model"), aria: Text("Decision model"), on: decision, busy: busy, identifier: "desktop-settings.decision-model")

@@ -23,7 +23,7 @@ public enum SettingsDestination: String, CaseIterable, Hashable, Sendable {
         // The links, feedback and the bot's settings sit on the root now
         // (the reference design iOS 1.14); General keeps the chat's settings.
         case .general: return ["general", "chat", "quick replies", "call voice", "walkie"]
-        case .experimental: return ["early", "preview", "skill", "authoring", "browser", "templates", "connected apps"]
+        case .experimental: return ["developer", "développeur", "experimental", "expérimental", "early", "preview", "skill", "authoring", "browser", "templates", "connected apps"]
         // Pair devices: the computers this phone is paired with
         case .account: return ["profile", "name", "email", "account", "sign out", "delete account", "switch account",
                                "companion", "device", "phone", "desktop", "pair", "pairing", "remote", "server", "connect", "computers"]

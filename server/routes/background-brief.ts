@@ -12,9 +12,13 @@
 //        Reads the apps already connected. No app: an empty queue.
 //   POST /api/bots/:id/background-brief/:suggestionId/reject
 //   POST /api/bots/:id/background-brief/:suggestionId/keep
-//   POST /api/bots/:id/background-brief/:suggestionId/feedback { choice }
+//   POST /api/bots/:id/background-brief/:suggestionId/feedback { choice, threadId?, messageId? }
 //        #2694: up, down, less or never. Applies at the next pass and
 //        leaves one memory line for the person.
+//   POST /api/bots/:id/background-brief/wake/feedback { choice, topic, threadId?, messageId? }
+//        #2694: the same choice on a whole wake kind (heartbeat, mail,
+//        calendar, attention, ...): it shapes the next wakes of that kind
+//        and is kept on the message it was given on.
 //
 // A pass does not invent pieces. It files only what the caller already read,
 // and only when every tool named is a read. Keep writes one memory line
@@ -41,6 +45,10 @@ export interface BackgroundBriefRouteDeps {
   keep: (botId: string, line: string) => void;
   /** #2694: write a feedback line into the person's memory. */
   remember?: (botId: string, choice: import("../proactive/background-brief.ts").BriefFeedback, text: string, topic: string) => void;
+  /** #2694: feedback on a wake kind, from a wake's message or a Today card. */
+  wakeFeedback?: (botId: string, topic: string, choice: import("../proactive/background-brief.ts").BriefFeedback, where: { threadId?: string; messageId?: string }) => { status: number; body: Record<string, unknown> };
+  /** #2694: a brief item rated from the chat: its row in the brief message shows the choice. */
+  itemShown?: (botId: string, suggestionId: string, choice: import("../proactive/background-brief.ts").BriefFeedback, where: { threadId: string; messageId: string }) => void;
   /** Names of the apps already connected. Empty: the queue stays empty. */
   connected(botId: string): readonly string[];
   /** A read of those apps. No send, no change, no browser. */
@@ -94,13 +102,30 @@ export function createBackgroundBriefRoutes(deps: BackgroundBriefRouteDeps): Rou
       if (!rejected) return json(res, 404, { error: "No pending suggestion." });
       return json(res, 200, { suggestion: rejected });
     }
+    if (suggestionId === "wake" && action === "feedback" && method === "POST") {
+      if (!deps.wakeFeedback) return json(res, 404, { error: "Not found." });
+      const body = await readBody(req) as { choice?: unknown; topic?: unknown; threadId?: unknown; messageId?: unknown } | null;
+      const choice = body?.choice;
+      if (!isBriefFeedback(choice)) return json(res, 400, { error: "choice must be up, down, less or never" });
+      const topic = typeof body?.topic === "string" ? body.topic.trim().toLowerCase() : "";
+      if (!/^[a-z][a-z-]{0,29}$/.test(topic)) return json(res, 400, { error: "topic must be a wake kind" });
+      const id = (value: unknown) => typeof value === "string" && /^[\w-]{1,200}$/.test(value) ? value : undefined;
+      const threadId = id(body?.threadId);
+      const messageId = id(body?.messageId);
+      const done = deps.wakeFeedback(botId, topic, choice, { ...(threadId ? { threadId } : {}), ...(messageId ? { messageId } : {}) });
+      return json(res, done.status, done.body);
+    }
     if (suggestionId && action === "feedback" && method === "POST") {
-      const body = await readBody(req) as { choice?: unknown } | null;
+      const body = await readBody(req) as { choice?: unknown; threadId?: unknown; messageId?: unknown } | null;
       const choice = body?.choice;
       if (!isBriefFeedback(choice)) return json(res, 400, { error: "choice must be up, down, less or never" });
       const done = deps.store.feedback(botId, suggestionId, choice);
       if (!done) return json(res, 404, { error: "No such suggestion." });
       deps.remember?.(botId, choice, done.item.text, done.topic);
+      const id = (value: unknown) => typeof value === "string" && /^[\w-]{1,200}$/.test(value) ? value : undefined;
+      const threadId = id(body?.threadId);
+      const messageId = id(body?.messageId);
+      if (threadId && messageId) deps.itemShown?.(botId, suggestionId, choice, { threadId, messageId });
       return json(res, 200, { suggestion: done.item, topic: done.topic });
     }
     if (suggestionId && action === "keep" && method === "POST") {

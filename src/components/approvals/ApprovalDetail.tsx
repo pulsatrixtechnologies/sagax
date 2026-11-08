@@ -11,6 +11,8 @@ import type { InboxApproval, InboxDestination } from "../../../shared/approvals-
 import { PendingApprovalActions, PendingApprovalPanel, pendingApprovals } from "@/components/PendingApproval";
 import { AttentionCard } from "@/components/AttentionCard";
 import { QuestionCard } from "@/components/QuestionCard";
+import { SuggestionFeedback } from "@/components/SuggestionFeedback";
+import { WakeFeedback, useOwnsBot } from "@/components/WakeFeedback";
 import { answerProactive, attentionOf, inboxWhere, markHandled, withoutIds } from "@/lib/approvals-inbox";
 import { readableError } from "@/lib/plain-error";
 import { api } from "@/state/store";
@@ -215,6 +217,15 @@ function TodayAttention({ entry, bot, onDecided, onDecideFailed }: {
         </button>
         {error && <span className="text-[12.5px] text-danger">{error}</span>}
       </div>
+      {/* #2694: less of this kind of wake, from Today as in the conversation */}
+      <WakeFeedback
+        className="mt-2"
+        botId={card.botId}
+        topic="attention"
+        value={card.feedback}
+        threadId={entry.threadId}
+        messageId={entry.requestId.startsWith("attention:") ? entry.requestId.slice("attention:".length) : undefined}
+      />
     </div>
   );
 }
@@ -229,6 +240,7 @@ function TodayProposal({ entry, options, onDecided, onDecideFailed }: {
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const owns = useOwnsBot(entry.botId);
   const answer = async (accept: boolean) => {
     if (busy) return;
     setBusy(true);
@@ -250,6 +262,15 @@ function TodayProposal({ entry, options, onDecided, onDecideFailed }: {
         <button type="button" disabled={busy} onClick={() => void answer(false)} className="ui-button">{options[1] ?? t("approvals.proactive.decline")}</button>
       </div>
       {error && <p className="mt-2 text-[12.5px] text-danger">{error}</p>}
+      {/* #2694: thumbs and "Moins de ça" on the proposal, as on its card in the conversation */}
+      {entry.proactiveId && owns && (
+        <SuggestionFeedback
+          className="mt-2"
+          onPick={async (choice) => {
+            await api(`/api/bots/${encodeURIComponent(entry.botId)}/proactive/${encodeURIComponent(entry.proactiveId!)}/feedback`, { method: "POST", body: JSON.stringify({ choice }) });
+          }}
+        />
+      )}
     </div>
   );
 }

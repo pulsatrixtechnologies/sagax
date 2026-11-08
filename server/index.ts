@@ -206,7 +206,7 @@ import { prepareSemanticRecall, setSemanticIndex } from "./recall/semantic-recal
 import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./engines/retire-every-claude.ts";
 import { LocalSemanticIndex, semanticIndexFile } from "./recall/semantic-index.ts";
 import { withoutWiderAudience } from "./memory/memory-audience.ts";
-import { BriefStore, feedbackMemoryText, type BriefFeedback, type BriefSuggestion } from "./proactive/background-brief.ts";
+import { BriefStore, feedbackMemoryText, suggestionAction, type BriefFeedback, type BriefSuggestion } from "./proactive/background-brief.ts";
 import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.ts";
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
@@ -19478,6 +19478,7 @@ const heartbeat = new HeartbeatManager({
   mainThread: (botId) => botMainThread(botId),
   read: (botId) => readMemoryDoc(botId, HEARTBEAT_PATH).text,
   enqueue: (input) => routines!.enqueueWebhook(input),
+  muted: (botId) => backgroundBriefs.wakeMuted(botId, "heartbeat"),
 });
 setInterval(() => { void heartbeat.tick().catch(reportBackgroundError); }, 60_000).unref?.();
 store.onChange((change) => {
@@ -19681,6 +19682,34 @@ function feedbackOnProposal(botId: string, proposalId: string, choice: BriefFeed
   return { status: 200, body: { ok: true, choice } };
 }
 ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal, feedback: feedbackOnProposal }));
+/** #2694: feedback on a whole wake kind (a heartbeat or mail/calendar wake's
+ * message, a Today attention card): the next wakes of that kind follow it
+ * (votes fade in two weeks, "never" holds until a thumbs-up), one memory
+ * line for the person, and the choice kept on the message. */
+function feedbackOnWake(botId: string, topic: string, choice: BriefFeedback, where: { threadId?: string; messageId?: string }): { status: number; body: Record<string, unknown> } {
+  const bot = store.bot(botId);
+  if (!bot) return { status: 404, body: { error: "no such bot" } };
+  let message: Message | undefined;
+  if (where.threadId && where.messageId) {
+    try {
+      routeThreadId(bot, where.threadId);
+    } catch {
+      return { status: 404, body: { error: "no such message" } };
+    }
+    message = store.messagesFor(where.threadId).find((row) => row.id === where.messageId);
+    if (!message) return { status: 404, body: { error: "no such message" } };
+  }
+  // the row itself names its wake kind when it has one (a Today card sends "attention")
+  const kind = message?.routineRun?.wakeTopic ?? topic;
+  backgroundBriefs.topicFeedback(bot.id, kind, choice);
+  const said = message?.routineRun?.summary ?? message?.attention?.items[0]?.text ?? message?.text ?? "";
+  rememberBriefFeedback(bot.id, choice, said || kind, kind);
+  if (message && where.threadId) {
+    if (message.routineRun) store.patchMessage(where.threadId, message.id, { routineRun: { ...message.routineRun, feedback: choice } });
+    else if (message.attention) store.patchMessage(where.threadId, message.id, { attention: { ...message.attention, feedback: choice } });
+  }
+  return { status: 200, body: { ok: true, choice, topic: kind } };
+}
 ROUTES.push(createProactiveMetricsRoutes<BotRecord>({
   bot: (id) => store.bot(id) ?? undefined,
   sees: (auth, bot) => auth.kind === "loopback" || listedBotVisible(bot, auth.session.principalId),
@@ -23795,7 +23824,9 @@ if (!process.env.VITEST) {
       if (threadId && !store.isConfidentialThread(threadId)) {
         // #2695: what waited (daily budget, quiet hours, FYI) arrives in the brief, in its own words
         const held = heldSignalsSection(signalGate.takeHeld(person), language);
-        store.appendMessage(threadId, { role: "bot", kind: "text", text: held ? `${briefMessageText(suggestions, language)}\n\n${held}` : briefMessageText(suggestions, language) });
+        // #2694: each point carries its id, so the chat rates it in place
+        const briefItems = suggestions.slice(0, 12).map((item) => ({ id: item.id, text: suggestionAction(item, language) }));
+        store.appendMessage(threadId, { role: "bot", kind: "text", text: held ? `${briefMessageText(suggestions, language)}\n\n${held}` : briefMessageText(suggestions, language), briefItems });
         // #2693: the primary bot turns up to 3 points a day into one-gesture cards
         if (bot.chiefOfStaff === true) postDailySuggestions(bot.id, threadId, suggestions, language);
       }
@@ -23817,6 +23848,19 @@ ROUTES.push(createBackgroundBriefRoutes({
   fastModel: (botId) => store.bot(botId)?.modelSelection.fast?.model ?? null,
   keep: (botId, line) => { updateMemory(botId, { action: "append", text: line }, { source: "background brief", readers: { kind: "person" } }); },
   remember: rememberBriefFeedback,
+  wakeFeedback: feedbackOnWake,
+  itemShown: (botId, suggestionId, choice, where) => {
+    const bot = store.bot(botId);
+    if (!bot) return;
+    try {
+      routeThreadId(bot, where.threadId);
+    } catch {
+      return;
+    }
+    const message = store.messagesFor(where.threadId).find((row) => row.id === where.messageId);
+    if (!message?.briefItems?.some((item) => item.id === suggestionId)) return;
+    store.patchMessage(where.threadId, message.id, { briefItems: message.briefItems.map((item) => item.id === suggestionId ? { ...item, feedback: choice } : item) });
+  },
   connected: backgroundBriefConnected,
   reads: backgroundBriefReads,
   screenContextAvailable: () => SCREEN_CONTEXT_AVAILABLE

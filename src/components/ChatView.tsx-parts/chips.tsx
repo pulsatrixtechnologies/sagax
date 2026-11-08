@@ -19,6 +19,7 @@ import { normalizeState } from "@/lib/mascot";
 import { ToolActivity, botNames } from "../ToolActivity";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
+import { WakeFeedback } from "../WakeFeedback";
 import { useChatRows } from "./types";
 
 export function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["autoModel"] }) {
@@ -95,7 +96,7 @@ export const ActivityChip = memo(function ActivityChip({ message, place = "auto"
 
 /** What a bot's turn elsewhere left for the person (2026-11-05): its card,
  * with the thread it was said in and the run it came from one click away. */
-export function AttentionRow({ message }: { message: Message }) {
+export function AttentionRow({ message, threadId }: { message: Message; threadId?: string }) {
   "use memo";
   const dispatch = useStoreDispatch();
   const getState = useStoreGetter();
@@ -104,6 +105,7 @@ export function AttentionRow({ message }: { message: Message }) {
   const owner = useStoreSelector((state) => state.bots.find((candidate) => candidate.id === card?.botId));
   if (!card) return null;
   return (
+    <div className="flex min-w-0 flex-col gap-1">
     <AttentionCard
       card={card}
       bot={owner}
@@ -115,10 +117,13 @@ export function AttentionRow({ message }: { message: Message }) {
         await api(`/api/bots/${card.botId}/messages`, { method: "POST", body: JSON.stringify({ text, threadId: card.threadId, sendId: crypto.randomUUID() }) });
       }}
     />
+    {/* #2694: the bot's owner says what to bring less, here as on Today */}
+    <WakeFeedback botId={card.botId} topic={message.routineRun?.wakeTopic ?? "attention"} value={card.feedback} threadId={threadId} messageId={message.id} />
+    </div>
   );
 }
 
-export function RoutineRunRow({ message, botId, onResume }: { message: Message; botId: string; onResume?: () => void }) {
+export function RoutineRunRow({ message, botId, threadId, onResume }: { message: Message; botId: string; threadId?: string; onResume?: () => void }) {
   "use memo";
   const dispatch = useStoreDispatch();
   const getState = useStoreGetter();
@@ -134,7 +139,10 @@ export function RoutineRunRow({ message, botId, onResume }: { message: Message; 
   }, shallowEqual);
   const owner = bots.find((candidate) => candidate.id === ownerId);
   const instances = useStoreSelector((state) => state.instances);
+  // #2694: a heartbeat or an email or calendar wake is rated once it has finished
+  const rated = run?.wakeTopic && run.status !== "running" && run.status !== "queued" && run.status !== "waiting" ? run.wakeTopic : undefined;
   return (
+    <div className="flex min-w-0 flex-col gap-1">
     <RoutineRunCard
       message={message}
       bot={owner}
@@ -149,6 +157,8 @@ export function RoutineRunRow({ message, botId, onResume }: { message: Message; 
       // 2026-11-06: each teammate's row names the model it works on.
       modelOf={(id, threadId) => delegateModelLabel(bots.find((candidate) => candidate.id === id), instances, threadId)}
     />
+    {rated && <WakeFeedback botId={ownerId} topic={rated} value={run?.feedback} threadId={threadId} messageId={message.id} />}
+    </div>
   );
 }
 

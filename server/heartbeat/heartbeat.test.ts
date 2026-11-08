@@ -55,7 +55,7 @@ describe("HeartbeatManager", () => {
     dir = undefined;
   });
 
-  function harness(text: string, probes: Partial<HeartbeatProbes>, start = new Date(2026, 10, 8, 9, 0).getTime()) {
+  function harness(text: string, probes: Partial<HeartbeatProbes>, start = new Date(2026, 10, 8, 9, 0).getTime(), muted?: (botId: string) => boolean) {
     dir = mkdtempSync(join(tmpdir(), "heartbeat-"));
     let now = start;
     let checklist = text;
@@ -68,6 +68,7 @@ describe("HeartbeatManager", () => {
       probes: { page: async () => ({ ok: true, text: "" }), stamp: async () => null, processes: async () => [], ...probes },
       file: join(dir, "heartbeat.json"),
       now: () => now,
+      ...(muted ? { muted } : {}),
     });
     return {
       manager,
@@ -120,6 +121,18 @@ describe("HeartbeatManager", () => {
     h.advance(31 * 60_000);
     await h.manager.tick();
     expect(h.runs).toHaveLength(2);
+  });
+
+  it("stays quiet while the person muted the heartbeat, and wakes once it fades (#2694)", async () => {
+    let mute = true;
+    const h = harness("- process Backup running", { processes: async () => [] }, undefined, () => mute);
+    await h.manager.tick();
+    h.advance(31 * 60_000);
+    await h.manager.tick();
+    expect(h.runs).toEqual([]);
+    mute = false;
+    h.advance(31 * 60_000);
+    expect(await h.manager.tick()).toEqual(["osprey"]);
   });
 
   it("waits for the interval before probing again", async () => {

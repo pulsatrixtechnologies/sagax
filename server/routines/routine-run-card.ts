@@ -31,6 +31,15 @@ export function pickRoutineFullReport(recorded: string, taskReport: string): str
   return report.startsWith(before.slice(0, Math.min(200, before.length))) ? report : undefined;
 }
 
+/** #2694: the kind of proactive wake a run is, for feedback from the chat:
+ * "heartbeat" (HEARTBEAT.md), or the wake's first source (mail, calendar,
+ * screen, ...). Undefined for a routine or a webhook of the person's own. */
+export function wakeTopicOf(run: Pick<RoutineRun, "webhookId" | "proactive">): string | undefined {
+  if (run.webhookId?.startsWith("heartbeat:")) return "heartbeat";
+  const source = run.proactive?.sources[0];
+  return source && /^[a-z]{1,30}$/.test(source) ? source : undefined;
+}
+
 /** `fullReport`: the bot's whole final message, read from the run's task
  * (syncRoutineRunToSource), when the run's record holds only its start. */
 export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullReport?: string): RoutineRunCardData {
@@ -70,6 +79,8 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.status === "completed" && run.problems) card.problems = readableRoutineProblems(redactSecretsInText(run.problems)).slice(0, 1_000);
   if (run.status === "queued" && run.attention) card.attention = redactSecretsInText(run.attention).slice(0, 500);
   if (run.startedAt) card.startedAt = run.startedAt;
+  const wakeTopic = wakeTopicOf(run);
+  if (wakeTopic) card.wakeTopic = wakeTopic;
   if (run.handedTo?.length) card.handedTo = run.handedTo.map((entry) => ({
     botId: entry.botId, threadId: entry.threadId, status: entry.status,
     ...(entry.name ? { name: redactSecretsInText(entry.name) } : {}),

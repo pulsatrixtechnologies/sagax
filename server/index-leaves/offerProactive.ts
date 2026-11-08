@@ -7,6 +7,9 @@ function offerProactive(event: ProactiveEvent) {
   const host = getHost();
 
   try {
+    // #2694: a wake kind the person said "never" to, or voted down past the
+    // mute line (votes fade in two weeks), does not wake the bot
+    if (host.backgroundBriefs?.wakeMuted(event.botId, event.source)) return undefined;
     return host.proactiveWaker.offer(event);
   } catch (error) {
     console.warn(`[proactive] offer failed: ${error instanceof Error ? error.name : "error"}`);

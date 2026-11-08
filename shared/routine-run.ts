@@ -33,4 +33,9 @@ export interface RoutineRunCardData {
   /** 2026-11-04: when the run started, so a running card shows how long it
    * has been going. */
   startedAt?: number;
+  /** #2694: a proactive wake's kind ("heartbeat", "mail", "calendar", ...),
+   * so the person can say less of it, or never, from the chat. */
+  wakeTopic?: string;
+  /** #2694: the person's feedback on that wake, kept across card updates. */
+  feedback?: "up" | "down" | "less" | "never";
 }

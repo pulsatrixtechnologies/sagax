@@ -96,6 +96,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   secret?: SecretRequestCardData;
   /** Lifecycle mirror for a routine whose real work lives in a fresh task. */
   routineRun?: RoutineRunCardData;
+  /** #2694: a brief's points, each rated in place (shared/wire.ts). */
+  briefItems?: Array<{ id: string; text: string; feedback?: "up" | "down" | "less" | "never" }>;
   /** Durable lifecycle receipt for a goal-driven channel run. */
   goalRun?: GroupGoalRunCardData;
   /** call rows: one finished Live call (its id, times and length, and a

@@ -86,41 +86,86 @@ export function isBriefFeedback(value: unknown): value is BriefFeedback {
   return typeof value === "string" && (BRIEF_FEEDBACK as readonly string[]).includes(value);
 }
 
-/** The kind of thing an item is about: the app its first piece came from. */
+/** The kind of thing an item is about: the app its first piece came from
+ * (pieces read "App, tool words" since #2693, older ones "App / tool"). */
 export function briefTopic(item: Pick<BriefSuggestion, "sources">): string {
   const piece = item.sources[0]?.piece ?? "";
-  const app = piece.split(" / ")[0]?.trim().toLowerCase().slice(0, 80);
+  const app = piece.split(/,| \/ /)[0]?.trim().toLowerCase().slice(0, 80);
   return app || "general";
 }
 
-export interface TopicFeedback { up: number; down: number; less: number }
+/** #2694: a topic's feedback. Counts fade with time (see decayTopic), so a
+ * "less" or a thumbs-down softens instead of muting a topic for good.
+ * `at` is when the counts were last brought to date; `blocked` is the
+ * person's "never" on a whole topic (a wake kind), lifted by a thumbs-up. */
+export interface TopicFeedback { up: number; down: number; less: number; at?: number; blocked?: boolean }
 
-/** A topic's weight: up raises it, down lowers it, less lowers it twice. */
-export function topicScore(row: TopicFeedback | undefined): number {
-  if (!row) return 0;
-  return row.up - row.down - 2 * row.less;
+/** Half-life of a feedback vote: after two weeks it weighs half. */
+export const TOPIC_HALF_LIFE_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** The counts brought to `now`: each vote halves every TOPIC_HALF_LIFE_MS.
+ * A row without `at` (written before decay) counts from `now`. */
+export function decayTopic(row: TopicFeedback, now: number): TopicFeedback {
+  const at = row.at ?? now;
+  const age = Math.max(0, now - at);
+  const factor = Math.pow(0.5, age / TOPIC_HALF_LIFE_MS);
+  const round = (value: number) => Math.round(value * factor * 1000) / 1000;
+  return { up: round(row.up), down: round(row.down), less: round(row.less), at: now, ...(row.blocked ? { blocked: true } : {}) };
 }
 
-/** At or under this, a topic is not proposed any more. */
+/** A topic's weight: up raises it, down lowers it, less lowers it twice. */
+export function topicScore(row: TopicFeedback | undefined, now?: number): number {
+  if (!row) return 0;
+  const live = now === undefined ? row : decayTopic(row, now);
+  return live.up - live.down - 2 * live.less;
+}
+
+/** At or under this, a topic is not proposed any more (until it fades). */
 export const TOPIC_MUTED_AT = -4;
+
+/** A "less" still counts while it weighs at least this much (about two weeks). */
+const LESS_ACTIVE_AT = 0.5;
+
+/** Whether a topic is muted now: blocked by "never", or voted down past
+ * TOPIC_MUTED_AT and not yet faded back. */
+export function topicMuted(row: TopicFeedback | undefined, now: number): boolean {
+  if (!row) return false;
+  if (row.blocked) return true;
+  return topicScore(row, now) <= TOPIC_MUTED_AT;
+}
 
 /** The suggestions a pass keeps, ranked by topic: a muted topic is dropped,
  * a topic the person asked less of keeps one item a pass, the rest goes
- * from the most liked topic down. */
-export function rankByFeedback<T extends Pick<BriefSuggestion, "sources">>(items: readonly T[], topics: Readonly<Record<string, TopicFeedback>>): T[] {
+ * from the most liked topic down. Votes fade with time (decayTopic). */
+export function rankByFeedback<T extends Pick<BriefSuggestion, "sources">>(items: readonly T[], topics: Readonly<Record<string, TopicFeedback>>, now = Date.now()): T[] {
   const perTopic = new Map<string, number>();
   const kept: Array<{ item: T; score: number; index: number }> = [];
   items.forEach((item, index) => {
     const topic = briefTopic(item);
-    const row = topics[topic];
+    const stored = topics[topic];
+    const row = stored ? decayTopic(stored, now) : undefined;
     const score = topicScore(row);
-    if (score <= TOPIC_MUTED_AT) return;
+    if (row?.blocked || score <= TOPIC_MUTED_AT) return;
     const seen = perTopic.get(topic) ?? 0;
-    if (row && row.less > 0 && seen >= 1) return;
+    if (row && row.less >= LESS_ACTIVE_AT && seen >= 1) return;
     perTopic.set(topic, seen + 1);
     kept.push({ item, score, index });
   });
   return kept.sort((a, b) => b.score - a.score || a.index - b.index).map((row) => row.item);
+}
+
+/** One vote on a topic, the stored row first brought to date. "never" blocks
+ * the topic only when `blockOnNever` (a wake kind; a brief item's "never"
+ * blocks that one item instead); "up" lifts a block. */
+export function voteTopic(stored: TopicFeedback | undefined, choice: BriefFeedback, now: number, blockOnNever = false): TopicFeedback {
+  const row = decayTopic(stored ?? { up: 0, down: 0, less: 0 }, now);
+  if (choice === "never") {
+    if (blockOnNever) row.blocked = true;
+  } else {
+    row[choice] += 1;
+  }
+  if (choice === "up") delete row.blocked;
+  return row;
 }
 
 /** The memory line a feedback leaves, in the person's language. */
@@ -167,7 +212,7 @@ const suggestionSchema = z.object({
   feedback: z.enum(BRIEF_FEEDBACK).optional(),
 });
 
-const topicSchema = z.object({ up: z.number().int().nonnegative(), down: z.number().int().nonnegative(), less: z.number().int().nonnegative() });
+const topicSchema = z.object({ up: z.number().nonnegative(), down: z.number().nonnegative(), less: z.number().nonnegative(), at: z.number().optional(), blocked: z.boolean().optional() });
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
@@ -493,7 +538,7 @@ export class BriefStore {
   recordPass(botId: string, pass: Extract<BriefPassResult, { ok: true }>): BriefSuggestion[] {
     const row = this.bot(botId);
     const added: BriefSuggestion[] = [];
-    for (const suggestion of rankByFeedback(pass.suggestions, row.topics ?? {})) {
+    for (const suggestion of rankByFeedback(pass.suggestions, row.topics ?? {}, this.now())) {
       if (row.rejected.includes(suggestion.identity)) continue;
       if (row.suggestions.some((item) => item.identity === suggestion.identity)) continue;
       const saved: BriefSuggestion = { ...suggestion, id: `brief_${randomUUID()}`, status: "pending", at: this.now() };
@@ -526,9 +571,7 @@ export class BriefStore {
     if (!item) return null;
     const topic = briefTopic(item);
     const topics = row.topics ?? {};
-    const counts = topics[topic] ?? { up: 0, down: 0, less: 0 };
-    if (choice !== "never") counts[choice] += 1;
-    topics[topic] = counts;
+    topics[topic] = voteTopic(topics[topic], choice, this.now());
     row.topics = topics;
     item.feedback = choice;
     if ((choice === "down" || choice === "never" || choice === "less") && item.status === "pending") item.status = "rejected";
@@ -543,6 +586,27 @@ export class BriefStore {
 
   topics(botId: string): Record<string, TopicFeedback> {
     return { ...this.bot(botId).topics };
+  }
+
+  /** #2694: feedback on a whole wake kind ("heartbeat", "mail", "calendar",
+   * "attention", ...), from a wake's message or a Today card. "never" blocks
+   * the kind until a thumbs-up; the other votes fade like brief topics. */
+  topicFeedback(botId: string, topic: string, choice: BriefFeedback): TopicFeedback {
+    const row = this.bot(botId);
+    const topics = row.topics ?? {};
+    const key = `wake:${topic.trim().toLowerCase().slice(0, 60)}`;
+    topics[key] = voteTopic(topics[key], choice, this.now(), true);
+    row.topics = topics;
+    this.data.bots[botId] = row;
+    this.save();
+    return { ...topics[key]! };
+  }
+
+  /** #2694: whether a wake kind is muted by the person's feedback now. */
+  wakeMuted(botId: string, topic: string): boolean {
+    const row = this.data.bots[botId];
+    if (!row?.topics) return false;
+    return topicMuted(row.topics[`wake:${topic.trim().toLowerCase().slice(0, 60)}`], this.now());
   }
 
   takePending(botId: string, id: string): BriefSuggestion | null {

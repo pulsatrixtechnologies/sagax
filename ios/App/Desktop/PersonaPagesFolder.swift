@@ -1401,10 +1401,10 @@ struct PersonaAccessPage: View {
     private var browserDetail: String {
         if !DesktopWorksOnRules.browserAvailable(config) {
             switch DesktopWorksOnRules.browserBlock(config: config) {
-            case .notInstalled: return String(localized: "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")
+            case .notInstalled: return String(localized: "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Developer → Experimental features and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")
             case let .server(reason): return reason
             case .noEngine: return String(localized: "This server has no browser engine.")
-            case .featureOff: return String(localized: "The built-in browser is switched off under App Settings → Experimental")
+            case .featureOff: return String(localized: "The built-in browser is switched off under App Settings → Developer → Experimental features")
             case .model: return String(localized: "This model cannot use the built-in browser")
             }
         }

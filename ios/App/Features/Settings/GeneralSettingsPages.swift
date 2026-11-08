@@ -137,7 +137,7 @@ struct ExperimentalSettingsView: View {
     @State private var error: String?
 
     var body: some View {
-        SettingsPage(title: "Experimental") {
+        SettingsPage(title: "Developer") {
             SettingsFooter(text: "Early features may change while we test them. Each one says whether it starts on or off.")
             SettingsCard {
                 feature("skillAuthoring", title: "Bots may draft skills for your review",

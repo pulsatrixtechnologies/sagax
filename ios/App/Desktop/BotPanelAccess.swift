@@ -95,10 +95,10 @@ struct BotPanelAccess: View {
     private var browserReason: String {
         switch DesktopWorksOnRules.browserBlock(config: config) {
         case .notInstalled:
-            String(localized: "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")
+            String(localized: "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Developer → Experimental features and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")
         case let .server(reason): reason
         case .noEngine: String(localized: "This server has no browser engine.")
-        case .featureOff: String(localized: "The built-in browser is switched off under App Settings → Experimental")
+        case .featureOff: String(localized: "The built-in browser is switched off under App Settings → Developer → Experimental features")
         case .model: String(localized: "This model cannot use the built-in browser")
         }
     }

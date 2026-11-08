@@ -160,6 +160,7 @@ extension DesktopSettingsSection {
         case .organization: "Organization"
         case .appearance: "Appearance"
         case .experimental: "Experimental"
+        case .developer: "Developer"
         case .connections: "API keys"
         case .myConnections: "My connections"
         case .decisionModel: "Decision model"
@@ -191,6 +192,7 @@ extension DesktopSettingsSection {
         case .organization: AppStrings.localized("Organization")
         case .appearance: AppStrings.localized("Appearance")
         case .experimental: AppStrings.localized("Experimental")
+        case .developer: AppStrings.localized("Developer")
         case .connections: AppStrings.localized("API keys")
         case .myConnections: AppStrings.localized("My connections")
         case .decisionModel: AppStrings.localized("Decision model")
@@ -231,6 +233,7 @@ extension DesktopSettingsSection {
         case .backups: "Save, restore and bring in your data."
         case .about: "This app's version, updates and help."
         case .experimental: "Features still being tried out."
+        case .developer: "Technical options: run details, timeouts, telemetry, logs and diagnostics."
         case .connections, .myConnections, .decisionModel, .myEngines, .companion,
              .people, .mail, .activity, .updates, .importBot:
             nil
@@ -243,6 +246,7 @@ extension DesktopSettingsSection {
         case .organization: .building2
         case .appearance: .palette
         case .experimental: .flaskConical
+        case .developer: .code2
         case .connections: .keyRound
         case .myConnections: .plug
         case .decisionModel: .zap
@@ -418,7 +422,8 @@ struct DesktopSettingsPage: View {
         case .general: AnyView(DesktopGeneralSettings())
         case .organization: AnyView(DesktopOrganizationSettings())
         case .appearance: AnyView(DesktopAppearanceSettings())
-        case .experimental: AnyView(DesktopExperimentalSettings())
+        // #2729: Experimental features is a card of Developer, as on the desktop.
+        case .experimental, .developer: AnyView(DesktopExperimentalSettings())
         case .connections: AnyView(DesktopAPIKeysSettings())
         // 2026-10-27: GitHub and the person's MCP servers live in Connect
         // apps (Sources, Providers); this page links there
@@ -520,7 +525,8 @@ extension IPadParityScreen {
         case .settingsCloudAccount: (.settings, .general, nil)
         case .settingsOrganization: (.settings, .organization, nil)
         case .settingsAppearance: (.settings, .appearance, nil)
-        case .settingsExperimental: (.settings, .experimental, nil)
+        // #2729: Experimental features is a card of Developer.
+        case .settingsDeveloper: (.settings, .developer, nil)
         case .settingsConnections: (.settings, .connections, nil)
         case .settingsMyConnections: (.settings, .myConnections, nil)
         case .settingsDecisionModel: (.settings, .decisionModel, nil)

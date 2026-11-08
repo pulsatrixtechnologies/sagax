@@ -17,6 +17,10 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
     case providers, voice, updates, about
     /// Security, Vault (`credentials`), Notifications and Import (lot 2b).
     case security, vault = "credentials", notifications, importBot = "import"
+    /// Developer (#2729): the desktop's technical page, where the
+    /// Experimental features card now lives. `.experimental` stays as an
+    /// old link that opens this page.
+    case developer
 
     /// Search words beside the label (the desktop's `keywords`).
     public var keywords: [String] {
@@ -30,6 +34,10 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
             ["skin", "theme", "appearance", "threads", "show threads", "sidebar", "density", "compact", "comfortable",
              "display", "notifications", "sound", "sounds", "mascot", "owl", "app icon", "icon", "logo"]
         case .experimental: ["early", "preview", "learn", "skill", "authoring", "browser", "templates"]
+        case .developer:
+            ["developer", "développeur", "technical", "technique", "experimental", "expérimental", "early", "preview",
+             "learn", "skill", "authoring", "browser", "templates", "data window", "fenêtre data", "context pods",
+             "pods de contexte", "decision model", "notetaker", "titles"]
         case .connections:
             ["keys", "api", "api key", "api keys", "connections", "xai", "mistral", "router", "openrouter",
              "openai", "anthropic", "provider"]
@@ -102,14 +110,15 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         // Appearance, Notifications, Security, Vault. AI: Providers, Models,
         // Voice, Usage. Installation: Organization, Computer, Backups and
         // import. App: App (id "about", Updates is its first card) and
-        // Experimental. Import and Updates are cards (settings-sections.ts
+        // Developer, which holds the Experimental features card (#2729).
+        // Import, Updates and Experimental are cards (settings-sections.ts
         // MERGED), never rows of the rail.
         switch gate.scope {
         case .sidecar, .serverClient:
             return [.appearance, .notifications] + engines + mine + [.organization, .about]
         case .serverAdmin:
             return [.general, .security, .vault, .appearance, .notifications, .providers, .engines] + engines + mine
-                + [.voice, .usage, .organization, .computer, .backups, .experimental, .about]
+                + [.voice, .usage, .organization, .computer, .backups, .developer, .about]
         }
     }
 
@@ -122,6 +131,8 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         // #2080 (L0): Import → Backups and import; Updates → App (about).
         case .importBot: .backups
         case .updates: .about
+        // #2729: Experimental features is a card of Developer.
+        case .experimental: .developer
         default: self
         }
     }
@@ -150,7 +161,7 @@ public enum DesktopSettingsNavGroup: String, CaseIterable, Hashable, Sendable {
         // #2080: Usage sits under AI (the cost of the models).
         case .providers, .engines, .myEngines, .myConnections, .voice, .connections, .decisionModel, .usage: .ai
         case .organization, .computer, .backups, .importBot, .companion, .people, .mail, .activity: .installation
-        case .experimental, .updates, .about: .app
+        case .developer, .experimental, .updates, .about: .app
         }
     }
 
@@ -161,7 +172,7 @@ public enum DesktopSettingsNavGroup: String, CaseIterable, Hashable, Sendable {
         // they stay out of the rail order (host resolves deep links).
         let order: [DesktopSettingsSection] = [
             .general, .security, .vault, .appearance, .notifications, .providers, .engines, .myEngines, .myConnections, .voice,
-            .usage, .organization, .computer, .backups, .experimental, .about,
+            .usage, .organization, .computer, .backups, .developer, .about,
         ]
         let ranked = sections.sorted { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
         return allCases.compactMap { group in

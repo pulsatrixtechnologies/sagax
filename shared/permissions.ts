@@ -330,8 +330,8 @@ const definitions = [
     key: "server.experimental", group: "server", memberDefault: false, adminOnly: false,
     label: { en: "Manage experimental features", fr: "Gérer les fonctionnalités expérimentales" },
     description: {
-      en: "See Settings > Developer > Experimental and turn its early features on or off for the whole server (skill authoring, the built-in browser, connected apps, the decision model, the data window, the meeting notetaker). It reaches no other installation setting. Anyone who can change the server's settings already has it.",
-      fr: "Voir Réglages > Expérimental et activer ou désactiver ses fonctionnalités en avant-première pour tout le serveur (rédaction de compétences, navigateur intégré, applications connectées, modèle de décision, fenêtre de données, preneur de notes de réunion). Elle n'atteint aucun autre réglage de l'installation. Toute personne qui peut changer les réglages du serveur l'a déjà.",
+      en: "See Settings > Developer > Experimental features and turn its early features on or off for the whole server (skill authoring, the built-in browser, connected apps, the decision model, the data window, the meeting notetaker). It reaches no other installation setting. Anyone who can change the server's settings already has it.",
+      fr: "Voir Réglages > Développeur > Fonctionnalités expérimentales et activer ou désactiver ses fonctionnalités en avant-première pour tout le serveur (rédaction de compétences, navigateur intégré, applications connectées, modèle de décision, fenêtre de données, preneur de notes de réunion). Elle n'atteint aucun autre réglage de l'installation. Toute personne qui peut changer les réglages du serveur l'a déjà.",
     },
   },
   {

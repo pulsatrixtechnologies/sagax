@@ -97,7 +97,9 @@ export const SETTINGS_NAV_LABEL = {
   // retired ids: openSettings remaps or falls back; the label is what would
   // have to be current for the capture to keep the shot.
   cloudAccount: "Account",
-  experimental: "Experimental",
+  // #2729: Experimental is a card of Developer; its old id opens Developer.
+  experimental: "Developer",
+  developer: "Developer",
   connections: "Providers",
   providers: "Providers",
   decisionModel: "Models",
@@ -408,7 +410,7 @@ add({ id: "notice-thread-gone", phase: "main", note: "in-app notice (toast)",
   open: async (ctx) => { await ctx.dispatch({ type: "notice", notice: { kind: "thread-gone", botName: "Helix" } }); await ctx.sleep(500); } });
 
 // settings, every section the local desktop page lists
-const SETTINGS = ["general", "organization", "cloudAccount", "appearance", "experimental", "connections", "decisionModel", "engines", "companion", "computer", "usage", "people", "mail", "activity", "backups", "workspaces"];
+const SETTINGS = ["general", "organization", "cloudAccount", "appearance", "developer", "connections", "decisionModel", "engines", "companion", "computer", "usage", "people", "mail", "activity", "backups", "workspaces"];
 // People (who signed in, managed in the organization's Admin) and Activity
 // (the admin log, with the fixture's own changes): an admin on the
 // organization server, where they have content (on the solo fixture both are
@@ -479,7 +481,7 @@ for (const section of ["memory", "privacy", "notifications"]) {
       await ctx.sleep(500);
     } });
 }
-for (const section of ["general", "memory", "privacy", "notifications", "organization", "appearance", "experimental", "connections", "decisionModel", "engines", "companion", "computer", "usage", "backups", "myConnections"]) {
+for (const section of ["general", "memory", "privacy", "notifications", "organization", "appearance", "developer", "connections", "decisionModel", "engines", "companion", "computer", "usage", "backups", "myConnections"]) {
   add({
     id: `org-settings-${section}`, phase: "main", org: true, note: `Settings > ${section} (organization server)`,
     ...(SETTINGS_NEEDS_ADVANCED.has(section) ? { advanced: true } : {}),

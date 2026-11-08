@@ -27032,6 +27032,28 @@
         }
       }
     },
+    "Developer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Developer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Développeur"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desenvolvedor"
+          }
+        }
+      }
+    },
     "Device": {
       "localizations": {
         "en": {
@@ -80250,6 +80272,28 @@
         }
       }
     },
+    "Technical options: run details, timeouts, telemetry, logs and diagnostics.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Technical options: run details, timeouts, telemetry, logs and diagnostics."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options techniques : détails d'exécution, délais, télémétrie, journaux et diagnostics."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opções técnicas: detalhes de execução, tempos limite, telemetria, registros e diagnósticos."
+          }
+        }
+      }
+    },
     "Telegram": {
       "localizations": {
         "en": {
@@ -81696,24 +81740,24 @@
         }
       }
     },
-    "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.": {
+    "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Developer → Experimental features and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server."
+            "value": "The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Developer → Experimental features and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le moteur du navigateur n'est pas encore installé sur ce serveur. Activez les interrupteurs du navigateur dans Réglages → Expérimental et dans les réglages d'accès du bot, puis ouvrez Ordinateur du bot → Navigateur pour l'installer. Ou lancez `sagax browser install` sur le serveur."
+            "value": "Le moteur du navigateur n'est pas encore installé sur ce serveur. Activez les interrupteurs du navigateur dans Réglages → Développeur → Fonctionnalités expérimentales et dans les réglages d'accès du bot, puis ouvrez Ordinateur du bot → Navigateur pour l'installer. Ou lancez `sagax browser install` sur le serveur."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O mecanismo do navegador ainda não está instalado neste servidor. Ative as chaves do navegador em Ajustes → Experimental e nos ajustes de acesso do bot, depois abra Computador do bot → Navegador para instalá-lo. Ou rode `sagax browser install` no servidor."
+            "value": "O mecanismo do navegador ainda não está instalado neste servidor. Ative as chaves do navegador em Ajustes → Desenvolvedor → Recursos experimentais e nos ajustes de acesso do bot, depois abra Computador do bot → Navegador para instalá-lo. Ou rode `sagax browser install` no servidor."
           }
         }
       }
@@ -81762,24 +81806,24 @@
         }
       }
     },
-    "The built-in browser is switched off under App Settings → Experimental": {
+    "The built-in browser is switched off under App Settings → Developer → Experimental features": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The built-in browser is switched off under App Settings → Experimental"
+            "value": "The built-in browser is switched off under App Settings → Developer → Experimental features"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le navigateur intégré est désactivé dans Paramètres → Expérimental"
+            "value": "Le navigateur intégré est désactivé dans Réglages → Développeur → Fonctionnalités expérimentales"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O navegador integrado está desativado em Configurações → Experimental"
+            "value": "O navegador integrado está desativado em Configurações → Desenvolvedor → Recursos experimentais"
           }
         }
       }

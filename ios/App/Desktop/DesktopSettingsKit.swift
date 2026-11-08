@@ -13,7 +13,7 @@ import CompanionCore
 // MARK: - Icons
 
 enum DesktopSettingsIcon: String, CaseIterable {
-    case user, building2, palette, flaskConical, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck, audioLines, info, bell, chevronRight, copy, fileUp, fingerprint, hardDrive
+    case user, building2, palette, flaskConical, code2, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck, audioLines, info, bell, chevronRight, copy, fileUp, fingerprint, hardDrive
 
     /// Path data in the 24 pt viewBox (lucide-react 0.539, ISC).
     var paths: [String] {
@@ -22,6 +22,7 @@ enum DesktopSettingsIcon: String, CaseIterable {
         case .building2: ["M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z","M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2","M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2","M10 6h4","M10 10h4","M10 14h4","M10 18h4"]
         case .palette: ["M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z","M13 6.5A.5 .5 0 1 0 14 6.5A.5 .5 0 1 0 13 6.5Z","M17 10.5A.5 .5 0 1 0 18 10.5A.5 .5 0 1 0 17 10.5Z","M6 12.5A.5 .5 0 1 0 7 12.5A.5 .5 0 1 0 6 12.5Z","M8 7.5A.5 .5 0 1 0 9 7.5A.5 .5 0 1 0 8 7.5Z"]
         case .flaskConical: ["M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2","M6.453 15h11.094","M8.5 2h7"]
+        case .code2: ["m18 16 4-4-4-4","m6 8-4 4 4 4","m14.5 4-5 16"]
         case .keyRound: ["M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z","M16 7.5A.5 .5 0 1 0 17 7.5A.5 .5 0 1 0 16 7.5Z"]
         case .zap: ["M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"]
         case .terminal: ["M12 19h8","m4 17 6-6-6-6"]

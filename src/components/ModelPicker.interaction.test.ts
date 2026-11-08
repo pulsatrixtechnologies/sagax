@@ -81,6 +81,7 @@ vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvance
 
 const { ModelPicker } = await import("./ModelPicker");
 const { ModelSearchList } = await import("./ModelMenu");
+const indicatorModule = await import("./LimitResetContinue");
 const { ModelMenuSettings } = await import("./ModelMenuSettings");
 type ModelMenuSettingsProps = import("./ModelMenuSettings").ModelMenuSettingsProps;
 type MenuRow = import("@/lib/model-menu").ModelMenuRow;
@@ -275,6 +276,25 @@ describe("ModelPicker Auto (docs/plans/2026-10-08-auto-model.md)", () => {
     const html = render(onAuto()).html;
     expect(html).toContain(">Auto<");
     expect(html).not.toContain(">Sonnet 5<");
+  });
+
+  it("#2902/#0867: the limit indicator follows the engine Auto resolved to, not the saved one", () => {
+    const { EngineLimitIndicator } = indicatorModule;
+    const limitEngine = (rendered: ReturnType<typeof render>) =>
+      (rendered.nodes.find((node) => node.type === EngineLimitIndicator)?.props.engine as string | undefined);
+    fixture.instances = [signedIn(), codex];
+    // Auto picked a Codex model for this thread: the dot reads Codex's limits.
+    fixture.autoStatus = {
+      auto: true, chain: [], excluded: [], backups: [],
+      pick: { instanceId: "codex", model: "gpt-5.6", engineLabel: "Codex", modelLabel: "GPT-5.6", role: "orchestration", tier: "standard", reason: "default" } as never,
+    };
+    expect(limitEngine(render(onAuto()))).toBe("codex");
+    // Before any pick is known it reads the saved engine.
+    fixture.autoStatus = null;
+    expect(limitEngine(render(onAuto()))).toBe("claude");
+    // Pinned (Auto off): the saved engine, whatever Auto would pick.
+    fixture.autoStatus = { auto: false, pick: null, chain: [], excluded: [], backups: [] };
+    expect(limitEngine(render(bot("claude", "claude-opus-5-5")))).toBe("claude");
   });
 
 });

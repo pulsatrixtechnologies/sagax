@@ -44,6 +44,9 @@ export interface PlanProvider {
   state?: PlanRowState;
   access?: "subscription" | "api-key";
   instanceId?: string | null;
+  /** Every instance the row stands for (folded on the same login). Absent
+   * from servers older than #0867: then only `instanceId`. */
+  instanceIds?: string[];
   failure?: PlanFailure | null;
   fiveHour?: PlanWindow;
   weekly?: PlanWindow;
@@ -65,6 +68,9 @@ export interface PlanRow {
   state: PlanRowState;
   access: "subscription" | "api-key";
   instanceId: string | null;
+  /** `instanceId` plus the instances folded into this row because they read
+   * the same login: a bot on any of them shows this row's limits. */
+  instanceIds: string[];
   /** state error: the sentence to show. */
   message: string | null;
   fiveHour: PlanWindow;
@@ -178,6 +184,7 @@ function rowOf(provider: PlanProvider): PlanRow {
     state,
     access,
     instanceId: provider.instanceId ?? null,
+    instanceIds: provider.instanceIds?.length ? provider.instanceIds : provider.instanceId ? [provider.instanceId] : [],
     message,
     fiveHour: provider.fiveHour ?? CLOSED,
     weekly: provider.weekly ?? CLOSED,

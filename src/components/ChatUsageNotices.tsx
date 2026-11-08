@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
-import { dismissNotice, noticeDismissed, showsGroupCostNotice, weeklyLimitNotice } from "@/lib/usage-notices";
+import { dismissNotice, noticeDismissed, rowsForEngine, showsGroupCostNotice, weeklyLimitNotice } from "@/lib/usage-notices";
 import { api } from "@/state/store";
 
 const GROUP_KEY = "group-cost";
@@ -49,6 +49,7 @@ export function useWeeklyLimit(engine?: string, driver?: string) {
     return () => { alive = false; window.clearInterval(timer); };
   }, []);
   // #2902: only the engine this bot runs on (Auto resolved); another
-  // provider's window lives on the Usage page, never in the chat bar.
-  return weeklyLimitNotice(rows.filter((row) => (row.instanceId ? row.instanceId === engine : Boolean(driver) && row.driver === driver)));
+  // provider's window lives on the Usage page, never in the chat bar. A row
+  // folded on a shared login answers for every instance reading it.
+  return weeklyLimitNotice(rowsForEngine(rows, engine, driver));
 }

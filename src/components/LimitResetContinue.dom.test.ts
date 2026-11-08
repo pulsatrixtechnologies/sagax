@@ -105,6 +105,29 @@ describe("EngineLimitIndicator (no banner above the chat, the owner 2026-11-08)"
     expect(codex.querySelector('[data-testid="engine-limit-indicator"]')?.getAttribute("title")).toContain("weekly Codex limit");
   });
 
+  it("#0867: an instance folded on a shared login still shows that login's weekly limit", async () => {
+    const plan = (id: string, driver: string, name: string, used: number, instanceIds: string[]) => ({
+      id, name, driver, ok: true, error: null, state: "windows", access: "subscription", instanceId: instanceIds[0], instanceIds,
+      fiveHour: { available: false, remainingPercent: null, usedPercent: null, resetsAt: null },
+      weekly: { available: true, remainingPercent: 100 - used, usedPercent: used, resetsAt: "2026-11-12T00:00:00Z" },
+    });
+    fixture.api.mockImplementation(async (path: unknown) =>
+      String(path) === "/api/plan-usage"
+        ? { providers: [plan("claude", "claude", "Claude", 95, ["claude", "claude-opus"]), plan("codex", "codex", "Codex", 12, ["codex", "chatgpt"])] }
+        : { checkedAt: NOW, engines: [] });
+    limits.rememberLimits({ checkedAt: NOW, engines: [] });
+    const opus = remount(createElement(EngineLimitIndicator, { engine: "claude-opus", botId: "scout", threadId: "t-1" }));
+    await settle();
+    await settle();
+    expect(opus.querySelector('[data-testid="engine-limit-indicator"]')?.getAttribute("title")).toContain("Claude");
+    expect(opus.querySelector('[data-testid="engine-limit-indicator"]')?.getAttribute("title")).toContain("95");
+    // the ChatGPT plan instance on the Codex login stays quiet at 12 %
+    const chatgpt = remount(createElement(EngineLimitIndicator, { engine: "chatgpt", botId: "scout", threadId: "t-1" }));
+    await settle();
+    await settle();
+    expect(chatgpt.innerHTML).toBe("");
+  });
+
   it("stays quiet for another engine", () => {
     expect(remount(createElement(EngineLimitIndicator, { engine: "codex" })).innerHTML).toBe("");
   });

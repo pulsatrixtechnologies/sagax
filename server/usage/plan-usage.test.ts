@@ -420,9 +420,24 @@ describe("plan usage fetcher", () => {
       cursor: { driver: "cursorAgent", displayName: "Cursor" },
       api: { driver: "grok", displayName: "Grok API" },
     })).toEqual([
-      { id: "claude", name: "Personal Claude", driver: "claude", environment: {}, configDir: "/tmp/claude", instanceId: "claude" },
-      { id: "codex", name: "Codex", driver: "codex", environment: {}, instanceId: "codex" },
-      { id: "grok", name: "Grok", driver: "grok", environment: { GROK_HOME: "/tmp/grok" }, instanceId: "grok" },
+      { id: "claude", name: "Personal Claude", driver: "claude", environment: {}, configDir: "/tmp/claude", instanceId: "claude", instanceIds: ["claude"] },
+      { id: "codex", name: "Codex", driver: "codex", environment: {}, instanceId: "codex", instanceIds: ["codex"] },
+      { id: "grok", name: "Grok", driver: "grok", environment: { GROK_HOME: "/tmp/grok" }, instanceId: "grok", instanceIds: ["grok"] },
+    ]);
+  });
+
+  it("#0867: an instance folded on a shared login is listed on the row it folds into", () => {
+    const rows = planAccountsFromInstances({
+      "claude-opus": { driver: "claudeAgent", displayName: "Opus" },
+      claude: { driver: "claudeAgent" },
+      chatgpt: { driver: "codex", config: { authMode: "chatgpt-plan" } },
+      codex: { driver: "codex" },
+      work: { driver: "claudeAgent", config: { configDir: "/tmp/work-claude" } },
+    });
+    expect(rows.map((row) => [row.id, row.instanceId, row.instanceIds])).toEqual([
+      ["claude", "claude", ["claude", "claude-opus"]],
+      ["codex", "codex", ["codex", "chatgpt"]],
+      ["work", "work", ["work"]],
     ]);
   });
 });

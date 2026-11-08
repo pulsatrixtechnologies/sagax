@@ -1,6 +1,6 @@
 /** Isolated gallery for headless screenshots of the conversation cost notices,
  * the engine limit banner, and the JSON tree viewer. Not shipped in the app.
- * ?lang=<code>&skin=<id>&view=notices|json|engine-limit|bot-pill&used=<weekly percent> */
+ * ?lang=<code>&skin=<id>&view=notices|json|engine-limit|bot-pill|other-provider-limit|folded-instance-limit&used=<weekly percent> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { GroupCostNotice } from "../components/ChatUsageNotices";
@@ -35,6 +35,15 @@ window.fetch = async (input, init) => {
         { id: "codex", name: "Codex", driver: "codex", ok: true, error: null, state: "windows", access: "subscription", instanceId: "codex", weekly: weekly(100) },
       ] });
     }
+    if (params.get("view") === "folded-instance-limit") {
+      // #0867: the bot runs on "claude-opus", which reads the same login as
+      // "claude", so the server folds it into the Claude row (95 % weekly).
+      const weekly = (n: number) => ({ available: true, usedPercent: n, remainingPercent: 100 - n, resetsAt: "2026-11-12T00:00:00Z" });
+      return json({ providers: [
+        { id: "claude", name: "Claude", driver: "claude", ok: true, error: null, state: "windows", access: "subscription", instanceId: "claude", instanceIds: ["claude", "claude-opus"], weekly: weekly(95) },
+        { id: "codex", name: "Codex", driver: "codex", ok: true, error: null, state: "windows", access: "subscription", instanceId: "codex", instanceIds: ["codex", "chatgpt"], weekly: weekly(20) },
+      ] });
+    }
     return json({ providers: [{ id: "claude", name: "Claude", driver: "claude", ok: true, error: null, state: "windows", access: "subscription", weekly: { available: true, usedPercent: used, remainingPercent: 100 - used, resetsAt: "2026-10-25T00:00:00Z" } }] });
   }
   if (url.includes("/api/limit-resets")) {
@@ -56,7 +65,7 @@ window.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
-rememberLimits(params.get("view") === "other-provider-limit" ? {
+rememberLimits(params.get("view") === "other-provider-limit" || params.get("view") === "folded-instance-limit" ? {
   checkedAt: Date.now(),
   engines: [{ engine: "claude", name: "Claude", driver: "claude", window: "5-hour", usedPercent: 10, resetsAt: resetAt, blocked: false }],
 } : {
@@ -107,6 +116,18 @@ function Gallery() {
           <div className="relative w-fit rounded-lg border border-hairline/40 bg-panel px-3 py-1.5 text-[13px]" data-gallery-model-chip>
             Claude Sonnet 5
             <EngineLimitIndicator engine="claude" botId="scout" threadId="t-scout" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (view === "folded-instance-limit") {
+    return (
+      <div data-gallery className="min-h-screen bg-app text-ink">
+        <div className="relative mx-auto flex min-h-[200px] max-w-[760px] flex-col items-end justify-end px-5 pb-6">
+          <div className="relative w-fit rounded-lg border border-hairline/40 bg-panel px-3 py-1.5 text-[13px]" data-gallery-model-chip>
+            Opus (claude-opus)
+            <EngineLimitIndicator engine="claude-opus" botId="scout" threadId="t-scout" />
           </div>
         </div>
       </div>

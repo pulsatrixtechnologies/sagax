@@ -19,6 +19,7 @@ function fakeHost(awaiting: boolean) {
       appendMessage: (threadId: string, message: any) => appended.push({ threadId, ...message }),
       setTaskClosedBy: () => {},
     },
+    languageOfPerson: () => "en", effectiveBotOwner: () => "owner-1",
     redactSecretsInText: (text: string) => text,
     patchParallelCard: () => {},
     markTaskContextExternallyUpdated: () => {},

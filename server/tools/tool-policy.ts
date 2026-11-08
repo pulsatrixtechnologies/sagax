@@ -49,7 +49,7 @@ export function ownerScopedRoute(route: string): boolean {
 /** These handlers derive the account owner from the authenticated person,
  * never a caller-provided person id. Their own keys/endpoints need no admin. */
 export function personalProviderRoute(route: string): boolean {
-  return /^\^?\/api\/me\/(?:providers|voice-keys)(?:\/|\$|$)/.test(plain(route));
+  return /^\^?\/api\/me\/(?:providers|voice-keys|pi-model-servers)(?:\/|\(|\$|$)/.test(plain(route));
 }
 
 /** The default classification of a route (generate.ts): GET reads; a DELETE,

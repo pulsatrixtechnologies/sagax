@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { SkeletonRows } from "@/components/Skeleton";
 
 import { FINISHED_FADE_MS, type BotActivityItem } from "@/lib/bot-activity";
 import { cn } from "@/lib/cn";
@@ -49,9 +49,7 @@ export function ActivityList({ items, error, onOpen, now, onStop, stopping, fadi
   }
   if (items === null) {
     return (
-      <p role="status" className="flex items-center gap-2 px-1 py-2 text-[12.5px] text-ink-secondary">
-        <Loader2 size={14} className="animate-spin" />{t("botPanel.coding.loading")}
-      </p>
+      <SkeletonRows label={t("botPanel.coding.loading")} rows={3} variant="card" />
     );
   }
   if (items.length === 0) {

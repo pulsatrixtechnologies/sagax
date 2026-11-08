@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
+import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
 import { personaPagesMatching } from "@/lib/persona-search";
 import { applySettingsSearch, clearSettingsSearch, settingsQuery } from "@/lib/settings-search";
 import type { BotProfileTab, PersonaCategory } from "@/lib/persona-sections";
@@ -139,6 +140,7 @@ export function BotProfileTabBar({ tabs, tab, onTab, search }: {
           }}
           className="flex min-w-0 flex-1 flex-wrap items-center gap-1"
         >
+          <TabIndicatorGroup>
           {tabs.map((id) => (
             <button
               key={id}
@@ -152,14 +154,16 @@ export function BotProfileTabBar({ tabs, tab, onTab, search }: {
               tabIndex={tab === id ? 0 : -1}
               onClick={() => onTab(id)}
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[14px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                tab === id ? "bg-hover text-ink" : "text-ink-secondary hover:text-ink",
+                "relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[14px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
                 q && !matching.has(id) && "opacity-40",
               )}
             >
-              {t(TAB_LABEL[id])}
+              {tab === id && <TabIndicator />}
+              <span className="relative">{t(TAB_LABEL[id])}</span>
             </button>
           ))}
+          </TabIndicatorGroup>
         </div>
         <button
           type="button"

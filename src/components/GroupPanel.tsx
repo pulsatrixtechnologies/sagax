@@ -15,6 +15,7 @@ import { useStore, type Bot, type Group } from "@/state/store";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { cn } from "@/lib/cn";
+import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
 import { t } from "@/lib/i18n";
 import { BotAvatar } from "./Avatar";
 import { ExportTranscriptMenu } from "./ExportTranscriptMenu";
@@ -259,6 +260,7 @@ export function GroupPanel({
             }}
             className="mt-4 flex max-w-full items-center justify-center gap-1"
           >
+            <TabIndicatorGroup>
             {tabs.map((id) => (
               <button
                 key={id}
@@ -270,13 +272,15 @@ export function GroupPanel({
                 onClick={() => setTab(id)}
                 className={cn(
                   // The bot panel's tab pill (BotSettingsDialog tabList).
-                  "rounded-full px-3 py-[3px] text-[14px] font-normal leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                  tab === id ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink",
+                  "relative rounded-full px-3 py-[3px] text-[14px] font-normal leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                  tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
                 )}
               >
-                {tabLabel(id)}
+                {tab === id && <TabIndicator className="bg-raised" />}
+                <span className="relative">{tabLabel(id)}</span>
               </button>
             ))}
+            </TabIndicatorGroup>
           </div>
         </div>
 

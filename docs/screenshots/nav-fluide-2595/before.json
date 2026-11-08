@@ -1,0 +1,302 @@
+{
+  "at": "2026-11-08T01:39:15.240Z",
+  "rounds": 3,
+  "summary": {
+    "switch-bot": {
+      "frames": 158,
+      "dropped": 12,
+      "worstFrame": 66.7,
+      "p95Frame": 33.4,
+      "longTasks": 2,
+      "longTaskMs": 106,
+      "worstLongTask": 54,
+      "cls": 0
+    },
+    "open-thread": {
+      "frames": 154,
+      "dropped": 13,
+      "worstFrame": 66.7,
+      "p95Frame": 33.4,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "worstLongTask": 0,
+      "cls": 0
+    },
+    "scroll-chat": {
+      "frames": 186,
+      "dropped": 3,
+      "worstFrame": 66.7,
+      "p95Frame": 16.8,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "worstLongTask": 0,
+      "cls": 0
+    },
+    "settings": {
+      "frames": 156,
+      "dropped": 2,
+      "worstFrame": 33.4,
+      "p95Frame": 16.8,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "worstLongTask": 0,
+      "cls": 0
+    },
+    "right-panel": {
+      "frames": 129,
+      "dropped": 0,
+      "worstFrame": 16.8,
+      "p95Frame": 16.7,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "worstLongTask": 0,
+      "cls": 0
+    },
+    "bot-profile-tabs": {
+      "frames": 151,
+      "dropped": 1,
+      "worstFrame": 33.4,
+      "p95Frame": 16.7,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "worstLongTask": 0,
+      "cls": 0
+    },
+    "menus": {
+      "frames": 767,
+      "dropped": 0,
+      "worstFrame": 16.8,
+      "p95Frame": 16.7,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "worstLongTask": 0,
+      "cls": 0
+    }
+  },
+  "samples": {
+    "switch-bot": [
+      {
+        "frames": 158,
+        "dropped": 16,
+        "worstFrame": 100,
+        "p95Frame": 33.4,
+        "longTasks": 5,
+        "longTaskMs": 277,
+        "worstLongTask": 62,
+        "cls": 0
+      },
+      {
+        "frames": 158,
+        "dropped": 12,
+        "worstFrame": 66.7,
+        "p95Frame": 33.4,
+        "longTasks": 2,
+        "longTaskMs": 106,
+        "worstLongTask": 54,
+        "cls": 0
+      },
+      {
+        "frames": 161,
+        "dropped": 12,
+        "worstFrame": 66.7,
+        "p95Frame": 33.4,
+        "longTasks": 1,
+        "longTaskMs": 52,
+        "worstLongTask": 52,
+        "cls": 0
+      }
+    ],
+    "open-thread": [
+      {
+        "frames": 154,
+        "dropped": 12,
+        "worstFrame": 66.7,
+        "p95Frame": 33.4,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 151,
+        "dropped": 13,
+        "worstFrame": 66.7,
+        "p95Frame": 33.3,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 163,
+        "dropped": 15,
+        "worstFrame": 66.7,
+        "p95Frame": 33.4,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      }
+    ],
+    "scroll-chat": [
+      {
+        "frames": 207,
+        "dropped": 3,
+        "worstFrame": 66.7,
+        "p95Frame": 16.8,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 186,
+        "dropped": 2,
+        "worstFrame": 66.7,
+        "p95Frame": 16.8,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 185,
+        "dropped": 3,
+        "worstFrame": 50,
+        "p95Frame": 16.8,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      }
+    ],
+    "settings": [
+      {
+        "frames": 161,
+        "dropped": 2,
+        "worstFrame": 33.4,
+        "p95Frame": 16.8,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 156,
+        "dropped": 2,
+        "worstFrame": 33.4,
+        "p95Frame": 16.7,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 154,
+        "dropped": 2,
+        "worstFrame": 33.4,
+        "p95Frame": 16.8,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      }
+    ],
+    "right-panel": [
+      {
+        "frames": 128,
+        "dropped": 0,
+        "worstFrame": 16.8,
+        "p95Frame": 16.7,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 135,
+        "dropped": 0,
+        "worstFrame": 16.8,
+        "p95Frame": 16.8,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 129,
+        "dropped": 0,
+        "worstFrame": 16.8,
+        "p95Frame": 16.7,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      }
+    ],
+    "bot-profile-tabs": [
+      {
+        "frames": 150,
+        "dropped": 1,
+        "worstFrame": 50.1,
+        "p95Frame": 16.7,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 151,
+        "dropped": 1,
+        "worstFrame": 33.4,
+        "p95Frame": 16.8,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 151,
+        "dropped": 1,
+        "worstFrame": 33.3,
+        "p95Frame": 16.7,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      }
+    ],
+    "menus": [
+      {
+        "frames": 766,
+        "dropped": 0,
+        "worstFrame": 16.8,
+        "p95Frame": 16.8,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 767,
+        "dropped": 0,
+        "worstFrame": 16.8,
+        "p95Frame": 16.7,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      },
+      {
+        "frames": 767,
+        "dropped": 0,
+        "worstFrame": 16.8,
+        "p95Frame": 16.7,
+        "longTasks": 0,
+        "longTaskMs": 0,
+        "worstLongTask": 0,
+        "cls": 0
+      }
+    ]
+  }
+}

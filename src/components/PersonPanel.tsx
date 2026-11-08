@@ -23,6 +23,7 @@ import { Mail, MessageSquare, PanelRight, Users } from "lucide-react";
 import { useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
+import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { usePerspicaxOrg, type OrgDirectory } from "@/lib/perspicax-org";
 import { personAvatarSrc } from "@/lib/profile-management";
@@ -177,6 +178,7 @@ export function PersonPanel({ personId, directory: given, initialTab = "profile"
             }}
             className="mt-4 flex max-w-full flex-wrap items-center justify-center gap-0.5"
           >
+            <TabIndicatorGroup>
             {tabs.map((id) => (
               <button
                 key={id}
@@ -189,13 +191,15 @@ export function PersonPanel({ personId, directory: given, initialTab = "profile"
                 tabIndex={tab === id ? 0 : -1}
                 onClick={() => setTab(id)}
                 className={cn(
-                  "rounded-md px-1.5 py-1 text-[13px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                  tab === id ? "bg-elevated-hover text-ink" : "text-ink-secondary hover:text-ink",
+                  "relative rounded-md px-1.5 py-1 text-[13px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                  tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
                 )}
               >
-                {id === "profile" ? t("personPanel.tab.profile") : id === "library" ? t("personPanel.tab.library") : t("personPanel.tab.achievements")}
+                {tab === id && <TabIndicator className="bg-elevated-hover" />}
+                <span className="relative">{id === "profile" ? t("personPanel.tab.profile") : id === "library" ? t("personPanel.tab.library") : t("personPanel.tab.achievements")}</span>
               </button>
             ))}
+            </TabIndicatorGroup>
           </div>
         </div>
 

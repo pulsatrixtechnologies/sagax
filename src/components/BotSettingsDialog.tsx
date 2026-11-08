@@ -18,6 +18,7 @@ import { useDataWindowItem } from "./DataWindowButton";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { reportAchievement } from "@/lib/achievements";
 import { cn } from "@/lib/cn";
+import { TabIndicator, TabIndicatorGroup } from "@/components/TabIndicator";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { BotActionsMenu, type BotActionsMenuAnchor } from "./bot-settings/BotActionsMenu";
 import { LibraryTab } from "./bot-settings/LibraryTab";
@@ -211,6 +212,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
       }}
       className="flex max-w-full items-center gap-1"
     >
+      <TabIndicatorGroup>
       {panelTabs.map((id) => (
         <button
           key={id}
@@ -221,13 +223,15 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
           tabIndex={tab === id ? 0 : -1}
           onClick={() => chooseTab(id)}
           className={cn(
-            "rounded-full px-3 py-[3px] text-[14px] font-normal leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-            tab === id ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink",
+            "relative rounded-full px-3 py-[3px] text-[14px] font-normal leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+            tab === id ? "text-ink" : "text-ink-secondary hover:text-ink",
           )}
         >
-          {t(`botPanel.tab.${id}`)}
+          {tab === id && <TabIndicator className="bg-raised" />}
+          <span className="relative">{t(`botPanel.tab.${id}`)}</span>
         </button>
       ))}
+      </TabIndicatorGroup>
     </div>
   );
   const showCompact = compact && !computerView;

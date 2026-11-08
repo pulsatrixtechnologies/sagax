@@ -90199,6 +90199,38 @@
         }
       }
     },
+    "Live Activities (Dynamic Island)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live Activities (Dynamic Island)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activités en direct (Dynamic Island)"
+          }
+        }
+      }
+    },
+    "Show a bot that works or needs you, with its Allow and Deny buttons, in the Dynamic Island and on the lock screen.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show a bot that works or needs you, with its Allow and Deny buttons, in the Dynamic Island and on the lock screen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche un bot qui travaille ou qui a besoin de vous, avec ses boutons Autoriser et Refuser, dans la Dynamic Island et sur l'écran verrouillé."
+          }
+        }
+      }
+    },
     "Unread count on the app icon": {
       "localizations": {
         "en": {

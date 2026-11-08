@@ -64,6 +64,16 @@ describe("Live Activity token store", () => {
     expect(s.listForBot("pr_alice", "mira")[0]?.token).toBe(TOKEN_A);
   });
 
+  it("removes every token one phone registered, and no other phone's", () => {
+    const { store: s } = store();
+    const base = { environment: "production" as const, appVersion: "", deviceName: "" };
+    s.register("pr_bob", { token: TOKEN_A, kind: "update", botId: "scout", deviceToken: "d".repeat(64), ...base });
+    s.register("pr_bob", { token: TOKEN_B, kind: "start", deviceToken: "d".repeat(64), ...base });
+    s.register("pr_bob", { token: TOKEN_C, kind: "start", deviceToken: "e".repeat(64), ...base });
+    expect(s.removeForDevice("pr_bob", "d".repeat(64))).toBe(2);
+    expect(s.list("pr_bob").map((t) => t.token)).toEqual([TOKEN_C]);
+  });
+
   it("removes tokens for a bot on end and prunes a dead token", () => {
     const { store: s } = store();
     s.register("pr_bob", { token: TOKEN_A, kind: "update", botId: "scout", environment: "production", appVersion: "", deviceName: "" });

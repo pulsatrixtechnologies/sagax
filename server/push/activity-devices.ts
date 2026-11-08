@@ -93,6 +93,8 @@ export interface LiveActivityTokenStore {
   remove(person: string, token: string): boolean;
   /** Drop every update token for this person and bot (activity ended). */
   removeForBot(person: string, botId: string): number;
+  /** Every token (update and push-to-start) this person registered from one phone. */
+  removeForDevice(person: string, deviceToken: string): number;
   /** APNs said the token is dead: gone for whoever had it. */
   prune(token: string): boolean;
   removePerson(person: string): void;
@@ -216,6 +218,15 @@ export function createLiveActivityTokenStore(
       const bot = botId.trim();
       const tokens = load().get(key) ?? [];
       const kept = tokens.filter((entry) => !(entry.kind === "update" && entry.botId === bot));
+      const removed = tokens.length - kept.length;
+      if (removed) save(key, kept);
+      return removed;
+    },
+    removeForDevice(person, deviceToken) {
+      const key = personKey(person);
+      const device = deviceToken.trim().toLowerCase();
+      const tokens = load().get(key) ?? [];
+      const kept = tokens.filter((entry) => entry.deviceToken !== device);
       const removed = tokens.length - kept.length;
       if (removed) save(key, kept);
       return removed;

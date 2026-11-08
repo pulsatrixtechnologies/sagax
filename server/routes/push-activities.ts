@@ -28,9 +28,11 @@ export interface PushActivityRouteDeps {
   defaultEnvironment(): ApnsEnvironment;
 }
 
-const removeBody = z.object({
-  token: z.string().trim().toLowerCase().regex(ACTIVITY_TOKEN),
-}).strict();
+const removeBody = z.union([
+  z.object({ token: z.string().trim().toLowerCase().regex(ACTIVITY_TOKEN) }).strict(),
+  // Live Activities switched off on that phone: every token it registered.
+  z.object({ deviceToken: z.string().trim().toLowerCase().regex(ACTIVITY_TOKEN) }).strict(),
+]);
 
 const publicToken = (entry: LiveActivityToken) => ({
   token: maskSecret(entry.token),
@@ -76,7 +78,10 @@ export function createPushActivityRoutes(deps: PushActivityRouteDeps): RouteHand
     if (method === "DELETE") {
       const body = await readBody(req);
       const parsed = removeBody.safeParse(body);
-      if (!parsed.success) return json(res, 400, { error: "send { token }" });
+      if (!parsed.success) return json(res, 400, { error: "send { token } or { deviceToken }" });
+      if ("deviceToken" in parsed.data) {
+        return json(res, 200, { ok: true, removed: deps.store.removeForDevice(person, parsed.data.deviceToken) });
+      }
       return json(res, 200, { ok: true, removed: deps.store.remove(person, parsed.data.token) });
     }
     return json(res, 405, { error: "GET, POST or DELETE" });

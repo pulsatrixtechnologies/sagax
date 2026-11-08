@@ -114147,6 +114147,412 @@
           }
         }
       }
+    },
+    "Longest a bot may answer in a group. A conversation can set its own.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durée maximale d'une réponse de bot dans un groupe. Une conversation peut fixer la sienne."
+          }
+        }
+      }
+    },
+    "Enter a whole number from 1 to 1,440.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez un nombre entier de 1 à 1 440."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Digite um número inteiro de 1 a 1.440."
+          }
+        }
+      }
+    },
+    "MCP calls": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appels MCP"
+          }
+        }
+      }
+    },
+    "Longest a bot's MCP tool call may run.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durée maximale d'un appel d'outil MCP par un bot."
+          }
+        }
+      }
+    },
+    "Enter a whole number from 1 to 60.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrez un nombre entier de 1 à 60."
+          }
+        }
+      }
+    },
+    "Steer, then stop, when a shell command keeps failing the same way.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oriente, puis arrête, quand une commande shell échoue toujours de la même façon."
+          }
+        }
+      }
+    },
+    "Turn the loop guard on or off for this installation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer ou désactiver le garde-fou de boucle pour cette installation"
+          }
+        }
+      }
+    },
+    "Delete event logs after": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer les journaux après"
+          }
+        }
+      }
+    },
+    "Finished conversations only, never the conversations themselves.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversations terminées seulement, jamais les conversations elles-mêmes."
+          }
+        }
+      }
+    },
+    "Enter a number of days between 1 and 3650.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrez un nombre de jours entre 1 et 3650."
+          }
+        }
+      }
+    },
+    "Trim each event log to": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limiter chaque journal à"
+          }
+        }
+      }
+    },
+    "MiB": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mio"
+          }
+        }
+      }
+    },
+    "Enter a size between 0.25 and 4096 MiB.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrez une taille entre 0,25 et 4096 Mio."
+          }
+        }
+      }
+    },
+    "Review after this many tool steps": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoir après ce nombre d'étapes d'outils"
+          }
+        }
+      }
+    },
+    "Enter a whole number from %@ to %@.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrez un nombre entier de %@ à %@."
+          }
+        }
+      }
+    },
+    "OpenTelemetry": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenTelemetry"
+          }
+        }
+      }
+    },
+    "Trace export": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export des traces"
+          }
+        }
+      }
+    },
+    "Sends the server's traces (bot turns, model calls with tokens and cost, tool and MCP calls, sub-agents, routines) to an OTLP/HTTP collector, following the OpenTelemetry GenAI conventions. Usage statistics keep working without a collector.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoie les traces du serveur (tours des bots, appels de modèle avec jetons et coût, appels d'outils et MCP, sous-agents, routines) à un collecteur OTLP/HTTP, selon les conventions GenAI d'OpenTelemetry. Les statistiques d'usage fonctionnent sans collecteur."
+          }
+        }
+      }
+    },
+    "Collector address": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adresse du collecteur"
+          }
+        }
+      }
+    },
+    "OTLP/HTTP base URL; /v1/traces is added.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL de base OTLP/HTTP ; /v1/traces est ajouté."
+          }
+        }
+      }
+    },
+    "Service name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom du service"
+          }
+        }
+      }
+    },
+    "service.name of the traces; sagax when empty.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "service.name des traces ; sagax si vide."
+          }
+        }
+      }
+    },
+    "Headers": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En-têtes"
+          }
+        }
+      }
+    },
+    "Header name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom de l'en-tête"
+          }
+        }
+      }
+    },
+    "Saved (type to replace)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrée (tapez pour remplacer)"
+          }
+        }
+      }
+    },
+    "Header value": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valeur de l'en-tête"
+          }
+        }
+      }
+    },
+    "An API key or a token for the collector. Values are never shown again.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une clé d'API ou un jeton pour le collecteur. Les valeurs ne sont jamais réaffichées."
+          }
+        }
+      }
+    },
+    "Add a header": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un en-tête"
+          }
+        }
+      }
+    },
+    "Send a test span": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer un span de test"
+          }
+        }
+      }
+    },
+    "Could not load the OpenTelemetry settings.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger les réglages OpenTelemetry."
+          }
+        }
+      }
+    },
+    "That did not work.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ça n'a pas fonctionné."
+          }
+        }
+      }
+    },
+    "Saved. Traces go to the collector within a few seconds.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistré. Les traces partent vers le collecteur d'ici quelques secondes."
+          }
+        }
+      }
+    },
+    "The collector accepted the test span.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le collecteur a accepté le span de test."
+          }
+        }
+      }
+    },
+    "Export is off.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'export est désactivé."
+          }
+        }
+      }
+    },
+    "Off: enter a collector address to send traces.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé : entrez l'adresse d'un collecteur pour envoyer les traces."
+          }
+        }
+      }
+    },
+    "Sending to %@: %@ spans sent, %@ not accepted": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi vers %@ : %@ spans envoyés, %@ refusés"
+          }
+        }
+      }
+    },
+    "Sending to %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi vers %@"
+          }
+        }
+      }
+    },
+    "Your bots draft and improve their own skills.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tes bots écrivent et améliorent leurs propres skills."
+          }
+        }
+      }
+    },
+    "Opens tables and files in a separate window.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre les tableaux et fichiers dans une fenêtre à part."
+          }
+        }
+      }
+    },
+    "A model names your new threads.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un modèle nomme tes nouveaux fils."
+          }
+        }
+      }
     }
   }
 }

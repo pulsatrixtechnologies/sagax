@@ -1903,19 +1903,34 @@ public struct ConfigViewer: Codable, Hashable, Sendable {
     public var permissions: [String]?
     /// The operator at the server's own computer (`viewer.operator`).
     public var isOperator: Bool?
+    /// What this person may change on the installation
+    /// (shared/viewer-capabilities.ts); absent on an older server.
+    public var capabilities: Capabilities?
+
+    public struct Capabilities: Codable, Hashable, Sendable {
+        public var editConfig: Bool?
+
+        public init(editConfig: Bool? = nil) { self.editConfig = editConfig }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            editConfig = try? c.decodeIfPresent(Bool.self, forKey: .editConfig)
+        }
+    }
 
     public init(principalId: String? = nil, role: String? = nil, botsReadOnly: Bool? = nil, canCreateBots: Bool? = nil,
-                permissions: [String]? = nil, isOperator: Bool? = nil) {
+                permissions: [String]? = nil, isOperator: Bool? = nil, capabilities: Capabilities? = nil) {
         self.principalId = principalId
         self.role = role
         self.botsReadOnly = botsReadOnly
         self.canCreateBots = canCreateBots
         self.permissions = permissions
         self.isOperator = isOperator
+        self.capabilities = capabilities
     }
 
     private enum CodingKeys: String, CodingKey {
-        case principalId, role, botsReadOnly, canCreateBots, permissions
+        case principalId, role, botsReadOnly, canCreateBots, permissions, capabilities
         case isOperator = "operator"
     }
 
@@ -1929,6 +1944,7 @@ public struct ConfigViewer: Codable, Hashable, Sendable {
         // failed config.
         permissions = try? c.decodeIfPresent([String].self, forKey: .permissions)
         isOperator = try? c.decodeIfPresent(Bool.self, forKey: .isOperator)
+        capabilities = try? c.decodeIfPresent(Capabilities.self, forKey: .capabilities)
     }
 }
 

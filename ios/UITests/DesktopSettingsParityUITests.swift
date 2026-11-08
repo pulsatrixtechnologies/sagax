@@ -69,36 +69,52 @@ final class DesktopSettingsParityUITests: XCTestCase {
     }
 
     @MainActor
-    func testExperimentalListsSevenFeaturesAndTheDecisionModelSaves() throws {
-        let app = launch("settings-experimental")
-        XCTAssertTrue(app.buttons["desktop-settings.decision-model"].waitForExistence(timeout: 15))
-        for id in ["skill-authoring", "browser", "decision-model", "data-window", "meeting-notetaker", "thread-titles", "dev-pods"] {
+    func testDeveloperListsTheDesktopsExperimentalFeaturesAndASwitchSaves() throws {
+        // #2729: Experimental features are a card of Developer, the desktop's
+        // four rows (ExperimentalSettings.tsx); browser, decision model and
+        // templates live elsewhere on the desktop.
+        let app = launch("settings-developer")
+        let dataWindow = app.buttons["desktop-settings.data-window"]
+        reveal(dataWindow, in: app)
+        XCTAssertTrue(dataWindow.waitForExistence(timeout: 15))
+        for id in ["skill-authoring", "data-window", "meeting-notetaker", "thread-titles", "dev-pods"] {
             let row = app.buttons["desktop-settings.\(id)"]
             reveal(row, in: app)
             XCTAssertTrue(row.waitForExistence(timeout: 10), "\(id) is listed")
         }
-        XCTAssertFalse(app.buttons["desktop-settings.browse-bots"].exists, "Browse Bots is not the desktop's")
-        let decision = app.buttons["desktop-settings.decision-model"]
-        let before = feature("decisionModel") ?? false
+        for id in ["browser", "decision-model", "browse-bots"] {
+            XCTAssertFalse(app.buttons["desktop-settings.\(id)"].exists, "\(id) is not on the desktop's Developer page")
+        }
+        reveal(dataWindow, in: app)
+        let before = feature("dataWindow") ?? false
         // the switch sits in its row's control column: tap its centre
-        decision.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        let flipped = NSPredicate { _, _ in self.feature("decisionModel") == !before }
+        dataWindow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let flipped = NSPredicate { _, _ in self.feature("dataWindow") == !before }
         wait(for: [XCTNSPredicateExpectation(predicate: flipped, object: nil)], timeout: 15)
-        try api("PATCH", "/api/config", ["features": ["decisionModel": before]])
+        try api("PATCH", "/api/config", ["features": ["dataWindow": before]])
     }
 
     @MainActor
-    func testAdvancedModeHidesTheTechnicalRowsOfAppearance() throws {
+    func testAdvancedModeOnDeveloperHidesTheTechnicalRowsOfAppearance() throws {
+        // The switch moved from Appearance to Developer > Interface, as on the desktop.
         let app = launch("settings-appearance")
-        let advanced = app.buttons["desktop-settings.advanced-mode"]
-        XCTAssertTrue(advanced.waitForExistence(timeout: 10))
         let toolCalls = app.buttons["desktop-settings.tool-calls"]
         reveal(toolCalls, in: app)
-        XCTAssertTrue(toolCalls.waitForExistence(timeout: 5), "Advanced is the default")
-        for _ in 0..<10 where !advanced.isHittable { app.swipeDown() }
-        advanced.tap()
+        XCTAssertTrue(toolCalls.waitForExistence(timeout: 10), "Advanced is the default")
+        XCTAssertFalse(app.buttons["desktop-settings.advanced-mode"].exists, "not on Appearance any more")
+        let developer = app.buttons["desktop-settings.nav.developer"]
+        let appearance = app.buttons["desktop-settings.nav.appearance"]
+        let advanced = app.buttons["desktop-settings.advanced-mode"]
+        func flipAdvanced() {
+            developer.tap()
+            reveal(advanced, in: app)
+            XCTAssertTrue(advanced.waitForExistence(timeout: 10))
+            advanced.tap()
+            appearance.tap()
+        }
+        flipAdvanced()
         XCTAssertFalse(toolCalls.waitForExistence(timeout: 2), "Simple hides Tool calls")
-        advanced.tap()
+        flipAdvanced()
         reveal(toolCalls, in: app)
         XCTAssertTrue(toolCalls.waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["desktop-settings.background-effects"].exists, "Background effects")

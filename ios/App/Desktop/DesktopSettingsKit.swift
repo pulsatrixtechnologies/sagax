@@ -1179,3 +1179,63 @@ struct DesktopEngineBadge: View {
         .accessibilityHidden(true)
     }
 }
+
+/// `UnitField` (SettingsPrimitives.tsx): the inset well, `h-7 rounded-lg`,
+/// the number right-aligned in tabular digits (`w-14`) and the unit in
+/// ink-secondary; a 0.5 pt border that turns focus blue, or danger when the
+/// last value was refused. The value is committed on Return or when the
+/// field loses focus; the draft stays drawn until the saved value comes
+/// back, or for the person to fix when it was refused.
+struct DesktopUnitField: View {
+    @Environment(\.desktopTheme) private var theme
+    let value: String
+    var unit: Text? = nil
+    let label: Text
+    var decimal = false
+    var width: CGFloat = 56
+    var identifier: String = ""
+    var disabled = false
+    var invalid = false
+    var edit: () -> Void = {}
+    let commit: (String) -> Void
+    @State private var draft: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            TextField(text: Binding(get: { draft ?? value }, set: { draft = $0; edit() })) { label }
+                .font(theme.font(13).monospacedDigit())
+                .foregroundStyle(theme.ink)
+                .multilineTextAlignment(.trailing)
+                .keyboardType(decimal ? .decimalPad : .numberPad)
+                .focused($focused)
+                .submitLabel(.done)
+                .onSubmit(send)
+                .frame(width: width)
+                .accessibilityLabel(label)
+                .accessibilityIdentifier(identifier)
+            if let unit {
+                DesktopText(unit, color: \.inkSecondary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 10)
+        .frame(height: 28)
+        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(invalid ? theme.danger.opacity(0.6) : focused ? theme.focus : theme.border, lineWidth: 0.5)
+        )
+        .disabled(disabled)
+        .opacity(disabled ? 0.5 : 1)
+        .onChange(of: focused) { now in if !now { send() } }
+        .onChange(of: value) { _ in if !focused { draft = nil } }
+    }
+
+    private func send() {
+        // A taken value stays drawn until the saved one comes back.
+        guard let text = draft else { return }
+        commit(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+}

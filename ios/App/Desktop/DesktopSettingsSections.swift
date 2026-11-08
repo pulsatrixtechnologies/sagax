@@ -248,69 +248,6 @@ private struct DesktopGeneralAdvancedSettings: View {
     }
 }
 
-/// Group turns (RoomTurnTimeoutSettings): one maximum per bot turn in a group. On Developer, as on the desktop (#2729).
-struct DesktopGroupTurnsCard: View {
-    @EnvironmentObject private var model: DesktopSettingsModel
-
-    var body: some View {
-        let config = model.config
-        DesktopSettingsCard(
-            Text("Group turns"),
-            summary: Text("\(config?.rooms?.turnTimeoutMinutes ?? 5) min per turn"),
-            subtitle: Text("Set one maximum duration for every bot turn in a group."),
-            open: false, identifier: "general.roomTurns"
-        ) {
-            DesktopNumberStepper(
-                label: Text("Maximum turn length"), unit: Text("minutes"),
-                value: config?.rooms?.turnTimeoutMinutes ?? 5, range: 1...1_440,
-                identifier: "desktop-settings.room-turns"
-            ) { minutes in
-                Task { _ = await model.apply(.roomTurnMinutes(minutes), key: "rooms") }
-            }
-            DesktopText("Applies to every bot turn in groups. Direct threads use the inactivity watchdog instead.",
-                        size: 12, line: 17, color: \.inkSecondary)
-                .padding(.top, 8)
-        }
-    }
-}
-
-/// Event log cleanup (ThreadCleanupSettings). On Developer, as on the desktop (#2729).
-struct DesktopEventLogCleanupCard: View {
-    @EnvironmentObject private var model: DesktopSettingsModel
-
-    var body: some View {
-        let config = model.config
-        let saving = !model.saving.isEmpty
-        DesktopSettingsCard(
-            Text("Event log cleanup"),
-            summary: config?.threads?.eventLogRetentionDays.map { Text("Delete after \($0) days") } ?? Text("Off"),
-            subtitle: Text("Trim the logs threads accumulate while they run."),
-            open: false, identifier: "general.threadCleanup"
-        ) {
-            let days = config?.threads?.eventLogRetentionDays
-            HStack(spacing: 12) {
-                DesktopText("Delete event logs of finished threads after", color: \.ink)
-                Spacer(minLength: 0)
-                DesktopSwitch(isOn: days != nil, label: Text("Delete event logs of finished threads"),
-                              identifier: "desktop-settings.cleanup", disabled: saving || config == nil) {
-                    Task { _ = await model.apply(.eventLogRetention(days == nil ? 30 : nil), key: "cleanup") }
-                }
-            }
-            if let days {
-                DesktopNumberStepper(label: Text("Days"), unit: Text("days"), value: days, range: 1...3_650,
-                                     identifier: "desktop-settings.cleanup-days") { value in
-                    Task { _ = await model.apply(.eventLogRetention(value), key: "cleanup") }
-                }
-                .padding(.top, 8)
-            }
-            DesktopText("When on, a daily sweep deletes the event-log files of threads that closed or were archived more than this many days ago. It only removes event-log files, never threads or transcripts.",
-                        size: 12, line: 17, color: \.inkSecondary)
-                .padding(.top, 8)
-        }
-    }
-}
-
-
 extension DesktopGeneralSettings {
     static func effortLabel(_ level: String) -> String {
         level == "xhigh" ? "X-High" : level.prefix(1).uppercased() + level.dropFirst()
@@ -591,11 +528,12 @@ struct DesktopNumberStepper: View {
 struct DesktopExperimentalSettings: View {
     @EnvironmentObject private var model: DesktopSettingsModel
 
-    /// ExperimentalSettings.tsx: the switches this server can run; one it
-    /// cannot run is not shown, never greyed (hiddenWhenUnavailable).
+    /// ExperimentalSettings.tsx: the four switches, each with the desktop's
+    /// grey line. A switch this person may not flip (mayToggle) or this
+    /// server does not report is not shown, never greyed; a member with
+    /// personal settings flips their own (PATCH /api/me/experimental).
     var body: some View {
         let config = model.config
-        let features = config?.features
         let busy = !model.saving.isEmpty || config == nil
         let rows = ExperimentalFeatureRow.shown(config)
         let on = rows.filter(\.on).count
@@ -611,14 +549,14 @@ struct DesktopExperimentalSettings: View {
                                         identifier: feature.key) {
                         DesktopSwitch(isOn: feature.on, label: Text(verbatim: AppStrings.localized(feature.aria)),
                                       identifier: feature.identifier, disabled: busy) {
-                            Task { _ = await model.apply(.feature(feature.key, !feature.on), key: feature.key) }
+                            guard let change = config?.experimentalChange(feature.key, !feature.on) else { return }
+                            Task { _ = await model.apply(change, key: feature.key) }
                         }
                     }
+                    if feature.key == "skillAuthoring", feature.on, config?.canSetSkillReview == true {
+                        DesktopSkillReviewRow()
+                    }
                 }
-            }
-            if features?.browser == true, config?.browserEngine?.kind == "unavailable" {
-                DesktopText("Then install the engine from a bot's Computer > Browser.", size: 12, line: 17, color: \.inkSecondary)
-                    .padding(.leading, 4)
             }
         }
     }
@@ -635,31 +573,20 @@ struct ExperimentalFeatureRow: Identifiable {
     let identifier: String
     var id: String { key }
 
-    /// The switches the server offers, in the desktop's order. A feature the
-    /// server does not report, or a browser it can neither run nor install,
-    /// is left out.
-    /// `templates` (Browse Bots in the sidebar menu) is the iPhone's own.
-    static func shown(_ config: DesktopSettingsConfig?, templates: Bool = false) -> [ExperimentalFeatureRow] {
-        let features = config?.features
+    /// ExperimentalSettings.tsx's rows, in its order: skill writing, the Data
+    /// window, the meeting notetaker, generated titles. A feature the server
+    /// does not report, or one this person may not flip, is left out.
+    static func shown(_ config: DesktopSettingsConfig?) -> [ExperimentalFeatureRow] {
+        guard let config else { return [] }
+        let features = config.features
         var rows = [ExperimentalFeatureRow(
             key: "skillAuthoring", title: "Bots may write and improve their own skills", aria: "Allow bots to draft skills",
-            note: "On by default. Save a bot's verification run as a skill from the Verify card, or ask a supported bot to run /create-verification-skill. Every change waits for your review.",
+            note: "Your bots draft and improve their own skills.",
             on: features?.skillAuthoring != false, identifier: "desktop-settings.skill-authoring")]
-        let engine = config?.browserEngine
-        if engine?.kind != "unavailable" || engine?.installable == true {
-            rows.append(ExperimentalFeatureRow(
-                key: "browser", title: "Built-in browser", aria: "Enable the built-in browser",
-                note: features?.browser == true
-                    ? "Enabled for this installation. Each bot also has its own browser switch."
-                    : "Off by default. Enable it to let supported bots use a browser tab you can watch and take over.",
-                on: features?.browser == true, identifier: "desktop-settings.browser"))
-        }
-        rows.append(ExperimentalFeatureRow(
-            key: "decisionModel", title: "Decision model", aria: "Decision model", note: nil,
-            on: features?.decisionModel == true, identifier: "desktop-settings.decision-model"))
         if let dataWindow = features?.dataWindow {
             rows.append(ExperimentalFeatureRow(
-                key: "dataWindow", title: "Data window", aria: "Turn on the Data window", note: nil,
+                key: "dataWindow", title: "Data window", aria: "Turn on the Data window",
+                note: "Opens tables and files in a separate window.",
                 on: dataWindow, identifier: "desktop-settings.data-window"))
         }
         if let notetaker = features?.meetingNotetaker {
@@ -670,16 +597,11 @@ struct ExperimentalFeatureRow: Identifiable {
         }
         if let titles = features?.llmThreadTitles {
             rows.append(ExperimentalFeatureRow(
-                key: "llmThreadTitles", title: "Generated conversation titles", aria: "Turn on generated conversation titles", note: nil,
+                key: "llmThreadTitles", title: "Generated conversation titles", aria: "Turn on generated conversation titles",
+                note: "A model names your new threads.",
                 on: titles, identifier: "desktop-settings.thread-titles"))
         }
-        if templates {
-            rows.append(ExperimentalFeatureRow(
-                key: "templates", title: "Browse Bots", aria: "Browse Bots",
-                note: "Off by default. Shows Browse Bots in the sidebar menu, to find and add ready-made bots and teams.",
-                on: features?.templates == true, identifier: "settings-experimental.templates"))
-        }
-        return rows
+        return rows.filter { config.mayToggleExperimental($0.key) }
     }
 }
 

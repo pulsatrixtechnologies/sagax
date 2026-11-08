@@ -224,12 +224,21 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
         public var dataWindow: Bool?
         public var meetingNotetaker: Bool?
         public var llmThreadTitles: Bool?
+        /// "Review after this many tool steps" under skill authoring (3 to 100).
+        public var skillReviewSteps: Int?
     }
+
+    /// Settings > Developer > Bots > MCP calls (`mcp.callTimeoutMinutes`).
+    public struct Mcp: Decodable, Equatable, Sendable { public var callTimeoutMinutes: Int? }
+    /// Settings > Developer > Loop guard: on unless the server says `false`.
+    public struct LoopGuard: Decodable, Equatable, Sendable { public var enabled: Bool? }
 
     public struct Rooms: Decodable, Equatable, Sendable { public var turnTimeoutMinutes: Int? }
     public struct Threads: Decodable, Equatable, Sendable {
         public var maxConcurrentPerBot: Int?
         public var eventLogRetentionDays: Int?
+        /// Event log cleanup's size cap, in bytes (nil: off).
+        public var eventLogMaxBytes: Int?
     }
     public struct Recovery: Decodable, Equatable, Sendable { public var enabled: Bool? }
     public struct Budgets: Decodable, Equatable, Sendable { public var monthlyUsd: Double? }
@@ -270,9 +279,62 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
     public var browserEngine: BrowserEngine?
     public var localVm: LocalVm?
     public var tts: Tts?
+    public var mcp: Mcp?
+    public var loopGuard: LoopGuard?
+    /// Who is looking (`viewer`), for the rights the desktop checks.
+    public var viewer: ConfigViewer?
     public var openai, anthropic, xai, openrouter, mistral, openaiCompat, vps: Flag?
 
     public init() {}
+
+    // MARK: Rights (src/lib/viewer.ts)
+
+    /// `canEditConfig`: the server's capability when it sends one; else
+    /// everyone but a named member (no viewer, an owner, an admin).
+    public var canEditConfig: Bool {
+        if let edit = viewer?.capabilities?.editConfig { return edit }
+        if viewer?.capabilities != nil { return false }
+        return viewer?.role != "member"
+    }
+
+    /// `viewerCan`: the server's permission list when it sends one; else
+    /// everyone but a named member, who holds the member defaults.
+    public func viewerCan(_ permission: String) -> Bool {
+        guard let viewer else { return true }
+        if viewer.isOperator == true || viewer.role == "owner" || viewer.role == "admin" { return true }
+        if let list = viewer.permissions { return list.contains(permission) }
+        if viewer.role != "member" { return true }
+        return BotFieldRules.memberDefaultPermissions.contains(permission)
+    }
+
+    /// `canManageExperimental`: `server.experimental` when the server sends a
+    /// permission list, else `canEditConfig`.
+    public var canManageExperimental: Bool {
+        viewer?.permissions != nil ? viewerCan("server.experimental") : canEditConfig
+    }
+
+    /// The experimental keys a person keeps for themselves on an
+    /// organization server (shared/person-settings.ts).
+    public static let personalFeatures: Set<String> = ["skillAuthoring", "dataWindow", "llmThreadTitles", "showToolCalls"]
+
+    /// ExperimentalSettings.tsx `mayToggle`: a manager flips every row; a
+    /// member with personal settings flips their own rows only.
+    public func mayToggleExperimental(_ key: String) -> Bool {
+        canManageExperimental || (personalSettings == true && Self.personalFeatures.contains(key))
+    }
+
+    /// Whether a manager writes the server's switch, or the person their own
+    /// (`PATCH /api/me/experimental`).
+    public func experimentalChange(_ key: String, _ on: Bool) -> DesktopConfigChange {
+        canManageExperimental ? .feature(key, on) : .myFeature(key, on)
+    }
+
+    /// DeveloperSettings.tsx: the Experimental card is there for a manager
+    /// or a member of an organization server with personal settings.
+    public var showsExperimental: Bool { canManageExperimental || personalSettings == true }
+
+    /// SkillReviewSettings.tsx `manage`: the threshold is a server setting.
+    public var canSetSkillReview: Bool { canManageExperimental || canEditConfig }
 
     /// A provider key is on file (`configured`), by the config's section name.
     public func keyConfigured(_ provider: DesktopAPIKeyProvider) -> Bool {
@@ -333,6 +395,45 @@ public enum DesktopConfigChange: Equatable, Sendable {
     case ttsServer(baseUrl: String, model: String)
     /// Settings > Voice > Advanced: the Fish Audio model.
     case fishModel(String)
+    /// Settings > Developer > Bots > MCP calls, 1 to 60 minutes.
+    case mcpCallTimeout(Int)
+    /// Settings > Developer > Loop guard (`PATCH {loopGuard: {enabled}}`).
+    case loopGuard(Bool)
+    /// "Review after this many tool steps", 3 to 100 (`PATCH {features}`).
+    case skillReviewSteps(Int)
+    /// Event log cleanup's size cap in bytes, a whole number of 256 KiB from
+    /// 256 KiB to 4 GiB, or nil for off.
+    case eventLogMaxBytes(Int?)
+    /// A member's own experimental switch (`PATCH /api/me/experimental`).
+    case myFeature(String, Bool)
+
+    /// Event log cleanup's bounds (ThreadCleanupSettings.tsx).
+    public static let retentionDays = 1...3_650
+    public static let defaultRetentionDays = 30
+    public static let capStepBytes = 256 * 1_024
+    public static let capBytes = (256 * 1_024)...(4 * 1_024 * 1_024 * 1_024)
+    public static let defaultCapMiB = 50.0
+    public static let mcpMinutes = 1...60
+    public static let defaultMcpMinutes = 10
+    public static let reviewSteps = 3...100
+    public static let defaultReviewSteps = 10
+
+    /// `parseCapMib`: MiB typed by the person to bytes, or nil when it is not
+    /// an exact 0.25 MiB step in range.
+    public static func capBytes(fromMiB text: String) -> Int? {
+        guard let mib = Double(text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")), mib.isFinite else { return nil }
+        let bytes = Int((mib * 1_048_576).rounded())
+        return capBytes.contains(bytes) && bytes % capStepBytes == 0 ? bytes : nil
+    }
+
+    /// `mibText`: 52428800 to "50", 262144 to "0.25".
+    public static func mibText(_ bytes: Int) -> String {
+        let mib = Double(bytes) / 1_048_576
+        if mib == mib.rounded() { return String(Int(mib)) }
+        var text = String(format: "%.2f", mib)
+        while text.hasSuffix("0") { text.removeLast() }
+        return text
+    }
 
     /// The features the Experimental and General switches may set.
     public static let switchableFeatures: Set<String> = [
@@ -385,6 +486,20 @@ public enum DesktopConfigChange: Equatable, Sendable {
         case let .fishModel(model):
             guard ["s2.1-pro", "s2.1-pro-free"].contains(model) else { return nil }
             return ["tts": ["fishModel": model]]
+        case let .mcpCallTimeout(minutes):
+            guard Self.mcpMinutes.contains(minutes) else { return nil }
+            return ["mcp": ["callTimeoutMinutes": minutes]]
+        case let .loopGuard(on):
+            return ["loopGuard": ["enabled": on]]
+        case let .skillReviewSteps(steps):
+            guard Self.reviewSteps.contains(steps) else { return nil }
+            return ["features": ["skillReviewSteps": steps]]
+        case let .eventLogMaxBytes(bytes):
+            if let bytes, !(Self.capBytes.contains(bytes) && bytes % Self.capStepBytes == 0) { return nil }
+            return ["threads": ["eventLogMaxBytes": bytes.map { $0 as Any } ?? NSNull()]]
+        case let .myFeature(name, on):
+            guard DesktopSettingsConfig.personalFeatures.contains(name) else { return nil }
+            return ["features": [name: on]]
         }
     }
 }
@@ -417,7 +532,13 @@ public extension CompanionClient {
 
     /// `PUT /api/config` with one change; the answer is the new config.
     func updateDesktopSettings(_ change: DesktopConfigChange) async throws -> DesktopSettingsConfig {
-        try await send(desktopSettingsRequest(change), as: DesktopSettingsConfig.self)
+        if case .myFeature = change {
+            // The person's own switch answers with their features, not the
+            // config: read the config again, as the desktop does.
+            try await send(desktopSettingsRequest(change))
+            return try await desktopSettingsConfig()
+        }
+        return try await send(desktopSettingsRequest(change), as: DesktopSettingsConfig.self)
     }
 
     func desktopSettingsRequest(_ change: DesktopConfigChange) throws -> URLRequest {
@@ -425,7 +546,8 @@ public extension CompanionClient {
         // The desktop PATCHes these two; the server merges either way.
         let method: String
         switch change {
-        case .newBotEffort, .eventLogRetention: method = "PATCH"
+        case .newBotEffort, .eventLogRetention, .eventLogMaxBytes, .loopGuard, .skillReviewSteps: method = "PATCH"
+        case .myFeature: return try makeRequest("PATCH", "/api/me/experimental", body: body)
         default: method = "PUT"
         }
         return try makeRequest(method, "/api/config", body: body)

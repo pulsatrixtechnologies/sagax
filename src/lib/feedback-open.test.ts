@@ -29,6 +29,15 @@ describe("requestFeedback (#2618)", () => {
     expect(sent[1]).not.toHaveProperty("screenshot");
   });
 
+  it("sends the words typed after /feedback so the flow starts from them (#2955)", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    const post = async (body: unknown) => { sent.push(body as never); return { botId: "b", threadId: "t" }; };
+    await requestFeedback({ post, desktop: false, locale: "en" }, { source: "slash", text: "  bug the routines are missing  " });
+    await requestFeedback({ post, desktop: false, locale: "en" }, { source: "slash", text: "   " });
+    expect(sent[0]).toMatchObject({ source: "slash", text: "bug the routines are missing" });
+    expect(sent[1]).not.toHaveProperty("text");
+  });
+
   it("names the OS briefly, never the whole user agent", () => {
     expect(osFromUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe("Windows NT 10.0");
     expect(osFromUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X)")).toBe("iOS 18.2");

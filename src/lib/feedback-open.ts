@@ -20,6 +20,8 @@ export interface FeedbackOpenDeps {
 export interface FeedbackOpenOptions {
   source: FeedbackSource;
   error?: string;
+  /** The words typed after /feedback. */
+  text?: string;
 }
 
 /** A short OS name from the user agent: never the full string. */
@@ -47,6 +49,7 @@ export async function requestFeedback(deps: FeedbackOpenDeps, options: FeedbackO
     ...(osFromUserAgent(deps.userAgent) ? { os: osFromUserAgent(deps.userAgent) } : {}),
     ...(deps.page ? { page: deps.page } : {}),
     ...(options.error ? { error: options.error.slice(0, 4000) } : {}),
+    ...(options.text?.trim() ? { text: options.text.trim().slice(0, 4000) } : {}),
     ...(logs.length ? { clientLogs: logs } : {}),
     ...(screenshot?.startsWith("data:image/png;base64,") ? { screenshot } : {}),
   };

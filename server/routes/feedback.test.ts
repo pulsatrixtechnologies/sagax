@@ -38,6 +38,12 @@ describe("feedback routes (#2618)", () => {
     expect(parseFeedbackStart(null)).toBeNull();
   });
 
+  it("keeps the words typed after /feedback, capped (#2955)", () => {
+    expect(parseFeedbackStart({ source: "slash", platform: "web", text: "bug the routines are missing" })?.text).toBe("bug the routines are missing");
+    expect(parseFeedbackStart({ source: "slash", platform: "web", text: "x".repeat(9000) })?.text?.length).toBe(4000);
+    expect(parseFeedbackStart({ source: "slash", platform: "web", text: 7 })).not.toHaveProperty("text");
+  });
+
   it("starts a report for the session person", async () => {
     const { run, started } = call("/api/feedback/start", "POST", { source: "sidebar", platform: "desktop" });
     const { sent } = await run();

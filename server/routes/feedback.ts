@@ -33,10 +33,12 @@ export function parseFeedbackStart(body: unknown): FeedbackStartRequest | null {
   const os = text(raw.os, 120);
   const page = text(raw.page, 120);
   const error = text(raw.error, 4000);
+  const words = text(raw.text, 4000);
   if (appVersion) request.appVersion = appVersion;
   if (os) request.os = os;
   if (page) request.page = page;
   if (error) request.error = error;
+  if (words) request.text = words;
   if (Array.isArray(raw.clientLogs)) request.clientLogs = raw.clientLogs.filter((line): line is string => typeof line === "string").slice(-60);
   if (typeof raw.screenshot === "string" && raw.screenshot.startsWith("data:image/png;base64,")) request.screenshot = raw.screenshot;
   return request;

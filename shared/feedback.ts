@@ -39,6 +39,8 @@ export interface FeedbackStartRequest {
   /** A PNG of the Sagax window itself (data URL), captured by the app. */
   screenshot?: string;
   locale?: "fr" | "en";
+  /** The words typed after /feedback, when the report starts from the slash command. */
+  text?: string;
 }
 
 export interface FeedbackStartResponse {

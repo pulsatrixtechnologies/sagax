@@ -13,6 +13,7 @@ import {
   pinnedWorkspaceStart,
   parseAutoComputerTarget,
   selectAutoComputer,
+  MAX_AUTO_COMPUTER_SWITCHES,
   type AutoComputerState,
 } from "./auto-computer.ts";
 import { AUTO_COMPUTER_SERVER, computerSelectTarget } from "../../shared/execution-target.ts";
@@ -74,6 +75,21 @@ describe("computer_select availability", () => {
     expect(selectAutoComputer(auto({ routine: true, routinesAllowed: false }), { target: "this_computer" }, true).text).toContain("routine");
     expect(selectAutoComputer(auto({ routine: true, routinesAllowed: true }), { target: "this_computer" }, true)).toMatchObject({ ok: true, target: "this_computer", changed: true });
     expect(selectAutoComputer(auto({ routine: true, routinesAllowed: true, desktopMounted: false }), { target: "this_computer" }, false).ok).toBe(false);
+  });
+
+  it("refuses a third move in one turn and tells the bot to finish where it is (#2736)", () => {
+    // QA 2026-11-07: one turn bounced between the server environment, the cloud computer and the Mac.
+    expect(MAX_AUTO_COMPUTER_SWITCHES).toBe(2);
+    expect(selectAutoComputer(auto({ switches: 1 }), { target: "this_computer" }, true)).toMatchObject({ ok: true, changed: true });
+    const third = selectAutoComputer(auto({ selected: "this_computer", switches: 2 }), { target: "cloud" }, true);
+    expect(third.ok).toBe(false);
+    expect(third.changed).toBeUndefined();
+    expect(third.text).toContain("Stay on their own computer");
+    expect(third.text).toContain("in their language");
+    // staying, or asking where it is, is never a move
+    expect(selectAutoComputer(auto({ selected: "this_computer", switches: 2 }), { target: "this_computer" }, true).ok).toBe(true);
+    expect(selectAutoComputer(auto({ switches: 2 }), {}, true).ok).toBe(true);
+    expect(AUTO_COMPUTER_RULES).toContain("at most two moves per turn");
   });
 
   it("rejects unknown targets and accepts common spellings", () => {
@@ -177,7 +193,7 @@ describe("Auto guidance (prompt fixture)", () => {
 
   it("does not send the bot to computer_select for connector tools or to confirm where it already is", () => {
     expect(text).toContain("Connector and Sagax tools (ConnectWise, Pulsatrix memory and flow, agents, search, other MCP servers) run on the server wherever you are: they need no computer and no computer_select.");
-    expect(text).toContain("Call computer_select only when a step needs a place other than the one you are on (not to confirm it).");
+    expect(text).toContain("Call computer_select only when a step needs a place other than the one you are on (not to confirm it); pick the place once and finish there: at most two moves per turn");
     expect(text).not.toContain("Select before the first tool call");
     expect(text).not.toContain("Prefer the cloud");
     expect(text).toContain("Never work around a refusal");

@@ -291,6 +291,28 @@ describe("createInternalEnvironmentsRoutes", () => {
     expect(body.result.tools[0]?.name).toBeTruthy();
   });
 
+  it("workplace/mcp counts each move and refuses a third one in the same turn (#2736)", async () => {
+    let auto: Record<string, unknown> = { auto: true, selected: "cloud", routine: false, sandboxConfigured: true, desktopMounted: true, routinesAllowed: false, browserAvailable: true };
+    const route = createInternalEnvironmentsRoutes(baseDeps({
+      isPerspicax: () => true,
+      turnWorkplace: () => ({ generation: "g1", decision: { principal: "pr_a" }, auto }) as never,
+      setTurnWorkplaceAuto: (_thread: string, next: unknown) => { auto = next as Record<string, unknown>; },
+      desktopConnected: () => true,
+      appendAdminAction: () => undefined,
+    } as never));
+    const move = async (target: string) => {
+      const { sent } = await call(route, { path: "/api/internal/workplace/mcp", body: { method: "tools/call", params: { name: "computer_select", arguments: { target } } } });
+      return (sent[0]!.body as { result: { isError?: boolean; content: Array<{ text: string }> } }).result;
+    };
+    expect((await move("this_computer")).isError).toBeUndefined();
+    expect((await move("cloud")).isError).toBeUndefined();
+    expect(auto.switches).toBe(2);
+    const third = await move("this_computer");
+    expect(third.isError).toBe(true);
+    expect(third.content[0]?.text).toContain("You already moved 2 times");
+    expect(auto.selected).toBe("cloud");
+  });
+
   it("computer/mcp 403 when turn has no cloud computer", async () => {
     const route = createInternalEnvironmentsRoutes(baseDeps());
     const { sent } = await call(route, {

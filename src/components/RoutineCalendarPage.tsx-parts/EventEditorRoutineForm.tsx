@@ -3,6 +3,7 @@ import {
   ChevronDown, ChevronRight, Copy, FileText, Plus,
 } from "lucide-react";
 import { AdvancedScheduleFields, HumanScheduleFields, scheduleTimeLabel, timeZoneLabel } from "@/components/routines/HumanScheduleFields";
+import { GithubTriggerFields } from "@/components/routines/GithubTriggerFields";
 import { CronRunDates } from "@/components/routines/CronScheduleFields";
 import { PANEL_INPUT, PANEL_LABEL, PANEL_TEXT_ACTION, PanelChip, PanelRow, PanelRows, PanelSelect, PanelToggle, PanelValue } from "@/components/routines/PanelRows";
 import { RunAsField } from "@/components/routines/RunAsField";
@@ -17,7 +18,7 @@ import { PillSelect } from "@/components/SettingsPrimitives";
 import { PICKER_FREQUENCIES } from "@/components/routines/schedule-editor";
 import { boatComputerEnabled } from "@/lib/feature-flags";
 import { CALENDAR_SLOT_MINUTES, toLocalDateInput } from "@/lib/routine-calendar";
-import { dayNames, durationLabel, scheduleSentence } from "@/lib/schedule-label";
+import { dayNames, durationLabel } from "@/lib/schedule-label";
 import { routineAutoPauseChoices, routineAutoPauseOption } from "@/lib/routine-display";
 import { modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/model-selection";
@@ -41,7 +42,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
     groupId, intervalDays, intervalDaysInvalid, intervalEnd, intervalEndDate, intervalEndInvalid,
     intervalEndMinimumAt, intervalInvalid, intervalMinutes, intervalWeekdays, intervalWindow,
     intervalWindowEnd, intervalWindowInvalid, intervalWindowStart, isRoomGoal, kind: _kind, lateMinutes,
-    limitReset, lockedBotId, mailAlias, moreOpen, name: _name, onlyWhenPresent, otherOwner, overlap, pattern,
+    limitReset, githubDraft, setGithubDraft, lockedBotId, mailAlias, moreOpen, name: _name, onlyWhenPresent, otherOwner, overlap, pattern,
     pickFiles, postResults, readOnly, recurrence, repeatsOnClock, requiredSkills, requiredMcp, requiresComputer,
     roleCoverage, roleReadiness, roomMembers, rooms, routineTarget: _routineTarget, routineModel, routineSubagentModel,
     routineEffort, actAs, runAs, runAsOptions, runOn, scheduleDraft, selectBots, selectFrequency, selectIntervalDays,
@@ -156,7 +157,8 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                     { value: "limit_reset", label: t("routines.limitReset.option") },
                     ...(recurrence === "advanced" ? [{ value: "advanced", label: t("scheduleEditor.frequency.advanced") }] : []),
                     ...(!isRoomGoal ? [{ value: "webhook", label: t("routineEditor.whenWebhook") }] : []),
-                    ...(recurrence === "email" ? [{ value: "email", label: existingRoutine?.schedule.type === "event" && existingRoutine.schedule.source === "github" ? scheduleSentence(existingRoutine.schedule) : t("schedule.sentence.email") }] : []),
+                    ...(!isRoomGoal ? [{ value: "github", label: t("routineTrigger.github") }] : []),
+                    ...(recurrence === "email" ? [{ value: "email", label: t("schedule.sentence.email") }] : []),
                   ]}
                 />
               </div>
@@ -174,6 +176,7 @@ export function EventEditorRoutineForm({ m }: { m: EventEditorModel }) {
                   onChange={setLimitReset}
                 />
               )}
+              {recurrence === "github" && <GithubTriggerFields draft={githubDraft} onChange={setGithubDraft} />}
               {recurrence === "pattern" && pattern && <HumanScheduleFields mode="essentials" draft={scheduleDraft} value={pattern} onChange={changeScheduleDraft} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />}
               {recurrence === "advanced" && pattern && <AdvancedScheduleFields value={pattern} preview={!onPage} onSimplify={simplifySchedule} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />}
               {recurrence === "interval" && (

@@ -1,11 +1,12 @@
 import { atLocalTime } from "@/lib/routine-calendar";
 import type { RoutineSchedule } from "@/lib/routines";
 import { activeLocale, t } from "@/lib/i18n";
+import { githubEventLabel } from "@/lib/github-event-label";
 import { cronScheduleLabel } from "../../shared/cron-label";
 
 /** The GitHub kinds a routine waits for, or "any event" (I3). */
 function githubKinds(events: readonly string[]): string {
-  return events.length ? events.join(", ") : t("schedule.github.anyEvent");
+  return events.length ? events.map(githubEventLabel).join(", ") : t("schedule.github.anyEvent");
 }
 
 /** Cron wording follows the app language: French (Québec) or English. */

@@ -4,6 +4,7 @@ import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider"
 import { useBotEditor } from "@/components/bot-settings/BotEditorContext";
 import { pathForFile } from "@/components/ComposerAttachments";
 import { draftFromWatch, watchFromDraft } from "@/components/routines/WatchFields";
+import { githubDraftFrom, type GithubDraft } from "@/components/routines/GithubTriggerFields";
 import { useRunAsOptions } from "@/components/routines/RunAsField";
 import { everyMinutesOf, keptScheduleValue, scheduleDraftFor, scheduleEditorValue, type ScheduleDraft } from "@/components/routines/schedule-editor";
 import { defaultScheduleModel, type ScheduleFrequency } from "../../../shared/schedule-model";
@@ -130,6 +131,7 @@ export function useEventEditorBody({
   const [actAs, setActAs] = useState<string | undefined>(existingRoutine ? undefined : template?.actAs);
   const [routineEffort, setRoutineEffort] = useState<EffortLevel | "">(template?.effort ?? "");
   const [recurrence, setRecurrence] = useState<RecurrenceChoice>(seed.limitReset ? "limit_reset" : recurrenceFor(schedule, initialAt, (routinesOnly ? "routine" : seed.kind) === "routine"));
+  const [githubDraft, setGithubDraft] = useState<GithubDraft>(() => githubDraftFrom(schedule));
   const [limitReset, setLimitReset] = useState<LimitResetChoice>(
     schedule.type === "limit_reset" ? { engine: schedule.engine, repeat: schedule.repeat } : { engine: seed.limitReset?.engine ?? "", repeat: "once" },
   );
@@ -193,7 +195,7 @@ export function useEventEditorBody({
   const roleReadiness = useRoutineReadiness(existingRoutine?.id ?? "");
   // A watch checks on a repeating schedule, for one bot.
   // Started by a webhook or an email, not the clock. Limit-reset waits on usage, not the clock.
-  const triggered = recurrence === "webhook" || recurrence === "email";
+  const triggered = recurrence === "webhook" || recurrence === "github" || recurrence === "email";
   const repeatsOnClock = recurrence !== "none" && recurrence !== "limit_reset" && !triggered;
   const watchAllowed = kind === "routine" && !isRoomGoal && repeatsOnClock;
   const at = fromLocalDateAndTime(date, startTime, template || existingCall ? initialAt : undefined);
@@ -319,7 +321,7 @@ export function useEventEditorBody({
   const save = async () => {
     await runEventEditorSave({
       attachmentPending, setSaving, setError, state, kind, routinesOnly, intervalMinutes,
-      existingIntervalSchedule, recurrence, intervalEndsAt, limitReset, bots, lockedBotId, botIds,
+      existingIntervalSchedule, recurrence, intervalEndsAt, limitReset, githubDraft, bots, lockedBotId, botIds,
       existingRoutine, keptCron, scheduleTouched, schedule, pattern, scheduleDraft, keptEvery, at,
       weekdays, selectedIntervalWeekdays, selectedIntervalWindow, triggered, timingMode, earlyMinutes,
       lateMinutes, name, description, routineTarget, groupId, runOn, durationMinutes, timeoutMinutes,
@@ -358,7 +360,7 @@ export function useEventEditorBody({
   // 2026-11-02: "When to run" reads as one sentence; the picker opens on
   // click (open from the start for a new routine).
   const whenSentence = eventEditorWhenSentence({
-    recurrence, pattern, limitReset, bots, lockedBotId, botIds, intervalMinutes, at, eventSchedule: existingRoutine?.schedule,
+    recurrence, pattern, limitReset, githubDraft, bots, lockedBotId, botIds, intervalMinutes, at, eventSchedule: existingRoutine?.schedule,
   });
   const [whenOpen, setWhenOpen] = useState(() => !existingRoutine);
   const advancedSummary = eventEditorAdvancedSummary({
@@ -372,7 +374,7 @@ export function useEventEditorBody({
   // reopens it; a toggle only holds while this editor stays open.
   const [moreOpen, setMoreOpen] = useState(false);
   const toggleMore = (open: boolean) => setMoreOpen(open);
-  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, routineSubagentModel, actAs, routineEffort, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
+  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, githubDraft, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, routineSubagentModel, actAs, routineEffort, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
@@ -408,7 +410,7 @@ export function useEventEditorBody({
   };
   // The trigger's icon: a clock for a schedule, a globe for a webhook, an
   // eye for a watch, an envelope for mail, an hourglass for a limit reset.
-  const whenIconName = recurrence === "webhook" ? "globe" : recurrence === "email" ? "mail" : recurrence === "limit_reset" ? "hourglass" : watchAllowed && watchDraft.on ? "eye" : recurrence === "interval" ? "repeat" : "clock";
+  const whenIconName = recurrence === "webhook" ? "globe" : recurrence === "github" ? "globe" : recurrence === "email" ? "mail" : recurrence === "limit_reset" ? "hourglass" : watchAllowed && watchDraft.on ? "eye" : recurrence === "interval" ? "repeat" : "clock";
   const WhenIcon = { globe: Globe, mail: Mail, hourglass: Hourglass, eye: Eye, repeat: Repeat2, clock: Clock3 }[whenIconName];
   // A panel is not modal (2026-11-01): no focus trap; Escape inside it still
   // asks about unsaved changes before it closes, and stops there.
@@ -425,7 +427,7 @@ export function useEventEditorBody({
     intervalDays, intervalDaysInvalid, intervalEnd, intervalEndDate, intervalEndInvalid, intervalEndMinimumAt,
     intervalInvalid, intervalMinutes, intervalWeekdays, intervalWindow, intervalWindowEnd, intervalWindowInvalid,
     intervalWindowStart, isCallKind, isRoomGoal, isRoutineKind, kind, lateMinutes,
-    limitReset, liveEnabled, mailAlias, moreOpen, name, onlyWhenPresent,
+    limitReset, githubDraft, setGithubDraft, liveEnabled, mailAlias, moreOpen, name, onlyWhenPresent,
     otherOwner, overlap, panel, pattern, pickFiles, postResults,
     readOnly, recurrence, repeatsOnClock, requestCancelEdit, requestClose, requestDismiss,
     requiredSkills, requiredMcp, requiresComputer, roleCoverage, roleReadiness,

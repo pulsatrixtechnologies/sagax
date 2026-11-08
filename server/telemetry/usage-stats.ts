@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 
 import { modelSharesOf, triggerLabel, type UsageRow } from "../usage/usage-ledger.ts";
+import { containsUuid, isOpaqueId } from "../../shared/human-id.ts";
 import { personOf } from "./agent-spans.ts";
 import { spansFileFor } from "./otel.ts";
 import type { UsageStats, UsageStatsGroup, UsageToolStat } from "../../shared/telemetry.ts";
@@ -85,6 +86,11 @@ function add(acc: Acc, input: number, output: number, cached: number, cost: numb
   if (threadId) acc.threads.add(threadId);
 }
 
+/** A label that is never a raw id: the id stays in `key`, the UI shows a name. */
+export function readableLabel(value: string, fallback: string): string {
+  return isOpaqueId(value) || containsUuid(value) ? fallback : value;
+}
+
 const SOURCE_LABELS: Record<string, string> = { user: "Person", owner: "Owner", routine: "Routine", bot: "Bot", helper: "Helper" };
 
 export function buildUsageStats(rows: readonly UsageRow[], spans: readonly LocalSpan[]): UsageStats {
@@ -102,13 +108,13 @@ export function buildUsageStats(rows: readonly UsageRow[], spans: readonly Local
     const cached = row.cachedInput ?? 0;
     add(totals, row.input, row.output, cached, row.costUsd, row.threadId, true);
     const accountKey = `${row.instanceId}${row.access ? `:${row.access}` : ""}`;
-    const account = get(byAccount, accountKey, row.instanceId);
+    const account = get(byAccount, accountKey, readableLabel(row.instanceId, row.driverKind || "Engine"));
     account.engine = row.driverKind;
     if (row.access) account.access = row.access;
     add(account, row.input, row.output, cached, row.costUsd, row.threadId, true);
     add(get(bySource, row.trigger.kind, SOURCE_LABELS[row.trigger.kind] ?? row.trigger.kind), row.input, row.output, cached, row.costUsd, row.threadId, true);
     const person = personOf(row);
-    const personLabel = row.trigger.kind === "user" ? triggerLabel(row.trigger) : person ?? "Owner";
+    const personLabel = row.trigger.kind === "user" ? triggerLabel(row.trigger) : readableLabel(person ?? "Owner", "Person");
     add(get(byPerson, person ?? "owner", personLabel), row.input, row.output, cached, row.costUsd, row.threadId, true);
     const shares = modelSharesOf(row) ?? [{ model: row.model, inputTokens: row.input - cached, outputTokens: row.output, cachedInputTokens: cached, costUsd: row.costUsd }];
     for (const share of shares) {

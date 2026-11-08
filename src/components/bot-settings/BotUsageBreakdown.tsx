@@ -170,7 +170,7 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
                       </button>
                       {expanded && (
                         <dl data-bot-usage-detail="" className="mb-2 ml-6 grid grid-cols-2 gap-x-6 gap-y-1 px-1 text-[12px] leading-4 sm:grid-cols-3">
-                          <Detail label={t("botProfile.usage.calls")} value={formatTokens(group.turns)} />
+                          <Detail label={t("botProfile.usage.calls")} value={String(group.turns)} />
                           <Detail label={t("botProfile.usage.cost")} value={usd(group.costUsd)} />
                           <Detail label={t("botProfile.usage.input")} value={formatTokens(group.inputTokens)} />
                           <Detail label={t("botProfile.usage.output")} value={formatTokens(group.outputTokens)} />

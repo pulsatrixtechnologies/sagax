@@ -10,7 +10,7 @@ import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
 import { ArrowUpRight, FolderOpen, Globe, Power } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
-import { AdvancedFold } from "./AdvancedFold";
+import { DeveloperLink } from "../settings/DeveloperLink";
 import { useBotEditor } from "./BotEditorContext";
 import { cn } from "@/lib/cn";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -26,10 +26,9 @@ import { CloudBackendPicker } from "../CloudBackendPicker";
 import { RemoteFolderField } from "../remote-session/RemoteFolderField";
 import { PILL, PLAIN_FIELD, PillSelect, Switch, useSettingsSurface } from "../SettingsPrimitives";
 import { ProposalStatus } from "./ProposalStatus";
-import { ToolSelectionCard, toolLabel } from "./ToolSelectionCard";
+import { toolLabel } from "./ToolSelectionCard";
 import { inputCls } from "./field";
 import { PaneEmpty, PaneSection, usePaneRows } from "./PaneSection";
-import { BotWebhooks } from "./BotWebhooks";
 import { BackgroundBriefCard } from "./BackgroundBriefCard";
 import type { useBotSettingsDerived } from "./useBotSettingsDerived";
 import { readableError } from "@/lib/plain-error";
@@ -388,14 +387,10 @@ export function AccessSection({
         </div>
       </PaneSection>}
 
-      {/* The working folder, the tool list, webhooks and the commands
-          always allowed: folded, one click away. */}
-      {part === "all" && <AdvancedFold id="access">
-        <WorkingFolder bot={bot} />
-        <ToolSelectionCard key={bot.id} bot={bot} engineKind={derived.engine?.driverKind} />
-        {!draft && <BotWebhooks bot={bot} />}
-        {!draft && <AlwaysAllowedCard bot={bot} patch={patch} />}
-      </AdvancedFold>}
+      {/* The working folder, the tool list, webhooks and the commands always
+          allowed live on Settings > Developer > Per bot (#2636, #2658): one
+          option, one place. This page keeps one discreet link. */}
+      {part === "all" && <DeveloperLink bot={draft ? undefined : bot} />}
     </div>
   );
 }

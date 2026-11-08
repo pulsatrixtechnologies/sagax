@@ -27,6 +27,16 @@ const row = (extra: Partial<UsageRow>): UsageRow => ({
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
+describe("usage labels never carry a raw id", () => {
+  it("keeps the guid in key and gives a readable label", () => {
+    const guid = "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b";
+    const stats = buildUsageStats([row({ instanceId: guid, trigger: { kind: "routine", principalId: guid } as UsageRow["trigger"] })], []);
+    expect(stats.byAccount[0]!.key).toContain(guid);
+    expect(stats.byAccount[0]!.label).toBe("claudeAgent");
+    for (const group of [...stats.byAccount, ...stats.byPerson]) expect(group.label).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+  });
+});
+
 describe("buildUsageStats", () => {
   it("splits by account, model, source and person and joins the calls by thread", () => {
     const rows = [

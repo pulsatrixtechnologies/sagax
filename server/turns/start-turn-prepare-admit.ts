@@ -290,9 +290,11 @@ export function createPrepareAdmitStartTurn(
     hasTeamComputer: Boolean(inheritedTeamComputer(state.bot))
   });
   // A place the person pinned from the Computer menu is where Auto starts,
-  // not a lock (#2576): "dans ton sandbox" still reaches the cloud.
+  // not a lock (#2576): "dans ton sandbox" still reaches the cloud. Only the
+  // conversation pin (state.plan.pinned) is that menu; the bot's own fixed
+  // Works on (Cloud, Local VM, This computer) stays fixed (#2842).
   const turnWorksPinned = turnWorksOn(state.plan, turnRemote.forceCloud);
-  const turnPinnedStart = IDENTITY.kind === "perspicax" ? pinnedWorkspaceStart(turnWorksPinned, turnRemote.forceCloud) : null;
+  const turnPinnedStart = IDENTITY.kind === "perspicax" && state.plan.pinned ? pinnedWorkspaceStart(turnWorksPinned, turnRemote.forceCloud) : null;
   const turnWorks = turnPinnedStart ? { auto: true } : turnWorksPinned;
   state.turnPrincipal = sandboxPrincipalForTurn({
     botOwnerPrincipalId: effectiveBotOwner(state.bot),

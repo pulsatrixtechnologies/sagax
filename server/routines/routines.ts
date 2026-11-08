@@ -39,7 +39,7 @@ import {
 import { ROUTINE_WATCH_LIMITS, type RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { parseMailAlias } from "../../shared/routine-mail-alias.ts";
 import { loadRoutineEffort, parseRoutineEffort } from "../../shared/routine-effort.ts";
-import { loadRoutineGoal, parseRoutineGoal, readGoalReport, routineGoalBlock, stepGoal, type RoutineGoal, type RoutineGoalInput } from "../../shared/routine-goal.ts";
+import { defaultNextCheck, expireGoal, goalPastDeadline, loadRoutineGoal, parseRoutineGoal, readGoalReport, routineGoalBlock, stepGoal, type RoutineGoal, type RoutineGoalInput } from "../../shared/routine-goal.ts";
 import { loadRoutineModel, parseRoutineModel } from "../../shared/routine-model.ts";
 import { loadRoutineActAs, parseRoutineActAs } from "../../shared/routine-act-as.ts";
 import { watchNoteBlock } from "./routine-watch.ts";
@@ -3249,6 +3249,7 @@ export class RoutineManager {
       this.prewakeUpcoming(now);
       this.prewarmUpcoming(now);
       this.checkEngineReconnectAhead(now);
+      this.closeExpiredGoals(now);
       // Only when I'm here (server/routines/routine-away.ts): skip a recurring
       // occurrence, or hold a one-time routine, while the person is away.
       const awaySkipped: Routine[] = [];
@@ -3907,6 +3908,45 @@ export class RoutineManager {
     return goal?.status === "active" ? routineGoalBlock(goal, this.now()) : undefined;
   }
 
+  /** #2696: past its deadline, an active goal never starts another run. The
+   * routine stops at once with a final report (a completed receipt with the
+   * deadline as its problem), instead of waiting for a run that would only
+   * notice it at its end. A run already at work settles it itself. */
+  private closeExpiredGoals(now: number): void {
+    const atWork = (run: RoutineRun) => run.status === "running" || run.status === "waiting" || (run.status === "queued" && run.manual);
+    const expired = this.routines.filter((routine) => routine.target === "bot" && goalPastDeadline(routine.goal, now) &&
+      !this.runs.some((run) => run.routineId === routine.id && atWork(run)));
+    if (expired.length === 0) return;
+    const closing: RoutineRun[] = [];
+    // A scheduled run still queued (its bot was busy) never starts past the deadline.
+    for (const run of this.runs) {
+      if (run.status !== "queued" || run.manual || !expired.some((routine) => routine.id === run.routineId)) continue;
+      run.status = "cancelled";
+      run.finishedAt = now;
+      run.error = "The goal's deadline passed before this run started";
+      closing.push(run);
+    }
+    const allocations: ResultsThreadAllocation[] = [];
+    this.commitMutation(() => {
+      for (const routine of expired) {
+        const closed = expireGoal(routine.goal!, now);
+        routine.goal = closed.goal;
+        routine.enabled = false;
+        routine.nextRunAt = null;
+        delete routine.nominalRunAt;
+        routine.updatedAt = Math.max(now, routine.updatedAt + 1);
+        const run = this.newRun(routine, now, false, allocations);
+        run.status = "completed";
+        run.finishedAt = now;
+        run.output = closed.report;
+        run.problems = closed.problem;
+        closing.push(run);
+      }
+    }, () => this.discardResultsThreads(allocations));
+    for (const routine of expired) this.emitRoutine(routine);
+    for (const run of closing) this.emitRun(run);
+  }
+
   /** #2696: read the goal lines off a completed run and move the goal on:
    * reached stops the routine, a chosen next check moves its next run,
    * blocked, stalled or past its deadline is a problem the person hears. */
@@ -3917,6 +3957,12 @@ export class RoutineManager {
     const report = readGoalReport(run.output, now);
     run.output = report.report || undefined;
     const step = stepGoal(routine.goal, report, now);
+    // A one-time routine (or one with no next occurrence) whose bot named no
+    // next check would stop silently with its goal still open: it looks
+    // again after the default delay, never past the deadline.
+    if (!step.stop && step.goal.nextCheckAt === undefined && (routine.schedule.type === "once" || routine.nextRunAt == null)) {
+      step.goal.nextCheckAt = defaultNextCheck(step.goal, now);
+    }
     routine.goal = step.goal;
     if (step.stop) {
       routine.enabled = false;

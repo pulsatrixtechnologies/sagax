@@ -40,6 +40,11 @@ export const ROUTINE_GOAL_MIN_CHECK_MS = 5 * 60_000;
 export const ROUTINE_GOAL_MAX_CHECK_MS = 14 * 24 * 60 * 60_000;
 /** Same progress this many runs in a row: the person hears about it. */
 export const ROUTINE_GOAL_STALL_RUNS = 3;
+/** A one-time goal routine whose bot named no next check looks again after
+ * this long (never past its deadline), instead of stopping silently. */
+export const ROUTINE_GOAL_DEFAULT_CHECK_MS = 24 * 60 * 60_000;
+/** A run may start this late after the deadline (the last check lands on it). */
+export const ROUTINE_GOAL_DEADLINE_GRACE_MS = 5 * 60_000;
 
 export const ROUTINE_GOAL_INVALID = "A goal is a sentence (at most 2000 characters), with an optional deadline, or null to remove it.";
 
@@ -175,12 +180,77 @@ export interface GoalStep {
   problem?: string;
 }
 
+/** The note's metric: a percentage first, else its first number ("78,95 %"
+ * and "78.95%" read the same). Undefined when the note has none. */
+export function progressMetric(note: string | undefined): number | undefined {
+  if (!note) return undefined;
+  const read = (raw: string) => {
+    const value = Number(raw.replace(/[\s\u00a0\u202f]/g, "").replace(",", "."));
+    return Number.isFinite(value) ? value : undefined;
+  };
+  const percent = /(-?\d+(?:[.,]\d+)?)\s*%/.exec(note);
+  if (percent) return read(percent[1]!);
+  const number = /-?\d+(?:[.,]\d+)?/.exec(note);
+  return number ? read(number[0]) : undefined;
+}
+
+function normalizedNote(note: string): string {
+  return note.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+/** Whether a progress note says the goal did not move since the previous one:
+ * the same metric within a small tolerance, or (no metric) the same words
+ * whatever the case, accents and punctuation. */
+export function progressUnchanged(previous: string | undefined, note: string | undefined): boolean {
+  if (!previous || !note) return false;
+  const before = progressMetric(previous);
+  const after = progressMetric(note);
+  if (before !== undefined && after !== undefined) {
+    return Math.abs(after - before) <= Math.max(1e-6, Math.abs(before) * 0.001);
+  }
+  if (before !== undefined || after !== undefined) return false;
+  return normalizedNote(previous) === normalizedNote(note);
+}
+
+/** When a goal with no chosen next check looks again: a day later, never
+ * past its deadline. */
+export function defaultNextCheck(goal: RoutineGoal, now: number): number {
+  const at = now + ROUTINE_GOAL_DEFAULT_CHECK_MS;
+  return goal.deadline ? Math.min(at, Math.max(goal.deadline, now + ROUTINE_GOAL_MIN_CHECK_MS)) : at;
+}
+
+/** Whether a goal's deadline has passed for a run starting `at` (a run may
+ * still start right at the deadline, within a short grace). */
+export function goalPastDeadline(goal: RoutineGoal | undefined, at: number): boolean {
+  return Boolean(goal && goal.status === "active" && goal.deadline && at > goal.deadline + ROUTINE_GOAL_DEADLINE_GRACE_MS);
+}
+
+/** An active goal closed by its deadline without a run: the goal and the
+ * final report the person receives. */
+export function expireGoal(goal: RoutineGoal, now: number): { goal: RoutineGoal; report: string; problem: string } {
+  const next: RoutineGoal = { ...goal, status: "expired", expiredAt: now };
+  delete next.nextCheckAt;
+  const checks = goal.checks ?? 0;
+  const lines = [
+    `Goal closed at its deadline (${iso(goal.deadline ?? now)}): ${goal.text}`,
+    `Checks run: ${checks}.`,
+    goal.progress ? `Last progress: ${goal.progress}` : "No progress was reported.",
+  ];
+  return {
+    goal: next,
+    report: lines.join("\n"),
+    problem: `The goal's deadline passed before it was reached${goal.progress ? `. Last progress: ${goal.progress}` : ""}`,
+  };
+}
+
 /** The goal after a completed run. */
 export function stepGoal(goal: RoutineGoal, report: GoalReport, now: number): GoalStep {
   const next: RoutineGoal = { ...goal, checks: (goal.checks ?? 0) + 1, lastCheckedAt: now };
   delete next.nextCheckAt;
   const note = report.note;
-  if (note && note === goal.progress) next.stalled = (goal.stalled ?? 0) + 1;
+  // No note says nothing moved: it never resets the count (the 78,95 % case,
+  // where the bot sometimes skipped its note and the alert never rang).
+  if (goal.progress && (!note || progressUnchanged(goal.progress, note))) next.stalled = (goal.stalled ?? 0) + 1;
   else delete next.stalled;
   if (note) next.progress = note;
   if (report.status === "achieved") {

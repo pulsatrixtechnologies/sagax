@@ -36,6 +36,8 @@ const bot = {
 const derived = {
   patch: () => {},
   engine: engineParam === "grok" ? { instanceId: "grok", driverKind: "grokAgent", displayName: "Grok" }
+    // ?engine=grokapi: the xAI API engine, where the row stays hidden
+    : engineParam === "grokapi" ? { instanceId: "grok-api", driverKind: "grok", displayName: "Grok API" }
     : engineParam === "claude" ? { instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude" } : undefined, canCoordinate: true, approvalMode: mismatch ? "full" : "ask",
   trustedModesAvailable: false, sectionName: "", currentChief: undefined,
 } as unknown as ReturnType<typeof useBotSettingsDerived>;

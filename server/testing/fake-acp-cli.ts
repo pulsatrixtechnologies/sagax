@@ -423,6 +423,7 @@ const dumpEnv = Object.fromEntries(
     "GROK_AGENT",
     "GROK_HOME",
     "GROK_AUTH_PATH",
+    "GROK_LEADER_SOCKET",
     "GROK_CLAUDE_MCPS_ENABLED",
     "GROK_CURSOR_MCPS_ENABLED",
     "GROK_CODEX_MCPS_ENABLED",

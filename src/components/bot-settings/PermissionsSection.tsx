@@ -196,9 +196,10 @@ export function PermissionsSection({
   const showDrafts = inPart("drafts") && advanced && !draft && canEditBotField(state.config, bot, "emailDrafts");
   const showMemeReplies = inPart("memes") && advanced && !draft && canEditBotField(state.config, bot, "memeReplies");
   const showLoopGuard = inPart("loopGuard") && advanced && !draft && canEditBotField(state.config, bot, "loopGuard");
-  // #2747: grok.com connectors, only for a bot on a Grok engine whose tools are not
-  // limited to a scope (a scoped turn never loads them)
-  const grokEngine = engine?.driverKind === "grokAgent" || engine?.driverKind === "grok";
+  // #2747: grok.com connectors, only for a bot on the Grok CLI engine (the xAI
+  // API engine "grok" cannot load them) whose tools are not limited to a scope
+  // (a scoped turn never loads them)
+  const grokEngine = engine?.driverKind === "grokAgent";
   const showGrokConnectors = inPart("grokConnectors") && advanced && !draft && grokEngine && bot.toolScope === undefined
     && canEditBotField(state.config, bot, "grokAccountConnectors");
   const showHooks = inPart("hooks") && !draft && canEditBotField(state.config, bot, "allowedRecipients");

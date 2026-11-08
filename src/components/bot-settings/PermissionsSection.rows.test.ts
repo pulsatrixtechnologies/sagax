@@ -32,3 +32,13 @@ describe("PermissionsSection Full in Edit N bots", () => {
     expect(approvalModeOptionsFor("claudeAgent", false, undefined).map((option) => option.mode)).toContain("full");
   });
 });
+
+// #2747 (v6): the xAI API engine ("grok", chat-completions) has no use_tool
+// and loads no grok.com connector, so the switch shows on the Grok CLI only.
+describe("PermissionsSection Grok account connectors row", () => {
+  const source = readFileSync(new URL("./PermissionsSection.tsx", import.meta.url), "utf8");
+  it("shows only on the grokAgent engine, never on the xAI API engine", () => {
+    expect(source).toContain("const grokEngine = engine?.driverKind === \"grokAgent\";");
+    expect(source).not.toContain("driverKind === \"grok\"");
+  });
+});

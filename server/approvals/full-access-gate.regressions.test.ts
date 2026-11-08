@@ -216,6 +216,45 @@ describe("#1819: an invented may-I card under Full access", () => {
     expect(rows.filter((row) => row.kind === "options" && row.card && !row.card.answered)).toHaveLength(1);
   });
 
+  // #2911: ask_choice with Yes/No on "A, or B?" becomes the two paths
+  // (#2901). Two paths are a real decision: Full access keeps the card.
+  it("an either/or ask_choice at Full shows its two paths on a card, never answered", () => {
+    const { store, rows } = fakeStore();
+    const either = { tool: ASK_CHOICE_TOOL, question: "Veux-tu que je refasse la collecte à neuf, ou qu'on avance directement avec ta validation ?", options: ["Oui", "Non"] };
+    const result = createAgentCard({ store, bot: BOT, threadId: "t-2911", input: either, approvalLevel: "full" });
+    expect("answered" in result).toBe(false);
+    const open = rows.filter((row) => row.kind === "options" && row.card && !row.card.answered);
+    expect(open).toHaveLength(1);
+    expect(open[0]?.card?.options).toEqual(["Que je refasse la collecte à neuf", "Qu'on avance directement avec ta validation"]);
+  });
+
+  it("an either/or ask_choice with a permission word at Full does not take the first path for the person", () => {
+    const { store, rows } = fakeStore();
+    const either = { tool: ASK_CHOICE_TOOL, question: "Veux-tu continuer l'import, ou attendre la validation ?", options: ["Oui", "Non"] };
+    const result = createAgentCard({ store, bot: BOT, threadId: "t-2911", input: either, approvalLevel: "full" });
+    expect("answered" in result).toBe(false);
+    expect(rows.find((row) => row.kind === "options")?.card).toMatchObject({ options: ["Continuer l'import", "Attendre la validation"] });
+    expect(rows.find((row) => row.kind === "options")?.card?.answered).toBeUndefined();
+  });
+
+  it("a plain may-I with Yes/No at Full is still answered Yes", () => {
+    const { store } = fakeStore();
+    const mayIYesNo = { tool: ASK_CHOICE_TOOL, question: "Puis-je continuer l'import?", options: ["Oui", "Non"] };
+    const result = createAgentCard({ store, bot: BOT, threadId: "t-2911", input: mayIYesNo, approvalLevel: "full" });
+    expect(result).toMatchObject({ ok: true, answered: { choice: "Oui" } });
+  });
+
+  it("the engine's own question tool with Yes/No on A or B keeps its card too", () => {
+    // request-opened-present.ts passes the raw options to fullAccessChoiceAnswer
+    for (const question of [
+      "Veux-tu que je refasse la collecte à neuf, ou qu'on avance directement avec ta validation ?",
+      "Veux-tu continuer l'import, ou attendre la validation ? 🙂",
+    ]) {
+      expect(fullAccessChoiceAnswer("full", { question, options: ["Oui", "Non"] }), question).toBeNull();
+    }
+    expect(fullAccessChoiceAnswer("full", { question: "Puis-je continuer l'import?", options: ["Oui", "Non"] })).toEqual({ choice: "Oui" });
+  });
+
   it("the prompt says so, so the model does not expect a click", () => {
     expect(approvalLevelPrompt("full")).toMatch(/may-I .*answered for the person/i);
     expect(fullAccessChoiceAnswer("full", { question: "Should I continue?", options: ["Yes", "No"] })).toEqual({ choice: "Yes" });

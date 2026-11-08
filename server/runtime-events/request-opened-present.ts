@@ -109,7 +109,9 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
       // option, the first one, is given back and the turn goes on. A real
       // decision, a form of several questions, a multi-select and a fact
       // only the person can supply keep their card (full-access-gate.ts).
-      // A harness ask (ask_choice) had this same reading in createChoiceCard.
+      // A harness ask (ask_choice) has this same reading in createChoiceCard,
+      // and a Yes/No on "A, or B?" keeps its card on both (#2911,
+      // fullAccessChoiceAnswer reads choiceOptionsFor).
       if (!permission && asker && event.requestId && !guestDriven && !event.harnessAsk) {
         const single = questions?.length === 1 ? questions[0] : undefined;
         const choice = single

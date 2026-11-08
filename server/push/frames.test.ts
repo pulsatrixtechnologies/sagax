@@ -36,6 +36,17 @@ describe("frames to pushes", () => {
     expect(kinds).toEqual(["approval", "approval", "approval", "message", "message", "routine", "routine", null, null]);
   });
 
+  it("a proactive report that needs the person wakes the phone at once, without Allow or Deny (#2697)", () => {
+    const push = pushesForFrame({
+      kind: "notify",
+      notification: { kind: "needs-you", botId: "b1", botName: "Scout", threadId: "t", title: "Scout needs you", body: "sign the renewal" },
+    }, deps())[0];
+    expect(push).toMatchObject({ kind: "approval", botId: "b1", title: "Scout needs you", body: "sign the renewal" });
+    expect(push?.requestId).toBeUndefined();
+    const wait = pushesForFrame({ kind: "notify", notification: { kind: "wait", botId: "b1", threadId: "t", title: "x", body: "y" } }, deps())[0];
+    expect(wait?.kind).toBe("message");
+  });
+
   it("a takeover wakes like an approval but carries no Allow or Deny", () => {
     const takeover = pushesForFrame({
       kind: "notify",

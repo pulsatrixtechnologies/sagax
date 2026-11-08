@@ -14,6 +14,8 @@ production VM) therefore sends real APNs pushes.
 | Someone nudges you | `nudge` | Always, at once, priority 10, the nudge sound |
 | An approval, or a bot waiting on your answer | `approval` | Nobody saw it |
 | A bot asks you to take over its computer | `approval` | Nobody saw it. Priority 10 like an approval; the banner has no Allow or Deny (no `requestId`). |
+| A proactive wake or a routine report with something only you can do (`needs-you`) | `approval` | Nobody saw it. Priority 10 like an approval, no Allow or Deny (#2697) |
+| A bot's wait finished (`wait`) | `message` | Nobody saw it |
 | A turn that could not start (expired OAuth, missing access) | `message` | Nobody saw it |
 | An incident the person has to look at | `message` | Nobody saw it |
 | A routine of yours finished | `message` | Nobody saw it. The banner names the routine (`Open routine %@`) and opens its report. A bot-to-bot turn stays quiet: the chip in both threads is the notice. |
@@ -215,6 +217,25 @@ Without `SAGAX_APNS_KEY_PATH` and `SAGAX_APNS_KEY_ID` the server sends
 nothing: phones still register, and the first push that would have gone out
 logs one line `push: APNs is not configured (...)`; after that, quiet. With
 them, startup logs `push: APNs on (...)`.
+
+### APNs relay (a server without the key, #2697)
+
+Only a server holding the `.p8` talks to Apple. A Sagax without it (a
+desktop on its own) prepares each push the same way and forwards it to a
+Sagax that has the key (`server/push/relay.ts`, `server/routes/push-relay.ts`).
+
+| Side | Variable | Value |
+| --- | --- | --- |
+| Without the key | `SAGAX_APNS_RELAY_URL` | the relay's base URL, `https` (plain `http` only on loopback) |
+| Without the key | `SAGAX_APNS_RELAY_TOKEN` | the shared secret, one line, 32 to 256 characters |
+| With the key | `SAGAX_APNS_RELAY_TOKENS` | the accepted secrets, comma separated; unset = `POST /api/push/relay` answers 404 |
+
+The relay checks the secret in constant time, takes only a hex device token,
+the environment, the `apns-*` headers a push needs (the topic must be its own
+app) and a body of at most 4 KB, limits each secret to 600 pushes a minute,
+and answers APNs' own outcome so a dead token is pruned on the sending
+server. A relay never forwards to another relay. Neither side logs a device
+token or a secret. Startup logs `push: APNs through the relay (topic ...)`.
 
 ## On the production VM (Perspicax infra)
 

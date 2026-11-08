@@ -316,6 +316,7 @@ import { createTelemetrySettingsStore } from "./telemetry/settings-store.ts";
 import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createGrokBridgeRoutes } from "./routes/grok-bridge.ts";
 import { createGrokBridgeInboundRoutes } from "./routes/grok-bridge-inbound.ts";
+import { createPushRelayRoutes } from "./routes/push-relay.ts";
 import { createGrokBridgeInternalRoutes } from "./routes/grok-bridge-internal.ts";
 import { GrokBridgeSecrets } from "./grok-bridge/secrets.ts";
 import { GrokBridgeStore } from "./grok-bridge/store.ts";
@@ -1226,7 +1227,8 @@ import { askedForView } from "../shared/requested-views.ts";
 import { isCwViewTool } from "../shared/cw-widgets/tool-call.ts";
 import { createPresenceRoutes, presenceFrameAllowed } from "./routes/presence.ts";
 import { PresenceTracker } from "./people/presence.ts";
-import { readApnsConfig } from "./push/config.ts";
+import { DEFAULT_APNS_BUNDLE_ID, readApnsConfig } from "./push/config.ts";
+import { ApnsRelaySender, readApnsRelayConfig, readApnsRelayTokens } from "./push/relay.ts";
 import { createPushDeviceStore, tokensOfConnectedDevices } from "./push/devices.ts";
 import { PushHub } from "./push/hub.ts";
 import { createAndroidPushDeviceStore } from "./push/fcm-devices.ts";
@@ -8581,6 +8583,8 @@ const achievementCallStarts = new Map<string, number>();
 // devices each person registered, and the hub that decides and sends. Off,
 // with one log line, until SAGAX_APNS_KEY_PATH and SAGAX_APNS_KEY_ID are set.
 const apnsConfig = readApnsConfig();
+// No key here: iPhone pushes go through a Sagax that has one (#2697).
+const apnsRelayConfig = readApnsRelayConfig();
 const pushDevices = createPushDeviceStore(DATA_DIR);
 // Android phones through FCM HTTP v1 (server/push/fcm.ts, docs/android-push.md):
 // off, with one log line, until SAGAX_FCM_SERVICE_ACCOUNT_PATH is set.
@@ -8599,6 +8603,9 @@ const liveActivityHub = new LiveActivityHub({
 });
 const pushHub = new PushHub({
   config: apnsConfig,
+  relay: apnsRelayConfig.configured
+    ? { sender: new ApnsRelaySender({ url: apnsRelayConfig.url, token: apnsRelayConfig.token }), bundleId: process.env.SAGAX_APNS_BUNDLE_ID?.trim() || DEFAULT_APNS_BUNDLE_ID }
+    : undefined,
   store: pushDevices,
   android: {
     store: androidPushDevices,
@@ -31684,6 +31691,12 @@ PRE_AUTH_ROUTES.push(createHealthPublicRoutes({
 }));
 // Signed inbound envelopes from a linked Grok (#2193): HMAC, no session.
 PRE_AUTH_ROUTES.push(createGrokBridgeInboundRoutes({ service: grokBridgeService }));
+// APNs relay for keyless Sagax servers (#2697): off until SAGAX_APNS_RELAY_TOKENS is set.
+PRE_AUTH_ROUTES.push(createPushRelayRoutes({
+  tokens: readApnsRelayTokens(),
+  topic: () => pushHub.topic,
+  send: (device, request) => pushHub.relaySend(device, request),
+}));
 PRE_AUTH_ROUTES.push(createMcpOAuthCallbackRoutes({
   findOwner: (state) => [...personOAuthManagers.values()].find((manager) => manager.ownsState(state)) ?? mcpOAuth,
   phoneReturnLocation,

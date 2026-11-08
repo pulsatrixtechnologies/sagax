@@ -6,11 +6,13 @@
 import { GROK_PROMPT_BYTE_LIMIT } from "./prompt-fit.ts";
 import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { ModelCatalog, ProviderErrorCode, TurnAccessInput } from "../../contracts.ts";
 import { harnessHome } from "../../env-path.ts";
+import { DATA_DIR } from "../../config.ts";
+import { isolateGrokMcp } from "./grok-mcp-isolation.ts";
 import { resolveCli } from "../../procs.ts";
 import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import type { DeviceSignIn } from "../device-auth.ts";
@@ -266,31 +268,6 @@ export function grokTurnCatalogSection(input: {
 export function grokConnectableConnectors(accountConnectors: boolean): { id: string; label: string }[] {
   if (!accountConnectors) return [];
   return GROK_CLOUD_CONNECTORS.map((connector) => ({ id: connector.id, label: connector.name }));
-}
-
-/** Whether Grok may load MCP servers Sagax did not mount: a config override
- * (GROK_CONFIG, GROK_CONFIG_PATH), or an `mcp_servers` table, dotted key or
- * assignment in GROK_HOME's config.toml or any `.grok/config.toml` from the
- * turn's folder up (the files grokInheritedProfile reads). Errs toward yes:
- * any line that starts with mcp_servers counts. */
-export function grokConfigDeclaresMcp(env: Record<string, string | undefined>, cwd?: string): boolean {
-  if (env.GROK_CONFIG || env.GROK_CONFIG_PATH) return true;
-  const files = [join(grokHome(env), "config.toml")];
-  if (cwd) {
-    for (let directory = resolve(cwd);;) {
-      files.push(join(directory, ".grok", "config.toml"));
-      const parent = dirname(directory);
-      if (parent === directory) break;
-      directory = parent;
-    }
-  }
-  return files.some((file) => {
-    try {
-      return /^\s*(?:\[\[?\s*)?["']?mcp_servers\b/m.test(readFileSync(file, "utf8"));
-    } catch {
-      return false;
-    }
-  });
 }
 
 /** The grok.com sign-in a turn runs on is stored. */
@@ -964,14 +941,10 @@ const support: AcpSupport = {
   // Auto or Full turn (#1982) runs Grok in `default` mode, with no per-call
   // classifier wait, and Sagax holds every MCP call that is not reviewed
   // read-only for a card (Full-approves unless a rule holds).
-  // Solo only: MCP servers the person declared in Grok's own config.toml are
-  // not mounted by Sagax, so the gate cannot hold them, and in `default`
-  // mode Grok may call them with no prompt. Such a turn keeps Grok's own
-  // auto mode. An organization turn withholds host tools: Grok reaches any
-  // MCP tool through use_tool only, and gated-mcp-ask.ts keeps every ask
-  // that names a server Sagax did not mount as a card.
-  approvalGate: (_config, turn, context) => (turn.approvalMode === "auto" || turn.approvalMode === "full") && grokApprovalGateEnabled(turn.botId)
-    && (turn.withholdHostTools === true || !grokConfigDeclaresMcp(context?.env ?? process.env, context?.cwd)),
+  // #2747: the MCP servers of the person's own Grok, Claude, Cursor or
+  // project config never reach a bot (grok-mcp-isolation.ts, applyTurnEnv),
+  // so every MCP server of the turn is one Sagax mounts and the gate holds.
+  approvalGate: (_config, turn) => (turn.approvalMode === "auto" || turn.approvalMode === "full") && grokApprovalGateEnabled(turn.botId),
   approvalReadOnly: (server, botId) => gateReadOnlyTools(server, botId),
   // a use_tool target the session's own catalog lists on a managed gateway
   // server: the person's own grok.com connector (grok-tool-catalog.ts)
@@ -1133,6 +1106,11 @@ const support: AcpSupport = {
     delete env.XAI_API_KEY;
   },
   applyTurnEnv: (env, { toolScope, withholdHostTools, accountConnectors }) => {
+    // #2747: the bot's CLI gets only the MCP servers Sagax mounts on
+    // session/new, never the person's own connectors (config.toml, project
+    // .grok and .mcp.json, ~/.claude.json, ~/.cursor/mcp.json, plugins).
+    // Runs after resolveTurnModel wrote the model slug into the real home.
+    isolateGrokMcp(env, grokHome(env), join(DATA_DIR, "engines", "grok-isolated"));
     // Cloud connectors of the signed-in xAI account reach this bot, the
     // managed configs and the gateway connectors (Outlook, Teams, Gmail...)
     // alike. A tool selection or someone else's account still turns them off

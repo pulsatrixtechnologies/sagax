@@ -96,7 +96,7 @@ function fixtures(n: number): InboxApproval[] {
     out.push({ key: "t-att:attention:m-att", threadId: "t-att", requestId: "attention:m-att", botId: "b-pixel", botName: "Pixel", threadTitle: "Factures", scope: "mine", kind: "attention", at: NOW - 38 * 60 * MIN, decidable: true, bulk: "question", message: attention });
     const proposal = { id: "m-pro", role: "bot", kind: "options", at: NOW - 95 * MIN,
       card: { title: "Nouveau courriel de Carla : « Contrat à signer »", subtitle: "Je peux le lire et préparer une réponse. On y va ?", options: ["Oui, vas-y", "Non merci"], proactiveProposal: { id: "pp1" } } } as unknown as Message;
-    out.push({ key: "t-pro:proactive:pp1", threadId: "t-pro", requestId: "proactive:pp1", botId: "b-echo", botName: "Echo", threadTitle: "Echo", scope: "mine", kind: "proposal", proactiveId: "pp1", at: NOW - 95 * MIN, decidable: true, bulk: "proposal", message: proposal });
+    out.push({ key: "t-pro:proactive:pp1", threadId: "t-pro", requestId: "proactive:pp1", botId: "b-echo", botName: "Echo", scope: "mine", kind: "proposal", proactiveId: "pp1", at: NOW - 95 * MIN, decidable: true, bulk: "proposal", message: proposal });
   }
   if (ROUTINE && n > 0) {
     out.push(permission(950, 3, 30 * 60, "WebFetch", { url: "https://example.com/rapports/matin" }, { risk: "read", routineName: "Revue du matin", threadTitle: "Revue du matin · 4 nov., 9 h 00", destination: "sandbox" }));

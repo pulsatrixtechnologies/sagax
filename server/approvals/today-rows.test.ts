@@ -50,6 +50,8 @@ describe("todayRows (#2689)", () => {
     }));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ kind: "proposal", proactiveId: "x", bulk: "proposal" });
+    // the conversation titled with the bot's own name adds no title
+    expect(rows[0]!.threadTitle).toBeUndefined();
   });
 
   it("the Questions filter keeps attention cards, Permissions does not", () => {

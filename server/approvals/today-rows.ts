@@ -100,7 +100,8 @@ export function todayRows(deps: TodayDeps): InboxApproval[] {
       requestId: `${PROACTIVE_PREFIX}${proposal.id}`,
       botId: bot.id,
       botName: bot.name,
-      ...(title ? { threadTitle: title.slice(0, 200) } : {}),
+      // the bot's own conversation carries its name: "Echo · Echo" says nothing
+      ...(title && title !== bot.name ? { threadTitle: title.slice(0, 200) } : {}),
       scope: "mine",
       kind: "proposal",
       proactiveId: proposal.id,

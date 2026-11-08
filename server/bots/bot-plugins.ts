@@ -121,6 +121,8 @@ export interface MarketplaceListing {
   updatedAt: number;
   plugins: Array<{
     name: string; description?: string; version?: string; category?: string; homepage?: string; icon?: string; installed: boolean; external: boolean;
+    /** #2759: converted from another format (Cursor), and what did not convert */
+    convertedFrom?: string; notConverted?: string[];
     /** the version this bot has, when it differs from `version` */
     installedVersion?: string;
     /** the marketplace offers another version or other files (Install updates in place) */
@@ -474,6 +476,8 @@ export class BotPlugins {
             ...(entry.category ? { category: entry.category } : {}),
             ...(entry.homepage ? { homepage: entry.homepage } : {}),
             ...(entry.icon ? { icon: entry.icon } : {}),
+            ...(entry.convertedFrom ? { convertedFrom: entry.convertedFrom } : {}),
+            ...(entry.notConverted?.length ? { notConverted: entry.notConverted } : {}),
             installed: Boolean(installed),
             ...(installed?.version && installed.version !== entry.version ? { installedVersion: installed.version } : {}),
             ...(update ? { updateAvailable: true } : {}),

@@ -50,6 +50,10 @@ export interface PluginItem {
   /** an MCP server that reads the person's GitHub account (the GitHub
    * plugin's token placeholder): whether that account is connected */
   githubAccount?: "connected" | "missing";
+  /** #2759: a marketplace plugin Sagax converted from another format
+   * ("cursor"), and what did not convert (codes, shown on its page) */
+  convertedFrom?: string;
+  notConverted?: string[];
 }
 
 /** Tag words to a category, first rule first. A tag is a marketplace
@@ -113,6 +117,8 @@ interface MarketplaceListing {
     installedVersion?: string; updateAvailable?: boolean;
     /** the plugin's site and declared icon (marketplace.json) */
     homepage?: string; icon?: string;
+    /** #2759: converted from another format (Cursor), and what did not convert */
+    convertedFrom?: string; notConverted?: string[];
   }>;
 }
 
@@ -375,6 +381,8 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
         ...(plugin.version ? { version: plugin.version } : {}),
         ...(plugin.installed && plugin.updateAvailable ? { updateAvailable: true } : {}),
         ...(plugin.installed && plugin.installedVersion ? { installedVersion: plugin.installedVersion } : {}),
+        ...(plugin.convertedFrom ? { convertedFrom: plugin.convertedFrom } : {}),
+        ...(plugin.notConverted?.length ? { notConverted: plugin.notConverted } : {}),
       });
     }
   }

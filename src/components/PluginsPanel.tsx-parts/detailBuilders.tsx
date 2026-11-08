@@ -204,6 +204,43 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
   };
 }
 
+/** The words for one "not converted" code (server/plugins/cursor-catalog.ts). */
+function notConvertedLabel(note: string): string {
+  const [code, detail = ""] = note.split(/:(.*)/s, 2) as [string, string?];
+  switch (code) {
+    case "rules_scope": return t("connectApps.plugin.converted.rulesScope");
+    case "rules_always": return t("connectApps.plugin.converted.rulesAlways");
+    case "agent_settings": return t("connectApps.plugin.converted.agentSettings", { keys: detail });
+    case "mcp_values": return t("connectApps.plugin.converted.mcpValues", { names: detail });
+    case "hooks": return t("connectApps.plugin.converted.hooks");
+    case "automations": return t("connectApps.plugin.converted.automations");
+    default: return note;
+  }
+}
+
+/** #2759: a plugin Sagax converted (Cursor): where it comes from and, plainly,
+ * what did not convert. */
+function conversionSection(item: PluginItem): ReactNode {
+  if (!item.convertedFrom) return null;
+  const notes = item.notConverted ?? [];
+  return (
+    <section data-plugin-conversion={item.convertedFrom}>
+      <h3 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.plugin.converted.title")}</h3>
+      <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{t("connectApps.plugin.converted.from")}</p>
+      {notes.length === 0
+        ? <p className="text-[12px] text-ink-secondary">{t("connectApps.plugin.converted.all")}</p>
+        : (
+          <>
+            <p className="mb-1 text-[12px] font-medium text-ink">{t("connectApps.plugin.converted.notConverted")}</p>
+            <ul className="list-disc space-y-1 pl-5 text-[12px] leading-relaxed text-ink-secondary">
+              {notes.map((note) => <li key={note}>{notConvertedLabel(note)}</li>)}
+            </ul>
+          </>
+        )}
+    </section>
+  );
+}
+
 /** A marketplace plugin: what it brought, each one a link to its own page. */
 export function pluginDetail(item: PluginItem, { items, marketplaces, installing, openItem, uninstallPlugin, updatePlugin, scope, botCard, openGithub, githubKey, githubSection }: DetailContext): DetailBase {
   const [plugin, marketplace] = item.id.split("@") as [string, string];
@@ -283,6 +320,7 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
         <>
           {item.description && <p className="px-1 text-[12.5px] leading-relaxed text-ink-secondary">{item.description}</p>}
           {botCard}
+          {conversionSection(item)}
         </>
       ),
     };
@@ -307,6 +345,7 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
           {children.length === 0 && <p className="text-[12px] text-ink-secondary">{t("connectApps.plugin.bringsNothing")}</p>}
           <p className="mt-2 text-[11.5px] text-ink-secondary">{t("connectApps.plugin.note")}</p>
         </section>
+        {conversionSection(item)}
       </>
     ),
   };

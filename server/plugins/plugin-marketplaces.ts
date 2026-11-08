@@ -56,6 +56,7 @@ import type { StoredMcpServer } from "../mcp/mcp-registry.ts";
 import { parseSkillMd } from "../../shared/skill-md.ts";
 import { officialCatalogFor } from "../../shared/skill-catalogs.ts";
 import { catalogNameFor, DEFAULT_SKILL_DIRS, synthesizeSkillsCatalog } from "./skills-catalog.ts";
+import { hasCursorMarketplace, synthesizeCursorCatalog } from "./cursor-catalog.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MAX_MARKETPLACES = 40;
@@ -174,6 +175,9 @@ export interface MarketplaceView {
     /** the plugin's site and declared icon (bot-plugins.ts pluginMarks) */
     homepage?: string;
     icon?: string;
+    /** #2759: converted from another format (Cursor), and what did not convert */
+    convertedFrom?: string;
+    notConverted?: string[];
     installed: boolean;
     /** the version installed, when it differs from `version` */
     installedVersion?: string;
@@ -568,6 +572,8 @@ export class PluginMarketplaces {
             ...(entry.category ? { category: entry.category } : {}),
             ...(entry.homepage ? { homepage: entry.homepage } : {}),
             ...(entry.icon ? { icon: entry.icon } : {}),
+            ...(entry.convertedFrom ? { convertedFrom: entry.convertedFrom } : {}),
+            ...(entry.notConverted?.length ? { notConverted: entry.notConverted } : {}),
             installed: Boolean(installed),
             ...(installed?.version && installed.version !== entry.version ? { installedVersion: installed.version } : {}),
             ...(update ? { updateAvailable: true } : {}),
@@ -615,9 +621,17 @@ export class PluginMarketplaces {
           if (shared) this.checkPolicy(source);
           await this.clone(source, staging, actor, options.environment ? await options.environment(source) : undefined);
         }
+        const official = manifestUrl ? undefined : officialCatalogFor(source.id);
+        if (!manifestUrl && (official?.format === "cursor" || (hasCursorMarketplace(staging) && !existsSync(join(staging, ".claude-plugin", "marketplace.json"))))) {
+          // #2759: a Cursor plugin marketplace (cursor/plugins) converted to the Claude Code layout
+          synthesizeCursorCatalog(staging, {
+            name: official?.id ?? catalogNameFor(source.id),
+            ...(official ? { description: official.description } : {}),
+            ...(source.github ? { rawBase: `https://raw.githubusercontent.com/${source.github.owner}/${source.github.repo}/${source.ref ?? "HEAD"}` } : {}),
+          });
+        }
         if (!manifestUrl && !existsSync(join(staging, ".claude-plugin", "marketplace.json"))) {
           // #2613: a skill catalog (Hermes Agent, OpenClaw, a skills/ folder) is read as a marketplace
-          const official = officialCatalogFor(source.id);
           synthesizeSkillsCatalog(staging, {
             name: official?.id ?? catalogNameFor(source.id),
             ...(official ? { description: official.description, dirs: official.skillDirs ?? DEFAULT_SKILL_DIRS } : {}),

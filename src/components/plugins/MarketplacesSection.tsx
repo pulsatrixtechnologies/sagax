@@ -328,6 +328,7 @@ function officialCatalogBlurb(id: string): string {
     case "hermes-agent": return t("connectApps.market.official.hermes");
     case "openclaw": return t("connectApps.market.official.openclaw");
     case "claude-plugins-official": return t("connectApps.market.official.claudePlugins");
+    case "cursor-plugins": return t("connectApps.market.official.cursor");
     default: return t("connectApps.market.official.agentSkills");
   }
 }

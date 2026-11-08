@@ -231,16 +231,29 @@ describe("the browser as a place (per task)", () => {
 
 describe("where an Auto turn starts (Owner 2026-10-15)", () => {
   const base = { routine: false, personAsked: true, desktopConnected: true, routinesAllowed: false, sandboxConfigured: true, browserAvailable: true };
+  // a person whose organization server has no environment for them yet
+  const noServerEnv = { ...base, sandboxConfigured: false };
 
-  it("defaults to the person's computer when it is connected", () => {
-    expect(autoStartTarget(base)).toEqual({ target: "this_computer", wanted: "this_computer", fallback: null });
+  // QA c2 D2/G5 (#2670): on an organization server, a person-asked turn
+  // started on their Mac whenever the Sagax app was connected, so shell and
+  // fetch_url ran on their computer while their server environment sat
+  // idle. The server environment is the default; their computer only when
+  // their words or the work ask for it (computer_select).
+  it("starts in the person's server environment when it exists, even with their computer connected (#2670)", () => {
+    expect(autoStartTarget(base)).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
+    // their explicit words or a pinned place still win
+    expect(autoStartTarget({ ...base, wanted: "this_computer" })).toEqual({ target: "this_computer", wanted: "this_computer", fallback: null });
   });
 
-  it("falls back to the cloud, and says why, when the computer is offline", () => {
-    expect(autoStartTarget({ ...base, desktopConnected: false })).toEqual({ target: "cloud", wanted: "this_computer", fallback: "offline" });
+  it("defaults to the person's computer when it is connected and they have no server environment", () => {
+    expect(autoStartTarget(noServerEnv)).toEqual({ target: "this_computer", wanted: "this_computer", fallback: null });
+  });
+
+  it("falls back, and says why, when the computer is offline", () => {
+    expect(autoStartTarget({ ...base, wanted: "this_computer", desktopConnected: false })).toEqual({ target: "cloud", wanted: "this_computer", fallback: "offline" });
     // no cloud either: the browser, then nothing
-    expect(autoStartTarget({ ...base, desktopConnected: false, sandboxConfigured: false }).target).toBe("browser");
-    expect(autoStartTarget({ ...base, desktopConnected: false, sandboxConfigured: false, browserAvailable: false }).target).toBeNull();
+    expect(autoStartTarget({ ...noServerEnv, desktopConnected: false }).target).toBe("browser");
+    expect(autoStartTarget({ ...noServerEnv, desktopConnected: false, browserAvailable: false }).target).toBeNull();
   });
 
   it("gives a sub-agent its own workspace, and never one that is not allowed", () => {
@@ -273,16 +286,22 @@ describe("where an Auto turn starts (Owner 2026-10-15)", () => {
   });
 
   it("never reaches a computer nobody asked for", () => {
-    expect(autoStartTarget({ ...base, personAsked: false })).toMatchObject({ target: "cloud", fallback: "unavailable" });
+    // with a server environment the cloud is the default, not a fallback (#2670)
+    expect(autoStartTarget({ ...base, personAsked: false })).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
+    const elsewhere = autoStartTarget({ ...noServerEnv, personAsked: false });
+    expect(elsewhere.target).not.toBe("this_computer");
+    expect(elsewhere.fallback).toBe("unavailable");
   });
 });
 
 describe("the thread line", () => {
   it("says the place when it changes, and the fallback once", () => {
-    const onComputer = autoStartTarget({ routine: false, personAsked: true, desktopConnected: true, routinesAllowed: false, sandboxConfigured: true, browserAvailable: true });
+    // no server environment: the computer is the default (#2670)
+    const onComputer = autoStartTarget({ routine: false, personAsked: true, desktopConnected: true, routinesAllowed: false, sandboxConfigured: false, browserAvailable: true });
     expect(autoStartLine(onComputer, null, false)).toEqual({ target: "this_computer" });
     expect(autoStartLine(onComputer, "this_computer", false)).toBeNull();
-    const offline = autoStartTarget({ routine: false, personAsked: true, desktopConnected: false, routinesAllowed: false, sandboxConfigured: true, browserAvailable: true });
+    // the computer was asked for (pinned) but is offline: the cloud, with the reason
+    const offline = autoStartTarget({ wanted: "this_computer", routine: false, personAsked: true, desktopConnected: false, routinesAllowed: false, sandboxConfigured: true, browserAvailable: true });
     expect(autoStartLine(offline, "this_computer", false)).toEqual({ target: "cloud", fallback: { wanted: "this_computer", reason: "offline" } });
     // still offline next turn: nothing new to say
     expect(autoStartLine(offline, "cloud", false)).toBeNull();
@@ -331,5 +350,17 @@ describe("a place pinned from the Computer menu (#2576)", () => {
   it("sends live-state questions to the direct state tool, never the shell", () => {
     expect(AUTO_COMPUTER_RULES).toContain("host_health");
     expect(AUTO_COMPUTER_RULES).toMatch(/Never read state through a shell/);
+  });
+
+  // QA c2 G5 (#2670): host_health reports failures and latency, never a
+  // product version; the rule that said "host_health ... and its versions"
+  // sent a bot through nine tool searches. Versions come from each
+  // product's own health endpoint.
+  it("names where product versions come from and keeps the shell off the person's computer by default (#2670)", () => {
+    expect(AUTO_COMPUTER_RULES).toMatch(/\/api\/health/);
+    expect(AUTO_COMPUTER_RULES).toMatch(/\/healthz/);
+    expect(AUTO_COMPUTER_RULES).not.toMatch(/host_health for the Pulsatrix host and its versions/);
+    expect(AUTO_COMPUTER_RULES).toMatch(/server environment, it is where a turn starts, with their computer connected or not/);
+    expect(AUTO_COMPUTER_RULES).toMatch(/Never run a shell or fetch_url on their computer to look something up/);
   });
 });

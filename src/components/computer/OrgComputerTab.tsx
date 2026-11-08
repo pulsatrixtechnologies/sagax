@@ -77,8 +77,10 @@ const SERVER_ENVIRONMENT_CHANGED = "sagax:server-environment-changed";
 const announceServerEnvironment = () => { window.dispatchEvent(new Event(SERVER_ENVIRONMENT_CHANGED)); };
 
 /** Which computer this bot uses, from its Works on, and why (one sentence).
- * Auto starts on the person's computer when the Sagax app is connected
- * (server/computer/auto-computer.ts autoStartTarget), else in the cloud. */
+ * Auto starts in the person's server environment when they have one (#2670),
+ * else on their computer when the Sagax app is connected, else in the cloud
+ * (server/computer/auto-computer.ts autoStartTarget). This legacy guess knows
+ * no server environment: the tab follows the server's answer (`inUse`) first. */
 export function activeComputer(bridge: DesktopBridgeStatus, place: EffectivePlace): { source: ComputerSource; reason: "cloud" | "computer" | "notConnected" | "none" } {
   if (place === "auto" && bridge.connected) return { source: "local", reason: "computer" };
   const computer = orgComputerFor(place);
@@ -94,7 +96,8 @@ export function activeComputer(bridge: DesktopBridgeStatus, place: EffectivePlac
 export type InUsePlace = "cloud" | "vm" | "local" | "browser" | "off" | "unknown";
 
 /** The screen the tab opens on: the destination in use, else the legacy
- * default (Works on; Auto starts on the Mac when it is connected). */
+ * default (Works on; Auto starts in the server environment when there is one,
+ * else on the Mac when it is connected, #2670). */
 export function defaultScreen(bridge: DesktopBridgeStatus, place: EffectivePlace, inUse?: InUsePlace): { source: ComputerSource; browser: boolean } {
   if (inUse === "unknown") return { source: "server", browser: false };
   if (inUse === "cloud") return { source: "server", browser: false };

@@ -1371,7 +1371,7 @@ export class PerspicaxMcp {
     // limited role is wanted, so a read refused looks for one held role that
     // may read it (live listing), switches for this one call only when the
     // person allowed it (a rule, or what they said), else asks with a card.
-    const readStop = (why: string) => `STOP: this read was refused (403) under ${label}${why}. Missing permission: ${needs}. This is a permission block, not missing data: do not retry the same records with other tools or another connection, and do not answer as if the records were empty. Tell the person the read is blocked and which permission the account needs.`;
+    const readStop = (why: string) => `STOP: this read was refused (403) under ${label}${why}. Missing permission: ${needs}. This is a permission block, not missing data: do not retry the same records with other tools or another connection, and do not answer as if the records were empty. Tell the person the read is blocked and which permission the account needs; never say it needs an admin or that nothing can be done.`;
     const blocked = (why: string) => {
       entry.readRefused = true;
       this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });

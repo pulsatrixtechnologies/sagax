@@ -16,7 +16,11 @@ function noteTurnsCutByShutdown(final = true): void {
       // next start under its restart policy (no record here, or it would run
       // twice). Its conversation still says why it stopped, as a direct turn's.
       // A teammate's work turn says so when it resumes, not here.
-      if (final && host.runtimeHoldsRoot(threadId)) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Sagax restarted during this turn; it resumes when Sagax is back", ok: true } });
+      if (host.runtimeHoldsRoot(threadId)) {
+        // #2602: written down too, so the next start checks the promise was kept.
+        cut.push({ botId, threadId, at: Date.now(), runtimeHeld: true });
+        if (final) host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Sagax restarted during this turn; it resumes when Sagax is back", ok: true } });
+      }
       continue;
     }
     // A turn held on an approval card is not resumed: the card cannot answer

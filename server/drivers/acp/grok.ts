@@ -116,11 +116,22 @@ const GROK_INLINE_ARGUMENTS_HINT_TEXT =
   " Never use its file or tool_input_file forms: they read the Sagax server's disk, not your environment," +
   " so a file you wrote with write_file or a command is never found there.";
 
+/** #2604, prod 2026-11-06/07: five routines of one bot called search_tool
+ * through use_tool (tool_name "search_tool") 3 to 4 times per run, each
+ * refused by Grok ("search_tool is a native tool, not an MCP integration
+ * tool"), and the runs ended completed with that line in their problems.
+ * search_tool and use_tool are Grok's own tools, never use_tool targets. */
+const GROK_NATIVE_TOOLS_HINT_TEXT =
+  " search_tool and use_tool are your own tools: call search_tool directly as its own tool call, never as use_tool's tool_name" +
+  " (use_tool only takes an MCP tool named <server>__<tool>)." +
+  " When a tool call fails with an error that says how to call it instead, follow that error on the next call; never repeat the same failing call.";
+
 export const GROK_TOOL_REUSE_HINT =
   "\n\nTool calls: each search_tool call costs a full extra round trip. When search_tool already showed you a tool earlier in this conversation," +
   " call it again directly with use_tool (same tool_name, arguments per the schema you saw) instead of searching again. Use search_tool only for a tool you have not seen yet," +
   " and when one search returns several tools you need, call them without searching again." +
-  GROK_INLINE_ARGUMENTS_HINT_TEXT;
+  GROK_INLINE_ARGUMENTS_HINT_TEXT +
+  GROK_NATIVE_TOOLS_HINT_TEXT;
 
 const SLUG = /^[a-z0-9][a-z0-9._-]*$/i;
 

@@ -91,4 +91,11 @@ describe("grok use_tool argument form", () => {
     // the reuse guidance it already carried is still there
     expect(GROK_TOOL_REUSE_HINT).toMatch(/call it again directly with use_tool/);
   });
+
+  // #2604: search_tool called through use_tool, refused 3 to 4 times per routine run.
+  it("the standing hint says search_tool is never a use_tool target and a failing call is not repeated", () => {
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/call search_tool directly as its own tool call, never as use_tool's tool_name/);
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/use_tool only takes an MCP tool named <server>__<tool>/);
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/never repeat the same failing call/);
+  });
 });

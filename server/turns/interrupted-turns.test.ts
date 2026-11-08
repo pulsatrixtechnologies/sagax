@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { drainTurns, INTERRUPTED_TURN_MAX_AGE_MS, saveInterruptedTurns, shutdownDrainMs, takeInterruptedTurns } from "./interrupted-turns.ts";
+import { drainTurns, INTERRUPTED_TURN_MAX_AGE_MS, runtimeResumeVerdict, saveInterruptedTurns, shutdownDrainMs, takeInterruptedTurns } from "./interrupted-turns.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -44,5 +44,20 @@ describe("interrupted turns", () => {
     expect(shutdownDrainMs({}, true)).toBe(0);
     expect(shutdownDrainMs({ SAGAX_SHUTDOWN_DRAIN_MS: "5000" }, true)).toBe(5_000);
     expect(shutdownDrainMs({ SAGAX_SHUTDOWN_DRAIN_MS: "999999" }, false)).toBe(120_000);
+  });
+  it("#2602: keeps a runtime-held turn and checks the resume promise was kept", () => {
+    const dir = temp();
+    const now = Date.now();
+    saveInterruptedTurns(dir, [{ botId: "b1", threadId: "t1", at: now - 1_000, runtimeHeld: true }]);
+    const [turn] = takeInterruptedTurns(dir, now).resume;
+    expect(turn).toEqual({ botId: "b1", threadId: "t1", at: now - 1_000, runtimeHeld: true });
+    const cutNote = { role: "bot", kind: "activity", at: now - 500 };
+    expect(runtimeResumeVerdict(turn!, { held: true, busy: false, messages: [cutNote] })).toBe("wait");
+    expect(runtimeResumeVerdict(turn!, { held: false, busy: true, messages: [cutNote] })).toBe("wait");
+    // Nothing came back and nothing holds it any more: the promise was not kept.
+    expect(runtimeResumeVerdict(turn!, { held: false, busy: false, messages: [cutNote] })).toBe("lost");
+    expect(runtimeResumeVerdict(turn!, { held: false, busy: false, messages: [cutNote, { role: "bot", at: now }] })).toBe("resumed");
+    // The person spoke first: a later answer belongs to the new request.
+    expect(runtimeResumeVerdict(turn!, { held: false, busy: false, messages: [{ role: "user", at: now - 100 }, { role: "bot", at: now }] })).toBe("lost");
   });
 });

@@ -17,6 +17,10 @@ export const NOTIFY_PUSH_KINDS: Readonly<Record<string, PushKind>> = Object.free
   question: "approval",
   approval: "approval",
   takeover: "approval",
+  // a proactive or routine report with something for the person (#2697):
+  // wakes the phone at once, like an ask, without Allow / Deny
+  "needs-you": "approval",
+  wait: "message",
   "turn-failed": "message",
   incident: "message",
   "routine-failed": "routine",

@@ -9,17 +9,25 @@
 // a push would have gone out, then skips quietly. A dead token (410, or 400
 // BadDeviceToken) is removed from the store. Never logs a token or a key.
 import { ApnsSender, createHttp2Transport, type ApnsLog, type ApnsTransport } from "./apns.ts";
-import type { ApnsConfigResult } from "./config.ts";
+import type { ApnsConfigResult, ApnsEnvironment } from "./config.ts";
 import { maskSecret } from "./config.ts";
 import { bypassesPushRateLimit, PUSH_SEEN_GRACE_MS, PushRateLimiter, shouldPush, waitsForGrace } from "./decide.ts";
 import type { PushDeviceStore } from "./devices.ts";
 import type { AndroidPushDeviceStore } from "./fcm-devices.ts";
 import { buildFcmMessage, type FcmSender } from "./fcm.ts";
-import { buildApnsRequest, buildReadSyncRequest, buildSettledRequest, collapseId, type PushMessage } from "./payload.ts";
+import { buildApnsRequest, buildReadSyncRequest, buildSettledRequest, collapseId, type ApnsRequest, type PushMessage } from "./payload.ts";
+import type { SendOutcome } from "./apns.ts";
 import { reportBackgroundError } from "../background-error.ts";
+
+/** What sends one prepared request to one iPhone: APNs itself, or a relay. */
+export interface IosPushSender {
+  send(device: { token: string; environment: ApnsEnvironment }, request: ApnsRequest): Promise<SendOutcome>;
+}
 
 export interface PushHubDeps {
   config: ApnsConfigResult;
+  /** No APNs key here: pushes go through a server that has one (./relay.ts, #2697). */
+  relay?: { sender: IosPushSender; bundleId: string };
   store: PushDeviceStore;
   /** Android phones (FCM). Absent or no sender: Android pushes are off. */
   android?: { store: AndroidPushDeviceStore; sender: FcmSender | null; reason?: string };
@@ -57,7 +65,10 @@ const key = (person: string, rest: string) => `${person}\0${rest}`;
 export class PushHub {
   readonly enabled: boolean;
   private readonly deps: PushHubDeps;
-  private readonly sender: ApnsSender | null;
+  private readonly sender: IosPushSender | null;
+  /** APNs itself (this server holds the key); a relay serves only this one. */
+  private readonly direct: ApnsSender | null;
+  private readonly bundleId: string;
   private readonly log: ApnsLog;
   private readonly now: () => number;
   private readonly limiter: PushRateLimiter;
@@ -89,13 +100,34 @@ export class PushHub {
         this.notConfiguredLogged = true;
       }
     }
-    this.sender = sender;
+    this.direct = sender;
+    let ios: IosPushSender | null = sender;
+    let bundleId = deps.config.configured ? deps.config.config.bundleId : "";
+    if (!ios && deps.relay) {
+      ios = deps.relay.sender;
+      bundleId = deps.relay.bundleId;
+      this.log.info(`push: APNs through the relay (topic ${bundleId})`);
+    }
+    this.sender = ios;
+    this.bundleId = bundleId;
     this.fcm = deps.android?.sender ?? null;
     if (this.fcm) this.log.info("push: FCM on (Android)");
-    this.enabled = sender !== null || this.fcm !== null;
+    this.enabled = ios !== null || this.fcm !== null;
   }
 
   private readonly fcm: FcmSender | null;
+
+  /** The relay route (POST /api/push/relay): sends a request another Sagax
+   * prepared, through this server's own APNs key. Null when this server has
+   * no key (a relay never forwards to another relay). */
+  relaySend(device: { token: string; environment: ApnsEnvironment }, request: ApnsRequest): Promise<SendOutcome> | null {
+    return this.direct ? this.direct.send(device, request) : null;
+  }
+
+  /** The app topic this server pushes to. */
+  get topic(): string {
+    return this.bundleId;
+  }
 
   /** This person's Android phones. */
   private androidDevices(person: string) {
@@ -196,7 +228,7 @@ export class PushHub {
     const android = fcm ? this.androidDevices(person) : [];
     if (!ios.length && !android.length) return;
     if (!this.readLimiter.tryTake(person, this.now())) return;
-    const bundleId = this.deps.config.configured ? this.deps.config.config.bundleId : "";
+    const bundleId = this.bundleId;
     const run = (async () => {
       for (const device of ios) {
         const outcome = await sender!.send(device, buildSettledRequest({ threadId, requestId, bundleId, nowMs: this.now() }));
@@ -221,7 +253,7 @@ export class PushHub {
     const android = fcm ? this.androidDevices(person) : [];
     if (!ios.length && !android.length) return;
     if (!this.readLimiter.tryTake(person, this.now())) return;
-    const bundleId = this.deps.config.configured ? this.deps.config.config.bundleId : "";
+    const bundleId = this.bundleId;
     const run = (async () => {
       for (const device of ios) {
         const outcome = await sender!.send(device, buildReadSyncRequest({ threadId, bundleId, nowMs: this.now() }));
@@ -302,7 +334,7 @@ export class PushHub {
     const personSound = this.deps.personSound?.(message.personId) ?? true;
     const personSoundChoice = this.deps.personSoundChoice?.(message.personId);
     for (const device of this.devicesToSend(message.personId)) {
-      const request = buildApnsRequest({ message, bundleId: this.deps.config.configured ? this.deps.config.config.bundleId : "", settings: device.settings, personSound, personSoundChoice, nowMs: this.now() });
+      const request = buildApnsRequest({ message, bundleId: this.bundleId, settings: device.settings, personSound, personSoundChoice, nowMs: this.now() });
       const outcome = await sender.send(device, request);
       if (!outcome.ok && outcome.prune) {
         this.deps.store.prune(device.token);

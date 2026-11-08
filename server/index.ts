@@ -21986,7 +21986,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const speaker = turnSpeakerPrincipals.get(threadId);
       const person = speaker ? principals.byId(speaker) : null;
       const role = !organization || !person ? null : person.local === true || person.orgRole === "admin" ? "admin" as const : "member" as const;
-      return { organization, role, perspicaxTools: organization && Boolean(speaker) };
+      return { organization, role, perspicaxTools: organization && Boolean(speaker), release: releaseVersion() };
     }
   }),
   createPerspicaxToolInternalRoutes({

@@ -15,7 +15,7 @@ vi.mock("@/lib/perspicax-org", () => ({ useOrgPeople: () => new Map() }));
 vi.mock("./BotProfileAvatarCard", () => ({ BotProfileAvatarCard: () => null }));
 
 import { BotZipImportPanel } from "./BotZipImport";
-import { BotActionsMenu } from "./bot-settings/BotActionsMenu";
+import { BotZipExportCard } from "./settings/DeveloperBotCard";
 import { StartingRole, startOptions } from "./NewBotDialog";
 import { botZipExportUrl, botZipLineText } from "@/lib/bot-zip";
 import type { Bot } from "@/state/store";
@@ -119,19 +119,19 @@ describe("import from zip", () => {
 });
 
 describe("export as zip", () => {
-  it("the bot's \"...\" menu downloads the zip with the parts chosen", () => {
+  // #2658: the export left the bot's "..." menu for Settings > Developer > the bot's card
+  it("the Developer card downloads the zip with the parts chosen", () => {
     const clicked: string[] = [];
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { clicked.push(this.getAttribute("href") ?? ""); });
     const bot = { id: "atlas", name: "Atlas", title: "", description: "", color: "purple", messages: [], modelSelection: { instanceId: "fixture", model: "m" }, grants: [{ target: "user:x", level: "use" }] } as unknown as Bot;
-    act(() => { root.render(createElement(BotActionsMenu, { bot, anchor: { x: 0, y: 0 }, onAnchor: vi.fn(), onRename: vi.fn() })); });
+    act(() => { root.render(createElement(BotZipExportCard, { bot })); });
     const inBody = (selector: string) => act(() => { (document.querySelector(selector) as HTMLElement).click(); });
-    inBody("[data-menu-item=export-zip]");
-    expect(document.querySelector("[data-bot-zip-export]")?.textContent).toContain("Secrets and tokens never leave");
+    expect(document.querySelector("[data-settings-group=developerBotZip]")?.textContent).toContain("Secrets and tokens never leave");
     inBody("[data-bot-zip-conversations]");
     inBody("[data-bot-zip-sharing]");
     inBody("[data-bot-zip-download]");
     expect(clicked).toEqual(["/api/bots/atlas/export.zip?conversations=1&sharing=1"]);
-    expect(document.querySelector("[data-bot-zip-export] [role=status]")?.textContent).toBe("The download has started.");
+    expect(document.querySelector("[data-settings-group=developerBotZip]")?.textContent).toContain("The download has started.");
   });
 
   it("names the parts in the URL and translates the preview lines", () => {

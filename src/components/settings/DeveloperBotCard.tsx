@@ -150,7 +150,7 @@ function DeveloperMemoryCards({ bot }: { bot: Bot }) {
 
 /** Export the bot as a .sagaxbot.zip: what to include, then the download
  * (was a popover under the bot's "..." menu). */
-function BotZipExportCard({ bot }: { bot: Bot }) {
+export function BotZipExportCard({ bot }: { bot: Bot }) {
   const [withConversations, setWithConversations] = useState(false);
   const [withSharing, setWithSharing] = useState(false);
   const [exported, setExported] = useState(false);

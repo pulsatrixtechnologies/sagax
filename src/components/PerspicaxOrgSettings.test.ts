@@ -54,14 +54,14 @@ describe("Settings > Organization without Sharing in the organization", () => {
         expect(html, `${locale} ${role}`).not.toContain('data-settings-card="organization.sharing"');
         expect(html, `${locale} ${role}`).not.toContain("data-org-sharing");
       }
-      // #2193: admins keep the Grok bridge kill switch; members stay read-only
-      expect(admin, locale).toContain('data-settings-card="organization.grokBridge"');
-      expect(admin, locale).toContain('role="switch"');
-      expect(member, locale).not.toContain('data-settings-card="organization.grokBridge"');
+      // #2767 (2026-11-08): the Grok bridge kill switch and the GitHub OAuth
+      // App's client id moved to Settings > Developer (admin only there); the
+      // Organization page draws neither, for any role
+      for (const html of [admin, member]) {
+        expect(html, locale).not.toContain('data-settings-card="organization.grokBridge"');
+        expect(html, locale).not.toContain("data-org-github-app");
+      }
       expect(member, locale).not.toContain('role="switch"');
-      // the GitHub OAuth App's client id, a server setting, is an admin input
-      expect(admin, locale).toContain("data-org-github-app");
-      expect(member, locale).not.toContain("data-org-github-app");
       expect(member, locale).not.toContain("<input");
       // the read-only rules block is the same for both roles
       const rules = (html: string) => {

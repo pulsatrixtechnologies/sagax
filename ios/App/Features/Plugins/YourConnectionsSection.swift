@@ -125,8 +125,9 @@ struct YourConnectionsSection: View {
                         .buttonStyle(.borderless)
                         .disabled(model.busy != nil)
                         .accessibilityIdentifier("your-connections-github-disconnect")
-                } else if github.state != "connected", github.state != "pending", github.deviceFlow {
-                    Button(String(localized: "Connect GitHub")) {
+                } else if github.state != "pending" {
+                    // Link plus code on every server (#2801): Sagax has a built-in OAuth App.
+                    Button(github.state == "error" ? String(localized: "Try again") : String(localized: "Connect GitHub")) {
                         Task { await model.run("gh-device") { try await $0.startGithubDevice() } }
                     }
                     .buttonStyle(.borderless)

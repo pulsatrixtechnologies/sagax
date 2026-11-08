@@ -21344,18 +21344,24 @@
         }
       }
     },
-    "Connect GitHub or a token: Plugins > Sources.": {
+    "Connect GitHub with a link and a code: Plugins > Sources.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connect GitHub or a token: Plugins > Sources."
+            "value": "Connect GitHub with a link and a code: Plugins > Sources."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connectez GitHub ou un jeton : Plugins > Sources."
+            "value": "Connectez GitHub avec un lien et un code : Plugins > Sources."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conecte o GitHub com um link e um código: Plugins > Sources."
           }
         }
       }
@@ -78107,6 +78113,28 @@
         }
       }
     },
+    "Still not working? Advanced, below, lets you paste a GitHub token instead.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still not working? Advanced, below, lets you paste a GitHub token instead."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours bloqué? Avancé, plus bas, permet de coller un jeton GitHub à la place."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ainda não funciona? Em Avançado, abaixo, você pode colar um token do GitHub."
+          }
+        }
+      }
+    },
     "Still on it.": {
       "localizations": {
         "fr": {
@@ -91336,28 +91364,6 @@
         }
       }
     },
-    "Use a token": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use a token"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Utiliser un jeton"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Usar um token"
-          }
-        }
-      }
-    },
     "Use another computer": {
       "localizations": {
         "fr": {
@@ -97213,28 +97219,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ton identité dans Sagax."
-          }
-        }
-      }
-    },
-    "Your administrator has not set up a GitHub OAuth App for this server (Settings > Organization). Paste a personal access token instead.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your administrator has not set up a GitHub OAuth App for this server (Settings > Organization). Paste a personal access token instead."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Votre administrateur n'a pas configuré d'application OAuth GitHub pour ce serveur (Réglages > Organisation). Collez plutôt un jeton d'accès personnel."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seu administrador não configurou um GitHub OAuth App para este servidor (Ajustes > Organização). Cole um token de acesso pessoal."
           }
         }
       }

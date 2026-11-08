@@ -18211,7 +18211,17 @@
       "settings.signals.quiet.title": "bf0671dd69c663bf66f170765d97a0b43a2140a68c0e5aea2abadc3af63d0a39",
       "settings.signals.quiet.description": "b8f1c6ff63713fb36f15b5a216851fb2824bae3cdef7d1b23def1f1a6f22ca2f",
       "settings.signals.quiet.off": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
-      "settings.signals.quiet.range": "c72e51fdcb01a6213c788a9ca09ff2747acff350f40634bd0e56feb477e1b1e8"
+      "settings.signals.quiet.range": "c72e51fdcb01a6213c788a9ca09ff2747acff350f40634bd0e56feb477e1b1e8",
+      "suggestionFeedback.label": "a702cf745c62c1e3e8f76812dc1d3ab659ed906b60b1797d4b70741f7d6a7c65",
+      "suggestionFeedback.up": "27a728b507d1250f22428f32591503ddc79c6c6a84f11e55715f180c649040fa",
+      "suggestionFeedback.down": "4e15b39050a523043a40857d1cbb78aa457821d26f727bdea5d41829e47d2308",
+      "suggestionFeedback.less": "61816f89f9d8bc5b8ce89bdbbb3b303f163d774ff68cae3deecfa9733826480a",
+      "suggestionFeedback.never": "5c2ff98466977c86900b5d2c1a6ba27f5f09f8c642b5963dfc8a936f5f81f98e",
+      "suggestionFeedback.failed": "40d3ea26bcc47aaf861b54235e9ac9c80a7301f24203ed32a34c235f3bb16cc9",
+      "suggestionFeedback.noted.up": "300f6737ee809abc257bba0c93ea40acbbcbe21ff08abc5dba0b58265f6688f0",
+      "suggestionFeedback.noted.down": "dcded34f1e088ae5724bcb200333fba52c6b19607ef3b638ea9ab134714ac838",
+      "suggestionFeedback.noted.less": "9afb19e3cd1b9aac7ef235f27f3bcb40fce68ebb9a74717a07a0ffdfdc0d31eb",
+      "suggestionFeedback.noted.never": "86228a822d63f324647f9216a424d8e09a649e5fdf543347c4c5e47bc67906dd"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -187,7 +187,7 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // 2026-11-05: answer an "Agit comme" role transition card from the phone
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+\/role-transition$/ },
   // 2026-10-30: answer a proactive proposal card from the phone
-  { method: "POST", path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+$/ },
+  { method: "POST", path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+(?:\/feedback)?$/ },
   // A credential value crosses this one route only as an HPKE envelope. The
   // server binds it to the authenticated device and exact pending card before
   // Electron opens it into the OS-encrypted credential store.

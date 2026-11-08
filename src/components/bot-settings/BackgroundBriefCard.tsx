@@ -18,13 +18,14 @@ import { PILL, PLAIN_FIELD, Switch, useSettingsSurface } from "../SettingsPrimit
 import { useBotEditor } from "./BotEditorContext";
 import { PaneSection } from "./PaneSection";
 import { readableError } from "@/lib/plain-error";
+import { SuggestionFeedback, type SuggestionFeedbackChoice } from "../SuggestionFeedback";
 
 interface BriefView {
   apps?: number;
   notice?: "no_apps";
   settings?: { enabled?: boolean; at?: string; timeZone?: string; screenContext?: boolean };
   screenContextAvailable?: boolean;
-  suggestions?: Array<{ id: string; text: string; status: string }>;
+  suggestions?: Array<{ id: string; text: string; status: string; feedback?: SuggestionFeedbackChoice }>;
   error?: string;
 }
 
@@ -79,6 +80,17 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
     }
   };
 
+  // #2694: the person's feedback on an item applies at the next pass; the
+  // item stays in the list with its choice until the list reloads.
+  const feedback = async (id: string, choice: SuggestionFeedbackChoice) => {
+    await api(`/api/bots/${botId}/background-brief/${id}/feedback`, { method: "POST", body: JSON.stringify({ choice }) });
+  };
+  const item = (row: { id: string; text: string; feedback?: SuggestionFeedbackChoice }) => (
+    <li key={row.id} data-brief-item={row.id} className="flex flex-col gap-0.5">
+      <span>{row.text}</span>
+      <SuggestionFeedback className="-ml-1" value={row.feedback} onPick={(choice) => feedback(row.id, choice)} />
+    </li>
+  );
   const note = briefQueueText(view);
   const enabled = view?.settings?.enabled === true;
   const at = view?.settings?.at ?? "08:00";
@@ -139,8 +151,8 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
           {note && <p role="status" data-brief-empty="">{note}</p>}
           {!note && pending.length === 0 && <p>{t("brief.queueEmpty")}</p>}
           {pending.length > 0 && (
-            <ul className="flex flex-col gap-1 text-[13px] leading-[18px] text-ink">
-              {pending.map((item) => <li key={item.id}>{item.text}</li>)}
+            <ul className="flex flex-col gap-2 text-[13px] leading-[18px] text-ink">
+              {pending.map(item)}
             </ul>
           )}
           {error && <p role="alert" className="text-danger">{error}</p>}
@@ -168,8 +180,8 @@ export function BackgroundBriefCard({ botId }: { botId: string }) {
       {note && <p role="status" data-brief-empty="">{note}</p>}
       {!note && pending.length === 0 && <p className="text-[12.5px] text-ink-secondary">{t("brief.queueEmpty")}</p>}
       {pending.length > 0 && (
-        <ul className="flex flex-col gap-1 text-[12.5px] text-ink">
-          {pending.map((item) => <li key={item.id}>{item.text}</li>)}
+        <ul className="flex flex-col gap-2 text-[12.5px] text-ink">
+          {pending.map(item)}
         </ul>
       )}
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}

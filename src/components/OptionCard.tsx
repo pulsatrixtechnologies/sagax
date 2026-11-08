@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useStore, visibleMessages, type Message } from "@/state/store";
+import { api, useStore, visibleMessages, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { isPersistentQuestionCard, parseChoices } from "../../shared/ask-question";
 import { returnFocusToComposer } from "./AskCard";
 import { ExpandableText } from "./ExpandableText";
+import { SuggestionFeedback } from "./SuggestionFeedback";
 import { picksInAnswer, QuestionSheet, SheetChoices, SheetField, SheetNote, sheetKeyHandler, type SheetChoice } from "./QuestionSheet";
 import { TerminalDestinationPicker, terminalAnswerPick, terminalDestinationKey, terminalDestinationLabel } from "./terminal/TerminalDestinationPicker";
 
@@ -152,6 +153,15 @@ export function OptionCard({
         <SheetNote>{reading.rest || t("question.status.answered")}</SheetNote>
       )}
       {closed && <SheetNote closed>{t("question.status.closed")}</SheetNote>}
+      {card.proactiveProposal && !groupId && (
+        <SuggestionFeedback
+          className="mt-2"
+          value={card.feedback}
+          onPick={async (choice) => {
+            await api(`/api/bots/${botId}/proactive/${card.proactiveProposal!.id}/feedback`, { method: "POST", body: JSON.stringify({ choice }) });
+          }}
+        />
+      )}
     </QuestionSheet>
   );
 }

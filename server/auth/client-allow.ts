@@ -238,7 +238,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/messages\/[\w-]+\/edit$/ },
   // 2026-10-30: a person's answer to a proactive proposal in their own
   // conversation (the handler checks they may write there)
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+(?:\/feedback)?$/ },
   // 2026-11-05 (visible roles, server/routes/perspicax-roles.ts): an "Agit
   // comme" card answered in the person's own thread, and the bot owner's
   // "Toujours ainsi" rules; the handlers check the thread and the owner
@@ -314,7 +314,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // The handler refuses anyone but the bot's person. Not an admin route.
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/background-brief$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/pass$/ },
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/[\w-]+\/(?:reject|keep)$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/[\w-]+\/(?:reject|keep|feedback)$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/artifacts\/art_[\w-]+\/refresh$/ },
   // claude.ai artifacts (server/routes/claude-artifacts.ts, #2018): every
   // call runs through the session person's own Claude account

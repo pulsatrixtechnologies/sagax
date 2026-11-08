@@ -204,7 +204,7 @@ import { prepareSemanticRecall, setSemanticIndex } from "./recall/semantic-recal
 import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./engines/retire-every-claude.ts";
 import { LocalSemanticIndex, semanticIndexFile } from "./recall/semantic-index.ts";
 import { withoutWiderAudience } from "./memory/memory-audience.ts";
-import { BriefStore, type BriefSuggestion } from "./proactive/background-brief.ts";
+import { BriefStore, feedbackMemoryText, type BriefFeedback, type BriefSuggestion } from "./proactive/background-brief.ts";
 import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.ts";
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
@@ -19649,7 +19649,32 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
 /** Legacy proposal cards (propose mode, retired 2026-11-01) remain answerable:
  * accept runs the wake at the bot's level; decline closes the card. */
 
-ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal }));
+/** #2694: the person's memory keeps one line per feedback, for them alone. */
+function rememberBriefFeedback(botId: string, choice: BriefFeedback, text: string, topic: string): void {
+  const bot = store.bot(botId);
+  const language = reachMeLanguage(reachMePerson(bot ? effectiveBotOwner(bot) || localPrincipalId() : localPrincipalId()) || null);
+  updateMemory(botId, { action: "append", text: feedbackMemoryText(choice, text, topic, language) }, { source: "proactive feedback", readers: { kind: "person" } });
+}
+/** #2694: feedback on a suggestion card lands on its brief item (next pass)
+ * and on the card itself, so every surface shows the choice. */
+function feedbackOnProposal(botId: string, proposalId: string, choice: BriefFeedback): { status: number; body: Record<string, unknown> } {
+  const bot = store.bot(botId);
+  const proposal = bot ? proactiveProposals.get(proposalId) : null;
+  if (!bot || !proposal || proposal.botId !== bot.id) return { status: 404, body: { error: "no such proposal" } };
+  try {
+    routeThreadId(bot, proposal.threadId);
+  } catch {
+    return { status: 404, body: { error: "no such proposal" } };
+  }
+  const briefId = proposal.events.map((event) => /^suggestion:(.+)$/.exec(event.key)?.[1]).find(Boolean);
+  const done = briefId ? backgroundBriefs.feedback(bot.id, briefId, choice) : null;
+  const event = proposal.events[0];
+  rememberBriefFeedback(bot.id, choice, done?.item.text ?? event?.summary ?? event?.label ?? "", done?.topic ?? event?.source ?? "general");
+  const message = store.messagesFor(proposal.threadId).find((row) => row.id === proposal.messageId);
+  if (message?.card) store.patchMessage(proposal.threadId, message.id, { card: { ...message.card, feedback: choice } });
+  return { status: 200, body: { ok: true, choice } };
+}
+ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal, feedback: feedbackOnProposal }));
 ROUTES.push(createProactiveMetricsRoutes<BotRecord>({
   bot: (id) => store.bot(id) ?? undefined,
   sees: (auth, bot) => auth.kind === "loopback" || listedBotVisible(bot, auth.session.principalId),
@@ -23758,6 +23783,7 @@ ROUTES.push(createBackgroundBriefRoutes({
   },
   fastModel: (botId) => store.bot(botId)?.modelSelection.fast?.model ?? null,
   keep: (botId, line) => { updateMemory(botId, { action: "append", text: line }, { source: "background brief", readers: { kind: "person" } }); },
+  remember: rememberBriefFeedback,
   connected: backgroundBriefConnected,
   reads: backgroundBriefReads,
   screenContextAvailable: () => SCREEN_CONTEXT_AVAILABLE

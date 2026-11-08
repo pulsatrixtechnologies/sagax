@@ -17,6 +17,8 @@ export interface OptionCardData {
   /** 2026-10-30: a proactive proposal; answered through its own route
    * (shared/proactive-proposal.ts), options[0] accepts. */
   proactiveProposal?: { id: string };
+  /** #2694: the person's feedback on this proactive card. */
+  feedback?: "up" | "down" | "less" | "never";
   /** 2026-11-05: an "Agit comme" card (shared/wire.ts RoleTransitionCard). */
   roleTransition?: import("../../../shared/wire").RoleTransitionCard;
   /** Organization server: only an organization admin can answer this card

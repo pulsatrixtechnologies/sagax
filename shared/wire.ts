@@ -1218,6 +1218,8 @@ export interface OptionCardData extends WaitCardField {
    * POST /api/bots/:id/proactive/:id (options[0] accepts, options[1]
    * declines), never as a typed message. */
   proactiveProposal?: { id: string };
+  /** #2694: the person's feedback on this proactive card. */
+  feedback?: "up" | "down" | "less" | "never";
   title: string;
   subtitle: string;
   options: string[];

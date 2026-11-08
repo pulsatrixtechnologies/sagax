@@ -171,14 +171,41 @@ export function parseUsagePeriod(raw: string | null | undefined): BotUsagePeriod
   return value === 7 || value === 30 ? value : null;
 }
 
+/** The window of a usage period, `offset` windows back (0 is the current
+ * one): [from, to] and the day keys it carries, oldest first. The current
+ * window ends now; an older one ends at the close of its last day. Days are
+ * cut in `timeZone` on the calendar itself, so DST never shifts them. */
+export function usagePeriodWindow(period: BotUsagePeriod, now: number, timeZone = "UTC", offset = 0): { from: Date; to: Date; dayKeys: string[] } {
+  const today = zonedParts(now, timeZone);
+  let first: DayParts;
+  let last: DayParts;
+  if (period === "month") {
+    const start = new Date(Date.UTC(today.year, today.month - 1 - offset, 1));
+    first = { year: start.getUTCFullYear(), month: start.getUTCMonth() + 1, day: 1 };
+    last = offset === 0 ? { year: today.year, month: today.month, day: today.day } : dayBefore({ year: first.year, month: first.month + 1, day: 1 }, 1);
+  } else {
+    last = dayBefore(today, offset * period);
+    first = dayBefore(last, period - 1);
+  }
+  const dayKeys: string[] = [];
+  for (let cursor = first; keyOfParts(cursor) <= keyOfParts(last); cursor = dayBefore(cursor, -1)) dayKeys.push(keyOfParts(cursor));
+  const from = zonedTimeToUtc(first.year, first.month, first.day, 0, 0, timeZone);
+  const after = dayBefore(last, -1);
+  const to = offset === 0 ? now : zonedTimeToUtc(after.year, after.month, after.day, 0, 0, timeZone) - 1;
+  return { from: new Date(from), to: new Date(to), dayKeys };
+}
+
+/** `?offset=` (windows back, 0 to 52); absent is 0; anything else is null (400). */
+export function parseUsageOffset(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw === "") return 0;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 && value <= 52 ? value : null;
+}
+
 /** [from, now] of a period: midnight of the first day in `timeZone`. */
 export function usagePeriodRange(period: BotUsagePeriod, now: number, timeZone = "UTC"): { from: Date; to: Date } {
-  if (period !== "month") {
-    const { from, to } = analyticsRange(period, now, timeZone);
-    return { from, to };
-  }
-  const today = zonedParts(now, timeZone);
-  return { from: new Date(zonedTimeToUtc(today.year, today.month, 1, 0, 0, timeZone)), to: new Date(now) };
+  const { from, to } = usagePeriodWindow(period, now, timeZone, 0);
+  return { from, to };
 }
 
 interface Speaker { id: string; name?: string }

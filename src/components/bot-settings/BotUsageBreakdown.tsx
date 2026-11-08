@@ -17,7 +17,7 @@ import { api, useStore, type Bot } from "@/state/store";
 import { BOT_USAGE_PERIODS, type BotUsagePeriod } from "../../../shared/bot-analytics";
 import type { BotUsageBreakdown, UsageStatsGroup, UsageToolStat } from "../../../shared/telemetry";
 import { PILL, SettingsGroup } from "../SettingsPrimitives";
-import { SEGMENTS, segment } from "./BotAnalyticsSection";
+import { OTHER_COLOR, SERIES_SLOTS, TextToggle, UsageChartCard, UsageChartControls, formatTileShare, seriesColor, type ChartSeries } from "../usage-chart/UsageChartCard";
 
 export type BotUsageUnit = "usd" | "tokens";
 type Dimension = "account" | "model" | "source" | "person";
@@ -71,6 +71,12 @@ export const TOP_ROWS = 6;
 /** Below this share of the longest bar, a row shows a dot, not a sliver. */
 const DOT_BELOW = 0.02;
 
+/** "2026-11-02" as a date that prints the same day in any zone. */
+const dayDate = (key: string) => new Date(`${key}T12:00:00Z`);
+const dayText = (key: string, locale: string, withYear = false) => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", ...(withYear ? { year: "numeric" } : {}), timeZone: "UTC" }).format(dayDate(key));
+/** Most weeks back the server answers (shared/bot-analytics parseUsageOffset). */
+const MAX_OFFSET = 52;
+
 const STAT_CARD = "flex min-w-0 flex-col rounded-2xl border border-hairline bg-card px-4 py-3";
 
 const tokensOf = (group: Pick<UsageStatsGroup, "inputTokens" | "outputTokens">) => group.inputTokens + group.outputTokens;
@@ -96,12 +102,9 @@ export function shares(groups: readonly UsageStatsGroup[], unit: BotUsageUnit): 
     .sort((a, b) => b.value - a.value || b.group.turns - a.group.turns);
 }
 
-/** A share in the active locale ("31%", "31 %"); a share under one percent
- * reads "<1%", never "0%". */
+/** A share in the active locale ("31%", "5.2%"); a sliver reads "<0.1%", never "0%". */
 export function formatShare(share: number, locale = documentLanguage(activeLocale())): string {
-  const format = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 });
-  if (share > 0 && share < 0.005) return `<${format.format(0.01)}`;
-  return format.format(share);
+  return formatTileShare(share, locale);
 }
 
 const sumOptional = (a: number | undefined, b: number | undefined) => (a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0));
@@ -162,9 +165,17 @@ export interface BotUsageBreakdownViewProps {
   onRetry?: () => void;
   /** Row keys shown open (tests and captures); a click toggles. */
   initialOpen?: readonly string[];
+  /** How many periods back the answer is (0 is the current one). */
+  offset?: number;
+  onOffset?: (offset: number) => void;
+  /** The chart's first grouping, and the details shown open (captures). */
+  initialDimension?: Dimension;
+  initialDetails?: boolean;
 }
 
-export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, accountName, modelName, loading = false, error = null, onRetry, initialOpen = [] }: BotUsageBreakdownViewProps) {
+export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, accountName, modelName, loading = false, error = null, onRetry, initialOpen = [], offset = 0, onOffset, initialDimension = "model", initialDetails = false }: BotUsageBreakdownViewProps) {
+  const [dimension, setDimension] = useState<Dimension>(initialDimension);
+  const [details, setDetails] = useState(initialDetails);
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(initialOpen));
   const toggle = (id: string) => setOpen((all) => {
     const next = new Set(all);
@@ -216,6 +227,69 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
     return lines;
   };
   const figure = (value: number, group: UsageStatsGroup) => (unit === "usd" ? usd(group.costUsd) : formatTokens(value));
+
+  const chartCard = () => {
+    if (!data) return null;
+    const groups = dimension === "account" ? data.byAccount : dimension === "model" ? data.byModel : dimension === "source" ? data.bySource : data.byPerson;
+    const firstLines = subLabels(dimension, groups);
+    const idOf = (group: UsageStatsGroup) => `${label(dimension, group)}\u0000${firstLines.get(group) ?? ""}`;
+    const merged = mergeAlike(groups, idOf);
+    const lines = subLabels(dimension, merged);
+    const idOfMerged = (group: UsageStatsGroup) => keyToSeries.get(group.key) ?? idOf(group);
+    const all = shares(merged, unit);
+    const folded = foldRows(all, SERIES_SLOTS);
+    const shown = folded.shown.slice(0, SERIES_SLOTS);
+    const rest = all.filter((row) => !shown.includes(row));
+    const keyToSeries = new Map<string, string>();
+    for (const group of groups) keyToSeries.set(group.key, idOf(group));
+    const days = data.days ?? [];
+    const valueOf = (day: (typeof days)[number], key: string) => {
+      const record = (dimension === "account" ? day.byAccount : dimension === "model" ? day.byModel : dimension === "source" ? day.bySource : day.byPerson)[key];
+      return record ? (unit === "usd" ? record.costUsd : record.tokens) : 0;
+    };
+    const perSeries = new Map<string, number[]>();
+    for (const [key, id] of keyToSeries) {
+      const values = perSeries.get(id) ?? days.map(() => 0);
+      days.forEach((day, index) => { values[index] = (values[index] ?? 0) + valueOf(day, key); });
+      perSeries.set(id, values);
+    }
+    const restIds = new Set(rest.map((row) => idOfMerged(row.group)));
+    const otherValues = days.map((_, index) => [...perSeries].filter(([id]) => restIds.has(id)).reduce((sum, [, values]) => sum + (values[index] ?? 0), 0));
+    const series: ChartSeries[] = shown.map((row, index) => ({
+      id: row.group.key,
+      label: label(dimension, row.group),
+      sub: lines.get(row.group) ?? null,
+      share: row.share,
+      values: perSeries.get(idOfMerged(row.group)) ?? days.map(() => 0),
+      color: seriesColor(index),
+    }));
+    if (rest.some((row) => row.value > 0)) {
+      series.push({ id: "others", label: t("botProfile.usage.others", { count: String(rest.length) }), share: rest.reduce((sum, row) => sum + row.share, 0), values: otherValues, color: OTHER_COLOR });
+    }
+    const locale = documentLanguage(activeLocale());
+    const first = days[0]?.day;
+    const last = days[days.length - 1]?.day;
+    const rangeLabel = first && last
+      ? first === last ? dayText(first, locale, true) : t("botProfile.usage.chart.rangeTo", { from: dayText(first, locale), to: dayText(last, locale, true) })
+      : periodCaption;
+    const money = (value: number) => (value > 0 && value < 0.01 ? "<$0.01" : formatUsd(value));
+    const formatValue = unit === "usd" ? money : (value: number) => formatTokens(value);
+    return (
+      <UsageChartCard
+        rangeLabel={rangeLabel}
+        onPrev={onOffset && offset < MAX_OFFSET ? () => onOffset(offset + 1) : undefined}
+        onNext={onOffset && offset > 0 ? () => onOffset(offset - 1) : undefined}
+        totalLabel={unit === "usd" ? t("botProfile.usage.chart.totalCost") : t("botProfile.usage.chart.totalTokens")}
+        total={totals ? (unit === "usd" ? usd(totals.turns === 0 ? 0 : totals.costUsd) : formatTokens(tokens)) : PENDING}
+        days={days.map((day) => ({ key: day.day, label: dayText(day.day, locale) }))}
+        series={series}
+        formatValue={formatValue}
+        formatAxis={unit === "usd" ? (value) => `$${new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 2 }).format(value)}` : undefined}
+        chartLabel={t("botProfile.usage.chart.aria", { group: t(DIMENSION_LABEL[dimension]) })}
+        empty={t("botProfile.usage.empty")}
+      />
+    );
+  };
 
   const section = (dimension: Dimension, groups: readonly UsageStatsGroup[]) => {
     const firstLines = subLabels(dimension, groups);
@@ -320,22 +394,17 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
         <h2 className="text-[18px] font-semibold leading-6 text-ink">{t("botProfile.usage.title")}</h2>
         <p className="text-[13px] leading-5 text-ink-secondary">{t("botProfile.usage.intro")}</p>
       </div>
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <div role="group" aria-label={t("botProfile.usage.periodAria")} className={SEGMENTS}>
-          {BOT_USAGE_PERIODS.map((option) => (
-            <button key={option} type="button" data-bot-usage-period={option} aria-pressed={option === period} onClick={() => onPeriod(option)} className={segment(option === period)}>
-              {t(PERIOD_LABEL[String(option)]!)}
-            </button>
-          ))}
-        </div>
-        <div role="group" aria-label={t("botProfile.usage.unitAria")} className={SEGMENTS}>
-          {(["usd", "tokens"] as const).map((option) => (
-            <button key={option} type="button" data-bot-usage-unit={option} aria-pressed={option === unit} onClick={() => onUnit(option)} className={segment(option === unit)}>
-              {t(UNIT_LABEL[option])}
-            </button>
-          ))}
-        </div>
-      </div>
+      <UsageChartControls
+        periods={BOT_USAGE_PERIODS.map((option) => ({ id: String(option), label: t(PERIOD_LABEL[String(option)]!) }))}
+        period={String(period)}
+        onPeriod={(id) => onPeriod(id === "month" ? "month" : (Number(id) as BotUsagePeriod))}
+        periodAria={t("botProfile.usage.periodAria")}
+        extra={<TextToggle options={(["usd", "tokens"] as const).map((option) => ({ id: option, label: t(UNIT_LABEL[option]) }))} value={unit} onChange={(id) => onUnit(id as BotUsageUnit)} ariaLabel={t("botProfile.usage.unitAria")} dataKey="data-bot-usage-unit" />}
+        groups={(Object.keys(DIMENSION_LABEL) as Dimension[]).map((id) => ({ id, label: t(DIMENSION_LABEL[id]) }))}
+        group={dimension}
+        onGroup={(id) => setDimension(id as Dimension)}
+        groupAria={t("botProfile.usage.chart.groupAria")}
+      />
 
       {error && (
         <div role="note" data-bot-usage-error="" className="flex min-w-0 flex-wrap items-center gap-3 px-1 text-[13px] leading-[18px] text-ink-secondary">
@@ -343,6 +412,8 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
           {onRetry && <button type="button" className={PILL} onClick={onRetry}>{t("botProfile.retry")}</button>}
         </div>
       )}
+
+      {chartCard()}
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div data-bot-usage-card="cost" className={STAT_CARD}>
@@ -368,11 +439,19 @@ export function BotUsageBreakdownView({ data, period, onPeriod, unit, onUnit, ac
 
       {data && (
         <>
-          {section("account", data.byAccount)}
-          {section("model", data.byModel)}
-          {section("source", data.bySource)}
-          {section("person", data.byPerson)}
-          {data.tools.length > 0 && <ToolList tools={data.tools} />}
+          <button type="button" data-bot-usage-details="" aria-expanded={details} onClick={() => setDetails((value) => !value)} className="flex min-h-[44px] items-center gap-1 self-start rounded-full px-1 text-[14px] leading-5 text-ink-secondary transition-colors hover:text-ink">
+            <ChevronRight size={16} aria-hidden="true" className={cn("transition-transform motion-reduce:transition-none", details && "rotate-90")} />
+            {t("botProfile.usage.chart.details")}
+          </button>
+          {details && (
+            <>
+              {section("account", data.byAccount)}
+              {section("model", data.byModel)}
+              {section("source", data.bySource)}
+              {section("person", data.byPerson)}
+              {data.tools.length > 0 && <ToolList tools={data.tools} />}
+            </>
+          )}
         </>
       )}
     </div>
@@ -412,14 +491,15 @@ export function BotUsageBreakdownSection({ bot }: { bot: Bot }) {
   const { state } = useStore();
   const [period, setPeriod] = useState<BotUsagePeriod>(30);
   const [unit, setUnit] = useState<BotUsageUnit>("usd");
+  const [offset, setOffset] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [answers, setAnswers] = useState<Record<string, Loaded>>({});
-  const key = `${bot.id}:${period}`;
+  const key = `${bot.id}:${period}:${offset}`;
 
   useEffect(() => {
     let live = true;
-    const slot = `${bot.id}:${period}`;
-    api<BotUsageBreakdown>(`/api/bots/${encodeURIComponent(bot.id)}/analytics?view=breakdown&period=${period}`).then(
+    const slot = `${bot.id}:${period}:${offset}`;
+    api<BotUsageBreakdown>(`/api/bots/${encodeURIComponent(bot.id)}/analytics?view=breakdown&period=${period}&offset=${offset}`).then(
       (data) => {
         if (live) setAnswers((all) => ({ ...all, [slot]: { attempt, data, error: null } }));
       },
@@ -432,7 +512,7 @@ export function BotUsageBreakdownSection({ bot }: { bot: Bot }) {
     return () => {
       live = false;
     };
-  }, [bot.id, period, attempt]);
+  }, [bot.id, period, offset, attempt]);
 
   const answer = answers[key];
   const retrying = Boolean(answer?.error) && answer!.attempt !== attempt;
@@ -440,7 +520,9 @@ export function BotUsageBreakdownSection({ bot }: { bot: Bot }) {
     <BotUsageBreakdownView
       data={answer?.data ?? null}
       period={period}
-      onPeriod={setPeriod}
+      onPeriod={(next) => { setPeriod(next); setOffset(0); }}
+      offset={offset}
+      onOffset={setOffset}
       unit={unit}
       onUnit={setUnit}
       accountName={(id) => state.instances.find((entry) => entry.instanceId === id)?.displayName ?? ""}

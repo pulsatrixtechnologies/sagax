@@ -4,7 +4,7 @@
 // spoke, failed runs by day, and days cut in the server's time zone.
 import { describe, expect, it } from "vitest";
 
-import { aggregateBotAnalytics, analyticsDayKey, analyticsRange, BOT_ANALYTICS_TOP_USERS, parseAnalyticsDays, type BotAnalyticsDays, type BotAnalyticsRow, type BotAnalyticsRun } from "./bot-analytics.ts";
+import { aggregateBotAnalytics, analyticsDayKey, analyticsRange, BOT_ANALYTICS_TOP_USERS, parseAnalyticsDays, parseUsageOffset, usagePeriodWindow, type BotAnalyticsDays, type BotAnalyticsRow, type BotAnalyticsRun } from "./bot-analytics.ts";
 
 const NOW = Date.UTC(2026, 10, 6, 15, 0, 0); // 2026-11-06T15:00:00Z, a Friday
 const DAY = 86_400_000;
@@ -180,5 +180,25 @@ describe("aggregateBotAnalytics", () => {
     expect(eastern.from).toBe("2026-10-31T04:00:00.000Z");
     expect(eastern.series[5]).toMatchObject({ day: "2026-11-05", messages: 1 });
     expect(eastern.series[6]).toMatchObject({ day: "2026-11-06", messages: 0 });
+  });
+});
+
+describe("usagePeriodWindow", () => {
+  it("lists the day keys, oldest first, and steps back a whole period per offset", () => {
+    const now = Date.UTC(2026, 10, 7, 15, 0, 0);
+    const current = usagePeriodWindow(7, now, "UTC", 0);
+    expect(current.dayKeys).toEqual(["2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-07"]);
+    const before = usagePeriodWindow(7, now, "UTC", 1);
+    expect(before.dayKeys[0]).toBe("2026-10-25");
+    expect(before.dayKeys[6]).toBe("2026-10-31");
+    expect(usagePeriodWindow("month", now, "UTC", 1).dayKeys).toHaveLength(31);
+    expect(usagePeriodWindow("month", now, "UTC", 1).dayKeys[0]).toBe("2026-10-01");
+  });
+
+  it("parses the offset parameter", () => {
+    expect(parseUsageOffset(undefined)).toBe(0);
+    expect(parseUsageOffset("3")).toBe(3);
+    expect(parseUsageOffset("53")).toBeNull();
+    expect(parseUsageOffset("x")).toBeNull();
   });
 });

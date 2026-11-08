@@ -117,15 +117,42 @@ function historyRows() {
 }
 const HISTORY = historyRows();
 
+// Per-day figures that sum back to each row's total, with a weekly rhythm so
+// the stacked bars differ day to day (the server sends the same shape).
+function usageDays(answer: { byAccount: GroupRow[]; byModel: GroupRow[]; bySource: GroupRow[]; byPerson: GroupRow[] }, count: number, offset: number) {
+  const first = NOW - (count * (offset + 1) - 1) * DAY;
+  const keys = Array.from({ length: count }, (_, index) => new Date(first + index * DAY).toISOString().slice(0, 10));
+  const weight = (seed: number, day: number) => 0.35 + ((Math.sin((seed + 1) * 12.9898 + (day + offset * 7) * 78.233) * 43758.5453) % 1 + 1) % 1;
+  const spread = (rows: GroupRow[], group: number) => keys.map((_, day) => {
+    const part: Record<string, { costUsd: number; tokens: number }> = {};
+    rows.forEach((row, index) => {
+      const sum = keys.reduce((total, __, d) => total + weight(group * 31 + index, d), 0);
+      const share = weight(group * 31 + index, day) / sum;
+      part[row.key] = { costUsd: Number(((row.costUsd ?? 0) * share).toFixed(4)), tokens: Math.round((row.inputTokens + row.outputTokens) * share) };
+    });
+    return part;
+  });
+  const accounts = spread(answer.byAccount, 1);
+  const models = spread(answer.byModel, 2);
+  const sources = spread(answer.bySource, 3);
+  const people = spread(answer.byPerson, 4);
+  return keys.map((day, index) => {
+    const total = Object.values(models[index]!).reduce((sum, value) => ({ costUsd: sum.costUsd + value.costUsd, tokens: sum.tokens + value.tokens }), { costUsd: 0, tokens: 0 });
+    return { day, total, byAccount: accounts[index]!, byModel: models[index]!, bySource: sources[index]!, byPerson: people[index]! };
+  });
+}
+
+interface GroupRow { key: string; costUsd: number | null; inputTokens: number; outputTokens: number }
+
 // The V6 usage breakdown (#2612): example figures in the shape the server sends.
-function breakdown(period: string) {
+function breakdown(period: string, offset = 0) {
   const scale = period === "7" ? 0.25 : period === "month" ? 0.3 : 1;
   const g = (key: string, label: string, turns: number, input: number, output: number, cached: number, cost: number | null, extra: Record<string, unknown> = {}) => ({
     key, label, turns: Math.round(turns * scale), inputTokens: Math.round(input * scale), outputTokens: Math.round(output * scale),
     cachedInputTokens: Math.round(cached * scale), costUsd: cost === null ? null : Number((cost * scale).toFixed(2)), ...extra,
   });
   const calls = (tool: number, mcp: number, subagent: number) => ({ toolCalls: Math.round(tool * scale), mcpCalls: Math.round(mcp * scale), subagentCalls: Math.round(subagent * scale) });
-  return {
+  const answer = {
     from: new Date(NOW - 30 * DAY).toISOString(), to: new Date(NOW).toISOString(), period: period === "month" ? "month" : Number(period), currency: null,
     totals: { ...g("", "", 151, 290_000, 66_000, 112_000, 9.59), ...calls(212, 64, 9), toolErrors: 3 },
     // A tenant-like spread (#2671): 16 models, accounts that share a name
@@ -167,6 +194,7 @@ function breakdown(period: string) {
       { tool: "researcher", kind: "subagent", calls: 9, errors: 0, totalMs: 61_000 },
     ],
   };
+  return { ...answer, offset, days: usageDays(answer, period === "7" ? 7 : period === "month" ? 7 : 30, offset) };
 }
 
 function analytics(days: number) {
@@ -307,7 +335,7 @@ function answer(method: string, path: string, search: URLSearchParams, body: unk
   if (path === bots) return json({ bot });
   if (path === `${bots}/overview`) return json(overview);
   if (path === `${bots}/history`) return json({ rows: HISTORY, revision: HISTORY.length });
-  if (path === `${bots}/analytics` && search.get("view") === "breakdown") return json(breakdown(search.get("period") ?? "30"));
+  if (path === `${bots}/analytics` && search.get("view") === "breakdown") return json(breakdown(search.get("period") ?? "30", Number(search.get("offset") ?? "0")));
   if (path === `${bots}/analytics`) return json(analytics([7, 30, 90].includes(Number(search.get("days"))) ? Number(search.get("days")) : 30));
   if (path === `${bots}/skills`) return json({ skills, staged: [{ id: "st1", name: "pricing-check", gist: "Compares a quote with the last three prices." }], library: [{ name: "invoice-review", description: "Reviews an invoice line by line." }, { name: "status-digest", description: "Digests a long thread into five lines." }], assignedSkills: ["meeting-notes"] });
   if (path === "/api/org-library/skills") return json({ organization: { name: "Northwind Studio" }, skills: [

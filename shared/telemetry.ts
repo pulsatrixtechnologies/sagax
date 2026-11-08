@@ -41,6 +41,20 @@ export interface UsageToolStat {
   totalMs: number;
 }
 
+/** One figure of a day: dollars (0 when unpriced) and tokens. */
+export interface UsageDayValue { costUsd: number; tokens: number }
+
+/** One day of the usage series (usage charts v2): the whole day and each
+ * group of the four splits, by the same keys as the group rows. */
+export interface UsageDay {
+  day: string;
+  total: UsageDayValue;
+  byAccount: Record<string, UsageDayValue>;
+  byModel: Record<string, UsageDayValue>;
+  bySource: Record<string, UsageDayValue>;
+  byPerson: Record<string, UsageDayValue>;
+}
+
 export interface UsageStats {
   totals: Omit<UsageStatsGroup, "key" | "label"> & { toolCalls: number; mcpCalls: number; subagentCalls: number; toolErrors: number };
   byAccount: UsageStatsGroup[];
@@ -60,4 +74,8 @@ export interface BotUsageBreakdown extends UsageStats {
   period: 7 | 30 | "month";
   /** The billing currency when a price list is applied, else null (USD). */
   currency: string | null;
+  /** One entry per day of the window, oldest first, zeros included. */
+  days: UsageDay[];
+  /** Windows back from the current one (0 is now). */
+  offset: number;
 }

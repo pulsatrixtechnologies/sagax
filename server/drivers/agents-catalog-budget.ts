@@ -117,7 +117,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
     tools: [
       "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule",
       "propose_bot_deletion", "import_plugin_team", "archive_bot", "create_bot", "create_room", "manage_room",
-      "propose_team_memory", "nudge_person", "retry_thread", "start_thread",
+      "propose_team_memory", "nudge_person", "retry_thread", "start_thread", "assignment_status",
     ],
   },
   {

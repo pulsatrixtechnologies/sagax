@@ -13,7 +13,7 @@ export function videoToolDefinition() {
       "Native image_to_video and reference_to_video remain available when the engine offers them.",
       "generate starts an async job and returns job_id; status reads progress, list finds this conversation's jobs, cancel stops local polling/download, retry resumes the SAME upstream request without another paid generation.",
       "The completed MP4 is saved and attached in this chat. Never claim completion from pending status or show a temporary provider URL.",
-      "Use a stable request_key for safe retries across turns. A new generate request_key starts a separately billable job. No remote xAI cancellation API is documented.",
+      "Use a stable request_key for safe retries across turns. A new generate request_key starts a separately billable job.",
     ].join(" "),
     inputSchema: {
       type: "object",

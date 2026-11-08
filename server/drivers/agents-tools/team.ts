@@ -17,7 +17,7 @@ import {
 export const DEF_START_THREAD = {
     name: "start_thread",
     description:
-      "Open a new thread: one conversation with its own history and its own run, shown to the person as a row under the bot it belongs to. Leave bot_id out to open it on yourself, for a separate job that should run on its own (\"review each pull request\" — one thread per pull request) instead of inside this conversation. Give bot_id (from list_bots) to open it on a teammate: that is a handoff into a fresh thread, which starts after your current turn ends and whose result is delivered here, like delegate_bot. The title becomes the row's name, so make it short and specific; write it as #Title when you mention it to the person. Do not use it for a question you need answered right now (ask_bot), for one task where the teammate's usual conversation is fine (delegate_bot), or for a note nobody has to act on. If a call is refused, do not retry it: say what you still wanted opened.",
+      "Open a new thread: one conversation with its own history and its own run, shown to the person as a row under the bot it belongs to. Leave bot_id out to open it on yourself, for a separate job that should run on its own (\"review each pull request\" — one thread per pull request) instead of inside this conversation. Give bot_id (from list_bots) to open it on a teammate: that is a handoff into a fresh thread, which starts after your current turn ends and whose result is delivered here, like delegate_bot. The title becomes the row's name, so make it short and specific; write it as #Title when you mention it to the person. Do not use it for a question you need answered right now (ask_bot), a task for the teammate's usual conversation (delegate_bot), or a note nobody acts on. If a call is refused, do not retry it: say what you still wanted opened.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -68,7 +68,7 @@ export const DEF_LIST_TEAM_SETUP = {
 
 export const DEF_PROPOSE_TEAM_SETUP = {
     name: "propose_team_setup",
-    description: "Primary Bot only: submit all requested specialist creation, profile/model configuration, and authorized team moves in ONE combined plan. Use exact catalog engine/model IDs from list_team_setup. Combine all fields for each bot; use the same create key or botId to coalesce repeated entries. New teams must be named explicitly in newTeams and have a specialist in this plan; access is granted only to those new teams. Another person's teams cannot be included. Models change bot defaults: threads following the bot (main, routines) move at their next turn; execution permissions stay unchanged. If review is pending, the decision and structured result automatically resume you once; do not ask again, poll, or repeat the proposal." + PROPOSAL_OUTCOME,
+    description: "Primary Bot only: submit all requested specialist creation, profile/model configuration, and authorized team moves in ONE combined plan. Use catalog engine/model IDs from list_team_setup. Combine all fields per bot. New teams must be named in newTeams and have a specialist in this plan; access is granted only to those teams. Models change bot defaults: threads following the bot move at their next turn. If review is pending, the decision resumes you once; do not ask again, poll, or repeat the proposal." + PROPOSAL_OUTCOME,
     inputSchema: {
       type: "object", additionalProperties: false,
       properties: {

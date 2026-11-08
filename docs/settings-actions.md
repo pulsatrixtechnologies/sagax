@@ -157,6 +157,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Voice notes | Bot editor > Voice | `sagax_settings` get, set `bot.voiceNotes` | simple |
 | Email drafts | Bot editor > Permissions > Email drafts | `sagax_settings` get, set `bot.emailDrafts` | simple |
 | Meme replies | Bot editor > Permissions > Meme replies | `sagax_settings` get, set `bot.memeReplies` | simple |
+| Collaborators can create routines | Bot page > Routines > Collaborators can create routines | `sagax_settings` get, set `bot.collaboratorsCreateRoutines` | simple |
 | Notifications | Bot editor > Voice > Notifications | `sagax_settings` get, set `bot.notifications` | simple |
 | Model and effort ({instanceId, model, effort}) | Bot editor > Model | `sagax_settings` get, set `bot.model` | simple |
 | Reasoning effort (low, medium, high, ...; keeps the model) | Bot editor > Model > Effort | `sagax_settings` get, set `bot.effort` | simple |
@@ -171,6 +172,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Archived (hidden) | Bot editor > ... > Archive | `sagax_settings` get, set `bot.hidden` | simple |
 | Memory on | Bot editor > Memory | `sagax_settings` get, set `bot.memoryEnabled` | simple |
 | Memory upkeep | Bot editor > Memory | `sagax_settings` get, set `bot.memoryUpkeep` | simple |
+| Skill learning (revise skills, propose new ones) | Bot editor > Skills | `sagax_settings` get, set `bot.skillLearning` | simple |
 | Built-in plugins by id, false switches one off (rea: REA reverse engineering) | Plugins > Installed | `sagax_settings` get, set `bot.builtinPlugins` | simple |
 | Team memory sharing (shared, private) | Bot editor > Memory > Team memory | `sagax_settings` get, set `bot.teamMemorySharing` | simple (autrui pour élargir à shared) |
 | Browser | Bot editor > Access > Browser | `sagax_settings` get, set `bot.browser` | simple |

@@ -54,11 +54,8 @@ import {
 import { personaSharingSummary } from "@/lib/bot-sharing";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { mascotColorGroup } from "../../../shared/mascot-colors";
-import { approvalModeFor } from "../../../shared/approval-mode";
-import { proactiveModeFor } from "../../../shared/proactive-mode";
 import { PILL, SettingsSurfaceProvider } from "../SettingsPrimitives";
 import { MascotHeroSlotContext } from "../floating-bots/mascot-hero-slot";
-import { modelLabel } from "../ModelPicker.tsx-parts/helpers";
 import { RulesSection } from "../bot-settings/RulesSection";
 import { WorkspaceFilesSection } from "../bot-settings/WorkspaceFilesSection";
 import { PermissionsSection, type PermissionsPart } from "../bot-settings/PermissionsSection";
@@ -69,11 +66,45 @@ import { AccountsCard, Block, CardRow, ChannelsCard, Note, ProfileCard, sectionL
 import { BotProfileHeader, useBotProfileHero } from "./BotProfilePage.tsx-parts/BotProfileHeader";
 import { BotProfileTabBar, useBotProfileSearch } from "./BotProfilePage.tsx-parts/BotProfileTabs";
 import { BotProfileTopBar } from "./BotProfilePage.tsx-parts/BotProfileTopBar";
-import { GROUP_LABEL, SUBPAGE_META, SubPage, SubPageRow } from "./BotProfilePage.tsx-parts/subpages";
+import { GROUP_LABEL, SUBPAGE_META, SubPage, SubPageRow, SubPageSaveBar } from "./BotProfilePage.tsx-parts/subpages";
+import { SubPageDraftStore, useSubPageDraft } from "./BotProfilePage.tsx-parts/subPageDraft";
+import { discardConfirmRequest, useConfirm } from "../ConfirmProvider";
+import { useBotRowValues } from "./BotProfilePage.tsx-parts/rowValues";
+import { personaSubPageForQuery } from "@/lib/persona-search";
 import { BotUsageBreakdownSection } from "../bot-settings/BotUsageBreakdown";
 
-export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: BotSettingsSection; onClose: () => void }) {
+type BotProfilePageProps = { bot: Bot; section: BotSettingsSection; onClose: () => void };
+
+/** The bot page. A sub-page stages its changes in a draft (#2620): Save /
+ * Cancel at its foot, a prompt before leaving with unsaved changes. */
+export function BotProfilePage(props: BotProfilePageProps) {
+  return (
+    <SubPageDraftStore botId={props.bot.id}>
+      <BotProfilePageView {...props} />
+    </SubPageDraftStore>
+  );
+}
+
+function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotProfilePageProps) {
   const { state, dispatch } = useStore();
+  // The bot with the open sub-page's draft applied (#2620).
+  const bot = state.bots.find((candidate) => candidate.id === propBot.id) ?? propBot;
+  const draft = useSubPageDraft();
+  const confirm = useConfirm();
+  // Leaving the sub-page (Back, a tab, a search, another section, Close)
+  // with unsaved changes asks first; yes drops the draft.
+  const leave = (go: () => void) => {
+    if (!draft?.dirty) {
+      go();
+      return;
+    }
+    void confirm(discardConfirmRequest()).then((ok) => {
+      if (!ok) return;
+      draft.discard();
+      go();
+    });
+  };
+  const onClose = () => leave(closeNow);
   const advanced = useAdvancedMode();
   const rootRef = useRef<HTMLElement>(null);
   const { available, slackUrl } = useBotSectionAvailability(bot.id);
@@ -126,19 +157,30 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   const [shareOpen, setShareOpen] = useState(false);
 
   // A row opens its sub-page at the top; Back returns to the row.
-  const openPage = (next: BotProfileSubPage) => {
+  const openPage = (next: BotProfileSubPage) => leave(() => {
     setTab(botProfileTabOfPage(next));
     setPage(next);
     scrollTo.current = "[data-bot-profile-subpage]";
-  };
-  const back = () => {
+  });
+  const back = () => leave(() => {
     const from = page;
     setPage(null);
     if (from) scrollTo.current = `[data-bot-profile-row="page-${from}"]`;
-  };
-  const openTab = (next: BotProfileTab) => {
+  });
+  const openTab = (next: BotProfileTab) => leave(() => {
     setTab(next);
     setPage(null);
+  });
+  // The draft is on while a sub-page is open; leaving it drops what is left.
+  const setDraftActive = draft?.setActive;
+  useEffect(() => {
+    setDraftActive?.(page !== null);
+  }, [page, setDraftActive]);
+  // Save writes the draft and returns to the row; Cancel drops it and returns.
+  const backNow = () => {
+    const from = page;
+    setPage(null);
+    if (from) scrollTo.current = `[data-bot-profile-row="page-${from}"]`;
   };
 
   // Where a section lives: the header (identity, appearance), a channel
@@ -153,12 +195,16 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   };
 
   // Opens a section where it lives: its tab and sub-page, scrolled into view.
-  const openCategory = (category: PersonaCategory) => {
-    setTab(tabOf(category));
-    setPage(pageOf(category));
+  const openCategory = (category: PersonaCategory, query?: string) => leave(() => {
+    // A search opens the sub-page that holds the matched option (#2623).
+    const hit = query ? resolvePage(personaSubPageForQuery(resolve(category), query)) : null;
+    setTab(hit ? botProfileTabOfPage(hit) : tabOf(category));
+    setPage(hit ?? pageOf(category));
     if (category === "slack") setChannel("slack");
-  };
+  });
   const reveal = (target: BotSettingsSection) => {
+    // Routines have their own sub-page (#2624), not a persona category.
+    if (target === "routines") { openPage("routines"); return; }
     const { category, selector } = placeOf(target);
     if (!category) return;
     if (category === "appearance") setAppearanceOpen(true);
@@ -189,6 +235,11 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   });
 
   const goTo = (id: BotSettingsSection) => {
+    if (id === "routines") {
+      dispatch({ type: "personaEditorSection", section: id });
+      reveal(id);
+      return;
+    }
     const category = personaCategoryForSection(id);
     if (!category || !shown(resolve(category))) return;
     dispatch({ type: "personaEditorSection", section: id });
@@ -236,7 +287,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     if (id === "summary") return renderSectionBody("overview");
     // Shared with: one summary row whose Manage opens the top bar's Share
     // popover (the people and groups are edited there, nowhere else), then
-    // who pays for the replies and the shared vault.
+    // the shared vault. Who pays for the replies is on Model (#2625).
     if (id === "sharing") {
       return (
         <>
@@ -360,20 +411,8 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     }
   };
 
-  // The short value a row shows on its right (the canvas): the model, the
-  // approval level, who it is shared with, whether it acts alone.
-  const selection = bot.modelSelection;
-  const rowValue = (id: BotProfileSubPage): string | null => {
-    if (id === "model") {
-      if (!selection) return null;
-      if (selection.auto) return t("botProfile.v6.value.auto");
-      return modelLabel(state.instances.find((instance) => instance.instanceId === selection.instanceId), selection.model);
-    }
-    if (id === "beforeActing") return t(`approvalMode.${approvalModeFor(bot)}.chip` as LocaleKey);
-    if (id === "sharing") return personaSharingSummary(bot);
-    if (id === "actsAlone") return t(proactiveModeFor(bot) === "off" ? "botProfile.v6.value.off" : "botProfile.v6.value.proactive");
-    return null;
-  };
+  // The short value every row shows on its right (the canvas, #2621).
+  const rowValue = useBotRowValues(bot, { tab, listing: page === null, slackUrl });
 
   const pages = useMemo(
     () => PERSONA_CATEGORIES.filter((id) => id !== "overview" && shown(id)),
@@ -490,7 +529,20 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
           {(!page || search.searching) && <BotProfileTabBar tabs={tabs} tab={tab} onTab={openTab} search={search} />}
 
           {page ? (
-            <SubPage key={page} page={page} onBack={back}>{subPageBody(page)}</SubPage>
+            <SubPage
+              key={page}
+              page={page}
+              onBack={back}
+              footer={draft ? (
+                <SubPageSaveBar
+                  dirty={draft.dirty}
+                  onSave={() => { draft.save(); backNow(); }}
+                  onCancel={() => { draft.discard(); backNow(); }}
+                />
+              ) : null}
+            >
+              {subPageBody(page)}
+            </SubPage>
           ) : (
             <div
               key={tab}

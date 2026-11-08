@@ -9437,6 +9437,16 @@ function routineNeedsRun(auth: RequestAuth, botId: unknown): boolean {
   if (!bot) return false;
   return !atLeast(viewerBotLevel(auth, bot), "run");
 }
+/** #2622: the owner may keep routine creation to themself and the bot's
+ * managers ("Collaborators can create routines" off). */
+const COLLABORATORS_CANNOT_CREATE = { error: "the owner of this bot does not let collaborators create routines", code: "collaborators_cannot_create_routines" } as const;
+function routineCreateRefused(auth: RequestAuth, botId: unknown): typeof COLLABORATORS_CANNOT_CREATE | null {
+  if (IDENTITY.kind !== "perspicax" || auth.kind !== "session" || typeof botId !== "string") return null;
+  const bot = store.bot(botId);
+  if (!bot || bot.collaboratorsCreateRoutines !== false) return null;
+  const level = viewerBotLevel(auth, bot);
+  return level === "owner" || level === "manage" ? null : COLLABORATORS_CANNOT_CREATE;
+}
 function hiddenRoutineTarget(body: unknown, visible: VisibleSet): string | null {
   if (visible.everything || !body || typeof body !== "object") return null;
   const { botId, groupId } = body as { botId?: unknown; groupId?: unknown };
@@ -30478,6 +30488,7 @@ ROUTES.push(createRoutinesHttpRoutes({
   scopeDeps: (auth, visible, viewerId) => routineScopeDeps(auth, visible as VisibleSet, viewerId),
   needsRun: (auth, botId) => routineNeedsRun(auth, botId),
   needsRunBody: NEEDS_RUN,
+  createRefused: (auth, botId) => routineCreateRefused(auth, botId),
   hiddenTarget: (body, visible) => hiddenRoutineTarget(body, visible as VisibleSet),
   resultsRefusal: (auth, body) => routineResultsRefusalFor(auth, body),
   runAsChoice: (auth, body) => routineRunAsChoice(auth, body),

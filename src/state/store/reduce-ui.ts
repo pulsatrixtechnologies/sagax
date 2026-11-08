@@ -83,9 +83,13 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       };
     }
     case "openRoutine": {
-      const opened = reduce(state, { type: "toggleSettings", open: true, section: "routines", botId: action.botId });
+      // #2624: one place for routines, the Routines sub-page of the bot page.
+      const opened = reduce(state, { type: "openPersonaEditor", botId: action.botId, section: "routines" });
       if (opened === state) return state;
-      return { ...opened, routineFocus: { botId: action.botId, routineId: action.routineId } };
+      return {
+        ...opened,
+        routineFocus: action.routineId ? { botId: action.botId, routineId: action.routineId } : { botId: action.botId, create: true },
+      };
     }
     case "routineFocused":
       return state.routineFocus ? { ...state, routineFocus: null } : state;

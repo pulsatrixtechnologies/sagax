@@ -552,6 +552,8 @@ export interface Bot {
   voiceNotes?: boolean;
   /** #2121: Auto (absent) or Off. */
   memeReplies?: "auto" | "off";
+  /** #2622: absent/true = collaborators may create routines on this bot. */
+  collaboratorsCreateRoutines?: boolean;
   /** whether this bot may write email draft cards (on unless switched off) */
   emailDrafts?: boolean;
   /** whether this bot uses native memory (on unless switched off) */
@@ -1264,7 +1266,9 @@ export interface AppState {
   pluginsFocusApps: string[] | null;
   /** 2026-10-15: a routine to show on its page in the bot panel (a routine
    * line in the conversation was clicked); RoutinesSection opens it once. */
-  routineFocus: { botId: string; routineId: string } | null;
+  /** A routine to open on the bot page's Routines sub-page (#2624), or a new
+   * one to start there (`create`). */
+  routineFocus: { botId: string; routineId: string } | { botId: string; create: true } | null;
   /** #2272 (2026-11-06): a routine run open as its own window over the chat
    * column, shaped like a bot-to-bot exchange (ExchangeSheet, X to close).
    * ChatView renders it (src/components/routines/RoutineRunWindow.tsx). */
@@ -1742,7 +1746,7 @@ export type Action =
   | { type: "revealThread"; threadId: string }
   | { type: "setThreadReturn"; threadReturn: AppState["threadReturn"] }
   | { type: "toggleSettings"; open?: boolean; section?: BotSettingsSection; botId?: string; owner?: PanelOwner | null }
-  | { type: "openRoutine"; botId: string; routineId: string }
+  | { type: "openRoutine"; botId: string; routineId?: string }
   | { type: "routineFocused" }
   /** 2026-11-05 (#2098): a run opens in the chat, at its message in the
    * bot's conversation. There is no run view beside the chat any more. */

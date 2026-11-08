@@ -130,7 +130,7 @@ export function openPlaceAction(
   switch (id) {
     case "choose-model": dispatch({ type: "toggleSettings", open: true, section: "model", botId: target.botId }); return true;
     case "open-tools": dispatch({ type: "toggleSettings", open: true, section: "access", botId: target.botId }); return true;
-    case "change-routine": dispatch({ type: "toggleSettings", open: true, section: "routines", botId: target.botId }); return true;
+    case "change-routine": dispatch({ type: "openPersonaEditor", botId: target.botId, section: "routines" }); return true;
     case "sign-in": appSettings("engines"); return true;
     case "manage-computers": appSettings("computer"); return true;
     case "add-boat-key": appSettings("connections"); return true;

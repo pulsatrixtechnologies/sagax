@@ -29,14 +29,27 @@ describe("Linked Grok Bot settings", () => {
     expect(html).toContain("https://grok.example/hook");
     expect(html).toContain('data-settings-row="grokBridgeMayCall"');
     expect(html).toContain('data-settings-row="grokBridgeMayText"');
-    expect(html).toContain("/api/bridge/grok/link_abc");
+    // #2682: the opaque link id is never drawn, only copied (tooltip)
+    expect(html).toContain('data-settings-row="grokBridgeInbound"');
+    expect(html).not.toContain(">/api/bridge/grok/link_abc<");
+    expect(html).toContain('title="/api/bridge/grok/link_abc"');
+  });
+
+  it("is drawn like Web search: FieldRow fields, Save as the primary pill, no bridge wording (#2682)", () => {
+    const html = renderToStaticMarkup(createElement(LinkedGrokBotSettings, { initial: linked }));
+    for (const row of ["grokBridgeWebhook", "grokBridgeKey", "grokBridgeBots"]) {
+      expect(html).toMatch(new RegExp(`data-settings-row="${row}" data-settings-rowkind="field"`));
+    }
+    expect(html).toMatch(/ui-button-primary[^"]*"[^>]*>Save link</);
+    expect(html).toContain("Link with Grok Bot");
+    expect(html).not.toMatch(/Grok bridge|Bridge on/i);
   });
 
   it("shows the org kill message when the bridge is disabled for the org", () => {
     const html = renderToStaticMarkup(createElement(LinkedGrokBotSettings, {
       initial: { ...linked, orgAllowed: false },
     }));
-    expect(html).toContain("An admin turned off the Grok bridge");
+    expect(html).toContain("An admin turned off Link with Grok Bot");
   });
 });
 
@@ -46,5 +59,7 @@ describe("Org Grok Bridge policy", () => {
     expect(html).toContain('data-settings-card="organization.grokBridge"');
     expect(html).toContain('data-org-grok-bridge="on"');
     expect(html).toContain('data-settings-row="grokBridge"');
+    expect(html).toContain("Link with Grok Bot");
+    expect(html).not.toContain("Grok bridge");
   });
 });

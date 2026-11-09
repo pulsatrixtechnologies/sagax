@@ -83,15 +83,28 @@ describe("enrolled hosts as device rows", () => {
     expect(hostLine(offline, undefined, NOW)).toMatch(/^Computer · Last seen /);
   });
 
-  it("renders one list with hosts among the devices", async () => {
+  it("puts the unattended computers apart from the other devices (#3134)", async () => {
     await mount([offline, linux], [mac, iphone, ipad]);
-    const list = el.querySelectorAll("[data-my-devices]");
-    expect(list).toHaveLength(1);
-    const rows = [...list[0]!.children];
-    expect(rows.map((row) => row.getAttribute("data-online"))).toEqual(["yes", "yes", "yes", "no", "no"]);
-    expect(rows[2]!.hasAttribute("data-unattended-host")).toBe(true);
-    expect(rows[4]!.textContent).toContain("old-pc");
+    const hostsSection = el.querySelector("[data-unattended-hosts]")!;
+    expect(hostsSection.querySelector("h2")?.textContent).toBe("Unattended computers2");
+    const hostRows = [...hostsSection.querySelector("[data-unattended-hosts-list]")!.children];
+    expect(hostRows.map((row) => row.textContent?.includes("srv-linux") ? "srv-linux" : row.textContent?.includes("old-pc") ? "old-pc" : "?")).toEqual(["srv-linux", "old-pc"]);
+    expect(hostRows.every((row) => row.hasAttribute("data-unattended-host"))).toBe(true);
+    expect(hostsSection.querySelector("[data-my-device]")).toBeNull();
+    const devicesSection = el.querySelector("[data-my-devices-section]")!;
+    expect(devicesSection.querySelector("h2")?.textContent).toBe("My devices3");
+    const deviceRows = [...devicesSection.querySelector("[data-my-devices]")!.children];
+    expect(deviceRows.map((row) => row.getAttribute("data-online"))).toEqual(["yes", "yes", "no"]);
+    expect(devicesSection.querySelector("[data-unattended-host]")).toBeNull();
     expect(el.textContent).not.toContain(LINUX);
+  });
+
+  it("hides My devices when there is none, keeps the hosts' empty state apart", async () => {
+    await mount([linux]);
+    expect(el.querySelector("[data-my-devices-section]")).toBeNull();
+    await mount([], [iphone]);
+    expect(el.querySelector("[data-unattended-hosts-empty]")).not.toBeNull();
+    expect(el.querySelector("[data-my-devices-section] [data-my-device]")).not.toBeNull();
   });
 
   it("keeps the facts behind Details and the actions behind ⋯", async () => {
@@ -99,6 +112,8 @@ describe("enrolled hosts as device rows", () => {
     expect(el.querySelector("[data-unattended-host-facts]")).toBeNull();
     await click(el.querySelector("[data-unattended-host-details]"));
     expect(el.querySelector("[data-unattended-host-facts]")?.textContent).toContain("Acme");
+    // #3134: the chips of the line, in full under Details.
+    expect(el.querySelector("[data-unattended-host-facts]")?.textContent).toContain("All bots");
     await click(el.querySelector("[data-unattended-host-more]"));
     expect(el.querySelector("[data-unattended-host-open]")).not.toBeNull();
     expect(el.querySelector("[data-unattended-host-revoke]")).not.toBeNull();
@@ -132,6 +147,9 @@ describe("bot scope and sharing on a host row (#2957)", () => {
     await mount([linux, scoped, shared].map((row, index) => ({ ...row, hostId: index === 0 ? `h_${"11".repeat(16)}` : row.hostId })));
     const labels = [...el.querySelectorAll("[data-unattended-host-bots]")].map((span) => span.textContent);
     expect(labels).toEqual(["All bots", "Nova"]);
+    // #3134: on the card's own line, not on a row of their own below it.
+    expect(el.querySelectorAll("[data-unattended-host-line] [data-unattended-host-bots]")).toHaveLength(2);
+    expect(rowOf("srv-marie")?.querySelector("[data-unattended-host-line] [data-unattended-host-shared-by]")).not.toBeNull();
     expect(el.querySelector("[data-unattended-host-shares]")?.textContent).toContain("1");
     expect(rowOf("srv-marie")?.querySelector("[data-unattended-host-shared-by]")?.textContent).toContain("Marie Tremblay");
     expect(rowOf("srv-marie")?.querySelector("[data-unattended-host-bots]")).toBeNull();
@@ -157,8 +175,12 @@ describe("bot scope and sharing on a host row (#2957)", () => {
     const dialog = document.querySelector("[data-host-bots-dialog]")!;
     expect(dialog).not.toBeNull();
     expect((dialog.querySelector("[data-host-bots-all]") as HTMLInputElement).checked).toBe(true);
-    await click(dialog.querySelector('[data-host-bot="bot-atlas"]'));
+    // #3134: "All bots" hides the list; unchecking it opens the list with every bot picked.
+    expect(dialog.querySelector("[data-host-bot]")).toBeNull();
+    await click(dialog.querySelector("[data-host-bots-all]"));
     expect((dialog.querySelector("[data-host-bots-all]") as HTMLInputElement).checked).toBe(false);
+    expect([...dialog.querySelectorAll<HTMLInputElement>("[data-host-bot]")].map((box) => [box.dataset.hostBot, box.checked])).toEqual([["bot-atlas", true], ["bot-nova", true]]);
+    await click(dialog.querySelector('[data-host-bot="bot-nova"]'));
     await click(dialog.querySelector("[data-host-bots-save]"));
     expect(saved.bots).toEqual([[LINUX, ["bot-atlas"]]]);
     expect(document.querySelector("[data-host-bots-dialog]")).toBeNull();

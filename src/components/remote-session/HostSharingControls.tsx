@@ -73,15 +73,18 @@ export function HostBotsPicker({ bots, value, onChange, disabled, name }: {
     <div role="group" aria-label={name ?? t("remoteSessionsAdmin.hosts.bots.title")} data-host-bots-picker=""
       className="flex flex-col divide-y divide-hairline/40 overflow-clip rounded-xl border-[0.5px] border-border bg-elevated">
       <label className={cn("flex min-h-[44px] cursor-pointer items-center gap-3 px-3.5 py-2.5 md:min-h-0", disabled && "cursor-not-allowed opacity-50")}>
-        <input type="checkbox" data-host-bots-all="" checked={all} disabled={disabled} onChange={() => onChange(null)} className="size-4 accent-[var(--accent)]" />
+        <input type="checkbox" data-host-bots-all="" checked={all} disabled={disabled} aria-expanded={!all}
+          onChange={() => onChange(all ? bots.map((bot) => bot.id) : null)} className="size-4 accent-[var(--accent)]" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-[13px] leading-[18px] text-ink">{t("remoteSessionsAdmin.hosts.bots.all")}</span>
           <span className="text-[12px] leading-4 text-ink-secondary">{t("remoteSessionsAdmin.hosts.bots.allHint")}</span>
         </span>
       </label>
-      {bots.map((bot) => (
+      {/* #3134: "All bots" hides the list instead of showing every bot unchecked;
+          unchecking it opens the list with every bot picked, to trim. */}
+      {!all && bots.map((bot) => (
         <label key={bot.id} className={cn("flex min-h-[44px] cursor-pointer items-center gap-3 px-3.5 py-2.5 md:min-h-0", disabled && "cursor-not-allowed opacity-50")}>
-          <input type="checkbox" data-host-bot={bot.id} checked={!all && (value ?? []).includes(bot.id)} disabled={disabled} onChange={() => toggle(bot.id)} className="size-4 accent-[var(--accent)]" />
+          <input type="checkbox" data-host-bot={bot.id} checked={(value ?? []).includes(bot.id)} disabled={disabled} onChange={() => toggle(bot.id)} className="size-4 accent-[var(--accent)]" />
           <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-raised text-ink-secondary"><BotIcon size={13} aria-hidden="true" /></span>
           <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink">{bot.name}</span>
         </label>
@@ -99,7 +102,7 @@ function SmallDialog({ titleId, title, subtitle, hooks, busy, onClose, footer, c
   return (
     <DialogLayer onBackdropMouseDown={() => { if (!busy) onClose(); }}>
       <DialogFrame titleId={titleId} title={title} subtitle={subtitle} width="sm" closeLabel={t("common.close")} onClose={onClose}
-        closeDisabled={busy} frameRef={frameRef} frameProps={{ ...hooks, "aria-busy": busy || undefined }} footer={footer}>
+        closeDisabled={busy} frameRef={frameRef} frameProps={{ ...hooks, "aria-busy": busy || undefined }} footer={footer} footerDivider>
         {children}
       </DialogFrame>
     </DialogLayer>

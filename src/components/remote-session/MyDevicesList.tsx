@@ -72,7 +72,7 @@ export function DeviceRow({ device }: { device: MyDevice }) {
     </form>
   ) : (
     <div className="flex min-w-0 items-center gap-1.5">
-      <span className="truncate text-[13.5px] font-semibold text-ink" data-my-device-name="">{name}</span>
+      <span className="truncate text-[13.5px] font-semibold text-ink" data-my-device-name="" title={name}>{name}</span>
       {device.current && computer && (
         <button type="button" data-my-device-rename="" aria-label={t("computer.rename.aria", { name })} title={t("computer.rename")}
           onClick={() => { setDraft(name); setEditing(true); }} className="rounded p-0.5 text-ink-secondary hover:text-ink">

@@ -12,6 +12,7 @@ import { t } from "@/lib/i18n";
 import { patchHostComputer } from "@/lib/host-computers";
 import { useStoreOptional } from "@/state/store";
 import { PageMenuItem } from "@/components/content-page";
+import { DEVICE_CHIP } from "./DeviceCardRow";
 
 /** The bot computer items of the host row's shared "⋯" menu (DeviceCardRow). */
 export function HostBotComputerMenuItems({ hostId, host, close, onEditTags, onChanged }: {
@@ -50,7 +51,7 @@ export function HostBotComputerMenuItems({ hostId, host, close, onEditTags, onCh
   </>;
 }
 
-/** The tags under the row's details, and their inline editor. */
+/** The inline editor of the host's tags (the chips are HostBotComputerChips). */
 export function HostBotComputerTags({ hostId, host, editing, onDone, onChanged }: {
   hostId: string;
   host: BotComputerHostView | null;
@@ -83,17 +84,24 @@ export function HostBotComputerTags({ hostId, host, editing, onDone, onChanged }
       </div>
     );
   }
+  return null;
+}
+
+/** #3134: "Bot computer" and the host's tags as chips on the card's own
+ * line, so the card keeps its height; every tag is also under Details. */
+export function HostBotComputerChips({ host }: { host: BotComputerHostView | null }) {
+  const tags = host?.tags ?? [];
   if (!host?.botComputer && tags.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5 pl-12" data-host-bot-computer-row-tags="">
+    <>
       {host?.botComputer && (
-        <span data-host-bot-computer-badge="" className="inline-flex h-6 items-center gap-1 rounded-full bg-selected px-2 text-[11.5px] font-medium text-ink">
-          <BotIcon size={12} aria-hidden="true" />{t("hostComputer.badge")}
+        <span data-host-bot-computer-badge="" className={cn(DEVICE_CHIP, "border-transparent bg-selected font-medium text-ink")}>
+          <BotIcon size={11} aria-hidden="true" className="shrink-0" /><span className="truncate">{t("hostComputer.badge")}</span>
         </span>
       )}
       {tags.map((tag) => (
-        <span key={tag} data-host-bot-computer-tag={tag} className={cn("inline-flex h-6 items-center rounded-full border border-hairline/50 px-2 text-[11.5px] text-ink-secondary")}>{tag}</span>
+        <span key={tag} data-host-bot-computer-tag={tag} title={tag} className={DEVICE_CHIP}><span className="truncate">{tag}</span></span>
       ))}
-    </div>
+    </>
   );
 }

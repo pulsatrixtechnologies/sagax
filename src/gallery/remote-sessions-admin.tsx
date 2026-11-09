@@ -121,6 +121,12 @@ window.fetch = async (input, init) => {
     if (init?.method === "DELETE") return new Response(JSON.stringify({ shares: [] }), { status: 200, headers: { "content-type": "application/json" } });
     return new Response(JSON.stringify({ shares }), { status: 200, headers: { "content-type": "application/json" } });
   }
+  // #3134: the first host is a bot computer with tags (the "Bot computer" chip).
+  if (new URL(url, location.origin).pathname === "/api/host-computers") {
+    const first = hosts[0];
+    const view = first ? [{ hostId: first.hostId, name: first.hostname ?? "", os: "linux", online: true, botComputer: true, tags: ["serveur", "nas"], shellOnly: true, access: "always", modes: {}, vm: null }] : [];
+    return new Response(JSON.stringify({ hosts: view }), { status: 200, headers: { "content-type": "application/json" } });
+  }
   if (url.includes("/api/admin/remote-sessions/hosts")) {
     return new Response(JSON.stringify({ hosts: [...hosts, ...connected()], available: true }), { status: 200, headers: { "content-type": "application/json" } });
   }
@@ -168,6 +174,10 @@ const BOTS = [
   { id: "bot-atlas", name: "Atlas", chiefOfStaff: true },
   { id: "bot-nova", name: "Nova" },
   { id: "bot-pixel", name: "Pixel" },
+  // #3134: ?bots=many, a long list that must scroll inside the Add computer body.
+  ...(params.get("bots") === "many"
+    ? ["Orion", "Vega", "Lyra", "Iris", "Sirius", "Cassio", "Maia", "Rigel", "Tycho", "Elara", "Juno", "Kepler"].map((name) => ({ id: `bot-${name.toLowerCase()}`, name }))
+    : []),
 ];
 const dialogStep = params.get("dialog") === "add" ? (params.get("step") ?? "os") : null;
 

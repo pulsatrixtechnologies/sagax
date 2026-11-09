@@ -2,10 +2,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/state/store";
-import { CompactionChip, DigestChip } from "./DigestChip";
+import { CompactionChip, DigestChip, DigestDetail } from "./DigestChip";
 
 const message: Message = {
-  id: "receipt", role: "bot", kind: "digest", at: 1, text: "Observed work, not a completion verdict",
+  id: "receipt", role: "bot", kind: "digest", at: 1, text: "[digest] · tools: Bash×12 · reply: done",
   digest: {
     turnId: "turn", botId: "bot", threadId: "thread", at: 1, durationMs: 100,
     tools: [{ name: "Bash", count: 12, failed: 1 }], toolsDropped: 2, toolCalls: 19,
@@ -61,7 +61,18 @@ describe("DigestChip", () => {
     const html = renderToStaticMarkup(createElement(DigestChip, { message }));
     expect(html).toContain(">Used 19 tools<");
     expect(html).toContain(">5 files changed<");
-    expect(html).toContain('title="Observed work, not a completion verdict"');
+    expect(html).toContain('title="What this turn did"');
+  });
+
+  // The server's digest line is model and search context, never UI text.
+  it("never shows the internal digest line, closed or open", () => {
+    const closed = renderToStaticMarkup(createElement(DigestChip, { message }));
+    const open = renderToStaticMarkup(createElement(DigestDetail, { message }));
+    for (const html of [closed, open]) {
+      expect(html).not.toContain("[digest]");
+      expect(html).not.toContain("reply:");
+    }
+    expect(open).toContain(">Bash<");
   });
 
   it("does not imply zero changed files when capture was unavailable", () => {

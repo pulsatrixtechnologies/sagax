@@ -68,14 +68,15 @@ struct DesktopComputerWindowView: View {
         self.floating = floating
         self.close = close
         _controller = StateObject(wrappedValue: ComputerController(botId: botId, client: { nil }))
+        _screen = ObservedObject(wrappedValue: ScreenStore.shared.screen(botId))
     }
 
     private var bot: Bot? { session.state.bot(botId) }
     private var name: String { bot?.name ?? "" }
     /// The screen from its own store, so a frame redraws only the views
     /// that draw it (#3017, L01).
-    @ObservedObject private var screens = ScreenStore.shared
-    private var streamFrame: ScreenFrame? { screens.frames[botId] ?? session.state.screens[botId] }
+    @ObservedObject private var screen: BotScreen
+    private var streamFrame: ScreenFrame? { screen.frame ?? session.state.screens[botId] }
     private var offline: Bool {
         if case .live = session.status { return false }
         return true

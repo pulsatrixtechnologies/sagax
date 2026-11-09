@@ -12,8 +12,10 @@
 // session's summaries, the WP5 thread and folder actions and the WP11 room
 // prompts. Only the presentation is the desktop's.
 //
-// Sub-trees are type-erased (`AnyView`) at each column and list boundary:
-// build 6 crashed at launch on iPad resolving one deep SwiftUI type.
+// Sub-trees are type-erased (`AnyView`) at each column boundary: build 6
+// crashed at launch on iPad resolving one deep SwiftUI type. A named view
+// struct already ends the type nesting, so the list's sections and rows go
+// without `AnyView` (#3029): erasing each row cost SwiftUI its diff.
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -249,18 +251,18 @@ struct DesktopSidebarList: View {
         return GeometryReader { outer in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    AnyView(DesktopPinnedTiles(chats: pinnedChats))
+                    DesktopPinnedTiles(chats: pinnedChats)
                     LazyVStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
-                            AnyView(DesktopSidebarSection(
+                            DesktopSidebarSection(
                                 section: section,
                                 first: index == 0,
                                 previews: previews,
                                 reorderable: sections.count > 1
-                            ))
+                            )
                         }
                         if !icons, !layout.hiddenRows.isEmpty {
-                            AnyView(DesktopHiddenEntries(rows: layout.hiddenRows))
+                            DesktopHiddenEntries(rows: layout.hiddenRows)
                         }
                     }
                 }
@@ -368,7 +370,9 @@ enum DesktopSidebarSections {
 /// section before or after this one (DD1).
 struct DesktopSidebarSection: View {
     @Environment(\.desktopTheme) private var theme
-    @EnvironmentObject private var session: Session
+    /// Read only by the drop (#3029): the rows carry what they draw, so a
+    /// session frame no longer re-runs every section's body on its own.
+    private var session: Session { SessionHub.session }
     @EnvironmentObject private var model: DesktopShellModel
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     let section: DesktopSidebarSectionData
@@ -383,13 +387,13 @@ struct DesktopSidebarSection: View {
         let targeted = model.dropTarget == section.id
         VStack(alignment: .leading, spacing: 4) {
             if !icons {
-                AnyView(DesktopSectionHeader(section: section, collapsed: collapsed, reorderable: reorderable))
+                DesktopSectionHeader(section: section, collapsed: collapsed, reorderable: reorderable)
                     .padding(.bottom, 2)
             }
             if !collapsed {
-                VStack(alignment: .leading, spacing: icons ? 4 : 2) {
+                LazyVStack(alignment: .leading, spacing: icons ? 4 : 2) {
                     ForEach(section.rows, id: \.id) { chat in
-                        AnyView(DesktopSidebarRowGroup(chat: chat, preview: previews[chat.id] ?? "", sectionId: section.id))
+                        DesktopSidebarRowGroup(chat: chat, preview: previews[chat.id] ?? "", sectionId: section.id)
                     }
                 }
                 .accessibilityElement(children: .contain)

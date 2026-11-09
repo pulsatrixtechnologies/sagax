@@ -265,9 +265,15 @@ struct ChatView: View {
 
     /// The focused message once this chat holds it (nil before): the jump's
     /// task id, so it runs again when the page carrying it arrives.
+    /// Memoized on the transcript and the id (#3029): the scan ran over the
+    /// whole transcript on every render while a jump was pending.
     var focusTarget: String? {
-        guard let id = session.focusedMessageId, messages.contains(where: { $0.id == id }) else { return nil }
-        return id
+        guard let id = session.focusedMessageId else { return nil }
+        let transcript = messages
+        if let hit = layoutMemo.focus, hit.id == id, hit.messages == transcript { return hit.found ? id : nil }
+        let found = transcript.contains(where: { $0.id == id })
+        layoutMemo.focus = (id, transcript, found)
+        return found ? id : nil
     }
 
     /// The transcript as the reader has asked to see it: every chip, folded
@@ -1646,4 +1652,5 @@ final class TranscriptLayoutMemo {
     var rows: [TranscriptRow] = []
     var linesKey: LinesKey?
     var lines: Lines?
+    var focus: (id: String, messages: [Message], found: Bool)?
 }

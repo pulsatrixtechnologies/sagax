@@ -81,8 +81,30 @@ final class SidebarPrefsModel: ObservableObject {
     }
 
     func layout(_ session: Session) -> SidebarLayout {
-        session.state.sidebarLayout(prefs: prefs, personal: personal, viewerId: viewerID(session))
+        let state = session.state
+        let key = LayoutKey(
+            bots: state.bots, rooms: state.rooms, sectionOrder: state.sectionOrder,
+            prefs: prefs, personal: personal, viewerId: viewerID(session)
+        )
+        // A token or a cursor publish leaves every input as it was (the
+        // arrays share their buffers, so the compare is O(1)): the sidebar
+        // reuses the last layout instead of re-filtering the roster (#3029).
+        if let memo = layoutMemo, memo.key == key { return memo.layout }
+        let layout = state.sidebarLayout(prefs: key.prefs, personal: key.personal, viewerId: key.viewerId)
+        layoutMemo = (key, layout)
+        return layout
     }
+
+    private struct LayoutKey: Equatable {
+        var bots: [Bot]
+        var rooms: [Room]
+        var sectionOrder: [String]
+        var prefs: SidebarPrefs
+        var personal: PersonalSections?
+        var viewerId: String
+    }
+
+    private var layoutMemo: (key: LayoutKey, layout: SidebarLayout)?
 
     func isCollapsed(_ id: String) -> Bool { prefs.collapsed.contains(id) }
 

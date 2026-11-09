@@ -33,18 +33,42 @@ public struct OffscreenUnread: Equatable, Sendable {
         self.nearestBelow = nearestBelow
     }
 
-    public static func compute(rows: [UnreadRowBox], viewportTop: Double, viewportBottom: Double) -> OffscreenUnread {
+    /// `order` is every row of the list, top to bottom. A lazy list lays
+    /// out only the rows near the screen (#3029), so a row with no box is
+    /// placed by its index: before the first laid-out row it is above the
+    /// window, after the last one it is below. Without `order` only the
+    /// boxes count.
+    public static func compute(
+        rows: [UnreadRowBox], viewportTop: Double, viewportBottom: Double,
+        order: [String] = [], unread: Set<String> = []
+    ) -> OffscreenUnread {
         var result = OffscreenUnread(above: 0, below: 0, nearestAbove: nil, nearestBelow: nil)
+        var boxes: [String: UnreadRowBox] = [:]
+        for row in rows { boxes[row.id] = row }
+        let index = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        let laidOut = rows.compactMap { index[$0.id] }
+        let firstLaidOut = laidOut.min()
+        let lastLaidOut = laidOut.max()
+
+        var above: [String] = []
+        var below: [String] = []
         for row in rows.sorted(by: { $0.top < $1.top }) where row.unread {
             let middle = (row.top + row.bottom) / 2
-            if middle < viewportTop {
-                result.above += 1
-                result.nearestAbove = row.id
-            } else if middle > viewportBottom {
-                result.below += 1
-                if result.nearestBelow == nil { result.nearestBelow = row.id }
-            }
+            if middle < viewportTop { above.append(row.id) } else if middle > viewportBottom { below.append(row.id) }
         }
+        var earlier: [String] = []
+        var later: [String] = []
+        for (position, id) in order.enumerated() where boxes[id] == nil && unread.contains(id) {
+            if let firstLaidOut, position < firstLaidOut { earlier.append(id) }
+            else if let lastLaidOut, position > lastLaidOut { later.append(id) }
+            else if firstLaidOut == nil { later.append(id) }
+        }
+        above = earlier + above
+        below += later
+        result.above = above.count
+        result.below = below.count
+        result.nearestAbove = above.last
+        result.nearestBelow = below.first
         return result
     }
 }

@@ -26,6 +26,18 @@ describe("complete plugin scopes", () => {
     expect(pluginMcpPrecheck("tool", { type: "http", url: "https://tools.example.com/mcp", headers: {} }, { ...context, hasEnvironment: false })).toBeNull();
   });
 
+  it("hides a macOS-only command server where its command would start off a Mac (#3181)", () => {
+    const imessage = { command: "bun", args: ["run", "--cwd", "/workspace/sagax-plugins/imessage", "start"], env: {} };
+    const context = { taken: () => false, organization: true, hasEnvironment: true };
+    expect(pluginMcpPrecheck("imessage", imessage, context)).toBe("not_here");
+    expect(pluginMcpPrecheck("notes", { command: "osascript", args: ["-e", "x"], env: {} }, context)).toBe("not_here");
+    // a solo desktop: on a Mac it runs, elsewhere it is hidden
+    expect(pluginMcpPrecheck("imessage", imessage, { ...context, organization: false, platform: "darwin" })).toBeNull();
+    expect(pluginMcpPrecheck("imessage", imessage, { ...context, organization: false, platform: "win32" })).toBe("not_here");
+    // the organization's server is Linux, whatever this process runs on
+    expect(pluginMcpPrecheck("imessage", imessage, { ...context, platform: "darwin" })).toBe("not_here");
+  });
+
   it("executes a solo plugin at its own folder without changing stored specs", () => {
     const spec = { command: "node", args: ["/workspace/sagax-plugins/review/bin/tool"], env: { ROOT: "/workspace/sagax-plugins/review" } };
     expect(pluginSpecOnComputer(spec, { name: "review", dir: "/home/person/plugins/review" })).toEqual({ command: "node", args: ["/home/person/plugins/review/bin/tool"], env: { ROOT: "/home/person/plugins/review" } });

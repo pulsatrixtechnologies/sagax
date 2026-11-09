@@ -1083,8 +1083,9 @@ plus runtime observation.
 
 - One constant: `shared/builtin-plugins.ts` (`REA_VERSION`, `REA_PLUGIN`).
   The launch is `npx -y rea-agents@<REA_VERSION> mcp` with
-  `REA_MCP_INPUT_SCHEMA_PROFILE=compact` and
-  `REA_MCP_OUTPUT_SCHEMA_PROFILE=compact`. Bumping REA = that constant,
+  `REA_MCP_INPUT_SCHEMA_PROFILE=compact`; `REA_MCP_OUTPUT_SCHEMA_PROFILE`
+  stays unset (6.8.0 takes only `full` or `off`, exits at start on
+  anything else, and `off` fails at start too, #3181). Bumping REA = that constant,
   its NOTICE line, a smoke run of `npx -y rea-agents@<ver> --help`.
 - Never interactive: `npx -y` and `npm_config_yes` answer npm, the update
   notifier is off, and the Hopper first-run demo/license dialog is a macOS

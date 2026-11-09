@@ -12377,7 +12377,11 @@ const stdioRelay = new SandboxStdioRelay({
   open: (principalId, spec, botId) => {
     if (!userSandbox) throw new StdioRelayError("This server has no server environments.", "unavailable");
     return userSandbox.stdioStream(principalId, spec, botId);
-  }
+  },
+  // once per failed start; the next turns do not mount it (#3181)
+  onStartFailure: ({ principalId, server, error }) => {
+    console.warn(`[mcp] "${server}" stopped before its first answer in the server environment of ${principalId}; not started again for 30 min: ${error.message}`);
+  },
 });
 function personalRemoteSpec(server: Extract<PersonalMcpServer, { kind: "remote" }>): RemoteMcpSpec {
   return { type: server.type, url: server.url, headers: {} };

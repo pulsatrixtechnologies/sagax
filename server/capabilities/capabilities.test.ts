@@ -256,6 +256,24 @@ describe("personal and complete plugin capabilities", () => {
     expect(byKey(noEnvironment, "plugin:bot:alpha@market")?.mounts).toBeUndefined();
   });
 
+  it("hides a macOS-only command server in the Linux server environment: no row, not brought, never mounted (#3181)", () => {
+    const input = inputs(ENGINES[2]!);
+    input.pluginEnvironment = true;
+    input.personal!.servers.imessage = personal({ kind: "stdio", command: "bun", args: ["run", "start"] });
+    input.pluginMcp = [
+      { scope: "bot", key: "alpha@market", name: "imessage", spec: { command: "bun", args: ["run", "--cwd", "/workspace/sagax-plugins/imessage", "start"], env: {} } },
+      { scope: "bot", key: "alpha@market", name: "command", spec: { command: "node", args: [], env: {} } },
+    ];
+    const list = resolveBotCapabilities(input, { principalId: "p1", mayChange: true });
+    expect(byKey(list, "mcp:me:imessage")).toBeUndefined();
+    const plugin = byKey(list, "plugin:bot:alpha@market");
+    expect(plugin).toMatchObject({ state: "on", mounts: ["command"] });
+    expect(plugin?.reason).toBeUndefined();
+    expect(plugin?.brings?.mcpServers ?? []).not.toContain("imessage");
+    expect(listedMounts(list)).not.toContain("imessage");
+    expect(turnMcp(input)).not.toContain("imessage");
+  });
+
   it("lists REA as a built-in plugin, on and mounted by default, off when switched off", () => {
     const input = inputs(ENGINES[0]!);
     input.pluginEnvironment = true;

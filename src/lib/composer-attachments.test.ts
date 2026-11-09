@@ -30,6 +30,7 @@ import {
   replyTargetTakesFocus,
   dataContextFor,
   fileMaxBytes,
+  formatSize,
   imageMaxBytes,
   setAttachmentHostShared,
   assertImageFitsMessage,
@@ -37,6 +38,13 @@ import {
   MESSAGE_IMAGE_MAX_COUNT,
   type Attachment,
 } from "./composer-attachments";
+
+describe("formatSize", () => {
+  it("uses the shared file wording and stops at megabytes", () => {
+    expect(formatSize(1536)).toBe("1.5 KB");
+    expect(formatSize(1024 ** 3)).toBe("1024.0 MB");
+  });
+});
 
 describe("the viewed Data result and the words", () => {
   it("rides as its own field of the send (shared/data-context.ts), so the transcript keeps every typed line", () => {

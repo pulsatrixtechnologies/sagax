@@ -169,8 +169,12 @@ posixOnly("a routine run's approval reaches the desktop (Approvals, stream, wait
 
       // (2)(3) the stream brings this session the card and the notification
       await stream.until((frame) => frame.kind === "message" && frame.threadId === live.threadId && frame.message?.card?.requestId === requestId, 10_000);
-      const notice = await stream.until((frame) => frame.kind === "notify" && frame.notification?.kind === "approval" && frame.notification.requestId === requestId, 10_000);
-      expect(notice.notification).toMatchObject({ threadId: live.threadId, botId: bot.id });
+      // the card is mirrored into the bot's own chat (nothing invisible, #2901);
+      // the banner opens on that view, which answers through the run's card
+      const mirror = await waitFor(async () => ((await api("GET", `/api/threads/${bot.threadId}/messages?limit=60`, alice)).body.messages as any[])
+        .find((message) => message.card?.approvalOrigin?.requestId === requestId));
+      const notice = await stream.until((frame) => frame.kind === "notify" && frame.notification?.kind === "approval" && frame.notification.requestId === mirror.card.requestId, 10_000);
+      expect(notice.notification).toMatchObject({ threadId: bot.threadId, botId: bot.id, cardId: mirror.id });
 
       // the run's hidden task waits on the person: the desktop badge and the
       // chat's approval box read it from /api/bots

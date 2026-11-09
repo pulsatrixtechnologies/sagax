@@ -154,6 +154,17 @@ describe("a routine's page", () => {
     expect(markup).not.toContain("Write the morning briefing.");
   });
 
+  it("shows the last 3 runs, then Show more for the others (2026-11-09)", () => {
+    const many = Array.from({ length: 5 }, (_, i) => run("completed", { id: `r${i}`, output: table, scheduledFor: NOW - (i + 1) * 60 * MIN }));
+    const markup = renderToStaticMarkup(createElement(RoutineDetail, { routine, runs: many, bots: [bot], now: NOW, onOpenRun: () => {} }));
+    for (const id of ["r0", "r1", "r2"]) expect(markup).toContain(`data-run-row="${id}"`);
+    for (const id of ["r3", "r4"]) expect(markup).not.toContain(`data-run-row="${id}"`);
+    expect(markup).toContain("data-routine-runs-more");
+    expect(markup).toContain("Show more");
+    const few = renderToStaticMarkup(createElement(RoutineDetail, { routine, runs: many.slice(0, 3), bots: [bot], now: NOW, onOpenRun: () => {} }));
+    expect(few).not.toContain("data-routine-runs-more");
+  });
+
   it("keeps no second copy of the configuration: rows Trigger, Active, Next run; no chip, no badge, no link (2026-11-03)", () => {
     const markup = renderToStaticMarkup(createElement(RoutineDetail, { routine, runs, bots: [bot], now: NOW, onOpenRun: () => {}, onToggle: () => {}, onPatch: async () => {}, onClearRuns: () => {} }));
     expect(markup).not.toContain("data-routine-config-prompt");

@@ -4,7 +4,7 @@ import { PerspicaxMcp, boardListRead, type PerspicaxRoleEvent } from "./perspica
 // Fake Perspicax for the visible-roles relay: no sockets, credentials or live
 // data. "service-desk" is refused (403) on time entries, read and write;
 // the person's own surface ("Moi") reads them.
-function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc"; readableBy?: string; explicitFull?: boolean; roleSwitch?: "allow" | "deny"; knownRefused?: boolean; projectReadableBy?: string; writableBy?: string; ruleTo?: string; switchFails?: string; ticketReadableBy?: string; ticketCounts?: Record<string, number> } = {}) {
+function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc"; readableBy?: string; explicitFull?: boolean; roleSwitch?: "allow" | "deny"; knownRefused?: boolean; projectReadableBy?: string; writableBy?: string; ruleTo?: string; switchFails?: string; ticketReadableBy?: string; ticketCounts?: Record<string, number>; pauseSwitchedList?: { reached: () => void; release: Promise<void> } } = {}) {
   const calls: Array<{ name?: string; args?: any; acting?: string }> = [];
   const acting = new Map<string, string>();
   const profiles = [
@@ -61,6 +61,12 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     // QA 0.8.69 (#3062): one ticket readable only under one role
     if (name === "cw_psa_get_ticket" && options.ticketReadableBy !== undefined && role !== options.ticketReadableBy) {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
+    }
+    // #3062: the list Sagax sends under another role stays on the wire
+    // until the test lets it go
+    if (name === "cw_psa_find_tickets" && role && options.pauseSwitchedList) {
+      options.pauseSwitchedList.reached();
+      await options.pauseSwitchedList.release;
     }
     // QA 0.8.69 (#3062): each role sees its own boards, so its own count
     if (name === "cw_psa_find_tickets" && options.ticketCounts !== undefined) {
@@ -599,6 +605,31 @@ describe("read role fallback without a card (#3062)", () => {
     // and a plain call after it runs under the turn's role again
     await f.relay("cw_psa_get_ticket", { id: 1 });
     expect(ticketReads(f)).toEqual([""]);
+  });
+
+  it("never sends a concurrent write of the turn under a role Sagax switched to for a wider list (#3062)", async () => {
+    let reached!: () => void;
+    const switched = new Promise<void>((resolve) => { reached = resolve; });
+    let release!: () => void;
+    const pauseSwitchedList = { reached, release: new Promise<void>((resolve) => { release = resolve; }) };
+    const f = fixture({ ticketCounts: { me: 4, "service-desk": 2, "full-access": 15 }, pauseSwitchedList });
+    await f.prepare();
+    await f.init();
+    const list = f.relay("cw_psa_find_tickets", { conditions: "closedFlag=false" });
+    // the session is now under another role, mid-read
+    await switched;
+    const write = f.relay("cw_psa_log_time", { ticketId: 1, hours: 1 });
+    for (let tick = 0; tick < 20; tick++) await new Promise((resolve) => setImmediate(resolve));
+    // the write waits for the role to come back: nothing sent yet
+    expect(f.calls.filter((call) => call.name === "cw_psa_log_time")).toEqual([]);
+    release();
+    const [listed, written] = await Promise.all([list, write]);
+    expect(f.text(listed)).toContain('"total":15');
+    expect(f.calls.filter((call) => call.name === "cw_psa_log_time").map((call) => call.acting)).toEqual([""]);
+    expect(f.text(written)).toContain('"as":"me"');
+    // and every role switch Sagax made was put back before the next call
+    const last = f.calls.filter((call) => call.name === "identity_switch" && (call.args.clear || call.args.profile)).at(-1);
+    expect(last?.args).toEqual({ clear: true });
   });
 
   it("keeps the turn's own answer when no other held role sees more", async () => {

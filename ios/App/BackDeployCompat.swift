@@ -13,19 +13,34 @@ extension View {
     /// Call sites only ever read the new value, so the shim hands that over
     /// and nothing else. On 16 this is the old single-value `onChange`, which
     /// fires on exactly the same edges.
-    @ViewBuilder
+    ///
+    /// Goes through a `ViewModifier` so `Self` appears once in the result
+    /// type. With the branches inlined here, every call nested `Self` three
+    /// times, so a long chain grew the type as 3^n and crashed the Release
+    /// compiler (Swift 6.4, "non-terminating conformance substitution").
     func onValueChange<V: Equatable>(
         of value: V,
         initial: Bool = false,
         perform action: @escaping (V) -> Void
     ) -> some View {
+        modifier(OnValueChange(value: value, initial: initial, action: action))
+    }
+}
+
+private struct OnValueChange<V: Equatable>: ViewModifier {
+    let value: V
+    let initial: Bool
+    let action: (V) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
         if #available(iOS 17.0, *) {
-            onChange(of: value, initial: initial) { _, newValue in action(newValue) }
+            content.onChange(of: value, initial: initial) { _, newValue in action(newValue) }
         } else if initial {
-            onChange(of: value) { newValue in action(newValue) }
+            content.onChange(of: value) { newValue in action(newValue) }
                 .onAppear { action(value) }
         } else {
-            onChange(of: value) { newValue in action(newValue) }
+            content.onChange(of: value) { newValue in action(newValue) }
         }
     }
 }

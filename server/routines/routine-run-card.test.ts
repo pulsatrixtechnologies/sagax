@@ -103,6 +103,14 @@ describe("wakeTopicOf (#2694)", () => {
 describe("routineRunFallbackText", () => {
   const problems = "Get message failed 2 times and never succeeded after: Microsoft Graph API error: 404 Not Found";
 
+  it("says a quiet run in the conversation's language (#3219)", () => {
+    const card = routineRunCard(run({ quiet: true, output: undefined }), "main");
+    expect(card.status).toBe("nothing_to_report");
+    expect(routineRunFallbackText(card, "fr-CA")).toMatch(/rien à signaler/);
+    expect(routineRunFallbackText(card, "fr-CA")).not.toContain("NOTHING_TO_REPORT");
+    expect(routineRunFallbackText(card, "en")).toContain("had nothing to report");
+  });
+
   it("says a run completed with problems without their lines", () => {
     const card = routineRunCard(run({ problems }), "main");
     expect(card.problems).toBe(problems);

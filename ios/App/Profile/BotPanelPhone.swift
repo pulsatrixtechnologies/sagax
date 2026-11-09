@@ -116,6 +116,7 @@ private struct PhoneBotPanelContent: View {
                     }
                 }
                 .navigationDestination(for: PanelComputerRoute.self) { _ in ComputerView(bot: current) }
+                .navigationDestination(for: PanelRulesRoute.self) { _ in BotRuleSetsPage(bot: current) }
                 .navigationDestination(for: PanelOverviewPage.self) { page in AnyView(overviewPage(page)) }
                 .navigationDestination(for: PanelProfileRoute.self) { route in AnyView(profilePage(route.tab)) }
                 .navigationDestination(for: PanelPersonaRoute.self) { _ in AnyView(profilePage(.settings)) }
@@ -576,8 +577,7 @@ private struct PhoneBotPanelContent: View {
             startTab: tab,
             context: editContext,
             actions: editActions,
-            slackURL: slackURL,
-            mailRow: mailRow
+            slackURL: slackURL
         )
     }
 
@@ -793,6 +793,11 @@ private struct PhoneBotPanelContent: View {
             archive: { confirmingArchive = true },
             delete: { confirmingDelete = true },
             close: { if !path.isEmpty { path.removeLast() } },
+            openRules: { path.append(PanelRulesRoute()) },
+            openFolder: {
+                libraryStart = .files(.all)
+                path.append(PanelOverviewPage.library)
+            },
             openPermissions: { path.append($0) }
         )
     }
@@ -973,6 +978,9 @@ private struct PanelRoutineRoute: Hashable {
 }
 
 private struct PanelComputerRoute: Hashable {}
+
+/// The bot's rule sets (`/api/bots/:id/rules`), the desktop's Rules page.
+private struct PanelRulesRoute: Hashable {}
 
 /// A page of the overview list (Computer has its own route).
 private enum PanelOverviewPage: String, Hashable {

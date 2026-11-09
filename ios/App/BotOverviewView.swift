@@ -154,3 +154,69 @@ struct BotOverviewView: View {
         }
     }
 }
+
+/// The Personality sub-page's "What it does" block (#3030), the desktop's
+/// `BOT_PROFILE_SUBPAGE_SECTIONS.personality = ["summary", "soul"]`: who it
+/// is and what it does, in one compact card; the whole overview stays one
+/// tap away behind "See everything".
+struct BotPersonalitySummary: View {
+    @Environment(\.themePalette) var themePalette
+    @EnvironmentObject private var session: Session
+    let bot: Bot
+    @State private var overview: BotOverview?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ProfileSectionLabel(text: "What it does", margin: Theme.Profile.routineMargin)
+            ProfileCard(margin: Theme.Profile.routineMargin) {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let overview {
+                        let blurb = overview.who.blurb.isEmpty ? overview.who.title : overview.who.blurb
+                        if !blurb.isEmpty {
+                            Text(verbatim: blurb)
+                                .font(Theme.Font.body)
+                                .foregroundStyle(Theme.textPrimary)
+                        }
+                        if overview.does.isEmpty {
+                            Text("Nothing scheduled or learned yet.")
+                                .font(Theme.Profile.labelFont)
+                                .foregroundStyle(Theme.textSecondary)
+                        } else {
+                            ForEach(Array(overview.does.prefix(3).enumerated()), id: \.offset) { _, line in
+                                Label(line, systemImage: "calendar.badge.clock")
+                                    .font(Theme.Profile.labelFont)
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                ProfileDivider(leading: 14)
+                NavigationLink {
+                    BotOverviewPage(bot: bot)
+                } label: {
+                    HStack {
+                        Text("See everything")
+                            .font(Theme.Font.body)
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(height: Theme.Profile.singleRow)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("personality-summary.more")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("personality-summary")
+        .task(id: bot.id) { overview = await session.botOverview(for: bot) }
+    }
+}

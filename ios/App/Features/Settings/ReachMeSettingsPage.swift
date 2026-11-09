@@ -117,6 +117,8 @@ struct ReachMeSettingsPage: View {
     @EnvironmentObject private var session: Session
     @StateObject private var model = ReachMeModel()
     @State private var pickingZone = false
+    /// Opened from a bot's profile (#3030): that bot, not the first one.
+    var startBotId: String? = nil
 
     /// The bots this person sees, by name.
     private var bots: [Bot] { session.state.bots.filter { $0.hidden != true } }
@@ -146,6 +148,7 @@ struct ReachMeSettingsPage: View {
         // the bots arrive with the stream: the first one shown once there is one
         .task(id: bots.first?.id) {
             model.attach(session)
+            if model.botId == nil, let start = startBotId { await model.pick(start); return }
             if model.botId == nil, let first = bots.first { await model.pick(first.id) }
         }
         .sheet(isPresented: $pickingZone) {

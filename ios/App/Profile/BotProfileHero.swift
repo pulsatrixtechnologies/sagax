@@ -21,13 +21,15 @@ import UniformTypeIdentifiers
 struct BotProfileHeroIdentity: View {
     @EnvironmentObject private var session: Session
     let bot: Bot
+    /// The desktop's header (#3030): name and label centred under the mascot.
+    var centered = false
 
     private var canName: Bool { session.canEditBotField(bot, "name") }
     private var canLabel: Bool { session.canEditBotField(bot, "title") }
     private var hasLabel: Bool { !bot.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: centered ? .center : .leading, spacing: 2) {
             PersonaInlineText(
                 value: bot.name, placeholder: nil, required: true, maxLength: 100,
                 size: 28, weight: .regular, line: 36, muted: false,
@@ -56,8 +58,9 @@ struct BotProfileHeroIdentity: View {
             }
         }
         // The in-place control pads its text by 6: keep the text on the column's edge.
-        .padding(.leading, -6)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, centered ? 0 : -6)
+        .multilineTextAlignment(centered ? .center : .leading)
+        .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-profile.hero.identity")
     }
@@ -188,6 +191,8 @@ struct BotProfileHeroDetails: View {
     @ObservedObject private var directory = PeopleDirectory.shared
     let bot: Bot
     let audience: String
+    /// The desktop's header (#3030): facts and description centred.
+    var centered = false
 
     @State private var blurb = ""
     @State private var viewerId = "local-owner"
@@ -204,16 +209,17 @@ struct BotProfileHeroDetails: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: centered ? .center : .leading, spacing: 12) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) { facts }
-                VStack(alignment: .leading, spacing: 4) { facts }
+                VStack(alignment: centered ? .center : .leading, spacing: 4) { facts }
             }
             .font(.system(size: 13.5))
             .foregroundStyle(theme.inkSecondary)
             description
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(centered ? .center : .leading)
+        .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-profile.hero.details")
         .task(id: bot.id) {
@@ -275,7 +281,7 @@ struct BotProfileHeroDetails: View {
             .lineSpacing(6)
             .lineLimit(1...12)
             .focused($blurbFocused)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
             .onValueChange(of: blurb) { now in
                 if now.count > NewBotRules.descriptionLimit { blurb = String(now.prefix(NewBotRules.descriptionLimit)) }
             }
@@ -292,7 +298,7 @@ struct BotProfileHeroDetails: View {
             }
             .font(.system(size: 14))
             .lineSpacing(6)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
             .accessibilityIdentifier("bot-profile.hero.description")
         }
     }

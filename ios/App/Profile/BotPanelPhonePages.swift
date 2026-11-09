@@ -18,14 +18,66 @@ import SwiftUI
 /// A More page: the phone's grouped form under the section's title.
 struct BotPanelFormPage<Content: View>: View {
     @Environment(\.themePalette) var themePalette
+    @EnvironmentObject private var session: Session
     let section: DesktopPanelSection
+    var bot: Bot?
     @ViewBuilder let content: Content
 
     var body: some View {
-        ThemedForm { content }
+        ThemedForm {
+            if let intro = section.subpageIntro {
+                Section { Text(intro).font(.footnote).foregroundStyle(Theme.textSecondary) }
+                    .accessibilityIdentifier("panel-page.\(section.rawValue).intro")
+            }
+            // a section this viewer may not change says why (`botSectionLock`)
+            if let bot, let lock = session.sectionLock(bot, section) {
+                Section { Label { Text(lock) } icon: { Image(systemName: "lock") } .font(.footnote).foregroundStyle(Theme.textSecondary) }
+                    .accessibilityIdentifier("panel-page.\(section.rawValue).locked")
+            }
+            content
+        }
             .navigationTitle(Text(section.title))
             .navigationBarTitleDisplayMode(.inline)
             .accessibilityIdentifier("panel-page.\(section.rawValue)")
+    }
+}
+
+extension Session {
+    /// Desktop `botSectionLock`: why this viewer may not change a section,
+    /// or nil when they may.
+    func sectionLock(_ bot: Bot, _ section: DesktopPanelSection) -> LocalizedStringKey? {
+        let edits = { (field: String) in self.canEditBotField(bot, field) }
+        let locked: Bool = switch section {
+        case .access: !edits("computer") && !edits("cwd")
+        case .worksOn: !edits("computer")
+        case .memory: !edits("memoryEnabled")
+        case .soul, .history: !edits("soul")
+        case .permissions: !edits("chiefOfStaff") && !edits("approvalMode")
+        default: false
+        }
+        guard locked else { return nil }
+        return surfaceGate.botsReadOnly
+            ? "Your administrator lets you use shared bots only."
+            : "Only this bot's owner or an admin can change this."
+    }
+}
+
+extension DesktopPanelSection {
+    /// The one line of intro under a sub-page's title (desktop
+    /// `botProfile.v6.page.<page>.intro`, #3030).
+    var subpageIntro: LocalizedStringKey? {
+        switch self {
+        case .soul: "Its standing instructions. Write as you would talk to it."
+        case .model, .worksOn: "One engine, one fallback, one place to run. Applies to the bot and all its threads."
+        case .slack: "Where people talk to it and where it reaches you."
+        case .sharing, .visibility: "Who can talk to it and who can set it up."
+        case .access: "Accounts and connectors. One place for both."
+        case .voice: "How it sounds on the phone and in voice notes."
+        case .history: "Every settings change, restorable."
+        case .skills: "What else it knows how to do. Each skill turns on or off."
+        case .memory: "The files it keeps and what it remembers."
+        default: nil
+        }
     }
 }
 
@@ -249,6 +301,9 @@ struct BotPermissionsSection: View {
     @State private var confirmingFull = false
     @State private var viewerId = "local-owner"
     @State private var maxThreads: Int?
+    @State private var hooks: BotLifecycleHooks?
+    @State private var engineKind: String?
+    @State private var grokConnectors: Bool?
 
     private func shows(_ group: BotPermissionsPart) -> Bool { part == .all || part == group }
 
@@ -275,6 +330,7 @@ struct BotPermissionsSection: View {
         if shows(.beforeActing) { approvalSection }
         if shows(.actsAlone) { actsAloneSections }
         if shows(.advanced) { advancedSections }
+        if shows(.advanced) { extraAdvancedSections }
         if !canEdit {
             Section {
                 Text("These are changed by an administrator, or in Sagax on your computer.")
@@ -310,6 +366,11 @@ struct BotPermissionsSection: View {
             Text(current.approvePeerComms == true
                  ? "This bot will stop and ask before it reaches out to another bot."
                  : "Let this bot talk to teammates on its own, without a confirmation step.")
+        }
+        // the engine decides whether the Grok account connectors switch shows
+        .task(id: current.modelSelection.instanceId) {
+            let instances = await DesktopModelCatalog.shared.instances(session)
+            engineKind = instances.first { $0.instanceId == current.modelSelection.instanceId }?.driverKind
         }
     }
 
@@ -382,6 +443,24 @@ struct BotPermissionsSection: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(ProactiveMode.of(current.proactiveMode).hint)
                 Text("How this bot acts on its own on an email, a calendar entry, a failed run, another bot's post or a webhook.")
+            }
+        }
+        // PermissionsSection.tsx: Allowed recipients, beside Proactive
+        if edits("allowedRecipients") {
+            let count = (current.allowedRecipients ?? []).count
+            Section {
+                NavigationLink {
+                    ApprovalGrantsPage(botId: current.id, recipientsOnly: true)
+                } label: {
+                    LabeledContent {
+                        Text(count == 0 ? String(localized: "No one yet") : count == 1 ? String(localized: "1 recipient") : String(localized: "\(count) recipients"))
+                    } label: {
+                        Label("Allowed recipients", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                }
+                .accessibilityIdentifier("permissions-allowed-recipients")
+            } footer: {
+                Text("People and bots it writes to without an approval card.")
             }
         }
         // #2048: remembered publish target (page / artifact surface).
@@ -465,6 +544,55 @@ struct BotPermissionsSection: View {
             } footer: {
                 Text("When off, this bot is not steered or stopped for a repeating shell failure.")
             }
+        }
+    }
+
+    /// Lifecycle hooks, Grok account connectors and Tool access
+    /// (`PermissionsSection.tsx`: LifecycleHooksRow, the Grok switch,
+    /// BotToolAccess), each shown only where the desktop shows it.
+    @ViewBuilder
+    private var extraAdvancedSections: some View {
+        if edits("grokAccountConnectors"), engineKind == "grokAgent", current.toolScope == nil {
+            let on = grokConnectors ?? current.grokAccountConnectors ?? false
+            Section {
+                Toggle("Grok account connectors", isOn: Binding(get: { on }, set: { next in
+                    let target = current
+                    Task { if await PersonaBotFields.patch(["grokAccountConnectors": .bool(next)], bot: target, session: session) { grokConnectors = next } }
+                }))
+                .tint(Theme.toggleOn)
+                .accessibilityIdentifier("permissions-grok-connectors")
+            } footer: {
+                VStack(alignment: .leading, spacing: 6) {
+                    if on { Text("This bot loads your grok.com connectors on your own Grok sign-in.") }
+                    Text("When on, this bot also loads the connectors of your own grok.com account. A write through them asks first, unless an Always allow rule covers it or the bot is on Full access.")
+                }
+            }
+        }
+        if edits("allowedRecipients") {
+            Section {
+                Toggle("Lifecycle hooks", isOn: Binding(get: { hooks?.enabled ?? false }, set: { next in
+                    guard let client = session.settingsClient else { return }
+                    let botId = current.id
+                    Task { if let saved = try? await client.setBotLifecycleHooks(botId: botId, enabled: next) { hooks = saved } }
+                }))
+                .tint(Theme.toggleOn)
+                .disabled(hooks == nil)
+                .accessibilityIdentifier("permissions-lifecycle-hooks")
+                if let events = hooks?.events, !events.isEmpty {
+                    Text(verbatim: events.joined(separator: ", "))
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            } footer: {
+                VStack(alignment: .leading, spacing: 6) {
+                    if hooks?.events.isEmpty ?? true { Text("No plugin hooks installed.") }
+                    Text("Plugin hooks run on the bot's computer (sandbox, VM or PC), never on the server. They stay off until you turn them on.")
+                }
+            }
+            .task(id: bot.id) { hooks = try? await session.settingsClient?.botLifecycleHooks(botId: bot.id) }
+        }
+        if edits("toolScope") {
+            MyToolAccessSections(botId: current.id)
         }
     }
 
@@ -762,23 +890,27 @@ struct BotPanelSectionPage: View {
         switch section {
         case .overview: AnyView(BotOverviewPage(bot: bot))
         case .slack:
-            AnyView(BotPanelFormPage(section: section) { if let slackURL { BotSlackSection(url: slackURL) } })
-        case .soul: AnyView(InstructionView(bot: bot))
+            AnyView(BotPanelFormPage(section: section, bot: bot) { if let slackURL { BotSlackSection(url: slackURL) } })
+        case .soul: AnyView(InstructionView(bot: bot, personality: true))
         case .skills: AnyView(BotSkillsPage(bot: bot))
         case .memory: AnyView(BotMemoryPage(bot: bot))
         case .access:
-            AnyView(BotPanelFormPage(section: section) {
-                if !worksOnListed { BotWorksOnSection(bot: bot) }
-                BotAccessSection(bot: bot)
+            // Accounts is Access only; Works on lives on the Model page (#3030).
+            AnyView(BotPanelFormPage(section: section, bot: bot) { BotAccessSection(bot: bot) })
+        case .worksOn: AnyView(BotPanelFormPage(section: section, bot: bot) { BotWorksOnSection(bot: bot) })
+        case .model:
+            // Model and Works on on one page (desktop `model: ["model", "worksOn"]`)
+            AnyView(BotPanelFormPage(section: section, bot: bot) {
+                BotModelSection(bot: bot)
+                BotWorksOnSection(bot: bot)
+                BotPayerSection(bot: bot)
             })
-        case .worksOn: AnyView(BotPanelFormPage(section: section) { BotWorksOnSection(bot: bot) })
-        case .model: AnyView(BotPanelFormPage(section: section) { BotModelSection(bot: bot); BotPayerSection(bot: bot) })
-        case .permissions: AnyView(BotPanelFormPage(section: section) { BotPermissionsSection(bot: bot) })
-        case .voice: AnyView(BotPanelFormPage(section: section) { BotVoiceSections(bot: bot) })
+        case .permissions: AnyView(BotPanelFormPage(section: section, bot: bot) { BotPermissionsSection(bot: bot) })
+        case .voice: AnyView(BotPanelFormPage(section: section, bot: bot) { BotVoiceSections(bot: bot) })
         case .visibility: AnyView(BotVisibilityPage(bot: bot))
         case .sharing: AnyView(BotSharingPage(bot: bot))
         case .history: AnyView(BotHistoryPage(bot: bot))
-        case .usage: AnyView(BotPanelFormPage(section: section) { BotUsageSection(bot: bot) })
+        case .usage: AnyView(BotPanelFormPage(section: section, bot: bot) { BotUsageSection(bot: bot) })
         }
     }
 }

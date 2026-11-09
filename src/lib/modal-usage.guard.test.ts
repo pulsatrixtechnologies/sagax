@@ -26,6 +26,7 @@ const DIALOG_FRAME_ALLOW = new Set([
   "components/OrgImportDialog.tsx", // org import window (restored)
   "components/memory-manager/MemoryImportDialog.tsx", // Memory > Import window (3733220d4, 2026-11-03)
   "components/remote-session/AddComputerDialog.tsx", // Add computer modal (#2723, enrolled hosts as device rows)
+  "components/remote-session/HostSharingControls.tsx", // per-host sharing window (#3134)
 ]);
 
 /** Production files that may call useModalDialog. */
@@ -36,6 +37,7 @@ const USE_MODAL_DIALOG_ALLOW = new Set([
   "components/RoutineCalendarPage.tsx", // EventEditor window path until panel-only
   "components/RoutineCalendarPage.tsx-parts/useEventEditorBody.ts", // the same EventEditor, split out
   "components/remote-session/AddComputerDialog.tsx", // Add computer modal (#2723)
+  "components/remote-session/HostSharingControls.tsx", // per-host sharing window (#3134)
 ]);
 
 /** Files that may mention window.confirm only in comments (or this guard). */

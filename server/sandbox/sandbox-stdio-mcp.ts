@@ -31,8 +31,12 @@ const OTHER_TIMEOUT_MS = 2 * 60_000;
 /** A server that stopped before its first answer is not started again for
  * this long (same command and variables); a changed spec retries at once. */
 export const START_FAILURE_MS = 30 * 60_000;
-/** Closes that say nothing about the server itself. */
-const NOT_A_START_FAILURE = new Set(["idle", "removed", "restarted", "thread ended", "server stopping"]);
+/** Closes that say something about the server itself: its process ended
+ * (or broke the stream) before any answer, or the environment refused this
+ * command as such. A refusal of the environment (busy, capacity, paused,
+ * not_running, image_missing, egress_policy, pool_full, internal) passes and
+ * is never remembered: the next frame tries again (#3181). */
+const START_FAILURE_REASONS = new Set(["exited", "error", "a line too long", "bad_stdio", "too_large"]);
 
 export class StdioRelayError extends Error {
   readonly code: string;
@@ -77,8 +81,10 @@ export class SandboxStdioRelay {
   private readonly options: SandboxStdioRelayOptions;
   private readonly sessions = new Map<string, Session>();
   private readonly opening = new Map<string, Promise<Session>>();
-  /** principal\0server: a start that failed, kept START_FAILURE_MS (#3181). */
-  private readonly startFailures = new Map<string, { fingerprint: string; at: number; error: StdioRelayError }>();
+  /** principal\0server\0fingerprint: a start that failed, kept
+   * START_FAILURE_MS (#3181). Two servers of the same name with different
+   * commands keep a mark each. */
+  private readonly startFailures = new Map<string, { at: number; error: StdioRelayError }>();
   private readonly now: () => number;
   private sweeper: ReturnType<typeof setInterval> | null = null;
 
@@ -110,10 +116,14 @@ export class SandboxStdioRelay {
     if (session.closed) return;
     session.closed = true;
     session.failure ??= new StdioRelayError(why === "idle" ? "The MCP server was stopped." : `The MCP server in your server environment stopped (${why}).`, "stopped");
-    if (!session.answered && !NOT_A_START_FAILURE.has(why)) {
+    if (!session.answered && START_FAILURE_REASONS.has(why)) {
       // It died before answering anything: remembered, so the next turns do
-      // not start it again and again (#3181).
-      this.startFailures.set(this.failureKey(session.principalId, session.server), { fingerprint: session.fingerprint, at: this.now(), error: session.failure });
+      // not start it again and again (#3181). Old marks (another command
+      // that is no longer asked for) go once expired.
+      for (const [old, mark] of this.startFailures) {
+        if (this.now() - mark.at >= START_FAILURE_MS) this.startFailures.delete(old);
+      }
+      this.startFailures.set(this.failureKey(session.principalId, session.server, session.fingerprint), { at: this.now(), error: session.failure });
       this.options.onStartFailure?.({ principalId: session.principalId, server: session.server, error: session.failure });
     }
     for (const { reject, timer } of session.pending.values()) {
@@ -124,15 +134,15 @@ export class SandboxStdioRelay {
     session.stream.destroy();
   }
 
-  private failureKey(principalId: string, server: string): string {
-    return `${principalId}\u0000${server}`;
+  private failureKey(principalId: string, server: string, fingerprint: string): string {
+    return `${principalId}\u0000${server}\u0000${fingerprint}`;
   }
 
   private recentStartFailure(principalId: string, server: string, fingerprint: string): StdioRelayError | undefined {
-    const key = this.failureKey(principalId, server);
+    const key = this.failureKey(principalId, server, fingerprint);
     const failed = this.startFailures.get(key);
     if (!failed) return undefined;
-    if (failed.fingerprint !== fingerprint || this.now() - failed.at >= START_FAILURE_MS) {
+    if (this.now() - failed.at >= START_FAILURE_MS) {
       this.startFailures.delete(key);
       return undefined;
     }
@@ -226,7 +236,7 @@ export class SandboxStdioRelay {
       session.firstLine = false;
       if (!session.answered) {
         session.answered = true;
-        this.startFailures.delete(this.failureKey(session.principalId, session.server));
+        this.startFailures.delete(this.failureKey(session.principalId, session.server, session.fingerprint));
       }
       const hasId = frame.id !== undefined && frame.id !== null;
       if (hasId && typeof frame.method === "string") {

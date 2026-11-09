@@ -116,9 +116,51 @@ describe("SandboxStdioRelay", () => {
     relay.stop();
   });
 
+  it("never marks a refusal of the environment itself (busy, paused): the next frame opens again (#3181)", async () => {
+    let refuse: string | undefined = "busy";
+    let opens = 0;
+    const failures: string[] = [];
+    const relay = new SandboxStdioRelay({ open: async () => { opens += 1; return fakeServer([], refuse ? { refuse } : {}); }, onStartFailure: ({ server }) => failures.push(server) });
+    const init = (threadId: string) => relay.relay({ ...base, threadId, frame: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } });
+    await expect(init("t-1")).rejects.toMatchObject({ code: "busy" });
+    expect(relay.startFailed("pr_a", "tools", spec)).toBe(false);
+    refuse = "paused";
+    await expect(init("t-2")).rejects.toMatchObject({ code: "paused" });
+    expect(relay.startFailed("pr_a", "tools", spec)).toBe(false);
+    refuse = undefined;
+    await expect(init("t-3")).resolves.toMatchObject({ id: 1 });
+    expect(opens).toBe(3);
+    expect(failures).toEqual([]);
+    relay.stop();
+  });
+
+  it("marks a refusal of the command itself (bad_stdio, too_large)", async () => {
+    for (const code of ["bad_stdio", "too_large"]) {
+      const relay = new SandboxStdioRelay({ open: async () => fakeServer([], { refuse: code }) });
+      await expect(relay.relay({ ...base, frame: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } })).rejects.toMatchObject({ code });
+      expect(relay.startFailed("pr_a", "tools", spec)).toBe(true);
+      relay.stop();
+    }
+  });
+
+  it("keeps one mark per command: two servers of the same name do not clear each other", async () => {
+    const other: SandboxStdioSpec = { ...spec, argv: ["npx", "-y", "other"] };
+    const relay = new SandboxStdioRelay({ open: async (_principal, given) => fakeServer([], given.argv[2] === "other" ? {} : { refuse: "bad_stdio" }) });
+    const init = (threadId: string, given: SandboxStdioSpec) => relay.relay({ ...base, threadId, spec: given, frame: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } });
+    await expect(init("t-1", spec)).rejects.toMatchObject({ code: "bad_stdio" });
+    expect(relay.startFailed("pr_a", "tools", other)).toBe(false);
+    await expect(init("t-2", other)).resolves.toMatchObject({ id: 1 });
+    // the other command answered: the first one stays marked
+    expect(relay.startFailed("pr_a", "tools", spec)).toBe(true);
+    await expect(init("t-3", spec)).rejects.toMatchObject({ code: "bad_stdio" });
+    relay.closePerson("pr_a", "tools");
+    expect(relay.startFailed("pr_a", "tools", spec)).toBe(false);
+    relay.stop();
+  });
+
   it("forgets a failed start when the person changes or removes the server", async () => {
-    const relay = new SandboxStdioRelay({ open: async () => fakeServer([], { refuse: "busy" }) });
-    await expect(relay.relay({ ...base, frame: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } })).rejects.toMatchObject({ code: "busy" });
+    const relay = new SandboxStdioRelay({ open: async () => fakeServer([], { refuse: "bad_stdio" }) });
+    await expect(relay.relay({ ...base, frame: { jsonrpc: "2.0", id: 1, method: "initialize", params: {} } })).rejects.toMatchObject({ code: "bad_stdio" });
     expect(relay.startFailed("pr_a", "tools", spec)).toBe(true);
     relay.closePerson("pr_a", "tools");
     expect(relay.startFailed("pr_a", "tools", spec)).toBe(false);

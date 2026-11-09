@@ -4,7 +4,7 @@ import { PerspicaxMcp, boardListRead, type PerspicaxRoleEvent } from "./perspica
 // Fake Perspicax for the visible-roles relay: no sockets, credentials or live
 // data. "service-desk" is refused (403) on time entries, read and write;
 // the person's own surface ("Moi") reads them.
-function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc"; readableBy?: string; explicitFull?: boolean; roleSwitch?: "allow" | "deny"; knownRefused?: boolean; projectReadableBy?: string; writableBy?: string; ruleTo?: string; switchFails?: string } = {}) {
+function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason: "person" | "routine" }; fallback?: "fallback" | "rule" | "stay"; meWrite?: "allow" | "deny"; meRefused?: "result" | "rpc"; readableBy?: string; explicitFull?: boolean; roleSwitch?: "allow" | "deny"; knownRefused?: boolean; projectReadableBy?: string; writableBy?: string; ruleTo?: string; switchFails?: string; ticketReadableBy?: string; ticketCounts?: Record<string, number> } = {}) {
   const calls: Array<{ name?: string; args?: any; acting?: string }> = [];
   const acting = new Map<string, string>();
   const profiles = [
@@ -57,6 +57,16 @@ function fixture(options: { routine?: boolean; turnRole?: { slug: string; reason
     // #2988: the generic query refused on project tickets only
     if (name === "cw_psa_query" && String(args.resource ?? "").startsWith("project") && options.projectReadableBy !== undefined && role !== options.projectReadableBy) {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
+    }
+    // QA 0.8.69 (#3062): one ticket readable only under one role
+    if (name === "cw_psa_get_ticket" && options.ticketReadableBy !== undefined && role !== options.ticketReadableBy) {
+      return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
+    }
+    // QA 0.8.69 (#3062): each role sees its own boards, so its own count
+    if (name === "cw_psa_find_tickets" && options.ticketCounts !== undefined) {
+      const total = options.ticketCounts[role || "me"] ?? 0;
+      const items = Array.from({ length: total }, (_, index) => ({ id: index + 1 }));
+      return reply({ content: [{ type: "text", text: JSON.stringify({ total, items }) }], structuredContent: { total, items, as: role || "me" } });
     }
     if (name === "cw_psa_find_time_entries" && options.meRefused === "result") {
       return reply({ isError: true, structuredContent: { code: "upstream_error", message: "ConnectWise answered 403", details: { status: 403 } } });
@@ -261,66 +271,33 @@ describe("visible roles in the Perspicax relay", () => {
   const reads = (f: ReturnType<typeof fixture>) => f.calls.filter((call) => call.name === "cw_psa_find_time_entries").map((call) => call.acting);
   const lastTickets = (f: ReturnType<typeof fixture>) => f.calls.filter((call) => call.name === "cw_psa_find_tickets").at(-1)?.acting;
 
-  it("offers another held role after a read 403 under the default surface, as a permission block", async () => {
+  it("reads a refused read under the next held role by itself, with no card (#3062)", async () => {
     const f = fixture({ readableBy: "full-access", explicitFull: true });
     await f.prepare();
     await f.init();
-    const answer = await f.relay("cw_psa_find_time_entries");
-    expect((answer.body as { result?: { isError?: boolean } }).result?.isError).toBe(true);
-    expect(f.text(answer)).toContain("not missing data");
-    expect(f.text(answer)).toContain("Time & Expense");
-    expect(f.text(answer)).toContain("Another role you hold, Full Access");
-    expect(f.text(answer)).toContain("approval card");
-    expect(f.text(answer)).not.toContain("STOP");
-    expect(reads(f)).toEqual([""]);
-    expect(f.switchAsked).toEqual([]);
-  });
-
-  it("lets the bot switch to the offered role for that one call when the person already allowed it, then puts Moi back", async () => {
-    const f = fixture({ readableBy: "full-access", explicitFull: true });
-    await f.prepare();
-    await f.init();
-    await f.relay("cw_psa_find_time_entries");
-    const go = await f.relay("identity_switch", { profile: "full-access" });
-    expect(f.text(go)).not.toContain("Refused by Sagax");
-    expect(f.text(go)).toContain("runs only your next call as Full Access");
     const answer = await f.relay("cw_psa_find_time_entries");
     expect(f.text(answer)).toContain('"as":"full-access"');
+    expect(f.text(answer)).toContain("read this once as Full Access");
+    expect(f.text(answer)).not.toContain("approval card");
     expect(reads(f)).toEqual(["", "full-access"]);
+    expect(f.switchAsked).toEqual([]);
     await f.relay("cw_psa_find_tickets");
     expect(lastTickets(f)).toBe("");
+  });
+
+  it("lets the bot switch roles itself for a read, with no card", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true });
+    await f.prepare();
+    await f.init();
+    const go = await f.relay("identity_switch", { profile: "full-access" });
+    expect(f.text(go)).not.toContain("Refused by Sagax");
+    const answer = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(answer)).toContain('"as":"full-access"');
+    expect(reads(f)).toEqual(["full-access"]);
     expect(f.switchAsked).toEqual([]);
   });
 
-  it("asks the person with a card when the bot sends the refused read again, and reads it once as that role", async () => {
-    const f = fixture({ readableBy: "full-access", explicitFull: true, roleSwitch: "allow" });
-    await f.prepare();
-    await f.init();
-    await f.relay("cw_psa_find_time_entries");
-    const answer = await f.relay("cw_psa_find_time_entries");
-    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_time_entries"]);
-    expect(f.text(answer)).toContain("with the person's approval");
-    expect(reads(f)).toEqual(["", "full-access"]);
-    await f.relay("cw_psa_find_tickets");
-    expect(lastTickets(f)).toBe("");
-  });
 
-  it("reports the read not done when the person declines, and never reads it under another role after", async () => {
-    const f = fixture({ readableBy: "full-access", explicitFull: true, roleSwitch: "deny" });
-    await f.prepare();
-    await f.init();
-    await f.relay("cw_psa_find_time_entries");
-    const answer = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(answer)).toContain("did not approve reading it once as Full Access");
-    expect(f.text(answer)).toContain("not missing data");
-    expect(reads(f)).toEqual([""]);
-    // #2960: the switch itself is free, the declined read stays declined
-    const go = await f.relay("identity_switch", { profile: "full-access" });
-    expect(f.text(go)).not.toContain("Refused by Sagax");
-    const escape = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(escape)).toContain("The person declined reading this (time/entries)");
-    expect(reads(f)).toEqual([""]);
-  });
 
   it("switches by itself for one call when a rule allows it: no card", async () => {
     const f = fixture({ readableBy: "full-access", explicitFull: true, fallback: "rule" });
@@ -334,29 +311,26 @@ describe("visible roles in the Perspicax relay", () => {
     expect(lastTickets(f)).toBe("");
   });
 
-  it("asks one card per read and turn: refused again after the card, it stops naming every role refused (no card chain)", async () => {
+  it("tries every held role once, then stops naming every role refused, with no card", async () => {
     const f = fixture({ readableBy: "nobody", explicitFull: true, roleSwitch: "allow" });
     await f.prepare();
     await f.init();
-    await f.relay("cw_psa_find_time_entries");
-    // QA 0.8.67 G3 (#2960): Full Access refused too after the card: no second
-    // card holds the turn, the STOP names the API member and every role refused
+    const first = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(first)).toContain("STOP: this read was refused (403)");
+    expect(f.text(first)).toContain("Full Access (API member nova)");
+    expect(f.text(first)).toContain("Service Desk (API member nova)");
+    expect(f.text(first)).toContain("which API member and role refused it");
+    expect(reads(f)).toEqual(["", "full-access", "service-desk"]);
+    // sent again: every role was tried in this turn, STOP, no more reads
     const again = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(again)).toContain("STOP: this read was refused (403)");
-    expect(f.text(again)).toContain("Full Access (API member nova)");
-    expect(f.text(again)).toContain("the person was already asked once for it in this turn");
-    expect(f.text(again)).toContain("which API member and role refused it");
-    expect(f.text(again)).not.toContain("Another role you hold");
-    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_time_entries"]);
-    expect(reads(f)).toEqual(["", "full-access"]);
-    const third = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(third)).toContain("STOP");
-    expect(f.switchAsked).toHaveLength(1);
+    expect(f.text(again)).toContain("STOP");
+    expect(reads(f)).toHaveLength(4);
+    expect(f.switchAsked).toEqual([]);
   });
 
   // QA 0.8.67 G3 (#2960): the week's time (time.entries) reads fine; a 403 on
   // project tickets (titles) offers to skip them, and never chains cards.
-  it("answers a week's time when project tickets are refused: skip offered, one card at most", async () => {
+  it("answers a week's time when project tickets are refused under every role: STOP, give the rest, no card", async () => {
     const f = fixture({ projectReadableBy: "nobody", explicitFull: true, roleSwitch: "allow" });
     await f.prepare();
     await f.init();
@@ -364,38 +338,27 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.text(hours)).toContain('"ok":true');
     expect(f.text(hours)).not.toContain("this list was read under");
     const titles = await f.relay("cw_psa_find_project_tickets", { conditions: "id in (1,2,3)" });
-    expect(f.text(titles)).toContain("REFUSED: this read was refused (403)");
-    expect(f.text(titles)).toContain("only a detail of the answer (a ticket or project title, a name)");
-    expect(f.text(titles)).toContain("skip it: give the answer without it");
-    expect(f.text(titles)).toContain("otherwise, when the answer needs it");
-    expect(f.switchAsked).toEqual([]);
-    // the bot insists: one card, refused again: STOP, never a second card
-    const insisted = await f.relay("cw_psa_find_project_tickets", { conditions: "id in (1,2,3)" });
-    expect(f.text(insisted)).toContain("STOP");
-    expect(f.text(insisted)).toContain("give the rest of the answer and say in one line what could not be read");
+    expect(f.text(titles)).toContain("STOP");
+    expect(f.text(titles)).toContain("give the rest of the answer and say in one line what could not be read");
     const more = await f.relay("cw_psa_find_project_tickets", { conditions: "id in (4)" });
     expect(f.text(more)).toContain("STOP");
-    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_project_tickets"]);
+    expect(f.switchAsked).toEqual([]);
     // the hours still read under the person's own access
     expect(f.text(await f.relay("cw_psa_find_time_entries", { conditions: "member/id=168" }))).toContain('"ok":true');
   });
 
   // #2988: the offer is for one read path; the same generic tool on another
   // path (the bot skipped the refused detail) is a plain read, not the card
-  it("never turns a read of another path with the same generic tool into the offered card", async () => {
+  it("reads a refused path of the generic tool under the role that reads it, and leaves other paths under Moi", async () => {
     const f = fixture({ projectReadableBy: "full-access", explicitFull: true, roleSwitch: "allow" });
     await f.prepare();
     await f.init();
     const titles = await f.relay("cw_psa_query", { resource: "project.tickets" });
-    expect(f.text(titles)).toContain("REFUSED: this read was refused (403)");
+    expect(f.text(titles)).toContain('"as":"full-access"');
     const companies = await f.relay("cw_psa_query", { resource: "company.companies" });
-    expect(f.switchAsked).toEqual([]);
     expect(f.text(companies)).toContain('"as":"me"');
-    expect(f.calls.filter((call) => call.name === "cw_psa_query").map((call) => call.acting)).toEqual(["", ""]);
-    // the refused read itself, sent again, still gets its one card
-    const again = await f.relay("cw_psa_query", { resource: "project.tickets" });
-    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_query"]);
-    expect(f.text(again)).toContain("with the person's approval");
+    expect(f.calls.filter((call) => call.name === "cw_psa_query").map((call) => call.acting)).toEqual(["", "full-access", ""]);
+    expect(f.switchAsked).toEqual([]);
   });
 
   it("blocks with the permission when no other held role can be tried", async () => {
@@ -421,14 +384,15 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.text(answer)).toContain("You do not have security permission");
   });
 
-  it("after Moi is refused too under a role, offers the next held role instead of stopping", async () => {
-    const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, meRefused: "result" });
+  it("after Moi is refused too under a role, reads it under the next held role instead of stopping", async () => {
+    const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, readableBy: "full-access" });
     await f.prepare();
     await f.init();
     const answer = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(answer)).toContain("REFUSED: this read was refused (403) under Service Desk (API member nova), the person's own account");
-    expect(f.text(answer)).toContain("Another role you hold, Full Access");
-    expect(f.calls.filter((call) => call.name === "cw_psa_find_time_entries")).toHaveLength(2);
+    expect(f.text(answer)).toContain('"as":"full-access"');
+    expect(f.text(answer)).toContain("Service Desk (API member nova), the person's own account was refused (403)");
+    expect(reads(f)).toEqual(["service-desk", "", "full-access"]);
+    expect(f.switchAsked).toEqual([]);
   });
 
   it("marks a read refused under every held role as a STOP block", async () => {
@@ -502,34 +466,16 @@ describe("visible roles in the Perspicax relay", () => {
   });
 
   // #2960: a declined card holds even when the bot resends under the same role
-  it("never offers another role or a second card after a decline, when the read is resent under the same role", async () => {
-    const f = fixture({ readableBy: "full-access", explicitFull: true, roleSwitch: "deny" });
+  it("stays in the role when the person said so: STOP, no other role, no card", async () => {
+    const f = fixture({ readableBy: "full-access", explicitFull: true, fallback: "stay" });
     await f.prepare();
     await f.init();
-    await f.relay("cw_psa_find_time_entries");
-    await f.relay("cw_psa_find_time_entries");
-    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_time_entries"]);
-    const again = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(again)).toContain("STOP");
-    expect(f.text(again)).toContain("the person declined reading it under another role");
-    expect(f.text(again)).not.toContain("Another role you hold");
-    const last = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(last)).toContain("STOP");
-    expect(f.switchAsked).toEqual(["me>full-access:cw_psa_find_time_entries"]);
-    expect(reads(f).every((role) => role === "")).toBe(true);
+    const answer = await f.relay("cw_psa_find_time_entries");
+    expect(f.text(answer)).toContain("the person asked to stay in that role");
+    expect(reads(f)).toEqual([""]);
+    expect(f.switchAsked).toEqual([]);
   });
 
-  it("never reads a declined read under Moi by a rule after the person declined", async () => {
-    const f = fixture({ turnRole: { slug: "service-desk", reason: "routine" }, routine: true, readableBy: "full-access", roleSwitch: "deny", fallback: "fallback" });
-    await f.prepare();
-    await f.init();
-    await f.relay("cw_psa_find_time_entries");
-    await f.relay("cw_psa_find_time_entries");
-    const declinedReads = reads(f).length;
-    const again = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(again)).toContain("the person declined reading it under another role");
-    expect(reads(f).slice(declinedReads).every((role) => role === "service-desk")).toBe(true);
-  });
 
   // #2960 (verifier, G1): the note never fires where it only pushes a switch
   it("adds no board note in a routine or under the role the person picked", async () => {
@@ -574,20 +520,15 @@ describe("visible roles in the Perspicax relay", () => {
 
   // QA 0.8.67 G2 (#2960): a STOP holds for its own turn; the person's later GO
   // naming the role is tried
-  it("scopes a declined read to its turn: the next turn's named role reads it", async () => {
-    const f = fixture({ readableBy: "full-access", explicitFull: true, roleSwitch: "deny" });
+  it("scopes the roles tried to their turn: the next turn tries them again", async () => {
+    const f = fixture({ readableBy: "nobody", explicitFull: true });
     await f.prepare();
     await f.init();
-    await f.relay("cw_psa_find_time_entries");
-    const declined = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(declined)).toContain("do not try other roles or tools for it in this turn");
-    expect(f.text(declined)).toContain("A later message where the person names a role to use is a new GO");
-    expect(f.text(declined)).not.toMatch(/do not try other roles or tools\.(?! )/);
+    expect(f.text(await f.relay("cw_psa_find_time_entries"))).toContain("STOP");
+    const tried = reads(f).length;
     await f.prepare();
-    await f.relay("identity_switch", { profile: "full-access" });
-    const go = await f.relay("cw_psa_find_time_entries");
-    expect(f.text(go)).toContain('"as":"full-access"');
-    expect(f.text(go)).not.toContain("STOP");
+    await f.relay("cw_psa_find_time_entries");
+    expect(reads(f).length - tried).toBe(3);
   });
   // readAs: a switch Perspicax refused sent the call again under the refused role
   it("never sends the call again when the switch to the other role is refused", async () => {
@@ -601,16 +542,71 @@ describe("visible roles in the Perspicax relay", () => {
   });
 
   // oneCall: a lease left open after the bot moved on put back a later deliberate switch
-  it("ends the one-call lease when the bot switches roles itself", async () => {
+  it("keeps a role the bot switched to itself after a refused read was read under another", async () => {
     const f = fixture({ readableBy: "full-access", explicitFull: true });
     await f.prepare();
     await f.init();
     await f.relay("cw_psa_find_time_entries");
     await f.relay("identity_switch", { profile: "full-access" });
-    await f.relay("identity_switch", { clear: true });
-    await f.relay("identity_switch", { profile: "full-access" });
-    await f.relay("cw_psa_find_tickets");
-    await f.relay("cw_psa_find_tickets");
-    expect(f.calls.filter((call) => call.name === "cw_psa_find_tickets").map((call) => call.acting)).toEqual(["full-access", "full-access"]);
+    await f.relay("cw_psa_find_time_entries");
+    expect(reads(f).at(-1)).toBe("full-access");
+  });
+});
+
+// QA prod 0.8.69 (#3062, rule d7-403-switch-role): a limited role is not a
+// block for a read; Sagax tries the held roles itself, never with a card.
+describe("read role fallback without a card (#3062)", () => {
+  const ticketReads = (f: ReturnType<typeof fixture>) => f.calls.filter((call) => call.name === "cw_psa_get_ticket").map((call) => call.acting);
+
+  it("reads a ticket refused under Moi and Dispatch Agent under the next held role, with no card", async () => {
+    const f = fixture({ ticketReadableBy: "full-access", roleSwitch: "deny" });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_get_ticket", { id: 297048 });
+    expect(ticketReads(f)).toEqual(["", "service-desk", "full-access"]);
+    expect(f.switchAsked).toEqual([]);
+    expect(f.text(answer)).toContain('"as":"full-access"');
+    expect(f.text(answer)).toContain("read this once as Full Access");
+    expect(f.text(answer)).not.toContain("STOP");
+    // the role is put back for the next call
+    await f.relay("cw_psa_get_ticket", { id: 1 });
+    expect(ticketReads(f).at(3)).toBe("");
+  });
+
+  it("never asks a card for a read, even when the refused read is sent again", async () => {
+    const f = fixture({ ticketReadableBy: "nobody", roleSwitch: "allow" });
+    await f.prepare();
+    await f.init();
+    const first = await f.relay("cw_psa_get_ticket", { id: 297048 });
+    expect(f.text(first)).toContain("STOP: this read was refused (403)");
+    const again = await f.relay("cw_psa_get_ticket", { id: 297048 });
+    expect(f.text(again)).toContain("STOP");
+    expect(f.switchAsked).toEqual([]);
+  });
+
+  it("counts open tickets under the held role that sees the most boards, never the default role's partial count", async () => {
+    const f = fixture({ ticketCounts: { me: 4, "service-desk": 2, "full-access": 15 } });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_find_tickets", { conditions: "owner/id=168 and closedFlag=false" });
+    expect(f.text(answer)).toContain('"total":15');
+    expect(f.text(answer)).not.toContain('"total":4');
+    expect(f.text(answer)).toContain("Full Access");
+    expect(f.switchAsked).toEqual([]);
+    // the next list in the turn goes straight to the widest role
+    const second = await f.relay("cw_psa_find_tickets", { conditions: "owner/id=168 and closedFlag=false" });
+    expect(f.text(second)).toContain('"total":15');
+    // and a plain call after it runs under the turn's role again
+    await f.relay("cw_psa_get_ticket", { id: 1 });
+    expect(ticketReads(f)).toEqual([""]);
+  });
+
+  it("keeps the turn's own answer when no other held role sees more", async () => {
+    const f = fixture({ ticketCounts: { me: 15, "service-desk": 2, "full-access": 15 } });
+    await f.prepare();
+    await f.init();
+    const answer = await f.relay("cw_psa_find_tickets", { conditions: "closedFlag=false" });
+    expect(f.text(answer)).toContain('"as":"me"');
+    expect(f.text(answer)).toContain('"total":15');
   });
 });

@@ -129,7 +129,10 @@ import { createProactiveMetricsRoutes } from "./routes/proactive-metrics.ts";
 import { createBotEventSubscriptionRoutes } from "./routes/bot-event-subscriptions.ts";
 import { BotEventSubscriptions } from "./bot-events/bot-event-subscriptions.ts";
 import { ProactiveMetricsLedger } from "./proactive/proactive-metrics.ts";
-import { ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
+import { ProactiveBudget, ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
+import { FlowWatchLoop, WATCH_TICK_MS, WatchMemory } from "./proactive/flow-watches.ts";
+import { flowHelperIn } from "./proactive/flow-watch-helper.ts";
+import { apiNamesOf } from "./perspicax/perspicax-mcp-helpers.ts";
 import { frontMomentSampler, ScreenContextWatcher, screenContextAvailable, screenMomentKey } from "./proactive/screen-context.ts";
 import { ProactiveProposals, ProactiveWaker, proactivePrompt, PeerNoticeHops, ProactivePendingFile, runFailureWakesBot, type ProactiveSource } from "./proactive/proactive-wake.ts";
 import { type BotActService, type PerformActor } from "./bots/bot-act.ts";
@@ -14324,7 +14327,7 @@ store.onChange((change) => {
       catch { console.error("[memory-upkeep] Could not forget deleted bot's upkeep state."); }
       try { cacheKeepWarm.cancelBot(change.botId); }
       catch { console.error("[cache-keepwarm] Could not cancel deleted bot's keep-warm windows."); }
-      try { commandAllowlist.clear(change.botId); mcpServersHost.botDeleted(change.botId); }
+      try { commandAllowlist.clear(change.botId); mcpServersHost.botDeleted(change.botId); flowWatchLoop.forget(change.botId); }
       catch { console.error("[command-allowlist] Could not remove deleted bot's saved rules."); }
       // Its plugins and the tokens saved for its marketplaces go with it.
       try { botPlugins.forgetBot(change.botId); }
@@ -19855,7 +19858,8 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
   webhook: "webhook",
   sms: "text",
   suggestion: "daily suggestion",
-  screen: "screen"
+  screen: "screen",
+  watch: "Pulsatrix watch"
 };
 
 /** A proactive wake: background run at the bot's level, under the right
@@ -24079,6 +24083,59 @@ const screenContext: ScreenContextWatcher | null = screenSampler ? new ScreenCon
   }
 }) : null;
 if (screenContext && !process.env.VITEST) screenContext.start();
+/** 2026-11-09: the Pulsatrix Flow watches of the profiles a bot holds
+ * (server/proactive/flow-watches.ts). Observe as a read with the owner's
+ * routine credentials, `when` true and new: one proactive wake in the bot's
+ * conversation; a write goes through the ordinary approval path. */
+const flowWatchLoop = new FlowWatchLoop({
+  bots: () => store.bots
+    .filter((bot) => !bot.hidden && !bot.temporary)
+    .map((bot) => ({ id: bot.id, owner: effectiveBotOwner(bot) || "" })),
+  bot: (botId) => store.bot(botId) ?? undefined,
+  // the organization's Flow plugin only: no person's or bot's plugin code
+  // runs on the shared server (a local server runs its own)
+  helper: (botId, owner) => {
+    const bot = store.bot(botId);
+    if (!bot) return null;
+    const plugins = scopedPluginFolders(bot, owner) as Array<{ dir: string; scope: string }>;
+    return flowHelperIn(plugins.filter((plugin) => IDENTITY.kind !== "perspicax" || plugin.scope === "organization").map((plugin) => plugin.dir));
+  },
+  session: (owner, botId, fn) => {
+    const mcp = perspicaxMcp;
+    if (!mcp || !owner) return Promise.resolve(null);
+    const control = new AbortController();
+    const timer = setTimeout(() => control.abort(), 120_000);
+    timer.unref?.();
+    return mcp.withRoutineSession(owner, botId, control.signal, (session) => fn({
+      tools: session.tools,
+      readOnly: session.readOnly,
+      call: session.call,
+      holdsProfile: async () => session.tools.has("api_list"),
+      apis: async () => {
+        const listed = await session.call("api_list", {});
+        return listed.ok && !listed.isError ? [...apiNamesOf(listed.value)].map(([id, name]) => ({ id, name })) : [];
+      }
+    })).finally(() => clearTimeout(timer));
+  },
+  timeZone: (owner) => (owner && isPrincipalId(owner) ? botSettings.person(owner).timeZone ?? undefined : undefined),
+  hostTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+  // its own budget: a watch is a scheduled read, not a wake loop (12 an hour)
+  engine: new ProactiveEngine({
+    bot: (botId) => store.bot(botId) ?? undefined,
+    coveredByRules: () => false,
+    approvalLevel: (botId) => {
+      const bot = store.bot(botId);
+      return bot ? approvalModeFor(bot) : undefined;
+    },
+    budget: new ProactiveBudget({ minIntervalMs: 0, maxPerWindow: 12, windowMs: 60 * 60_000 })
+  }),
+  offer: (event) => offerProactive(event),
+  log: (botId, line) => proactiveEventsLine(botId, line),
+  memory: new WatchMemory(join(DATA_DIR, "proactive-watches.json"))
+});
+if (!process.env.VITEST && IDENTITY.kind === "perspicax") {
+  setInterval(() => void flowWatchLoop.tick(), WATCH_TICK_MS).unref();
+}
 if (!process.env.VITEST) {
   startBriefTimer({
     store: backgroundBriefs,

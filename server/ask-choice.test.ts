@@ -51,6 +51,18 @@ describe("ask_choice, the clickable question every engine can use", () => {
     expect(rows[1]!.from).toMatchObject({ botId: BOT.id });
   });
 
+  it("words the default title in the conversation's language, and keeps a given one (QA 0.8.77)", () => {
+    const { fake, rows } = store();
+    rows.push({ id: "p1", at: 1, role: "user", kind: "text", text: "Peux-tu vérifier la sauvegarde de ce soir?" } as Message);
+    createAgentCard({ store: fake, bot: BOT, threadId: "direct", input: { tool: ASK_CHOICE_TOOL, question: "Laquelle?", options: ["A", "B"] } });
+    expect(rows.at(-1)!.card).toMatchObject({ title: "Ton bot a une question", subtitle: "Laquelle?" });
+    createAgentCard({ store: fake, bot: BOT, threadId: "direct", input: { tool: ASK_CHOICE_TOOL, title: "Sauvegarde", question: "Laquelle?", options: ["A", "B"] } });
+    expect(rows.at(-1)!.card).toMatchObject({ title: "Sauvegarde" });
+    const english = store();
+    createAgentCard({ store: english.fake, bot: BOT, threadId: "direct", personLanguage: "fr-CA", input: { tool: ASK_CHOICE_TOOL, question: "Which?", options: ["A", "B"] } });
+    expect(english.rows[0]!.card).toMatchObject({ title: "Ton bot a une question" });
+  });
+
   it("refuses a malformed call without drawing anything", () => {
     const { fake, rows } = store();
     expect(createAgentCard({ store: fake, bot: BOT, threadId: "t", input: { tool: ASK_CHOICE_TOOL, question: "?", options: ["A"] } })).toMatchObject({ ok: false, status: 400 });

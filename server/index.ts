@@ -22545,6 +22545,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
         proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
         // #1905: a may-I ask_choice under Full access is answered, not drawn
         approvalLevel: sourceApprovalMode(bot.id, threadId),
+        personLanguage: languageOfPerson(person ?? undefined),
         // 2026-11-03: where nobody watches, a real question card (raiseHarnessQuestion)
         ...(harnessQuestionThread(threadId) ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, choice) } : {}),
         // #2048: publish-target availability for this bot, engine and person

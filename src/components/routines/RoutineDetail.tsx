@@ -25,7 +25,7 @@ import type { Bot, Group } from "@/state/store";
 import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { runActivityStatus } from "./RoutineRunDetail";
-import { PanelRow, PanelRows, PanelToggle, PanelValue } from "./PanelRows";
+import { PANEL_TEXT_ACTION, PanelRow, PanelRows, PanelToggle, PanelValue } from "./PanelRows";
 import { RunAsField, useRunAsOptions } from "./RunAsField";
 import { RoutineActAsField, useRoutineRoleCoverage } from "./RoutineActAsField";
 import { TriggerPopover } from "./TriggerPopover";
@@ -177,6 +177,9 @@ export function RoutineStateBadge({ routine, runs }: { routine: Routine; runs: R
 }
 
 /** "Runs (n)", Clear run logs at its right, then the runs, newest first. */
+/** Runs listed before Show more (2026-11-09). */
+export const RUNS_SHOWN = 3;
+
 export function RoutineRunsSection({ routine, runs, now = Date.now(), onOpenRun, onClearRuns }: {
   routine: Routine;
   runs: RoutineRun[];
@@ -185,6 +188,9 @@ export function RoutineRunsSection({ routine, runs, now = Date.now(), onOpenRun,
   onClearRuns?: () => void;
 }) {
   const history = [...runs].filter((run) => run.routineId === routine.id).sort((a, b) => routineRunTime(b) - routineRunTime(a));
+  // 2026-11-09 : the last 3 runs, then Show more for the others.
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? history : history.slice(0, RUNS_SHOWN);
   return <section data-routine-runs="" className="min-w-0 space-y-2">
     <div className="flex items-center justify-between gap-2 px-1">
       <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">{t("routineDetail.runs")}{history.length > 0 && <span className="rounded-full bg-raised px-1.5 text-[10.5px]">{history.length}</span>}</h3>
@@ -192,7 +198,8 @@ export function RoutineRunsSection({ routine, runs, now = Date.now(), onOpenRun,
     </div>
     {history.length === 0
       ? <p className="rounded-xl border border-dashed border-hairline/50 p-5 text-center text-[12.5px] text-ink-secondary">{t("routines.drawer.noRuns")}</p>
-      : <ol data-routine-history aria-label={t("routineDetail.runs")} className="flex flex-col gap-0.5">{history.map((run) => <RunHistoryRow key={run.id} run={run} now={now} onOpen={onOpenRun} />)}</ol>}
+      : <ol data-routine-history aria-label={t("routineDetail.runs")} className="flex flex-col gap-0.5">{shown.map((run) => <RunHistoryRow key={run.id} run={run} now={now} onOpen={onOpenRun} />)}</ol>}
+    {history.length > RUNS_SHOWN && <button type="button" data-routine-runs-more aria-expanded={showAll} onClick={() => setShowAll((value) => !value)} className={cn(PANEL_TEXT_ACTION, "ml-0.5")}>{showAll ? t("routineEditor.showLess") : t("routineEditor.showMore")}</button>}
   </section>;
 }
 

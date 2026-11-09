@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { ImportWriters } from "@/lib/memory-import";
 import type { MemoryNoteDetail, MemoryTierRow } from "@/lib/memory-manager";
-import type { JournalFacts, PageLink, PageRow, PageTier } from "@/lib/memory-page";
+import { canDecideRow, type JournalFacts, type PageLink, type PageRow, type PageTier } from "@/lib/memory-page";
 import { MemoryImportDialog, type ImportDestination } from "./MemoryImportDialog";
 import { MemoryNoteView, type NoteSave } from "./MemoryNoteView";
 import { TEAM_KINDS } from "./memory-manager-helpers";
@@ -61,6 +61,8 @@ export interface MemoryManagerReadingProps {
   togglePin: (key: string) => void;
   saveNote: (next: NoteSave) => Promise<boolean>;
   deleteKeys: (keys: string[]) => Promise<void>;
+  /** Review (#3106): approve or deny proposals the viewer may decide. */
+  decideKeys: (keys: string[], decision: "approve" | "deny") => Promise<void>;
   startMove: (keys: string[]) => void;
   createNote: () => Promise<void>;
   runMove: () => Promise<void>;
@@ -78,7 +80,7 @@ export function MemoryManagerReading(props: MemoryManagerReadingProps) {
     noteTier, noteLinks, previewLinks, factsByBot, tierByKey, rowByKey,
     setScreen, setNote, setPreview, setCreateTarget, setCreateFolder, setCreateTitle,
     setMoveScope, setMoveTopic, setImportOpen, setMapFocus, setView, setNotice,
-    togglePin, saveNote, deleteKeys, startMove, createNote, runMove, openNote, openKey, previewKey, refresh,
+    togglePin, saveNote, deleteKeys, decideKeys, startMove, createNote, runMove, openNote, openKey, previewKey, refresh,
   } = props;
 
   return (
@@ -106,6 +108,8 @@ export function MemoryManagerReading(props: MemoryManagerReadingProps) {
                 onSave={saveNote}
                 onDelete={note.mayEdit ? () => void deleteKeys([noteEntry.key]) : undefined}
                 onMove={noteEntry.source.kind === "perspicax" && note.mayEdit ? () => startMove([noteEntry.key]) : undefined}
+                onApprove={canDecideRow(noteEntry) ? () => void decideKeys([noteEntry.key], "approve") : undefined}
+                onDeny={canDecideRow(noteEntry) ? () => void decideKeys([noteEntry.key], "deny") : undefined}
                 onNeighbourhood={() => { setMapFocus(noteEntry.key); setView("map"); }}
                 onOpenLink={(key) => openKey(key)}
                 linkColor={(key) => tierByKey.get(rowByKey.get(key)?.tier ?? "")?.color}
@@ -204,6 +208,8 @@ export function MemoryManagerReading(props: MemoryManagerReadingProps) {
                 onEditPage={() => void openNote(preview.entry, true)}
                 onDelete={preview.detail.mayEdit ? () => { const key = preview.entry.key; setPreview(null); void deleteKeys([key]); } : undefined}
                 onMove={preview.entry.source.kind === "perspicax" && preview.detail.mayEdit ? () => { const key = preview.entry.key; setPreview(null); startMove([key]); } : undefined}
+                onApprove={canDecideRow(preview.entry) ? () => void decideKeys([preview.entry.key], "approve") : undefined}
+                onDeny={canDecideRow(preview.entry) ? () => void decideKeys([preview.entry.key], "deny") : undefined}
                 onNeighbourhood={() => { setMapFocus(preview.entry.key); setPreview(null); setView("map"); }}
                 onOpenLink={previewKey}
                 linkColor={(key) => tierByKey.get(rowByKey.get(key)?.tier ?? "")?.color}

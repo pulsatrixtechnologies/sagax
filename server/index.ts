@@ -27644,6 +27644,7 @@ if (IDENTITY.kind === "perspicax") {
     client: new PerspicaxMemoryNotesClient({
       baseUrl: () => perspicaxBase(),
       accessToken: (principalId) => perspicaxAccessToken(principalId),
+      linkBearer: () => perspicaxDirectory?.linkBearer() ?? null,
     }),
   }));
 } else {

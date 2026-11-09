@@ -9,9 +9,13 @@
 //   /api/me/memory/archived
 //   /api/me/memory/order                (PUT: a folder's manual order)
 //   /api/me/memory/collections[/<id>]   (curated, ordered notes)
+//   /api/me/memory/reviews/<id>         (GET: a pending review's body, #3106)
+//   /api/me/memory/reviews/<id>/approve (POST)
+//   /api/me/memory/reviews/<id>/refuse  (POST {reason})
+//   /api/me/memory/reviews/bulk-approve (POST {ids})
 //
-// Forwards to Perspicax `/api/v1/memory/read/*` with the session's own live
-// access token as Bearer. Session only; subject is always the signed-in
+// Forwards to Perspicax `/api/v1/memory/read/*` (reviews: `/api/v1/memory/
+// reviews/*`) as the signed-in person (link token plus subject when linked). Session only; subject is always the signed-in
 // person (never a body or query field). Solo servers and unsigned callers
 // get a clear refusal. An expired Perspicax sign-in is 409
 // `memory_sign_in_again` (same idea as me-avatar), never 401 on the Sagax
@@ -23,6 +27,8 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const ME_MEMORY_PREFIX = "/api/me/memory";
+/** Perspicax review queue (approve, refuse, bulk approve). */
+export const MEMORY_REVIEWS_PREFIX = "/api/v1/memory/reviews";
 
 export interface MeMemoryNotesDeps {
   /** SAGAX_PERSPICAX_ISSUER when this is an organization server. */
@@ -81,6 +87,20 @@ type Upstream = { method: NotesMethod; path: string; body?: unknown };
 export function upstreamOf(method: string, path: string, url: URL, body: unknown): Upstream | "method" | null {
   if (!path.startsWith(ME_MEMORY_PREFIX)) return null;
   const rest = path.slice(ME_MEMORY_PREFIX.length) || "/";
+
+  if (rest === "/reviews/bulk-approve") {
+    if (method !== "POST") return "method";
+    return { method: "POST", path: `${MEMORY_REVIEWS_PREFIX}/bulk-approve`, body };
+  }
+  const review = /^\/reviews\/([^/]+)(\/approve|\/refuse)?$/.exec(rest);
+  if (review) {
+    // One path segment, re-encoded: the id never reaches another route upstream.
+    let raw: string;
+    try { raw = decodeURIComponent(review[1]!); } catch { return null; }
+    const target = `${MEMORY_REVIEWS_PREFIX}/${encodeURIComponent(raw)}`;
+    if (!review[2]) return method === "GET" ? { method: "GET", path: target } : "method";
+    return method === "POST" ? { method: "POST", path: `${target}${review[2]}`, body } : "method";
+  }
 
   if (rest === "/tree") {
     if (method !== "GET") return "method";

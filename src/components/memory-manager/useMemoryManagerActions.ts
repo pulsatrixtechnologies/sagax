@@ -3,11 +3,11 @@ import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import { api } from "@/state/store";
 import {
-  deleteBotNotes, detectBodyKind, openBotNote, openPerspicaxNote, openTeamNote,
+  decidePerspicaxReview, deleteBotNotes, detectBodyKind, openBotNote, openPerspicaxNote, openPerspicaxReview, openTeamNote,
   pxMemory, restoreBotChange, saveBotNote, undoBotDeletes,
   type MemoryBrowse, type MemoryManagerSource, type MemoryNoteDetail, type MemoryTierRow,
 } from "@/lib/memory-manager";
-import { rowKey, type PageRow } from "@/lib/memory-page";
+import { canDecideRow, rowKey, type PageRow } from "@/lib/memory-page";
 import { confirmAsync } from "../ConfirmProvider";
 import type { CollectionSummary } from "./MemoryCollections";
 import type { NoteSave } from "./MemoryNoteView";
@@ -45,6 +45,8 @@ export interface MemoryActionsInput {
   meTier: MemoryTierRow | undefined;
   rows: PageRow[];
   rowByKey: Map<string, PageRow>;
+  /** Perspicax proposals waiting in a tier's queue (the Review list). */
+  reviewRows: PageRow[];
   archivedRows: PageRow[];
   trashRows: PageRow[];
   pxTrashRows: PageRow[];
@@ -87,7 +89,7 @@ export interface MemoryActionsInput {
 /** Note open/save/delete/create/move and folder mutations for the Memory page. */
 export function useMemoryManagerActions(input: MemoryActionsInput) {
   const {
-    sources, overviews, pxSource, pxTiers, botSources, teamSources, meTier, rows, rowByKey,
+    sources, overviews, pxSource, pxTiers, botSources, teamSources, meTier, rows, rowByKey, reviewRows,
     archivedRows, trashRows, pxTrashRows, place, screen, note, noteEntry, createTarget, createFolder,
     createTitle, createBody, moveTopic, moveScope, collections, pxTierKey, refresh,
     setPlace, setScreen, setView, setPreview, setNote, setNoteEntry, setBusy, setError, setNotice,
@@ -108,7 +110,8 @@ export function useMemoryManagerActions(input: MemoryActionsInput) {
 
   const loadDetail = async (entry: PageRow): Promise<MemoryNoteDetail> => {
     let detail: MemoryNoteDetail | null = null;
-    if (entry.source.kind === "bot" && entry.source.botId && entry.row.path) detail = await openBotNote(entry.source.botId, entry.row.path);
+    if (entry.row.reviewId) detail = await openPerspicaxReview(entry.row.reviewId);
+    else if (entry.source.kind === "bot" && entry.source.botId && entry.row.path) detail = await openBotNote(entry.source.botId, entry.row.path);
     else if (entry.source.kind === "team") detail = await openTeamNote(entry.source.section ?? "", entry.row.id);
     else if (entry.source.kind === "perspicax" && entry.row.scope) detail = await openPerspicaxNote(entry.row.scope, entry.row.id);
     if (!detail) throw new Error(t("memoryManager.noteMissing"));
@@ -127,8 +130,9 @@ export function useMemoryManagerActions(input: MemoryActionsInput) {
       setPreview(null);
     }
   };
+  const findRow = (key: string) => rowByKey.get(key) ?? reviewRows.find((entry) => entry.key === key);
   const previewKey = (key: string) => {
-    const entry = rowByKey.get(key);
+    const entry = findRow(key);
     if (entry) void openPreview(entry);
   };
 
@@ -154,7 +158,7 @@ export function useMemoryManagerActions(input: MemoryActionsInput) {
   };
 
   const openKey = (key: string, edit = false) => {
-    const entry = rowByKey.get(key);
+    const entry = findRow(key);
     if (entry) void openNote(entry, edit);
   };
 
@@ -225,11 +229,12 @@ export function useMemoryManagerActions(input: MemoryActionsInput) {
     }
   };
 
-  const lookup = (key: string) => rowByKey.get(key) ?? (noteEntry?.key === key ? noteEntry : undefined) ?? archivedRows.find((entry) => entry.key === key) ?? trashRows.find((entry) => entry.key === key);
+  const lookup = (key: string) => findRow(key) ?? (noteEntry?.key === key ? noteEntry : undefined) ?? archivedRows.find((entry) => entry.key === key) ?? trashRows.find((entry) => entry.key === key);
 
   /** Deletes the rows (any source, several at once), with one Undo for all. */
   const deleteKeys = async (keys: string[]) => {
-    const entries = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry));
+    // A pending Perspicax review is not a note yet: Deny settles it, never Delete.
+    const entries = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry) && !entry!.row.reviewId);
     if (!entries.length) return;
     const ok = await confirmAsync({
       title: t("memoryManager.delete"),
@@ -296,6 +301,41 @@ export function useMemoryManagerActions(input: MemoryActionsInput) {
       refresh();
     } finally {
       setBusy(false);
+    }
+  };
+
+  /**
+   * #3106: approve or deny proposals from the Review list (one row, the
+   * preview, or the selection). A team-memory proposal is accepted (PATCH
+   * accept) or removed (DELETE settles its cards as deny); a Perspicax review
+   * is approved or refused. Rows the viewer may not decide are skipped.
+   */
+  const decideKeys = async (keys: string[], decision: "approve" | "deny") => {
+    const entries = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry) && canDecideRow(entry!));
+    if (!entries.length) return;
+    setBusy(true);
+    setError(null);
+    let done = 0;
+    try {
+      for (const entry of entries) {
+        if (entry.row.reviewId) {
+          await decidePerspicaxReview(entry.row.reviewId, decision);
+        } else {
+          const path = `/api/team-memory/${encodeURIComponent(entry.row.id)}?section=${encodeURIComponent(entry.source.section ?? "")}`;
+          if (decision === "approve") await api(path, { method: "PATCH", body: JSON.stringify({ accept: true }) });
+          else await api(path, { method: "DELETE" });
+        }
+        done += 1;
+      }
+    } catch (cause) {
+      setError(readableError(cause));
+    } finally {
+      const decided = new Set(entries.slice(0, done).map((entry) => entry.key));
+      if (done) setNotice({ text: t(decision === "approve" ? "memoryManager.reviewApproved" : "memoryManager.reviewDenied", { count: done }) });
+      setPreview((current) => (current && decided.has(current.entry.key) ? null : current));
+      if (screen.kind === "note" && decided.has(screen.key)) { setScreen({ kind: "list" }); setNote(null); }
+      setBusy(false);
+      refresh();
     }
   };
 
@@ -444,7 +484,7 @@ export function useMemoryManagerActions(input: MemoryActionsInput) {
 
   return {
     goPlace, loadDetail, openPreview, previewKey, openNote, openKey, togglePin, saveNote, lookup,
-    deleteKeys, restoreKeys, emptyTrash, targets, defaultTarget, startCreate, createNote, startMove,
+    deleteKeys, decideKeys, restoreKeys, emptyTrash, targets, defaultTarget, startCreate, createNote, startMove,
     runMove, renamePxFolder, deletePxFolder, deleteBotFolder, folderMenu, linkTitle, reorder, collect,
   };
 }

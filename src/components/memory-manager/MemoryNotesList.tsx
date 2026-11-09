@@ -6,7 +6,7 @@
 // swatch and name, the folder, the tags, the links, then the author and
 // when it changed. Ticked rows bring the bar of the bulk actions.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, FileStack, FolderInput, GripVertical, Link2, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { BookOpen, Check, FileStack, FolderInput, GripVertical, Link2, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -27,7 +27,7 @@ import {
   type PageRow,
   type PageTier,
 } from "@/lib/memory-page";
-import { AuthorBadge, excerptLabel, FIELD, GHOST_BUTTON, MiniSegment, OUTLINE_BUTTON, relLabel, Swatch, TagChip } from "./memory-ui";
+import { AuthorBadge, excerptLabel, FIELD, GHOST_BUTTON, MiniSegment, OUTLINE_BUTTON, PRIMARY_BUTTON, relLabel, Swatch, TagChip } from "./memory-ui";
 
 export interface ListTemplate {
   key: string;
@@ -60,6 +60,8 @@ export function MemoryNotesList({
   onReorder,
   collections,
   onAddToCollection,
+  canDecide,
+  onDecide,
 }: {
   title: string;
   line: string;
@@ -83,6 +85,10 @@ export function MemoryNotesList({
   onMove?: (keys: string[]) => void;
   /** Trash and Archived: restore the ticked rows. */
   onRestore?: (keys: string[]) => void;
+  /** Review (#3106): the proposals this viewer may approve or deny. Rows
+   * they may not decide get no button at all (hidden, never greyed). */
+  canDecide?: (entry: PageRow) => boolean;
+  onDecide?: (keys: string[], decision: "approve" | "deny") => void;
   restoreLabel?: string;
   headExtra?: React.ReactNode;
   busy: boolean;
@@ -158,6 +164,7 @@ export function MemoryNotesList({
     void onReorder(rest.map((entry) => entry.row.id));
   };
   const movable = onMove && selected.length > 0 && selected.every((entry) => entry.source.kind === "perspicax");
+  const decidable = !!onDecide && !!canDecide && selected.length > 0 && selected.every((entry) => canDecide(entry));
 
   const viewLabel: Record<ListView, string> = {
     active: t("memoryManager.view.active"),
@@ -316,6 +323,16 @@ export function MemoryNotesList({
               )}
             </span>
           )}
+          {decidable && (
+            <>
+              <button type="button" className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] shadow-[inset_0_0_0_1px_currentColor] hover:bg-ink/10" onClick={() => { onDecide?.(keys, "approve"); setPicked(new Set()); }} disabled={busy} data-memory-bulk-approve="">
+                <Check size={14} aria-hidden="true" />{t("memoryManager.reviewApprove")}
+              </button>
+              <button type="button" className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] shadow-[inset_0_0_0_1px_currentColor] hover:bg-ink/10" onClick={() => { onDecide?.(keys, "deny"); setPicked(new Set()); }} disabled={busy} data-memory-bulk-deny="">
+                <X size={14} aria-hidden="true" />{t("memoryManager.reviewDeny")}
+              </button>
+            </>
+          )}
           {onRestore && (
             <button type="button" className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] shadow-[inset_0_0_0_1px_currentColor] hover:bg-ink/10" onClick={() => onRestore(keys)} disabled={busy} data-memory-bulk-restore="">
               <RotateCcw size={14} aria-hidden="true" />{restoreLabel ?? t("memoryManager.restore")}
@@ -398,6 +415,16 @@ export function MemoryNotesList({
               <span className="flex flex-col items-end gap-1.5 whitespace-nowrap text-[12px] text-ink-secondary">
                 {row.author && <AuthorBadge name={row.author} />}
                 {when && <span title={row.updatedAt ? new Date(row.updatedAt).toLocaleString() : undefined}>{when}</span>}
+                {onDecide && canDecide?.(entry) && (
+                  <span className="flex items-center gap-1.5">
+                    <button type="button" className={cn(OUTLINE_BUTTON, "h-7 px-2.5 text-[12.5px]")} disabled={busy} onClick={() => onDecide([entry.key], "deny")} aria-label={t("memoryManager.reviewDenyNote", { title: row.title })} data-memory-row-deny="">
+                      <X size={13} aria-hidden="true" />{t("memoryManager.reviewDeny")}
+                    </button>
+                    <button type="button" className={cn(PRIMARY_BUTTON, "h-7 px-2.5 text-[12.5px]")} disabled={busy} onClick={() => onDecide([entry.key], "approve")} aria-label={t("memoryManager.reviewApproveNote", { title: row.title })} data-memory-row-approve="">
+                      <Check size={13} aria-hidden="true" />{t("memoryManager.reviewApprove")}
+                    </button>
+                  </span>
+                )}
               </span>
             </div>
           );

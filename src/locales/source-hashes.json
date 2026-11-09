@@ -18299,7 +18299,13 @@
       "remoteSessionsAdmin.hosts.team.subtitle": "97dc48d8f47fe5de1722ec8765b111fba807e836ca096df15369fba949d0f207",
       "remoteSessionsAdmin.hosts.team.label": "5985039f106df054b43c3529139613bf7c2372937539f344c7c5ee47d00a0d63",
       "remoteSessionsAdmin.hosts.team.none": "e3924f2807b785f1696e48a823514203bcab4947656bcc37bff4bd85ec7b1a4e",
-      "remoteSessionsAdmin.hosts.team.hint": "7d00e5c27720e9ffe0c28b43b2b693138311a3741da9297b7710d639077f3190"
+      "remoteSessionsAdmin.hosts.team.hint": "7d00e5c27720e9ffe0c28b43b2b693138311a3741da9297b7710d639077f3190",
+      "memoryManager.reviewApprove": "6007acbe30b2cd98703e83350ea665c06009fcd51f26dd73b309294235f45f21",
+      "memoryManager.reviewDeny": "05a2d7332eb9d8bf164487c743a2e93c21b16bb2061a93e3ee2ceb508eadb753",
+      "memoryManager.reviewApproveNote": "b24f1c88fb1052f0faacd14f62c1d896daac94776da1128d88d65d3f33e0c3bd",
+      "memoryManager.reviewDenyNote": "338165938b3981eeec255164c7e9b8512539e6fcd0f6be22704937c2b7f44086",
+      "memoryManager.reviewApproved": "f61984049d1f1f5aa1ae9cfd12428b97b6ba0e21492c0955c7e083f3b04b78a1",
+      "memoryManager.reviewDenied": "7749bcdb907d67b9000a6c89dea4382edea0d972bf2829ee827e694001d4b9e2"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

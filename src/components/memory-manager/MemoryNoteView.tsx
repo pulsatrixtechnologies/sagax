@@ -8,7 +8,7 @@
 // Edit on the right. Edit keeps the page: the
 // title, the tags and the Markdown editor in place of the body.
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, ChevronLeft, MoreHorizontal, Network, Pencil, Pin, PinOff, FolderInput, Trash2 } from "lucide-react";
+import { ArrowUpRight, Check, ChevronLeft, MoreHorizontal, Network, Pencil, Pin, PinOff, FolderInput, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -58,6 +58,8 @@ export function MemoryNoteView({
   onSave,
   onDelete,
   onMove,
+  onApprove,
+  onDeny,
   onNeighbourhood,
   onOpenLink,
   linkColor,
@@ -80,6 +82,9 @@ export function MemoryNoteView({
   onSave: (next: NoteSave) => Promise<boolean>;
   onDelete?: () => void;
   onMove?: () => void;
+  /** A proposal "To review" the viewer may decide (#3106): Approve and Deny. */
+  onApprove?: () => void;
+  onDeny?: () => void;
   onNeighbourhood: () => void;
   onOpenLink: (key: string) => void;
   /** The swatch of the tier a linked note lives in. */
@@ -200,6 +205,16 @@ export function MemoryNoteView({
                   </div>
                 )}
               </div>
+              {onDeny && (
+                <button type="button" className={OUTLINE_BUTTON} disabled={busy} onClick={onDeny} data-memory-note-deny="">
+                  <X size={14} aria-hidden="true" />{t("memoryManager.reviewDeny")}
+                </button>
+              )}
+              {onApprove && (
+                <button type="button" className={PRIMARY_BUTTON} disabled={busy} onClick={onApprove} data-memory-note-approve="">
+                  <Check size={14} aria-hidden="true" />{t("memoryManager.reviewApprove")}
+                </button>
+              )}
               <button type="button" className={OUTLINE_BUTTON} onClick={onNeighbourhood} data-memory-note-neighbourhood="">
                 <Network size={14} aria-hidden="true" />{t("memoryManager.note.neighbourhood")}
               </button>

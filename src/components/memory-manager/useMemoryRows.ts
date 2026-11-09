@@ -118,6 +118,35 @@ export function useMemoryRows({ sources, overviews, journals, bodies, archivedRa
     return out;
   }, [botSources, teamSources, pxSource, pxTiers, overviews, factsByBot, bodies, actorName, pxTierKey]);
   const rowByKey = useMemo(() => new Map(rows.map((entry) => [entry.key, entry])), [rows]);
+  // #3106: the proposals waiting in a Perspicax tier's queue, listed under Review
+  // (counted there before, never shown). Not notes yet: kept out of `rows`.
+  const reviewRows = useMemo<PageRow[]>(() => {
+    if (!pxSource) return [];
+    const out: PageRow[] = [];
+    for (const tier of pxTiers) {
+      for (const item of tier.pendingItems ?? []) {
+        out.push({
+          key: `${pxSource.id}-review|${item.reviewId}`,
+          source: tierSource(pxSource, tier),
+          tier: pxTierKey(tier.scope),
+          folderKey: `px:${tier.scope}/${item.topic}`,
+          folderPath: item.topic,
+          row: {
+            id: item.reviewId,
+            title: item.title,
+            folder: item.topic,
+            scope: tier.scope,
+            status: "proposed",
+            createdAt: item.createdAt,
+            updatedAt: item.createdAt,
+            reviewId: item.reviewId,
+            mayDecide: item.mayDecide,
+          },
+        });
+      }
+    }
+    return out;
+  }, [pxSource, pxTiers, pxTierKey]);
 
   const pxRows = useCallback((list: MemoryNoteRow[], archived: boolean): PageRow[] => {
     if (!pxSource) return [];
@@ -211,9 +240,10 @@ export function useMemoryRows({ sources, overviews, journals, bodies, archivedRa
       teams: rows.filter((entry) => tierByKey.get(entry.tier)?.kind === "team").length,
       pinned: rows.filter((entry) => pins.includes(entry.key)).length,
       recent: rows.filter((entry) => (entry.row.updatedAt ?? 0) >= cutoff).length,
-      review: rows.filter((entry) => entry.row.status === "proposed").length + pxTiers.reduce((sum, tier) => sum + (tier.pending ?? 0), 0),
+      review: rows.filter((entry) => entry.row.status === "proposed").length + reviewRows.length
+        + pxTiers.reduce((sum, tier) => sum + Math.max(0, (tier.pending ?? 0) - (tier.pendingItems?.length ?? 0)), 0),
     };
-  }, [rows, tierByKey, pins, pxTiers]);
+  }, [rows, tierByKey, pins, pxTiers, reviewRows]);
 
   const placeRows = useMemo<PageRow[]>(() => {
     if (place.kind === "all") return rows;
@@ -223,7 +253,7 @@ export function useMemoryRows({ sources, overviews, journals, bodies, archivedRa
       const cutoff = Date.now() - RECENT_MS;
       return rows.filter((entry) => (entry.row.updatedAt ?? 0) >= cutoff);
     }
-    if (place.kind === "review") return rows.filter((entry) => entry.row.status === "proposed");
+    if (place.kind === "review") return [...rows.filter((entry) => entry.row.status === "proposed"), ...reviewRows];
     if (place.kind === "archived") return archivedRows;
     if (place.kind === "trash") return trashRows;
     if (place.kind === "collections") {
@@ -236,7 +266,7 @@ export function useMemoryRows({ sources, overviews, journals, bodies, archivedRa
     if (place.kind !== "folder") return rows;
     const folder = place.folder;
     return rows.filter((entry) => entry.folderKey === folder || entry.folderKey.startsWith(`${folder}/`));
-  }, [place, rows, tierByKey, pins, archivedRows, trashRows, openCollection, collections, collectionItems]);
+  }, [place, rows, reviewRows, tierByKey, pins, archivedRows, trashRows, openCollection, collections, collectionItems]);
 
   // The Collections scope: every collection's notes not loaded yet.
   // 2026-11-03 (audit N-6): each collection is asked once, four at a time;
@@ -257,5 +287,5 @@ export function useMemoryRows({ sources, overviews, journals, bodies, archivedRa
   }, [place.kind, collections, collectionItems]);
   useEffect(() => { if (place.kind !== "collections") setOpenCollection(null); }, [place.kind]);
 
-  return { pxSource, pxTiers, botSources, teamSources, meTier, tiers, tierByKey, pxTierKey, factsByBot, rows, rowByKey, archivedRows, pxTrashRows, trashRows, counts, placeRows };
+  return { pxSource, pxTiers, botSources, teamSources, meTier, tiers, tierByKey, pxTierKey, factsByBot, rows, rowByKey, reviewRows, archivedRows, pxTrashRows, trashRows, counts, placeRows };
 }

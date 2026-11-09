@@ -57,6 +57,40 @@ vi.mock("@/state/store", async () => {
         };
       }
       if (path.startsWith("/api/bots/northwind/")) throw new actual.ApiError("no such bot", 404);
+      // #3106 `review`: two Perspicax teams with their queues, a team-memory proposal; decisions stick.
+      const review = (globalThis as { __memoryReview?: Set<string> }).__memoryReview;
+      if (review && path.startsWith("/api/me/memory/reviews/") && init?.method === "POST") {
+        review.add(path.split("/")[5]!);
+        return {};
+      }
+      if (review && path.startsWith("/api/team-memory/tm1") && init?.method && init.method !== "GET") {
+        review.add("tm1");
+        return {};
+      }
+      if (review && path.startsWith("/api/team-memory")) {
+        return { entries: review.has("tm1") ? [] : [{ id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot", status: "proposed", updatedAt: now, source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 1000 } }] };
+      }
+      if (review && path.startsWith("/api/me/memory/tree")) {
+        const pending = (items: Array<{ review_id: string; title: string; may_decide: boolean }>) => items
+          .filter((item) => !review.has(item.review_id))
+          .map((item) => ({ ...item, kind: "new", topic: "dispatch", risky: false, mine: false, created: new Date(now - 60_000).toISOString() }));
+        return {
+          tiers: [
+            { scope: "me", kind: "me", name: "Personal", may_write: true, may_manage: true, trashed: 0, topics: [] },
+            { scope: "org", kind: "org", name: "Organization", may_write: false, may_manage: false, trashed: 0, topics: [] },
+            {
+              scope: "team:7", kind: "team", name: "Équipe terrain", may_write: true, may_manage: false, trashed: 0,
+              pending: pending([{ review_id: "r1", title: "Night shift rule", may_decide: true }]),
+              topics: [{ topic: "dispatch", count: 1, entries: [{ id: "n7", title: "Board order", topic: "dispatch", tags: [], excerpt: "Urgent first" }] }],
+            },
+            {
+              scope: "team:9", kind: "team", name: "Back office", may_write: true, may_manage: false, trashed: 0,
+              pending: pending([{ review_id: "r2", title: "Invoice wording", may_decide: false }]),
+              topics: [{ topic: "billing", count: 1, entries: [{ id: "n9", title: "Invoice QC", topic: "billing", tags: [], excerpt: "Check" }] }],
+            },
+          ],
+        };
+      }
       if (path.startsWith("/api/team-memory") && path.includes("section=dr-eggbot")) return { entries: [] };
       if (path.startsWith("/api/bots/perf/memory/journal")) return { entries: [] };
       if (path.startsWith("/api/bots/perf/memory") && init?.method === "DELETE") return { ok: true };
@@ -183,6 +217,7 @@ describe("MemoryManagerPanel page", () => {
     host.remove();
     delete (globalThis as { __memoryWide?: boolean }).__memoryWide;
     delete (globalThis as { __memoryLinks?: boolean }).__memoryLinks;
+    delete (globalThis as { __memoryReview?: Set<string> }).__memoryReview;
     vi.restoreAllMocks();
   });
 
@@ -508,6 +543,78 @@ describe("MemoryManagerPanel page", () => {
     await act(async () => { (host.querySelector('[data-memory-nav="review"]') as HTMLButtonElement).click(); });
     expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(1);
   });
+  // #3106 (the owner, 2026-11-09): "why dont I see my perspicax teams?" One tier per Perspicax team, by its real name.
+  it("lists one tier per Perspicax team of the overview, with its real name and folders", async () => {
+    (globalThis as { __memoryReview?: Set<string> }).__memoryReview = new Set();
+    await render();
+    for (const [scope, name] of [["team:7", "Équipe terrain"], ["team:9", "Back office"]]) {
+      const tier = host.querySelector(`[data-memory-tier="perspicax:${scope}"]`);
+      expect(tier, scope).not.toBeNull();
+      expect(tier!.textContent).toContain(name);
+    }
+    expect(host.querySelector('[data-memory-tier="perspicax:org"]')).not.toBeNull();
+    expect(host.querySelector('[data-memory-folder="team:7/dispatch"]')).not.toBeNull();
+    expect(host.querySelector('[data-memory-folder="team:9/billing"]')).not.toBeNull();
+  });
+
+  // #3106 (the owner, 2026-11-09): "I should be able to approve, deny" in Review.
+  it("Review: approve and deny decide a proposal, the row leaves and the count drops; no button where the viewer may not decide", async () => {
+    const decided = new Set<string>();
+    (globalThis as { __memoryReview?: Set<string> }).__memoryReview = decided;
+    (globalThis as { __memoryWide?: boolean }).__memoryWide = true;
+    await render();
+    const nav = () => host.querySelector('[data-memory-nav="review"]') as HTMLButtonElement;
+    await act(async () => { nav().click(); });
+    await settle();
+    const rowOf = (title: string) => Array.from(host.querySelectorAll<HTMLElement>("[data-memory-note-row]")).find((row) => row.textContent?.includes(title));
+    const titles = () => Array.from(host.querySelectorAll<HTMLElement>("[data-memory-note-row]")).map((row) => row.querySelector("[data-memory-row-open] span span")?.textContent ?? "");
+    expect(titles().sort()).toEqual(["Invoice wording", "Night shift rule", "OMB"].sort());
+    expect(nav().textContent).toContain("3");
+    // Not the viewer's to decide: no button and no box (hidden, never greyed).
+    expect(rowOf("Invoice wording")!.querySelector("[data-memory-row-approve]")).toBeNull();
+    expect(rowOf("Invoice wording")!.querySelector("[data-memory-row-deny]")).toBeNull();
+    expect(rowOf("Invoice wording")!.querySelector('input[type="checkbox"]')).toBeNull();
+
+    await act(async () => { (rowOf("Night shift rule")!.querySelector("[data-memory-row-approve]") as HTMLButtonElement).click(); });
+    await settle();
+    await wait();
+    await settle();
+    expect(calls.some((call) => call.method === "POST" && call.path === "/api/me/memory/reviews/r1/approve")).toBe(true);
+    expect(rowOf("Night shift rule")).toBeUndefined();
+    expect(nav().textContent).toContain("2");
+
+    await act(async () => { (rowOf("OMB")!.querySelector("[data-memory-row-deny]") as HTMLButtonElement).click(); });
+    await settle();
+    await wait();
+    await settle();
+    expect(calls.some((call) => call.method === "DELETE" && call.path.startsWith("/api/team-memory/tm1?section="))).toBe(true);
+    expect(rowOf("OMB")).toBeUndefined();
+    expect(titles()).toEqual(["Invoice wording"]);
+    expect(nav().textContent).toContain("1");
+  });
+
+  it("Review: the bulk bar approves the ticked proposals, and denies through Perspicax with a reason", async () => {
+    const decided = new Set<string>();
+    (globalThis as { __memoryReview?: Set<string> }).__memoryReview = decided;
+    (globalThis as { __memoryWide?: boolean }).__memoryWide = true;
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-nav="review"]') as HTMLButtonElement).click(); });
+    await settle();
+    const boxes = Array.from(host.querySelectorAll<HTMLInputElement>('[data-memory-note-row] input[type="checkbox"]'));
+    expect(boxes.length).toBe(2);
+    for (const box of boxes) await act(async () => { box.click(); });
+    expect(host.querySelector("[data-memory-bulk-move]")).toBeNull();
+    await act(async () => { (host.querySelector("[data-memory-bulk-deny]") as HTMLButtonElement).click(); });
+    await settle();
+    await wait();
+    await settle();
+    const refuse = calls.find((call) => call.path === "/api/me/memory/reviews/r1/refuse");
+    expect(refuse?.method).toBe("POST");
+    expect(JSON.parse(refuse!.body!).reason).toBeTruthy();
+    expect(calls.some((call) => call.method === "DELETE" && call.path.startsWith("/api/team-memory/tm1"))).toBe(true);
+    expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(1);
+  });
+
   // 2026-11-03 (the owner): "I need to be able to see if it's linked to a bot" and
   // delete a folder no bot is linked to; the stray "dr eggbot 0 · No folders yet" tier.
   it("says which folders a bot is linked to, and lets an unlinked one be deleted", async () => {

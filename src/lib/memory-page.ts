@@ -40,6 +40,18 @@ export interface PageRow {
   folderPath: string;
 }
 
+/**
+ * #3106: whether the viewer may approve or deny this proposal from the Review
+ * list. A Perspicax review says so itself (`may_decide`: a member of the
+ * section or an admin); a team-memory proposal is decided by anyone who sees
+ * the section (the server refuses a reader who cannot write).
+ */
+export function canDecideRow(entry: PageRow): boolean {
+  if (entry.row.status !== "proposed") return false;
+  if (entry.row.reviewId) return entry.row.mayDecide === true;
+  return entry.source.kind === "team" && entry.source.mayWrite !== false;
+}
+
 const TEAM_COLORS = [
   "var(--color-warning)",
   "color-mix(in srgb, var(--color-unread) 55%, var(--color-danger))",

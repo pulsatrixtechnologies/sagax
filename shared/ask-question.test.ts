@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   answerWithoutPreamble,
+  visibleQuestionAnswer,
   capAnswerEcho,
   askQuestionSummary,
   ASK_USER_TOOL,
@@ -475,5 +476,27 @@ describe("isPersistentQuestionCard", () => {
     expect(shouldSettleRequestCard(question, "unavailable")).toBe(false);
     expect(shouldSettleRequestCard(question, "user")).toBe(true);
     expect(shouldSettleRequestCard({ requestType: "permission", tool: "Bash" }, "timeout")).toBe(true);
+  });
+});
+
+describe("visibleQuestionAnswer (#3007)", () => {
+  const questions = [{ question: "Quel est ton numéro de billet préféré ?", options: [{ label: "100" }, { label: "200" }] }];
+
+  it("shows one answer alone, never the English lead-in", () => {
+    const formatted = formatQuestionAnswers(questions, [["299783"]]);
+    expect(formatted.startsWith("The user answered your questions.")).toBe(true);
+    expect(visibleQuestionAnswer(formatted, questions)).toBe("299783");
+    expect(visibleQuestionAnswer(formatted)).toBe("299783");
+  });
+
+  it("shows each question above its answer when there are several", () => {
+    const two = [...questions, { question: "Pour quel client ?", options: [{ label: "Acme" }] }];
+    const shown = visibleQuestionAnswer(formatQuestionAnswers(two, [["200"], ["Acme"]]), two);
+    expect(shown).toBe("Quel est ton numéro de billet préféré ?\n200\n\nPour quel client ?\nAcme");
+    expect(shown).not.toContain("The user answered");
+  });
+
+  it("leaves a plain answer as it is", () => {
+    expect(visibleQuestionAnswer("Oui", questions)).toBe("Oui");
   });
 });

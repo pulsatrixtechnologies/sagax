@@ -315,6 +315,28 @@ export function answerWithoutPreamble(answer: string): string {
   return answer.startsWith(`${ANSWER_PREAMBLE}\n\n`) ? answer.slice(ANSWER_PREAMBLE.length + 2) : answer;
 }
 
+/** #3007: what the person sees in the chat for an answer given after the
+ * engine stopped holding the question (a harness ask_choice, a late reply).
+ * Never the model-facing English lead-in: one question shows its answer
+ * alone, several show each question above its answer. The model still gets
+ * the question through promptWithReply. */
+export function visibleQuestionAnswer(answer: string, questions?: readonly AskQuestion[] | null): string {
+  if (!answer.startsWith(`${ANSWER_PREAMBLE}\n\n`)) return answer;
+  const list = questions ?? [];
+  if (list.length) {
+    const byQuestion = questionAnswersByQuestion(answer, list);
+    const pairs = list
+      .map((question) => [question.question, byQuestion[question.question]?.trim() ?? ""] as const)
+      .filter(([, value]) => value);
+    if (pairs.length === 1) return pairs[0][1];
+    if (pairs.length > 1) return pairs.map(([question, value]) => `${question}\n${value}`).join("\n\n");
+  }
+  const body = answerWithoutPreamble(answer);
+  const single = /^Q: [^\n]*\nA: ([\s\S]*)$/.exec(body);
+  if (single && !single[1].includes("\n\nQ: ")) return single[1].trim();
+  return body;
+}
+
 /** Sized so a reply typed in a card is never cut; only a longer chat message
  * echoed back as free text (Cursor's skipped-question reason) is. */
 export const MAX_ANSWER_ECHO = ANSWER_PREAMBLE.length + MAX_QUESTIONS

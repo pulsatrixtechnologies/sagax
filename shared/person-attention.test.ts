@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { personAttention, personAttentionText } from "./person-attention.ts";
+import { personAttention, personAttentionText, withoutBareNeedsInput } from "./person-attention.ts";
 
 // The shape of the 2026-11-05 dispatch report (names and clients neutral).
 const DISPATCH_REPORT = [
@@ -48,5 +48,18 @@ describe("personAttention", () => {
 
   it("says it in one plain fallback line per item", () => {
     expect(personAttentionText({ kind: "human", botName: "Atlas", items: [{ text: "**100201** decide" }] })).toBe("Atlas needs you:\n- **100201** decide");
+  });
+});
+
+describe("withoutBareNeedsInput (#3007)", () => {
+  it("drops a line that is only the marker", () => {
+    expect(withoutBareNeedsInput("NEEDS INPUT")).toBe("");
+    expect(withoutBareNeedsInput("**NEEDS INPUT:**")).toBe("");
+    expect(withoutBareNeedsInput("J'attends ta réponse.\nNEEDS INPUT")).toBe("J'attends ta réponse.");
+  });
+
+  it("keeps a marker that carries its question, and any other text", () => {
+    expect(withoutBareNeedsInput("NEEDS INPUT: Quel billet ?")).toBe("NEEDS INPUT: Quel billet ?");
+    expect(withoutBareNeedsInput("Bonjour")).toBe("Bonjour");
   });
 });

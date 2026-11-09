@@ -164,3 +164,19 @@ describe("a reply to a widget", () => {
     expect(transcriptText({ ...answer, replyToId: plain.id }, new Map([[plain.id, plain]]), "Milind")).toBe("[replying to Assistant: “Original answer”]\nLooks right");
   });
 });
+
+describe("a reply to a question card (#3007)", () => {
+  const cardMessage = message({ id: "card-1", kind: "options", text: undefined, card: { title: "Your bot has a question", subtitle: "Quel billet ?", requestId: "ask-choice-1", requestType: "question" } as Message["card"] });
+
+  it("tells the model the line answers its question, which the persisted text never carries", () => {
+    const prompt = promptWithReply("299783", cardMessage, "Alex");
+    expect(prompt).toContain("answer to the question you asked");
+    expect(prompt).toContain("Quel billet ?");
+    expect(prompt.endsWith("Current message:\n299783")).toBe(true);
+  });
+
+  it("replays the answer with its question in the history", () => {
+    const line = message({ id: "u1", role: "user", text: "299783", replyToId: "card-1" });
+    expect(transcriptText(line, new Map([["card-1", cardMessage]]))).toBe("[answering your question: “Quel billet ?”]\n299783");
+  });
+});

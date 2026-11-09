@@ -1740,4 +1740,34 @@ describe("await_turn and a pending card (#2922)", () => {
     const again = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
     expect(again.body).toMatchObject({ finished: true, reply: "Done with B." });
   });
+
+  it("an answered ask_choice waits for the answer's own turn: never the words before it as the reply (#3007)", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "ask me", mode: "async" });
+    const threadId = String(sent.body.thread_id);
+    w.add(threadId, { role: "bot", kind: "text", text: "Je pose la question." });
+    const cardRow = w.add(threadId, { role: "bot", kind: "options", text: "", question: { answered: true, late: true } });
+    w.add(threadId, { role: "bot", kind: "text", text: "NEEDS INPUT" });
+    // answered, but the answer line still waits for the turn before it to end
+    const early = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 1_500 });
+    expect(early.body.finished).toBe(false);
+    expect(early.body.reply ?? "").not.toContain("NEEDS INPUT");
+    w.add(threadId, { role: "user", kind: "text", text: "299783", replyToId: cardRow.id });
+    w.add(threadId, { role: "bot", kind: "text", text: "Noté : 299783." });
+    const done = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(done.body).toMatchObject({ finished: true, reply: "Noté : 299783." });
+  });
+
+  it("an engine-held question answered mid-turn: the reply is the words after the card (#3007)", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "ask me", mode: "async" });
+    const threadId = String(sent.body.thread_id);
+    w.add(threadId, { role: "bot", kind: "text", text: "Une question d'abord." });
+    w.add(threadId, { role: "bot", kind: "options", text: "", question: { answered: true, late: false } });
+    w.add(threadId, { role: "bot", kind: "text", text: "Merci, c'est fait." });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, reply: "Merci, c'est fait." });
+  });
 });

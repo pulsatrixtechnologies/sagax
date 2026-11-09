@@ -5513,6 +5513,36 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(problems).not.toMatch(/__|5f/);
   });
 
+  it("keeps a failure's whole hint in the problem line, never cut mid-word (#3127)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const hint = "\"res_0000000000000000\" is not a handle of this server (\"files\"): its handles look like \"files:r1.ab12\". Pass the whole handle the shaped result named, to the query_result tool of the server that returned it.";
+    tool(h, "thread-1", "a", "mcp__files__query_result", false, hint);
+    tool(h, "thread-1", "b", "mcp__files__query_result", false, hint);
+    const saved = "Use the saved result id (r- and a UUID) and a non-negative integer offset from its notice.";
+    tool(h, "thread-1", "c", "tool_result_read", false, saved);
+    tool(h, "thread-1", "d", "tool_result_read", false, saved);
+    done(h, "thread-1");
+    const problems = runOf(h).problems ?? "";
+    expect(problems).toContain(hint);
+    expect(problems).toContain(saved);
+  });
+
+  it("cuts a very long failure at a word, marked, and the whole text within its bound (#3127)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const long = Array.from({ length: 120 }, (_, i) => `word${i}`).join(" ");
+    tool(h, "thread-1", "a", "mcp__files__list", false, long);
+    tool(h, "thread-1", "b", "mcp__files__list", false, long);
+    done(h, "thread-1");
+    const problems = runOf(h).problems ?? "";
+    expect(problems.length).toBeLessThanOrEqual(1_000);
+    expect(problems).toMatch(/word\d+…/);
+    expect(problems).not.toContain(long);
+  });
+
   it("a connector whose sign-in expired is said plainly with its link, from one refusal (#2749)", async () => {
     const h = harness(start);
     const routine = h.manager.create(input());

@@ -32,7 +32,7 @@ import { resolveCliSpawn } from "./env-path.ts";
 import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp/mcp-directory.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
 import { parseGateSearch, pinnedToolNames, searchedCatalog } from "./mcp/mcp-gate-search.ts";
-import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, exampleQuery } from "./mcp/mcp-shape.ts";
+import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, UPSTREAM_QUERY_TOOL_NAME, answerQuery, describeShape, exampleQuery, isNamedHandle, isUpstreamHandle } from "./mcp/mcp-shape.ts";
 import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText } from "./mcp/mcp-trim.ts";
 import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
 import { parseAgentsWithhold, resolvedServerLog } from "./mcp/agents-tool-priority.ts";
@@ -548,6 +548,16 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   routeLine(line);
 });
 
+/** The arguments of a call to the server's own query tool, called by name
+ * or through the remote directory's call_tool (#3127). */
+function upstreamQueryArguments(name: unknown, args: unknown): Record<string, unknown> | undefined {
+  if (name === UPSTREAM_QUERY_TOOL_NAME) return isRecord(args) ? args : undefined;
+  if (DIRECTORY && typeof name === "string" && isRecord(args) && directoryCallTarget(name, args) === UPSTREAM_QUERY_TOOL_NAME) {
+    return isRecord(args.arguments) ? args.arguments : undefined;
+  }
+  return undefined;
+}
+
 function routeLine(line: string): void {
   let message: Json | undefined;
   if (line.trim()) {
@@ -566,9 +576,31 @@ function routeLine(line: string): void {
   // The gate's own read-only tool: it reads a result this process holds and
   // never reaches upstream, so no selection, alias or approval applies.
   if (BUDGET > 0 && message?.method === "tools/call" && params?.name === QUERY_TOOL_NAME) {
+    // #3127: a handle the server minted itself (res_…) is not held here; it
+    // is read by the server's own query tool, so the call goes there, through
+    // every check a call of that tool meets, instead of failing.
+    const asked = params.arguments;
+    if (isRecord(asked) && isUpstreamHandle(asked.result) && !heldResults.get(asked.result)) {
+      params.name = UPSTREAM_QUERY_TOOL_NAME;
+      params.arguments = { handle: asked.result, ...(typeof asked.query === "string" ? { expression: asked.query } : {}) };
+      line = JSON.stringify(message);
+    } else {
+      if (!id) return;
+      process.stderr.write(resolvedServerLog(NAME, QUERY_TOOL_NAME));
+      process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result: answerQuery(heldResults, params.arguments, BUDGET) })}\n`);
+      return;
+    }
+  }
+  // #3127, the other way: the server's own query tool handed a handle the
+  // gate shaped ("<server>:r1.tag"). The upstream never held it; the gate
+  // answers it as a query_result call, or says which server holds it.
+  const upstreamQuery = message?.method === "tools/call" && params ? upstreamQueryArguments(params.name, params.arguments) : undefined;
+  if (BUDGET > 0 && upstreamQuery && isNamedHandle(upstreamQuery.handle)) {
     if (!id) return;
+    const asked = upstreamQuery;
+    const query = typeof asked.expression === "string" ? asked.expression : typeof asked.query === "string" ? asked.query : "@";
     process.stderr.write(resolvedServerLog(NAME, QUERY_TOOL_NAME));
-    process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result: answerQuery(heldResults, params.arguments, BUDGET) })}\n`);
+    process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message?.id, result: answerQuery(heldResults, { result: asked.handle, query }, BUDGET) })}\n`);
     return;
   }
   // #2189: a name agents already owns is not served here.

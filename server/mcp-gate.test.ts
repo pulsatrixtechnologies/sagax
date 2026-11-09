@@ -70,7 +70,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     return send(msg.id, catalog(msg.params));
   }
   if (msg.method === "tools/call") {
-    appendFileSync(process.env.SCRIPT + ".calls", msg.params.name + "\\n");
+    appendFileSync(process.env.SCRIPT + ".calls", msg.params.name + (script.recordArgs ? " " + JSON.stringify(msg.params.arguments) : "") + "\\n");
     send(msg.id, { content: [{ type: "text", text: script.text ?? "executed" }] });
     if (delayedList) { send(delayedList.id, catalog()); delayedList = undefined; }
     return;
@@ -624,6 +624,44 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(bare).toMatchObject({ isError: true });
       expect(bare.content[0].text).toContain("not a handle of this server");
       expect(existsSync(join(scratch, "reply.json.calls"))).toBe(true);
+    });
+  });
+
+  describe("a handle given to the other family's query tool (#3127)", () => {
+    const products = Array.from({ length: 300 }, (_, i) => ({ id: `p${i}`, name: `Bar ${i}`, price: 100 + i, blurb: "x".repeat(300) }));
+    const full = JSON.stringify({ products });
+    const callWithArgs = async (name: string, args: unknown, id: number) => {
+      send({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
+      return JSON.parse(await nextLine());
+    };
+
+    it("forwards a handle the server minted itself from query_result to the server's api_result_query", async () => {
+      start({ text: "[1,2,3]", recordArgs: true }, {}, SCOPED_UPSTREAM);
+      const answer = await callWithArgs("query_result", { result: "res_58e88a3adbc84612", query: "length(items)" }, 1);
+      expect(answer.result.isError).toBeUndefined();
+      expect(answer.result.content[0].text).toBe("[1,2,3]");
+      expect(readFileSync(join(scratch, "reply.json.calls"), "utf8"))
+        .toBe('api_result_query {"handle":"res_58e88a3adbc84612","expression":"length(items)"}\n');
+    });
+
+    it("answers a handle the gate shaped, given to api_result_query, without the server", async () => {
+      start({ text: full, recordArgs: true }, {}, SCOPED_UPSTREAM);
+      const handle = heldHandle((await call("read")).result.content[0].text);
+      const answer = await callWithArgs("api_result_query", { handle, expression: "length(products)" }, 2);
+      expect(answer.result.isError).toBeUndefined();
+      expect(answer.result.content[0].text).toBe("300");
+      // the alias spelling of the server's own tool is read the same way
+      const aliased = await callWithArgs("api_result_query", { handle, query: "products[0].name" }, 3);
+      expect(aliased.result.content[0].text).toBe('"Bar 0"');
+      expect(readFileSync(join(scratch, "reply.json.calls"), "utf8")).toBe("read {}\n");
+    });
+
+    it("says which server holds another server's shaped handle given to api_result_query", async () => {
+      start({ text: full, recordArgs: true }, {}, SCOPED_UPSTREAM);
+      const answer = await callWithArgs("api_result_query", { handle: "files:r1.ab12", expression: "@" }, 1);
+      expect(answer.result).toMatchObject({ isError: true });
+      expect(answer.result.content[0].text).toContain('held by the "files" server');
+      expect(existsSync(join(scratch, "reply.json.calls"))).toBe(false);
     });
   });
 

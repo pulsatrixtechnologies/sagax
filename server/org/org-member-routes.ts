@@ -727,6 +727,11 @@ function memberStep(tool: Record<string, unknown> | null): MemberStep {
   return step;
 }
 
+/** The message kinds a person reads as chat. A routine run's result card
+ * (#3152) is one: it lands in the bot's main conversation, so a thread read
+ * shows it there. A turn's reply (replyAfter) stays the bot's own text. */
+const MEMBER_TEXT_KINDS = new Set(["text", "nudge", "access", "routine.run"]);
+
 /** Reads a Sagax message page (as the person saw it) after a cursor. */
 export function readThreadPage(threadId: string, raw: unknown, since: string | null, expireDays?: number, translate?: ApprovalTranslate): ThreadRead {
   const list = Array.isArray(objectOf(raw)?.messages) ? (objectOf(raw)!.messages as unknown[]) : [];
@@ -744,7 +749,7 @@ export function readThreadPage(threadId: string, raw: unknown, since: string | n
       continue;
     }
     const text = str(m.text);
-    if ((kind === "text" || kind === "nudge" || kind === "access") && text !== null && (m.role === "user" || m.role === "bot")) {
+    if (MEMBER_TEXT_KINDS.has(kind) && text !== null && (m.role === "user" || m.role === "bot")) {
       const sender = objectOf(m.sender);
       messages.push({ id: m.id as string, role: m.role, kind, text, at: typeof m.at === "number" ? m.at : null, sender: str(sender?.name) ? { name: sender!.name as string } : null });
     }

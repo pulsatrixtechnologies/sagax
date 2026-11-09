@@ -1244,6 +1244,14 @@ describe("transcripts", () => {
     expect(texts).toEqual(["mcp__agents__sagax_settings (failed): Unknown setting key \"rules\". Use list first.", "mcp__agents__sagax_settings"]);
   });
 
+  it("a routine run's result card in the chat reads as a note (#3152)", async () => {
+    const { w, c } = await seeded();
+    const tid = [...w.threads.keys()][0]!;
+    w.add(tid, { role: "bot", kind: "routine.run", text: "Completed with problems.\n\nQuatre GO attendent la personne." });
+    const r = await w.api.call(c, "read_latest_page", { agent_id: "bot-a", limit: 1 });
+    expect(r.body.entries).toMatchObject([{ kind: "note", role: "agent", text: "Completed with problems.\n\nQuatre GO attendent la personne." }]);
+  });
+
   it("read_latest_page pages backwards with sequence cursors", async () => {
     const { w, c } = await seeded();
     const first = await w.api.call(c, "read_latest_page", { agent_id: "bot-a", limit: 4 });

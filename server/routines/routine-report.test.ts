@@ -4,6 +4,7 @@ import {
   ROUTINE_QUIET_MARKER,
   flowRunBlockedReason,
   routineReportOutcome,
+  routineReportProse,
   routineRunReportable,
 } from "./routine-report.ts";
 
@@ -185,5 +186,26 @@ describe("items only the person can do (2026-11-05)", () => {
     expect(outcome.report).toBe("- [HUMAIN] **100201**: decide which client it belongs to.");
     expect(routineRunReportable({ status: "completed", postResults: false, attention: true })).toBe(true);
     expect(routineRunReportable({ status: "completed", postResults: false })).toBe(false);
+  });
+});
+
+describe("routineReportProse (#3152)", () => {
+  it("drops the status line and turns a markdown table into a short list", () => {
+    const outcome = routineReportOutcome([
+      "RUN_STATUS: partial: lecture refusée.",
+      "",
+      "| Point | État | GO |",
+      "|:---|---|---:|",
+      "| Sagax 0.8.76 | à surveiller | GO requis |",
+      "| Jeton GitHub |  | GO requis |",
+      "",
+      "Deux GO attendent.",
+    ].join("\n"));
+    expect(outcome.declared).toEqual({ status: "partial", reason: "lecture refusée." });
+    expect(outcome.report).toBe("- Sagax 0.8.76: à surveiller, GO requis\n- Jeton GitHub: GO requis\n\nDeux GO attendent.");
+  });
+
+  it("leaves pipes that are not a table as written", () => {
+    expect(routineReportProse("a | b\n| only one row |\nend")).toBe("a | b\n| only one row |\nend");
   });
 });

@@ -362,6 +362,17 @@ describe("threads, approvals and nudges", () => {
     expect(replyAfter(read.messages, "m2")).toBeNull();
   });
 
+  it("shows a routine run's result card in the chat it landed in (#3152)", () => {
+    const page = { messages: [
+      { id: "m1", role: "user", kind: "text", text: "hi", at: 1 },
+      { id: "r1", role: "bot", kind: "routine.run", text: "Completed with problems.\n\nQuatre GO attendent la personne.", at: 2, routineRun: { runId: "run1", status: "completed" } },
+    ] };
+    expect(readThreadPage("t1", page, "m1").messages).toEqual([
+      { id: "r1", role: "bot", kind: "routine.run", text: "Completed with problems.\n\nQuatre GO attendent la personne.", at: 2, sender: null },
+    ]);
+    expect(replyAfter(readThreadPage("t1", page, "m1").messages, null)).toBeNull();
+  });
+
   it("serves a thread through the person's own read", async () => {
     status = () => "working";
     respond = () => ({ status: 200, body: { messages: [{ id: "m1", role: "user", kind: "text", text: "go", at: 1 }, { id: "m2", role: "bot", kind: "text", text: "on it", at: 2 }] } });

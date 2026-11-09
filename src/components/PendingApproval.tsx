@@ -772,7 +772,7 @@ export function PendingApprovalBox({
       {/* locale: the panel is memoized and its other props do not
           change with the language (see MessagesList in ChatView) */}
       <PendingApprovalPanel
-        key={pending.requestId}
+        key={`${pending.requestId}-panel`}
         pending={pending}
         count={approvals.length}
         index={index}
@@ -790,7 +790,7 @@ export function PendingApprovalBox({
           : undefined}
       />
       <PendingApprovalActions
-        key={pending.requestId}
+        key={`${pending.requestId}-actions`}
         pending={pending}
         threadId={threadId}
         bot={botFor(pending)}

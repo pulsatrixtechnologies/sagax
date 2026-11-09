@@ -2,6 +2,8 @@
 /** syncRoutineRunToSource (#1388). Pure move from server/index.ts. */
 import { wakeTopicOf } from "../routines/routine-run-card.ts";
 import type { RoutineRun } from "../routines/routines.ts";
+import { textLanguage } from "../../shared/looks-french.ts";
+import { ROUTINE_QUIET_MARKER } from "../routines/routine-report.ts";
 import { needsYouNotificationWords } from "../runtime-events/question-notification-words.ts";
 export type Host = Record<string, any>;
 
@@ -17,6 +19,16 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   const host = getHost();
 
   const known = host.routineSourceOwner(run);
+  // #3219: the NOTHING_TO_REPORT marker is a status the parser consumes; the
+  // run's own thread never shows it raw.
+  if (run.status === "completed" && run.threadId) {
+    const marker = new RegExp(`^[ \\t]*${ROUTINE_QUIET_MARKER}[ \\t]*$`, "gm");
+    const last = host.store.messagesFor(run.threadId)?.findLast?.((message) => message.role === "bot" && !message.kind && typeof message.text === "string" && message.text.trim());
+    if (last?.text && marker.test(last.text)) {
+      marker.lastIndex = 0;
+      host.store.patchMessage(run.threadId, last.id, { text: last.text.replace(marker, "").replace(/\n{3,}/g, "\n\n").trim() });
+    }
+  }
   // 2026-11-05: a completed report with items only the person can do
   // ([HUMAIN], needs_human, a question) always posts, as a card with them.
   const attentionLevel = run.status === "completed" && !run.quiet ? routineAttentionLevel(host, run) : "normal";
@@ -71,7 +83,10 @@ function syncRoutineRunToSource(run: RoutineRun): string | null{
   const fresh = host.routineRunCard(run, sourceThreadId, host.routineFullReport(run));
   // #2694: the person's feedback on a wake stays on its card across updates
   const card = existing?.routineRun?.feedback ? { ...fresh, feedback: existing.routineRun.feedback } : fresh;
-  const text = host.routineRunFallbackText(card);
+  // #3219: the line follows the language the run wrote in, else the person's.
+  const language = textLanguage(`${run.output ?? ""}\n${run.routineName ?? ""}`)
+    ?? (run.runAs ? host.languageOfPerson?.(run.runAs) : undefined);
+  const text = host.routineRunFallbackText(card, language);
   const statusChanged = existing?.routineRun?.status !== run.status;
   const runBotRecord = host.store.bot(run.botId);
   const attention = attentionFound && runBotRecord && run.threadId

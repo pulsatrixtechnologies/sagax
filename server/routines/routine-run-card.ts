@@ -94,7 +94,9 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
 
 /** The text of a run's message: what a client without the card draws, and
  * what the notification, the search and the thread preview read. */
-export function routineRunFallbackText(card: RoutineRunCardData): string {
+export function routineRunFallbackText(card: RoutineRunCardData, language?: string): string {
+  // #3219: a quiet run's line in the language of the conversation.
+  if (card.status === "nothing_to_report" && (language ?? "").toLowerCase().startsWith("fr")) return `Routine « ${card.routineName} » : rien à signaler`;
   const goalState = card.goalStatus === "needs-input"
     ? "needs your input"
     : card.goalStatus === "blocked"

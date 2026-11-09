@@ -213,8 +213,14 @@ describe("feedback service (#2618)", () => {
     expect(french.store.threads.get("t-other")!.at(-1)!.card?.title).toBe("Qu'est-ce qu'on signale?");
 
     const english = setup({ language: () => "en-US" });
-    english.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "ça marche toujours pas, tabarnak", principalId: "p1" });
+    english.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "this is still not working and I am angry, damn", principalId: "p1" });
     expect(english.store.threads.get("t-main")!.at(-1)!.card?.title).toBe("Looks like something isn't working.");
+  });
+
+  it("follows the conversation's language over the app setting (#3218)", () => {
+    const mixed = setup({ language: () => "en-US" });
+    mixed.service.maybeOffer({ botId: "b-main", threadId: "t-main", text: "ça marche toujours pas, tabarnak", principalId: "p1" });
+    expect(mixed.store.threads.get("t-main")!.at(-1)!.card?.title).toBe("On dirait que quelque chose ne marche pas.");
   });
 
   it("guesses from the words only when the person's language is unknown", () => {

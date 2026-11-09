@@ -6,6 +6,7 @@
 // queue and are retried. The same flow runs inline when someone types
 // /feedback in any chat, and any bot's conversation can get one pre-drafted
 // offer when the person sounds frustrated.
+import { textLanguage } from "../../shared/looks-french.ts";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../atomic.ts";
@@ -524,7 +525,10 @@ export function createFeedbackService(deps: FeedbackDeps) {
       .map((message) => message.text!);
     const signal = frustrationSignal(input.text, earlier);
     if (!signal) return;
-    const lang = languageFor(input.principalId, input.text);
+    // #3218: the card follows the conversation's language (the words of the
+    // person's messages), before the app setting.
+    const spoken = textLanguage([...earlier.slice(-3), input.text].join("\n"));
+    const lang = spoken ?? languageFor(input.principalId, input.text);
     const record = draft({
       owner: input.principalId,
       botId: bot.id,

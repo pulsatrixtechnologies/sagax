@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createSyncRoutineRunToSource } from "./syncRoutineRunToSource.ts";
 
-type Row = { id: string; kind: string; routineRun?: { runId: string; wakeTopic?: string }; attention?: unknown };
+type Row = { id: string; kind: string; text?: string; routineRun?: { runId: string; wakeTopic?: string }; attention?: unknown };
 
 /** #2694 review: the attention a finished routine puts on its own card reads
  * the person's feedback (thumbs-down, "less", "never") like a relayed card. */
@@ -70,6 +70,13 @@ describe("syncRoutineRunToSource and the person's feedback (#2694)", () => {
     expect(w.rows).toEqual([]);
     expect(w.rang).toEqual([]);
     expect(w.unread).toEqual([]);
+  });
+
+  it("strips the raw NOTHING_TO_REPORT marker from the run's own thread (#3219)", () => {
+    const w = world("normal", { output: "Rien de neuf aujourd'hui pour cette routine.\nNOTHING_TO_REPORT" });
+    w.rows.push({ id: "bot-final", kind: undefined, role: "bot", text: "Rien de neuf.\n\nNOTHING_TO_REPORT" } as never);
+    w.sync();
+    expect(w.rows.find((row) => row.id === "bot-final")?.text).toBe("Rien de neuf.");
   });
 
   it("a proactive wake reads its own kind", () => {

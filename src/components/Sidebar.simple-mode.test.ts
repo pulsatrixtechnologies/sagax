@@ -7,7 +7,7 @@ import type { SidebarDensity } from "@/lib/sidebar-preferences";
 const fixture = vi.hoisted(() => ({ showThreads: true, state: {} as Partial<AppState>, dispatch: vi.fn() }));
 vi.mock("@/lib/thread-preferences", () => ({ useShowThreads: () => fixture.showThreads, useThreadsLocationChoice: () => "header", useThreadsMode: () => ((fixture.showThreads) ? "header" : "one") as "one" | "header" | "sidebar" }));
 vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({}) }));
-vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }));
+vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node, flushSync: (fn: () => void) => fn() }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return { ...original, useStore: () => ({ state: { ...original.initialState, ...fixture.state }, dispatch: fixture.dispatch }) };

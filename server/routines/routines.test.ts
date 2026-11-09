@@ -5300,6 +5300,21 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(run.problems).toContain("2 tool steps failed and the run ended without a final message");
   });
 
+  it("a tool started before the final message whose failure lands after it leaves the run green", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    send(h, { threadId: "thread-1", itemId: "a", type: "item.started", itemType: "tool", title: "fetch" });
+    say(h, "thread-1", "Rapport : 3 factures vérifiées, aucune en retard.");
+    send(h, { threadId: "thread-1", itemId: "a", type: "item.completed", itemType: "tool", ok: false, output: "timeout" });
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.output).toBe("Rapport : 3 factures vérifiées, aucune en retard.");
+    expect(run.problems).toBeUndefined();
+    expect(isRoutineProblemRun(run)).toBe(false);
+  });
+
   it("the final message after the last tool stays the run's output; one moved-past miss is no problem", async () => {
     const h = harness(start);
     const routine = h.manager.create(input());

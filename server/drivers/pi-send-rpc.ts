@@ -24,6 +24,11 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
   };
   const awaitResponse = (command: string, timeoutMs = 20_000, key = command) =>
     new Promise<unknown>((resolve, reject) => {
+      // #3063: a retired attempt's child is gone; nothing will answer
+      if (ctx.retired) {
+        reject(new Error("pi restarted without extensions"));
+        return;
+      }
       const timer = setTimeout(() => {
         ctx.responseWaiters.delete(key);
         reject(new Error(`pi ${command} timed out`));
@@ -33,6 +38,7 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
     });
   ctx.child.stdin.on("error", () => rejectWaiters(new Error("pi stdin closed")));
   const send = (obj: Record<string, unknown>) => {
+    if (ctx.retired) return;
     appendNative(ctx.threadId, { dir: "out", source: "pi.rpc", msg: hooks.piNativeLogMessage(obj) });
     ctx.child.stdin.write(JSON.stringify(obj) + "\n");
   };
@@ -190,7 +196,36 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
       return hooks.isRefusal(error) ? "refused" as const : "indeterminate" as const;
     }
   };
+  // #3063: this child could not load an extension and the turn moves to a
+  // new one: release everything this attempt holds, with no turn.completed
+  // (the retry, under the same turn id, reports the outcome).
+  const retire = () => {
+    if (ctx.settled) return;
+    ctx.retired = true;
+    ctx.settled = true;
+    if (ctx.agentEndTimer) {
+      clearTimeout(ctx.agentEndTimer);
+      ctx.agentEndTimer = null;
+    }
+    for (const timer of ctx.askTimers) clearTimeout(timer);
+    ctx.askTimers.clear();
+    ctx.pending.clear();
+    rejectWaiters(new Error("pi restarted without extensions"));
+    try {
+      killCliTree(ctx.child);
+    } catch {
+      /* already gone */
+    }
+    if (ctx.mcpTempDir) {
+      try {
+        rmSync(ctx.mcpTempDir, { recursive: true, force: true });
+      } catch {
+        /* best effort */
+      }
+    }
+    if (ctx.deps.active.get(ctx.threadId)?.turnId === ctx.turnId) ctx.deps.active.delete(ctx.threadId);
+  };
   ctx.deps.active.set(ctx.threadId, { stop, turnId: ctx.turnId, pending: ctx.pending, child: ctx.child, steer: steerActiveTurn });
 
-  return Object.assign(ctx, { rejectWaiters, awaitResponse, send, flushAssistantText, settle, finishRun, stop });
+  return Object.assign(ctx, { rejectWaiters, awaitResponse, send, flushAssistantText, settle, finishRun, stop, retire });
 }

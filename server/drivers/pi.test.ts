@@ -897,6 +897,43 @@ describe("PiDriver turns (fake CLI)", () => {
     });
   });
 
+  // #3063: an extension pi cannot load (an AppleDouble ._voice-guard.ts)
+  // retries the turn once without extensions instead of failing it.
+  it("retries a turn without extensions when pi cannot load one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-pi-ext-retry-"));
+    const dump = join(dir, "dump.jsonl");
+    await create("extension-load-error", { FAKE_PI_DUMP: dump });
+    const threadId = "t-ext-retry-" + randomUUID();
+    const { turnId } = await instance.adapter.sendTurn({ threadId, text: "hi" });
+    const done = await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    expect(done).toMatchObject({ ok: true });
+    const own = recorder.events.filter((e) => e.turnId === turnId);
+    expect(own.filter((e) => e.type === "turn.started")).toHaveLength(1);
+    expect(own.filter((e) => e.type === "turn.completed")).toHaveLength(1);
+    expect(own.filter((e) => e.type === "runtime.error")).toEqual([]);
+    const runs = readFileSync(dump, "utf8").split("\n").filter(Boolean)
+      .map((line) => JSON.parse(line) as { argv?: string[] })
+      // the turn's children carry the Sagax MCP extension (a model probe does not)
+      .filter((row) => row.argv?.includes("-e"));
+    expect(runs).toHaveLength(2);
+    expect(runs[0]?.argv).not.toContain("--no-extensions");
+    expect(runs[1]?.argv).toContain("--no-extensions");
+    expect(instance.adapter.hasSession(threadId)).toBe(false);
+  });
+
+  it("fails once, with pi's words, when the turn without extensions fails too", async () => {
+    await create("extension-load-error-always");
+    const threadId = "t-ext-retry-fail-" + randomUUID();
+    const { turnId } = await instance.adapter.sendTurn({ threadId, text: "hi" });
+    const done = await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    expect(done).toMatchObject({ ok: false, stopReason: "failed" });
+    const own = recorder.events.filter((e) => e.turnId === turnId);
+    expect(own.filter((e) => e.type === "turn.completed")).toHaveLength(1);
+    expect(own.filter((e) => e.type === "runtime.error")).toEqual([
+      expect.objectContaining({ message: expect.stringContaining("Failed to load extension") }),
+    ]);
+  });
+
   it("drains stderr beyond pipe capacity while a cold turn runs", async () => {
     await create("stderr-flood");
     const { turnId } = await instance.adapter.sendTurn({ threadId: "t-stderr-flood", text: "hi" });

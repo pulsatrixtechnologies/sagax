@@ -21,6 +21,7 @@
 // Sagax holds no kit content: the folder is the operator's.
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
+import { isMacMetadataName, removeMacMetadata, withoutMacMetadata } from "../mac-metadata.ts";
 
 export const PI_KIT_DIR_ENV = "SAGAX_PI_KIT_DIR";
 export const PI_PACKAGES_DIR_ENV = "SAGAX_PI_PACKAGES_DIR";
@@ -200,26 +201,36 @@ export interface PiKitInstall {
   args: string[];
 }
 
+/** #3063: remove macOS metadata (`._*`, `.DS_Store`) from the folders pi
+ * loads code and skills from in a pi home, left by an earlier copy. */
+export function cleanPiHomeMetadata(home: string): number {
+  return ["extensions", "skills", "tools", "prompts", "themes"].reduce((sum, name) => sum + removeMacMetadata(join(home, name)), 0);
+}
+
 /** Copy the kit into a pi home and return the `-e` arguments that load it.
  * Every turn copies again, so a kit updated in place reaches the next turn,
  * and the identity in APPEND_SYSTEM.md is always the turn's own person. */
 export function installPiKit(kitDir: string, home: string, identity: PiKitIdentity, env: Record<string, string | undefined> = process.env): PiKitInstall {
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const args: string[] = [];
+  // #3063: a kit made on a Mac carries AppleDouble `._*.ts` files pi would
+  // load as extensions; they are never copied, never loaded, and those an
+  // earlier release copied are removed
+  cleanPiHomeMetadata(home);
 
   const extensions = join(kitDir, "extensions");
   if (existsSync(extensions) && statSync(extensions).isDirectory()) {
     const target = join(home, "extensions");
-    cpSync(extensions, target, { recursive: true, force: true });
+    cpSync(extensions, target, { recursive: true, force: true, filter: withoutMacMetadata });
     for (const name of readdirSync(extensions).sort()) {
-      if (!/\.(ts|js|mjs)$/.test(name)) continue;
+      if (isMacMetadataName(name) || !/\.(ts|js|mjs)$/.test(name)) continue;
       if (!statSync(join(extensions, name)).isFile()) continue;
       args.push("-e", join(target, name));
     }
   }
 
   const tools = join(kitDir, "tools");
-  if (existsSync(tools) && statSync(tools).isDirectory()) cpSync(tools, join(home, "tools"), { recursive: true, force: true });
+  if (existsSync(tools) && statSync(tools).isDirectory()) cpSync(tools, join(home, "tools"), { recursive: true, force: true, filter: withoutMacMetadata });
 
   const packages = readPiKitPackages(kitDir);
   if (existsSync(join(kitDir, "packages.txt"))) cpSync(join(kitDir, "packages.txt"), join(home, "packages.txt"), { force: true });

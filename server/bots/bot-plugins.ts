@@ -57,6 +57,7 @@ import { WORKSPACE_SCOPE as WORKSPACE_TOKEN_KEY } from "../github/github-credent
 import type { MarketplaceCredentialView } from "../../shared/github-credentials.ts";
 import { applyPluginConfig, checkPluginConfig, readConfigValues, readPluginConfigFields, writeConfigValues, type PluginConfigField, type PluginConfigValue } from "../plugins/plugin-config.ts";
 import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "../plugins/plugin-metadata-cache.ts";
+import { withoutMacMetadata } from "../mac-metadata.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const BOT_ID = /^[\w-]{1,80}$/;
@@ -165,6 +166,8 @@ export function copySanitizedPlugin(from: string, to: string, marketplaceEntry?:
     recursive: true,
     dereference: false,
     filter: (path) => {
+      // #3063: macOS metadata (`._*`, `.DS_Store`) never reaches an engine
+      if (!withoutMacMetadata(path)) return false;
       const stat = lstatSync(path);
       return !stat.isSymbolicLink() && !path.split(sep).includes(".git");
     },

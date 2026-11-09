@@ -33,6 +33,7 @@ import {
   INSTALLATION_CAPABILITIES_FILE, SKILLS_LIBRARY_INDEX_FORMAT, SKILLS_LIBRARY_INDEX_PART, SKILLS_LIBRARY_INDEX_VERSION, SKILLS_LIBRARY_RESTORE_IMPORT,
 } from "../shared/capability-stores.ts";
 import { WORKSPACE_BACKUP_RECONNECT, type WorkspaceBackupClientState, type WorkspaceBackupPrivateMetadata, type WorkspaceBackupReconnectCategory, type WorkspaceBackupSummary } from "../shared/workspace-backup.ts";
+import { engineMacMetadataPath } from "./mac-metadata.ts";
 
 export type { WorkspaceBackupSummary, WorkspaceBackupPrivateMetadata } from "../shared/workspace-backup.ts";
 export const MAX_WORKSPACE_BACKUP_BYTES = 10 * 1024 ** 3;
@@ -698,6 +699,9 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
         if (isAtRestTemp(name) || (!prefix && name === ".at-rest-originals")) continue;
         if (excludedWorkspaceAuthPath(path)) { reconnect.path(path); continue; }
         if (ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || restoredLibraryIndexPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path)) continue;
+        // #3063: macOS metadata in an engine's extensions or skills (an
+        // AppleDouble `._voice-guard.ts` pi tried to load) is never content
+        if (engineMacMetadataPath(path)) continue;
         // no secret in a backup (2026-10-18, « Exclure tout »): an engine's
         // saved sign-in, a person's sealed stores, the workspace's keys, the
         // phones' push registrations; whoever restores reconnects them
@@ -1412,7 +1416,7 @@ function prepareRestore(dataDir: string, id: string, manifest: Manifest): string
   // journal files would then be absent from the manifest.
   const stagedData = join(job, "staged", "data");
   const engineKeys = confidentialEngineKeys(stagedData, existsSync(join(stagedData, "bots.json")) ? privateJson(join(stagedData, "bots.json")) : [], manifest.sourceDataDir, false);
-  const installed = manifest.entries.filter((entry) => !ephemeralWorkspaceTokenPath(entry.path) && !restoredLibraryIndexPath(entry.path) && !confidentialDataScopePath(entry.path) && !savedSignInPath(entry.path) && !disposableEngineHomePath(entry.path) && !confidentialEngineSessionPath(entry.path, engineKeys));
+  const installed = manifest.entries.filter((entry) => !ephemeralWorkspaceTokenPath(entry.path) && !restoredLibraryIndexPath(entry.path) && !confidentialDataScopePath(entry.path) && !savedSignInPath(entry.path) && !disposableEngineHomePath(entry.path) && !confidentialEngineSessionPath(entry.path, engineKeys) && !engineMacMetadataPath(entry.path));
   for (const entry of installed.filter((entry) => entry.type === "directory")) folder(join(prepared, entry.path));
   for (const entry of installed) {
     const destination = join(prepared, entry.path);

@@ -142,6 +142,35 @@ describe("installPiKit", () => {
   });
 });
 
+describe("macOS metadata in the kit (#3063)", () => {
+  it("never copies or loads an AppleDouble ._*.ts or .DS_Store, and removes those already in the home", () => {
+    const dir = kit();
+    // an AppleDouble resource fork: binary, NUL bytes, a .ts name
+    writeFileSync(join(dir, "extensions", "._voice-guard.ts"), Buffer.from([0, 5, 22, 7, 0, 2, 0, 0]));
+    writeFileSync(join(dir, "extensions", "voice-guard.ts"), "export default () => {};\n");
+    writeFileSync(join(dir, "extensions", ".DS_Store"), Buffer.from([0, 0, 0, 1]));
+    writeFileSync(join(dir, "extensions", "lib", "._util.ts"), Buffer.from([0, 5, 22, 7]));
+    writeFileSync(join(dir, "tools", "._helper.sh"), Buffer.from([0, 5, 22, 7]));
+    const home = tempDir();
+    // left by an earlier release that copied the kit as is
+    mkdirSync(join(home, "extensions"), { recursive: true });
+    writeFileSync(join(home, "extensions", "._old.ts"), Buffer.from([0, 5, 22, 7]));
+    mkdirSync(join(home, "skills", "s"), { recursive: true });
+    writeFileSync(join(home, "skills", "s", "._SKILL.md"), Buffer.from([0, 5, 22, 7]));
+    const { args } = installPiKit(dir, home, {}, { PATH: "" });
+    const loaded = args.filter((_, index) => index % 2 === 1);
+    expect(loaded.some((path) => /[\\/]\._/.test(path) || path.endsWith(".DS_Store"))).toBe(false);
+    expect(loaded).toContain(join(home, "extensions", "voice-guard.ts"));
+    expect(existsSync(join(home, "extensions", "._voice-guard.ts"))).toBe(false);
+    expect(existsSync(join(home, "extensions", ".DS_Store"))).toBe(false);
+    expect(existsSync(join(home, "extensions", "lib", "._util.ts"))).toBe(false);
+    expect(existsSync(join(home, "tools", "._helper.sh"))).toBe(false);
+    expect(existsSync(join(home, "extensions", "._old.ts"))).toBe(false);
+    expect(existsSync(join(home, "skills", "s", "._SKILL.md"))).toBe(false);
+    expect(existsSync(join(home, "extensions", "lib", "util.ts"))).toBe(true);
+  });
+});
+
 describe("npm on PATH", () => {
   it("finds npm in a PATH folder only", () => {
     expect(npmOnPath({ PATH: npmBin() })).toBe(true);

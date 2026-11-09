@@ -14558,7 +14558,7 @@
   "routines.preflight.notice": "La routine « {name} » n'a pas démarré : {reason}",
   "pages.share.bot.legend": "Dans la bibliothèque du bot",
   "pages.share.bot.personal": "Personnelle",
-  "pages.share.bot.personalHint": "Vous seul voyez cette Page dans la bibliothèque.",
+  "pages.share.bot.personalHint": "Toi seul vois cette Page dans la bibliothèque.",
   "pages.share.bot.shared": "Partagée dans la bibliothèque",
   "pages.share.bot.sharedHint": "Toute personne qui peut utiliser ce bot peut la lire et lui demander de l'actualiser.",
   "botPanel.library.sharedPages": "Pages partagées",
@@ -14567,5 +14567,5 @@
   "pages.refreshPrompt": "Actualise la Page « {title} » avec des informations à jour.",
   "pages.refreshAsked": "Actualisation demandée au bot.",
   "systemBot.feedback.title": "Bogues, idées, questions",
-  "systemBot.feedback.description": "Signalez un bogue, proposez une idée ou posez une question à l'équipe Sagax."
+  "systemBot.feedback.description": "Signale un bogue, propose une idée ou pose une question à l'équipe Sagax."
 }

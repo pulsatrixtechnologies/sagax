@@ -4,7 +4,7 @@
 // json() it sent before failing) and then throws must never get a second
 // writeHead: ERR_HTTP_HEADERS_SENT from inside the catch escaped the async
 // handler as an unhandled rejection and took the whole server down twice in
-// four minutes on GOX (0.8.77). Log the original error with the route, close
+// four minutes on a hosted server (0.8.77). Log the original error with the route, close
 // the half-sent reply, and keep the process up.
 import type { ServerResponse } from "node:http";
 

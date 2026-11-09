@@ -66,22 +66,29 @@ public enum ShapeAvatarPresets {
         objectIds.contains { $0.rawValue == value }
     }
 
+    /// A saved def that carries an object preset's id is a stale copy of that
+    /// preset: the current preset wins (desktop avatarDefForShape, 2026-11-09).
+    public static func current(_ def: ShapeAvatarDef) -> ShapeAvatarDef {
+        if let id = def.id, let shape = objectIds.first(where: { $0.rawValue == id }), let preset = byShape(shape) { return preset }
+        return def
+    }
+
     /// Definition for the current shape: custom avatarDef, or the object preset.
     public static func definition(for look: MascotLook) -> ShapeAvatarDef? {
-        if let def = look.avatarDef { return def }
+        if let def = look.avatarDef { return current(def) }
         if let shape = look.shape, isObjectShape(shape) { return byShape(shape) }
         return nil
     }
 
     public static func definition(for look: CompleteMascotLook) -> ShapeAvatarDef? {
-        if let def = look.avatarDef { return def }
+        if let def = look.avatarDef { return current(def) }
         if isObjectShape(look.shape) { return byShape(look.shape) }
         return nil
     }
 
     /// Like desktop avatarDefForShape: custom wins, else object preset for object ids.
     public static func avatarDef(for shape: MascotShape, avatarDef: ShapeAvatarDef?) -> ShapeAvatarDef? {
-        if let avatarDef { return avatarDef }
+        if let avatarDef { return current(avatarDef) }
         return byShape(shape)
     }
 

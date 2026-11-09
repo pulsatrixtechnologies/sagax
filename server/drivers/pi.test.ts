@@ -1061,6 +1061,18 @@ describe("PiDriver turns (fake CLI)", () => {
     expect(recorder.events.some((e) => e.type === "item.completed" && e.threadId === "t-local-refused")).toBe(false);
   });
 
+  it("never answers on pi's default model when it cannot switch to a hosted one (#3079)", async () => {
+    const home = mkdtempSync(join(tmpdir(), "omb-pi-hosted-refused-"));
+    await create(undefined, { HOME: home, FAKE_PI_SET_MODEL_REFUSE: "1" });
+    await instance.adapter.sendTurn({ threadId: "t-hosted-refused", text: "test", model: "openrouter/anthropic/claude-fable-5.1" }).catch(() => undefined);
+    const done = await recorder.until((e) => e.type === "turn.completed" && e.threadId === "t-hosted-refused");
+    expect(done).toMatchObject({ ok: false });
+    const error = recorder.events.find((e) => e.type === "runtime.error" && e.threadId === "t-hosted-refused") as { message: string };
+    expect(error.message).toMatch(/^pi could not switch to the model anthropic\/claude-fable-5\.1 on openrouter, so it did not answer on another model\./);
+    expect(error.message).not.toMatch(/xai/i);
+    expect(recorder.events.some((e) => e.type === "item.completed" && e.threadId === "t-hosted-refused")).toBe(false);
+  });
+
   it("writes a local model into the payer's own pi home, the one the child reads", async () => {
     const home = mkdtempSync(join(tmpdir(), "omb-pi-payer-home-"));
     const payerHome = join(home, "principals", "pr_test", "piAgent-key");

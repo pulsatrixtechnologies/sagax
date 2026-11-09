@@ -9,7 +9,10 @@ function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHos
   const { claudeAiConnectorsForTurn } = host;
 
   // the same payer-is-speaker rule as the connectors section (engineConnectorsPromptFor)
-  const account = host.accountConnectorInput(bot, instance, speaker);
+  const account = {
+    ...host.accountConnectorInput(bot, instance, speaker),
+    ...(host.isRelayPart?.(threadId) ? { engineRelay: true } : {}),
+  };
   const builtins = [
     ...(integrations.browser ? ["the built-in browser"] : []),
     ...(computer ? ["a computer"] : []),

@@ -36,6 +36,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     engineTurnLevel,
     fitTurnImagesForModel,
     grokCloudConnectorsForTurn,
+    isRelayPart,
     guardTurnDispatch,
     handoffs,
     harnessCommandSource,
@@ -218,7 +219,11 @@ export function createDispatchStartTurn(host: StartTurnHost) {
         return userSkillsDir ? { userSkillsDir } : {};
       })(),
       claudeAiConnectors: claudeAiConnectorsFor(state.bot, state.instance, state.speaker, turnAccess?.via),
-      grokCloudConnectors: grokCloudConnectorsForTurn(accountConnectorInput(state.bot, state.instance, state.speaker, turnAccess?.via)),
+      grokCloudConnectors: grokCloudConnectorsForTurn({
+        ...accountConnectorInput(state.bot, state.instance, state.speaker, turnAccess?.via),
+        // a run_with_engine part loads this person's grok.com connectors
+        ...(isRelayPart(state.threadId) ? { engineRelay: true } : {}),
+      }),
       ...pluginDirsFor(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker)),
       mcpCallTimeoutMs: mcpCallTimeoutMinutes(cfg) * 60_000,
       ...(() => { const approvalWaitMs = routineApprovalWaitMs?.(state.threadId); return approvalWaitMs ? { approvalWaitMs } : {}; })(),
@@ -243,7 +248,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       const customMcp = state.instance.adapter.capabilities.customMcp === true;
       deferConnectorsPatch(() => {
         store.patchTask(botId, threadId, {
-          connectors: turnConnectorsFor(connectorsBot, instance, speaker, integrations, principal, customMcp),
+          connectors: turnConnectorsFor(connectorsBot, instance, speaker, integrations, principal, customMcp, threadId),
         });
         turnTrace(threadId, "connectors-patched");
       });

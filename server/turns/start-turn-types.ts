@@ -195,6 +195,7 @@ export type StartTurnHost = {
   generateThreadTitle: any,
   githubWithheldPrompt: any,
   grokCloudConnectorsForTurn: any,
+  isRelayPart: any,
   guardTurnDispatch: any,
   guestDrivenTurns: any,
   guestEngineRefusal: any,

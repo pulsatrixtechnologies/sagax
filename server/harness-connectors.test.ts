@@ -101,8 +101,9 @@ describe("whose account connectors a turn reaches (review of #943, point 5)", ()
       expect(accountConnectorsForTurn(input), driver).toBe("foreign");
       expect(claudeAiConnectorsForTurn(input)).toBe(false);
       expect(grokCloudConnectorsForTurn(input)).toBe(false);
-      // opted in or not: someone else's connectors never reach the bot
+      // opted in or not, relay or not: someone else's connectors never reach the bot
       expect(grokCloudConnectorsForTurn({ ...input, grokAccountConnectors: true })).toBe(false);
+      expect(grokCloudConnectorsForTurn({ ...input, engineRelay: true })).toBe(false);
     }
   });
   it("#1137: the owner pays with their subscription for someone else: foreign, the owner's connectors never mount", () => {
@@ -133,6 +134,16 @@ describe("whose account connectors a turn reaches (review of #943, point 5)", ()
     // the xAI API engine has no use_tool and no grok.com MCP: never, opted in or not
     expect(grokCloudConnectorsForTurn({ ...base, identity: "solo", driver: "grok", speaker: { origin: "operator" }, grokAccountConnectors: true })).toBe(false);
     expect(grokCloudConnectorsForTurn({ ...base, identity: "solo", driver: "grokAgent", speaker: { origin: "person", principalId: BOB }, grokAccountConnectors: true })).toBe(false);
+    // a relay part of someone else still stays off
+    expect(grokCloudConnectorsForTurn({ ...base, identity: "solo", driver: "grokAgent", speaker: { origin: "person", principalId: BOB }, engineRelay: true })).toBe(false);
+  });
+  it("a run_with_engine part loads the person's own grok.com connectors without the bot opt-in", () => {
+    const own = { ...base, driver: "grokAgent", via: "subscription" as const, payerPrincipalId: BOB, speaker: { origin: "person" as const, principalId: BOB }, engineRelay: true };
+    expect(grokCloudConnectorsForTurn(own)).toBe(true);
+    expect(grokCloudConnectorsForTurn({ ...own, engineRelay: false })).toBe(false);
+    expect(grokCloudConnectorsForTurn({ ...own, driver: "grok" })).toBe(false);
+    expect(grokCloudConnectorsForTurn({ ...own, driver: "claudeAgent" })).toBe(false);
+    expect(grokCloudConnectorsForTurn({ ...base, identity: "solo", driver: "grokAgent", speaker: { origin: "operator" }, engineRelay: true })).toBe(true);
   });
   it("tells a foreign turn the connectors belong to someone else and offers nothing", () => {
     const text = engineConnectorsPrompt({ driver: "grokAgent", claudeAi: false, grokCloud: false, foreign: true });

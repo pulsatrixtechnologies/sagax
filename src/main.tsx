@@ -6,7 +6,7 @@ import {
 } from "./lib/session";
 import { applyBrand, bootstrapBrand } from "./lib/brand";
 import { allowUiSnapshot, clearUiSnapshot, readUiSnapshot, setLaunchSnapshot } from "./lib/ui-snapshot";
-import { holdWrites, releaseWrites } from "./lib/write-gate";
+import { holdWrites, releaseWrites, writesHeld } from "./lib/write-gate";
 import { applySkin, applySkinDepth, applySkinTexture, installSkinAutoFollow, readSkin, readSkinDepth, readSkinTexture } from "./lib/skins";
 import { applyFont, readFont } from "./lib/fonts";
 import { applyAccessibility, installAccessibility } from "./lib/accessibility-preferences";
@@ -170,7 +170,19 @@ async function launch(): Promise<void> {
     holdWrites();
     migrateInterfaceModeToAdvancedOnce();
     const root = createRoot(container);
-    root.render(<StrictMode><PageBoundary><App /></PageBoundary></StrictMode>);
+    // A stored drawing the page cannot render (an older or damaged file)
+    // would show the error screen on every launch, since nothing replaces
+    // the file until the store hydrates. Drop it and start from the server.
+    let drawingDropped = false;
+    const dropDrawing = () => {
+      if (drawingDropped || !writesHeld()) return;
+      drawingDropped = true;
+      clearUiSnapshot();
+      setLaunchSnapshot(null);
+      releaseWrites();
+      setTimeout(() => root.render(<StrictMode><PageBoundary key="live"><App /></PageBoundary></StrictMode>), 0);
+    };
+    root.render(<StrictMode><PageBoundary onError={dropDrawing}><App /></PageBoundary></StrictMode>);
     const [, chosen] = await Promise.all([bootstrapBrand(), chooseRoot()]);
     allowUiSnapshot(appForOwnerHere);
     // An unreachable server is not news about who is looking: the drawing

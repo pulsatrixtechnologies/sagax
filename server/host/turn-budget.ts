@@ -8,9 +8,18 @@
 // render in the person's language: the turn's own working notes, the step
 // count and how to continue. Never a silent failure.
 //
+// Continuation (#3023, 2026-11-08): a long
+// task is not cut at the ceiling any more. Reaching it opens a new segment of
+// the same turn (same session, same context, no question, no tool cut): the
+// counters start again and one visible row says "Suite automatique n/N". Only
+// the last segment carries the wrap-up note and the stop with a partial
+// answer, so `maxContinuations` (default 10) is the anti-loop safety ceiling;
+// the loop guard (#3013) still ends a turn that repeats itself well before.
+//
 // Settings, first set wins: SAGAX_TURN_BUDGET=0 (off), SAGAX_TURN_MAX_MINUTES
-// and SAGAX_TURN_MAX_STEPS (0 = no ceiling), config.json `turnBudget.bots[id]`,
-// `turnBudget`, then the defaults (20 minutes, 80 steps, note at 75 %).
+// and SAGAX_TURN_MAX_STEPS (0 = no ceiling), SAGAX_TURN_MAX_CONTINUATIONS,
+// config.json `turnBudget.bots[id]`, `turnBudget`, then the defaults (20
+// minutes and 80 steps per segment, 10 continuations, note at 75 %).
 import { z } from "zod";
 
 import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
@@ -19,9 +28,11 @@ import { reportBackgroundError } from "../background-error.ts";
 export const DEFAULT_TURN_MAX_MINUTES = 20;
 export const DEFAULT_TURN_MAX_STEPS = 80;
 export const DEFAULT_TURN_WRAP_UP_AT = 0.75;
+export const DEFAULT_TURN_MAX_CONTINUATIONS = 10;
 
 const minutes = z.number().int().min(1).max(1_440);
 const steps = z.number().int().min(5).max(10_000);
+const continuations = z.number().int().min(0).max(100);
 
 const limitsSchema = z.object({
   enabled: z.boolean().optional(),
@@ -29,6 +40,8 @@ const limitsSchema = z.object({
   maxMinutes: minutes.nullable().optional(),
   /** Tool steps before the turn is stopped; null: no step ceiling. */
   maxSteps: steps.nullable().optional(),
+  /** Segments a turn continues into, automatically, past the ceiling (0: stop at the first). */
+  maxContinuations: continuations.optional(),
 }).strict();
 
 /** The `turnBudget` section of config.json. */
@@ -44,6 +57,8 @@ export interface TurnBudgetSettings {
   enabled: boolean;
   maxMinutes?: number;
   maxSteps?: number;
+  /** Automatic continuations past the ceiling; absent reads as none. */
+  maxContinuations?: number;
   wrapUpAt: number;
 }
 
@@ -70,10 +85,16 @@ export function turnBudgetSettings(
   };
   const maxMinutes = pick(envLimit(env.SAGAX_TURN_MAX_MINUTES, minutes), "maxMinutes", DEFAULT_TURN_MAX_MINUTES);
   const maxSteps = pick(envLimit(env.SAGAX_TURN_MAX_STEPS, steps), "maxSteps", DEFAULT_TURN_MAX_STEPS);
+  const envContinuations = env.SAGAX_TURN_MAX_CONTINUATIONS?.trim();
+  const parsedContinuations = envContinuations ? continuations.safeParse(Number(envContinuations)) : undefined;
+  const maxContinuations = parsedContinuations?.success
+    ? parsedContinuations.data
+    : bot?.maxContinuations ?? section?.maxContinuations ?? DEFAULT_TURN_MAX_CONTINUATIONS;
   return {
     enabled: env.SAGAX_TURN_BUDGET !== "0" && section?.enabled !== false && bot?.enabled !== false,
     ...(maxMinutes === undefined ? {} : { maxMinutes }),
     ...(maxSteps === undefined ? {} : { maxSteps }),
+    maxContinuations,
     wrapUpAt: section?.wrapUpAt ?? DEFAULT_TURN_WRAP_UP_AT,
   };
 }
@@ -91,6 +112,8 @@ export interface TurnBudgetDeps {
   interrupt(threadId: string, cause: string): Promise<unknown>;
   /** Posts the partial render as the bot's message. */
   post(threadId: string, text: string): void;
+  /** Shows one row in the conversation: an automatic continuation started. */
+  note?(threadId: string, text: string): void;
   language(threadId: string): TurnBudgetLanguage;
   now?(): number;
   setTimer?(fire: () => void, ms: number): unknown;
@@ -121,6 +144,10 @@ interface TurnState {
   steered: boolean;
   stopped: boolean;
   timer: unknown;
+  /** Continuations used, and the steps and active time spent before the current segment. */
+  segment: number;
+  segmentSteps: number;
+  segmentMs: number;
 }
 
 function wholeMinutes(ms: number): number {
@@ -140,6 +167,14 @@ export function wrapUpNote(input: { language?: TurnBudgetLanguage; minutes: numb
     return `[Sagax : ce tour roule depuis ${input.minutes} min et ${input.steps} étapes ; il s'arrête à ${input.ceiling}. Arrête d'explorer et réponds tout de suite à la personne avec ce que tu as, en français : ce que tu as trouvé, ce qui reste et la prochaine étape. Ne lance aucun nouveau script ni aucune chaîne d'outils.]`;
   }
   return `[Sagax: this turn has run ${input.minutes} min and ${input.steps} steps; it is stopped at ${input.ceiling}. Stop exploring now and answer the person with what you have, in their language: what you found, what remains, and the one next step. Start no new script or tool chain.]`;
+}
+
+/** The visible row of an automatic continuation. */
+export function continuationNote(input: { language?: TurnBudgetLanguage; segment: number; max: number; ceiling: string }): string {
+  if (input.language === "fr") {
+    return `Suite automatique ${input.segment}/${input.max} : la tâche dépasse ${input.ceiling}, je continue sans m'arrêter`;
+  }
+  return `Automatic continuation ${input.segment}/${input.max}: the task runs past ${input.ceiling}, carrying on`;
 }
 
 /** The partial render posted when the ceiling stops a turn. */
@@ -231,6 +266,21 @@ export function createTurnBudget(deps: TurnBudgetDeps): TurnBudget {
     }
   };
 
+  /** The ceiling was reached with a continuation left: a new segment of the same turn. */
+  const continueTurn = (threadId: string, turn: TurnState, settings: TurnBudgetSettings, max: number) => {
+    turn.segment += 1;
+    turn.segmentSteps = turn.steps;
+    turn.segmentMs = elapsed(turn);
+    turn.steered = false;
+    log(`continue ${turn.segment}/${max}: thread=${threadId} steps=${turn.steps}`);
+    const language = deps.language(threadId);
+    try {
+      deps.note?.(threadId, continuationNote({ language, segment: turn.segment, max, ceiling: ceilingText(settings, language) }));
+    } catch {
+      log(`continuation row not shown: thread=${threadId}`);
+    }
+  };
+
   /** Acts on the ceiling or the wrap-up mark, then arms the timer for the next time mark. */
   const check = (threadId: string) => {
     const turn = turns.get(threadId);
@@ -238,17 +288,24 @@ export function createTurnBudget(deps: TurnBudgetDeps): TurnBudget {
     disarm(turn);
     const settings = deps.settings(threadId);
     if (!settings.enabled || !deps.live(threadId)) return;
-    const spent = elapsed(turn);
+    const maxContinuations = settings.maxContinuations ?? 0;
     const maxMs = settings.maxMinutes === undefined ? undefined : settings.maxMinutes * 60_000;
-    const overSteps = settings.maxSteps !== undefined && turn.steps >= settings.maxSteps;
+    let spent = elapsed(turn) - turn.segmentMs;
+    const overSteps = settings.maxSteps !== undefined && turn.steps - turn.segmentSteps >= settings.maxSteps;
     const overTime = maxMs !== undefined && spent >= maxMs;
-    if (overSteps || overTime) return stop(threadId, turn, settings);
-    const wrapSteps = settings.maxSteps !== undefined && turn.steps >= Math.ceil(settings.maxSteps * settings.wrapUpAt);
+    if (overSteps || overTime) {
+      if (turn.segment >= maxContinuations) return stop(threadId, turn, settings);
+      continueTurn(threadId, turn, settings, maxContinuations);
+      spent = 0;
+    }
+    // Only the last segment asks for a partial answer: before it, the task goes on.
+    const lastSegment = turn.segment >= maxContinuations;
+    const wrapSteps = settings.maxSteps !== undefined && turn.steps - turn.segmentSteps >= Math.ceil(settings.maxSteps * settings.wrapUpAt);
     const wrapMs = maxMs === undefined ? undefined : maxMs * settings.wrapUpAt;
-    if (!turn.steered && (wrapSteps || (wrapMs !== undefined && spent >= wrapMs))) steer(threadId, turn, settings);
+    if (lastSegment && !turn.steered && (wrapSteps || (wrapMs !== undefined && spent >= wrapMs))) steer(threadId, turn, settings);
     // Waiting on a person is not work: no timer while a card is open.
     if (maxMs === undefined || turn.resumedAt === null) return;
-    const nextMark = !turn.steered && wrapMs !== undefined && spent < wrapMs ? wrapMs : maxMs;
+    const nextMark = lastSegment && !turn.steered && wrapMs !== undefined && spent < wrapMs ? wrapMs : maxMs;
     turn.timer = setTimer(() => {
       turn.timer = undefined;
       check(threadId);
@@ -266,6 +323,7 @@ export function createTurnBudget(deps: TurnBudgetDeps): TurnBudget {
         ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
         steps: before?.steps ?? 0, items: new Set(), activeMs: before?.activeMs ?? 0, resumedAt: now(), openRequests: 0,
         notes: before ? [...before.notes] : [], steered: before?.steered ?? false, stopped: false, timer: undefined,
+        segment: before?.segment ?? 0, segmentSteps: before?.segmentSteps ?? 0, segmentMs: before?.segmentMs ?? 0,
       });
       return check(threadId);
     }

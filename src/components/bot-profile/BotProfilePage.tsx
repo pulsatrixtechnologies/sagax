@@ -1,9 +1,10 @@
 // The bot's profile page, V6 (#2612, the "Épuré Grok Bot" canvas; before
 // it #2126, #2173, #2271): the surface that edits one bot, filling the main
 // panel in place of the chat. Its top is the bot's appearance, edited in
-// place: a banner in the mascot's colour with the mascot large over its
-// lower edge, no card around it (Grok Bot, JC 2026-11-08), the name with its
-// title under it, centred, who sees it and the owner, the description. The
+// place: a low banner in the mascot's colour with the mascot small on the
+// left over its lower edge, no card around it (Grok Bot, the owner 2026-11-09), the
+// name with its title under it, who sees it and the owner, the description,
+// all aligned left. The
 // top bar floats over the banner and, once the name scrolls under it, turns
 // into a blurred bar with the small mascot and the name. Then pill tabs:
 //
@@ -522,7 +523,7 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
           data-bot-profile-banner=""
           data-bot-profile-banner-palette={bannerPalette}
           style={bannerStyle}
-          className="bot-profile-banner h-[150px] w-full shrink-0"
+          className="bot-profile-banner h-[112px] w-full shrink-0"
         />
         {/* One centred column, a comfortable reading width (Grok Bot), a
             16px gutter on a phone. */}

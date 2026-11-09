@@ -106,6 +106,15 @@ describe("the Appearance pane", () => {
     expect(host.innerHTML).not.toContain('aria-label="Zoom avatar"');
   });
 
+  it("regression (the owner 2026-11-09): on the profile page, the summary, Use, the moves and Play a move come after the mascot picker, never above the tabs", async () => {
+    await mountPane(makeBot(), true);
+    const editor = host.querySelector("[data-mascot-look-editor]")!;
+    const order = [...editor.children].map((child) => (child.hasAttribute("data-appearance-tab-bar") ? "tabs" : child.hasAttribute("data-appearance-tab-panel") ? "panel" : child.hasAttribute("data-mascot-controls") ? "controls" : "other"));
+    expect(order.filter((part) => part !== "other")).toEqual(["tabs", "panel", "controls"]);
+    // nothing dropped: the summary, Use, the moves and Play a move, all in the row
+    for (const marker of ["[data-mascot-summary]", "[data-mascot-action]", "[data-mascot-moves]", "[data-mascot-play]"]) expect(inside(marker, "[data-mascot-controls]")).toBe(true);
+  });
+
   it("regression (the owner 2026-11-06): on the profile page, colours only in the Color tab, Mascot / Generate / Upload in the Mascot tab, Reset and Randomize in the tab row", async () => {
     await mountPane(makeBot(), true);
     // open on Mascot: no colour dot anywhere, the sources beside the search, Reset and Randomize at the right of the tabs

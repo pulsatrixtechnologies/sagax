@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppState, Bot, BotSettingsSection } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
 import { CIRCLE_CLOSE_BUTTON, CIRCLE_LABEL } from "@/lib/circle-button";
+import { MASCOT_HERO_SIZE } from "@/components/floating-bots/MascotLookPreview";
 
 const fixture = vi.hoisted(() => ({
   state: {} as Partial<AppState>,
@@ -237,7 +238,7 @@ describe("bot profile page shell", () => {
     }
   });
 
-  it("regression (2026-11-08): the mascot sits bare on the banner, no card, the name and label stacked and centred under it", () => {
+  it("regression (2026-11-09, « mascot more on the left, a bit smaller »): the mascot sits bare and small at the left over a lower banner, the name and label stacked and left-aligned under it", () => {
     const html = render("overview");
     const hero = at(html, 'data-bot-profile-hero=""');
     const audience = at(html, "data-bot-profile-audience");
@@ -245,17 +246,22 @@ describe("bot profile page shell", () => {
     const banner = at(html, 'data-bot-profile-banner=""');
     expect(banner).toBeGreaterThan(0);
     expect(banner).toBeLessThan(hero);
-    expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner /i);
-    // the mascot over the banner's lower edge, centred
-    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[96px\] flex flex-col items-center/);
+    expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner h-\[112px\] /i);
+    // the mascot over the banner's lower edge, at the left of the column
+    expect(html).toMatch(/data-bot-profile-hero=""[^>]*class="relative -mt-\[46px\] flex flex-col items-start/);
     const heroHtml = html.slice(hero, audience);
     expect(heroHtml).toContain("data-mascot-hero");
     // no card: no border, no panel, no tinted ground around the mascot
     const card = /<section[^>]*data-mascot-hero=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
     expect(card).not.toBe("");
     for (const cls of ["border", "rounded-2xl", "radial-gradient", "bg-panel", "p-4"]) expect(card).not.toContain(cls);
-    expect(card).toContain("items-center");
-    // name (28px) then the label, centred, inside the hero, before who sees it
+    expect(card).toContain("items-start");
+    expect(card).not.toContain("items-center");
+    // small (84px mascot in an 88px frame) and clipped to it
+    const stage = /<button[^>]*data-mascot-stage=""[^>]*>/.exec(heroHtml)?.[0] ?? "";
+    expect(stage).toContain(`width:${MASCOT_HERO_SIZE + 4}px`);
+    expect(stage).toContain("overflow-hidden");
+    // name (28px) then the label, left-aligned, inside the hero, before who sees it
     const heading = at(html, "data-mascot-heading");
     const title = at(html, 'data-bot-profile-title=""');
     const label = at(html, 'data-bot-profile-label=""');
@@ -263,12 +269,12 @@ describe("bot profile page shell", () => {
     expect(heading).toBeLessThan(title);
     expect(title).toBeLessThan(label);
     expect(label).toBeLessThan(audience);
-    expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*justify-center text-center text-\[28px\]/);
+    expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*justify-start text-left text-\[28px\]/);
     // no button row nor summary in the header: they head the Appearance tab
     for (const marker of ["data-mascot-play", "data-mascot-randomize", "data-mascot-summary", "data-mascot-action", "data-bot-profile-appearance-toggle"]) expect(heroHtml).not.toContain(marker);
-    // nothing lost under it: who sees it, the description, centred
-    expect(html.slice(audience - 200, audience)).toContain("justify-center");
-    expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*class="[^"]*text-center/);
+    // nothing lost under it: who sees it, the description, left-aligned
+    expect(html.slice(audience - 200, audience)).toContain("justify-start");
+    expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*class="[^"]*text-left/);
     // the column a reading width with a 16px gutter on a phone
     expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[760px\] flex-col px-4 pb-10 sm:px-6"/);
   });

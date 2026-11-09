@@ -19498,6 +19498,20 @@ routines = new RoutineManager({
     // already at work reports, and nothing resumes the run it was for.
     if (!run.groupId) coordinator.stopAwaitingDirect(run.threadId, "The routine run starts again");
   },
+  onRunNotice: (_run, notice) => {
+    // #3130: a run blocked or skipped at pre-flight says why in the bot's chat
+    // with the person. The same line already last in that chat is not
+    // repeated (a frequent routine signed out for hours stays one line).
+    for (const id of notice.threadIds) {
+      try {
+        const last = store.activePath(id).at(-1);
+        if (last?.role === "bot" && last.kind === "text" && last.text === notice.text) continue;
+        store.appendMessage(id, { role: "bot", kind: "text", text: notice.text });
+      } catch (error) {
+        reportBackgroundError(error);
+      }
+    }
+  },
   onRunFailed: (run, alert) => {
     // 2026-11-05 (perspicax#880): a failed wake backs the bot's next wake
     // off, and only the first failure of a streak reaches the person (one

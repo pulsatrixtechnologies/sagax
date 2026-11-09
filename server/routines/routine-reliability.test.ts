@@ -54,6 +54,24 @@ describe("routine reliability in an isolated journal", () => {
     expect(other.manager.listRuns()[0]).toMatchObject({ status: "blocked", readiness: expect.arrayContaining([expect.objectContaining({ code: "engine_signed_out" })]) });
     expect(other.manager.listRuns()[0]?.startingAttempts).toBeUndefined();
   });
+  it("says a run blocked or skipped at pre-flight in the bot's chat with the person, in their language (#3130)", async () => {
+    const onRunNotice = vi.fn();
+    const h = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-1" }), languageFor: () => "fr-CA" });
+    h.probes.engine = () => ({ engine: `${h.engine}-boot`, name: "Claude", signedIn: false, starting: true });
+    h.advance(60 * 60_000); await h.flush();
+    expect(onRunNotice).not.toHaveBeenCalled();
+    for (let i = 0; i < ROUTINE_STARTING_MAX_ATTEMPTS; i++) { h.advance(ROUTINE_STARTING_RETRY_MS); await h.flush(); }
+    expect(onRunNotice).toHaveBeenCalledTimes(1);
+    expect(onRunNotice.mock.calls[0]![1]).toEqual({ threadIds: ["chat-1"], text: `La routine « Inbox review » n'a pas démarré : ${ROUTINE_STARTING_SKIPPED}` });
+    const other = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-2" }) });
+    other.probes.engine = () => ({ engine: `${other.engine}-out`, name: "Claude", signedIn: false });
+    other.advance(60 * 60_000); await other.flush();
+    const run = other.manager.listRuns()[0]!;
+    expect(run.status).toBe("blocked");
+    expect(onRunNotice).toHaveBeenCalledTimes(2);
+    expect(onRunNotice.mock.calls[1]![1]).toEqual({ threadIds: ["chat-2"], text: `The routine "Inbox review" did not start: ${run.error}` });
+    expect(run.error).toBeTruthy();
+  });
   it("never runs a Flow shadow probe before a routine run: a routine called by name starts (2026-11-04)", async () => {
     const h = fixture();
     h.manager.update(h.routine.id, { prompt: "Use flow_run.", requires: { skills: ["running-px-flow"] } });

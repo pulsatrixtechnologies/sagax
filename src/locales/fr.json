@@ -14545,5 +14545,6 @@
   "piServers.checkedAt": "Dernier test",
   "piServers.context": "contexte {count} jetons",
   "piServers.contextDefault": "contexte non fourni, valeur par défaut",
-  "routines.loopStop.notice": "La routine a été arrêtée avant la fin : elle répétait la même étape. {reason}"
+  "routines.loopStop.notice": "La routine a été arrêtée avant la fin : elle répétait la même étape. {reason}",
+  "routines.preflight.notice": "La routine « {name} » n'a pas démarré : {reason}"
 }

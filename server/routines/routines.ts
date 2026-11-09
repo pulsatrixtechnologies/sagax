@@ -1,5 +1,5 @@
 import type { EffortLevel } from "../../shared/model-selection.ts";
-import { routineLoopStopNotice } from "./loop-stop-notice.ts";
+import { routineLoopStopNotice, routinePreflightNotice } from "./loop-stop-notice.ts";
 import { loadRoutineReadiness } from "./routine-readiness.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "../engines/engine-refusals.ts";
 import type { RoutineRequirements, RoutineReadinessAnswer, RoutineReadinessResult } from "../../shared/routine-readiness.ts";
@@ -677,6 +677,9 @@ export interface RoutineManagerOptions {
   /** Projects every durable transition into the source conversation. */
   onRunChanged?: (run: RoutineRun) => void;
   onRunFailed?: (run: RoutineRun, alert?: RoutineAlert | null) => void;
+  /** #3130: a line the bot's chat with the person shows for this run (a run
+   * blocked or skipped at pre-flight), in the person's language. */
+  onRunNotice?: (run: RoutineRun, notice: { text: string; threadIds: string[] }) => void;
   /** Raised once when a queued run has waited out the deferral notice window. */
   onRunDeferred?: (run: RoutineRun, alert?: RoutineAlert) => void;
   /** Login-engine sign-in already expired ahead of scheduled or proactive
@@ -3595,10 +3598,10 @@ export class RoutineManager {
                 this.emitRun(run);
                 continue;
               }
-              this.blockRun(run, admission.skipped ?? ROUTINE_RATE_LIMITED_SKIPPED);
+              this.blockRun(run, admission.skipped ?? ROUTINE_RATE_LIMITED_SKIPPED, null, true);
               continue;
             }
-            if (!admission.suspend && (admission.skipped || /this run is skipped/i.test(admission.error))) this.blockRun(run, admission.skipped ?? admission.error);
+            if (!admission.suspend && (admission.skipped || /this run is skipped/i.test(admission.error))) this.blockRun(run, admission.skipped ?? admission.error, null, true);
             else this.failRun(run, admission.error);
             const current = this.runs.find((candidate) => candidate.id === run.id) ?? run;
             if (admission.suspend) this.suspendRoutine(run.routineId, admission.suspend, current);
@@ -3624,7 +3627,7 @@ export class RoutineManager {
                 continue;
               }
               run.readiness = readiness.checks;
-              this.blockRun(run, ROUTINE_STARTING_SKIPPED, firstOwnerNotice(this.ownerNotices, run.botId, "probe_error", this.now()) ? { detail: `${routine.name}: "${ROUTINE_STARTING_SKIPPED}"` } : null);
+              this.blockRun(run, ROUTINE_STARTING_SKIPPED, firstOwnerNotice(this.ownerNotices, run.botId, "probe_error", this.now()) ? { detail: `${routine.name}: "${ROUTINE_STARTING_SKIPPED}"` } : null, true);
               continue;
             }
             run.readiness = readiness.checks;
@@ -3633,7 +3636,7 @@ export class RoutineManager {
               const cause = blocker.code === "engine_credits" ? "credits" : blocker.code === "engine_limit" ? "usage_limit"
                 : blocker.code === "engine_signed_out" ? "signed_out" : blocker.code === "ready" ? "probe_error" : blocker.code;
               const alert = firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now()) ? { detail: `${routine.name}: "${blocker.line}"` } : null;
-              this.blockRun(run, blocker.line, alert);
+              this.blockRun(run, blocker.line, alert, true);
               continue;
             }
           }
@@ -4720,8 +4723,11 @@ export class RoutineManager {
   }
 
   /** Flow refused this run (previous unclosed / unknown / run_exists): blocked
-   * with the tool's reason, no proactive wake (onRunFailed still fires). */
-  private blockRun(run: RoutineRun, message: string, alert: RoutineAlert | null = null) {
+   * with the tool's reason, no proactive wake (onRunFailed still fires).
+   * #3130: a run blocked or skipped at pre-flight (`preflight`) never got a
+   * thread of its own, so the reason is also said in the bot's chat with the
+   * person (onRunNotice): nothing stays invisible. */
+  private blockRun(run: RoutineRun, message: string, alert: RoutineAlert | null = null, preflight = false) {
     this.runTrouble.delete(run.id);
     delete run.waitingOn;
     run.status = "blocked";
@@ -4732,7 +4738,31 @@ export class RoutineManager {
     delete run.quiet;
     this.saveLater();
     this.emitRun(run);
+    if (preflight) {
+      const notice = this.preflightNotice(run);
+      if (notice) {
+        try {
+          this.options.onRunNotice?.(cloneRun(run), notice);
+        } catch (error) {
+          reportBackgroundError(error);
+        }
+      }
+    }
     this.options.onRunFailed?.(cloneRun(run), alert);
+  }
+
+  /** #3130: what a run blocked or skipped before it started says, in the
+   * language of the person it runs for, and the bot's chat with the person
+   * it is said in (the run's results thread, else the conversation it came
+   * from). Null for a room goal (its room shows its own card) or no thread. */
+  preflightNotice(run: RoutineRun): { text: string; threadIds: string[] } | null {
+    if (run.target === "room-goal") return null;
+    const threadId = run.threadId ?? run.resultsThreadId ?? run.sourceThreadId;
+    if (!threadId) return null;
+    const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
+    const name = this.routines.find(routine => routine.id === run.routineId)?.name ?? run.routineName;
+    const text = routinePreflightNotice(this.options.languageFor?.(who), redactSecretsInText(name), run.error ?? "");
+    return { text, threadIds: [threadId] };
   }
 
   /** Probes run beside the scheduler. Only an explicit blocker holds a run. */

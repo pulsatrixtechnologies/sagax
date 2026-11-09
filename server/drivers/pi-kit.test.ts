@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { installPiKit, mergePiSettings, npmOnPath, npmPackageName, piKitDir, piKitPackageArg, readPiKitPackages, renderPiKitTemplate, resolvePiSettingsPackages } from "./pi-kit.ts";
+import { installPiKit, isPiKitGuard, mergePiSettings, npmOnPath, npmPackageName, piKitDir, piKitPackageArg, readPiKitPackages, renderPiKitTemplate, resolvePiSettingsPackages } from "./pi-kit.ts";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "sagax-pi-kit-"));
@@ -168,6 +168,35 @@ describe("macOS metadata in the kit (#3063)", () => {
     expect(existsSync(join(home, "extensions", "._old.ts"))).toBe(false);
     expect(existsSync(join(home, "skills", "s", "._SKILL.md"))).toBe(false);
     expect(existsSync(join(home, "extensions", "lib", "util.ts"))).toBe(true);
+  });
+});
+
+describe("a kit extension left out (#3063)", () => {
+  it("names guards by name or by guards.txt", () => {
+    expect(isPiKitGuard("voice-guard.ts", new Set())).toBe(true);
+    expect(isPiKitGuard("tool-policy.ts", new Set())).toBe(true);
+    expect(isPiKitGuard("voice.ts", new Set(["voice.ts"]))).toBe(true);
+    expect(isPiKitGuard("voice.ts", new Set())).toBe(false);
+  });
+
+  it("leaves out only the skipped extension, removes its copy and never skips a guard", () => {
+    const dir = kit();
+    writeFileSync(join(dir, "extensions", "audit-guard.ts"), "export default () => {};\n");
+    writeFileSync(join(dir, "extensions", "c.ts"), "export default () => {};\n");
+    writeFileSync(join(dir, "guards.txt"), "# guards\nc.ts\n");
+    const home = tempDir();
+    // copied by an earlier turn
+    mkdirSync(join(home, "extensions"), { recursive: true });
+    writeFileSync(join(home, "extensions", "a.ts"), "export default () => {};\n");
+    const skip = (arg: string) => /[\\/](a|audit-guard|c)\.ts$/.test(arg);
+    const { args, guards, skipped } = installPiKit(dir, home, {}, { PATH: "" }, skip);
+    const loaded = args.filter((_, index) => index % 2 === 1);
+    expect(skipped).toEqual([join(home, "extensions", "a.ts")]);
+    expect(loaded).not.toContain(join(home, "extensions", "a.ts"));
+    expect(loaded).toContain(join(home, "extensions", "b.ts"));
+    expect(guards).toEqual([join(home, "extensions", "audit-guard.ts"), join(home, "extensions", "c.ts")]);
+    expect(existsSync(join(home, "extensions", "a.ts"))).toBe(false);
+    expect(existsSync(join(home, "extensions", "b.ts"))).toBe(true);
   });
 });
 

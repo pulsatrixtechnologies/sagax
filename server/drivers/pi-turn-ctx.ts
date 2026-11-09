@@ -3,6 +3,7 @@ import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import type { EffortLevel, RuntimeEvent, SendTurnInput, SteerOutcome, TurnAccessInput } from "../contracts.ts";
 import type { ToolScope } from "../../shared/tool-scope.ts";
+import type { PiKitInstall } from "./pi-kit.ts";
 
 export type PiChild = ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -91,7 +92,9 @@ export type PiTurnHooks = {
     meta?: { contextWindow?: number; maxTokens?: number },
   ) => { provider: string; modelId: string } | null;
   modelContextWindow: (modelId: string) => number | undefined;
-  piKitArgs: (homeEnv: Record<string, string | undefined>, identity: SendTurnInput["piKitIdentity"]) => string[];
+  /** #2024/#3063: install the kit in the turn's pi home, leaving out any
+   * extension pi failed to load (never a guard); empty without a kit. */
+  piKit: (homeEnv: Record<string, string | undefined>, identity: SendTurnInput["piKitIdentity"]) => PiKitInstall;
   warmPerson: (turn: SendTurnInput) => string;
   registerWarmBudget: (input: { person: string; child: PiChild }) => PiWarmBudget;
   /** Arm retireClosedWarmProcess on the child's close (idempotent with standby/fresh). */
@@ -176,12 +179,19 @@ export type PiPrepared = {
   sessionFile: string | null;
   sessionReady: boolean;
   stderr: string;
-  /** #3063: set once the child failed to load an extension and the turn
-   * moved to a new child without extensions; this attempt then stays silent. */
+  /** #3063: what this turn loaded from the kit, and what it left out. */
+  kit: PiKitInstall;
+  /** #3063: set once the child failed to load a kit extension and the turn
+   * moved to a new child without that one; this attempt then stays silent. */
   retired: boolean;
-  /** #3063: called (first attempt only) when pi exits because an extension
-   * failed to load, with pi's line; the turn retries without extensions. */
-  onExtensionLoadFailure?: (line: string) => void;
+  /** #3063: pi's stdin broke (pi is exiting): the close decides the turn. */
+  stdinClosed: boolean;
+  /** #3063: the fallback that fails the turn if no close follows a broken stdin. */
+  closeTimer: ReturnType<typeof setTimeout> | null;
+  /** #3063: set while a retry may still follow; called when pi exits
+   * because it failed to load this kit extension (not a guard), with pi's
+   * line. The turn runs again without that one extension. */
+  onExtensionLoadFailure?: (arg: string, line: string) => void;
 };
 
 export type PiRpcSlots = {
@@ -194,6 +204,9 @@ export type PiRpcSlots = {
   stop: () => void;
   /** #3063: end this attempt without a turn.completed (a retry follows). */
   retire: () => void;
+  /** Fail the turn with this message; once pi's stdin broke, pi's close
+   * decides instead (a retry, or pi's own words), with a short fallback. */
+  failTurn: (message: string) => void;
 };
 
 export type PiSendCtx = PiPrepared & PiRpcSlots;

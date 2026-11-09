@@ -1,14 +1,9 @@
 /** stderr drain plus the child's error and close paths (#1383). */
 import { engineExitedLine } from "../../shared/engine-exit-words.ts";
 import { describeSpawnFailure } from "../procs.ts";
+import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { classifyPiExtensionFailure, piExtensionFailureMessage, piExtensionLoadFailure } from "./pi-extension-failures.ts";
 import type { PiSendCtx } from "./pi-turn-ctx.ts";
-
-/** #3063: pi's line when it exited because an extension failed to load
- * ("Failed to load extension <error> <path>"), else null. */
-export function piExtensionLoadFailure(stderr: string): string | null {
-  const line = stderr.split(/\r?\n/).find((text) => /Failed to load extension/i.test(text));
-  return line ? line.trim().slice(0, 500) : null;
-}
 
 export function attachPiStdio(ctx: PiSendCtx): void {
   const { emit, base } = ctx.deps;
@@ -25,19 +20,25 @@ export function attachPiStdio(ctx: PiSendCtx): void {
     ctx.settle(false);
   });
   ctx.child.on("close", () => {
-    // #3063: an extension pi could not load (an AppleDouble ._*.ts, a
-    // broken file) is retried once without extensions, never a dead bot
-    const failure = !ctx.settled && ctx.onExtensionLoadFailure && !ctx.assistantText && ctx.toolNames.size === 0
+    // #3063: an extension pi could not load (a broken file, a missing
+    // dependency): the turn runs again without that one kit extension. A
+    // guard, the Sagax extension or one Sagax cannot name is never left
+    // out: the turn fails, in words the person reads in the chat.
+    const failure = !ctx.settled && !ctx.assistantText && ctx.toolNames.size === 0
       ? piExtensionLoadFailure(ctx.stderr)
       : null;
-    if (failure && ctx.onExtensionLoadFailure) {
-      const retry = ctx.onExtensionLoadFailure;
-      ctx.retire();
-      retry(failure);
-      return;
+    let message = engineExitedLine("pi", ctx.stderr);
+    if (failure) {
+      const verdict = classifyPiExtensionFailure(failure, ctx.kit, SPAWNED_PROXIES.piMcpExtension);
+      if (verdict.kind === "skip" && ctx.onExtensionLoadFailure) {
+        const retry = ctx.onExtensionLoadFailure;
+        ctx.retire();
+        retry(verdict.arg, failure);
+        return;
+      }
+      message = piExtensionFailureMessage(verdict, failure);
     }
     // a clean close without a terminal event is a failed turn, never a hang
-    const message = engineExitedLine("pi", ctx.stderr);
     ctx.rejectWaiters(new Error(message));
     if (!ctx.settled) emit({ ...base(ctx.threadId, ctx.turnId), type: "runtime.error", message });
     ctx.settle(false);

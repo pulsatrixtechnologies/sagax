@@ -63,6 +63,7 @@ import {
   mergeLocalInject,
 } from "./local-inject.ts";
 import { cleanPiHomeMetadata, installPiKit, piKitDir } from "./pi-kit.ts";
+import { skipFailedPiExtension } from "./pi-extension-failures.ts";
 import type { PiActiveTurn, PiTurnHooks } from "./pi-turn-ctx.ts";
 import { createPiSendTurn } from "./pi-send-turn.ts";
 import { MODEL_SERVER_DEFAULT_CONTEXT, MODEL_SERVER_DEFAULT_MAX_TOKENS, MODEL_SERVER_KEY_ENV_PREFIX, writePiModelServers } from "./pi-model-servers.ts";
@@ -1191,12 +1192,15 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       piNativeLogMessage,
       ensurePiInjectModel,
       modelContextWindow: (modelId) => models.options.find((option) => option.id === modelId)?.contextWindow,
-      piKitArgs: (homeEnv, identity) => {
+      piKit: (homeEnv, identity) => {
         const kit = piKitDir(homeEnv);
         // #3063: no macOS metadata in the folders pi loads, kit or not
         if (!kit) cleanPiHomeMetadata(piAgentDir(homeEnv));
-        // #3008: the PATH the child gets, to know whether pi could run npm
-        return kit ? installPiKit(kit, piAgentDir(homeEnv), identity ?? {}, { ...homeEnv, PATH: augmentedPath() }).args : [];
+        // #3008: the PATH the child gets, to know whether pi could run npm.
+        // #3063: an extension pi failed to load is left out, alone.
+        return kit
+          ? installPiKit(kit, piAgentDir(homeEnv), identity ?? {}, { ...homeEnv, PATH: augmentedPath() }, skipFailedPiExtension)
+          : { args: [], guards: [], skipped: [] };
       },
       warmPerson: warmResourcePerson,
       registerWarmBudget: ({ person, child }) => warmResources.register({

@@ -8,8 +8,9 @@
 //   FAKE_PI_MODE   happy (default) | tooluse | mcpgateway | permission | interleave | question-select | question-input
 //                  | turn-error | no-models | exit-early | compaction | compaction-recovery
 //                  | compaction-recovery-upstream | prompt-reject | omp-chunk | stderr-flood
-//                  | extension-load-error (pi cannot load an extension and exits,
-//                  unless run with --no-extensions) | extension-load-error-always
+//                  | extension-load-error (pi cannot load the `-e` extension whose
+//                  file name is FAKE_PI_BAD_EXTENSION and exits) | extension-load-error-always
+//                  (pi cannot load an extension outside the kit and exits)
 //   FAKE_PI_MODELS comma-separated provider/model pairs (default "ollama-cloud/glm-5.2,openai/gpt-4o")
 //   FAKE_PI_ERROR  the turn-error mode's errorMessage
 //   FAKE_PI_SET_MODEL_REFUSE refuse every set_model
@@ -80,9 +81,18 @@ if (mode === "exit-early") {
 }
 // #3063: pi parses every extension at startup and exits on the first that
 // fails, as it did on an AppleDouble `._voice-guard.ts`.
-if (mode === "extension-load-error-always" || (mode === "extension-load-error" && !argv.includes("--no-extensions"))) {
+if (mode === "extension-load-error-always") {
   process.stderr.write("Failed to load extension ParseError Unexpected character '\\u0000' /data/principals/p/piAgent-key/extensions/._voice-guard.ts\n");
   process.exit(1);
+}
+if (mode === "extension-load-error") {
+  const bad = process.env.FAKE_PI_BAD_EXTENSION ?? "";
+  const loaded = argv.filter((_, index) => argv[index - 1] === "-e");
+  const failing = bad ? loaded.find((path) => path.replace(/\\/g, "/").endsWith(`/${bad}`)) : undefined;
+  if (failing) {
+    process.stderr.write(`Failed to load extension SyntaxError Unexpected token ${failing}\n`);
+    process.exit(1);
+  }
 }
 if (mode === "stderr-flood") {
   // Exceed a pipe's capacity before answering any RPC. A driver that does

@@ -38,6 +38,33 @@ export function signInFamily(instance: { driverKind: string; access?: InstanceIn
 
 export const SIGN_IN_FAMILY_LABEL: Record<SignInFamily, string> = { claude: "Claude", openai: "OpenAI" };
 
+/** #3116: the harness (the engine that runs a turn) named for the chat-bar
+ * picker's first step: the CLI or API behind a provider's accounts. A kind
+ * not listed falls back to the instance's display name. */
+export const HARNESS_LABEL: Record<string, string> = {
+  claudeAgent: "Claude Code",
+  claude: "Claude API",
+  codex: "Codex",
+  grokAgent: "Grok",
+  grok: "xAI API",
+  piAgent: "pi",
+  "openai-compat": "OpenAI-compatible",
+  mistral: "Mistral",
+  groq: "Groq",
+  cerebras: "Cerebras",
+  meta: "Meta",
+  antigravityAgent: "Antigravity",
+  geminiAgent: "Gemini CLI",
+  opencodeAgent: "OpenCode",
+  qwenAgent: "Qwen Code",
+  clineAgent: "Cline",
+  cursorAgent: "Cursor",
+};
+
+export function harnessLabel(instance: { driverKind: string; displayName: string }): string {
+  return HARNESS_LABEL[instance.driverKind] ?? instance.displayName;
+}
+
 /** A Claude sign-in (one of possibly several accounts). */
 export function isClaudeAccount(instance: { driverKind: string; access?: InstanceInfo["access"] } | undefined): boolean {
   return signInFamily(instance) === "claude";

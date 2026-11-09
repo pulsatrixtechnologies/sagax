@@ -6,6 +6,8 @@ import { effortLabel } from "@/lib/effort-label";
 import { t } from "@/lib/i18n";
 import { modelLabel, modelProvider } from "./helpers";
 import { autoOptimizeOf } from "../../../shared/model-auto-optimize";
+import { harnessLabel } from "@/lib/engine-rail";
+import { isDesktopModelId } from "@/lib/local-models";
 
 export function modelPickerSummary(opts: {
   autoOn: boolean;
@@ -29,15 +31,21 @@ export function modelPickerComposerLabel(opts: {
   active: InstanceInfo | undefined;
   selection: ModelSelection;
   selectedVariantLabel: string | undefined;
+  /** #3116: the provider's name, when the harness has more than one. */
+  providerLabel?: string;
 }): string {
-  const { autoOn, active, selection, selectedVariantLabel } = opts;
+  const { autoOn, active, selection, selectedVariantLabel, providerLabel } = opts;
   // #2106: "Auto Balance" / "Claude Fable 5.1 High" in the chat bar.
   if (autoOn) return `Auto ${t(`model.auto.optimize.${autoOptimizeOf(selection.autoOptimize)}`)}`;
-  return [
+  const model = [
     modelLabel(active, selection.model),
     selectedVariantLabel,
     !selectedVariantLabel && selection.effort ? effortLabel(selection.effort) : "",
   ].filter(Boolean).join(" ");
+  // #3116: the chip reads the three steps: "Claude Code · Anthropic · Fable 5.1 High".
+  // A local model's harness is the local group, whatever engine serves it.
+  const harness = isDesktopModelId(selection.model) ? t("model.localGroup") : active ? harnessLabel(active) : "";
+  return [harness, providerLabel, model].filter(Boolean).join(" · ");
 }
 
 export function modelPickerFollowLine(opts: {

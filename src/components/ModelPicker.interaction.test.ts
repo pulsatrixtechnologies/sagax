@@ -270,7 +270,10 @@ describe("the Grok list", () => {
     expect(row(opened, "grok-4.7-build-fast")).toBeUndefined();
     expect(html).not.toContain("Grok 4.5");
     expect(html).not.toContain("Grok 4.6");
-    expect(html).toContain("DwarfStar: Qwen3.8 Flash Next");
+    // #3116: the menu opens on the harnesses: Grok, and the local models as their own
+    expect(html).toContain('data-model-harness="grokAgent"');
+    expect(html).toContain('data-model-harness="local"');
+    expect(row(opened, "dwarfstar::qwen3.8-flash-next")).toBeDefined();
     expect(html).not.toContain("data-model-unavailable");
   });
 });

@@ -2,7 +2,7 @@
 import { localModelSubtext } from "@/lib/local-model-label";
 import { isDesktopModelId, localModelRows, localRowUnavailable } from "@/lib/local-models";
 import { modelOn } from "../../../shared/offered-models";
-import { SIGN_IN_FAMILY_LABEL, signInFamily } from "@/lib/engine-rail";
+import { SIGN_IN_FAMILY_LABEL, harnessLabel, signInFamily } from "@/lib/engine-rail";
 import { needsCli, needsSignIn } from "../EngineSetup";
 import type { ModelMenuRow, ModelMenuSection } from "../ModelMenu";
 import { equivalentOfferedModel } from "../../../shared/payable-model";
@@ -236,6 +236,8 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
   // Models that run on this computer get their own section, whatever engine
   // runs them (2026-10-14): never mixed into "Claude" or another provider.
   const LOCAL_SECTION_KEY = "local:this-computer";
+  /** #3116: the local models are one harness of their own in the step picker. */
+  const LOCAL_HARNESS = "local";
   // Every engine offers the same local models (DwarfStar through Claude, Grok,
   // Codex, pi...): list each model once. Rows come in engine order with the
   // bot's own engine first, so the first one kept is the engine already in use.
@@ -306,11 +308,13 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
         note: accessNote(instance),
         access: sectionAccess(instance),
         family: sectionFamily(instance),
+        harness: instance.driverKind,
+        harnessLabel: harnessLabel(instance),
         rows: marked.filter((row) => !localKeys.has(row.key)),
       };
     }).filter((section) => section.rows.length > 0),
   ];
-  if (menuLocalRows.length > 0) rawMenuSections.push({ key: LOCAL_SECTION_KEY, label: t("model.localGroup"), rows: uniqueLocalRows(menuLocalRows) });
+  if (menuLocalRows.length > 0) rawMenuSections.push({ key: LOCAL_SECTION_KEY, label: t("model.localGroup"), harness: LOCAL_HARNESS, harnessLabel: t("model.localGroup"), rows: uniqueLocalRows(menuLocalRows) });
   const unified = unifyProviderSections(rawMenuSections);
   const modelRows = unified.flatMap((section) => section.rows.filter((row) => row.kind === "model"));
   const favoriteRows = favoriteKeys.flatMap((key) => modelRows.filter((row) => row.key === key).slice(0, 1));

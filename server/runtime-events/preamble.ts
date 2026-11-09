@@ -2,6 +2,7 @@
 /** Preamble for the main runtime bus subscriber (#1388). Pure move. */
 import { groupGoalCompletionTurnId, parseGroupGoalDecision } from "../groups/group-goal-run.ts";
 import { withoutFinishUntilMarker } from "../finish-until.ts";
+import { withoutBareNeedsInput } from "../../shared/person-attention.ts";
 import { soloGoalLine, withoutSoloGoalMarker } from "../solo-goal.ts";
 import { clearHeldSteersForThread } from "../turns/held-steers.ts";
 import { noteFirstResponse } from "../turns/turn-trace.ts";
@@ -196,6 +197,8 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
     // #1329: the condition's marker is read, then taken out of what is shown.
     if (bot) host.finishUntilRuns.noteReply(event.threadId, spoken.text);
     spoken.text = withoutFinishUntilMarker(spoken.text);
+    // #3007: a bare NEEDS INPUT line beside a question card is no bubble
+    spoken.text = withoutBareNeedsInput(spoken.text);
     // a video card the bot wrote (```video, or the envelope as ```json or
     // bare JSON) becomes a player row after the text, never raw JSON
     const written = videoMessagesFromText(spoken.text, event.threadId);

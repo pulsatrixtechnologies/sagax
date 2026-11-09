@@ -189,6 +189,9 @@ export const HANDLE_TTL_MS = 7 * 24 * 3_600_000;
 const POLL_MS = 400;
 /** Idle looks in a row that end a wait with no words (a turn that said nothing or failed). */
 const IDLE_LOOKS_DONE = 3;
+/** #3007: idle looks (about 20 s) an answered question may wait for the
+ * turn its answer starts before the handle reports finished anyway. */
+const FOLLOW_UP_LOOKS = 50;
 /** Refusal codes a caller can usefully retry (same args or after a short wait). */
 const RETRYABLE_REFUSAL_CODES = new Set([
   "busy",
@@ -334,6 +337,10 @@ export interface StoredMessage {
   /** #2922: a person's line that answers a card (the card message's id):
    * part of the turn it unblocked, not a new prompt. */
   replyToId?: string;
+  /** #3007: a question card. `answered` once the person answered it;
+   * `late` when no engine holds the question (a harness ask_choice): the
+   * answer then comes back as the person's next line, a turn of its own. */
+  question?: { answered: boolean; late: boolean };
 }
 
 /** #2922: the cards a conversation (and the threads it handed work to)
@@ -870,14 +877,18 @@ function turnFailureWords(cause: string): string {
  * ended. #2579: the lines the agent says before a tool call ("Je cherche
  * d'abord…") are progress, kept in the steps: the reply is the last run of
  * text, the words after the turn's last tool call. */
-function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean; failed: string | null } {
+function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean; failed: string | null; followUp: boolean } {
   const start = turnAnchorIndex(messages, anchor);
-  if (start < 0) return { reply: "", sawAnchor: false, failed: null };
+  if (start < 0) return { reply: "", sawAnchor: false, failed: null, followUp: false };
   let run: string[] = [];
   let lastRun: string[] = [];
   // #3008: the turn's last word is a failed-turn row (the engine died, a
   // provider refused): the turn failed, even with words before it.
   let failed: string | null = null;
+  // #3007: an answered question card this turn has not answered yet: the
+  // person's line still to come ("answer", a late question) or the bot's
+  // words after it ("text"). Until then the turn is not finished.
+  let followUp: "answer" | "text" | null = null;
   for (const message of messages.slice(start + 1)) {
     if (message.role === "user" && (message.kind ?? "text") === "text") {
       // #2922: the person's answer to a card is part of this turn: the reply
@@ -885,10 +896,19 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
       if (!message.replyToId) break;
       if (run.length) lastRun = run;
       run = [];
+      if (followUp === "answer") followUp = "text";
       continue;
     }
     if (message.role !== "bot") continue;
     const kind = message.kind ?? "text";
+    if (message.question?.answered) {
+      // the words before an answered question (the lead-in, a marker) are
+      // never its reply
+      run = [];
+      lastRun = [];
+      followUp = message.question.late ? "answer" : "text";
+      continue;
+    }
     if (kind === "activity") {
       if (run.length) lastRun = run;
       run = [];
@@ -899,15 +919,17 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
     if (kind === "text" && typeof message.text === "string" && message.text.trim()) {
       run.push(message.text.trim());
       failed = null;
+      if (followUp === "text") followUp = null;
     }
   }
-  const joined = (run.length ? run : lastRun).join("\n\n");
+  const joined = followUp ? "" : (run.length ? run : lastRun).join("\n\n");
   // a row that only repeats the reply (flagged after it answered) is no failure
   if (failed !== null && joined && failedTurnRepeatsReply(failed, [joined])) failed = null;
   return {
     reply: joined.length > REPLY_MAX_CHARS ? `${joined.slice(0, REPLY_MAX_CHARS)}\n[...]` : joined,
     sawAnchor: true,
     failed: failed === null ? null : turnFailureWords(failed),
+    followUp: followUp !== null,
   };
 }
 
@@ -1780,6 +1802,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
   ): Promise<TurnResult> => {
     const deadline = now() + timeoutMs;
     let idleLooks = 0;
+    let followUpLooks = 0;
     for (;;) {
       const raw = deps.turnState(body.a, body.t);
       const messages = deps.messages(body.t);
@@ -1802,6 +1825,12 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const reviewing = pending?.reviewing === true;
       if (state === "idle" && read.sawAnchor && reviewing) {
         // a reviewer still decides a card of this turn: not finished
+        idleLooks = 0;
+      } else if (state === "idle" && read.sawAnchor && read.followUp && followUpLooks < FOLLOW_UP_LOOKS) {
+        // #3007: a question was answered and its answer turn has not
+        // spoken yet (a late answer waits for the turn before it to end):
+        // not finished, the reply is what the bot says after the answer
+        followUpLooks += 1;
         idleLooks = 0;
       } else if (state === "idle" && read.sawAnchor) {
         idleLooks += 1;

@@ -7,6 +7,7 @@ import { queuedChannelMessage, queueChannelMessage } from "../rooms/channel-queu
 import { queuedSteeredMessage } from "../turns/steer-queue.ts";
 import { assertWithinBudget } from "../usage/spend.ts";
 import { createHash } from "node:crypto";
+import { visibleQuestionAnswer } from "../../shared/ask-question.ts";
 export type Host = Record<string, any>;
 
 export function createDeliverLateQuestionAnswer(getHost: () => Host): any {
@@ -38,7 +39,10 @@ async function deliverLateQuestionAnswer(
     throw Object.assign(new Error("the question's conversation no longer exists"), { status: 409 });
   }
 
-  const text = group ? `@${owner.name}: ${answer}` : answer;
+  // #3007: the person's own words in the chat, never the model-facing
+  // English lead-in; the model gets the question from promptWithReply
+  const shown = visibleQuestionAnswer(answer, cardMessage.card?.questionRequest?.questions);
+  const text = group ? `@${owner.name}: ${shown}` : shown;
   const sendId = `late-question-${createHash("sha256").update(`${threadId}:${requestId}`).digest("hex").slice(0, 32)}`;
   const key = group
     ? `group:${group.id}:${threadId}:${sendId}`

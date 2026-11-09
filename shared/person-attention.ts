@@ -41,6 +41,18 @@ const ITEM_MAX = 600;
 const TAG = /\[\s*(?:HUMAIN|HUMAN|NEEDS[_ -]HUMAN|ACTION[_ -]REQUISE|ACTION[_ -]REQUIRED)\s*\]/i;
 const TAG_LINE = new RegExp(`^\\s*(?:[-*+•]|\\d+[.)])?\\s*(?:\\*\\*|__)?\\s*${TAG.source}\\s*(?:\\*\\*|__)?\\s*[:—–-]?\\s*(.*)$`, "i");
 const QUESTION_LINE = /^\s*[*_`]*NEEDS INPUT\s*:[*_`]*\s*(.+)$/i;
+const BARE_NEEDS_INPUT = /^\s*[*_`]*NEEDS INPUT\s*:?\s*[*_`]*\s*$/i;
+
+/** #3007: a line that is only the runtime's question marker, with no
+ * question after it, says nothing to the person (the card beside it asks):
+ * it is taken out of the visible text. A marker that carries its question
+ * stays, it is read by personAttention. */
+export function withoutBareNeedsInput(text: string): string {
+  if (!/NEEDS INPUT/i.test(text)) return text;
+  const lines = text.split("\n");
+  const kept = lines.filter((line) => !BARE_NEEDS_INPUT.test(line));
+  return kept.length === lines.length ? text : kept.join("\n").trim();
+}
 const STATUS_LINE = /^[\s`*_>]*RUN[_ ]STATUS\s*:?[\s`*_]*(failed|failure|partial|partially)\b[\s`*_]*[:—–-]?\s*(.*)$/i;
 /** The ticket an item leads with: `**100201**`, `#100201`, `ticket 100201`. */
 const TICKET = /(?:\*\*|#|\b(?:ticket|billet)\s+#?)(\d{4,9})\b|^\s*(\d{5,9})\b/i;

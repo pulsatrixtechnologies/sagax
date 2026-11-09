@@ -30331,6 +30331,10 @@ const agentApi = createAgentApi({
       at: message.at,
       ...(message.queueId ? { queueId: message.queueId } : {}),
       ...(message.role === "user" && message.replyToId && cardIds.has(message.id) ? { replyToId: message.replyToId } : {}),
+      // #3007: an answered question card; the reply is what follows it
+      ...(message.kind === "options" && message.card?.requestId && isPersistentQuestionCard(message.card)
+        ? { question: { answered: Boolean(message.card.answered && message.card.answered !== "unavailable"), late: String(message.card.requestId).startsWith("ask-choice-") } }
+        : {}),
       sender: message.from?.name ?? message.peerAsk?.name ?? message.sender?.name ?? null,
       tool: message.tool ? { name: message.tool.name, ok: message.tool.ok } : null,
       attachments: (message.attachments ?? []).map((file) => ({ name: file.kind === "file" ? file.name : undefined, path: file.path }))

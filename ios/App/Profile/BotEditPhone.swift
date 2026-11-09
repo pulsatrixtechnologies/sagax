@@ -18,6 +18,10 @@ struct BotEditActions {
     var archive: () -> Void
     var delete: () -> Void
     var close: () -> Void
+    /// iPad only: the bot's Rules document and its Folder (workspace files
+    /// with the Memory inside), the desktop's Rules and Folder rows (#3017, G3).
+    var openRules: (() -> Void)? = nil
+    var openFolder: (() -> Void)? = nil
 }
 
 extension LocalizedStringKey {

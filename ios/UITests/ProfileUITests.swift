@@ -351,12 +351,12 @@ final class ProfileUITests: XCTestCase {
         defer { _ = try? api("PATCH", "/api/bots/\(id)", ["soul": before]) }
         let app = launchProfile()
 
-        // the gear's bot profile > Knowledge > Instructions (#2157)
+        // the gear's bot profile > General > Personality (#2157, #3017)
         element("panel-gear", in: app).tap()
-        let knowledge = element("bot-profile-tab.knowledge", in: app)
-        XCTAssertTrue(knowledge.waitForExistence(timeout: 15))
-        knowledge.tap()
-        let soul = element("bot-profile-knowledge.instructions", in: app)
+        let general = element("bot-profile-tab.general", in: app)
+        XCTAssertTrue(general.waitForExistence(timeout: 15))
+        general.tap()
+        let soul = element("bot-profile-settings.soul", in: app)
         guard soul.waitForExistence(timeout: 10) else { throw XCTSkip("this pairing has no Soul section: start the fixture with PARITY_OWNER=1") }
         soul.tap()
         let body = app.staticTexts["text-card-body"]

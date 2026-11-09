@@ -15,6 +15,7 @@ struct DesktopBotProfileHost: View {
     @State private var mailRow: BotInboundMailRow?
     @State private var confirmingArchive = false
     @State private var confirmingDelete = false
+    @State private var deleteFailed = false
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var gate: SurfaceGate { session.surfaceGate }
@@ -34,7 +35,20 @@ struct DesktopBotProfileHost: View {
 
     private var editActions: BotEditActions {
         BotEditActions(
-            openPage: { _ in },
+            // the tree's pages land on the matching persona page (#3017, G10)
+            openPage: { page in
+                let target: DesktopPersonaPage? = switch page {
+                case .root, .identity: nil
+                case .personality: .soul
+                case .toolsApps: .access
+                case .sharing: .sharing
+                case .advanced: .summary
+                }
+                withAnimation(.easeOut(duration: 0.15)) {
+                    model.panelSection = target?.section
+                    model.personaPage = target ?? .overview
+                }
+            },
             openSection: { section in
                 withAnimation(.easeOut(duration: 0.15)) {
                     model.panelSection = section
@@ -54,7 +68,9 @@ struct DesktopBotProfileHost: View {
             },
             archive: { confirmingArchive = true },
             delete: { confirmingDelete = true },
-            close: { close() }
+            close: { close() },
+            openRules: { openPersona(.rules) },
+            openFolder: { openPersona(.files) }
         )
     }
 
@@ -66,14 +82,10 @@ struct DesktopBotProfileHost: View {
             } else {
                 profileRoot
             }
-            // The profile root carries its own X on its top bar (#2313).
-            if sectionPage != nil {
-                WindowCloseChip(action: close)
-                    .padding(.leading, 12)
-                    .padding(.top, 12)
-                    .zIndex(20)
-                    .accessibilitySortPriority(1000)
-            }
+            // The profile root carries its own X on its top bar (#2313); a
+            // sub-page shows the back chevron and its title only, like the
+            // desktop (#3017, G9).
+
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.app)
@@ -98,13 +110,22 @@ struct DesktopBotProfileHost: View {
         .alert("Delete this bot?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive) {
                 Task {
-                    _ = await session.deleteBot(current)
-                    close()
+                    // close only once the bot is really gone (#3017, G11)
+                    if await session.deleteBot(current) {
+                        close()
+                    } else {
+                        deleteFailed = true
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This cannot be undone.")
+        }
+        .alert("Couldn't delete the bot", isPresented: $deleteFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(verbatim: session.actionError ?? "")
         }
         .background(DesktopEscapeKey(action: close))
     }
@@ -159,7 +180,7 @@ struct DesktopBotProfileHost: View {
                     .lineLimit(1)
                 Spacer(minLength: 8)
             }
-            .padding(.leading, 56)
+            .padding(.leading, 12)
             .padding(.trailing, 16)
             .padding(.top, 14)
             .padding(.bottom, 8)
@@ -168,6 +189,13 @@ struct DesktopBotProfileHost: View {
                 // Page id on the body only: putting it on this VStack hid the
                 // window-close chip from UITests (#1939).
                 .accessibilityIdentifier("desktop-persona-window.page.\(page.rawValue)")
+        }
+    }
+
+    private func openPersona(_ page: DesktopPersonaPage) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            model.panelSection = nil
+            model.personaPage = page
         }
     }
 

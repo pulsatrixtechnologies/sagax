@@ -274,15 +274,14 @@ private struct BotPanelOverview: View {
     @EnvironmentObject private var model: DesktopShellModel
     let bot: Bot
 
-    @State private var overview: BotOverview?
-    @State private var loaded = false
+    @State private var load: BotOverviewLoad = .loading
     @State private var prompt: PromptPreview?
     @State private var promptFailed = false
     @State private var promptOpen = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let overview {
+            if let overview = load.overview {
                 PanelFillCard {
                     Text(verbatim: overview.who.name).panelText(13, 19.5, .medium).foregroundStyle(theme.ink)
                     if !overview.who.title.isEmpty {
@@ -305,15 +304,17 @@ private struct BotPanelOverview: View {
                 listCard("Won’t", overview.wont, empty: nil)
                 promptCard
                 recentCard(overview.recent)
-            } else if loaded {
+            } else if load == .failed {
                 PanelNotice(text: String(localized: "Couldn’t load the overview."))
-            } else {
+            } else if load == .loading {
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(24)
             }
+            // .hidden: this pairing has no overview to read (no computer,
+            // 403 owner only, 404): nothing shown, as on the desktop.
         }
         .task(id: bot.id) {
-            overview = await session.botOverview(for: bot)
-            loaded = true
+            load = await session.botOverview(for: bot)
+            guard load != .hidden else { return }
             if session.surfaceGate.allows(.promptPreview, bot: bot), let client = session.profileClient {
                 do { prompt = try await client.systemPrompt(botId: bot.id) } catch { promptFailed = true }
             }

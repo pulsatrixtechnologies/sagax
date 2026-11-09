@@ -3614,18 +3614,32 @@ final class Session: ObservableObject {
         return (try? await client.botPresets()) ?? []
     }
 
-    func botOverview(for bot: Bot) async -> BotOverview? {
-        guard let client else { return nil }
+    /// The bot overview (iPad Overview and Personality pages, the iPhone
+    /// "What it does" summary), as the desktop `BotProfilePage`. A pairing
+    /// with no overview to read (the gate, a 403 or 404, no computer) gets
+    /// `.hidden`: the section goes away rather than saying it failed.
+    func botOverview(for bot: Bot) async -> BotOverviewLoad {
+        guard let client else {
+            #if DEBUG
+            // The store preview has no computer: its overview is made from
+            // the fixture, as the demo's is.
+            if ProcessInfo.processInfo.arguments.contains("-store-preview") {
+                return .loaded(.local(bot: bot, routines: [], language: DemoLanguage(identifier: Locale.preferredLanguages.first)))
+            }
+            #endif
+            return .hidden
+        }
+        // The demo serves every bot's overview, as the desktop demo shows it.
+        guard isDemo || surfaceGate.allows(.botOverview, bot: bot) else { return .hidden }
         let connectionID = connection?.id
         do {
             let overview = try await client.overview(botId: bot.id)
-            guard !Task.isCancelled, connection?.id == connectionID else { return nil }
-            return overview
+            guard !Task.isCancelled, connection?.id == connectionID else { return .loading }
+            return .loaded(overview)
         } catch {
-            guard !Task.isCancelled, connection?.id == connectionID else { return nil }
-            guard !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return nil }
-            actionError = error.localizedDescription
-            return nil
+            guard !Task.isCancelled, connection?.id == connectionID else { return .loading }
+            guard !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return .loading }
+            return BotOverviewLoad(error: error)
         }
     }
 

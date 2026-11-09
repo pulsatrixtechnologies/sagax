@@ -458,7 +458,9 @@ struct InstructionView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                 }
-            } else if let soul {
+            } else {
+                // "What it does" loads on its own, as the desktop overview:
+                // a soul that is slow or refused never holds it back (#3061).
                 if personality {
                     Text("Its standing instructions. Write as you would talk to it.")
                         .font(Theme.Profile.labelFont)
@@ -470,40 +472,47 @@ struct InstructionView: View {
                     BotPersonalitySummary(bot: bot).padding(.bottom, 12)
                     ProfileSectionLabel(text: "Personality", margin: Theme.Profile.routineMargin)
                 }
-                if let lock {
-                    // desktop locked block: the note, then the soul read-only
-                    // (BotProfilePage `botSectionLock`)
-                    ProfileCard(margin: Theme.Profile.routineMargin) {
-                        PanelLockNote(text: lock)
-                            .padding(.horizontal, 16)
-                            .accessibilityIdentifier("panel-page.soul.locked")
-                        // desktop `data-persona-readonly`: the soul as it
-                        // is, in an inset block, not editable
-                        if !soul.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text(verbatim: soul)
-                                .font(.footnote)
-                                .foregroundStyle(Theme.textSecondary)
-                                .lineSpacing(4)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(12)
-                                .background(Theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .padding(.horizontal, 16)
-                                .padding(.top, 4)
-                                .padding(.bottom, 12)
-                                .accessibilityIdentifier("panel-page.soul.readonly")
-                        }
-                    }
-                } else {
-                    soulCards(soul)
-                }
-            } else if let problem {
-                TextCardBody(text: problem)
-            } else {
-                ProgressView().padding(.top, 40)
+                soulBody
             }
         }
         .task { await load() }
+    }
+
+    @ViewBuilder
+    private var soulBody: some View {
+        if let soul {
+            if let lock {
+                // desktop locked block: the note, then the soul read-only
+                // (BotProfilePage `botSectionLock`)
+                ProfileCard(margin: Theme.Profile.routineMargin) {
+                    PanelLockNote(text: lock)
+                        .padding(.horizontal, 16)
+                        .accessibilityIdentifier("panel-page.soul.locked")
+                    // desktop `data-persona-readonly`: the soul as it
+                    // is, in an inset block, not editable
+                    if !soul.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(verbatim: soul)
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textSecondary)
+                            .lineSpacing(4)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(Theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                            .padding(.bottom, 12)
+                            .accessibilityIdentifier("panel-page.soul.readonly")
+                    }
+                }
+            } else {
+                soulCards(soul)
+            }
+        } else if let problem {
+            TextCardBody(text: problem)
+        } else {
+            ProgressView().padding(.top, 40)
+        }
     }
 
     /// Why this viewer may not change the soul (desktop `botSectionLock`).

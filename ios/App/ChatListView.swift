@@ -174,6 +174,11 @@ struct ChatListView: View {
                 if path.isEmpty, let id = UserDefaults.standard.string(forKey: "previewOpenBot"),
                    let bot = session.state.bot(id) {
                     path.append(Chat.bot(bot))
+                    // `-previewPanelSection <section>`: its panel, then that
+                    // Edit bot page (BotPanelPhone), as the iPad shell does.
+                    if UserDefaults.standard.string(forKey: "previewPanelSection") != nil {
+                        session.requestPanelDoor(.nameCapsule)
+                    }
                 }
             }
 #endif

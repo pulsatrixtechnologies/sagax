@@ -30068,6 +30068,9 @@ ROUTES.push(createToolGrantRoutes({
 // (server/routes/my-tool-grants.ts).
 ROUTES.push(createMyToolGrantRoutes({
   person: (auth) => inboxViewer(auth)?.principalId ?? null,
+  // #3151: a bot acting as its person (a routine run as its owner) reads
+  // that person's grants; it still never writes them.
+  reader: (auth) => auth.kind === "session" && isBotActSession(auth.session) ? auth.session.principalId?.trim() || null : inboxViewer(auth)?.principalId ?? null,
   isAdmin: (auth) => auth.kind === "loopback" ? auth.trust !== "service" : auth.scopes.includes("admin"),
   grants: toolGrants,
   audit: (action, auth, req, detail) => appendAdminAction(DATA_DIR, {

@@ -37,8 +37,11 @@ struct CodingChatView: View {
     @State private var panelOpen = true
     @State private var panelSheet = false
     @State private var width: CGFloat = 0
+    /// Set in the iPad shell: the panel's content goes to the bot panel's Coding tab.
+    var bridge: CodingPanelBridge?
 
-    init(target: CodingChatTarget, parent: BotActivityModel, onClose: (() -> Void)? = nil) {
+    init(target: CodingChatTarget, parent: BotActivityModel, bridge: CodingPanelBridge? = nil, onClose: (() -> Void)? = nil) {
+        self.bridge = bridge
         self.target = target
         self.parent = parent
         self.onClose = onClose
@@ -61,7 +64,7 @@ struct CodingChatView: View {
     }
 
     /// Wide enough for the transcript and the session column side by side.
-    private var wide: Bool { width >= 720 }
+    private var wide: Bool { bridge == nil && width >= 720 }
 
     private var panelInput: CodingPanelInput {
         CodingPanelInput(item: detail?.item ?? item, detail: detail, bot: bot, threadId: threadId,
@@ -105,6 +108,16 @@ struct CodingChatView: View {
             }
         )
         .background(Theme.bg.ignoresSafeArea())
+        .background(
+            Color.clear
+                .onAppear {
+                    bridge?.onReveal = { reveal($0) }
+                    bridge?.input = panelInput
+                }
+                .onChange(of: now) { _ in bridge?.input = panelInput }
+                .onChange(of: snapshot.rows.count) { _ in bridge?.input = panelInput }
+                .onDisappear { bridge?.input = nil }
+        )
         .sheet(isPresented: $panelSheet) {
             NavigationStack {
                 CodingChatPanel(input: panelInput, showMessage: reveal)
@@ -181,6 +194,7 @@ struct CodingChatView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Spacer(minLength: 4)
+                if bridge == nil {
                 Button {
                     togglePanel()
                 } label: {
@@ -195,6 +209,7 @@ struct CodingChatView: View {
                 .accessibilityValue(Text(verbatim: "\(CodingChatRules.statusLabel(detail?.item.status ?? item.status)) · \(CodingChatRules.elapsedLabel(item: item, detail: detail, nowMs: now.timeIntervalSince1970 * 1000))"))
                 .accessibilityAddTraits(wide && panelOpen ? .isSelected : [])
                 .accessibilityIdentifier("coding.panel-toggle")
+                }
             }
             Text(verbatim: BotActivityWording.title(item))
                 .font(Theme.font(17, .semibold))
@@ -517,20 +532,8 @@ private struct CodingChatRowView: View {
         case let .line(_, message):
             bubble(message)
         case let .reads(_, _, paths, running):
-            HStack(spacing: 6) {
-                Text(verbatim: CodingChatRules.read)
-                    .font(Theme.Font.label)
-                    .foregroundStyle(Theme.textTertiary)
-                ForEach(paths, id: \.self) { path in
-                    Text(verbatim: path)
-                        .font(Theme.Font.code)
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Theme.inset, in: Capsule())
-                }
-                if running { ProgressView().controlSize(.mini) }
-            }
+            CodingToolLineView(line: CodingToolLines.readsLine(paths: paths), running: running,
+                               ok: nil, duration: nil, result: [], more: 0, expanded: nil)
         case let .step(_, _, step):
             stepView(step)
         }
@@ -559,16 +562,24 @@ private struct CodingChatRowView: View {
     private func stepView(_ step: CodingStep) -> some View {
         switch step {
         case let .command(_, command, output, exitCode, ok, durationMs, tests, diff):
-            VStack(alignment: .leading, spacing: 8) {
-                CodingTerminalView(
-                    command: command,
-                    output: output,
-                    exitCode: exitCode,
-                    ok: ok,
-                    durationMs: durationMs,
-                    tests: tests,
-                    initiallyExpanded: ok == nil || ok == false
+            let preview = CodingToolLines.preview(output)
+            let summary = tests.map { t in
+                [CodingChatRules.testsPassedLabel(t.passed)] + (t.failed > 0 ? [CodingChatRules.testsFailedLabel(t.failed)] : [])
+            }?.joined(separator: ", ")
+            VStack(alignment: .leading, spacing: 4) {
+                CodingToolLineView(
+                    line: CodingToolLines.line(for: step), running: ok == nil, ok: ok,
+                    duration: CodingToolLines.duration(durationMs),
+                    result: summary.map { [$0] } ?? preview.lines,
+                    more: summary == nil ? preview.more : 0,
+                    expanded: summary == nil ? output : nil
                 )
+                if let exitCode, ok == false {
+                    Text(verbatim: "exit \(exitCode)")
+                        .font(Theme.Font.code)
+                        .foregroundStyle(Theme.danger)
+                        .padding(.leading, 16)
+                }
                 if let diff {
                     ForEach(Array(diff.enumerated()), id: \.offset) { _, file in
                         CodingDiffView(file: file)
@@ -576,41 +587,85 @@ private struct CodingChatRowView: View {
                 }
             }
         case let .edit(_, files, ok, error):
-            VStack(alignment: .leading, spacing: 8) {
-                if ok == false {
-                    Text(verbatim: error.map(CodingChatRules.editFailedWhy) ?? CodingChatRules.editFailed)
-                        .font(Theme.Font.label)
-                        .foregroundStyle(Theme.danger)
-                }
+            VStack(alignment: .leading, spacing: 4) {
+                let added = files.reduce(0) { $0 + $1.added }
+                let removed = files.reduce(0) { $0 + $1.removed }
+                CodingToolLineView(
+                    line: CodingToolLines.line(for: step), running: false, ok: ok, duration: nil,
+                    result: ok == false
+                        ? [error.map(CodingChatRules.editFailedWhy) ?? CodingChatRules.editFailed]
+                        : ["+\(added) -\(removed)"],
+                    more: 0, expanded: nil
+                )
                 ForEach(Array(files.enumerated()), id: \.offset) { _, file in
                     CodingDiffView(file: file)
                 }
             }
-        case let .read(_, paths):
-            HStack(spacing: 6) {
-                Text(verbatim: CodingChatRules.read).font(Theme.Font.label).foregroundStyle(Theme.textTertiary)
-                ForEach(paths, id: \.self) { path in
-                    Text(verbatim: path)
-                        .font(Theme.Font.code)
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Theme.inset, in: Capsule())
+        case .read:
+            CodingToolLineView(line: CodingToolLines.line(for: step), running: false, ok: nil,
+                               duration: nil, result: [], more: 0, expanded: nil)
+        case let .tool(_, tool):
+            let preview = CodingToolLines.preview(tool.output)
+            CodingToolLineView(
+                line: CodingToolLines.line(for: step), running: tool.ok == nil, ok: tool.ok,
+                duration: CodingToolLines.duration(tool.durationMs),
+                result: preview.lines, more: preview.more, expanded: tool.output
+            )
+        }
+    }
+}
+
+/// `ToolLine.tsx`: `● Name(arg)` with the duration at the right, then
+/// `⎿ first lines` and `… +N lines` (tap to open the whole result).
+struct CodingToolLineView: View {
+    let line: CodingToolLine
+    let running: Bool
+    let ok: Bool?
+    let duration: String?
+    let result: [String]
+    let more: Int
+    let expanded: String?
+    @State private var open = false
+
+    private var dot: Color {
+        if running { return Theme.textTertiary }
+        return ok == false ? Theme.danger : Theme.success
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(verbatim: "\u{25CF}").font(.system(size: 9)).foregroundStyle(dot)
+                (Text(verbatim: line.name).font(Theme.font(13, .semibold)).foregroundColor(Theme.textPrimary)
+                    + Text(verbatim: "(\(line.arg))").font(Theme.Font.code).foregroundColor(Theme.textSecondary))
+                    .lineLimit(2)
+                Spacer(minLength: 4)
+                if let duration {
+                    Text(verbatim: duration).font(Theme.Font.label).foregroundStyle(Theme.textTertiary).monospacedDigit()
                 }
             }
-        case let .tool(_, tool):
-            HStack(spacing: 8) {
-                Image(systemName: "wrench.and.screwdriver")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textTertiary)
-                Text(verbatim: tool.summary ?? tool.name)
-                    .font(Theme.Font.label)
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(2)
+            .accessibilityIdentifier("coding-tool-line")
+            ForEach(Array(result.enumerated()), id: \.offset) { index, text in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(verbatim: index == 0 ? "\u{23BF}" : " ").font(Theme.Font.code).foregroundStyle(Theme.textTertiary)
+                    Text(verbatim: text).font(Theme.Font.code)
+                        .foregroundStyle(ok == false ? Theme.danger : Theme.textSecondary).lineLimit(2)
+                }
+                .padding(.leading, 14)
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.inset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            if more > 0 {
+                Button { open.toggle() } label: {
+                    Text(verbatim: "\u{2026} +\(more) lines").font(Theme.Font.code).foregroundStyle(Theme.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 34)
+                .accessibilityIdentifier("coding-tool-more")
+            }
+            if open, let expanded {
+                Text(verbatim: expanded).font(Theme.Font.code).foregroundStyle(Theme.textSecondary)
+                    .textSelection(.enabled).padding(.leading, 34)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

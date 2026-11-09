@@ -578,7 +578,7 @@ struct TimeZonePickerView: View {
                             }
                         } label: {
                             HStack {
-                                Text(verbatim: zone.replacingOccurrences(of: "_", with: " "))
+                                Text(verbatim: TimeZoneLabel.detailed(zone))
                                     .font(Theme.Font.rowTitle)
                                     .foregroundStyle(Theme.textPrimary)
                                 Spacer()

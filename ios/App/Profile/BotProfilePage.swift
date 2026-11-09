@@ -78,6 +78,8 @@ struct BotProfilePage: View {
     @State private var capabilitiesFailed = false
     @State private var condensed = false
     @State private var searching = false
+    @State private var channelsOpen = false
+    @State private var accountsOpen = false
     @State private var query = ""
     @FocusState private var searchFocused: Bool
     @StateObject private var owlHandle = OwlMascotHandle()
@@ -724,17 +726,41 @@ struct BotProfilePage: View {
             .padding(.horizontal, Theme.Profile.cardMargin + 4)
     }
 
+    /// The desktop's one-line description under each General row; on the iPad
+    /// main column the recap moves to the right as a value.
+    private static let rowDescriptions: [String: String] = [
+        "bot-profile-settings.soul": "What it knows, how it speaks, what it won't do",
+        "bot-profile-settings.model": "Engine, fallback, where it runs, who pays",
+        "bot-profile-settings.permissions": "What it does alone, what it asks",
+        "bot-profile-more.rules": "When it wants to... it should...",
+        "bot-profile-settings.voice": "Tone, speed, language",
+        "bot-profile-settings.history": "Every settings change, restorable",
+    ]
+
     private func linkRow(_ row: LinkRow) -> some View {
-        Button {
+        let desc = fillsMain ? Self.rowDescriptions[row.id] : nil
+        return Button {
             Haptics.selection()
             row.action()
         } label: {
             ProfileRow(
                 icon: ProfileRowIcon(systemImage: row.symbol, size: 16),
-                title: Text(row.title),
-                subtitle: row.subtitle.map { Text(verbatim: $0) },
-                height: row.subtitle == nil ? Theme.Profile.singleRow : Theme.Profile.routineRow
-            ) { ProfileChevronTrailing() }
+                title: desc != nil && row.id == "bot-profile-settings.permissions" ? Text("Before it acts") : Text(row.title),
+                subtitle: desc.map { Text(verbatim: String(localized: String.LocalizationValue($0))) }
+                    ?? row.subtitle.map { Text(verbatim: $0) },
+                height: (row.subtitle == nil && desc == nil) ? Theme.Profile.singleRow : Theme.Profile.routineRow
+            ) {
+                HStack(spacing: 8) {
+                    if desc != nil, let value = row.subtitle {
+                        Text(verbatim: value)
+                            .font(Theme.Font.label)
+                            .foregroundStyle(Theme.textSecondary)
+                            .lineLimit(1)
+                            .accessibilityIdentifier("\(row.id).value")
+                    }
+                    ProfileChevronTrailing()
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -820,6 +846,46 @@ struct BotProfilePage: View {
 
     private var channelsHit: Bool { hit(Self.words("Channels")) || channelLines.contains(where: hit) }
 
+    /// "1 active": the connected Reach me channels, Slack and the mailbox.
+    private var channelsActiveLabel: String {
+        let on = (reach?.settings.channels ?? []).count
+        let address = mail?.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let total = on + (slackURL != nil ? 1 : 0) + (address.isEmpty ? 0 : 1)
+        return total == 0 ? String(localized: "None") : String(localized: "\(total) active")
+    }
+
+    /// A desktop-style group row that opens its detail inline: icon, title,
+    /// description, the value at the right and a chevron that turns.
+    private func disclosureRow(
+        id: String, symbol: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
+        value: String, open: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            ProfileRow(
+                icon: ProfileRowIcon(systemImage: symbol, size: 16),
+                title: Text(title),
+                subtitle: Text(subtitle),
+                height: Theme.Profile.routineRow
+            ) {
+                HStack(spacing: 8) {
+                    Text(verbatim: value)
+                        .font(Theme.Font.label)
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)
+                    ProfileChevronTrailing()
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+        .accessibilityValue(Text(verbatim: open ? "expanded" : "collapsed"))
+    }
+
     @ViewBuilder
     private var channelsGroup: some View {
         let lines = hit(Self.words("Channels")) ? channelLines : channelLines.filter(hit)
@@ -827,9 +893,21 @@ struct BotProfilePage: View {
             VStack(alignment: .leading, spacing: 8) {
                 groupLabel("Channels")
                 ProfileCard {
-                    ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
-                        if index > 0 { ProfileDivider() }
-                        channelRow(line)
+                    if fillsMain && !searching {
+                        disclosureRow(
+                            id: "bot-profile-channels.toggle",
+                            symbol: "bubble.left",
+                            title: "Channels",
+                            subtitle: "Slack, email, Messages",
+                            value: channelsActiveLabel,
+                            open: channelsOpen
+                        ) { withAnimation(.easeOut(duration: 0.15)) { channelsOpen.toggle() } }
+                    }
+                    if !fillsMain || searching || channelsOpen {
+                        ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
+                            if index > 0 || (fillsMain && !searching) { ProfileDivider() }
+                            channelRow(line)
+                        }
                     }
                 }
             }
@@ -926,9 +1004,9 @@ struct BotProfilePage: View {
             let shown = whole ? accounts : accounts.filter { hit(Self.accountName($0)) }
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    groupLabel("Accounts")
+                    groupLabel(fillsMain ? "Bot accounts" : "Accounts")
                     Spacer(minLength: 0)
-                    Menu {
+                    if !fillsMain || searching || accountsOpen { Menu {
                         Button("Apps") { actions.openSection(.access) }
                         Button("MCP servers") { actions.openSection(.access) }
                     } label: {
@@ -942,9 +1020,21 @@ struct BotProfilePage: View {
                         .background(Theme.cardRaised, in: Capsule())
                     }
                     .accessibilityIdentifier("bot-profile-accounts.add")
-                    .padding(.trailing, Theme.Profile.cardMargin)
+                    .padding(.trailing, Theme.Profile.cardMargin) }
                 }
                 ProfileCard {
+                    if fillsMain && !searching {
+                        disclosureRow(
+                            id: "bot-profile-accounts.toggle",
+                            symbol: "powerplug",
+                            title: "What it can use",
+                            subtitle: "Accounts and connectors",
+                            value: accounts.isEmpty ? String(localized: "None") : String(accounts.count),
+                            open: accountsOpen
+                        ) { withAnimation(.easeOut(duration: 0.15)) { accountsOpen.toggle() } }
+                    }
+                    if !fillsMain || searching || accountsOpen {
+                    if fillsMain && !searching { ProfileDivider() }
                     if capabilitiesFailed {
                         HStack(spacing: 8) {
                             Text("Couldn't load the accounts")
@@ -1005,6 +1095,7 @@ struct BotProfilePage: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, Theme.Profile.textInset)
                             .frame(minHeight: Theme.Profile.singleRow)
+                    }
                     }
                 }
             }

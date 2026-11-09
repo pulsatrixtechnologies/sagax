@@ -91,9 +91,14 @@ it("a routine run's choice card reaches its person in the chat, the inbox, a not
     expect(await runTask()).toMatchObject({ routineRunId: run.id, busy: false });
 
     // ── a notification the person's devices take, with its choices ─────
+    // The card is mirrored into the bot's own chat (nothing invisible, #2901);
+    // the banner opens on that view, which answers through the run's card.
+    const mirror = (await messages(bot.threadId)).find((message) => message.card?.approvalOrigin?.requestId === requestId);
+    expect(mirror?.card?.requestId).toMatch(/^origin:/);
     await expect.poll(() => stream.frames.some((event: any) => event.kind === "notify" && event.notification?.kind === "question"
-      && event.notification.threadId === threadId && event.notification.requestId === requestId), { timeout: 10_000 }).toBe(true);
-    const notice = stream.frames.find((event: any) => event.kind === "notify" && event.notification?.requestId === requestId).notification;
+      && event.notification.threadId === bot.threadId && event.notification.requestId === mirror.card.requestId
+      && event.notification.cardId === mirror.id), { timeout: 10_000 }).toBe(true);
+    const notice = stream.frames.find((event: any) => event.kind === "notify" && event.notification?.requestId === mirror.card.requestId).notification;
     expect(notice.choices).toEqual(options);
 
     // ── the person answers; the same run goes on and completes ─────────

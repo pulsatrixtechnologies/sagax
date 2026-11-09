@@ -25,7 +25,8 @@ import { usePerspicaxOrg, type OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { groupPeopleCandidates } from "@/lib/private-threads";
 import { api, useStore } from "@/state/store";
 import type { PageAccess, PublishedPageSummary } from "../../shared/published-pages";
-import { initialsOf, needsLinkConfirm, pageReadingUrl, sharePlan, teamCandidates, withInvite, type ShareChange } from "@/lib/page-share-plan";
+import { viewerActorId } from "@/lib/viewer";
+import { initialsOf, needsLinkConfirm, pageReadingUrl, sharePlan, showBotLibraryChoice, teamCandidates, withInvite, type ShareChange } from "@/lib/page-share-plan";
 import { ExpirySelect, openReadingLink, pageErrorText } from "./page-controls";
 import { useOrgDirectory } from "./GroupPeoplePicker";
 
@@ -108,6 +109,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
 
   const invites = page.invites ?? { people: [], teams: [] };
   const viewerId = state.config?.viewer?.principalId ?? null;
+  const botChoice = showBotLibraryChoice({ page, org: organization, viewerId: viewerActorId(state.config), bot: state.bots.find((candidate) => candidate.id === page.botId) });
   const people = useMemo(() => new Map((directory?.people ?? []).map((person) => [person.principalId.toLowerCase(), person])), [directory]);
   const teams = useMemo(() => new Map((directory?.teams ?? []).map((team) => [team.id.toLowerCase(), team])), [directory]);
   const personCandidates = organization && query.trim()
@@ -245,7 +247,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
         {linkOff && page.access === "link" && shared && <p className="mt-1.5 text-[12px] text-warning">{t("pages.linkOffActive")}</p>}
       </fieldset>
 
-      <fieldset className="mb-3" disabled={busy} data-page-bot-scope="">
+      {botChoice && <fieldset className="mb-3" disabled={busy} data-page-bot-scope="">
         <legend className="mb-1.5 text-[12px] font-medium text-ink-secondary">{t("pages.share.bot.legend")}</legend>
         <div className="flex flex-col gap-0.5">
           {([false, true] as const).map((value) => {
@@ -262,7 +264,7 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
             );
           })}
         </div>
-      </fieldset>
+      </fieldset>}
 
       {!shared && <p className="mb-3 text-[12px] text-ink-secondary">{t("pages.share.notShared", { n: String(version) })}</p>}
       {shared && (

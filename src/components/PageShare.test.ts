@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { sharePlan, teamCandidates, withInvite } from "./PageShare";
+import { showBotLibraryChoice } from "@/lib/page-share-plan";
 
 const now = 1_000_000;
 const draft = { status: "draft" as const, access: "private" as const, expiresAt: null, currentVersion: null };
@@ -60,5 +61,19 @@ describe("the invite lists", () => {
     const teams = [{ id: "t1", name: "Support", managers: [], members: ["a"] }, { id: "t2", name: "Sales support", managers: [], members: [] }, { id: "t3", name: "Finance", managers: [], members: [] }];
     expect(teamCandidates(teams, ["t1"], "supp").map((team) => team.id)).toEqual(["t2"]);
     expect(teamCandidates(teams, [], "").length).toBe(3);
+  });
+});
+
+describe("#3194: the In the bot's Library choice", () => {
+  const personal = { botShared: undefined };
+  it("is hidden for a solo bot, on a solo server or on an organization server", () => {
+    expect(showBotLibraryChoice({ page: personal, org: false, viewerId: "pr_a", bot: { ownerUserId: "pr_a" } })).toBe(false);
+    expect(showBotLibraryChoice({ page: personal, org: true, viewerId: "pr_a", bot: { ownerUserId: "pr_a", grants: [] } })).toBe(false);
+    expect(showBotLibraryChoice({ page: personal, org: true, viewerId: "pr_a", bot: undefined })).toBe(false);
+  });
+  it("shows for a shared bot, the owner's or someone else's, and for a page already shared", () => {
+    expect(showBotLibraryChoice({ page: personal, org: true, viewerId: "pr_a", bot: { ownerUserId: "pr_a", grants: [{}] } })).toBe(true);
+    expect(showBotLibraryChoice({ page: personal, org: true, viewerId: "pr_b", bot: { ownerUserId: "pr_a" } })).toBe(true);
+    expect(showBotLibraryChoice({ page: { botShared: true }, org: false, viewerId: "pr_a", bot: undefined })).toBe(true);
   });
 });

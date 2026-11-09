@@ -73,6 +73,8 @@ const conversation: Message[] = Array.from({ length: 6 }, (_, i) => [
   line(`b${i}`, "bot", fr ? `Réponse ${i + 1} : ${i + 3} billets fermés depuis ce matin.` : `Answer ${i + 1}: ${i + 3} tickets closed since this morning.`, i * 2 + 1, `u${i}`),
 ]).flat();
 const after = params.get("state") === "after";
+// ?gif=1: Iris's last message is a GIF the person sent (#3204)
+const gif = params.get("gif") === "1";
 const kindCard = fr
   ? { title: "Qu'est-ce qu'on signale?", subtitle: "Choisissez, ou décrivez-le dans vos mots.", options: ["Un bogue", "Une idée", "Une question"] }
   : { title: "What would you like to report?", subtitle: "Pick one, or describe it in your own words.", options: ["A bug", "An idea", "A question"] };
@@ -83,8 +85,10 @@ const feedbackMessages: Message[] = [
 const team: Bot[] = [
   bot("nova", "Nova", { chiefOfStaff: true, title: fr ? "Chef de cabinet" : "Chief of staff", mascotBody: "squircle", pinned: true }, fr ? "Je coordonne la semaine." : "Coordinating the week.", 4),
   { ...bot("atlas", "Atlas", { title: "Grok 4.6", color: "pink", mascotBody: "squircle", section: "My team", busy: true }, "", 8), messages: conversation, activeLeafId: conversation.at(-1)?.id } as Bot,
-  bot("iris", "Iris", { title: "Dev Ops", color: "orange", mascotBody: "drop", section: "My team" }, fr ? "Mémoire nettoyée." : "Memory tidied up.", 42),
-  ...(after ? [{ ...bot("feedback", "Feedback", { title: fr ? "Vos retours" : "Your feedback", color: "teal", mascotBody: "blob", section: "My team", systemBot: "feedback" } as Partial<Bot>, "", 201), messages: feedbackMessages, activeLeafId: "f2" } as Bot] : []),
+  gif
+    ? { ...bot("iris", "Iris", { title: "Dev Ops", color: "orange", mascotBody: "drop", section: "My team" }, "", 42), messages: [line("m-iris-gif", "user", '<attached-image path="/data/attachments/ab12/cat.gif" name="cat.gif" meme-provider="giphy" meme-attribution="GIPHY" />', 42)] } as Bot
+    : bot("iris", "Iris", { title: "Dev Ops", color: "orange", mascotBody: "drop", section: "My team" }, fr ? "Mémoire nettoyée." : "Memory tidied up.", 42),
+  ...(after ? [{ ...bot("feedback", "Feedback", { title: "Bogues, idées, questions", description: "Signalez un bogue, proposez une idée ou posez une question à l'équipe Sagax. / Report a bug, suggest an idea or ask the Sagax team a question.", color: "teal", mascotBody: "blob", section: "My team", systemBot: "feedback" } as Partial<Bot>, "", 201), messages: feedbackMessages, activeLeafId: "f2" } as Bot] : []),
 ];
 const start: AppState = {
   ...initialState,

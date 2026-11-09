@@ -9,6 +9,7 @@ import { BotRoleTag } from "../LabelTag";
 import { BotShareIcon, botShareLabel } from "../BotShareIcon";
 import { botShareState } from "@/lib/bot-share-state";
 import type { MenuState } from "./types";
+import { botTitleText } from "@/lib/system-bot-copy";
 
 export function SidebarPinnedGrid({
   pinnedBots,
@@ -35,7 +36,7 @@ export function SidebarPinnedGrid({
     <div className={cn("grid", density === "icons" ? "mb-2 grid-cols-1 gap-1 py-1.5" : "mb-4 grid-cols-[repeat(auto-fit,95px)] justify-center gap-x-1 gap-y-3 pb-1.5 pt-3")}>
       {pinnedBots.map((bot) => {
         const selected = state.activeView === "chat" && state.selectedId === bot.id;
-        const title = bot.title.trim();
+        const title = botTitleText(bot).trim();
         const share = botShareState(bot, state.groups, viewerId);
         return (
           <button

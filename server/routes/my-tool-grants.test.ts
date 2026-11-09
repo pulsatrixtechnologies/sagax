@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
 import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
+import { BOT_ACT_SESSION_LABEL, isBotActSession } from "../auth/sessions.ts";
 import { ToolGrantStore } from "../tools/tool-grants.ts";
 import { TOOL_POLICY_ROWS } from "../tool-policy.generated.ts";
 import { createMyToolGrantRoutes } from "./my-tool-grants.ts";
@@ -19,11 +20,19 @@ afterEach(async () => { await Promise.all(servers.splice(0).map((s) => new Promi
 const member = (principalId: string | null, admin = false): RequestAuth =>
   ({ kind: "session", scopes: admin ? ["admin", "client"] : ["client"], session: { id: `s-${principalId}`, principalId } } as unknown as RequestAuth);
 
+// A bot's act copy of its person's session (a routine run as its owner).
+const botActingAs = (principalId: string): RequestAuth =>
+  ({ kind: "session", scopes: ["client"], session: { id: "s-act", principalId, ephemeral: true, label: BOT_ACT_SESSION_LABEL } } as unknown as RequestAuth);
+const sessionOf = (a: RequestAuth) => (a.kind === "session" ? a.session as unknown as { principalId?: string | null; ephemeral?: boolean; label?: string } : null);
+
 async function serve(auth: RequestAuth) {
   const grants = new ToolGrantStore(null, () => NOW);
   const audits: Array<{ action: string; detail: Record<string, unknown> }> = [];
   const routes = [createMyToolGrantRoutes({
-    person: (a) => (a.kind === "session" ? (a.session as { principalId?: string | null }).principalId ?? null : null),
+    // as server/index.ts: a bot's act session is nobody for a write...
+    person: (a) => { const s = sessionOf(a); return s && !isBotActSession(s as never) ? s.principalId ?? null : null; },
+    // ...and its person for a read (#3151)
+    reader: (a) => sessionOf(a)?.principalId ?? null,
     isAdmin: (a) => a.scopes.includes("admin"),
     grants,
     audit: (action, _a, _r, detail) => audits.push({ action, detail }),
@@ -85,6 +94,18 @@ describe("a person's own tool access (Owner 2026-10-26)", () => {
     expect((await send("POST", "/api/me/tool-grants", { subject: { kind: "user", id: "pr_other" }, scope: "agents:read" })).status).toBe(400);
     const nobody = await serve(member(null));
     expect((await nobody.send("GET", "/api/me/tool-grants")).status).toBe(403);
+  });
+
+  it("a routine run as its owner reads the owner's grants, and still grants or revokes nothing (#3151)", async () => {
+    const { send, grants } = await serve(botActingAs("pr_ada"));
+    const own = grants.grant({ kind: "user", id: "pr_ada" }, "agents:read", "pr_ada");
+    grants.grant({ kind: "user", id: "pr_other" }, "agents:write", "x");
+    const read = await send("GET", "/api/me/tool-grants");
+    expect(read.status).toBe(200);
+    expect(read.body.grants.map((g: { id: string }) => g.id)).toEqual([own.id]);
+    expect((await send("POST", "/api/me/tool-grants", { scope: "agents:write" })).body.code).toBe("no_person");
+    expect((await send("POST", `/api/me/tool-grants/${own.id}/revoke`)).body.code).toBe("no_person");
+    expect(grants.all().filter((g) => g.revokedAt === undefined)).toHaveLength(2);
   });
 
   it("members reach the handler; no agent tool may use the routes", () => {

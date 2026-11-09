@@ -10,11 +10,13 @@
 //   POST /api/me/tool-grants { scope, expiresAt? } -> 201 { grant }
 //   POST /api/me/tool-grants/<id>/revoke     -> { ok }
 //
-// Never a bot: an agent tool cannot reach these routes (their policy rows
-// are `tool-grants:admin`, never default-enabled), and a bot's act copy of
-// a session or an AI client is refused (`person` returns null), so no agent
-// grants itself or its speaker anything. Every write is one row in the
-// admin activity log, like the other grant routes.
+// Never a bot for a write: an agent tool cannot grant or revoke here (their
+// policy rows are `tool-grants:admin`, never default-enabled), and a bot's
+// act copy of a session or an AI client is refused (`person` returns null),
+// so no agent grants itself or its speaker anything. Reading is the person's
+// own: a bot acting as its person (a routine run as its owner, a delegated
+// turn) reads that person's grants through `reader` (#3151). Every write is
+// one row in the admin activity log, like the other grant routes.
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
@@ -30,6 +32,9 @@ export interface MyToolGrantRouteDeps {
   /** The signed-in person's principal id, or null when no person asks (a
    * local service, a bot's act session, an AI client). */
   person(auth: RequestAuth): string | null;
+  /** Whose grants this request may read: the person, or the person a bot
+   * acts as (#3151); null when nobody's. Defaults to `person`. */
+  reader?(auth: RequestAuth): string | null;
   isAdmin(auth: RequestAuth): boolean;
   grants: Pick<ToolGrantStore, "all" | "grant" | "revoke">;
   audit(action: "tool_grants.grant" | "tool_grants.revoke", auth: RequestAuth, req: IncomingMessage, detail: Record<string, unknown>): void;
@@ -48,18 +53,22 @@ export function createMyToolGrantRoutes(deps: MyToolGrantRouteDeps): RouteHandle
     const list = path === "/api/me/tool-grants";
     if (!list && !revoke) return PASS;
     res.setHeader("cache-control", "no-store");
-    const person = deps.person(auth);
-    if (!person) return json(res, 403, { error: "Sign in to manage your own tool access.", code: "no_person" });
-    const subject = { kind: "user" as const, id: person };
-    const mine = (row: { subject: { kind: string; id: string } }) => row.subject.kind === "user" && row.subject.id === person;
+    const ownedBy = (id: string) => (row: { subject: { kind: string; id: string } }) => row.subject.kind === "user" && row.subject.id === id;
     const admin = deps.isAdmin(auth);
 
+    // A routine run acting for its owner may read the list (#3151); changing a grant still needs the person.
     if (list && method === "GET") {
+      const reader = deps.reader ? deps.reader(auth) : deps.person(auth);
+      if (!reader) return json(res, 403, { error: "Sign in to manage your own tool access.", code: "no_person" });
       const at = now();
-      const rows = deps.grants.all().filter(mine)
+      const rows = deps.grants.all().filter(ownedBy(reader))
         .map((g) => ({ ...g, state: g.revokedAt !== undefined ? "revoked" : g.expiresAt !== undefined && g.expiresAt <= at ? "expired" : "active" }));
       return json(res, 200, { grants: rows, mayGrantAdmin: true, adminOnlyAreas: admin ? [] : ORG_REACH_AREAS });
     }
+    const person = deps.person(auth);
+    if (!person) return json(res, 403, { error: "Sign in to manage your own tool access.", code: "no_person" });
+    const subject = { kind: "user" as const, id: person };
+    const mine = ownedBy(person);
     if (list && method === "POST") {
       const parsed = grantBody.safeParse(await readBody(req));
       if (!parsed.success) return json(res, 400, { error: "scope <area>:<read|write|admin> required" });

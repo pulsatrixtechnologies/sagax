@@ -25,10 +25,11 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { DetailPanel } from "./DetailPanel";
 import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 import { t, activeLocale } from "@/lib/i18n";
-import { CanvasComputers } from "./CanvasComputers";
+import { AddComputerDialog } from "./remote-session/AddComputerDialog";
+import { fetchRemoteHosts, type RemoteHostCard } from "./remote-session/remote-hosts-client";
 import { PAGE_ACTION_BUTTON, PAGE_HEADER_BUTTON, PageHeader } from "./content-page";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
-import type { TeamComputer } from "../../shared/team-computer";
+import { unattendedHostLabel } from "./remote-session/UnattendedHostsSection";
 import { useMacInsetChrome } from "./DesktopCapabilities";
 import { readableError } from "@/lib/plain-error";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -249,11 +250,9 @@ export function TeamMapPage() {
   const [teamEditor, setTeamEditor] = useState<{ section?: string; rename?: boolean } | null>(null);
   const [pluginImport, setPluginImport] = useState(false);
   const [deletingTeam, setDeletingTeam] = useState<string | null>(null);
-  const [computersOpen, setComputersOpen] = useState(false);
-  const [createComputerRequest, setCreateComputerRequest] = useState(0);
-  const [computers, setComputers] = useState<TeamComputer[]>([]);
-  const [computerDrop, setComputerDrop] = useState<{ id: string; section: string } | null>(null);
-  const clearComputerDrop = useCallback(() => setComputerDrop(null), []);
+  // "Add computer": the same modal as Remote sessions (OS, install mode, code).
+  const [addingComputer, setAddingComputer] = useState(false);
+  const [hostAnswer, setHostAnswer] = useState<{ available: boolean; hosts: RemoteHostCard[] }>({ available: true, hosts: [] });
   const [pendingMove, setPendingMove] = useState<{ bot: Bot; destination: string; resolve: (moved: boolean) => void } | null>(null);
   // null until the session answers: never flash Create team at a member on solo.
   const [manageTeams, setManageTeams] = useState<boolean | null>(null);
@@ -292,6 +291,10 @@ export function TeamMapPage() {
       });
     return () => { alive = false; };
   }, [remoteClient, orgMode]);
+  const loadHosts = useCallback(() => {
+    void fetchRemoteHosts().then((answer) => setHostAnswer({ available: answer.available, hosts: answer.hosts })).catch(() => {});
+  }, []);
+  useEffect(() => { if (ownComputers) loadHosts(); }, [ownComputers, loadHosts]);
   const personalStored = usePersonalSections();
   const personal = orgMode ? personalStored ?? EMPTY_PERSONAL_SECTIONS : null;
   const sectionParents = useSectionParents();
@@ -373,7 +376,7 @@ export function TeamMapPage() {
         topbar
         actionsStyle={controlsShiftStyle}
         actions={!remoteClient && <>
-          {ownComputers && <button onClick={() => setComputersOpen((value) => !value)} aria-label={t("settings.group.computers")} aria-expanded={computersOpen} className={PAGE_HEADER_BUTTON}><Monitor size={16} /></button>}
+          {ownComputers && <button onClick={() => setAddingComputer(true)} aria-label={t("settings.group.computers")} aria-haspopup="dialog" data-team-map-computers="" className={PAGE_HEADER_BUTTON}><Monitor size={16} /></button>}
           {(canEditTeams || ownComputers) && <details className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => {
             if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); }
           }}>
@@ -383,7 +386,7 @@ export function TeamMapPage() {
             }}>
               {canEditTeams && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => setTeamEditor({})}><Users size={16} />{t("team.create")}</button>}
               {canEditTeams && <button data-team-map-import-plugin="" className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => { setTeamEditor(null); setPluginImport(true); }}><Puzzle size={16} />{t("pluginTeam.menu")}</button>}
-              {ownComputers && <button data-team-map-unattended="" className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => { setComputersOpen(true); setCreateComputerRequest((value) => value + 1); }}><MonitorSmartphone size={16} />{t("teamMap.unattendedComputer")}</button>}
+              {ownComputers && <button data-team-map-unattended="" className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => setAddingComputer(true)}><MonitorSmartphone size={16} />{t("teamMap.unattendedComputer")}</button>}
               {/* An OMB Cloud home has no Local VM (shared/cloud-home.ts). */}
               {adminTeams && placeOffered("vm", state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => dispatch({ type: "toggleAppSettings", section: "computer", open: true })}><Monitor size={16} />{t("teamMap.localVm")}</button>}
             </div>
@@ -400,16 +403,14 @@ export function TeamMapPage() {
       <TeamCanvas sections={sections} canManage={canEditTeams} onMove={requestMove}
         connectedBotIds={state.settingsOpen ? edges.flatMap((edge) => edge.sourceBotId === state.selectedId ? [edge.targetBotId] : edge.targetBotId === state.selectedId ? [edge.sourceBotId] : []) : []}
         onComputer={(bot) => dispatch({ type: "toggleSettings", botId: bot.id, section: "access", open: true })}
-        teamComputers={Object.fromEntries(computers.filter((computer) => computer.section !== null).map((computer) => [computer.section!, { name: computer.name, state: computer.state }]))}
-        onTeamComputer={() => setComputersOpen(true)}
-        onComputerDrop={(id, section) => { if (ownComputers) { setComputersOpen(true); setComputerDrop({ id, section }); } }}
+        teamComputers={Object.fromEntries(hostAnswer.hosts.filter((host) => host.state === "enrolled" && host.section !== null).map((host) => [host.section!, { name: unattendedHostLabel(host), state: host.online ? t("myDevices.onlineNow") : undefined }]))}
+        onTeamComputer={() => dispatch({ type: "showRemoteSessions" })}
         onInstructions={(section, label) => setContextEditor({ section, label })}
         onMemory={(section, label) => setMemoryEditor({ section, label })}
         onEditTeam={(section, rename) => setTeamEditor({ section, rename })}
         onDeleteTeam={setDeletingTeam}
         isEmpty={(key) => ![...laidOut.bots, ...laidOut.groups].some((record) => record.section?.trim() === key)} />
-      {ownComputers && <CanvasComputers cloud={adminTeams} open={computersOpen} createRequest={createComputerRequest} drop={computerDrop} sections={sections}
-        onClose={() => setComputersOpen(false)} onDropHandled={clearComputerDrop} onChange={setComputers} />}
+      {ownComputers && addingComputer && <AddComputerDialog available={hostAnswer.available} hosts={hostAnswer.hosts as never} onIssued={loadHosts} onClose={() => { setAddingComputer(false); loadHosts(); }} />}
       </div>
       {edges.length > 0 && <details className="shrink-0 border-t border-hairline/40 bg-panel px-6 py-3">
         <summary className="cursor-pointer text-[12px] text-ink-secondary">{t("canvas.handoffs")} · {edges.length}</summary>

@@ -5,7 +5,7 @@
 // bots limits it to them, and the server refuses the others. Sharing gives
 // a person or a group of the organization the same computer in their own
 // list (marked "Shared by <me>"); their bots use it with the host's access.
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bot as BotIcon, Loader2, Users, X } from "lucide-react";
 
 import { DialogFrame, DialogLayer, PILL, PRIMARY_PILL } from "@/components/SettingsPrimitives";
@@ -18,7 +18,11 @@ import { type OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { groupPeopleCandidates } from "@/lib/private-threads";
 import { readableError } from "@/lib/plain-error";
 import { useStoreOptional } from "@/state/store";
+import { EMPTY_PERSONAL_SECTIONS, personalSectionNames, usePersonalSections } from "@/lib/personal-sections";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import {
+  fetchRemoteHosts,
+  placeRemoteHost,
   setRemoteHostBots,
   shareRemoteHost,
   unshareRemoteHost,
@@ -140,6 +144,73 @@ export function HostBotsDialog({ hostId, host, value, onSaved, onClose }: {
       <div className="flex flex-col gap-3">
         {error && <p role="alert" className="rounded-lg bg-danger/10 p-2 text-[12px] text-danger">{error}</p>}
         <HostBotsPicker bots={bots} value={draft} onChange={setDraft} disabled={busy} />
+      </div>
+    </SmallDialog>
+  );
+}
+
+/** The teams a host can be placed on: the person's own sections in an
+ * organization, else the server's sections and the groups' sections. */
+function useTeamNames(): string[] {
+  const store = useStoreOptional();
+  const personal = usePersonalSections();
+  const org = usePerspicaxOrg() !== null;
+  const sections = store?.state.sections;
+  const groups = store?.state.groups;
+  return useMemo(() => org
+    ? personalSectionNames(personal ?? EMPTY_PERSONAL_SECTIONS)
+    : [...new Set([...(sections ?? []), ...(groups ?? []).flatMap((group) => group.section && group.ownerId === undefined ? [group.section] : [])])].filter(Boolean),
+  [org, personal, sections, groups]);
+}
+
+/** "Team…" from a host row: the team this computer is the default for (it
+ * moved here from the Team map's Computers panel). */
+export function HostTeamDialog({ hostId, host, onClose }: { hostId: string; host: string; onClose: () => void }) {
+  const teams = useTeamNames();
+  const [current, setCurrent] = useState<string | null | undefined>(undefined);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    void fetchRemoteHosts()
+      .then((answer) => { if (!alive) return; const section = answer.hosts.find((row) => row.hostId === hostId)?.section ?? null; setCurrent(section); setDraft(section); })
+      .catch(() => { if (alive) setCurrent(null); });
+    return () => { alive = false; };
+  }, [hostId]);
+  const save = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await placeRemoteHost(hostId, draft);
+      onClose();
+    } catch (cause) {
+      setError(readableError(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const options = current && !teams.includes(current) ? [current, ...teams] : teams;
+  return (
+    <SmallDialog titleId="host-team-title" title={t("remoteSessionsAdmin.hosts.team.title")} subtitle={t("remoteSessionsAdmin.hosts.team.subtitle", { host })}
+      hooks={{ "data-host-team-dialog": hostId }} busy={busy} onClose={onClose}
+      footer={<>
+        <button type="button" className={PILL} disabled={busy} onClick={onClose}>{t("common.cancel")}</button>
+        <button type="button" data-host-team-save="" className={PRIMARY_PILL} disabled={busy || current === undefined || draft === current} onClick={() => void save()}>
+          {busy && <Loader2 size={13} aria-hidden="true" className="animate-spin" />}{t("common.save")}
+        </button>
+      </>}>
+      <div className="flex flex-col gap-3">
+        {error && <p role="alert" className="rounded-lg bg-danger/10 p-2 text-[12px] text-danger">{error}</p>}
+        <label className="flex flex-col gap-1.5 text-[12px] text-ink-secondary">
+          {t("remoteSessionsAdmin.hosts.team.label")}
+          <select data-host-team-select="" value={draft ?? ""} disabled={busy || current === undefined} onChange={(event) => setDraft(event.target.value || null)}
+            className="w-full rounded-lg border border-hairline/60 bg-inset px-3 py-2 text-[13px] text-ink outline-none focus:border-accent">
+            <option value="">{t("remoteSessionsAdmin.hosts.team.none")}</option>
+            {options.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        </label>
+        <p className="text-[12px] leading-4 text-ink-secondary">{t("remoteSessionsAdmin.hosts.team.hint")}</p>
       </div>
     </SmallDialog>
   );

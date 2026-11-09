@@ -1948,7 +1948,6 @@
   "canvas.moveBot": "将 {name} 移至 {team} · 会变更团队成员",
   "canvas.reviewMove": "检查是否要将 {name} 移至 {team}。",
   "canvas.moveCancelled": "已取消移动。团队成员不变。",
-  "canvas.assignComputer": "将电脑指派给 {team}",
   "canvas.manageTeam": "管理 {name} 团队",
   "canvas.dropHere": "将机器人拖曳至此，或从团队菜单添加现有机器人。",
   "canvas.hint": "在团队内拖曳以排列 · 拖至另一个团队以移动 · 滚轮缩放 · 触控板或 Shift+滚轮平移",

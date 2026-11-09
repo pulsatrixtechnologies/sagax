@@ -1,8 +1,9 @@
 /** Isolated gallery for headless screenshots of the Team map page (the Tools
  * page header standard). Neutral fictional bots; a mocked fetch answers the
  * page's reads so nothing connects. Not shipped in the app.
- * ?width=<px>&height=<px>&lang=<code>&skin=<id> */
-import { StrictMode } from "react";
+ * ?width=<px>&height=<px>&lang=<code>&skin=<id>&dialog=computers opens the
+ * computer button's Add computer modal (same component as Remote sessions). */
+import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
 import { TeamMapPage } from "../components/TeamMapPage";
@@ -35,10 +36,21 @@ const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   if (url.includes("/api/team-map")) return json({ collaborations: [{ groupId: "g1", botIds: ["atlas", "boreas"], lastAt: Date.now() - 3_600_000 }], queued: [], running: [] });
+  if (url.includes("/api/auth/session")) return json({ kind: "session", id: "s", label: "Mac", scopes: ["client"], expiresAt: 1 });
+  if (url.includes("/api/remote-hosts")) return json({ available: true, hosts: [] });
   if (url.includes("/api/team-computers")) return json({ computers: [] });
   if (url.includes("/api/")) return json({});
   return realFetch(input, init);
 };
+
+function OpenComputers() {
+  useEffect(() => {
+    if (params.get("dialog") !== "computers") return;
+    const timer = window.setTimeout(() => document.querySelector<HTMLElement>("[data-team-map-computers]")?.click(), 300);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return null;
+}
 
 const value = { state, dispatch: () => {}, flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} };
 
@@ -47,7 +59,7 @@ createRoot(document.getElementById("root")!).render(
     <BotEditorStore value={value}>
       <div data-gallery-sample="team-map" className="flex overflow-hidden bg-app text-ink" style={{ width, height }}>
         <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col">
-          <TeamMapPage />
+          <TeamMapPage /><OpenComputers />
         </div>
       </div>
     </BotEditorStore>

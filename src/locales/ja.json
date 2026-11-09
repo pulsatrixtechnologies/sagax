@@ -3032,7 +3032,6 @@
   "canvas.moveBot": "{name} を {team} に移動 · チームの所属が変わります",
   "canvas.reviewMove": "{name} の {team} への移動を確認してください。",
   "canvas.moveCancelled": "移動をキャンセルしました。チームの所属は変更されていません。",
-  "canvas.assignComputer": "{team} にコンピューターを割り当て",
   "canvas.manageTeam": "{name} チームを管理",
   "canvas.dropHere": "ここにボットをドラッグするか、チームメニューから既存のボットを追加してください。",
   "canvas.hint": "チーム内でドラッグして配置 · 別のチームにドロップして移動 · ホイールでズーム · トラックパッドまたは Shift+ホイールで移動",

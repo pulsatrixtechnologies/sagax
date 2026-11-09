@@ -48,7 +48,14 @@ const MESSAGES = [
   card("a", "mcp__perspicax_example_flow__acme_desk_query_schedule", scheduleInput),
   card("b", "mcp__perspicax_example_flow__acme_desk_write", writeInput),
   card("c", "mcp__claude_ai_Acme_Desk__acme_desk__query", { resource: "service/tickets", conditions: "status/name='Nouveau'", pageSize: 25 }),
+  memoryCard(),
 ];
+
+/** #2641: a memory write goes through the same card and offers Always allow. */
+function memoryCard(): Message {
+  const base = card("m", "mcp__perspicax__memory_save", { topic: "preferences", content: "Weekly report goes out Friday at 4 pm, short list, no table." });
+  return { ...base, card: { ...base.card!, ownerRule: { tool: "mcp__perspicax__memory_save", scope: {}, description: "Save memories with Perspicax" } } } as Message;
+}
 const settledCard = card("d", "mcp__perspicax_example_flow__acme_desk_action", { action: "delete", resource: "time/entries", id: 991 });
 const ruleCard = card("e", "mcp__perspicax_example_flow__acme_desk_query", { resource: "company/companies", pageSize: 25 });
 // Receipt of an "Always allow" answer: its details read « Toujours permis » in French

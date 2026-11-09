@@ -47,6 +47,7 @@ function skillCard(id: string, answered?: "allow"): Message {
       options: ["Enable", "Deny"],
       requestId: `skill-${id}`,
       tool: "stage_skill",
+      ownerRule: { tool: "sagax:skill", scope: { action: "create", source: "review" }, description: "Keep the skills this bot learns from its conversations" },
       ...(answered ? { answered } : {}),
       skillRequest: {
         version: 1,
@@ -79,6 +80,7 @@ function routineCard(id: string, answered?: "allow"): Message {
       options: ["Schedule", "Cancel"],
       requestId: `routine-${id}`,
       tool: "schedule_routine",
+      ownerRule: { tool: "sagax:routine", scope: { action: "create" }, description: "Create routines" },
       ...(answered ? { answered } : {}),
       routineRequest: {
         version: 1,
@@ -113,6 +115,9 @@ function Preview() {
         {SETTLED.map((message) => <ApprovalCard key={message.id} bot={BOT} message={message} />)}
         <div className="mt-4 rounded-2xl border border-hairline/40 bg-card">
           <PendingApprovalBox approvals={pendingApprovals([OPEN[0]!])} threadId="t" botFor={() => BOT} onCancelTurn={() => {}} />
+        </div>
+        <div className="mt-4 rounded-2xl border border-hairline/40 bg-card">
+          <PendingApprovalBox approvals={pendingApprovals([OPEN[1]!])} threadId="t" botFor={() => BOT} onCancelTurn={() => {}} />
         </div>
       </div>
     </div>

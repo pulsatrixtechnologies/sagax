@@ -789,7 +789,7 @@ import { BrowserNetworkDebug } from "./browser/browser-network-debug.ts";
 import { createScreenFrameSource } from "./computer/screen-frame-source.ts";
 import { screenFrameHash } from "./computer/screen-frame-gate.ts";
 import { RoutineRequestService } from "./routines/routine-requests.ts";
-import { directApply, reviewedSkillNeedsCard, UNDO_STALE } from "./direct-apply.ts";
+import { directApply, learnedSkillRuleCandidate, reviewedSkillNeedsCard, UNDO_STALE } from "./direct-apply.ts";
 import { createAgentCard } from "./widgets/chat-widgets.ts";
 import { buildBotOverview } from "./bots/bot-overview.ts";
 import { ProfileRequestService } from "./profiles/profile-requests.ts";
@@ -16589,7 +16589,24 @@ const skillReview = createSkillReview({
     // Under Full access the new skill applies too, with its receipt and Undo
     // (2026-11-08: no card at Full for the bot's own work).
     if (reviewedSkillNeedsCard(change.action, direct)) {
-      appendSkillRequestCard({ botId, threadId, staged });
+      // #2641 (2026-11-08, every card offers Always allow): the card's Always
+      // allow keeps the skills this bot learns from its conversations, and a
+      // kept rule applies the next one at once, with its receipt and Undo.
+      const reviewRule = learnedSkillRuleCandidate();
+      const kept = keptCardRule(bot, threadId, reviewRule, ["always-grant"]);
+      if (kept) {
+        const applied = applySkillWriteWithReceipt(botId, staged, () => {
+          const receipt = appendSkillRequestCard({ botId, threadId, staged, applied: true });
+          appendDecision(DATA_DIR, { threadId, requestId: receipt.requestId, botId, botName: bot.name,
+            tool: "stage_skill", summary: receipt.summary, decision: "auto-approved", source: "owner-rule", rule: kept.id });
+        });
+        if ("error" in applied) {
+          rejectStagedSkillWrite(botId, staged.id);
+          return { ok: false, error: applied.error };
+        }
+        return { ok: true };
+      }
+      appendSkillRequestCard({ botId, threadId, staged, ownerRule: reviewRule });
       return { ok: true };
     }
     const applied = applyOwnStagedSkill(bot, threadId, staged, direct);

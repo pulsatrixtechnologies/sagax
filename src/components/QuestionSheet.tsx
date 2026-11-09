@@ -283,7 +283,7 @@ export function SheetField({
           event.preventDefault();
           if (canSend) onSend();
         }}
-        className="block max-h-40 min-h-9 w-full resize-none rounded-[10px] border border-ink/[0.12] bg-ink/[0.04] py-2 pe-10 ps-3 text-[13.5px] leading-5 text-ink outline-none placeholder:text-ink-tertiary focus:border-ink/[0.28] [field-sizing:content]"
+        className="block max-h-40 min-h-9 w-full resize-none rounded-[10px] border border-ink/[0.12] bg-ink/[0.04] py-2 pe-10 ps-3 text-[13.5px] leading-5 text-ink outline-none placeholder:text-ink-tertiary focus:border-ink/[0.28] focus-visible:ring-2 focus-visible:ring-accent/60 [field-sizing:content]"
       />
       {value.trim() && (
         <button

@@ -12,7 +12,33 @@ import { navigationTargetGone } from "@/lib/dead-thread-chips";
 import { ConversationLink } from "./ConversationLink";
 import { HandoffRow } from "./HandoffRow";
 import { isHandoff } from "@/lib/handoff-row";
+import { stepLabel } from "@/lib/step-label";
 import type { MausColor } from "@/lib/mascot";
+import { Box } from "lucide-react";
+import { StepRow } from "./StepRow";
+
+/** Receipts of work the bot sent into one of its threads or coding
+ * sessions: drawn "Messaged <title>" in the single stream. */
+const MESSAGED = /^(?:Opened thread|Resumed thread|Parallel task) #/;
+
+/** Threads off: the receipt as a plain step, "Messaged" + cube + the
+ * session title. No link and no "Open thread" (unified chat). */
+export function ThreadReceiptRow({ message }: { message: Message }) {
+  const ref = message.threadRef;
+  const tool = message.tool;
+  if (!ref || !tool) return null;
+  const messaged = MESSAGED.test(tool.name ?? "");
+  const label = messaged ? t("chat.messaged") : stepLabel(tool);
+  return (
+    <StepRow
+      label={label}
+      target={messaged ? ref.title || undefined : undefined}
+      icon={<Box size={13} className="shrink-0" aria-hidden="true" />}
+      testId="thread-receipt"
+      data={{ "data-thread-receipt": ref.threadId }}
+    />
+  );
+}
 
 export function ThreadChip({ message }: { message: Message }) {
   const { state, dispatch } = useStore();
@@ -21,11 +47,12 @@ export function ThreadChip({ message }: { message: Message }) {
   const tool = message.tool;
   if (!ref || !tool) return null;
   // Threads off (Settings > Appearance): the single stream shows no thread
-  // row or link in the chat (2026-10-22). A hand-off to a teammate still
-  // shows, in place: "Asked <teammate>" with its brief and the teammate's
-  // verdict folded under it (HandoffRow, 2026-11-09, #2901: nothing
-  // invisible). Its thread stays reachable from the bot panel.
-  if (!showThreads) return isHandoff(message) ? <HandoffRow message={message} /> : null;
+  // link in the chat (2026-10-22). A hand-off to a teammate shows in place:
+  // "Asked <teammate>" with its brief and the teammate's verdict folded
+  // under it (HandoffRow, 2026-11-09, #2901). Every other receipt shows as
+  // a plain step, "Messaged <session>" (nothing invisible): hiding it made
+  // the bot's work in a coding session vanish from the chat.
+  if (!showThreads) return isHandoff(message) ? <HandoffRow message={message} /> : <ThreadReceiptRow message={message} />;
   if (navigationTargetGone(message, state)) return null;
   const bot = state.bots.find((candidate) => candidate.id === ref.botId);
   const group = bot ? undefined : state.groups.find((candidate) => candidate.id === ref.botId);

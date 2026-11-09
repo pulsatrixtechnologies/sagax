@@ -4,18 +4,21 @@
 // or a few lines of prose. The prompt says the rule (OUTPUT_STYLE_RULE, sent
 // to every bot through RICH_OUTPUT_PROMPT, its brief and the cold prompt);
 // the reply check (shared/reply-style.ts) rewrites a key/sentence table the
-// model still wrote as a bulleted list with bold labels.
+// model still wrote as a bulleted list with bold labels. #3020: a
+// "Champ | Valeur" table for three values (a regression of #2949 on another
+// engine, in French) gets the same rewrite, whatever its cells hold.
 
 /** The output-style rule every bot gets. */
 export const OUTPUT_STYLE_RULE =
   " Output style: by default answer in short prose, or a short bulleted list with the label in bold (\"- **Label**: what it is\")."
   + " Use a table only for real tabular data: at least 3 columns of comparable values (numbers, dates, ids), more than about 6 rows of the same kind, or when the person asks for a table."
   + " Never a two-column label and sentence table, never a table for a status or a summary."
+  + " Never a field and value table (\"Field | Value\", \"Champ | Valeur\") for a handful of values: two or three values are one sentence or a short list, in French as in English, whatever the engine."
   + " When a compact Sagax card fits (an ```email draft, an ```artifact link, a ```cw card the person asked for), it wins over a table or a list.";
 
 /** One short rule for the cold (routine, automation) prompt. */
 export const OUTPUT_STYLE_RULE_SHORT =
-  " Default to short prose or a short list with bold labels; a table only for 3+ columns of comparable values, 6+ rows of one kind, or on request; never a label and sentence or status table.";
+  " Default to short prose or a short list with bold labels; a table only for 3+ columns of comparable values, 6+ rows of one kind, or on request; never a label and sentence, field and value (\"Champ | Valeur\") or status table.";
 
 const SEPARATOR = /^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/;
 /** A table row: a line with at least one unescaped pipe. */
@@ -47,8 +50,21 @@ export interface KeySentenceTable {
   rows: Array<[string, string]>;
 }
 
+/** #3020: a header that names no data, only "a label and its value"
+ * ("Champ | Valeur", "Field | Value"): the table holds a handful of facts. */
+const GENERIC_LABEL = /^(?:champs?|fields?|cl[ée]s?|keys?|[ée]l[ée]ments?|items?|propri[ée]t[ée]s?|propert(?:y|ies)|param[èe]tres?|parameters?|settings?|r[ée]glages?|attributs?|attributes?|m[ée]triques?|metrics?|indicateurs?|indicators?|infos?|informations?|donn[ée]es?|data|aspects?|crit[èe]res?|criteria|sujets?|topics?)$/iu;
+const GENERIC_VALUE = /^(?:valeurs?|values?|d[ée]tails?|r[ée]sultats?|results?|r[ée]ponses?|answers?|infos?|informations?|contenu|content)$/iu;
+const plain = (cell: string): string => cell.replace(/[*_`]/g, "").trim();
+/** A two-column header that is only "label | value". */
+export function isFieldValueHeader(header: readonly string[]): boolean {
+  if (header.length !== 2) return false;
+  const [label, value] = header.map(plain) as [string, string];
+  return GENERIC_VALUE.test(value) || (GENERIC_LABEL.test(label) && !/\d/.test(value));
+}
+
 /** Markdown tables with two columns whose second column is sentences (at
- * least half its rows, and at least one row). Code fences are skipped. */
+ * least half its rows, and at least one row), or whose header is only
+ * "label | value" (#3020). Code fences are skipped. */
 export function findKeySentenceTables(text: string): KeySentenceTable[] {
   const lines = text.split("\n");
   const found: KeySentenceTable[] = [];
@@ -74,7 +90,8 @@ export function findKeySentenceTables(text: string): KeySentenceTable[] {
       end++;
     }
     const sentences = rows.filter(([, value]) => isSentenceCell(value)).length;
-    if (rows.length > 0 && sentences > 0 && sentences * 2 >= rows.length) found.push({ start: index, end, rows });
+    const fieldValue = isFieldValueHeader(cells(line));
+    if (rows.length > 0 && (fieldValue || (sentences > 0 && sentences * 2 >= rows.length))) found.push({ start: index, end, rows });
     index = end - 1;
   }
   return found;

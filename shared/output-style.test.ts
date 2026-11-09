@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findKeySentenceTables, isSentenceCell, OUTPUT_STYLE_RULE, OUTPUT_STYLE_RULE_SHORT, rewriteKeySentenceTables } from "./output-style.ts";
+import { findKeySentenceTables, isFieldValueHeader, isSentenceCell, OUTPUT_STYLE_RULE, OUTPUT_STYLE_RULE_SHORT, rewriteKeySentenceTables } from "./output-style.ts";
 
 // #2949: the reply flagged (2026-11-08), a "Piece | State" table of sentences.
 const FLAGGED = [
@@ -23,7 +23,9 @@ describe("output style rule", () => {
     expect(OUTPUT_STYLE_RULE).toContain("when the person asks for a table");
     expect(OUTPUT_STYLE_RULE).toContain("Never a two-column label and sentence table, never a table for a status or a summary");
     expect(OUTPUT_STYLE_RULE).toContain("compact Sagax card fits");
-    expect(OUTPUT_STYLE_RULE_SHORT).toContain("never a label and sentence or status table");
+    expect(OUTPUT_STYLE_RULE).toContain("Never a field and value table (\"Field | Value\", \"Champ | Valeur\")");
+    expect(OUTPUT_STYLE_RULE).toContain("in French as in English, whatever the engine");
+    expect(OUTPUT_STYLE_RULE_SHORT).toContain("never a label and sentence, field and value (\"Champ | Valeur\") or status table");
     expect(`${OUTPUT_STYLE_RULE}${OUTPUT_STYLE_RULE_SHORT}`).not.toMatch(/[\u2013\u2014]/);
   });
 });
@@ -51,6 +53,32 @@ describe("key/sentence table check", () => {
       expect(findKeySentenceTables(table)).toEqual([]);
       expect(rewriteKeySentenceTables(table)).toBe(table);
     }
+  });
+
+  it("rewrites a Champ | Valeur table of three values as a short list (#3020)", () => {
+    // QA pass 3 (2026-11-09): count and newest open tickets of board 1
+    const reply = [
+      "Voici le portrait du tableau 1.",
+      "",
+      "| Champ | Valeur |",
+      "|---|---|",
+      "| Ouverts | 164 |",
+      "| Plus récents | #299803, #299794, #299783 |",
+      "| Confiance | Élevée |",
+    ].join("\n");
+    expect(findKeySentenceTables(reply)).toHaveLength(1);
+    expect(rewriteKeySentenceTables(reply)).toBe([
+      "Voici le portrait du tableau 1.",
+      "",
+      "- **Ouverts**: 164",
+      "- **Plus récents**: #299803, #299794, #299783",
+      "- **Confiance**: Élevée",
+    ].join("\n"));
+    for (const header of ["| Field | Value |", "| **Clé** | **Valeur** |", "| Métrique | Résultat |", "| Élément | Détail |"]) {
+      expect(findKeySentenceTables(`${header}\n|---|---|\n| Ouverts | 164 |`)).toHaveLength(1);
+    }
+    expect(isFieldValueHeader(["Billet", "Heures"])).toBe(false);
+    expect(isFieldValueHeader(["Machine", "Statut"])).toBe(false);
   });
 
   it("leaves a table inside a code fence alone", () => {

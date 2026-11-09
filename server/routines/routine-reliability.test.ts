@@ -54,6 +54,19 @@ describe("routine reliability in an isolated journal", () => {
     expect(other.manager.listRuns()[0]).toMatchObject({ status: "blocked", readiness: expect.arrayContaining([expect.objectContaining({ code: "engine_signed_out" })]) });
     expect(other.manager.listRuns()[0]?.startingAttempts).toBeUndefined();
   });
+  it("waits out a usage limit whose reset is near instead of blocking the run, once (#3223)", async () => {
+    const h = fixture();
+    const engine = `${h.engine}-limit`;
+    const reset = h.now() + 60 * 60_000 + 30 * 60_000;
+    noteEngineRefusal({ engine, cause: "usage_limit", at: h.now(), resetsAt: reset });
+    h.probes.engine = () => ({ engine, name: "Claude", signedIn: true });
+    h.advance(60 * 60_000); await h.flush();
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "queued", retried: "usage_limit", retryAt: reset + 60_000 });
+    expect(h.manager.listRuns()[0]?.error).toBeUndefined();
+    expect(h.onRunFailed).not.toHaveBeenCalled();
+    h.advance(31 * 60_000 + 60_000); await h.flush();
+    expect(h.manager.listRuns()[0]?.status).toBe("running");
+  });
   it("says a run blocked or skipped at pre-flight in the bot's chat with the person, in their language (#3130)", async () => {
     const onRunNotice = vi.fn();
     const h = fixture({ onRunNotice, resolveResultsThread: () => ({ threadId: "chat-1" }), languageFor: () => "fr-CA" });

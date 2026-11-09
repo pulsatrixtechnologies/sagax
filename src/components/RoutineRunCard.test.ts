@@ -97,7 +97,8 @@ describe("RoutineRunCard", () => {
     expect(handoff).toContain("data-routine-run-plain");
     expect(handoff).not.toContain("rounded-2xl border bg-card");
     expect(handoff).toContain("data-run-handed-to");
-    expect(handoff).toContain("Sent work to Nova");
+    expect(handoff).not.toContain("Sent work to");
+    expect(handoff).toContain("Nova");
     expect(handoff).toContain("Planning next moves");
     expect(handoff).toContain("data-delegation-waiting");
     // threads hidden (no onOpenThread): the teammate is named, never linked
@@ -319,7 +320,7 @@ describe("RoutineRunCard", () => {
     expect(markup).toContain("data-routine-run-card");
     expect(markup).not.toContain("rounded-2xl border bg-card");
     expect(markup).toContain('data-run-handoff="nova"');
-    expect(markup).toContain("Sent work to Nova");
+    expect(markup).not.toContain("Sent work to");
     expect(markup).toContain('data-run-teammate-thread="nova-work"');
     expect(markup).toContain("See Nova&#x27;s work, Completed");
     expect(markup).not.toContain("Open Nova");

@@ -3,16 +3,16 @@
 // weird in the chat"; 2026-11-06: Grok Bot's sub-agent list). Above the
 // bubble, the provenance line every card here has (#2148): Teammates ·
 // when · the state with its mark (spinning and "Waiting for ..." while any
-// teammate works, Needs your answer, Completed, Failed). In the bubble, the
-// "Sent work to ..." title and one row per teammate: the task, then "bot ·
-// model" in grey, whole (nothing truncated), the live state and the time,
-// the result note under it. Folded once every teammate finished; the title
-// opens it. A click on a row shows that teammate's work right there under
-// the card, in this conversation (unified chat: never a conversation switch,
-// never "Open thread"); with onOpen (threads shown) the click opens what it
-// always did.
+// teammate works, Needs your answer, Completed, Failed). In the bubble, one
+// row per teammate, always shown (owner 2026-11-08, #2947: no "Sent work
+// to ..." title and no fold, the line and the rows already say it all): the
+// task, then "bot · model" in grey, whole (nothing truncated), the live
+// state and the time, the result note under it. A click on a row shows
+// that teammate's work right there under the card, in this conversation
+// (unified chat: never a conversation switch, never "Open thread"); with
+// onOpen (threads shown) the click opens what it always did.
 import { lazy, Suspense, useState } from "react";
-import { Check, ChevronDown, ChevronRight, CircleAlert, CircleDashed, Loader2, Users, X } from "lucide-react";
+import { Check, CircleAlert, CircleDashed, Loader2, Users, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -123,8 +123,6 @@ export function DelegationList({ entries, botOf, modelOf, onOpen, inline = true 
   inline?: boolean;
 }) {
   const bubbleWidths = useChatBubbleWidthClasses();
-  // The person's own fold wins; otherwise open while anything still runs.
-  const [toggled, setToggled] = useState<boolean | null>(null);
   // Which teammate's work is open under the card (one at a time).
   const [work, setWork] = useState<string | null>(null);
   if (entries.length === 0) return null;
@@ -136,7 +134,6 @@ export function DelegationList({ entries, botOf, modelOf, onOpen, inline = true 
   const running = rows.filter((row) => row.state === "running" || row.state === "queued");
   const cardState = delegationCardState(rows.map((row) => row.state));
   const settled = cardState !== "running";
-  const open = toggled ?? !settled;
   const waitingText = running.length === 1
     ? t("delegation.waitingFor", { name: running[0]!.name })
     : t("delegation.waitingForCount", { count: running.length });
@@ -150,7 +147,7 @@ export function DelegationList({ entries, botOf, modelOf, onOpen, inline = true 
   const starts = rows.map((row) => row.entry.startedAt).filter((at): at is number => typeof at === "number");
   const ends = rows.map((row) => row.entry.finishedAt).filter((at): at is number => typeof at === "number");
   const at = settled && ends.length === rows.length ? Math.max(...ends) : starts.length > 0 ? Math.min(...starts) : undefined;
-  const intro = t("routineRun.handedTo", { name: rows.map((row) => row.name).join(", ") });
+  const names = rows.map((row) => row.name).join(", ");
   const revealing = !onOpen && inline;
   const shown = revealing ? rows.find((row) => row.entry.threadId === work) : undefined;
   const width = bubbleWidths[chatBubbleWidth({ terminal: false, wide: Boolean(shown) })];
@@ -158,7 +155,7 @@ export function DelegationList({ entries, botOf, modelOf, onOpen, inline = true 
     <section
       data-delegation-card
       data-delegation-card-state={cardState}
-      aria-label={t("delegation.card.aria", { title: intro, status: statusText })}
+      aria-label={t("delegation.card.aria", { title: names, status: statusText })}
       className="relative mt-2 w-full"
     >
       <div data-delegation-provenance className="mb-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-0.5 text-[11px] text-ink-secondary">
@@ -181,21 +178,8 @@ export function DelegationList({ entries, botOf, modelOf, onOpen, inline = true 
           {cardState === "running" ? <ThinkingSheen text={statusText} className="text-[11px]" /> : statusText}
         </span>
       </div>
-      <div data-delegation-bubble className={cn("flex flex-col gap-1 rounded-[18px] bg-bubble-bot px-3 py-[7px] text-[13px] leading-5 text-ink", width)}>
-        <button
-          type="button"
-          data-delegation-toggle
-          aria-expanded={open}
-          title={intro}
-          onClick={() => setToggled(!open)}
-          className="-mx-1 flex w-[calc(100%+0.5rem)] items-center gap-1 rounded-lg px-1 text-left transition-colors hover:bg-control/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          {open
-            ? <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-ink-tertiary" />
-            : <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-ink-tertiary" />}
-          <span data-delegation-intro className="min-w-0 flex-1 truncate font-medium">{intro}</span>
-        </button>
-        <ul data-run-handed-to hidden={!open} className="flex flex-col gap-0.5">
+      <div data-delegation-bubble className={cn("flex flex-col rounded-[18px] bg-bubble-bot px-3 py-[7px] text-[13px] leading-5 text-ink", width)}>
+        <ul data-run-handed-to className="flex flex-col gap-0.5">
           {rows.map(({ entry, name, state, model }) => {
             const stateText = t(STATE_LINE[state]);
             const when = entry.finishedAt ?? entry.startedAt;

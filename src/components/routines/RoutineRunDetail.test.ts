@@ -129,7 +129,7 @@ describe("a run's detail", () => {
     const markup = html({ run: run("blocked", { error: "{", handedTo: [{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "running" }] }), onOpenThread: (_botId, threadId) => opened.push(threadId) });
     expect(markup).toContain("Blocked: waiting for Nova");
     expect(markup).toContain('data-run-teammate-thread="teammate-thread"');
-    expect(markup).toContain("Sent work to Nova");
+    expect(markup).not.toContain("Sent work to");
   });
 
   it("a JSON final answer reads as plain sentences with its whole under Show details", () => {

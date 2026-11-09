@@ -105,6 +105,12 @@ export type BotActDeps = {
   markActSend?: (sendId: string) => void;
   operatorAudience: () => string;
   sessionForPerson: (personKey: string) => LiveSession | null;
+  /** #3091: the scopes a signed-out person holds by their organization role
+   * now (admin for an organization admin), for their routine's acts. */
+  ownerScopes?: (personKey: string) => Array<"admin" | "client"> | null;
+  /** #3091: whether one of the person's permissions opens this admin route
+   * (request-auth.ts PERMISSION_ROUTES), as the request gate does. */
+  permits?: (personKey: string, method: string, path: string) => boolean;
   /** `confirmed`: this replay follows that person's own Allow on a planned
    * change's card (the card's step-up covered `classes`). */
   performRoute: (actor: PerformActor, target: Extract<ActTarget, { kind: "route" }>, confirmed?: { personKey: string | null; classes: readonly string[]; primary?: { botId: string; botName: string; messageId: string } }, maxChars?: number) => Promise<{ status: number; text: string }>;
@@ -183,8 +189,35 @@ export function createBotActService(deps: BotActDeps): BotActService {
     }
   };
 
-  const RETRY_NOTE = " Do not retry this call: say in your report that this setting could not be read or changed while the owner is signed out, and continue without it.";
+  // #3091: every refusal is final and says so, or the model calls the same thing again.
+  const RETRY_NOTE = " This refusal is final: do not retry this call or a variant of it. Say in your answer or report that this setting could not be read or changed, and continue without it.";
+  const ADMIN_ONLY = "This setting needs an administrator of the organization: it changes the whole organization, other people or the shared server, not this person's own bots, skills, plugins or connectors.";
   const refuse = (status: number, error: string): BotActResult => ({ status, body: { error } });
+
+  /** #3091: who the act runs as, with which scopes. A routine whose owner is
+   * signed out acts with the owner's own standing (ownerScopes), not a
+   * fixed client scope, and a route one of the person's permissions opens
+   * (PERMISSION_ROUTES) is theirs to call, as it is from their own screen. */
+  const actingAs = (actor: ReturnType<typeof actorForTurn>): { refused: BotActResult } | { performActor: PerformActor; scopes: Array<"admin" | "client">; neededScope: (method: string, path: string) => "admin" | "client" } => {
+    if (actor.kind === "none") return { refused: refuse(403, NONE_REASON[actor.reason] ?? "This turn cannot act.") };
+    if (actor.kind !== "person") return { performActor: { kind: "operator" }, scopes: ["admin", "client"], neededScope: deps.neededScope };
+    const neededScope = (method: string, path: string): "admin" | "client" => {
+      const needed = deps.neededScope(method, path);
+      return needed === "admin" && deps.permits?.(actor.personKey, method, path) ? "client" : needed;
+    };
+    const session = deps.sessionForPerson(actor.personKey);
+    if (session) {
+      return { performActor: { kind: "person", sessionId: session.id, personKey: actor.personKey, scopes: session.scopes, ...(actor.routine ? { routine: true as const } : {}) }, scopes: session.scopes, neededScope };
+    }
+    if (actor.routine) {
+      // #2701: the owner is not signed in while their routine runs: the
+      // act runs as them on a one-request session (performRoute, actAs)
+      const owned = deps.ownerScopes?.(actor.personKey);
+      const scopes: Array<"admin" | "client"> = owned?.length ? [...owned] : ["client"];
+      return { performActor: { kind: "person", sessionId: "", personKey: actor.personKey, scopes, routine: true }, scopes, neededScope };
+    }
+    return { refused: refuse(403, "This person's session is no longer valid." + RETRY_NOTE) };
+  };
 
   return {
     target(requestId) {
@@ -197,27 +230,12 @@ export function createBotActService(deps: BotActDeps): BotActService {
       sweep();
       const actor = actorForTurn(input.facts);
       if (actor.kind === "none") return refuse(403, NONE_REASON[actor.reason] ?? "This turn cannot act.");
-      let performActor: PerformActor;
-      let scopes: string[];
-      if (actor.kind === "person") {
-        const session = deps.sessionForPerson(actor.personKey);
-        if (session) {
-          performActor = { kind: "person", sessionId: session.id, personKey: actor.personKey, scopes: session.scopes, ...(actor.routine ? { routine: true as const } : {}) };
-          scopes = session.scopes;
-        } else if (actor.routine) {
-          // #2701: the owner is not signed in while their routine runs: the
-          // act runs as them on a one-request session (performRoute, actAs)
-          performActor = { kind: "person", sessionId: "", personKey: actor.personKey, scopes: ["client"], routine: true };
-          scopes = ["client"];
-        } else return refuse(403, "This person's session is no longer valid.");
-      } else {
-        performActor = { kind: "operator" };
-        scopes = ["admin", "client"];
-      }
-      if (input.target.kind === "route" && !scopes.includes(deps.neededScope(input.target.method, input.target.path))) {
-        // #3082: a routine that repeats a refused call is cut by the loop guard; say it is final.
-        return refuse(403, "This person cannot change that setting: it needs rights they do not have."
-          + (actor.kind === "person" && actor.routine ? RETRY_NOTE : ""));
+      const acting = actingAs(actor);
+      if ("refused" in acting) return acting.refused;
+      const { performActor, scopes, neededScope } = acting;
+      if (input.target.kind === "route" && !scopes.includes(neededScope(input.target.method, input.target.path))) {
+        // #3082/#3091: a model that repeats a refused call is cut by the loop guard; say it is final.
+        return refuse(403, ADMIN_ONLY + RETRY_NOTE);
       }
       if (input.plan.effect === "run") {
         // the registry and its policy decided: the route reads it as the
@@ -250,25 +268,11 @@ export function createBotActService(deps: BotActDeps): BotActService {
       sweep();
       const actor = actorForTurn(input.facts);
       if (actor.kind === "none") return refuse(403, NONE_REASON[actor.reason] ?? "This turn cannot act.");
-      let performActor: PerformActor;
-      let scopes: string[];
-      if (actor.kind === "person") {
-        const session = deps.sessionForPerson(actor.personKey);
-        if (session) {
-          performActor = { kind: "person", sessionId: session.id, personKey: actor.personKey, scopes: session.scopes, ...(actor.routine ? { routine: true as const } : {}) };
-          scopes = session.scopes;
-        } else if (actor.routine) {
-          // #2701: the owner is not signed in while their routine runs: the
-          // act runs as them on a one-request session (performRoute, actAs)
-          performActor = { kind: "person", sessionId: "", personKey: actor.personKey, scopes: ["client"], routine: true };
-          scopes = ["client"];
-        } else return refuse(403, "This person's session is no longer valid.");
-      } else {
-        performActor = { kind: "operator" };
-        scopes = ["admin", "client"];
-      }
-      const decision = decideBotAct({ raw: input.raw, mode: input.mode, scopes, neededScope: deps.neededScope });
-      if (!decision.ok) return refuse(decision.status, decision.error + (actor.kind === "person" && actor.routine && decision.status === 403 ? RETRY_NOTE : ""));
+      const acting = actingAs(actor);
+      if ("refused" in acting) return acting.refused;
+      const { performActor, scopes, neededScope } = acting;
+      const decision = decideBotAct({ raw: input.raw, mode: input.mode, scopes, neededScope });
+      if (!decision.ok) return refuse(decision.status, decision.error + (decision.status === 403 ? RETRY_NOTE : ""));
       if (decision.effect === "run") return run(performActor, decision.target);
       const classes = actClassesOf(decision.target);
       const candidate = actRuleCandidate(decision.target, classes, describeOf);

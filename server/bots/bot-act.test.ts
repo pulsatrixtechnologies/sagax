@@ -8,7 +8,7 @@ function facts(patch: Partial<TurnFacts> = {}): TurnFacts {
   return { automation: false, guest: false, requestUsable: true, senderUnproven: false, provenPerson: person, sharedServer: false, ...patch };
 }
 
-function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom"; session?: { id: string; scopes: Array<"admin" | "client"> } | null; routeStatus?: (path: string) => number; markActSend?: (sendId: string) => void; onRoute?: (body: unknown) => void } = {}) {
+function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom"; session?: { id: string; scopes: Array<"admin" | "client"> } | null; routeStatus?: (path: string) => number; markActSend?: (sendId: string) => void; onRoute?: (body: unknown) => void; ownerScopes?: (key: string) => Array<"admin" | "client"> | null; permits?: (key: string, method: string, path: string) => boolean } = {}) {
   const performed: Array<{ actor: PerformActor; method?: string; path?: string }> = [];
   const broadcasts: Array<{ audience: string; command: string; input: Record<string, unknown> }> = [];
   const cards: Array<{ requestId: string; summary: string; rule?: unknown; answered?: "allow" | "deny"; expired?: true }> = [];
@@ -23,6 +23,8 @@ function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom";
     ...(options.markActSend ? { markActSend: options.markActSend } : {}),
     operatorAudience: () => "operator",
     sessionForPerson: () => options.session === undefined ? { id: "wide", scopes: ["client"] } : options.session,
+    ...(options.ownerScopes ? { ownerScopes: options.ownerScopes } : {}),
+    ...(options.permits ? { permits: options.permits } : {}),
     async performRoute(actor, target) {
       performed.push({ actor, method: target.method, path: target.path });
       options.onRoute?.(target.body);
@@ -54,7 +56,8 @@ describe("bot act", () => {
   it("refuses a member an admin route and performs a route they may read as their session", async () => {
     const { service, performed } = harness();
     const refused = await service.handle({ facts: facts(), raw: { method: "POST", path: "/api/admin/settings" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
-    expect(refused).toEqual({ status: 403, body: { error: "This person cannot call that route." } });
+    expect(refused.status).toBe(403);
+    expect(String(refused.body.error)).toMatch(/^This person cannot call that route\. This refusal is final: do not retry this call/);
     expect(performed).toEqual([]);
     const allowed = await service.handle({ facts: facts(), raw: { method: "GET", path: "/api/bots" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "ask" });
     expect(allowed.status).toBe(200);
@@ -161,11 +164,33 @@ describe("bot act", () => {
     expect(away.performed[0]?.actor).toEqual({ kind: "person", sessionId: "", personKey: "owner-1", scopes: ["client"], routine: true });
     const admin = await away.service.handle({ facts: facts({ automation: true, sharedServer: true, provenPerson: null, routineOwner: "owner-1" }), raw: { method: "POST", path: "/api/admin/settings" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
     expect(admin.status).toBe(403);
-    expect(String(admin.body.error)).toContain("Do not retry this call");
+    expect(String(admin.body.error)).toContain("This refusal is final: do not retry this call");
     const solo = harness();
     const desk = await solo.service.handle({ facts: facts({ automation: true, provenPerson: null }), raw: { method: "GET", path: "/api/bots" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
     expect(desk.status).toBe(200);
     expect(solo.performed[0]?.actor).toEqual({ kind: "operator" });
+  });
+
+  it("#3091: a signed-out owner's routine keeps the owner's own standing and permissions, and a refusal is final", async () => {
+    const routine = facts({ automation: true, sharedServer: true, provenPerson: null, routineOwner: "owner-1" });
+    const base = { facts: routine, threadId: "t", botId: "b", botName: "Ada", botColor: "green" };
+    const plan = { effect: "run" as const, summary: "Read a setting", stepUpClasses: [] };
+    // an organization admin's routine is not narrowed to client
+    const admin = harness({ session: null, ownerScopes: () => ["admin", "client"] });
+    const read = await admin.service.handlePlanned({ ...base, target: { kind: "route", method: "GET", path: "/api/admin/settings" }, plan });
+    expect(read.status).toBe(200);
+    expect(admin.performed[0]?.actor).toEqual({ kind: "person", sessionId: "", personKey: "owner-1", scopes: ["admin", "client"], routine: true });
+    // a member's routine calls an admin route one of their permissions opens
+    const member = harness({ session: null, ownerScopes: () => ["client"], permits: (_key, _method, path) => path === "/api/admin/skills" });
+    const opened = await member.service.handlePlanned({ ...base, target: { kind: "route", method: "GET", path: "/api/admin/skills" }, plan });
+    expect(opened.status).toBe(200);
+    expect(member.performed[0]?.actor).toMatchObject({ scopes: ["client"], routine: true });
+    // what stays admin (the organization, other people) is refused once, as final
+    const closed = await member.service.handlePlanned({ ...base, target: { kind: "route", method: "PUT", path: "/api/admin/settings" }, plan });
+    expect(closed.status).toBe(403);
+    expect(String(closed.body.error)).toContain("needs an administrator of the organization");
+    expect(String(closed.body.error)).toContain("This refusal is final: do not retry this call");
+    expect(member.performed).toHaveLength(1);
   });
 
   it("in auto, runs a write on the person's own bot and the route still refuses another person's bot", async () => {

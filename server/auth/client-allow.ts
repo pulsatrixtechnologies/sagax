@@ -634,6 +634,11 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // A bot's capabilities (server/routes/bot-capabilities.ts): the one
   // resolved list, read by a person who may use the bot (checked in the handler).
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/capabilities$/, feature: "orgDirectory" },
+  // #3091: a bot's own setup, changed by its owner or a manager (checked in
+  // the handlers): its plugin lifecycle hooks (they run on the bot's own
+  // computer, server/routes/lifecycle-hooks.ts) and its library skills.
+  { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/lifecycle-hooks$/, feature: "orgDirectory" },
+  { methods: ["PUT"], path: /^\/api\/bots\/[\w-]+\/skills-library$/, feature: "orgDirectory" },
   // Personal plugins use the same installer; the route binds "me" to the
   // signed-in principal, never a caller-supplied person or bot id.
   { methods: ["GET"], path: /^\/api\/(?:bots\/[\w-]+|me)\/plugins$/, feature: "orgDirectory" },
@@ -677,6 +682,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // The person's own monthly spend limit: anyone signed in reads it; changing
   // it stays admin scope (server/routes/usage.ts).
   { methods: ["GET"], path: /^\/api\/me\/spend-cap$/ },
+  // #3091: the person's own usage measure switch (server/routes/usage-meter.ts:
+  // the session's person only, nothing leaves this server).
+  { methods: ["GET", "PUT"], path: /^\/api\/me\/usage-meter$/ },
+  { methods: ["POST"], path: /^\/api\/me\/usage-meter\/events$/ },
   // A person's own plan windows (5-hour, weekly) read from their own
   // subscription logins only (server/usage/plan-usage.ts orgPlanAccounts). On a
   // solo server this path stays admin.

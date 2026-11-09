@@ -94,7 +94,8 @@ export function toContextAttachments(attachments: Attachment[]): Array<RoutineCo
 /** `short` (the side panel's routine page): folded to a few lines; `onEdit`
  * turns the text into its editor on a click or Enter (2026-11-06, JC). */
 /** `fill` (the side panel's page, 2026-11-06): the text fills its section,
- * at least 45% of the panel, and folds only past 80% of it. */
+ * at least 45% of the panel; folded, it stops at half the panel (2026-11-09,
+ * JC, #3154: it used to reach 80%, pushing Goal and the rest out of view). */
 export function InstructionText({ text, short = false, fill = false, onEdit }: { text: string; short?: boolean; fill?: boolean; onEdit?: () => void }) {
   const body = useRef<HTMLDivElement>(null);
   const [long, setLong] = useState(false);
@@ -113,7 +114,7 @@ export function InstructionText({ text, short = false, fill = false, onEdit }: {
   } : {};
   if (!text.trim()) return <p data-routine-instruction-text {...editProps} className={cn("text-[13.5px] text-ink-tertiary", onEdit && "-mx-2 cursor-text rounded-lg px-2 py-1.5 hover:bg-hover", fill && "flex-1")}>{onEdit ? t("routineCalendar.botInstructions") : t("routineEditor.none")}</p>;
   return <div className={cn("min-w-0", fill && "flex flex-1 flex-col")}>
-    <div ref={body} data-routine-instruction-text data-folded={!open && long ? "" : undefined} {...editProps} className={cn("relative min-w-0 break-words text-[13.5px] leading-relaxed text-ink [&_a]:no-underline", fill && "flex-1", !open && (fill ? "max-h-[80cqh] overflow-hidden" : short ? "max-h-[7.5rem] overflow-hidden" : "max-h-[35vh] overflow-hidden"), onEdit && "-mx-2 cursor-text rounded-lg px-2 py-1 hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}>
+    <div ref={body} data-routine-instruction-text data-folded={!open && long ? "" : undefined} {...editProps} className={cn("relative min-w-0 break-words text-[13.5px] leading-relaxed text-ink [&_a]:no-underline", fill && "flex-1", !open && (fill ? "max-h-[50cqh] overflow-hidden" : short ? "max-h-[7.5rem] overflow-hidden" : "max-h-[35vh] overflow-hidden"), onEdit && "-mx-2 cursor-text rounded-lg px-2 py-1 hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}>
       <ChatMarkdown text={text} />
       {!open && long && <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-panel to-transparent" />}
     </div>

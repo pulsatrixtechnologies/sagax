@@ -11,6 +11,9 @@
 //                  | extension-load-error (pi cannot load the `-e` extension whose
 //                  file name is FAKE_PI_BAD_EXTENSION and exits) | extension-load-error-always
 //                  (pi cannot load an extension outside the kit and exits)
+//   FAKE_PI_STDIN_FIRST with extension-load-error: pi answers the handshake, drops
+//                  its stdin, and exits a moment later, so the driver's next write
+//                  breaks (EPIPE) before the close arrives
 //   FAKE_PI_MODELS comma-separated provider/model pairs (default "ollama-cloud/glm-5.2,openai/gpt-4o")
 //   FAKE_PI_ERROR  the turn-error mode's errorMessage
 //   FAKE_PI_SET_MODEL_REFUSE refuse every set_model
@@ -20,7 +23,7 @@
 //   FAKE_PI_STEER_OUT_OF_ORDER hold the first steer's refusal until a second
 //                  frame arrives, then answer refusal-for-first / success-for-second
 
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, closeSync, readFileSync } from "node:fs";
 
 const mode = process.env.FAKE_PI_MODE ?? "happy";
 const modelPairs = (process.env.FAKE_PI_MODELS ?? "ollama-cloud/glm-5.2,openai/gpt-4o")
@@ -90,6 +93,31 @@ if (mode === "extension-load-error") {
   const loaded = argv.filter((_, index) => argv[index - 1] === "-e");
   const failing = bad ? loaded.find((path) => path.replace(/\\/g, "/").endsWith(`/${bad}`)) : undefined;
   if (failing) {
+    if (process.env.FAKE_PI_STDIN_FIRST) {
+      // #3063: a dying pi drops its stdin before it exits
+      await new Promise<void>((resolve) => {
+        let buffered = "";
+        process.stdin.setEncoding("utf8");
+        process.stdin.on("data", (chunk: string) => {
+          buffered += chunk;
+          const lines = buffered.split("\n");
+          buffered = lines.pop() ?? "";
+          for (const line of lines.filter(Boolean)) {
+            const command = (JSON.parse(line) as { type?: string }).type ?? "";
+            process.stdout.write(JSON.stringify({ type: "response", command, success: true, data: {} }) + "\n");
+            // answered the session handshake: the driver writes next
+            if (command === "new_session" || command === "switch_session") {
+              // destroy alone keeps fd 0 open; closing it breaks the driver's pipe
+              process.stdin.destroy();
+              closeSync(0);
+              resolve();
+              return;
+            }
+          }
+        });
+      });
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
     process.stderr.write(`Failed to load extension SyntaxError Unexpected token ${failing}\n`);
     process.exit(1);
   }

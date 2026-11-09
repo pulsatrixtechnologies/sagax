@@ -45,6 +45,7 @@ import {
 import { STABLE_END_MARKER } from "./pi-mcp-extension.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { resetPiExtensionFailures } from "./pi-extension-failures.ts";
+import { PI_CLOSE_GRACE_MS } from "./pi-send-rpc.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "testing", "fake-pi-cli.ts");
 const MODELS_LINE =
@@ -953,6 +954,39 @@ describe("PiDriver turns (fake CLI)", () => {
     const fixed = await instance.adapter.sendTurn({ threadId: threadId + "-3", text: "fixed" });
     expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === fixed.turnId)).toMatchObject({ ok: true });
     expect(loads(turnRuns(dump).at(-1)!, "voice.ts")).toBe(true);
+    resetPiExtensionFailures();
+  });
+
+  // #3063 (review 0.8.70, section 3): a dying pi can drop its stdin before
+  // it closes. The broken write must not fail the turn ahead of the close
+  // that retries it without the extension pi could not load.
+  it("still retries without the extension when pi's stdin breaks before its close", async () => {
+    resetPiExtensionFailures();
+    const { kit, home, dump } = extensionKit();
+    await create("extension-load-error", {
+      FAKE_PI_DUMP: dump,
+      SAGAX_PI_KIT_DIR: kit,
+      PI_CODING_AGENT_DIR: home,
+      FAKE_PI_BAD_EXTENSION: "voice.ts",
+      FAKE_PI_STDIN_FIRST: "1",
+    });
+    const threadId = "t-ext-epipe-" + randomUUID();
+    const started = Date.now();
+    const { turnId } = await instance.adapter.sendTurn({ threadId, text: "hi" });
+    const done = await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    expect(done).toMatchObject({ ok: true });
+    // the close decided, well before the fallback for a pi that never closes
+    expect(Date.now() - started).toBeLessThan(PI_CLOSE_GRACE_MS);
+    const own = recorder.events.filter((e) => e.turnId === turnId);
+    expect(own.filter((e) => e.type === "turn.completed")).toHaveLength(1);
+    expect(own.filter((e) => e.type === "runtime.error")).toEqual([]);
+    expect(own.filter((e) => e.type === "runtime.notice")).toEqual([
+      expect.objectContaining({ message: expect.stringContaining("voice.ts") }),
+    ]);
+    const runs = turnRuns(dump);
+    expect(runs).toHaveLength(2);
+    expect(loads(runs[0]!, "voice.ts")).toBe(true);
+    expect(loads(runs[1]!, "voice.ts")).toBe(false);
     resetPiExtensionFailures();
   });
 

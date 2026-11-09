@@ -513,6 +513,13 @@ describe("the routine panel page layout (2026-11-06, the owner)", () => {
     expect(host.querySelector("[data-routine-editor-scroll]")!.className).toContain("[container-type:size]");
   });
 
+  it("folds a long Instruction at half the panel height at most (#3154)", () => {
+    mountPage();
+    const text = host.querySelector<HTMLElement>("[data-routine-instruction-fill] [data-routine-instruction-text]")!;
+    expect(text.className).toContain("max-h-[50cqh]");
+    expect(text.className).not.toContain("max-h-[80cqh]");
+  });
+
   it("drops Next runs, folds Required skills, MCP, Mail tag, Duplicate and the server note under More in Advanced", () => {
     mountPage();
     expect(host.textContent).not.toContain("Next runs");

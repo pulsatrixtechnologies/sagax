@@ -12,6 +12,8 @@ import {
   type AgentApiDeps, type AgentCaller, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type SendReceipt, type StoredMessage, type TurnState,
 } from "./agent-api.ts";
 import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./proactive/priority-wake.ts";
+import { failedTurnTool } from "../shared/failed-turn.ts";
+import { ENGINE_EXITED_SENTENCE } from "../shared/engine-exit-words.ts";
 
 const SECRET = Buffer.alloc(32, 7);
 const ALL: AgentScope[] = ["agents.read", "agents.send", "agents.create"];
@@ -1610,6 +1612,33 @@ describe("fleet tools (#1944)", () => {
     expect((await w.api.call(person("pr_1", ["agents.read"]), "list_agent_models", {
       agent_id: "bot-a",
     })).status).toBe(200);
+  });
+});
+
+describe("await_turn and a turn that failed (#3008)", () => {
+  const exited = "pi process exited before replying: Error: spawn npm ENOENT (npm install pi-subagents --prefix /data/principals/p/piAgent-key/npm)";
+
+  it("an engine that died before replying answers status failed with plain words, never finished with an empty reply", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [{ role: "bot", kind: "activity", text: "", tool: { ...failedTurnTool(exited), ok: false } }] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "hi", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "failed", reply: "", error: ENGINE_EXITED_SENTENCE });
+    expect(String(r.body.error)).not.toContain("ENOENT");
+  });
+
+  it("words after the failed row win: the turn finished", async () => {
+    const w = world({
+      replyAfterPolls: 1,
+      replyRows: () => [
+        { role: "bot", kind: "activity", text: "", tool: { ...failedTurnTool("provider refused"), ok: false } },
+        { role: "bot", kind: "text", text: "Recovered answer." },
+      ],
+    });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "hi", mode: "async" });
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 5_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "finished", reply: "Recovered answer." });
   });
 });
 

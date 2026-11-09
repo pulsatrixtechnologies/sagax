@@ -5,6 +5,21 @@ import { providerReplyCutMessage } from "../../shared/provider-reply-cut";
 import { requestTooLargeMessage } from "../../shared/request-too-large";
 import { botsSaveFailure } from "../../shared/bots-save-failure";
 
+describe("plainErrorLine: an engine that stopped before replying (#3008)", () => {
+  afterEach(() => setLocale("en"));
+  const raw = "pi process exited before replying: Error: spawn npm ENOENT npm install pi-subagents --prefix /data/principals/p/piAgent-key/npm --legacy-peer-deps";
+
+  it("says the engine stopped, never \"couldn't be found\" from the ENOENT in the raw text", () => {
+    expect(plainErrorLine(raw)).toBe("The bot's engine stopped before it could reply. Send your message again; if it keeps happening, restart the engine.");
+    expect(plainErrorLine("claude process exited before replying")).toBe(plainErrorLine(raw));
+  });
+
+  it("reads in French", () => {
+    setLocale("fr");
+    expect(plainErrorLine(raw)).toBe("Le moteur du bot s'est arrêté avant de répondre. Renvoie ton message ; si ça se répète, redémarre le moteur.");
+  });
+});
+
 describe("plainErrorLine", () => {
   it.each([
     ["Failed to fetch", "Couldn't reach Sagax. Check that it's running, then try again."],

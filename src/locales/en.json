@@ -1946,6 +1946,7 @@
   "chat.error.replyCutLength": "The reply was cut: maximum length reached. Ask for a continuation.",
   "chat.error.replyCutFilter": "The reply was cut by the provider: content filter.",
   "chat.error.replyCut": "The reply was cut by the provider.",
+  "chat.error.engineExited": "The bot's engine stopped before it could reply. Send your message again; if it keeps happening, restart the engine.",
   "chat.error.dismiss": "Dismiss",
   "chat.error.signedOut": "{name} isn't signed in yet. Sign in below, then send your message again.",
   "chat.exchange.empty": "No messages with {name} yet.",

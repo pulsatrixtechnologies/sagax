@@ -1193,7 +1193,8 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       modelContextWindow: (modelId) => models.options.find((option) => option.id === modelId)?.contextWindow,
       piKitArgs: (homeEnv, identity) => {
         const kit = piKitDir(homeEnv);
-        return kit ? installPiKit(kit, piAgentDir(homeEnv), identity ?? {}, homeEnv).args : [];
+        // #3008: the PATH the child gets, to know whether pi could run npm
+        return kit ? installPiKit(kit, piAgentDir(homeEnv), identity ?? {}, { ...homeEnv, PATH: augmentedPath() }).args : [];
       },
       warmPerson: warmResourcePerson,
       registerWarmBudget: ({ person, child }) => warmResources.register({

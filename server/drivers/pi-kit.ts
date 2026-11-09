@@ -9,13 +9,18 @@
 //                     is dropped
 //   tools/            copied as is, for the extensions that read it
 //   packages.txt      pi package sources, one a line ("#" starts a comment),
-//                     loaded with `-e` too; the image can preinstall them
+//                     loaded with `-e` too; the image preinstalls them
 //                     (Dockerfile PI_KIT_PACKAGES, SAGAX_PI_PACKAGES_DIR)
+// #3008: pi installs a missing `npm:` package with npm at startup, and the
+// image has no npm: pi then dies before its first reply. An `npm:` source
+// (packages.txt or settings.json "packages") loads from the image's
+// preinstalled folder; one the image lacks is left out with a warning when
+// npm is not on PATH, so pi still starts.
 // The kit is copied into the turn's pi home (PI_CODING_AGENT_DIR), so each
 // person's home carries it; host tools stay withheld as they are without it.
 // Sagax holds no kit content: the folder is the operator's.
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { delimiter, isAbsolute, join, resolve } from "node:path";
 
 export const PI_KIT_DIR_ENV = "SAGAX_PI_KIT_DIR";
 export const PI_PACKAGES_DIR_ENV = "SAGAX_PI_PACKAGES_DIR";
@@ -104,19 +109,90 @@ export function npmPackageName(source: string): string | null {
   return at > 0 ? spec.slice(0, at) : spec;
 }
 
+/** The folder the image preinstalled an `npm:` source into, or null. */
+export function preinstalledPiPackage(source: string, env: Record<string, string | undefined>): string | null {
+  const name = npmPackageName(source);
+  const root = env[PI_PACKAGES_DIR_ENV]?.trim();
+  if (!name || !root) return null;
+  const dir = join(root, name);
+  return existsSync(dir) ? dir : null;
+}
+
+/** Whether an `npm` command is on PATH, so pi can install a package itself. */
+export function npmOnPath(env: Record<string, string | undefined>): boolean {
+  const path = env.PATH ?? "";
+  const names = process.platform === "win32" ? ["npm.cmd", "npm.exe", "npm"] : ["npm"];
+  for (const dir of path.split(delimiter)) {
+    if (!dir) continue;
+    for (const name of names) {
+      try {
+        if (statSync(join(dir, name)).isFile()) return true;
+      } catch {
+        // not here
+      }
+    }
+  }
+  return false;
+}
+
 /** What `-e` loads for one packages.txt line: a package the image
  * preinstalled under SAGAX_PI_PACKAGES_DIR as its folder, a relative path
  * from the kit folder, anything else as pi reads the source itself. */
 export function piKitPackageArg(source: string, kitDir: string, env: Record<string, string | undefined>): string {
-  const name = npmPackageName(source);
-  const root = env[PI_PACKAGES_DIR_ENV]?.trim();
-  if (name && root) {
-    const dir = join(root, name);
-    if (existsSync(dir)) return dir;
-  }
+  const dir = preinstalledPiPackage(source, env);
+  if (dir) return dir;
   if (source.startsWith("./") || source.startsWith("../")) return resolve(kitDir, source);
   if (isAbsolute(source)) return source;
   return source;
+}
+
+const warned = new Set<string>();
+
+/** #3008: say once per source that it is left out, never on every turn. */
+function warnSkipped(source: string): void {
+  if (warned.has(source)) return;
+  warned.add(source);
+  console.warn(`[pi-kit] ${source} is not preinstalled in this image and npm is not on PATH: pi starts without it. Rebuild the image with PI_KIT_PACKAGES naming it.`);
+}
+
+/** Whether pi would have to run npm for this source and cannot. */
+function unreachableNpmSource(source: string, env: Record<string, string | undefined>, npm: () => boolean): boolean {
+  return npmPackageName(source) !== null && !preinstalledPiPackage(source, env) && !npm();
+}
+
+/** #3008: the settings' "packages" pi can load without npm. An `npm:` entry
+ * the image preinstalled points at its folder; one already loaded with `-e`
+ * from packages.txt is dropped (never loaded twice); one pi would have to
+ * install with an npm the image lacks is dropped. Null when nothing changes. */
+export function resolvePiSettingsPackages(
+  packages: unknown,
+  loaded: ReadonlySet<string>,
+  env: Record<string, string | undefined>,
+  npm: () => boolean,
+): unknown[] | null {
+  if (!Array.isArray(packages)) return null;
+  const out: unknown[] = [];
+  for (const entry of packages) {
+    const source = typeof entry === "string" ? entry : isRecord(entry) && typeof entry.source === "string" ? entry.source : null;
+    const name = source ? npmPackageName(source) : null;
+    if (!source || !name) {
+      out.push(entry);
+      continue;
+    }
+    if (loaded.has(name)) continue;
+    const dir = preinstalledPiPackage(source, env);
+    if (dir) {
+      out.push(typeof entry === "string" ? dir : { ...(entry as Record<string, unknown>), source: dir });
+      continue;
+    }
+    if (!npm()) {
+      warnSkipped(source);
+      continue;
+    }
+    out.push(entry);
+  }
+  const same = out.length === packages.length && out.every((value, index) => value === packages[index]);
+  return same ? null : out;
 }
 
 export interface PiKitInstall {
@@ -147,15 +223,31 @@ export function installPiKit(kitDir: string, home: string, identity: PiKitIdenti
 
   const packages = readPiKitPackages(kitDir);
   if (existsSync(join(kitDir, "packages.txt"))) cpSync(join(kitDir, "packages.txt"), join(home, "packages.txt"), { force: true });
-  for (const source of packages) args.push("-e", piKitPackageArg(source, kitDir, env));
+  let npm: boolean | undefined;
+  const hasNpm = (): boolean => (npm ??= npmOnPath(env));
+  const loaded = new Set<string>();
+  for (const source of packages) {
+    if (unreachableNpmSource(source, env, hasNpm)) {
+      warnSkipped(source);
+      continue;
+    }
+    args.push("-e", piKitPackageArg(source, kitDir, env));
+    const name = npmPackageName(source);
+    if (name) loaded.add(name);
+  }
 
   const kitSettings = readJsonObject(join(kitDir, "settings.json"));
-  if (kitSettings) {
-    const path = join(home, "settings.json");
-    const exists = existsSync(path);
+  const path = join(home, "settings.json");
+  const exists = existsSync(path);
+  if (kitSettings || exists) {
     const base = exists ? readJsonObject(path) : {};
     // a settings file pi or the person broke is left alone
-    if (base) writeFileSync(path, `${JSON.stringify(mergePiSettings(base, kitSettings), null, 2)}\n`, { mode: 0o600 });
+    if (base) {
+      const merged = kitSettings ? mergePiSettings(base, kitSettings) : base;
+      const resolved = resolvePiSettingsPackages(merged.packages, loaded, env, hasNpm);
+      if (resolved) merged.packages = resolved;
+      if (kitSettings || resolved) writeFileSync(path, `${JSON.stringify(merged, null, 2)}\n`, { mode: 0o600 });
+    }
   }
 
   const template = join(kitDir, "APPEND_SYSTEM.md");

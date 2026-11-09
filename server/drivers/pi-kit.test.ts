@@ -4,10 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { installPiKit, mergePiSettings, npmPackageName, piKitDir, piKitPackageArg, readPiKitPackages, renderPiKitTemplate } from "./pi-kit.ts";
+import { installPiKit, mergePiSettings, npmOnPath, npmPackageName, piKitDir, piKitPackageArg, readPiKitPackages, renderPiKitTemplate, resolvePiSettingsPackages } from "./pi-kit.ts";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "sagax-pi-kit-"));
+}
+
+/** A PATH folder holding an `npm` file, as an image with npm would. */
+function npmBin(): string {
+  const dir = tempDir();
+  writeFileSync(join(dir, process.platform === "win32" ? "npm.cmd" : "npm"), "#!/bin/sh\n");
+  return dir;
 }
 
 function kit(): string {
@@ -76,7 +83,7 @@ describe("installPiKit", () => {
     const home = join(tempDir(), "agent");
     mkdirSync(home);
     writeFileSync(join(home, "settings.json"), JSON.stringify({ theme: "dark", compaction: { reserveTokens: 1000 } }));
-    const { args } = installPiKit(kitDir, home, { USER_NAME: "Alex", TIMEZONE: "UTC", LANG_NAME: "English" }, {});
+    const { args } = installPiKit(kitDir, home, { USER_NAME: "Alex", TIMEZONE: "UTC", LANG_NAME: "English" }, { PATH: npmBin() });
     expect(args).toEqual([
       "-e", join(home, "extensions", "a.ts"),
       "-e", join(home, "extensions", "b.ts"),
@@ -98,5 +105,53 @@ describe("installPiKit", () => {
     installPiKit(kitDir, home, {}, {});
     expect(readFileSync(join(home, "settings.json"), "utf8")).toBe("{ broken");
     expect(installPiKit(tempDir(), tempDir(), {}, {}).args).toEqual([]);
+  });
+
+  // #3008: a kit names npm:pi-subagents in packages.txt and in
+  // settings.json "packages"; the image has no npm, so pi ran
+  // `npm install` at startup and died (spawn npm ENOENT) before replying.
+  it("never leaves pi an npm package to install when the image has no npm", () => {
+    const kitDir = tempDir();
+    writeFileSync(join(kitDir, "packages.txt"), "npm:pi-subagents\n./local-pkg\n");
+    writeFileSync(join(kitDir, "settings.json"), JSON.stringify({ packages: ["npm:pi-subagents", "git:example.com/pkg"] }));
+    const home = tempDir();
+    const { args } = installPiKit(kitDir, home, {}, { PATH: tempDir() });
+    expect(args).toEqual(["-e", join(kitDir, "local-pkg")]);
+    expect(JSON.parse(readFileSync(join(home, "settings.json"), "utf8")).packages).toEqual(["git:example.com/pkg"]);
+  });
+
+  it("loads a preinstalled package once, from the image, in packages.txt and settings alike", () => {
+    const kitDir = tempDir();
+    writeFileSync(join(kitDir, "packages.txt"), "npm:pi-subagents\n");
+    writeFileSync(join(kitDir, "settings.json"), JSON.stringify({ packages: ["npm:pi-subagents", { source: "npm:@scope/other@2", extensions: ["x"] }] }));
+    const root = tempDir();
+    mkdirSync(join(root, "pi-subagents"));
+    mkdirSync(join(root, "@scope", "other"), { recursive: true });
+    const home = tempDir();
+    const { args } = installPiKit(kitDir, home, {}, { PATH: tempDir(), SAGAX_PI_PACKAGES_DIR: root });
+    expect(args).toEqual(["-e", join(root, "pi-subagents")]);
+    expect(JSON.parse(readFileSync(join(home, "settings.json"), "utf8")).packages).toEqual([{ source: join(root, "@scope", "other"), extensions: ["x"] }]);
+  });
+
+  it("cleans an npm package the home's own settings name, with no kit settings", () => {
+    const kitDir = tempDir();
+    const home = tempDir();
+    writeFileSync(join(home, "settings.json"), JSON.stringify({ theme: "dark", packages: ["npm:pi-subagents"] }));
+    installPiKit(kitDir, home, {}, { PATH: tempDir() });
+    expect(JSON.parse(readFileSync(join(home, "settings.json"), "utf8"))).toEqual({ theme: "dark", packages: [] });
+  });
+});
+
+describe("npm on PATH", () => {
+  it("finds npm in a PATH folder only", () => {
+    expect(npmOnPath({ PATH: npmBin() })).toBe(true);
+    expect(npmOnPath({ PATH: tempDir() })).toBe(false);
+    expect(npmOnPath({})).toBe(false);
+  });
+
+  it("keeps settings packages as they are when npm can install them", () => {
+    expect(resolvePiSettingsPackages(["npm:a", "git:b"], new Set(), {}, () => true)).toBeNull();
+    expect(resolvePiSettingsPackages(["npm:a", "git:b"], new Set(["a"]), {}, () => true)).toEqual(["git:b"]);
+    expect(resolvePiSettingsPackages(undefined, new Set(), {}, () => false)).toBeNull();
   });
 });

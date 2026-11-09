@@ -199,15 +199,20 @@ Values: `USER_NAME` the person's display name, `TIMEZONE` their time zone,
 `SAGAX_PI_CW_MEMBER` on a single-person server only. Host tools stay withheld
 from organization turns as they are without a kit.
 
-The image removes npm, so the kit's packages are installed at build time:
+The image removes npm, so the kit's packages are installed at build time. The
+default preinstalls `npm:pi-subagents@0.84.0`; name your kit's own list:
 
 ```sh
 docker build --build-arg PI_KIT_PACKAGES="npm:example-pi-package@1.2.3" -t sagax .
 ```
 
 They land under `SAGAX_PI_PACKAGES_DIR` (`/opt/sagax-pi-packages/node_modules`)
-and a turn loads them from there. A source not preinstalled is passed to pi as
-written.
+and a turn loads them from there, from `packages.txt` and from the
+`packages` of `settings.json` alike. An `npm:` source not preinstalled is
+passed to pi only when npm is on the server's PATH; without npm it is left out
+with a warning in the server log, since pi would try to install it at startup
+and stop before replying (#3008). Other sources (local paths, `git:`) are
+passed as written.
 
 ## Notes
 

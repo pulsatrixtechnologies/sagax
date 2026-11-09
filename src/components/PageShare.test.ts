@@ -31,6 +31,15 @@ describe("what one gesture sends", () => {
     expect(sharePlan(live, 2, { kind: "expiry", hours: 24 }, now)).toEqual([{ method: "PATCH", path: "", body: { expiresAt: now + 24 * 3_600_000 } }]);
   });
 
+  it("#3128: switching between personal and shared in the Library is one PATCH, publishing a draft first", () => {
+    expect(sharePlan(live, 2, { kind: "bot", shared: true }, now)).toEqual([{ method: "PATCH", path: "", body: { botShared: true } }]);
+    expect(sharePlan(live, 2, { kind: "bot", shared: false }, now)).toEqual([{ method: "PATCH", path: "", body: { botShared: false } }]);
+    expect(sharePlan(draft, 3, { kind: "bot", shared: true }, now)).toEqual([
+      { method: "POST", path: "/publish", body: { version: 3, access: "private", expiresAt: null } },
+      { method: "PATCH", path: "", body: { botShared: true } },
+    ]);
+  });
+
   it("a newer version on screen is shared only by its own button, keeping the access and a future expiry", () => {
     expect(sharePlan(live, 2, { kind: "version" }, now)).toEqual([]);
     expect(sharePlan(live, 4, { kind: "version" }, now)).toEqual([{ method: "POST", path: "/publish", body: { version: 4, access: "org", expiresAt: now + 5_000 } }]);

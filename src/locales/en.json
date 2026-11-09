@@ -14551,5 +14551,15 @@
   "piServers.context": "context {count} tokens",
   "piServers.contextDefault": "context not reported, default used",
   "routines.loopStop.notice": "The routine was stopped before it finished: it kept repeating the same step. {reason}",
-  "routines.preflight.notice": "The routine \"{name}\" did not start: {reason}"
+  "routines.preflight.notice": "The routine \"{name}\" did not start: {reason}",
+  "pages.share.bot.legend": "In the bot's Library",
+  "pages.share.bot.personal": "Personal",
+  "pages.share.bot.personalHint": "Only you see this Page in the Library.",
+  "pages.share.bot.shared": "Shared in the Library",
+  "pages.share.bot.sharedHint": "Everyone who can use this bot can read it and ask the bot to refresh it.",
+  "botPanel.library.sharedPages": "Shared Pages",
+  "pages.sharedBy": "Shared by {name}",
+  "pages.refreshShared": "Ask the bot to refresh",
+  "pages.refreshPrompt": "Please refresh the Page \"{title}\" with up-to-date information.",
+  "pages.refreshAsked": "Refresh requested from the bot."
 }

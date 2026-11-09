@@ -413,6 +413,15 @@ export interface PublishedPageSummary {
   pinned?: boolean;
   /** The person allowed the bot to replace the published version. */
   keepUpdated?: boolean;
+  /** #3128: shared in the bot's Library (everyone who uses the bot reads it
+   * and asks the bot to refresh it). Absent: personal. */
+  botShared?: boolean;
+  /** #3128: on a page someone else shared, the name of the person who made
+   * it. Absent on the person's own pages. */
+  sharedBy?: string;
+  /** #3128: on a page someone else shared, whether you may remove it (its
+   * creator, the bot's owner). */
+  canRemove?: boolean;
   /** The people and teams invited to read it (Share). */
   invites?: PageInvites;
   /** People who may edit this page besides its person (#1704). */

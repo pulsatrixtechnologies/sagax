@@ -1704,3 +1704,43 @@ describe("who writes a page's state: the page's declaration within its sharing (
     expect((await call(handler, session("pr_editor"), "POST", `/api/pages/${id}/share`, { audience: "org" })).status).toBe(404);
   });
 });
+
+describe("a Page shared in the bot's Library (#3128)", () => {
+  it("is personal by default and switches in both directions", () => {
+    const { pages } = store();
+    const { page } = proposed(pages, "pr_a");
+    expect(pages.get(page.id)!.botShared).toBeUndefined();
+    expect((pages.setBotShared(page.id, true, "pr_a") as { botShared?: boolean }).botShared).toBe(true);
+    expect((pages.setBotShared(page.id, false, "pr_a") as { botShared?: boolean }).botShared).toBeUndefined();
+  });
+
+  it("members of the bot read it, others and its own person's list do not see it twice", () => {
+    const { pages } = store();
+    const { page } = proposed(pages, "pr_a");
+    pages.publish(page.id, { version: 1, access: "private", expiresAt: null });
+    pages.setBotShared(page.id, true);
+    const may = (botId: string) => botId === "bot1";
+    expect(pages.sharedFor("pr_b", may).map((p) => p.id)).toEqual([page.id]);
+    expect(pages.sharedFor("PR_A", may)).toEqual([]);
+    expect(pages.sharedFor("pr_b", () => false)).toEqual([]);
+    const record = pages.get(page.id)!;
+    const mayUseBot = (principalId: string, botId: string) => principalId === "pr_b" && botId === "bot1";
+    expect(pageReadable(record, { principalId: "pr_b", computerOwner: false }, undefined, undefined, mayUseBot)).toBe(true);
+    expect(pageReadable(record, { principalId: "pr_c", computerOwner: false }, undefined, undefined, mayUseBot)).toBe(false);
+    expect(pageReadable(record, { principalId: "pr_b", computerOwner: false })).toBe(false);
+    pages.setBotShared(page.id, false);
+    expect(pageReadable(pages.get(page.id)!, { principalId: "pr_b", computerOwner: false }, undefined, undefined, mayUseBot)).toBe(false);
+    expect(pages.sharedFor("pr_b", may)).toEqual([]);
+  });
+
+  it("the bot may propose a new version on a shared Page of the same bot, not of another bot or a personal one", () => {
+    const { pages } = store();
+    const { page } = proposed(pages, "pr_a");
+    pages.publish(page.id, { version: 1, access: "private", expiresAt: null });
+    const refresh = (botId: string) => pages.propose({ botId, threadId: "t2", title: "Rapport", kind: "html", content: HTML + "<!-- 2 -->", pageId: page.id, ownerId: "pr_b" } as never);
+    expect(refresh("bot1").ok).toBe(false);
+    pages.setBotShared(page.id, true);
+    expect(refresh("bot1").ok).toBe(true);
+    expect(refresh("bot2").ok).toBe(false);
+  });
+});

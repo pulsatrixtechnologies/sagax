@@ -12418,6 +12418,20 @@ ROUTES.push(createPublishedPageRoutes({
   // link sees them (publishedPageViewer), and the names in a page's threads
   reader: (auth) => pageReaderFor(auth),
   teamsOf: (principalId) => IDENTITY.kind === "perspicax" ? (principals.byId(principalId)?.teams ?? []).map((team) => team.id) : [],
+  // #3128: a page shared in a bot's Library: who uses the bot reads it, its
+  // creator and the bot's owner remove it
+  mayUseBot: (principalId, botId) => {
+    if (IDENTITY.kind !== "perspicax") return false;
+    const bot = store.bot(botId);
+    const viewer = authzViewerFromId(principalId);
+    return Boolean(bot && viewer && canOnBot(viewer, "bot.use", botFacts(bot)));
+  },
+  mayRemoveShared: (auth, page) => {
+    const bot = store.bot(page.botId);
+    const who = auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() : undefined;
+    return Boolean(bot && who && (who === (page.ownerId ?? "").toLowerCase() || who === effectiveBotOwner(bot).toLowerCase() || ownerOrAdminOf(auth, bot)));
+  },
+  personName: (principalId) => pageThreadName(principalId),
   names: (ids) => Object.fromEntries(ids.map((id) => [id, pageThreadName(id)])),
   live: pageLive,
   // someone else commented: the page's person hears it (Annotate)

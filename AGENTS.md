@@ -2612,6 +2612,19 @@ classes and variables. Same CSP and sandbox. Tests:
 `ios/Tests/CompanionCoreTests/ContentThemeTests.swift`. Captures:
 `scripts/capture/bot-content-theme.ts`, docs/screenshots/bot-content-theme.
 
+## Pages shared in a bot's Library (#3128)
+
+A Page is personal by default. Share > "In the bot's Library" switches it to
+shared and back (`botShared` on the page, PATCH `{botShared}`; a draft is
+published first). Anyone who may use the bot (`bot.use`) reads it through its
+reading link (`pageReadable`, `mayUseBot`) and asks the bot to refresh it (the
+Library row sends the bot a message with the page context; the store lets the
+bot propose a new version on a botShared page of the same bot). Its creator and
+the bot's owner remove it (DELETE on the page, `mayRemoveShared`). They list
+in `GET /api/pages` with `sharedBy` and `canRemove`, and in a "Shared Pages"
+section of the Library tab. Tests: `server/pages/published-pages.test.ts`,
+`src/components/PageShare.test.ts`.
+
 ## Page view (2026-10-28; lot 5 layout 2026-10-31, stage default after native audit)
 
 A page a bot proposes shows in the conversation as a card with a live,

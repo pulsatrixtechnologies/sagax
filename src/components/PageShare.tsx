@@ -245,6 +245,25 @@ export function PageSharePopover({ page, version, linkOff, onChange, onClose, cl
         {linkOff && page.access === "link" && shared && <p className="mt-1.5 text-[12px] text-warning">{t("pages.linkOffActive")}</p>}
       </fieldset>
 
+      <fieldset className="mb-3" disabled={busy} data-page-bot-scope="">
+        <legend className="mb-1.5 text-[12px] font-medium text-ink-secondary">{t("pages.share.bot.legend")}</legend>
+        <div className="flex flex-col gap-0.5">
+          {([false, true] as const).map((value) => {
+            const checked = (page.botShared === true) === value;
+            return (
+              <label key={String(value)} className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-hover">
+                <input type="radio" name={`page-bot-scope-${page.id}`} value={value ? "shared" : "personal"} checked={checked} onChange={() => void run({ kind: "bot", shared: value })} className="sr-only" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px]">{value ? t("pages.share.bot.shared") : t("pages.share.bot.personal")}</span>
+                  <span className="block text-[11.5px] text-ink-tertiary">{value ? t("pages.share.bot.sharedHint") : t("pages.share.bot.personalHint")}</span>
+                </span>
+                {checked && <Check size={14} className="mt-1.5 text-accent" aria-hidden="true" />}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
       {!shared && <p className="mb-3 text-[12px] text-ink-secondary">{t("pages.share.notShared", { n: String(version) })}</p>}
       {shared && (
         <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px]">

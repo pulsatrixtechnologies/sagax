@@ -14551,5 +14551,15 @@
   "piServers.context": "contexte {count} jetons",
   "piServers.contextDefault": "contexte non fourni, valeur par défaut",
   "routines.loopStop.notice": "La routine a été arrêtée avant la fin : elle répétait la même étape. {reason}",
-  "routines.preflight.notice": "La routine « {name} » n'a pas démarré : {reason}"
+  "routines.preflight.notice": "La routine « {name} » n'a pas démarré : {reason}",
+  "pages.share.bot.legend": "Dans la bibliothèque du bot",
+  "pages.share.bot.personal": "Personnelle",
+  "pages.share.bot.personalHint": "Vous seul voyez cette Page dans la bibliothèque.",
+  "pages.share.bot.shared": "Partagée dans la bibliothèque",
+  "pages.share.bot.sharedHint": "Toute personne qui peut utiliser ce bot peut la lire et lui demander de l'actualiser.",
+  "botPanel.library.sharedPages": "Pages partagées",
+  "pages.sharedBy": "Partagée par {name}",
+  "pages.refreshShared": "Demander au bot d'actualiser",
+  "pages.refreshPrompt": "Actualise la Page « {title} » avec des informations à jour.",
+  "pages.refreshAsked": "Actualisation demandée au bot."
 }

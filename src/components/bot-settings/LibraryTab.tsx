@@ -7,7 +7,7 @@
 // bot's Claude Code plugins in Connect apps, in that bot's scope.
 // (docs/superpowers/specs/2026-10-16-artifacts-design.md)
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AppWindow, Copy, Download, FolderOpen, LoaderCircle, MessageSquare, MoreHorizontal, Pin, PinOff, RefreshCw, RotateCcw, Share, Trash2, X } from "lucide-react";
+import { AppWindow, Copy, Download, FolderOpen, LoaderCircle, MessageSquare, MoreHorizontal, Pin, PinOff, RefreshCw, RotateCcw, Share, Trash2, Users, X } from "lucide-react";
 
 import { api, useStore, type Bot, type Group } from "@/state/store";
 import { groupThreadIds } from "@/lib/group-panel";
@@ -143,6 +143,7 @@ export function PersonLibraryBody(props: Omit<Parameters<typeof LibraryBody>[0],
 }
 
 function LibraryTabView({ list, pages, files }: { list: ArtifactList; pages: ReturnType<typeof useBotPages>; files: ReturnType<typeof useThreadFiles> }) {
+  const { dispatch } = useStore();
   const advanced = useAdvancedMode();
   const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const setPinned = (file: ThreadFile, pinned: boolean) => {
@@ -169,6 +170,7 @@ function LibraryTabView({ list, pages, files }: { list: ArtifactList; pages: Ret
       pages={pages.pages}
       onPageChange={pages.patch}
       onPageRemoved={pages.drop}
+      onAskRefresh={(page) => dispatch({ type: "send", botId: page.botId, text: t("pages.refreshPrompt", { title: page.title }), dataContext: { page: { pageId: page.id, title: page.title } } })}
       advanced={advanced}
       status={status}
     />
@@ -176,7 +178,7 @@ function LibraryTabView({ list, pages, files }: { list: ArtifactList; pages: Ret
 }
 
 /** Everything the tab shows, given the loaded lists (tests render it). */
-export function LibraryBody({ threadId, files, filesError = false, onRetryFiles = () => {}, onJump = () => {}, onPinFile = () => {}, list, pages = null, onPageChange = () => {}, onPageRemoved = () => {}, advanced = false, now, status = null, openMenus = false, emptyText }: {
+export function LibraryBody({ threadId, files, filesError = false, onRetryFiles = () => {}, onJump = () => {}, onPinFile = () => {}, list, pages = null, onPageChange = () => {}, onPageRemoved = () => {}, onAskRefresh, advanced = false, now, status = null, openMenus = false, emptyText }: {
   /** The conversation of the files; a file that names its own (a person's
    * Library, several conversations) is served from that one. */
   threadId: string;
@@ -191,6 +193,8 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
   pages?: PublishedPageSummary[] | null;
   onPageChange?: (page: PublishedPageSummary) => void;
   onPageRemoved?: (id: string) => void;
+  /** #3128: ask the bot to refresh a page someone shared. */
+  onAskRefresh?: (page: PublishedPageSummary) => void;
   /** Advanced mode: a file's menu also offers Copy path. */
   advanced?: boolean;
   now?: number;
@@ -209,7 +213,12 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
 
   const loading = (files === null && !filesError) || (list.artifacts === null && !list.error);
   const failed = (files === null && filesError) && (list.artifacts === null && list.error);
-  const items = libraryItems(files, list.artifacts, pages);
+  // #3128: pages shared in the bot's Library (the person's own and the ones
+  // others shared) have a section of their own
+  const isShared = (page: PublishedPageSummary) => page.botShared === true || page.sharedBy !== undefined;
+  const items = libraryItems(files, list.artifacts, pages ? pages.filter((page) => !isShared(page)) : pages);
+  const sharedItems = (pages ?? []).filter(isShared).sort((a, b) => b.updatedAt - a.updatedAt)
+    .map((page): LibraryItem => ({ kind: "page", key: `page:${page.id}`, at: page.updatedAt, pinned: false, page }));
   const policy = usePagesPolicy();
   const [deletingPage, setDeletingPage] = useState<PublishedPageSummary | null>(null);
   const [pageBusy, setPageBusy] = useState(false);
@@ -251,8 +260,14 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
   const row = (item: LibraryItem): ReactNode => item.kind === "file"
     ? <FileRow key={item.key} threadId={at(item.file)} file={item.file} advanced={advanced} openMenus={openMenus} onOpen={open} onJump={onJump} onDownload={download} onCopyPath={copyPath} onPin={onPinFile} />
     : item.kind === "page"
-      ? <PageLibraryRow key={item.key} page={item.page} linkOff={!policy.linkSharing} openMenus={openMenus} onChange={onPageChange}
-          onPin={(page) => patchPage(page, { pinned: page.pinned !== true })} onDelete={setDeletingPage} />
+      ? item.page.sharedBy !== undefined
+        ? <SharedPageRow key={item.key} page={item.page} openMenus={openMenus} onDelete={setDeletingPage}
+            onRefresh={(page) => {
+              onAskRefresh?.(page);
+              setNote({ tone: "ok", text: t("pages.refreshAsked") });
+            }} />
+        : <PageLibraryRow key={item.key} page={item.page} linkOff={!policy.linkSharing} openMenus={openMenus} onChange={onPageChange}
+            onPin={(page) => patchPage(page, { pinned: page.pinned !== true })} onDelete={setDeletingPage} />
       : <ArtifactLibraryRow key={item.key} artifact={item.artifact} actions={actions} now={now} openMenus={openMenus} />;
   const [olderOpen, setOlderOpen] = useState(false);
   const card = (id: string, title: string, rows: LibraryItem[]) => {
@@ -289,7 +304,7 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
             <RotateCcw size={12} aria-hidden="true" /> {t("chat.retry")}
           </button>
         </div>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && sharedItems.length === 0 ? (
         <div data-library-empty="" className="flex flex-col items-center gap-2 px-6 py-12 text-center text-ink-secondary">
           <FolderOpen size={20} aria-hidden="true" />
           <span className="text-[13px]">{emptyText ?? t("botPanel.library.empty")}</span>
@@ -297,6 +312,7 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
       ) : (
         <>
           {groups.pinned.length > 0 && card("pinned", t("botPanel.library.pinned"), groups.pinned)}
+          {sharedItems.length > 0 && card("shared", t("botPanel.library.sharedPages"), sharedItems)}
           {groups.periods.map((period) => card(period.id, t(`botPanel.library.period.${period.id}`), period.items))}
         </>
       )}
@@ -338,7 +354,8 @@ function LibraryRow({ attr, icon, name, trail, pinned, pinLabel, onTogglePin, me
   trail?: ReactNode;
   pinned: boolean;
   pinLabel: string;
-  onTogglePin: () => void;
+  /** Absent: the row has no pin (a page someone else shared). */
+  onTogglePin?: () => void;
   menuLabel: string;
   menu: (close: () => void) => ReactNode;
   openMenus: boolean;
@@ -354,17 +371,19 @@ function LibraryRow({ attr, icon, name, trail, pinned, pinLabel, onTogglePin, me
           {trail}
         </>,
       )}
-      <button
-        type="button"
-        aria-pressed={pinned}
-        aria-label={pinLabel}
-        title={pinLabel}
-        data-library-pin={pinned ? "on" : "off"}
-        onClick={onTogglePin}
-        className={cn(ROW_BUTTON, pinned ? "text-accent" : REVEAL)}
-      >
-        <Pin size={14} aria-hidden="true" fill={pinned ? "currentColor" : "none"} />
-      </button>
+      {onTogglePin && (
+        <button
+          type="button"
+          aria-pressed={pinned}
+          aria-label={pinLabel}
+          title={pinLabel}
+          data-library-pin={pinned ? "on" : "off"}
+          onClick={onTogglePin}
+          className={cn(ROW_BUTTON, pinned ? "text-accent" : REVEAL)}
+        >
+          <Pin size={14} aria-hidden="true" fill={pinned ? "currentColor" : "none"} />
+        </button>
+      )}
       <PopoverMenu className={REVEAL} buttonClass={ROW_BUTTON} label={menuLabel} icon={<MoreHorizontal size={14} />} menuLabel={name} defaultOpen={openMenus}>
         {menu}
       </PopoverMenu>
@@ -488,10 +507,13 @@ function PageLibraryRow({ page, linkOff, openMenus, onChange, onPin, onDelete }:
       attr={{ "data-library-page": page.id }}
       icon={<PageRowGlyph page={page} />}
       name={page.title || t("pages.untitled")}
-      trail={sharing ? (
-        <span className="relative">
+      trail={sharing || page.botShared === true ? (
+        <span className="relative flex items-center">
+          {page.botShared === true && <Users size={12} data-page-bot-shared="" className="text-ink-secondary" aria-label={t("pages.share.bot.shared")} />}
+          {sharing && (
           <PageSharePopover page={page} version={page.currentVersion ?? page.versions.at(-1)?.n ?? 1} linkOff={linkOff} onChange={onChange} onClose={() => setSharing(false)}
             className="absolute right-0 top-5 z-[5]" />
+          )}
         </span>
       ) : null}
       pinned={pinned}
@@ -510,6 +532,44 @@ function PageLibraryRow({ page, linkOff, openMenus, onChange, onPin, onDelete }:
     >
       {(content) => (
         <button type="button" data-page-open onClick={open} aria-label={t("pages.cardOpen", { title: page.title })} className={OPEN_BUTTON}>
+          {content}
+        </button>
+      )}
+    </LibraryRow>
+  );
+}
+
+/** A page someone else shared in this bot's Library (#3128): you read it
+ * through its reading link and ask the bot to refresh it; its creator and the
+ * bot's owner remove it. */
+function SharedPageRow({ page, openMenus, onRefresh, onDelete }: {
+  page: PublishedPageSummary;
+  openMenus: boolean;
+  onRefresh: (page: PublishedPageSummary) => void;
+  onDelete: (page: PublishedPageSummary) => void;
+}) {
+  const name = page.title || t("pages.untitled");
+  const open = () => { if (page.url) window.open(page.url, "_blank", "noopener,noreferrer"); };
+  return (
+    <LibraryRow
+      attr={{ "data-library-page": page.id, "data-library-shared-page": page.id }}
+      icon={<PageRowGlyph page={page} />}
+      name={name}
+      trail={page.sharedBy ? <span className="shrink-0 truncate text-[11.5px] text-ink-tertiary" data-page-shared-by="">{t("pages.sharedBy", { name: page.sharedBy })}</span> : null}
+      pinned={false}
+      pinLabel=""
+      menuLabel={t("pages.moreAria", { title: page.title })}
+      openMenus={openMenus}
+      menu={(close) => (
+        <>
+          <MenuItem icon={<AppWindow size={14} />} label={t("pages.open")} disabled={!page.url} onClick={() => { close(); open(); }} />
+          <MenuItem icon={<RefreshCw size={14} />} label={t("pages.refreshShared")} onClick={() => { close(); onRefresh(page); }} />
+          {page.canRemove === true && <MenuItem icon={<Trash2 size={14} />} label={t("pages.deleteMenu")} onClick={() => { close(); onDelete(page); }} />}
+        </>
+      )}
+    >
+      {(content) => (
+        <button type="button" data-page-open disabled={!page.url} onClick={open} aria-label={t("pages.cardOpen", { title: page.title })} className={OPEN_BUTTON}>
           {content}
         </button>
       )}

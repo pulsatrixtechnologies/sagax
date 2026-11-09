@@ -12,7 +12,11 @@ function ownPageContext(context: DataContext | undefined, botId: string, auth: R
   const mine = Boolean(page) && page!.botId === botId && (host.IDENTITY.kind === "perspicax"
     ? Boolean(owner) && (page!.ownerId ?? "").toLowerCase() === owner!.toLowerCase()
     : page!.ownerId === undefined);
-  if (mine) return context;
+  // #3128: a page shared in this bot's Library is also kept for a person who
+  // uses the bot (they ask it to refresh the page)
+  const shared = !mine && host.IDENTITY.kind === "perspicax" && Boolean(page) && page!.botId === botId && page!.botShared === true
+    && Boolean(owner) && Boolean(host.store.bot(botId) && host.canOnBot(host.authzViewerFromId(owner!), "bot.use", host.botFacts(host.store.bot(botId))));
+  if (mine || shared) return context;
   const { page: _dropped, ...rest } = context;
   return rest.cardId ? rest : undefined;
 

@@ -37,6 +37,7 @@ import { ScreenFrame } from "../ScreenFrame";
 import { VideoPlayerWidget } from "../video/VideoPlayerWidget";
 import { showToolCallsEnabled } from "@/lib/feature-flags";
 import { isStatusActivity, isTurnStoppedNotice } from "@/lib/activity-runs";
+import { isFailedTeammateStep } from "@/lib/step-label";
 import { botNames } from "../ToolActivity";
 import { SeenByRow, type SeenFace } from "../SeenBy";
 import { formatTime } from "@/state/store";
@@ -237,8 +238,9 @@ export function MessagesListItem({
   }
   if (item.kind === "run") {
     const hasWidget = item.messages.some((step) => shownCwWidget(step.tool));
-    // Tool calls off: the steps go, a turn's narration stays folded.
-    const shown = showToolCalls ? item.messages : item.messages.filter((step) => step.kind !== "activity");
+    // Tool calls off: the steps go, a turn's narration stays folded. A
+    // failed hand-off to a teammate stays: it is why no answer came.
+    const shown = showToolCalls ? item.messages : item.messages.filter((step) => step.kind !== "activity" || isFailedTeammateStep(step));
     // Hidden steps still carry the divider: the reply under them is new.
     if (!shown.length && !hasWidget) return divider && <div key={item.id} className="contents">{divider}</div>;
     return (
@@ -397,7 +399,7 @@ export function MessagesListItem({
         // A comm chip stays on Apple mobile web (the only trace there a
         // teammate was consulted) and whenever the send failed.
         const keepComm = Boolean(m.comm) && (appleMobileWeb || m.tool?.ok === false);
-        if (!showToolCalls && !m.threadRef && !m.dataResult && !m.inputRequest && !keepComm) return null;
+        if (!showToolCalls && !m.threadRef && !m.dataResult && !m.inputRequest && !keepComm && !isFailedTeammateStep(m)) return null;
         return <ActivityChip message={m} place={place} />;
       }
       case "digest":

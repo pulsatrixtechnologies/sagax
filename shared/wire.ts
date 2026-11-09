@@ -993,7 +993,9 @@ export interface WireMessage extends WaitLineField {
     limitResetsAt?: number;
     /** Provider item identity, scoped to the owning turn. */
     itemId?: string;
-    /** A failed one-way send's row: the runtime id of the notice it reports. */
+    /** A failed one-way send's row: the runtime id of the notice it reports.
+     * A "Sent to <teammate>" receipt: the request it opened, which the
+     * teammate's result names as its roomRequest id. */
     handoffId?: string;
     /** Whether the harness captured the full redacted result. Private
      * server-local spill paths are not exposed to clients. */

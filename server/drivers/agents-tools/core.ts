@@ -3,6 +3,7 @@
 // dispatched by agents-call.ts. Never import server/index.ts.
 
 import { BOT_REACTIONS } from "../../../shared/reactions.ts";
+import { COORDINATE_MESSAGE_MAX_CHARS } from "../../../shared/turn-limits.ts";
 import { BOT_NOTIFY_PARAM, botNotifyArg } from "../../../shared/notification.ts";
 import { CREDENTIAL_TARGETS, isCredentialTargetId } from "../../../shared/credential-request.ts";
 import { peerName } from "../../peers/peer-roster.ts";
@@ -45,7 +46,7 @@ export const DEF_COORDINATE_BOTS = {
     inputSchema: { type: "object", additionalProperties: false, properties: {
       group_id: { type: "string", description: "Optional destination room; omit for this room or, outside a room, your thread with each teammate." },
       bot_ids: { type: "array", items: { type: "string", description: "A teammate's name as your roster prints it, or its id ([id: …]) when the roster or list_bots shows one. A name shared by two reachable teammates is refused: use the id." }, minItems: 1, maxItems: 4, uniqueItems: true },
-      message: { type: "string", minLength: 1, maxLength: 4000, description: "Question or task for these teammates; later requests in the same conversation can build on earlier ones. Send separate requests when responsibilities differ." },
+      message: { type: "string", minLength: 1, maxLength: COORDINATE_MESSAGE_MAX_CHARS, description: "Question or task for these teammates; later requests in the same conversation can build on earlier ones. Send separate requests when responsibilities differ." },
       reason: { type: "string", maxLength: 200, description: "Optional one line for the person about why this goes to them (shown as a chip)." },
       rework: { type: "boolean", description: "True only to send concrete work again to someone whose request already finished or failed: a correction, a re-check or a retry." },
       mode: { type: "string", enum: ["work", "consult"], description: "consult: a question only, allowed to the bot that sent you this work. Default: consult for that bot, else work." },

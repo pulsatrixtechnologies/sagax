@@ -2,7 +2,9 @@
  * long turn: before (one row per step, as #488 drew them: "Used 6 tools",
  * "Could not use mcp" ten times over) and after (one group per turn, the
  * steps inside, the same step merged with a count). Not shipped in the app.
- * ?skin=<id>&lang=<code>&view=before|after|after-open|after-live */
+ * ?skin=<id>&lang=<code>&view=before|after|after-open|after-live|handoff|handoff-open
+ * handoff: a bot-to-bot hand-off in the unified chat (2026-11-09), the
+ * sender's row (asked, answered with a verdict, failed) and the teammate's. */
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { ActivityRun } from "../components/ActivityRun";
@@ -10,6 +12,10 @@ import { BotAvatar } from "../components/Avatar";
 import { DigestChip } from "../components/DigestChip";
 import { StepRow } from "../components/StepRow";
 import { ToolActivity } from "../components/ToolActivity";
+import { HandoffRow } from "../components/HandoffRow";
+import { ChatRowsContext, type ChatRows } from "../components/ChatView.tsx-parts/types";
+import { createStoreSource, StoreSourceContext } from "../state/store-selector";
+import { initialState, type AppState, type Bot } from "../state/store";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { stepLabel, stepDuration } from "../lib/step-label";
@@ -164,12 +170,58 @@ function After() {
   );
 }
 
+// A hand-off in the unified chat: Wren asked Olive, Olive answered FAIL; a
+// second ask still running; a third refused by the server.
+const work = { botId: "olive", threadId: "olive-work", title: "@Wren · work" };
+const brief = "Vérifie la version 0.8.73 sur staging : connexion, envoi d'un message, carte d'approbation. Réponds PASS ou FAIL avec le détail.";
+const handSent = (id: string, handoffId: string, extra: Partial<NonNullable<Message["tool"]>> = {}): Message => ({
+  id, at: 1, role: "bot", kind: "activity", threadRef: work, from: { botId: "wren", name: "Wren", color: "green" },
+  tool: { name: "Sent to Olive", ok: true, input: brief, handoffId, ...extra },
+});
+const handReplied: Message = {
+  id: "h-replied", at: 2, role: "bot", kind: "activity", threadRef: work, roomRequest: { id: "req-1", phase: "result" },
+  from: { botId: "olive", name: "Olive", color: "orange" },
+  tool: { name: "Olive replied", ok: true, output: "FAIL\nLa connexion passe. L'envoi d'un message échoue : erreur 500 sur /api/send.\nLa carte d'approbation s'affiche." },
+};
+const handAsked: Message = {
+  id: "h-asked", at: 1, role: "bot", kind: "activity", threadRef: work, from: { botId: "wren", name: "Wren", color: "green" },
+  tool: { name: "Asked by Wren", ok: true, input: brief, handoffId: "req-1" },
+};
+const handBots = [
+  { id: "wren", name: "Wren", color: "green" },
+  { id: "olive", name: "Olive", color: "orange" },
+] as unknown as Bot[];
+const sender = [handSent("h1", "req-1"), handReplied, handSent("h2", "req-2"),
+  handSent("h3", "req-3", { ok: false, output: "Provide 1-4 distinct botIds and a message of 1-16000 characters." })];
+const handState = { ...initialState, bots: [{ ...handBots[0], messages: sender }, { ...handBots[1], messages: [handAsked, { ...handReplied, id: "h-r2" }] }] } as unknown as AppState;
+const handSource = createStoreSource(handState, () => undefined);
+const rowsFor = (botId: string) => ({ bots: handBots, botId, threadId: `${botId}-main` }) as unknown as ChatRows;
+
+function Handoff() {
+  return (
+    <StoreSourceContext.Provider value={handSource as never}>
+      <Section title="Chat de Wren (expéditeur)">
+        <ChatRowsContext.Provider value={rowsFor("wren")}>
+          <ToolActivity tool={running} />
+          {sender.map((message) => <HandoffRow key={message.id} message={message} />)}
+          <ToolActivity tool={tickets} />
+        </ChatRowsContext.Provider>
+      </Section>
+      <Section title="Chat d'Olive (destinataire)">
+        <ChatRowsContext.Provider value={rowsFor("olive")}>
+          <HandoffRow message={handAsked} />
+        </ChatRowsContext.Provider>
+      </Section>
+    </StoreSourceContext.Provider>
+  );
+}
+
 function Gallery() {
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="mx-auto flex max-w-xl flex-col gap-5" data-gallery={view}>
         <div className="self-end rounded-[18px] bg-bubble-user px-3 py-2 text-[13px] text-ink">Résume le billet #296221</div>
-        {view === "before" ? <Before /> : <After />}
+        {view === "before" ? <Before /> : view.startsWith("handoff") ? <Handoff /> : <After />}
         <div className="self-start rounded-[18px] bg-card px-3 py-2 text-[13px] text-ink">Voici le résumé du billet #296221 : gabarit de courriel dans Bamboo, 4 notes.</div>
       </div>
     </div>

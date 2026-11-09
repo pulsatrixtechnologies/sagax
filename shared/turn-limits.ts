@@ -25,3 +25,8 @@ export function botTurnLimit(bot: { turnLimits?: BotTurnLimits } | null | undefi
   const value = bot?.turnLimits?.[key];
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_TURN_LIMIT ? value : DEFAULT_TURN_LIMITS[key];
 }
+
+/** The longest brief coordinate_bots carries to a teammate (characters).
+ * 4 000 cut real QA briefs short (2026-11-09): a review request with its
+ * acceptance list ran past it and the hand-off failed. */
+export const COORDINATE_MESSAGE_MAX_CHARS = 16_000;

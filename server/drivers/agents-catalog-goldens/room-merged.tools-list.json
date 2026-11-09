@@ -183,7 +183,7 @@
           "message": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 4000,
+            "maxLength": 16000,
             "description": "Question or task for these teammates; later requests in the same conversation can build on earlier ones. Send separate requests when responsibilities differ."
           },
           "reason": {

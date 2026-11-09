@@ -27,7 +27,8 @@ import {
   type RosterMember,
 } from "../peers/peer-roster.ts";
 import { requiresDecisionCard } from "../runtime/done-when.ts";
-import { botTurnLimit } from "../../shared/turn-limits.ts";
+import { botTurnLimit, COORDINATE_MESSAGE_MAX_CHARS } from "../../shared/turn-limits.ts";
+import { redactSecretsInText } from "../redact.ts";
 import { queuedThreadPosition } from "../turns/steer-queue.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
 import { PASS } from "./table.ts";
@@ -665,7 +666,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
     const parsed = z.object({
       groupId: z.string().min(1).max(128).optional(),
       botIds: z.array(z.string().min(1).max(128)).min(1).max(4).refine(ids => new Set(ids).size === ids.length),
-      message: z.string().trim().min(1).max(4000),
+      message: z.string().trim().min(1).max(COORDINATE_MESSAGE_MAX_CHARS),
       // One line for the person, shown on the "Sent to" chip.
       reason: z.string().trim().max(200).optional(),
       rework: z.boolean().default(false),
@@ -685,7 +686,7 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
       title: z.string().trim().min(1).max(80).optional(),
       projectId: z.string().min(1).max(128).optional(),
     }).safeParse(await readInternalBody());
-    if (!parsed.success) return json(res, 400, { error: "Provide 1-4 distinct botIds and a message of 1-4000 characters." });
+    if (!parsed.success) return json(res, 400, { error: `Provide 1-4 distinct botIds and a message of 1-${COORDINATE_MESSAGE_MAX_CHARS} characters.` });
     const oneWay = parsed.data.reply === "none";
     if (oneWay && (parsed.data.consult || parsed.data.mode === "consult")) {
       return json(res, 400, { error: "consult asks a question whose answer comes back to you; leave reply out" });
@@ -886,7 +887,11 @@ export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typ
           const recipient = store.bot(target.botId)!;
           store.appendMessage(address.threadId, { role: "bot", kind: "activity",
             from: { botId: internalSender.id, name: internalSender.name, color: internalSender.color },
+            // The brief and the request it opened ride on the receipt: the
+            // unified chat draws them as one "Asked <teammate>" row whose
+            // verdict lands under it when the result comes back (2026-11-09).
             tool: { name: "Sent to " + recipient.name + (destination && destination.id !== source?.id ? " · " + destination.name : ""), ok: true,
+              input: redactSecretsInText(parsed.data.message), handoffId: node.id,
               ...(parsed.data.reason ? { output: parsed.data.reason } : {}) },
             ...(destination ? { comm: { groupId: destination.id, threadId: node.threadId, withBotId: recipient.id, withName: recipient.name, withColor: recipient.color } }
               : { threadRef: { botId: recipient.id, threadId: node.threadId, title: store.taskByThread(recipient.id, node.threadId)!.title } }),

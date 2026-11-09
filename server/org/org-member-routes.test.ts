@@ -244,7 +244,7 @@ describe("sending", () => {
     expect(got.status).toBe(200);
     expect(got.body).toMatchObject({ botId: "b1", threadId: "t1", messageId: "m1", status: "done", pending: false, reply: "Done: 3 tickets.", cursor: "m2" });
     // the AI client continues its hidden conversation (#291), never the person's open chat
-    expect(performed[0]!.request).toEqual({ method: "POST", path: "/api/bots/b1/messages", body: { text: "hi", threadId: "t1" } });
+    expect(performed[0]!.request).toEqual({ method: "POST", path: "/api/bots/b1/messages", body: { text: "hi", threadId: "t1", busyMode: "after", aiClient: true } });
     expect(recorded).toEqual([{ person: expect.objectContaining({ principalId: "pr_bob" }), action: "client.message", after: { threadId: "t1", waited: true, hidden: true } }]);
     expect(JSON.stringify(recorded)).not.toContain("hi\"");
   });
@@ -282,7 +282,7 @@ describe("sending", () => {
     expect(performed.map((p) => p.request.path)).toEqual(["/api/bots/b1/tasks", "/api/bots/b1/messages"]);
     // #1170: a new thread is never hidden; the person can see and close it
     expect(performed[0]!.request.body).toEqual({ confidential: false });
-    expect(performed[1]!.request.body).toEqual({ text: "hello", threadId: "t9" });
+    expect(performed[1]!.request.body).toEqual({ text: "hello", threadId: "t9", busyMode: "after", aiClient: true });
     expect(got.status).toBe(403);
     expect(got.body).toMatchObject({ code: "forbidden", message: "This bot is not yours to use." });
     expect(recorded).toEqual([]);
@@ -302,7 +302,7 @@ describe("sending", () => {
       expect(got.status).toBe(200);
       expect(performed.filter((p) => p.request.method === "POST").map((p) => [p.request.path, p.request.body])).toEqual([
         ["/api/bots/b1/tasks", { confidential: false }],
-        ["/api/bots/b1/messages", { text: "count the tickets", threadId: "t9" }],
+        ["/api/bots/b1/messages", { text: "count the tickets", threadId: "t9", busyMode: "after", aiClient: true }],
       ]);
       expect(recorded[0]!.after).toEqual({ threadId: "t9", waited: false, hidden: true });
     });
@@ -316,14 +316,35 @@ describe("sending", () => {
       respond = sentTo("t7");
       await call("POST", "bots/b1/messages", token("bob"), { text: "again" });
       expect(asked).toEqual(["b1/pr_bob"]);
-      expect(performed.filter((p) => p.request.method === "POST").map((p) => [p.request.path, p.request.body])).toEqual([["/api/bots/b1/messages", { text: "again", threadId: "t7" }]]);
+      expect(performed.filter((p) => p.request.method === "POST").map((p) => [p.request.path, p.request.body])).toEqual([["/api/bots/b1/messages", { text: "again", threadId: "t7", busyMode: "after", aiClient: true }]]);
     });
 
     it("honors a thread the client names, as given", async () => {
       respond = sentTo("t5");
       await call("POST", "bots/b1/messages", token("bob"), { text: "here", threadId: "t5" });
-      expect(performed.filter((p) => p.request.method === "POST").map((p) => [p.request.path, p.request.body])).toEqual([["/api/bots/b1/messages", { text: "here", threadId: "t5" }]]);
+      expect(performed.filter((p) => p.request.method === "POST").map((p) => [p.request.path, p.request.body])).toEqual([["/api/bots/b1/messages", { text: "here", threadId: "t5", busyMode: "after", aiClient: true }]]);
       expect(recorded[0]!.after).toEqual({ threadId: "t5", waited: false });
+    });
+
+    it("#3220: a queued prompt is anchored by its queue slot, never answered with the previous reply", async () => {
+      let sentOnce = false;
+      let looks = 0;
+      status = () => (sentOnce && looks++ < 2 ? "working" : "idle");
+      respond = (request) => {
+        if (request.method === "POST") {
+          sentOnce = true;
+          return { status: 202, body: { ok: true, threadId: "t1", queueId: "q1" } };
+        }
+        return { status: 200, body: { messages: [
+          { id: "m1", role: "user", kind: "text", text: "first", at: 1 },
+          { id: "m2", role: "bot", kind: "text", text: "answer to first", at: 2 },
+          { id: "m3", role: "user", kind: "text", text: "second", at: 3, queueId: "q1" },
+          { id: "m4", role: "bot", kind: "text", text: "answer to second", at: 4 },
+        ] } };
+      };
+      const got = await call("POST", "bots/b1/messages", token("bob"), { text: "second", threadId: "t1", wait: 30 });
+      expect(performed.find((p) => p.request.method === "POST")!.request.body).toMatchObject({ busyMode: "after", aiClient: true });
+      expect(got.body.reply).toBe("answer to second");
     });
 
     it("the Perspicax console is the person typing: their own conversation, nothing hidden", async () => {

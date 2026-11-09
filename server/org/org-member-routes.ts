@@ -412,6 +412,8 @@ export interface MemberMessage {
   text: string;
   at: number | null;
   sender: { name: string } | null;
+  /** The queue slot a waiting prompt held before its line was stored. */
+  queueId?: string;
 }
 
 /** How a card is answered (2026-10-17, the AI-client approval loop):
@@ -751,7 +753,7 @@ export function readThreadPage(threadId: string, raw: unknown, since: string | n
     const text = str(m.text);
     if (MEMBER_TEXT_KINDS.has(kind) && text !== null && (m.role === "user" || m.role === "bot")) {
       const sender = objectOf(m.sender);
-      messages.push({ id: m.id as string, role: m.role, kind, text, at: typeof m.at === "number" ? m.at : null, sender: str(sender?.name) ? { name: sender!.name as string } : null });
+      messages.push({ id: m.id as string, role: m.role, kind, text, at: typeof m.at === "number" ? m.at : null, sender: str(sender?.name) ? { name: sender!.name as string } : null, ...(str(m.queueId) ? { queueId: m.queueId as string } : {}) });
     }
   }
   // Pending cards are read from the whole page: a card raised before the
@@ -1112,6 +1114,9 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     botId: string | null;
     threadId: string;
     anchor: string | null;
+    /** The queue slot of a prompt that waits for the running turn: its line is
+     * stored only when its own turn starts. */
+    queueId?: string | null;
     wait: number;
     emit?: (event: StreamEvent) => void;
     closed?: () => boolean;
@@ -1129,7 +1134,11 @@ function memberRouteTools(deps: OrgMemberRouteDeps) {
     let lastEmit = Number.NEGATIVE_INFINITY;
     let lastKey = "";
     const announced = new Set<string>();
-    const anchorOf = (read: ThreadRead) => input.anchor ?? read.messages.findLast((m) => m.role === "user")?.id ?? null;
+    // #3220: a queued prompt is anchored by its queue slot, so its reply is
+    // never the previous prompt's. Until its line is stored nothing answers it.
+    const anchorOf = (read: ThreadRead) => input.anchor
+      ?? (input.queueId ? read.messages.find((m) => m.queueId === input.queueId)?.id ?? `queue:${input.queueId}` : null)
+      ?? read.messages.findLast((m) => m.role === "user")?.id ?? null;
     while (wait > 0 && now() < deadline) {
       if (closed?.()) break;
       status = deps.threadStatus(threadId) ?? "idle";
@@ -1458,12 +1467,16 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
         const sent = await deps.perform(person, {
           method: "POST",
           path: `/api/bots/${encodeURIComponent(botId)}/messages`,
-          body: { text, ...(threadId ? { threadId } : {}), ...(input.sendId ? { sendId: input.sendId } : {}) },
+          // #3220: an AI client's prompt keeps its own turn and reply (queued
+          // behind a running turn, never steered into it or merged with
+          // another queued prompt); the console is the person typing.
+          body: { text, ...(threadId ? { threadId } : {}), ...(input.sendId ? { sendId: input.sendId } : {}), ...(hidden ? { busyMode: "after", aiClient: true } : {}) },
         });
         if (!okStatus(sent)) return passThrough(sent, "The message could not be sent.");
         const receipt = objectOf(sent.body) ?? {};
         const finalThread = str(receipt.threadId) ?? threadId ?? null;
         const messageId = str(objectOf(receipt.message)?.id);
+        const queueId = messageId ? null : str(receipt.queueId);
         if (hidden && finalThread && messageId) deps.markAiClientLine?.(finalThread, messageId);
         deps.record(person, { action: "client.message", target: { kind: "bot", id: botId }, after: { threadId: finalThread, waited: wait > 0, ...(input.newThread ? { newThread: true } : {}), ...(hidden && !input.threadId ? { hidden: true } : {}) } });
         if (!finalThread) return answer({ botId, threadId: null, messageId, status: "working", pending: true, reply: null, approvals: [], cursor: null, summary: null });
@@ -1471,11 +1484,11 @@ function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, all
           return {
             stream: async (emit, closed) => {
               emit({ event: "started", botId, threadId: finalThread, messageId });
-              return watchTurn({ person, botId, threadId: finalThread, anchor: messageId, wait, emit, closed });
+              return watchTurn({ person, botId, threadId: finalThread, anchor: messageId, queueId, wait, emit, closed });
             },
           };
         }
-        return answer(await watchTurn({ person, botId, threadId: finalThread, anchor: messageId, wait }));
+        return answer(await watchTurn({ person, botId, threadId: finalThread, anchor: messageId, queueId, wait }));
       },
     },
     {

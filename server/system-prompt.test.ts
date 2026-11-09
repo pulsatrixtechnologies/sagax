@@ -423,11 +423,20 @@ describe("RICH_OUTPUT_PROMPT", () => {
     expect(richOutputPrompt(false)).toContain(OUTPUT_STYLE_RULE);
     expect(RICH_OUTPUT_PROMPT).not.toContain("with a Markdown table for records and comparisons");
     expect(RICH_OUTPUT_PROMPT).not.toContain("ConnectWise records go in a Markdown table by default");
-    expect(RICH_OUTPUT_PROMPT).toContain("one or two records, or a handful of values, read as a short list");
+    expect(RICH_OUTPUT_PROMPT).toContain("ConnectWise records go in prose or a short list");
     // #2641 (2026-11-08): no prompt line sends data to a table by default
-    expect(RICH_OUTPUT_PROMPT).toContain("3 or more comparable fields");
+    expect(RICH_OUTPUT_PROMPT).toContain("more than 5 rows and 3 columns");
     expect(WIDGET_PROMPT).not.toContain("Put data and comparisons in a markdown table");
     expect(WIDGET_PROMPT).toContain("a markdown table only for real tabular data");
+  });
+});
+
+describe("short answers (#3224)", () => {
+  it("keeps short replies table-free, arithmetic out of the shell, and counts before naming a number", () => {
+    expect(WORK_STYLE_PROMPT).toContain("never a table for a short answer");
+    expect(WORK_STYLE_PROMPT).toContain("never through a shell command");
+    expect(WORK_STYLE_PROMPT).toContain("Count the items of a list you produced");
+    expect(RICH_OUTPUT_PROMPT).not.toContain("3 or more comparable fields");
   });
 });
 

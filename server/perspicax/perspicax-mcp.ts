@@ -35,6 +35,7 @@ import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { IdentityGate } from "./identity-gate.ts";
 import { PERSPICAX_ROUTINE_RETRY_MS, perspicaxUnsent, REMOTE_SUPPORT_OPEN_UNAVAILABLE, VOICE_CALL_REDIRECTED, VOICE_CALL_UNAVAILABLE, PERSPICAX_TOKEN_MIN_LIFE_MS, PERSPICAX_RELAY_TIMEOUT_MS, PERSPICAX_RELAY_MAX_BYTES, PERSPICAX_KEEPALIVE_MS, PERSPICAX_KEEPALIVE_JITTER_MS, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ACCESS_ENDED, PERSPICAX_SESSION_RESET, PERSPICAX_WRITE_REPLAYED, perspicaxWriteOnceTool } from "./perspicax-mcp-rules.ts";
 export { PERSPICAX_ROUTINE_RETRY_MS, perspicaxUnsent, REMOTE_SUPPORT_OPEN_UNAVAILABLE, VOICE_CALL_REDIRECTED, VOICE_CALL_UNAVAILABLE, PERSPICAX_TOKEN_MIN_LIFE_MS, PERSPICAX_RELAY_TIMEOUT_MS, PERSPICAX_RELAY_MAX_BYTES, PERSPICAX_KEEPALIVE_MS, PERSPICAX_KEEPALIVE_JITTER_MS, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ACCESS_ENDED, PERSPICAX_SESSION_RESET, PERSPICAX_WRITE_REPLAYED, perspicaxWriteOnceTool } from "./perspicax-mcp-rules.ts";
 
@@ -254,6 +255,8 @@ interface Entry {
   token: string;
   expiresAt: number;
   mcpSessionId?: string;
+  /** #3062: serializes Sagax's own role switches with the session's calls. */
+  identityGate?: IdentityGate;
   initialized?: boolean;
   identity?: PerspicaxIdentity;
   identityWarning?: IdentityFailure;
@@ -737,6 +740,11 @@ export class PerspicaxMcp {
   /** Internal identity traffic uses the very same token and session as the
    * engine's calls. It never enters the identity gate recursively. */
   private async identityRpc(entry: Entry, method: string, params?: Json): Promise<unknown> {
+    // #3062: inside a role switch of Sagax's own (readAs) this passes through
+    return this.gateOf(entry).shared(() => this.identityRpcSent(entry, method, params));
+  }
+
+  private async identityRpcSent(entry: Entry, method: string, params?: Json): Promise<unknown> {
     const link = this.options.link();
     if (!link || entry.ended) throw new Error("Perspicax unavailable");
     const speaker = this.options.subjectOf(entry.principalId);
@@ -1194,6 +1202,10 @@ export class PerspicaxMcp {
   }
 
   /** The role the connection acts as now ("" = Moi, the default surface). */
+  private gateOf(entry: Entry): IdentityGate {
+    return (entry.identityGate ??= new IdentityGate());
+  }
+
   private currentRole(entry: Entry): string {
     return entry.identity ? entry.identity.profile() : entry.profileChoice ?? ME_ROLE;
   }
@@ -1582,6 +1594,12 @@ export class PerspicaxMcp {
    * it); never more than once per call. A switch Perspicax refused sends
    * nothing: the call would only run again under the refused role. */
   private async readAs(entry: Entry, frame: Json, previous: string, target: string): Promise<PerspicaxRelayAnswer | null> {
+    // #3062: the switch, the call and the role put back hold the session
+    // alone; every other call of the turn waits until the role is back
+    return this.gateOf(entry).exclusive(() => this.readAsHeld(entry, frame, previous, target));
+  }
+
+  private async readAsHeld(entry: Entry, frame: Json, previous: string, target: string): Promise<PerspicaxRelayAnswer | null> {
     const link = this.options.link();
     if (!link || entry.ended) return null;
     const viaChoice = !entry.identity && entry.profileChoice === previous;
@@ -1616,7 +1634,6 @@ export class PerspicaxMcp {
     const frame: Json = { ...input.frame };
     const id = frame.id;
     const notification = id === undefined;
-    const ended = (): PerspicaxRelayAnswer => (notification ? { status: 202 } : { status: 200, body: rpcError(id, -32001, PERSPICAX_ACCESS_ENDED) });
     if (!this.entryMounted(entry)) {
       return { status: 403, body: { error: "this bot is no longer available for the Perspicax connection", code: "profile_not_mounted" } };
     }
@@ -1660,6 +1677,15 @@ export class PerspicaxMcp {
     }
     const blocked = input.judged ? null : telephonyBlock(frame, entry.twilioTools) ?? await this.permissionBlock(entry, frame);
     if (blocked) return { status: 200, body: { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: blocked }], isError: true } } };
+    // #3062: never sent while Sagax has the session under another role
+    return this.gateOf(entry).shared(() => this.relayFrameSent(input, entry, frame));
+  }
+
+  /** The engine frame on the wire, under the session's own role. */
+  private async relayFrameSent(input: { threadId: string; generation: string; botId: string; frame: unknown; judged?: boolean }, entry: Entry, frame: Json): Promise<PerspicaxRelayAnswer> {
+    const id = frame.id;
+    const notification = id === undefined;
+    const ended = (): PerspicaxRelayAnswer => (notification ? { status: 202 } : { status: 200, body: rpcError(id, -32001, PERSPICAX_ACCESS_ENDED) });
     const speaker = this.options.subjectOf(entry.principalId);
     if (!speaker || speaker.disabled) this.end(entry);
     if (entry.ended) return ended();

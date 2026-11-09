@@ -6854,6 +6854,22 @@
         }
       }
     },
+    "An approval is waiting for an admin in this bot's conversation. The model can change once it is answered.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une approbation attend un admin dans la conversation de ce bot. Le modèle pourra changer une fois qu'elle aura une réponse."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma aprovação está esperando um admin na conversa deste bot. O modelo poderá mudar depois que ela for respondida."
+          }
+        }
+      }
+    },
     "API keys": {
       "localizations": {
         "en": {
@@ -53980,6 +53996,22 @@
         }
       }
     },
+    "Open %@'s chat": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le chat de %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir o chat de %@"
+          }
+        }
+      }
+    },
     "Parallel conversations": {
       "localizations": {
         "en": {
@@ -79211,22 +79243,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Parar o turno em andamento e enviar esta mensagem agora"
-          }
-        }
-      }
-    },
-    "Stop this bot before changing its model.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Arrête ce bot avant de changer son modèle."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pare este bot antes de mudar o modelo dele."
           }
         }
       }

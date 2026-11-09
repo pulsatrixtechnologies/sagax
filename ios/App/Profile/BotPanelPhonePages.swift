@@ -31,7 +31,7 @@ struct BotPanelFormPage<Content: View>: View {
             }
             // a section this viewer may not change says why (`botSectionLock`)
             if let bot, let lock = session.sectionLock(bot, section) {
-                Section { Label { Text(lock) } icon: { Image(systemName: "lock") } .font(.footnote).foregroundStyle(Theme.textSecondary) }
+                Section { PanelLockNote(text: lock) }
                     .accessibilityIdentifier("panel-page.\(section.rawValue).locked")
             }
             content
@@ -39,6 +39,71 @@ struct BotPanelFormPage<Content: View>: View {
             .navigationTitle(Text(section.title))
             .navigationBarTitleDisplayMode(.inline)
             .accessibilityIdentifier("panel-page.\(section.rawValue)")
+    }
+}
+
+/// Desktop `Note` (bot-profile cards.tsx): a lock and why this viewer may
+/// not change the setting, in place of the setting itself.
+struct PanelLockNote: View {
+    @Environment(\.themePalette) var themePalette
+    let text: LocalizedStringKey
+
+    var body: some View {
+        Label { Text(text) } icon: { Image(systemName: "lock") }
+            .font(.footnote)
+            .foregroundStyle(Theme.textSecondary)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .accessibilityElement(children: .combine)
+    }
+}
+
+/// Opens the bot's chat from a panel page: the chat is under the panel,
+/// so the panel goes (desktop: settings close, the bot is selected).
+private struct BotPanelOpenChatKey: EnvironmentKey {
+    static let defaultValue: (() -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var botPanelOpenChat: (() -> Void)? {
+        get { self[BotPanelOpenChatKey.self] }
+        set { self[BotPanelOpenChatKey.self] = newValue }
+    }
+}
+
+/// Desktop `ModelLockLine` (bot-settings/ModelSection.tsx): why the model
+/// waits for the turn, and the way out, back to the conversation.
+struct ModelTurnLockLine: View {
+    @Environment(\.themePalette) var themePalette
+    @Environment(\.botPanelOpenChat) private var openChat
+    let bot: Bot
+    let lock: ModelTurnLock
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(lock.line)
+                .font(.footnote)
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let openChat {
+                Button(String(format: AppStrings.localized("Open %@'s chat"), bot.name), action: openChat)
+                    .font(.footnote.weight(.medium))
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("model-lock-open-chat")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("model-lock.\(lock.rawValue)")
+    }
+}
+
+extension ModelTurnLock {
+    /// Desktop `botPanel.model.locked*`.
+    var line: LocalizedStringKey {
+        switch self {
+        case .working: "This bot's conversation is working. Stop its turn to change the model."
+        case .approval: "An approval is waiting for you in this bot's conversation. Answer it to change the model."
+        case .admin: "An approval is waiting for an admin in this bot's conversation. The model can change once it is answered."
+        }
     }
 }
 
@@ -245,10 +310,10 @@ struct BotModelSection: View {
                     .disabled(current.busy == true)
                     .accessibilityIdentifier("model-follow-bot")
                 }
-                if current.busy == true {
-                    Label("Stop this bot before changing its model.", systemImage: "hourglass")
-                        .font(.footnote).foregroundStyle(Theme.textSecondary)
-                }
+            }
+            // why the model waits, under the picker (desktop ModelLockLine)
+            if let lock = ModelTurnLock.of(current) {
+                ModelTurnLockLine(bot: current, lock: lock)
             }
         }
         .overlay { if busy { ProgressView() } }
@@ -620,6 +685,9 @@ struct BotPermissionsSection: View {
 struct BotWorksOnSection: View {
     @Environment(\.themePalette) var themePalette
     let bot: Bot
+    /// The Model page shows the lock note in the Workspace card; the Works on
+    /// page already says it above.
+    var notesLock = false
     @EnvironmentObject private var session: Session
     @State private var config: ConfigStatus?
 
@@ -633,6 +701,19 @@ struct BotWorksOnSection: View {
     private var selected: DesktopWorksOn { DesktopWorksOnRules.selected(DesktopWorksOn.of(current)) }
 
     var body: some View {
+        if let lock = session.sectionLock(current, .worksOn) {
+            // desktop: the Workspace card holds only the note (botSectionLock);
+            // on its own page the page's note says it
+            if notesLock {
+                Section { PanelLockNote(text: lock) } header: { Text("Workspace") }
+                    .accessibilityIdentifier("panel-page.worksOn.locked")
+            }
+        } else {
+            picker
+        }
+    }
+
+    private var picker: some View {
         Section {
             Picker("Works on", selection: Binding(get: { selected }, set: { next in
                 guard next != selected else { return }
@@ -646,7 +727,7 @@ struct BotWorksOnSection: View {
             .disabled(!canEdit || current.busy == true)
             .accessibilityIdentifier("access-works-on")
         } header: {
-            Text("Works on")
+            Text("Workspace")
         } footer: {
             Text("The bot picks where each task runs: the cloud, a Local VM, this computer or the browser, among the places available to it and allowed. Off gives it no computer and no browser.")
         }
@@ -902,7 +983,7 @@ struct BotPanelSectionPage: View {
             // Model and Works on on one page (desktop `model: ["model", "worksOn"]`)
             AnyView(BotPanelFormPage(section: section, bot: bot) {
                 BotModelSection(bot: bot)
-                BotWorksOnSection(bot: bot)
+                BotWorksOnSection(bot: bot, notesLock: true)
                 BotPayerSection(bot: bot)
             })
         case .permissions: AnyView(BotPanelFormPage(section: section, bot: bot) { BotPermissionsSection(bot: bot) })

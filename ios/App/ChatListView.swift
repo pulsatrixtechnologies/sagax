@@ -170,6 +170,11 @@ struct ChatListView: View {
                    path.isEmpty, let first = chats.first {
                     path.append(first.chat)
                 }
+                // `-previewOpenBot <id>`: that bot's chat (store preview captures)
+                if path.isEmpty, let id = UserDefaults.standard.string(forKey: "previewOpenBot"),
+                   let bot = session.state.bot(id) {
+                    path.append(Chat.bot(bot))
+                }
             }
 #endif
             .sheet(isPresented: $showingUpdates) {

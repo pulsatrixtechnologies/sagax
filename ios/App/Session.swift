@@ -195,7 +195,12 @@ final class Session: ObservableObject {
     /// `canEditBotField` for this pairing: the owner of the bot on an
     /// organization server, an admin session, or the owner's sidecar.
     func canEditBotField(_ bot: Bot, _ field: String) -> Bool {
-        surfaceGate.canEditBotField(bot, field)
+        #if DEBUG
+        // `-previewLockedFields soul,computer`: captures of the lock notes
+        if let locked = UserDefaults.standard.string(forKey: "previewLockedFields"),
+           locked.split(separator: ",").contains(Substring(field)) { return false }
+        #endif
+        return surfaceGate.canEditBotField(bot, field)
     }
     /// Who answers a card for the shared server (`adminApproval`) and saves
     /// a command rule: an admin session, or a person an admin gave

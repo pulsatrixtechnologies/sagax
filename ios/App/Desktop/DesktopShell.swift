@@ -831,6 +831,23 @@ private struct DesktopShellRouting: ViewModifier {
     /// threads (off except main-threads, as the references' localStorage),
     /// the pointer over Aurora, or a menu open where the desktop opened it.
     private func applyParityLaunch() async {
+        // Store preview: `-previewOpenBot <id> -previewPanelSection <section>`
+        // opens that bot's Edit bot page on the section (lock notes captures).
+        if ParityLaunch.current == nil,
+           let botId = UserDefaults.standard.string(forKey: "previewOpenBot") {
+            for _ in 0..<150 {
+                if let bot = session.state.bots.first(where: { $0.id == botId }) {
+                    model.open(.bot(bot))
+                    if let raw = UserDefaults.standard.string(forKey: "previewPanelSection"),
+                       let section = DesktopPanelSection(rawValue: raw) {
+                        model.showPersona(section)
+                    }
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            return
+        }
         guard let screen = ParityLaunch.current?.iPadScreen, screen.implemented else { return }
         model.parityShowThreads = screen == .mainThreads || screen == .chatThreads
         switch screen {

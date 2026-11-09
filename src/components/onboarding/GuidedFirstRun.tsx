@@ -19,7 +19,7 @@
 // a sibling of the shell, so no widget is ever injected into the conversation
 // (#876). No marketing, no fake progress: a step that cannot run shows the one
 // real next action instead.
-import { useCallback, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Check } from "lucide-react";
 import { PulsatrixMark } from "@/components/PulsatrixMark";
 import { engineReady } from "@/components/EngineLibrary";
@@ -28,7 +28,7 @@ import { setEmailGateDone, track } from "@/lib/analytics";
 import { cn } from "@/lib/cn";
 import { focusComposer } from "@/lib/composer-focus";
 import { createAutoFirstBot } from "@/lib/first-bot";
-import { FIRST_RUN_STEPS, firstRunInitialStep, firstRunStepIndex, type FirstRunStep } from "@/lib/first-run";
+import { FIRST_RUN_STEPS, conversationHistoryExists, firstRunAlreadyDone, firstRunInitialStep, firstRunStepIndex, type FirstRunStep } from "@/lib/first-run";
 import { t } from "@/lib/i18n";
 import { completionPatch, engineSummary, organisationSignIn } from "@/lib/onboarding";
 import { api, useStore } from "@/state/store";
@@ -73,6 +73,9 @@ export function GuidedFirstRun({
   const facts = { engineReady: engineReadyNow, botExists: firstBot !== null };
 
   const [step, setStep] = useState<FirstRunStep>(() => initialStep ?? firstRunInitialStep(facts));
+  // #3047: a bot that already holds a conversation is past the "first
+  // message"; a replay (asked from Help) still shows the guide.
+  const [alreadyDone] = useState(() => !replay && !initialStep && firstRunAlreadyDone({ ...facts, historyExists: conversationHistoryExists(state.bots) }));
   const [creating, setCreating] = useState(false);
   const [createFailed, setCreateFailed] = useState(false);
   const [createdBotId, setCreatedBotId] = useState<string | null>(null);
@@ -86,7 +89,7 @@ export function GuidedFirstRun({
   const messageBot = (createdBotId && state.bots.find((b) => b.id === createdBotId)) || firstBot;
 
   const finish = useCallback(
-    async (reason: "completed" | "skipped") => {
+    async (reason: "completed" | "skipped" | "history") => {
       if (finishing.current) return;
       finishing.current = true;
       track("first_run_completed", { reason, at: step, replay });
@@ -107,6 +110,11 @@ export function GuidedFirstRun({
     },
     [step, replay, onDone, dispatch],
   );
+
+  // closed as done, quietly: no card, no caret moved
+  useEffect(() => {
+    if (alreadyDone) void finish("history");
+  }, [alreadyDone, finish]);
 
   const goTo = useCallback((target: FirstRunStep) => setStep(target), []);
 
@@ -156,6 +164,8 @@ export function GuidedFirstRun({
       first.focus();
     }
   };
+
+  if (alreadyDone) return null;
 
   const index = firstRunStepIndex(step);
   const previous = index > 0 ? FIRST_RUN_STEPS[index - 1]! : null;

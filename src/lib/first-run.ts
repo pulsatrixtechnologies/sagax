@@ -48,3 +48,17 @@ export function nextFirstRunStep(step: FirstRunStep): FirstRunStep | null {
   if (index < 0 || index + 1 >= FIRST_RUN_STEPS.length) return null;
   return FIRST_RUN_STEPS[index + 1]!;
 }
+
+/** #3047 (QA 2026-11-08): the guide's finish line is a first message. A
+ * workspace whose bot already has a conversation (a message from the person,
+ * or older pages still to load) is past it: with an engine and a bot there,
+ * the guide has nothing left to show, so it closes itself as done instead of
+ * asking for a "first" message over an existing history. */
+export function firstRunAlreadyDone(facts: FirstRunFacts & { historyExists: boolean }): boolean {
+  return firstRunInitialStep(facts) === "message" && facts.historyExists;
+}
+
+/** Whether any of the person's bots already holds a conversation. */
+export function conversationHistoryExists(bots: readonly { hidden?: boolean; messages?: readonly { role: string }[]; hasMore?: boolean }[]): boolean {
+  return bots.some((bot) => !bot.hidden && (bot.hasMore === true || (bot.messages ?? []).some((message) => message.role === "user")));
+}

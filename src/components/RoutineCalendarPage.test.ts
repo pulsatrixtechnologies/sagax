@@ -258,3 +258,16 @@ describe("the Automations header (Owner, 2026-10-27: one row, secondary controls
     expect(routinesPageView).toMatch(/actionsStyle=\{[^\n]*controlsShiftStyle/);
   });
 });
+
+describe("the time grid on a phone (#3047)", () => {
+  it("fits a week's seven days in 390px, keeps the wide grid elsewhere", async () => {
+    const { calendarGridColumns } = await import("./RoutineCalendarPage.tsx-parts/helpers");
+    const phoneWeek = calendarGridColumns(7, true);
+    // 390 minus the page's 8px side margins and borders
+    expect(phoneWeek.minWidth).toBeLessThanOrEqual(372);
+    expect(phoneWeek.gridTemplateColumns).toBe("44px repeat(7, minmax(40px, 1fr))");
+    expect(calendarGridColumns(7, false).gridTemplateColumns).toBe("64px repeat(7, minmax(88px, 1fr))");
+    expect(calendarGridColumns(3, true).minWidth).toBeLessThanOrEqual(372);
+    expect(calendarGridColumns(1, false).minDayWidth).toBe(340);
+  });
+});

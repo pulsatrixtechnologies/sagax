@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 import { Menu } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { useSidebarViewport } from "@/lib/sidebar-preferences";
+import { useStoreSelector } from "@/state/store-selector";
 import { Sidebar } from "./Sidebar";
 
 export function AppSidebar({ drawerOpen, onDrawerOpenChange, composeOpen, onCompose }: {
@@ -26,6 +27,12 @@ export function AppSidebar({ drawerOpen, onDrawerOpenChange, composeOpen, onComp
   useEffect(() => {
     if (viewport !== "phone" && drawerOpen) onDrawerOpenChange(false);
   }, [viewport, drawerOpen, onDrawerOpenChange]);
+  // #3047 (QA 2026-11-08): Settings opened from the drawer's profile menu is a
+  // full modal; the drawer (and its title-bar row) must not stay lit behind it.
+  const settingsOpen = useStoreSelector((state) => state.appSettingsOpen);
+  useEffect(() => {
+    if (settingsOpen && drawerOpen) onDrawerOpenChange(false);
+  }, [settingsOpen, drawerOpen, onDrawerOpenChange]);
   return (
     <>
       <button

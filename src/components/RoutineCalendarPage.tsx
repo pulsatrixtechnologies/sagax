@@ -89,7 +89,9 @@ import type {
 import {
   routineEditorAt,
   statusState,
+  calendarGridColumns,
 } from "./RoutineCalendarPage.tsx-parts/helpers";
+import { useSidebarViewport } from "@/lib/sidebar-preferences";
 import { AttachmentChips, BotPicker, formatWithAiRequest } from "./RoutineCalendarPage.tsx-parts/editorWidgets";
 import { EventEditorBody } from "./RoutineCalendarPage.tsx-parts/EventEditorBody";
 import { PausedList } from "./RoutineCalendarPage.tsx-parts/PausedList";
@@ -585,9 +587,8 @@ const CalendarGrid = memo(function CalendarGrid({
     const format = cachedDateFormat(HOUR_LABEL_OPTIONS, activeLocale());
     return Array.from({ length: 24 }, (_, hour) => hour === 0 ? "" : format.format(new Date(2000, 0, 1, hour)));
   }, []);
-  const minDayWidth = days === 7 ? 88 : days === 3 ? 180 : 340;
-  const gridTemplateColumns = `64px repeat(${days}, minmax(${minDayWidth}px, 1fr))`;
-  const minWidth = 64 + days * minDayWidth;
+  const phone = useSidebarViewport() === "phone";
+  const { gridTemplateColumns, minWidth } = calendarGridColumns(days, phone);
 
   useEffect(() => {
     const viewport = scrollRef.current;
@@ -694,16 +695,16 @@ const CalendarGrid = memo(function CalendarGrid({
     )}
     <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-auto border-l border-t border-hairline/40 bg-app", botDrag && "bg-accent/[0.03]")}>
       <div className="sticky top-0 z-30 grid bg-app/95 backdrop-blur" style={{ gridTemplateColumns, minWidth }}>
-        <div className="border-b border-r border-hairline/40 px-2 py-3 text-center text-[12px] font-medium text-ink-secondary">{formatGmtOffset(-new Date(anchor).getTimezoneOffset())}</div>
+        <div className={cn("border-b border-r border-hairline/40 py-3 text-center font-medium text-ink-secondary", phone ? "px-0.5 text-[10px]" : "px-2 text-[12px]")}>{formatGmtOffset(-new Date(anchor).getTimezoneOffset())}</div>
         {starts.map((start) => {
           const date = new Date(start);
           const isToday = start === today;
-          return <div key={start} role="columnheader" className={cn("border-b border-r border-hairline/40 px-2 py-2 text-center last:border-r-0", isToday && "bg-accent/[0.035]")}><div className={cn("text-[11px] font-medium", isToday ? "text-accent" : "text-ink-secondary")}>{weekdayNames[date.getDay()]}</div><div className={cn("mx-auto mt-1 flex size-8 items-center justify-center rounded-full text-[15px] font-medium", isToday ? "bg-accent text-accent-ink" : "text-ink")}>{date.getDate()}</div></div>;
+          return <div key={start} role="columnheader" className={cn("min-w-0 border-b border-r border-hairline/40 py-2 text-center last:border-r-0", phone ? "px-0.5" : "px-2", isToday && "bg-accent/[0.035]")}><div className={cn("truncate font-medium", phone ? "text-[10px]" : "text-[11px]", isToday ? "text-accent" : "text-ink-secondary")}>{weekdayNames[date.getDay()]}</div><div className={cn("mx-auto mt-1 flex items-center justify-center rounded-full font-medium", phone ? "size-7 text-[13px]" : "size-8 text-[15px]", isToday ? "bg-accent text-accent-ink" : "text-ink")}>{date.getDate()}</div></div>;
         })}
       </div>
       <div role="grid" aria-label={t("routineCalendar.calendarAria")} onDragEnd={() => setDragPreview(null)} className="relative grid" style={{ height: HOUR_HEIGHT * 24, gridTemplateColumns, minWidth }}>
         <div className="relative border-r border-hairline/40">
-          {hourLabels.map((label, hour) => <div key={hour} className="absolute right-2 -translate-y-1/2 text-[11px] tabular-nums text-ink-tertiary" style={{ top: hour * HOUR_HEIGHT }}>{label}</div>)}
+          {hourLabels.map((label, hour) => <div key={hour} className={cn("absolute -translate-y-1/2 tabular-nums", phone ? "right-1 text-[10px]" : "right-2 text-[11px]", "text-ink-tertiary")} data-hour-label="" style={{ top: hour * HOUR_HEIGHT }}>{label}</div>)}
         </div>
         {dayLayouts.map(({ start, shown: dayItems, overflow, layouts: collisionLayouts, crowded }) => {
           const now = new Date(minuteNow);

@@ -2531,7 +2531,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         {(macInset || browser) && (density === "icons" || showLogo) && (
           <div className={cn("flex h-9 items-center", density === "icons" ? "justify-center" : "px-4")} aria-hidden={browser ? true : undefined}>
             {browser && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 max-sm:hidden" data-sidebar-window-dots="">
                 <span className="size-3 rounded-full bg-[#ff5f57]" />
                 <span className="size-3 rounded-full bg-[#febc2e]" />
                 <span className="size-3 rounded-full bg-[#28c840]" />
@@ -2568,7 +2568,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           <>
             <div className={titleBarHead ? SIDEBAR_TITLE_ROW : SIDEBAR_HEAD_ROW} data-sidebar-title-row={titleBarHead ? "" : undefined}>
               {titleBarHead && browser && (
-                <span className="flex items-center gap-2" aria-hidden="true">
+                <span className="flex items-center gap-2 max-sm:hidden" aria-hidden="true" data-sidebar-window-dots="">
                   <span className="size-3 rounded-full bg-[#ff5f57]" />
                   <span className="size-3 rounded-full bg-[#febc2e]" />
                   <span className="size-3 rounded-full bg-[#28c840]" />

@@ -84,6 +84,7 @@ export function useComposerSend({
   setCaret,
   setAttachmentNotice,
   refocusInput,
+  pinnedQuestion,
 }: {
   draftId: string;
   text: string;
@@ -127,6 +128,9 @@ export function useComposerSend({
   setCaret: Dispatch<SetStateAction<number>>;
   setAttachmentNotice: Dispatch<SetStateAction<string | null>>;
   refocusInput: () => void;
+  /** #3214: the pinned question the typed text answers, when one waits
+   * and takes a free answer (src/lib/pending-question.ts). */
+  pinnedQuestion: { requestId: string; answer: string } | null;
 }) {
   const uploadImage = useCallback(async (file: File): Promise<Attachment | null> => {
     await startAttachmentUpload(draftId, file, true);
@@ -243,6 +247,30 @@ export function useComposerSend({
     // "Stopped" line (shared/stop-intent.ts), the same for every client.
     if (busy && group && attachments.length === 0 && isStopIntent(text)) {
       interruptTurn();
+      setText("");
+      refocusInput();
+      return;
+    }
+    // #3214: a question pinned over the box takes what the person types as
+    // its answer, the same way as the card's own "other" row: the card
+    // settles at once, and comes back unanswered with the words restored
+    // if the server refuses (unless it was answered elsewhere meanwhile).
+    if (pinnedQuestion && attachments.length === 0) {
+      const { requestId, answer } = pinnedQuestion;
+      const typed = text;
+      dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: "answer", answeredText: answer } });
+      dispatch({
+        type: "decideRequest",
+        threadId,
+        requestId,
+        behavior: "answer",
+        message: answer,
+        onError: (_message, settledElsewhere) => {
+          if (settledElsewhere) return;
+          dispatch({ type: "cardSettled", threadId, requestId, patch: { answered: undefined, answeredText: undefined } });
+          setText(typed);
+        },
+      });
       setText("");
       refocusInput();
       return;

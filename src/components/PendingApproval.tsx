@@ -200,7 +200,7 @@ export function stepperIndex(approvals: Pending[], requestId: string | undefined
   return at >= 0 ? at : 0;
 }
 
-function Stepper({ index, count, onPrevious, onNext }: { index: number; count: number; onPrevious?: () => void; onNext?: () => void }) {
+export function Stepper({ index, count, onPrevious, onNext }: { index: number; count: number; onPrevious?: () => void; onNext?: () => void }) {
   const button = "flex size-6 items-center justify-center rounded-full text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent";
   return (
     <div className="flex items-center gap-0.5" data-approval-stepper="">

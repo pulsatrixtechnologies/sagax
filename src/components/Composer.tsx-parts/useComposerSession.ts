@@ -10,6 +10,7 @@ import { useShowThreads } from "@/lib/thread-preferences";
 import { sendKeyLabel, useSendKey } from "@/lib/send-key";
 import { goalCoordinatorForComposer, openTaskWorking, roomRespondersForComposer, roomTakesImages } from "@/lib/group-routing";
 import { pendingApprovals, type Pending } from "../PendingApproval";
+import { usePinnedWaiting } from "./PinnedWaitingCard";
 import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { useThreadRefs } from "../ThreadRefs";
 import { useParallelCards } from "../parallel-approvals";
@@ -90,6 +91,9 @@ export function useComposerSession({
   // about something else leaves it open (the bot never picks for the
   // person, and there is no X on a waiting question, #885).
   const openQuestions = pendingQuestions(group ? group.messages : bot ? visibleMessages(bot) : []);
+  // #3214: the pinned card over the box, approvals and questions together,
+  // and which one the person is on (typing answers that question).
+  const pinned = usePinnedWaiting(approvals, openQuestions);
   const approvalBotFor = (pending: Pending) => pending.message.card?.approvalOrigin
     ? storeBots.find(candidate => candidate.id === pending.message.from?.botId)
     : group
@@ -159,6 +163,7 @@ export function useComposerSession({
     approvals,
     approval,
     openQuestions,
+    pinned,
     approvalBotFor,
     onCall,
     autoRoutesBusySend,

@@ -2,6 +2,7 @@ import { api } from "@/state/store";
 import { COMPOSER_ATTACH_EVENT } from "./Composer.tsx-parts/constants";
 import type { ComposerProps } from "./Composer.tsx-parts/types";
 
+import { pinnedQuestionAnswer } from "@/lib/pending-question";
 import { useComposerSession } from "./Composer.tsx-parts/useComposerSession";
 import { useComposerFocus } from "./Composer.tsx-parts/useComposerFocus";
 import { useComposerDraftState } from "./Composer.tsx-parts/useComposerDraft";
@@ -136,6 +137,7 @@ export function Composer({
     setCaret: focus.setCaret,
     setAttachmentNotice: draft.setAttachmentNotice,
     refocusInput: focus.refocusInput,
+    pinnedQuestion: pinnedQuestionAnswer(session.pinned.current, draft.text),
   });
 
   const voice = useComposerVoice({

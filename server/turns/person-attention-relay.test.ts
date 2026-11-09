@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { BriefStore, TOPIC_HALF_LIFE_MS } from "../proactive/background-brief.ts";
 
 import type { WireMessage, WireTask } from "../../shared/wire.ts";
-import { mirrorBackgroundReply, mirrorLateRunReply, RELAY_GROUP_MS, RELAY_RECENT_ROWS, RELAY_TEXT_MAX, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
+import { askedWords, mirrorBackgroundReply, mirrorLateRunReply, RELAY_GROUP_MS, RELAY_RECENT_ROWS, RELAY_TEXT_MAX, relayPersonAttention, type AttentionBot, type AttentionRelayDeps } from "./person-attention-relay.ts";
 
 const ATLAS: AttentionBot = { id: "bot-atlas", name: "Atlas" };
 const REPORT = "- [HUMAIN] **100201** (board 1) : decide which client it belongs to.\n- [HUMAIN] **100202** : set it to Completed by hand.\n\nNo writes.";
@@ -388,5 +388,17 @@ describe("mirrorBackgroundReply (#2915)", () => {
     w.deps.task = (_botId, threadId) => ({ threadId, title: "x", archivedAt: 5 }) as never;
     w.say("work", "Still here.");
     expect(mirrorBackgroundReply({ bot: ATLAS, threadId: "work", turnId: "turn-1", ok: true }, w.deps)).toBe(true);
+  });
+});
+
+describe("askedWords (QA 0.8.77: no internal note in the mirrored ask)", () => {
+  it("drops the notes the server puts before a request the bot wrote itself", () => {
+    const opened = "[Thread you opened yourself from #General. The request below is your own words, not the person's: do the work here and end with a clear result they can read.]\n\n[Read-only task: look, read and report. Do not create, edit, delete, send or buy anything. If the work needs a change, stop and say what you would change.]\n\nCheck the login fix and report back.";
+    expect(askedWords(opened)).toBe("Check the login fix and report back.");
+    expect(askedWords("[Sent while you work · route r1: use it now.]\nAlso the logs")).toBe("Also the logs");
+  });
+
+  it("keeps a person's own line that starts with a bracket", () => {
+    expect(askedWords("[urgent] call the client")).toBe("[urgent] call the client");
   });
 });

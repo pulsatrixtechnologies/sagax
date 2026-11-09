@@ -13,6 +13,7 @@ import { DataWindowViewSync } from "@/components/DataWindowButton";
 import { MAUS_COLORS } from "@/lib/mascot";
 import { botSwitchActive, useBotAccent, useBotAccentEnabled, useBotSwitch } from "@/lib/bot-accent";
 import { usePageLookSync } from "@/lib/page-look-sync";
+import { typingIntoField } from "@/lib/provisional-typing";
 import { useShellNavigation } from "./App.tsx-parts/useShellNavigation";
 import { useShellEffects } from "./App.tsx-parts/useShellEffects";
 import { ShellLayout } from "./App.tsx-parts/ShellLayout";
@@ -55,14 +56,16 @@ function BotAccentSync() {
 }
 
 /** While the window draws the stored snapshot of the last launch
- * (src/lib/ui-snapshot.ts), it takes no input: no click, key, paste or drop
- * reaches the page until the server's own snapshot has replaced it, a few
- * hundred milliseconds. Nothing is drawn: the layer is transparent. */
+ * (src/lib/ui-snapshot.ts), it takes no click, shortcut, paste or drop until
+ * the server's own snapshot has replaced it, a few hundred milliseconds.
+ * Plain typing in a focused text field goes through (typingIntoField).
+ * Nothing is drawn: the layer is transparent. */
 function ProvisionalInputGuard() {
   const provisional = useStoreSelector((current) => current.provisional === true);
   useEffect(() => {
     if (!provisional) return;
     const stop = (event: Event) => {
+      if (typingIntoField(event)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     };

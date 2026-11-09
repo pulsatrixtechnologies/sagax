@@ -189,8 +189,10 @@ export const HANDLE_TTL_MS = 7 * 24 * 3_600_000;
 const POLL_MS = 400;
 /** Idle looks in a row that end a wait with no words (a turn that said nothing or failed). */
 const IDLE_LOOKS_DONE = 3;
-/** #3007: idle looks (about 20 s) an answered question may wait for the
- * turn its answer starts before the handle reports finished anyway. */
+/** #3007: idle looks (about 20 s) an answered ask_choice may wait for the
+ * person's answer line (queued behind the asking turn) before the handle
+ * reports finished anyway. Once the answer is in the conversation and the
+ * turn is idle, the turn is over: no wait. */
 const FOLLOW_UP_LOOKS = 50;
 /** Refusal codes a caller can usefully retry (same args or after a short wait). */
 const RETRYABLE_REFUSAL_CODES = new Set([
@@ -877,9 +879,9 @@ function turnFailureWords(cause: string): string {
  * ended. #2579: the lines the agent says before a tool call ("Je cherche
  * d'abord…") are progress, kept in the steps: the reply is the last run of
  * text, the words after the turn's last tool call. */
-function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean; failed: string | null; followUp: boolean } {
+function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean; failed: string | null; followUp: "answer" | "text" | null } {
   const start = turnAnchorIndex(messages, anchor);
-  if (start < 0) return { reply: "", sawAnchor: false, failed: null, followUp: false };
+  if (start < 0) return { reply: "", sawAnchor: false, failed: null, followUp: null };
   let run: string[] = [];
   let lastRun: string[] = [];
   // #3008: the turn's last word is a failed-turn row (the engine died, a
@@ -929,7 +931,7 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
     reply: joined.length > REPLY_MAX_CHARS ? `${joined.slice(0, REPLY_MAX_CHARS)}\n[...]` : joined,
     sawAnchor: true,
     failed: failed === null ? null : turnFailureWords(failed),
-    followUp: followUp !== null,
+    followUp,
   };
 }
 
@@ -1826,10 +1828,12 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       if (state === "idle" && read.sawAnchor && reviewing) {
         // a reviewer still decides a card of this turn: not finished
         idleLooks = 0;
-      } else if (state === "idle" && read.sawAnchor && read.followUp && followUpLooks < FOLLOW_UP_LOOKS) {
-        // #3007: a question was answered and its answer turn has not
-        // spoken yet (a late answer waits for the turn before it to end):
-        // not finished, the reply is what the bot says after the answer
+      } else if (state === "idle" && read.sawAnchor && read.followUp === "answer" && followUpLooks < FOLLOW_UP_LOOKS) {
+        // #3007: an ask_choice was answered and the person's answer line is
+        // not in the conversation yet (a late answer waits for the turn
+        // before it to end): not finished. Once the answer is recorded and
+        // the turn is idle with no words after it, the turn is over: the
+        // idle looks below end the wait at once.
         followUpLooks += 1;
         idleLooks = 0;
       } else if (state === "idle" && read.sawAnchor) {

@@ -1759,6 +1759,33 @@ describe("await_turn and a pending card (#2922)", () => {
     expect(done.body).toMatchObject({ finished: true, reply: "Noté : 299783." });
   });
 
+  it("an answered question whose turn ended with no words after it returns at once, not after the follow-up wait", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "ask me", mode: "async" });
+    const threadId = String(sent.body.thread_id);
+    w.add(threadId, { role: "bot", kind: "text", text: "Une question d'abord." });
+    w.add(threadId, { role: "bot", kind: "options", text: "", question: { answered: true, late: false } });
+    const startedAt = w.deps.now!();
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 30_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "finished" });
+    expect(r.body.reply ?? "").not.toContain("Une question d'abord.");
+    expect(w.deps.now!() - startedAt).toBeLessThan(3_000);
+  });
+
+  it("an ask_choice answered with the person's line and a silent answer turn returns at once", async () => {
+    const w = world({ replyAfterPolls: 1, replyRows: () => [] });
+    const c = person("p1");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "ask me", mode: "async" });
+    const threadId = String(sent.body.thread_id);
+    const cardRow = w.add(threadId, { role: "bot", kind: "options", text: "", question: { answered: true, late: true } });
+    w.add(threadId, { role: "user", kind: "text", text: "B", replyToId: cardRow.id });
+    const startedAt = w.deps.now!();
+    const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 30_000 });
+    expect(r.body).toMatchObject({ finished: true, status: "finished" });
+    expect(w.deps.now!() - startedAt).toBeLessThan(3_000);
+  });
+
   it("an engine-held question answered mid-turn: the reply is the words after the card (#3007)", async () => {
     const w = world({ replyAfterPolls: 1, replyRows: () => [] });
     const c = person("p1");

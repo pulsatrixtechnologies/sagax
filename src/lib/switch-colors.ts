@@ -28,11 +28,11 @@ export interface SwitchColors {
   offEdge: string;
 }
 
-/** The one on colour of every switch in the app (Grok Bot's blue, measured
+/** The one on colour of every switch in the app (the reference app's blue, measured
  * 2026-11-07, #1362c7). The skin's accent, a brand and a bot's colour no longer
  * recolour it, and its lightness never moves per skin. */
 export const SWITCH_ON_BLUE = "#1362c7";
-/** The off track on a dark skin: Grok Bot's dark track (the panel's #3a3a3a). */
+/** The off track on a dark skin: the reference app's dark track (the panel's #3a3a3a). */
 export const SWITCH_OFF_DARK = "#3a3a3a";
 
 /** The thumb, white in both states. */

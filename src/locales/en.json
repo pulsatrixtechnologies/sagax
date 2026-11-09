@@ -14216,7 +14216,7 @@
   "grokBridge.keyPlaceholder": "Paste the shared secret",
   "grokBridge.bots": "Grok peer labels",
   "grokBridge.botsHelp": "Comma-separated labels your Sagax bots may address. Empty means any label on your link.",
-  "grokBridge.botsPlaceholder": "cryptic, ember",
+  "grokBridge.botsPlaceholder": "scout, writer",
   "grokBridge.mayCall": "Grok Bot may call me",
   "grokBridge.mayCallHelp": "When on, phone.call_owner from your linked Grok peer skips the approval card. Third-party calls always ask.",
   "grokBridge.mayText": "Grok Bot may text me",

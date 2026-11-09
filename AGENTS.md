@@ -10315,7 +10315,7 @@ Port of OpenMausBot #3073, without its optional Cursor sign-in (a third-party
 account token Sagax does not keep). New bot / first run (`AgentImport.tsx`) and
 the export of a bot shared on x.ai dropped on Bot templates > Import
 (`TemplateTools` readFile). Settings > Backups no longer holds a Grok Bot row
-(JC 2026-11-06). `src/components/GrokImportBox.tsx` reads an
+(2026-11-06). `src/components/GrokImportBox.tsx` reads an
 `https://x.ai/bot/<id>` link or a marketplace page through
 `POST /api/team-library/grok` (`server/routes/team-library-grok.ts`, client
 scope since 2026-10-26; `server/team/team-library.ts` `fetchGrokTemplateCard`
@@ -10914,7 +10914,7 @@ then `apply`). Apply writes only the ids the person checked. A replace is
 not written unless that line was checked. Lines left unchecked, and
 preferences that were not in the paste, stay. This is not the agent import.
 Not an admin route: another bot, or a bot that is not their primary, is 404
-`not_primary`. The Settings > Backups card was removed (JC 2026-11-06); the
+`not_primary`. The Settings > Backups card was removed (2026-11-06); the
 API stays. Covered by `shared/preference-import.test.ts`.
 
 ## Bot task list

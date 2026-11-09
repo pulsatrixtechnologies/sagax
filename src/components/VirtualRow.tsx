@@ -99,6 +99,19 @@ function remember(element: HTMLElement, key: string, height: number): void {
   else if (!element.classList.contains("contents") && (element.parentElement?.getBoundingClientRect().height ?? 0) > 0) rememberRowHeight(key, 0);
 }
 
+/** True when the row draws no box of its own (`display: contents`, the
+ * transcript's drawn tail). An IntersectionObserver never sees such an
+ * element intersect, so "far" says nothing about where it is: dropping the
+ * content on it gives the row a box again (display: block, its held height),
+ * the observer then sees it near and mounts it, the box goes away and the row
+ * is dropped again, every frame. Above the fold, that loop shook the whole
+ * conversation, or the one row, once the reader scrolled up from the bottom
+ * (#3122); while the pane follows the bottom, the pin hid it. */
+export function rowHasNoBox(element: Element): boolean {
+  if (element.classList.contains("contents")) return true;
+  return typeof getComputedStyle === "function" && getComputedStyle(element).display === "contents";
+}
+
 /* Live rows report their height as it changes, from one shared observer
    that runs after layout. A row going away then needs no measure of its own:
    measuring in the unmount of a whole list (a bot switch) forced one layout
@@ -161,7 +174,8 @@ export function VirtualRow({ rowKey, eager = false, estimate, initiallyShown = f
     watcher.listeners.set(element, (near, far, height) => {
       if (liveRef.current) remember(element, keyRef.current, height);
       if (near) setShown(true);
-      else if (far === false && !eagerRef.current) setShown(false);
+      // a row with no box of its own is never "far": see rowHasNoBox
+      else if (far === false && !eagerRef.current && !(liveRef.current && rowHasNoBox(element))) setShown(false);
     });
     watcher.near.observe(element);
     watcher.far.observe(element);

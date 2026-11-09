@@ -103,7 +103,7 @@ export function MessagesListItem({
   getState,
   dispatch,
   latestPageVersionById,
-  eager,
+  eager: eagerAsked,
 }: {
   /** Draws its content at once: the visible tail, the focused and the
    * unread rows. The others wait until the scroller brings them near. */
@@ -165,6 +165,9 @@ export function MessagesListItem({
   const rowKey = transcriptRowKey(item);
   const rowClass = index >= items.length - DRAWN_TAIL_ROWS || listedItemMessages(item).some((row) => row.id === focusedId)
     ? "contents" : "transcript-row";
+  // The drawn tail always holds its content: a row without a box cannot be
+  // virtualized (VirtualRow's rowHasNoBox, #3122).
+  const eager = eagerAsked || rowClass === "contents";
   if (item.kind === "gotoGroup") {
     return (
       <VirtualRow key={item.id} rowKey={rowKey} eager={eager} estimate={TRANSCRIPT_ROW_ESTIMATE} className={rowClass}>

@@ -6,7 +6,8 @@
 // both follow the person to iOS. Skills live on the Personas page and the
 // bot's Claude Code plugins in Connect apps, in that bot's scope.
 // (docs/superpowers/specs/2026-10-16-artifacts-design.md)
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { AppWindow, Copy, Download, FolderOpen, LoaderCircle, MessageSquare, MoreHorizontal, Pin, PinOff, RefreshCw, RotateCcw, Share, Trash2, Users, X } from "lucide-react";
 
 import { api, useStore, type Bot, type Group } from "@/state/store";
@@ -485,6 +486,36 @@ function ArtifactLibraryRow({ artifact, actions, now, openMenus }: { artifact: A
   );
 }
 
+/** #3184: the row's Share popover, drawn on top of the page (a portal under
+ * the row, right-aligned) rather than inside the row's open button and the
+ * list's clipped frame. Its events stop here: a click in it never opens the
+ * page. */
+function RowPopover({ children }: { children: ReactNode }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [style, setStyle] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    const place = () => {
+      const row = anchor.current?.closest("li") ?? anchor.current;
+      if (!row) return;
+      const rect = row.getBoundingClientRect();
+      const top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 160));
+      setStyle({ position: "fixed", top, right: Math.max(8, window.innerWidth - rect.right), maxHeight: window.innerHeight - top - 8, overflowY: "auto" });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, []);
+  const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
+  return (
+    <span ref={anchor} data-library-share-anchor="" className="contents">
+      {style && createPortal(
+        <div data-library-share-layer="" style={style} className="z-[60] rounded-2xl" onClick={stop} onPointerDown={stop} onKeyDown={stop}>{children}</div>,
+        document.body,
+      )}
+    </span>
+  );
+}
+
 /** A page the bot made (2026-10-28): its icon and title; a click opens it
  * like its card in the chat does (openPage, src/lib/open-page.ts: beside the
  * chat on desktop or full screen on a phone when the conversation is on
@@ -511,8 +542,9 @@ function PageLibraryRow({ page, linkOff, openMenus, onChange, onPin, onDelete }:
         <span className="relative flex items-center">
           {page.botShared === true && <Users size={12} data-page-bot-shared="" className="text-ink-secondary" aria-label={t("pages.share.bot.shared")} />}
           {sharing && (
-          <PageSharePopover page={page} version={page.currentVersion ?? page.versions.at(-1)?.n ?? 1} linkOff={linkOff} onChange={onChange} onClose={() => setSharing(false)}
-            className="absolute right-0 top-5 z-[5]" />
+            <RowPopover>
+              <PageSharePopover page={page} version={page.currentVersion ?? page.versions.at(-1)?.n ?? 1} linkOff={linkOff} onChange={onChange} onClose={() => setSharing(false)} />
+            </RowPopover>
           )}
         </span>
       ) : null}

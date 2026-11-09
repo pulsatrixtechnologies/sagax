@@ -12,6 +12,12 @@ import { currentOpenPage, registerPagePanelHost, resetOpenPage } from "@/lib/ope
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+// the Share popover itself (it needs the app's store) as a plain stand-in:
+// the test is where the Library draws it
+vi.mock("../PageShare", () => ({
+  PageSharePopover: ({ page }: { page: { id: string } }) => createElement("div", { "data-page-share-popover": page.id, role: "dialog" }, "share"),
+}));
+
 const { LibraryBody } = await import("./LibraryTab");
 
 const now = Date.parse("2026-10-26T12:00:00Z");
@@ -37,11 +43,11 @@ afterEach(() => {
   artifactWindowOpen.mockClear();
 });
 
-function mount() {
+function mount(extra: Record<string, unknown> = {}) {
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
-  act(() => root!.render(createElement(LibraryBody, { threadId: "t1", files: [], list: { artifacts: [], error: false, reload: () => {}, patch: () => {} }, pages: [page] as never, now })));
+  act(() => root!.render(createElement(LibraryBody, { threadId: "t1", files: [], list: { artifacts: [], error: false, reload: () => {}, patch: () => {} }, pages: [page] as never, now, ...extra })));
   return host;
 }
 
@@ -60,5 +66,18 @@ describe("Library: a page opens the one way", () => {
     await act(async () => { host.querySelector<HTMLElement>("[data-page-open]")!.click(); });
     expect(currentOpenPage()).toBeNull();
     expect(artifactWindowOpen).toHaveBeenCalledWith({ botId: "bot1", artifactId: "page:pageAAAA1111", title: "Weekly KPIs" });
+  });
+
+  it("Share… draws its popover outside the row's open button and list frame (#3184)", async () => {
+    registerPagePanelHost("bot1");
+    mount({ openMenus: true });
+    const share = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.includes("Share…"));
+    await act(async () => { share!.click(); });
+    const popover = document.querySelector<HTMLElement>("[data-page-share-popover]");
+    expect(popover).not.toBeNull();
+    expect(popover!.closest("[data-page-open]")).toBeNull();
+    expect(popover!.closest("ul")).toBeNull();
+    await act(async () => { popover!.click(); });
+    expect(currentOpenPage()).toBeNull();
   });
 });

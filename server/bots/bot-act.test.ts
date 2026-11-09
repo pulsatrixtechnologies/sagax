@@ -161,6 +161,7 @@ describe("bot act", () => {
     expect(away.performed[0]?.actor).toEqual({ kind: "person", sessionId: "", personKey: "owner-1", scopes: ["client"], routine: true });
     const admin = await away.service.handle({ facts: facts({ automation: true, sharedServer: true, provenPerson: null, routineOwner: "owner-1" }), raw: { method: "POST", path: "/api/admin/settings" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
     expect(admin.status).toBe(403);
+    expect(String(admin.body.error)).toContain("Do not retry this call");
     const solo = harness();
     const desk = await solo.service.handle({ facts: facts({ automation: true, provenPerson: null }), raw: { method: "GET", path: "/api/bots" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
     expect(desk.status).toBe(200);

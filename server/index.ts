@@ -18100,12 +18100,14 @@ bus.subscribe(makeLoopStopSubscriber({
   ignore: shouldIgnoreProviderEvent,
   stop: (threadId, reason) => {
     // #3009: a routine run cut here ends with the guard's reason, never green.
-    routines?.noteLoopStop(threadId, reason);
+    const routineRun = routines?.noteLoopStop(threadId, reason) === true;
     const group = store.groupByThread(threadId);
     const botId = group ? undefined : store.botByThread(threadId)?.id;
     const note = () => {
       console.warn(`[loop] thread ${threadId.slice(0, 8)}: ${reason}`);
       store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: reason, ok: false } });
+      // #3082: a routine cut here says so in the bot's thread, in words the person reads.
+      if (routineRun) store.appendMessage(threadId, { role: "bot", kind: "text", text: `The routine was stopped before it finished: it kept repeating the same step. ${reason}` });
     };
     dispatchLoopStop(threadId, { botId, groupId: group?.id }, {
       stopDirect: (id, thread) => {

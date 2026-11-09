@@ -125,3 +125,16 @@ export const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled])
 export const MENU_WIDTH = 420;
 export const MENU_MAX_HEIGHT = 520;
 
+/** #3116: the list of a chat-bar menu never shows fewer than about seven
+ * rows. The fixed chrome (search field, settings, Manage) is about
+ * MENU_CHROME px; the footer scrolls when the window has less room. */
+export const MIN_LIST_HEIGHT = 240;
+export const MENU_CHROME = 180;
+
+/** The list's floor inside a menu `menuHeight` px tall: MIN_LIST_HEIGHT
+ * when the menu has room, else what is left over the chrome, never under
+ * 120 px (a short window still shows the search and a few rows). */
+export function menuListMinHeight(menuHeight: number): number {
+  return Math.max(120, Math.min(MIN_LIST_HEIGHT, menuHeight - MENU_CHROME));
+}
+

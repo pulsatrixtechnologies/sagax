@@ -44,6 +44,11 @@ export interface ModelMenuSection {
   access?: "subscription" | "api";
   /** #2106: sign-in family key used to unify several accounts into one section. */
   family?: string;
+  /** #3116: the engine (driver kind) that runs this section's models, the
+   * first step of the chat-bar picker. Sections sharing it are its providers. */
+  harness?: string;
+  /** #3116: the harness's name ("Claude Code", "Codex", "Grok"). */
+  harnessLabel?: string;
   rows: ModelMenuRow[];
 }
 

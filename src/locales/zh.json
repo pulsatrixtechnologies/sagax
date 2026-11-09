@@ -2626,5 +2626,11 @@
   "leftOut.reason.maxPackageSkills": "一个包最多包含 {max} 个 skills",
   "leftOut.reason.intervalRoutine": "它按无法对应到时间表的间隔重复；请设定一天中的时间后重新添加",
   "leftOut.reason.onceRoutine": "它只运行一次，因此没有排程；如仍需要请手动运行",
-  "leftOut.reason.invalidYaml": "这不是有效的 YAML"
+  "leftOut.reason.invalidYaml": "这不是有效的 YAML",
+  "model.step.harness": "Harness",
+  "model.step.provider": "提供方",
+  "model.step.model": "模型",
+  "model.step.providers": "{count} 个提供方",
+  "model.step.models": "{count} 个模型",
+  "model.step.oneModel": "1 个模型"
 }

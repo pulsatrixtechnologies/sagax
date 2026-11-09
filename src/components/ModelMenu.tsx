@@ -28,8 +28,9 @@ import { t } from "@/lib/i18n";
 import {
   activeRowKey, filterModelSections, groupedModelMenuEntries, modelMenuRoot, modelMenuRootEntries, pickableRows, previewProviderRows, stepRow,
   ALL_MODELS_KEY, CURRENT_KEY_PREFIX, FAVORITE_KEY_PREFIX,
-  type ModelMenuProvider, type ModelMenuRow, type ModelMenuSection,
+  type ModelMenuEntry, type ModelMenuProvider, type ModelMenuRow, type ModelMenuSection,
 } from "@/lib/model-menu";
+import { modelMenuStepView, stepCrumbs, stepPathBack, stepPathInto, type ModelMenuHarness, type ModelStepEntry, type ModelStepPath } from "@/lib/model-menu-steps";
 
 export type { ModelMenuRow, ModelMenuSection };
 
@@ -117,7 +118,7 @@ export function sectionsForEngine(sections: ModelMenuSection[], engine: string |
   return sections.filter((section) => section.key === "top" || section.key === engine);
 }
 
-export function ModelSearchList({ sections: allSections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, onPreview, onAutoEdit, after, autoPanel, custom, showAll = false, engineChips }: {
+export function ModelSearchList({ sections: allSections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, onPreview, onAutoEdit, after, autoPanel, custom, showAll = false, engineChips, steps, listMinHeight }: {
   sections: ModelMenuSection[];
   onPick: (row: ModelMenuRow) => void;
   onPreview?: (row: ModelMenuRow) => void;
@@ -150,10 +151,21 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
   /** #2963: a row of engine chips over the list (All, then each engine with
    * its logo); a chip keeps the top rows and that engine's models. */
   engineChips?: { mark: (sectionKey: string) => ReactNode };
+  /** #3116: the menu in three steps while the search is empty: the
+   * harnesses (with the top rows), then the chosen harness's providers,
+   * then the provider's models. `mark` draws a harness's logo. Typing
+   * leaves the steps for the flat list of matches. `initialPath` opens
+   * the menu at a step (the gallery and tests; the chat bar opens at the
+   * harnesses). */
+  steps?: { mark?: (harness: string) => ReactNode; initialPath?: ModelStepPath };
+  /** #3116: with `after`, the list never shrinks under this many pixels;
+   * the footer scrolls instead. */
+  listMinHeight?: number;
 }) {
   const style = STYLE[variant];
   const [engine, setEngine] = useState<string | null>(null);
-  const chips = engineChips ? engineSections(allSections) : [];
+  const [path, setPath] = useState<ModelStepPath>(steps?.initialPath ?? {});
+  const chips = engineChips && !steps ? engineSections(allSections) : [];
   const sections = chips.length > 1 ? sectionsForEngine(allSections, engine) : allSections;
   const engineOn = chips.length > 1 && sections !== allSections ? engine : null;
   const [query, setQuery] = useState("");
@@ -167,9 +179,13 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baseId = useId();
   const searching = query.trim().length > 0;
-  const nested = submenus && !searching;
+  const stepping = Boolean(steps) && !searching;
+  const nested = submenus && !searching && !stepping;
+  // menu items (not listbox options): the nested root and the steps
+  const menuLike = nested || stepping;
   const shown = filterModelSections(sections, query);
   const favoriteKeys = favorites?.keys ?? [];
+  const view = stepping ? modelMenuStepView(allSections, path, favoriteKeys) : null;
   const previewSection = (section: ModelMenuSection): { section: ModelMenuSection; hidden: number } => {
     if (showAll || searching || !section.label) return { section, hidden: 0 };
     const preview = previewProviderRows(section.rows, {
@@ -182,11 +198,18 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
   const root = nested ? modelMenuRoot(shown, favoriteKeys) : null;
   const grouped = Boolean(root) && groupProviders;
   const showingAll = grouped && allOpen;
-  const entries = root ? (groupProviders ? groupedModelMenuEntries(root, allOpen) : modelMenuRootEntries(root)) : null;
+  const entries: Array<ModelMenuEntry | ModelStepEntry> | null = view
+    ? view.entries
+    : root ? (groupProviders ? groupedModelMenuEntries(root, allOpen) : modelMenuRootEntries(root)) : null;
   const rows = entries ?? pickableRows(displaySections);
   const listScrollClass = after !== undefined
     ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1"
     : style.list;
+  // #3116: the root cause of the squashed list: the search field, the
+  // chips, the settings and the Manage row were all `shrink-0`, so the
+  // list (`min-h-0 flex-1`) took whatever was left, a few rows in a short
+  // window. The list now keeps a floor and the footer scrolls instead.
+  const listStyle = after !== undefined && listMinHeight !== undefined ? { minHeight: listMinHeight } : undefined;
   const toggleProviderExpanded = (key: string) => {
     setExpandedProviders((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -256,6 +279,21 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
     setMoved(ALL_MODELS_KEY);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
+  // #3116: into a harness or a provider, and one step back (the active
+  // row lands on the entry the person came out of)
+  const stepInto = (entry: ModelStepEntry) => {
+    clearTimer();
+    setPath(stepPathInto(path, entry));
+    setMoved(null);
+  };
+  const stepBackPath = view ? stepPathBack(view, path) : null;
+  const stepBack = () => {
+    if (!view || !stepBackPath) return;
+    clearTimer();
+    setPath(stepBackPath);
+    setMoved((stepBackPath.harness ? view.provider?.key : view.harness?.key) ?? null);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -273,9 +311,19 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
       openAll();
       return;
     }
+    if (view && entry && ("harness" in entry && entry.harness || entry.provider) && (event.key === "ArrowRight" || event.key === "Enter")) {
+      event.preventDefault();
+      stepInto(entry);
+      return;
+    }
     if (entry?.provider && (event.key === "ArrowRight" || event.key === "Enter")) {
       event.preventDefault();
       openSubmenu(entry.provider, "keyboard");
+      return;
+    }
+    if (event.key === "ArrowLeft" && stepBackPath) {
+      event.preventDefault();
+      stepBack();
       return;
     }
     if (event.key === "ArrowLeft" && openSub) {
@@ -309,6 +357,12 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
         setMoved(null);
         return;
       }
+      if (stepBackPath) {
+        event.preventDefault();
+        event.stopPropagation();
+        stepBack();
+        return;
+      }
       if (showingAll) {
         event.preventDefault();
         event.stopPropagation();
@@ -331,7 +385,7 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
     active: key === active,
     style,
     disabled,
-    nested,
+    nested: menuLike,
     favorite: favorites ? { on: favorites.keys.includes(row.key), onToggle: () => favorites.onToggle(row) } : undefined,
     onAutoEdit: row.kind === "auto" ? onAutoEdit : undefined,
     onHover: () => {
@@ -350,8 +404,8 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
         <input
           ref={inputRef}
           type="text"
-          role={nested ? undefined : "combobox"}
-          aria-expanded={nested ? undefined : "true"}
+          role={menuLike ? undefined : "combobox"}
+          aria-expanded={menuLike ? undefined : "true"}
           aria-controls={listboxId}
           aria-autocomplete="list"
           aria-activedescendant={active ? optionId(active) : undefined}
@@ -397,10 +451,74 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
           })}
         </div>
       )}
-      {root ? (
+      {view ? (
+        <div ref={listRef} id={listboxId} role="menu" aria-label={label ?? t("model.models")} data-model-list
+          data-model-step={view.level} data-model-list-scroll={after !== undefined ? "" : undefined}
+          className={listScrollClass} style={listStyle}>
+          {stepBackPath && (
+            <button type="button" data-model-step-back onMouseDown={(event) => event.preventDefault()} onClick={stepBack}
+              aria-label={t("model.settings.back", { title: stepCrumbs(view).join(" › ") })}
+              className="mb-1 flex w-full items-center gap-1 rounded-lg px-2 py-1.5 text-left text-[12.5px] font-medium text-popover-ink-secondary outline-none hover:bg-popover-hover hover:text-popover-ink focus-visible:ring-2 focus-visible:ring-focus">
+              <ChevronLeft size={14} aria-hidden="true" />
+              <span>{t("model.back")}</span>
+              <span aria-hidden="true" className="truncate font-normal">· {stepCrumbs(view).join(" › ")}</span>
+            </button>
+          )}
+          {(view.level === "harness" || view.skipped) && view.top.length + (view.current ? 1 : 0) > 0 && (
+            <div role="group" data-model-section="top" className="py-0.5">
+              {view.top.map((row) => (
+                <Fragment key={row.key}>
+                  <ModelSearchRow {...rowProps(row, row.key)} />
+                  {row.kind === "auto" && autoPanel}
+                </Fragment>
+              ))}
+              {view.current && <ModelSearchRow {...rowProps(view.current, `${CURRENT_KEY_PREFIX}${view.current.key}`)} />}
+            </div>
+          )}
+          {(view.level === "harness" || view.skipped) && view.favorites.length > 0 && (
+            <div role="group" aria-label={t("model.favorites")} data-model-favorites className={cn("py-0.5", style.divider)}>
+              <div aria-hidden="true" className={style.heading}>{t("model.favorites")}</div>
+              {view.favorites.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, `${FAVORITE_KEY_PREFIX}${row.key}`)} />)}
+            </div>
+          )}
+          {view.level === "harness" && view.harnesses.length > 0 && (
+            <div role="group" aria-label={t("model.step.harness")} data-model-harnesses className={cn("py-0.5", style.divider)}>
+              <div aria-hidden="true" className={style.heading}>{t("model.step.harness")}</div>
+              {view.harnesses.map((harness) => (
+                <HarnessRow key={harness.key} harness={harness} id={optionId(harness.key)} style={style} active={harness.key === active}
+                  mark={steps?.mark?.(harness.harness)}
+                  onHover={() => setMoved(harness.key)}
+                  onOpen={() => stepInto({ key: harness.key, current: harness.current, harness })} />
+              ))}
+            </div>
+          )}
+          {view.level === "provider" && (
+            <div role="group" aria-label={t("model.step.provider")} data-model-providers className={cn("py-0.5", view.skipped && style.divider)}>
+              <div aria-hidden="true" className={style.heading}>{t("model.step.provider")}</div>
+              {view.providers.map((provider) => (
+                <ProviderRow key={provider.key} provider={provider} id={optionId(provider.key)} style={style}
+                  active={provider.key === active} expanded={false}
+                  onHover={() => setMoved(provider.key)}
+                  onOpen={() => stepInto({ key: provider.key, current: provider.current, provider })} />
+              ))}
+            </div>
+          )}
+          {view.level === "model" && view.provider && (
+            <div role="group" aria-label={view.provider.section.label} data-model-section={view.provider.section.key}
+              className={cn("py-0.5", view.skipped && style.divider)}>
+              <div aria-hidden="true" className={cn("flex items-baseline gap-1.5", style.heading)}>
+                <span className="truncate">{view.provider.section.label ?? t("model.step.model")}</span>
+                {view.provider.section.note && <span data-model-section-note className="truncate opacity-80">· {view.provider.section.note}</span>}
+              </div>
+              {view.rows.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
+            </div>
+          )}
+          {view.entries.length === 0 && <div data-model-no-match className={style.empty}>{t("model.noMatch")}</div>}
+        </div>
+      ) : root ? (
         <div ref={listRef} id={listboxId} role="menu" aria-label={label ?? t("model.models")} data-model-list
           data-model-list-scroll={after !== undefined ? "" : undefined}
-          className={listScrollClass}>
+          className={listScrollClass} style={listStyle}>
           {showingAll && (
             <button type="button" data-model-all-back onMouseDown={(event) => event.preventDefault()} onClick={closeAll}
               aria-label={t("model.settings.back", { title: t("model.providerRow") })}
@@ -452,7 +570,7 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
       ) : (
         <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list
           data-model-list-scroll={after !== undefined ? "" : undefined}
-          className={listScrollClass}>
+          className={listScrollClass} style={listStyle}>
           {shown.length === 0 && !customOffer && <div data-model-no-match className={style.empty}>{t("model.noMatch")}</div>}
           {customOffer && (
             <div role="group" data-model-custom className="py-0.5">
@@ -493,7 +611,7 @@ export function ModelSearchList({ sections: allSections, onPick, variant, autoFo
         </div>
       )}
       {after !== undefined && (
-        <div role="presentation" data-model-menu-footer className="shrink-0">{after}</div>
+        <div role="presentation" data-model-menu-footer className={listMinHeight !== undefined ? "min-h-0 overflow-y-auto overscroll-contain" : "shrink-0"}>{after}</div>
       )}
       {openSub && openProvider && (
         <ModelSubmenu
@@ -556,6 +674,53 @@ function AllModelsRow({ id, style, active, current, onHover, onOpen }: {
       <span className="flex shrink-0 items-center gap-1">
         {current && <span data-model-provider-current aria-hidden="true" className={cn("size-1.5 rounded-full bg-current", style.check)} />}
         <ChevronRight size={14} aria-hidden="true" className={style.detail} />
+      </span>
+    </div>
+  );
+}
+
+/** #3116, step 1: a harness: its logo, its name, the current model when
+ * it runs there (else how many providers or models), a chevron. */
+function HarnessRow({ harness, id, style, active, mark, onHover, onOpen }: {
+  harness: ModelMenuHarness;
+  id: string;
+  style: Style;
+  active: boolean;
+  mark?: ReactNode;
+  onHover: () => void;
+  onOpen: () => void;
+}) {
+  const current = harness.sections.flatMap((section) => section.rows).find((row) => row.current);
+  const detail = current
+    ? current.label
+    : harness.sections.length > 1
+      ? t("model.step.providers", { count: harness.sections.length })
+      : harness.models === 1 ? t("model.step.oneModel") : t("model.step.models", { count: harness.models });
+  return (
+    <div
+      id={id}
+      role="menuitem"
+      aria-haspopup="menu"
+      data-model-row-key={harness.key}
+      data-model-harness={harness.harness}
+      // keep the focus in the search field
+      onMouseDown={(event) => event.preventDefault()}
+      onMouseEnter={onHover}
+      onClick={onOpen}
+      className={cn(
+        "flex min-h-8 cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-[13px]",
+        style.row,
+        active && style.active,
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {mark && <span aria-hidden="true" className="flex shrink-0 items-center">{mark}</span>}
+        <span className="truncate">{harness.label}</span>
+      </span>
+      <span className="flex min-w-0 shrink items-center gap-1.5">
+        <span data-model-harness-detail className={cn("truncate text-[12px]", style.detail)}>{detail}</span>
+        {harness.current && <span data-model-provider-current aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full bg-current", style.check)} />}
+        <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0", style.detail)} />
       </span>
     </div>
   );

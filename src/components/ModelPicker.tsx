@@ -54,6 +54,7 @@ import { ModelPickerMenu, windowOnlyMenuPlace } from "./ModelPicker.tsx-parts/Mo
 import { makeModelPickerActions, makeToggleMenu } from "./ModelPicker.tsx-parts/modelPickerActions";
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
+import { modelMenuHarnesses } from "@/lib/model-menu-steps";
 
 export {
   COMPOSER_MODEL_EVENT,
@@ -328,7 +329,12 @@ export function ModelPicker({
 
   const summary = modelPickerSummary({ autoOn, autoRecord, active, selection, selectedVariantLabel, advanced });
   const followLine = modelPickerFollowLine({ follows, profileName: profile.name, fallbackLine });
-  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel });
+  // #3116: the chip names the provider only when the harness has several
+  const currentHarness = modelMenuHarnesses(menuSections).find((harness) => harness.current);
+  const providerLabel = currentHarness && currentHarness.sections.length > 1
+    ? currentHarness.sections.find((section) => section.rows.some((row) => row.current))?.label
+    : undefined;
+  const composerLabel = choose ? choose.label : modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel, providerLabel });
 
   const toggleMenu = makeToggleMenu({
     locked, menu, closeMenu, anchorRef, triggerRef, setMenuDoneCall, setMenuAt, setMenu, headless, windowOnly, fallbackAnchor,

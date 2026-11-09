@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { menuListMinHeight } from "./helpers";
 import { menuRoomAbove, menuRoomBelow, windowOnlyMenuPlace } from "./ModelPickerMenu";
 
 // 2026-11-03: the composer's model menu opened upward from a chip in the
@@ -32,5 +33,20 @@ describe("windowOnly menu place", () => {
     expect(windowOnlyMenuPlace(1032)).toEqual({ left: 24, top: 96 });
     expect(windowOnlyMenuPlace(180)).toEqual({ left: 24, top: 52 });
     expect(windowOnlyMenuPlace(100)).toEqual({ left: 24, top: 8 });
+  });
+});
+
+// #3116: the list of the chat-bar menu kept a few rows when the fixed
+// chrome (search, settings, Manage) took the rest of a short menu. It now
+// keeps a floor and the footer scrolls instead.
+describe("menuListMinHeight", () => {
+  it("keeps about seven rows in a full-height menu", () => {
+    expect(menuListMinHeight(520)).toBe(240);
+    expect(menuListMinHeight(1000)).toBe(240);
+  });
+  it("leaves the chrome its room in a shorter menu, never under 120px", () => {
+    expect(menuListMinHeight(400)).toBe(220);
+    expect(menuListMinHeight(300)).toBe(120);
+    expect(menuListMinHeight(120)).toBe(120);
   });
 });

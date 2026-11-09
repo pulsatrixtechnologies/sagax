@@ -675,7 +675,6 @@ teamBotFromThread.memory.nothing
 teamBotFromThread.memory.summary
 teamBotFromThread.warn.memory
 teamSettings.fullWarning
-toolDetail.input
 toolDetail.output
 update.button.downloading
 update.button.downloadingStart

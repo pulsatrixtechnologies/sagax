@@ -1870,5 +1870,11 @@
   "leftOut.reason.maxPackageSkills": "un paquete contiene como máximo {max} skills",
   "leftOut.reason.intervalRoutine": "se repite en un intervalo que no encaja en un horario; vuelve a añadirlo con una hora del día",
   "leftOut.reason.onceRoutine": "se ejecuta solo una vez, así que no se programó; ejecútalo a mano si aún hace falta",
-  "leftOut.reason.invalidYaml": "no es YAML válido"
+  "leftOut.reason.invalidYaml": "no es YAML válido",
+  "model.step.harness": "Harness",
+  "model.step.provider": "Proveedor",
+  "model.step.model": "Modelo",
+  "model.step.providers": "{count} proveedores",
+  "model.step.models": "{count} modelos",
+  "model.step.oneModel": "1 modelo"
 }

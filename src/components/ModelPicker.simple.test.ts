@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, InstanceInfo } from "@/state/store";
 
 const fixture = vi.hoisted(() => {
@@ -10,6 +10,17 @@ const fixture = vi.hoisted(() => {
 });
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => false, setAdvancedMode: () => {} }));
 vi.mock("./MenuMotion", () => ({ useMenuMotion: () => ({ shown: true, closing: false, className: "", exitProps: {} }) }));
+// #3116: the chat bar menu opens on its first step (the harnesses); a test
+// that reads the models of one harness opens the menu on that step.
+const steps = vi.hoisted(() => ({ path: {} as { harness?: string; provider?: string } }));
+vi.mock("./ModelMenu", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./ModelMenu")>();
+  return {
+    ...actual,
+    ModelSearchList: (props: Parameters<typeof actual.ModelSearchList>[0]) =>
+      actual.ModelSearchList({ ...props, steps: props.steps ? { ...props.steps, initialPath: steps.path } : undefined }),
+  };
+});
 vi.mock("@/state/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/state/store")>()),
   useStore: () => ({
@@ -60,12 +71,32 @@ function bot(): Bot {
 
 const html = () => renderToStaticMarkup(createElement(ModelPicker, { bot: bot() }));
 
+beforeEach(() => { steps.path = {}; });
+
 describe("model picker in Simple mode", () => {
-  it("keeps the model list and hides effort, catalog chrome and settings links", () => {
+  it("opens on the harnesses, with Auto and the bot's model on top (#3116)", () => {
     fixture.instances = [claude(true)];
     const markup = html();
     expect(markup).toContain('data-model-search-list="popover"');
     expect(markup).toContain('placeholder="Search models"');
+    expect(markup).toContain('data-model-step="harness"');
+    expect(markup).toContain('data-model-row-key="auto"');
+    expect(markup).toContain("Opus");
+    expect(markup).toContain('data-model-harness="claudeAgent"');
+    expect(markup).toContain(">Claude Code<");
+    // the custom ollama model makes a Local harness of its own
+    expect(markup).toContain('data-model-harness="local"');
+    expect(markup).toContain(">1 model<");
+    // a harness's models wait for its step
+    expect(markup).not.toContain("Extra three");
+  });
+
+  it("keeps the model list and hides effort, catalog chrome and settings links", () => {
+    fixture.instances = [claude(true)];
+    steps.path = { harness: "claudeAgent" };
+    const markup = html();
+    expect(markup).toContain('data-model-step="model"');
+    expect(markup).toContain("data-model-step-back");
     expect(markup).toContain("Opus");
     // #2963: the chat bar menu is flat: every model shows, no Show more.
     expect(markup).not.toContain("data-model-show-more");
@@ -81,13 +112,16 @@ describe("model picker in Simple mode", () => {
   it("labels the composer chip with the effort, as in Advanced", () => {
     fixture.instances = [claude(true)];
     const markup = renderToStaticMarkup(createElement(ModelPicker, { bot: bot(), inComposer: true }));
-    expect(markup).toMatch(/<span class="truncate">Opus High<\/span>/);
+    // #3116: the chip reads the steps: the harness, then the model and its effort
+    expect(markup).toMatch(/<span class="truncate">Claude Code · Opus High<\/span>/);
   });
 
   it("lists local models under Local in Simple too", () => {
     const instance = claude(true);
     instance.models.options.push({ id: "dwarfstar::qwen3.8-flash-next-chat", label: "DwarfStar: Qwen3.8 Flash Next", custom: true, local: true, anthropic: true });
     fixture.instances = [instance];
+    expect(html()).toContain('data-model-harness="local"');
+    steps.path = { harness: "local" };
     const markup = html();
     expect(markup).toContain('data-model-section="local:this-computer"');
     expect(markup).toContain("DwarfStar: Qwen3.8 Flash Next");
@@ -106,6 +140,7 @@ describe("model picker in Simple mode", () => {
       { id: "desk8002abc::Twin-Model", label: "Twin-Model", server: ":8002", custom: true, local: true, anthropic: true },
     );
     fixture.instances = [instance];
+    steps.path = { harness: "local" };
     const markup = html();
     expect(markup).toContain("Ornith-1.5-122B-oQ4e-mtp");
     expect(markup).not.toContain(":8000:");

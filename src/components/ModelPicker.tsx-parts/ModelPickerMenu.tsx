@@ -12,7 +12,8 @@ import { EffortRow } from "./EffortControls";
 import { toggleModelFavorite } from "@/lib/model-favorites";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/wire";
-import { MENU_MAX_HEIGHT, MENU_WIDTH } from "./helpers";
+import { MENU_MAX_HEIGHT, MENU_WIDTH, menuListMinHeight } from "./helpers";
+import { modelMenuHarnesses } from "@/lib/model-menu-steps";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
 
@@ -228,6 +229,20 @@ export function ModelPickerMenu({
       </div>
     </>
   );
+  const menuMaxHeight = menuAt
+    ? menuAt.top != null
+      ? menuRoomBelow(menuAt.top)
+      : menuAt.bottom != null
+        ? menuRoomAbove(menuAt.bottom)
+        : MENU_MAX_HEIGHT
+    : undefined;
+  // #3116: a harness's mark is its first provider's (an engine instance,
+  // or the local group's monitor)
+  const harnesses = modelMenuHarnesses(menuSections);
+  const harnessMark = (harness: string): ReactNode => {
+    const entry = harnesses.find((candidate) => candidate.harness === harness);
+    return entry && engineMark ? engineMark(entry.sections[0].key) : null;
+  };
   const content = (
     <>
       <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)}
@@ -236,7 +251,8 @@ export function ModelPickerMenu({
         after={below}
         custom={customModel}
         showAll
-        engineChips={engineMark ? { mark: engineMark } : undefined}
+        steps={{ mark: harnessMark }}
+        listMinHeight={menuListMinHeight(menuMaxHeight ?? MENU_MAX_HEIGHT)}
         autoPanel={autoPanel} />
     </>
   );
@@ -265,13 +281,6 @@ export function ModelPickerMenu({
     </AnchoredPopover>
   );
 
-  const menuMaxHeight = menuAt
-    ? menuAt.top != null
-      ? menuRoomBelow(menuAt.top)
-      : menuAt.bottom != null
-        ? menuRoomAbove(menuAt.bottom)
-        : MENU_MAX_HEIGHT
-    : undefined;
   const menuPanel = (
     <div
       ref={menuRef}

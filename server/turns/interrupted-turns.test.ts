@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { drainTurns, INTERRUPTED_TURN_MAX_AGE_MS, runtimeResumeVerdict, saveInterruptedTurns, shutdownDrainMs, takeInterruptedTurns } from "./interrupted-turns.ts";
+import { directResumeStep, drainTurns, INTERRUPTED_TURN_MAX_AGE_MS, runtimeResumeVerdict, saveInterruptedTurns, shutdownDrainMs, takeInterruptedTurns } from "./interrupted-turns.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -59,5 +59,15 @@ describe("interrupted turns", () => {
     expect(runtimeResumeVerdict(turn!, { held: false, busy: false, messages: [cutNote, { role: "bot", at: now }] })).toBe("resumed");
     // The person spoke first: a later answer belongs to the new request.
     expect(runtimeResumeVerdict(turn!, { held: false, busy: false, messages: [{ role: "user", at: now - 100 }, { role: "bot", at: now }] })).toBe("lost");
+  });
+});
+
+describe("directResumeStep (#3217)", () => {
+  it("relaunches a lost chat turn once, then reports it", () => {
+    expect(directResumeStep("resumed", false)).toBe("done");
+    expect(directResumeStep("wait", false)).toBe("wait");
+    expect(directResumeStep("lost", false)).toBe("relaunch");
+    expect(directResumeStep("lost", true)).toBe("report");
+    expect(directResumeStep("wait", true)).toBe("wait");
   });
 });

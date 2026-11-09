@@ -47,6 +47,16 @@ export function runtimeResumeVerdict(turn: InterruptedTurn, view: {
   return "lost";
 }
 
+export type DirectResumeStep = "wait" | "done" | "relaunch" | "report";
+
+/** #3217: what a chat turn resumed at start does next, from its verdict: a
+ * lost turn is started once more, a second loss is reported in the chat. */
+export function directResumeStep(verdict: "wait" | "resumed" | "lost", relaunched: boolean): DirectResumeStep {
+  if (verdict === "resumed") return "done";
+  if (verdict === "wait") return "wait";
+  return relaunched ? "report" : "relaunch";
+}
+
 const FILE = "interrupted-turns.json";
 /** A turn cut longer ago than this is not resumed: its moment has passed. */
 export const INTERRUPTED_TURN_MAX_AGE_MS = 60 * 60_000;

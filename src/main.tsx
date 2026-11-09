@@ -4,7 +4,9 @@ import App from "./App";
 import {
   BROWSER_SIGN_IN_FAILED, previewBrowserSignIn, resolveSessionState, SERVICE_TRUST_REASON, takeBrowserSignInFromLocation, takePairingFromLocation, takeInvitedEmailFromLocation,
 } from "./lib/session";
-import { bootstrapBrand } from "./lib/brand";
+import { applyBrand, bootstrapBrand } from "./lib/brand";
+import { allowUiSnapshot, clearUiSnapshot, readUiSnapshot, setLaunchSnapshot } from "./lib/ui-snapshot";
+import { holdWrites, releaseWrites } from "./lib/write-gate";
 import { applySkin, applySkinDepth, applySkinTexture, installSkinAutoFollow, readSkin, readSkinDepth, readSkinTexture } from "./lib/skins";
 import { applyFont, readFont } from "./lib/fonts";
 import { applyAccessibility, installAccessibility } from "./lib/accessibility-preferences";
@@ -89,6 +91,7 @@ async function chooseRoot(): Promise<React.ReactNode> {
   // 2026-10-20: a deploy, a restart or a provider that is slow to confirm a
   // sign-in is retried in silence; the sign-in screen only for a real end.
   const session = await resolveSessionState();
+  launchSessionUnreachable = session.kind === "unreachable";
   if (session.kind === "session") {
     try {
       const res = await fetch("/api/auth/session", { credentials: "same-origin" });
@@ -143,10 +146,47 @@ async function chooseRoot(): Promise<React.ReactNode> {
     const { DataWindow } = await import("./components/data/DataWindow");
     return <DataWindow />;
   }
+  appForOwnerHere = session.kind === "loopback" && session.trust !== "service";
   return <App />;
 }
 
+/** chooseRoot drew the workspace for the owner on this computer (the only
+ * one whose page keeps a launch snapshot, src/lib/ui-snapshot.ts). */
+let appForOwnerHere = false;
+let launchSessionUnreachable = false;
+const workspacePage = !detachedAssistant && !floatingBot && location.pathname === "/";
+
 // A floating bot's window makes no request of its own: its texts arrive translated from the main page.
-void Promise.all([floatingBot ? undefined : bootstrapBrand(), chooseRoot()]).then(([, root]) => {
-  createRoot(document.getElementById("root")!).render(<StrictMode><PageBoundary>{root}</PageBoundary></StrictMode>);
-});
+async function launch(): Promise<void> {
+  const container = document.getElementById("root")!;
+  // The workspace as this computer's page last showed it, drawn before the
+  // local server answers: read only until the server's own snapshot
+  // replaces it (store "hydrate"); writes wait (write-gate.ts). The server
+  // still decides who is looking, right after.
+  const snapshot = workspacePage ? await readUiSnapshot() : null;
+  if (snapshot) {
+    applyBrand(snapshot.brand);
+    setLaunchSnapshot(snapshot);
+    holdWrites();
+    migrateInterfaceModeToAdvancedOnce();
+    const root = createRoot(container);
+    root.render(<StrictMode><PageBoundary><App /></PageBoundary></StrictMode>);
+    const [, chosen] = await Promise.all([bootstrapBrand(), chooseRoot()]);
+    allowUiSnapshot(appForOwnerHere);
+    // An unreachable server is not news about who is looking: the drawing
+    // stays until the server answers or the launch gives up on it.
+    if (!appForOwnerHere && !launchSessionUnreachable) {
+      // Not the owner here any more (paired, service trust, signed out):
+      // the stored drawing goes, and so does its file.
+      clearUiSnapshot();
+      setLaunchSnapshot(null);
+      releaseWrites();
+      root.render(<StrictMode><PageBoundary>{chosen}</PageBoundary></StrictMode>);
+    }
+    return;
+  }
+  const [, chosen] = await Promise.all([floatingBot ? undefined : bootstrapBrand(), chooseRoot()]);
+  allowUiSnapshot(workspacePage && appForOwnerHere);
+  createRoot(container).render(<StrictMode><PageBoundary>{chosen}</PageBoundary></StrictMode>);
+}
+void launch();

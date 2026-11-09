@@ -40,6 +40,7 @@ import { activateExistingWindow, releaseSingleInstanceLock } from "./single-inst
 import { bootFailureMessage, listeningSignal, pollServerIdentity, SERVER_BOOT_TIMEOUT_MS, SERVER_LISTENING_GRACE_MS } from "./server-boot-probe.mjs";
 import { createServerSupervisor } from "./server-supervisor.mjs";
 import { createBootUiHandler } from "./boot-ui.mjs";
+import { createUiSnapshotStore } from "./ui-snapshot.mjs";
 import { serverChildLaunch } from "./server-child-launch.mjs";
 import { packageUrlFromCommandLine, packageUrlFromDeepLink } from "./package-link.mjs";
 import { createOrganizationEntry, ORGANIZATION_DEEP_LINK, isOrganizationDeepLink, takeOrganizationDeepLink, organizationRestartIntent, withOrganizationRestartIntent, withoutOrganizationRestartIntent } from "./organization-entry.mjs";
@@ -4169,6 +4170,16 @@ ipcMain.handle("engine:open-terminal", localOnly("engine:open-terminal", async (
 // Fallback for the renderer's copy button when the web Clipboard API rejects
 // (unfocused page, denied permission). Plain text only; resolves false on failure.
 ipcMain.handle("clipboard:write-text", localOnly("clipboard:write-text", (_event, text) => writeClipboardText(clipboard, text)));
+// The sidebar and open conversation as this computer's page last showed them (electron/ui-snapshot.mjs):
+// this computer's own data folder only, never in server mode.
+const uiSnapshotStore = createUiSnapshotStore({
+  dir: path.join(app.getPath("userData"), "ui-snapshot"),
+  dataDir: () => (serverModeEnvironment(environmentsState) || desktopRemoteAccess ? null : runningDataDir ?? desktopDataDir()),
+  safeStorage,
+});
+ipcMain.handle("ui-snapshot:read", localOnly("ui-snapshot:read", () => uiSnapshotStore.read()));
+ipcMain.handle("ui-snapshot:write", localOnly("ui-snapshot:write", (_event, text) => uiSnapshotStore.write(text)));
+ipcMain.handle("ui-snapshot:clear", localOnly("ui-snapshot:clear", () => uiSnapshotStore.clear()));
 
 // Per-loopback-server API keys for local models (Settings > Computer). These
 // run through the desktop UI only (the local page, or this app's bundle on an

@@ -12,6 +12,8 @@ import { selectionListed } from "@/lib/selection-fallback";
 import { hiddenKeySet, readSidebarHidden, useSidebarHidden } from "@/lib/sidebar-hidden";
 import { readLastBotSection, rememberBotSection } from "@/lib/last-bot-section";
 import { useShowThreads } from "@/lib/thread-preferences";
+import { buildUiSnapshot, createUiSnapshotWriter, launchUiSnapshot, UI_SNAPSHOT_PROVISIONAL_MS } from "@/lib/ui-snapshot";
+import { releaseWrites } from "@/lib/write-gate";
 import { noteBackAtBot, noteLeftBot, readNewChats, setOnScreenBot, writeNewChats } from "@/lib/fresh-topic";
 import { isEarlierSegment } from "@/lib/single-stream";
 import { t, activeLocale } from "@/lib/i18n";
@@ -232,8 +234,14 @@ function restoreBotSettingsSection(state: AppState): AppState {
   const freshTopic = Object.keys(newChats).length > 0
     ? { ...state.freshTopic, ...Object.fromEntries(Object.entries(newChats).map(([botId, threadId]) => [botId, { threadId, auto: false }])) }
     : state.freshTopic;
-  const withHidden = { ...state, freshTopic, sidebarHiddenKeys: hiddenKeySet(readSidebarHidden()) };
+  const withHidden = withLaunchSnapshot({ ...state, freshTopic, sidebarHiddenKeys: hiddenKeySet(readSidebarHidden()) });
   return section ? { ...withHidden, botSettingsSection: section, botSettingsSectionStored: true } : withHidden;
+}
+
+/** The first state of a launch that has a stored snapshot (main.tsx). */
+export function withLaunchSnapshot(state: AppState, snapshot = launchUiSnapshot()): AppState {
+  if (!snapshot || state.hydrated) return state;
+  return { ...state, provisional: true, bots: snapshot.bots, groups: snapshot.groups, sections: snapshot.sections, selectedId: snapshot.selectedId };
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -245,6 +253,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, rawDispatch] = useReducer(reducer, initialState, restoreBotSettingsSection);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // A stored drawing (src/lib/ui-snapshot.ts): writes go again once the
+  // server's own snapshot has replaced it; a launch the server never answers
+  // drops it. <html data-provisional> keeps the window from taking input (App).
+  useEffect(() => {
+    const root = document.documentElement;
+    if (state.provisional) {
+      root.dataset.provisional = "";
+      performance.mark("sagax:provisional", { detail: { selectedId: stateRef.current.selectedId } });
+      const timer = setTimeout(() => rawDispatch({ type: "provisionalExpired" }), UI_SNAPSHOT_PROVISIONAL_MS);
+      return () => clearTimeout(timer);
+    }
+    if (root.hasAttribute("data-provisional")) performance.mark("sagax:live", { detail: { selectedId: stateRef.current.selectedId } });
+    delete root.dataset.provisional;
+    releaseWrites();
+    return undefined;
+  }, [state.provisional]);
+  // The snapshot the next launch draws, from the server's state only.
+  const snapshotWriter = useMemo(() => createUiSnapshotWriter(() => buildUiSnapshot(stateRef.current, location.origin)), []);
+  useEffect(() => () => snapshotWriter.dispose(), [snapshotWriter]);
+  useEffect(() => {
+    if (state.hydrated && !state.provisional) snapshotWriter.schedule();
+  }, [state.hydrated, state.provisional, state.bots, state.groups, state.sections, state.selectedId, snapshotWriter]);
   useEffect(() => {
     if (state.hydrated && state.config && !state.config.personalSettings) migrateInstalledVoiceSettings(state.config.tts, state.bots);
   }, [state.hydrated, state.config, state.bots]);

@@ -142,7 +142,7 @@ export function applyBrand(status: BrandStatus): void {
   for (const [name, value] of Object.entries(brandVars(status.brand))) root.style.setProperty(name, value);
 }
 
-function isBrandStatus(value: unknown): value is BrandStatus {
+export function isBrandStatus(value: unknown): value is BrandStatus {
   if (!value || typeof value !== "object") return false;
   const v = Reflect.get(value, "brand");
   return Boolean(v) && typeof v === "object" && typeof Reflect.get(Object(v), "name") === "string";

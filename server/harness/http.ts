@@ -29,6 +29,12 @@ export function json(res: ServerResponse, status: number, body: unknown) {
   const data = JSON.stringify(hook ? hook(body) : body);
   const headers = { "content-type": "application/json" };
   if (sendTunnelJson(res, status, headers, data)) return;
+  // A reply already started (stream, earlier json()) cannot take a second
+  // writeHead: throwing ERR_HTTP_HEADERS_SENT here crashed the server (#3216).
+  if (res.headersSent || res.writableEnded) {
+    console.error(`[request] dropped a ${status} JSON reply: the response was already started`);
+    return;
+  }
   res.writeHead(status, headers);
   res.end(data);
 }

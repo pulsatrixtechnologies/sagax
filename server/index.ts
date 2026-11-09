@@ -1023,6 +1023,7 @@ import { type ReactionActor } from "../shared/reactions.ts";
 // Keep these two last: a route module may import any server module, and
 // loading the table after everything above leaves module start-up order as is.
 import { gzipTunnelReplies, json, readBody } from "./harness/http.ts";
+import { answerRequestError } from "./request/request-error.ts";
 import { parseRequest } from "./request/parse-request.ts";
 import { createStartTurn } from "./turns/start-turn.ts";
 import { createRunGroupMemberTurn } from "./turns/group-member-turn.ts";
@@ -33536,14 +33537,8 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
     if (await runInternal(req, res, url, path, method, auth)) return;
     if (await fallback(req, res, url, path, method, auth, state)) return;
   } catch (e) {
-    const status = (e as any)?.status ?? 500;
-    const candidateCode = (e as { code?: unknown })?.code;
-    const code = typeof candidateCode === "string" && ["guarded_busy", "guarded_branch", "guarded_permissions", "guarded_request_changed", "guarded_request_untracked", "outside_workspace", "org_full_access_disabled", "parallel_limit", "parallel_nested", "misuse_blocked", "misuse_approval_required", "misuse_locked", "safety_blocked", "no_engine"].includes(candidateCode)
-      ? candidateCode : undefined;
-    // 2026-11-02: a misuse block names its one reason (a category id)
-    const candidateReason = (e as { reason?: unknown })?.reason;
-    const reason = code === "misuse_blocked" && typeof candidateReason === "string" && /^[a-z_]{1,40}$/.test(candidateReason) ? candidateReason : undefined;
-    return json(res, status, { error: e instanceof Error ? e.message : String(e), ...(code ? { code } : {}), ...(reason ? { reason } : {}) });
+    // Never a second writeHead on a reply already started (#3216).
+    return answerRequestError(res, e, method, path);
   } finally {
     state.releaseWorkspaceRequest?.();
   }

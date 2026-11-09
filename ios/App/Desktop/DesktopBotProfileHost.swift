@@ -278,9 +278,11 @@ struct DesktopBotProfileHost: View {
     }
 
     /// The page's `botSectionLock` note: Rules and the Bot folder follow the soul.
+    /// Personality and Model draw it in their locked card (PersonaLockedSection).
     private func lockNote(_ page: DesktopPersonaPage) -> LocalizedStringKey? {
         let section: DesktopPanelSection? = switch page {
         case .rules, .files: .soul
+        case .soul, .model: nil
         default: page.section
         }
         return section.flatMap { session.sectionLock(current, $0) }
@@ -338,7 +340,11 @@ struct DesktopPersonaPageHost: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         BotPanelMore(bot: current, slackURL: slackURL, only: .overview)
-                        PersonaPersonalityPage(bot: current, slackURL: slackURL)
+                        if let lock = session.sectionLock(current, .soul) {
+                            PersonaLockedSection(bot: current, section: .soul, lock: lock)
+                        } else {
+                            PersonaPersonalityPage(bot: current, slackURL: slackURL)
+                        }
                     }
                     .padding(.horizontal, 32)
                     .padding(.vertical, 16)
@@ -356,7 +362,11 @@ struct DesktopPersonaPageHost: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         PersonaModelPage(bot: current, slackURL: slackURL)
-                        BotPanelMore(bot: current, slackURL: slackURL, only: .worksOn)
+                        if let lock = session.sectionLock(current, .worksOn) {
+                            PersonaLockedSection(bot: current, section: .worksOn, lock: lock)
+                        } else {
+                            BotPanelMore(bot: current, slackURL: slackURL, only: .worksOn)
+                        }
                     }
                     .padding(.horizontal, 32)
                     .padding(.vertical, 16)

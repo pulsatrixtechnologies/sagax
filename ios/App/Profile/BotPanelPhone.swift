@@ -128,6 +128,8 @@ private struct PhoneBotPanelContent: View {
                 }
         }
         .tint(Theme.accentText)
+        // desktop ModelLockLine's "Open {bot}'s chat": back to the chat
+        .environment(\.botPanelOpenChat, { dismiss() })
         .sheet(isPresented: $editingAvatar) { PhoneBotAvatarSheet(bot: current, draft: $draft) }
         .sheet(item: $activityRoute) { route in
             BotActivitySheet(botId: bot.id, route: route, model: activity) { _, threadId in
@@ -938,6 +940,13 @@ private struct PhoneBotPanelContent: View {
 
     #if DEBUG
     private func applyParityScreen() async {
+        // `-previewPanelSection model` (store preview): that Edit bot page
+        if ParityLaunch.current == nil, let raw = UserDefaults.standard.string(forKey: "previewPanelSection"),
+           let section = DesktopPanelSection(rawValue: raw) {
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            openEditor(at: section)
+            return
+        }
         guard let screen = ParityLaunch.current?.screen else { return }
         switch screen {
         case .profileLinks: libraryStart = .links; panelTab = .library

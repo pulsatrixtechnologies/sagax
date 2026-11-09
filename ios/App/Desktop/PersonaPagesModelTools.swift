@@ -79,7 +79,7 @@ struct PersonaModelPage: View {
     }
 
     private var defaultModelRow: some View {
-        let busy = bot.currentTaskBusy == true
+        let busy = ModelTurnLock.of(bot) != nil
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 20) {
                 DesktopText(Text("Default model"))
@@ -107,14 +107,20 @@ struct PersonaModelPage: View {
                 .accessibilityIdentifier("persona-model.default")
             }
             .frame(minHeight: 28)
-            if busy {
-                DesktopText(bot.activity == "waiting-on-you"
-                            ? Text("An approval is waiting for you in this bot's conversation. Answer it to change the model.")
-                            : Text("This bot's conversation is working. Stop its turn to change the model."),
-                            size: 12, line: 16, color: \.inkSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 8)
-                    .accessibilityIdentifier("persona-model.lock")
+            // desktop ModelLockLine: the reason, then "Open {bot}'s chat"
+            if let lock = ModelTurnLock.of(bot) {
+                VStack(alignment: .leading, spacing: 4) {
+                    DesktopText(Text(lock.line), size: 12, line: 16, color: \.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button { model.open(.bot(bot)) } label: {
+                        DesktopText(verbatim: String(format: AppStrings.localized("Open %@'s chat"), bot.name), size: 12, weight: .medium, line: 16, color: \.accentText)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("persona-model.lock.open-chat")
+                }
+                .padding(.top, 8)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("persona-model.lock")
             }
         }
         .padding(.horizontal, 14)

@@ -438,7 +438,7 @@ struct InstructionView: View {
                     .disabled(saving)
                     .accessibilityIdentifier("instructions-save")
                 }
-            } else if soul != nil {
+            } else if soul != nil, lock == nil {
                 GlassCircleButton(systemImage: "pencil", accessibilityLabel: "Edit", glyphSize: 17) {
                     draft = soul ?? ""
                     editing = true
@@ -470,17 +470,33 @@ struct InstructionView: View {
                     BotPersonalitySummary(bot: bot).padding(.bottom, 12)
                     ProfileSectionLabel(text: "Personality", margin: Theme.Profile.routineMargin)
                 }
-                TextCardBody(text: soul.isEmpty ? String(localized: "No instructions yet.") : soul)
-                // RULES.md and docs/ beside the soul (#269)
-                BotWorkspaceShortcuts(bot: bot)
-                    .padding(.horizontal, Theme.Profile.routineMargin)
-                    .padding(.top, 12)
-                // #1329: the bot's "do not finish until" condition
-                ProfileCard(margin: Theme.Profile.routineMargin) {
-                    FinishUntilEditor(bot: session.state.bots.first { $0.id == bot.id } ?? bot)
-                        .padding(14)
+                if let lock {
+                    // desktop locked block: the note, then the soul read-only
+                    // (BotProfilePage `botSectionLock`)
+                    ProfileCard(margin: Theme.Profile.routineMargin) {
+                        PanelLockNote(text: lock)
+                            .padding(.horizontal, 16)
+                            .accessibilityIdentifier("panel-page.soul.locked")
+                        // desktop `data-persona-readonly`: the soul as it
+                        // is, in an inset block, not editable
+                        if !soul.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(verbatim: soul)
+                                .font(.footnote)
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineSpacing(4)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(Theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .padding(.horizontal, 16)
+                                .padding(.top, 4)
+                                .padding(.bottom, 12)
+                                .accessibilityIdentifier("panel-page.soul.readonly")
+                        }
+                    }
+                } else {
+                    soulCards(soul)
                 }
-                .padding(.top, 12)
             } else if let problem {
                 TextCardBody(text: problem)
             } else {
@@ -490,7 +506,34 @@ struct InstructionView: View {
         .task { await load() }
     }
 
+    /// Why this viewer may not change the soul (desktop `botSectionLock`).
+    private var lock: LocalizedStringKey? {
+        session.sectionLock(session.state.bot(bot.id) ?? bot, .soul)
+    }
+
+    @ViewBuilder
+    private func soulCards(_ soul: String) -> some View {
+        TextCardBody(text: soul.isEmpty ? String(localized: "No instructions yet.") : soul)
+        // RULES.md and docs/ beside the soul (#269)
+        BotWorkspaceShortcuts(bot: bot)
+            .padding(.horizontal, Theme.Profile.routineMargin)
+            .padding(.top, 12)
+        // #1329: the bot's "do not finish until" condition
+        ProfileCard(margin: Theme.Profile.routineMargin) {
+            FinishUntilEditor(bot: session.state.bots.first { $0.id == bot.id } ?? bot)
+                .padding(14)
+        }
+        .padding(.top, 12)
+    }
+
     private func load() async {
+        #if DEBUG
+        // `-previewSoul <text>` (store preview captures): no server to ask
+        if session.profileClient == nil, let preview = UserDefaults.standard.string(forKey: "previewSoul") {
+            soul = preview
+            return
+        }
+        #endif
         guard let client = session.profileClient else { return }
         do { soul = try await client.soul(botId: bot.id).soul } catch { problem = error.localizedDescription }
     }

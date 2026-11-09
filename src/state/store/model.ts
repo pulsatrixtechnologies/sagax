@@ -457,6 +457,8 @@ export interface TaskUsage {
 }
 
 export interface Bot {
+  /** WireBot.systemBot: the server's own bot (the Feedback bot). */
+  systemBot?: "feedback";
   /** A bot the viewer knows only from a room it is in (groupMemberBots):
    * its name and look, nothing else; it cannot be opened. */
   publicProfile?: true;

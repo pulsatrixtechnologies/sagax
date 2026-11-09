@@ -14567,5 +14567,7 @@
   "pages.sharedBy": "Shared by {name}",
   "pages.refreshShared": "Ask the bot to refresh",
   "pages.refreshPrompt": "Please refresh the Page \"{title}\" with up-to-date information.",
-  "pages.refreshAsked": "Refresh requested from the bot."
+  "pages.refreshAsked": "Refresh requested from the bot.",
+  "systemBot.feedback.title": "Bugs, ideas, questions",
+  "systemBot.feedback.description": "Report a bug, suggest an idea or ask the Sagax team a question."
 }

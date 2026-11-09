@@ -47,3 +47,37 @@ describe("feedback report", () => {
     expect(reportTitle("bug", "x".repeat(300)).length).toBeLessThanOrEqual(100);
   });
 });
+
+describe("feedback report structure (attachments, title, summary)", () => {
+  const text = 'Le bouton ne répond plus après la mise à jour. Rien ne se passe quand je clique.\n<attached-image path="/Users/alex/.sagax/att/shot.png" name="shot.png" />';
+  it("never leaks the raw attachment tag and lists attachments by name", () => {
+    const report = buildReport(
+      { kind: "bug", steps: `Ouvrir les réglages\n<attached-image path="/tmp/a.png" name="a.png" />\nCliquer`, expected: "Ça sauvegarde", actual: text, followups: [] },
+      { source: "slash", platform: "desktop", page: "settings" },
+      {},
+    );
+    expect(report.body).not.toContain("attached-image");
+    expect(report.body).not.toContain("/tmp/a.png");
+    expect(report.body).not.toContain("/.sagax/");
+    expect(report.body).toContain("## Attachments");
+    expect(report.body).toContain("2 images attached");
+    expect(report.body).toContain("1. Ouvrir les réglages\n2. Cliquer");
+  });
+  it("makes a short descriptive title and a reworded summary, not the verbatim answer", () => {
+    const long = "Le bouton ne répond plus après la mise à jour de l'application sur mon ordinateur et je dois tout redémarrer chaque fois que ça arrive, c'est pénible. Autre phrase.";
+    const report = buildReport({ kind: "bug", actual: long, followups: [] }, { source: "slash", page: "settings" }, {});
+    expect(report.title.length).toBeLessThanOrEqual(100);
+    expect(report.title).toMatch(/^\[Feedback\] Bug: .+ \(settings\)$/);
+    expect(report.title).not.toContain("Autre phrase");
+    const summary = report.body.split("## Summary")[1]!.split("##")[0]!;
+    expect(summary).toContain("The person reported a bug from the settings page.");
+    expect(summary).not.toContain(long);
+    expect(summary).not.toContain(">");
+  });
+  it("handles an answer made only of an image", () => {
+    const report = buildReport({ kind: "idea", describe: '<attached-image path="/x.png" />', followups: [] }, { source: "slash" }, {});
+    expect(report.body).toContain("_No summary given._");
+    expect(report.body).toContain("1 image attached");
+    expect(report.body).not.toContain("<attached");
+  });
+});

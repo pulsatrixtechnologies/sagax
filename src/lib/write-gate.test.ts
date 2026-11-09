@@ -38,3 +38,15 @@ it("does not hold another origin's requests", async () => {
   expect(sent).toEqual(["POST https://example.com/collect"]);
   gate.releaseWrites();
 });
+
+it("drops a held write aimed at a bot the server no longer lists, sends the others in order", async () => {
+  const gate = await import("./write-gate");
+  gate.holdWrites();
+  const gone = window.fetch("/api/bots/ghost-bot/warm", { method: "POST" });
+  const kept = window.fetch("/api/bots/live-bot/read", { method: "POST" });
+  const other = window.fetch("/api/settings", { method: "PATCH" });
+  gate.releaseWrites(["live-bot"]);
+  const [goneResponse] = await Promise.all([gone, kept, other]);
+  expect(goneResponse.ok).toBe(true);
+  expect(sent).toEqual(["POST /api/bots/live-bot/read", "PATCH /api/settings"]);
+});

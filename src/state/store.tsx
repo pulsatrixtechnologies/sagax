@@ -266,7 +266,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     if (root.hasAttribute("data-provisional")) performance.mark("sagax:live", { detail: { selectedId: stateRef.current.selectedId } });
     delete root.dataset.provisional;
-    releaseWrites();
+    releaseWrites(stateRef.current.bots.map((bot) => bot.id));
     return undefined;
   }, [state.provisional]);
   // The snapshot the next launch draws, from the server's state only.

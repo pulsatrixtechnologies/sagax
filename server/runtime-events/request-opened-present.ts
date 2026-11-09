@@ -12,6 +12,7 @@ import { appendDecision, decisionCall } from "../decision-log.ts";
 import { deliverableNotification } from "../notify.ts";
 import { choiceQuestionMismatch } from "../../shared/notification-context.ts";
 import { questionNotificationWords } from "./question-notification-words.ts";
+import { questionCardTitle } from "../approvals/approval-words.ts";
 import {
   customRuleCandidate,
   serverHome,
@@ -96,6 +97,8 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
       const questions = event.questions?.length ? event.questions : undefined;
       // One generator for the card and its push (shared/approval-describe.ts):
       // "Allow the bot to run a command?" and one plain line, never a raw id.
+      // #3080: the question card's title is in the person's language
+      const questionTitle = (): string => { try { return questionCardTitle(host.languageOfPerson(cardAnswerer)) || "Your bot has a question"; } catch { return "Your bot has a question"; } };
       const plainWords = permission ? host.serverApprovalWords(host.languageOfPerson(cardAnswerer)) : undefined;
       const declaredProduct = permission ? host.declaredToolProduct(asker?.id, event.mcpTool ?? event.tool ?? "", event.input) : undefined;
       const plain = plainWords ? approvalPlain({ botName: asker?.name, tool: event.mcpTool ?? event.tool, toolInput: event.input, detail: event.summary, ...(declaredProduct ? { hints: declaredProduct } : {}) }, plainWords) : undefined;
@@ -127,12 +130,12 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
           // full-access: question
           const settled = pushMessage({
             role: "bot", kind: "options",
-            card: { title: "Your bot has a question", subtitle: choice.question, options: choice.options, requestType: "question", answered: "answer", answeredText: answered.choice, autoApplied: true },
+            card: { title: questionTitle(), subtitle: choice.question, options: choice.options, requestType: "question", answered: "answer", answeredText: answered.choice, autoApplied: true },
           });
           void (async () => {
             const outcome = instance ? await instance.adapter.respondToRequest(event.threadId, requestId, { behavior: "answer", message: answered.choice }).catch(() => "unavailable" as const) : "unavailable";
             if (outcome !== "answered") {
-              host.store.patchMessage(event.threadId, settled.id, { card: { title: "Your bot has a question", subtitle: choice.question, options: choice.options, requestType: "question", expired: true } });
+              host.store.patchMessage(event.threadId, settled.id, { card: { title: questionTitle(), subtitle: choice.question, options: choice.options, requestType: "question", expired: true } });
               pushMessage({ role: "bot", kind: "activity", tool: { name: "Full access could not deliver the answer to the engine; retry the task after reconnecting.", ok: false } });
               return;
             }
@@ -179,7 +182,7 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
               ? "Local computer approval"
               : permission
                 ? "Approval needed"
-                : "Your bot has a question",
+                : questionTitle(),
           subtitle: event.summary,
           options: event.choices?.length ? event.choices : permission ? ["Allow", "Deny"] : [],
           requestId: event.requestId,

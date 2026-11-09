@@ -35,6 +35,8 @@ interface BotLike {
   name: string;
   threadId: string;
   systemBot?: "feedback";
+  /** Every thread the bot has (one per person), for the card sweep (#3081). */
+  tasks?: ReadonlyArray<{ threadId: string }>;
 }
 
 /** The slice of the server store the service uses. */
@@ -529,8 +531,22 @@ export function createFeedbackService(deps: FeedbackDeps) {
   }
 
   /** Retry the queue and read filed issues' status back (every 5 minutes). */
+  /** #3081: every thread of the Feedback bot, not only those that still have
+   * a report record: a card whose report is gone from disk sits in a thread
+   * nothing else would sweep. Runs at startup and on every tick. */
+  function sweepOrphanCards(): void {
+    for (const bot of store.bots) {
+      if (bot.systemBot !== "feedback") continue;
+      const threads = new Set<string>([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)]);
+      for (const threadId of threads) {
+        try { retireStaleCards(threadId); } catch { /* the next sweep */ }
+      }
+    }
+  }
+
   let swept = false;
   async function tick(): Promise<void> {
+    sweepOrphanCards();
     // #3018: drafts left unfinished expire; cards left behind by earlier
     // versions (one per reopened flow) are retired once after a start.
     const stale = new Set<string>();
@@ -595,6 +611,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     answerCard,
     maybeOffer,
     tick,
+    sweepOrphanCards,
     list,
     flush: async () => { await Promise.all(pending); },
   };

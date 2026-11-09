@@ -20,3 +20,9 @@ export function serverApprovalWords(language?: string, env: NodeJS.ProcessEnv = 
     },
   };
 }
+
+/** #3080: the title of a question card (ask_choice) in the person's language,
+ * as the MCP payload and the phones show it as sent. */
+export function questionCardTitle(language?: string, env: NodeJS.ProcessEnv = process.env): string {
+  return serverApprovalWords(language, env).t("question.card.title");
+}

@@ -137,8 +137,8 @@ describe("ShareBotButton", () => {
     expect(markup).toMatch(/placeholder="Add people or groups"[^>]*data-bot-share-search|data-bot-share-search[^>]*placeholder="Add people or groups"/);
     expect(markup).toContain('title="Search by name, login or email"');
     expect(markup).toContain("Who has access");
-    // the organization: its name, its initials, the word for its access
-    expect(markup).toMatch(/data-bot-share-org[^>]*>.*>EO<.*Example Org.*>Shared</);
+    // a grant to a person or a team never makes the organization a row
+    expect(markup).not.toContain("data-bot-share-org");
     // the owner first, then each grant
     expect(markup).toMatch(new RegExp(`data-grant="user:${OWNER}"[^>]*data-bot-share-owner|data-bot-share-owner[^>]*data-grant="user:${OWNER}"`));
     expect(markup).toMatch(/data-bot-share-owner[^>]*>.*Alice Example.*alice · alice@example\.test.*>Owner</);
@@ -158,18 +158,23 @@ describe("ShareBotButton", () => {
     }
   });
 
-  it("names the organization by default and says the bot is private when nobody holds a grant", () => {
+  it("draws no organization row when nobody holds a grant either", () => {
     fixture.org = null;
     const markup = render(true, { rows: [] });
-    expect(markup).toMatch(/data-bot-share-org[^>]*>.*Your organization.*>Private</);
+    expect(markup).not.toContain("data-bot-share-org");
     expect(markup).toContain("Not shared with anyone yet.");
   });
 
-  it("shows the organization's visibility word when the server sends it", () => {
-    const visible = { ...bot, visibility: "everyone" } as Bot;
-    fixture.sharing = { directory, rows, administer: ownerRights, isOwner: true, mayShare: true };
-    const markup = renderToStaticMarkup(createElement(ShareBotButton, { bot: visible, open: true, onOpenChange: () => {} }));
-    expect(markup).toMatch(/data-bot-share-org[^>]*>.*>Everyone who can sign in</);
+  it("shows the organization row only when the access is organization-wide", () => {
+    const open = (visibility: unknown, org: unknown = fixture.org) => {
+      fixture.org = org;
+      fixture.sharing = { directory, rows, administer: ownerRights, isOwner: true, mayShare: true };
+      return renderToStaticMarkup(createElement(ShareBotButton, { bot: { ...bot, visibility } as Bot, open: true, onOpenChange: () => {} }));
+    };
+    expect(open("everyone")).toMatch(/data-bot-share-org[^>]*>.*>EO<.*Example Org.*>Everyone who can sign in</);
+    expect(open("admins")).toMatch(/data-bot-share-org[^>]*>.*Example Org.*>Admins only</);
+    expect(open("everyone", null)).toMatch(/data-bot-share-org[^>]*>.*Your organization/);
+    expect(open({ users: [BOB] })).not.toContain("data-bot-share-org");
   });
 
   it("lists matches with a level select and an Add pill, never a primary button", () => {

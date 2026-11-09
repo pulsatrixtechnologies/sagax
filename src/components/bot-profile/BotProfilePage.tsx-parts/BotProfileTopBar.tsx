@@ -1,16 +1,12 @@
 // The page's top bar (#2313, split from BotProfilePage for #1383): the close
-// button and who sees the bot stay put while the page scrolls, centred like
+// button and Share stay put while the page scrolls, centred like
 // the sidebar head's search and + circles. Grok Bot (JC 2026-11-08): the bar
 // floats over the banner, clear, so the banner and the mascot scroll away
 // under it whole; once the name has scrolled under it, the bar turns into a
 // blurred strip of the page's ground with the small mascot and the name.
 // Nothing is ever cut by an opaque coloured band.
-import { Lock, Users } from "lucide-react";
-
 import type { Bot } from "@/state/store";
-import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { CIRCLE_LABEL } from "@/lib/circle-button";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { BotAvatar } from "@/components/Avatar";
 import { splitBotNameTitle } from "../../bot-settings/bot-name-title";
@@ -28,10 +24,9 @@ export function BotProfileInsetStrip() {
   return <div aria-hidden="true" data-bot-profile-inset-strip="" className="content-topbar-strip h-9 shrink-0 bg-app" {...dragProps} />;
 }
 
-export function BotProfileTopBar({ bot, onClose, privateBot, shareShown, shareOpen, onShareOpenChange, condensed }: {
+export function BotProfileTopBar({ bot, onClose, shareShown, shareOpen, onShareOpenChange, condensed }: {
   bot: Bot;
   onClose: () => void;
-  privateBot: boolean;
   shareShown: boolean;
   shareOpen: boolean;
   onShareOpenChange: (open: boolean) => void;
@@ -73,13 +68,6 @@ export function BotProfileTopBar({ bot, onClose, privateBot, shareShown, shareOp
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2" style={controlsShiftStyle ?? noDragStyle}>
-        <span
-          data-bot-profile-visibility={privateBot ? "private" : "shared"}
-          className={CIRCLE_LABEL}
-        >
-          {privateBot ? <Lock size={14} strokeWidth={1.75} aria-hidden="true" /> : <Users size={14} strokeWidth={1.75} aria-hidden="true" />}
-          {privateBot ? t("botProfile.private") : t("botProfile.shared")}
-        </span>
         {/* Share (Grok Bot): the popover where the people and groups the
             bot is shared with are managed, the one place for it. */}
         {shareShown && <ShareBotButton bot={bot} open={shareOpen} onOpenChange={onShareOpenChange} />}

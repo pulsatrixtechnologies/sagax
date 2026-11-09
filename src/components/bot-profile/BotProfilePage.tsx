@@ -454,7 +454,6 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
     };
   }, []);
 
-  const privateBot = personaSharingSummary(bot) === t("botSettings.sharing.empty");
   // The banner is a wash of the mascot's colour (#2173, back after #2313):
   // its hex goes to the stylesheet as a variable; a neutral mascot keeps a
   // visible grey there. The banner scrolls with the page under the clear
@@ -511,7 +510,6 @@ function BotProfilePageView({ bot: propBot, section, onClose: closeNow }: BotPro
         <BotProfileTopBar
           bot={bot}
           onClose={onClose}
-          privateBot={privateBot}
           shareShown={shown("sharing")}
           shareOpen={shareOpen}
           onShareOpenChange={setShareOpen}

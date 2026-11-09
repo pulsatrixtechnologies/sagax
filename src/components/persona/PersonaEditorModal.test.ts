@@ -143,7 +143,7 @@ describe("bot profile page shell", () => {
     const html = render("overview");
     expect(html).toContain('data-bot-profile-placement="main"');
     expect(html).not.toContain("data-detail-panel");
-    expect(html).toContain('data-bot-profile-visibility="private"');
+    expect(html).not.toContain("data-bot-profile-visibility");
     expect(render("slack")).toContain("data-slack-logo");
     expect(html).toContain("data-bot-profile-page");
     expect(html).not.toContain('aria-modal="true"');
@@ -279,7 +279,7 @@ describe("bot profile page shell", () => {
     expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[760px\] flex-col px-4 pb-10 sm:px-6"/);
   });
 
-  it("regression (2026-11-08, « why is it cutting like that »): X and Private / Shared float on a clear sticky bar in the scroll, no opaque coloured band", () => {
+  it("regression (2026-11-08, « why is it cutting like that »): X and Share float on a clear sticky bar in the scroll, no opaque coloured band", () => {
     const html = render("overview");
     const scroll = at(html, 'data-bot-profile-scroll=""');
     const bar = at(html, "data-bot-profile-topbar");
@@ -290,7 +290,7 @@ describe("bot profile page shell", () => {
     expect(bar).toBeLessThan(banner);
     const barHtml = html.slice(bar, banner);
     expect(barHtml).toContain("data-window-close");
-    expect(barHtml).toContain("data-bot-profile-visibility");
+    expect(barHtml).not.toContain("data-bot-profile-visibility");
     const barTag = html.slice(html.lastIndexOf("<", bar), html.indexOf(">", bar) + 1);
     expect(barTag).toContain("sticky top-0");
     expect(barTag).toContain("bg-transparent");
@@ -355,7 +355,7 @@ describe("bot profile page shell", () => {
     expect(render("access")).toContain("No accounts connected to this bot yet.");
   });
 
-  it("draws the top bar's X and Private / Shared from the app's round header control, not a black disc", () => {
+  it("draws the top bar's X from the app's round header control, not a black disc", () => {
     const html = render("overview");
     const tagOf = (marker: string) => {
       const index = html.indexOf(marker);
@@ -364,9 +364,9 @@ describe("bot profile page shell", () => {
     const close = tagOf("data-window-close");
     for (const cls of CIRCLE_CLOSE_BUTTON.split(" ")) expect(close).toContain(cls);
     expect(close).toContain('aria-label="Close"');
-    const pill = tagOf("data-bot-profile-visibility");
-    for (const cls of CIRCLE_LABEL.split(" ")) expect(pill).toContain(cls);
-    for (const tag of [close, pill]) {
+    const share = tagOf("data-bot-profile-share");
+    for (const cls of CIRCLE_LABEL.split(" ")) expect(share).toContain(cls);
+    for (const tag of [close, share]) {
       expect(tag).not.toContain("bg-black");
       expect(tag).not.toContain("text-white");
     }

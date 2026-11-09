@@ -14138,8 +14138,6 @@
   "botProfile.memoryPage": "Open the Memory page",
   "botProfile.channel.email": "Email",
   "botProfile.tab.appearance": "Appearance",
-  "botProfile.private": "Private",
-  "botProfile.shared": "Shared",
   "connectApps.add": "Add",
   "connectApps.addCustomConnector": "Add a custom connector",
   "connectApps.backTo": "Back to {name}",

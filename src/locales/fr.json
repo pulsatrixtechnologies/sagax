@@ -14139,8 +14139,6 @@
   "botProfile.memoryPage": "Ouvrir la page Mémoire",
   "botProfile.channel.email": "Courriel",
   "botProfile.tab.appearance": "Apparence",
-  "botProfile.private": "Privé",
-  "botProfile.shared": "Partagé",
   "connectApps.add": "Ajouter",
   "connectApps.addCustomConnector": "Ajouter un connecteur personnalisé",
   "connectApps.backTo": "Retour à {name}",

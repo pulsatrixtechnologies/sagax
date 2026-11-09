@@ -3,6 +3,7 @@
 // around a published page (src/page-reader/). Pure: no store, no i18n, so
 // the reader's small bundle carries only this.
 import type { OrgDirectory } from "@/lib/perspicax-org";
+import { showPrivateConversationHint } from "@/lib/private-threads";
 import type { PageAccess, PageInvites, PublishedPageSummary } from "../../shared/published-pages";
 
 export interface ShareStep {
@@ -92,4 +93,19 @@ export function teamCandidates(teams: NonNullable<OrgDirectory["teams"]>, invite
 /** Initials for an avatar without a picture. Pure. */
 export function initialsOf(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join("") || "?";
+}
+
+/** #3194: the "In the bot's Library" choice (personal page or shared page)
+ * only means something when several people use the bot: an organization
+ * server and a bot someone else owns or its owner shared. On a solo bot it is
+ * hidden, never greyed. A page already shared stays switchable. */
+export function showBotLibraryChoice(input: {
+  page: Pick<PublishedPageSummary, "botShared">;
+  org: boolean;
+  viewerId: string;
+  bot: { ownerUserId?: string; grants?: readonly unknown[]; directGrants?: readonly unknown[] } | undefined;
+}): boolean {
+  if (input.page.botShared === true) return true;
+  if (!input.bot) return false;
+  return showPrivateConversationHint({ org: input.org, viewerId: input.viewerId, bot: input.bot });
 }

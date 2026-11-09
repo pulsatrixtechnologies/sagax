@@ -110,7 +110,8 @@ it("applies the owner's own settings at once, holds the sensitive ones on a card
     const memberComms = await turn(helper.id, helper.threadId, "Turn on tool calls for everyone.", member);
     expect(memberComms).not.toBe(comms);
     const refused = await settings(memberComms, { action: "set", key: "server.showToolCalls", value: false }, 403);
-    expect(refused.error).toContain("rights they do not have");
+    expect(refused.error).toContain("needs an administrator of the organization");
+    expect(refused.error).toContain("This refusal is final");
     expect((await journal()).filter((row) => row.changed[0] === "server.showToolCalls")).toHaveLength(1);
   } finally {
     await fixture.close();

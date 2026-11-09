@@ -279,6 +279,23 @@ function text(status: number, body: string): BotActResult {
   return status >= 400 ? { status, body: { error: body } } : { status, body: { text: body } };
 }
 
+/** #3091: a failed sagax_settings call says plainly whether calling again can
+ * help, or the model repeats the same call until the loop guard stops the
+ * turn. A refusal that already says so is left as it is. */
+export function finalRefusal(result: BotActResult): BotActResult {
+  if (result.status < 400) return result;
+  const said = String(result.body.error ?? result.body.text ?? "").trim();
+  if (/\b(?:do not retry|refusal is final)\b/i.test(said)) return result;
+  const note = result.status === 400 || result.status === 422
+    ? "Do not send this same call again: fix the key, target or value named above (action list shows them), or continue without this setting."
+    : result.status === 401 || result.status === 403
+      ? "This refusal is final: do not retry this call or a variant of it. Say in your answer or report that this setting could not be read or changed, and continue without it."
+      : result.status === 404
+        ? "This refusal is final: that record does not exist for this person. Do not retry it; continue without it."
+        : "This setting could not be reached now. Do not retry it in this turn: say so in your answer or report and continue without it.";
+  return { ...result, body: { ...result.body, error: said ? `${said} ${note}` : note } };
+}
+
 function listText(family: unknown): string {
   const families = typeof family === "string" && (SETTING_FAMILIES as readonly string[]).includes(family) ? [family] : SETTING_FAMILIES;
   const lines: string[] = [];
@@ -753,5 +770,5 @@ export function createSettingsActions(deps: SettingsActionDeps) {
     return failed === ids.length ? text(400, [head, ...lines].join("\n")) : text(200, [head, ...lines].join("\n"));
   }
 
-  return { handle: handleMany };
+  return { handle: async (input: SettingsActionInput) => finalRefusal(await handleMany(input)) };
 }

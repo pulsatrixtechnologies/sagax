@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** botActs (#1388). Pure move from server/index.ts. */
 import { createBotActService } from "../bots/bot-act.ts";
-import { requiredScope } from "../auth/request-auth.ts";
+import { requiredScope, routePermissions } from "../auth/request-auth.ts";
 export type Host = Record<string, any>;
 
 export function createBotActs(getHost: () => Host): any {
@@ -26,6 +26,24 @@ function botActs() {
       const admin = live.find((session) => session.scopes.includes("admin"));
       const picked = admin ?? live[0];
       return picked ? { id: picked.id, scopes: [...picked.scopes] } : null;
+    },
+    // #3091: a signed-out owner's routine acts with the owner's own standing:
+    // an organization admin keeps admin, a member keeps client and the
+    // routes their permissions open (PERMISSION_ROUTES), as on their screen.
+    ownerScopes: (key) => {
+      if (host.IDENTITY.kind !== "perspicax") return null;
+      const person = host.principals.byId(key);
+      if (!person || person.disabledAt !== undefined || person.consoleDisabled) return null;
+      return person.orgRole === "admin" ? ["admin", "client"] : ["client"];
+    },
+    permits: (key, method, path) => {
+      const grants = routePermissions(method, path, {
+        sharedComputers: sharedComputersEnabled(host.cfg),
+        orgPairing: host.IDENTITY.kind === "perspicax",
+        orgDirectory: host.IDENTITY.kind === "perspicax",
+        serverCatalogue: host.IDENTITY.kind !== "perspicax"
+      });
+      return Boolean(grants?.some((permission) => host.sessionPermits({ principalId: key }, permission)));
     },
     performRoute: host.performBotActRouteOutsideConfidential,
     broadcastUi: (audience, command, input) => {

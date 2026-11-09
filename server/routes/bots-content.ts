@@ -132,10 +132,11 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
       return !listSkills(botId).some((skill) => skill.name === name);
     };
 
-    // Bot skills and skill-template: owner / manage / admin for changes.
-    // skills-library assignment on a bot keeps the original (no refusal call).
+    // Bot skills, skill-template and library skill assignment: owner /
+    // manage / admin for changes (#3091: the assignment is open to a member
+    // for their own bot, so it takes the same refusal).
     {
-      const skillRoute = /^\/api\/bots\/([\w-]+)\/(?:skill-template|skills(?:\/[a-z0-9-]+(?:\/(?:review|files|history(?:\/restore)?))?)?)$/.exec(path);
+      const skillRoute = /^\/api\/bots\/([\w-]+)\/(?:skill-template|skills(?:\/[a-z0-9-]+(?:\/(?:review|files|history(?:\/restore)?))?)?|skills-library)$/.exec(path);
       if (skillRoute) {
         const refused = botSkillsRefusal(auth, skillRoute[1]!, method !== "GET");
         if (refused) return json(res, refused.status, refused.body);

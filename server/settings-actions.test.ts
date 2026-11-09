@@ -4,7 +4,7 @@ import type { TurnFacts } from "../shared/bot-act.ts";
 import type { BotActService } from "./bots/bot-act.ts";
 import { sagaxInternalTool } from "./sagax-internal-tools.ts";
 import { SETTINGS } from "../shared/settings-actions.ts";
-import { createSettingsActions, settingStepUpClasses, type SettingsActionDeps } from "./settings-actions.ts";
+import { createSettingsActions, finalRefusal, settingStepUpClasses, type SettingsActionDeps } from "./settings-actions.ts";
 
 const PERSON: TurnFacts = { automation: false, guest: false, requestUsable: true, senderUnproven: false, provenPerson: "pr_owner", sharedServer: true };
 
@@ -157,6 +157,17 @@ describe("sagax_settings", () => {
     const result = await harness({ routeStatus: 403 }).call({ action: "set", key: "bot.name", value: "Owl" });
     expect(result.status).toBe(403);
     expect(result.body.error).toContain("forbidden");
+    // #3091: the refusal tells the model it is final, so a routine does not loop on it
+    expect(result.body.error).toContain("This refusal is final: do not retry");
+  });
+
+  it("#3091: every failure says whether to retry, and a note is never added twice", () => {
+    expect(String(finalRefusal({ status: 404, body: { error: "No bot b9." } }).body.error)).toContain("does not exist");
+    expect(String(finalRefusal({ status: 422, body: { error: "Bad value." } }).body.error)).toContain("Do not send this same call again");
+    expect(String(finalRefusal({ status: 502, body: { error: "Upstream." } }).body.error)).toContain("Do not retry it in this turn");
+    const once = finalRefusal({ status: 403, body: { error: "No. This refusal is final: do not retry this call." } });
+    expect(String(once.body.error).match(/refusal is final/g)).toHaveLength(1);
+    expect(finalRefusal({ status: 200, body: { text: "ok" } })).toEqual({ status: 200, body: { text: "ok" } });
   });
 
   it("refuses a routine or webhook turn, an unknown key and a value of the wrong kind, with what to do", async () => {

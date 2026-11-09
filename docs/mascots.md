@@ -410,6 +410,7 @@ store on `mascotLook.avatarDef`. Bodies never render disassembled
 | Phone | `ios/Sources/CompanionCore/ShapeEngine*.swift`, `ShapeMascotView.swift` |
 | Screenshots | `docs/screenshots/shapes`, `docs/screenshots/shape-engine-v2` |
 | Say and sprout fix (#2981): before/after, rest and orbit move | `docs/screenshots/shapes-say-sprout` |
+| Sprout restored and say mascot look (#3104): before main and after, rest and move | `docs/screenshots/shapes-regression-2026-11-09` |
 
 ## HD mascots (painted art, pilot: Shiba)
 

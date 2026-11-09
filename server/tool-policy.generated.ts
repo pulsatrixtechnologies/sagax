@@ -466,7 +466,6 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]{1,80})\\/remote-sessions$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)(?:\\/(always-allow|model))?$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)(?:\\/|$)","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
-  {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/(?:skill-template|skills(?:\\/[a-z0-9-]+(?:\\/(?:review|files|history(?:\\/restore)?))?)?)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/(?:skill-template|skills(?:\\/[a-z0-9-]+(?:\\/(?:review|files|history(?:\\/restore)?))?)?|skills-library)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/(cards\\/[\\w-]+\\/role-transition|roles(?:\\/[\\w/-]*)?)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/(links|files|export)$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},

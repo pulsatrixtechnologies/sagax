@@ -249,6 +249,10 @@ const BODY_AIMED = new Set(["POST /api/routines", "POST /api/groups", "POST /api
 const FOREIGN_OTHER: Record<string, { statuses: number[]; why: string }> = {
   "GET /api/people/{person}/avatar": { statuses: [200, 204], why: "a colleague's photo is public inside the organization" },
   "GET /api/bot-catalog/{bot}": { statuses: [200], why: "Browse Bots answers for any id; checked for B's private marker like every answer" },
+  // #3096: the person panel's Library lists only the files of the rooms the
+  // caller shares with that person and reads (routes/person-library.ts), so a
+  // foreign probe answers an empty list, never one of B's own files.
+  "GET /api/people/{person}/library": { statuses: [200], why: "only the rooms A and B share; checked for B's private marker like every answer" },
 };
 
 /** Writes a person with `use` makes on a shared bot (authz.ts: see it, open

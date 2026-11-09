@@ -121,7 +121,8 @@ const WORDS = {
     previewTitle: "Envoyer ce signalement?",
     previewSubtitle: "Écrivez un détail pour l'ajouter, ou envoyez tel quel. La capture d'écran reste sur le serveur.",
     cancelled: "Annulé : rien n'a été envoyé.",
-    queuedNoToken: "En file d'attente : signalement prêt et gardé ici : l'envoi à l'équipe n'est pas encore configuré sur ce serveur. Je réessaie toutes les 5 minutes.",
+    queuedNoToken: (manual: string) => `En file d'attente : signalement prêt et gardé ici. Ce serveur n'a pas de jeton GitHub pour l'envoyer à l'équipe : un administrateur du serveur doit définir la variable SAGAX_FEEDBACK_GITHUB_TOKEN (ou l'enregistrer par PUT /api/admin/feedback-config). Je réessaie toutes les 5 minutes. En attendant, vous pouvez ${manual}.`,
+    manualLink: (url: string) => `[ouvrir le signalement sur GitHub](${url}) vous-même (il est déjà rempli)`,
     queuedError: "L'envoi n'a pas passé pour l'instant; le signalement est gardé ici et je réessaie automatiquement.",
     sent: (link: string) => `Envoyé à l'équipe : ${link}. Je vous tiens au courant ici.`,
     duplicate: (link: string) => `Un signalement semblable est déjà ouvert (${link}) : j'y ai ajouté le vôtre.`,
@@ -135,7 +136,8 @@ const WORDS = {
     previewTitle: "Send this report?",
     previewSubtitle: "Type a detail to add it, or send it as is. The screenshot stays on the server.",
     cancelled: "Cancelled: nothing was sent.",
-    queuedNoToken: "Queued: report ready and kept here: sending to the team is not set up on this server yet. I retry every 5 minutes.",
+    queuedNoToken: (manual: string) => `Queued: report ready and kept here. This server has no GitHub token to send it to the team: a server admin must set the SAGAX_FEEDBACK_GITHUB_TOKEN environment variable (or save it with PUT /api/admin/feedback-config). I retry every 5 minutes. Meanwhile you can ${manual}.`,
+    manualLink: (url: string) => `[open the report on GitHub](${url}) yourself (it is already filled in)`,
     queuedError: "Sending did not go through for now; the report is kept here and I retry on my own.",
     sent: (link: string) => `Sent to the team: ${link}. I'll keep you posted here.`,
     duplicate: (link: string) => `A similar report is already open (${link}): I added yours to it.`,
@@ -144,6 +146,14 @@ const WORDS = {
     resolved: (link: string) => `Resolved (${link}). Thanks for the report!`,
   },
 } as const;
+
+/** A pre-filled "new issue" page: the fallback that needs no server token. */
+export function manualIssueUrl(repo: string, report: { title: string; body: string; labels?: readonly string[] }): string {
+  const body = report.body.length > 5000 ? `${report.body.slice(0, 4999)}…` : report.body;
+  const query = new URLSearchParams({ title: report.title, body });
+  if (report.labels?.length) query.set("labels", report.labels.join(","));
+  return `https://github.com/${repo}/issues/new?${query.toString()}`;
+}
 
 function newReportId(): string {
   return `fb${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -341,7 +351,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
     if (!target) {
       record.status = "queued";
       record.nextTryAt = now() + RETRY_MS;
-      if (!record.queuedNoticed) postStatus(record, words.queuedNoToken);
+      if (!record.queuedNoticed) postStatus(record, words.queuedNoToken(words.manualLink(manualIssueUrl(deps.config().repo, record.report!))));
       record.queuedNoticed = true;
       save();
       return;

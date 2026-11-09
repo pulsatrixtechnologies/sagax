@@ -117,6 +117,17 @@ describe("feedback service (#2618)", () => {
     expect(existsSync(join(dataDir, "feedback", "reports.json"))).toBe(true);
   });
 
+  it("names the missing variable and offers a pre-filled GitHub issue link when no token is set (#3201)", async () => {
+    const { service, store } = setup();
+    const started = service.start("p1", { source: "menu", platform: "web", locale: "en" });
+    for (const answer of ["A question", "How do I share a bot with my whole team?", "Send"]) say(service, started.botId, started.threadId, answer);
+    await service.flush();
+    const text = store.threads.get(started.threadId)!.at(-1)?.text ?? "";
+    expect(text).toContain("SAGAX_FEEDBACK_GITHUB_TOKEN");
+    expect(text).toContain("https://github.com/acme/app/issues/new?title=");
+    expect(text).not.toContain("not set up on this server yet");
+  });
+
   it("exposes the Send card as an answerable question card and settles it", async () => {
     const { service, store } = setup();
     const started = service.start("p1", { source: "menu", platform: "web", locale: "fr" });

@@ -13,7 +13,9 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
     env.json(env.res, 400, { error: "threadId goes with modelSelection" });
     return true;
   }
-  if (rawSelection !== undefined) requirePinnedClientThread(env, m[1], body.threadId);
+  // #3033: the agent API (update_agent_model) changes the bot's default for
+  // every conversation and says so with botWide; the app keeps the #1674 guard.
+  if (rawSelection !== undefined && (body as Record<string, unknown>).botWide !== true) requirePinnedClientThread(env, m[1], body.threadId);
   const selectedTask = existingBot ? env.requestedTaskBot(existingBot.id, body.threadId) : null;
   const beforeProfile = existingBot ? env.profileSnapshot(existingBot) : undefined;
   const beforeVisibility = existingBot?.visibility;

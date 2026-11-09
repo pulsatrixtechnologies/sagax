@@ -30174,7 +30174,8 @@ const agentApi = createAgentApi({
     const patched = await performAsMember(memberForAgentCaller(caller), {
       method: "PATCH",
       path: `/api/bots/${encodeURIComponent(agentId)}`,
-      body: { modelSelection },
+      // #3033: bot-wide by design, so no conversation is named.
+      body: { modelSelection, botWide: true },
     });
     if (patched.status >= 300) {
       const message = String((patched.body as { error?: unknown; message?: unknown })?.error

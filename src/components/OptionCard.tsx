@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, useStore, visibleMessages, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { questionCardTitle } from "@/lib/question-card-title";
 import { isPersistentQuestionCard, parseChoices } from "../../shared/ask-question";
 import { otherChoiceIndex } from "../../shared/other-choice";
 import { returnFocusToComposer } from "./AskCard";
@@ -67,7 +68,7 @@ export function OptionCard({
     ? (card.terminalRequest.destinations ?? []).find((choice) => terminalDestinationKey(choice) === (terminalPick || terminalDestinationKey(card.terminalRequest!)))
     : undefined;
   // A terminal card names the destination picked right now, in the app's language.
-  const title = terminalPicked ? t("terminal.card.title", { destination: terminalDestinationLabel(terminalPicked) }) : card.title;
+  const title = terminalPicked ? t("terminal.card.title", { destination: terminalDestinationLabel(terminalPicked) }) : questionCardTitle(card);
   const subtitle = card.subtitle;
   // Cards saved before the server flattened `ask_user` choices can still hold
   // `{ label }` rows; a label is drawable, an object as a React child is not.

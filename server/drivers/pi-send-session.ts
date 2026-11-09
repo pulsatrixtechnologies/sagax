@@ -77,19 +77,19 @@ export async function runPiSession(ctx: PiSendCtx): Promise<void> {
       ctx.send({ type: "set_model", provider: chosen.provider, modelId: chosen.modelId });
       await modelPromise;
     } catch (err) {
-      // A local model pi cannot reach is never replaced by pi's default
+      // A model pi cannot switch to is never replaced by pi's default
       // model: that one bills a provider the person did not pick (on
       // 2026-10-27 a computer-shared model ran on an xAI key instead, and
-      // its spent credits read as a usage limit).
-      if (isLocalModelId(turn.model)) {
-        const reason = String((err as Error)?.message ?? err).slice(0, 300);
-        const message = `pi could not switch to the local model ${chosen.modelId}, so it did not answer on another model. Check that the computer that serves it is online and shares it, then try again. (pi said: "${reason}")`;
-        if (ctx.stdinClosed) return ctx.failTurn(message);
-        emit({ ...base(threadId, turnId), type: "runtime.error", message });
-        ctx.settle(false);
-        throw new Error(message);
-      }
-      /* a hosted pick keeps going on the default model */
+      // its spent credits read as a usage limit; #3079: an OpenRouter pick
+      // failed with an xAI "Incorrect API key").
+      const reason = String((err as Error)?.message ?? err).slice(0, 300);
+      const message = isLocalModelId(turn.model)
+        ? `pi could not switch to the local model ${chosen.modelId}, so it did not answer on another model. Check that the computer that serves it is online and shares it, then try again. (pi said: "${reason}")`
+        : `pi could not switch to the model ${chosen.modelId} on ${chosen.provider}, so it did not answer on another model. Check that a ${chosen.provider} key is set for this bot's provider, then try again. (pi said: "${reason}")`;
+      if (ctx.stdinClosed) return ctx.failTurn(message);
+      emit({ ...base(threadId, turnId), type: "runtime.error", message });
+      ctx.settle(false);
+      throw new Error(message);
     }
   }
 

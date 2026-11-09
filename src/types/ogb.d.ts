@@ -261,6 +261,12 @@ const __BASE_VERSION__: string;
       };
       confirm(message: string): Promise<boolean>;
       getCapabilities(): Promise<DesktopCapabilities>;
+      /** The sidebar and open conversation as last shown (electron/ui-snapshot.mjs). */
+      uiSnapshot?: {
+        read(): Promise<string | null>;
+        write(text: string): Promise<boolean>;
+        clear(): Promise<void>;
+      };
       onCapabilitiesChanged(cb: (capabilities: DesktopCapabilities) => void): () => void;
       remoteClient?: {
         active: boolean;

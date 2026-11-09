@@ -1416,6 +1416,10 @@ export interface AppState {
   disconnectedAt: number | null;
   /** Bots and rooms have loaded once: a link opened at launch can resolve. */
   hydrated?: true;
+  /** Bots and rooms are this computer's stored snapshot of the last launch
+   * (src/lib/ui-snapshot.ts), drawn until the server's own replaces them:
+   * read only, never merged into it, and the window takes no input. */
+  provisional?: true;
   error: string | null;
   /** a quiet, non-error line above the transcript; clears itself */
   notice: { kind: "thread-gone" | "bot-gone" | "steer-images"; botName: string | null } | null;
@@ -1528,6 +1532,8 @@ export function replaceBotQueues(state: AppState, queues: AppState["pendingQueue
 export type BotAnnouncement = Omit<Bot, "messages"> & { messages?: Message[] };
 
 export type Action =
+  /** A launch that waited too long for the server drops the stored drawing. */
+  | { type: "provisionalExpired" }
   | {
       type: "hydrate";
       bots: Bot[];

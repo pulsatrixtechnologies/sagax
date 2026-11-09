@@ -6,9 +6,18 @@ import {fallbackSelection, selectionListed} from "@/lib/selection-fallback";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
 
-export function reduceHydrate(state: AppState, action: Action, _reduce: ReduceFn): AppState | undefined {
+export function reduceHydrate(state: AppState, action: Action, reduce: ReduceFn): AppState | undefined {
   switch (action.type) {
+    case "provisionalExpired":
+      return state.provisional
+        ? { ...state, provisional: undefined, bots: [], groups: [], sections: [], selectedId: "" }
+        : state;
     case "hydrate": {
+      // A stored drawing (ui-snapshot.ts) is replaced, never merged: none of
+      // its stamps, selection or rows outlive the server's snapshot.
+      if (state.provisional) {
+        return reduce({ ...state, provisional: undefined, bots: [], groups: [], sections: [], selectedId: "" }, action);
+      }
       // A snapshot with a missing list (a gallery page whose /api/bots is not
       // answered, an older server) hydrates as an empty one, never a crash.
       const snapshotBots = action.bots ?? [];

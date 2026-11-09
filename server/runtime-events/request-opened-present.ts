@@ -13,6 +13,7 @@ import { deliverableNotification } from "../notify.ts";
 import { choiceQuestionMismatch } from "../../shared/notification-context.ts";
 import { questionNotificationWords } from "./question-notification-words.ts";
 import { questionCardTitle } from "../approvals/approval-words.ts";
+import { lastPersonText, turnLanguage } from "../turns/turn-language.ts";
 import {
   customRuleCandidate,
   serverHome,
@@ -98,7 +99,14 @@ export function presentRequestOpened(event: any, ctx: any, host: any, s: any): v
       // One generator for the card and its push (shared/approval-describe.ts):
       // "Allow the bot to run a command?" and one plain line, never a raw id.
       // #3080: the question card's title is in the person's language
-      const questionTitle = (): string => { try { return questionCardTitle(host.languageOfPerson(cardAnswerer)) || "Your bot has a question"; } catch { return "Your bot has a question"; } };
+      // #3150: in the conversation's language (the person's last line there,
+      // an MCP prompt included), the person's own setting only when that line
+      // does not tell: a French prompt from an English-set client got English.
+      const questionTitle = (): string => {
+        try {
+          return questionCardTitle(questionCardLanguage(host.store.messagesFor(event.threadId), host.languageOfPerson(cardAnswerer))) || "Your bot has a question";
+        } catch { return "Your bot has a question"; }
+      };
       const plainWords = permission ? host.serverApprovalWords(host.languageOfPerson(cardAnswerer)) : undefined;
       const declaredProduct = permission ? host.declaredToolProduct(asker?.id, event.mcpTool ?? event.tool ?? "", event.input) : undefined;
       const plain = plainWords ? approvalPlain({ botName: asker?.name, tool: event.mcpTool ?? event.tool, toolInput: event.input, detail: event.summary, ...(declaredProduct ? { hints: declaredProduct } : {}) }, plainWords) : undefined;
@@ -394,4 +402,10 @@ export function nativeChoiceMismatch(event: any, questions: any[] | undefined, p
   }
   const choices = Array.isArray(event.choices) ? event.choices.map(String).filter(Boolean) : [];
   return choices.length >= 2 ? choiceQuestionMismatch(String(event.summary ?? ""), choices) : undefined;
+}
+
+/** #3150: the language a question card's title is worded in: the language
+ * of the person's last line in the conversation, else their own setting. */
+export function questionCardLanguage(messages: readonly { role?: string; kind?: string; text?: string }[] | undefined, preferred: string | null | undefined): string {
+  return turnLanguage(lastPersonText(messages ?? []), preferred);
 }

@@ -263,6 +263,10 @@ enum IPadParityScreen: String, CaseIterable {
     case settingsImport = "settings-import"
     case sidebarSelect = "sidebar-select"
     case computerWindow = "computer-window"
+    /// Helix's coding task where the chat is (round 8, #3147).
+    case coding = "coding"
+    /// The Edit bot page opened from the sidebar, the panel closed.
+    case botEdit = "bot-edit"
 
     /// Accepts the id, or a capture file stem ("03-main", "desktop-1366x1024-03-main").
     init?(argument: String) {
@@ -285,7 +289,7 @@ enum IPadParityScreen: String, CaseIterable {
         case .mainCompact, .mainCollapsed, .mainThreads, .sidebarRowHover, .sidebarBotMenu,
              .sidebarBotContextMenu, .sidebarSectionMenu, .sidebarProfileMenu, .sidebarNewMenu, .newGroup: true
         default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts || self == .aboutDialog || self == .releaseNotesDialog
-            || self == .sidebarSelect || self == .computerWindow || self == .newBot || self == .noticeThreadGone || self == .groupPanel
+            || self == .sidebarSelect || self == .computerWindow || self == .coding || self == .botEdit || self == .newBot || self == .noticeThreadGone || self == .groupPanel
             || self == .onboardingWelcome || self == .onboardingTour
         }
     }
@@ -308,7 +312,7 @@ enum IPadParityScreen: String, CaseIterable {
 
     /// The persona editor is open on this surface (`panel-more` and its
     /// sections keep their ids from when it was the More tab).
-    var opensPersonaEditor: Bool { self == .panelMore || panelSection != nil }
+    var opensPersonaEditor: Bool { self == .panelMore || self == .botEdit || panelSection != nil }
 
     /// The persona editor section open on a `panel-more-<section>` surface
     /// (the section's id in kebab case: `panel-more-works-on` is worksOn).

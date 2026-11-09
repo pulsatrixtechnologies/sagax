@@ -342,7 +342,9 @@ final class BotPanelDetailsUITests: XCTestCase {
         XCTAssertTrue(element("bot-usage-empty", in: app).waitForExistence(timeout: 10) || element("bot-usage-turns", in: app).exists, "the usage section shows")
         let navBack = app.navigationBars.buttons.element(boundBy: 0)
         if navBack.exists { navBack.tap() } else { element("profile-back", in: app).tap() }
-        // then Voice
+        // then Voice, under General > More (Usage moved to Stats, #3017)
+        let general = element("bot-profile-tab.general", in: app)
+        if general.waitForExistence(timeout: 10) { general.tap() }
         let voice = element("bot-profile-settings.voice", in: app)
         for _ in 0..<10 where !(voice.exists && voice.isHittable) { app.swipeUp() }
         XCTAssertTrue(voice.waitForExistence(timeout: 10))

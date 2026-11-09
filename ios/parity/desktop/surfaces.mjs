@@ -438,6 +438,13 @@ add({ id: "settings-general-scrolled", phase: "main", note: "Settings > General,
     if (skip) return skip;
     await ctx.eval(`(() => { for (const el of document.querySelectorAll("[role=dialog] *")) { if (el.scrollHeight > el.clientHeight + 20 && getComputedStyle(el).overflowY !== "visible") el.scrollTop = el.scrollHeight; } return true; })()`);
   } });
+// IPadParityScreen.settingsDeveloperScrolled: Settings > Developer, scrolled to the end.
+add({ id: "settings-developer-scrolled", phase: "main", note: "Settings > Developer, scrolled to the end",
+  open: async (ctx) => {
+    const skip = await openSettingsOrSkip(ctx, "developer");
+    if (skip) return skip;
+    await ctx.eval(`(() => { for (const el of document.querySelectorAll("[role=dialog] *")) { if (el.scrollHeight > el.clientHeight + 20 && getComputedStyle(el).overflowY !== "visible") el.scrollTop = el.scrollHeight; } return true; })()`);
+  } });
 
 // I-sync (current renderer): appended so the earlier numbers stay put.
 // Library's Skills and Plugins views (LibraryTab.tsx), and Settings > My
@@ -602,6 +609,35 @@ add({ id: "computer-window", phase: "main", noShell: true, note: "the bot's comp
     await ctx.page.send("Page.navigate", { url: `${origin}/src/gallery/computer-screens.html?modal=sandbox&lang=en` });
     await ctx.sleep(2500);
     await ctx.waitFor(`Boolean(document.querySelector("[data-sandbox-takeover]"))`, { timeoutMs: 15_000 });
+  } });
+
+// Round 8 (#3147). Helix's coding task (fixture-server.mjs CODING_TITLE):
+// its row in the panel's Activity opens the coding chat where the chat is
+// (ActivitySection.tsx openCodingChat).
+const CODING_TITLE = "Corriger la redirection de connexion";
+add({ id: "coding", phase: "main", note: "coding chat: Helix's coding task opened from the bot panel's Activity, in place of the chat (CodingChat.tsx)",
+  open: async (ctx) => {
+    await ctx.selectBot("Helix");
+    await openPanel(ctx);
+    // A finished task leaves the panel's live Coding rows: open the entry
+    // the panel's History would (the server's own activity feed).
+    const botId = await ctx.eval(`__parity.state().selectedId ?? null`);
+    const feed = await fetch(`${ctx.fixture.server}/api/bots/${botId}/activity`).then((r) => r.json()).catch(() => null);
+    const item = feed?.items?.find((entry) => entry.title === CODING_TITLE || entry.threadTitle === CODING_TITLE);
+    if (!item?.coding) return { skip: "Helix's coding task is not a coding entry of its activity" };
+    await ctx.dispatch({ type: "openCodingChat", target: { botId: item.botId, itemId: item.id, ...(item.threadId ? { threadId: item.threadId } : {}), seed: item } });
+    await ctx.waitFor(`Boolean(__parity.state().codingChat)`, { timeoutMs: 8_000 });
+    await ctx.sleep(1500);
+    return null;
+  } });
+// The Edit bot page opened from the sidebar row's menu: the page in the
+// main area with the panel closed (panel-more opens it from the panel).
+add({ id: "bot-edit", phase: "main", note: "Edit bot page opened from the sidebar (panel closed): hero, description, tabs",
+  open: async (ctx) => {
+    const botId = await ctx.eval(`__parity.state().selectedId ?? null`);
+    await ctx.dispatch({ type: "openPersonaEditor", botId });
+    await ctx.waitFor(`Boolean(document.querySelector("[data-persona-modal],[data-bot-profile-page]"))`, { timeoutMs: 8_000 });
+    await ctx.sleep(900);
   } });
 
 export const NOT_CAPTURED = [

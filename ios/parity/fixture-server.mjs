@@ -424,6 +424,8 @@ function today(hour, minute) {
   return d.getTime();
 }
 const DAY = 86_400_000;
+/** The title of Helix's coding task: surfaces.mjs and ParityLaunch.swift open it by this name. */
+const CODING_TITLE = "Corriger la redirection de connexion";
 
 // ── pass one: the API ───────────────────────────────────────────────────
 async function seedThroughAPI(base) {
@@ -460,6 +462,13 @@ async function seedThroughAPI(base) {
   if (HOME === "primary" || HOME === "mixed") await api(base, "POST", `/api/bots/${ids.ara.id}/primary`, {});
   // Ara carries the unread dot in the reference.
   await api(base, "PATCH", `/api/bots/${ids.ara.id}`, { unread: true }).catch(() => {});
+
+  // Helix's coding task (surface `coding`): a conversation of its own,
+  // started aside so Helix's chat stays the one on screen. Its transcript
+  // (seedTranscripts) edits source files, which makes it a coding entry of
+  // GET /api/bots/:id/activity on both platforms.
+  const coding = await api(base, "POST", `/api/bots/${ids.helix.id}/tasks`, { title: CODING_TITLE, hidden: true });
+  ids.helix.codingThreadId = (coding.task ?? coding).threadId;
 
   const ara = ids.ara.id;
   if (process.env.PARITY_NO_ROUTINES) return { ids, groupId: group.id, groupThreadId: group.threadId, routines: [] };
@@ -510,10 +519,12 @@ function seedTranscripts(dataDir, seeded) {
     let parent;
     for (const m of messages) {
       const id = m.id ?? `parity-${++counter}`;
-      const record = { id, at: m.at, ...(parent ? { parentId: parent } : {}), role: m.role, kind: "text", text: m.text };
+      const kind = m.tool ? "activity" : "text";
+      const record = { id, at: m.at, ...(parent ? { parentId: parent } : {}), role: m.role, kind, text: m.text };
+      if (m.tool) record.tool = m.tool;
       if (m.attachments) record.attachments = m.attachments;
-      if (m.role === "bot") Object.assign(record, { turnId: `turn-${id}`, turnTerminal: true, turnSucceeded: true });
-      insert.run(threadId, id, m.at, m.role, "text", m.text, JSON.stringify(record));
+      if (m.role === "bot" && !m.tool) Object.assign(record, { turnId: `turn-${id}`, turnTerminal: true, turnSucceeded: true });
+      insert.run(threadId, id, m.at, m.role, kind, m.text, JSON.stringify(record));
       parent = id;
     }
     leaf.run(threadId, parent);
@@ -571,6 +582,18 @@ function seedTranscripts(dataDir, seeded) {
     { role: "user", at: now - DAY - 3_600_000, text: "Où en est le gabarit ?" },
     { role: "bot", at: now - DAY, text: PREVIEWS.helix },
   ]);
+  // Helix's coding task: two source edits and a test run, this morning.
+  if (ids.helix.codingThreadId) {
+    const edit = (path, before, after) => JSON.stringify({ file_path: path, old_string: before, new_string: after });
+    write(ids.helix.codingThreadId, [
+      { role: "user", at: today(10, 2), text: "La page de connexion renvoie à l'accueil au lieu de la page demandée. Corrige la redirection." },
+      { role: "bot", at: today(10, 3), text: "Read src/auth/login.ts", tool: { name: "Read", ok: true, input: JSON.stringify({ file_path: "src/auth/login.ts" }) } },
+      { role: "bot", at: today(10, 4), text: "Edit src/auth/login.ts", tool: { name: "Edit", ok: true, files: ["src/auth/login.ts"], input: edit("src/auth/login.ts", "redirect(\"/\");", "redirect(next ?? \"/\");") } },
+      { role: "bot", at: today(10, 5), text: "Edit src/auth/login.test.ts", tool: { name: "Edit", ok: true, files: ["src/auth/login.test.ts"], input: edit("src/auth/login.test.ts", "it.todo(\"keeps next\");", "it(\"keeps next\", () => expect(target(\"/a\")).toBe(\"/a\"));") } },
+      { role: "bot", at: today(10, 6), text: "Bash pnpm test src/auth", tool: { name: "Bash", ok: true, input: JSON.stringify({ command: "pnpm test src/auth" }), output: "Test Files  1 passed (1)\n     Tests  4 passed (4)" } },
+      { role: "bot", at: today(10, 7), text: "La redirection garde maintenant la page demandée (`next`), avec un test qui le vérifie. Les 4 tests de `src/auth` passent." },
+    ]);
+  }
   write(ids.helios.threadId, [{ role: "bot", at: today(9, 12), text: PREVIEWS.helios }]);
   // Rigel spoke this afternoon: search lists it right after the group (19).
   write(ids.rigel.threadId, [{ role: "bot", at: today(16, 20), text: PREVIEWS.rigel }]);

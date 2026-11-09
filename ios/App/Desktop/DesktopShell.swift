@@ -168,6 +168,10 @@ final class DesktopShellModel: ObservableObject {
     /// The bot's computer window drawn in the shell (lot 6): the fallback
     /// where iPadOS has no second scene to give it, and the parity captures.
     @Published var computerWindow: String?
+    /// A coding task opened from the bot panel's Activity, drawn where the
+    /// chat is (desktop `state.codingChat`, ChatViewSheets.tsx), never in a
+    /// sheet over the panel. Leaving for another chat or page closes it.
+    @Published var codingChat: DesktopCodingChat?
     /// The chat column's notice (`state.notice`, ChatErrorBanner.tsx
     /// ChatNotice): a dead thread link, a bot that is gone; it clears
     /// itself after 6 s, as the desktop's store does.
@@ -233,6 +237,7 @@ final class DesktopShellModel: ObservableObject {
     func open(_ chat: Chat) {
         selected = chat
         page = nil
+        codingChat = nil
         // Leaving the bot's profile page for its chat (#2136).
         if personaOpen { personaOpen = false; panelSection = nil }
     }
@@ -241,6 +246,7 @@ final class DesktopShellModel: ObservableObject {
     func show(_ page: DesktopPage) {
         menu = nil
         self.page = page
+        codingChat = nil
         if personaOpen { personaOpen = false; panelSection = nil }
     }
 
@@ -633,6 +639,10 @@ struct DesktopContent: View {
             case .automations: AnyView(DesktopAutomationsPage())
             case .memory: AnyView(DesktopMemoryPage())
             }
+        } else if let coding = model.codingChat {
+            // ChatViewSheets.tsx: CodingChat takes the chat's place
+            AnyView(DesktopCodingChatHost(coding: coding))
+                .id("coding-\(coding.id)")
         } else if let chat = model.selected {
             // the notice is in the chat's own banner stack (DesktopChatChrome.notice)
             AnyView(DesktopChatColumn(chat: chat))
@@ -644,6 +654,38 @@ struct DesktopContent: View {
                     .font(theme.font(13))
                     .foregroundStyle(theme.inkSecondary)
             }
+        }
+    }
+}
+
+/// A coding task in the shell (`DesktopShellModel.codingChat`): the bot
+/// panel's activity model, kept for its stop and refresh.
+struct DesktopCodingChat: Identifiable {
+    let target: CodingChatTarget
+    let parent: BotActivityModel
+    var id: String { target.itemId }
+
+    /// `opensAsCodingChat` (ActivitySection.tsx): a conversation's (or a
+    /// cloud agent's) code work, never a routine run or a sub-agent.
+    static func opens(_ item: BotActivityItem) -> Bool {
+        item.coding == true && item.kind != .routine && item.kind != .subagent
+            && (item.id.hasPrefix("thread:") || item.id.hasPrefix("cloud:"))
+    }
+
+    init(item: BotActivityItem, parent: BotActivityModel) {
+        target = CodingChatTarget(botId: item.botId, itemId: item.id, threadId: item.threadId, seed: item)
+        self.parent = parent
+    }
+}
+
+/// CodingChat.tsx in the main column: its own title bar, X back to the chat.
+struct DesktopCodingChatHost: View {
+    @EnvironmentObject private var model: DesktopShellModel
+    let coding: DesktopCodingChat
+
+    var body: some View {
+        NavigationStack {
+            CodingChatView(target: coding.target, parent: coding.parent) { model.codingChat = nil }
         }
     }
 }
@@ -919,6 +961,23 @@ private struct DesktopShellRouting: ViewModifier {
             model.selection.toggle(helix.id)
         case .computerWindow:
             model.computerWindow = model.selected?.id
+        case .coding:
+            // the reference opens Helix's coding task (fixture CODING_TITLE)
+            // from its panel: the coding chat where the chat is, panel open
+            guard let helix = bot("Helix") else { return }
+            model.open(.bot(helix))
+            model.panelTab = .activity
+            model.panelOpen = true
+            let activity = BotActivityModel(botId: helix.id)
+            activity.start(client: session.profileClient)
+            for _ in 0..<150 {
+                if let item = activity.list?.all.first(where: { $0.title == "Corriger la redirection de connexion" || $0.threadTitle == "Corriger la redirection de connexion" }),
+                   DesktopCodingChat.opens(item) {
+                    model.codingChat = DesktopCodingChat(item: item, parent: activity)
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
         case .newGroup:
             // the reference's pointer rests on Liora's row once the list
             // redraws in group mode: its "Add" hint, ⌘2 on Orion

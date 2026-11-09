@@ -787,14 +787,8 @@ struct BotProfilePage: View {
                 pill: "Manage",
                 action: { UIApplication.shared.open(slackURL) }
             ))
-        } else {
-            lines.append(ChannelLine(
-                id: "bot-profile-channel.slack",
-                title: "Slack",
-                subtitle: String(localized: "Not offered here"),
-                symbol: "number"
-            ))
         }
+        // no Slack on this server: the row is hidden, not shown as unavailable
         if mailLoaded, mail == nil || mail?.available == true {
             let address = mail?.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             lines.append(ChannelLine(

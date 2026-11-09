@@ -19,6 +19,7 @@ import { notificationSoundsEnabled } from "@/lib/notification-preferences";
 import { t } from "@/lib/i18n";
 import { achievementIcon } from "./icons";
 import "./achievements.css";
+import { webAudioAllowed } from "@/lib/audio-gate";
 
 const RewardPreview = lazy(() => import("./RewardPreview"));
 
@@ -30,7 +31,7 @@ function isEditable(target: EventTarget | null): boolean {
 export function playUnlockChime(): void {
   try {
     const AudioContextClass = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
+    if (!AudioContextClass || !webAudioAllowed()) return;
     const context = new AudioContextClass();
     const start = context.currentTime + 0.02;
     [659.25, 987.77, 1318.51].forEach((frequency, index) => {

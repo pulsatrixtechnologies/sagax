@@ -8,7 +8,7 @@ import { PerspicaxOrgSettings } from "./PerspicaxOrgSettings";
 import { ConnectServerWizard } from "./ConnectServerWizard";
 import { OrgDirectory, type OrgPersonView, type PendingInviteView } from "./OrgDirectory";
 import type { OrgRole } from "../../shared/org-role";
-import { isPerspicaxOrg, type PerspicaxOrg } from "@/lib/perspicax-org";
+import { isPerspicaxOrg, ORG_PROBE_INIT, type PerspicaxOrg } from "@/lib/perspicax-org";
 import { OrgMemorySettings } from "./OrgMemorySettings";
 import { SettingsGroup } from "./SettingsPrimitives";
 import { OrganizationBotRows } from "./settings/OrganizationBotRules";
@@ -87,7 +87,7 @@ export function OrganizationSettings({ memoryShown = false }: { advanced?: boole
 
   const loadOrg = async (alive = () => true) => {
     try {
-      const body = await api<unknown>("/api/org");
+      const body = await api<unknown>("/api/org", ORG_PROBE_INIT);
       if (!alive()) return;
       if (isPerspicaxOrg(body)) setPerspicaxOrg(body);
       setOrgReady(true);

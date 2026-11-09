@@ -3,6 +3,8 @@
 // interacted with the page once (browsers refuse autoplay anyway), and every
 // sound is a no-op while the "play sounds" option is off.
 
+import { webAudioAllowed } from "@/lib/audio-gate";
+
 export type RetroSound = "hello" | "bye" | "pop" | "tap" | "chime" | "whoosh" | "click" | "bulb";
 
 type Note = { at: number; freq: number; dur: number; type?: OscillatorType; gain?: number; slideTo?: number };
@@ -49,7 +51,7 @@ export function createRetroSounds(
   enabled: () => boolean,
   factory: () => AudioContext | null = () => {
     const Ctor = (globalThis as { AudioContext?: typeof AudioContext }).AudioContext;
-    return Ctor ? new Ctor() : null;
+    return Ctor && webAudioAllowed() ? new Ctor() : null;
   },
 ): RetroSoundPlayer {
   let ctx: AudioContext | null = null;

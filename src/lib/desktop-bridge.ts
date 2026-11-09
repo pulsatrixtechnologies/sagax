@@ -77,10 +77,12 @@ export interface DesktopBridgeStatus {
 /** Null where there is no bridge (a solo server, no person); throws when
  * the server could not be asked right now. */
 export async function loadDesktopBridge(fetchImpl: typeof fetch = fetch): Promise<DesktopBridgeStatus | null> {
-  const response = await fetchImpl("/api/me/desktop-bridge", { credentials: "same-origin", cache: "no-store" });
+  // #3043: the probe header gets a quiet 200 `{ offered: false }` on a solo server.
+  const response = await fetchImpl("/api/me/desktop-bridge", { credentials: "same-origin", cache: "no-store", headers: { "x-sagax-org-probe": "1" } });
   if (response.status === 404 || response.status === 403) return null;
   if (!response.ok) throw new Error(`desktop bridge status ${response.status}`);
-  return await response.json() as DesktopBridgeStatus;
+  const body = await response.json() as DesktopBridgeStatus | { offered: false };
+  return "offered" in body && body.offered === false ? null : body as DesktopBridgeStatus;
 }
 
 export function readWorkplace(storage: Pick<Storage, "getItem"> = localStorage): BotWorkplace {

@@ -46,7 +46,7 @@ export function ReaderShare({ boot, pageId, onClose }: { boot: ReaderBoot; pageI
     const id = encodeURIComponent(pageId);
     void readerApi<{ page: PublishedPageSummary }>(`/api/pages/${id}`).then((answer) => { if (live) setPage(answer.page); }, () => { if (live) setError(readerText(boot.lang, "failed")); });
     void readerApi<PagesPolicy>("/api/pages/policy").then((answer) => { if (live) setPolicy(answer); }, () => undefined);
-    void readerApi<{ org?: { identity?: { kind?: string } } }>("/api/org").then((answer) => {
+    void readerApi<{ org?: { identity?: { kind?: string } } | null }>("/api/org", { headers: { "x-sagax-org-probe": "1" } }).then((answer) => {
       if (!live || answer?.org?.identity?.kind !== "perspicax") return;
       setOrganization(true);
       void readerApi<OrgDirectory>("/api/org/directory").then(

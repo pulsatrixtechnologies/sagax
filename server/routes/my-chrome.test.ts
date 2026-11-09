@@ -53,7 +53,10 @@ describe("/api/my-chrome", () => {
   it("answers POST only, and only the person or an admin", async () => {
     expect((await fetch(`${base}/api/my-chrome/status`)).status).toBe(405);
     allowed = false;
-    expect((await post("status")).status).toBe(403);
+    // #3043: the status reads "not offered" (200), quietly; a change is still refused
+    const quiet = await post("status");
+    expect(quiet.status).toBe(200);
+    expect(quiet.body).toMatchObject({ offered: false, enabled: false, driving: [] });
     expect((await post("enable", { enabled: true })).status).toBe(403);
     expect(service.status().enabled).toBe(false);
   });

@@ -4,6 +4,8 @@
 // It rings only when the person turned it on (Settings > Appearance, off by
 // default), at each bark of the bark move (shiba-moves.ts SHIBA_BARKS).
 
+import { webAudioAllowed } from "./audio-gate";
+
 /** The bark as a score: when (s), how long, the tone's start and end pitch (Hz), the noise band (Hz). */
 export const BARK_SCORE = { length: 0.13, from: 620, to: 260, band: 900, gain: 0.12 } as const;
 
@@ -12,7 +14,7 @@ let audio: AudioContext | null = null;
 function context(): AudioContext | null {
   if (audio) return audio;
   const Ctor = (globalThis as { AudioContext?: typeof AudioContext }).AudioContext;
-  if (!Ctor) return null;
+  if (!Ctor || !webAudioAllowed()) return null;
   try {
     audio = new Ctor();
   } catch {

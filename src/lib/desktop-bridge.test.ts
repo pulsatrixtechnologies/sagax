@@ -20,6 +20,10 @@ describe("where bots work, as the app says it", () => {
 
   it("a solo server has no bridge; a failure is not 'no bridge'", async () => {
     expect(await loadDesktopBridge(async () => new Response("{}", { status: 404 }))).toBeNull();
+    // #3043: the probe header's quiet answer on a solo server
+    let sent: HeadersInit | undefined;
+    expect(await loadDesktopBridge(async (_url, init) => { sent = init?.headers; return new Response(JSON.stringify({ offered: false }), { status: 200 }); })).toBeNull();
+    expect(sent).toEqual({ "x-sagax-org-probe": "1" });
     await expect(loadDesktopBridge(async () => new Response("{}", { status: 502 }))).rejects.toThrow();
   });
 

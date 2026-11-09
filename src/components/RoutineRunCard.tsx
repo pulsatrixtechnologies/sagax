@@ -331,6 +331,11 @@ export function RoutineRunCard({
               className={cn(running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}
             >{lead}</span>
           ),
+          // #3042 (QA 2026-11-08): the routine's name is visible, not only in
+          // a tooltip, so every posted turn says where it came from.
+          run.routineName?.trim() && (
+            <span key="name" data-routine-run-name className="max-w-[16rem] truncate font-medium text-ink-secondary">{run.routineName.trim()}</span>
+          ),
           <time key="at" dateTime={new Date(at).toISOString()} title={triggeredAt ? routineDateTime(triggeredAt) : undefined}>{routineDateTime(at)}</time>,
           elapsed && <span key="elapsed" data-routine-run-elapsed className="tabular-nums">{elapsed}</span>,
           onOpen && (

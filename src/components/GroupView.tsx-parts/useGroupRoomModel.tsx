@@ -13,7 +13,7 @@ import { groupMemberBots } from "@/lib/group-members";
 import { botPublicProfile } from "../../../shared/bot-public-profile";
 import { personAvatarSrc } from "@/lib/profile-management";
 import { botLabel } from "@/lib/human-label";
-import { channelHumanRow, useOrgPeople } from "@/lib/perspicax-org";
+import { channelHumanRow, ORG_PROBE_INIT, useOrgPeople } from "@/lib/perspicax-org";
 import { useRemoteClient } from "@/lib/render-reads";
 import { roomFolderEditable } from "./RoomSettings";
 import { canLeaveGroup } from "@/lib/group-leave";
@@ -23,7 +23,7 @@ import { canLeaveGroup } from "@/lib/group-leave";
 async function loadRemoteActor(): Promise<{ id: string; role: "owner" | "admin" | "member" | null }> {
   try {
     const session = await api<{ email?: string }>("/api/auth/session");
-    const org = await api<{ people?: { id: string; role: "owner" | "admin" | "member" }[] }>("/api/org");
+    const org = await api<{ people?: { id: string; role: "owner" | "admin" | "member" }[] }>("/api/org", ORG_PROBE_INIT);
     const id = typeof session.email === "string" ? session.email.trim().toLowerCase() : "";
     const role = org.people?.find((person) => person.id.trim().toLowerCase() === id)?.role ?? null;
     return { id, role };

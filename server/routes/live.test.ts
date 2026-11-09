@@ -73,10 +73,11 @@ function deps(overrides: Partial<LiveRouteDeps> = {}): LiveRouteDeps & { saved: 
 describe("live routes", () => {
   it("answers 404 on every route and starts nothing while Live calls are off (the Sagax default)", async () => {
     const d = deps({ enabled: () => false });
+    // #3043: the load-time lookup of the running call reads "no call", quietly
+    expect(await request(d, "GET", "/api/live/call")).toMatchObject({ status: 200, body: { call: null } });
     for (const [method, path, body] of [
       ["POST", "/api/live/session", { botId: "bot1", sdp: "v=0\r\n", client: "android" }],
       ["POST", "/api/live/call/end", { callId: "c1" }],
-      ["GET", "/api/live/call", undefined],
       ["POST", "/api/live/device-revoked", {}],
       ["PATCH", "/api/live/settings", { voice: "ash" }],
     ] as const) {

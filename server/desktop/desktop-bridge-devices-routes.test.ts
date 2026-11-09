@@ -10,22 +10,22 @@ import { createDesktopBridgeRoutes } from "./desktop-bridge-routes.ts";
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
 const capabilities = { shell: true, files: true, fetch: true, browser: true, computer: false, localVm: true };
 
-function setup() {
+function setup(organization = true) {
   const bridges = new DesktopBridges((session) => (session.startsWith("ada") ? ADA : null));
   bridges.register({ id: randomUUID(), name: "Work MacBook", platform: "darwin", attachmentsDir: "/tmp/a", capabilities }, "ada-1", "c".repeat(64));
   bridges.register({ id: randomUUID(), name: "Mac mini", platform: "darwin", attachmentsDir: "/tmp/a", capabilities }, "ada-2", "c".repeat(64));
   const routes = createDesktopBridgeRoutes({
-    organization: () => true,
+    organization: () => organization,
     bridges,
     tunnels: { connected: () => false } as never,
     audit: { record() {}, recent: () => [] } as never,
     workplace: () => ({}),
     phones: (person) => (person === ADA ? [{ name: "My iPhone", platform: "ios", lastSeenAt: 5, online: false }] : []),
   });
-  const call = async (path: string, method: string, body?: unknown) => {
+  const call = async (path: string, method: string, body?: unknown, headers: Record<string, string> = {}) => {
     let answer: { status: number; body: Record<string, unknown> } | undefined;
     await routes({
-      req: { headers: { "content-type": "application/json" } },
+      req: { headers: { "content-type": "application/json", ...headers } },
       res: { setHeader() {} },
       path, method,
       auth: { kind: "session", session: { id: "ada-1", principalId: ADA } },
@@ -56,5 +56,12 @@ describe("the person's devices routes", () => {
     expect(bridges.devices(ADA).find((device) => device.name === "Mac mini")?.access).toBe("ask");
     const bad = await call("/api/me/desktop-bridge/computers/access", "POST", { computer: "Mac mini", access: "maybe" });
     expect(bad.status).toBe(400);
+  });
+
+  it("on a solo server, the web probe reads a quiet 200 and everything else stays 404 (#3043)", async () => {
+    const { call } = setup(false);
+    expect(await call("/api/me/desktop-bridge", "GET", undefined, { "x-sagax-org-probe": "1" })).toEqual({ status: 200, body: { offered: false } });
+    expect((await call("/api/me/desktop-bridge", "GET")).status).toBe(404);
+    expect((await call("/api/me/desktop-bridge/computers/access", "POST", {}, { "x-sagax-org-probe": "1" })).status).toBe(404);
   });
 });

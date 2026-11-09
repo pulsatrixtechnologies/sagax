@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { describe, expect, it, vi } from "vitest";
 import { createBotsMutateRoutes, type BotsMutateRouteDeps } from "./bots-mutate.ts";
 import { PASS, dispatchRoutes, type RouteContext } from "./table.ts";
+import { buildBotPatchProfile } from "./bots-mutate-patch-build-profile.ts";
+import { createBotPatchState, type BotPatchState, type BotsMutateEnv } from "./bots-mutate-helpers.ts";
 
 function context(path: string, method = "GET", body: unknown = {}, headers: Record<string, string> = {}) {
   const json = vi.fn();
@@ -126,6 +128,23 @@ describe("bots-mutate routes", () => {
     await createBotsMutateRoutes(deps)(ctx);
     expect(json).toHaveBeenCalledWith(ctx.res, 403, expect.objectContaining({ code: "bot_model_owner_only" }));
     expect(deps.store.patchBot).not.toHaveBeenCalled();
+  });
+
+  it("#3033: a bot-wide model change from the agent API needs no conversation; the app still names one", async () => {
+    const run = async (body: Record<string, unknown>) => {
+      const known: Record<string, unknown> = {
+        store: { bot: () => bot, tasks: () => [{ threadId: "thread-1" }, { threadId: "thread-2" }] },
+        auth: { kind: "session", scopes: ["client"] }, req: { headers: {} },
+        threadsShownTo: (_bot: unknown, tasks: unknown[]) => tasks, scopedThreadViewer: () => null,
+        isAgentConversation: () => false, json: vi.fn(),
+      };
+      const env = new Proxy(known, { get: (target, key: string) => key in target ? target[key] : vi.fn(() => undefined) });
+      const state = { ...createBotPatchState(["/api/bots/osprey", "osprey"] as unknown as RegExpMatchArray), body } as unknown as BotPatchState;
+      try { await buildBotPatchProfile(env as unknown as BotsMutateEnv, state); return null; } catch (error) { return error as { code?: string; status?: number }; }
+    };
+    const selection = { instanceId: "xai", model: "grok-2" };
+    expect(await run({ modelSelection: selection })).toMatchObject({ code: "thread_required", status: 409 });
+    expect((await run({ modelSelection: selection, botWide: true }))?.code).not.toBe("thread_required");
   });
 
   it("marks the open conversation read", async () => {

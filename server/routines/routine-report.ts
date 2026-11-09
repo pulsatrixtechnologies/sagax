@@ -29,7 +29,7 @@ export const ROUTINE_STATUS_MARKER = "RUN_STATUS:";
 
 /** What the bot reads in its system prompt on every routine run. */
 export const ROUTINE_REPORT_CONTRACT =
-  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was. Whatever the outcome, end with one plain-language summary line a person can read alone: what was done, what is blocked and why, and what they must do. Never end with JSON, a code block or a raw tool result as your last words; put any structured data before that line. If you handed work to a teammate, name the teammate and what they are doing.`;
+  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was. Write the report as plain prose or a short list, never a markdown table. Whatever the outcome, end with one plain-language summary line a person can read alone: what was done, what is blocked and why, and what they must do. Never end with JSON, a code block or a raw tool result as your last words; put any structured data before that line. If you handed work to a teammate, name the teammate and what they are doing.`;
 
 /** The marker on a line of its own, in the shapes models write it in. */
 const MARKER_LINE = /^[\s`*_[(<"']*nothing[\s_-]to[\s_-]report[\s`*_\])>"'.!]*$/i;
@@ -118,7 +118,39 @@ function declaredStatus(text: string): { declared?: RoutineReportOutcome["declar
   return { rest: text };
 }
 
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+const cellsOf = (line: string) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+
+/** #3152: a report is read in a chat bubble and a phone notification, where
+ * a markdown table shows as rows of pipes. Each table (a header row, its
+ * rule, then rows) becomes a short list, one row per line: the row's first
+ * cell, then its other cells. Anything else is left as written. */
+export function routineReportProse(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  for (let at = 0; at < lines.length; at += 1) {
+    const rule = lines[at + 1] ?? "";
+    if (!(TABLE_ROW.test(lines[at]!) && TABLE_RULE.test(rule) && rule.includes("|"))) {
+      out.push(lines[at]!);
+      continue;
+    }
+    at += 1;
+    while (at + 1 < lines.length && TABLE_ROW.test(lines[at + 1]!)) {
+      at += 1;
+      const [first = "", ...rest] = cellsOf(lines[at]!).filter((cell) => cell !== "");
+      if (first) out.push(rest.length ? `- ${first}: ${rest.join(", ")}` : `- ${first}`);
+    }
+  }
+  return out.join("\n");
+}
+
 export function routineReportOutcome(output: string | undefined): RoutineReportOutcome {
+  const outcome = rawReportOutcome(output);
+  return outcome.report ? { ...outcome, report: routineReportProse(outcome.report) } : outcome;
+}
+
+function rawReportOutcome(output: string | undefined): RoutineReportOutcome {
   // 2026-11-06: a final message that was only a control token the model
   // wrote as text ("<|eos|>", six webhook runs in one evening) is no report:
   // the run is quiet, so no bubble, no unread and no notification.

@@ -805,7 +805,8 @@ export function toEntry(threadId: string, message: StoredMessage): TranscriptEnt
     const error = failed && typeof message.tool?.output === "string" ? redactSecretsInText(message.tool.output.trim().replace(/\s+/g, " ")) : "";
     return { ...base, kind: "tool", text: `${name}${failed ? (error ? ` (failed): ${error}` : " (failed)") : ""}`.slice(0, 300) };
   }
-  if (kind === "text" || kind === "nudge" || kind === "access") {
+  // A routine run's result card is part of the chat (#3152): it reads as a note.
+  if (kind === "text" || kind === "nudge" || kind === "access" || kind === "routine.run") {
     const text = typeof message.text === "string" ? message.text : "";
     if (!text.trim() && !files.length) return null;
     return { ...base, kind: kind === "text" ? "text" : "note", text: text.length > ENTRY_TEXT_MAX ? `${text.slice(0, ENTRY_TEXT_MAX)}\n[...]` : text, ...(files.length ? { files } : {}) };

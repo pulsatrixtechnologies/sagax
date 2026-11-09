@@ -10,13 +10,13 @@ import { wireTurnBudget } from "./turn-budget-wiring.ts";
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "claude-sonnet-5" });
 const at = "2026-11-07T00:00:00.000Z";
 
-function wired(store: Store, settings: { maxSteps?: number; maxMinutes?: number }, preferred = "fr") {
+function wired(store: Store, settings: { maxSteps?: number; maxMinutes?: number; maxContinuations?: number }, preferred = "fr") {
   let listener: ((event: RuntimeEvent) => void) | undefined;
   const busy = new Set<string>();
   const steers: { threadId: string; note: string }[] = [];
   const stops: { botId: string; threadId: string }[] = [];
   const budget = wireTurnBudget({
-    config: () => ({ turnBudget: { maxSteps: settings.maxSteps ?? null, maxMinutes: settings.maxMinutes ?? null } }),
+    config: () => ({ turnBudget: { maxSteps: settings.maxSteps ?? null, maxMinutes: settings.maxMinutes ?? null, maxContinuations: settings.maxContinuations ?? 0 } }),
     env: {},
     botByThread: (threadId) => store.botByThread(threadId),
     threadBusy: (_botId, threadId) => busy.has(threadId),
@@ -63,6 +63,22 @@ describe("turn budget wiring (#2764)", () => {
     expect(last?.from?.botId).toBe(bot.id);
     // the person's own chat is untouched
     expect(store.messagesFor(bot.threadId).some((m) => m.text?.includes("Tour arrêté"))).toBe(false);
+  });
+
+  it("continues past the ceiling with a visible row in the same conversation, no stop", async () => {
+    const store = new Store(selection);
+    const bot = store.createBot({ name: "Helper" }, { seedMessages: false });
+    const h = wired(store, { maxSteps: 8, maxContinuations: 10 });
+    h.busy.add(bot.threadId);
+    h.emit(bot.threadId, { type: "turn.started", turnId: "t1" });
+    h.tools(bot.threadId, "t1", 0, 8);
+    await flush();
+    expect(h.stops).toEqual([]);
+    expect(h.steers).toEqual([]);
+    const row = store.messagesFor(bot.threadId).at(-1);
+    expect(row?.kind).toBe("activity");
+    expect(row?.tool?.name).toContain("Suite automatique 1/10");
+    expect(row?.from?.botId).toBe(bot.id);
   });
 
   it("leaves an idle conversation and ignored provider events alone", async () => {

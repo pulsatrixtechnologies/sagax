@@ -20,6 +20,13 @@ export interface TurnBudgetBot {
   modelSelection: { instanceId: string };
 }
 
+type TurnBudgetFrom = { botId: string; name: string; color: string };
+
+/** The bot's partial answer, or the visible row of an automatic continuation. */
+export type TurnBudgetMessage =
+  | { role: "bot"; kind: "text"; text: string; from?: TurnBudgetFrom }
+  | { role: "bot"; kind: "activity"; tool: { name: string; ok: boolean }; from?: TurnBudgetFrom };
+
 export interface TurnBudgetHost {
   config(): { turnBudget?: TurnBudgetConfig };
   env?: NodeJS.ProcessEnv;
@@ -28,7 +35,7 @@ export interface TurnBudgetHost {
   threadBusy(botId: string, threadId: string): boolean;
   steerer(instanceId: string): ((threadId: string, note: string) => Promise<SteerOutcome>) | undefined;
   stopDirectThread(botId: string, threadId: string): Promise<unknown>;
-  appendMessage(threadId: string, message: { role: "bot"; kind: "text"; text: string; from?: { botId: string; name: string; color: string } }): void;
+  appendMessage(threadId: string, message: TurnBudgetMessage): void;
   /** The conversation as it reads now (the person's last message sets the language, #2762). */
   messages(threadId: string): readonly { role?: string; kind?: string; text?: string }[];
   /** The person's own language setting, used when their last message is too short to tell. */
@@ -64,6 +71,13 @@ export function wireTurnBudget(host: TurnBudgetHost): TurnBudget {
       ...(bot ? { from: { botId: bot.id, name: bot.name, color: bot.color } } : {}),
     });
   };
+  const note = (threadId: string, text: string) => {
+    const bot = host.botByThread(threadId);
+    host.appendMessage(threadId, {
+      role: "bot", kind: "activity", tool: { name: text, ok: true },
+      ...(bot ? { from: { botId: bot.id, name: bot.name, color: bot.color } } : {}),
+    });
+  };
   const budget = createTurnBudget({
     settings: (threadId) => turnBudgetSettings(host.config(), host.env ?? process.env, host.botByThread(threadId)?.id),
     live: busy,
@@ -71,6 +85,7 @@ export function wireTurnBudget(host: TurnBudgetHost): TurnBudget {
     steer,
     interrupt,
     post,
+    note,
     language,
     ...(host.log ? { log: host.log } : {}),
     ...(host.now ? { now: host.now } : {}),

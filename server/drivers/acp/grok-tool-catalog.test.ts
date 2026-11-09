@@ -89,6 +89,19 @@ describe("grokCatalogSection", () => {
     expect(section.text).toContain("without calling a tool");
   });
 
+  it("always names the Today and Remote Access tools of the agents server, with their arguments (#3221, #3222)", () => {
+    const names = [...Array.from({ length: 70 }, (_, i) => `tool_${String(i).padStart(2, "0")}`), "remote_support_hosts", "sagax_approvals"];
+    const catalog = readGrokCatalog({ servers: [{ name: "agents", session: { enabled: true, status: "ready", tools: names.map((name) => ({ name, enabled: true })) } }] });
+    const section = grokCatalogSection({ catalog })!;
+    expect(section.text).toContain("- agents (72 tools; search_tool for the others): remote_support_hosts, sagax_approvals");
+    expect(section.text).toContain(`use_tool agents__sagax_approvals with {"action":"list"}`);
+    expect(section.text).toContain("use_tool agents__remote_support_hosts with {}");
+    expect(section.text.length).toBeLessThanOrEqual(GROK_CATALOG_CHARS_MAX);
+    // another server with the same tool names gets no shortcut
+    const other = readGrokCatalog({ servers: [{ name: "perspicax", session: { enabled: true, status: "ready", tools: names.map((name) => ({ name, enabled: true })) } }] });
+    expect(grokCatalogSection({ catalog: other })!.text).not.toContain("remote_support_hosts");
+  });
+
   it("offers pinned tools and their lines even before the catalog is read", () => {
     const section = grokCatalogSection({ catalog: undefined, pinned: ["agents__remote_session_snapshot"], lines: ["Remote session open on MAC-DEMO-01."] })!;
     expect(section.text).toContain("Open for this conversation, call directly with use_tool: agents__remote_session_snapshot.");

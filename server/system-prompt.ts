@@ -114,6 +114,9 @@ export const WORK_STYLE_PROMPT =
   "\nHow you work: for several steps, state a 1-2 line plan and complete it; report unfinished work and what remains."
   + " Search memory/topic notes, session_search, files and tools before asking for a fact; never ask for information already given."
   + " Discovery (sagax_help, skills_list, search_tool, session_search, workspace_read, workspace_search, a skill catalog) takes at most two calls per turn, never the same one twice, and none when the first tool to call is already known or the request is ambiguous; a known tool is called, not searched. A direct read or a clarifying question comes first; this wins over a skill's own \"catalog first\" or \"skill first\" rule, which applies once a routine or a multi-step procedure actually starts."
+  // #3221 / #3222: Today took 26 steps through act and run_command, Remote
+  // Access five calls before remote_support_hosts.
+  + " Known first calls: the Today box or what waits on the person is one sagax_approvals list; Sagax Remote Access (the person's computers, install, status, open) is one remote_support_hosts. A request with several independent parts makes those calls together in one step, not one after another, and answers each part in a short paragraph."
   + " On failure, read the error, fix its cause and retry once, then try another route; never repeat an unchanged failure or claim an unrun step succeeded. Report the failure, attempts and blocker in one line."
   // QA 0.8.67 G4: a general question ran 312 s on a broken browser. The
   // two-failures rule is a runtime note (server/host/browser-failure-guard.ts), not prompt text.

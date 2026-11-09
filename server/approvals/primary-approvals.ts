@@ -65,6 +65,20 @@ export type PrimaryCard = {
   always?: "rule" | "session";
 };
 
+/** Something else the Today box shows the person that a card click does not
+ * answer: a bot's needs-you card or a proactive offer (#3221). Listed so one
+ * `list` call is the whole Today box; the person answers it in its
+ * conversation. */
+export type PrimaryWaiting = {
+  botName: string;
+  kind: "needs-you" | "offer";
+  /** what the bot said, one line */
+  text: string;
+  /** the conversation or routine, by name */
+  where?: string;
+  at: number;
+};
+
 export type PrimaryResult = { status: number; body: Record<string, unknown> };
 
 export type PrimaryApprovalsDeps = {
@@ -73,6 +87,8 @@ export type PrimaryApprovalsDeps = {
   turn: (botId: string, threadId: string, generation: string) => PrimaryTurn | { status: number; code: string; error: string };
   /** The cards waiting on this person that they may answer. */
   pending: (turn: PrimaryTurn) => PrimaryCard[];
+  /** The rest of the Today box: needs-you cards and proactive offers. */
+  waiting?: (turn: PrimaryTurn) => PrimaryWaiting[];
   /** The click: POST /api/threads/:threadId/respond as the person. */
   respond: (turn: PrimaryTurn, card: PrimaryCard, body: Record<string, unknown>) => Promise<PrimaryResult>;
   /** Always allow this: POST /api/custom-rules fromCard as the person. */
@@ -153,8 +169,17 @@ export function createPrimaryApprovals(deps: PrimaryApprovalsDeps) {
   /** Messages whose yes already answered a card it did not name. */
   const implicit = new Set<string>();
 
-  function listText(cards: PrimaryCard[], at: number): string {
-    if (!cards.length) return "Nothing is waiting on the person.";
+  function waitingText(rows: readonly PrimaryWaiting[]): string[] {
+    if (!rows.length) return [];
+    return [
+      `Also in the Today box (${rows.length}; the person answers these in that conversation, not with this tool):`,
+      ...rows.map((row) => `- ${row.kind === "offer" ? "offer" : "needs you"} from ${row.botName}${row.where ? ` in ${row.where}` : ""}, ${ageOf(row.at, now())}: ${row.text.replace(/\s+/g, " ").slice(0, 240)}`),
+    ];
+  }
+
+  function listText(cards: PrimaryCard[], at: number, waiting: readonly PrimaryWaiting[] = []): string {
+    const rest = waitingText([...waiting].sort((a, b) => b.at - a.at).slice(0, 20));
+    if (!cards.length) return rest.length ? ["No approval card is waiting on the person.", ...rest].join("\n").slice(0, 8000) : "Nothing is waiting on the person.";
     const latest = latestSeen(cards, at);
     const lines = cards.map((card) => {
       if (card.confidential) {
@@ -170,6 +195,7 @@ export function createPrimaryApprovals(deps: PrimaryApprovalsDeps) {
       `${cards.length} card${cards.length === 1 ? "" : "s"} waiting on the person:`,
       ...lines,
       "Answer one only when the person asked for it in their message: pass their own words as quote. A bare yes (\"oui\", \"vas-y\", \"approuve\") without naming a card answers the latest one they saw: omit card, then tell them which one it was.",
+      ...rest,
     ].join("\n").slice(0, 8000);
   }
 
@@ -269,7 +295,7 @@ export function createPrimaryApprovals(deps: PrimaryApprovalsDeps) {
     const gate = deps.turn(input.botId, input.threadId, input.generation);
     if ("error" in gate) return refused(gate.status, gate.code, gate.error);
     const action = input.args.action;
-    if (action === "list") return ok(listText(deps.pending(gate), gate.message.at));
+    if (action === "list") return ok(listText(deps.pending(gate), gate.message.at, deps.waiting?.(gate) ?? []));
     if (action !== "answer" && action !== "cancel") return refused(400, "action", "action is list, answer or cancel.");
     const found = find(gate, input.args.card);
     if ("status" in found && "body" in found) return found;

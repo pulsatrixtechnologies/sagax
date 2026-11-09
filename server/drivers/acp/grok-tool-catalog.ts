@@ -120,6 +120,18 @@ export const GROK_CATALOG_SERVER_TOOLS_MAX = 40;
 /** The whole section stays under this many characters (~900 tokens). */
 export const GROK_CATALOG_CHARS_MAX = 3_600;
 
+/** Sagax's own agents server is truncated (~70 tools), so a tool the bot has
+ * not used yet is unnamed: Remote Access took five calls to reach
+ * remote_support_hosts (#3222) and the Today box 26 steps through act and
+ * run_command (#3221). These are always named, with their arguments, so one
+ * use_tool call answers the request. The arguments are given because a
+ * direct-call rule without them made the model deliberate (+4 to 6 s). */
+export const GROK_AGENT_SHORTCUTS: readonly { tool: string; args: string; when: string }[] = [
+  { tool: "sagax_approvals", args: `{"action":"list"}`, when: "the Today box or what waits for the person (approvals, questions, needs-you cards, offers)" },
+  { tool: "remote_support_hosts", args: "{}", when: "Sagax Remote Access or Pulsatrix Assist, the person's own computers (install, status, open)" },
+];
+const AGENTS_SERVER = "agents";
+
 /** A connector id ("outlook", "microsoft-teams") and a live catalog server
  * name ("outlook", "Microsoft Teams") name the same connector: compared with
  * separators and case removed, one normalized form contains the other (an
@@ -351,7 +363,8 @@ export function grokCatalogSection(input: {
       continue;
     }
     truncated = true;
-    const mine = server.tools.filter((tool) => favored.has(`${server.name}__${tool}`));
+    const shortcut = server.name === AGENTS_SERVER ? new Set(GROK_AGENT_SHORTCUTS.map((entry) => entry.tool)) : undefined;
+    const mine = server.tools.filter((tool) => favored.has(`${server.name}__${tool}`) || shortcut?.has(tool));
     rows.push(`- ${server.name} (${server.tools.length} tools; search_tool for the others)${mine.length ? `: ${mine.join(", ")}` : ""}`);
   }
   // Names only, and no "call it directly" rule for a tool the model has not
@@ -379,8 +392,14 @@ export function grokCatalogSection(input: {
       return group.sagaxAgentToolsNote ? `${base}. ${group.sagaxAgentToolsNote}` : base;
     }).join("; ")}.`
     : "";
+  const agents = ready.find((server) => server.name === AGENTS_SERVER && server.tools.length > GROK_CATALOG_SERVER_TOOLS_MAX);
+  const shortcuts = agents ? GROK_AGENT_SHORTCUTS.filter((entry) => agents.tools.includes(entry.tool)) : [];
+  const shortcutLine = shortcuts.length
+    ? `\nOne call answers each of these, no search_tool, no act, no shell; independent calls go out together: ${shortcuts.map((entry) => `${entry.when}: use_tool ${AGENTS_SERVER}__${entry.tool} with ${entry.args}`).join("; ")}.`
+    : "";
   const tail =
     gatewayLine +
+    shortcutLine +
     (notReady.length ? `\nNot connected now: ${notReady.map((server) => `${server.name} (${server.status})`).join(", ")}.` : "") +
     connectableLine +
     (pinnedLines.length ? `\n${pinnedLines.join("\n")}` : "") +

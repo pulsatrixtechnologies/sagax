@@ -21,7 +21,7 @@ import {
   SEND_OPTIONS, type FeedbackAnswers, type FeedbackLanguage, type FeedbackMarker, type FlowCard, type FlowMessage,
 } from "./flow.ts";
 import { fileIssue, issueStatus, type GithubFiler } from "./github.ts";
-import { buildReport, type FiledReport, type ReportContext, type ReportSpan } from "./report.ts";
+import { buildReport, stripAttachments, type FiledReport, type ReportContext, type ReportSpan } from "./report.ts";
 
 export interface StoredMessage extends FlowMessage {
   id: string;
@@ -535,7 +535,7 @@ export function createFeedbackService(deps: FeedbackDeps) {
       context: { signal },
       offer: true,
     });
-    const summary = oneLine(anonymize(input.text, deps.names()), 200);
+    const summary = oneLine(anonymize(stripAttachments(input.text).text, deps.names()), 200);
     // the Feedback product's offer, never a permission; full-access: exempt
     post(input.threadId, { step: "offer", reportId: record.id }, { kind: "options", card: offerCard(lang, summary) });
   }
